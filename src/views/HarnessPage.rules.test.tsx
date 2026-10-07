@@ -263,19 +263,24 @@ function focusSurfaces() {
   act(() => surfaces().focus());
 }
 
+/** A row of the surfaces list by its name: the `[x]` toggle in front of it is not part of the name. */
 function surfaceRow(name: string) {
-  return within(surfaces()).getAllByRole("option").find(row => row.querySelector(".nm")!.textContent!.trim().startsWith(name))!;
+  return within(surfaces()).getAllByRole("option").find(row => new RegExp(`^(\\[.\\] )?${name}\\b`).test(row.querySelector(".nm")!.textContent!.trim()))!;
 }
 
 function rulesFile() {
   return screen.getByLabelText("Rules file");
 }
 
+function detailPane() {
+  return screen.getByRole("region", { name: "Claude detail" });
+}
+
 function statusBar() {
   return within(screen.getByLabelText("Status bar"));
 }
 
-/** A key hint of the surfaces pane. Hints live in the status bar while their pane has focus. */
+/** A key hint of the surfaces pane (or of the pane that has focus). Hints live in the status bar while their pane has focus. */
 function surfaceHint(name: RegExp) {
   if (!screen.getByRole("region", { name: "Claude surfaces" }).contains(document.activeElement)) focusSurfaces();
   return statusBar().queryByRole("button", { name });
@@ -289,7 +294,7 @@ function mode() {
   return document.querySelector(".statusbar .mode")!.textContent;
 }
 
-describe("rules file in the surfaces pane", () => {
+describe("rules file in the detail pane", () => {
   it("shows layout and the refinement lines a base update keeps, as an update and not a conflict", () => {
     renderClaude(rules({ refinement_lines: 14 }), "update_available");
     expect(rulesFile().textContent).toContain("managed base block");
@@ -325,6 +330,8 @@ describe("rules file in the surfaces pane", () => {
     renderClaude(rules({ layout: "malformed", conflict_reason: "malformed_markers", malformed_reason: "duplicate_begin" }));
     expect(rulesFile().textContent).toContain("markers malformed: left as is, never rewritten");
     expect(rulesFile().textContent).toContain("more than one BEGIN marker");
+    // Nothing in the app can fix it, so this is the one case that says what to do.
+    expect(rulesFile().textContent).toContain("fix the markers by hand; the app never rewrites a file whose block it cannot split");
     expect(surfaceHint(/convert/)?.getAttribute("title")).toContain("malformed");
     expect(surfaceHint(/diff/)?.getAttribute("title")).toContain("malformed");
     expect(surfaceHint(/leave as is/)).toBeNull();
@@ -343,6 +350,48 @@ describe("rules file in the surfaces pane", () => {
     expect(meta.className).not.toContain("c-fail");
     expect(surfaceHint(/hand back/)).not.toBeNull();
     expect(surfaceHint(/leave as is/)).toBeNull();
+  });
+
+  it("leaves what to do about the file to the status bar: no instructions under the facts", () => {
+    renderClaude(rules({ conflict_reason: "base_block_edited", refinement_lines: 2 }));
+    expect(detailPane().textContent).not.toMatch(/An update replaces|Update skips this file|Base updates are not applied/);
+    expect(detailPane().textContent).not.toContain("fix the markers");
+    cleanup();
+    renderClaude(rules({ refinement_lines: 14 }), "update_available");
+    expect(detailPane().textContent).not.toMatch(/An update replaces/);
+  });
+
+  it("offers d, v and m only while the cursor is on the rules row", () => {
+    backend();
+    renderClaude(rules({ conflict_reason: "base_block_edited" }));
+    const detailBody = () => within(detailPane()).getByRole("group", { name: "Claude detail" });
+    const offered = () => ["diff", "convert", "leave as is"].map(name => statusBar().queryByRole("button", { name: new RegExp(name) }) !== null);
+
+    // The rules row is first: the keys are on offer from the list and from the detail of that row.
+    focusSurfaces();
+    expect(offered()).toEqual([true, true, true]);
+    act(() => detailBody().focus());
+    expect(offered()).toEqual([true, true, true]);
+
+    // Agents: nothing to diff, convert or leave, in either pane, and the keys do nothing.
+    focusSurfaces();
+    press("j");
+    expect(detailPane().querySelector(".pane-title")!.textContent).toContain("agents");
+    expect(offered()).toEqual([false, false, false]);
+    press("d");
+    press("v");
+    press("m");
+    act(() => detailBody().focus());
+    expect(offered()).toEqual([false, false, false]);
+    press("d");
+    expect(invokeMock).not.toHaveBeenCalled();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.queryByRole("region", { name: "Claude rules review" })).toBeNull();
+
+    // Back on the rules row they are on offer again.
+    focusSurfaces();
+    press("k");
+    expect(offered()).toEqual([true, true, true]);
   });
 
   it("has no rules block for a surface that is not in the status, and no rules actions", () => {
@@ -376,8 +425,9 @@ describe("rules diff (d)", () => {
     expect(added).toEqual([["+", "## Verification"], ["+", "Run the lightest falsifying check."]]);
     expect(pane.querySelector("input, textarea, [contenteditable]")).toBeNull();
     expect(screen.queryByRole("button", { name: /apply/ })).toBeNull();
-    // The page's four panes are replaced, like the install review.
+    // The page's pair is replaced by one pane and the output strip, like the install review.
     expect(screen.queryByRole("listbox", { name: "Claude surfaces" })).toBeNull();
+    expect(screen.getByRole("region", { name: "Claude rules review" }).className).toContain("review");
     expect(screen.getByRole("region", { name: "Output" })).toBeTruthy();
   });
 
@@ -682,6 +732,15 @@ describe(":rules command", () => {
     expect(invokeMock).not.toHaveBeenCalled();
   });
 
+  it("works whichever row the cursor is on", async () => {
+    backend();
+    renderClaude(rules({ conflict_reason: "base_block_edited" }));
+    focusSurfaces();
+    press("j");
+    run("rules diff claude");
+    await screen.findByRole("group", { name: /to installed/ });
+  });
+
   it("defaults to the harness of the page when none is named", async () => {
     backend();
     renderClaude(rules({ conflict_reason: "base_block_edited" }));
@@ -698,8 +757,7 @@ describe("Codex rules override", () => {
 
   it("warns prominently that AGENTS.override.md replaces AGENTS.md", () => {
     renderCodex(codexHealth([OVERRIDE_CHECK]));
-    const surfacesPane = screen.getByRole("region", { name: "Codex surfaces" });
-    const alert = within(surfacesPane).getByRole("alert");
+    const alert = within(screen.getByRole("region", { name: "Codex detail" })).getByRole("alert");
     expect(alert.textContent).toContain("AGENTS.override.md replaces AGENTS.md");
     expect(alert.textContent).toContain("the Agent Workspace base is not loaded until it is removed or emptied");
     expect(alert.className).toContain("rules-alert");
@@ -707,10 +765,10 @@ describe("Codex rules override", () => {
 
   it("stays quiet without the warning", () => {
     renderCodex(codexHealth([{ ...OVERRIDE_CHECK, status: "pass" }]));
-    expect(within(screen.getByRole("region", { name: "Codex surfaces" })).queryByRole("alert")).toBeNull();
+    expect(within(screen.getByRole("region", { name: "Codex detail" })).queryByRole("alert")).toBeNull();
     cleanup();
     renderCodex(codexHealth([]));
-    expect(within(screen.getByRole("region", { name: "Codex surfaces" })).queryByRole("alert")).toBeNull();
+    expect(within(screen.getByRole("region", { name: "Codex detail" })).queryByRole("alert")).toBeNull();
   });
 });
 
@@ -722,6 +780,7 @@ describe("Cursor", () => {
     });
     renderInFrame(<CursorView {...p} runtimeHealth={null} />);
     expect(screen.queryByLabelText("Rules file")).toBeNull();
-    expect(within(screen.getByRole("region", { name: "Cursor surfaces" })).queryByRole("button", { name: /diff|convert|leave/ })).toBeNull();
+    act(() => screen.getByRole("listbox", { name: "Cursor surfaces" }).focus());
+    expect(statusBar().queryByRole("button", { name: /diff|convert|leave/ })).toBeNull();
   });
 });

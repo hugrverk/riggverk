@@ -7,7 +7,6 @@ export function CodexView({ runtimeHealth, ...props }: HarnessViewProps & { runt
     <HarnessPage
       {...props}
       harness="codex"
-      summary="Sync Codex rules, native TOML agents, managed config sections, and global skills."
       runtime={{ harness: "codex", health: runtimeHealth }}
     />
   );

@@ -14,6 +14,7 @@ import {
 import type { AgentTargetMeta, ClaudeRuntimeHealth, CodexRuntimeHealth, OpenCodeRuntimeHealth } from "../types";
 import { ClaudeView } from "./ClaudeView";
 import { CodexView } from "./CodexView";
+import { CursorView } from "./CursorView";
 import { OpenCodeView } from "./OpenCodeView";
 import type { HarnessViewProps } from "./pageTypes";
 
@@ -25,6 +26,7 @@ vi.mock("@tauri-apps/api/core", () => ({
 
 const TARGETS: AgentTargetMeta[] = [
   { id: "codex_rules", label: "codex rules", harness: "codex", kind: "rules", target_rel: ".codex/AGENTS.md", source_rel: "templates/codex-rules.md" },
+  { id: "codex_agents", label: "codex agents", harness: "codex", kind: "agents", target_rel: ".codex/agents", source_rel: "templates/codex/agents" },
   { id: "codex_config", label: "codex config", harness: "codex", kind: "config", target_rel: ".codex/config.toml", source_rel: "templates/codex/config.toml" },
   { id: "claude_rules", label: "claude rules", harness: "claude", kind: "rules", target_rel: ".claude/CLAUDE.md", source_rel: "templates/claude-rules.md" },
   { id: "claude_agents", label: "claude agents", harness: "claude", kind: "agents", target_rel: ".claude/agents", source_rel: "templates/claude/agents" },
@@ -92,17 +94,36 @@ function renderCodex(overrides: Partial<HarnessViewProps> = {}) {
   return { props: merged, ...renderInFrame(<CodexView {...merged} runtimeHealth={CODEX_HEALTH} />) };
 }
 
-function targets() {
-  return screen.getByRole("listbox", { name: "Codex targets" });
+function surfaces() {
+  return screen.getByRole("listbox", { name: "Codex surfaces" });
 }
 
-function press(key: string, target: Element) {
+function detail() {
+  return screen.getByRole("region", { name: "Codex detail" });
+}
+
+function press(key: string, target: Element = surfaces()) {
   fireEvent.keyDown(target, { key });
+}
+
+function statusBar() {
+  return within(screen.getByLabelText("Status bar"));
 }
 
 /** A key hint of the focused pane: hints live in the status bar, not in the panes. */
 function hint(name: RegExp) {
-  return within(screen.getByLabelText("Status bar")).getByRole("button", { name });
+  return statusBar().getByRole("button", { name });
+}
+
+/** The `dt` -> `dd` pairs of the detail pane, runtime rows included. */
+function facts(root: HTMLElement = detail()): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const dt of root.querySelectorAll("dt")) result[dt.textContent!] = dt.nextElementSibling!.textContent!;
+  return result;
+}
+
+function rowText(row: Element) {
+  return [row.querySelector(".nm")!.textContent!.replace(/ /g, " ").replace(/\s+/g, " ").trim(), row.querySelector(".meta")!.textContent!.trim()];
 }
 
 beforeEach(() => {
@@ -112,122 +133,218 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("HarnessPage", () => {
-  it("shows the four panes: targets, surfaces, runtime and output", () => {
+  it("shows two panes, the surfaces and their detail, and the output as a strip", () => {
     renderCodex();
     const page = screen.getByRole("region", { name: "Codex" });
+    expect(page.className).toContain("pair");
     expect(within(page).getAllByRole("region").map(pane => pane.getAttribute("aria-label"))).toEqual([
-      "Codex targets",
       "Codex surfaces",
-      "Codex runtime",
+      "Codex detail",
       "Output",
     ]);
+    expect(page.querySelector(".outstrip")).not.toBeNull();
   });
 
-  it("lists the targets as a multi-select with a text marker, and Space toggles the one under the cursor", () => {
-    const { props: p } = renderCodex();
-    expect(targets().getAttribute("aria-multiselectable")).toBe("true");
-    const rows = within(targets()).getAllByRole("option");
-    expect(rows.map(row => [row.getAttribute("aria-selected"), row.querySelector(".nm")!.textContent])).toEqual([
-      ["true", "[x] codex rules"],
-      ["false", "[ ] codex config"],
+  it("lists one row per surface with the toggle of its target, and skills without one", () => {
+    renderCodex();
+    expect(surfaces().getAttribute("aria-multiselectable")).toBe("true");
+    const rows = within(surfaces()).getAllByRole("option");
+    // codex_config is off by default; codex_agents is on but has no status row yet; skills have no target.
+    expect(rows.map(rowText)).toEqual([
+      ["[ ] config .codex/config.toml", "off"],
+      ["[x] agents .codex/agents", "unknown"],
+      ["[x] rules .codex/AGENTS.md", "update"],
+      ["skills current detail", "current"],
     ]);
-    act(() => targets().focus());
-    press(" ", targets());
-    expect(p.onToggleTarget).toHaveBeenCalledWith("codex_rules");
-    press("j", targets());
-    press(" ", targets());
+    expect(rows.map(row => row.getAttribute("aria-selected"))).toEqual(["false", "true", "true", "false"]);
+    // One signal per row: the state word in its tone, no glyph.
+    expect(rows[2]!.querySelector(".meta")!.className).toContain("c-warn");
+    expect(rows[3]!.querySelector(".meta")!.className).toContain("c-ok");
+    expect(rows[2]!.querySelector(".meta .g")).toBeNull();
+  });
+
+  it("offers the codex agents toggle, which the page used to leave out", () => {
+    const { props: p } = renderCodex();
+    act(() => surfaces().focus());
+    press("j");
+    expect(detail().querySelector(".pane-title")!.textContent).toContain("agents");
+    press(" ");
+    expect(p.onToggleTarget).toHaveBeenCalledWith("codex_agents");
+  });
+
+  it("Space toggles the target of the row under the cursor, and a click does too", () => {
+    const { props: p } = renderCodex();
+    const rows = within(surfaces()).getAllByRole("option");
+    act(() => surfaces().focus());
+    press(" ");
     expect(p.onToggleTarget).toHaveBeenLastCalledWith("codex_config");
+    press("j");
+    press("j");
+    press(" ");
+    expect(p.onToggleTarget).toHaveBeenLastCalledWith("codex_rules");
     fireEvent.click(rows[1]!);
+    expect(p.onToggleTarget).toHaveBeenLastCalledWith("codex_agents");
     expect(p.onToggleTarget).toHaveBeenCalledTimes(3);
   });
 
-  it("moves focus to the output pane when an apply leaves a rollback transaction, so z works", () => {
+  it("offers the toggle as a status-bar hint, and it toggles too", () => {
+    const { props: p } = renderCodex();
+    act(() => surfaces().focus());
+    fireEvent.click(hint(/toggle target/));
+    expect(p.onToggleTarget).toHaveBeenCalledWith("codex_config");
+  });
+
+  it("says skills have no target toggle instead of toggling them", () => {
+    const { props: p } = renderCodex();
+    act(() => surfaces().focus());
+    press("G");
+    expect(detail().querySelector(".pane-title")!.textContent).toContain("skills");
+    press(" ");
+    expect(p.onToggleTarget).not.toHaveBeenCalled();
+    expect(statusBar().getByText("skills have no target toggle")).toBeTruthy();
+  });
+
+  it("shows the detail of the row under the cursor and follows it", () => {
+    renderCodex();
+    act(() => surfaces().focus());
+    const title = () => detail().querySelector(".pane-title")!.textContent;
+    // The first row: config, off, with its target.
+    expect(title()).toContain("config · off");
+    expect(facts()).toMatchObject({
+      file: ".codex/config.toml",
+      source: "templates/codex/config.toml",
+      target: "codex config · off",
+      state: "off",
+    });
+    press("j");
+    press("j");
+    expect(title()).toContain("rules · update");
+    expect(facts()).toMatchObject({ file: ".codex/AGENTS.md", target: "codex rules · on", state: "update", detail: "update_available detail" });
+    press("j");
+    // Skills: no file, source or target to show, only the state and what the backend said.
+    expect(title()).toContain("skills · current");
+    const skills = facts();
+    expect(skills).toMatchObject({ state: "current", detail: "current detail" });
+    expect(skills).not.toHaveProperty("file");
+    expect(skills).not.toHaveProperty("source");
+    expect(skills).not.toHaveProperty("target");
+  });
+
+  it("names the other surface a toggle also gates", () => {
+    const cursorTargets: AgentTargetMeta[] = [
+      { id: "cursor_setup", label: "cursor global agents", harness: "cursor", kind: "agents", target_rel: ".cursor/agents", source_rel: "templates/cursor/agents" },
+    ];
+    const p = props({ agentTargets: cursorTargets, overview: overviewOf({}) });
+    renderInFrame(<CursorView {...p} runtimeHealth={null} />);
+    const list = screen.getByRole("listbox", { name: "Cursor surfaces" });
+    act(() => list.focus());
+    const cursorDetail = () => screen.getByRole("region", { name: "Cursor detail" });
+    expect(facts(cursorDetail())).toMatchObject({ file: ".cursor/agents", target: "cursor global agents · on · also mcp" });
+    press("G", list);
+    // The MCP file is not the target's path: it names the toggle, not a file that is not its own.
+    const mcp = facts(cursorDetail());
+    expect(mcp).toMatchObject({ target: "cursor global agents · on · also agents" });
+    expect(mcp).not.toHaveProperty("file");
+    press(" ", list);
+    expect(p.onToggleTarget).toHaveBeenCalledWith("cursor_setup");
+  });
+
+  it("moves focus to the output strip when an apply leaves a rollback transaction, so z works", () => {
     const { rerenderFrame, props: p } = renderCodex();
-    act(() => targets().focus());
+    act(() => surfaces().focus());
     rerenderFrame(<CodexView {...p} rollbackTransactionId="tx-1" runtimeHealth={CODEX_HEALTH} />);
     expect(document.activeElement?.closest("[data-pane-id]")?.getAttribute("data-pane-id")).toBe("output");
     fireEvent.keyDown(document.activeElement!, { key: "z" });
     expect(p.onRollback).toHaveBeenCalledTimes(1);
   });
 
-  it("offers the toggle as a button too", () => {
-    const { props: p } = renderCodex();
-    fireEvent.click(within(screen.getByRole("region", { name: "Codex targets" })).getByRole("button", { name: /toggle/ }));
-    expect(p.onToggleTarget).toHaveBeenCalledWith("codex_rules");
-  });
-
-  it("shows autosave progress and failure next to the targets", () => {
+  it("shows autosave progress and failure next to the harness state", () => {
     const { rerenderFrame, props: p } = renderCodex({ settingsSaveStatus: "pending" });
-    const title = () => screen.getByRole("region", { name: "Codex targets" }).querySelector(".pane-title")!.textContent;
+    const title = () => screen.getByRole("region", { name: "Codex surfaces" }).querySelector(".pane-title")!.textContent;
+    expect(title()).toContain("update");
     expect(title()).toContain("autosaving");
     rerenderFrame(<CodexView {...p} settingsSaveStatus="error" runtimeHealth={CODEX_HEALTH} />);
     expect(title()).toContain("not saved");
   });
 
-  it("lists surfaces whose target is off as off, and the others with their state", () => {
-    // codex_config is off by default; codex_agents is on but has no status row yet.
+  it("shows the runtime facts of the harness under the surface, without restating them as prose", () => {
     renderCodex();
-    const surfaces = within(screen.getByRole("listbox", { name: "Codex surfaces" })).getAllByRole("option");
-    expect(surfaces.map(row => [row.querySelector(".nm")!.textContent!.trim().split(" ")[0], row.querySelector(".meta")!.textContent!.trim()])).toEqual([
-      ["config", "· off"],
-      ["agents", "· unknown"],
-      ["rules", "◐ update"],
-      ["skills", "● current"],
-    ]);
+    const runtime = facts();
+    expect(detail().textContent).toContain("runtime · diverged");
+    expect(runtime).toMatchObject({ skills: "synced · 17/18", approval: "on-request", sandbox: "workspace-write" });
+    // The summary only restates the verdict; the next step stays while the runtime is out of sync.
+    expect(detail().textContent).not.toContain("Codex diverged");
+    expect(runtime.next).toBe("Update Codex.");
   });
 
-  it("shows the runtime facts of the harness", () => {
-    renderCodex();
-    const runtime = screen.getByRole("region", { name: "Codex runtime" });
-    expect(runtime.querySelector(".pane-title")!.textContent).toContain("diverged");
-    expect(runtime.textContent).toContain("skills");
-    expect(runtime.textContent).toContain("synced · 17/18");
-    expect(runtime.textContent).toContain("on-request");
-    expect(runtime.textContent).toContain("Update Codex.");
+  it("shows a failed status check and the files an update preserved as facts of the harness", () => {
+    const status = installationStatus("conflict", [surfaceStatus("codex_rules", "conflict")], { conflict_count: 1 }, { conflict_details: ["~/.codex/AGENTS.md", "~/.codex/config.toml"] });
+    const overview = overviewOf({ codex: status });
+    const { props: p, rerenderFrame } = renderCodex({ overview });
+    expect(facts()).toMatchObject({ preserved: "~/.codex/AGENTS.md, ~/.codex/config.toml" });
+    expect(detail().textContent).not.toContain("conflict summary");
+    const failed = { ...overview, entries: { codex: { id: "codex" as const, status: null, loading: false, error: "hash failed" } } };
+    rerenderFrame(<CodexView {...p} overview={failed} runtimeHealth={CODEX_HEALTH} />);
+    expect(facts()).toMatchObject({ status: "failed: hash failed" });
   });
 
-  it("opens the install review for this harness with u, and a read-only preview with p", () => {
+  it("opens the install review for this harness with u, and a read-only preview with p, from either pane", () => {
     const { props: p } = renderCodex();
-    act(() => targets().focus());
-    press("u", targets());
+    act(() => surfaces().focus());
+    press("u");
     expect(p.install.open).toHaveBeenCalledWith("codex");
-    press("p", targets());
+    press("p");
     expect(p.install.open).toHaveBeenLastCalledWith("codex", { readOnly: true });
+    const body = within(detail()).getByRole("group", { name: "Codex detail" });
+    act(() => body.focus());
+    press("u", body);
+    expect(p.install.open).toHaveBeenCalledTimes(3);
   });
 
   it("does not update while target changes are still being saved", () => {
     const { props: p } = renderCodex({ settingsSaveStatus: "saving" });
-    act(() => targets().focus());
-    press("u", targets());
+    act(() => surfaces().focus());
+    press("u");
     expect(p.install.open).not.toHaveBeenCalled();
-    const update = hint(/update/);
-    expect(update.getAttribute("title")).toBe("saving target changes");
+    expect(hint(/update/).getAttribute("title")).toBe("saving target changes");
   });
 
   it("explains a missing workspace and offers no update", () => {
     const { props: p } = renderCodex({ workspaceValid: false, overview: overviewOf({}) });
-    expect(screen.getByRole("region", { name: "Codex surfaces" }).textContent).toContain("No valid workspace installed");
-    act(() => targets().focus());
-    press("u", targets());
+    expect(detail().textContent).toContain("No valid workspace installed");
+    expect(facts()).toMatchObject({ runtime: "no valid workspace" });
+    act(() => surfaces().focus());
+    press("u");
     expect(p.install.open).not.toHaveBeenCalled();
   });
 
-  it("shows the review in place of the panes while it is open", () => {
+  it("waits for the settings before it lists anything", () => {
+    renderCodex({ appSettings: null });
+    expect(screen.getByRole("region", { name: "Codex surfaces" }).textContent).toContain("loading settings…");
+    expect(screen.queryByRole("option")).toBeNull();
+    expect(detail().querySelector(".pane-title")!.textContent).toContain("detail");
+  });
+
+  it("shows the review as one pane and the strip in place of the pair while it is open", () => {
     const flow = flowOf([op("codex_rules", "update")], { label: "update codex", surfaces: ["codex_rules"] });
     const install = installScreenOf(flow, "codex");
     renderCodex({ install });
+    const review = screen.getByRole("region", { name: "Codex install review" });
+    expect(review.className).toContain("review");
+    expect(within(review).getAllByRole("region").map(pane => pane.getAttribute("aria-label")).at(-1)).toBe("Output");
+    expect(within(review).getAllByRole("region")).toHaveLength(2);
     expect(screen.getByRole("grid", { name: "Install plan" })).toBeTruthy();
-    expect(screen.queryByRole("listbox", { name: "Codex targets" })).toBeNull();
+    expect(screen.queryByRole("listbox", { name: "Codex surfaces" })).toBeNull();
     fireEvent.keyDown(screen.getByRole("grid", { name: "Install plan" }), { key: "y" });
     expect(install.apply).toHaveBeenCalledTimes(1);
   });
 
   it("shows the Claude runtime from its sync flags", () => {
     renderInFrame(<ClaudeView {...props()} runtimeHealth={CLAUDE_HEALTH} />);
-    const runtime = screen.getByRole("region", { name: "Claude runtime" });
-    expect(runtime.querySelector(".pane-title")!.textContent).toContain("diverged");
-    expect(runtime.textContent).toContain("diverged · 5/6");
-    expect(runtime.textContent).toContain("claude cli");
+    const claude = screen.getByRole("region", { name: "Claude detail" });
+    expect(claude.textContent).toContain("runtime · diverged");
+    expect(facts(claude)).toMatchObject({ agents: "diverged · 5/6", "claude cli": "available" });
+    expect(claude.textContent).not.toContain("Claude CLI available");
   });
 });
 
@@ -266,8 +383,8 @@ describe("OpenCodeView model override", () => {
     const small = screen.getByLabelText("small model") as HTMLSelectElement;
     expect(small.value).toBe("anthropic/claude-haiku-4-5");
 
-    const runtime = screen.getByRole("region", { name: "OpenCode runtime" });
-    act(() => (runtime.querySelector(".pane-body") as HTMLElement).focus());
+    const detailPane = screen.getByRole("region", { name: "OpenCode detail" });
+    act(() => (detailPane.querySelector(".pane-body") as HTMLElement).focus());
     const save = hint(/save model/);
     expect(save.getAttribute("aria-disabled")).toBe("true");
 
@@ -280,7 +397,21 @@ describe("OpenCodeView model override", () => {
       smallModel: "anthropic/claude-haiku-4-5",
     }));
     await waitFor(() => expect(onModelUpdated).toHaveBeenCalledTimes(1));
-    expect(await within(runtime).findByText("Saved model selection")).toBeTruthy();
+    expect(await within(detailPane).findByText("Saved model selection")).toBeTruthy();
+  });
+
+  it("reloads the model list with R, leaving m to the rules file in the same pane", async () => {
+    backend();
+    renderOpenCode();
+    await waitFor(() => expect((screen.getByLabelText("model") as HTMLSelectElement).tagName).toBe("SELECT"));
+    const body = screen.getByRole("region", { name: "OpenCode detail" }).querySelector(".pane-body") as HTMLElement;
+    act(() => body.focus());
+    const listCalls = () => invokeMock.mock.calls.filter(([command]) => command === "list_available_opencode_models").length;
+    const before = listCalls();
+    fireEvent.keyDown(body, { key: "m" });
+    expect(listCalls()).toBe(before);
+    fireEvent.keyDown(body, { key: "R" });
+    await waitFor(() => expect(listCalls()).toBe(before + 1));
   });
 
   it("saves from the keyboard with s once there is a change", async () => {
@@ -288,7 +419,7 @@ describe("OpenCodeView model override", () => {
     const { onModelUpdated } = renderOpenCode();
     const model = () => screen.getByLabelText("model") as HTMLSelectElement;
     await waitFor(() => expect(model().tagName === "SELECT" && model().value).toBe("anthropic/claude-sonnet-4-5"));
-    const body = screen.getByRole("region", { name: "OpenCode runtime" }).querySelector(".pane-body") as HTMLElement;
+    const body = screen.getByRole("region", { name: "OpenCode detail" }).querySelector(".pane-body") as HTMLElement;
     act(() => body.focus());
     fireEvent.keyDown(body, { key: "s" });
     expect(onModelUpdated).not.toHaveBeenCalled();
@@ -311,10 +442,10 @@ describe("OpenCodeView model override", () => {
     fireEvent.change(model(), { target: { value: "gpt-5" } });
     expect(screen.getByRole("alert").textContent).toBe("Must be provider/model format");
     expect(model().getAttribute("aria-invalid")).toBe("true");
-    const runtime = screen.getByRole("region", { name: "OpenCode runtime" });
-    act(() => (runtime.querySelector(".pane-body") as HTMLElement).focus());
+    const detailPane = screen.getByRole("region", { name: "OpenCode detail" });
+    act(() => (detailPane.querySelector(".pane-body") as HTMLElement).focus());
     expect(hint(/save model/).getAttribute("title")).toBe("Must be provider/model format");
-    expect(runtime.textContent).toContain("opencode models: unavailable");
+    expect(detailPane.textContent).toContain("opencode models: unavailable");
   });
 
   it("does not load models without a valid workspace", () => {
