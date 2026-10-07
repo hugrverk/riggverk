@@ -10,6 +10,7 @@ mod executable_resolver;
 mod installation_status;
 mod managed_bootstrap;
 mod managed_state;
+mod mutation_lock;
 mod path_safety;
 mod path_utils;
 mod platform_paths;
