@@ -673,7 +673,25 @@ describe("OutputStrip success moment", () => {
 
   it("stays calm for a result that was already there when the strip mounted", () => {
     document.documentElement.setAttribute("data-motion", "full");
-    renderInFrame(<OutputStrip {...props({ wsLog: APPLY, wsLogCompletedAt: Date.now() })} />);
+    renderInFrame(<OutputStrip {...props({ wsLog: APPLY, wsLogCompletedAt: Date.now() - 60_000 })} />);
+    expect(strip().classList.contains("just-done")).toBe(false);
+    expect(line().querySelector(".g")!.classList.contains("tick")).toBe(true);
+  });
+
+  it("counts a result of the last second or two as landed when the strip mounts onto it", () => {
+    // The page swaps the review for its panes, and remounts the strip, as the task ends.
+    document.documentElement.setAttribute("data-motion", "full");
+    renderInFrame(<OutputStrip {...props({ wsLog: APPLY, wsLogCompletedAt: Date.now() - 200 })} />);
+    expect(strip().classList.contains("just-done")).toBe(true);
+    cleanup();
+
+    document.documentElement.setAttribute("data-motion", "subtle");
+    renderInFrame(<OutputStrip {...props({ wsLog: APPLY, wsLogCompletedAt: Date.now() - 200 })} />);
+    expect(strip().classList.contains("just-done")).toBe(false);
+    cleanup();
+
+    document.documentElement.setAttribute("data-motion", "full");
+    renderInFrame(<OutputStrip {...props({ wsLog: { ...APPLY, success: false }, wsLogCompletedAt: Date.now() - 200 })} />);
     expect(strip().classList.contains("just-done")).toBe(false);
   });
 

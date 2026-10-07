@@ -66,6 +66,9 @@ export function outputTextOf(log: ActionResult | null): string | null {
   return text || null;
 }
 
+/** A result this young when the strip mounts still counts as having just landed. */
+const FRESH_RESULT_MS = 1500;
+
 /** Transaction ids are nanosecond timestamps; the tail is what tells two of them apart. */
 function shortTransactionId(id: string): string {
   return id.length > 8 ? id.slice(-6) : id;
@@ -119,13 +122,16 @@ export function OutputStrip({
     if ((wsRunning && !seen.running) || (wsLog && wsLog !== seen.log)) setExpanded(true);
   }
 
-  // The result on screen: a task in flight hides the previous one. One that lands while the strip is mounted
-  // (a strip that mounts onto an old result stays calm) is flagged once, in full motion only; the animation
-  // clears the flag. Done while rendering, like `seen`, so the first painted frame already carries it.
+  // The result on screen: a task in flight hides the previous one. One that lands while the strip is mounted, or
+  // that is only seconds old when it mounts (the page swaps the review for its panes, and remounts the strip, as the
+  // task ends), is flagged once, in full motion only; the animation clears the flag. A strip that mounts onto an
+  // older result stays calm. Done while rendering, like `seen`, so the first painted frame already carries it.
   const motion = useMotion();
   const shown = wsRunning ? null : wsLog;
   const [shownSeen, setShownSeen] = useState(shown);
-  const [landed, setLanded] = useState<ActionResult | null>(null);
+  const [landed, setLanded] = useState<ActionResult | null>(() =>
+    shown?.success && motion === "full" && wsLogCompletedAt !== null && Date.now() - wsLogCompletedAt < FRESH_RESULT_MS ? shown : null,
+  );
   if (shownSeen !== shown) {
     setShownSeen(shown);
     if (shown?.success && motion === "full") setLanded(shown);
