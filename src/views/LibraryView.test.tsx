@@ -180,8 +180,21 @@ function queryStatusHint(name: string) {
   return within(screen.getByLabelText("Status bar")).queryByRole("button", { name });
 }
 
-function textarea(label?: string) {
-  return (label ? screen.getByLabelText(label) : screen.getByRole("textbox")) as HTMLTextAreaElement;
+function textarea(label: string) {
+  return screen.getByLabelText(label) as HTMLTextAreaElement;
+}
+
+/** Edit mode: Enter or `i` on the focused document pane swaps the rendered view for the source textarea. */
+function editDocument(label: string) {
+  focusPane("Document");
+  press(document.activeElement!, "i");
+  return textarea(label);
+}
+
+/** Mod+s from the document pane, whichever mode it is in. */
+function pressSave() {
+  focusPane("Document");
+  press(document.activeElement!, "s", { ctrlKey: true });
 }
 
 function runCommand(line: string) {
@@ -198,11 +211,13 @@ const docs: DocSummary[] = [
 ];
 
 describe("LibraryView layout", () => {
-  it("renders items, editor and preview panes with the source switcher and counts", () => {
+  it("renders the items and one document pane with the source switcher and counts", () => {
     renderLibrary({ docs, activeDoc: makeDoc("a", "Alpha", "# A"), docDraft: "# A" });
     expect(screen.getByRole("region", { name: "Library items" }).getAttribute("data-pane-id")).toBe("items");
-    expect(screen.getByRole("region", { name: "Editor" }).getAttribute("data-pane-id")).toBe("editor");
-    expect(screen.getByRole("region", { name: "Preview" }).getAttribute("data-pane-id")).toBe("preview");
+    expect(screen.getByRole("region", { name: "Document" }).getAttribute("data-pane-id")).toBe("editor");
+    expect(document.querySelectorAll("section.pane")).toHaveLength(2);
+    expect(screen.queryByRole("region", { name: "Editor" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Preview" })).toBeNull();
     const group = screen.getByRole("group", { name: "Library source type" });
     expect(within(group).getAllByRole("button").map(button => button.textContent)).toEqual([
       "docs 3",
@@ -226,10 +241,11 @@ describe("LibraryView layout", () => {
     expect(statusBarText()).toBe("library › skills");
   });
 
-  it("shows the editor and preview empty states while nothing is open", () => {
+  it("shows one empty state in the document pane while nothing is open", () => {
     renderLibrary({ docs });
-    expect(screen.getByText("Select a document to preview")).not.toBeNull();
-    expect(screen.getByText("Nothing to preview")).not.toBeNull();
+    expect(screen.getAllByText("Select a document to preview")).toHaveLength(1);
+    expect(screen.queryByText("Nothing to preview")).toBeNull();
+    expect(screen.getByRole("region", { name: "Document" }).querySelector(".pane-title")!.textContent).toBe("document");
   });
 });
 
@@ -255,12 +271,14 @@ describe("LibraryView Configs pane", () => {
       configEditorSourceContent: content,
       configDraft: content.content,
     });
-    expect(textarea("Edit config source").value).toContain("opencode_marker");
-    // The preview shows the same text pretty-printed.
+    // Rendered by default: the source, pretty-printed, and no textarea until the item is edited.
     expect(document.querySelector(".configs-code")!.textContent).toContain('"opencode_marker": true');
+    expect(screen.queryByLabelText("Edit config source")).toBeNull();
     expect(screen.queryByText("Select a config target to preview")).toBeNull();
     // The bundle summary is gated on the same active content.
     expect(screen.getByRole("region", { name: "bundle" })).not.toBeNull();
+    expect(editDocument("Edit config source").value).toContain("opencode_marker");
+    expect(document.querySelector(".configs-code")).toBeNull();
   });
 
   it("shows a loading state for opencode_config and then renders content", () => {
@@ -275,7 +293,7 @@ describe("LibraryView Configs pane", () => {
 
     const loaded = makeDoc("base", "base", '{"loaded_marker": 1}');
     update({ ...props, configEditorSourceContent: loaded, configDraft: loaded.content });
-    expect(textarea("Edit config source").value).toContain("loaded_marker");
+    expect(document.querySelector(".configs-code")!.textContent).toContain('"loaded_marker": 1');
   });
 
   it("shows the template content for other config targets as a read-only preview", () => {
@@ -287,9 +305,13 @@ describe("LibraryView Configs pane", () => {
       configTemplateContent: template,
       configDraft: template.content,
     });
-    const editor = textarea("Edit config source");
-    expect(editor.value).toContain("template_marker");
-    expect(editor.readOnly).toBe(true);
+    expect(document.querySelector(".configs-code")!.textContent).toContain("template_marker");
+    expect(screen.getByText("template preview")).not.toBeNull();
+    // Never a textarea for a read-only item, however it is asked for.
+    focusPane("Document");
+    press(document.activeElement!, "i");
+    press(document.activeElement!, "Enter");
+    expect(screen.queryByLabelText("Edit config source")).toBeNull();
     expect(screen.queryByRole("region", { name: "bundle" })).toBeNull();
   });
 
@@ -355,7 +377,7 @@ describe("LibraryView Configs pane", () => {
     expect(onSelectConfigSource).toHaveBeenCalledWith("policy");
   });
 
-  it("treats the generated snapshot as read-only: no save, editor marked read-only", () => {
+  it("treats the generated snapshot as read-only: no textarea, no save", () => {
     const onSaveConfig = vi.fn();
     const content = makeDoc("snapshot", "snapshot", '{"snap": 1}');
     renderLibrary({
@@ -368,9 +390,9 @@ describe("LibraryView Configs pane", () => {
       configDraft: content.content,
       onSaveConfig,
     });
-    expect(textarea("Edit config source").readOnly).toBe(true);
+    expect(screen.queryByLabelText("Edit config source")).toBeNull();
     expect(screen.getByText("generated snapshot: edit Base or Policy instead")).not.toBeNull();
-    press(textarea("Edit config source"), "s", { ctrlKey: true });
+    pressSave();
     expect(onSaveConfig).not.toHaveBeenCalled();
   });
 
@@ -387,7 +409,7 @@ describe("LibraryView Configs pane", () => {
       configDirty: true,
       onSaveConfig,
     });
-    press(textarea("Edit config source"), "s", { ctrlKey: true });
+    pressSave();
     expect(onSaveConfig).toHaveBeenCalledTimes(1);
   });
 
@@ -567,20 +589,50 @@ describe("LibraryView status-bar hints", () => {
     expect(queryStatusHint("/ filter")).toBeNull();
   });
 
-  it("offers open, not the list hints, while the editor pane has focus", () => {
+  it("offers edit, save and open, not the list hints, while the document pane has focus", () => {
     renderLibrary({ docs, activeDoc: doc, docDraft: doc.content });
-    focusPane("Editor");
+    focusPane("Document");
+    expect(statusHint("↵ edit")).not.toBeNull();
     expect(statusHint("o open")).not.toBeNull();
     expect(queryStatusHint("/ filter")).toBeNull();
     expect(queryStatusHint("] next source")).toBeNull();
   });
 
-  it("hides open while nothing is open", () => {
+  it("edits from the status-bar hint, and then offers save but no edit while typing", () => {
+    renderLibrary({ docs, activeDoc: doc, docDraft: doc.content });
+    focusPane("Document");
+    fireEvent.click(statusHint("↵ edit"));
+    expect(document.activeElement).toBe(textarea("Edit document"));
+    const bar = within(screen.getByLabelText("Status bar"));
+    expect(bar.getByText("INSERT")).not.toBeNull();
+    expect(bar.getByText("leave field")).not.toBeNull();
+    expect(queryStatusHint("↵ edit")).toBeNull();
+    expect(bar.getByRole("button", { name: /save/ })).not.toBeNull();
+  });
+
+  it("keeps the edit hint disabled, with the reason, for a read-only item", () => {
+    const skill: SkillSummary = { id: "tdd", name: "tdd", description: "", path: "", group: "g", category: "", risk: "low", targets: [], related: [] };
+    renderLibrary({
+      sourceType: "skills",
+      skills: [skill],
+      activeSkillId: "tdd",
+      activeSkillContent: makeDoc("tdd", "tdd", "# Tdd"),
+    });
+    focusPane("Document");
+    const hint = statusHint("↵ edit");
+    expect(hint.getAttribute("aria-disabled")).toBe("true");
+    expect(hint.getAttribute("title")).toBe("skills are edited as files: open it in your editor");
+    fireEvent.click(hint);
+    expect(screen.queryByLabelText("Skill source")).toBeNull();
+  });
+
+  it("hides edit and open while nothing is open", () => {
     renderLibrary({ docs });
     focusList();
     expect(queryStatusHint("o open")).toBeNull();
-    focusPane("Editor");
+    focusPane("Document");
     expect(queryStatusHint("o open")).toBeNull();
+    expect(queryStatusHint("↵ edit")).toBeNull();
   });
 });
 
@@ -725,52 +777,97 @@ describe("LibraryView debounced selection", () => {
   });
 });
 
-describe("LibraryView editor", () => {
+describe("LibraryView document pane", () => {
   const doc = makeDoc("a", "Alpha", "# Saved heading");
 
-  it("shows the open doc in the editor pane title with its path, and a modified marker while dirty", () => {
+  it("shows the open doc in the pane title with its path, and a modified marker while dirty", () => {
     const { update } = renderLibrary({ docs, activeDoc: doc, docDraft: doc.content });
-    const title = screen.getByRole("region", { name: "Editor" }).querySelector(".pane-title")!;
+    const title = screen.getByRole("region", { name: "Document" }).querySelector(".pane-title")!;
     expect(title.textContent).toBe("Alpha · docs/a.md");
     update({ docs, activeDoc: doc, docDraft: "# Edited", docDirty: true });
     expect(title.textContent).toBe("Alpha · docs/a.md · modified");
   });
 
-  it("moves into the editor with Enter or i from the list, and Escape returns to the list", () => {
+  it("shows the document once, rendered, and no textarea until it is edited", () => {
+    renderLibrary({ docs, activeDoc: doc, docDraft: doc.content });
+    const pane = screen.getByRole("region", { name: "Document" });
+    expect(within(pane).getAllByRole("heading", { name: "Saved heading" })).toHaveLength(1);
+    expect(screen.queryByLabelText("Edit document")).toBeNull();
+    expect(screen.getAllByText(/Saved heading/)).toHaveLength(1);
+  });
+
+  it("moves into edit mode with Enter or i from the list, and Escape returns to the rendered view", () => {
     renderLibrary({ docs, activeDoc: doc, docDraft: doc.content });
     const list = focusList();
     press(list, "Enter");
     const editor = textarea("Edit document");
     expect(document.activeElement).toBe(editor);
+    // Edit mode swaps the rendered view for the source: the text is not shown twice.
+    expect(screen.queryByRole("heading", { name: "Saved heading" })).toBeNull();
 
     press(editor, "Escape");
-    expect(document.activeElement).toBe(listbox());
+    expect(screen.queryByLabelText("Edit document")).toBeNull();
+    expect(screen.getByRole("heading", { name: "Saved heading" })).not.toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole("group", { name: "Document" }));
 
-    press(listbox(), "i");
-    expect(document.activeElement).toBe(editor);
+    press(focusList(), "i");
+    expect(document.activeElement).toBe(textarea("Edit document"));
   });
 
-  it("lands on the editor pane in NORMAL mode with l, so a further l moves on instead of typing", () => {
+  it("edits from the focused pane with Enter or i, and shows the edit rendered after Escape", () => {
+    const { update } = renderLibrary({ docs, activeDoc: doc, docDraft: doc.content });
+    focusPane("Document");
+    press(document.activeElement!, "Enter");
+    const editor = textarea("Edit document");
+    expect(document.activeElement).toBe(editor);
+
+    // Typing reaches the controller, which hands the working copy back as the draft.
+    update({ docs, activeDoc: doc, docDraft: "# Draft heading", docDirty: true });
+    expect(textarea("Edit document").value).toBe("# Draft heading");
+    press(textarea("Edit document"), "Escape");
+    const pane = screen.getByRole("region", { name: "Document" });
+    expect(within(pane).getByRole("heading", { name: "Draft heading" })).not.toBeNull();
+    expect(within(pane).queryByRole("heading", { name: "Saved heading" })).toBeNull();
+    expect(pane.querySelector(".pane-title")!.textContent).toContain("modified");
+    expect(document.activeElement).toBe(screen.getByRole("group", { name: "Document" }));
+
+    press(document.activeElement!, "i");
+    expect(document.activeElement).toBe(textarea("Edit document"));
+  });
+
+  it("lands on the document pane in NORMAL mode with l, and h returns to the list", () => {
     renderLibrary({ docs, activeDoc: doc, docDraft: doc.content });
     const list = focusList();
     press(list, "l");
-    const editorPane = screen.getByRole("region", { name: "Editor" });
-    expect(document.activeElement).toBe(editorPane.querySelector(".lib-editor"));
-    expect(document.activeElement).not.toBe(textarea("Edit document"));
-    press(document.activeElement!, "l");
-    expect(document.activeElement).toBe(screen.getByRole("group", { name: "Preview" }));
-    press(document.activeElement!, "h");
+    const body = screen.getByRole("group", { name: "Document" });
+    expect(document.activeElement).toBe(body);
+    expect(screen.queryByLabelText("Edit document")).toBeNull();
+    // It is the last pane: l stays put instead of typing or wrapping.
+    press(body, "l");
+    expect(document.activeElement).toBe(body);
+    press(body, "h");
+    expect(document.activeElement).toBe(listbox());
+  });
+
+  it("lands on the pane, not in the textarea, with h and l while the pane is still in edit mode", () => {
+    renderLibrary({ docs, activeDoc: doc, docDraft: doc.content });
+    const editor = editDocument("Edit document");
+    // Leave through the list without Escape: the item stays in edit mode.
+    act(() => listbox().focus());
+    press(listbox(), "l");
+    const pane = screen.getByRole("region", { name: "Document" });
+    expect(document.activeElement).toBe(pane.querySelector(".lib-editor"));
+    expect(document.activeElement).not.toBe(editor);
     press(document.activeElement!, "h");
     expect(document.activeElement).toBe(listbox());
-    press(editorPane.querySelector(".lib-editor")!, "i");
-    expect(document.activeElement).toBe(textarea("Edit document"));
+    press(listbox(), "i");
+    expect(document.activeElement).toBe(editor);
   });
 
   it("does not run list keys while typing in the editor", () => {
     const onSetSourceType = vi.fn();
     renderLibrary({ docs, activeDoc: doc, docDraft: doc.content, onSetSourceType });
-    const editor = textarea("Edit document");
-    act(() => editor.focus());
+    const editor = editDocument("Edit document");
     press(editor, "]");
     press(editor, "i");
     press(editor, "j");
@@ -778,7 +875,20 @@ describe("LibraryView editor", () => {
     expect(document.activeElement).toBe(editor);
   });
 
-  it("opens the row and then moves into the editor when Enter is pressed before the selection landed", () => {
+  it("returns to the rendered view when another item opens", () => {
+    const other = makeDoc("c", "Gamma", "# Gamma heading");
+    const { update } = renderLibrary({ docs, activeDoc: doc, docDraft: doc.content });
+    editDocument("Edit document");
+    update({ docs, activeDoc: other, docDraft: other.content });
+    expect(screen.queryByLabelText("Edit document")).toBeNull();
+    expect(screen.getByRole("heading", { name: "Gamma heading" })).not.toBeNull();
+    // Coming back to the first item does not resume editing it.
+    update({ docs, activeDoc: doc, docDraft: doc.content });
+    expect(screen.queryByLabelText("Edit document")).toBeNull();
+    expect(screen.getByRole("heading", { name: "Saved heading" })).not.toBeNull();
+  });
+
+  it("opens the row and then edits it when Enter is pressed before the selection landed", () => {
     const onSelectDoc = vi.fn();
     const { update } = renderLibrary({ docs, activeDoc: doc, docDraft: doc.content, onSelectDoc });
     const list = focusList();
@@ -786,38 +896,57 @@ describe("LibraryView editor", () => {
     press(list, "Enter");
     expect(onSelectDoc).toHaveBeenCalledWith("c");
     expect(document.activeElement).toBe(list);
+    expect(screen.queryByLabelText("Edit document")).toBeNull();
 
     const next = makeDoc("c", "Gamma", "# Gamma");
     update({ docs, activeDoc: next, docDraft: next.content, onSelectDoc });
     expect(document.activeElement).toBe(textarea("Edit document"));
   });
 
+  it("opens a read-only row with Enter into the rendered pane, not a textarea", () => {
+    const onSelectSkillPreview = vi.fn();
+    const skills: SkillSummary[] = [
+      { id: "one", name: "one", description: "", path: "", group: "g", category: "", risk: "", targets: [], related: [] },
+      { id: "two", name: "two", description: "", path: "", group: "g", category: "", risk: "", targets: [], related: [] },
+    ];
+    const one = makeDoc("one", "one", "# One");
+    const { update } = renderLibrary({ sourceType: "skills", skills, activeSkillId: "one", activeSkillContent: one, onSelectSkillPreview });
+    const list = focusList();
+    press(list, "j");
+    press(list, "Enter");
+    expect(onSelectSkillPreview).toHaveBeenCalledWith("two");
+    update({ sourceType: "skills", skills, activeSkillId: "two", activeSkillContent: makeDoc("two", "two", "# Two"), onSelectSkillPreview });
+    expect(document.activeElement).toBe(screen.getByRole("group", { name: "Document" }));
+    expect(screen.queryByLabelText("Skill source")).toBeNull();
+  });
+
   it("reports edits through the draft handler", () => {
     const onChangeDocDraft = vi.fn();
     renderLibrary({ docs, activeDoc: doc, docDraft: doc.content, onChangeDocDraft });
+    editDocument("Edit document");
     fireEvent.change(textarea("Edit document"), { target: { value: "# New" } });
     expect(onChangeDocDraft).toHaveBeenCalledWith("# New");
   });
 
-  it("renders the preview from the draft, not from the saved content", () => {
+  it("renders the document from the draft, not from the saved content", () => {
     const { update } = renderLibrary({ docs, activeDoc: doc, docDraft: doc.content });
-    const preview = screen.getByRole("region", { name: "Preview" });
-    expect(within(preview).getByRole("heading", { name: "Saved heading" })).not.toBeNull();
+    const pane = screen.getByRole("region", { name: "Document" });
+    expect(within(pane).getByRole("heading", { name: "Saved heading" })).not.toBeNull();
     update({ docs, activeDoc: doc, docDraft: "# Draft heading", docDirty: true });
-    expect(within(preview).getByRole("heading", { name: "Draft heading" })).not.toBeNull();
-    expect(within(preview).queryByRole("heading", { name: "Saved heading" })).toBeNull();
+    expect(within(pane).getByRole("heading", { name: "Draft heading" })).not.toBeNull();
+    expect(within(pane).queryByRole("heading", { name: "Saved heading" })).toBeNull();
   });
 
-  it("renders tables and links in the preview", () => {
+  it("renders tables and links", () => {
     const content = "Paragraph with [safe link](https://example.com).\n\n| A | B |\n|---|---|\n| 1 | 2 |";
     renderLibrary({ docs, activeDoc: makeDoc("a", "Alpha", content), docDraft: content });
-    const preview = screen.getByRole("region", { name: "Preview" });
-    expect(preview.querySelector(".lib-docs-markdown")).not.toBeNull();
-    expect(preview.querySelector("table")).not.toBeNull();
-    expect(preview.querySelector("a[href='https://example.com']")).not.toBeNull();
+    const pane = screen.getByRole("region", { name: "Document" });
+    expect(pane.querySelector(".lib-docs-markdown")).not.toBeNull();
+    expect(pane.querySelector("table")).not.toBeNull();
+    expect(pane.querySelector("a[href='https://example.com']")).not.toBeNull();
   });
 
-  it("leaves YAML front matter out of the rendered preview but keeps it in the editor", () => {
+  it("leaves YAML front matter out of the rendered skill and offers no textarea for it", () => {
     const content = "---\nname: tdd\ndescription: Red green\n---\n\n# Tdd\n\nBody.";
     const skill: SkillSummary = { id: "tdd", name: "tdd", description: "Red green", path: "", group: "g", category: "testing", risk: "low", targets: ["codex"], related: [] };
     renderLibrary({
@@ -826,33 +955,42 @@ describe("LibraryView editor", () => {
       activeSkillId: "tdd",
       activeSkillContent: { id: "tdd", title: "tdd", path: "skills/tdd/SKILL.md", section: "skills", source: "workspace", content },
     });
-    const preview = screen.getByRole("region", { name: "Preview" });
-    expect(preview.querySelector("hr")).toBeNull();
-    expect(within(preview).getByRole("heading", { name: "Tdd" })).not.toBeNull();
-    expect(textarea("Skill source").value).toBe(content);
+    const pane = screen.getByRole("region", { name: "Document" });
+    expect(pane.querySelector("hr")).toBeNull();
+    expect(within(pane).getByRole("heading", { name: "Tdd" })).not.toBeNull();
+    expect(screen.queryByLabelText("Skill source")).toBeNull();
   });
 
-  it("opens the item externally from the list key and from the status-bar hint of the editor pane", () => {
+  it("keeps the new-doc form at the top of the pane in both modes", () => {
+    renderLibrary({ docs, activeDoc: doc, docDraft: doc.content, showCreateDoc: true });
+    const pane = screen.getByRole("region", { name: "Document" });
+    const form = within(pane).getByRole("form", { name: "New document" });
+    expect(form.nextElementSibling).toBe(pane.querySelector(".lib-docs-markdown"));
+    editDocument("Edit document");
+    expect(within(pane).getByRole("form", { name: "New document" }).nextElementSibling).toBe(textarea("Edit document"));
+  });
+
+  it("opens the item externally from the list key and from the status-bar hint of the document pane", () => {
     const onOpenDoc = vi.fn();
     renderLibrary({ docs, activeDoc: doc, docDraft: doc.content, onOpenDoc });
     press(focusList(), "o");
     expect(onOpenDoc).toHaveBeenCalledWith("a");
-    focusPane("Editor");
+    focusPane("Document");
     fireEvent.click(statusHint("o open"));
     expect(onOpenDoc).toHaveBeenCalledTimes(2);
-    expect(within(screen.getByRole("region", { name: "Editor" })).queryByRole("button", { name: /open/ })).toBeNull();
+    expect(within(screen.getByRole("region", { name: "Document" })).queryByRole("button", { name: /open/ })).toBeNull();
   });
 
-  it("offers copy path, close and discard in the editor footer", () => {
+  it("offers copy path, close and discard in the document footer", () => {
     renderLibrary({ docs, activeDoc: doc, docDraft: doc.content });
-    const footer = screen.getByRole("region", { name: "Editor" }).querySelector<HTMLElement>(".pane-foot")!;
+    const footer = screen.getByRole("region", { name: "Document" }).querySelector<HTMLElement>(".pane-foot")!;
     expect(within(footer).getByRole("button", { name: "Copy path" })).not.toBeNull();
     // `:q` and `:reset` are command-line commands: the status bar has no binding to offer, so they stay here.
     expect(within(footer).getByRole("button", { name: ":q close" })).not.toBeNull();
     expect(within(footer).getByRole("button", { name: ":reset discard" })).not.toBeNull();
   });
 
-  it("marks skills read-only: readOnly textarea, marker, no save, open externally", () => {
+  it("marks skills read-only: rendered only, marker, no edit, no save, open externally", () => {
     const onOpenSkill = vi.fn();
     const onSaveDoc = vi.fn();
     const skill: SkillSummary = { id: "tdd", name: "tdd", description: "", path: "", group: "g", category: "", risk: "low", targets: [], related: [] };
@@ -864,16 +1002,25 @@ describe("LibraryView editor", () => {
       onOpenSkill,
       onSaveDoc,
     });
-    const editor = textarea("Skill source");
-    expect(editor.readOnly).toBe(true);
-    expect(screen.getByRole("region", { name: "Editor" }).querySelector(".pane-title")!.textContent).toContain("read-only");
-    press(editor, "s", { ctrlKey: true });
+    const pane = screen.getByRole("region", { name: "Document" });
+    expect(within(pane).getByRole("heading", { name: "Tdd" })).not.toBeNull();
+    expect(pane.querySelector(".pane-title")!.textContent).toContain("read-only");
+    expect(within(pane).getByText("skills are edited as files: open it in your editor")).not.toBeNull();
+
+    focusPane("Document");
+    press(document.activeElement!, "i");
+    press(document.activeElement!, "Enter");
+    press(focusList(), "i");
+    expect(screen.queryByLabelText("Skill source")).toBeNull();
+    expect(screen.queryByRole("textbox", { name: /source/i })).toBeNull();
+
+    pressSave();
     expect(onSaveDoc).not.toHaveBeenCalled();
     press(focusList(), "o");
     expect(onOpenSkill).toHaveBeenCalledWith("tdd");
   });
 
-  it("shows agent metadata and notes in the preview pane", () => {
+  it("shows agent metadata and notes above the rendered source in the document pane", () => {
     const agents: AgentMetadataResponse[] = [
       {
         id: "v.md",
@@ -890,24 +1037,28 @@ describe("LibraryView editor", () => {
       activeAgentContent: { id: "v.md", title: "verifier", path: "agents/v.md", content: "# Verifier", exists: true },
       agentDraft: "# Verifier",
     });
-    const meta = screen.getByRole("region", { name: "metadata" });
+    const pane = screen.getByRole("region", { name: "Document" });
+    const meta = within(pane).getByRole("region", { name: "metadata" });
     expect(within(meta).getByText("Checks things")).not.toBeNull();
     expect(within(meta).getByText("runtime-sensitive: edit with care")).not.toBeNull();
     expect(within(meta).getByText("first note")).not.toBeNull();
     expect(within(meta).getByText("second note")).not.toBeNull();
+    expect(within(pane).getByRole("heading", { name: "Verifier" })).not.toBeNull();
   });
 });
 
 describe("LibraryView save", () => {
   const doc = makeDoc("a", "Alpha", "# Saved");
 
-  it("saves the open doc with Mod+s from the editor and from the list", () => {
+  it("saves the open doc with Mod+s from the rendered pane, from the textarea and from the list", () => {
     const onSaveDoc = vi.fn();
     renderLibrary({ docs, activeDoc: doc, docDraft: "# Edited", docDirty: true, onSaveDoc });
-    press(textarea("Edit document"), "s", { ctrlKey: true });
+    pressSave();
     expect(onSaveDoc).toHaveBeenCalledTimes(1);
-    press(focusList(), "s", { ctrlKey: true });
+    press(editDocument("Edit document"), "s", { ctrlKey: true });
     expect(onSaveDoc).toHaveBeenCalledTimes(2);
+    press(focusList(), "s", { ctrlKey: true });
+    expect(onSaveDoc).toHaveBeenCalledTimes(3);
   });
 
   it("calls the save handler of the active source only", () => {
@@ -925,7 +1076,7 @@ describe("LibraryView save", () => {
       agentTemplateDirty: true,
       ...handlers,
     });
-    press(textarea("Edit agent rules template"), "s", { ctrlKey: true });
+    pressSave();
     expect(handlers.onSaveAgentTemplate).toHaveBeenCalledTimes(1);
 
     update({
@@ -937,7 +1088,7 @@ describe("LibraryView save", () => {
       agentDirty: true,
       ...handlers,
     });
-    press(textarea("Edit agent source"), "s", { ctrlKey: true });
+    pressSave();
     expect(handlers.onSaveAgent).toHaveBeenCalledTimes(1);
     expect(handlers.onSaveDoc).not.toHaveBeenCalled();
     expect(handlers.onSaveConfig).not.toHaveBeenCalled();
@@ -947,7 +1098,7 @@ describe("LibraryView save", () => {
   it("does not save a clean doc and says so in the status bar", () => {
     const onSaveDoc = vi.fn();
     renderLibrary({ docs, activeDoc: doc, docDraft: doc.content, onSaveDoc });
-    press(textarea("Edit document"), "s", { ctrlKey: true });
+    pressSave();
     expect(onSaveDoc).not.toHaveBeenCalled();
     expect(statusBarText()).toBe("no changes to save");
   });
@@ -955,7 +1106,7 @@ describe("LibraryView save", () => {
   it("does not start a second save while one is running", () => {
     const onSaveDoc = vi.fn();
     renderLibrary({ docs, activeDoc: doc, docDraft: "# Edited", docDirty: true, docSaving: true, onSaveDoc });
-    press(textarea("Edit document"), "s", { ctrlKey: true });
+    pressSave();
     expect(onSaveDoc).not.toHaveBeenCalled();
   });
 
@@ -986,9 +1137,9 @@ describe("LibraryView save", () => {
     expect(onSaveConfig).not.toHaveBeenCalled();
   });
 
-  it("shows save progress and results in the editor footer, and announces a finished save in the status bar", () => {
+  it("shows save progress and results in the document footer, and announces a finished save in the status bar", () => {
     const { update } = renderLibrary({ docs, activeDoc: doc, docDraft: "# Edited", docDirty: true, docSaving: true });
-    const footer = screen.getByRole("region", { name: "Editor" }).querySelector(".pane-foot")!;
+    const footer = screen.getByRole("region", { name: "Document" }).querySelector(".pane-foot")!;
     expect(footer.textContent).toContain("saving…");
     update({
       docs,
@@ -1028,7 +1179,7 @@ describe("LibraryView save", () => {
       docDraft: doc.content,
       docSaveResult: { success: false, action: "save_doc", stdout: "", stderr: "failed with token=sk-abcdefghijklmnopqrstuvwxyz0123456789", exit_code: 1 },
     });
-    const footer = screen.getByRole("region", { name: "Editor" }).querySelector(".pane-foot")!;
+    const footer = screen.getByRole("region", { name: "Document" }).querySelector(".pane-foot")!;
     expect(footer.textContent).not.toContain("sk-abcdefghijklmnopqrstuvwxyz0123456789");
   });
 });
@@ -1040,8 +1191,7 @@ describe("LibraryView close and reset", () => {
     vi.useFakeTimers();
     const onResetDoc = vi.fn();
     renderLibrary({ docs, activeDoc: doc, docDraft: doc.content, onResetDoc });
-    const editor = textarea("Edit document");
-    act(() => editor.focus());
+    const editor = editDocument("Edit document");
     // Opening the command line from the editor needs Mod+k (":" would be typed).
     press(editor, "k", { ctrlKey: true });
     const input = screen.getByRole("combobox", { name: "Command" });
@@ -1053,6 +1203,9 @@ describe("LibraryView close and reset", () => {
     expect(screen.queryByRole("dialog", { name: /confirm/i })).toBeNull();
     expect(onResetDoc).not.toHaveBeenCalled();
     expect(document.activeElement).toBe(listbox());
+    // The pane is back to the rendered view.
+    expect(screen.queryByLabelText("Edit document")).toBeNull();
+    expect(screen.getByRole("heading", { name: "Saved" })).not.toBeNull();
   });
 
   it("asks before closing a dirty item and discards the edits only after the confirmation", async () => {
@@ -1081,7 +1234,7 @@ describe("LibraryView close and reset", () => {
 
   it("closes through the footer button with the same confirmation", async () => {
     renderLibrary({ docs, activeDoc: doc, docDraft: "# Edited", docDirty: true });
-    fireEvent.click(within(screen.getByRole("region", { name: "Editor" })).getByRole("button", { name: /close/ }));
+    fireEvent.click(within(screen.getByRole("region", { name: "Document" })).getByRole("button", { name: /close/ }));
     expect(await screen.findByRole("dialog")).not.toBeNull();
   });
 

@@ -1,16 +1,21 @@
-import type { ReactNode, RefObject } from "react";
+import { useMemo, type ReactNode, type RefObject } from "react";
+import { CopyableBlock } from "../../components/CopyableBlock";
 import { CopyButton } from "../../components/CopyButton";
 import { redactTerminalOutput } from "../../lib/redactTerminalOutput";
 import { ActionKey } from "../../ui/ActionKey";
+import { Kv } from "../../ui/Kv";
 import { Pane } from "../../ui/Pane";
+import { DocContent } from "./DocContent";
 import type { LibraryEntry } from "./entry";
 
-interface EditorPaneProps {
+interface DocumentPaneProps {
   entry: LibraryEntry | null;
-  /** Shown instead of the editor while no item is open. */
+  /** Shown instead of the document while no item is open. */
   emptyHint: string;
+  /** True while the pane shows the source textarea instead of the rendered document (editable items only). */
+  editing: boolean;
   textareaRef: RefObject<HTMLTextAreaElement | null>;
-  /** Rendered above the textarea (the new-doc form). */
+  /** Rendered above the document (the new-doc form). */
   top?: ReactNode;
   onClose: () => void | Promise<void>;
 }
@@ -27,18 +32,50 @@ function saveStatus(entry: LibraryEntry): { text: string; ok: boolean } | null {
   return null;
 }
 
+function formatJson(content: string): string {
+  try {
+    return JSON.stringify(JSON.parse(content), null, 2);
+  } catch {
+    return content;
+  }
+}
+
+/** The working copy rendered (markdown, or pretty-printed JSON for configs) under the item's metadata. */
+function DocumentView({ entry }: { entry: LibraryEntry }) {
+  const isJson = entry.preview === "json";
+  const formatted = useMemo(() => (isJson ? formatJson(entry.draft) : ""), [isJson, entry.draft]);
+  return (
+    <>
+      {entry.meta.length > 0 && (
+        <div className="lib-meta" role="region" aria-label={entry.metaTitle ?? "Metadata"}>
+          {entry.metaTitle && <p className="group">{entry.metaTitle}</p>}
+          <Kv items={entry.meta} />
+        </div>
+      )}
+      {isJson ? (
+        <CopyableBlock text={formatted} className="copyable-block-terminal copyable-block-fill">
+          <pre className="configs-code">{formatted}</pre>
+        </CopyableBlock>
+      ) : (
+        <DocContent content={entry.draft} />
+      )}
+    </>
+  );
+}
+
 /**
- * Pane [2]: the working copy as a plain textarea. The pane itself is the NORMAL-mode target (`l` from the
- * list lands on it without typing anything); Enter or `i` moves into the textarea (INSERT) and Escape returns
- * to the list.
+ * The open item, one pane. It shows the working copy rendered, so unsaved edits are visible; the rendered body
+ * is the pane's NORMAL-mode focus target (`l` from the list lands on it and scrolls it). Editable items switch
+ * the same pane to a plain textarea (INSERT) while `editing`; read-only items never do.
  */
-export function EditorPane({ entry, emptyHint, textareaRef, top, onClose }: EditorPaneProps) {
+export function DocumentPane({ entry, emptyHint, editing, textareaRef, top, onClose }: DocumentPaneProps) {
   const status = entry ? saveStatus(entry) : null;
+  const showTextarea = entry !== null && editing;
   return (
     <Pane
       id="editor"
-      label="Editor"
-      title={entry ? entry.title : "editor"}
+      label="Document"
+      title={entry ? entry.title : "document"}
       meta={
         entry ? (
           <>
@@ -58,7 +95,8 @@ export function EditorPane({ entry, emptyHint, textareaRef, top, onClose }: Edit
           </>
         ) : undefined
       }
-      bodyClassName="lib-fill"
+      scrollable={!showTextarea}
+      bodyClassName={showTextarea ? "lib-fill" : undefined}
       footer={
         entry ? (
           <>
@@ -88,26 +126,32 @@ export function EditorPane({ entry, emptyHint, textareaRef, top, onClose }: Edit
         ) : undefined
       }
     >
-      <div className="lib-editor" data-pane-primary="" tabIndex={-1}>
-        {top}
-        {entry ? (
+      {showTextarea ? (
+        <div className="lib-editor" data-pane-primary="" tabIndex={-1}>
+          {top}
           <textarea
             key={entry.id}
             ref={textareaRef}
             className="lib-textarea"
             value={entry.draft}
-            readOnly={entry.readOnly}
             onChange={(e) => entry.onChange(e.target.value)}
             spellCheck={false}
             aria-label={entry.editorLabel}
           />
-        ) : (
-          <p className="c-dim" role="status">
-            <span aria-hidden="true">$ </span>
-            {emptyHint}
-          </p>
-        )}
-      </div>
+        </div>
+      ) : (
+        <>
+          {top}
+          {entry ? (
+            <DocumentView entry={entry} />
+          ) : (
+            <p className="c-dim" role="status">
+              <span aria-hidden="true">$ </span>
+              {emptyHint}
+            </p>
+          )}
+        </>
+      )}
     </Pane>
   );
 }

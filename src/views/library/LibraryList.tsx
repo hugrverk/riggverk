@@ -22,7 +22,7 @@ export interface LibraryListProps<T> {
   followCursor: boolean;
   /** Opens a row (the controller's guarded select). */
   onSelect: (key: string) => void | Promise<void>;
-  /** Enter, double-click or `i` on a row: open it and move into the editor. */
+  /** Enter, double-click or `i` on a row: open it and move into it. */
   onActivate: (key: string) => void;
   /** Label of the Enter hint in the status bar while the list has focus. */
   activateHint?: string;
@@ -31,8 +31,8 @@ export interface LibraryListProps<T> {
 }
 
 /**
- * PaneList whose cursor previews: moving it opens the row under it after a short pause, so the editor and
- * preview panes follow the list. The list keeps its own cursor and re-syncs it when the open item changes
+ * PaneList whose cursor previews: moving it opens the row under it after a short pause, so the document
+ * pane follows the list. The list keeps its own cursor and re-syncs it when the open item changes
  * from outside (first load, a newly created doc).
  */
 export function LibraryList<T>({

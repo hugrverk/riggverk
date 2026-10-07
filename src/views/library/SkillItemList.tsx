@@ -56,6 +56,7 @@ export function SkillItemList({
       followCursor={followCursor}
       onSelect={onSelect}
       onActivate={onActivate}
+      activateHint="read"
       filter={{ value: search, onChange: onSearchChange, label: "Search skills", placeholder: "search skills" }}
       empty="No skills match"
     />

@@ -9,12 +9,12 @@ import { RULES_LIST_KEY } from "./RulesItemList";
 export type LibraryPreviewKind = "markdown" | "json";
 
 /**
- * The one item open in the editor and preview panes, normalised across sources so those panes do not
- * care whether it is a doc, a rules template, a skill, an agent source or a config source.
+ * The one item open in the document pane, normalised across sources so the pane does not care whether it is
+ * a doc, a rules template, a skill, an agent source or a config source.
  */
 export interface LibraryEntry {
   source: LibrarySourceType;
-  /** Identity of the loaded item; the editor remounts when it changes. */
+  /** Identity of the loaded item; the textarea remounts and edit mode ends when it changes. */
   id: string;
   /** Key of the list row that opens this item (compared with the row a user asks to edit). */
   listKey: string;
@@ -27,14 +27,14 @@ export interface LibraryEntry {
   editorLabel: string;
   /** Content as saved on disk. */
   saved: string;
-  /** Working copy shown in the editor and rendered by the preview. */
+  /** Working copy: the textarea's value, and what the rendered view shows. */
   draft: string;
   dirty: boolean;
   saving: boolean;
   saveResult: ActionResult | null;
   saveMessage: string;
   readOnly: boolean;
-  /** Why the item cannot be edited here (editor footer). */
+  /** Why the item cannot be edited here (pane footer, disabled edit hint). */
   readOnlyReason: string | null;
   /** Footer note about what a save touches ("template only"). */
   note: string | null;
@@ -266,7 +266,7 @@ export function buildEntry(props: LibraryViewProps): LibraryEntry | null {
   }
 }
 
-/** Text shown in the editor pane while no item is open. */
+/** Text shown in the document pane while no item is open. */
 export function emptyStateHint(source: LibrarySourceType, workspaceValid: boolean): string {
   if (!workspaceValid) return "No valid workspace selected";
   switch (source) {
