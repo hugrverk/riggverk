@@ -222,11 +222,11 @@
   min-width: 0;
 }
 
+/* Lowercase like every other group label; the pane title is the only louder level. */
 .prompt-loops-composer-label {
   font-size: var(--fs-sm);
   color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+  text-transform: lowercase;
 }
 
 .prompt-loops-composer-select {
