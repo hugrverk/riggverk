@@ -21,8 +21,6 @@ export const INSTALL_PLAN_PANE_ID = "plan";
 
 export interface InstallPlanPaneProps {
   flow: InstallFlow;
-  /** `[n]` in the pane title. */
-  index?: number;
   /** Label of an unrelated workspace task that is running; apply waits for it. */
   busyLabel: string | null;
   /** Where backups are written, for the note under the table. */
@@ -59,7 +57,7 @@ function Counts({ counts }: { counts: PlanCounts }) {
  * only, and only when there is something safe to apply), `n`/Esc cancel, `r` preview again after a stale or
  * expired preview. Enter never applies; the visible `y apply` button does the same as the key.
  */
-export function InstallPlanPane({ flow, index = 1, busyLabel, backupRoot, onApply }: InstallPlanPaneProps) {
+export function InstallPlanPane({ flow, busyLabel, backupRoot, onApply }: InstallPlanPaneProps) {
   const { status, review, error, request } = flow;
   const open = status !== "idle";
   useConfirmMode(open);
@@ -245,7 +243,6 @@ export function InstallPlanPane({ flow, index = 1, busyLabel, backupRoot, onAppl
   return (
     <Pane
       id={INSTALL_PLAN_PANE_ID}
-      index={index}
       title="plan"
       label="Install plan"
       scrollable={!hasTable}

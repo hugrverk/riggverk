@@ -158,9 +158,8 @@ export function StartView({
     { enabled: !showPlan },
   );
 
-  const outputPane = (index: number) => (
+  const outputPane = () => (
     <OutputPane
-      index={index}
       wsRunning={wsRunning}
       wsLog={wsLog}
       wsLogCompletedAt={wsLogCompletedAt}
@@ -178,8 +177,8 @@ export function StartView({
   if (showPlan) {
     return (
       <section className="screen install" aria-label="Workspace install review">
-        <InstallPlanPane flow={install.flow} index={1} busyLabel={wsRunning} backupRoot={backupRoot} onApply={install.apply} />
-        {outputPane(2)}
+        <InstallPlanPane flow={install.flow} busyLabel={wsRunning} backupRoot={backupRoot} onApply={install.apply} />
+        {outputPane()}
       </section>
     );
   }
@@ -242,7 +241,7 @@ export function StartView({
 
   return (
     <section className="screen quad" aria-label="Workspace">
-      <Pane id="harnesses" index={1} title="harnesses" label="Harnesses" defaultFocus meta={`· ${targets.length}`}>
+      <Pane id="harnesses" title="harnesses" label="Harnesses" defaultFocus meta={`· ${targets.length}`}>
         <PaneList
           label="Harnesses"
           items={targets}
@@ -271,7 +270,7 @@ export function StartView({
         </p>
       </Pane>
 
-      <Pane id="surfaces" index={2} title="surfaces" label="Surfaces" meta={`· ${selectedLabel}`}>
+      <Pane id="surfaces" title="surfaces" label="Surfaces" meta={`· ${selectedLabel}`}>
         <PaneList
           label={`${selectedLabel} surfaces`}
           items={surfaceRows}
@@ -295,7 +294,7 @@ export function StartView({
         <SurfaceMatrix rows={matrixModel(overview, targets, appSettings)} selectedId={selected} />
       </Pane>
 
-      <Pane id="status" index={3} title="status" label="Status" scrollable meta={`· ${selectedLabel}`}>
+      <Pane id="status" title="status" label="Status" scrollable meta={`· ${selectedLabel}`}>
         {override && (
           <p className="rules-alert" role="alert">
             <Glyph name="conflict" tone="warn" /> <b>{override.title}.</b> {override.detail}
@@ -323,7 +322,7 @@ export function StartView({
         )}
       </Pane>
 
-      {outputPane(4)}
+      {outputPane()}
     </section>
   );
 }

@@ -26,11 +26,11 @@ function View({ bindings = [] as Binding[], confirm = false, context = null as s
   useStatusContext(context);
   return (
     <>
-      <Pane id="main" index={1} title="main" defaultFocus>
+      <Pane id="main" title="main" defaultFocus>
         <PaneList label="rows" items={[{ id: "a" }]} getKey={row => row.id} renderItem={row => <span>{row.id}</span>} />
         <input aria-label="field" />
       </Pane>
-      <Pane id="other" index={2} title="other" scrollable>
+      <Pane id="other" title="other" scrollable>
         <p>x</p>
       </Pane>
     </>

@@ -22,7 +22,6 @@ const APPLY: ActionResult = {
 
 function props(overrides: Partial<OutputPaneProps> = {}): OutputPaneProps {
   return {
-    index: 4,
     wsRunning: null,
     wsLog: null,
     wsLogCompletedAt: null,
@@ -125,11 +124,11 @@ describe("OutputPane", () => {
       useFocusOutputOnNewTransaction(transactionId);
       return (
         <>
-          <Pane id="targets" index={1} title="targets" defaultFocus scrollable>
+          <Pane id="targets" title="targets" defaultFocus scrollable>
             <p>targets</p>
           </Pane>
           {extra && (
-            <Pane id="surfaces" index={2} title="surfaces" scrollable>
+            <Pane id="surfaces" title="surfaces" scrollable>
               <p>surfaces</p>
             </Pane>
           )}
@@ -158,14 +157,14 @@ describe("OutputPane", () => {
         useFocusOutputOnNewTransaction(transactionId);
         return review ? (
           <section>
-            <Pane id="plan" index={1} title="plan" scrollable>
+            <Pane id="plan" title="plan" scrollable>
               <p>plan</p>
             </Pane>
             <OutputPane {...props({ wsLog: APPLY })} />
           </section>
         ) : (
           <section>
-            <Pane id="targets" index={1} title="targets" defaultFocus scrollable>
+            <Pane id="targets" title="targets" defaultFocus scrollable>
               <p>targets</p>
             </Pane>
             <OutputPane {...props({ wsLog: APPLY, rollbackTransactionId: transactionId, onRollback: () => {} })} />

@@ -12,8 +12,6 @@ import { ReadyState, TerminalState } from "./TerminalOutput";
 export interface OutputPaneProps {
   /** `data-pane-id`; also anchors the pane's key hints. Default "output". */
   id?: string;
-  /** Number shown as `[n]`. */
-  index: number;
   wsRunning: string | null;
   wsLog: ActionResult | null;
   wsLogCompletedAt: number | null;
@@ -74,7 +72,6 @@ function scrollPaneBody(id: string, to: "top" | "bottom") {
  */
 export function OutputPane({
   id = "output",
-  index,
   wsRunning,
   wsLog,
   wsLogCompletedAt,
@@ -183,7 +180,6 @@ export function OutputPane({
   return (
     <Pane
       id={id}
-      index={index}
       title="output"
       label="Output"
       scrollable

@@ -439,7 +439,7 @@ export function SettingsView({
   if (!appSettings) {
     return (
       <section ref={screenRef} className="screen settings-screen" aria-label="Settings">
-        <Pane id="settings-appearance" index={1} title="settings" label="Loading settings" scrollable>
+        <Pane id="settings-appearance" title="settings" label="Loading settings" scrollable>
           <p className="c-dim setting-note">loading…</p>
         </Pane>
       </section>
@@ -680,7 +680,6 @@ export function SettingsView({
     <section ref={screenRef} className="screen settings-screen" aria-label="Settings">
       <Pane
         id="settings-appearance"
-        index={1}
         title="appearance"
         label="Appearance"
         meta={
@@ -699,7 +698,7 @@ export function SettingsView({
         )}
         <p className="setting-note c-dim">Optional hex overrides; empty uses the theme default. Changes save automatically.</p>
       </Pane>
-      <Pane id="settings-app" index={2} title="app" label="App" footer={NAV_HINTS}>
+      <Pane id="settings-app" title="app" label="App" footer={NAV_HINTS}>
         <Kv
           className="settings-kv"
           items={[

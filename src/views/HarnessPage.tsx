@@ -111,9 +111,8 @@ export function HarnessPage({
     { enabled: !installOpen && !rulesFlow.open },
   );
 
-  const outputPane = (index: number) => (
+  const outputPane = () => (
     <OutputPane
-      index={index}
       wsRunning={wsRunning}
       wsLog={wsLog}
       wsLogCompletedAt={wsLogCompletedAt}
@@ -131,8 +130,8 @@ export function HarnessPage({
   if (installOpen) {
     return (
       <section className="screen install" aria-label={`${label} install review`}>
-        <InstallPlanPane flow={install.flow} index={1} busyLabel={wsRunning} backupRoot={backupRoot} onApply={install.apply} />
-        {outputPane(2)}
+        <InstallPlanPane flow={install.flow} busyLabel={wsRunning} backupRoot={backupRoot} onApply={install.apply} />
+        {outputPane()}
       </section>
     );
   }
@@ -142,12 +141,11 @@ export function HarnessPage({
       <section className="screen install" aria-label={`${label} rules review`}>
         <RulesPane
           flow={rulesFlow}
-          index={1}
           busyLabel={wsRunning}
           backupRoot={backupRoot}
           canConvert={rulesModel?.convertible === true}
         />
-        {outputPane(2)}
+        {outputPane()}
       </section>
     );
   }
@@ -163,7 +161,6 @@ export function HarnessPage({
     <section className="screen quad" aria-label={label}>
       <Pane
         id="targets"
-        index={1}
         title="targets"
         label={`${label} targets`}
         defaultFocus
@@ -213,7 +210,6 @@ export function HarnessPage({
 
       <Pane
         id="surfaces"
-        index={2}
         title="surfaces"
         label={`${label} surfaces`}
         meta={
@@ -266,7 +262,6 @@ export function HarnessPage({
 
       <Pane
         id="runtime"
-        index={3}
         title="runtime"
         label={`${label} runtime`}
         scrollable
@@ -281,7 +276,7 @@ export function HarnessPage({
         {workspaceValid && runtimeExtra}
       </Pane>
 
-      {outputPane(4)}
+      {outputPane()}
     </section>
   );
 }

@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { renderWithShell } from "../test/renderWithShell";
+import { renderInFrame, renderWithShell } from "../test/renderWithShell";
 import { Pane } from "./Pane";
 import { PaneList, type PaneListProps } from "./PaneList";
 
@@ -265,17 +265,41 @@ describe("PaneList", () => {
     expect(message.compareDocumentPosition(listbox()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it("shows an Enter hint in the pane footer that activates the cursor row when clicked", () => {
+  it("shows an Enter hint in the status bar that activates the cursor row when clicked", () => {
     const onActivate = vi.fn();
-    renderWithShell(
-      <Pane id="harnesses" index={1} title="harnesses">
+    renderInFrame(
+      <Pane id="harnesses" title="harnesses">
         <List onActivate={onActivate} activateHint="open" />
       </Pane>,
     );
-    const hint = screen.getByRole("button", { name: /open/ });
+    expect(screen.queryByRole("button", { name: /open/ })).toBeNull();
+    act(() => listbox().focus());
+    const hint = within(screen.getByLabelText("Status bar")).getByRole("button", { name: /open/ });
     expect(hint.textContent).toContain("↵");
     fireEvent.click(hint);
     expect(onActivate).toHaveBeenCalledWith(ROWS[0]);
+  });
+
+  it("shows a Space hint in the status bar for multi-select lists and toggles the cursor row when clicked", () => {
+    const onToggle = vi.fn();
+    const { rerenderFrame } = renderInFrame(
+      <Pane id="harnesses" title="harnesses">
+        <List multiSelectable onToggle={onToggle} toggleHint="toggle target" />
+      </Pane>,
+    );
+    act(() => listbox().focus());
+    const bar = within(screen.getByLabelText("Status bar"));
+    const hint = bar.getByRole("button", { name: /toggle target/ });
+    expect(hint.textContent).toContain("Space");
+    fireEvent.click(hint);
+    expect(onToggle).toHaveBeenCalledWith(ROWS[0]);
+    // Single-select lists cannot toggle, so the hint is not offered.
+    rerenderFrame(
+      <Pane id="harnesses" title="harnesses">
+        <List onToggle={onToggle} toggleHint="toggle target" />
+      </Pane>,
+    );
+    expect(bar.queryByRole("button", { name: /toggle target/ })).toBeNull();
   });
 
   it("works under StrictMode without duplicate registrations", () => {

@@ -16,7 +16,7 @@ export interface ActionKeyProps {
 
 /**
  * `<button class="action-key"><kbd>u</kbd> update</button>`: a key hint that is also the control.
- * Footer and status-bar hints are real buttons, so every keyboard action stays mouse-reachable.
+ * Status-bar hints are real buttons, so every keyboard action stays mouse-reachable.
  */
 export function ActionKey({ keys, children, onClick, disabled = false, shortcut, className }: ActionKeyProps) {
   const isDisabled = disabled !== false;

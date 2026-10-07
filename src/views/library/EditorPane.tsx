@@ -37,7 +37,6 @@ export function EditorPane({ entry, emptyHint, textareaRef, top, onClose }: Edit
   return (
     <Pane
       id="editor"
-      index={2}
       label="Editor"
       title={entry ? entry.title : "editor"}
       meta={

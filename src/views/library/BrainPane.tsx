@@ -12,7 +12,6 @@ export function BrainPane({ workspaceValid, brainSetupText, brainSetupSource }: 
   return (
     <Pane
       id="editor"
-      index={2}
       label="Brain Setup"
       title="brain setup"
       meta={workspaceValid && brainSetupSource ? `· source: ${brainSetupSource}` : undefined}

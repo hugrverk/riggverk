@@ -161,7 +161,6 @@ function WorkItemsList({
 
 function WorkColumn({
   title,
-  index,
   count,
   items,
   emptyMessage,
@@ -170,8 +169,6 @@ function WorkColumn({
   onUsePromptContext,
 }: {
   title: string;
-  /** `[n]` in the pane title. */
-  index: number;
   count: number;
   items: RepoDashboardWorkItem[];
   emptyMessage: string;
@@ -182,7 +179,6 @@ function WorkColumn({
   return (
     <Pane
       id={`work-${title.toLowerCase()}`}
-      index={index}
       title={title.toLowerCase()}
       meta={`· ${count}`}
       label={`${title} work`}
@@ -272,7 +268,6 @@ export function RepoWorkWorkspace({
     <div className="repo-dashboard-work-workspace">
       <Pane
         id="work-summary"
-        index={2}
         title="work"
         label="Work summary and filters"
         className="repo-dashboard-work-summary-pane"
@@ -421,7 +416,6 @@ export function RepoWorkWorkspace({
           <WorkColumn
             key={columnId}
             title={title}
-            index={columnIndex + 3}
             defaultFocus={columnIndex === 0}
             count={columnItems.length}
             items={columnItems}
@@ -439,7 +433,6 @@ export function RepoWorkWorkspace({
       {canonicalMode && canonicalPartition.other.length ? (
         <Pane
           id="work-other"
-          index={columns.length + 3}
           title="other"
           meta={`· ${canonicalPartition.other.length}`}
           label="Other work items"

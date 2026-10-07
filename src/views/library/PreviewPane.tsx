@@ -23,7 +23,7 @@ export function PreviewPane({ entry }: { entry: LibraryEntry | null }) {
   const formatted = useMemo(() => (isJson ? formatJson(draft) : ""), [isJson, draft]);
 
   return (
-    <Pane id="preview" index={3} label="Preview" title="preview" meta={isJson ? "· json" : "· rendered"} scrollable>
+    <Pane id="preview" label="Preview" title="preview" meta={isJson ? "· json" : "· rendered"} scrollable>
       {!entry ? (
         <p className="c-dim" role="status">Nothing to preview</p>
       ) : (

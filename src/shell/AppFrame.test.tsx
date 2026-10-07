@@ -14,7 +14,7 @@ function press(target: Element | Document, key: string, init: KeyboardEventInit 
 function Panes({ withInput = false }: { withInput?: boolean }) {
   return (
     <>
-      <Pane id="harnesses" index={1} title="harnesses" defaultFocus>
+      <Pane id="harnesses" title="harnesses" defaultFocus>
         <PaneList
           label="Harnesses"
           items={[{ id: "a" }, { id: "b" }]}
@@ -22,11 +22,11 @@ function Panes({ withInput = false }: { withInput?: boolean }) {
           renderItem={item => <span className="nm">{item.id}</span>}
         />
       </Pane>
-      <Pane id="surfaces" index={2} title="surfaces" scrollable>
+      <Pane id="surfaces" title="surfaces" scrollable>
         {withInput && <input aria-label="name" />}
         <p>body</p>
       </Pane>
-      <Pane id="output" index={3} title="output" scrollable>
+      <Pane id="output" title="output" scrollable>
         <p>log</p>
       </Pane>
     </>
@@ -114,7 +114,7 @@ describe("AppFrame", () => {
       const { rerenderFrame } = renderInFrame(<Panes />, { view: "start" });
       await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("listbox", { name: "Harnesses" })));
       rerenderFrame(
-        <Pane id="only" index={1} title="only" scrollable>
+        <Pane id="only" title="only" scrollable>
           <p>settings</p>
         </Pane>,
         { view: "settings" },

@@ -17,8 +17,6 @@ export const RULES_PANE_ID = "rules";
 
 export interface RulesPaneProps {
   flow: RulesFlow;
-  /** `[n]` in the pane title. */
-  index?: number;
   /** Label of an unrelated workspace task that is running; apply waits for it. */
   busyLabel: string | null;
   /** Where backups are written, for the note under the conversion. */
@@ -155,7 +153,7 @@ function ConversionBody({ preview, view }: { preview: RulesConversionPreview; vi
  * edits and the update, `v` open the conversion from the diff, `f` switch the conversion between its diff and the
  * resulting file, `r` open the review again after an error, `j`/`k`/`g g`/`G` scroll. Enter never applies.
  */
-export function RulesPane({ flow, index = 1, busyLabel, backupRoot, canConvert, returnPaneId = "surfaces" }: RulesPaneProps) {
+export function RulesPane({ flow, busyLabel, backupRoot, canConvert, returnPaneId = "surfaces" }: RulesPaneProps) {
   const { state } = flow;
   const open = state.status !== "idle";
   useConfirmMode(open);
@@ -321,7 +319,6 @@ export function RulesPane({ flow, index = 1, busyLabel, backupRoot, canConvert, 
   return (
     <Pane
       id={RULES_PANE_ID}
-      index={index}
       title="rules"
       label="Rules review"
       scrollable

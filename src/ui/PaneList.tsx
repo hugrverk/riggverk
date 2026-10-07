@@ -49,8 +49,10 @@ export interface PaneListProps<T> {
   onActivate?: (item: T) => void;
   /** Space on the cursor row, or click, when `multiSelectable`. */
   onToggle?: (item: T) => void;
-  /** Label of the Enter hint shown in the owning pane's footer ("open"). */
+  /** Label of the Enter hint shown in the status bar while the list's pane has focus ("open"). */
   activateHint?: string;
+  /** Label of the Space hint, same placement ("toggle target"). Only shown while the list is multi-selectable. */
+  toggleHint?: string;
   filter?: PaneListFilter;
   /** Rendered instead of rows when `items` is empty, as a status message right under the filter. */
   empty?: ReactNode;
@@ -86,6 +88,7 @@ export function PaneList<T>({
   onActivate,
   onToggle,
   activateHint,
+  toggleHint,
   filter,
   empty,
   pageSize = 10,
@@ -201,6 +204,8 @@ export function PaneList<T>({
       id: `list.${idBase}.toggle`,
       keys: "Space",
       title: "Toggle selection",
+      hint: toggleHint,
+      paneId: toggleHint && paneId ? paneId : undefined,
       when: () => latest.current.multiSelectable && latest.current.onToggle !== undefined && latest.current.cursorIndex >= 0,
       run: () => {
         const { items: list, cursorIndex: at, onToggle: toggle } = latest.current;

@@ -321,7 +321,6 @@ export function LibraryView(props: LibraryViewProps) {
     <div className={isBrain ? "screen library library-pair" : "screen library"} ref={rootRef}>
       <Pane
         id="items"
-        index={1}
         label="Library items"
         title={activeSource.label}
         meta={activeCount !== undefined ? `· ${activeCount}` : undefined}

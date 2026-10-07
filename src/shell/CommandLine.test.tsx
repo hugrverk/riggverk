@@ -18,7 +18,7 @@ function setup(commands: CommandSpec[]) {
   return renderInFrame(
     <>
       <Commands commands={commands} />
-      <Pane id="main" index={1} title="main" scrollable>
+      <Pane id="main" title="main" scrollable>
         <button type="button">anchor</button>
       </Pane>
     </>,
