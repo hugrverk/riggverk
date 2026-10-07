@@ -272,7 +272,7 @@ describe("PaneList", () => {
         <List onActivate={onActivate} activateHint="open" />
       </Pane>,
     );
-    expect(screen.queryByRole("button", { name: /open/ })).toBeNull();
+    expect(within(screen.getByRole("region", { name: "harnesses" })).queryByRole("button")).toBeNull();
     act(() => listbox().focus());
     const hint = within(screen.getByLabelText("Status bar")).getByRole("button", { name: /open/ });
     expect(hint.textContent).toContain("↵");
@@ -290,7 +290,7 @@ describe("PaneList", () => {
     act(() => listbox().focus());
     const bar = within(screen.getByLabelText("Status bar"));
     const hint = bar.getByRole("button", { name: /toggle target/ });
-    expect(hint.textContent).toContain("Space");
+    expect(hint.textContent).toContain("space");
     fireEvent.click(hint);
     expect(onToggle).toHaveBeenCalledWith(ROWS[0]);
     // Single-select lists cannot toggle, so the hint is not offered.

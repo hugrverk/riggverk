@@ -37,6 +37,11 @@ function pane() {
   return screen.getByRole("region", { name: "Output" });
 }
 
+/** Key hints live in the status bar while the pane has focus, not in the pane. */
+function bar() {
+  return within(screen.getByLabelText("Status bar"));
+}
+
 beforeEach(() => {
   Object.assign(navigator, { clipboard: { writeText: vi.fn(async () => {}) } });
 });
@@ -50,7 +55,7 @@ describe("OutputPane", () => {
     expect(pane().textContent).toContain("operations ready");
     expect(pane().textContent).toContain("workspace: valid · branch: main · targets: 2 rules, 1 configs");
     expect(pane().textContent).toContain(":update <target>");
-    expect(pane().querySelector(".pane-title")!.textContent).toContain("[4]");
+    expect(pane().querySelector(".pane-title")!.textContent).not.toContain("[");
   });
 
   it("shows a finished run as command, status line, stdout rule and the text", () => {
@@ -108,13 +113,13 @@ describe("OutputPane", () => {
   it("offers z rollback only while a transaction can be rolled back, and runs it", () => {
     const onRollback = vi.fn();
     const { rerenderFrame } = renderInFrame(<OutputPane {...props({ wsLog: APPLY })} />);
-    expect(within(pane()).queryByRole("button", { name: /rollback/ })).toBeNull();
-    rerenderFrame(<OutputPane {...props({ wsLog: APPLY, rollbackTransactionId: "1710000000000", onRollback })} />);
-    const button = within(pane()).getByRole("button", { name: /rollback/ });
-    fireEvent.click(button);
-    expect(onRollback).toHaveBeenCalledTimes(1);
     const body = pane().querySelector(".pane-body")!;
     act(() => (body as HTMLElement).focus());
+    expect(bar().queryByRole("button", { name: /rollback/ })).toBeNull();
+    rerenderFrame(<OutputPane {...props({ wsLog: APPLY, rollbackTransactionId: "1710000000000", onRollback })} />);
+    const button = bar().getByRole("button", { name: /rollback/ });
+    fireEvent.click(button);
+    expect(onRollback).toHaveBeenCalledTimes(1);
     fireEvent.keyDown(body, { key: "z" });
     expect(onRollback).toHaveBeenCalledTimes(2);
   });
@@ -202,6 +207,6 @@ describe("OutputPane", () => {
     rerenderFrame(<OutputPane {...props({ onRefresh, wsRunning: "apply" })} />);
     fireEvent.keyDown(body, { key: "r" });
     expect(onRefresh).toHaveBeenCalledTimes(1);
-    expect(within(pane()).getByRole("button", { name: /refresh/ }).getAttribute("title")).toBe("a task is running");
+    expect(bar().getByRole("button", { name: /refresh/ }).getAttribute("title")).toBe("a task is running");
   });
 });

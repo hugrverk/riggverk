@@ -244,7 +244,7 @@ describe("PromptLoopsTool", () => {
     fireEvent.click(screen.getByRole("button", { name: /^< prev$/ }));
     expect(screen.getAllByRole("tab")[0]?.getAttribute("aria-selected")).toBe("true");
     expect(screen.getByRole("button", { name: /^y copy$/ })).not.toBeNull();
-    // The list's Enter binding shows up in the pane footer.
+    // The list's Enter binding shows up in the status bar.
     expect(screen.getAllByRole("button", { name: /compose/ }).length).toBeGreaterThan(0);
     // Hints are offered in NORMAL mode; clicking "context" moves into the text field (INSERT).
     fireEvent.click(screen.getByRole("button", { name: /context/ }));

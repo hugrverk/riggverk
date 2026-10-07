@@ -31,7 +31,7 @@ export interface UseRulesActionsOptions {
   /** An install review is open on this page. */
   installOpen: boolean;
   flow: RulesFlow;
-  /** Panes whose footers offer `d`, `v` and `m`. */
+  /** Panes whose focus offers `d`, `v` and `m` as status-bar hints. */
   paneIds: readonly string[];
   /** Reload installation state after "leave as is" changed. */
   reload: () => void | Promise<void>;

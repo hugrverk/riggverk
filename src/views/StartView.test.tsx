@@ -113,6 +113,11 @@ function press(key: string, target: Element = harnessList()) {
   fireEvent.keyDown(target, { key });
 }
 
+/** A key hint of the focused pane: hints live in the status bar, not in the panes. */
+function hint(name: RegExp) {
+  return within(screen.getByLabelText("Status bar")).getByRole("button", { name });
+}
+
 describe("StartView panes", () => {
   it("shows the workspace and the enabled harnesses with their installation state", () => {
     renderStart({ enabledHarnessIds: ["codex", "claude", "cursor"] });
@@ -169,8 +174,8 @@ describe("StartView panes", () => {
   it("shows the output pane with the rollback key when a transaction can be rolled back", () => {
     const onRollback = vi.fn();
     renderStart({ rollbackTransactionId: "1710000000000", onRollback });
-    const output = screen.getByRole("region", { name: "Output" });
-    fireEvent.click(within(output).getByRole("button", { name: /rollback/ }));
+    act(() => screen.getByRole("group", { name: "Output" }).focus());
+    fireEvent.click(hint(/rollback/));
     expect(onRollback).toHaveBeenCalledTimes(1);
   });
 });
@@ -189,23 +194,26 @@ describe("StartView keys", () => {
   it("offers an update key for the workspace row and labels it after the state", () => {
     const { props: p } = renderStart({ overview: overviewOf({ workspace: installationStatus("update_available", [], { update_count: 1 }) }) });
     const list = harnessList();
-    expect(within(screen.getByRole("region", { name: "Harnesses" })).getByRole("button", { name: /update/ })).toBeTruthy();
+    act(() => list.focus());
+    expect(hint(/update/)).toBeTruthy();
     press("u", list);
     expect(p.install.open).toHaveBeenCalledWith("workspace", { scope: "start" });
   });
 
   it("does not offer an update for a target that is already current, and explains why", () => {
     const { props: p } = renderStart();
+    act(() => harnessList().focus());
     press("u");
     expect(p.install.open).not.toHaveBeenCalled();
-    const update = within(screen.getByRole("region", { name: "Harnesses" })).getByRole("button", { name: /update/ });
+    const update = hint(/update/);
     expect(update.getAttribute("aria-disabled")).toBe("true");
     expect(update.getAttribute("title")).toMatch(/already current/);
   });
 
   it("lets the workspace be installed while it is invalid, but nothing else", () => {
     const { props: p } = renderStart({ workspaceDiagnostics: INVALID_DIAGNOSTICS, workspaceValid: false, overview: overviewOf({}) });
-    expect(within(screen.getByRole("region", { name: "Harnesses" })).getByRole("button", { name: /install/ })).toBeTruthy();
+    act(() => harnessList().focus());
+    expect(hint(/install/)).toBeTruthy();
     press("u");
     expect(p.install.open).toHaveBeenCalledWith("workspace", { scope: "start" });
     press("j");

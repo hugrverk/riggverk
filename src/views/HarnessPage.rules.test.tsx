@@ -271,8 +271,14 @@ function rulesFile() {
   return screen.getByLabelText("Rules file");
 }
 
-function footerButton(name: RegExp) {
-  return within(screen.getByRole("region", { name: "Claude surfaces" })).queryByRole("button", { name });
+function statusBar() {
+  return within(screen.getByLabelText("Status bar"));
+}
+
+/** A key hint of the surfaces pane. Hints live in the status bar while their pane has focus. */
+function surfaceHint(name: RegExp) {
+  if (!screen.getByRole("region", { name: "Claude surfaces" }).contains(document.activeElement)) focusSurfaces();
+  return statusBar().queryByRole("button", { name });
 }
 
 function rulesPane() {
@@ -292,9 +298,9 @@ describe("rules file in the surfaces pane", () => {
     expect(surfaceRow("rules").querySelector(".meta")!.textContent).toContain("update");
     expect(surfaceRow("rules").querySelector(".meta")!.textContent).not.toContain("conflict");
     // A base update offers the diff only: nothing to convert, nothing to leave as is.
-    expect(footerButton(/diff/)).not.toBeNull();
-    expect(footerButton(/convert/)).toBeNull();
-    expect(footerButton(/leave as is/)).toBeNull();
+    expect(surfaceHint(/diff/)).not.toBeNull();
+    expect(surfaceHint(/convert/)).toBeNull();
+    expect(surfaceHint(/leave as is/)).toBeNull();
   });
 
   it("explains an edited base block as a conflict with its reason and offers diff, convert and leave as is", () => {
@@ -303,25 +309,25 @@ describe("rules file in the surfaces pane", () => {
     expect(rulesFile().textContent).toContain("the base block was edited");
     expect(rulesFile().textContent).toContain("2 refinement lines preserved");
     expect(surfaceRow("rules").querySelector(".meta")!.textContent).toContain("conflict");
-    expect(footerButton(/diff/)).not.toBeNull();
-    expect(footerButton(/convert/)).not.toBeNull();
-    expect(footerButton(/leave as is/)).not.toBeNull();
+    expect(surfaceHint(/diff/)).not.toBeNull();
+    expect(surfaceHint(/convert/)).not.toBeNull();
+    expect(surfaceHint(/leave as is/)).not.toBeNull();
   });
 
   it("explains a plain file that differs from every shipped base", () => {
     renderClaude(rules({ layout: "legacy", conflict_reason: "legacy_diverged" }));
     expect(rulesFile().textContent).toContain("plain file, no base block");
     expect(rulesFile().textContent).toContain("the file differs from every shipped base");
-    expect(footerButton(/convert/)).not.toBeNull();
+    expect(surfaceHint(/convert/)).not.toBeNull();
   });
 
   it("names the marker rule that failed and offers neither conversion nor leave as is", () => {
     renderClaude(rules({ layout: "malformed", conflict_reason: "malformed_markers", malformed_reason: "duplicate_begin" }));
     expect(rulesFile().textContent).toContain("markers malformed: left as is, never rewritten");
     expect(rulesFile().textContent).toContain("more than one BEGIN marker");
-    expect(footerButton(/convert/)?.getAttribute("title")).toContain("malformed");
-    expect(footerButton(/diff/)?.getAttribute("title")).toContain("malformed");
-    expect(footerButton(/leave as is/)).toBeNull();
+    expect(surfaceHint(/convert/)?.getAttribute("title")).toContain("malformed");
+    expect(surfaceHint(/diff/)?.getAttribute("title")).toContain("malformed");
+    expect(surfaceHint(/leave as is/)).toBeNull();
     focusSurfaces();
     press("v");
     press("d");
@@ -335,19 +341,19 @@ describe("rules file in the surfaces pane", () => {
     expect(meta.textContent).toContain("you manage");
     expect(meta.className).toContain("c-warn");
     expect(meta.className).not.toContain("c-fail");
-    expect(footerButton(/hand back/)).not.toBeNull();
-    expect(footerButton(/leave as is/)).toBeNull();
+    expect(surfaceHint(/hand back/)).not.toBeNull();
+    expect(surfaceHint(/leave as is/)).toBeNull();
   });
 
   it("has no rules block for a surface that is not in the status, and no rules actions", () => {
     renderClaude(rules(), "current", { overview: overviewOf({}) });
     expect(screen.queryByLabelText("Rules file")).toBeNull();
-    expect(footerButton(/diff/)).toBeNull();
+    expect(surfaceHint(/diff/)).toBeNull();
   });
 
   it("disables the actions while another task runs", () => {
     renderClaude(rules({ conflict_reason: "base_block_edited" }), "conflict", { wsRunning: "update claude" });
-    expect(footerButton(/convert/)?.getAttribute("title")).toBe("update claude is running");
+    expect(surfaceHint(/convert/)?.getAttribute("title")).toBe("update claude is running");
     focusSurfaces();
     press("v");
     expect(invokeMock).not.toHaveBeenCalled();
@@ -379,7 +385,7 @@ describe("rules diff (d)", () => {
     backend();
     renderClaude(rules({ conflict_reason: "base_block_edited" }));
     focusSurfaces();
-    fireEvent.click(footerButton(/diff/)!);
+    fireEvent.click(surfaceHint(/diff/)!);
     await screen.findByRole("group", { name: "shipped base sha256:0123456789abcd to installed" });
     expect(invokeMock).toHaveBeenCalledWith("preview_rules_diff", { surface: "claude_rules", mode: "edits" });
     const pane = rulesPane();
@@ -496,7 +502,7 @@ describe("rules conversion (v, y)", () => {
     const { p } = await openPreview();
     press("Enter");
     expect(invokeMock).not.toHaveBeenCalledWith("apply_rules_conversion", expect.anything());
-    fireEvent.click(within(rulesPane()).getByRole("button", { name: /apply/ }));
+    fireEvent.click(statusBar().getByRole("button", { name: /apply/ }));
     await waitFor(() => expect(p.onApplied).toHaveBeenCalledTimes(1));
   });
 
@@ -557,7 +563,7 @@ describe("rules conversion (v, y)", () => {
     focusSurfaces();
     press("v");
     expect((await screen.findByRole("alert")).textContent).toContain("nothing to convert: this file is managed by the base block already");
-    expect(within(rulesPane()).queryByRole("button", { name: /apply/ })).toBeNull();
+    expect(statusBar().queryByRole("button", { name: /apply/ })).toBeNull();
     press("y");
     expect(invokeMock).not.toHaveBeenCalledWith("apply_rules_conversion", expect.anything());
   });
@@ -565,7 +571,7 @@ describe("rules conversion (v, y)", () => {
   it("waits for a running task before it applies", async () => {
     const { p, rerenderFrame } = await openPreview();
     rerenderFrame(<ClaudeView {...p} wsRunning="release-check" runtimeHealth={CLAUDE_HEALTH} />);
-    const apply = within(rulesPane()).getByRole("button", { name: /apply/ });
+    const apply = statusBar().getByRole("button", { name: /apply/ });
     expect(apply.getAttribute("title")).toBe("release-check is running");
     press("y");
     expect(invokeMock).not.toHaveBeenCalledWith("apply_rules_conversion", expect.anything());

@@ -371,7 +371,7 @@ export function SettingsView({
   };
 
   // `c` and `R` work from both panes (the workspace row is in the app pane, but the appearance pane has the
-  // initial focus) and are hinted in both footers.
+  // initial focus) and are hinted in the status bar from both.
   const workspaceBindings: Binding[] = WORKSPACE_PANES.flatMap(paneId => [
     {
       id: `settings.workspace.choose.${paneId}`,

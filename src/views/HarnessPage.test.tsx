@@ -100,6 +100,11 @@ function press(key: string, target: Element) {
   fireEvent.keyDown(target, { key });
 }
 
+/** A key hint of the focused pane: hints live in the status bar, not in the panes. */
+function hint(name: RegExp) {
+  return within(screen.getByLabelText("Status bar")).getByRole("button", { name });
+}
+
 beforeEach(() => {
   invokeMock.mockReset();
 });
@@ -195,7 +200,7 @@ describe("HarnessPage", () => {
     act(() => targets().focus());
     press("u", targets());
     expect(p.install.open).not.toHaveBeenCalled();
-    const update = within(screen.getByRole("region", { name: "Codex surfaces" })).getByRole("button", { name: /update/ });
+    const update = hint(/update/);
     expect(update.getAttribute("title")).toBe("saving target changes");
   });
 
@@ -262,12 +267,13 @@ describe("OpenCodeView model override", () => {
     expect(small.value).toBe("anthropic/claude-haiku-4-5");
 
     const runtime = screen.getByRole("region", { name: "OpenCode runtime" });
-    const save = within(runtime).getByRole("button", { name: /save model/ });
+    act(() => (runtime.querySelector(".pane-body") as HTMLElement).focus());
+    const save = hint(/save model/);
     expect(save.getAttribute("aria-disabled")).toBe("true");
 
     fireEvent.change(model(), { target: { value: "openai/gpt-5" } });
-    expect(within(runtime).getByRole("button", { name: /save model/ }).getAttribute("aria-disabled")).toBeNull();
-    fireEvent.click(within(runtime).getByRole("button", { name: /save model/ }));
+    expect(hint(/save model/).getAttribute("aria-disabled")).toBeNull();
+    fireEvent.click(hint(/save model/));
 
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("update_opencode_model_selection", {
       model: "openai/gpt-5",
@@ -306,7 +312,8 @@ describe("OpenCodeView model override", () => {
     expect(screen.getByRole("alert").textContent).toBe("Must be provider/model format");
     expect(model().getAttribute("aria-invalid")).toBe("true");
     const runtime = screen.getByRole("region", { name: "OpenCode runtime" });
-    expect(within(runtime).getByRole("button", { name: /save model/ }).getAttribute("title")).toBe("Must be provider/model format");
+    act(() => (runtime.querySelector(".pane-body") as HTMLElement).focus());
+    expect(hint(/save model/).getAttribute("title")).toBe("Must be provider/model format");
     expect(runtime.textContent).toContain("opencode models: unavailable");
   });
 

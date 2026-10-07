@@ -55,7 +55,7 @@ function Counts({ counts }: { counts: PlanCounts }) {
  *
  * Keys (focus inside the pane): `j`/`k` move, `d` details of the row, `c` next conflict, `y` apply (review
  * only, and only when there is something safe to apply), `n`/Esc cancel, `r` preview again after a stale or
- * expired preview. Enter never applies; the visible `y apply` button does the same as the key.
+ * expired preview. Enter never applies; the `y apply` hint in the status bar is clickable and does the same as the key.
  */
 export function InstallPlanPane({ flow, busyLabel, backupRoot, onApply }: InstallPlanPaneProps) {
   const { status, review, error, request } = flow;
