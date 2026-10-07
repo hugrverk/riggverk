@@ -984,6 +984,7 @@ fn managed_hash_for(
 fn detect_stale_artifact_state(
     artifact: &ArtifactId,
     workspace_root: &Path,
+    bundled_root: &Path,
     home: &Path,
     managed_hash: Option<&str>,
 ) -> (OperationKind, PreviousState) {
@@ -1005,9 +1006,11 @@ fn detect_stale_artifact_state(
         Ok(d) => d,
         Err(_) => return (OperationKind::Conflict, PreviousState::Conflict),
     };
-    let Some(expected) = managed_hash else {
+    // Byte-for-byte a version the app shipped is as good as a recorded hash.
+    let shipped = crate::shipped_digests::is_shipped_version(artifact, bundled_root, &installed);
+    if managed_hash.is_none() && !shipped {
         return (OperationKind::Conflict, PreviousState::Conflict);
-    };
+    }
     if let ArtifactId::CodexLegacySkill(name) = artifact {
         let Some(current) = crate::artifact_registry::SkillName::new(name.as_str().to_string())
             .map(ArtifactId::CodexSkill)
@@ -1039,7 +1042,7 @@ fn detect_stale_artifact_state(
             }
         }
     }
-    if installed == expected {
+    if managed_hash == Some(installed.as_str()) || shipped {
         (OperationKind::Remove, PreviousState::ManagedFile)
     } else {
         (OperationKind::Conflict, PreviousState::Conflict)
@@ -1115,7 +1118,8 @@ pub fn plan_artifacts_for_uninstall(
             crate::setup_fingerprint::artifact_source_digest(&artifact, source_root, home).ok();
         let managed_hash = managed_hash_for(&identity, &records);
         let owned = managed_hash.as_deref() == Some(installed.as_str())
-            || source.as_deref() == Some(installed.as_str());
+            || source.as_deref() == Some(installed.as_str())
+            || crate::shipped_digests::is_shipped_version(&artifact, &bundled_root, &installed);
         if owned {
             let surface = artifact.surface();
             removals.push(PlannedArtifact {
@@ -1150,8 +1154,13 @@ pub fn plan_artifacts_for_uninstall(
             continue;
         }
         let managed_hash = managed_hash_for(&identity, &records);
-        let (kind, previous_state) =
-            detect_stale_artifact_state(&artifact, workspace_root, home, managed_hash.as_deref());
+        let (kind, previous_state) = detect_stale_artifact_state(
+            &artifact,
+            workspace_root,
+            &bundled_root,
+            home,
+            managed_hash.as_deref(),
+        );
         match kind {
             OperationKind::Remove => {
                 let surface = artifact.surface();
@@ -1293,15 +1302,18 @@ pub fn plan_artifacts_for_surfaces(
                     previous_state,
                     &artifact,
                     workspace_root,
+                    &bundled_root,
                     home,
                     managed_hash.as_deref(),
                 );
                 // Updates without proven ownership are preserved as conflicts,
-                // except mergeable configs: their merge rewrites only managed
-                // keys and preserves user-owned content by construction.
+                // except mergeable configs (their merge rewrites only managed
+                // keys and preserves user-owned content by construction) and
+                // files that are byte-for-byte a version the app shipped.
                 if managed_hash.is_none()
                     && matches!(kind, OperationKind::Update)
                     && !matches!(previous_state, PreviousState::MergeableConfigFile)
+                    && !installed_is_shipped_version(&artifact, workspace_root, &bundled_root, home)
                 {
                     (OperationKind::Conflict, PreviousState::Conflict)
                 } else {
@@ -1341,8 +1353,13 @@ pub fn plan_artifacts_for_surfaces(
         }
         seen.insert(identity.clone());
         let managed_hash = managed_hash_for(&identity, &records);
-        let (kind, previous_state) =
-            detect_stale_artifact_state(&artifact, workspace_root, home, managed_hash.as_deref());
+        let (kind, previous_state) = detect_stale_artifact_state(
+            &artifact,
+            workspace_root,
+            &bundled_root,
+            home,
+            managed_hash.as_deref(),
+        );
         if matches!(kind, OperationKind::NoChange | OperationKind::Unavailable) {
             continue;
         }
@@ -1361,11 +1378,26 @@ pub fn plan_artifacts_for_surfaces(
     Ok(planned)
 }
 
+/// Whether the installed copy is byte-for-byte a version the app shipped for
+/// this artifact. An unreadable or absent copy is not.
+fn installed_is_shipped_version(
+    artifact: &ArtifactId,
+    workspace_root: &Path,
+    bundled_root: &Path,
+    home: &Path,
+) -> bool {
+    crate::setup_fingerprint::artifact_installed_managed_digest(artifact, workspace_root, home)
+        .is_ok_and(|installed| {
+            crate::shipped_digests::is_shipped_version(artifact, bundled_root, &installed)
+        })
+}
+
 fn refine_with_managed_hash(
     kind: OperationKind,
     previous: PreviousState,
     artifact: &ArtifactId,
     workspace_root: &Path,
+    bundled_root: &Path,
     home: &Path,
     managed_hash: Option<&str>,
 ) -> (OperationKind, PreviousState) {
@@ -1378,7 +1410,11 @@ fn refine_with_managed_hash(
     let installed =
         crate::setup_fingerprint::artifact_installed_managed_digest(artifact, workspace_root, home)
             .unwrap_or(crate::setup_fingerprint::ABSENT_DIGEST.into());
-    if installed == expected {
+    // A recorded hash that no longer matches may only be stale: a file that is
+    // exactly a version the app shipped is still the app's to update.
+    if installed == expected
+        || crate::shipped_digests::is_shipped_version(artifact, bundled_root, &installed)
+    {
         (OperationKind::Update, previous)
     } else {
         (OperationKind::Conflict, PreviousState::Conflict)
@@ -2751,6 +2787,7 @@ mod tests {
 
     #[test]
     fn validation_fails_on_update_after_apply() {
+        let _guard = crate::test_env::guard::lock();
         let home = temp("val-home");
         let ws = temp("val-ws");
         fs::create_dir_all(home.join(".codex")).unwrap();
@@ -2809,6 +2846,7 @@ mod tests {
 
     #[test]
     fn automatic_restore_keeps_user_edit_when_digests_were_never_recorded() {
+        let _guard = crate::test_env::guard::lock();
         let (op, backup_dir, home, ws) =
             automatic_restore_fixture("auto-user-edit", "original", "user edit");
         let err = restore_artifact_from_backup(&op, &backup_dir, &home, &ws).unwrap_err();
@@ -2821,6 +2859,7 @@ mod tests {
 
     #[test]
     fn automatic_restore_restores_planned_content_and_skips_original() {
+        let _guard = crate::test_env::guard::lock();
         let bundled = crate::setup_roots::bundled_root().unwrap();
         let source = fs::read_to_string(bundled.join("templates/sync/codex-rules.md")).unwrap();
         let (op, backup_dir, home, ws) =
@@ -2840,6 +2879,7 @@ mod tests {
 
     #[test]
     fn automatic_restore_keeps_edit_made_after_recorded_apply() {
+        let _guard = crate::test_env::guard::lock();
         let (mut op, backup_dir, home, ws) =
             automatic_restore_fixture("auto-recorded", "original", "applied");
         let dest = home.join(".codex/AGENTS.md");
@@ -2857,6 +2897,7 @@ mod tests {
 
     #[test]
     fn restore_file_failure_keeps_the_destination() {
+        let _guard = crate::test_env::guard::lock();
         let (mut op, backup_dir, home, ws) =
             automatic_restore_fixture("restore-keeps-dest", "original", "current");
         // A backup that is not a regular file makes the copy fail.
@@ -3008,5 +3049,147 @@ mod tests {
         );
         result.expect("the bundled merge scripts render the rollback");
         assert!(restored.contains("approval_policy"), "{restored}");
+    }
+
+    fn shipped_fixture(label: &str) -> (PathBuf, PathBuf, PathBuf) {
+        let base = temp(label);
+        let home = base.join("home");
+        let ws = base.join("ws");
+        fs::create_dir_all(&home).unwrap();
+        fs::create_dir_all(&ws).unwrap();
+        (base, home, ws)
+    }
+
+    fn write_file(path: &Path, bytes: &[u8]) {
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, bytes).unwrap();
+    }
+
+    fn inject_shipped(key: &str, bytes: &[u8]) -> crate::shipped_digests::test_override::Guard {
+        crate::shipped_digests::test_override::inject(
+            &crate::shipped_digests::test_override::json_for(
+                key,
+                &[crate::stable_digest::bytes(bytes)],
+            ),
+        )
+    }
+
+    #[test]
+    fn stale_artifact_that_is_a_shipped_version_is_removed_with_or_without_a_record() {
+        let (base, home, ws) = shipped_fixture("stale-shipped");
+        let bundled = crate::setup_roots::bundled_root().unwrap();
+        let retired = crate::managed_bootstrap::REMOVED_SKILL_NAMES[0];
+        let artifact =
+            ArtifactId::ClaudeSkill(crate::artifact_registry::SkillName::new(retired).unwrap());
+        let dest = artifact.resolve_dest(&home, &ws).unwrap();
+        let shipped = b"a version the app shipped\n";
+        let key = format!("templates/skills/claude/{retired}/SKILL.md");
+        let _inject = inject_shipped(&key, shipped);
+        let other_record = crate::stable_digest::bytes(b"an older recorded hash");
+        let detect = |record: Option<&str>| {
+            detect_stale_artifact_state(&artifact, &ws, &bundled, &home, record)
+        };
+        let remove = (OperationKind::Remove, PreviousState::ManagedFile);
+        let conflict = (OperationKind::Conflict, PreviousState::Conflict);
+
+        write_file(&dest, shipped);
+        assert_eq!(detect(None), remove);
+        assert_eq!(detect(Some(&other_record)), remove);
+        assert_eq!(
+            detect(Some(&crate::stable_digest::bytes(shipped))),
+            remove,
+            "a matching record is proof on its own"
+        );
+
+        // Anything the app never shipped keeps today's behaviour.
+        write_file(&dest, b"the user edited this\n");
+        assert_eq!(detect(None), conflict);
+        assert_eq!(detect(Some(&other_record)), conflict);
+        let _ = fs::remove_dir_all(base);
+    }
+
+    #[test]
+    fn stale_artifact_ownership_ignores_metadata_that_does_not_parse() {
+        let (base, home, ws) = shipped_fixture("stale-malformed");
+        let bundled = crate::setup_roots::bundled_root().unwrap();
+        let retired = crate::managed_bootstrap::REMOVED_SKILL_NAMES[0];
+        let artifact =
+            ArtifactId::ClaudeSkill(crate::artifact_registry::SkillName::new(retired).unwrap());
+        let dest = artifact.resolve_dest(&home, &ws).unwrap();
+        write_file(&dest, b"a version the app shipped\n");
+        let _inject = crate::shipped_digests::test_override::inject("{ not json");
+        assert_eq!(
+            detect_stale_artifact_state(&artifact, &ws, &bundled, &home, None),
+            (OperationKind::Conflict, PreviousState::Conflict)
+        );
+        let _ = fs::remove_dir_all(base);
+    }
+
+    #[test]
+    fn codex_legacy_special_case_still_guards_a_shipped_version() {
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        unsafe {
+            std::env::remove_var("CODEX_HOME");
+            std::env::remove_var("CODEX_SKILLS_PATH");
+        }
+        let (base, home, ws) = shipped_fixture("legacy-shipped");
+        crate::test_env::set_test_user_dirs(&home);
+        let bundled = crate::setup_roots::bundled_root().unwrap();
+        let name = crate::artifact_registry::SkillName::new("tdd").unwrap();
+        let legacy = ArtifactId::CodexLegacySkill(name.clone());
+        let current = ArtifactId::CodexSkill(name);
+        let shipped = b"a version the app shipped\n";
+        let _inject = inject_shipped("templates/skills/codex/tdd/SKILL.md", shipped);
+        write_file(&legacy.resolve_dest(&home, &ws).unwrap(), shipped);
+        let detect = || detect_stale_artifact_state(&legacy, &ws, &bundled, &home, None);
+
+        // No migrated copy yet: the shipped legacy copy is the app's to remove.
+        assert_eq!(
+            detect(),
+            (OperationKind::Remove, PreviousState::ManagedFile)
+        );
+        // A different migrated copy exists: the legacy guard decides, as before.
+        write_file(
+            &current.resolve_dest(&home, &ws).unwrap(),
+            b"the user's own copy\n",
+        );
+        assert_eq!(detect(), (OperationKind::Conflict, PreviousState::Conflict));
+        let _ = fs::remove_dir_all(base);
+    }
+
+    #[test]
+    fn recorded_hash_mismatch_is_an_update_only_for_a_shipped_version() {
+        let (base, home, ws) = shipped_fixture("refine-shipped");
+        let bundled = crate::setup_roots::bundled_root().unwrap();
+        let artifact =
+            ArtifactId::ClaudeAgent(crate::artifact_registry::AgentName::new("verifier").unwrap());
+        let dest = artifact.resolve_dest(&home, &ws).unwrap();
+        let shipped = b"an older verifier agent\n";
+        let _inject = inject_shipped("templates/claude/agents/verifier.md", shipped);
+        let stale_record = crate::stable_digest::bytes(b"an even older recorded hash");
+        let refine = |record: Option<&str>| {
+            refine_with_managed_hash(
+                OperationKind::Update,
+                PreviousState::ManagedFile,
+                &artifact,
+                &ws,
+                &bundled,
+                &home,
+                record,
+            )
+        };
+
+        write_file(&dest, shipped);
+        assert_eq!(
+            refine(Some(&stale_record)),
+            (OperationKind::Update, PreviousState::ManagedFile)
+        );
+        write_file(&dest, b"the user edited this\n");
+        assert_eq!(
+            refine(Some(&stale_record)),
+            (OperationKind::Conflict, PreviousState::Conflict)
+        );
+        let _ = fs::remove_dir_all(base);
     }
 }

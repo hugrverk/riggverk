@@ -1,0 +1,840 @@
+{
+  "schema": 1,
+  "sources": {
+    "agents/architect.md": [
+      "sha256:017bbe23d93aac6cb50d41e42ba662eba2306a1e8596aa5c8e8b78a28156aee5",
+      "sha256:15360945d3eaed6465e576900cfc946fa051e1623d59bd77d438874d887ee5b9",
+      "sha256:335d2cff78f566598930106de44c09c52238fcb63ef9139b296b09ec4bcec80f",
+      "sha256:4a1dccf1d665e5001506da1881b2cfdbb712a945c081f572d99e482392d469d3",
+      "sha256:89619bae46537fc968ff1b68651db0c9700c96d0b03c50615c6025c1c5a6276e",
+      "sha256:9f9b73d8f7df15bbab2a6e3905d49e391b3be1e2af3da1db923b419aa506ef58",
+      "sha256:a38501d50b37ef9e38041396c3b0b00cb8a5e7682e4ae3b211a2561272377b00",
+      "sha256:e3d487e7f2d911e2b72dfa131572ab7ffcd300d052ca2b863a1ef5050bcdbf85",
+      "sha256:ea0ebf3d06c04f96a8b6ddd5dca4adea7a420346698d49282d27360f397c8d8c"
+    ],
+    "agents/autopilot.md": [
+      "sha256:380f0714edc670c6d0a5ebb55cd40ce44efedc6248b300e8608e476050c16e6d",
+      "sha256:631a4cc80c70cf1eb7d24edd6b497faa5b22b45de0b2861890bebc98b3d838ac",
+      "sha256:89fe7d4cdde430b0a766b9b469c74f88f1a06e172f710fcb01c1e48651116b00",
+      "sha256:f204b1959bb4b7d3303187dd9bfe5198e68317c4e9d7183a96c7e484008d9d07"
+    ],
+    "agents/code-reviewer.md": [
+      "sha256:035a61488b7af148b28ab59bc339bcd8c3f43e1196bf8294ce157176bb2f665b",
+      "sha256:74a99e23888cf0833afed1d9c9584f1552656bd80b772148dde60d3af41a4af2"
+    ],
+    "agents/docs-writer.md": [
+      "sha256:0b727a8784c8aacc5f66830eafb1b666f59318547ecd302e39b90afa8758fa1c",
+      "sha256:f651754388d25b9909f5aceb08353d058073774126558a31772f088123162c6e"
+    ],
+    "agents/inspector.md": [
+      "sha256:17afe7d4a01058a96cf1948888268de9d7a4c972b74e10418fc9bff1e129ede7",
+      "sha256:3e28809c1fae8bdc6be9646d76a260f9112d0f93c33e34e6d2aa3a1a0f807179",
+      "sha256:4c89595c218121ee6f3fe567a2aa155fa7333a81b8a81aac0a9ad339a39ef659",
+      "sha256:74a99e23888cf0833afed1d9c9584f1552656bd80b772148dde60d3af41a4af2",
+      "sha256:8d7b87164e8bc026bb9ae5ce040c8d73005ae9180c7d94e6df62dddc3ca93824",
+      "sha256:93717d165290cd9233a355863cb37380370c47629f55f9e5b2dd6287c7a28d9a",
+      "sha256:ac012a5744f0fb671275b2b012b6e57bf92f0845f39f2565429d58bd00320135",
+      "sha256:af0a2cc5fd44b197512aeddba40c36e5cd9161348cf039dd1e85d5c7e7753d0a",
+      "sha256:ceb4289dcaa99afa422788465a6b148b8d3622b6e0116c2d4fad67dd12e47538",
+      "sha256:d1340a2d008c4554045240e81eb064b0ea75f9c6f36999ce42f8eca7fa6c05de",
+      "sha256:e42815b406a68accd931d6ea46deb072c2c873815f8229b097336b4c896cadff",
+      "sha256:ed910e50c3c094b25c0351a3b28cbb6930bf5bdbb6b1898fc964264ac1fc1233"
+    ],
+    "agents/qa-verifier.md": [
+      "sha256:013c15ca40825b83fbac6bc13e56112e3fcc9c87832165d5f7aeb5527d484402",
+      "sha256:1b349380850511e57c0ab182b72af72be0566e4bef3989cdc20638c5baffa8fa"
+    ],
+    "agents/repo-scout.md": [
+      "sha256:01c46e463ef92c6f6980965d0b3e0efd9a4403f37d6d07ed9f27f74ea986304e",
+      "sha256:0ab6760443ebf9f2738b9e4ec278c50bd95c4d878276d6f8f6921f53d5ee3b62",
+      "sha256:305e7b1142530bfb5daf1f6bc5310f9d93c08c96a585665ee9998dfdb91712e2",
+      "sha256:5bb9d8cdf0e2ee1f92170ad6fe299b3a6f83863d135275a158a7a96fe7991e0b",
+      "sha256:852b8621678287653ba15001d17bec5a304c7c1bc6c2fb5a3800c854f5aea2ef",
+      "sha256:884eda50e09a4443ce1c6126029f62858bf575329975c90453824a9eea66d37e",
+      "sha256:913c8d939a243ff0416f0bde9082106c986835c2a9292159278082ad463aab6b",
+      "sha256:abe597a3677055df39e2a21f632a9ed6d1234cc5097d1893fdab5f12982600da",
+      "sha256:c611c538665d8c4ca744cb702a131583800913e6079e29cb16b8e6a78e9e9e05"
+    ],
+    "agents/scout.md": [
+      "sha256:00cc1fa1ec47f238666191da79ace0ee87790b768b98bd2ba301ffe8103d24b3",
+      "sha256:2d571dac16d22d23473bdebfb420d8739e10b01067b22df1eeb663afa6291899",
+      "sha256:884eda50e09a4443ce1c6126029f62858bf575329975c90453824a9eea66d37e",
+      "sha256:aa97cad13698de2f48a2a94aaee5579590d979473b3ae8e964968321cf1e30b1",
+      "sha256:c4499de0f476f3696d7a7d188ed4302c9b38ff17016c7da9ea007cea1d969bf2",
+      "sha256:ca3c89ef4523448377c991ab93723ffd5190461efd23e52e2cd30179ad6c73f6"
+    ],
+    "agents/scribe.md": [
+      "sha256:0184bab5e15ef71479760b0a87f0f9276f8ed031226241d398bbb69abf409475",
+      "sha256:0b727a8784c8aacc5f66830eafb1b666f59318547ecd302e39b90afa8758fa1c",
+      "sha256:103fa3e6a0413d6ffabffa286843a73002e1c2839d1247aaa81eb5079a73ec39",
+      "sha256:3c69be9ae02ce8983fbf9564c8483555b47e83c3a2c53afb0aaba8f0e1c3bd41",
+      "sha256:5be98a69744e0a660720688c61b70359f3bdb6d88f30b9d2abf1057e6e8f8171",
+      "sha256:606231024629b6a470b26e5c661eb984f325371ca1af0ab15fcf93f83154220b",
+      "sha256:61b5b1d4705d131a4f99205f9535263eed3ba401350dcde39eff57aec27d2960",
+      "sha256:79d5bba37d243431aebad0637160926aae51fae03c298ee467d47c62c914f0c4",
+      "sha256:a3c37840456d5984db7abc490541ca0620bfce2a5a73e202876e11c324f7a85c",
+      "sha256:c61cc0f9207738ed89d40fbe9d405108a7ccf5dde22bb2f7df94fe2560fb8549",
+      "sha256:e069c3b209127f726655b61334942a96f0c1f14363804b8d5292e58a35d76977"
+    ],
+    "agents/security-auditor.md": [
+      "sha256:5e9dc9bedd7209a76f8b859d2fbc27b9f87f9987c947a95dedef33a4f5fb22d0",
+      "sha256:aca09beb4b6a085ec6c2b6390ebf24b0b9f3dbd84a3583a2111ba1e0d3084713"
+    ],
+    "agents/sentinel.md": [
+      "sha256:02d42d4dfef92a530fe61f2d6be1bbb8c1a68dee435a28c05ea30d1d157dfa16",
+      "sha256:4afa5094bfe4309867491a53d20c1edad8da966030bf4e2e9f19861145147829",
+      "sha256:5518ea1070a7d672e534bdc9875fb00edf27bf1a04d35d2e43a705804ae0ae93",
+      "sha256:55554c03d4e5adea85caf2342ea8be0a2c1cb4b94410e19820ed292942f298ff",
+      "sha256:9e31dce169474957687d8f1a04e1de9394287a03430822abc00ab40709594da5",
+      "sha256:a0a84c0ea7f9f8698b1b02d8a677dd5eceef12117266e176761eed129640919d",
+      "sha256:aca09beb4b6a085ec6c2b6390ebf24b0b9f3dbd84a3583a2111ba1e0d3084713",
+      "sha256:bb176d2efc7d0fd46dcdc516ff6f8b8b8f141ed9a63d66bf60ca3f5762b14443",
+      "sha256:bff1f2a6d514607696d3880c4e3b6c8141403c2889bb50c867485e820d7307fd",
+      "sha256:c40fbc5f7538df19a15135165bd7c04ba8c3e4cf4576cea6c06980eca2301cfd",
+      "sha256:e0bd730418b0ff8e788875331008d6ae287bd10e6e20742bd2b975afab035bd2"
+    ],
+    "agents/verifier.md": [
+      "sha256:006ab64d6b4cae102a3e859c3fa2e9661ea79e53bee15c87e68f821e4c6311f8",
+      "sha256:1b349380850511e57c0ab182b72af72be0566e4bef3989cdc20638c5baffa8fa",
+      "sha256:2afeeb7f954028b943a4e16e9db401894de648dfbd6d5b68e9c8012908d274bf",
+      "sha256:33540aa32b03d649b6ee37509ab56cbc1bc42ff277ff32a9895ad0289f64d99c",
+      "sha256:406df7c70b68a20d11321611bc40140e3f23a420e354838d103b78c3b107bb4c",
+      "sha256:5d70912ca265e341388ba4ffc0cfb55cf01342bba8ea62442e355bcff32fc34e",
+      "sha256:7897f87ce9d03194135e116fce198c799ffd18316e1445d07d734c820fde3855",
+      "sha256:7cc8c622cdb13fad41149fa6cb5e11384a6ac801266ce02d8c9cdf1ad184ae56",
+      "sha256:aa9cc2eea388c1e80b66dbd515451f9acaae23b5778e17ddfd6b1d8278afc2c5",
+      "sha256:cb8d3f5c2c39c0e5a14ab05c2b0a656daca5885b0ba9e950ac1c31829687f3a1",
+      "sha256:cf731558d452a4356f112f56489c80b7976fb9e0bdbb8c364b283d73e5158c07",
+      "sha256:f8fbdcb35a470e02e7ca9c382313ac5d710249bffe10bb37d734517079ae76d5"
+    ],
+    "skills/accessibility-review/SKILL.md": [
+      "sha256:0bd5cd9f8e2338a564107daf6aa6d01970a36ff3fff06bc5f86b5ced85fad9fd",
+      "sha256:262eb86b8eec18630076f93f0cf9b8b16d0a0b3f4f62c9b6710e7a0af471c6f7",
+      "sha256:78d69cbf4f91b01865caeffa89cc5616e7d08d7ce9aa0e05de5bb78e32638b5d",
+      "sha256:d35d5b9af76b02ff79f1d06aecf7e5512dda3238e45c432184c3fb8e3c0c62bd",
+      "sha256:ea2016c0c9b4c38b3a1bb26d8b2ea98067be4baac19450881085abe98edf383a",
+      "sha256:ebf2a25f4b84b1e6f142c3704671837859000b256def0385e0a6be7bb7146940"
+    ],
+    "skills/agent-report-review/SKILL.md": [
+      "sha256:da9b69ed07462bd62f0e38898af6887d0114bf2801a0ab571bc5656add4ed24f",
+      "sha256:f95b371d66f1e2fb72e69be132443433f0298334ebe13f69d5eae81a40919dff",
+      "sha256:fb44c2a81c431af3137d15044cf4e2c3faa6218754ea4c45863625a4e2a5c071"
+    ],
+    "skills/browser-qa/SKILL.md": [
+      "sha256:1746af0204c1d398d2a65d1aaff458a479dd457b2687762981f053a5c3cfdcf3",
+      "sha256:3eadff493e957be3cec79bbca52e89b738f155f943efcae54c2ad9237896c878",
+      "sha256:65c12ac3aa5de8a2595cf1e5d67ef077992cccbff59977d61918341f0269e605",
+      "sha256:74bc5f54dfe6061b3a064669099103b420f69624f91fe2d437e0b2a242364e26",
+      "sha256:93b3ae350b3db22136dada1fcb4fa63ac4ca98c7847e154939f95fcc0027a7c1",
+      "sha256:b219395c52aa80026fbd7715ac336e5bcedc3557cecb807a2971f13aa0f670f0",
+      "sha256:e958a8f92c380b423d67939b1996ae09ee3a84d7711aac86c97e0553f17e3ca2"
+    ],
+    "skills/caveman/SKILL.md": [
+      "sha256:0bc496f746a26aa42fc2b84b5c7e2d1f1b6cb713f0acfb329ea37832bf7fe174",
+      "sha256:397f5aedc5904bf0a92b073713a5309a3889cac29ccd5a27ccc1eb712016b872",
+      "sha256:8414397511db898da9c2279a3257f6f47a873ea20b9061bdf6f0e843322804e7",
+      "sha256:c247b243d16f61c4417e600707567b823de369e7ecb9d1fe5273c62424516dd9"
+    ],
+    "skills/context-budget/SKILL.md": [
+      "sha256:224477c7c6dfe048ef5053df9b6a9c241de44069dd179043cbf0b5f8c30edc4b",
+      "sha256:3c9b82db6e2982993ef19d75bcf0d5d7c7680092c59f1df49e6d698e02f121a3",
+      "sha256:411ee5994a59b030cec69f327aaf1830352aa265a94c54f4aed6226026840095",
+      "sha256:c3b4644dc17afa663518be89f6abd4f1a5fd4bfde85ae4a326956bfbbd5819e4",
+      "sha256:cb89eb828c89e674a87bc7bbd09447722fa616104a487a17a3fa1d9037821556",
+      "sha256:d10a878a0f06cfa756990d8b9a0d90f20fe0c4d4d57a0e207de8c18994ffe2ce",
+      "sha256:e118b5c4fe65997fa850013c4fdf4602b7b685e63fa4ead644e3a70f865608a5"
+    ],
+    "skills/current-docs/SKILL.md": [
+      "sha256:0f81af64ba50f3f729ea151824b26bd82922e37568a84e155a3a7f9d7c349a6b",
+      "sha256:70242b1c0f6a595b0dc141ff1619e5c2f52c457ba8a15636424bda49fcce975c",
+      "sha256:768183e183181d8db7d58d0efa4fefa5a09a7276e5471b665386a9b589e502d0",
+      "sha256:89229da1b97db99e0364373f830f37fd204090a42e8a187cbc3a71f47f26fcd8",
+      "sha256:92cc37ad44a494758affbdc1e3a3e8658a926f39145901a2b30f1b5346b7cae9",
+      "sha256:c9498f3312bd9b65e362d37772d6071fbc6472b082c64d283b2f6a5195e02b91",
+      "sha256:f50b4dad5c02d71328ff9c987315cf574e63b22a3b0bb87f5f5ac6ca42acce18"
+    ],
+    "skills/database-migrations/SKILL.md": [
+      "sha256:4174b1d7277028b8cdb1ec448e62525485cf7c82e4c859a1f86adea9d70edafb",
+      "sha256:55bd3ec77dc0baac6eb8d8ca3292a96b011c343cf3a5d5956abdfedb6892207c",
+      "sha256:8d09e94d68225d5881ebf37609907bb5de8380bd2fedc96d25c7e3d2bf6f08c2",
+      "sha256:b855fed9007c2bfcb460fc5113aebf09f15eea829c61e4605ff23b1447c3721c",
+      "sha256:cb68b01c0da3c7eff86ab03cc6a23ece316a72d817a9bd1c407a4088217af013",
+      "sha256:d95a7d2752cde24373379b2367e779ce31c440155c75d858d03ca38587b800d6"
+    ],
+    "skills/dependency-evaluation/SKILL.md": [
+      "sha256:270a48d2edc996abcffd4c81012c61492d0484401810a7324eb46344b48398fd",
+      "sha256:6e0d70dbb6be3515ee33d1cfe4b7baf9611414a6c5cf9eec6a64422064fc4b01",
+      "sha256:f6a35db9fd54e7f60ccf1168c694b192e749848f1eface5079abb4fb68f17f9f"
+    ],
+    "skills/diagnose/SKILL.md": [
+      "sha256:47043d5578afcea15cc99f066611dbc63b6d5ac6a1648dc31f934e5b54047bcb",
+      "sha256:4cbafcb8f22cb773ffa88c78c87fc459875defac4f378078a083e918255755e5",
+      "sha256:7a4f38892ceb61ecba002d91a7205f8870c89fbac0bc4d8b6e21846a1b4c968d",
+      "sha256:af1b638dc616fdbbfa1e987c40750388fc9d3d21c3bd6578760cf24acb7affa6",
+      "sha256:c43e8d639df666cf01261363b0b100c4ae71ff9284f7477a8e9dd653338b0a8a",
+      "sha256:dcdecdc98a90050c5bd0a4a908696262d3cd3f97da7d3c3475403233b4a11bb2",
+      "sha256:ead0fe0d57c03086e5ffe044ddb8553f2642cd56f96a7abd0ecb2038e401f6b8"
+    ],
+    "skills/frontend-design/SKILL.md": [
+      "sha256:1fc1b8432bee2695dbdabbfc3ecbe567ba83214fcaf18a72ac6a1b3998f4a9a3",
+      "sha256:339b0a6a6c1c5122807ab5436cd68df8364bcb90f019ca318dfdd7d066bab6ef",
+      "sha256:34773cd172eb23be7828b1cb169483929fc5b25d5c2ecf2b3d088c55bdf7dcba",
+      "sha256:46a7b93452601223e6f5d813019892817a4e5745dc3f6ae6166b93fb15c95efe",
+      "sha256:4d70e96b0fe5f20000a018423636469f14a30bcbdb354556e3fc4c62523a2a9c",
+      "sha256:e25f292a0e5d56ee198f41a1fab3d661085ca6b3548114f5c2e447603f1526fb",
+      "sha256:f06072d3e998d75dcb25e64e08e6d09db323b190197ac3480863a19a4026d7d8",
+      "sha256:f842f1bed01d271bc11d44916b39a7cf44524fd53403c3c1f730bbcf6db1f385"
+    ],
+    "skills/grill-me/SKILL.md": [
+      "sha256:1b88f70e463777a67940b9d1de29857e1b4f0077474b4d6433a3dfa89b99abd6",
+      "sha256:8f21bae9924f67c5f1f11a9b07d20dfd308a8ebde69a20d64229c70a48d970f8",
+      "sha256:9efdea8c83d388540ce840148077d473baef194b72a2be64436d3179d21fdcc8"
+    ],
+    "skills/grill-with-docs/SKILL.md": [
+      "sha256:3a4e568413fb28860d9a8f677600d24ac60b3cdcb02989e434fae76458893b8f",
+      "sha256:e590b5eec943b3736efe30f8e87888b4d600df00448fca1b3b2dece696ec2796",
+      "sha256:f28ddb2f5b8db178413fbb283198b4516402edab58139495bfe72b43eb71ec3e"
+    ],
+    "skills/handoff/SKILL.md": [
+      "sha256:5c0984408486d465d90aaaa031b62eaf0efd17ce0250777add749d3d4a73c279",
+      "sha256:8ddeecaf5d66e9de5f67ed7ce2ba5c5ce86442f7d97104f75517310f0791299f",
+      "sha256:d8d1aa4bda004bdf7b345bad0fd3a6f1a0c2620913de41c3afe464827ba2d933",
+      "sha256:e12e29868f567b3ab38a335e659f3a3b2be416ca9c1ae39fd1af1957516001ec"
+    ],
+    "skills/implementation-plan/SKILL.md": [
+      "sha256:02036ea114d6deadc8b879f028c74127855b470008795f470300b12b3a0315cd",
+      "sha256:1794306b869b8e1fa25e9ef30c068522ecaae963d5d51c9ddbc26c5ef30325fc",
+      "sha256:33218350c860a2a9aa29192a38ba75b6af5261edb79444813d7a369155b8453b",
+      "sha256:572aae6151e08611eb115d1c2974ecba5cfaf9e325ed7eecc6f8d850d1aa181a",
+      "sha256:6a814d768701cc917ae058fadaf763dbcc3732d9ff88e72dc0b73dbf4e63fddc",
+      "sha256:6b151e45e68ea064ac0c6ed2b85f14dfd629bf4390d5f27c7f17f0e27fda74a9",
+      "sha256:74b3816b05bc2a22abf38bb4051f284a8fe58425796abc75b7b8e25866abbb0f",
+      "sha256:90f56543d8efd4bc6d00fd385160c2bff1ecc44bc4d57f2095f7dec385fa2833"
+    ],
+    "skills/improve-codebase-architecture/SKILL.md": [
+      "sha256:139b2f5786f941e336ab6dd51bb27006f8308cb2e7c0a08aceb21d030b19c5db",
+      "sha256:d0c2746be66ae7b05ee64b0e031433af254c494bee4ab7625ae059fb5bc8b1e5",
+      "sha256:d3aa635f591840f61cdceb8850d1a6955d5dd11ca79e980f4bd379395b8c9bb3"
+    ],
+    "skills/kretsverket-editor-change/SKILL.md": [
+      "sha256:24e06ea57f82369f24277e027ff082547bcbab7fe42741cbb5ae403cf6f7b4c1",
+      "sha256:c300c2947af11c9f56efb3a7939d9ca13f13259a331f3fa6fead1c6fa41ca375"
+    ],
+    "skills/kretsverket-electrical-drawing/SKILL.md": [
+      "sha256:44db69fc80493510a4cf0219ff15601d7c34df22a7f1f129b87e651f6a59bbfc",
+      "sha256:5c6043eed5d5cddd1dac5c3f3fbffdc0da2c64945b80325437ff88635980b848"
+    ],
+    "skills/kretsverket-file-compatibility/SKILL.md": [
+      "sha256:6c845d3d2c54b9d38d092fd46d212d9757229b951ad794edc527ee790c780d5f",
+      "sha256:bbf0666cc351f09f82b943a89f36ac5132ae1dc5535f4f2ad285c09d0d51ce53"
+    ],
+    "skills/kretsverket-symbol-system/SKILL.md": [
+      "sha256:44683d9eb3e09ff83626cb0299928c44a55a007f1e5ff0620d70dabd17086c36",
+      "sha256:94475ef3e55e9176827cb11c59787cf671151cfe6e2fa03f859f82be168c8516"
+    ],
+    "skills/minimal-implementation/SKILL.md": [
+      "sha256:262c9ed819614644fe3cc57fceb48768405b66e09d17ca15b139de33177a6e8a",
+      "sha256:60ab950a40b15624a48efd65cc2568187077e639ca801b2b2973dd418d88c670",
+      "sha256:8ce7a52c34e92327c3e2c008fff29181b1f55ad37e662f5d4b82a92de3114c10"
+    ],
+    "skills/nextjs-product-slice/SKILL.md": [
+      "sha256:1f6557d9a8a014e7ed6914e152fc47b30845bbb79462d68ab56cc0ce20a0382c",
+      "sha256:89f3839942fa5da82a132eaba2fd0de762999e04ba960d2a9760d316846086cb"
+    ],
+    "skills/prototype/SKILL.md": [
+      "sha256:0fcfddc60fe815dbb41248085d9084d58e81ac29f997631ae94aaeb1ae6b7484",
+      "sha256:44ee9ea4a8301dfe08596db4aed7cacfb674a89227b4b86793ea8b86d2879442",
+      "sha256:4872656ac3f578678dbdfa489af9ec18bc814771f63d2126a526ff08a070b12b",
+      "sha256:50165be506348db1f5a38a3d05a9b3b7c0b577dff0085238e652c5d14e920c5c",
+      "sha256:541f695ef2487a4f4d7602537af1e116bd4b3ea188dd03acf6c841c4a75cca26",
+      "sha256:69fce39585102dd2783b39f4719fbd49df3680779c4087e3342846b1fbdf9a3d",
+      "sha256:d61ff77a0ab3c358e3dd8d44ff7a8b0e03dfd118355318a8027aaff84957c4fb"
+    ],
+    "skills/release-check/SKILL.md": [
+      "sha256:0c339a59dd56b95ad6945fef249cef52be48cf462d6ed2ea3edb633af31f0c37",
+      "sha256:4793f3d34f4c1a15603d6c9020a09efbcef727bd21ac8dd7e7667db610190860",
+      "sha256:a1c12b130e3b9d2d83abdab8e55b6ece62b5bc99f2c3958fb8e0c86ae0c9dbc0",
+      "sha256:e0344fe1000469716135b664a316da87e722a0b0a68ea9ce122ff1ed21253e0b",
+      "sha256:ea532ba7f0eedff2f7409108d9b66debfffa575e8db552b95d65e960c251245d",
+      "sha256:ef6e8b45c9dfaf2b5dd0f47b1042d1ebc8a743869ca3fb95bb4a95ecd0ea157e",
+      "sha256:fcde3a3f23117d2ced4e9bab26b3984ee5f88e3fb3b88b06c28d41379f3399f5"
+    ],
+    "skills/retro/SKILL.md": [
+      "sha256:c3ff6297bd1645b85ae9375c2f22813b9aa97a9542f6e04d493860111cd4ea76"
+    ],
+    "skills/screenshot-review/SKILL.md": [
+      "sha256:01caeed63aa3ab50ab0437b79ad868d810066f07dbcb66f2d5112678209f1dc0",
+      "sha256:0e56eefa258c27afdb0a72ef4b1f6eb0d649949ae13725107c247c120b2e1728",
+      "sha256:1735a18c90c00498fc5b95a2dd8a6ce89a270a153e35d569095439d30a0ea33f",
+      "sha256:2c5f5030d1f199fc96ffeb22bacb111bfd11263ec5c53e2480ef080aba8339e0",
+      "sha256:83225d8ef4d8a2b4abc43d661ad0e5ac83c3fdb58bf259132fa94d806cce90f9",
+      "sha256:a1d757a29e904771311130792883650429040ed0412064f82787fca482740fed",
+      "sha256:e03331d933da05bf18f991a9030370dfe71cdd518930097d9bddb6e84fdc0dfa"
+    ],
+    "skills/security-review/SKILL.md": [
+      "sha256:1ce6808d6a86b8918d8a230dc8f8f4773defbebdba8103e1874818395086c7bc",
+      "sha256:3b01e84d18654d54926a2a9343e93af224ea5848feb31e3f0e21354c0c44e68d",
+      "sha256:57dd5cf908a53e99a521fd78ffe35f6cddc8e1b814036f594b8ad10c8b78ebbb",
+      "sha256:67a52d9805bcce3115b62540beddbca7cd53330d4db5eb332f3c37835406932c",
+      "sha256:73cbf73cf57ff55e00680c7ffd308f62f4c8a8ea64727773166fd2d89e387fb7",
+      "sha256:d5c9bd97eee73237c5d17aa85e0daee7acdbb85d21c894c82f884863ca6c8654",
+      "sha256:e03ced2100075da5d4c2f3cdffcc0966d4c41d982502c264063870f9d7093b13"
+    ],
+    "skills/supabase-rls-review/SKILL.md": [
+      "sha256:2c5cf08d64ac07b5f5cfc511f78a11bb02a568472f7e5021ace6ad431e8ef7ba",
+      "sha256:8288132b6213a8efde379fa30dd467db6d4665b00bf00d09d5611ec7416a4e7b"
+    ],
+    "skills/sync-agent-rules/SKILL.md": [
+      "sha256:19bc228f527db68c086cf1ff0e46b3a2ea34264475d645b9c6cba7525e401477"
+    ],
+    "skills/tdd/SKILL.md": [
+      "sha256:5b155be0cd2fa170f9aa7cde27c1003b18ec424c2e649048a90b1d3f5e5b7961",
+      "sha256:8442d79f5c890cfe8450a8edc7ba8ef2c8ddf4d29f8d23ef28699888e0e14668",
+      "sha256:b67ee4bbf7c99a0cf1fb887ff0cd1295dabbf90b0000a8dce89cdf27017f4479",
+      "sha256:ca1f1d93127af7da70ecd6d259b18e04628c5f3543e96adf662b08d68c99e9d4",
+      "sha256:ecbb1828c87381e625603420fa5ba2cba8989cf9ff14c81e72efc968e705ffb3",
+      "sha256:f000e31d81e8c0f75bade87dbbb711eb195173b20c95b578be02998069c8bc9f"
+    ],
+    "skills/to-prd/SKILL.md": [
+      "sha256:d64e77f713982f47fd12fcb80a729dab6073ebf5fc098849257e9c0d08813e6b",
+      "sha256:dd107bcc3110d6c6b7d0c383af9572f3bf8ad18d82b7537c93bbcffc903fe931",
+      "sha256:f2835e3a05edfe8b8b37afa759e4b863f3752ad5ed16c924ed8b8a5dfbcfe2d5"
+    ],
+    "skills/triage/SKILL.md": [
+      "sha256:09c06f736ce5f3d121828d60414dbe59169fc28d3f4be733b4ec369204de7567",
+      "sha256:2d7af14305f319d5496628853fc3c45d96663118e77ae8a0625d2859955e4c1d",
+      "sha256:f7e8735f58ec82fe06831a4dc4c6a57c361dbbd28baa809d15892683f6aa428e"
+    ],
+    "skills/woocommerce-pdp-review/SKILL.md": [
+      "sha256:20817f5defe63c7cf94fd86d5e359652891a27dd3774ab104f2dd40dea693956",
+      "sha256:25c8b99950e91ec1b1631c56e880846302d0355f6b46dbd901a171670db4f4c2"
+    ],
+    "skills/wordpress-woocommerce/SKILL.md": [
+      "sha256:33c80dbae90271b5be3a20f83a78589266059ee3c3d0120b81aa8bbf75415efa",
+      "sha256:43de24205593092832d5d8da3fea0141da8fdf1ece0d9e15aac3a5895161ff7d",
+      "sha256:a1c2e975330eca69e38c02a87d9d93631bc54bc051b040f37fca3a706fdb6937",
+      "sha256:ba3db646c40aaed32b5be31c20e05202e827b89424ae66ce32991fde667638c0",
+      "sha256:c3d555f84d114fc2cc0a2a128b8f24ab854ad3ed877012b976aab6f13b06d8da",
+      "sha256:cdc6ed65fea9d864c186a1d50af391000ff1341321d1e3b6322c369359e223f9"
+    ],
+    "skills/write-a-skill/SKILL.md": [
+      "sha256:0cde2f4290f2783916638cbacbd7e0e22cd26f9a0226ea3daede17dbf7ee8c82",
+      "sha256:1d256fa8068f1c6ae5d0b1c8a095d667e135620397da91bbd7e54c04103977a0",
+      "sha256:5160f93c0215fd46aea044b6dbcf70f87be4aa48b91ea473e50c80ac121ae2dc"
+    ],
+    "skills/zoom-out/SKILL.md": [
+      "sha256:2c4c7e418595537eaa65206050720ec830ba9ecd49caf6a2f0e6c9121629d0ca",
+      "sha256:69ae4ab3308c049eec88fa54b2fdb770dff1355c7f6c25b2b1d963530548e9e5",
+      "sha256:7a926433f05e2d8bd0e8106ad931e8a113ed3311a74cfabce3f87d351c68bd26",
+      "sha256:b368f5489c0b4c1ebee01586582d1b4c413cea50f37fb077c99da9b8b931ba31",
+      "sha256:c04bd2480e7b4f9baf02f28d7d3e0240a7327e85ed28e7f1d1d6e59f7bd44337",
+      "sha256:f340e53c5a3fc60d3a901b2315d4649a7cb755666e3359741855082312da9cab"
+    ],
+    "templates/claude/agents/inspector.md": [
+      "sha256:06b53abbf81f47b20bf20042984c03d695d958d653f58ebc3cc0858bdb260acc",
+      "sha256:0a4d6512766bf03f0f6b09d5b152d869d12a7c03d58223bd9baec4b1254f6a99",
+      "sha256:19a9332246eb8e3c1022515d692bda0f0e34aaa905599c76a82e79620b2764d7",
+      "sha256:341381b851045aba06a02c9f36112838e5b6d604b7a69eef7134130993005d21",
+      "sha256:4661408bbd9dd7ade0533ce44241f70316a984a50e4e574d4cb9b69931d66cfa",
+      "sha256:49ba5674bc1a981f57f13e22ab1ac60e0125383a000f021e81fdf799d0c9c3a3",
+      "sha256:ed2ded0851ac5abe2777b7cd6a19d02bfeebb161cad44159e4e669d44eb3b5cb"
+    ],
+    "templates/claude/agents/repo-scout.md": [
+      "sha256:06de32b2bc594bb2b0e3f1cd0e3ca95a74e68d6e2f91ac9356d2a7ea010ac167",
+      "sha256:1b956a473c57cd921e9f05da484257ac46b4464767d3618a142a47507fa26f98",
+      "sha256:738413f36fe7210cf6b19422f394c573e9960d6bf84aa0cd575d25480051f4e2",
+      "sha256:a4b658b9ea625f86383f399361038babeb0cbfb5ee7894dd9e3a25ed420cc1d6",
+      "sha256:b70b135b087a15e21bcdc4743a4ecfc65ac9fcc7d05cbd331aa78b7ab874be60",
+      "sha256:c9ba5bc0fd96741f9612ba4cbe37e8dde76d8e489d97a9119676a9683f7eb35d",
+      "sha256:fa3188169cadb0f15c0ab855a9c3b30ba6ca41852802c240c078c8b3cc577c4b"
+    ],
+    "templates/claude/agents/scribe.md": [
+      "sha256:a9a7370d4a8db8239714f8a14891ffc1fbb83f6828986aa8079606e5ae278e30",
+      "sha256:b27107490f854a66d07e7b7691be13008829105844bcf066eb85caaa0b106cbb",
+      "sha256:b9399e7bf262e188077ed79369940e3756a5a6740e56edf26eaa840255c23c47",
+      "sha256:f710529ca58ab96447d846caf426e544a68969961a137a041512ef491c0ed96b"
+    ],
+    "templates/claude/agents/sentinel.md": [
+      "sha256:a560d37a71881bbba61a7dc7c89ba0f76793aed66bd327263dd0517bb6d9bf80",
+      "sha256:c7493b9ecf2222d786d7b8b3c6f6cdc8a4fe29bfb2beef9a38f2bff3cfb8e7e1",
+      "sha256:cfd0ecbe32ae7f57c6f711efc9a02ffdf8a9b82bb8d4db2a74fd1235ac5edbbc",
+      "sha256:f17005882f49c492f0fa90c44916b319895cebe2cd523cffa7a309f103de0f62",
+      "sha256:fae3b09d88155e1edc3e17000f6b76c5841e056fbbdc207cd3bcb2d59bcc0ab5"
+    ],
+    "templates/claude/agents/verifier.md": [
+      "sha256:204d2617b3fb88e000b604e4b7cd91606bc63a5e5a1a846d294d3be794c51adf",
+      "sha256:4b4bbd8f639bc7513e6e020e848c24f411877b9bee05c5d49c874aaa2b69367c",
+      "sha256:902ec67a24b9792345b861c1a53a43c6a7ab2d882d6a52c10b7e66a1b0eb34f4",
+      "sha256:a5ffb7e66b896ce056c8e5e9d041eaf317a4ed75292df1cca8a7fa898b93d582",
+      "sha256:d73823f0c76033d3066d620f87cdcd81061f42b0a472f50445b6d5b74b28c5b3",
+      "sha256:f91548ad355121292239b3041093a4dbf31f4cd14223c872237338c422ef8a2b"
+    ],
+    "templates/codex/agents/inspector.toml": [
+      "sha256:0663ca6af24670ad9cee93c22c44a2df027802c8646420a07a9f5e1ff5d3da79",
+      "sha256:35c8dbffcb7ddd04eff131a39b592c08c5b4c88a8d7486a16b1159975f30febd"
+    ],
+    "templates/codex/agents/repo_scout.toml": [
+      "sha256:1859d79cdc247f4361b0763d3e7664ade8fff5bd9226dcb81196f23bfcdc005f",
+      "sha256:5121332fc48e61392d288f40446a48eb0091638c5c146da98f1101ffead8de43"
+    ],
+    "templates/codex/agents/security_reviewer.toml": [
+      "sha256:5537993d613f69cde6064586fd159c42a7682e3e19f32e4b4fb8df1ba1a19d68"
+    ],
+    "templates/codex/agents/verifier.toml": [
+      "sha256:765975078a868a99dd6fde33175448233bb36ec8788b8d09e603bd2219b906c9",
+      "sha256:7a52fb003201e6531f7be86c38d09f2ba0373e6dbac73c5b53be7390acff20f5",
+      "sha256:aaaf528cb90df12a9fb991869cf456336132a0f8df4ef1287adcb695d8a7864a"
+    ],
+    "templates/cursor/agents/architect.md": [
+      "sha256:fc572816ae4fa8c9cdf0edf7fec7bc24d9761de89b0b79b191f2f40d7ef57b70"
+    ],
+    "templates/cursor/agents/browser-qa.md": [
+      "sha256:1723efe1e3a5b6c9ecc737b00b6569125793e8ecba4077f4962155f545daa10f",
+      "sha256:edf866b024b8ac0266eab1543be15350cf364a65f5a47c5346106b156ab1ebc6"
+    ],
+    "templates/cursor/agents/inspector.md": [
+      "sha256:36b76592f589b3aac2805ea393497c1f76a48fa5d5ea2da5174780c1905e6951",
+      "sha256:4e29cbdc91e96c27457be564db81eedef0e25ec06ace68ed68fb02acf8d35f9d",
+      "sha256:d1a7b59164291a689e48faeee9de443c6034f5f8d21407cb34fc803a2145d8be"
+    ],
+    "templates/cursor/agents/release-checker.md": [
+      "sha256:49e26ee7d051901abf5a76ad196864e0312bb1280a63968cc44dd10ba82cf149"
+    ],
+    "templates/cursor/agents/repo-scout.md": [
+      "sha256:5ddedc1eb34dc16b32e01b63603e59e0cda7652d8d62ca10528dfd175ca28f4b",
+      "sha256:752f77ace0ab7e5b04da29f6ab22dfe67bf7707c2da1206c427f1f68564bdf3b",
+      "sha256:a4b658b9ea625f86383f399361038babeb0cbfb5ee7894dd9e3a25ed420cc1d6"
+    ],
+    "templates/cursor/agents/scout.md": [
+      "sha256:8719a71c0f821b675e45abb3b1364ab861298434e871b1a3ae80c188efe00796"
+    ],
+    "templates/cursor/agents/scribe.md": [
+      "sha256:6bc1b46ec715198fb943c41acc7dc5ead09efac1073e374a03ecfc5ff9fa6969"
+    ],
+    "templates/cursor/agents/security-reviewer.md": [
+      "sha256:6899b5f0cbb9fb2156ad75996c757503632aefe9fcfb32cabc74e639e32008cf"
+    ],
+    "templates/cursor/agents/sentinel.md": [
+      "sha256:e5c7f2a09ff834d246d246fdc4bfabb03a54671249e9cbcb644f3877c0696bea"
+    ],
+    "templates/cursor/agents/verifier.md": [
+      "sha256:11cee6b2a456a3a39e21110685eb94689ac315b8c900c882956894138b2ec8f5",
+      "sha256:47664ba74af3ec73db2148de6cb3a96207b2f62c80903cd187dff8159f188eee",
+      "sha256:acef6b86b22d965422e37c1f1c731b0a30a8171701a3a9fff92aac289b475062",
+      "sha256:cc2b3e79d7e93a956b9679d3d162e5a5d6c4bb356af0d1661b522992c698b7b6",
+      "sha256:d73823f0c76033d3066d620f87cdcd81061f42b0a472f50445b6d5b74b28c5b3"
+    ],
+    "templates/playwright-mcp.config.json": [
+      "sha256:7860c365d835a8b8aa2839d19a097aa9ebbd6455f7f4eaf0ec16cff148cf3000"
+    ],
+    "templates/skills/claude/accessibility-review/SKILL.md": [
+      "sha256:1edc65d75a9c6a296ddf10a2ba9fb77e745225e770f1b50d5f05388a4fa7dbde",
+      "sha256:818e832bf5e67c2b633b02903e27ec784d12c18f0723950dad698bbf7f6c31b3",
+      "sha256:dbae48bd5ae9fd5016c810d5f5974159c3fbc53247ab04ba2ccfd27651487f6e"
+    ],
+    "templates/skills/claude/browser-qa/SKILL.md": [
+      "sha256:3a9ad2bc3e0efd9f2019ffef5d191fd57f4bb812b9e55f9799c7b19901df1aa7",
+      "sha256:941b2da01a82263fc575c311b107f5c7aa300337e55d7e4c84a9fb672e5ce732",
+      "sha256:d861b6111d964f37feb7b3d3b77033f363e4f62bb1e35e4fed5a8a46cf26b7e2"
+    ],
+    "templates/skills/claude/context-budget/SKILL.md": [
+      "sha256:04d2e2544477e5ae9bebb7084c81b46e63bb3e0c500208e018f1a0e3e38b2815",
+      "sha256:cdc73f73d02e3838e57b109a42e6e49ad28478bf044a99f76373ee2a8d22a63a",
+      "sha256:eaa3b59870f8d5639870ed85ce441492f5b8e02fc924f830656eea6a3bafae40"
+    ],
+    "templates/skills/claude/current-docs/SKILL.md": [
+      "sha256:81d40af4522184e57e276d567fe815ca1977a8b9a5fe017483a50f59e18c97fc",
+      "sha256:fcc129a6b7c059763a2befe812d623dd00123007bd281b5d00030b85c8c56fcf",
+      "sha256:fd8a0ac7ceb54262edeaddb7280abdfdf722bcc7f842d91e01cff8700b10d5c8"
+    ],
+    "templates/skills/claude/database-migrations/SKILL.md": [
+      "sha256:2622f962be58635c61ef37ca45fbd025272032574667fa46c33c7925d6cbecb1",
+      "sha256:4ad8a99fd6ea941ef2ee7437a668e3ab388beb622ffa13d50a7b9cc8a42ec8f7",
+      "sha256:717cf8719e664b93d063026abdef5deb5f44dfd869e10d7c95e039d85ac883ab"
+    ],
+    "templates/skills/claude/diagnose/SKILL.md": [
+      "sha256:113063ad4b076868ee0ae633ac0fbfb2c67f1c45dae641dff2e1f694cd729c79",
+      "sha256:2fd30d5145b80c08ba1a5eee69feded6ace1d7afa4a125945d202f1eee0f399d",
+      "sha256:e18af5140cb7ec46ebb83875e8217cf13d2acca376574d5885e99294ac4b2d96"
+    ],
+    "templates/skills/claude/frontend-design/SKILL.md": [
+      "sha256:2adffe9654aed1f830253d6da387f202b12f01a01f706b51f2217aff73a620ee",
+      "sha256:809e64780e2c4f3fab7ad84d1dbe295d5d77f01bee602e81fcde1bef9c8da4b3"
+    ],
+    "templates/skills/claude/handoff/SKILL.md": [
+      "sha256:384be40fac6fbc6bd963054154e4a925af4ca4db3cb8ef06978cfce32fe33dfc",
+      "sha256:7651309833b6ee29b671312a5a141ef64190be03e88eda7c9405b246f49d3a12",
+      "sha256:877d7a185c28033487317d2d8c6e6643f4687de8ee555a7bb6e930b790696f33"
+    ],
+    "templates/skills/claude/implementation-plan/SKILL.md": [
+      "sha256:091f97e8815287df685192f9940d4e27f198ee0eaeb18771aeb4a0491242d216",
+      "sha256:9cdb1384c002ea6a66c0e42b010959306195417f50f75f37082acc1710edf340",
+      "sha256:a182a6ae70dd6b58c8f9da2a43b5ce0a6f84af93da61d638cedc047b5f118fef",
+      "sha256:c3d78e923f08c923013bb1f7df2b786e22a286cfc25238e3371f8d6a5ffecc86"
+    ],
+    "templates/skills/claude/kretsverket-editor-change/SKILL.md": [
+      "sha256:2544898b7605eba16a560ece9d8fce9467d398e55e0a6eb8e4f55109d432adf4",
+      "sha256:3d9b187fa291f2c9db6fa86af1b4fb95d5c6444854aa5189b308b8950edb652f"
+    ],
+    "templates/skills/claude/kretsverket-electrical-drawing/SKILL.md": [
+      "sha256:2a3dc5aeee8d8a549773b90c2b269398955419f300681dd0aa3b0c2205d92d51",
+      "sha256:47fcaf2de9922a711016989e89828121776e07e84efdfb4afdcfb7ecfa31130a"
+    ],
+    "templates/skills/claude/kretsverket-file-compatibility/SKILL.md": [
+      "sha256:32264e1333ed2df0f304adbe5faec02e98749806190956057a306fe82591628a",
+      "sha256:8d59f491dfe6e4c379d9fca627c41afab7163f1a2d99bccbbc14e6a5a545d41b"
+    ],
+    "templates/skills/claude/kretsverket-symbol-system/SKILL.md": [
+      "sha256:4df7cee70274936ce06cbfbe3cc43594d606cb70b65fae0b481471ad785ee7b0",
+      "sha256:70d4a875627dff55cf08c586e8d0d323be2f35a5ed0ddc73326267f40baf7711"
+    ],
+    "templates/skills/claude/minimal-implementation/SKILL.md": [
+      "sha256:822f08ae33a5b53247dd4776f46beee9ec85fe874c8666f4a1d75ea7150225a3",
+      "sha256:e17ec7e1faeaf6c2b44b343948856e9829cbced05c7f3af5e688e4762a4fdf92"
+    ],
+    "templates/skills/claude/prototype/SKILL.md": [
+      "sha256:04e33eaf2616acbd2dfb4f71709a1e9385d71191ee3df0918926939a0a07caac",
+      "sha256:4904a9d66cb0811a3ecf32546cdb047eed016d5c351f5a5c7964238cbadb712e",
+      "sha256:4aa9413d38f71b756a22b1146db0e228e277e4df93fe2cefe8fe2b291c3e02f2",
+      "sha256:bc3a68d05e96c79e1a5c8897e120e4ada06b1a8ffd014fcc9d1c4624b3046e6f"
+    ],
+    "templates/skills/claude/release-check/SKILL.md": [
+      "sha256:06dd67cb2b55188ae1a3bcb7579d2fc1883ed752e97b86c802a23c75d8eb7ece",
+      "sha256:9abc7a5ac6f0c69a8334a319efa5619afe85e63784d856ff1dc9787cd945d34c",
+      "sha256:f5a64bc1f8f5a43830368efccdc9037585f00c4820b94830bf213aadb05931f6"
+    ],
+    "templates/skills/claude/retro/SKILL.md": [
+      "sha256:310e190cef051ac2c68b6a3b9f5844e125316fe821009f7ae2ec78f8408c9d53"
+    ],
+    "templates/skills/claude/screenshot-review/SKILL.md": [
+      "sha256:2d5c1ff02c503fb956174a01c1ffa54be0e1a4a5117da1c7842cbae809b9b22b",
+      "sha256:a6125893d0475669aa9a4dcef0c3df2f0f3afb009d219eaf55803306818d8587",
+      "sha256:b43d955972d3bd855097e02109f8d4e4eb0ffc23fa225ce602decdd63fd97eea"
+    ],
+    "templates/skills/claude/security-review/SKILL.md": [
+      "sha256:141e9805413e9122b3c49cd64cdcbe29861f9c729971f30b400f8e04d0fa0e4b",
+      "sha256:1a0d42fa57120f3286bd6e4ea04134b92eaac9320b9a6a6e403ea50f6e6f4bbb",
+      "sha256:e20d0b6d299281d9305e5c77e558d8bc0bbf2ba4eb4ba102b2f09e3e8b68b334"
+    ],
+    "templates/skills/claude/tdd/SKILL.md": [
+      "sha256:01ce2c38d539bdda05eb869933da4bb6b524fced1d59dac8bbb91174956027eb",
+      "sha256:dfda4860469ec7c3944e045a1fb9c7a26a7dfebd915d246c4555990c45f026cf"
+    ],
+    "templates/skills/claude/wordpress-woocommerce/SKILL.md": [
+      "sha256:04eb575c21bae100e713b0aba30b0a6f395f43b86fdf3a7cf89ecafe3b3df66c",
+      "sha256:6ff614d6f5da630ac407aa325751ccadbe9f6ca77de2029841205c26621815ed",
+      "sha256:92bd89da05fe2747562498536f287a1b23a6f17d56fab21d0e5398cab98ccc93"
+    ],
+    "templates/skills/claude/zoom-out/SKILL.md": [
+      "sha256:368bcd8f022591d02abca36d499ed0d59b7f6c04df7d76d3c5b8379d92c5657d",
+      "sha256:85aaaee632eb2e69156062cf876ede8bb7f244e58872a8079bbaca6b8ae51f34",
+      "sha256:cefd57010e45ff88e3303b68b282de0bd0be04ed958753c026a700a0dd30fd97"
+    ],
+    "templates/skills/codex/accessibility-review/SKILL.md": [
+      "sha256:0d25870eb1296054fe2b2d1d6ea80e18dd30bf3b288382f350110b2de644716b",
+      "sha256:a113a23924bb6ff66a41338106dc8d106a986986ce3278ab449d47386781385a",
+      "sha256:dbae48bd5ae9fd5016c810d5f5974159c3fbc53247ab04ba2ccfd27651487f6e"
+    ],
+    "templates/skills/codex/browser-qa/SKILL.md": [
+      "sha256:8d7ca9fff5c8739dc9759e7c648abf029c17b5025a65994d65d29fc07fc30b51",
+      "sha256:ddd60278cdd4e1c81b59b05cc46065640275a2a8a39d08363f42f50695f4dd33",
+      "sha256:fa806ed829a0dcc25d6f864575c7b4f9a10dbcb81c4af3db9384fc333b7c3805"
+    ],
+    "templates/skills/codex/context-budget/SKILL.md": [
+      "sha256:04d2e2544477e5ae9bebb7084c81b46e63bb3e0c500208e018f1a0e3e38b2815",
+      "sha256:0e3661e087f9b36b8358f0e4790430fd3df5cfa06f82a759d082769af40460de",
+      "sha256:bcf287c86ea3aa8ac30c0d32941206118cad66f1d41ef82c4bd373f1b894acc7"
+    ],
+    "templates/skills/codex/current-docs/SKILL.md": [
+      "sha256:1cc6ad040ecc8dd30ee58f9a351040d88db0ed9b879a5390ce47cb636853c808",
+      "sha256:4684a3e7d28619828e59edfb8807d2086324738deeeb2e1ca21869774e171d6a",
+      "sha256:cccac1572563d7e3b2828634a2a268aadcb8aecd447cc71617134cac6cb47497"
+    ],
+    "templates/skills/codex/database-migrations/SKILL.md": [
+      "sha256:4ad8a99fd6ea941ef2ee7437a668e3ab388beb622ffa13d50a7b9cc8a42ec8f7",
+      "sha256:a220df768306db11083080d25eb16a161e1f30b489933a77137562b3912b4fa9",
+      "sha256:f69e72b7e6f888eb8f9f9141a79219bfc922ae7dd0f72f5ad95b8210576b0896"
+    ],
+    "templates/skills/codex/diagnose/SKILL.md": [
+      "sha256:405eab31a6f6b76662e6e3feed8ddc87cb074c0d7b31b1f0a40e990b637e7afe",
+      "sha256:bd04bc4c21382164f4410e4e5915c4b063b050fa7816c7ff159d5d6f5a0dbdcc",
+      "sha256:e18af5140cb7ec46ebb83875e8217cf13d2acca376574d5885e99294ac4b2d96"
+    ],
+    "templates/skills/codex/frontend-design/SKILL.md": [
+      "sha256:7ce382b32579bb37e43313884ee266c42670c47a1c636b0039d23cf15c59e91c",
+      "sha256:870e6476ff20790d0e6e8ccc6b5fafdd4e99647f0f14ec9ca2619e8abb0d3fa0"
+    ],
+    "templates/skills/codex/handoff/SKILL.md": [
+      "sha256:1b28f1106d7534cdaaab0bf034f496dc215b773703d59072b9572e69ffac7e8b",
+      "sha256:c880caa7fd9b0c3680fbd929f25406f85754825b79e1dce2140218162a2e1379"
+    ],
+    "templates/skills/codex/implementation-plan/SKILL.md": [
+      "sha256:4011da1a4f1950bf40e6d82ef0bd3b76261d32607aede3ec98e8f5839d091181",
+      "sha256:768be4d226f97e0a83e5d9fa87b43817a47139cf01dc93b580a1263703d96b2b",
+      "sha256:9cdb1384c002ea6a66c0e42b010959306195417f50f75f37082acc1710edf340",
+      "sha256:a182a6ae70dd6b58c8f9da2a43b5ce0a6f84af93da61d638cedc047b5f118fef"
+    ],
+    "templates/skills/codex/kretsverket-editor-change/SKILL.md": [
+      "sha256:2544898b7605eba16a560ece9d8fce9467d398e55e0a6eb8e4f55109d432adf4",
+      "sha256:5ba418b265002459baac715ff25db73aec27d422cfd64a25779be04119ce3c5e"
+    ],
+    "templates/skills/codex/kretsverket-electrical-drawing/SKILL.md": [
+      "sha256:47fcaf2de9922a711016989e89828121776e07e84efdfb4afdcfb7ecfa31130a",
+      "sha256:c49b58c1302990ec130ff32a50c15b74a08d222b2be312df887c8dd6f80d4b5c"
+    ],
+    "templates/skills/codex/kretsverket-file-compatibility/SKILL.md": [
+      "sha256:8d59f491dfe6e4c379d9fca627c41afab7163f1a2d99bccbbc14e6a5a545d41b",
+      "sha256:9f6a8df7a3cab82b8624840cdaf40a59c75ca182ceb2226f8e046cfcc3fefadd"
+    ],
+    "templates/skills/codex/kretsverket-symbol-system/SKILL.md": [
+      "sha256:70d4a875627dff55cf08c586e8d0d323be2f35a5ed0ddc73326267f40baf7711",
+      "sha256:7f2069541487db3689b4a2c70d4dd28238dd9b5dd5c10eecdb68280e28117cc5"
+    ],
+    "templates/skills/codex/minimal-implementation/SKILL.md": [
+      "sha256:2521079acc9663c5b2d6a282947f926b971c6d76a1bfe1805bea7a6e623a5d0a",
+      "sha256:e17ec7e1faeaf6c2b44b343948856e9829cbced05c7f3af5e688e4762a4fdf92"
+    ],
+    "templates/skills/codex/prototype/SKILL.md": [
+      "sha256:48a0dfe52e218ffa5533f3f36b1a24ba4f4810da89196d1ca01298ea109c679a",
+      "sha256:4904a9d66cb0811a3ecf32546cdb047eed016d5c351f5a5c7964238cbadb712e",
+      "sha256:a55ff77a8ffdb5851080e252565301a1a779630bf40ab1b665bd9e95eb7f5efa",
+      "sha256:f81276e56e575c731cb94884b495e97420a34fc4ee0a0c41ae46a178fdc697b9"
+    ],
+    "templates/skills/codex/release-check/SKILL.md": [
+      "sha256:460b8de86eef27e677f2a2aa4849d875885f5f25c8e687fcbfe3513386ac225a",
+      "sha256:4f7a7456ed4c7b04587ca236509949ae75805b00f4c021a4a2a35c0ad7ee138a",
+      "sha256:e9206a4b591180bba7b86158583786930ea737017d6b98af5a1de7bc386460bd"
+    ],
+    "templates/skills/codex/retro/SKILL.md": [
+      "sha256:310e190cef051ac2c68b6a3b9f5844e125316fe821009f7ae2ec78f8408c9d53"
+    ],
+    "templates/skills/codex/screenshot-review/SKILL.md": [
+      "sha256:0ef57d7e5c741f82c12bcb6baff8eb0f38a2a8cdf3a27f44ac66ac339fc3ec27",
+      "sha256:2d5c1ff02c503fb956174a01c1ffa54be0e1a4a5117da1c7842cbae809b9b22b",
+      "sha256:8426c8bf2a6f302356444b50d883465ede7a120dd468d7305c0c1c6133305c9e"
+    ],
+    "templates/skills/codex/security-review/SKILL.md": [
+      "sha256:2ec65ef38d69cf4a5a98d60641e9b632cd65571efd3b716a35e39e3834624002",
+      "sha256:ed9b911e754037467e36fd74d51e2032521b91df569c7b1e40ce7afd7e221063",
+      "sha256:f07b299bcd909c305bd4cfe857be864f76fb566418cee1a8eee09af51b1e16f4"
+    ],
+    "templates/skills/codex/tdd/SKILL.md": [
+      "sha256:01ce2c38d539bdda05eb869933da4bb6b524fced1d59dac8bbb91174956027eb",
+      "sha256:d3c1df957d747bdd52e3b5d593448e79503997c7f134460d3af4b892931b0315"
+    ],
+    "templates/skills/codex/wordpress-woocommerce/SKILL.md": [
+      "sha256:04eb575c21bae100e713b0aba30b0a6f395f43b86fdf3a7cf89ecafe3b3df66c",
+      "sha256:0eddde68635e4fb0a5f49db44a73291645452902612d2b25f3780322f8f645f2",
+      "sha256:2a65c6dbb30de1e3944e1cc9a03db29834ab2d387d2357d3a897b4108c8e7af8"
+    ],
+    "templates/skills/codex/zoom-out/SKILL.md": [
+      "sha256:0b26786ce7f555dff969b543c5471d2d234a2ea8859c41c2139ae731ad24e32e",
+      "sha256:368bcd8f022591d02abca36d499ed0d59b7f6c04df7d76d3c5b8379d92c5657d",
+      "sha256:f1827dc178ef8607e82adca57fe86cbeffadb5f19d1eff944dc75680d13d9f9f"
+    ],
+    "templates/skills/cursor/accessibility-review/SKILL.md": [
+      "sha256:42f685fbb2e9cd9d413f784a35b8461251f4d15708d296b871d3f64564014bd2",
+      "sha256:8e6bae21b7fcffe2afdc13f41a84eae389226fd37ffbf3ea48ae0826fd1728ce",
+      "sha256:b28eb01e872bb11adc95c73f20082406c20b9688a9fb9231f993d34e630852f5"
+    ],
+    "templates/skills/cursor/browser-qa/SKILL.md": [
+      "sha256:67306574c892d57bc3ba023c85bd4afb5118a563bea12db4648193a862c504fc",
+      "sha256:a4a9fc3d9982c7051f3f5d422b287aa5818c8eb6af06050edfd5a0fb5d59d407",
+      "sha256:b020d1f9342e7e15a138ff76308958b050e00ec5d1fdcc3f77def2f4c28d474c"
+    ],
+    "templates/skills/cursor/context-budget/SKILL.md": [
+      "sha256:15b379e2298babd9359013bf83825fa254d509b880f8e291475bd02e0e371e47",
+      "sha256:5d4dc2deaf6972f135c96ef9ffe35359f569dbbb059ce7f313a408fea85ed55a",
+      "sha256:b5f8bcf27b8b1de2ae00dfb18a6b2d09aba8e8e167eec0eac5bff566511638ab"
+    ],
+    "templates/skills/cursor/current-docs/SKILL.md": [
+      "sha256:16127222e2adf3030d8407f77da61fb8529d03373e14201fa2b15816d2d73bab",
+      "sha256:c10757463fefbd48385d383e95aab40dcb67e379c11e677f78741969598dab58",
+      "sha256:c18bd120eb71c4c0e77a247b0a5862e1c8a19973ce87a9597998189d1e8c2988"
+    ],
+    "templates/skills/cursor/database-migrations/SKILL.md": [
+      "sha256:642d702e46a1f175c2502154a2df8246a6bf1445b592690c71bbff345c540a1f",
+      "sha256:e2d91d632f46f1cdb28526e48cc38ad7a1be4a00dfc912e4071dbbf909613b31",
+      "sha256:e913f183dc66025ac5bc0214d85ce325165b458ff82a2212dd638bddf7ec7a98"
+    ],
+    "templates/skills/cursor/diagnose/SKILL.md": [
+      "sha256:036a016ac0f6ad2a5419e6d3aff1c8c3a484f22166ab7433cfd825b1250e5fc0",
+      "sha256:35345e43a905143a7f1d153cff65dbbf658ad1df4d2aa1373858fc3c4abb3765",
+      "sha256:86ae8a160628a0a634325673f5ad92028ee6ec0f4224e9e1a7a25ec172cf69f3"
+    ],
+    "templates/skills/cursor/frontend-design/SKILL.md": [
+      "sha256:2589eebf0d2e6034ef3070500cf2b830fe88e8a6ac75f70b253793bd1b0924fb",
+      "sha256:ca1335ae4402573c90f95b5e0bdcd69cad0cfc064c8911b61ff87a516c94d566"
+    ],
+    "templates/skills/cursor/handoff/SKILL.md": [
+      "sha256:e1bb74021a69672790799254476d3ca357b39a28f8327b7abecb6b0025b6497c",
+      "sha256:ebeef4b073c1fa00e8c835d7eb094373cf67c4f947d5b28cf983eaf5513ac6aa"
+    ],
+    "templates/skills/cursor/implementation-plan/SKILL.md": [
+      "sha256:369611305c06444d6a3496f324b99df7d61250524d3259cd92dbfe6431b10c57",
+      "sha256:9e3dc1952cf6bda2dbff900b688cbc896705a5a3c2e46bc9805d9fefd9774eb7",
+      "sha256:e41cd4f93b83aed019a9c955dd79fa9b6d8db8fd48708358a47423a58bc50e48",
+      "sha256:fb2fc79a0e030f630837f981de10053b3b298dc2ab87438b8ca8a7735c2d6ce2"
+    ],
+    "templates/skills/cursor/kretsverket-editor-change/SKILL.md": [
+      "sha256:3213cb6ab94b55c92838f0d40c54aac74af1e5c52736c13631e7ca5545319edb",
+      "sha256:5ea88be7e49b5688689e1fe407823c3508dfd196cbae13c25dcaf19447eb3970"
+    ],
+    "templates/skills/cursor/kretsverket-electrical-drawing/SKILL.md": [
+      "sha256:5b1147dbd83b9ef5fbedecc9d387147108d44e7d2bbc16a9148618992553e01d",
+      "sha256:f6b39fc6bb99625c629928dc38be97272c2a41dc13a9e58cd9d57718b60963f0"
+    ],
+    "templates/skills/cursor/kretsverket-file-compatibility/SKILL.md": [
+      "sha256:1271f6991f48f1ed91cc47eb873d4758c27db484f7b86d722013ea4b9ec3d266",
+      "sha256:65ccad233c4b08850478267ebc8b077abc3ab586493731f002f54b3b6e421298"
+    ],
+    "templates/skills/cursor/kretsverket-symbol-system/SKILL.md": [
+      "sha256:b5d15a236eb6a7b99a387735bb3572bb3aedceb13a33049ce3f7db5789d3fe7d",
+      "sha256:e64f28215d64383935a9c83df1d665004324a62a78ffdf8ae24ae7fd49d94df3"
+    ],
+    "templates/skills/cursor/minimal-implementation/SKILL.md": [
+      "sha256:56d5f489c5ce6877ccf9f3f17f8f6e089f259e079297dca04fda3a97c7a805f4",
+      "sha256:a1d6db3050ff8bf716d4cf965c38fd55001a37eda03f5db43aa56eba39434738"
+    ],
+    "templates/skills/cursor/prototype/SKILL.md": [
+      "sha256:87e8ada1aa00b17175ec316112d08d74bd2c2d21717c7d3607e6c6e77aad54d6",
+      "sha256:ba94917348bba49a840dabdd260e2e27d75afcd29c04c6d89dba1f9ecfcc4634",
+      "sha256:c9a68580705443211c0f79e0a47a53a6110e52e1ae1c7f9563427ac62f3a97d5",
+      "sha256:fff0066fedc4bd5f948f7d0f9580ee1610f16d7648db02047fcd987def10d696"
+    ],
+    "templates/skills/cursor/release-check/SKILL.md": [
+      "sha256:303efdf5ddae1af1f9829396d361a06fb3f2ca965decfa6a2e043ddd6dc50acb",
+      "sha256:a3fbafd8dc34afba2cbdafdb35079e43ca411b8cad98a680feaf9050f0e32c72",
+      "sha256:bc0de55534706d47c5838be820b9b0dfb6a255f8fc69638cb55559ac10df8ec9"
+    ],
+    "templates/skills/cursor/retro/SKILL.md": [
+      "sha256:a83c37f9a4bc765148e03593ddd34e339017d96825806ad6063096db8f226dfc"
+    ],
+    "templates/skills/cursor/screenshot-review/SKILL.md": [
+      "sha256:3fb2d111454a10ba49d36e5666327569b40caf75b868c6ffa1fa1481efd5ef69",
+      "sha256:4984df5afd03cc5ecbaab52a43416bcf4e438570bde0b4c6073ebf058016e8e8",
+      "sha256:ae73650b2cd08a5506df342e62d117381700ef6dadfb097b338f568cf4b62bee"
+    ],
+    "templates/skills/cursor/security-review/SKILL.md": [
+      "sha256:426a4fd648ce18a46e00a01274f5e006000758fb73814212230ec215bc4f696c",
+      "sha256:86f120f784bf7d549ea8ad3a50e4b9595e8a8241f3dd179fa532e9a9eccac02e",
+      "sha256:f45a42762c02fad044fd6aa63fba98caedfa02c0addca89bd3794181335d3c78"
+    ],
+    "templates/skills/cursor/tdd/SKILL.md": [
+      "sha256:bcffe9155884cd55706df2b87e8cbbf39682ce305790f99501f41fa8a19de6d1",
+      "sha256:d1dd66bf0b1e2fe3c1d1537d458933ab3b8c55338b1b91983e6f19162a2a9f15"
+    ],
+    "templates/skills/cursor/wordpress-woocommerce/SKILL.md": [
+      "sha256:1bf5860c7deef1f53a6f6bbb21c73dc9e965d9a50a0d1b9988120b270438a63e",
+      "sha256:80210d8e84c0da505843a840e85e4562ea9f80b73ec74817e62bfa11dd3a218f",
+      "sha256:f96e392c4d6f8d49d95741d8953689201283b09b41c26769031cbc1cb081ebce"
+    ],
+    "templates/skills/cursor/zoom-out/SKILL.md": [
+      "sha256:131c8f7102a70ccbec6c684f5b03516d0b393454801bb059c23eaa872637b7e7",
+      "sha256:5dc561ae3cc97d6790ad9bd4e99d8bf8bc1ced86f15712937bed23053d209c9c",
+      "sha256:f90a19233b7b51210fc82037eb139e03fc60a517e7e765320859e583d099dcbe"
+    ],
+    "templates/skills/opencode/accessibility-review/SKILL.md": [
+      "sha256:603ab04e972fb9ba83762142537718d805fe6514ab5e964aa3d627868dba4a58",
+      "sha256:dbae48bd5ae9fd5016c810d5f5974159c3fbc53247ab04ba2ccfd27651487f6e",
+      "sha256:f18f427609f020b70f865690d22b3b262fff4947b74681794f8437a7e50d21e9"
+    ],
+    "templates/skills/opencode/browser-qa/SKILL.md": [
+      "sha256:2963e6626db5f2f3d355ca8b9a4d2d3a281cc82636cf2804439f1328e1086f92",
+      "sha256:3d86071663b4088f55f4d4b610c355ea53fc3474a26c0401bf9b68fd7589098c",
+      "sha256:b1bf9eb415d112bbd853ccc7d46f79d3bff0acc500a148f7b4088e658b12c97b"
+    ],
+    "templates/skills/opencode/context-budget/SKILL.md": [
+      "sha256:0238aee0c82f0f9b2e8fed2245104c8c4bdcb1505327c718b62dac32b60a7537",
+      "sha256:04d2e2544477e5ae9bebb7084c81b46e63bb3e0c500208e018f1a0e3e38b2815",
+      "sha256:478c9f70b6eaac445475d84ea04dc53fcd1bf477f16ac647f01f9585fe0495b6"
+    ],
+    "templates/skills/opencode/current-docs/SKILL.md": [
+      "sha256:0f50740e509393b972677af3d2dbed71e4675f884207811b418fe6142ecbadd7",
+      "sha256:1cc6ad040ecc8dd30ee58f9a351040d88db0ed9b879a5390ce47cb636853c808",
+      "sha256:aaf37d7f9c5608c8beb5f6c71ce523df2f9a5f2f4ffffc94eebe6720b9109b22"
+    ],
+    "templates/skills/opencode/database-migrations/SKILL.md": [
+      "sha256:4ad8a99fd6ea941ef2ee7437a668e3ab388beb622ffa13d50a7b9cc8a42ec8f7",
+      "sha256:753cfb76873605fa585a4b9502b94146c8cc0b7cc8b0df20228f7ebe6adcfb1f",
+      "sha256:c0aee335699cedef6f395899b2db73787296e842b556bdaf9a742b005048e0d9"
+    ],
+    "templates/skills/opencode/diagnose/SKILL.md": [
+      "sha256:84f8438fc10f2611e33f6536b4eb9887f4d0985df04bad0bb8385a5e2fb9d6e0",
+      "sha256:e18af5140cb7ec46ebb83875e8217cf13d2acca376574d5885e99294ac4b2d96",
+      "sha256:ff1f0673e4c47a781da1b5b1865a53221eb08a4744a88c71514af386197c0ffe"
+    ],
+    "templates/skills/opencode/frontend-design/SKILL.md": [
+      "sha256:64b820dc7f45c53eb584ab99280385883cb31bed526aef473cd7e5f75a9b7667",
+      "sha256:809e64780e2c4f3fab7ad84d1dbe295d5d77f01bee602e81fcde1bef9c8da4b3"
+    ],
+    "templates/skills/opencode/handoff/SKILL.md": [
+      "sha256:c3a6125c9d382f673d19d8a9446ba6b5aaebcfc4e8912c7bdc10d52cbd9f74cd",
+      "sha256:c880caa7fd9b0c3680fbd929f25406f85754825b79e1dce2140218162a2e1379"
+    ],
+    "templates/skills/opencode/implementation-plan/SKILL.md": [
+      "sha256:4ac5d00a6be9dce4c44ccc1b3111743e8a17596e0ad7c43fe3257c09f4c9f96f",
+      "sha256:9cdb1384c002ea6a66c0e42b010959306195417f50f75f37082acc1710edf340",
+      "sha256:a182a6ae70dd6b58c8f9da2a43b5ce0a6f84af93da61d638cedc047b5f118fef",
+      "sha256:aef4ed0a77fc3277a06ac93541cbc22ebfe05aa587e232f54d916640faffd5e7"
+    ],
+    "templates/skills/opencode/kretsverket-editor-change/SKILL.md": [
+      "sha256:2544898b7605eba16a560ece9d8fce9467d398e55e0a6eb8e4f55109d432adf4",
+      "sha256:7e801c0d5efc10a6916aa6feff4701ff6953557d3c3a9e4861053212d4f1af3a"
+    ],
+    "templates/skills/opencode/kretsverket-electrical-drawing/SKILL.md": [
+      "sha256:36d2b561e4141c376c5ca0809ba18c73c3f8889b110dbb9c2b33571103a2223c",
+      "sha256:47fcaf2de9922a711016989e89828121776e07e84efdfb4afdcfb7ecfa31130a"
+    ],
+    "templates/skills/opencode/kretsverket-file-compatibility/SKILL.md": [
+      "sha256:2dbe1f955fa0656686462ae28db05facd814a1927d92fb634d000371b552ba24",
+      "sha256:8d59f491dfe6e4c379d9fca627c41afab7163f1a2d99bccbbc14e6a5a545d41b"
+    ],
+    "templates/skills/opencode/kretsverket-symbol-system/SKILL.md": [
+      "sha256:70d4a875627dff55cf08c586e8d0d323be2f35a5ed0ddc73326267f40baf7711",
+      "sha256:a2a4f30223f17b3d027a975a5d8899bc395c28807a42af32694297ad2c31a6c6"
+    ],
+    "templates/skills/opencode/minimal-implementation/SKILL.md": [
+      "sha256:08344f8c20420b923ba85a0a68ea4aee8cee0fc4a6217e2300fb634ab0309ac2",
+      "sha256:e17ec7e1faeaf6c2b44b343948856e9829cbced05c7f3af5e688e4762a4fdf92"
+    ],
+    "templates/skills/opencode/prototype/SKILL.md": [
+      "sha256:38532267bf6738c9b4829ea0b8914764def9eb8307b15cca7fe9e4790fea5c47",
+      "sha256:4904a9d66cb0811a3ecf32546cdb047eed016d5c351f5a5c7964238cbadb712e",
+      "sha256:8fc34ad7e6ddb510858b334610646a5fd398723bf768804eb704c02e65b11c98",
+      "sha256:fcab0bd22b600e1d30e4a3e974d592a2e23572679c4b5707e095d5d2fcb3d740"
+    ],
+    "templates/skills/opencode/release-check/SKILL.md": [
+      "sha256:1d08f9df30ecb275ed08b1240d968cdc586059cf6730485e1863ae3ab9806056",
+      "sha256:3a2865cf220ba2e831404134df774cc04a78788cedcc2be62e81cecfd0489e43",
+      "sha256:4c67170ccab8772e9cb47c44a56797a24c41b420562e5388d8808e1e25baecde"
+    ],
+    "templates/skills/opencode/retro/SKILL.md": [
+      "sha256:310e190cef051ac2c68b6a3b9f5844e125316fe821009f7ae2ec78f8408c9d53"
+    ],
+    "templates/skills/opencode/screenshot-review/SKILL.md": [
+      "sha256:2d5c1ff02c503fb956174a01c1ffa54be0e1a4a5117da1c7842cbae809b9b22b",
+      "sha256:4156a59096fa60becca69ebee599665ad9417ed122c0162c6a245af6df91440d",
+      "sha256:c0247b9d46acb21b90a658e697cc68952c4e2c27852b7d72cefce08a91f24b23"
+    ],
+    "templates/skills/opencode/security-review/SKILL.md": [
+      "sha256:4812ba2c0cfcb0547b6c6aedc470159fff60faf63e8ec742ccad7a258d009397",
+      "sha256:f07b299bcd909c305bd4cfe857be864f76fb566418cee1a8eee09af51b1e16f4",
+      "sha256:f271a9bcde5a4982e47007a75c06b374a148e556d0e36b01928f52296f55b0b8"
+    ],
+    "templates/skills/opencode/tdd/SKILL.md": [
+      "sha256:01ce2c38d539bdda05eb869933da4bb6b524fced1d59dac8bbb91174956027eb",
+      "sha256:60a8cc8bb34a018d67462e1bfc2bd98b1230c0a95369bbb7a6ba883e5b20f729"
+    ],
+    "templates/skills/opencode/wordpress-woocommerce/SKILL.md": [
+      "sha256:04eb575c21bae100e713b0aba30b0a6f395f43b86fdf3a7cf89ecafe3b3df66c",
+      "sha256:33ccf33ad74aafd60d6f402739f6beabaa0c475f33e12e5a57940f14d3c3383a",
+      "sha256:ab981017a8622858da6d1bdf3ad5d3cec866a742ff64575f62e433f61a059369"
+    ],
+    "templates/skills/opencode/zoom-out/SKILL.md": [
+      "sha256:368bcd8f022591d02abca36d499ed0d59b7f6c04df7d76d3c5b8379d92c5657d",
+      "sha256:37fc3df00682ac82c7b25e0c10135cc56a13d3c6291394bd5afaf2147c9572a7",
+      "sha256:812b19a5c88dd3672060336de935d3587ef092745f2374061c5466d16e41968b"
+    ]
+  }
+}

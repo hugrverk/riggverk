@@ -105,6 +105,7 @@ MIGRATION_FIXTURE_ALLOWLIST = {
     REPO_ROOT / "src-tauri/src/commands/workspace.rs",
     REPO_ROOT / "src-tauri/src/commands/setup.rs",
     WS_ROOT / "metadata/pre-manifest-ownership.json",
+    WS_ROOT / "metadata/shipped-digests.json",
 }
 
 DEPRECATED_METADATA_PREFIX = "resources/default-workspace/metadata/deprecated-skills"
