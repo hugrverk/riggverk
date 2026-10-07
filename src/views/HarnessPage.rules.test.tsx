@@ -539,15 +539,15 @@ describe("rules conversion (v, y)", () => {
     expect(p.onApplied).toHaveBeenCalledWith(APPLY_RESULT);
     expect(p.tasks.mock).toHaveBeenCalledTimes(1);
     expect(p.tasks.mock.mock.calls[0]![0]).toMatchObject({ label: "convert claude rules", action: "apply_rules_conversion" });
-    expect(p.refreshAfterApply).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(p.refreshAfterApply).toHaveBeenCalledTimes(1));
     const log = p.tasks.logs[0]!;
     expect(log).toMatchObject({ success: true, action: "apply_rules_conversion claude rules", exit_code: 0 });
     expect(log.stdout).toContain("applied      claude rules");
     expect(log.stdout).toContain("kept         1 section below the END marker: ## Communication");
     expect(log.stdout).toContain("transaction tx-rules-1 recorded · rollback available");
-    // The review closes and the page's panes come back.
-    expect(screen.getByRole("listbox", { name: "Claude surfaces" })).toBeTruthy();
-    expect(mode()).toBe("NORMAL");
+    // The review closes and the page's panes come back (after the apply settles; a loaded run can lag a tick).
+    expect(await screen.findByRole("listbox", { name: "Claude surfaces" })).toBeTruthy();
+    await waitFor(() => expect(mode()).toBe("NORMAL"));
   });
 
   it("never applies on Enter, and y is also a button", async () => {
