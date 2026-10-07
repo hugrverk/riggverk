@@ -97,6 +97,8 @@ def source_key(rel: str) -> str | None:
 
 def generate() -> dict[str, object]:
     ownership = load_ownership_module()
+    if ownership.git("rev-parse", "--is-shallow-repository").strip() == b"true":
+        raise RuntimeError("shallow clone: shipped versions need the full git history")
     by_rel = ownership.historical_blobs_by_rel()
     sources: dict[str, set[str]] = {}
     blob_digests: dict[str, str | None] = {}
