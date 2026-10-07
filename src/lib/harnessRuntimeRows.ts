@@ -41,9 +41,14 @@ function warningRows(warnings: readonly string[]): KvItem[] {
   return warnings.map((warning, index) => ({ label: index === 0 ? "warnings" : "", value: warning, tone: "warn" as const, wrap: true, id: `warning-${index}` }));
 }
 
+/*
+ * The overall verdict is the runtime group's heading (`runtimeVerdict`), so the rows below start with the parts.
+ */
+
 function codexRows(health: CodexRuntimeHealth): KvItem[] {
+  // The AGENTS.override.md warning has its own alert on the Codex page; the warnings row would repeat it.
+  const override = health.checks?.find(check => check.id === "rules_override" && check.status === "warn")?.detail;
   return [
-    statusRow("runtime", health.status),
     statusRow("rules", health.rules_status),
     { label: "agents", value: `${runtimeChipLabel(health.agents_status).toLowerCase()} · ${health.installed_bundled_agent_count}/${health.bundled_agent_count}`, tone: toneOf(health.agents_status) },
     { label: "skills", value: `${runtimeChipLabel(health.skills_status).toLowerCase()} · ${health.skills_synced_count}/${health.skills_expected_count}`, tone: toneOf(health.skills_status) },
@@ -51,13 +56,12 @@ function codexRows(health: CodexRuntimeHealth): KvItem[] {
     ...textRow("approval", health.approval_policy),
     ...textRow("sandbox", health.sandbox_mode),
     ...nextRows(health.status, health.next_action),
-    ...warningRows(health.warnings),
+    ...warningRows(health.warnings.filter(warning => warning !== override)),
   ];
 }
 
 function opencodeRows(health: OpenCodeRuntimeHealth): KvItem[] {
   return [
-    statusRow("runtime", health.status),
     ...textRow("default agent", health.default_agent),
     ...textRow("autoupdate", health.autoupdate),
     { label: "agents", value: `${health.installed_bundled_agent_count}/${health.bundled_agent_count} installed`, tone: health.agent_mismatches.length > 0 ? "warn" : "ok" },
@@ -69,7 +73,6 @@ function opencodeRows(health: OpenCodeRuntimeHealth): KvItem[] {
 
 function cursorRows(health: CursorProfileHealth): KvItem[] {
   return [
-    statusRow("runtime", health.status),
     { label: "profile", value: health.profile_root },
     statusRow("workspace", health.workspace_resources_status),
     { label: "agents", value: `${health.global_agents_count}/${health.expected_global_agents_count}`, tone: toneOf(health.global_agents_status) },
@@ -82,9 +85,7 @@ function cursorRows(health: CursorProfileHealth): KvItem[] {
 }
 
 function claudeRows(health: ClaudeRuntimeHealth): KvItem[] {
-  const synced = health.rules_synced && health.agents_synced && health.skills_synced;
   return [
-    flagRow("runtime", synced),
     flagRow("rules", health.rules_synced),
     { label: "agents", value: `${health.agents_synced ? "synced" : "diverged"} · ${health.installed_agent_count}/${health.expected_agent_count}`, tone: health.agents_synced ? "ok" : "warn" },
     flagRow("skills", health.skills_synced),
@@ -94,7 +95,8 @@ function claudeRows(health: ClaudeRuntimeHealth): KvItem[] {
 
 /** `key  value` rows for the runtime section of a harness page. */
 export function runtimeRowsFor({ harness, health }: HarnessRuntimeHealth): KvItem[] {
-  if (!health) return [{ label: "runtime", value: "not loaded", tone: "dim" }];
+  // Not loaded yet: the heading says so.
+  if (!health) return [];
   switch (harness) {
     case "codex": return codexRows(health);
     case "opencode": return opencodeRows(health);
