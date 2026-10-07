@@ -1,6 +1,7 @@
 /* ── harness pages: runtime pane rows (the OpenCode model override) ── */
 
-.runtime-edit { padding-top: 6px; }
+/* The section follows the runtime rows, so its opening group label keeps the blank row every other group has. */
+.runtime-edit > .group:first-child { margin-top: var(--lh); }
 
 .kv-edit dt label { color: inherit; }
 
