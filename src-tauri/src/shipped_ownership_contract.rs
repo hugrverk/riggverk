@@ -17,6 +17,7 @@ mod tests {
         apply_setup, apply_uninstall, preview_setup, preview_uninstall, rollback_setup_transaction,
         SetupResult,
     };
+    use crate::managed_bootstrap::REMOVED_SKILL_NAMES;
     use crate::managed_state::{
         artifact_identity, read_managed_state, write_managed_state_atomic, ManagedArtifactRecord,
     };
@@ -333,10 +334,12 @@ mod tests {
     #[test]
     fn a_stale_retired_skill_is_removed_only_when_it_is_a_shipped_version() {
         let env = Installed::new("retired", FILE_SURFACES);
-        let retired = ArtifactId::ClaudeSkill(skill("caveman"));
-        let edited = ArtifactId::ClaudeSkill(skill("grill-me"));
-        let shipped = b"the last shipped caveman skill\n";
-        let user_text = b"the user rewrote grill-me\n";
+        // Two skills the app no longer ships.
+        let retired_name = REMOVED_SKILL_NAMES[0];
+        let retired = ArtifactId::ClaudeSkill(skill(retired_name));
+        let edited = ArtifactId::ClaudeSkill(skill(REMOVED_SKILL_NAMES[1]));
+        let shipped = b"the last shipped version of a retired skill\n";
+        let user_text = b"the user rewrote a retired skill\n";
         for (artifact, bytes) in [(&retired, &shipped[..]), (&edited, &user_text[..])] {
             fs::create_dir_all(env.path(artifact).parent().expect("parent")).expect("dir");
             env.write(artifact, bytes);
@@ -348,7 +351,8 @@ mod tests {
             });
             write_managed_state_atomic(&env.ws, &state).expect("write state");
         }
-        let _inject = test_override::inject(&shipped_json(&[("skills/caveman/SKILL.md", shipped)]));
+        let key = format!("skills/{retired_name}/SKILL.md");
+        let _inject = test_override::inject(&shipped_json(&[(key.as_str(), shipped)]));
 
         assert_eq!(
             env.planned(SetupSurfaceId::ClaudeSkills, &retired),

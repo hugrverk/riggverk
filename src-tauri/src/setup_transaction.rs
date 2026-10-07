@@ -3078,11 +3078,13 @@ mod tests {
     fn stale_artifact_that_is_a_shipped_version_is_removed_with_or_without_a_record() {
         let (base, home, ws) = shipped_fixture("stale-shipped");
         let bundled = crate::setup_roots::bundled_root().unwrap();
+        let retired = crate::managed_bootstrap::REMOVED_SKILL_NAMES[0];
         let artifact =
-            ArtifactId::ClaudeSkill(crate::artifact_registry::SkillName::new("caveman").unwrap());
+            ArtifactId::ClaudeSkill(crate::artifact_registry::SkillName::new(retired).unwrap());
         let dest = artifact.resolve_dest(&home, &ws).unwrap();
         let shipped = b"a version the app shipped\n";
-        let _inject = inject_shipped("templates/skills/claude/caveman/SKILL.md", shipped);
+        let key = format!("templates/skills/claude/{retired}/SKILL.md");
+        let _inject = inject_shipped(&key, shipped);
         let other_record = crate::stable_digest::bytes(b"an older recorded hash");
         let detect = |record: Option<&str>| {
             detect_stale_artifact_state(&artifact, &ws, &bundled, &home, record)
@@ -3110,8 +3112,9 @@ mod tests {
     fn stale_artifact_ownership_ignores_metadata_that_does_not_parse() {
         let (base, home, ws) = shipped_fixture("stale-malformed");
         let bundled = crate::setup_roots::bundled_root().unwrap();
+        let retired = crate::managed_bootstrap::REMOVED_SKILL_NAMES[0];
         let artifact =
-            ArtifactId::ClaudeSkill(crate::artifact_registry::SkillName::new("caveman").unwrap());
+            ArtifactId::ClaudeSkill(crate::artifact_registry::SkillName::new(retired).unwrap());
         let dest = artifact.resolve_dest(&home, &ws).unwrap();
         write_file(&dest, b"a version the app shipped\n");
         let _inject = crate::shipped_digests::test_override::inject("{ not json");
