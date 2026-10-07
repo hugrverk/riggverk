@@ -6,7 +6,8 @@
                        [1] list  [2] list  [3] facts  [4] output, laid out 2 x 2
      .screen.install   the install review: [1] plan  [2] output
 
-   Below 700px of height, or with large text, the panes stack in one column and the screen scrolls.
+   When the window is too small for the 2 x 2 grid the panes stack in one column and the screen scrolls.
+   The thresholds scale with the text size (medium 13px / large 15px / extra-large 17px).
    ═══════════════════════════════════════════════════════════════════════════════════ */
 
 @mixin stacked-panes($pane-min-height) {
@@ -56,13 +57,21 @@
   }
 }
 
-[data-app-font-size="large"] .screen.quad,
-[data-app-font-size="extra-large"] .screen.quad {
-  @include stacked-panes(260px);
+@media (max-width: 1100px), (max-height: 800px) {
+  [data-app-font-size="large"] .screen.quad,
+  [data-app-font-size="extra-large"] .screen.quad {
+    @include stacked-panes(260px);
+  }
 }
 
-[data-app-font-size="extra-large"] .screen.install {
-  @include stacked-panes(280px);
+@media (max-width: 1250px), (max-height: 900px) {
+  [data-app-font-size="extra-large"] .screen.quad {
+    @include stacked-panes(260px);
+  }
+
+  [data-app-font-size="extra-large"] .screen.install {
+    @include stacked-panes(280px);
+  }
 }
 
 /* ---- pane content ---- */
