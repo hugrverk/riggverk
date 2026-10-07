@@ -8,9 +8,24 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { useKeymapState } from "../keyboard/context";
+import { useKeymapContext, useKeymapState } from "../keyboard/context";
+import { echoOf, type EchoKey } from "../keyboard/echo";
 
 export type ShellMode = "NORMAL" | "INSERT" | "COMMAND" | "CONFIRM" | "HELP";
+
+/** Outcome colour of a status-bar notice; a notice without one is plain information. */
+export type NoticeTone = "ok" | "warn" | "fail";
+
+export interface NotifyOptions {
+  tone?: NoticeTone;
+  durationMs?: number;
+}
+
+/** The key just handled and its hint, shown next to the mode badge for a moment. */
+export interface KeyEcho extends EchoKey {
+  /** Changes on every echo, so the same key twice restarts the entrance. */
+  id: number;
+}
 
 export interface ShellStateValue {
   commandLineOpen: boolean;
@@ -23,6 +38,11 @@ export interface ShellStateValue {
   statusContext: string | null;
   /** Transient one-line message shown in the status bar. */
   notice: string | null;
+  noticeTone: NoticeTone | null;
+  /** Changes with every notice, so an identical repeat still restarts its entrance. */
+  noticeId: number;
+  /** The last handled key with its hint (`u update`) while it is fresh; see `echoOf` for what counts. */
+  echo: KeyEcho | null;
   openCommandLine: (initialText?: string) => void;
   closeCommandLine: () => void;
   openHelp: () => void;
@@ -31,10 +51,12 @@ export interface ShellStateValue {
   /** Marks a confirm/review surface as open; returns the release function. */
   beginConfirm: () => () => void;
   setStatusContext: (text: string | null) => void;
-  notify: (text: string, durationMs?: number) => void;
+  /** A bare number is the duration, kept for older callers; prefer `{ tone, durationMs }`. */
+  notify: (text: string, options?: number | NotifyOptions) => void;
 }
 
 const NOTICE_MS = 4000;
+const ECHO_MS = 900;
 
 const noop = () => {};
 
@@ -45,6 +67,9 @@ const DETACHED_STATE: ShellStateValue = {
   confirmDepth: 0,
   statusContext: null,
   notice: null,
+  noticeTone: null,
+  noticeId: 0,
+  echo: null,
   openCommandLine: noop,
   closeCommandLine: noop,
   openHelp: noop,
@@ -63,12 +88,34 @@ export function ShellStateProvider({ children }: { children: ReactNode }) {
   const [helpOpen, setHelpOpen] = useState(false);
   const [confirmDepth, setConfirmDepth] = useState(0);
   const [statusContext, setStatusContext] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<{ text: string; tone: NoticeTone | null; id: number } | null>(null);
+  const [echo, setEcho] = useState<KeyEcho | null>(null);
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const noticeSeq = useRef(0);
+  const echoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const echoSeq = useRef(0);
+  const keymapContext = useKeymapContext();
 
   useEffect(() => () => {
     if (noticeTimer.current) clearTimeout(noticeTimer.current);
+    if (echoTimer.current) clearTimeout(echoTimer.current);
   }, []);
+
+  // A binding that ran (key or hint click) echoes next to the mode badge; the keymap decides nothing about it.
+  useEffect(() => {
+    if (!keymapContext) return;
+    const { keymap, platform } = keymapContext;
+    return keymap.onRun(run => {
+      const next = echoOf(run, platform);
+      if (!next) return;
+      if (echoTimer.current) clearTimeout(echoTimer.current);
+      setEcho({ ...next, id: ++echoSeq.current });
+      echoTimer.current = setTimeout(() => {
+        echoTimer.current = null;
+        setEcho(null);
+      }, ECHO_MS);
+    });
+  }, [keymapContext]);
 
   const openCommandLine = useCallback((initialText = "") => {
     setHelpOpen(false);
@@ -96,9 +143,10 @@ export function ShellStateProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const notify = useCallback((text: string, durationMs = NOTICE_MS) => {
+  const notify = useCallback((text: string, options: number | NotifyOptions = {}) => {
+    const { tone = null, durationMs = NOTICE_MS } = typeof options === "number" ? { durationMs: options } : options;
     if (noticeTimer.current) clearTimeout(noticeTimer.current);
-    setNotice(text);
+    setNotice({ text, tone, id: ++noticeSeq.current });
     noticeTimer.current = setTimeout(() => {
       noticeTimer.current = null;
       setNotice(null);
@@ -112,7 +160,10 @@ export function ShellStateProvider({ children }: { children: ReactNode }) {
       helpOpen,
       confirmDepth,
       statusContext,
-      notice,
+      notice: notice?.text ?? null,
+      noticeTone: notice?.tone ?? null,
+      noticeId: notice?.id ?? 0,
+      echo,
       openCommandLine,
       closeCommandLine,
       openHelp,
@@ -129,6 +180,7 @@ export function ShellStateProvider({ children }: { children: ReactNode }) {
       confirmDepth,
       statusContext,
       notice,
+      echo,
       openCommandLine,
       closeCommandLine,
       openHelp,

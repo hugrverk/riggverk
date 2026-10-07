@@ -47,6 +47,18 @@ export interface RegisteredBinding {
   seq: number;
 }
 
+/** A binding that just ran, from a key press or a click on its hint. */
+export interface BindingRun {
+  binding: Binding;
+  /** The chord that matched; the first alternative for a click. */
+  chord: KeyChord;
+  source: "key" | "click";
+  /** A text field had focus when the key was pressed. */
+  editable: boolean;
+  /** The key was auto-repeating. */
+  repeat: boolean;
+}
+
 interface Slot {
   entry: RegisteredBinding;
   token: symbol;
@@ -68,6 +80,7 @@ export function evaluateWhen(binding: Binding): { active: boolean; disabledReaso
 export class KeymapRegistry {
   private slots = new Map<string, Slot>();
   private listeners = new Set<() => void>();
+  private runListeners = new Set<(run: BindingRun) => void>();
   private snapshot: readonly RegisteredBinding[] = [];
   private seq = 0;
 
@@ -108,6 +121,18 @@ export class KeymapRegistry {
       this.listeners.delete(listener);
     };
   };
+
+  /** Observes every binding that ran (the shell's key echo); the registry decides nothing from it. */
+  onRun = (listener: (run: BindingRun) => void): (() => void) => {
+    this.runListeners.add(listener);
+    return () => {
+      this.runListeners.delete(listener);
+    };
+  };
+
+  emitRun(run: BindingRun): void {
+    for (const listener of [...this.runListeners]) listener(run);
+  }
 
   private rebuild() {
     this.snapshot = [...this.slots.values()].map(slot => slot.entry).sort((a, b) => a.seq - b.seq);

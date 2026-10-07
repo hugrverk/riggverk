@@ -218,6 +218,7 @@ describe("CommandLine", () => {
     type(input, "boom");
     fireEvent.keyDown(input, { key: "Enter" });
     await waitFor(() => expect(within(screen.getByLabelText("Status bar")).getByRole("status").textContent).toBe("boom: exploded"));
+    expect(within(screen.getByLabelText("Status bar")).getByRole("status").getAttribute("data-tone")).toBe("fail");
   });
 
   it("Mod+k opens it with an empty line", () => {

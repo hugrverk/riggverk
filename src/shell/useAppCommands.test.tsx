@@ -253,6 +253,7 @@ describe("useAppCommands", () => {
       runLine("copy");
       await waitFor(() => expect(writeText).toHaveBeenCalledWith("line one\nline two"));
       await waitFor(() => expect(within(screen.getByLabelText("Status bar")).getByRole("status").textContent).toBe("copied output"));
+      expect(within(screen.getByLabelText("Status bar")).getByRole("status").getAttribute("data-tone")).toBe("ok");
     });
 
     it("copy without output is disabled, and a clipboard failure surfaces as an error", async () => {

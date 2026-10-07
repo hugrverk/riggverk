@@ -138,6 +138,37 @@
   color: var(--text-muted);
 }
 
+/* A notice may carry an outcome tone; plain information keeps the muted colour. Enters once, full motion only. */
+.statusbar .ctx[data-tone="ok"] { color: var(--ok); }
+.statusbar .ctx[data-tone="warn"] { color: var(--warn); }
+.statusbar .ctx[data-tone="fail"] { color: var(--fail); }
+
+:root[data-motion="full"] .statusbar .ctx .notice {
+  display: inline-block;
+  animation: notice-in 160ms ease-out;
+}
+
+@keyframes notice-in { from { opacity: 0; transform: translateY(60%); } }
+
+/* The key just handled and its hint (showcmd): visual only, there for a moment after the mode badge. */
+.statusbar .echo {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 4px;
+  margin-right: 14px;
+  color: var(--text-muted);
+}
+
+.statusbar .echo kbd {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+:root[data-motion="full"] .statusbar .echo { animation: echo-in 120ms ease-out; }
+
+@keyframes echo-in { from { opacity: 0; } }
+
 /* One row tall: a hint that does not fit wraps onto a second, clipped row, so whole hints drop from the end
    instead of being cut mid-word. `.hints-keep` (command, help) is outside it and never shrinks. */
 .statusbar .hints {

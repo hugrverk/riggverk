@@ -72,15 +72,15 @@ export function useLibraryKeys({
   const save = () => {
     const current = latest.current;
     if (!current) {
-      notify("nothing is open");
+      notify("nothing is open", { tone: "warn" });
       return;
     }
     if (current.readOnly) {
-      notify("read-only item");
+      notify("read-only item", { tone: "warn" });
       return;
     }
     if (!current.dirty) {
-      notify("no changes to save");
+      notify("no changes to save", { tone: "warn" });
       return;
     }
     if (current.saving) return;
@@ -109,7 +109,7 @@ export function useLibraryKeys({
   const wasSaving = useRef(false);
   useEffect(() => {
     const result = latest.current?.saveResult;
-    if (wasSaving.current && !saving && result?.success) notify(redactTerminalOutput(result.stdout) || "saved");
+    if (wasSaving.current && !saving && result?.success) notify(redactTerminalOutput(result.stdout) || "saved", { tone: "ok" });
     wasSaving.current = saving;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [saving]);

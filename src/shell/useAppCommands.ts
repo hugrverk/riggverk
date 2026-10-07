@@ -203,7 +203,7 @@ export function useAppCommands(deps: AppCommandDeps): void {
       run: async () => {
         try {
           await navigator.clipboard.writeText(deps.outputText ?? "");
-          notify("copied output");
+          notify("copied output", { tone: "ok" });
         } catch {
           deps.setError("Copy failed: clipboard is not available");
         }

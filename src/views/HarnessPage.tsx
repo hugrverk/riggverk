@@ -179,7 +179,7 @@ export function HarnessPage({
 
   const onToggle = (row: HarnessRowModel) => {
     if (row.targetId) onToggleTarget(row.targetId);
-    else notify(`${row.name} have no target toggle`);
+    else notify(`${row.name} have no target toggle`, { tone: "warn" });
   };
 
   return (

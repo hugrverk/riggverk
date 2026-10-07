@@ -581,7 +581,7 @@ function AppShell() {
    */
   const requestUninstallPreview = useCallback(async () => {
     if (install.isOpenOn("start")) {
-      notify("close the install review first (n or Esc), then run :uninstall");
+      notify("close the install review first (n or Esc), then run :uninstall", { tone: "warn" });
       return;
     }
     await switchView("start");
@@ -687,7 +687,7 @@ function AppShell() {
   // The command line has no row to show the outcome in: a switch is a notice, a refusal the error banner.
   const reportWorkspaceSwitch = (message: { ok: boolean; text: string } | null) => {
     if (!message) return;
-    if (message.ok) notify(message.text);
+    if (message.ok) notify(message.text, { tone: "ok" });
     else setError(message.text);
   };
 
