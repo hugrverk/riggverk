@@ -158,7 +158,8 @@ export function HarnessPage({
   }
 
   const harnessState = targetMeta(entry, { workspaceValid, id: harness });
-  const verdict = runtimeVerdict(runtime);
+  // Without a workspace there is no runtime to judge: the heading says so and no rows follow.
+  const verdict = workspaceValid ? runtimeVerdict(runtime) : { text: "no valid workspace", tone: "dim" as const };
   const override = rulesOverrideWarning(runtime.harness === "codex" ? runtime.health : null);
   const conflictDetails = entry?.status?.conflict_details ?? [];
 
@@ -255,7 +256,7 @@ export function HarnessPage({
           {"runtime · "}
           <span className={toneClass(verdict.tone) || undefined}>{verdict.text}</span>
         </div>
-        <Kv items={workspaceValid ? runtimeRowsFor(runtime) : [{ label: "runtime", value: "no valid workspace", tone: "dim" }]} />
+        {workspaceValid && <Kv items={runtimeRowsFor(runtime)} />}
         {workspaceValid && runtimeExtra}
       </Pane>
 
