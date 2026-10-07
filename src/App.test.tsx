@@ -166,7 +166,7 @@ describe("App", () => {
       await act(async () => {
         fireEvent.click(runButton);
       });
-      const dialog = await screen.findByRole("dialog", { name: "run release-check", hidden: true });
+      const dialog = await screen.findByRole("dialog", { name: "Run release-check", hidden: true });
       expect(dialog.textContent).toContain("scripts/release-check.sh from /tmp/chosen-ws");
       await act(async () => {
         fireEvent.click(within(dialog).getByRole("button", { name: /cancel/i, hidden: true }));

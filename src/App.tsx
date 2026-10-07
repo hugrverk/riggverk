@@ -628,7 +628,7 @@ function AppShell() {
   const runReleaseCheck = useCallback(async () => {
     const root = workspaceDiagnostics?.resolved_path ?? "the active workspace";
     const ok = await confirm({
-      title: "run release-check",
+      title: "Run release-check",
       message: `This runs scripts/release-check.sh from ${root}. It executes code from that folder; only continue for a workspace you trust.`,
       confirmLabel: "run",
     });
