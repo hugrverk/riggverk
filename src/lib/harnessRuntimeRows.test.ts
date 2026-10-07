@@ -49,7 +49,8 @@ describe("runtimeRowsFor", () => {
     expect(rows.find(row => row.label === "agents")).toMatchObject({ value: "2/3 installed", tone: "warn" });
     expect(rows.find(row => row.label === "autoupdate")).toBeUndefined();
     expect(rows.filter(row => row.tone === "warn" && row.wrap).map(row => row.value)).toEqual(["first warning", "second warning"]);
-    expect(rows.find(row => row.label === "next")?.value).toBe("Update OpenCode.");
+    // The backend's sentence reads like the other values: no capital, no full stop.
+    expect(rows.find(row => row.label === "next")?.value).toBe("update OpenCode");
   });
 
   it("shows the next step only while the runtime is out of sync, and never a summary", () => {
@@ -72,7 +73,7 @@ describe("runtimeRowsFor", () => {
     expect(labels("synced", "No runtime action needed.")).not.toContain("next");
     expect(labels("synced", "No runtime action needed.")).not.toContain("summary");
     const stale = runtimeRowsFor({ harness: "opencode", health: opencode("stale", "Regenerate opencode.json before sync.") });
-    expect(stale.find(row => row.label === "next")?.value).toBe("Regenerate opencode.json before sync.");
+    expect(stale.find(row => row.label === "next")?.value).toBe("regenerate opencode.json before sync");
     expect(stale.map(row => row.label)).not.toContain("summary");
   });
 

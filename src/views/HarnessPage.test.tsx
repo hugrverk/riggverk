@@ -279,7 +279,7 @@ describe("HarnessPage", () => {
     expect(runtime).toMatchObject({ skills: "synced · 17/18", approval: "on-request", sandbox: "workspace-write" });
     // The summary only restates the verdict; the next step stays while the runtime is out of sync.
     expect(detail().textContent).not.toContain("Codex diverged");
-    expect(runtime.next).toBe("Update Codex.");
+    expect(runtime.next).toBe("update Codex");
   });
 
   it("shows a failed status check and the files an update preserved as facts of the harness", () => {
