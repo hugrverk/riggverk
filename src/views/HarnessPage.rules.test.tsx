@@ -524,10 +524,12 @@ describe("rules conversion (v, y)", () => {
     expect(summary).toContain("2 changed lines");
     // The diff comes first; `f` switches to the exact file apply writes.
     expect(rulesPane().querySelector(".diff-line.add .diff-text")!.textContent).toBe("Respond in Swedish.");
+    // `f` belongs to the review pane: on a slow runner focus lands there a tick after the preview renders.
+    await waitFor(() => expect(rulesPane().contains(document.activeElement)).toBe(true));
     press("f");
-    expect(screen.getByLabelText("Resulting file").textContent).toBe(RESULT_FILE);
+    expect((await screen.findByLabelText("Resulting file")).textContent).toBe(RESULT_FILE);
     press("f");
-    expect(rulesPane().querySelector(".rules-file")).toBeNull();
+    await waitFor(() => expect(rulesPane().querySelector(".rules-file")).toBeNull());
   });
 
   it("applies with exactly the preview's fingerprint and token on y, and reports into the output with the transaction", async () => {
