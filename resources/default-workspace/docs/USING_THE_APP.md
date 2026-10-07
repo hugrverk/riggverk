@@ -43,9 +43,9 @@ Keys fire only when no text field has focus; Escape leaves a field. `Mod` is Cmd
 | Harness page, rules row | `d` `v` `m` | Diff, Convert, Leave as is |
 | OpenCode runtime pane | `e` `s` `m` | Edit model override, save it, reload models |
 | Library | `[` `]` or `<` `>` | Previous or next source |
-| | `i`, Enter | Edit the open item |
+| | `i`, Enter | Edit the open item (skills and other read-only items are not editable) |
 | | `Mod+s` | Save (also `:w`) |
-| | Escape | Back to the list |
+| | Escape | Leave the text and show the rendered item again |
 | | `o` | Open in your editor |
 | | `n` | New doc (Docs source) |
 | Prompt Builder | `[` `]` or `<` `>` | Previous or next prompt group |
@@ -130,7 +130,7 @@ New files have no backup. Restore by rollback while the transaction is in this s
 
 ## Library
 
-Panes: **items**, **editor**, **preview**. Sources: Docs, Rules, Skills, Runtime agents, Configs, Brain Setup (`[` `]` to switch). Docs are grouped Start, Guides, Reference, Prompt Templates, Cursor, Configs, and Context. `i` or Enter edits, `Mod+s` or `:w` saves, `:q` closes and asks before discarding edits.
+Panes: **items** and the open **document**, which shows the item rendered (Markdown, or formatted JSON for configs) and turns into its source text while you edit. Sources: Docs, Rules, Skills, Runtime agents, Configs, Brain Setup (`[` `]` to switch). Docs are grouped Start, Guides, Reference, Prompt Templates, Cursor, Configs, and Context. `i` or Enter edits, Escape returns to the rendered view, `Mod+s` or `:w` saves, `:q` closes and asks before discarding edits.
 
 The Library edits the runtime workspace copy. Saves back up the file first and refuse symlinks. They do not change what harnesses receive, and an edited bundled file becomes a conflict for later updates ([TROUBLESHOOTING.md](TROUBLESHOOTING.md#conflicts)). A doc that differs from the bundled one shows a stale-doc warning.
 
