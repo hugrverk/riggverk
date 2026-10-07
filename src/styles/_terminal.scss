@@ -1,5 +1,5 @@
 /* ── output pane: `❯ command`, a status line, `── stdout ──`, then the text ──
-   Markup lives in components/TerminalOutput.tsx and OutputPane.tsx. Glyphs sit in `.g` cells; nothing
+   Markup lives in components/TerminalOutput.tsx and OutputStrip.tsx. Glyphs sit in `.g` cells; nothing
    depends on white-space: pre outside the output text itself. */
 
 .out { padding: 0 10px; }
@@ -71,12 +71,6 @@
 .tui-noout {
   margin-top: 6px;
   color: var(--text-muted);
-}
-
-.tui-idle {
-  display: flex;
-  flex-direction: column;
-  margin-top: 6px;
 }
 
 .tui-progress {
