@@ -16,7 +16,9 @@ export interface ActionKeyProps {
 
 /**
  * `<button class="action-key"><kbd>u</kbd> update</button>`: a key hint that is also the control.
- * Status-bar hints are real buttons, so every keyboard action stays mouse-reachable.
+ * Status-bar hints are real buttons, so every keyboard action stays mouse-reachable. A click leaves focus where
+ * it was: in Chromium webviews (WebView2 on Windows) the mousedown would focus the button, the status bar would
+ * lose the focused pane, and the pane's hint would unmount before its click landed.
  */
 export function ActionKey({ keys, children, onClick, disabled = false, shortcut, className }: ActionKeyProps) {
   const isDisabled = disabled !== false;
@@ -27,6 +29,7 @@ export function ActionKey({ keys, children, onClick, disabled = false, shortcut,
       aria-disabled={isDisabled || undefined}
       aria-keyshortcuts={shortcut}
       title={typeof disabled === "string" ? disabled : undefined}
+      onMouseDown={event => event.preventDefault()}
       onClick={() => {
         if (!isDisabled) onClick?.();
       }}

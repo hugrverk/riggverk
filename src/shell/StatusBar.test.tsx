@@ -122,6 +122,19 @@ describe("StatusBar", () => {
     expect(copy).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps focus in the pane when a hint is pressed with the mouse, so the hint is still there for the click", () => {
+    const update = vi.fn();
+    renderInFrame(<View bindings={[{ id: "t.update", keys: "u", title: "Update", hint: "update", scope: "pane", paneId: "main", run: update }]} />);
+    const list = screen.getByRole("listbox", { name: "rows" });
+    act(() => list.focus());
+    const hint = within(status()).getByRole("button", { name: /update/ });
+    // fireEvent returns false when the default (focusing the button) was prevented.
+    expect(fireEvent.mouseDown(hint)).toBe(false);
+    expect(document.activeElement).toBe(list);
+    fireEvent.click(hint);
+    expect(update).toHaveBeenCalledTimes(1);
+  });
+
   it("shows a disabled hint with the reason when when() returns a string, and hides it when false", () => {
     const run = vi.fn();
     renderInFrame(
