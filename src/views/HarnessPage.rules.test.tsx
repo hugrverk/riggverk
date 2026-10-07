@@ -124,6 +124,7 @@ function props(overrides: Partial<HarnessViewProps> = {}): HarnessViewProps & { 
     wsLog: null,
     wsLogCompletedAt: null,
     wsRunning: null,
+    wsProgress: null,
     status: STATUS_DATA,
     workspaceValid: true,
     gitAvailable: true,

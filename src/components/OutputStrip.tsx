@@ -7,13 +7,15 @@ import { redactTerminalOutput } from "../lib/redactTerminalOutput";
 import { useNotify } from "../shell/ShellState";
 import { Glyph } from "../ui/Glyph";
 import { Kbd } from "../ui/Kbd";
-import type { ActionResult, StatusData } from "../types";
+import type { ActionResult, ApplyProgress, StatusData } from "../types";
 import { ActivityLoader, completedLabel, TerminalState } from "./TerminalOutput";
 
 export interface OutputStripProps {
   /** `data-pane-id`; also anchors the strip's key hints. Default "output". */
   id?: string;
   wsRunning: string | null;
+  /** What the backend last reported for the running task; null until it reports or when nothing runs. */
+  progress?: ApplyProgress | null;
   wsLog: ActionResult | null;
   wsLogCompletedAt: number | null;
   status: StatusData | null;

@@ -13,7 +13,7 @@ import {
   surfaceStatus,
   VALID_DIAGNOSTICS,
 } from "../test/pageFixtures";
-import type { InstallAgent } from "../types";
+import type { ApplyProgress, InstallAgent } from "../types";
 import { StartView, type StartViewProps } from "./StartView";
 
 vi.mock("@tauri-apps/api/core", () => ({
@@ -21,6 +21,20 @@ vi.mock("@tauri-apps/api/core", () => ({
     throw new Error("unexpected invoke");
   }),
 }));
+
+const outputStripProps = vi.fn();
+
+// The real strip, with its props recorded: the pages must hand it the backend's progress.
+vi.mock("../components/OutputStrip", async importOriginal => {
+  const actual = await importOriginal<typeof import("../components/OutputStrip")>();
+  return {
+    ...actual,
+    OutputStrip: (stripProps: Parameters<typeof actual.OutputStrip>[0]) => {
+      outputStripProps(stripProps);
+      return <actual.OutputStrip {...stripProps} />;
+    },
+  };
+});
 
 const originalShowModal = HTMLDialogElement.prototype.showModal;
 const originalClose = HTMLDialogElement.prototype.close;
@@ -87,6 +101,7 @@ function props(overrides: Partial<StartViewProps> = {}): StartViewProps {
     wsLog: null,
     wsLogCompletedAt: null,
     wsRunning: null,
+    wsProgress: null,
     status: STATUS_DATA,
     workspaceValid: true,
     gitAvailable: true,
@@ -384,5 +399,27 @@ describe("StartView uninstall recovery", () => {
   it("offers the uninstall preview only for a valid workspace", () => {
     renderStart();
     expect(screen.getByRole("region", { name: "Uninstall" })).toBeTruthy();
+  });
+});
+
+describe("StartView output strip progress", () => {
+  const progress: ApplyProgress = {
+    task: "apply_setup",
+    phase: "apply",
+    done: 4,
+    total: 7,
+    file: "~/.claude/skills/handoff/SKILL.md",
+  };
+
+  beforeEach(() => outputStripProps.mockClear());
+
+  it("hands the backend's progress to the strip", () => {
+    renderStart({ wsRunning: "update claude", wsProgress: progress });
+    expect(outputStripProps).toHaveBeenLastCalledWith(expect.objectContaining({ progress }));
+  });
+
+  it("hands it null until the backend reports", () => {
+    renderStart({ wsRunning: "update claude", wsProgress: null });
+    expect(outputStripProps).toHaveBeenLastCalledWith(expect.objectContaining({ progress: null }));
   });
 });

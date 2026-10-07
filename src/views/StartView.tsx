@@ -81,6 +81,7 @@ export function StartView({
   wsLog,
   wsLogCompletedAt,
   wsRunning,
+  wsProgress,
   status,
   workspaceValid,
   gitAvailable,
@@ -162,6 +163,7 @@ export function StartView({
   const outputStrip = (
     <OutputStrip
       wsRunning={wsRunning}
+      progress={wsProgress}
       wsLog={wsLog}
       wsLogCompletedAt={wsLogCompletedAt}
       status={status}

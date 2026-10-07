@@ -589,6 +589,21 @@ export interface UninstallPlanView {
   preview_token: string | null;
 }
 
+/**
+ * What the backend reports while an apply, uninstall, rollback or rules conversion runs (the `apply-progress` event).
+ * `done` counts finished items and `file` is the one in progress (`~/...`), null between items. `total` is null
+ * only when the backend cannot tell. "done" ends the stream, whether the task succeeded or not; the outcome is
+ * the task's own result.
+ */
+export interface ApplyProgress {
+  /** The backend command (`apply_setup`, `apply_uninstall`, `apply_rules_conversion`, `rollback_setup_transaction`). */
+  task: string;
+  phase: "backup" | "apply" | "done";
+  done: number;
+  total: number | null;
+  file: string | null;
+}
+
 export interface SetupResult {
   success: boolean;
   transaction_id: string;

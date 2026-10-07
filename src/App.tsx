@@ -9,6 +9,7 @@ import { useUninstallRecovery } from "./lib/useUninstallRecovery";
 import { useWorkspaceActions } from "./lib/useWorkspaceActions";
 import { useWorkspaceGeneration } from "./lib/useWorkspaceGeneration";
 import { useAppSettingsController } from "./hooks/useAppSettingsController";
+import { useApplyProgress } from "./hooks/useApplyProgress";
 import { useWorkspacePicker } from "./hooks/useWorkspacePicker";
 import { workspaceTaskBlockedMessage } from "./lib/workspaceErrors";
 import { useInstallationOverview } from "./hooks/useInstallationOverview";
@@ -241,6 +242,8 @@ function AppShell() {
     workspaceDiagnostics,
     setError,
   });
+
+  const wsProgress = useApplyProgress(wsRunning);
 
   // Keep the backups chip current: on mount and whenever a workspace task (apply, uninstall, rollback) finishes.
   useEffect(() => {
@@ -655,6 +658,7 @@ function AppShell() {
     wsLog,
     wsLogCompletedAt,
     wsRunning,
+    wsProgress,
     status,
     workspaceValid,
     gitAvailable,

@@ -13,8 +13,10 @@
  *   empty     valid workspace with no docs, skills or agents
  * `&theme=light|dark|system` sets the persisted appearance.
  *
- * Mutating commands update in-memory state so install/rollback/save flows round-trip.
+ * Mutating commands update in-memory state so install/rollback/save flows round-trip. Apply, uninstall and
+ * rollback emit `apply-progress` events like the backend does (backup, then one file at a time, then done).
  */
+import { emit } from "@tauri-apps/api/event";
 import { mockIPC } from "@tauri-apps/api/mocks";
 import type {
   ActionResult,
@@ -22,6 +24,7 @@ import type {
   AgentSourceContent,
   AgentTargetMeta,
   AppSettings,
+  ApplyProgress,
   BackupRunDetails,
   BackupRunSummary,
   BrainSetupSeedResult,
@@ -1013,6 +1016,40 @@ async function runAction(action: string): Promise<ActionResult> {
   }
 }
 
+/* ---- apply progress ---- */
+
+const MOCK_SKILLS = ["handoff", "diagnose", "implementation-plan", "release-check"];
+
+/** The files a surface writes, for display: a directory surface lists its files like the backend would. */
+function surfaceFiles(surface: SetupSurfaceId): string[] {
+  const path = SURFACE_PATHS[surface];
+  if (surface.endsWith("_agents")) return agentRows.map(([filename]) => `${path}/${filename}`);
+  if (surface.endsWith("_skills")) return MOCK_SKILLS.map(name => `${path}/${name}/SKILL.md`);
+  return [path];
+}
+
+/**
+ * Reports a task the way the backend does: an optional backup pass, then one `apply` event per file (counting the
+ * files finished before it), the completed count, and `done`. Paced so the strip shows the values arriving.
+ */
+async function emitProgress(task: string, files: string[], options: { backup?: boolean } = {}): Promise<void> {
+  const total = files.length;
+  const report = (phase: ApplyProgress["phase"], done: number, file: string | null) =>
+    emit("apply-progress", { task, phase, done, total, file } satisfies ApplyProgress);
+  if (options.backup !== false) {
+    for (const [index, file] of files.entries()) {
+      await report("backup", index, file);
+      await delay(45);
+    }
+  }
+  for (const [index, file] of files.entries()) {
+    await report("apply", index, file);
+    await delay(110);
+  }
+  await report("apply", total, null);
+  await report("done", total, null);
+}
+
 /* ---- dispatcher ---- */
 
 type Args = Record<string, unknown> | undefined;
@@ -1066,9 +1103,12 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
     case "preview_setup":
       await delay(200);
       return setupPlan(arg<SetupSurfaceId[]>(args, "surfaces"));
-    case "apply_setup":
-      await delay(700);
-      return applyPlan(arg<SetupSurfaceId[]>(args, "surfaces"));
+    case "apply_setup": {
+      const surfaces = arg<SetupSurfaceId[]>(args, "surfaces");
+      const pending = surfaces.filter(surface => ["not_installed", "update_available"].includes(surfaceStates.get(surface) ?? ""));
+      await emitProgress("apply_setup", pending.flatMap(surfaceFiles));
+      return applyPlan(surfaces);
+    }
     case "preview_rules_diff":
       await delay(150);
       return mockRulesDiff(arg<RulesSurfaceId>(args, "surface"), (arg<RulesDiffMode | undefined>(args, "mode")) ?? "update");
@@ -1076,16 +1116,17 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
       await delay(200);
       return mockRulesConversion(arg<RulesSurfaceId>(args, "surface"));
     case "apply_rules_conversion":
-      await delay(700);
+      await emitProgress("apply_rules_conversion", [SURFACE_PATHS[arg<RulesSurfaceId>(args, "surface")]]);
       return applyRulesConversion(arg<RulesSurfaceId>(args, "surface"), arg<string | null>(args, "planFingerprint"), arg<string | null>(args, "previewToken"));
     case "set_rules_user_managed":
       await delay(100);
       setRulesUserManaged(arg<RulesSurfaceId>(args, "surface"), arg<boolean>(args, "userManaged"));
       return null;
     case "rollback_setup_transaction": {
-      await delay(400);
       const dryRun = arg<boolean>(args, "dryRun");
       const id = arg<string>(args, "transactionId");
+      if (dryRun) await delay(400);
+      else await emitProgress("rollback_setup_transaction", ["~/.claude/CLAUDE.md", "~/.claude/agents/verifier.md"], { backup: false });
       if (!lastTransactionId || id !== lastTransactionId) {
         return { success: false, transaction_id: id, applied: [], failed: [id], rolled_back: [], manual_steps: [], message: `transaction ${id} not found` } satisfies SetupResult;
       }
@@ -1117,7 +1158,7 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
         preview_token: scenario === "fresh" ? null : "uninstall-tok-1",
       } satisfies UninstallPlanView;
     case "apply_uninstall":
-      await delay(700);
+      await emitProgress("apply_uninstall", ["~/.claude/CLAUDE.md", "~/.codex/agents/verifier.toml", "~/.codex/agents/inspector.toml"]);
       for (const surface of ALL_SURFACES) surfaceStates.set(surface, "not_installed");
       lastTransactionId = "2026-10-06T09-00-00Z-u001";
       return { success: true, transaction_id: lastTransactionId, applied: ["~/.claude/CLAUDE.md", "~/.codex/agents"], failed: [], rolled_back: [], manual_steps: [], message: "uninstalled 2 · preserved 1 · merged 1" } satisfies SetupResult;
@@ -1223,7 +1264,7 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
   }
 }
 
-mockIPC((cmd, args) => handle(cmd, args as Args));
+mockIPC((cmd, args) => handle(cmd, args as Args), { shouldMockEvents: true });
 
 // Report as a Tauri host so the shell lays out exactly as in the app (traffic-light reserve).
 (globalThis as { isTauri?: boolean }).isTauri = true;

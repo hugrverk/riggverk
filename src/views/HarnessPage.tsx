@@ -65,6 +65,7 @@ export function HarnessPage({
   wsLog,
   wsLogCompletedAt,
   wsRunning,
+  wsProgress,
   status,
   workspaceValid,
   gitAvailable,
@@ -121,6 +122,7 @@ export function HarnessPage({
   const outputStrip = () => (
     <OutputStrip
       wsRunning={wsRunning}
+      progress={wsProgress}
       wsLog={wsLog}
       wsLogCompletedAt={wsLogCompletedAt}
       status={status}
