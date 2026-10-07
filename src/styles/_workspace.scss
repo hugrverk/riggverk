@@ -11,16 +11,20 @@
    (medium 13px / large 15px / extra-large 17px).
    ═══════════════════════════════════════════════════════════════════════════════════ */
 
-/* A pair stacks as list, detail, strip. The strip's row is `auto` (it is one line until it expands), so the
-   pane rows are explicit and only extra children fall back to the pane minimum. */
+/* A pair stacks as list, detail, strip in a flex column, not a grid: the screen's height is definite, so grid
+   rows would share it out and both panes would scroll inside a fraction of the window. Here each pane takes its
+   content height (at least the minimum, capped so a long detail still scrolls) and the screen scrolls past them. */
 @mixin stacked-pair($pane-min-height) {
-  grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: repeat(2, minmax($pane-min-height, auto)) auto;
-  grid-auto-rows: minmax($pane-min-height, auto);
+  display: flex;
+  flex-direction: column;
   overflow-y: auto;
-  align-content: start;
 
-  > .pane:not(.outstrip) { max-height: max(320px, 78vh); }
+  > * { flex: none; }
+
+  > .pane:not(.outstrip) {
+    min-height: $pane-min-height;
+    max-height: max(320px, 78vh);
+  }
 }
 
 /* The list column never drops below what the installed map needs (target names, six glyph columns and their
