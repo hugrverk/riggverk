@@ -10,6 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import { useConfirmMode } from "../shell/ShellState";
+import { TButton } from "../ui/TButton";
 
 export interface ConfirmConfig {
   title?: string;
@@ -126,7 +127,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // The key caps are aria-hidden so the buttons keep the plain accessible names "cancel" / "confirm";
+  // The bracket buttons keep the plain accessible names "cancel" / "confirm" (their key caps are aria-hidden);
   // aria-keyshortcuts exposes the keys to assistive technology instead.
   return (
     <ConfirmContext.Provider value={{ confirm }}>
@@ -149,23 +150,19 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
           <p id={messageId}>{config?.message}</p>
         </div>
         <div className="app-modal-footer">
-          <button
-            ref={cancelRef}
-            type="button"
-            className="btn btn-sm"
-            aria-keyshortcuts="n"
-            onClick={handleCancel}
-          >
-            <kbd aria-hidden="true">n</kbd> {config?.cancelLabel ?? "cancel"}
-          </button>
-          <button
-            type="button"
-            className={`btn btn-sm${config?.destructive ? " btn-danger" : " btn-primary"}`}
-            aria-keyshortcuts="y"
-            onClick={handleConfirm}
-          >
-            <kbd aria-hidden="true">y</kbd> {config?.confirmLabel ?? "confirm"}
-          </button>
+          <span className="tbtn-row">
+            <TButton ref={cancelRef} keys={["n"]} shortcut="n" onClick={handleCancel}>
+              {config?.cancelLabel ?? "cancel"}
+            </TButton>
+            <TButton
+              keys={["y"]}
+              shortcut="y"
+              variant={config?.destructive ? "danger" : "primary"}
+              onClick={handleConfirm}
+            >
+              {config?.confirmLabel ?? "confirm"}
+            </TButton>
+          </span>
         </div>
       </dialog>
     </ConfirmContext.Provider>

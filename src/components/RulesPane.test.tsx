@@ -141,4 +141,60 @@ describe("RulesPane", () => {
     renderPane({ status: "diff", surface: "codex_rules", diff: DIFF });
     expect(document.querySelector(".statusbar .mode")!.textContent).toBe("CONFIRM");
   });
+
+  describe("confirm line buttons", () => {
+    const confirmLine = () => within(screen.getByRole("region", { name: "Rules review" }).querySelector<HTMLElement>(".pane-foot")!);
+
+    it("ask the question with apply and cancel beside it; apply runs what y runs, cancel what n runs", () => {
+      const flow = renderPane({ status: "conversion", surface: "codex_rules", preview: PREVIEW });
+      const footer = screen.getByRole("region", { name: "Rules review" }).querySelector(".pane-foot")!;
+      expect(footer.querySelector(".q")!.textContent).toBe("convert codex rules: write the file shown?");
+      expect(Array.from(footer.querySelectorAll("button.tbtn")).map(button => button.textContent)).toEqual(["yapply", "ncancel"]);
+      expect(confirmLine().getByRole("button", { name: "apply" }).classList.contains("tbtn-primary")).toBe(true);
+      fireEvent.click(confirmLine().getByRole("button", { name: "apply" }));
+      expect(flow.apply).toHaveBeenCalledTimes(1);
+      fireEvent.click(confirmLine().getByRole("button", { name: "cancel" }));
+      expect(flow.close).toHaveBeenCalledTimes(1);
+    });
+
+    it("never apply on Enter, on the pane or on the cancel button", () => {
+      const flow = renderPane({ status: "conversion", surface: "codex_rules", preview: PREVIEW });
+      press("Enter");
+      fireEvent.keyDown(confirmLine().getByRole("button", { name: "cancel" }), { key: "Enter" });
+      expect(flow.apply).not.toHaveBeenCalled();
+    });
+
+    it("hold apply for a running task or a preview without a token, with the reason", () => {
+      const busy = renderPane({ status: "conversion", surface: "codex_rules", preview: PREVIEW }, { busyLabel: "release-check" });
+      const apply = confirmLine().getByRole("button", { name: "apply" });
+      expect(apply.getAttribute("title")).toBe("release-check is running");
+      fireEvent.click(apply);
+      expect(busy.apply).not.toHaveBeenCalled();
+      cleanup();
+      const tokenless = renderPane({ status: "conversion", surface: "codex_rules", preview: { ...PREVIEW, preview_token: null } });
+      const held = confirmLine().getByRole("button", { name: "apply" });
+      expect(held.getAttribute("title")).toBe("the preview has no token; open it again");
+      fireEvent.click(held);
+      expect(tokenless.apply).not.toHaveBeenCalled();
+    });
+
+    it("offer only close beside a read-only diff", () => {
+      const flow = renderPane({ status: "diff", surface: "codex_rules", diff: DIFF });
+      expect(confirmLine().queryByRole("button", { name: "apply" })).toBeNull();
+      fireEvent.click(confirmLine().getByRole("button", { name: "close" }));
+      expect(flow.close).toHaveBeenCalledTimes(1);
+    });
+
+    it("lock while the conversion is applied", () => {
+      const flow = renderPane({ status: "applying", surface: "codex_rules", preview: PREVIEW });
+      const apply = confirmLine().getByRole("button", { name: "apply" });
+      const cancel = confirmLine().getByRole("button", { name: "cancel" });
+      expect(apply.getAttribute("title")).toBe("applying…");
+      expect(cancel.getAttribute("title")).toBe("applying; it cannot be cancelled");
+      fireEvent.click(apply);
+      fireEvent.click(cancel);
+      expect(flow.apply).not.toHaveBeenCalled();
+      expect(flow.close).not.toHaveBeenCalled();
+    });
+  });
 });

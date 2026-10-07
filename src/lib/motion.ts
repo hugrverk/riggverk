@@ -51,6 +51,18 @@ export function applyMotionSetting(setting: unknown): void {
   }
 }
 
+function subscribeToOsPreference(onChange: () => void): () => void {
+  const query = reducedMotionQuery();
+  if (!query?.addEventListener) return () => {};
+  query.addEventListener("change", onChange);
+  return () => query.removeEventListener("change", onChange);
+}
+
+/** Whether the OS asks for reduced motion right now; re-renders when that changes. */
+export function useSystemReducedMotion(): boolean {
+  return useSyncExternalStore(subscribeToOsPreference, () => reducedMotionQuery()?.matches === true, () => false);
+}
+
 function subscribeToMotion(onChange: () => void): () => void {
   const observer = new MutationObserver(onChange);
   observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-motion"] });

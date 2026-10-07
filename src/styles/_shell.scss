@@ -270,6 +270,29 @@
   min-width: 0;
 }
 
+/* A successful apply or rollback sweeps one accent line down the view area, once (hooks/useScanOnSuccess toggles
+   `.scan`). An overlay: it takes no space, ignores the pointer and the area clips it. Full motion only. */
+.view-area.scan { position: relative; }
+
+[data-motion="full"] .view-area.scan::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 5;
+  height: 48px;
+  border-bottom: 1px solid var(--accent);
+  background: linear-gradient(to bottom, transparent, rgba(var(--accent-rgb), 0.16));
+  pointer-events: none;
+  animation: view-scan 520ms ease-in-out both;
+}
+
+@keyframes view-scan {
+  from { transform: translateY(-48px); }
+  to { transform: translateY(100vh); }
+}
+
 .view-loading {
   display: flex;
   align-items: center;

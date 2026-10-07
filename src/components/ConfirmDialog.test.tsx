@@ -122,7 +122,42 @@ describe("ConfirmDialog", () => {
 
     expect(await screen.findByRole("dialog")).toBeTruthy();
     const deleteBtn = screen.getByRole("button", { name: /delete all/i });
-    expect(deleteBtn.className).toContain("btn-danger");
+    expect(deleteBtn.className).toContain("tbtn-danger");
+  });
+
+  it("lays the footer out as bracket buttons, cancel first, with the confirm one primary", async () => {
+    render(
+      <ConfirmProvider>
+        <TestConsumer />
+      </ConfirmProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /show confirm/i }));
+    const dialog = await screen.findByRole("dialog");
+    const buttons = Array.from(dialog.querySelectorAll<HTMLButtonElement>(".app-modal-footer button"));
+    expect(buttons.map(button => button.textContent)).toEqual(["ncancel", "yconfirm"]);
+    expect(buttons.every(button => button.classList.contains("tbtn"))).toBe(true);
+    expect(buttons[0]!.classList.contains("tbtn-primary")).toBe(false);
+    expect(buttons[1]!.classList.contains("tbtn-primary")).toBe(true);
+  });
+
+  it("uses the custom labels in the buttons and keeps the key caps out of their names", async () => {
+    function Labelled() {
+      const confirm = useConfirm();
+      return (
+        <button type="button" onClick={() => confirm({ message: "Go?", confirmLabel: "roll back", cancelLabel: "keep" })}>
+          trigger labelled
+        </button>
+      );
+    }
+    render(
+      <ConfirmProvider>
+        <Labelled />
+      </ConfirmProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /trigger labelled/i }));
+    await screen.findByRole("dialog");
+    expect(screen.getByRole("button", { name: "roll back" }).querySelector("kbd")!.textContent).toBe("y");
+    expect(screen.getByRole("button", { name: "keep" }).querySelector("kbd")!.textContent).toBe("n");
   });
 
   it("closes dialog when cancel is clicked and resolves to false", async () => {

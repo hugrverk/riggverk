@@ -102,7 +102,7 @@ Use fixture files in the isolated `HOME` (`~/.claude/CLAUDE.md`, `~/.codex/AGENT
 
 - [ ] Fresh and legacy settings enable Codex, OpenCode, Claude, and Cursor
 - [ ] Appearance (dark, light, system), all four text sizes (`small`, `medium`, `large`, `extra-large`), and theme colors autosave; `r` in the appearance pane resets after a confirm
-- [ ] Reduce Motion (Motion setting) disables pulse, scan, and flash animations
+- [ ] Motion `full` shows the launch sequence, apply progress (bar, file, spinner, elapsed), the success tick and scanline; `subtle` keeps only the progress indicators; `off` (or the OS reduced-motion preference) stops every animation
 - [ ] Landing page selection (`start`, `repo-dashboard`, `prompts`, `library`) persists and opens after app restart
 - [ ] Settings: `c` chooses a workspace folder; an invalid folder is refused with a reason; a valid one becomes the active workspace and status reloads; `R` resets to the default path
 - [ ] `AGENT_WORKSPACE_PATH` overrides the chosen path
@@ -174,7 +174,7 @@ Use fixture files in the isolated `HOME` (`~/.claude/CLAUDE.md`, `~/.codex/AGENT
 - Notes: ________
 
 ### Settings and workspace picker
-- [ ] Appearance, Reduce Motion, landing page, picker, harness enablement passed
+- [ ] Appearance, motion levels, landing page, picker, harness enablement passed
 - Notes: ________
 
 ### Library, Prompt Builder, Repo Dashboard

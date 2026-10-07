@@ -10,6 +10,7 @@ import type { Binding } from "../keyboard/registry";
 import { useKeymap } from "../keyboard/useKeymap";
 import { isSettingsConflictError } from "../lib/appSettingsMutation";
 import { displayPath } from "../lib/displayPath";
+import { useSystemReducedMotion } from "../lib/motion";
 import {
   APP_FONT_SIZE_LABELS,
   APP_FONT_SIZE_VALUES,
@@ -71,8 +72,9 @@ const APPEARANCE_OPTIONS = [
 
 const MOTION_OPTIONS = [
   { value: "full", label: "full" },
-  { value: "reduced", label: "reduced" },
-] as const;
+  { value: "subtle", label: "subtle" },
+  { value: "off", label: "off" },
+] as const satisfies ReadonlyArray<{ value: AppSettings["motion"]; label: string }>;
 
 const LANDING_OPTIONS = [
   { value: "start", label: "workspace" },
@@ -286,6 +288,8 @@ export function SettingsView({
   onResetWorkspace,
 }: SettingsViewProps) {
   const ids = useId();
+  // The OS preference beats the setting (lib/motion), so the row says when it is the one in charge.
+  const systemReducesMotion = useSystemReducedMotion();
   const screenRef = useRef<HTMLElement>(null);
   const labelId = (key: string) => `${ids}-${key}`;
   const [accentDraft, setAccentDraft] = useState(appSettings?.accent_color ?? "");
@@ -518,12 +522,12 @@ export function SettingsView({
     {
       ...label("motion", "motion"),
       value: (
-        <RadioGroup
-          options={MOTION_OPTIONS}
-          value={appSettings.motion === "off" ? "reduced" : "full"}
-          onSelect={mode => onSetMotion(mode === "reduced" ? "off" : "full")}
-          label="Reduce motion"
-        />
+        <>
+          <RadioGroup options={MOTION_OPTIONS} value={appSettings.motion} onSelect={onSetMotion} label="Motion" />
+          {systemReducesMotion && (
+            <div className="setting-hint c-dim">the system asks for reduced motion: motion is off until that changes</div>
+          )}
+        </>
       ),
     },
     {
