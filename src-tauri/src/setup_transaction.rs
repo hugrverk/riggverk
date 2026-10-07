@@ -2787,6 +2787,7 @@ mod tests {
 
     #[test]
     fn validation_fails_on_update_after_apply() {
+        let _guard = crate::test_env::guard::lock();
         let home = temp("val-home");
         let ws = temp("val-ws");
         fs::create_dir_all(home.join(".codex")).unwrap();
@@ -2845,6 +2846,7 @@ mod tests {
 
     #[test]
     fn automatic_restore_keeps_user_edit_when_digests_were_never_recorded() {
+        let _guard = crate::test_env::guard::lock();
         let (op, backup_dir, home, ws) =
             automatic_restore_fixture("auto-user-edit", "original", "user edit");
         let err = restore_artifact_from_backup(&op, &backup_dir, &home, &ws).unwrap_err();
@@ -2857,6 +2859,7 @@ mod tests {
 
     #[test]
     fn automatic_restore_restores_planned_content_and_skips_original() {
+        let _guard = crate::test_env::guard::lock();
         let bundled = crate::setup_roots::bundled_root().unwrap();
         let source = fs::read_to_string(bundled.join("templates/sync/codex-rules.md")).unwrap();
         let (op, backup_dir, home, ws) =
@@ -2876,6 +2879,7 @@ mod tests {
 
     #[test]
     fn automatic_restore_keeps_edit_made_after_recorded_apply() {
+        let _guard = crate::test_env::guard::lock();
         let (mut op, backup_dir, home, ws) =
             automatic_restore_fixture("auto-recorded", "original", "applied");
         let dest = home.join(".codex/AGENTS.md");
@@ -2893,6 +2897,7 @@ mod tests {
 
     #[test]
     fn restore_file_failure_keeps_the_destination() {
+        let _guard = crate::test_env::guard::lock();
         let (mut op, backup_dir, home, ws) =
             automatic_restore_fixture("restore-keeps-dest", "original", "current");
         // A backup that is not a regular file makes the copy fail.
