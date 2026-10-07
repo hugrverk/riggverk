@@ -5,9 +5,13 @@
      .screen.quad      Start and harness pages: four panes in DOM order
                        [1] list  [2] list  [3] facts  [4] output, laid out 2 x 2
      .screen.install   the install review: [1] plan  [2] output
+     .screen.pair      master-detail: a list and its detail side by side, the output strip (.outstrip, one
+                       row, see _terminal.scss) under both
+     .screen.review    install and rules review: the plan takes the full width, the output strip under it
 
    When the window is too small for the 2 x 2 grid the panes stack in one column and the screen scrolls.
-   The thresholds scale with the text size (medium 13px / large 15px / extra-large 17px).
+   A pair needs no height (two side-by-side panes fit any window that fits one), so it stacks by width alone,
+   with the strip last. The thresholds scale with the text size (medium 13px / large 15px / extra-large 17px).
    ═══════════════════════════════════════════════════════════════════════════════════ */
 
 @mixin stacked-panes($pane-min-height) {
@@ -25,6 +29,18 @@
   }
 }
 
+/* A pair stacks as list, detail, strip. The strip's row is `auto` (it is one line until it expands), so the
+   pane rows are explicit and only extra children fall back to the pane minimum. */
+@mixin stacked-pair($pane-min-height) {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: repeat(2, minmax($pane-min-height, auto)) auto;
+  grid-auto-rows: minmax($pane-min-height, auto);
+  overflow-y: auto;
+  align-content: start;
+
+  > .pane:not(.outstrip) { max-height: max(320px, 78vh); }
+}
+
 .screen.quad {
   grid-template-columns: minmax(300px, 2fr) minmax(0, 3fr);
   grid-template-rows: minmax(0, 1fr) minmax(0, 1.2fr);
@@ -40,8 +56,21 @@
   grid-template-rows: minmax(0, 1fr);
 }
 
+.screen.pair {
+  grid-template-columns: minmax(300px, 2fr) minmax(0, 3fr);
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+
+.screen.pair > .outstrip { grid-column: 1 / -1; }
+
+.screen.review {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+
 @media (max-width: 960px) {
   .screen.quad { @include stacked-panes(220px); }
+  .screen.pair { @include stacked-pair(260px); }
 
   .screen.install {
     grid-template-columns: minmax(0, 1fr);
@@ -64,6 +93,13 @@
   }
 }
 
+@media (max-width: 1100px) {
+  [data-app-font-size="large"] .screen.pair,
+  [data-app-font-size="extra-large"] .screen.pair {
+    @include stacked-pair(260px);
+  }
+}
+
 @media (max-width: 1250px), (max-height: 900px) {
   [data-app-font-size="extra-large"] .screen.quad {
     @include stacked-panes(260px);
@@ -71,6 +107,12 @@
 
   [data-app-font-size="extra-large"] .screen.install {
     @include stacked-panes(280px);
+  }
+}
+
+@media (max-width: 1250px) {
+  [data-app-font-size="extra-large"] .screen.pair {
+    @include stacked-pair(260px);
   }
 }
 
