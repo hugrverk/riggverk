@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useRef, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { Fragment, useEffect, useMemo, useRef, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useCommandList, useKeymapEntries, usePlatform } from "../keyboard/context";
 import { formatKeys, type Platform } from "../keyboard/keymap";
 import { bindingGroup, evaluateWhen, type RegisteredBinding } from "../keyboard/registry";
+import { MATRIX_LEGEND } from "../lib/installationView";
 import { ActionKey } from "../ui/ActionKey";
+import { Glyph } from "../ui/Glyph";
 import { KeyCaps } from "../ui/Kbd";
 import { trapTab, useRestoreFocus } from "./overlay";
 import { useShellState } from "./ShellState";
@@ -55,7 +57,7 @@ export function groupBindings(entries: readonly RegisteredBinding[], platform: P
 
 /**
  * `?` overlay generated from the registries: every registered binding grouped by its `group`, then every
- * command. Nothing here is hand-written, so it cannot drift from what the keys actually do.
+ * command. The keys cannot drift from what they do; the one static section is the installed-map glyph legend.
  */
 export function HelpOverlay() {
   const { helpOpen } = useShellState();
@@ -168,6 +170,19 @@ function HelpBody() {
               </dl>
             </section>
           )}
+          <section aria-label="Installed map">
+            <h3 className="group">Installed map</h3>
+            <dl className="kv">
+              {MATRIX_LEGEND.map(entry => (
+                <Fragment key={entry.label}>
+                  <dt>
+                    <Glyph name={entry.glyph} tone={entry.tone} />
+                  </dt>
+                  <dd>{entry.label}</dd>
+                </Fragment>
+              ))}
+            </dl>
+          </section>
         </div>
         <p className="foot">
           <ActionKey keys={["esc"]} onClick={closeHelp}>

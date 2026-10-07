@@ -302,7 +302,7 @@ export function LibraryView(props: LibraryViewProps) {
       break;
   }
 
-  // Opening the form from `n` or the footer puts the cursor in its title field.
+  // Opening the form from `n` or its status-bar hint puts the cursor in its title field.
   const createForm =
     sourceType === "docs" && props.showCreateDoc ? (
       <CreateDocForm
@@ -321,7 +321,6 @@ export function LibraryView(props: LibraryViewProps) {
     <div className={isBrain ? "screen library library-pair" : "screen library"} ref={rootRef}>
       <Pane
         id="items"
-        index={1}
         label="Library items"
         title={activeSource.label}
         meta={activeCount !== undefined ? `· ${activeCount}` : undefined}

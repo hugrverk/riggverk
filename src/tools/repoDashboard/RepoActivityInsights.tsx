@@ -598,7 +598,6 @@ export function RepoActivityInsights({
         <div className="repo-dashboard-activity-insights-body">
           <Pane
             id="contributions"
-            index={2}
             title="contributions"
             label="Contributions"
             className="repo-dashboard-activity-insights-chart"
@@ -650,7 +649,6 @@ export function RepoActivityInsights({
             {allStats.length ? (
               <Pane
                 id="contributors"
-                index={3}
                 title="contributors"
                 meta={`· ${allStats.length}`}
                 className="repo-dashboard-contributor-panel"
@@ -694,7 +692,6 @@ export function RepoActivityInsights({
             ) : null}
             <Pane
               id="commit-activity"
-              index={allStats.length ? 4 : 3}
               title="commit activity"
               className="repo-dashboard-heatmap-panel"
               bodyClassName="repo-dashboard-pane-body repo-dashboard-heatmap-body scroll-cue"

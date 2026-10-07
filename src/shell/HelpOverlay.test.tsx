@@ -42,7 +42,7 @@ describe("HelpOverlay", () => {
       <>
         <Registrar bindings={extra} />
         <Probe />
-        <Pane id="main" index={1} title="main">
+        <Pane id="main" title="main">
           <PaneList label="rows" items={[{ id: "a" }]} getKey={row => row.id} renderItem={row => <span>{row.id}</span>} />
         </Pane>
       </>,
@@ -95,6 +95,19 @@ describe("HelpOverlay", () => {
     expect(Array.from(row("Save").querySelectorAll("kbd")).map(kbd => kbd.textContent)).toEqual(["⌘S"]);
   });
 
+  it("ends with the installed-map glyph legend, drawn from the matrix's own glyphs", () => {
+    renderInFrame(<Registrar bindings={[]} />);
+    const map = within(openHelp()).getByRole("region", { name: "Installed map" });
+    const rows = Array.from(map.querySelectorAll("dt")).map(dt => [dt.textContent, dt.nextElementSibling!.textContent]);
+    expect(rows).toEqual([
+      ["●", "current"],
+      ["◐", "update / not installed"],
+      ["✗", "conflict"],
+      ["·", "off / n/a"],
+    ]);
+    expect(Array.from(map.querySelectorAll("dt .g")).every(glyph => glyph.getAttribute("aria-hidden") === "true")).toBe(true);
+  });
+
   it("lists the registered commands with their aliases", () => {
     renderInFrame(
       <Registrar
@@ -110,7 +123,7 @@ describe("HelpOverlay", () => {
 
   it("closes with Escape, ? and q, restoring focus to where it was", () => {
     renderInFrame(
-      <Pane id="main" index={1} title="main" scrollable>
+      <Pane id="main" title="main" scrollable>
         <button type="button">anchor</button>
       </Pane>,
     );
@@ -126,7 +139,7 @@ describe("HelpOverlay", () => {
   });
 
   it("closes from its close button and traps Tab inside", () => {
-    renderInFrame(<Pane id="main" index={1} title="main" scrollable><p>body</p></Pane>);
+    renderInFrame(<Pane id="main" title="main" scrollable><p>body</p></Pane>);
     const help = openHelp();
     const close = within(help).getByRole("button", { name: /close/ });
     act(() => close.focus());
@@ -138,7 +151,7 @@ describe("HelpOverlay", () => {
   });
 
   it("uses the styled structure: backdrop dialog, .help-box with sections and kv rows, and closes on backdrop click", () => {
-    renderInFrame(<Pane id="main" index={1} title="main" scrollable><p>body</p></Pane>);
+    renderInFrame(<Pane id="main" title="main" scrollable><p>body</p></Pane>);
     const help = openHelp();
     expect(help.className).toBe("help-overlay");
     const box = help.querySelector(":scope > .help-box")!;
@@ -153,7 +166,7 @@ describe("HelpOverlay", () => {
   });
 
   it("scrolls the help box from the keyboard while focus is on the dialog", () => {
-    renderInFrame(<Pane id="main" index={1} title="main" scrollable><p>body</p></Pane>);
+    renderInFrame(<Pane id="main" title="main" scrollable><p>body</p></Pane>);
     const help = openHelp();
     const box = help.querySelector<HTMLElement>(".help-box")!;
     // jsdom has no layout: give the box a scrollable extent.

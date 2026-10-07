@@ -73,7 +73,7 @@ function overviewWith(entries: Record<string, InstallationStatus>): Installation
 function Harness({ deps }: { deps: AppCommandDeps }) {
   useAppCommands(deps);
   return (
-    <Pane id="main" index={1} title="main" scrollable>
+    <Pane id="main" title="main" scrollable>
       <p>body</p>
     </Pane>
   );

@@ -66,8 +66,9 @@ function moveTo(name: string) {
   fireEvent.click(within(list).getAllByRole("option").find(option => option.textContent!.includes(name))!);
 }
 
-function status() {
-  return screen.getByRole("region", { name: "Status" });
+/** The detail pane of whichever row is under the cursor. */
+function detail() {
+  return screen.getByRole("region", { name: / detail$/ });
 }
 
 describe("StartView rules file", () => {
@@ -78,11 +79,11 @@ describe("StartView rules file", () => {
       />,
     );
     // The workspace row is under the cursor first: no rules line.
-    expect(status().textContent).not.toContain("refinement");
+    expect(detail().textContent).not.toContain("refinement");
     moveTo("claude");
-    expect(status().textContent).toContain("base block edited: left as is · 2 refinement lines preserved");
-    expect(status().textContent).toContain("the base block was edited");
-    expect(status().textContent).toContain("open the claude page: d diff · v convert · m leave as is");
+    expect(detail().textContent).toContain("base block edited: left as is · 2 refinement lines preserved");
+    expect(detail().textContent).toContain("the base block was edited");
+    expect(detail().textContent).toContain("open the claude page: d diff · v convert · m leave as is");
   });
 
   it("shows a file the user manages as base updates available, with a text label instead of a conflict", () => {
@@ -92,10 +93,10 @@ describe("StartView rules file", () => {
       />,
     );
     moveTo("claude");
-    const rules = within(screen.getByRole("listbox", { name: "claude surfaces" })).getAllByRole("option").find(row => row.textContent!.includes("rules"))!;
+    const rules = within(screen.getByRole("list", { name: "claude surfaces" })).getAllByRole("listitem").find(row => row.textContent!.includes("rules"))!;
     expect(rules.querySelector(".meta")!.textContent).toContain("you manage");
-    expect(status().textContent).toContain("base updates available, you manage this file");
-    expect(status().textContent).toContain("m hand back");
+    expect(detail().textContent).toContain("base updates available, you manage this file");
+    expect(detail().textContent).toContain("m hand back");
   });
 
   it("warns on the Codex row when AGENTS.override.md replaces AGENTS.md", () => {
@@ -108,10 +109,10 @@ describe("StartView rules file", () => {
         codexRuntimeHealth={health}
       />,
     );
-    expect(within(status()).queryByRole("alert")).toBeNull();
+    expect(within(detail()).queryByRole("alert")).toBeNull();
     moveTo("codex");
-    expect(within(status()).getByRole("alert").textContent).toContain("AGENTS.override.md replaces AGENTS.md");
+    expect(within(detail()).getByRole("alert").textContent).toContain("AGENTS.override.md replaces AGENTS.md");
     moveTo("claude");
-    expect(within(status()).queryByRole("alert")).toBeNull();
+    expect(within(detail()).queryByRole("alert")).toBeNull();
   });
 });

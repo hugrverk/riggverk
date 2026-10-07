@@ -31,8 +31,13 @@ export interface UseRulesActionsOptions {
   /** An install review is open on this page. */
   installOpen: boolean;
   flow: RulesFlow;
-  /** Panes whose footers offer `d`, `v` and `m`. */
+  /** Panes whose focus offers `d`, `v` and `m` as status-bar hints. */
   paneIds: readonly string[];
+  /**
+   * Whether the keys apply right now (the page's cursor is on the rules file). When false they are not offered
+   * and do nothing; `:rules` is not affected. Default true.
+   */
+  active?: boolean;
   /** Reload installation state after "leave as is" changed. */
   reload: () => void | Promise<void>;
 }
@@ -70,6 +75,7 @@ export function useRulesActions({
   installOpen,
   flow,
   paneIds,
+  active = true,
   reload,
 }: UseRulesActionsOptions): RulesActions {
   const confirm = useConfirm();
@@ -129,7 +135,7 @@ export function useRulesActions({
     }
   };
 
-  const whenFor = (gate: RulesGate) => () => (!gate.visible ? false : gate.reason ?? true);
+  const whenFor = (gate: RulesGate) => () => (!active || !gate.visible ? false : gate.reason ?? true);
   // `m` is one key with two meanings: leave a conflict as is, or hand a left-as-is file back.
   const toggle = gates.manage.visible ? gates.manage : gates.leave;
   const bindings: Binding[] = paneIds.flatMap((paneId): Binding[] => [

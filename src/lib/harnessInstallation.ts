@@ -1,7 +1,6 @@
 import {
   INSTALL_AGENTS,
   type AppSettings,
-  type InstallationState,
   type InstallAgent,
   type SetupPlan,
   type SetupSurfaceId,
@@ -144,26 +143,4 @@ export function surfacesNeedingApply(plan: SetupPlan): SetupSurfaceId[] {
     .filter((op) => op.kind === "create" || op.kind === "update" || op.kind === "remove")
     .map((op) => op.surface);
   return [...new Set(surfaces)];
-}
-
-export function installationChipTone(
-  state: InstallationState,
-): "ok" | "warn" | "fail" | "muted" {
-  switch (state) {
-    case "current": return "ok";
-    case "update_available":
-    case "not_installed": return "warn";
-    case "conflict": return "fail";
-    case "unavailable": return "muted";
-  }
-}
-
-export function installationChipLabel(state: InstallationState): string {
-  switch (state) {
-    case "current": return "current";
-    case "update_available": return "update available";
-    case "not_installed": return "not installed";
-    case "conflict": return "conflicts";
-    case "unavailable": return "unavailable";
-  }
 }

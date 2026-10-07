@@ -15,8 +15,9 @@ interface OpenCodeModelRowsProps {
 const FORMAT_ERROR = "Must be provider/model format";
 
 /**
- * The OpenCode model override as editable rows of the runtime pane: `model` and `small model` are selects
- * (a text input while no model list is available), `s` saves, `m` reloads the list, `e` edits. The value is
+ * The OpenCode model override as editable rows of the detail pane: `model` and `small model` are selects
+ * (a text input while no model list is available), `s` saves, `R` reloads the list, `e` edits. `m` is the
+ * rules file's "leave as is" in the same pane, so the reload does not take it. The value is
  * stored in app settings and applied on the next OpenCode update; workspace templates are not edited.
  */
 export function OpenCodeModelRows({ workspaceValid, onModelUpdated }: OpenCodeModelRowsProps) {
@@ -155,7 +156,7 @@ export function OpenCodeModelRows({ workspaceValid, onModelUpdated }: OpenCodeMo
         },
         {
           id: "opencode.model.refresh",
-          keys: "m",
+          keys: "R",
           title: "Reload the available models",
           hint: "reload models",
           group: "OpenCode model",

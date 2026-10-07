@@ -1,6 +1,6 @@
 import { useRef, type ReactNode } from "react";
 import { focusDefaultPane } from "../keyboard/focus";
-import type { InstallationState, InstallAgent } from "../types";
+import type { InstallAgent } from "../types";
 import { INSTALL_AGENTS } from "../types";
 import { Glyph } from "../ui/Glyph";
 import { CommandLine } from "./CommandLine";
@@ -18,7 +18,6 @@ export interface AppFrameProps {
   libraryDirty: boolean;
   settingsErrored: boolean;
   enabledHarnessIds?: readonly InstallAgent[];
-  harnessStates?: Partial<Record<InstallAgent, InstallationState | null>>;
   /** Global error message; rendered as a role=alert line under the top line. */
   error: string | null;
   onDismissError: () => void;
@@ -40,7 +39,6 @@ export function AppFrame({
   libraryDirty,
   settingsErrored,
   enabledHarnessIds = INSTALL_AGENTS,
-  harnessStates,
   error,
   onDismissError,
   topRight,
@@ -68,7 +66,6 @@ export function AppFrame({
         libraryDirty={libraryDirty}
         settingsErrored={settingsErrored}
         enabledHarnessIds={enabledHarnessIds}
-        harnessStates={harnessStates}
         onSwitchView={goTo}
         right={topRight}
       />

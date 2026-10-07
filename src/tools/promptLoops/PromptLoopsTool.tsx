@@ -250,7 +250,6 @@ export function PromptLoopsTool({
       <div className="screen prompt-loops-main">
         <Pane
           id="prompt-list"
-          index={1}
           title="prompts"
           meta={`· ${group.group} · ${items.length}`}
           className="prompt-loops-list-pane"
@@ -306,7 +305,6 @@ export function PromptLoopsTool({
 
         <Pane
           id="prompt-detail"
-          index={2}
           title="detail"
           label="Prompt detail"
           className="prompt-loops-detail-pane"

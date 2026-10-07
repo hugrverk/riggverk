@@ -14,7 +14,6 @@ export function OpenCodeView({ runtimeHealth, onModelUpdated, ...props }: OpenCo
     <HarnessPage
       {...props}
       harness="opencode"
-      summary="Install or update OpenCode rules, config, agents, and skills through one managed workflow."
       runtime={{ harness: "opencode", health: runtimeHealth }}
       runtimeExtra={<OpenCodeModelRows workspaceValid={props.workspaceValid} onModelUpdated={onModelUpdated} />}
     />

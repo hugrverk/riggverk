@@ -126,7 +126,6 @@ export function RepoDocsWorkspace({
       <div className="repo-dashboard-docs-body">
         <Pane
           id="docs-list"
-          index={2}
           title="docs"
           meta={`· ${filteredDocs.length}`}
           label="Document list"
@@ -182,7 +181,6 @@ export function RepoDocsWorkspace({
 
         <Pane
           id="docs-reader"
-          index={3}
           title={selectedDoc ? docDisplayTitle(selectedDoc.path) : "reader"}
           meta={selectedDoc ? `· ${selectedDoc.path}` : undefined}
           label="Document reader"

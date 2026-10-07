@@ -26,11 +26,11 @@ function View({ bindings = [] as Binding[], confirm = false, context = null as s
   useStatusContext(context);
   return (
     <>
-      <Pane id="main" index={1} title="main" defaultFocus>
+      <Pane id="main" title="main" defaultFocus>
         <PaneList label="rows" items={[{ id: "a" }]} getKey={row => row.id} renderItem={row => <span>{row.id}</span>} />
         <input aria-label="field" />
       </Pane>
-      <Pane id="other" index={2} title="other" scrollable>
+      <Pane id="other" title="other" scrollable>
         <p>x</p>
       </Pane>
     </>
@@ -120,6 +120,25 @@ describe("StatusBar", () => {
     expect(bar.queryByRole("button", { name: /update/ })).toBeNull();
     fireEvent.click(bar.getByRole("button", { name: /copy output/ }));
     expect(copy).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows a disabled hint with the reason when when() returns a string, and hides it when false", () => {
+    const run = vi.fn();
+    renderInFrame(
+      <View
+        bindings={[
+          { id: "t.a", keys: "a", title: "A", hint: "apply", scope: "pane", paneId: "main", when: () => "nothing to apply", run },
+          { id: "t.b", keys: "b", title: "B", hint: "hidden", scope: "pane", paneId: "main", when: () => false, run },
+        ]}
+      />,
+    );
+    act(() => screen.getByRole("listbox", { name: "rows" }).focus());
+    const apply = within(status()).getByRole("button", { name: /apply/ });
+    expect(apply.getAttribute("aria-disabled")).toBe("true");
+    expect(apply.getAttribute("title")).toBe("nothing to apply");
+    fireEvent.click(apply);
+    expect(run).not.toHaveBeenCalled();
+    expect(within(status()).queryByRole("button", { name: /hidden/ })).toBeNull();
   });
 
   it("offers the command-line and help hints in NORMAL mode and row hints while a list has focus", () => {

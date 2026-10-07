@@ -76,6 +76,11 @@ function pane(name: string): HTMLElement {
   return screen.getByRole("region", { name });
 }
 
+/** Key hints of the focused pane live in the status bar. */
+function hints() {
+  return within(screen.getByLabelText("Status bar"));
+}
+
 /** Keeps the draft in state so radio selections re-render like they do under App. */
 function StatefulSettings({ onAppearance }: { onAppearance?: (value: AppSettings["appearance"]) => void }) {
   const [settings, setSettings] = useState<AppSettings>({ ...defaultSettings(), revision: 1 });
@@ -346,14 +351,14 @@ describe("SettingsView autosave status", () => {
 
   it("offers retry only after a failed save, from the footer and with s", () => {
     const { props, rerenderFrame } = renderSettings();
-    expect(within(pane("App")).queryByRole("button", { name: /retry save/ })).toBeNull();
+    focus(radios("Landing page")[0]!);
+    expect(hints().queryByRole("button", { name: /retry save/ })).toBeNull();
 
     rerenderFrame(<SettingsView {...props} settingsSaveStatus="error" />);
-    const retry = within(pane("App")).getByRole("button", { name: /retry save/ });
+    const retry = hints().getByRole("button", { name: /retry save/ });
     fireEvent.click(retry);
     expect(props.onRetrySave).toHaveBeenCalledTimes(1);
 
-    focus(radios("Landing page")[0]!);
     press(document.activeElement!, "s");
     expect(props.onRetrySave).toHaveBeenCalledTimes(2);
   });
@@ -361,7 +366,8 @@ describe("SettingsView autosave status", () => {
   it("disables retry while a colour is invalid", () => {
     const { props } = renderSettings({ settingsSaveStatus: "error" });
     fireEvent.change(screen.getByLabelText("Accent hex code"), { target: { value: "nope" } });
-    const retry = within(pane("App")).getByRole("button", { name: /retry save/ });
+    focus(radios("Landing page")[0]!);
+    const retry = hints().getByRole("button", { name: /retry save/ });
     expect(retry.getAttribute("aria-disabled")).toBe("true");
     fireEvent.click(retry);
     expect(props.onRetrySave).not.toHaveBeenCalled();
@@ -371,7 +377,8 @@ describe("SettingsView autosave status", () => {
 describe("SettingsView reset", () => {
   it("resets appearance from the footer key and from r, through onReset", async () => {
     const { props } = renderSettings();
-    fireEvent.click(within(pane("Appearance")).getByRole("button", { name: /reset appearance/ }));
+    focus(radios("Theme")[0]!);
+    fireEvent.click(hints().getByRole("button", { name: /reset appearance/ }));
     expect(props.onReset).toHaveBeenCalledTimes(1);
     await act(async () => {});
 
@@ -462,16 +469,16 @@ describe("SettingsView workspace row", () => {
     await act(async () => {});
   });
 
-  it("reaches choose and reset from the appearance pane, and hints them in its footer", async () => {
+  it("reaches choose and reset from the appearance pane, and hints them in the status bar", async () => {
     const onChooseWorkspace = vi.fn(async () => null);
     const onResetWorkspace = vi.fn(async () => null);
     const { rerenderFrame, props } = renderSettings({ onChooseWorkspace, onResetWorkspace });
 
-    const footer = pane("Appearance").querySelector(".pane-foot") as HTMLElement;
-    expect(within(footer).getByRole("button", { name: /choose folder/ })).not.toBeNull();
-    expect(within(footer).getByRole("button", { name: /reset folder/ }).getAttribute("aria-disabled")).toBe("true");
-
     focus(radios("Theme")[0]!);
+    expect(within(pane("Appearance")).queryByRole("button", { name: /choose folder/ })).toBeNull();
+    expect(hints().getByRole("button", { name: /choose folder/ })).not.toBeNull();
+    expect(hints().getByRole("button", { name: /reset folder/ }).getAttribute("aria-disabled")).toBe("true");
+
     press(document.activeElement!, "c");
     expect(onChooseWorkspace).toHaveBeenCalledTimes(1);
     await act(async () => {});

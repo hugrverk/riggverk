@@ -108,7 +108,7 @@ describe("RulesPane", () => {
 
   it("holds apply while another task runs and says why", () => {
     const flow = renderPane({ status: "conversion", surface: "codex_rules", preview: PREVIEW }, { busyLabel: "release-check" });
-    const apply = within(screen.getByRole("region", { name: "Rules review" })).getByRole("button", { name: /apply/ });
+    const apply = within(screen.getByLabelText("Status bar")).getByRole("button", { name: /apply/ });
     expect(apply.getAttribute("title")).toBe("release-check is running");
     press("y");
     expect(flow.apply).not.toHaveBeenCalled();

@@ -34,7 +34,7 @@ function activityCellClass(index: number, activeIndex: number): string {
   return "terminal-activity-cell";
 }
 
-/** Owns its animation tick so only this small component re-renders while a task runs. */
+/** Owns its animation tick so only this small component re-renders while a task runs. A span, so it can sit inside a button. */
 export function ActivityLoader({ idle = false }: { idle?: boolean }) {
   const [activeIndex, setActiveIndex] = useState(0);
 
@@ -45,12 +45,12 @@ export function ActivityLoader({ idle = false }: { idle?: boolean }) {
   }, [idle]);
 
   return (
-    <div
+    <span
       className={`terminal-activity${idle ? " terminal-activity-idle" : ""}`}
       aria-hidden="true"
     >
       {Array.from({ length: ACTIVITY_CELLS }, (_, i) => <span key={i} className={activityCellClass(i, activeIndex)} />)}
-    </div>
+    </span>
   );
 }
 

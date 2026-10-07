@@ -558,7 +558,6 @@ export function RepoDashboardTool({
       <section className="repo-dashboard-main screen">
         <Pane
           id="repo"
-          index={1}
           title="repo"
           meta={snapshotMatchesPath && snapshot ? `· ${snapshot.branch}` : undefined}
           label="Repository"
@@ -862,7 +861,6 @@ export function RepoDashboardTool({
               <div className="repo-dashboard-overview-lower">
                 <Pane
                   id="latest"
-                  index={5}
                   title="latest merge / commit"
                   label="Latest merge or commit"
                   className="repo-dashboard-latest"
@@ -877,7 +875,6 @@ export function RepoDashboardTool({
                 </Pane>
                 <Pane
                   id="recent"
-                  index={6}
                   title="recent activity"
                   label="Recent activity"
                   className="repo-dashboard-recent-activity-card"

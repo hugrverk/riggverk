@@ -51,6 +51,15 @@ describe("UninstallCard", () => {
     expect(container.firstChild).toBeNull();
   });
 
+  it("tells the uninstall as one row and keeps the preview button for the mouse", () => {
+    renderCard();
+    const card = screen.getByRole("region", { name: "Uninstall" });
+    expect(card.querySelector("dt")!.textContent).toBe("uninstall");
+    expect(card.querySelector("dd")!.textContent).toBe("previews first · backed up, rollback-capable");
+    expect(card.querySelector("p")).toBeNull();
+    expect(within(card).getByRole("button", { name: /preview uninstall/i })).toBeTruthy();
+  });
+
   it("previews first and only applies the reviewed fingerprint and token after confirming", async () => {
     const { onApply } = renderCard();
     fireEvent.click(screen.getByRole("button", { name: /preview uninstall/i }));

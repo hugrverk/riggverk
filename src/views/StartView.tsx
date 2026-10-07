@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { InstallPlanPane } from "../components/InstallPlanPane";
-import { OutputPane, useFocusOutputOnNewTransaction } from "../components/OutputPane";
+import { OutputStrip, useFocusOutputOnNewTransaction } from "../components/OutputStrip";
 import { SurfaceMatrix } from "../components/SurfaceMatrix";
 import { completedLabel } from "../components/TerminalOutput";
 import { UninstallCard } from "../components/UninstallCard";
@@ -52,9 +52,10 @@ export interface StartViewProps extends PageOutputProps, PageInstallProps {
 }
 
 /**
- * The workspace page: [1] the workspace and the enabled harnesses with their installation state, [2] the
- * surfaces of the one under the cursor plus the installed-state matrix, [3] its status, verification and the
- * uninstall and recovery actions, [4] output. `u` and `p` open the install review in place of the panes.
+ * The workspace page, master-detail: [1] the workspace and the enabled harnesses with their installation state
+ * and the installed-state matrix, [2] the detail of the one under the cursor (surfaces, status, verification, the
+ * uninstall and recovery actions), and the output strip under both. `u` and `p` open the install review in
+ * place of the panes.
  */
 export function StartView({
   workspaceDiagnostics,
@@ -108,35 +109,35 @@ export function StartView({
         : "release-check is not available in this workspace";
   const statusBindings: Binding[] = [
     {
-      id: "start.status.release-check",
+      id: "start.detail.release-check",
       keys: "R",
       title: "Run the release check",
       hint: "release-check",
       group: "Verify",
       scope: "pane",
-      paneId: "status",
+      paneId: "detail",
       when: () => releaseCheckState,
       run: () => onReleaseCheck(),
     },
     {
-      id: "start.status.open-folder",
+      id: "start.detail.open-folder",
       keys: "o",
       title: "Open the workspace folder",
       hint: "open folder",
       group: "Verify",
       scope: "pane",
-      paneId: "status",
+      paneId: "detail",
       when: () => (!workspaceValid ? false : busy ? `${wsRunning} is running` : true),
       run: () => onOpenFolder(),
     },
     {
-      id: "start.status.backups",
+      id: "start.detail.backups",
       keys: "B",
       title: "Open the backups folder",
       hint: "backups",
       group: "Verify",
       scope: "pane",
-      paneId: "status",
+      paneId: "detail",
       when: () => (busy ? `${wsRunning} is running` : true),
       run: () => onOpenBackupsFolder(),
     },
@@ -145,7 +146,7 @@ export function StartView({
     [
       ...installBindings({
         idPrefix: "start",
-        paneIds: ["harnesses", "surfaces", "status"],
+        paneIds: ["harnesses", "detail"],
         update,
         previewDisabled,
         // The review of the harness under the cursor stays on this page.
@@ -158,9 +159,8 @@ export function StartView({
     { enabled: !showPlan },
   );
 
-  const outputPane = (index: number) => (
-    <OutputPane
-      index={index}
+  const outputStrip = (
+    <OutputStrip
       wsRunning={wsRunning}
       wsLog={wsLog}
       wsLogCompletedAt={wsLogCompletedAt}
@@ -177,9 +177,9 @@ export function StartView({
 
   if (showPlan) {
     return (
-      <section className="screen install" aria-label="Workspace install review">
-        <InstallPlanPane flow={install.flow} index={1} busyLabel={wsRunning} backupRoot={backupRoot} onApply={install.apply} />
-        {outputPane(2)}
+      <section className="screen review" aria-label="Workspace install review">
+        <InstallPlanPane flow={install.flow} busyLabel={wsRunning} backupRoot={backupRoot} onApply={install.apply} />
+        {outputStrip}
       </section>
     );
   }
@@ -187,8 +187,6 @@ export function StartView({
   const selectedLabel = overviewLabel(selected);
   const surfaceRows = surfaceRowsFor(selected, entry, appSettings);
   const meta = targetMeta(entry, { workspaceValid, id: selected });
-  const offCount = surfaceRows.filter(row => row.state === "off").length;
-  const onCount = surfaceRows.length - offCount;
   const conflicts = entry?.status?.conflict_details ?? [];
   // The rules file of the harness under the cursor: its state is told here, the actions live on the harness page.
   const rulesSurface = selected === "workspace" ? null : rulesSurfaceOf(selected);
@@ -196,9 +194,10 @@ export function StartView({
   const rulesHint = rulesModel ? rulesPageHint(rulesModel, selectedLabel) : null;
   const override = selected === "codex" ? rulesOverrideWarning(codexRuntimeHealth) : null;
 
+  // The state is the detail title's. The backend summary adds something only for an update: the breakdown.
+  const changes = entry?.status?.state === "update_available" ? entry.status.summary.replace(/^Update available:\s*/, "") : null;
   const statusItems: KvItem[] = [
-    { label: "state", value: meta.text, tone: meta.tone },
-    ...(entry?.status ? [{ label: "summary", value: entry.status.summary, wrap: true }] : []),
+    ...(changes ? [{ label: "changes", value: changes, wrap: true }] : []),
     ...(entry?.error ? [{ label: "error", value: entry.error, tone: "fail" as const, wrap: true }] : []),
     ...(conflicts.length > 0
       ? [{ label: "preserved", value: conflicts.join(", "), tone: "warn" as const, wrap: true }]
@@ -210,9 +209,8 @@ export function StartView({
           ...(rulesHint ? [{ label: "", value: rulesHint, tone: "dim" as const, wrap: true, id: "rules-hint" }] : []),
         ]
       : []),
-    ...(selected === "workspace"
-      ? [{ label: "path", value: resolvedPath, wrap: true }]
-      : [{ label: "surfaces", value: `${onCount} on${offCount > 0 ? `, ${offCount} off (target toggles)` : ""}` }]),
+    // A harness's surfaces, on and off, are the rows right above.
+    ...(selected === "workspace" ? [{ label: "path", value: resolvedPath, wrap: true }] : []),
   ];
 
   const lastCheck = wsLog?.action === "release_check" ? wsLog : null;
@@ -241,8 +239,8 @@ export function StartView({
   ];
 
   return (
-    <section className="screen quad" aria-label="Workspace">
-      <Pane id="harnesses" index={1} title="harnesses" label="Harnesses" defaultFocus meta={`· ${targets.length}`}>
+    <section className="screen pair" aria-label="Workspace">
+      <Pane id="harnesses" title="harnesses" label="Harnesses" defaultFocus meta={`· ${targets.length}`}>
         <PaneList
           label="Harnesses"
           items={targets}
@@ -253,7 +251,7 @@ export function StartView({
           onActivate={id => {
             const harness = harnessForView(id);
             if (harness) onNavigate(harness);
-            else focusPaneById("surfaces");
+            else focusPaneById("detail");
           }}
           renderItem={id => {
             const row = targetMeta(overview.entries[id], { workspaceValid, id });
@@ -265,42 +263,46 @@ export function StartView({
             );
           }}
         />
-        <p className="c-dim pane-note">
-          Install and update one local workspace for rules, skills, agents, configs, and documentation. Unknown or
-          modified files are preserved for review.
-        </p>
-      </Pane>
-
-      <Pane id="surfaces" index={2} title="surfaces" label="Surfaces" meta={`· ${selectedLabel}`}>
-        <PaneList
-          label={`${selectedLabel} surfaces`}
-          items={surfaceRows}
-          getKey={row => row.surface}
-          renderItem={row => {
-            // A rules file the user keeps is not current and not a conflict; the rules model says so.
-            const display = row.surface === rulesSurface && rulesModel?.display ? rulesModel.display : row.display;
-            return (
-              <>
-                <span className="nm">
-                  {row.name} {row.detail && <span className="c-dim">{row.detail}</span>}
-                </span>
-                <span className={`meta ${toneClass(display.tone)}`.trim()}>
-                  <Glyph name={display.glyph} tone={display.tone} /> {display.label}
-                </span>
-              </>
-            );
-          }}
-        />
         <div className="group pane-group">installed map</div>
         <SurfaceMatrix rows={matrixModel(overview, targets, appSettings)} selectedId={selected} />
       </Pane>
 
-      <Pane id="status" index={3} title="status" label="Status" scrollable meta={`· ${selectedLabel}`}>
+      <Pane
+        id="detail"
+        title={selectedLabel}
+        label={`${selectedLabel} detail`}
+        scrollable
+        meta={
+          <>
+            · <span className={toneClass(meta.tone)}>{meta.text}</span>
+          </>
+        }
+      >
         {override && (
           <p className="rules-alert" role="alert">
             <Glyph name="conflict" tone="warn" /> <b>{override.title}.</b> {override.detail}
           </p>
         )}
+        <div className="group pane-group">surfaces</div>
+        {/* Static rows, not a listbox: the detail is one scroll and j/k do not move inside it. */}
+        <ul className="rows rows-static" aria-label={`${selectedLabel} surfaces`}>
+          {surfaceRows.map(row => {
+            // A rules file the user keeps is not current and not a conflict; the rules model says so. Its own
+            // sentence is the `rules` / `why` rows below, so the row does not repeat it.
+            const isRules = row.surface === rulesSurface && rulesModel !== null;
+            const display = isRules && rulesModel.display ? rulesModel.display : row.display;
+            return (
+              <li key={row.surface} className="row">
+                <span className="cur" aria-hidden="true" />
+                <span className="nm">
+                  {row.name} {row.detail && !isRules && <span className="c-dim">{row.detail}</span>}
+                </span>
+                <span className={`meta ${toneClass(display.tone)}`.trim()}>{display.label}</span>
+              </li>
+            );
+          })}
+        </ul>
+        <div className="group pane-group">status</div>
         <Kv items={statusItems} aria-label={`${selectedLabel} status`} />
         <div className="group pane-group">verify</div>
         <Kv items={verifyItems} aria-label="Verification and backups" />
@@ -323,7 +325,7 @@ export function StartView({
         )}
       </Pane>
 
-      {outputPane(4)}
+      {outputStrip}
     </section>
   );
 }

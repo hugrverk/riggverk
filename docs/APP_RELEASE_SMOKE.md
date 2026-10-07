@@ -40,7 +40,7 @@ Tab keys below assume the default order: workspace, codex, opencode, cursor, cla
 - [ ] `n` (and Escape) cancels; nothing was written (check the isolated workspace dir)
 - [ ] `p` shows the plan with no apply path; `n` closes it
 - [ ] `u` then `y` installs: `.agent-workspace/workspace.json`, `.agent-workspace/managed-state.json`, and the bundled files exist
-- [ ] Output pane shows the result; a second `u` reports `nothing to change`, no mutation
+- [ ] The output strip under the panes opens by itself with the result; a second `u` reports `nothing to change`, no mutation
 - [ ] `d` expands a row's details; `c` jumps to the next conflict; `j`/`k` move rows
 - [ ] A modified bundled file in the workspace appears as a conflict row (`preserved, skipped`), `y` applies only the safe rows, and the conflict file is unchanged
 - [ ] Moving the conflicting file away and installing again updates it
@@ -75,10 +75,10 @@ Use fixture files in the isolated `HOME` (`~/.claude/CLAUDE.md`, `~/.codex/AGENT
 
 ## 6. Rollback and uninstall
 
-- [ ] After `y`, the footer and output show a transaction; `z` on the output pane (or `:rollback`) runs a dry run and a confirm, then restores the backed-up files
+- [ ] After `y`, the output strip shows the transaction and takes focus; `z` there (or `:rollback`) runs a dry run and a confirm, then restores the backed-up files
 - [ ] `:rollback` with nothing to roll back says so
 - [ ] Backups exist under `setup/<transaction id>/` with `manifest.json`, `artifacts/`, `managed-state.previous.json` (dirs 0700, files 0600); Library saves under `docs/<id>-<timestamp>/`
-- [ ] Workspace status pane lists the backup run count and the root path; `B` opens the folder
+- [ ] The workspace detail pane lists the backup run count and the root path; `B` there opens the folder
 - [ ] **preview uninstall** classifies removable, preserved, and merge-managed artifacts; modified and unknown fixture files stay on disk after uninstall
 - [ ] Merge-managed rules files with user text outside the block are kept; a file with only an unedited block is removable
 - [ ] **uninstall everything** removes proven app-owned files and the workspace becomes invalid

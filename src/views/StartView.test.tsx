@@ -113,7 +113,33 @@ function press(key: string, target: Element = harnessList()) {
   fireEvent.keyDown(target, { key });
 }
 
+/** The detail pane of the row under the cursor ("workspace detail", "claude detail", ...). */
+function detail(name = "workspace") {
+  return screen.getByRole("region", { name: `${name} detail` });
+}
+
+/** A key hint of the focused pane: hints live in the status bar, not in the panes. */
+function hint(name: RegExp) {
+  return within(screen.getByLabelText("Status bar")).getByRole("button", { name });
+}
+
 describe("StartView panes", () => {
+  it("is a list, the detail of its cursor row and the output strip, without a prose note", () => {
+    const { container } = renderStart();
+    const screenEl = screen.getByRole("region", { name: "Workspace" });
+    expect(screenEl.classList.contains("pair")).toBe(true);
+    expect([...screenEl.children].map(child => child.getAttribute("data-pane-id"))).toEqual(["harnesses", "detail", "output"]);
+    expect(screen.getByRole("region", { name: "Harnesses" })).toBeTruthy();
+    expect(detail()).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Output" })).toBeTruthy();
+    // The detail is one scroll, not a second listbox, and the old surfaces and status panes are gone.
+    expect(screen.queryByRole("listbox", { name: /surfaces/ })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Surfaces" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Status" })).toBeNull();
+    expect(container.textContent).not.toContain("Install and update one local workspace");
+    expect(container.querySelector(".pane-note")).toBeNull();
+  });
+
   it("shows the workspace and the enabled harnesses with their installation state", () => {
     renderStart({ enabledHarnessIds: ["codex", "claude", "cursor"] });
     const rows = within(harnessList()).getAllByRole("option");
@@ -126,23 +152,31 @@ describe("StartView panes", () => {
     expect(screen.getByRole("region", { name: "Harnesses" }).querySelector(".pane-title")!.textContent).toContain("· 4");
   });
 
-  it("lists the surfaces of the harness under the cursor with a glyph and a state word each", () => {
+  it("follows the cursor: the detail pane shows the surfaces of the row under it, a state word each", () => {
     renderStart();
+    const workspace = detail();
+    expect(workspace.querySelector(".pane-title")!.textContent).toBe("workspace · current");
     for (let i = 0; i < 4; i++) press("j");
     expect(rowOf(harnessList(), "claude").getAttribute("aria-selected")).toBe("true");
-    const surfaces = screen.getByRole("listbox", { name: "claude surfaces" });
-    const rows = within(surfaces).getAllByRole("option");
-    expect(rows.map(row => row.querySelector(".meta")!.textContent!.trim())).toEqual(["◐ update", "● current", "✗ conflict"]);
+    expect(screen.queryByRole("region", { name: "workspace detail" })).toBeNull();
+    const claude = detail("claude");
+    expect(claude.querySelector(".pane-title")!.textContent).toBe("claude · 1 to update · 1 conflict");
+    expect(claude.querySelector(".pane-title .c-fail")!.textContent).toBe("1 to update · 1 conflict");
+    const rows = within(within(claude).getByRole("list", { name: "claude surfaces" })).getAllByRole("listitem");
+    expect(rows.map(row => row.querySelector(".meta")!.textContent)).toEqual(["update", "current", "conflict"]);
     expect(rows[0]!.textContent).toContain("bundle a7c3e1 → installed 91be20");
+    // One state signal per row: the word in its tone colour, no glyph.
+    expect(rows.map(row => row.querySelector(".meta")!.className)).toEqual(["meta c-warn", "meta c-ok", "meta c-fail"]);
+    expect(claude.querySelector(".rows .g")).toBeNull();
   });
 
   it("shows surfaces whose target toggle is off as off", () => {
     renderStart({ appSettings: settingsOf() });
     press("j");
     expect(rowOf(harnessList(), "codex").getAttribute("aria-selected")).toBe("true");
-    const surfaces = screen.getByRole("listbox", { name: "codex surfaces" });
-    const config = within(surfaces).getAllByRole("option").find(row => row.textContent!.includes("config"))!;
-    expect(config.querySelector(".meta")!.textContent!.trim()).toBe("· off");
+    const surfaces = within(detail("codex")).getByRole("list", { name: "codex surfaces" });
+    const config = within(surfaces).getAllByRole("listitem").find(row => row.textContent!.includes("config"))!;
+    expect(config.querySelector(".meta")!.textContent).toBe("off");
     expect(config.textContent).toContain("target codex_config is off");
   });
 
@@ -156,21 +190,36 @@ describe("StartView panes", () => {
 
   it("shows status, verification and the last transaction for the selected target", () => {
     renderStart({ rollbackTransactionId: "1710000000000", wsLog: { success: true, action: "release_check", stdout: "ok", stderr: "", exit_code: 0 }, wsLogCompletedAt: Date.now() });
-    const status = screen.getByRole("region", { name: "Status" });
-    expect(within(status).getByLabelText("workspace status").textContent).toContain("current");
-    expect(within(status).getByLabelText("workspace status").textContent).toContain("/tmp/workspace");
-    const verify = within(status).getByLabelText("Verification and backups");
+    const pane = detail();
+    // The state is the title's ("workspace · current"); the status rows add the path.
+    expect(pane.querySelector(".pane-title")!.textContent).toContain("workspace · current");
+    expect(within(pane).getByLabelText("workspace status").textContent).not.toContain("current");
+    expect(within(pane).getByLabelText("workspace status").textContent).toContain("/tmp/workspace");
+    const verify = within(pane).getByLabelText("Verification and backups");
     expect(verify.textContent).toContain("release-check");
     expect(verify.textContent).toContain("ok");
     expect(verify.textContent).toContain("2 runs · /tmp/backups");
     expect(verify.textContent).toContain("1710000000000 · rollback available");
   });
 
-  it("shows the output pane with the rollback key when a transaction can be rolled back", () => {
+  it("adds the backend's change breakdown only for an update, without its prefix", () => {
+    const update = installationStatus("update_available", [], { create_count: 5, update_count: 165, remove_count: 3 }, {
+      summary: "Update available: 5 to create, 165 to update, 3 to remove",
+    });
+    renderStart({ overview: overviewOf({ workspace: update }) });
+    const status = within(detail()).getByLabelText("workspace status");
+    expect(status.textContent).toContain("changes5 to create, 165 to update, 3 to remove");
+    expect(status.textContent).not.toContain("Update available");
+    cleanup();
+    renderStart({ overview: overviewOf({ workspace: installationStatus("conflict", [], { conflict_count: 2 }) }) });
+    expect(within(detail()).getByLabelText("workspace status").textContent).not.toContain("changes");
+  });
+
+  it("offers the rollback key on the output strip when a transaction can be rolled back", () => {
     const onRollback = vi.fn();
     renderStart({ rollbackTransactionId: "1710000000000", onRollback });
-    const output = screen.getByRole("region", { name: "Output" });
-    fireEvent.click(within(output).getByRole("button", { name: /rollback/ }));
+    act(() => within(screen.getByRole("region", { name: "Output" })).getByRole("button").focus());
+    fireEvent.click(hint(/rollback/));
     expect(onRollback).toHaveBeenCalledTimes(1);
   });
 });
@@ -189,23 +238,26 @@ describe("StartView keys", () => {
   it("offers an update key for the workspace row and labels it after the state", () => {
     const { props: p } = renderStart({ overview: overviewOf({ workspace: installationStatus("update_available", [], { update_count: 1 }) }) });
     const list = harnessList();
-    expect(within(screen.getByRole("region", { name: "Harnesses" })).getByRole("button", { name: /update/ })).toBeTruthy();
+    act(() => list.focus());
+    expect(hint(/update/)).toBeTruthy();
     press("u", list);
     expect(p.install.open).toHaveBeenCalledWith("workspace", { scope: "start" });
   });
 
   it("does not offer an update for a target that is already current, and explains why", () => {
     const { props: p } = renderStart();
+    act(() => harnessList().focus());
     press("u");
     expect(p.install.open).not.toHaveBeenCalled();
-    const update = within(screen.getByRole("region", { name: "Harnesses" })).getByRole("button", { name: /update/ });
+    const update = hint(/update/);
     expect(update.getAttribute("aria-disabled")).toBe("true");
     expect(update.getAttribute("title")).toMatch(/already current/);
   });
 
   it("lets the workspace be installed while it is invalid, but nothing else", () => {
     const { props: p } = renderStart({ workspaceDiagnostics: INVALID_DIAGNOSTICS, workspaceValid: false, overview: overviewOf({}) });
-    expect(within(screen.getByRole("region", { name: "Harnesses" })).getByRole("button", { name: /install/ })).toBeTruthy();
+    act(() => harnessList().focus());
+    expect(hint(/install/)).toBeTruthy();
     press("u");
     expect(p.install.open).toHaveBeenCalledWith("workspace", { scope: "start" });
     press("j");
@@ -214,29 +266,46 @@ describe("StartView keys", () => {
     expect(rowOf(harnessList(), "codex").textContent).toContain("needs workspace");
   });
 
-  it("Enter opens a harness page, and on the workspace row drills into the surfaces pane", () => {
+  it("Enter opens a harness page, and on the workspace row moves focus to the detail pane", () => {
     const { props: p } = renderStart();
     act(() => harnessList().focus());
     press("Enter");
     expect(p.onNavigate).not.toHaveBeenCalled();
-    expect(document.activeElement).toBe(screen.getByRole("listbox", { name: "workspace surfaces" }));
+    expect(document.activeElement).toBe(within(detail()).getByRole("group", { name: "workspace detail" }));
     act(() => harnessList().focus());
     press("j");
     press("Enter");
     expect(p.onNavigate).toHaveBeenCalledWith("codex");
   });
 
-  it("runs the release check, opens the folder and the backups from the status pane", () => {
+  it("offers the release check, the folder and the backups while the detail pane has focus", () => {
     const { props: p } = renderStart();
-    const status = screen.getByRole("region", { name: "Status" });
-    const body = status.querySelector(".pane-body")!;
-    act(() => (body as HTMLElement).focus());
-    fireEvent.keyDown(body, { key: "R", shiftKey: true });
-    fireEvent.keyDown(body, { key: "o" });
-    fireEvent.keyDown(body, { key: "B", shiftKey: true });
+    const body = within(detail()).getByRole("group", { name: "workspace detail" });
+    act(() => body.focus());
+    fireEvent.click(hint(/release-check/));
+    fireEvent.click(hint(/open folder/));
+    fireEvent.click(hint(/backups/));
     expect(p.onReleaseCheck).toHaveBeenCalledTimes(1);
     expect(p.onOpenFolder).toHaveBeenCalledTimes(1);
     expect(p.onOpenBackupsFolder).toHaveBeenCalledTimes(1);
+    fireEvent.keyDown(body, { key: "R", shiftKey: true });
+    fireEvent.keyDown(body, { key: "o" });
+    fireEvent.keyDown(body, { key: "B", shiftKey: true });
+    expect(p.onReleaseCheck).toHaveBeenCalledTimes(2);
+    expect(p.onOpenFolder).toHaveBeenCalledTimes(2);
+    expect(p.onOpenBackupsFolder).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not offer those keys while the harness list has focus, but offers update, preview and refresh on both panes", () => {
+    renderStart({ overview: overviewOf({ workspace: installationStatus("update_available", [], { update_count: 1 }) }) });
+    act(() => harnessList().focus());
+    expect(within(screen.getByLabelText("Status bar")).queryByRole("button", { name: /open folder/ })).toBeNull();
+    expect(hint(/preview/)).toBeTruthy();
+    expect(hint(/refresh/)).toBeTruthy();
+    act(() => within(detail()).getByRole("group", { name: "workspace detail" }).focus());
+    expect(hint(/update/)).toBeTruthy();
+    expect(hint(/preview/)).toBeTruthy();
+    expect(hint(/refresh/)).toBeTruthy();
   });
 
   it("refreshes with r", () => {
@@ -247,13 +316,16 @@ describe("StartView keys", () => {
 });
 
 describe("StartView install review", () => {
-  it("shows the plan and the output instead of the four panes while the review is open", () => {
+  it("shows the plan and the output strip instead of the two panes while the review is open", () => {
     const flow = flowOf([op("workspace_bundle", "update")], { label: "update workspace", surfaces: ["workspace_bundle"] });
     renderStart({ install: installScreenOf(flow, "start") });
     expect(screen.getByRole("grid", { name: "Install plan" })).toBeTruthy();
     expect(screen.getByRole("region", { name: "Output" })).toBeTruthy();
     expect(screen.queryByRole("listbox", { name: "Harnesses" })).toBeNull();
-    expect(screen.getByRole("region", { name: "Workspace install review" })).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "workspace detail" })).toBeNull();
+    const review = screen.getByRole("region", { name: "Workspace install review" });
+    expect(review.classList.contains("review")).toBe(true);
+    expect([...review.children].map(child => child.getAttribute("data-pane-id"))).toEqual(["plan", "output"]);
   });
 
   it("hands apply to the install screen when y is pressed", () => {

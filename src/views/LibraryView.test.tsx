@@ -657,9 +657,9 @@ describe("LibraryView editor", () => {
   it("shows the open doc in the editor pane title with its path, and a modified marker while dirty", () => {
     const { update } = renderLibrary({ docs, activeDoc: doc, docDraft: doc.content });
     const title = screen.getByRole("region", { name: "Editor" }).querySelector(".pane-title")!;
-    expect(title.textContent).toBe("[2] Alpha · docs/a.md");
+    expect(title.textContent).toBe("Alpha · docs/a.md");
     update({ docs, activeDoc: doc, docDraft: "# Edited", docDirty: true });
-    expect(title.textContent).toBe("[2] Alpha · docs/a.md · modified");
+    expect(title.textContent).toBe("Alpha · docs/a.md · modified");
   });
 
   it("moves into the editor with Enter or i from the list, and Escape returns to the list", () => {
@@ -1059,9 +1059,11 @@ describe("LibraryView new doc form", () => {
 
   it("only offers new doc for the docs source of a valid workspace", () => {
     const { update } = renderLibrary({ docs });
-    expect(within(screen.getByRole("region", { name: "Library items" })).getByRole("button", { name: /new doc/ })).not.toBeNull();
+    act(() => listbox().focus());
+    const bar = within(screen.getByLabelText("Status bar"));
+    expect(bar.getByRole("button", { name: /new doc/ })).not.toBeNull();
     update({ docs, workspaceValid: false });
-    expect(within(screen.getByRole("region", { name: "Library items" })).queryByRole("button", { name: /new doc/ })).toBeNull();
+    expect(bar.queryByRole("button", { name: /new doc/ })).toBeNull();
   });
 });
 

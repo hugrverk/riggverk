@@ -21,14 +21,14 @@ export interface Binding {
   /** Help-overlay section. Defaults to a label derived from `scope`. */
   group?: string;
   /**
-   * Short label. Bindings with a hint render as a clickable ActionKey in the owning pane footer
-   * (`paneId`) or, for global bindings, in the status bar.
+   * Short label. Bindings with a hint render as a clickable ActionKey in the status bar: while the owning
+   * pane (`paneId`) has focus, or always for global bindings.
    */
   hint?: string;
   scope: Scope;
-  /** Anchors the binding to `section[data-pane-id=...]`: active only while focus is inside that pane, shown in its footer. */
+  /** Anchors the binding to `section[data-pane-id=...]`: active only while focus is inside that pane, hinted in the status bar. */
   paneId?: string;
-  /** true = enabled, false = inactive (hidden from footers), string = disabled with that reason. */
+  /** true = enabled, false = inactive (hidden from hints), string = disabled with that reason. */
   when?: () => boolean | string;
   /** Fire while a text field has focus. Default false. */
   inEditable?: boolean;
@@ -122,7 +122,7 @@ export function isVisibleHint(entry: RegisteredBinding): boolean {
   return active || disabledReason !== null;
 }
 
-/** Bindings that show up in a pane footer: anchored to the pane and carrying a hint. */
+/** Bindings hinted in the status bar while the pane has focus: anchored to the pane and carrying a hint. */
 export function paneHintEntries(entries: readonly RegisteredBinding[], paneId: string): RegisteredBinding[] {
   return entries.filter(entry => entry.binding.paneId === paneId && entry.binding.hint);
 }

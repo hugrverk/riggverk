@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { focusDefaultPane, focusPane } from "../keyboard/focus";
 import type { Binding } from "../keyboard/registry";
@@ -15,13 +15,13 @@ function Panes({ bindings = [] as Binding[] }) {
   useKeymap(bindings);
   return (
     <>
-      <Pane id="one" index={1} title="harnesses" meta="· 5">
+      <Pane id="one" title="harnesses" meta="· 5">
         <button type="button">first</button>
       </Pane>
-      <Pane id="two" index={2} title="surfaces" scrollable footer={<span>static hint</span>}>
+      <Pane id="two" title="surfaces" scrollable footer={<span>static hint</span>}>
         <p>body</p>
       </Pane>
-      <Pane id="three" index={3} title="output" defaultFocus scrollable>
+      <Pane id="three" title="output" defaultFocus scrollable>
         <p>log</p>
       </Pane>
     </>
@@ -29,7 +29,7 @@ function Panes({ bindings = [] as Binding[] }) {
 }
 
 describe("Pane", () => {
-  it("renders the contract markup: section, [n] index, title, body, footer", () => {
+  it("renders the contract markup: section, title, body, and a footer only when one is given", () => {
     const { container } = renderWithShell(<Panes />);
     const pane = screen.getByRole("region", { name: "harnesses" });
     expect(pane.tagName).toBe("SECTION");
@@ -37,8 +37,8 @@ describe("Pane", () => {
     expect(pane.getAttribute("data-pane-id")).toBe("one");
     expect(pane.getAttribute("data-keyscope")).toBe("pane");
     const title = pane.querySelector(".pane-title")!;
-    expect(title.querySelector(".k")!.textContent).toBe("[1]");
-    expect(title.textContent).toBe("[1] harnesses · 5");
+    expect(title.querySelector(".k")).toBeNull();
+    expect(title.textContent).toBe("harnesses · 5");
     expect(pane.querySelector(".pane-body")).not.toBeNull();
     expect(pane.querySelector(".pane-foot")).toBeNull();
     expect(container.querySelector("[data-pane-id='two'] .pane-foot")!.textContent).toBe("static hint");
@@ -85,50 +85,23 @@ describe("Pane", () => {
     expect(document.activeElement).toBe(screen.getByRole("group", { name: "surfaces" }));
   });
 
-  describe("footer ActionKeys", () => {
-    it("renders bindings with a hint as buttons that call run, and ignores bindings of other panes", () => {
-      const update = vi.fn();
-      const other = vi.fn();
-      renderWithShell(
+  describe("binding hints", () => {
+    it("does not render hinted bindings in the pane: they live in the status bar", () => {
+      const { container } = renderWithShell(
         <Panes
           bindings={[
-            { id: "t.update", keys: "u", title: "Update", hint: "update", scope: "pane", paneId: "one", run: update },
-            { id: "t.other", keys: "o", title: "Other", hint: "other", scope: "pane", paneId: "two", run: other },
-            { id: "t.nohint", keys: "n", title: "No hint", scope: "pane", paneId: "one", run: () => {} },
+            { id: "t.update", keys: "u", title: "Update", hint: "update", scope: "pane", paneId: "one", run: () => {} },
+            { id: "t.other", keys: "o", title: "Other", hint: "other", scope: "pane", paneId: "two", run: () => {} },
           ]}
         />,
       );
-      const pane = screen.getByRole("region", { name: "harnesses" });
-      const buttons = within(pane).getAllByRole("button", { name: /update/ });
-      expect(buttons).toHaveLength(1);
-      expect(buttons[0]!.className).toContain("action-key");
-      expect(buttons[0]!.querySelector("kbd")!.textContent).toBe("u");
-      fireEvent.click(buttons[0]!);
-      expect(update).toHaveBeenCalledTimes(1);
-      expect(update.mock.calls[0]![0]).toBeInstanceOf(KeyboardEvent);
-      expect(within(pane).queryByRole("button", { name: /other/ })).toBeNull();
-      expect(other).not.toHaveBeenCalled();
+      expect(container.querySelector("[data-pane-id='one'] .pane-foot")).toBeNull();
+      expect(screen.queryByRole("button", { name: /update/ })).toBeNull();
+      // A pane that has a static footer shows only that content.
+      expect(container.querySelector("[data-pane-id='two'] .pane-foot")!.textContent).toBe("static hint");
     });
 
-    it("shows a disabled hint with the reason when when() returns a string, and hides it when false", () => {
-      const run = vi.fn();
-      renderWithShell(
-        <Panes
-          bindings={[
-            { id: "t.a", keys: "a", title: "A", hint: "apply", scope: "pane", paneId: "one", when: () => "nothing to apply", run },
-            { id: "t.b", keys: "b", title: "B", hint: "hidden", scope: "pane", paneId: "one", when: () => false, run },
-          ]}
-        />,
-      );
-      const apply = screen.getByRole("button", { name: /apply/ });
-      expect(apply.getAttribute("aria-disabled")).toBe("true");
-      expect(apply.getAttribute("title")).toBe("nothing to apply");
-      fireEvent.click(apply);
-      expect(run).not.toHaveBeenCalled();
-      expect(screen.queryByRole("button", { name: /hidden/ })).toBeNull();
-    });
-
-    it("also fires the binding from the keyboard while focus is inside the pane", () => {
+    it("still fires the binding from the keyboard while focus is inside the pane", () => {
       const run = vi.fn();
       renderWithShell(
         <Panes bindings={[{ id: "t.update", keys: "u", title: "Update", hint: "update", scope: "pane", paneId: "one", run }]} />,

@@ -95,6 +95,11 @@ function cursorRow() {
   return grid().querySelector("tr[aria-selected='true']") as HTMLElement;
 }
 
+/** Key hints live in the status bar (the review pane has focus), not in the pane. */
+function bar() {
+  return within(screen.getByLabelText("Status bar"));
+}
+
 function modeText() {
   return screen.getByLabelText("Status bar").querySelector(".mode")!.textContent;
 }
@@ -141,13 +146,14 @@ describe("InstallPlanPane", () => {
     expect(conflict.textContent).toContain("preserved, skipped");
   });
 
-  it("asks the question the footer buttons answer and notes the backup", () => {
+  it("asks the question the status-bar buttons answer and notes the backup", () => {
     renderPane(makeFlow());
     const pane = screen.getByRole("region", { name: "Install plan" });
     expect(within(pane).getByRole("status").textContent).toBe("apply 3 safe changes, skip 1 conflict?");
     expect(pane.querySelector(".bk")!.textContent).toContain("/tmp/backups");
-    expect(within(pane).getByRole("button", { name: /apply/ })).toBeTruthy();
-    expect(within(pane).getByRole("button", { name: /cancel/ })).toBeTruthy();
+    expect(within(pane).queryByRole("button")).toBeNull();
+    expect(bar().getByRole("button", { name: /apply/ })).toBeTruthy();
+    expect(bar().getByRole("button", { name: /cancel/ })).toBeTruthy();
   });
 
   it("shows CONFIRM mode while the review is open", () => {
@@ -168,7 +174,7 @@ describe("InstallPlanPane", () => {
 
   it("applies with the visible apply button", () => {
     const { onApply } = renderPane(makeFlow());
-    fireEvent.click(within(screen.getByRole("region", { name: "Install plan" })).getByRole("button", { name: /apply/ }));
+    fireEvent.click(bar().getByRole("button", { name: /apply/ }));
     expect(onApply).toHaveBeenCalledTimes(1);
   });
 
@@ -184,7 +190,7 @@ describe("InstallPlanPane", () => {
     const { onApply } = renderPane(makeFlow({ operations: [op("claude_skills", "conflict")] }));
     press("y");
     expect(onApply).not.toHaveBeenCalled();
-    const apply = within(screen.getByRole("region", { name: "Install plan" })).getByRole("button", { name: /apply/ });
+    const apply = bar().getByRole("button", { name: /apply/ });
     expect(apply.getAttribute("aria-disabled")).toBe("true");
     expect(apply.getAttribute("title")).toBe("nothing safe to apply, 1 conflict");
     fireEvent.click(apply);
@@ -195,7 +201,7 @@ describe("InstallPlanPane", () => {
     const { onApply } = renderPane(makeFlow(), { busyLabel: "release-check" });
     press("y");
     expect(onApply).not.toHaveBeenCalled();
-    const apply = within(screen.getByRole("region", { name: "Install plan" })).getByRole("button", { name: /apply/ });
+    const apply = bar().getByRole("button", { name: /apply/ });
     expect(apply.getAttribute("title")).toBe("release-check is running");
   });
 
@@ -205,8 +211,8 @@ describe("InstallPlanPane", () => {
     press("y");
     expect(onApply).not.toHaveBeenCalled();
     const pane = screen.getByRole("region", { name: "Install plan" });
-    expect(within(pane).queryByRole("button", { name: /apply/ })).toBeNull();
-    expect(within(pane).getByRole("button", { name: /close/ })).toBeTruthy();
+    expect(bar().queryByRole("button", { name: /apply/ })).toBeNull();
+    expect(bar().getByRole("button", { name: /close/ })).toBeTruthy();
     expect(within(pane).getByRole("status").textContent).toContain("preview only");
     press("n");
     expect(flow.cancel).toHaveBeenCalledTimes(1);
@@ -271,8 +277,7 @@ describe("InstallPlanPane", () => {
 
   it("offers c only when there is a conflict", () => {
     renderPane(makeFlow({ operations: [op("claude_rules", "update")] }));
-    const pane = screen.getByRole("region", { name: "Install plan" });
-    expect(within(pane).queryByRole("button", { name: /next conflict/ })).toBeNull();
+    expect(bar().queryByRole("button", { name: /next conflict/ })).toBeNull();
     const before = cursorRow();
     press("c");
     expect(cursorRow()).toBe(before);
@@ -301,7 +306,7 @@ describe("InstallPlanPane", () => {
     expect(pane.textContent).toContain("Installed files changed after this preview");
     fireEvent.keyDown(pane, { key: "r" });
     expect(stale.repreview).toHaveBeenCalledTimes(1);
-    fireEvent.click(within(pane).getByRole("button", { name: /preview again/ }));
+    fireEvent.click(bar().getByRole("button", { name: /preview again/ }));
     expect(stale.repreview).toHaveBeenCalledTimes(2);
     cleanup();
 

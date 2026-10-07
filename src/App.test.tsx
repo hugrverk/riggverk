@@ -90,6 +90,24 @@ function commandCount(backend: Backend, command: string): number {
   return backend.commandLog.filter(entry => entry === command).length;
 }
 
+/**
+ * A key hint of the Start view's detail pane (the cursor starts on "workspace"). Hints live in the status bar
+ * while their pane has focus, so this moves focus (back) into the pane when the hint is not showing (a dialog
+ * may have taken it). Call it outside `act`: a nested act would not flush the focus change before the query.
+ */
+function findStatusHint(name: RegExp): Promise<HTMLElement> {
+  return waitFor(() => {
+    const bar = within(screen.getByLabelText("Status bar"));
+    const shown = bar.queryByRole("button", { name });
+    if (shown) return shown;
+    act(() => {
+      (document.activeElement as HTMLElement | null)?.blur();
+      screen.getByRole("group", { name: "workspace detail" }).focus();
+    });
+    return bar.getByRole("button", { name });
+  });
+}
+
 describe("App", () => {
   beforeEach(() => {
     invokeMock.mockReset();
@@ -141,10 +159,10 @@ describe("App", () => {
       const backend = installBackend({ workspace_path: "/tmp/chosen-ws" });
       backend.releaseCheckAvailable = true;
       render(<App />);
-      const status = await screen.findByRole("region", { name: "Status" });
-      const runButton = await within(status).findByRole("button", { name: /release-check/i });
-      await waitFor(() => expect(runButton).not.toHaveAttribute("aria-disabled", "true"));
+      await screen.findByRole("region", { name: "workspace detail" });
+      await waitFor(async () => expect(await findStatusHint(/release-check/i)).not.toHaveAttribute("aria-disabled", "true"));
 
+      const runButton = await findStatusHint(/release-check/i);
       await act(async () => {
         fireEvent.click(runButton);
       });
@@ -155,8 +173,9 @@ describe("App", () => {
       });
       expect(commandCount(backend, "run_action")).toBe(0);
 
+      const runAgain = await findStatusHint(/release-check/i);
       await act(async () => {
-        fireEvent.click(runButton);
+        fireEvent.click(runAgain);
       });
       await act(async () => {
         fireEvent.click(within(dialog).getByRole("button", { name: /run/i, hidden: true }));
@@ -174,9 +193,9 @@ describe("App", () => {
     render(<App />);
     await waitFor(() => expect(commandCount(backend, "get_settings")).toBeGreaterThanOrEqual(1));
 
-    // The Start view's status pane offers the default workspace folder action once diagnostics report a valid workspace.
-    const status = await screen.findByRole("region", { name: "Status" });
-    const openButton = await within(status).findByRole("button", { name: /open folder/i });
+    // The Start view's detail pane offers the default workspace folder action once diagnostics report a valid workspace.
+    await screen.findByRole("region", { name: "workspace detail" });
+    const openButton = await findStatusHint(/open folder/i);
     await act(async () => {
       fireEvent.click(openButton);
     });

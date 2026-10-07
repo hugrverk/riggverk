@@ -727,12 +727,6 @@ function AppShell() {
         libraryDirty={libraryDirty}
         settingsErrored={settingsSaveStatus === "error"}
         enabledHarnessIds={enabledHarnessIds}
-        harnessStates={{
-          codex: overview.entries.codex?.status?.state ?? null,
-          opencode: overview.entries.opencode?.status?.state ?? null,
-          cursor: overview.entries.cursor?.status?.state ?? null,
-          claude: overview.entries.claude?.status?.state ?? null,
-        }}
         error={error}
         onDismissError={() => setError(null)}
         statusRight={`${backups.length} backup${backups.length === 1 ? "" : "s"}`}

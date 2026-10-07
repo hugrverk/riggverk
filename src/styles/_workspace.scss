@@ -2,75 +2,59 @@
    Workspace page, harness pages and the install review: layouts and the pieces the shared
    primitives (_primitives.scss) do not cover. Panes are `section.pane` inside `.screen`.
 
-     .screen.quad      Start and harness pages: four panes in DOM order
-                       [1] list  [2] list  [3] facts  [4] output, laid out 2 x 2
-     .screen.install   the install review: [1] plan  [2] output
+     .screen.pair      master-detail: a list and its detail side by side, the output strip (.outstrip, one
+                       row, see _terminal.scss) under both
+     .screen.review    install and rules review: the plan takes the full width, the output strip under it
 
-   When the window is too small for the 2 x 2 grid the panes stack in one column and the screen scrolls.
-   The thresholds scale with the text size (medium 13px / large 15px / extra-large 17px).
+   A pair needs no height (two side-by-side panes fit any window that fits one), so it stacks by width alone:
+   list, detail, strip in one column, and the screen scrolls. The thresholds scale with the text size
+   (medium 13px / large 15px / extra-large 17px).
    ═══════════════════════════════════════════════════════════════════════════════════ */
 
-@mixin stacked-panes($pane-min-height) {
-  grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: none;
-  grid-auto-rows: minmax($pane-min-height, auto);
+/* A pair stacks as list, detail, strip in a flex column, not a grid: the screen's height is definite, so grid
+   rows would share it out and both panes would scroll inside a fraction of the window. Here each pane takes its
+   content height (at least the minimum, capped so a long detail still scrolls) and the screen scrolls past them. */
+@mixin stacked-pair($pane-min-height) {
+  display: flex;
+  flex-direction: column;
   overflow-y: auto;
-  align-content: start;
 
-  /* :nth-child(n) matches the specificity of the 2 x 2 placement rules, so these (later) rules win. */
-  > .pane:nth-child(n) {
-    grid-column: auto;
-    grid-row: auto;
+  > * { flex: none; }
+
+  > .pane:not(.outstrip) {
+    min-height: $pane-min-height;
     max-height: max(320px, 78vh);
   }
 }
 
-.screen.quad {
-  grid-template-columns: minmax(300px, 2fr) minmax(0, 3fr);
-  grid-template-rows: minmax(0, 1fr) minmax(0, 1.2fr);
+/* The list column never drops below what the installed map needs (target names, six glyph columns and their
+   gaps: about 31 characters at any text size), so the map does not scroll sideways just above a stacking threshold. */
+.screen.pair {
+  grid-template-columns: minmax(calc(var(--fs) * 32), 2fr) minmax(0, 3fr);
+  grid-template-rows: minmax(0, 1fr) auto;
 }
 
-.screen.quad > .pane:nth-child(1) { grid-column: 1; grid-row: 1; }
-.screen.quad > .pane:nth-child(2) { grid-column: 1; grid-row: 2; }
-.screen.quad > .pane:nth-child(3) { grid-column: 2; grid-row: 1; }
-.screen.quad > .pane:nth-child(4) { grid-column: 2; grid-row: 2; }
+.screen.pair > .outstrip { grid-column: 1 / -1; }
 
-.screen.install {
-  grid-template-columns: minmax(0, 3fr) minmax(300px, 2fr);
-  grid-template-rows: minmax(0, 1fr);
+.screen.review {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
 }
 
 @media (max-width: 960px) {
-  .screen.quad { @include stacked-panes(220px); }
+  .screen.pair { @include stacked-pair(260px); }
+}
 
-  .screen.install {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(0, 1.4fr) minmax(0, 1fr);
+@media (max-width: 1100px) {
+  [data-app-font-size="large"] .screen.pair,
+  [data-app-font-size="extra-large"] .screen.pair {
+    @include stacked-pair(260px);
   }
 }
 
-@media (max-height: 700px) {
-  .screen.quad { @include stacked-panes(240px); }
-
-  .screen.install {
-    @include stacked-panes(260px);
-  }
-}
-
-@media (max-width: 1100px), (max-height: 800px) {
-  [data-app-font-size="large"] .screen.quad,
-  [data-app-font-size="extra-large"] .screen.quad {
-    @include stacked-panes(260px);
-  }
-}
-
-@media (max-width: 1250px), (max-height: 900px) {
-  [data-app-font-size="extra-large"] .screen.quad {
-    @include stacked-panes(260px);
-  }
-
-  [data-app-font-size="extra-large"] .screen.install {
-    @include stacked-panes(280px);
+@media (max-width: 1250px) {
+  [data-app-font-size="extra-large"] .screen.pair {
+    @include stacked-pair(260px);
   }
 }
 
@@ -81,11 +65,8 @@
   overflow-wrap: anywhere;
 }
 
-.pane-group {
-  margin-top: 8px;
-}
-
-.pane-body > .kv + .pane-group { margin-top: 10px; }
+/* The detail pane's surface rows are plain text in the `.rows` layout, not a list to move in: no hover highlight. */
+.rows-static .row:hover { background: none; }
 
 /* ---- surface matrix ---- */
 
@@ -126,7 +107,7 @@
 
 .plan-state > div { display: flex; align-items: center; gap: 10px; }
 
-/* The question leads the footer row, the backup note takes a line of its own below the key hints. */
+/* The question leads the footer row, the backup note takes a line of its own below it. */
 .pane-foot .q {
   order: -1;
   min-width: 0;

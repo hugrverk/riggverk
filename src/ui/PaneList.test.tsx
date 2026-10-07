@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { renderWithShell } from "../test/renderWithShell";
+import { renderInFrame, renderWithShell } from "../test/renderWithShell";
 import { Pane } from "./Pane";
 import { PaneList, type PaneListProps } from "./PaneList";
 
@@ -169,11 +169,24 @@ describe("PaneList", () => {
       expect(onToggle).toHaveBeenLastCalledWith(ROWS[2]);
     });
 
-    it("ignores Space in single-select lists", () => {
+    it("toggles with Space but not on click in single-select lists", () => {
       const onToggle = vi.fn();
       renderWithShell(<List onToggle={onToggle} />);
-      press(listbox(), " ");
+      const list = listbox();
+      const options = within(list).getAllByRole("option");
+      fireEvent.click(options[2]!);
+      // A click only moves the cursor (and the selection with it): inspecting a row never flips it.
       expect(onToggle).not.toHaveBeenCalled();
+      expect(options.map(option => option.getAttribute("aria-selected"))).toEqual(["false", "false", "true", "false"]);
+      press(list, " ");
+      expect(onToggle).toHaveBeenLastCalledWith(ROWS[2]);
+    });
+
+    it("ignores Space without onToggle", () => {
+      const onActivate = vi.fn();
+      renderWithShell(<List onActivate={onActivate} />);
+      press(listbox(), " ");
+      expect(onActivate).not.toHaveBeenCalled();
     });
   });
 
@@ -265,17 +278,41 @@ describe("PaneList", () => {
     expect(message.compareDocumentPosition(listbox()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it("shows an Enter hint in the pane footer that activates the cursor row when clicked", () => {
+  it("shows an Enter hint in the status bar that activates the cursor row when clicked", () => {
     const onActivate = vi.fn();
-    renderWithShell(
-      <Pane id="harnesses" index={1} title="harnesses">
+    renderInFrame(
+      <Pane id="harnesses" title="harnesses">
         <List onActivate={onActivate} activateHint="open" />
       </Pane>,
     );
-    const hint = screen.getByRole("button", { name: /open/ });
+    expect(within(screen.getByRole("region", { name: "harnesses" })).queryByRole("button")).toBeNull();
+    act(() => listbox().focus());
+    const hint = within(screen.getByLabelText("Status bar")).getByRole("button", { name: /open/ });
     expect(hint.textContent).toContain("↵");
     fireEvent.click(hint);
     expect(onActivate).toHaveBeenCalledWith(ROWS[0]);
+  });
+
+  it("shows a Space hint in the status bar when the list toggles, and toggles the cursor row when clicked", () => {
+    const onToggle = vi.fn();
+    const { rerenderFrame } = renderInFrame(
+      <Pane id="harnesses" title="harnesses">
+        <List multiSelectable onToggle={onToggle} toggleHint="toggle target" />
+      </Pane>,
+    );
+    act(() => listbox().focus());
+    const bar = within(screen.getByLabelText("Status bar"));
+    const hint = bar.getByRole("button", { name: /toggle target/ });
+    expect(hint.textContent).toContain("space");
+    fireEvent.click(hint);
+    expect(onToggle).toHaveBeenCalledWith(ROWS[0]);
+    // Without onToggle there is nothing to toggle, so the hint is not offered.
+    rerenderFrame(
+      <Pane id="harnesses" title="harnesses">
+        <List toggleHint="toggle target" />
+      </Pane>,
+    );
+    expect(bar.queryByRole("button", { name: /toggle target/ })).toBeNull();
   });
 
   it("works under StrictMode without duplicate registrations", () => {

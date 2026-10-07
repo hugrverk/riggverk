@@ -7,7 +7,6 @@ export function ClaudeView({ runtimeHealth, ...props }: HarnessViewProps & { run
     <HarnessPage
       {...props}
       harness="claude"
-      summary="Sync Claude rules, native subagents, and the canonical global skill catalog."
       runtime={{ harness: "claude", health: runtimeHealth }}
     />
   );
