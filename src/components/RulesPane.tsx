@@ -308,7 +308,7 @@ export function RulesPane({ flow, busyLabel, backupRoot, canConvert, returnPaneI
       <>
         {`· ${title} · diff · `}
         <span className="c-ok" title={`${state.diff.added} lines added`}>+{state.diff.added}</span>{" "}
-        <span className="c-fail" title={`${state.diff.removed} lines removed`}>-{state.diff.removed}</span>
+        <span className="c-fail" title={`${state.diff.removed} lines removed`}>−{state.diff.removed}</span>
       </>
     ) : state.status === "conversion" || state.status === "applying" ? (
       `· ${title} · convert`

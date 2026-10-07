@@ -422,6 +422,8 @@ describe("rules diff (d)", () => {
     expect(mode()).toBe("CONFIRM");
     const pane = rulesPane();
     expect(pane.textContent).toContain("+2");
+    // The title counts with the same minus sign as the install plan.
+    expect(pane.querySelector(".pane-title")!.textContent).toContain("+2 −0");
     // Added lines carry a + in their own column; the diff has no way to write.
     const added = Array.from(pane.querySelectorAll(".diff-line.add")).map(row => [row.querySelector(".diff-mark")!.textContent, row.querySelector(".diff-text")!.textContent]);
     expect(added).toEqual([["+", "## Verification"], ["+", "Run the lightest falsifying check."]]);
