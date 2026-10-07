@@ -1,6 +1,7 @@
 mod agent_discovery;
 mod agent_skill_targets;
 mod agent_targets;
+mod apply_progress;
 mod artifact_registry;
 mod commands;
 mod cursor_profile_ops;
@@ -71,6 +72,7 @@ pub fn run() {
                 .resolve("default-workspace", tauri::path::BaseDirectory::Resource)
                 .map_err(|e| format!("resolve bundled workspace: {e}"))?;
             setup_roots::initialize(bundled)?;
+            apply_progress::install(app.handle().clone());
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.maximize();
             }

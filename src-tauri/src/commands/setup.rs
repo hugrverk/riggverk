@@ -16,6 +16,7 @@ use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 
+use crate::apply_progress::{artifact_display_path, ApplyPhase, ProgressReporter};
 use crate::setup_lifecycle::{
     OperationKind, PlannedOperation, SetupPlan, SetupRequest, SetupSurfaceId,
 };
@@ -152,6 +153,7 @@ fn reconcile_interrupted_setup_transactions(
             home,
             workspace_root,
             RollbackExecutionMode::Automatic,
+            &mut ProgressReporter::silent(),
         );
         if let Some(error) = run.persist_error {
             return Err(format!(
@@ -378,6 +380,7 @@ fn run_persisted_rollback(
     home: &Path,
     workspace_root: &Path,
     mode: RollbackExecutionMode,
+    progress: &mut ProgressReporter,
 ) -> RollbackRun {
     let indices = setup_transaction::rollback_eligible_indices(&manifest.operations);
     if let Err(e) = persist_setup_manifest(
@@ -402,7 +405,15 @@ fn run_persisted_rollback(
         }
         RollbackExecutionMode::Explicit => NewerCompletedWrites::default(),
     };
-    for index in indices.into_iter().rev() {
+    let total = indices.len();
+    for (position, index) in indices.into_iter().rev().enumerate() {
+        progress.report(ApplyPhase::Apply, position, Some(total), || {
+            Some(artifact_display_path(
+                &manifest.operations[index].artifact,
+                home,
+                workspace_root,
+            ))
+        });
         if let Some(owner) = newer_writes.owner_of(&manifest.operations[index].artifact) {
             manifest.operations[index].rollback_status = setup_transaction::RollbackStatus::Failed;
             preserved.push(format!(
@@ -544,6 +555,7 @@ fn run_persisted_rollback(
             return RollbackRun::persist_failed(rolled_back, errors, preserved, e);
         }
     }
+    progress.report(ApplyPhase::Apply, total, Some(total), || None);
 
     // A newer completed transaction owns the managed state now; restoring this
     // transaction's snapshot would erase its ownership records.
@@ -889,6 +901,7 @@ fn run_persisted_automatic_rollback(
         home,
         workspace_root,
         RollbackExecutionMode::Automatic,
+        &mut ProgressReporter::silent(),
     )
 }
 
@@ -947,11 +960,23 @@ fn user_home() -> Result<PathBuf, String> {
 
 // ── Apply ──
 
-/// Apply artifact-level operations using artifact-owned transactions.
+/// Apply artifact-level operations using artifact-owned transactions, reporting progress as it goes.
 pub(super) fn apply_planned_artifacts(
+    selected: &[setup_transaction::PlannedArtifact],
+    manual_steps: Vec<String>,
+    preview_token: Option<&str>,
+    progress: &mut ProgressReporter,
+) -> SetupResult {
+    let result = run_planned_artifacts(selected, manual_steps, preview_token, progress);
+    progress.finish();
+    result
+}
+
+fn run_planned_artifacts(
     selected: &[setup_transaction::PlannedArtifact],
     mut manual_steps: Vec<String>,
     preview_token: Option<&str>,
+    progress: &mut ProgressReporter,
 ) -> SetupResult {
     let transaction_id = match new_transaction_id() {
         Ok(id) => id,
@@ -1141,7 +1166,10 @@ pub(super) fn apply_planned_artifacts(
         };
 
     let mut manifest_ops: Vec<ArtifactManifestOperation> = Vec::new();
-    for p in &pending {
+    for (backed_up, p) in pending.iter().enumerate() {
+        progress.report(ApplyPhase::Backup, backed_up, Some(pending.len()), || {
+            Some(artifact_display_path(&p.artifact, &home, &ws_root))
+        });
         let backup_rel =
             match setup_transaction::backup_artifact(&p.artifact, &backup_dir, &home, &ws_root) {
                 Ok(rel) => rel,
@@ -1272,6 +1300,16 @@ pub(super) fn apply_planned_artifacts(
         };
     }
 
+    let apply_total = pending
+        .iter()
+        .filter(|p| {
+            matches!(
+                p.kind,
+                OperationKind::Create | OperationKind::Update | OperationKind::Remove
+            )
+        })
+        .count();
+
     // `manifest.operations` was built from `pending` in order.
     for (operation_index, p) in pending.iter().enumerate() {
         if !matches!(
@@ -1280,6 +1318,9 @@ pub(super) fn apply_planned_artifacts(
         ) {
             continue;
         }
+        progress.report(ApplyPhase::Apply, applied.len(), Some(apply_total), || {
+            Some(artifact_display_path(&p.artifact, &home, &ws_root))
+        });
         manifest.operations[operation_index].apply_status =
             setup_transaction::ApplyStatus::InFlight;
         if let Err(e) = persist_setup_manifest(
@@ -1408,6 +1449,7 @@ pub(super) fn apply_planned_artifacts(
             artifact_label(&p.artifact)
         });
     }
+    progress.report(ApplyPhase::Apply, applied.len(), Some(apply_total), || None);
 
     if let Err(e) = persist_setup_manifest(
         &manifest_path,
@@ -1512,7 +1554,11 @@ pub(super) fn apply_planned_artifacts(
 /// - The transaction manifest exists
 /// - The backup files are present
 /// - The destination paths are resolvable from the current registry
-pub fn rollback_transaction(transaction_id: &str, dry_run: bool) -> SetupResult {
+pub fn rollback_transaction(
+    transaction_id: &str,
+    dry_run: bool,
+    progress: &mut ProgressReporter,
+) -> SetupResult {
     if !validate_transaction_id_format(transaction_id) {
         return SetupResult {
             success: false,
@@ -1936,6 +1982,7 @@ pub fn rollback_transaction(transaction_id: &str, dry_run: bool) -> SetupResult 
         &home,
         &ws_root,
         RollbackExecutionMode::Explicit,
+        progress,
     );
     let restored = run.rolled_back;
     let mut rollback_failures = run.errors;
@@ -2202,7 +2249,11 @@ pub fn apply_setup(
     if surface_ids.is_empty() {
         // Every requested surface is target-disabled: nothing to apply.
         let plan = crate::setup_lifecycle::empty_plan();
-        return Ok(apply_setup_plan_with_token(&plan, None));
+        return Ok(apply_setup_plan_with_token(
+            &plan,
+            None,
+            &mut ProgressReporter::silent(),
+        ));
     }
 
     // Use real detection instead of synthetic all-Create states
@@ -2255,12 +2306,17 @@ pub fn apply_setup(
         ));
     }
 
-    Ok(apply_setup_plan_with_token(&plan, Some(token)))
+    Ok(apply_setup_plan_with_token(
+        &plan,
+        Some(token),
+        &mut ProgressReporter::for_task("apply_setup"),
+    ))
 }
 
 pub(crate) fn apply_setup_plan_with_token(
     plan: &SetupPlan,
     preview_token: Option<&str>,
+    progress: &mut ProgressReporter,
 ) -> SetupResult {
     let manual_steps: Vec<String> = plan
         .manual_steps
@@ -2335,7 +2391,7 @@ pub(crate) fn apply_setup_plan_with_token(
         }
     };
 
-    apply_planned_artifacts(&planned, manual_steps, preview_token)
+    apply_planned_artifacts(&planned, manual_steps, preview_token, progress)
 }
 
 /// One removable or preserved item in an uninstall plan, for display.
@@ -2469,6 +2525,7 @@ pub fn apply_uninstall(
         &plan.removals,
         vec![],
         Some(&token),
+        &mut ProgressReporter::for_task("apply_uninstall"),
     ))
 }
 
@@ -2480,7 +2537,10 @@ pub fn rollback_setup_transaction(
     if !validate_transaction_id_format(&transaction_id) {
         return Err("invalid transaction_id: must be a numeric timestamp".to_string());
     }
-    Ok(rollback_transaction(&transaction_id, dry_run))
+    let mut progress = ProgressReporter::for_task("rollback_setup_transaction");
+    let result = rollback_transaction(&transaction_id, dry_run, &mut progress);
+    progress.finish();
+    Ok(result)
 }
 
 #[cfg(test)]
@@ -2500,7 +2560,7 @@ mod tests {
     #[test]
     fn apply_empty_plan_succeeds() {
         let plan = test_plan(vec![]);
-        let result = apply_setup_plan_with_token(&plan, None);
+        let result = apply_setup_plan_with_token(&plan, None, &mut ProgressReporter::silent());
         assert!(result.success, "empty plan should succeed");
         assert_eq!(result.message, "No operations to apply");
     }
@@ -2512,7 +2572,7 @@ mod tests {
             OperationKind::NoChange,
             "synced".to_string(),
         )]);
-        let result = apply_setup_plan_with_token(&plan, None);
+        let result = apply_setup_plan_with_token(&plan, None, &mut ProgressReporter::silent());
         assert!(result.success);
         assert_eq!(result.message, "No operations to apply");
     }
@@ -2693,7 +2753,7 @@ mod tests {
 
     #[test]
     fn rollback_rejects_empty_transaction_id() {
-        let result = rollback_transaction("", false);
+        let result = rollback_transaction("", false, &mut ProgressReporter::silent());
         assert!(!result.success);
     }
 
@@ -2781,7 +2841,11 @@ mod tests {
 
     #[test]
     fn rollback_nonexistent_transaction() {
-        let result = rollback_transaction("1234567890123456789", false);
+        let result = rollback_transaction(
+            "1234567890123456789",
+            false,
+            &mut ProgressReporter::silent(),
+        );
         assert!(!result.success);
         assert!(
             result.message.contains("not found") || result.message.contains("Transaction backup")
@@ -2816,8 +2880,12 @@ mod tests {
     #[test]
     fn rollback_dry_run_leaves_a_real_transaction_untouched() {
         let env = TempSetupEnv::new("dry-run-real");
-        let applied =
-            apply_planned_artifacts(&env.plan(&[SetupSurfaceId::CodexRules]), vec![], None);
+        let applied = apply_planned_artifacts(
+            &env.plan(&[SetupSurfaceId::CodexRules]),
+            vec![],
+            None,
+            &mut ProgressReporter::silent(),
+        );
         assert!(applied.success, "{}", applied.message);
         let codex = env.home.join(".codex/AGENTS.md");
         assert!(codex.is_file());
@@ -2827,7 +2895,11 @@ mod tests {
             .join("manifest.json");
         let manifest_before = fs::read(&manifest_path).unwrap();
 
-        let dry = rollback_transaction(&applied.transaction_id, true);
+        let dry = rollback_transaction(
+            &applied.transaction_id,
+            true,
+            &mut ProgressReporter::silent(),
+        );
         assert!(dry.success, "{}", dry.message);
         assert_eq!(dry.applied.len(), 1, "dry run lists what would be restored");
         assert!(dry.applied[0].contains("CodexRules"), "{:?}", dry.applied);
@@ -2838,9 +2910,94 @@ mod tests {
             "dry run must not write the manifest"
         );
 
-        let real = rollback_transaction(&applied.transaction_id, false);
+        let real = rollback_transaction(
+            &applied.transaction_id,
+            false,
+            &mut ProgressReporter::silent(),
+        );
         assert!(real.success, "{}", real.message);
         assert!(!codex.exists(), "real rollback removes the created file");
+    }
+
+    #[test]
+    fn apply_and_rollback_report_progress_without_changing_the_result() {
+        use crate::apply_progress::{ApplyPhase, ApplyProgress};
+        let env = TempSetupEnv::new("progress");
+        let surfaces = [SetupSurfaceId::CodexRules, SetupSurfaceId::OpenCodeRules];
+        let (mut progress, events) = ProgressReporter::collecting("apply_setup");
+
+        let applied = apply_planned_artifacts(&env.plan(&surfaces), vec![], None, &mut progress);
+
+        assert!(applied.success, "{}", applied.message);
+        assert_eq!(applied.applied.len(), 2);
+        let events = events.snapshot();
+        let first = events.first().expect("events");
+        assert_eq!(
+            (first.phase, first.done, first.total),
+            (ApplyPhase::Backup, 0, Some(2))
+        );
+        let last = events.last().unwrap();
+        assert_eq!(
+            (last.phase, last.done, last.total, last.file.as_deref()),
+            (ApplyPhase::Done, 2, Some(2), None)
+        );
+        let before_done = &events[events.len() - 2];
+        assert_eq!(
+            (before_done.phase, before_done.done, before_done.total),
+            (ApplyPhase::Apply, 2, Some(2))
+        );
+        assert!(events
+            .iter()
+            .any(|e| e.phase == ApplyPhase::Apply && e.done == 0));
+        // Phases only move forward and counts never go back within one.
+        let rank = |e: &ApplyProgress| e.phase as u8;
+        assert!(events
+            .windows(2)
+            .all(|pair| rank(&pair[0]) <= rank(&pair[1])
+                && (pair[0].phase != pair[1].phase || pair[0].done <= pair[1].done)));
+        // Only `~/...` display paths, never an absolute or temp path.
+        let base = env.base.to_string_lossy().into_owned();
+        for event in &events {
+            assert_eq!(event.task, "apply_setup");
+            if let Some(file) = &event.file {
+                assert!(file.starts_with("~/"), "{file}");
+                assert!(!file.contains(&base), "{file}");
+            }
+        }
+
+        let (mut rollback_progress, rollback_events) =
+            ProgressReporter::collecting("rollback_setup_transaction");
+        let rolled = rollback_transaction(&applied.transaction_id, false, &mut rollback_progress);
+        rollback_progress.finish();
+        assert!(rolled.success, "{}", rolled.message);
+        let rollback_events = rollback_events.snapshot();
+        assert!(rollback_events
+            .iter()
+            .all(|e| e.phase != ApplyPhase::Backup));
+        let first = rollback_events.first().expect("rollback events");
+        assert_eq!(
+            (first.phase, first.done, first.total),
+            (ApplyPhase::Apply, 0, Some(2))
+        );
+        let last = rollback_events.last().unwrap();
+        assert_eq!(
+            (last.phase, last.done, last.total),
+            (ApplyPhase::Done, 2, Some(2))
+        );
+    }
+
+    #[test]
+    fn apply_works_when_nobody_listens() {
+        // No app handle is registered under test, like a webview that never subscribed.
+        let env = TempSetupEnv::new("progress-no-listener");
+        let applied = apply_planned_artifacts(
+            &env.plan(&[SetupSurfaceId::CodexRules]),
+            vec![],
+            None,
+            &mut ProgressReporter::for_task("apply_setup"),
+        );
+        assert!(applied.success, "{}", applied.message);
+        assert!(env.home.join(".codex/AGENTS.md").is_file());
     }
 
     #[test]
@@ -2861,7 +3018,7 @@ mod tests {
 
     #[test]
     fn rollback_rejects_path_traversal_transaction_id() {
-        let result = rollback_transaction("../evil", false);
+        let result = rollback_transaction("../evil", false, &mut ProgressReporter::silent());
         assert!(!result.success);
     }
 
@@ -3037,7 +3194,7 @@ mod tests {
     #[test]
     fn apply_empty_plan_returns_valid_transaction_id() {
         let plan = test_plan(vec![]);
-        let result = apply_setup_plan_with_token(&plan, None);
+        let result = apply_setup_plan_with_token(&plan, None, &mut ProgressReporter::silent());
         assert!(result.success);
         assert!(!result.transaction_id.is_empty());
         assert!(result.transaction_id.chars().all(|c| c.is_ascii_digit()));
@@ -3174,7 +3331,7 @@ mod tests {
         let _restore = guard::EnvRestore::capture();
         let (base, _home, _ws, txn_id) = rollback_test_fixture();
         seed_two_artifact_transaction(&txn_id);
-        let result = rollback_transaction(&txn_id, false);
+        let result = rollback_transaction(&txn_id, false, &mut ProgressReporter::silent());
         assert!(result.success, "{}", result.message);
         assert_eq!(result.rolled_back.len(), 2);
         let manifest = read_manifest(&txn_id);
@@ -3243,13 +3400,13 @@ mod tests {
         setup_transaction::persist_manifest_atomic(&manifest_path, &manifest, &backup_dir).unwrap();
         fs::write(home.join(".codex/AGENTS.md"), "codex-rules-backup").unwrap(); // home == user_home()
 
-        let dry = rollback_transaction(&txn_id, true);
+        let dry = rollback_transaction(&txn_id, true, &mut ProgressReporter::silent());
         assert!(dry.success);
         assert_eq!(dry.applied.len(), 1);
         assert!(dry.applied[0].contains("OpenCodeRules"));
         assert!(dry.rolled_back.iter().any(|l| l.contains("CodexRules")));
 
-        let result = rollback_transaction(&txn_id, false);
+        let result = rollback_transaction(&txn_id, false, &mut ProgressReporter::silent());
         assert!(result.success, "{}", result.message);
         assert_eq!(result.rolled_back.len(), 1);
         let final_manifest = read_manifest(&txn_id);
@@ -3274,7 +3431,7 @@ mod tests {
             &backup_dir,
         )
         .unwrap();
-        let result = rollback_transaction(&txn_id, false);
+        let result = rollback_transaction(&txn_id, false, &mut ProgressReporter::silent());
         assert!(result.success, "{}", result.message);
         let _ = fs::remove_dir_all(&base);
     }
@@ -3295,7 +3452,7 @@ mod tests {
         )
         .unwrap();
 
-        let result = rollback_transaction(&txn_id, false);
+        let result = rollback_transaction(&txn_id, false, &mut ProgressReporter::silent());
         assert!(result.success, "{}", result.message);
         assert!(!result.rolled_back.is_empty());
         let _ = fs::remove_dir_all(&base);
@@ -3318,7 +3475,7 @@ mod tests {
             &backup_dir,
         )
         .unwrap();
-        let result = rollback_transaction(&txn_id, false);
+        let result = rollback_transaction(&txn_id, false, &mut ProgressReporter::silent());
         assert!(!result.success);
         assert!(result.message.contains("already rolled back"));
         let _ = fs::remove_dir_all(&base);
@@ -3339,7 +3496,7 @@ mod tests {
             &backup_dir,
         )
         .unwrap();
-        let dry = rollback_transaction(&txn_id, true);
+        let dry = rollback_transaction(&txn_id, true, &mut ProgressReporter::silent());
         assert!(dry.success);
         assert_eq!(dry.rolled_back.len(), 1);
         let after = read_manifest(&txn_id);
@@ -3377,12 +3534,12 @@ mod tests {
         )
         .unwrap();
 
-        let dry = rollback_transaction(&txn_id, true);
+        let dry = rollback_transaction(&txn_id, true, &mut ProgressReporter::silent());
         assert!(dry.success);
         assert!(dry.rolled_back.iter().any(|l| l.contains("CodexRules")));
         assert_eq!(dry.applied.len(), 1);
 
-        let result = rollback_transaction(&txn_id, false);
+        let result = rollback_transaction(&txn_id, false, &mut ProgressReporter::silent());
         assert!(result.success, "{}", result.message);
         assert_eq!(result.rolled_back.len(), 1);
         assert!(!result.rolled_back.iter().any(|l| l.contains("CodexRules")));
@@ -3410,7 +3567,7 @@ mod tests {
         )
         .unwrap();
 
-        let result = rollback_transaction(&txn_id, false);
+        let result = rollback_transaction(&txn_id, false, &mut ProgressReporter::silent());
         assert!(result.success, "{}", result.message);
         assert_eq!(result.rolled_back.len(), 2);
         let _ = fs::remove_dir_all(&base);
@@ -3434,7 +3591,7 @@ mod tests {
         )
         .unwrap();
 
-        let result = rollback_transaction(&txn_id, false);
+        let result = rollback_transaction(&txn_id, false, &mut ProgressReporter::silent());
         assert!(!result.success);
         let final_manifest = read_manifest(&txn_id);
         assert_eq!(
@@ -3472,7 +3629,7 @@ mod tests {
         )
         .unwrap();
 
-        let result = rollback_transaction(&txn_id, false);
+        let result = rollback_transaction(&txn_id, false, &mut ProgressReporter::silent());
         assert!(result.success, "{}", result.message);
         assert_eq!(result.rolled_back.len(), 2);
         let final_manifest = read_manifest(&txn_id);
@@ -3507,7 +3664,7 @@ mod tests {
         )
         .unwrap();
 
-        let result = rollback_transaction(&txn_id, false);
+        let result = rollback_transaction(&txn_id, false, &mut ProgressReporter::silent());
         assert!(result.success, "{}", result.message);
         let final_manifest = read_manifest(&txn_id);
         assert_eq!(
@@ -3535,7 +3692,7 @@ mod tests {
         .unwrap();
         let before_raw = fs::read_to_string(backup_dir.join("manifest.json")).unwrap();
 
-        let dry = rollback_transaction(&txn_id, true);
+        let dry = rollback_transaction(&txn_id, true, &mut ProgressReporter::silent());
         assert!(dry.success);
         assert!(dry.rolled_back.iter().any(|l| l.contains("CodexRules")));
         let after_raw = fs::read_to_string(backup_dir.join("manifest.json")).unwrap();
@@ -3655,7 +3812,8 @@ mod tests {
         fs::remove_dir_all(setup_root.join("1002")).expect("remove blocking transaction");
 
         let planned = env.plan(&[SetupSurfaceId::CodexRules]);
-        let result = apply_planned_artifacts(&planned, vec![], None);
+        let result =
+            apply_planned_artifacts(&planned, vec![], None, &mut ProgressReporter::silent());
         assert!(result.success, "apply: {}", result.message);
         assert!(env.home.join(".codex/AGENTS.md").is_file());
     }
@@ -3850,7 +4008,7 @@ mod tests {
         .unwrap();
 
         for dry_run in [true, false] {
-            let result = rollback_transaction(&older, dry_run);
+            let result = rollback_transaction(&older, dry_run, &mut ProgressReporter::silent());
             assert!(!result.success, "dry_run={dry_run}");
             assert!(
                 result.message.contains("newer completed transaction")
@@ -3885,7 +4043,12 @@ mod tests {
     #[test]
     fn apply_refreshes_stale_record_of_unchanged_artifact_outside_the_selection() {
         let env = TempSetupEnv::new("refresh-stale");
-        let first = apply_planned_artifacts(&env.plan(&[SetupSurfaceId::CodexRules]), vec![], None);
+        let first = apply_planned_artifacts(
+            &env.plan(&[SetupSurfaceId::CodexRules]),
+            vec![],
+            None,
+            &mut ProgressReporter::silent(),
+        );
         assert!(first.success, "{}", first.message);
         let codex = ArtifactId::CodexRules;
         let identity = crate::managed_state::artifact_identity(&codex);
@@ -3905,8 +4068,12 @@ mod tests {
         assert_eq!(planned[0].kind, OperationKind::NoChange);
 
         // Any later apply, even of another surface, refreshes it.
-        let second =
-            apply_planned_artifacts(&env.plan(&[SetupSurfaceId::OpenCodeRules]), vec![], None);
+        let second = apply_planned_artifacts(
+            &env.plan(&[SetupSurfaceId::OpenCodeRules]),
+            vec![],
+            None,
+            &mut ProgressReporter::silent(),
+        );
         assert!(second.success, "{}", second.message);
         let state = crate::managed_state::read_managed_state(&env.ws).expect("state");
         let record = state
@@ -3926,7 +4093,12 @@ mod tests {
         use std::os::unix::fs::PermissionsExt;
         let mode_of = |path: &Path| fs::metadata(path).unwrap().permissions().mode() & 0o777;
         let env = TempSetupEnv::new("private-backups");
-        let first = apply_planned_artifacts(&env.plan(&[SetupSurfaceId::CodexRules]), vec![], None);
+        let first = apply_planned_artifacts(
+            &env.plan(&[SetupSurfaceId::CodexRules]),
+            vec![],
+            None,
+            &mut ProgressReporter::silent(),
+        );
         assert!(first.success, "{}", first.message);
 
         // Age the installed file so the next apply backs it up before replacing it.
@@ -3937,8 +4109,12 @@ mod tests {
             record.hash = crate::stable_digest::bytes(b"older-codex");
         }
         crate::managed_state::write_managed_state_atomic(&env.ws, &state).unwrap();
-        let second =
-            apply_planned_artifacts(&env.plan(&[SetupSurfaceId::CodexRules]), vec![], None);
+        let second = apply_planned_artifacts(
+            &env.plan(&[SetupSurfaceId::CodexRules]),
+            vec![],
+            None,
+            &mut ProgressReporter::silent(),
+        );
         assert!(second.success, "{}", second.message);
 
         let txn_dir = env.setup_root().join(&second.transaction_id);
@@ -3984,7 +4160,12 @@ mod tests {
 
         // Install both, then age them: installed content differs from the
         // source but matches the managed record, so the next plan updates both.
-        let first = apply_planned_artifacts(&env.plan(&surfaces), vec![], None);
+        let first = apply_planned_artifacts(
+            &env.plan(&surfaces),
+            vec![],
+            None,
+            &mut ProgressReporter::silent(),
+        );
         assert!(first.success, "{}", first.message);
         fs::write(&codex_dest, "old-codex").unwrap();
         fs::write(&opencode_dest, "old-opencode").unwrap();
@@ -4018,9 +4199,17 @@ mod tests {
             return; // permissions are not enforced (running as root)
         }
 
-        let result = apply_planned_artifacts(&planned, vec![], None);
+        let (mut progress, events) = ProgressReporter::collecting("apply_setup");
+        let result = apply_planned_artifacts(&planned, vec![], None, &mut progress);
 
         assert!(!result.success, "second artifact must fail the apply");
+        let events = events.snapshot();
+        let last = events.last().expect("progress events");
+        assert_eq!(
+            (last.phase, last.done, last.total),
+            (crate::apply_progress::ApplyPhase::Done, 1, Some(2)),
+            "a failed apply still ends the stream, short of the total"
+        );
         assert!(
             result
                 .rolled_back
@@ -4092,7 +4281,7 @@ mod tests {
             .filter(|p| p.artifact == untouched || p.artifact == edited)
             .cloned()
             .collect();
-        let result = apply_planned_artifacts(&stale, vec![], None);
+        let result = apply_planned_artifacts(&stale, vec![], None, &mut ProgressReporter::silent());
         assert!(result.success, "{}", result.message);
         assert!(!untouched.resolve_dest(&env.home, &env.ws).unwrap().exists());
         assert_eq!(

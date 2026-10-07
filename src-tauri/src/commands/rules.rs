@@ -12,6 +12,7 @@ use serde::Serialize;
 
 use super::setup::{apply_planned_artifacts, SetupResult};
 use super::workspace::setup_workspace_target_path;
+use crate::apply_progress::ProgressReporter;
 use crate::artifact_registry::ArtifactId;
 use crate::rules_block::{self, RulesConflict, RulesPlan};
 use crate::rules_convert::{self, ConversionOrigin};
@@ -488,7 +489,12 @@ pub fn apply_rules_conversion(
         &[surface_id],
     )?;
 
-    let mut result = apply_planned_artifacts(&[plan.operation], Vec::new(), Some(token));
+    let mut result = apply_planned_artifacts(
+        &[plan.operation],
+        Vec::new(),
+        Some(token),
+        &mut ProgressReporter::for_task("apply_rules_conversion"),
+    );
     if result.success {
         clear_user_managed_after_conversion(&ws_root, &artifact, &mut result);
     }
