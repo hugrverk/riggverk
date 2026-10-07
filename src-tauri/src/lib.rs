@@ -24,6 +24,7 @@ mod setup_mutation_guard;
 mod setup_roots;
 mod setup_transaction;
 mod shell_runtime;
+mod shipped_digests;
 mod skill_discovery;
 mod skills_install;
 mod stable_digest;
