@@ -214,7 +214,7 @@ export function HarnessPage({
                 <>
                   <span className="nm">
                     {row.targetId ? (row.targetEnabled ? "[x]" : "[ ]") : NO_TOGGLE} {row.name}{" "}
-                    <span className="c-dim">{row.path || row.detail}</span>
+                    <span className="c-dim">{row.path}</span>
                   </span>
                   <span className={`meta ${toneClass(display.tone)}`.trim()}>{display.label}</span>
                 </>

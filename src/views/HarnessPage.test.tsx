@@ -155,7 +155,7 @@ describe("HarnessPage", () => {
       ["[ ] config .codex/config.toml", "off"],
       ["[x] agents .codex/agents", "unknown"],
       ["[x] rules .codex/AGENTS.md", "update"],
-      ["skills current detail", "current"],
+      ["skills", "current"],
     ]);
     expect(rows.map(row => row.getAttribute("aria-selected"))).toEqual(["true", "false", "false", "false"]);
     // One signal per row: the state word in its tone, no glyph.
