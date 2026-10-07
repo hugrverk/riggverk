@@ -351,17 +351,19 @@ mod tests {
     #[test]
     fn malformed_metadata_proves_nothing() {
         let shipped = digest(b"x");
-        let valid =
-            test_override::json_for("templates/claude/agents/verifier.md", &[shipped.clone()]);
+        let valid = test_override::json_for(
+            "templates/claude/agents/verifier.md",
+            std::slice::from_ref(&shipped),
+        );
         assert!(ShippedDigests::parse(&valid).is_ok());
         let cases = [
             "not json".to_string(),
             "{}".to_string(),
             r#"{"schema":2,"sources":{"a":[]}}"#.to_string(),
             r#"{"schema":1,"sources":{}}"#.to_string(),
-            test_override::json_for("../escape", &[shipped.clone()]),
-            test_override::json_for("/abs/path", &[shipped.clone()]),
-            test_override::json_for("a//b", &[shipped.clone()]),
+            test_override::json_for("../escape", std::slice::from_ref(&shipped)),
+            test_override::json_for("/abs/path", std::slice::from_ref(&shipped)),
+            test_override::json_for("a//b", std::slice::from_ref(&shipped)),
             test_override::json_for("a", &["sha256:short".to_string()]),
             test_override::json_for("a", &[crate::stable_digest::ABSENT.to_string()]),
         ];
