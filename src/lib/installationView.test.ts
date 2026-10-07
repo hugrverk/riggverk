@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import type { InstallationOverview, OverviewEntry, OverviewId } from "../hooks/useInstallationOverview";
-import type { InstallationState, InstallationStatus, SetupSurfaceId, SurfaceInstallationStatus } from "../types";
+import type { AgentTargetMeta, InstallationState, InstallationStatus, SetupSurfaceId, SurfaceInstallationStatus } from "../types";
 import {
+  harnessRowsFor,
   matrixModel,
   overviewTargets,
   previewDisabledFor,
@@ -97,6 +98,45 @@ describe("surfaceRowsFor", () => {
     expect(surfaceRowsFor("workspace", undefined, null)).toEqual([
       expect.objectContaining({ surface: "workspace_bundle", state: "unknown" }),
     ]);
+  });
+});
+
+describe("harnessRowsFor", () => {
+  const TARGETS: AgentTargetMeta[] = [
+    { id: "codex_agents", label: "codex agents", harness: "codex", kind: "agents", target_rel: ".codex/agents", source_rel: "templates/codex/agents" },
+    { id: "codex_rules", label: "codex rules", harness: "codex", kind: "rules", target_rel: ".codex/AGENTS.md", source_rel: "templates/sync/codex-rules.md" },
+    { id: "cursor_setup", label: "cursor global agents", harness: "cursor", kind: "agents", target_rel: ".cursor/agents", source_rel: "templates/cursor/agents" },
+  ];
+
+  it("gives every surface a row with the toggle of its target, codex agents included", () => {
+    const codex = entry("codex", status("update_available", [surface("codex_rules", "update_available"), surface("codex_skills", "current")]));
+    const rows = harnessRowsFor("codex", codex, { ...SETTINGS, enabled_target_ids: ["codex_rules", "codex_agents"] }, TARGETS);
+    expect(rows.map(row => [row.name, row.targetId, row.targetEnabled, row.state])).toEqual([
+      ["config", "codex_config", false, "off"],
+      ["agents", "codex_agents", true, "unknown"],
+      ["rules", "codex_rules", true, "update_available"],
+      ["skills", null, null, "current"],
+    ]);
+    // A target the backend did not list still gets its toggle; it just has no path or metadata.
+    expect(rows[0]).toMatchObject({ target: null, path: "", detail: "" });
+    expect(rows[1]).toMatchObject({ target: TARGETS[0], path: ".codex/agents" });
+    expect(rows[2]).toMatchObject({ path: ".codex/AGENTS.md", detail: "update_available detail", display: { label: "update", tone: "warn" } });
+    expect(rows[3]).toMatchObject({ target: null, path: "", detail: "current detail" });
+  });
+
+  it("lists the other surfaces a toggle gates, and gives the path to the first only", () => {
+    const rows = harnessRowsFor("cursor", undefined, { enabled_harness_ids: ["cursor"], enabled_target_ids: ["cursor_setup"] }, TARGETS);
+    expect(rows.map(row => [row.surface, row.targetId, row.alsoSurfaces, row.path])).toEqual([
+      ["cursor_agents", "cursor_setup", ["cursor_mcp"], ".cursor/agents"],
+      ["cursor_skills", null, [], ""],
+      ["cursor_mcp", "cursor_setup", ["cursor_agents"], ""],
+    ]);
+  });
+
+  it("keeps the off state of a toggled-off target and drops the backend detail", () => {
+    const claude = entry("claude", status("current", [surface("claude_agents", "current")]));
+    const rows = harnessRowsFor("claude", claude, { enabled_harness_ids: ["claude"], enabled_target_ids: ["claude_rules"] }, []);
+    expect(rows.find(row => row.surface === "claude_agents")).toMatchObject({ state: "off", targetEnabled: false, detail: "", display: { label: "off" } });
   });
 });
 

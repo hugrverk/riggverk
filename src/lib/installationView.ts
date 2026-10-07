@@ -7,12 +7,22 @@ import {
 } from "../hooks/useInstallationOverview";
 import type { GlyphName } from "../ui/Glyph";
 import type { Tone } from "../ui/tone";
-import type { AppSettings, InstallationState, InstallationStatus, InstallAgent, SetupSurfaceId } from "../types";
+import type {
+  AgentTargetMeta,
+  AppSettings,
+  InstallationState,
+  InstallationStatus,
+  InstallAgent,
+  SetupSurfaceId,
+} from "../types";
 import {
   harnessSurfaceStates,
   HARNESS_LABELS,
   HARNESS_NAV_ORDER,
+  TARGET_SURFACES,
+  targetIdForSurface,
   WORKSPACE_SURFACES,
+  type SetupTargetId,
 } from "./harnessInstallation";
 
 type EnabledSettings = Pick<AppSettings, "enabled_target_ids" | "enabled_harness_ids">;
@@ -148,6 +158,58 @@ export function surfaceRowsFor(
       state,
       display: STATE_DISPLAY[state],
       targetId: null,
+    };
+  });
+}
+
+export interface HarnessRowModel {
+  surface: SetupSurfaceId;
+  name: string;
+  /**
+   * The gating target's own path (`target_rel`). Empty for an ungated surface, for a target the backend did not
+   * list, and for a target's secondary surface (Cursor's MCP shares `cursor_setup` with the agents, whose path
+   * this is not).
+   */
+  path: string;
+  /** Backend detail for the surface ("1 to update"); empty while it is off or not fetched. */
+  detail: string;
+  state: SurfaceDisplayState;
+  display: StateDisplay;
+  /** The target toggle gating the surface, whether it is on or off; null for ungated skills. */
+  targetId: SetupTargetId | null;
+  /** The backend's metadata for `targetId`, or null when ungated or not listed. */
+  target: AgentTargetMeta | null;
+  /** Whether the toggle is on; null when ungated. */
+  targetEnabled: boolean | null;
+  /** The other surfaces the same toggle gates. */
+  alsoSurfaces: SetupSurfaceId[];
+}
+
+/**
+ * Rows of a harness page: one per surface, carrying the toggle of the target that gates it. Built from the
+ * surfaces (not from the backend's target list) so every gating target is offered, whatever the backend sent.
+ */
+export function harnessRowsFor(
+  harness: InstallAgent,
+  entry: OverviewEntry | undefined,
+  settings: EnabledSettings,
+  agentTargets: readonly AgentTargetMeta[],
+): HarnessRowModel[] {
+  return surfaceRowsFor(harness, entry, settings).map(row => {
+    const targetId = targetIdForSurface(row.surface);
+    const gated = targetId ? TARGET_SURFACES[targetId] : [];
+    const target = targetId ? (agentTargets.find(candidate => candidate.id === targetId) ?? null) : null;
+    return {
+      surface: row.surface,
+      name: row.name,
+      path: target && gated[0] === row.surface ? target.target_rel : "",
+      detail: row.state === "off" ? "" : row.detail,
+      state: row.state,
+      display: row.display,
+      targetId,
+      target,
+      targetEnabled: targetId ? settings.enabled_target_ids.includes(targetId) : null,
+      alsoSurfaces: gated.filter(surface => surface !== row.surface),
     };
   });
 }
