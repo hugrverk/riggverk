@@ -302,8 +302,13 @@ export function StartView({
             );
           })}
         </ul>
-        <div className="group pane-group">status</div>
-        <Kv items={statusItems} aria-label={`${selectedLabel} status`} />
+        {/* The title already states the state; the group exists only when there is something to add to it. */}
+        {statusItems.length > 0 && (
+          <>
+            <div className="group pane-group">status</div>
+            <Kv items={statusItems} aria-label={`${selectedLabel} status`} />
+          </>
+        )}
         <div className="group pane-group">verify</div>
         <Kv items={verifyItems} aria-label="Verification and backups" />
         {(workspaceValid || uninstallRecoveryTransactionId) && (

@@ -155,7 +155,7 @@ describe("HarnessPage", () => {
       ["[ ] config .codex/config.toml", "off"],
       ["[x] agents .codex/agents", "unknown"],
       ["[x] rules .codex/AGENTS.md", "update"],
-      ["skills current detail", "current"],
+      ["skills", "current"],
     ]);
     expect(rows.map(row => row.getAttribute("aria-selected"))).toEqual(["true", "false", "false", "false"]);
     // One signal per row: the state word in its tone, no glyph.
@@ -279,7 +279,7 @@ describe("HarnessPage", () => {
     expect(runtime).toMatchObject({ skills: "synced · 17/18", approval: "on-request", sandbox: "workspace-write" });
     // The summary only restates the verdict; the next step stays while the runtime is out of sync.
     expect(detail().textContent).not.toContain("Codex diverged");
-    expect(runtime.next).toBe("Update Codex.");
+    expect(runtime.next).toBe("update Codex");
   });
 
   it("shows a failed status check and the files an update preserved as facts of the harness", () => {
@@ -317,7 +317,10 @@ describe("HarnessPage", () => {
   it("explains a missing workspace and offers no update", () => {
     const { props: p } = renderCodex({ workspaceValid: false, overview: overviewOf({}) });
     expect(detail().textContent).toContain("No valid workspace installed");
-    expect(facts()).toMatchObject({ runtime: "no valid workspace" });
+    // The runtime heading carries the verdict; no row restates it under a heading that says something else.
+    expect(detail().textContent).toContain("runtime · no valid workspace");
+    expect(facts()).not.toHaveProperty("runtime");
+    expect(facts()).not.toHaveProperty("rules");
     act(() => surfaces().focus());
     press("u");
     expect(p.install.open).not.toHaveBeenCalled();

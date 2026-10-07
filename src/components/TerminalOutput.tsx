@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
+import { actionLabel } from "../lib/actionLabel";
 import { applyOutputLineTone } from "../lib/installPlan";
 import { redactTerminalOutput } from "../lib/redactTerminalOutput";
 import { Glyph } from "../ui/Glyph";
@@ -96,10 +97,11 @@ function CommandLine({ label, caret, when }: { label: string; caret?: boolean; w
   );
 }
 
-export function RunningState({ label }: { label: string }) {
+/** `header` false leaves out the `❯ command` line, for a host that already shows it (the output strip's own line). */
+export function RunningState({ label, header = true }: { label: string; header?: boolean }) {
   return (
     <>
-      <CommandLine label={label} caret />
+      {header && <CommandLine label={label} caret />}
       <div className="tui-progress" role="status" aria-label={`${label} running`}>
         <ActivityLoader />
         <span className="tui-progress-label">working…</span>
@@ -117,11 +119,14 @@ export function ActionResultOutput({
   completedAt,
   sectioned = true,
   showNoOutput = true,
+  header = true,
 }: {
   result: ActionResult;
   completedAt?: number;
   sectioned?: boolean;
   showNoOutput?: boolean;
+  /** The `❯ command · when` line; off for a host that already shows it (the output strip's own line). */
+  header?: boolean;
 }) {
   const [safeStdout, safeStderr] = useMemo(
     () => [redactTerminalOutput(result.stdout), redactTerminalOutput(result.stderr)],
@@ -131,7 +136,7 @@ export function ActionResultOutput({
 
   return (
     <>
-      <CommandLine label={result.action} when={completedAt !== undefined ? completedLabel(completedAt) : undefined} />
+      {header && <CommandLine label={actionLabel(result.action)} when={completedAt !== undefined ? completedLabel(completedAt) : undefined} />}
       <div className={`tui-statusline ${result.success ? "c-ok" : "c-fail"}`}>
         <Glyph name={result.success ? "check" : "fail"} />
         <span className="tui-status-text">
@@ -176,6 +181,7 @@ export function TerminalState({
   idleContent,
   sectioned = true,
   showNoOutput = true,
+  header = true,
 }: {
   runningLabel?: string | null;
   result?: ActionResult | null;
@@ -184,13 +190,15 @@ export function TerminalState({
   idleContent?: ReactNode;
   sectioned?: boolean;
   showNoOutput?: boolean;
+  /** The `❯ command` line of the running and finished states; off when the host shows the command itself. */
+  header?: boolean;
 }) {
   if (runningLabel) {
-    return <RunningState label={runningLabel} />;
+    return <RunningState label={runningLabel} header={header} />;
   }
 
   if (result) {
-    return <ActionResultOutput result={result} completedAt={completedAt} sectioned={sectioned} showNoOutput={showNoOutput} />;
+    return <ActionResultOutput result={result} completedAt={completedAt} sectioned={sectioned} showNoOutput={showNoOutput} header={header} />;
   }
 
   if (idleContent) {

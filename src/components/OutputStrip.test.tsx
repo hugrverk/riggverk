@@ -108,10 +108,11 @@ describe("OutputStrip", () => {
       expect(line().querySelector(".terminal-activity")).not.toBeNull();
     });
 
-    it("shows a finished run as verdict glyph, action, ok and when", () => {
+    it("shows a finished run as verdict glyph, the task's own name, ok and when", () => {
       renderInFrame(<OutputStrip {...props({ wsLog: APPLY, wsLogCompletedAt: Date.now() })} />);
       const text = line().textContent!;
-      expect(text.startsWith("✓apply_setup update claude · ok · ")).toBe(true);
+      // The same words the line showed while the task ran, not the action id.
+      expect(text.startsWith("✓update claude · ok · ")).toBe(true);
       expect(text).toContain("just now");
       expect(text).not.toContain("rollback");
       expect(line().querySelector(".g")!.className).toContain("c-ok");
@@ -119,8 +120,16 @@ describe("OutputStrip", () => {
 
     it("marks a failed run with the fail glyph and the word", () => {
       renderInFrame(<OutputStrip {...props({ wsLog: { ...APPLY, success: false, stdout: "", stderr: "write failed", exit_code: 1 } })} />);
-      expect(line().textContent).toContain("✗apply_setup update claude · failed");
+      expect(line().textContent).toContain("✗update claude · failed");
       expect(line().querySelector(".g")!.className).toContain("c-fail");
+    });
+
+    it("names a release check the same way finished as while it ran", () => {
+      const { rerenderFrame } = renderInFrame(<OutputStrip {...props({ wsRunning: "release-check" })} />);
+      expect(line().textContent).toContain("release-check");
+      rerenderFrame(<OutputStrip {...props({ wsLog: { ...APPLY, action: "release_check" } })} />);
+      expect(line().textContent).toContain("✓release-check · ok");
+      expect(line().textContent).not.toContain("release_check");
     });
 
     it("names the transaction z would roll back, in the result only", () => {
@@ -180,6 +189,9 @@ describe("OutputStrip", () => {
       expect(log().hidden).toBe(false);
       expect(log().textContent).toContain("completed · exit 0");
       expect(log().textContent).toContain("── stdout");
+      // The line names the command and when it ran; the log does not say it again.
+      expect(log().querySelector(".tui-cmdline")).toBeNull();
+      expect(log().textContent).not.toContain("update claude");
       expect(line().textContent).toContain("esc collapse");
       // Lines written by an apply are toned by their first word; the glyph row never depends on colour alone.
       const tones = Array.from(log().querySelectorAll(".tui-out span")).map(span => [span.className, span.textContent]);

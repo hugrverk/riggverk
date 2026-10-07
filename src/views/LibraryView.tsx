@@ -1,8 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ActionResult } from "../components/TerminalOutput";
 import { focusPaneById } from "../keyboard/focus";
 import { useStatusContext } from "../shell/ShellState";
-import { Kbd } from "../ui/Kbd";
 import { Pane } from "../ui/Pane";
 import type {
   AgentMetadataResponse,
@@ -20,9 +19,8 @@ import { BrainPane } from "./library/BrainPane";
 import { ConfigItemList } from "./library/ConfigItemList";
 import { CreateDocForm } from "./library/CreateDocForm";
 import { DocItemList } from "./library/DocItemList";
-import { EditorPane } from "./library/EditorPane";
+import { DocumentPane } from "./library/DocumentPane";
 import { buildEntry, emptyStateHint } from "./library/entry";
-import { PreviewPane } from "./library/PreviewPane";
 import { RULES_LIST_KEY, RulesItemList } from "./library/RulesItemList";
 import { SkillItemList } from "./library/SkillItemList";
 import { SourceSwitcher, type LibrarySourceTab } from "./library/SourceSwitcher";
@@ -39,7 +37,7 @@ const SOURCE_TYPES: { id: LibrarySourceType; label: string; title: string }[] = 
   { id: "brain", label: "brain", title: "Brain Setup" },
 ];
 
-/** A pending "move into the editor" request outlives the open item it waits for only this long. */
+/** A pending "open it for editing" request outlives the open item it waits for only this long. */
 const FOCUS_REQUEST_MS = 2000;
 
 export interface LibraryViewProps {
@@ -155,11 +153,12 @@ function sourceCount(props: LibraryViewProps, type: LibrarySourceType): number |
 }
 
 /**
- * Library: [1] item list of the active source (with the source switcher), [2] editor, [3] preview of the
- * working copy. Brain Setup has no editor, so it is a list plus one copy-block pane.
+ * Library: [1] item list of the active source (with the source switcher), [2] the open item as one document
+ * pane: the working copy rendered, or its source textarea while editing. Brain Setup has nothing to edit, so
+ * its second pane is one copy block.
  *
- * The preview/edit mode props (`docMode`, ...) stay in the contract with the controller; the panes no
- * longer need them because the preview is always on and the editor is a pane of its own.
+ * The preview/edit mode props (`docMode`, ...) stay in the contract with the controller; the pane keeps its
+ * own view/edit state (below), which resets with the open item, so they are not needed.
  */
 export function LibraryView(props: LibraryViewProps) {
   const { sourceType, onSetSourceType, workspaceValid, showConfigs } = props;
@@ -173,11 +172,37 @@ export function LibraryView(props: LibraryViewProps) {
   const isBrain = sourceType === "brain";
   const followCursor = !(entry?.dirty ?? false);
 
+  // Edit mode belongs to one open item: switching to another (or to none) returns to the rendered view.
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const entryId = entry?.id ?? null;
+  if (editingId !== null && editingId !== entryId) setEditingId(null);
+  const editing = entry !== null && !entry.readOnly && editingId === entry.id;
+
   const sources: LibrarySourceTab[] = SOURCE_TYPES
     .filter(source => source.id !== "configs" || showConfigs)
     .map(source => ({ ...source, count: sourceCount(props, source.id) }));
   const activeSource = SOURCE_TYPES.find(source => source.id === sourceType) ?? SOURCE_TYPES[0]!;
   const activeCount = sourceCount(props, sourceType);
+
+  const startEdit = () => {
+    if (!entry || entry.readOnly) return;
+    // Already in edit mode (focus was elsewhere): there is no mode change for the effect below to follow.
+    if (textareaRef.current) textareaRef.current.focus();
+    else setEditingId(entry.id);
+  };
+  const stopEdit = () => setEditingId(null);
+
+  // Entering edit mode puts the cursor in the textarea; leaving it hands focus back to the rendered pane,
+  // unless focus already went somewhere on purpose (`:q` sends it to the list).
+  const wasEditing = useRef(false);
+  useLayoutEffect(() => {
+    if (editing) textareaRef.current?.focus();
+    else if (wasEditing.current) {
+      const active = document.activeElement;
+      if (!active || active === document.body) focusPaneById("editor", rootRef.current ?? document);
+    }
+    wasEditing.current = editing;
+  }, [editing]);
 
   useStatusContext(activeSource.label);
   const { close } = useLibraryKeys({
@@ -190,6 +215,8 @@ export function LibraryView(props: LibraryViewProps) {
     onSetSourceType,
     showCreateDoc: props.showCreateDoc,
     onSetShowCreateDoc: props.onSetShowCreateDoc,
+    startEdit,
+    stopEdit,
   });
 
   // Switching source replaces the list, which takes focus with it: put it back on the new list.
@@ -201,12 +228,14 @@ export function LibraryView(props: LibraryViewProps) {
     if (!active || active === document.body) focusPaneById("items", rootRef.current ?? document);
   }, [sourceType]);
 
-  // Enter on a row opens it and moves into the editor once that item has loaded.
+  // Enter on a row opens it and moves into it once that item has loaded: the textarea for an editable item,
+  // the rendered document for a read-only one.
   const entryKey = entry?.listKey ?? null;
   useEffect(() => {
     if (focusRequest === null) return;
-    if (entryKey === focusRequest && textareaRef.current) {
-      textareaRef.current.focus();
+    if (entry && entryKey === focusRequest) {
+      if (entry.readOnly) focusPaneById("editor", rootRef.current ?? document);
+      else startEdit();
       setFocusRequest(null);
       return;
     }
@@ -221,7 +250,6 @@ export function LibraryView(props: LibraryViewProps) {
     }
     setFocusRequest(key);
   };
-  const hasFilter = sourceType === "docs" || sourceType === "skills" || sourceType === "agents";
 
   let list: React.ReactNode;
   switch (sourceType) {
@@ -318,7 +346,7 @@ export function LibraryView(props: LibraryViewProps) {
     ) : undefined;
 
   return (
-    <div className={isBrain ? "screen library library-pair" : "screen library"} ref={rootRef}>
+    <div className="screen library" ref={rootRef}>
       <Pane
         id="items"
         label="Library items"
@@ -326,19 +354,6 @@ export function LibraryView(props: LibraryViewProps) {
         meta={activeCount !== undefined ? `· ${activeCount}` : undefined}
         defaultFocus
         bodyClassName="lib-list-body"
-        footer={
-          <>
-            {hasFilter && (
-              <span>
-                <Kbd>/</Kbd> filter
-              </span>
-            )}
-            <span>
-              <Kbd>[</Kbd>
-              <Kbd>]</Kbd> source
-            </span>
-          </>
-        }
       >
         <SourceSwitcher
           sources={sources}
@@ -355,20 +370,18 @@ export function LibraryView(props: LibraryViewProps) {
           brainSetupSource={props.brainSetupSource}
         />
       ) : (
-        <>
-          <EditorPane
-            entry={entry}
-            emptyHint={
-              sourceType === "configs" && props.activeConfigTargetId === "opencode_config" && workspaceValid
-                ? "Loading config source..."
-                : emptyStateHint(sourceType, workspaceValid)
-            }
-            textareaRef={textareaRef}
-            top={createForm}
-            onClose={close}
-          />
-          <PreviewPane entry={entry} />
-        </>
+        <DocumentPane
+          entry={entry}
+          emptyHint={
+            sourceType === "configs" && props.activeConfigTargetId === "opencode_config" && workspaceValid
+              ? "Loading config source…"
+              : emptyStateHint(sourceType, workspaceValid)
+          }
+          editing={editing}
+          textareaRef={textareaRef}
+          top={createForm}
+          onClose={close}
+        />
       )}
     </div>
   );

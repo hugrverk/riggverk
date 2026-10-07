@@ -97,7 +97,7 @@ Tabs in order (press `1`-`9`; disabled harnesses are hidden and the rest renumbe
 
 - Workspace - harness list with install state, surfaces, installed-state matrix, release-check, uninstall with preview, session-scoped **Recover previous uninstall**, backups folder, output.
 - Codex, OpenCode, Cursor, Claude - target toggles (Space, autosaved), surfaces, runtime health, install review. OpenCode adds the model override.
-- Library - items, editor, and preview panes for docs, rules, skills, runtime agents, configs, and Brain Setup. Saves write the runtime workspace only (`:w`, `:q`).
+- Library - an items list and one document pane (rendered, or its source while editing) for docs, rules, skills, runtime agents, configs, and Brain Setup. Saves write the runtime workspace only (`:w`, `:q`).
 - Repo Dashboard - local-git-first repository and docs insight with bounded `git fetch --prune` and optional `gh` enrichment. Open trusted repositories only.
 - Prompt Builder - deterministic copy-ready prompt templates (Prompt, Goal Prompt, Batch Prompt) with optional repository context.
 - Settings - harnesses, appearance, text size, motion, landing page, colors, workspace.

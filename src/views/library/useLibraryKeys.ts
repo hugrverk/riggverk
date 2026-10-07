@@ -23,11 +23,19 @@ interface LibraryKeysOptions {
   onSetSourceType: (type: LibrarySourceType) => void | Promise<void>;
   showCreateDoc: boolean;
   onSetShowCreateDoc: (show: boolean) => void;
+  /** Switches the document pane to the source textarea and puts the cursor in it. */
+  startEdit: () => void;
+  /** Switches the document pane back to the rendered view (focus follows in the caller). */
+  stopEdit: () => void;
 }
 
+/** Panes whose focus offers `o` as a status-bar hint (the key itself works anywhere in the library). */
+const OPEN_PANES = ["items", "editor"] as const;
+
 /**
- * Library key layer: `[`/`]` source, `i`/Enter into the editor, Mod+s and `:w` save, Escape back to the list,
- * `:q` close (asks first when there are unsaved edits), `:reset`, `o` open externally, `n` new doc.
+ * Library key layer: `[`/`]` source, `/` filter (hint only: the list owns the key), `i`/Enter edit the open
+ * item (rendered view -> textarea), Mod+s and `:w` save, Escape back to the rendered view, `:q` close (asks
+ * first when there are unsaved edits), `:reset`, `o` open externally, `n` new doc.
  * Selection itself lives in the item lists; every guard (dirty confirm, stale loads) stays in the controller.
  */
 export function useLibraryKeys({
@@ -40,6 +48,8 @@ export function useLibraryKeys({
   onSetSourceType,
   showCreateDoc,
   onSetShowCreateDoc,
+  startEdit,
+  stopEdit,
 }: LibraryKeysOptions): { close: () => Promise<void> } {
   const confirm = useConfirm();
   const { notify, beginConfirm } = useShellState();
@@ -90,6 +100,7 @@ export function useLibraryKeys({
       if (!ok) return;
       latest.current?.onReset();
     }
+    stopEdit();
     focusItemsSoon();
   };
 
@@ -108,29 +119,36 @@ export function useLibraryKeys({
       id: "library.source.prev",
       keys: ["[", "<"],
       title: "Previous source",
+      hint: "prev source",
       group: "Library",
       scope: "pane",
+      paneId: "items",
       run: () => stepSource(-1),
     },
     {
       id: "library.source.next",
       keys: ["]", ">"],
       title: "Next source",
+      hint: "next source",
       group: "Library",
       scope: "pane",
+      paneId: "items",
       run: () => stepSource(1),
     },
     {
       id: "library.edit",
-      keys: ["i", "Enter"],
+      keys: ["Enter", "i"],
       title: "Edit the open item",
+      hint: "edit",
       group: "Library",
       scope: "pane",
-      run: () => {
-        const textarea = textareaRef.current;
-        if (!textarea) return false;
-        textarea.focus();
+      paneId: "editor",
+      when: () => {
+        const current = latest.current;
+        if (!current) return false;
+        return current.readOnly ? current.readOnlyReason ?? "read-only" : true;
       },
+      run: startEdit,
     },
     {
       id: "library.save",
@@ -153,20 +171,20 @@ export function useLibraryKeys({
       inEditable: true,
       run: event => {
         if (event.target !== textareaRef.current) return false;
-        focusItems();
+        stopEdit();
       },
     },
-    {
-      id: "library.open",
+    ...OPEN_PANES.map((paneId): Binding => ({
+      id: `library.open.${paneId}`,
       keys: "o",
       title: "Open in the external editor",
       hint: "open",
       group: "Library",
       scope: "pane",
-      paneId: "items",
+      paneId,
       when: () => latest.current !== null,
       run: () => latest.current?.onOpen(),
-    },
+    })),
     {
       id: "library.new-doc",
       keys: "n",

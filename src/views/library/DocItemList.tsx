@@ -55,7 +55,7 @@ export function DocItemList({
 
   const staleHint = docsHealth?.missing_prompt_template_docs
     ? "Prompt Templates and other bundled docs are missing from this workspace."
-    : `${missingCount} bundled doc(s) are missing from this workspace.`;
+    : `${missingCount} bundled doc${missingCount === 1 ? " is" : "s are"} missing from this workspace.`;
 
   return (
     <>

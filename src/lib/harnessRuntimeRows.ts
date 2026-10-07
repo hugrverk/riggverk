@@ -32,9 +32,15 @@ function textRow(label: string, value: string | null | undefined, options: { wra
   return value ? [{ label, value, ...options }] : [];
 }
 
+/** A backend sentence ("Update OpenCode.") as a row value: lowercase start and no full stop, like every other value. */
+function fragment(sentence: string): string {
+  const text = sentence.trim().replace(/\.$/, "");
+  return text.charAt(0).toLowerCase() + text.slice(1);
+}
+
 /** The backend's next step, only while the runtime is out of sync: "No runtime action needed." is noise. */
 function nextRows(status: string, next: string | null | undefined): KvItem[] {
-  return runtimeChipTone(status) === "ok" ? [] : textRow("next", next, { wrap: true });
+  return runtimeChipTone(status) === "ok" ? [] : textRow("next", next && fragment(next), { wrap: true });
 }
 
 function warningRows(warnings: readonly string[]): KvItem[] {

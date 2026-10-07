@@ -218,6 +218,22 @@ describe("SettingsView keyboard navigation", () => {
     expect(document.activeElement).toBe(screen.getByLabelText("Accent hex code"));
   });
 
+  it("hints j and k in the status bar from both panes, clickable, and keeps pane footers free of key hints", () => {
+    renderSettings();
+    focus(radios("Theme")[0]!);
+    fireEvent.click(hints().getByRole("button", { name: "j next setting" }));
+    expect(document.activeElement).toBe(radios("Global app text size")[1]);
+    fireEvent.click(hints().getByRole("button", { name: "k prev setting" }));
+    expect(document.activeElement).toBe(radios("Theme")[0]);
+
+    focus(radios("Landing page")[0]!);
+    expect(hints().getByRole("button", { name: "j next setting" })).not.toBeNull();
+    expect(hints().getByRole("button", { name: "k prev setting" })).not.toBeNull();
+
+    expect(pane("Appearance").querySelector(".pane-foot")).toBeNull();
+    expect(pane("App").querySelector(".pane-foot")).toBeNull();
+  });
+
   it("does not move focus with j in a hex field, and Escape leaves the field", () => {
     renderSettings();
     const accent = screen.getByLabelText("Accent hex code");

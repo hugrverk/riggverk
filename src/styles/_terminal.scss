@@ -99,14 +99,16 @@
    when a stacked page is taller than the window (the page scrolls instead). */
 .outstrip { min-height: auto; }
 
+/* Same left padding, 16px glyph cell and gap as a list row, so the glyph and the command sit under the rows'
+   cursor cell and names in the panes above. */
 .outstrip-line {
   display: flex;
   flex: none;
   align-items: center;
-  gap: 14px;
+  gap: 8px;
   width: 100%;
   height: calc(var(--lh) + 6px);
-  padding: 0 10px;
+  padding: 0 10px 0 8px;
   border: 0;
   background: none;
   color: var(--text);
@@ -118,7 +120,10 @@
 
 .outstrip-line:focus-visible { outline-offset: -2px; }
 
-.outstrip-line .g { flex: none; }
+.outstrip-line > .g {
+  flex: none;
+  width: 16px;
+}
 
 /* The command and what follows it share one ellipsis; the loader and `running` keep their size. */
 .outstrip-text {

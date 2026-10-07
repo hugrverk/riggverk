@@ -117,8 +117,8 @@ Use fixture files in the isolated `HOME` (`~/.claude/CLAUDE.md`, `~/.codex/AGENT
 
 ## 9. Library, Prompt Builder, Repo Dashboard
 
-- [ ] Library shows items, editor, and preview panes; `[` `]` (and `<` `>`) switch among docs, rules, skills, agents, configs, brain
-- [ ] `i` or Enter opens the editor; `Mod+s` and `:w` save; Escape returns to the list; `:q` asks before discarding edits; `:reset` discards them; `n` creates a doc; `o` opens externally
+- [ ] Library shows the items list and one document pane (rendered by default); `[` `]` (and `<` `>`) switch among docs, rules, skills, agents, configs, brain
+- [ ] `i` or Enter swaps the rendered document for its source (never for read-only items such as skills); `Mod+s` and `:w` save; Escape returns to the rendered view; `h` returns to the list; `:q` asks before discarding edits; `:reset` discards them; `n` creates a doc; `o` opens externally
 - [ ] Docs: select, preview, edit, dirty state, save, reset, create form, stale bundled-doc warning, Markdown table, fenced code, code copy
 - [ ] Saving over an existing file creates `docs/<id>-<timestamp>/` in the backup root; a symlinked doc is refused
 - [ ] Library edits do not change what a harness install writes (installs come from the bundle)
