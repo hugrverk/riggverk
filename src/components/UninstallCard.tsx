@@ -71,7 +71,7 @@ export function UninstallCard({
       <div className="lifecycle" role="region" aria-label="Uninstall">
         <Kv
           className="lifecycle-kv"
-          items={[{ label: "uninstall", value: ":uninstall · previews first · backed up, rollback-capable", tone: "dim", wrap: true }]}
+          items={[{ label: "uninstall", value: "previews first · backed up, rollback-capable", tone: "dim", wrap: true }]}
         />
         <div className="lifecycle-actions">
           <button

@@ -187,8 +187,6 @@ export function StartView({
   const selectedLabel = overviewLabel(selected);
   const surfaceRows = surfaceRowsFor(selected, entry, appSettings);
   const meta = targetMeta(entry, { workspaceValid, id: selected });
-  const offCount = surfaceRows.filter(row => row.state === "off").length;
-  const onCount = surfaceRows.length - offCount;
   const conflicts = entry?.status?.conflict_details ?? [];
   // The rules file of the harness under the cursor: its state is told here, the actions live on the harness page.
   const rulesSurface = selected === "workspace" ? null : rulesSurfaceOf(selected);
@@ -210,9 +208,8 @@ export function StartView({
           ...(rulesHint ? [{ label: "", value: rulesHint, tone: "dim" as const, wrap: true, id: "rules-hint" }] : []),
         ]
       : []),
-    ...(selected === "workspace"
-      ? [{ label: "path", value: resolvedPath, wrap: true }]
-      : [{ label: "surfaces", value: `${onCount} on${offCount > 0 ? `, ${offCount} off (target toggles)` : ""}` }]),
+    // A harness's surfaces, on and off, are the rows right above.
+    ...(selected === "workspace" ? [{ label: "path", value: resolvedPath, wrap: true }] : []),
   ];
 
   const lastCheck = wsLog?.action === "release_check" ? wsLog : null;

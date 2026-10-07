@@ -55,7 +55,7 @@ describe("UninstallCard", () => {
     renderCard();
     const card = screen.getByRole("region", { name: "Uninstall" });
     expect(card.querySelector("dt")!.textContent).toBe("uninstall");
-    expect(card.querySelector("dd")!.textContent).toBe(":uninstall · previews first · backed up, rollback-capable");
+    expect(card.querySelector("dd")!.textContent).toBe("previews first · backed up, rollback-capable");
     expect(card.querySelector("p")).toBeNull();
     expect(within(card).getByRole("button", { name: /preview uninstall/i })).toBeTruthy();
   });
