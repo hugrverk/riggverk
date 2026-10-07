@@ -97,6 +97,68 @@
   transition: none;
 }
 
+/* ── output strip: one line under the page's panes, expands into the log ──
+   Markup lives in components/OutputStrip.tsx. `.outstrip` is a `.pane` (border, accent on :focus-within) with no
+   title notch, footer or padding of its own; the line is the pane's focus target, the log below it is `TerminalState`. */
+
+/* `.pane` lets a grid item shrink to nothing; the strip is one line plus its capped log and must keep that height
+   when a stacked page is taller than the window (the page scrolls instead). */
+.outstrip { min-height: auto; }
+
+.outstrip-line {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  height: calc(var(--lh) + 6px);
+  padding: 0 10px;
+  border: 0;
+  background: none;
+  color: var(--text);
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.outstrip-line:focus-visible { outline-offset: -2px; }
+
+.outstrip-line .g { flex: none; }
+
+/* The command and what follows it share one ellipsis; the loader and `running` keep their size. */
+.outstrip-text {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.outstrip-cmd {
+  font-weight: 500;
+  color: var(--text-heading);
+}
+
+.outstrip-line .terminal-activity { flex: none; margin-top: 0; }
+
+/* The key that toggles the log, pinned to the right edge. */
+.outstrip-affordance {
+  flex: none;
+  margin-left: auto;
+  color: var(--text-muted);
+}
+
+/* No display here: the `hidden` attribute collapses it. Capped at about 12 lines; longer output scrolls. */
+.outstrip-log {
+  min-height: 0;
+  max-height: calc(var(--lh) * 12);
+  padding: 0 10px 6px;
+  border-top: 1px solid var(--border);
+  overflow: auto;
+}
+
+.outstrip-log:focus-visible { outline-offset: -2px; }
+
 @media (prefers-reduced-motion: reduce) {
   .tui-caret { animation: none; }
 }
