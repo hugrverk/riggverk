@@ -107,8 +107,9 @@ Installed skill files are user-owned after installation. Agent Workspace may:
 - create missing managed copies
 - report synced or diverged copies
 - remove only known deprecated copies that still match an Agent Workspace reference snapshot
+- update or remove a copy that is byte-for-byte a version the app shipped, even when `managed-state.json` records no or a different hash for it (see Managed ownership below)
 
-Diverged deprecated copies and unknown skills are preserved.
+Diverged deprecated copies, edited copies, and unknown skills are preserved.
 
 Deprecated removal creates a transaction backup before deletion. Rollback validates the transaction, resolves the current destination from the harness registry, rejects destination mismatch and occupied targets, stages restores, and preserves the backup transaction.
 
@@ -212,6 +213,8 @@ Packaged source and runtime destination are resolved independently by `SetupRoot
 
 Managed ownership is recorded in `.agent-workspace/managed-state.json` schema 2 with stable SHA-256 digests. First-run adoption and stale cleanup require an exact canonical or historical digest. Unknown files and modified historical copies remain conflicts and are never claimed or deleted.
 
+A whole-file copy artifact (harness skill, harness agent, OpenCode Playwright MCP file) whose bytes are exactly a version the app shipped is app-owned even when its recorded hash differs or is missing, for example after an older app version or legacy script synced it without recording ownership. The planner then updates or removes it like a recorded file, with backup and rollback. `metadata/shipped-digests.json` lists those versions per bundle source path (every committed version plus the current one, including retired skills and agents); `scripts/generate-shipped-digests.py` keeps it current and `release-check` verifies it. Rules blocks (`metadata/rules-history`), merge-managed configs, and workspace files have their own proofs and are not covered. Missing or malformed metadata proves nothing, so those files stay conflicts.
+
 OpenCode agent permissions are composed from `templates/opencode.policy.json` plus `templates/opencode/agents/*.role.json`. Restrictive roles use `composition.replace_sections` so inherited bash/edit capabilities are replaced, not shallow-merged. `scripts/validate_opencode_permissions.py` guards the semantic contract in release-check.
 
 Transactions persist manifest status fail-closed, validate backups before mutation, reject symlink parent chains, and record per-artifact apply, validation, rollback, managed digest, and full digest state. The exact prior managed-state bytes or prior absence are part of the transaction and are restored on rollback. Managed state is published atomically before the transaction becomes completed.
@@ -222,7 +225,7 @@ Automatic rollback uses the workspace root validated at transaction start, not t
 
 Full uninstall previews removable, preserved, and merge-managed artifacts before any mutation:
 
-- **Removable** — installed files with proven app ownership (managed-state digest, historical ownership, or current bundled source match).
+- **Removable** — installed files with proven app ownership (managed-state digest, historical ownership, a version the app shipped, or current bundled source match).
 - **Preserved** — modified or unknown user files that do not match an app-owned proof.
 - **Merge-managed** — user-owned config files where only allowlisted keys were merged, and rules files that hold the user's own text beside the base block; the file is never deleted wholesale. A rules file that holds nothing but an unedited base block is removable.
 

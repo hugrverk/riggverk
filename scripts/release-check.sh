@@ -299,6 +299,11 @@ python3 scripts/generate-pre-manifest-ownership.py --check
 step "rules history is current"
 python3 scripts/generate-rules-history.py --check
 
+# Same history requirement: the digests of every shipped skill and agent file version.
+step "shipped digests are current"
+run_python_unittests scripts/test_generate_shipped_digests.py
+python3 scripts/generate-shipped-digests.py --check
+
 step "release-check syntax"
 bash -n scripts/release-check.sh
 for repo_script in \

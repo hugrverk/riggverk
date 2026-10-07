@@ -24,6 +24,7 @@ mod setup_mutation_guard;
 mod setup_roots;
 mod setup_transaction;
 mod shell_runtime;
+mod shipped_digests;
 mod skill_discovery;
 mod skills_install;
 mod stable_digest;
@@ -34,6 +35,8 @@ mod managed_reconciliation_contract;
 mod opencode_model_override_contract;
 #[cfg(test)]
 mod rules_block_contract;
+#[cfg(test)]
+mod shipped_ownership_contract;
 #[cfg(test)]
 mod smoke_runtime;
 #[cfg(test)]
