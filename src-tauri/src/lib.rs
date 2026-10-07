@@ -36,6 +36,8 @@ mod opencode_model_override_contract;
 #[cfg(test)]
 mod rules_block_contract;
 #[cfg(test)]
+mod shipped_ownership_contract;
+#[cfg(test)]
 mod smoke_runtime;
 #[cfg(test)]
 mod test_env;
