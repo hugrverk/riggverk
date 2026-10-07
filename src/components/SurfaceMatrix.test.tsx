@@ -68,13 +68,11 @@ describe("SurfaceMatrix", () => {
     expect(cells[4]!.getAttribute("title")).toBe("cursor mcp: conflict");
   });
 
-  it("spells the glyphs out in a legend and emphasises the selected row", () => {
-    render(<SurfaceMatrix rows={ROWS} selectedId="cursor" />);
-    const legend = screen.getByLabelText("Legend");
-    expect(legend.textContent).toContain("current");
-    expect(legend.textContent).toContain("update / not installed");
-    expect(legend.textContent).toContain("conflict");
-    expect(legend.textContent).toContain("off / n/a");
+  it("has no legend row (it lives in the help overlay) and emphasises the selected row", () => {
+    const { container } = render(<SurfaceMatrix rows={ROWS} selectedId="cursor" />);
+    expect(screen.queryByLabelText("Legend")).toBeNull();
+    expect(container.querySelector(".matrix-legend")).toBeNull();
+    expect(container.children).toHaveLength(1);
     expect(screen.getByRole("rowheader", { name: "cursor" }).classList.contains("c-head")).toBe(true);
     expect(screen.getByRole("rowheader", { name: "workspace" }).classList.contains("c-head")).toBe(false);
   });

@@ -279,15 +279,6 @@ kbd {
 .matrix-grid .h { color: var(--text-muted); font-size: var(--fs-sm); }
 .matrix-grid .cell { text-align: center; }
 
-.matrix-legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 2px 14px;
-  padding: 0 10px;
-  color: var(--text-muted);
-  font-size: var(--fs-sm);
-}
-
 /* ---- plan table ---- */
 
 .plan {
@@ -464,6 +455,7 @@ kbd {
 }
 
 .help-overlay section { min-width: 0; }
+.help-overlay .group { text-transform: lowercase; }
 .help-overlay .kv { grid-template-columns: minmax(64px, max-content) minmax(0, 1fr); }
 .help-overlay .kv dt { white-space: nowrap; }
 .help-overlay .kv dd { white-space: normal; }

@@ -40,6 +40,17 @@ const STATE_DISPLAY: Record<SurfaceDisplayState, StateDisplay> = {
   user_managed: { glyph: "partial", tone: "warn", label: "you manage" },
 };
 
+/**
+ * One line per glyph of the installed map, shown in the `?` help instead of under the matrix. Glyph and tone
+ * come from the same table as the cells, so the legend cannot drift from what the matrix draws.
+ */
+export const MATRIX_LEGEND: readonly StateDisplay[] = [
+  STATE_DISPLAY.current,
+  { ...STATE_DISPLAY.update_available, label: "update / not installed" },
+  STATE_DISPLAY.conflict,
+  { ...STATE_DISPLAY.off, label: "off / n/a" },
+];
+
 export function overviewLabel(id: OverviewId): string {
   return id === "workspace" ? "workspace" : HARNESS_LABELS[id].toLowerCase();
 }

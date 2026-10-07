@@ -95,6 +95,19 @@ describe("HelpOverlay", () => {
     expect(Array.from(row("Save").querySelectorAll("kbd")).map(kbd => kbd.textContent)).toEqual(["⌘S"]);
   });
 
+  it("ends with the installed-map glyph legend, drawn from the matrix's own glyphs", () => {
+    renderInFrame(<Registrar bindings={[]} />);
+    const map = within(openHelp()).getByRole("region", { name: "Installed map" });
+    const rows = Array.from(map.querySelectorAll("dt")).map(dt => [dt.textContent, dt.nextElementSibling!.textContent]);
+    expect(rows).toEqual([
+      ["●", "current"],
+      ["◐", "update / not installed"],
+      ["✗", "conflict"],
+      ["·", "off / n/a"],
+    ]);
+    expect(Array.from(map.querySelectorAll("dt .g")).every(glyph => glyph.getAttribute("aria-hidden") === "true")).toBe(true);
+  });
+
   it("lists the registered commands with their aliases", () => {
     renderInFrame(
       <Registrar

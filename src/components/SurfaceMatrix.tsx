@@ -12,53 +12,45 @@ export interface SurfaceMatrixProps {
 
 /**
  * Installed state of every target against every surface kind. A CSS grid, not preformatted text: each cell is
- * a glyph (shape carries the state, colour only reinforces it) plus a visually hidden text label, and the
- * legend below spells the glyphs out.
+ * a glyph (shape carries the state, colour only reinforces it) plus a visually hidden text label. The glyph
+ * legend (`MATRIX_LEGEND`) lives in the `?` help overlay, not under the matrix.
  */
 export function SurfaceMatrix({ rows, selectedId }: SurfaceMatrixProps) {
   return (
-    <>
-      <div
-        className="matrix-grid"
-        role="table"
-        aria-label="Installed surfaces"
-        style={{ "--matrix-cols": MATRIX_COLUMNS.length } as CSSProperties}
-      >
-        <div className="matrix-row" role="row">
-          <span className="h" role="columnheader">
-            <span className="visually-hidden">target</span>
+    <div
+      className="matrix-grid"
+      role="table"
+      aria-label="Installed surfaces"
+      style={{ "--matrix-cols": MATRIX_COLUMNS.length } as CSSProperties}
+    >
+      <div className="matrix-row" role="row">
+        <span className="h" role="columnheader">
+          <span className="visually-hidden">target</span>
+        </span>
+        {MATRIX_COLUMNS.map(column => (
+          <span key={column} className="h" role="columnheader">
+            {column}
           </span>
-          {MATRIX_COLUMNS.map(column => (
-            <span key={column} className="h" role="columnheader">
-              {column}
+        ))}
+      </div>
+      {rows.map(row => (
+        <div key={row.id} className="matrix-row" role="row">
+          <span className={cx(row.id === selectedId && "c-head")} role="rowheader">
+            {row.label}
+          </span>
+          {row.cells.map(cell => (
+            <span
+              key={cell.column}
+              className="cell"
+              role="cell"
+              title={`${row.label} ${cell.column}: ${cell.display.label}`}
+            >
+              <Glyph name={cell.display.glyph} tone={cell.display.tone} />
+              <span className="visually-hidden">{cell.display.label}</span>
             </span>
           ))}
         </div>
-        {rows.map(row => (
-          <div key={row.id} className="matrix-row" role="row">
-            <span className={cx(row.id === selectedId && "c-head")} role="rowheader">
-              {row.label}
-            </span>
-            {row.cells.map(cell => (
-              <span
-                key={cell.column}
-                className="cell"
-                role="cell"
-                title={`${row.label} ${cell.column}: ${cell.display.label}`}
-              >
-                <Glyph name={cell.display.glyph} tone={cell.display.tone} />
-                <span className="visually-hidden">{cell.display.label}</span>
-              </span>
-            ))}
-          </div>
-        ))}
-      </div>
-      <div className="matrix-legend" aria-label="Legend">
-        <span><Glyph name="ok" tone="ok" /> current</span>
-        <span><Glyph name="partial" tone="warn" /> update / not installed</span>
-        <span><Glyph name="fail" tone="fail" /> conflict</span>
-        <span><Glyph name="none" tone="dim" /> off / n/a</span>
-      </div>
-    </>
+      ))}
+    </div>
   );
 }
