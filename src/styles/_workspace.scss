@@ -187,11 +187,12 @@
 
 /* ---- uninstall and recovery ---- */
 
+/* No top padding: the first row sits one blank row under the `lifecycle` label, like every other group's. */
 .lifecycle {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  padding: 4px 10px 6px;
+  padding: 0 10px 6px;
 }
 
 .lifecycle p { overflow-wrap: break-word; }
