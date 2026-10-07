@@ -39,9 +39,14 @@ function strip() {
   return screen.getByRole("region", { name: "Output" });
 }
 
-/** The one-row summary: the strip's primary focus target and its toggle. */
+/** The one-row summary: the strip's primary focus target and its toggle. Not the only button once a result offers rollback. */
 function line() {
-  return within(strip()).getByRole("button");
+  return strip().querySelector<HTMLButtonElement>("button[aria-controls]")!;
+}
+
+/** The mouse-only `↵ expand` / `esc collapse` key beside the line. */
+function affordance() {
+  return strip().querySelector(".outstrip-affordance")!;
 }
 
 /** The log the line controls. Found through `aria-controls`: a collapsed (hidden) element has no accessible name. */
@@ -82,7 +87,8 @@ describe("OutputStrip", () => {
   describe("the line", () => {
     it("is one quiet row while idle: ready, the workspace context, no command hints and no caret", () => {
       renderInFrame(<OutputStrip {...props()} />);
-      expect(line().textContent).toBe("❯ready · workspace valid · branch main↵ expand");
+      expect(line().textContent).toBe("❯ready · workspace valid · branch main");
+      expect(affordance().textContent).toBe("↵ expand");
       expect(strip().textContent).not.toContain("try:");
       expect(strip().querySelector(".tui-caret")).toBeNull();
       expect(line().getAttribute("aria-expanded")).toBe("false");
@@ -93,13 +99,14 @@ describe("OutputStrip", () => {
       const { rerenderFrame } = renderInFrame(<OutputStrip {...props({ status: null })} />);
       expect(line().textContent).toContain("ready · waiting for workspace status…");
       rerenderFrame(<OutputStrip {...props({ workspaceValid: false, gitAvailable: false })} />);
-      expect(line().textContent).toContain("ready · workspace invalid↵");
+      expect(line().textContent).toBe("❯ready · workspace invalid");
       expect(line().textContent).not.toContain("branch");
     });
 
     it("shows a running task with its label and the loader, and opens by itself", () => {
       renderInFrame(<OutputStrip {...props({ wsRunning: "update claude" })} />);
-      expect(line().textContent).toBe("❯update clauderunningesc collapse");
+      expect(line().textContent).toBe("❯update claudeworking…⠋0.0srunning");
+      expect(affordance().textContent).toBe("esc collapse");
       expect(line().getAttribute("aria-expanded")).toBe("true");
       // One loader: the open log's. Collapsed, the line carries it.
       expect(line().querySelector(".terminal-activity")).toBeNull();
@@ -132,11 +139,30 @@ describe("OutputStrip", () => {
       expect(line().textContent).not.toContain("release_check");
     });
 
-    it("names the transaction z would roll back, in the result only", () => {
-      const { rerenderFrame } = renderInFrame(<OutputStrip {...props({ wsLog: APPLY, rollbackTransactionId: TRANSACTION })} />);
-      expect(line().textContent).toContain("· z rollback 456789");
-      rerenderFrame(<OutputStrip {...props({ rollbackTransactionId: TRANSACTION })} />);
+    it("offers the transaction z would roll back, as its own button beside the result only", () => {
+      const onRollback = vi.fn();
+      const { rerenderFrame } = renderInFrame(
+        <OutputStrip {...props({ wsLog: APPLY, rollbackTransactionId: TRANSACTION, onRollback })} />,
+      );
+      const rollback = within(strip()).getByRole("button", { name: "rollback 456789" });
+      expect(rollback.querySelector("kbd")!.textContent).toBe("z");
+      expect(rollback.getAttribute("aria-keyshortcuts")).toBe("Z");
+      // A sibling of the line's toggle in the same row: buttons never nest.
+      expect(line().contains(rollback)).toBe(false);
+      expect(rollback.parentElement).toBe(line().parentElement);
+      expect(line().querySelector("button")).toBeNull();
       expect(line().textContent).not.toContain("rollback");
+      fireEvent.click(rollback);
+      expect(onRollback).toHaveBeenCalledTimes(1);
+      // Clicking the offer does not toggle the log.
+      expect(line().getAttribute("aria-expanded")).toBe("false");
+
+      rerenderFrame(<OutputStrip {...props({ rollbackTransactionId: TRANSACTION, onRollback })} />);
+      expect(within(strip()).queryByRole("button", { name: /rollback/ })).toBeNull();
+      rerenderFrame(<OutputStrip {...props({ wsRunning: "update claude", wsLog: APPLY, rollbackTransactionId: TRANSACTION, onRollback })} />);
+      expect(within(strip()).queryByRole("button", { name: /rollback/ })).toBeNull();
+      rerenderFrame(<OutputStrip {...props({ wsLog: APPLY, rollbackTransactionId: TRANSACTION })} />);
+      expect(within(strip()).queryByRole("button", { name: /rollback/ })).toBeNull();
     });
   });
 
@@ -192,7 +218,7 @@ describe("OutputStrip", () => {
       // The line names the command and when it ran; the log does not say it again.
       expect(log().querySelector(".tui-cmdline")).toBeNull();
       expect(log().textContent).not.toContain("update claude");
-      expect(line().textContent).toContain("esc collapse");
+      expect(affordance().textContent).toBe("esc collapse");
       // Lines written by an apply are toned by their first word; the glyph row never depends on colour alone.
       const tones = Array.from(log().querySelectorAll(".tui-out span")).map(span => [span.className, span.textContent]);
       expect(tones).toContainEqual(["c-ok", "applied      claude rules"]);
@@ -502,5 +528,167 @@ describe("OutputStrip", () => {
       act(() => screen.getByRole("group", { name: "targets" }).focus());
       expect(focusedPaneId()).toBe("targets");
     });
+  });
+});
+
+describe("OutputStrip progress", () => {
+  const WRITING = { task: "apply_setup", phase: "apply", done: 4, total: 7, file: "~/.claude/skills/handoff/SKILL.md" } as const;
+
+  it("reads the bar, count and file on the line while files are written", () => {
+    renderInFrame(<OutputStrip {...props({ wsRunning: "update claude", progress: WRITING })} />);
+    const bar = line().querySelector("[role='progressbar']")!;
+    expect(bar.getAttribute("aria-valuenow")).toBe("4");
+    expect(bar.getAttribute("aria-valuemin")).toBe("0");
+    expect(bar.getAttribute("aria-valuemax")).toBe("7");
+    expect(bar.getAttribute("style")).toContain("--p: 57%");
+    expect(line().textContent).toBe("❯update claude░░░░░░░░░░██████████4/7~/.claude/skills/handoff/SKILL.md⠋0.0srunning");
+  });
+
+  it("keeps the file on one ellipsized, titled item instead of wrapping the line", () => {
+    const file = "~/.claude/skills/a-very-long-skill-name/references/an-even-longer-file-name.md";
+    renderInFrame(<OutputStrip {...props({ wsRunning: "update claude", progress: { ...WRITING, file } })} />);
+    const item = line().querySelector(".pfile")!;
+    expect(item.textContent).toBe(file);
+    expect(item.getAttribute("title")).toBe(file);
+    expect(line().querySelectorAll(".pfile")).toHaveLength(1);
+  });
+
+  it("falls back to the loader and a word while backing up and before the first event", () => {
+    const { rerenderFrame } = renderInFrame(<OutputStrip {...props({ wsRunning: "update claude" })} />);
+    expect(line().querySelector("[role='progressbar']")).toBeNull();
+    expect(line().textContent).toContain("working…");
+
+    rerenderFrame(<OutputStrip {...props({ wsRunning: "update claude", progress: { ...WRITING, phase: "backup", done: 2 } })} />);
+    expect(line().querySelector("[role='progressbar']")).toBeNull();
+    expect(line().textContent).toContain("backing up…");
+    expect(line().textContent).not.toContain("4/7");
+
+    // Without a total there is nothing to count, so the line stays indeterminate.
+    rerenderFrame(<OutputStrip {...props({ wsRunning: "update claude", progress: { ...WRITING, total: null } })} />);
+    expect(line().querySelector("[role='progressbar']")).toBeNull();
+    expect(line().textContent).toContain("working…");
+  });
+
+  it("carries the loader on the line only while the log is collapsed, and shows the full bar when done", () => {
+    renderInFrame(<OutputStrip {...props({ wsRunning: "update claude", progress: { ...WRITING, phase: "backup" } })} />);
+    expect(line().querySelector(".terminal-activity")).toBeNull();
+    fireEvent.click(line());
+    expect(line().querySelector(".terminal-activity")).not.toBeNull();
+    cleanup();
+
+    renderInFrame(<OutputStrip {...props({ wsRunning: "update claude", progress: { ...WRITING, phase: "done", done: 7, file: null } })} />);
+    expect(line().querySelector(".pbar")!.classList.contains("done")).toBe(true);
+    expect(line().textContent).toContain("7/7");
+  });
+
+  it("tells the open log the count, file and time, and lists the files as they are written", () => {
+    const first = { ...WRITING, done: 0, file: "~/.claude/CLAUDE.md" };
+    const { rerenderFrame } = renderInFrame(<OutputStrip {...props({ wsRunning: "update claude", progress: first })} />);
+    const status = within(strip()).getByRole("status");
+    // Only the label is announced; the numbers around it are not.
+    expect(status.getAttribute("aria-label")).toBe("update claude running");
+    expect(log().querySelector(".tui-progress-label")!.textContent).toBe("working… · 0/7 · ~/.claude/CLAUDE.md · 0.0s");
+    expect(log().querySelector(".tui-progress-label [aria-hidden='true']")).not.toBeNull();
+    const listed = () => Array.from(log().querySelectorAll(".tail-line")).map(item => item.textContent);
+    expect(listed()).toEqual(["~/.claude/CLAUDE.md"]);
+
+    rerenderFrame(<OutputStrip {...props({ wsRunning: "update claude", progress: { ...first, done: 1, file: "~/.claude/agents/verifier.md" } })} />);
+    // The same file reported twice is one line.
+    rerenderFrame(<OutputStrip {...props({ wsRunning: "update claude", progress: { ...first, done: 1, file: "~/.claude/agents/verifier.md" } })} />);
+    rerenderFrame(<OutputStrip {...props({ wsRunning: "update claude", progress: { ...first, done: 7, file: null } })} />);
+    expect(listed()).toEqual(["~/.claude/CLAUDE.md", "~/.claude/agents/verifier.md"]);
+    expect(log().querySelector(".tui-progress-label")!.textContent).toBe("working… · 7/7 · 0.0s");
+  });
+
+  it("names the backup phase in the log and lists no file for it", () => {
+    renderInFrame(<OutputStrip {...props({ wsRunning: "update claude", progress: { ...WRITING, phase: "backup", done: 1 } })} />);
+    expect(log().querySelector(".tui-progress-label")!.textContent).toBe("working… · backing up · 0.0s");
+    expect(log().querySelector(".tail-line")).toBeNull();
+  });
+
+  it("keeps only the latest files of a long run", () => {
+    const at = (index: number) => ({ ...WRITING, done: index, total: 100, file: `~/.claude/skills/s${index}/SKILL.md` });
+    const { rerenderFrame } = renderInFrame(<OutputStrip {...props({ wsRunning: "update claude", progress: at(0) })} />);
+    for (let index = 1; index < 60; index++) {
+      rerenderFrame(<OutputStrip {...props({ wsRunning: "update claude", progress: at(index) })} />);
+    }
+    const listed = Array.from(log().querySelectorAll(".tail-line")).map(item => item.textContent);
+    expect(listed).toHaveLength(40);
+    expect(listed[0]).toBe("~/.claude/skills/s20/SKILL.md");
+    expect(listed.at(-1)).toBe("~/.claude/skills/s59/SKILL.md");
+  });
+
+  it("starts the next task with an empty list", () => {
+    const { rerenderFrame } = renderInFrame(<OutputStrip {...props({ wsRunning: "update claude", progress: WRITING })} />);
+    expect(log().querySelectorAll(".tail-line")).toHaveLength(1);
+    rerenderFrame(<OutputStrip {...props({ wsLog: APPLY })} />);
+    rerenderFrame(<OutputStrip {...props({ wsRunning: "rollback" })} />);
+    expect(log().querySelector(".tail-line")).toBeNull();
+  });
+});
+
+describe("OutputStrip success moment", () => {
+  const FAILED: ActionResult = { ...APPLY, success: false, stdout: "", stderr: "write failed", exit_code: 1 };
+
+  afterEach(() => document.documentElement.removeAttribute("data-motion"));
+
+  /** jsdom has no AnimationEvent: React listens for the prefixed event there, and the name the handler reads is attached by hand. */
+  function animationEnd(animationName: string) {
+    for (const type of ["animationend", "webkitAnimationEnd"]) {
+      fireEvent(strip(), Object.assign(new Event(type, { bubbles: true }), { animationName }));
+    }
+  }
+
+  function landsUnder(level: string, result: ActionResult) {
+    document.documentElement.setAttribute("data-motion", level);
+    const { rerenderFrame } = renderInFrame(<OutputStrip {...props({ wsRunning: "update claude" })} />);
+    rerenderFrame(<OutputStrip {...props({ wsRunning: null, wsLog: result, wsLogCompletedAt: Date.now() })} />);
+    return rerenderFrame;
+  }
+
+  it("pops the check and fades the border once when a success lands under full motion", () => {
+    landsUnder("full", APPLY);
+    expect(strip().classList.contains("just-done")).toBe(true);
+    expect(line().querySelector(".g")!.classList.contains("tick")).toBe(true);
+    // The check's own animation ending does not clear it; the border fade does.
+    animationEnd("tick-pop");
+    expect(strip().classList.contains("just-done")).toBe(true);
+    animationEnd("outstrip-ok-fade");
+    expect(strip().classList.contains("just-done")).toBe(false);
+  });
+
+  it("flags nothing under subtle or off motion", () => {
+    for (const level of ["subtle", "off"]) {
+      landsUnder(level, APPLY);
+      expect(strip().classList.contains("just-done"), level).toBe(false);
+      cleanup();
+    }
+  });
+
+  it("flags nothing for a failure", () => {
+    landsUnder("full", FAILED);
+    expect(strip().classList.contains("just-done")).toBe(false);
+    expect(line().querySelector(".g")!.classList.contains("tick")).toBe(false);
+  });
+
+  it("stays calm for a result that was already there when the strip mounted", () => {
+    document.documentElement.setAttribute("data-motion", "full");
+    renderInFrame(<OutputStrip {...props({ wsLog: APPLY, wsLogCompletedAt: Date.now() })} />);
+    expect(strip().classList.contains("just-done")).toBe(false);
+  });
+
+  it("waits for the task to end when the result arrives while it is still shown as running", () => {
+    document.documentElement.setAttribute("data-motion", "full");
+    const { rerenderFrame } = renderInFrame(<OutputStrip {...props({ wsRunning: "update claude" })} />);
+    rerenderFrame(<OutputStrip {...props({ wsRunning: "update claude", wsLog: APPLY })} />);
+    expect(strip().classList.contains("just-done")).toBe(false);
+    rerenderFrame(<OutputStrip {...props({ wsRunning: null, wsLog: APPLY })} />);
+    expect(strip().classList.contains("just-done")).toBe(true);
+  });
+
+  it("drops the flag when the output is cleared", () => {
+    const rerenderFrame = landsUnder("full", APPLY);
+    rerenderFrame(<OutputStrip {...props()} />);
+    expect(strip().classList.contains("just-done")).toBe(false);
   });
 });

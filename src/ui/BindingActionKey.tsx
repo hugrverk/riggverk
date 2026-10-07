@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { usePlatform } from "../keyboard/context";
 import { ariaKeyShortcuts, formatKeys, parseKeys } from "../keyboard/keymap";
 import { evaluateWhen, type Binding, type RegisteredBinding } from "../keyboard/registry";
@@ -36,7 +37,16 @@ export function BindingActionKey({ entry }: { entry: RegisteredBinding }) {
  * The bracket-button form of a binding its owner holds (a confirm line's `y apply`): the same visibility and
  * disabled rules as `BindingActionKey`, and a click runs the binding exactly as its key does, never a second code path.
  */
-export function BindingButton({ binding, variant }: { binding: Binding; variant?: TButtonProps["variant"] }) {
+export function BindingButton({
+  binding,
+  variant,
+  label,
+}: {
+  binding: Binding;
+  variant?: TButtonProps["variant"];
+  /** The text after the key cap; defaults to the binding's hint. */
+  label?: ReactNode;
+}) {
   const platform = usePlatform();
   const { active, disabledReason } = evaluateWhen(binding);
   if (!binding.hint || (!active && disabledReason === null)) return null;
@@ -48,7 +58,7 @@ export function BindingButton({ binding, variant }: { binding: Binding; variant?
       disabled={disabledReason ?? false}
       onClick={() => invokeBinding(binding)}
     >
-      {binding.hint}
+      {label ?? binding.hint}
     </TButton>
   );
 }
