@@ -254,7 +254,8 @@ export function OutputStrip({
         <span className="outstrip-text">
           <span className="outstrip-cmd">{wsRunning}</span>
         </span>
-        <ActivityLoader />
+        {/* Expanded, the log below shows its own loader. */}
+        {!expanded && <ActivityLoader />}
         <span className="c-dim">running</span>
       </>
     );

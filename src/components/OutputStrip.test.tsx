@@ -100,9 +100,12 @@ describe("OutputStrip", () => {
     it("shows a running task with its label and the loader, and opens by itself", () => {
       renderInFrame(<OutputStrip {...props({ wsRunning: "update claude" })} />);
       expect(line().textContent).toBe("❯update clauderunningesc collapse");
-      expect(line().querySelector(".terminal-activity")).not.toBeNull();
       expect(line().getAttribute("aria-expanded")).toBe("true");
+      // One loader: the open log's. Collapsed, the line carries it.
+      expect(line().querySelector(".terminal-activity")).toBeNull();
       expect(within(strip()).getByRole("status").getAttribute("aria-label")).toBe("update claude running");
+      fireEvent.click(line());
+      expect(line().querySelector(".terminal-activity")).not.toBeNull();
     });
 
     it("shows a finished run as verdict glyph, action, ok and when", () => {
