@@ -5,7 +5,6 @@ import {
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
-  type ReactNode,
 } from "react";
 import type { Binding } from "../keyboard/registry";
 import { useKeymap } from "../keyboard/useKeymap";
@@ -264,18 +263,7 @@ function ColorField({
   );
 }
 
-const WORKSPACE_PANES = ["settings-appearance", "settings-app"] as const;
-
-const NAV_HINTS: ReactNode = (
-  <>
-    <span>
-      <kbd>j</kbd> <kbd>k</kbd> setting
-    </span>
-    <span>
-      <kbd>←</kbd> <kbd>→</kbd> option
-    </span>
-  </>
-);
+const SETTINGS_PANES = ["settings-appearance", "settings-app"] as const;
 
 export function SettingsView({
   appSettings,
@@ -372,7 +360,7 @@ export function SettingsView({
 
   // `c` and `R` work from both panes (the workspace row is in the app pane, but the appearance pane has the
   // initial focus) and are hinted in the status bar from both.
-  const workspaceBindings: Binding[] = WORKSPACE_PANES.flatMap(paneId => [
+  const workspaceBindings: Binding[] = SETTINGS_PANES.flatMap(paneId => [
     {
       id: `settings.workspace.choose.${paneId}`,
       keys: "c",
@@ -421,18 +409,24 @@ export function SettingsView({
       },
     },
   ];
-  // Row movement is active anywhere inside the settings screen, in both panes.
-  const rowBindings: Binding[] = (["next", "prev"] as const).map(direction => ({
-    id: `settings.row.${direction}`,
-    keys: direction === "next" ? "j" : "k",
-    title: direction === "next" ? "Next setting" : "Previous setting",
-    scope: "pane",
-    repeat: true,
-    run: event => {
-      const from = event.target instanceof Element ? event.target : document.activeElement;
-      return focusSettingRow(from, direction === "next" ? 1 : -1) ? undefined : false;
-    },
-  }));
+  // Row movement is active anywhere inside the settings screen, in both panes; the rows are not a listbox, so
+  // the status bar's generic `j k move` hint does not apply and each pane hints the keys itself.
+  const rowBindings: Binding[] = SETTINGS_PANES.flatMap(paneId =>
+    (["next", "prev"] as const).map((direction): Binding => ({
+      id: `settings.row.${direction}.${paneId}`,
+      keys: direction === "next" ? "j" : "k",
+      title: direction === "next" ? "Next setting" : "Previous setting",
+      hint: direction === "next" ? "next setting" : "prev setting",
+      scope: "pane",
+      paneId,
+      repeat: true,
+      when: () => !!appSettings,
+      run: event => {
+        const from = event.target instanceof Element ? event.target : document.activeElement;
+        return focusSettingRow(from, direction === "next" ? 1 : -1) ? undefined : false;
+      },
+    })),
+  );
   useKeymap(bindings);
   useKeymap(rowBindings, { ref: screenRef });
 
@@ -688,7 +682,6 @@ export function SettingsView({
           </span>
         }
         defaultFocus
-        footer={NAV_HINTS}
       >
         <Kv className="settings-kv" items={appearanceItems} aria-label="Appearance settings" />
         {contrastDetail && (
@@ -698,7 +691,7 @@ export function SettingsView({
         )}
         <p className="setting-note c-dim">Optional hex overrides; empty uses the theme default. Changes save automatically.</p>
       </Pane>
-      <Pane id="settings-app" title="app" label="App" footer={NAV_HINTS}>
+      <Pane id="settings-app" title="app" label="App">
         <Kv
           className="settings-kv"
           items={[
