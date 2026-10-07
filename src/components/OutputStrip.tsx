@@ -2,6 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState, type FocusEvent, type Reac
 import { focusPaneById, listPanes, paneOf } from "../keyboard/focus";
 import { useKeymap } from "../keyboard/useKeymap";
 import type { Binding } from "../keyboard/registry";
+import { actionLabel } from "../lib/actionLabel";
 import { redactTerminalOutput } from "../lib/redactTerminalOutput";
 import { useNotify } from "../shell/ShellState";
 import { Glyph } from "../ui/Glyph";
@@ -264,7 +265,7 @@ export function OutputStrip({
       <>
         <Glyph name={wsLog.success ? "check" : "fail"} tone={wsLog.success ? "ok" : "fail"} />
         <span className="outstrip-text">
-          <span className="outstrip-cmd">{wsLog.action}</span>{" "}
+          <span className="outstrip-cmd">{actionLabel(wsLog.action)}</span>{" "}
           <span className="c-dim">
             · {wsLog.success ? "ok" : "failed"}
             {wsLogCompletedAt !== null && ` · ${completedLabel(wsLogCompletedAt)}`}

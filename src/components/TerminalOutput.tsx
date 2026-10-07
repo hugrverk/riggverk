@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
+import { actionLabel } from "../lib/actionLabel";
 import { applyOutputLineTone } from "../lib/installPlan";
 import { redactTerminalOutput } from "../lib/redactTerminalOutput";
 import { Glyph } from "../ui/Glyph";
@@ -131,7 +132,7 @@ export function ActionResultOutput({
 
   return (
     <>
-      <CommandLine label={result.action} when={completedAt !== undefined ? completedLabel(completedAt) : undefined} />
+      <CommandLine label={actionLabel(result.action)} when={completedAt !== undefined ? completedLabel(completedAt) : undefined} />
       <div className={`tui-statusline ${result.success ? "c-ok" : "c-fail"}`}>
         <Glyph name={result.success ? "check" : "fail"} />
         <span className="tui-status-text">
