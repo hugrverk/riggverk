@@ -161,15 +161,18 @@ export function HarnessPage({
   const verdict = runtimeVerdict(runtime);
   const override = rulesOverrideWarning(runtime.harness === "codex" ? runtime.health : null);
   const conflictDetails = entry?.status?.conflict_details ?? [];
-  const harnessFacts: KvItem[] = [
-    ...(entry?.error ? [{ label: "status", value: `failed: ${entry.error}`, tone: "fail" as const, wrap: true }] : []),
-    ...(conflictDetails.length > 0 ? [{ label: "preserved", value: conflictDetails.join(", "), tone: "warn" as const, wrap: true }] : []),
-  ];
 
   // A file the user keeps is not current and not a conflict; the rules model says so.
   const displayOf = (row: HarnessRowModel): StateDisplay =>
     row.surface === rulesSurface && rulesModel?.display ? rulesModel.display : row.display;
   const selectedDisplay = selected ? displayOf(selected) : null;
+  const showRules = rulesModel !== null && selected?.surface === rulesSurface;
+  // What is true of the whole harness follows the surface's own facts, so one column of labels carries both.
+  const facts: KvItem[] = [
+    ...(selected && selectedDisplay ? surfaceFacts(selected, selectedDisplay, !showRules) : []),
+    ...(entry?.error ? [{ label: "status", value: `failed: ${entry.error}`, tone: "fail" as const, wrap: true }] : []),
+    ...(conflictDetails.length > 0 ? [{ label: "preserved", value: conflictDetails.join(", "), tone: "warn" as const, wrap: true }] : []),
+  ];
 
   const onToggle = (row: HarnessRowModel) => {
     if (row.targetId) onToggleTarget(row.targetId);
@@ -245,9 +248,8 @@ export function HarnessPage({
             <Glyph name="conflict" tone="warn" /> <b>{override.title}.</b> {override.detail}
           </p>
         )}
-        {selected && selectedDisplay && <Kv items={surfaceFacts(selected, selectedDisplay)} />}
-        {selected?.surface === rulesSurface && rulesModel && <RulesSummary model={rulesModel} error={rules.error} />}
-        {harnessFacts.length > 0 && <Kv items={harnessFacts} />}
+        {facts.length > 0 && <Kv items={facts} />}
+        {showRules && <RulesSummary model={rulesModel} error={rules.error} />}
         <div className="group">
           {"runtime · "}
           <span className={toneClass(verdict.tone) || undefined}>{verdict.text}</span>
@@ -261,8 +263,11 @@ export function HarnessPage({
   );
 }
 
-/** The facts of one surface row: where it lands, what feeds it, which toggle gates it, and its state. */
-function surfaceFacts(row: HarnessRowModel, display: StateDisplay): KvItem[] {
+/**
+ * The facts of one surface row: where it lands, what feeds it, which toggle gates it, and its state. The backend's
+ * detail line is left out where the rules summary below says the same thing in full.
+ */
+function surfaceFacts(row: HarnessRowModel, display: StateDisplay, withDetail: boolean): KvItem[] {
   const also = row.alsoSurfaces.map(surfaceShortName).join(", ");
   const toggle = row.targetId
     ? `${row.target?.label ?? row.targetId} · ${row.targetEnabled ? "on" : "off"}${also ? ` · also ${also}` : ""}`
@@ -272,6 +277,6 @@ function surfaceFacts(row: HarnessRowModel, display: StateDisplay): KvItem[] {
     ...(row.path && row.target ? [{ label: "source", value: row.target.source_rel, tone: "dim" as const }] : []),
     ...(toggle ? [{ label: "target", value: toggle }] : []),
     { label: "state", value: display.label, tone: display.tone },
-    ...(row.detail ? [{ label: "detail", value: row.detail, wrap: true }] : []),
+    ...(withDetail && row.detail ? [{ label: "detail", value: row.detail, wrap: true }] : []),
   ];
 }

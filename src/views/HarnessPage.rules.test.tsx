@@ -356,6 +356,8 @@ describe("rules file in the detail pane", () => {
     renderClaude(rules({ conflict_reason: "base_block_edited", refinement_lines: 2 }));
     expect(detailPane().textContent).not.toMatch(/An update replaces|Update skips this file|Base updates are not applied/);
     expect(detailPane().textContent).not.toContain("fix the markers");
+    // The rules summary says it all: the backend's one-line detail is not repeated above it.
+    expect(detailPane().textContent).not.toContain("conflict detail");
     cleanup();
     renderClaude(rules({ refinement_lines: 14 }), "update_available");
     expect(detailPane().textContent).not.toMatch(/An update replaces/);
