@@ -8,7 +8,8 @@ export const APPLY_PROGRESS_EVENT = "apply-progress";
 /**
  * The latest progress the backend reported for the workspace task in flight. `running` is the task label
  * (`wsRunning`): progress exists only while it is set, starts empty with every task and is gone when the task ends,
- * so a late event of the last task never shows up in the next one.
+ * so a late event of the last task never shows up in the next one. An event that beats the render marking the task
+ * as running is dropped; the next one replaces it.
  *
  * Without a backend, or without permission to listen, the hook stays null and the strip falls back to its
  * indeterminate state.
