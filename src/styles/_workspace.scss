@@ -23,8 +23,10 @@
   > .pane:not(.outstrip) { max-height: max(320px, 78vh); }
 }
 
+/* The list column never drops below what the installed map needs (target names, six glyph columns and their
+   gaps: about 31 characters at any text size), so the map does not scroll sideways just above a stacking threshold. */
 .screen.pair {
-  grid-template-columns: minmax(300px, 2fr) minmax(0, 3fr);
+  grid-template-columns: minmax(calc(var(--fs) * 32), 2fr) minmax(0, 3fr);
   grid-template-rows: minmax(0, 1fr) auto;
 }
 
