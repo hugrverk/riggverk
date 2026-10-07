@@ -150,6 +150,7 @@ kbd {
 
 /* Two or three buttons side by side: a confirm line, a dialog footer. */
 .tbtn-row { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0 10px; }
+.tbtn-row:empty { display: none; }
 
 /* ---- screen + pane ---- */
 

@@ -6,6 +6,7 @@ import { useKeymap } from "../keyboard/useKeymap";
 import { displayPath } from "../lib/displayPath";
 import { surfaceTitle } from "../lib/installPlan";
 import { useConfirmMode, useStatusContext } from "../shell/ShellState";
+import { BindingButton } from "../ui/BindingActionKey";
 import { Glyph } from "../ui/Glyph";
 import { Kv, type KvItem } from "../ui/Kv";
 import { Pane } from "../ui/Pane";
@@ -201,29 +202,33 @@ export function RulesPane({ flow, busyLabel, backupRoot, canConvert, returnPaneI
   const closeState = (): boolean | string => (state.status === "applying" ? "applying; it cannot be cancelled" : open);
   const closeLabel = state.status === "diff" ? "close" : "cancel";
 
+  // The confirm line's buttons run these two: the very bindings the keys fire.
+  const applyAction: Binding = {
+    id: "rules.apply",
+    keys: "y",
+    title: "Convert the rules file as previewed",
+    hint: "apply",
+    group: "Rules review",
+    scope: "pane",
+    paneId: RULES_PANE_ID,
+    when: applyState,
+    run: () => flow.apply(),
+  };
+  const closeAction: Binding = {
+    id: "rules.close",
+    keys: ["n", "Escape"],
+    title: "Close the rules review",
+    hint: closeLabel,
+    group: "Rules review",
+    scope: "pane",
+    paneId: RULES_PANE_ID,
+    when: closeState,
+    run: () => flow.close(),
+  };
+
   const actions: Binding[] = [
-    {
-      id: "rules.apply",
-      keys: "y",
-      title: "Convert the rules file as previewed",
-      hint: "apply",
-      group: "Rules review",
-      scope: "pane",
-      paneId: RULES_PANE_ID,
-      when: applyState,
-      run: () => flow.apply(),
-    },
-    {
-      id: "rules.close",
-      keys: ["n", "Escape"],
-      title: "Close the rules review",
-      hint: closeLabel,
-      group: "Rules review",
-      scope: "pane",
-      paneId: RULES_PANE_ID,
-      when: closeState,
-      run: () => flow.close(),
-    },
+    applyAction,
+    closeAction,
     {
       id: "rules.mode",
       keys: "t",
@@ -328,6 +333,10 @@ export function RulesPane({ flow, busyLabel, backupRoot, canConvert, returnPaneI
         <>
           <span className="q" role="status">
             {question}
+          </span>
+          <span className="tbtn-row">
+            <BindingButton binding={applyAction} variant="primary" />
+            <BindingButton binding={closeAction} />
           </span>
           {noteBackup && (
             <span className="bk">
