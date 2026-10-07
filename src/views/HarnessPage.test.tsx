@@ -448,7 +448,8 @@ describe("OpenCodeView model override", () => {
     expect(model().getAttribute("aria-invalid")).toBe("true");
     const detailPane = screen.getByRole("region", { name: "OpenCode detail" });
     act(() => (detailPane.querySelector(".pane-body") as HTMLElement).focus());
-    expect(hint(/save model/).getAttribute("title")).toBe("Must be provider/model format");
+    // The status bar follows focus on its own schedule; under a loaded test run it can lag a tick.
+    await waitFor(() => expect(hint(/save model/).getAttribute("title")).toBe("Must be provider/model format"));
     expect(detailPane.textContent).toContain("opencode models: unavailable");
   });
 
