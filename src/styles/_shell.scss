@@ -138,6 +138,37 @@
   color: var(--text-muted);
 }
 
+/* A notice may carry an outcome tone; plain information keeps the muted colour. Enters once, full motion only. */
+.statusbar .ctx[data-tone="ok"] { color: var(--ok); }
+.statusbar .ctx[data-tone="warn"] { color: var(--warn); }
+.statusbar .ctx[data-tone="fail"] { color: var(--fail); }
+
+:root[data-motion="full"] .statusbar .ctx .notice {
+  display: inline-block;
+  animation: notice-in 160ms ease-out;
+}
+
+@keyframes notice-in { from { opacity: 0; transform: translateY(60%); } }
+
+/* The key just handled and its hint (showcmd): visual only, there for a moment after the mode badge. */
+.statusbar .echo {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 4px;
+  margin-right: 14px;
+  color: var(--text-muted);
+}
+
+.statusbar .echo kbd {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+:root[data-motion="full"] .statusbar .echo { animation: echo-in 120ms ease-out; }
+
+@keyframes echo-in { from { opacity: 0; } }
+
 /* One row tall: a hint that does not fit wraps onto a second, clipped row, so whole hints drop from the end
    instead of being cut mid-word. `.hints-keep` (command, help) is outside it and never shrinks. */
 .statusbar .hints {
@@ -325,3 +356,26 @@
 }
 
 .btn-warn:hover:not(:disabled) { border-color: var(--warn); color: var(--warn); }
+
+/* ---- boot (launch overlay, Boot.tsx) ----
+   A once-per-launch sequence: full motion types a few lines, subtle fades the shell in (.veil), off never mounts it.
+   Opacity only. The caret is the terminal's .tui-caret, which blinks at 1 Hz. */
+
+.boot {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  padding: 14px 12px;
+  background: var(--bg);
+  color: var(--text);
+  white-space: pre-wrap;
+  overflow: hidden;
+}
+
+.boot .ln { display: block; min-height: var(--lh); }
+.boot .k { color: var(--text-muted); }
+.boot .tui-caret { vertical-align: -0.15em; }
+.boot.veil { pointer-events: none; }
+.boot.out { animation: boot-out 200ms ease-out forwards; }
+
+@keyframes boot-out { to { opacity: 0; } }

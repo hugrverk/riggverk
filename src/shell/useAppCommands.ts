@@ -7,6 +7,7 @@ import {
 } from "../hooks/useInstallationOverview";
 import { HARNESS_NAV_ORDER } from "../lib/harnessInstallation";
 import type { InstallTarget } from "../lib/installPlan";
+import { currentMotion } from "../lib/motion";
 import { workspaceTaskBlockedMessage } from "../lib/workspaceErrors";
 import type { AppSettings, InstallAgent } from "../types";
 import type { LibrarySourceType } from "../views/LibraryView";
@@ -75,7 +76,7 @@ function isDarkNow(): boolean {
  * y to apply), `rollback` asks after a dry run, `uninstall` opens the existing uninstall preview.
  */
 export function useAppCommands(deps: AppCommandDeps): void {
-  const { openHelp, notify } = useShellState();
+  const { openHelp, notify, replayBoot } = useShellState();
 
   const targets = () => updateTargets(deps.enabledHarnessIds);
   const busyReason = () => (deps.busyLabel ? `${deps.busyLabel} is running` : true);
@@ -203,7 +204,7 @@ export function useAppCommands(deps: AppCommandDeps): void {
       run: async () => {
         try {
           await navigator.clipboard.writeText(deps.outputText ?? "");
-          notify("copied output");
+          notify("copied output", { tone: "ok" });
         } catch {
           deps.setError("Copy failed: clipboard is not available");
         }
@@ -214,6 +215,13 @@ export function useAppCommands(deps: AppCommandDeps): void {
       summary: "show every key binding and command",
       group: "App",
       run: () => openHelp(),
+    },
+    {
+      name: "boot",
+      summary: "replay the launch sequence",
+      group: "App",
+      enabled: () => (currentMotion() === "full" ? true : "the launch sequence needs motion: full"),
+      run: () => replayBoot(),
     },
     {
       name: "release-check",

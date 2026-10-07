@@ -1,4 +1,5 @@
 export * from "./keymap";
+export { echoOf, type EchoKey } from "./echo";
 export {
   SCOPE_PRECEDENCE,
   KeymapRegistry,
@@ -7,6 +8,7 @@ export {
   isVisibleHint,
   paneHintEntries,
   type Binding,
+  type BindingRun,
   type RegisteredBinding,
   type Scope,
 } from "./registry";

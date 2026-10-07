@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo, lazy, Suspense } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { version as APP_VERSION } from "../package.json";
 import { LEAVE_DIRTY_MESSAGE } from "./lib/editorGuards";
 import { invokeOpen } from "./lib/invokeOpen";
 import { useConfirm } from "./components/ConfirmDialog";
@@ -584,7 +585,7 @@ function AppShell() {
    */
   const requestUninstallPreview = useCallback(async () => {
     if (install.isOpenOn("start")) {
-      notify("close the install review first (n or Esc), then run :uninstall");
+      notify("close the install review first (n or Esc), then run :uninstall", { tone: "warn" });
       return;
     }
     await switchView("start");
@@ -691,7 +692,7 @@ function AppShell() {
   // The command line has no row to show the outcome in: a switch is a notice, a refusal the error banner.
   const reportWorkspaceSwitch = (message: { ok: boolean; text: string } | null) => {
     if (!message) return;
-    if (message.ok) notify(message.text);
+    if (message.ok) notify(message.text, { tone: "ok" });
     else setError(message.text);
   };
 
@@ -734,6 +735,18 @@ function AppShell() {
         error={error}
         onDismissError={() => setError(null)}
         statusRight={`${backups.length} backup${backups.length === 1 ? "" : "s"}`}
+        // The launch sequence waits for the settings (the motion level is final then) and only tells what has loaded.
+        boot={
+          appSettings
+            ? {
+                version: APP_VERSION,
+                workspace: workspaceDiagnostics ? (workspaceDiagnostics.valid ? workspaceDiagnostics.resolved_path : null) : undefined,
+                branch: status?.git_available ? status.branch : null,
+                dirty: status?.dirty,
+                backups: backups.length > 0 ? backups.length : undefined,
+              }
+            : undefined
+        }
       >
         {view === "start" && (
           <StartView

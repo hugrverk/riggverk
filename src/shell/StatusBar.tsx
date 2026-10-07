@@ -2,7 +2,8 @@ import type { ReactNode } from "react";
 import { useKeymapEntries, useKeymapState } from "../keyboard/context";
 import { isVisibleHint, paneHintEntries, type RegisteredBinding } from "../keyboard/registry";
 import { BindingActionKey } from "../ui/BindingActionKey";
-import { Kbd } from "../ui/Kbd";
+import { Kbd, KeyCaps } from "../ui/Kbd";
+import { RollingText } from "../ui/RollingText";
 import { useShellMode, useShellState } from "./ShellState";
 
 /** Hints that stay visible however narrow the bar gets: how to reach everything else. */
@@ -16,15 +17,15 @@ export interface StatusBarProps {
 }
 
 /**
- * Bottom bar: derived mode (NORMAL / INSERT / COMMAND / CONFIRM / HELP), context, the pending chord, and
- * hints for the focused pane plus the global actions. Hinted bindings render as clickable ActionKeys; the
- * positional hints (tab numbers, pane and row movement) are plain text because they are not single actions.
- * When the bar is too narrow the hints drop from the end, a whole hint at a time; `:` command and `?` help
- * sit in their own group and always stay.
+ * Bottom bar: derived mode (NORMAL / INSERT / COMMAND / CONFIRM / HELP), the key just handled (echo), context
+ * or a transient notice (toned ok / warn / fail), the pending chord, and hints for the focused pane plus the
+ * global actions. Hinted bindings render as clickable ActionKeys; the positional hints (tab numbers, pane and
+ * row movement) are plain text because they are not single actions. When the bar is too narrow the hints drop
+ * from the end, a whole hint at a time; `:` command and `?` help sit in their own group and always stay.
  */
 export function StatusBar({ viewLabel, right }: StatusBarProps) {
   const mode = useShellMode();
-  const { statusContext, notice } = useShellState();
+  const { statusContext, notice, noticeTone, noticeId, echo } = useShellState();
   const { pendingChord, activePaneId, inList } = useKeymapState();
   const entries = useKeymapEntries();
 
@@ -42,8 +43,20 @@ export function StatusBar({ viewLabel, right }: StatusBarProps) {
       <span className="mode" data-mode={mode.toLowerCase()}>
         {mode}
       </span>
-      <span className="ctx" role="status">
-        {notice ?? context}
+      {echo && (
+        // The action already reaches screen readers through its own control and result, so the echo is visual only.
+        <span key={echo.id} className="echo" aria-hidden="true">
+          <KeyCaps keys={echo.keys} /> {echo.label}
+        </span>
+      )}
+      <span className="ctx" role="status" data-tone={notice ? noticeTone ?? undefined : undefined}>
+        {notice ? (
+          <span key={noticeId} className="notice">
+            {notice}
+          </span>
+        ) : (
+          context
+        )}
       </span>
       {pendingChord.length > 0 && (
         <span className="chord" aria-label="Pending keys">
@@ -113,7 +126,7 @@ export function StatusBar({ viewLabel, right }: StatusBarProps) {
           ))}
         </div>
       )}
-      <span className="rt">{right}</span>
+      <span className="rt">{typeof right === "string" ? <RollingText>{right}</RollingText> : right}</span>
     </footer>
   );
 }
