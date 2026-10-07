@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useConfirmMode } from "../shell/ShellState";
 import { Kbd } from "../ui/Kbd";
+import { Kv } from "../ui/Kv";
 import type { UninstallPlanView } from "../types";
 
 interface UninstallCardProps {
@@ -68,10 +69,10 @@ export function UninstallCard({
   return (
     <>
       <div className="lifecycle" role="region" aria-label="Uninstall">
-        <p className="c-dim">
-          Remove every app-installed rule, agent, skill, and workspace file. Modified and user-created files are
-          preserved; removals are backed up and rollback-capable.
-        </p>
+        <Kv
+          className="lifecycle-kv"
+          items={[{ label: "uninstall", value: ":uninstall · previews first · backed up, rollback-capable", tone: "dim", wrap: true }]}
+        />
         <div className="lifecycle-actions">
           <button
             type="button"
