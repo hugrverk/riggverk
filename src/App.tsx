@@ -10,6 +10,7 @@ import { useWorkspaceActions } from "./lib/useWorkspaceActions";
 import { useWorkspaceGeneration } from "./lib/useWorkspaceGeneration";
 import { useAppSettingsController } from "./hooks/useAppSettingsController";
 import { useApplyProgress } from "./hooks/useApplyProgress";
+import { useScanOnSuccess } from "./hooks/useScanOnSuccess";
 import { useWorkspacePicker } from "./hooks/useWorkspacePicker";
 import { workspaceTaskBlockedMessage } from "./lib/workspaceErrors";
 import { useInstallationOverview } from "./hooks/useInstallationOverview";
@@ -244,6 +245,8 @@ function AppShell() {
   });
 
   const wsProgress = useApplyProgress(wsRunning);
+  // A successful apply or rollback sweeps one line down the view area (full motion only).
+  useScanOnSuccess(wsRunning, wsLog);
 
   // Keep the backups chip current: on mount and whenever a workspace task (apply, uninstall, rollback) finishes.
   useEffect(() => {
