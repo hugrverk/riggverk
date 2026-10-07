@@ -386,3 +386,57 @@ describe("StartView uninstall recovery", () => {
     expect(screen.getByRole("region", { name: "Uninstall" })).toBeTruthy();
   });
 });
+
+describe("StartView live counters", () => {
+  afterEach(() => {
+    delete document.documentElement.dataset.motion;
+  });
+
+  const UPDATED = {
+    ...OVERVIEW,
+    entries: {
+      ...OVERVIEW.entries,
+      opencode: {
+        ...OVERVIEW.entries.opencode!,
+        status: installationStatus("current", [surfaceStatus("open_code_config", "current")]),
+      },
+    },
+  };
+
+  function renderChanging() {
+    const first = props();
+    const view = renderInFrame(<StartView {...first} />);
+    return {
+      ...view,
+      applyUpdate: () => view.rerenderFrame(<StartView {...first} overview={UPDATED} />),
+    };
+  }
+
+  it("rolls a row's meta when its state changes, and no other row", () => {
+    document.documentElement.dataset.motion = "full";
+    const { applyUpdate } = renderChanging();
+    const before = rowOf(harnessList(), "opencode").querySelector(".meta")!.textContent;
+    expect(harnessList().querySelector(".roll-old")).toBeNull();
+    applyUpdate();
+    expect(harnessList().querySelectorAll(".roll-old")).toHaveLength(1);
+    expect(rowOf(harnessList(), "opencode").querySelector(".roll-old")!.textContent).toBe(before);
+    expect(rowOf(harnessList(), "opencode").querySelector(".roll-new")!.textContent).toBe("current");
+  });
+
+  it("swaps the meta instantly when motion is off", () => {
+    document.documentElement.dataset.motion = "off";
+    const { applyUpdate } = renderChanging();
+    applyUpdate();
+    expect(harnessList().querySelector(".roll-old")).toBeNull();
+    expect(rowOf(harnessList(), "opencode").querySelector(".meta")!.textContent).toBe("current");
+  });
+
+  it("does not roll the detail title when the cursor moves to another harness", () => {
+    document.documentElement.dataset.motion = "full";
+    renderStart();
+    press("j");
+    press("j");
+    expect(screen.getByRole("region", { name: "opencode detail" })).toBeTruthy();
+    expect(document.querySelector(".roll-old")).toBeNull();
+  });
+});

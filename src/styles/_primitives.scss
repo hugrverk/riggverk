@@ -21,6 +21,8 @@
      .filter                 pane filter row: <div class="filter"><span class="c-acc">/</span><input></div>
    Key/value
      .kv                     <dl class="kv"><dt>key</dt><dd>value</dd></dl>; dd.wrap allows wrapping
+   Motion
+     .roll                   RollingText: a changed value slides in (full motion only), see "rolling text" below
    Keys and glyphs
      kbd                     light key cap (outline, no fill); .action-key = <button class="action-key"><kbd>u</kbd> update</button>
      .g                      fixed-width glyph cell (▸ ● ◐ ✓ ✗ ❯ + ~ − !), inline-block 1ch, centred; never a <tr>
@@ -460,3 +462,36 @@ kbd {
 .help-overlay .kv dt { white-space: nowrap; }
 .help-overlay .kv dd { white-space: normal; }
 .help-overlay .foot { padding: 6px 10px 0; color: var(--text-muted); font-size: var(--fs-sm); }
+
+/* ---- rolling text (RollingText) ----
+   Only while motion is full and a value just changed: the box clips its own slide, so nothing around it moves.
+   Idle, the wrapper is plain inline text. The leaving copy only exists while it rolls. */
+
+.roll-old { display: none; }
+
+:root[data-motion="full"] .roll[data-rolling] {
+  position: relative;
+  display: inline-block;
+  clip-path: inset(0);
+}
+
+:root[data-motion="full"] .roll[data-rolling] .roll-new {
+  display: inline-block;
+  animation: roll-in 200ms ease-out;
+}
+
+:root[data-motion="full"] .roll[data-rolling] .roll-old {
+  display: block;
+  position: absolute;
+  top: 0;
+  left: 0;
+  white-space: nowrap;
+  animation: roll-out 200ms ease-in forwards;
+}
+
+@keyframes roll-out { to { transform: translateY(-100%); opacity: 0; } }
+@keyframes roll-in { from { transform: translateY(100%); opacity: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .roll .roll-old { display: none !important; }
+}
