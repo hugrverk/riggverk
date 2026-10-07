@@ -981,8 +981,7 @@
 
 .repo-dashboard-contributor-visibility-state {
   font-size: var(--fs-sm);
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
+  text-transform: lowercase;
   color: var(--text-muted);
 }
 
@@ -1279,8 +1278,7 @@
 
 .repo-dashboard-work-status {
   font-size: var(--fs-sm);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  text-transform: lowercase;
   color: var(--text-muted);
 }
 
