@@ -218,17 +218,18 @@ describe("HarnessPage", () => {
       file: ".codex/config.toml",
       source: "templates/codex/config.toml",
       target: "codex config · off",
-      state: "off",
     });
+    // The state is the title's; it is not repeated as a row.
+    expect(facts()).not.toHaveProperty("state");
     press("j");
     press("j");
     expect(title()).toContain("rules · update");
-    expect(facts()).toMatchObject({ file: ".codex/AGENTS.md", target: "codex rules · on", state: "update", detail: "update_available detail" });
+    expect(facts()).toMatchObject({ file: ".codex/AGENTS.md", target: "codex rules · on", detail: "update_available detail" });
     press("j");
-    // Skills: no file, source or target to show, only the state and what the backend said.
+    // Skills: no file, source or target to show, only what the backend said.
     expect(title()).toContain("skills · current");
     const skills = facts();
-    expect(skills).toMatchObject({ state: "current", detail: "current detail" });
+    expect(skills).toMatchObject({ detail: "current detail" });
     expect(skills).not.toHaveProperty("file");
     expect(skills).not.toHaveProperty("source");
     expect(skills).not.toHaveProperty("target");

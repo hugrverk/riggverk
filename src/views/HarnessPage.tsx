@@ -169,7 +169,8 @@ export function HarnessPage({
   const showRules = rulesModel !== null && selected?.surface === rulesSurface;
   // What is true of the whole harness follows the surface's own facts, so one column of labels carries both.
   const facts: KvItem[] = [
-    ...(selected && selectedDisplay ? surfaceFacts(selected, selectedDisplay, !showRules) : []),
+    // The state is the detail title's; the facts are what the title cannot say.
+    ...(selected ? surfaceFacts(selected, !showRules) : []),
     ...(entry?.error ? [{ label: "status", value: `failed: ${entry.error}`, tone: "fail" as const, wrap: true }] : []),
     ...(conflictDetails.length > 0 ? [{ label: "preserved", value: conflictDetails.join(", "), tone: "warn" as const, wrap: true }] : []),
   ];
@@ -267,7 +268,7 @@ export function HarnessPage({
  * The facts of one surface row: where it lands, what feeds it, which toggle gates it, and its state. The backend's
  * detail line is left out where the rules summary below says the same thing in full.
  */
-function surfaceFacts(row: HarnessRowModel, display: StateDisplay, withDetail: boolean): KvItem[] {
+function surfaceFacts(row: HarnessRowModel, withDetail: boolean): KvItem[] {
   const also = row.alsoSurfaces.map(surfaceShortName).join(", ");
   const toggle = row.targetId
     ? `${row.target?.label ?? row.targetId} · ${row.targetEnabled ? "on" : "off"}${also ? ` · also ${also}` : ""}`
@@ -276,7 +277,6 @@ function surfaceFacts(row: HarnessRowModel, display: StateDisplay, withDetail: b
     ...(row.path ? [{ label: "file", value: row.path }] : []),
     ...(row.path && row.target ? [{ label: "source", value: row.target.source_rel, tone: "dim" as const }] : []),
     ...(toggle ? [{ label: "target", value: toggle }] : []),
-    { label: "state", value: display.label, tone: display.tone },
     ...(withDetail && row.detail ? [{ label: "detail", value: row.detail, wrap: true }] : []),
   ];
 }
