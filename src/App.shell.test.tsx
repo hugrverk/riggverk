@@ -174,14 +174,17 @@ describe("App shell", () => {
     expect(currentTab()).toBe("Workspace");
   });
 
-  it("shows installation state from the overview as status dots on the harness tabs", async () => {
+  it("does not mark the harness tabs with their installation state", async () => {
     const backend = installBackend();
     backend.installation = { codex: "update_available", cursor: "conflict" };
     render(<App />);
-    const codex = await within(nav()).findByRole("button", { name: "Codex, update available" });
-    expect(codex.querySelector(".st.st-warn")).not.toBeNull();
-    expect(within(nav()).getByRole("button", { name: "Cursor, conflicts" }).querySelector(".st.st-fail")).not.toBeNull();
-    expect(within(nav()).getByRole("button", { name: "OpenCode, current" }).querySelector(".st.st-ok")).not.toBeNull();
+    await ready();
+    await waitFor(() => expect(backend.statusRequests.length).toBeGreaterThanOrEqual(4));
+    await act(async () => {});
+    for (const name of ["Codex", "OpenCode", "Cursor", "Claude"]) {
+      const tab = within(nav()).getByRole("button", { name });
+      expect(tab.querySelector(".st")).toBeNull();
+    }
   });
 
   it("asks the backend about a newly enabled harness only after the settings save has landed", async () => {
@@ -192,7 +195,8 @@ describe("App shell", () => {
     });
     const claudeRequests = () => backend.statusRequests.filter(surfaces => surfaces[0]?.startsWith("claude"));
     render(<App />);
-    await within(nav()).findByRole("button", { name: "Codex, current" });
+    await within(nav()).findByRole("button", { name: "Codex" });
+    await waitFor(() => expect(backend.statusRequests.some(surfaces => surfaces[0]?.startsWith("codex"))).toBe(true));
 
     fireEvent.keyDown(document.body, { key: ",", ctrlKey: true });
     const settings = await screen.findByRole("region", { name: "Settings" });
@@ -202,9 +206,9 @@ describe("App shell", () => {
     expect(claudeRequests()).toHaveLength(0);
 
     release();
-    const claude = await within(nav()).findByRole("button", { name: "Claude, current" });
+    const claude = await within(nav()).findByRole("button", { name: "Claude" });
     expect(claude).toBeInTheDocument();
-    expect(claudeRequests()).toHaveLength(1);
+    await waitFor(() => expect(claudeRequests()).toHaveLength(1));
   });
 
   it("drops :uninstall while the install review is open instead of popping the dialog after it closes", async () => {

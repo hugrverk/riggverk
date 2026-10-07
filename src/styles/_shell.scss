@@ -82,9 +82,7 @@
   border-radius: 50%;
 }
 
-.st-ok { background: var(--ok); }
 .st-warn { background: var(--warn); }
-.st-fail { background: var(--fail); }
 .tab[aria-current="page"] .st { box-shadow: 0 0 0 1px var(--inv-fg); }
 
 .tab .short { display: none; }

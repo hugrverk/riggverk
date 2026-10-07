@@ -97,22 +97,15 @@ describe("TopLine", () => {
     expect(screen.queryByRole("button", { name: "Library" })).toBeNull();
   });
 
-  it("shows harness installation state as a status dot and in the accessible name", () => {
-    render(
-      <TopLine
-        view="start"
-        libraryDirty={false}
-        settingsErrored={false}
-        harnessStates={{ codex: "current", opencode: "update_available", cursor: "conflict", claude: "unavailable" }}
-        onSwitchView={vi.fn()}
-      />,
+  it("marks only a dirty or errored tab: harness tabs carry no dot", () => {
+    const { container } = render(
+      <TopLine view="start" libraryDirty={false} settingsErrored={false} onSwitchView={vi.fn()} />,
     );
-    expect(screen.getByRole("button", { name: "Codex, current" }).querySelector(".st.st-ok")).not.toBeNull();
-    expect(screen.getByRole("button", { name: "OpenCode, update available" }).querySelector(".st.st-warn")).not.toBeNull();
-    expect(screen.getByRole("button", { name: "Cursor, conflicts" }).querySelector(".st.st-fail")).not.toBeNull();
-    const claude = screen.getByRole("button", { name: "Claude" });
-    expect(claude.querySelector(".st")).toBeNull();
-    expect(screen.getByRole("button", { name: "Workspace" }).querySelector(".st")).toBeNull();
+    expect(container.querySelector("nav.tabs .st")).toBeNull();
+    cleanup();
+    const dirty = render(<TopLine view="start" libraryDirty settingsErrored={false} onSwitchView={vi.fn()} />);
+    expect(Array.from(dirty.container.querySelectorAll("nav.tabs .st"))).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "Codex" }).querySelector(".st")).toBeNull();
   });
 
   it("is a window drag region with tabs and a right slot, without a brand label", () => {
