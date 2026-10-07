@@ -40,6 +40,12 @@ pub struct AppSettings {
     pub background_color: Option<String>,
     #[serde(default)]
     pub foreground_color: Option<String>,
+    /// Motion level: "full", "subtle" or "off". Empty means the file predates
+    /// the field and is derived from `reduce_motion` by `normalize_motion`.
+    #[serde(default)]
+    pub motion: String,
+    /// Legacy flag, kept in step with `motion` (`true` exactly when motion is
+    /// "off") so a downgrade to a build that only knows it keeps the choice.
     #[serde(default)]
     pub reduce_motion: bool,
     #[serde(default = "default_landing_view")]
@@ -71,6 +77,7 @@ impl Default for AppSettings {
             accent_color: None,
             background_color: None,
             foreground_color: None,
+            motion: default_motion(),
             reduce_motion: false,
             landing_view: default_landing_view(),
             repo_dashboard_entries: Vec::new(),
@@ -112,6 +119,10 @@ fn default_landing_view() -> String {
     "start".into()
 }
 
+fn default_motion() -> String {
+    "full".into()
+}
+
 fn deserialize_harness_ids<'de, D>(deserializer: D) -> Result<Vec<HarnessId>, D::Error>
 where
     D: serde::Deserializer<'de>,
@@ -129,6 +140,18 @@ fn normalize_app_font_size(value: &str) -> String {
         "small" | "medium" | "large" | "extra-large" => value.to_string(),
         _ => default_app_font_size(),
     }
+}
+
+/// Validate `motion`; a missing value comes from the legacy `reduce_motion`
+/// flag (`true` is "off"), an unknown one falls back to "full". Keeps
+/// `reduce_motion` in step with the result.
+fn normalize_motion(settings: &mut AppSettings) {
+    settings.motion = match settings.motion.as_str() {
+        "full" | "subtle" | "off" => settings.motion.clone(),
+        "" if settings.reduce_motion => "off".into(),
+        _ => default_motion(),
+    };
+    settings.reduce_motion = settings.motion == "off";
 }
 
 fn normalize_landing_view(value: &str) -> String {
@@ -161,6 +184,7 @@ fn normalize(settings: &mut AppSettings) {
     }
     settings.app_font_size = normalize_app_font_size(&settings.app_font_size);
     settings.landing_view = normalize_landing_view(&settings.landing_view);
+    normalize_motion(settings);
 
     if let Some(ref val) = settings.workspace_path {
         if is_legacy_default_workspace_path(val) {
@@ -205,6 +229,7 @@ fn normalize_for_save(settings: &mut AppSettings) -> Result<(), String> {
     }
     settings.app_font_size = normalize_app_font_size(&settings.app_font_size);
     settings.landing_view = normalize_landing_view(&settings.landing_view);
+    normalize_motion(settings);
 
     if let Some(ref val) = settings.workspace_path {
         if is_legacy_default_workspace_path(val) {
@@ -591,6 +616,7 @@ mod tests {
             accent_color: None,
             background_color: None,
             foreground_color: None,
+            motion: "full".into(),
             reduce_motion: false,
             landing_view: "start".into(),
             repo_dashboard_entries: Vec::new(),
@@ -694,6 +720,7 @@ mod tests {
             accent_color: None,
             background_color: None,
             foreground_color: None,
+            motion: "full".into(),
             reduce_motion: false,
             landing_view: "start".into(),
             repo_dashboard_entries: Vec::new(),
@@ -784,6 +811,120 @@ mod tests {
         assert_eq!(settings.app_font_size, "medium");
     }
 
+    // ── motion tests ──
+
+    fn load_settings_json(json: serde_json::Value) -> AppSettings {
+        let mut loaded: AppSettings = serde_json::from_value(json).expect("load settings");
+        normalize(&mut loaded);
+        loaded
+    }
+
+    #[test]
+    fn motion_defaults_to_full() {
+        let settings = AppSettings::default();
+        assert_eq!(settings.motion, "full");
+        assert!(!settings.reduce_motion);
+    }
+
+    #[test]
+    fn legacy_reduce_motion_true_migrates_to_off() {
+        let loaded = load_settings_json(serde_json::json!({
+            "appearance": "dark",
+            "reduce_motion": true
+        }));
+        assert_eq!(loaded.motion, "off");
+        assert!(loaded.reduce_motion);
+    }
+
+    #[test]
+    fn legacy_reduce_motion_false_or_absent_migrates_to_full() {
+        let explicit = load_settings_json(serde_json::json!({
+            "appearance": "dark",
+            "reduce_motion": false
+        }));
+        assert_eq!(explicit.motion, "full");
+        let absent = load_settings_json(serde_json::json!({ "appearance": "dark" }));
+        assert_eq!(absent.motion, "full");
+        assert!(!absent.reduce_motion);
+    }
+
+    #[test]
+    fn motion_accepts_constrained_values_and_wins_over_legacy_flag() {
+        for (value, legacy) in [("full", false), ("subtle", false), ("off", true)] {
+            let loaded = load_settings_json(serde_json::json!({
+                "appearance": "dark",
+                "motion": value,
+                // A stale legacy flag must not override an explicit motion value.
+                "reduce_motion": !legacy
+            }));
+            assert_eq!(loaded.motion, value);
+            assert_eq!(loaded.reduce_motion, legacy);
+        }
+    }
+
+    #[test]
+    fn motion_unknown_value_becomes_full() {
+        for value in ["reduced", "FULL", " off", "none"] {
+            let mut settings = settings_with_path(None);
+            settings.motion = value.into();
+            settings.reduce_motion = true;
+
+            normalize(&mut settings);
+
+            assert_eq!(settings.motion, "full", "{value:?}");
+            assert!(!settings.reduce_motion);
+        }
+    }
+
+    #[test]
+    fn saved_motion_writes_both_fields() {
+        for (value, legacy) in [("full", false), ("subtle", false), ("off", true)] {
+            let mut settings = settings_with_path(None);
+            settings.motion = value.into();
+            settings.reduce_motion = false;
+
+            normalize_for_save(&mut settings).expect("save normalization");
+
+            assert_eq!(settings.motion, value);
+            assert_eq!(settings.reduce_motion, legacy);
+        }
+    }
+
+    #[test]
+    fn saved_settings_without_motion_derive_it_from_the_legacy_flag() {
+        let mut settings = settings_with_path(None);
+        settings.motion = String::new();
+        settings.reduce_motion = true;
+
+        normalize_for_save(&mut settings).expect("save normalization");
+
+        assert_eq!(settings.motion, "off");
+    }
+
+    #[test]
+    fn legacy_settings_file_with_reduce_motion_loads_as_off() {
+        with_temp_home(|dir| {
+            let mut json = serde_json::to_value(AppSettings::default()).expect("serialize");
+            let object = json.as_object_mut().expect("settings object");
+            object.remove("motion");
+            object.insert("reduce_motion".into(), serde_json::json!(true));
+            write_settings_file(dir, &json.to_string());
+
+            let loaded = get_settings_snapshot().expect("snapshot").settings;
+            assert_eq!(loaded.motion, "off");
+
+            // The next write persists both fields.
+            let saved = save(loaded).expect("save");
+            let on_disk: serde_json::Value = serde_json::from_str(
+                &fs::read_to_string(settings_path_for_home(dir)).expect("read settings"),
+            )
+            .expect("parse settings");
+            assert_eq!(on_disk["motion"], "off");
+            assert_eq!(on_disk["reduce_motion"], true);
+            assert_eq!(saved.motion, "off");
+        });
+    }
+
     // ── accent_color tests ──
 
     #[test]
@@ -832,6 +973,7 @@ mod tests {
             accent_color: Some("#FFAA00".into()),
             background_color: None,
             foreground_color: None,
+            motion: "full".into(),
             reduce_motion: false,
             landing_view: "start".into(),
             repo_dashboard_entries: Vec::new(),
@@ -854,6 +996,7 @@ mod tests {
             accent_color: Some("bad".into()),
             background_color: None,
             foreground_color: None,
+            motion: "full".into(),
             reduce_motion: false,
             landing_view: "start".into(),
             repo_dashboard_entries: Vec::new(),
