@@ -102,7 +102,7 @@ describe("SettingsView layout", () => {
     const appearance = pane("Appearance");
     expect(within(appearance).getByRole("radiogroup", { name: "Theme" })).toBeTruthy();
     expect(within(appearance).getByRole("radiogroup", { name: "Global app text size" })).toBeTruthy();
-    expect(within(appearance).getByRole("radiogroup", { name: "Reduce motion" })).toBeTruthy();
+    expect(within(appearance).getByRole("radiogroup", { name: "Motion" })).toBeTruthy();
     expect(within(appearance).getByLabelText("Accent hex code")).toBeTruthy();
     const app = pane("App");
     expect(within(app).getByRole("radiogroup", { name: "Landing page" })).toBeTruthy();
@@ -187,7 +187,7 @@ describe("SettingsView radio groups", () => {
 
   it("selects by click for motion and landing page", () => {
     const { props } = renderSettings();
-    fireEvent.click(within(screen.getByRole("radiogroup", { name: "Reduce motion" })).getByRole("radio", { name: "reduced" }));
+    fireEvent.click(within(screen.getByRole("radiogroup", { name: "Motion" })).getByRole("radio", { name: "off" }));
     expect(props.onSetMotion).toHaveBeenCalledWith("off");
     fireEvent.click(within(screen.getByRole("radiogroup", { name: "Landing page" })).getByRole("radio", { name: "prompt loops" }));
     expect(props.onSetLandingView).toHaveBeenCalledWith("prompts");
@@ -204,6 +204,75 @@ describe("SettingsView radio groups", () => {
   });
 });
 
+describe("SettingsView motion control", () => {
+  const MOTION_QUERY = "(prefers-reduced-motion: reduce)";
+  const NOTE = "the system asks for reduced motion: motion is off until that changes";
+
+  /** A controllable `prefers-reduced-motion` query; every other query stays false. */
+  function stubOsReducedMotion(initial: boolean) {
+    const listeners = new Set<() => void>();
+    const state = { reduced: initial };
+    window.matchMedia = ((query: string) => ({
+      get matches() {
+        return query === MOTION_QUERY && state.reduced;
+      },
+      media: query,
+      addEventListener: (_type: string, listener: () => void) => listeners.add(listener),
+      removeEventListener: (_type: string, listener: () => void) => listeners.delete(listener),
+    })) as unknown as typeof window.matchMedia;
+    return {
+      set(reduced: boolean) {
+        state.reduced = reduced;
+        act(() => listeners.forEach(listener => listener()));
+      },
+    };
+  }
+
+  it("offers full, subtle and off as radios in that order, with the setting checked", () => {
+    renderSettings({ appSettings: { ...defaultSettings(), revision: 1, motion: "subtle" } });
+    const options = radios("Motion");
+    expect(options.map(option => option.textContent)).toEqual(["( )full", "(•)subtle", "( )off"]);
+    expect(options.map(option => option.getAttribute("aria-checked"))).toEqual(["false", "true", "false"]);
+    // The roving tab stop is on the checked option.
+    expect(options.map(option => option.getAttribute("tabindex"))).toEqual(["-1", "0", "-1"]);
+  });
+
+  it("selects each level by click and with the arrow keys", () => {
+    const { props } = renderSettings();
+    const [full, subtle, off] = radios("Motion");
+    fireEvent.click(subtle!);
+    expect(props.onSetMotion).toHaveBeenLastCalledWith("subtle");
+    fireEvent.click(off!);
+    expect(props.onSetMotion).toHaveBeenLastCalledWith("off");
+    focus(full!);
+    press(full!, "ArrowRight");
+    expect(props.onSetMotion).toHaveBeenLastCalledWith("subtle");
+    press(full!, "ArrowLeft");
+    expect(props.onSetMotion).toHaveBeenLastCalledWith("off");
+  });
+
+  it("shows no note while the system asks for nothing", () => {
+    stubOsReducedMotion(false);
+    renderSettings();
+    expect(screen.queryByText(NOTE)).toBeNull();
+  });
+
+  it("says in a dim note that the system's reduced-motion request puts motion off, and follows the preference", () => {
+    const os = stubOsReducedMotion(true);
+    renderSettings({ appSettings: { ...defaultSettings(), revision: 1, motion: "full" } });
+    const note = screen.getByText(NOTE);
+    expect(note.className).toContain("c-dim");
+    // On the motion row, beside the radios, not in another pane.
+    expect(note.closest("dd")!.contains(screen.getByRole("radiogroup", { name: "Motion" }))).toBe(true);
+    // The saved choice is still shown: the system overrides it, it does not rewrite it.
+    expect(radios("Motion")[0]!.getAttribute("aria-checked")).toBe("true");
+    os.set(false);
+    expect(screen.queryByText(NOTE)).toBeNull();
+    os.set(true);
+    expect(screen.getByText(NOTE)).toBeTruthy();
+  });
+});
+
 describe("SettingsView keyboard navigation", () => {
   it("j and k move focus between settings rows inside the pane", () => {
     renderSettings();
@@ -213,7 +282,7 @@ describe("SettingsView keyboard navigation", () => {
     press(dark!, "j");
     expect(document.activeElement).toBe(radios("Global app text size")[1]);
     press(document.activeElement!, "j");
-    expect(document.activeElement).toBe(radios("Reduce motion")[0]);
+    expect(document.activeElement).toBe(radios("Motion")[0]);
     press(document.activeElement!, "j");
     expect(document.activeElement).toBe(screen.getByLabelText("Accent hex code"));
   });

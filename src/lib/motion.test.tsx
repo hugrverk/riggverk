@@ -1,6 +1,13 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { applyMotionSetting, currentMotion, effectiveMotion, normalizeMotion, useMotion } from "./motion";
+import {
+  applyMotionSetting,
+  currentMotion,
+  effectiveMotion,
+  normalizeMotion,
+  useMotion,
+  useSystemReducedMotion,
+} from "./motion";
 import { applyThemeSettings, defaultSettings } from "./settingsDraft";
 
 type ChangeListener = (event: { matches: boolean }) => void;
@@ -140,5 +147,28 @@ describe("useMotion", () => {
 
     act(() => os.setReduced(false));
     await waitFor(() => expect(result.current).toBe("full"));
+  });
+});
+
+describe("useSystemReducedMotion", () => {
+  it("reports the OS preference and follows it, whatever the setting says", () => {
+    const os = installReducedMotionQuery(false);
+    applyMotionSetting("off");
+    const { result, unmount } = renderHook(() => useSystemReducedMotion());
+    expect(result.current).toBe(false);
+
+    act(() => os.setReduced(true));
+    expect(result.current).toBe(true);
+    act(() => os.setReduced(false));
+    expect(result.current).toBe(false);
+
+    unmount();
+    // Only applyMotionSetting's own watcher is left.
+    expect(os.listeners.size).toBe(1);
+  });
+
+  it("is false without matchMedia", () => {
+    const { result } = renderHook(() => useSystemReducedMotion());
+    expect(result.current).toBe(false);
   });
 });
