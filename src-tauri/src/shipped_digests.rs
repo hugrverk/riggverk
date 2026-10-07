@@ -52,11 +52,12 @@ impl ShippedDigests {
             {
                 return Err(format!("invalid shipped digests source key: {key:?}"));
             }
-            // "absent" passes the digest grammar but is never a shipped version.
-            if digests
-                .iter()
-                .any(|d| d == crate::stable_digest::ABSENT || !crate::stable_digest::valid(d))
-            {
+            // "absent" passes the digest grammar but is never a shipped version, and neither is an
+            // empty file (the generator skips empty content; this holds even if the file is edited).
+            let empty = crate::stable_digest::bytes(b"");
+            if digests.iter().any(|d| {
+                d == crate::stable_digest::ABSENT || *d == empty || !crate::stable_digest::valid(d)
+            }) {
                 return Err(format!("invalid shipped digest for {key}"));
             }
             sources.insert(key, digests.into_iter().collect());
@@ -366,6 +367,8 @@ mod tests {
             test_override::json_for("a//b", std::slice::from_ref(&shipped)),
             test_override::json_for("a", &["sha256:short".to_string()]),
             test_override::json_for("a", &[crate::stable_digest::ABSENT.to_string()]),
+            // An empty file is never a shipped version.
+            test_override::json_for("a", &[crate::stable_digest::bytes(b"")]),
         ];
         for raw in cases {
             assert!(ShippedDigests::parse(&raw).is_err(), "{raw}");
