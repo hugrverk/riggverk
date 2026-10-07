@@ -2212,13 +2212,14 @@ pub fn preview_setup(surfaces: Vec<String>) -> Result<SetupPlan, String> {
     plan_surfaces(surface_ids, &ws_root, &home)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn apply_setup(
     surfaces: Vec<String>,
     skip_manual: bool,
     plan_fingerprint: Option<String>,
     preview_token: Option<String>,
 ) -> Result<SetupResult, String> {
+    let _mutation = crate::mutation_lock::acquire();
     // Validate all provided surface IDs are known before any processing
     let unknown: Vec<&String> = surfaces
         .iter()
@@ -2491,11 +2492,12 @@ pub fn preview_uninstall() -> Result<UninstallPlanView, String> {
 
 /// Apply a previously previewed uninstall. Every removed file is backed up
 /// in the transaction backup folder and the transaction is rollback-capable.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn apply_uninstall(
     plan_fingerprint: Option<String>,
     preview_token: Option<String>,
 ) -> Result<SetupResult, String> {
+    let _mutation = crate::mutation_lock::acquire();
     let ws_root = setup_workspace_target_path()?;
     let home = user_home()?;
     let plan = setup_transaction::plan_artifacts_for_uninstall(&ws_root, &home)?;
@@ -2529,11 +2531,12 @@ pub fn apply_uninstall(
     ))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn rollback_setup_transaction(
     transaction_id: String,
     dry_run: bool,
 ) -> Result<SetupResult, String> {
+    let _mutation = crate::mutation_lock::acquire();
     if !validate_transaction_id_format(&transaction_id) {
         return Err("invalid transaction_id: must be a numeric timestamp".to_string());
     }

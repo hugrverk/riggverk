@@ -449,12 +449,13 @@ pub fn preview_rules_conversion(surface: String) -> Result<RulesConversionPrevie
 /// Convert a hand-edited rules file onto the managed base block. Runs as a
 /// regular setup transaction: the file is backed up first and the transaction
 /// can be rolled back while the file is unchanged.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn apply_rules_conversion(
     surface: String,
     plan_fingerprint: Option<String>,
     preview_token: Option<String>,
 ) -> Result<SetupResult, String> {
+    let _mutation = crate::mutation_lock::acquire();
     let (surface_id, artifact) = rules_target(&surface)?;
     let ws_root = setup_workspace_target_path()?;
     let home = user_home()?;
