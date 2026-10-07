@@ -189,6 +189,9 @@ describe("OutputStrip", () => {
       expect(log().hidden).toBe(false);
       expect(log().textContent).toContain("completed · exit 0");
       expect(log().textContent).toContain("── stdout");
+      // The line names the command and when it ran; the log does not say it again.
+      expect(log().querySelector(".tui-cmdline")).toBeNull();
+      expect(log().textContent).not.toContain("update claude");
       expect(line().textContent).toContain("esc collapse");
       // Lines written by an apply are toned by their first word; the glyph row never depends on colour alone.
       const tones = Array.from(log().querySelectorAll(".tui-out span")).map(span => [span.className, span.textContent]);

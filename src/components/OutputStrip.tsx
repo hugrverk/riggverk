@@ -330,12 +330,14 @@ export function OutputStrip({
         hidden={!expanded}
       >
         {expanded && (
+          // The line above already names the command and when it ran; the log starts at the verdict.
           <TerminalState
             runningLabel={wsRunning}
             result={wsLog}
             completedAt={wsLogCompletedAt ?? undefined}
             readyLabel="ready"
             idleContent={<div className="tui-noout">— nothing run yet —</div>}
+            header={false}
           />
         )}
       </div>
