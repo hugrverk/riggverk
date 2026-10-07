@@ -214,7 +214,9 @@ textarea {
 
 /* ---- motion ----
    Blinking carets and the activity loader are the only animations left (D10). Both the
-   OS preference and the in-app reduce_motion setting stop them. */
+   OS preference and the in-app motion setting ("off") stop them. `data-motion` on <html> holds the
+   effective level (lib/motion.ts: the OS preference wins over the setting), so the attribute rule and the
+   media query agree; the media query alone keeps the CSS correct before the script runs. */
 
 @media (prefers-reduced-motion: reduce) {
   *,
@@ -227,9 +229,9 @@ textarea {
   }
 }
 
-[data-reduce-motion="true"] *,
-[data-reduce-motion="true"] *::before,
-[data-reduce-motion="true"] *::after {
+[data-motion="off"] *,
+[data-motion="off"] *::before,
+[data-motion="off"] *::after {
   animation-duration: 0.01ms !important;
   animation-iteration-count: 1 !important;
   transition-duration: 0.01ms !important;

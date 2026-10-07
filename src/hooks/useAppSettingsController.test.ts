@@ -24,7 +24,7 @@ const baseSettings: AppSettings = {
   accent_color: null,
   background_color: null,
   foreground_color: null,
-  reduce_motion: false,
+  motion: "full",
   landing_view: "start",
   repo_dashboard_entries: [],
   active_repo_dashboard_id: null,
@@ -431,7 +431,7 @@ describe("useAppSettingsController autosave", () => {
     });
 
     await act(async () => {
-      result.current.setReduceMotion(true);
+      result.current.setMotion("off");
     });
     await act(async () => {
       await result.current.retrySaveSettings();
@@ -440,11 +440,11 @@ describe("useAppSettingsController autosave", () => {
     const updates = invoke.mock.calls.filter(([cmd]) => cmd === "update_settings");
     expect(updates).toHaveLength(2);
     expect(updates[1][1].expectedRevision).toBe(7);
-    expect(updates[1][1].settings.reduce_motion).toBe(true);
+    expect(updates[1][1].settings.motion).toBe("off");
     expect(updates[1][1].settings.repo_dashboard_entries).toEqual(server.repo_dashboard_entries);
     expect(updates[1][1].settings.active_repo_dashboard_id).toBe("server");
     expect(result.current.settingsSaveStatus).toBe("saved");
-    expect(result.current.appSettings?.reduce_motion).toBe(true);
+    expect(result.current.appSettings?.motion).toBe("off");
     expect(result.current.appSettings?.revision).toBe(8);
   });
 
@@ -511,7 +511,7 @@ describe("useAppSettingsController resetSettings", () => {
     appearance: "light",
     app_font_size: "large",
     accent_color: "#ff0000",
-    reduce_motion: true,
+    motion: "subtle",
     landing_view: "library",
     workspace_path: "/tmp/workspace",
     repo_dashboard_entries: [{ id: "repo-1", label: "Repo", path: "/tmp/repo" }],
@@ -571,7 +571,7 @@ describe("useAppSettingsController resetSettings", () => {
     expect(sent.appearance).toBe("dark");
     expect(sent.app_font_size).toBe("medium");
     expect(sent.accent_color).toBeNull();
-    expect(sent.reduce_motion).toBe(false);
+    expect(sent.motion).toBe("full");
     expect(sent.workspace_path).toBe("/tmp/workspace");
     expect(sent.repo_dashboard_entries).toEqual(customised.repo_dashboard_entries);
     expect(sent.active_repo_dashboard_id).toBe("repo-1");

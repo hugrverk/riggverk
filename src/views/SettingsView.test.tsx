@@ -40,7 +40,7 @@ function makeProps(overrides: Partial<Props> = {}): Props {
     onSetAccentColor: vi.fn(),
     onSetBackgroundColor: vi.fn(),
     onSetForegroundColor: vi.fn(),
-    onSetReduceMotion: vi.fn(),
+    onSetMotion: vi.fn(),
     onSetLandingView: vi.fn(),
     onToggleHarness: vi.fn(),
     onRetrySave: vi.fn(),
@@ -188,7 +188,7 @@ describe("SettingsView radio groups", () => {
   it("selects by click for motion and landing page", () => {
     const { props } = renderSettings();
     fireEvent.click(within(screen.getByRole("radiogroup", { name: "Reduce motion" })).getByRole("radio", { name: "reduced" }));
-    expect(props.onSetReduceMotion).toHaveBeenCalledWith(true);
+    expect(props.onSetMotion).toHaveBeenCalledWith("off");
     fireEvent.click(within(screen.getByRole("radiogroup", { name: "Landing page" })).getByRole("radio", { name: "prompt loops" }));
     expect(props.onSetLandingView).toHaveBeenCalledWith("prompts");
   });

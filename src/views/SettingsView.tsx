@@ -43,7 +43,7 @@ interface SettingsViewProps {
   onSetAccentColor: (value: string | null) => void;
   onSetBackgroundColor: (value: string | null) => void;
   onSetForegroundColor: (value: string | null) => void;
-  onSetReduceMotion: (value: boolean) => void;
+  onSetMotion: (value: AppSettings["motion"]) => void;
   onSetLandingView: (value: string) => void;
   onToggleHarness: (id: InstallAgent) => void;
   onRetrySave?: () => void;
@@ -274,7 +274,7 @@ export function SettingsView({
   onSetAccentColor,
   onSetBackgroundColor,
   onSetForegroundColor,
-  onSetReduceMotion,
+  onSetMotion,
   onSetLandingView,
   onToggleHarness,
   onRetrySave,
@@ -520,8 +520,8 @@ export function SettingsView({
       value: (
         <RadioGroup
           options={MOTION_OPTIONS}
-          value={appSettings.reduce_motion ? "reduced" : "full"}
-          onSelect={mode => onSetReduceMotion(mode === "reduced")}
+          value={appSettings.motion === "off" ? "reduced" : "full"}
+          onSelect={mode => onSetMotion(mode === "reduced" ? "off" : "full")}
           label="Reduce motion"
         />
       ),

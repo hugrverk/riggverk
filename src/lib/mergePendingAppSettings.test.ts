@@ -15,7 +15,7 @@ const base: AppSettings = {
   accent_color: null,
   background_color: null,
   foreground_color: null,
-  reduce_motion: false,
+  motion: "full",
   landing_view: "start",
   repo_dashboard_entries: [],
   active_repo_dashboard_id: null,
@@ -36,16 +36,16 @@ describe("mergePendingAppSettings", () => {
     expect(merged.revision).toBe(5);
   });
 
-  it("keeps pending reduce_motion and landing_view edits", () => {
+  it("keeps pending motion and landing_view edits", () => {
     const savedSerialized = serializeSettingsForCompare(base);
-    const local = { ...base, reduce_motion: true, landing_view: "library" };
+    const local: AppSettings = { ...base, motion: "subtle", landing_view: "library" };
     const rebased = mergePendingLocalOntoAcknowledged({ ...base, revision: 6 }, local, savedSerialized);
-    expect(rebased.reduce_motion).toBe(true);
+    expect(rebased.motion).toBe("subtle");
     expect(rebased.landing_view).toBe("library");
     expect(rebased.revision).toBe(6);
 
     const afterMutation = applyMutationPreservingPendingLocal({ ...base, revision: 7 }, "sent", local, savedSerialized);
-    expect(afterMutation.reduce_motion).toBe(true);
+    expect(afterMutation.motion).toBe("subtle");
     expect(afterMutation.landing_view).toBe("library");
     expect(afterMutation.revision).toBe(7);
   });

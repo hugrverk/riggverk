@@ -273,7 +273,7 @@ function AppShell() {
     setAccentColor,
     setBackgroundColor,
     setForegroundColor,
-    setReduceMotion,
+    setMotion,
     setLandingView,
     toggleTarget,
     toggleHarness,
@@ -909,7 +909,7 @@ function AppShell() {
             onSetAccentColor={setAccentColor}
             onSetBackgroundColor={setBackgroundColor}
             onSetForegroundColor={setForegroundColor}
-            onSetReduceMotion={setReduceMotion}
+            onSetMotion={setMotion}
             onSetLandingView={setLandingView}
             onToggleHarness={toggleHarness}
             onRetrySave={retrySaveSettings}
