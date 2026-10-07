@@ -589,8 +589,10 @@ fn save_doc_at_root(
     ))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn save_doc(id: String, content: String) -> Result<ActionResult, String> {
+    // Writes files an apply may also write: wait for a running mutation instead of interleaving.
+    let _mutation = crate::mutation_lock::acquire();
     let root = workspace_root()?;
     save_doc_at_root(&root, &id, &content, None)
 }
@@ -645,12 +647,14 @@ fn create_doc_at_root(
     })
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn create_doc(
     title: String,
     slug: String,
     content: Option<String>,
 ) -> Result<DocumentContent, String> {
+    // Writes files an apply may also write: wait for a running mutation instead of interleaving.
+    let _mutation = crate::mutation_lock::acquire();
     let root = workspace_root()?;
     create_doc_at_root(&root, &title, &slug, content)
 }
@@ -2061,8 +2065,10 @@ pub fn open_agent_template() -> Result<ActionResult, String> {
 
 const MAX_AGENT_TEMPLATE_SIZE: usize = 512 * 1024;
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn save_agent_template(content: String) -> Result<ActionResult, String> {
+    // Writes files an apply may also write: wait for a running mutation instead of interleaving.
+    let _mutation = crate::mutation_lock::acquire();
     if content.len() > MAX_AGENT_TEMPLATE_SIZE {
         return Err("content exceeds 512 KB limit".to_string());
     }
@@ -2210,11 +2216,13 @@ const MAX_OPENCODE_CONFIG_SOURCE_SIZE: usize = 512 * 1024;
 /// Only editable types (base, policy) are allowed.
 /// Snapshot is read-only and will be rejected.
 /// This is a narrow special case for activeConfigTargetId == "opencode_config".
-#[tauri::command]
+#[tauri::command(async)]
 pub fn save_opencode_config_source(
     source_type: String,
     content: String,
 ) -> Result<ActionResult, String> {
+    // Writes files an apply may also write: wait for a running mutation instead of interleaving.
+    let _mutation = crate::mutation_lock::acquire();
     if content.len() > MAX_OPENCODE_CONFIG_SOURCE_SIZE {
         return Err("content exceeds 512 KB limit".to_string());
     }
@@ -2416,8 +2424,10 @@ pub fn open_agent_source(filename: String) -> Result<ActionResult, String> {
 
 const MAX_AGENT_SOURCE_SIZE: usize = 512 * 1024;
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn save_agent_source(filename: String, content: String) -> Result<ActionResult, String> {
+    // Writes files an apply may also write: wait for a running mutation instead of interleaving.
+    let _mutation = crate::mutation_lock::acquire();
     if content.len() > MAX_AGENT_SOURCE_SIZE {
         return Err("content exceeds 512 KB limit".to_string());
     }

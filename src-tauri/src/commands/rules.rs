@@ -526,8 +526,10 @@ fn clear_user_managed_after_conversion(
 /// Record (or clear) that the user manages a hand-edited rules file
 /// themselves. A recorded file stays untouched and reports base updates
 /// instead of a conflict. Writes only the preferences file.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn set_rules_user_managed(surface: String, user_managed: bool) -> Result<(), String> {
+    // Writes files an apply may also write: wait for a running mutation instead of interleaving.
+    let _mutation = crate::mutation_lock::acquire();
     let (_, artifact) = rules_target(&surface)?;
     let ws_root = setup_workspace_target_path()?;
     let home = user_home()?;
