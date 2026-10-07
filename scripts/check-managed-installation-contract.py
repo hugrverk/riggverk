@@ -332,8 +332,13 @@ def main() -> None:
     setup_code = production_code[TAURI / "commands/setup.rs"]
     if len(re.findall(r"\bconsume_preview_token\b", setup_code)) != 1:
         fail("preview token must be consumed in exactly one place (the apply owner)")
-    if "consume_preview_token" not in function_body(setup_code, "apply_planned_artifacts"):
-        fail("preview token consumption must remain inside apply_planned_artifacts")
+    # apply_planned_artifacts reports progress around run_planned_artifacts, which holds the apply body: the
+    # token must be consumed in that body, and the wrapper must delegate to it.
+    apply_wrapper = function_body(setup_code, "apply_planned_artifacts")
+    if not re.search(r"\brun_planned_artifacts\s*\(", apply_wrapper):
+        fail("apply_planned_artifacts must delegate to run_planned_artifacts")
+    if "consume_preview_token" not in function_body(setup_code, "run_planned_artifacts"):
+        fail("preview token consumption must remain inside the apply body (run_planned_artifacts)")
 
     require(
         TAURI / "setup_transaction.rs",
