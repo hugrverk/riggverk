@@ -113,5 +113,5 @@ Command output is redacted for display and capped at 16 MB per stream. Helper su
 
 ## Dependencies
 
-- [Tauri](https://tauri.app) - application shell. The webview CSP allows only `'self'` and IPC; capabilities are window dragging and the folder dialog.
+- [Tauri](https://tauri.app) - application shell. The webview CSP allows only `'self'` and IPC; capabilities are window dragging, the folder dialog, and listening for backend events (the webview cannot emit).
 - [serde](https://serde.rs), [React](https://react.dev), [TypeScript](https://www.typescriptlang.org), [Vite](https://vite.dev) (MIT).
