@@ -202,6 +202,16 @@ describe("StartView panes", () => {
     expect(verify.textContent).toContain("1710000000000 · rollback available");
   });
 
+  it("leaves the status group out when the title already says everything", () => {
+    renderStart();
+    for (let i = 0; i < 3; i++) press("j");
+    // Cursor: no changes, no error, no preserved files, no rules file. The title carries its state.
+    const cursor = detail("cursor");
+    expect(cursor.querySelector(".pane-title")!.textContent).toBe("cursor · 1 conflict");
+    expect(within(cursor).queryByLabelText("cursor status")).toBeNull();
+    expect([...cursor.querySelectorAll(".group")].map(group => group.textContent)).toEqual(["surfaces", "verify", "lifecycle"]);
+  });
+
   it("adds the backend's change breakdown only for an update, without its prefix", () => {
     const update = installationStatus("update_available", [], { create_count: 5, update_count: 165, remove_count: 3 }, {
       summary: "Update available: 5 to create, 165 to update, 3 to remove",
