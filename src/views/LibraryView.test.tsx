@@ -271,7 +271,7 @@ describe("LibraryView Configs pane", () => {
       configEditorSourceContent: null,
     };
     const { update } = renderLibrary(props);
-    expect(screen.getByText("Loading config source...")).not.toBeNull();
+    expect(screen.getByText("Loading config source…")).not.toBeNull();
 
     const loaded = makeDoc("base", "base", '{"loaded_marker": 1}');
     update({ ...props, configEditorSourceContent: loaded, configDraft: loaded.content });
@@ -989,7 +989,7 @@ describe("LibraryView save", () => {
   it("shows save progress and results in the editor footer, and announces a finished save in the status bar", () => {
     const { update } = renderLibrary({ docs, activeDoc: doc, docDraft: "# Edited", docDirty: true, docSaving: true });
     const footer = screen.getByRole("region", { name: "Editor" }).querySelector(".pane-foot")!;
-    expect(footer.textContent).toContain("saving...");
+    expect(footer.textContent).toContain("saving…");
     update({
       docs,
       activeDoc: doc,

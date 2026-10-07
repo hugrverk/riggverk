@@ -16,7 +16,7 @@ interface EditorPaneProps {
 }
 
 function saveStatus(entry: LibraryEntry): { text: string; ok: boolean } | null {
-  if (entry.saving) return { text: "saving...", ok: true };
+  if (entry.saving) return { text: "saving…", ok: true };
   const result = entry.saveResult;
   if (result) {
     return result.success

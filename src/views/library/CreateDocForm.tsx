@@ -72,7 +72,7 @@ export function CreateDocForm({
           className="btn btn-primary btn-sm"
           disabled={creating || !title.trim() || !slug.trim()}
         >
-          {creating ? "creating..." : "create"}
+          {creating ? "creating…" : "create"}
         </button>
         <button type="button" className="btn btn-sm" onClick={() => onSetShow(false)}>
           cancel

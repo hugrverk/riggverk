@@ -345,7 +345,7 @@ export function LibraryView(props: LibraryViewProps) {
             entry={entry}
             emptyHint={
               sourceType === "configs" && props.activeConfigTargetId === "opencode_config" && workspaceValid
-                ? "Loading config source..."
+                ? "Loading config source…"
                 : emptyStateHint(sourceType, workspaceValid)
             }
             textareaRef={textareaRef}
