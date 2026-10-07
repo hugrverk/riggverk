@@ -123,12 +123,6 @@
   overflow-wrap: anywhere;
 }
 
-.pane-group {
-  margin-top: 8px;
-}
-
-.pane-body > .kv + .pane-group { margin-top: 10px; }
-
 /* ---- surface matrix ---- */
 
 .matrix-row { display: contents; }
@@ -168,7 +162,7 @@
 
 .plan-state > div { display: flex; align-items: center; gap: 10px; }
 
-/* The question leads the footer row, the backup note takes a line of its own below the key hints. */
+/* The question leads the footer row, the backup note takes a line of its own below it. */
 .pane-foot .q {
   order: -1;
   min-width: 0;
