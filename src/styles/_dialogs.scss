@@ -14,8 +14,8 @@
 /* ---- modal dialogs ----
    A native <dialog> (it stays the overlay scope for the keymap) drawn as a titled box: accent border,
    the title sitting on the top border like a pane title, a body, and an inset footer row that holds the
-   key-hinted buttons (<button class="btn"><kbd>y</kbd> confirm</button>). ConfirmDialog, the uninstall
-   dialogs and the conflict dialog share these classes:
+   key-hinted buttons (ConfirmDialog: bracket buttons, `[ n cancel ] [ y confirm ]`, see .tbtn; the uninstall and
+   conflict dialogs: <button class="btn"><kbd>y</kbd> confirm</button>). They share these classes:
      .app-modal  > .app-modal-header > h2.app-modal-title
                  > .app-modal-body
                  > .app-modal-footer

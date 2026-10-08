@@ -1515,11 +1515,13 @@ fn validate_model_id(id: &str) -> Result<String, String> {
 ///
 /// Does NOT mutate workspace templates/opencode.base.json or templates/opencode.json.
 /// The override is stored outside the workspace and applied on the next Install/Update.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn update_opencode_model_selection(
     model: String,
     small_model: String,
 ) -> Result<String, String> {
+    // Writes files an apply may also write: wait for a running mutation instead of interleaving.
+    let _mutation = crate::mutation_lock::acquire();
     // Validate inputs; persist the trimmed values.
     let model = validate_model_id(&model)?;
     let small_model = validate_model_id(&small_model)?;

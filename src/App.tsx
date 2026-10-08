@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo, lazy, Suspense } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { version as APP_VERSION } from "../package.json";
 import { LEAVE_DIRTY_MESSAGE } from "./lib/editorGuards";
 import { invokeOpen } from "./lib/invokeOpen";
 import { useConfirm } from "./components/ConfirmDialog";
@@ -9,6 +10,8 @@ import { useUninstallRecovery } from "./lib/useUninstallRecovery";
 import { useWorkspaceActions } from "./lib/useWorkspaceActions";
 import { useWorkspaceGeneration } from "./lib/useWorkspaceGeneration";
 import { useAppSettingsController } from "./hooks/useAppSettingsController";
+import { useApplyProgress } from "./hooks/useApplyProgress";
+import { useScanOnSuccess } from "./hooks/useScanOnSuccess";
 import { useWorkspacePicker } from "./hooks/useWorkspacePicker";
 import { workspaceTaskBlockedMessage } from "./lib/workspaceErrors";
 import { useInstallationOverview } from "./hooks/useInstallationOverview";
@@ -242,6 +245,10 @@ function AppShell() {
     setError,
   });
 
+  const wsProgress = useApplyProgress(wsRunning);
+  // A successful apply or rollback sweeps one line down the view area (full motion only).
+  useScanOnSuccess(wsRunning, wsLog);
+
   // Keep the backups chip current: on mount and whenever a workspace task (apply, uninstall, rollback) finishes.
   useEffect(() => {
     if (!wsRunning) void loadBackups();
@@ -273,7 +280,7 @@ function AppShell() {
     setAccentColor,
     setBackgroundColor,
     setForegroundColor,
-    setReduceMotion,
+    setMotion,
     setLandingView,
     toggleTarget,
     toggleHarness,
@@ -581,7 +588,7 @@ function AppShell() {
    */
   const requestUninstallPreview = useCallback(async () => {
     if (install.isOpenOn("start")) {
-      notify("close the install review first (n or Esc), then run :uninstall");
+      notify("close the install review first (n or Esc), then run :uninstall", { tone: "warn" });
       return;
     }
     await switchView("start");
@@ -655,6 +662,7 @@ function AppShell() {
     wsLog,
     wsLogCompletedAt,
     wsRunning,
+    wsProgress,
     status,
     workspaceValid,
     gitAvailable,
@@ -687,7 +695,7 @@ function AppShell() {
   // The command line has no row to show the outcome in: a switch is a notice, a refusal the error banner.
   const reportWorkspaceSwitch = (message: { ok: boolean; text: string } | null) => {
     if (!message) return;
-    if (message.ok) notify(message.text);
+    if (message.ok) notify(message.text, { tone: "ok" });
     else setError(message.text);
   };
 
@@ -730,6 +738,18 @@ function AppShell() {
         error={error}
         onDismissError={() => setError(null)}
         statusRight={`${backups.length} backup${backups.length === 1 ? "" : "s"}`}
+        // The launch sequence waits for the settings (the motion level is final then) and only tells what has loaded.
+        boot={
+          appSettings
+            ? {
+                version: APP_VERSION,
+                workspace: workspaceDiagnostics ? (workspaceDiagnostics.valid ? workspaceDiagnostics.resolved_path : null) : undefined,
+                branch: status?.git_available ? status.branch : null,
+                dirty: status?.dirty,
+                backups: backups.length > 0 ? backups.length : undefined,
+              }
+            : undefined
+        }
       >
         {view === "start" && (
           <StartView
@@ -909,7 +929,7 @@ function AppShell() {
             onSetAccentColor={setAccentColor}
             onSetBackgroundColor={setBackgroundColor}
             onSetForegroundColor={setForegroundColor}
-            onSetReduceMotion={setReduceMotion}
+            onSetMotion={setMotion}
             onSetLandingView={setLandingView}
             onToggleHarness={toggleHarness}
             onRetrySave={retrySaveSettings}

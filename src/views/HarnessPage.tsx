@@ -23,6 +23,7 @@ import { Glyph } from "../ui/Glyph";
 import { Kv, type KvItem } from "../ui/Kv";
 import { Pane } from "../ui/Pane";
 import { PaneList } from "../ui/PaneList";
+import { RollingText } from "../ui/RollingText";
 import { toneClass } from "../ui/tone";
 import type { InstallAgent } from "../types";
 import { installBindings } from "./installBindings";
@@ -65,6 +66,7 @@ export function HarnessPage({
   wsLog,
   wsLogCompletedAt,
   wsRunning,
+  wsProgress,
   status,
   workspaceValid,
   gitAvailable,
@@ -121,6 +123,7 @@ export function HarnessPage({
   const outputStrip = () => (
     <OutputStrip
       wsRunning={wsRunning}
+      progress={wsProgress}
       wsLog={wsLog}
       wsLogCompletedAt={wsLogCompletedAt}
       status={status}
@@ -178,7 +181,7 @@ export function HarnessPage({
 
   const onToggle = (row: HarnessRowModel) => {
     if (row.targetId) onToggleTarget(row.targetId);
-    else notify(`${row.name} have no target toggle`);
+    else notify(`${row.name} have no target toggle`, { tone: "warn" });
   };
 
   return (
@@ -191,7 +194,7 @@ export function HarnessPage({
         meta={
           <>
             {"· "}
-            <span className={toneClass(harnessState.tone) || undefined}>{harnessState.text}</span>
+            <RollingText key={harness} className={toneClass(harnessState.tone)}>{harnessState.text}</RollingText>
             {saving && <span className="c-dim"> · autosaving…</span>}
             {settingsSaveStatus === "error" && <span className="c-fail"> · not saved, retry in settings</span>}
           </>
@@ -235,7 +238,9 @@ export function HarnessPage({
           selectedDisplay && (
             <>
               {"· "}
-              <span className={toneClass(selectedDisplay.tone) || undefined}>{selectedDisplay.label}</span>
+              <RollingText key={selected?.surface} className={toneClass(selectedDisplay.tone)}>
+                {selectedDisplay.label}
+              </RollingText>
             </>
           )
         }

@@ -52,6 +52,7 @@ function props(overrides: Partial<StartViewProps> = {}): StartViewProps {
     wsLog: null,
     wsLogCompletedAt: null,
     wsRunning: null,
+    wsProgress: null,
     status: STATUS_DATA,
     workspaceValid: true,
     gitAvailable: true,

@@ -61,7 +61,7 @@ const baseSettings: AppSettings = {
   accent_color: null,
   background_color: null,
   foreground_color: null,
-  reduce_motion: false,
+  motion: "full",
   landing_view: "start",
   repo_dashboard_entries: [],
   active_repo_dashboard_id: null,

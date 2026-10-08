@@ -3,17 +3,22 @@ import { focusPaneById, listPanes, paneOf } from "../keyboard/focus";
 import { useKeymap } from "../keyboard/useKeymap";
 import type { Binding } from "../keyboard/registry";
 import { actionLabel } from "../lib/actionLabel";
+import { useMotion } from "../lib/motion";
 import { redactTerminalOutput } from "../lib/redactTerminalOutput";
 import { useNotify } from "../shell/ShellState";
+import { BindingButton } from "../ui/BindingActionKey";
 import { Glyph } from "../ui/Glyph";
 import { Kbd } from "../ui/Kbd";
-import type { ActionResult, StatusData } from "../types";
-import { ActivityLoader, completedLabel, TerminalState } from "./TerminalOutput";
+import { cx } from "../ui/tone";
+import type { ActionResult, ApplyProgress, StatusData } from "../types";
+import { completedLabel, Elapsed, RunningProgress, Spinner, TerminalState } from "./TerminalOutput";
 
 export interface OutputStripProps {
   /** `data-pane-id`; also anchors the strip's key hints. Default "output". */
   id?: string;
   wsRunning: string | null;
+  /** What the backend last reported for the running task; null until it reports or when nothing runs. */
+  progress?: ApplyProgress | null;
   wsLog: ActionResult | null;
   wsLogCompletedAt: number | null;
   status: StatusData | null;
@@ -61,6 +66,9 @@ export function outputTextOf(log: ActionResult | null): string | null {
   return text || null;
 }
 
+/** A result this young when the strip mounts still counts as having just landed. */
+const FRESH_RESULT_MS = 1500;
+
 /** Transaction ids are nanosecond timestamps; the tail is what tells two of them apart. */
 function shortTransactionId(id: string): string {
   return id.length > 8 ? id.slice(-6) : id;
@@ -72,18 +80,21 @@ function scrollLogTo(log: HTMLElement | null, to: "top" | "bottom") {
 
 /**
  * The terminal as a one-line strip under the page's panes: `❯ ready · workspace valid · branch main`, a running
- * task, or the last result with its rollback hint. It expands into the full log (`TerminalState`) while a task
- * runs and when a result arrives; `↵` on the line toggles it, `esc` collapses, otherwise the user's toggle wins.
+ * task with its progress, or the last result with its rollback button. It expands into the full log
+ * (`TerminalState`) while a task runs and when a result arrives; `↵` on the line toggles it, `esc` collapses,
+ * otherwise the user's toggle wins. Under full motion a result that lands pops its ✓ and fades the border from ok.
  * Keys while it has focus: `y` copy, `C` clear, `z` roll back the last transaction, `r` refresh, `g g` / `G`
  * top and bottom of the log.
  *
  * It is a pane (`section.pane[data-pane-id]`, reachable with `h`/`l`) without a title or footer; its hints show
- * in the status bar like any pane's. Enter on the line itself is the button's own click; the Enter binding covers
- * the rest of the pane and the status-bar hint.
+ * in the status bar like any pane's. The line is a toggle button with the rollback button as its sibling (buttons
+ * never nest). Enter on the toggle is the button's own click; the Enter binding covers the rest of the pane and the
+ * status-bar hint.
  */
 export function OutputStrip({
   id = "output",
   wsRunning,
+  progress,
   wsLog,
   wsLogCompletedAt,
   status,
@@ -110,6 +121,22 @@ export function OutputStrip({
     setSeen({ running: wsRunning, log: wsLog });
     if ((wsRunning && !seen.running) || (wsLog && wsLog !== seen.log)) setExpanded(true);
   }
+
+  // The result on screen: a task in flight hides the previous one. One that lands while the strip is mounted, or
+  // that is only seconds old when it mounts (the page swaps the review for its panes, and remounts the strip, as the
+  // task ends), is flagged once, in full motion only; the animation clears the flag. A strip that mounts onto an
+  // older result stays calm. Done while rendering, like `seen`, so the first painted frame already carries it.
+  const motion = useMotion();
+  const shown = wsRunning ? null : wsLog;
+  const [shownSeen, setShownSeen] = useState(shown);
+  const [landed, setLanded] = useState<ActionResult | null>(() =>
+    shown?.success && motion === "full" && wsLogCompletedAt !== null && Date.now() - wsLogCompletedAt < FRESH_RESULT_MS ? shown : null,
+  );
+  if (shownSeen !== shown) {
+    setShownSeen(shown);
+    if (shown?.success && motion === "full") setLanded(shown);
+  }
+  const justDone = landed !== null && landed === shown;
 
   // Redaction scans the whole log; do it once per log, not on every render.
   const text = useMemo(() => outputTextOf(wsLog), [wsLog]);
@@ -138,6 +165,22 @@ export function OutputStrip({
     }
     pendingScroll.current = to;
     setExpanded(true);
+  };
+
+  // The rollback button beside the result runs this very binding.
+  const rollbackBinding: Binding = {
+    id: `outstrip.${id}.rollback`,
+    keys: "z",
+    title: "Roll back the last transaction",
+    hint: "rollback",
+    group: "Output",
+    scope: "pane",
+    paneId: id,
+    when: () => {
+      if (!latest.current.rollbackTransactionId || !latest.current.onRollback) return false;
+      return latest.current.wsRunning ? "a task is running" : true;
+    },
+    run: () => latest.current.onRollback?.(),
   };
 
   const bindings: Binding[] = [
@@ -195,20 +238,7 @@ export function OutputStrip({
       when: () => (latest.current.onClear && latest.current.wsLog && !latest.current.wsRunning ? true : false),
       run: () => latest.current.onClear?.(),
     },
-    {
-      id: `outstrip.${id}.rollback`,
-      keys: "z",
-      title: "Roll back the last transaction",
-      hint: "rollback",
-      group: "Output",
-      scope: "pane",
-      paneId: id,
-      when: () => {
-        if (!latest.current.rollbackTransactionId || !latest.current.onRollback) return false;
-        return latest.current.wsRunning ? "a task is running" : true;
-      },
-      run: () => latest.current.onRollback?.(),
-    },
+    rollbackBinding,
     {
       id: `outstrip.${id}.refresh`,
       keys: "r",
@@ -256,25 +286,21 @@ export function OutputStrip({
           <span className="outstrip-cmd">{wsRunning}</span>
         </span>
         {/* Expanded, the log below shows its own loader. */}
-        {!expanded && <ActivityLoader />}
+        <RunningProgress progress={progress} loader={!expanded} />
+        <Spinner />
+        <Elapsed />
         <span className="c-dim">running</span>
       </>
     );
   } else if (wsLog) {
     summary = (
       <>
-        <Glyph name={wsLog.success ? "check" : "fail"} tone={wsLog.success ? "ok" : "fail"} />
+        <Glyph name={wsLog.success ? "check" : "fail"} tone={wsLog.success ? "ok" : "fail"} className={wsLog.success ? "tick" : undefined} />
         <span className="outstrip-text">
           <span className="outstrip-cmd">{actionLabel(wsLog.action)}</span>{" "}
           <span className="c-dim">
             · {wsLog.success ? "ok" : "failed"}
             {wsLogCompletedAt !== null && ` · ${completedLabel(wsLogCompletedAt)}`}
-            {rollbackTransactionId && (
-              <>
-                {" · "}
-                <Kbd>z</Kbd> rollback {shortTransactionId(rollbackTransactionId)}
-              </>
-            )}
           </span>
         </span>
       </>
@@ -295,31 +321,44 @@ export function OutputStrip({
     );
   }
 
+  // The rollback offer belongs to the result: a sibling button beside the line's toggle, never inside it.
+  const rollback = !wsRunning && wsLog && rollbackTransactionId && (
+    <BindingButton binding={rollbackBinding} label={`rollback ${shortTransactionId(rollbackTransactionId)}`} />
+  );
+
   return (
     <section
       ref={paneRef}
-      className="pane outstrip"
+      className={cx("pane", "outstrip", justDone && "just-done")}
       data-pane-id={id}
       data-keyscope="pane"
       aria-label="Output"
       tabIndex={-1}
       onFocus={onFocus}
+      onAnimationEnd={event => {
+        // The border fade is the last of the success animations; the check's pop finishes inside it.
+        if (event.animationName === "outstrip-ok-fade") setLanded(null);
+      }}
     >
-      <button
-        ref={lineRef}
-        type="button"
-        className="outstrip-line"
-        tabIndex={0}
-        data-pane-primary=""
-        aria-expanded={expanded}
-        aria-controls={logId}
-        onClick={toggle}
-      >
-        {summary}
-        <span className="outstrip-affordance" aria-hidden="true">
+      <div className="outstrip-line">
+        <button
+          ref={lineRef}
+          type="button"
+          className="outstrip-toggle"
+          tabIndex={0}
+          data-pane-primary=""
+          aria-expanded={expanded}
+          aria-controls={logId}
+          onClick={toggle}
+        >
+          {summary}
+        </button>
+        {rollback}
+        {/* A mouse-only second target for the toggle; the button beside it is the accessible one. */}
+        <span className="outstrip-affordance" aria-hidden="true" onClick={toggle}>
           <Kbd>{expanded ? "esc" : "↵"}</Kbd> {expanded ? "collapse" : "expand"}
         </span>
-      </button>
+      </div>
       <div
         id={logId}
         ref={logRef}
@@ -336,6 +375,7 @@ export function OutputStrip({
             result={wsLog}
             completedAt={wsLogCompletedAt ?? undefined}
             readyLabel="ready"
+            progress={progress}
             idleContent={<div className="tui-noout">— nothing run yet —</div>}
             header={false}
           />

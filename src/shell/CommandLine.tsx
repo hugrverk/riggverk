@@ -78,10 +78,10 @@ function CommandLineBox({ initial }: { initial: string }) {
     closeCommandLine();
     try {
       void Promise.resolve(parsed.cmd.run(parsed)).catch((failure: unknown) =>
-        notify(`${parsed.cmd.name}: ${errorMessage(failure)}`),
+        notify(`${parsed.cmd.name}: ${errorMessage(failure)}`, { tone: "fail" }),
       );
     } catch (failure) {
-      notify(`${parsed.cmd.name}: ${errorMessage(failure)}`);
+      notify(`${parsed.cmd.name}: ${errorMessage(failure)}`, { tone: "fail" });
     }
     return true;
   };

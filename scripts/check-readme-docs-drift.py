@@ -135,8 +135,8 @@ def main() -> None:
     release_smoke = read(ROOT / "docs/APP_RELEASE_SMOKE.md")
     if "Recover previous uninstall" not in release_smoke and "uninstall" not in release_smoke.lower():
         fail("APP_RELEASE_SMOKE.md must include uninstall recovery smoke")
-    if "Reduce Motion" not in release_smoke and "reduce motion" not in release_smoke.lower():
-        fail("APP_RELEASE_SMOKE.md must include Reduce Motion smoke")
+    if "Motion `full`" not in release_smoke and "reduce motion" not in release_smoke.lower():
+        fail("APP_RELEASE_SMOKE.md must include the motion levels smoke")
     if "landing page" not in release_smoke.lower() and "landing_view" not in release_smoke:
         fail("APP_RELEASE_SMOKE.md must include landing page smoke")
 

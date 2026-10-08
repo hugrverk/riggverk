@@ -11,7 +11,7 @@ import {
   STATUS_DATA,
   surfaceStatus,
 } from "../test/pageFixtures";
-import type { AgentTargetMeta, ClaudeRuntimeHealth, CodexRuntimeHealth, OpenCodeRuntimeHealth } from "../types";
+import type { AgentTargetMeta, ApplyProgress, ClaudeRuntimeHealth, CodexRuntimeHealth, OpenCodeRuntimeHealth } from "../types";
 import { ClaudeView } from "./ClaudeView";
 import { CodexView } from "./CodexView";
 import { CursorView } from "./CursorView";
@@ -23,6 +23,20 @@ const invokeMock = vi.fn();
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: (...args: unknown[]) => invokeMock(...args),
 }));
+
+const outputStripProps = vi.fn();
+
+// The real strip, with its props recorded: the pages must hand it the backend's progress.
+vi.mock("../components/OutputStrip", async importOriginal => {
+  const actual = await importOriginal<typeof import("../components/OutputStrip")>();
+  return {
+    ...actual,
+    OutputStrip: (stripProps: Parameters<typeof actual.OutputStrip>[0]) => {
+      outputStripProps(stripProps);
+      return <actual.OutputStrip {...stripProps} />;
+    },
+  };
+});
 
 const TARGETS: AgentTargetMeta[] = [
   { id: "codex_rules", label: "codex rules", harness: "codex", kind: "rules", target_rel: ".codex/AGENTS.md", source_rel: "templates/codex-rules.md" },
@@ -80,6 +94,7 @@ function props(overrides: Partial<HarnessViewProps> = {}): HarnessViewProps {
     wsLog: null,
     wsLogCompletedAt: null,
     wsRunning: null,
+    wsProgress: null,
     status: STATUS_DATA,
     workspaceValid: true,
     gitAvailable: true,
@@ -463,5 +478,27 @@ describe("OpenCodeView model override", () => {
     renderInFrame(<OpenCodeView {...merged} runtimeHealth={null} onModelUpdated={vi.fn()} />);
     expect(invokeMock).not.toHaveBeenCalled();
     expect(screen.queryByLabelText("model")).toBeNull();
+  });
+});
+
+describe("HarnessPage output strip progress", () => {
+  const progress: ApplyProgress = {
+    task: "apply_setup",
+    phase: "apply",
+    done: 2,
+    total: 5,
+    file: "~/.codex/AGENTS.md",
+  };
+
+  beforeEach(() => outputStripProps.mockClear());
+
+  it("hands the backend's progress to the strip", () => {
+    renderCodex({ wsRunning: "update codex", wsProgress: progress });
+    expect(outputStripProps).toHaveBeenLastCalledWith(expect.objectContaining({ progress }));
+  });
+
+  it("hands it null until the backend reports", () => {
+    renderCodex({ wsRunning: "update codex", wsProgress: null });
+    expect(outputStripProps).toHaveBeenLastCalledWith(expect.objectContaining({ progress: null }));
   });
 });

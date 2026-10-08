@@ -13,7 +13,7 @@ import {
   surfaceStatus,
   VALID_DIAGNOSTICS,
 } from "../test/pageFixtures";
-import type { InstallAgent } from "../types";
+import type { ApplyProgress, InstallAgent } from "../types";
 import { StartView, type StartViewProps } from "./StartView";
 
 vi.mock("@tauri-apps/api/core", () => ({
@@ -21,6 +21,20 @@ vi.mock("@tauri-apps/api/core", () => ({
     throw new Error("unexpected invoke");
   }),
 }));
+
+const outputStripProps = vi.fn();
+
+// The real strip, with its props recorded: the pages must hand it the backend's progress.
+vi.mock("../components/OutputStrip", async importOriginal => {
+  const actual = await importOriginal<typeof import("../components/OutputStrip")>();
+  return {
+    ...actual,
+    OutputStrip: (stripProps: Parameters<typeof actual.OutputStrip>[0]) => {
+      outputStripProps(stripProps);
+      return <actual.OutputStrip {...stripProps} />;
+    },
+  };
+});
 
 const originalShowModal = HTMLDialogElement.prototype.showModal;
 const originalClose = HTMLDialogElement.prototype.close;
@@ -87,6 +101,7 @@ function props(overrides: Partial<StartViewProps> = {}): StartViewProps {
     wsLog: null,
     wsLogCompletedAt: null,
     wsRunning: null,
+    wsProgress: null,
     status: STATUS_DATA,
     workspaceValid: true,
     gitAvailable: true,
@@ -384,5 +399,81 @@ describe("StartView uninstall recovery", () => {
   it("offers the uninstall preview only for a valid workspace", () => {
     renderStart();
     expect(screen.getByRole("region", { name: "Uninstall" })).toBeTruthy();
+  });
+});
+
+describe("StartView output strip progress", () => {
+  const progress: ApplyProgress = {
+    task: "apply_setup",
+    phase: "apply",
+    done: 4,
+    total: 7,
+    file: "~/.claude/skills/handoff/SKILL.md",
+  };
+
+  beforeEach(() => outputStripProps.mockClear());
+
+  it("hands the backend's progress to the strip", () => {
+    renderStart({ wsRunning: "update claude", wsProgress: progress });
+    expect(outputStripProps).toHaveBeenLastCalledWith(expect.objectContaining({ progress }));
+  });
+
+  it("hands it null until the backend reports", () => {
+    renderStart({ wsRunning: "update claude", wsProgress: null });
+    expect(outputStripProps).toHaveBeenLastCalledWith(expect.objectContaining({ progress: null }));
+  });
+});
+
+describe("StartView live counters", () => {
+  afterEach(() => {
+    delete document.documentElement.dataset.motion;
+  });
+
+  const UPDATED = {
+    ...OVERVIEW,
+    entries: {
+      ...OVERVIEW.entries,
+      opencode: {
+        ...OVERVIEW.entries.opencode!,
+        status: installationStatus("current", [surfaceStatus("open_code_config", "current")]),
+      },
+    },
+  };
+
+  function renderChanging() {
+    const first = props();
+    const view = renderInFrame(<StartView {...first} />);
+    return {
+      ...view,
+      applyUpdate: () => view.rerenderFrame(<StartView {...first} overview={UPDATED} />),
+    };
+  }
+
+  it("rolls a row's meta when its state changes, and no other row", () => {
+    document.documentElement.dataset.motion = "full";
+    const { applyUpdate } = renderChanging();
+    const before = rowOf(harnessList(), "opencode").querySelector(".meta")!.textContent;
+    expect(harnessList().querySelector(".roll-old")).toBeNull();
+    applyUpdate();
+    expect(harnessList().querySelectorAll(".roll-old")).toHaveLength(1);
+    expect(rowOf(harnessList(), "opencode").querySelector(".roll-old")!.textContent).toBe(before);
+    expect(rowOf(harnessList(), "opencode").querySelector(".roll-new")!.textContent).toBe("current");
+  });
+
+  it("swaps the meta instantly when motion is off", () => {
+    document.documentElement.dataset.motion = "off";
+    const { applyUpdate } = renderChanging();
+    applyUpdate();
+    expect(harnessList().querySelector(".roll-old")).toBeNull();
+    expect(rowOf(harnessList(), "opencode").querySelector(".meta")!.textContent).toBe("current");
+  });
+
+  it("does not roll the detail title when the cursor moves to another harness", () => {
+    document.documentElement.dataset.motion = "full";
+    renderStart();
+    press("j");
+    press("j");
+    expect(screen.getByRole("region", { name: "opencode detail" })).toBeTruthy();
+    expect(document.querySelector(".roll-old")).toBeNull();
   });
 });

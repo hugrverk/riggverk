@@ -12,6 +12,7 @@ import {
   type PlanCounts,
 } from "../lib/installPlan";
 import { useConfirmMode, useStatusContext } from "../shell/ShellState";
+import { BindingButton } from "../ui/BindingActionKey";
 import { Glyph } from "../ui/Glyph";
 import { Pane } from "../ui/Pane";
 import { cx, toneClass } from "../ui/tone";
@@ -138,29 +139,33 @@ export function InstallPlanPane({ flow, busyLabel, backupRoot, onApply }: Instal
     return true;
   };
 
+  // The confirm line's buttons run these two: the very bindings the keys fire.
+  const applyAction: Binding = {
+    id: "plan.apply",
+    keys: "y",
+    title: "Apply the reviewed plan",
+    hint: "apply",
+    group: "Install plan",
+    scope: "pane",
+    paneId: INSTALL_PLAN_PANE_ID,
+    when: applyState,
+    run: () => onApply(),
+  };
+  const cancelAction: Binding = {
+    id: "plan.cancel",
+    keys: ["n", "Escape"],
+    title: readOnly ? "Close the preview" : "Cancel the review",
+    hint: readOnly ? "close" : "cancel",
+    group: "Install plan",
+    scope: "pane",
+    paneId: INSTALL_PLAN_PANE_ID,
+    when: cancelState,
+    run: () => flow.cancel(),
+  };
+
   const actions: Binding[] = [
-    {
-      id: "plan.apply",
-      keys: "y",
-      title: "Apply the reviewed plan",
-      hint: "apply",
-      group: "Install plan",
-      scope: "pane",
-      paneId: INSTALL_PLAN_PANE_ID,
-      when: applyState,
-      run: () => onApply(),
-    },
-    {
-      id: "plan.cancel",
-      keys: ["n", "Escape"],
-      title: readOnly ? "Close the preview" : "Cancel the review",
-      hint: readOnly ? "close" : "cancel",
-      group: "Install plan",
-      scope: "pane",
-      paneId: INSTALL_PLAN_PANE_ID,
-      when: cancelState,
-      run: () => flow.cancel(),
-    },
+    applyAction,
+    cancelAction,
     {
       id: "plan.details",
       keys: "d",
@@ -231,6 +236,10 @@ export function InstallPlanPane({ flow, busyLabel, backupRoot, onApply }: Instal
     <>
       <span className="q" role="status">
         {question}
+      </span>
+      <span className="tbtn-row">
+        <BindingButton binding={applyAction} variant="primary" />
+        <BindingButton binding={cancelAction} />
       </span>
       {noteBackup && (
         <span className="bk">

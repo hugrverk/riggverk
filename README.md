@@ -115,7 +115,7 @@ Stored in `settings.json` under the app support dir; autosaved.
 | `workspace_path` | unset (`~/.config/agent-workspace`) | Custom workspace folder chosen in Settings (`c` choose, `R` reset to default). It must pass the workspace markers. Generator scripts the app runs always come from the bundled read-only copy, not from this folder. |
 | `appearance` | `"dark"` | `"dark"`, `"light"`, or `"system"`. |
 | `app_font_size` | `"medium"` | `"small"`, `"medium"`, `"large"`, `"extra-large"`. |
-| `reduce_motion` | `false` | When `true`, disables pulse, scan, and flash animations. |
+| `motion` | `"full"` | `"full"`, `"subtle"`, or `"off"`. `"off"` stops animations and transitions; the OS reduced-motion preference always counts as `"off"`. Older files with `reduce_motion: true` load as `"off"`; the legacy `reduce_motion` flag is still written beside it. |
 | `landing_view` | `"start"` | View shown on start: `"start"`, `"repo-dashboard"`, `"prompts"`, `"library"`. |
 
 Target toggles gate these surfaces: rules, agents, and config per harness, and Cursor agents plus MCP (`cursor_setup`). `codex_config` is the only target off by default because it rewrites the Codex approval and sandbox posture. Settings files from before target gating are migrated once: every default stays on, and any target you had enabled or whose surface is already managed stays on, so nothing already installed is dropped. Skills and the workspace bundle are never gated.

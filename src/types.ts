@@ -180,7 +180,8 @@ export interface AppSettings {
   accent_color: string | null;
   background_color: string | null;
   foreground_color: string | null;
-  reduce_motion: boolean;
+  // The backend still writes the legacy `reduce_motion` flag beside it; it is derived from `motion` there.
+  motion: "full" | "subtle" | "off";
   landing_view: string;
   repo_dashboard_entries?: RepoDashboardEntry[];
   active_repo_dashboard_id?: string | null;
@@ -586,6 +587,21 @@ export interface UninstallPlanView {
   summary: string;
   plan_fingerprint: string | null;
   preview_token: string | null;
+}
+
+/**
+ * What the backend reports while an apply, uninstall, rollback or rules conversion runs (the `apply-progress` event).
+ * `done` counts finished items and `file` is the one in progress (`~/...`), null between items. `total` is null
+ * only when the backend cannot tell. "done" ends the stream, whether the task succeeded or not; the outcome is
+ * the task's own result.
+ */
+export interface ApplyProgress {
+  /** The backend command (`apply_setup`, `apply_uninstall`, `apply_rules_conversion`, `rollback_setup_transaction`). */
+  task: string;
+  phase: "backup" | "apply" | "done";
+  done: number;
+  total: number | null;
+  file: string | null;
 }
 
 export interface SetupResult {

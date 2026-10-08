@@ -146,14 +146,79 @@ describe("InstallPlanPane", () => {
     expect(conflict.textContent).toContain("preserved, skipped");
   });
 
-  it("asks the question the status-bar buttons answer and notes the backup", () => {
+  it("asks the question on the confirm line with its answers beside it, and notes the backup", () => {
     renderPane(makeFlow());
     const pane = screen.getByRole("region", { name: "Install plan" });
     expect(within(pane).getByRole("status").textContent).toBe("apply 3 safe changes, skip 1 conflict?");
     expect(pane.querySelector(".bk")!.textContent).toContain("/tmp/backups");
-    expect(within(pane).queryByRole("button")).toBeNull();
+    // The question and its two bracket buttons share the footer row; the status bar repeats them as hints.
+    const footer = pane.querySelector(".pane-foot")!;
+    expect(Array.from(footer.querySelectorAll("button.tbtn")).map(button => button.textContent)).toEqual(["yapply", "ncancel"]);
+    expect(within(pane).getByRole("button", { name: "apply" }).classList.contains("tbtn-primary")).toBe(true);
+    expect(within(pane).getByRole("button", { name: "cancel" }).getAttribute("aria-keyshortcuts")).toBe("N Escape");
     expect(bar().getByRole("button", { name: /apply/ })).toBeTruthy();
     expect(bar().getByRole("button", { name: /cancel/ })).toBeTruthy();
+  });
+
+  describe("confirm line buttons", () => {
+    const confirmLine = () => within(screen.getByRole("region", { name: "Install plan" }).querySelector<HTMLElement>(".pane-foot")!);
+
+    it("apply runs the same action as y, cancel the same as n", () => {
+      const flow = makeFlow();
+      const { onApply } = renderPane(flow);
+      fireEvent.click(confirmLine().getByRole("button", { name: "apply" }));
+      expect(onApply).toHaveBeenCalledTimes(1);
+      fireEvent.click(confirmLine().getByRole("button", { name: "cancel" }));
+      expect(flow.cancel).toHaveBeenCalledTimes(1);
+    });
+
+    it("keeps Enter from applying, with the keyboard on the grid or on the cancel button", () => {
+      const { onApply } = renderPane(makeFlow());
+      press("Enter");
+      fireEvent.keyDown(confirmLine().getByRole("button", { name: "cancel" }), { key: "Enter" });
+      expect(onApply).not.toHaveBeenCalled();
+    });
+
+    it("disables apply with the reason the key would give, and still cancels", () => {
+      const flow = makeFlow({ operations: [op("claude_skills", "conflict")] });
+      const { onApply } = renderPane(flow);
+      const apply = confirmLine().getByRole("button", { name: "apply" });
+      expect(apply.getAttribute("aria-disabled")).toBe("true");
+      expect(apply.getAttribute("title")).toBe("nothing safe to apply, 1 conflict");
+      fireEvent.click(apply);
+      expect(onApply).not.toHaveBeenCalled();
+      fireEvent.click(confirmLine().getByRole("button", { name: "cancel" }));
+      expect(flow.cancel).toHaveBeenCalledTimes(1);
+    });
+
+    it("waits for an unrelated running task like the key does", () => {
+      const { onApply } = renderPane(makeFlow(), { busyLabel: "release-check" });
+      const apply = confirmLine().getByRole("button", { name: "apply" });
+      expect(apply.getAttribute("title")).toBe("release-check is running");
+      fireEvent.click(apply);
+      expect(onApply).not.toHaveBeenCalled();
+    });
+
+    it("offers only close for a read-only preview", () => {
+      const flow = makeFlow({ request: { ...REQUEST, label: "preview claude", readOnly: true } });
+      renderPane(flow);
+      expect(confirmLine().queryByRole("button", { name: "apply" })).toBeNull();
+      fireEvent.click(confirmLine().getByRole("button", { name: "close" }));
+      expect(flow.cancel).toHaveBeenCalledTimes(1);
+    });
+
+    it("locks both buttons while the apply runs", () => {
+      const flow = makeFlow({ status: "applying" });
+      const { onApply } = renderPane(flow);
+      const apply = confirmLine().getByRole("button", { name: "apply" });
+      const cancel = confirmLine().getByRole("button", { name: "cancel" });
+      expect(apply.getAttribute("title")).toBe("applying…");
+      expect(cancel.getAttribute("title")).toBe("applying; it cannot be cancelled");
+      fireEvent.click(apply);
+      fireEvent.click(cancel);
+      expect(onApply).not.toHaveBeenCalled();
+      expect(flow.cancel).not.toHaveBeenCalled();
+    });
   });
 
   it("shows CONFIRM mode while the review is open", () => {

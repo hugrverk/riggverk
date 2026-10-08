@@ -26,6 +26,7 @@ import { Glyph } from "../ui/Glyph";
 import { Kv, type KvItem } from "../ui/Kv";
 import { Pane } from "../ui/Pane";
 import { PaneList } from "../ui/PaneList";
+import { RollingText } from "../ui/RollingText";
 import { toneClass } from "../ui/tone";
 import type { AppSettings, CodexRuntimeHealth, InstallAgent, WorkspaceDiagnostics } from "../types";
 import { installBindings } from "./installBindings";
@@ -81,6 +82,7 @@ export function StartView({
   wsLog,
   wsLogCompletedAt,
   wsRunning,
+  wsProgress,
   status,
   workspaceValid,
   gitAvailable,
@@ -162,6 +164,7 @@ export function StartView({
   const outputStrip = (
     <OutputStrip
       wsRunning={wsRunning}
+      progress={wsProgress}
       wsLog={wsLog}
       wsLogCompletedAt={wsLogCompletedAt}
       status={status}
@@ -258,7 +261,9 @@ export function StartView({
             return (
               <>
                 <span className="nm">{overviewLabel(id)}</span>
-                <span className={`meta ${toneClass(row.tone)}`.trim()}>{row.text}</span>
+                <span className={`meta ${toneClass(row.tone)}`.trim()}>
+                  <RollingText>{row.text}</RollingText>
+                </span>
               </>
             );
           }}
@@ -274,7 +279,7 @@ export function StartView({
         scrollable
         meta={
           <>
-            · <span className={toneClass(meta.tone)}>{meta.text}</span>
+            · <RollingText key={selected} className={toneClass(meta.tone)}>{meta.text}</RollingText>
           </>
         }
       >

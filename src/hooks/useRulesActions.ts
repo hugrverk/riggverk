@@ -106,7 +106,10 @@ export function useRulesActions({
       try {
         await invoke("set_rules_user_managed", { surface: model.surface, userManaged });
         setError(null);
-        notify(userManaged ? `${label} rules: left as is, you manage the file` : `${label} rules: the app manages the file again`);
+        notify(
+          userManaged ? `${label} rules: left as is, you manage the file` : `${label} rules: the app manages the file again`,
+          { tone: "ok" },
+        );
         await reload();
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));

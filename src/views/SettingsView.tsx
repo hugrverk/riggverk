@@ -10,6 +10,7 @@ import type { Binding } from "../keyboard/registry";
 import { useKeymap } from "../keyboard/useKeymap";
 import { isSettingsConflictError } from "../lib/appSettingsMutation";
 import { displayPath } from "../lib/displayPath";
+import { useSystemReducedMotion } from "../lib/motion";
 import {
   APP_FONT_SIZE_LABELS,
   APP_FONT_SIZE_VALUES,
@@ -43,7 +44,7 @@ interface SettingsViewProps {
   onSetAccentColor: (value: string | null) => void;
   onSetBackgroundColor: (value: string | null) => void;
   onSetForegroundColor: (value: string | null) => void;
-  onSetReduceMotion: (value: boolean) => void;
+  onSetMotion: (value: AppSettings["motion"]) => void;
   onSetLandingView: (value: string) => void;
   onToggleHarness: (id: InstallAgent) => void;
   onRetrySave?: () => void;
@@ -71,8 +72,9 @@ const APPEARANCE_OPTIONS = [
 
 const MOTION_OPTIONS = [
   { value: "full", label: "full" },
-  { value: "reduced", label: "reduced" },
-] as const;
+  { value: "subtle", label: "subtle" },
+  { value: "off", label: "off" },
+] as const satisfies ReadonlyArray<{ value: AppSettings["motion"]; label: string }>;
 
 const LANDING_OPTIONS = [
   { value: "start", label: "workspace" },
@@ -274,7 +276,7 @@ export function SettingsView({
   onSetAccentColor,
   onSetBackgroundColor,
   onSetForegroundColor,
-  onSetReduceMotion,
+  onSetMotion,
   onSetLandingView,
   onToggleHarness,
   onRetrySave,
@@ -286,6 +288,8 @@ export function SettingsView({
   onResetWorkspace,
 }: SettingsViewProps) {
   const ids = useId();
+  // The OS preference beats the setting (lib/motion), so the row says when it is the one in charge.
+  const systemReducesMotion = useSystemReducedMotion();
   const screenRef = useRef<HTMLElement>(null);
   const labelId = (key: string) => `${ids}-${key}`;
   const [accentDraft, setAccentDraft] = useState(appSettings?.accent_color ?? "");
@@ -518,12 +522,12 @@ export function SettingsView({
     {
       ...label("motion", "motion"),
       value: (
-        <RadioGroup
-          options={MOTION_OPTIONS}
-          value={appSettings.reduce_motion ? "reduced" : "full"}
-          onSelect={mode => onSetReduceMotion(mode === "reduced")}
-          label="Reduce motion"
-        />
+        <>
+          <RadioGroup options={MOTION_OPTIONS} value={appSettings.motion} onSelect={onSetMotion} label="Motion" />
+          {systemReducesMotion && (
+            <div className="setting-hint c-dim">the system asks for reduced motion: motion is off until that changes</div>
+          )}
+        </>
       ),
     },
     {

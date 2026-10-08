@@ -12,6 +12,7 @@ use serde::Serialize;
 
 use super::setup::{apply_planned_artifacts, SetupResult};
 use super::workspace::setup_workspace_target_path;
+use crate::apply_progress::ProgressReporter;
 use crate::artifact_registry::ArtifactId;
 use crate::rules_block::{self, RulesConflict, RulesPlan};
 use crate::rules_convert::{self, ConversionOrigin};
@@ -448,12 +449,13 @@ pub fn preview_rules_conversion(surface: String) -> Result<RulesConversionPrevie
 /// Convert a hand-edited rules file onto the managed base block. Runs as a
 /// regular setup transaction: the file is backed up first and the transaction
 /// can be rolled back while the file is unchanged.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn apply_rules_conversion(
     surface: String,
     plan_fingerprint: Option<String>,
     preview_token: Option<String>,
 ) -> Result<SetupResult, String> {
+    let _mutation = crate::mutation_lock::acquire();
     let (surface_id, artifact) = rules_target(&surface)?;
     let ws_root = setup_workspace_target_path()?;
     let home = user_home()?;
@@ -488,7 +490,12 @@ pub fn apply_rules_conversion(
         &[surface_id],
     )?;
 
-    let mut result = apply_planned_artifacts(&[plan.operation], Vec::new(), Some(token));
+    let mut result = apply_planned_artifacts(
+        &[plan.operation],
+        Vec::new(),
+        Some(token),
+        &mut ProgressReporter::for_task("apply_rules_conversion"),
+    );
     if result.success {
         clear_user_managed_after_conversion(&ws_root, &artifact, &mut result);
     }
@@ -519,8 +526,10 @@ fn clear_user_managed_after_conversion(
 /// Record (or clear) that the user manages a hand-edited rules file
 /// themselves. A recorded file stays untouched and reports base updates
 /// instead of a conflict. Writes only the preferences file.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn set_rules_user_managed(surface: String, user_managed: bool) -> Result<(), String> {
+    // Writes files an apply may also write: wait for a running mutation instead of interleaving.
+    let _mutation = crate::mutation_lock::acquire();
     let (_, artifact) = rules_target(&surface)?;
     let ws_root = setup_workspace_target_path()?;
     let home = user_home()?;
