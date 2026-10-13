@@ -39,7 +39,9 @@ run() {
   local home="$1"
   shift
   rc=0
-  env -i PATH="$PATH" HOME="$home" TMPDIR="$tmp_root/tmp" "$@" >"$out_log" 2>&1 || rc=$?
+  # PYTHONDONTWRITEBYTECODE: Apple's python3 caches stdlib bytecode under $HOME/Library/Caches, which is
+  # Python's write, not the script's; without it a dry run that only runs python would fail the empty-home check.
+  env -i PATH="$PATH" HOME="$home" TMPDIR="$tmp_root/tmp" PYTHONDONTWRITEBYTECODE=1 "$@" >"$out_log" 2>&1 || rc=$?
 }
 
 assert_ok() {
