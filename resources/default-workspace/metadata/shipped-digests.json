@@ -228,6 +228,9 @@
       "sha256:6c845d3d2c54b9d38d092fd46d212d9757229b951ad794edc527ee790c780d5f",
       "sha256:bbf0666cc351f09f82b943a89f36ac5132ae1dc5535f4f2ad285c09d0d51ce53"
     ],
+    "skills/kretsverket-status-report/SKILL.md": [
+      "sha256:52b843f5bb6e3661f340fd7170b04d64d5c4f395add73279bbb9b9b8ff57e233"
+    ],
     "skills/kretsverket-symbol-system/SKILL.md": [
       "sha256:44683d9eb3e09ff83626cb0299928c44a55a007f1e5ff0620d70dabd17086c36",
       "sha256:94475ef3e55e9176827cb11c59787cf671151cfe6e2fa03f859f82be168c8516"
@@ -484,6 +487,9 @@
       "sha256:32264e1333ed2df0f304adbe5faec02e98749806190956057a306fe82591628a",
       "sha256:8d59f491dfe6e4c379d9fca627c41afab7163f1a2d99bccbbc14e6a5a545d41b"
     ],
+    "templates/skills/claude/kretsverket-status-report/SKILL.md": [
+      "sha256:9e87e4d9794c2811a872aadc6922b505721f80f51171fc5108438987828c44ed"
+    ],
     "templates/skills/claude/kretsverket-symbol-system/SKILL.md": [
       "sha256:4df7cee70274936ce06cbfbe3cc43594d606cb70b65fae0b481471ad785ee7b0",
       "sha256:70d4a875627dff55cf08c586e8d0d323be2f35a5ed0ddc73326267f40baf7711"
@@ -585,6 +591,9 @@
     "templates/skills/codex/kretsverket-file-compatibility/SKILL.md": [
       "sha256:8d59f491dfe6e4c379d9fca627c41afab7163f1a2d99bccbbc14e6a5a545d41b",
       "sha256:9f6a8df7a3cab82b8624840cdaf40a59c75ca182ceb2226f8e046cfcc3fefadd"
+    ],
+    "templates/skills/codex/kretsverket-status-report/SKILL.md": [
+      "sha256:9e87e4d9794c2811a872aadc6922b505721f80f51171fc5108438987828c44ed"
     ],
     "templates/skills/codex/kretsverket-symbol-system/SKILL.md": [
       "sha256:70d4a875627dff55cf08c586e8d0d323be2f35a5ed0ddc73326267f40baf7711",
@@ -688,6 +697,9 @@
       "sha256:1271f6991f48f1ed91cc47eb873d4758c27db484f7b86d722013ea4b9ec3d266",
       "sha256:65ccad233c4b08850478267ebc8b077abc3ab586493731f002f54b3b6e421298"
     ],
+    "templates/skills/cursor/kretsverket-status-report/SKILL.md": [
+      "sha256:2b41540ab61284835a52b9eecaa0c1a7dd30be0d001779dd704d21dc6da77b64"
+    ],
     "templates/skills/cursor/kretsverket-symbol-system/SKILL.md": [
       "sha256:b5d15a236eb6a7b99a387735bb3572bb3aedceb13a33049ce3f7db5789d3fe7d",
       "sha256:e64f28215d64383935a9c83df1d665004324a62a78ffdf8ae24ae7fd49d94df3"
@@ -789,6 +801,9 @@
     "templates/skills/opencode/kretsverket-file-compatibility/SKILL.md": [
       "sha256:2dbe1f955fa0656686462ae28db05facd814a1927d92fb634d000371b552ba24",
       "sha256:8d59f491dfe6e4c379d9fca627c41afab7163f1a2d99bccbbc14e6a5a545d41b"
+    ],
+    "templates/skills/opencode/kretsverket-status-report/SKILL.md": [
+      "sha256:9e87e4d9794c2811a872aadc6922b505721f80f51171fc5108438987828c44ed"
     ],
     "templates/skills/opencode/kretsverket-symbol-system/SKILL.md": [
       "sha256:70d4a875627dff55cf08c586e8d0d323be2f35a5ed0ddc73326267f40baf7711",

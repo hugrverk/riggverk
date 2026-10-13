@@ -1,0 +1,743 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>Kretsverket lägesrapport</title>
+<script>document.documentElement.classList.add('js')</script>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Crect x='1' y='1' width='46' height='46' rx='7' fill='%231b2537'/%3E%3Cg transform='translate(3.6 3.6) scale(0.85)'%3E%3Cpath fill-rule='evenodd' d='M6 9h36v30H6Zm6 6v18h24V15Z' fill='%23eef2f9'/%3E%3Ccircle cx='39' cy='12' r='8' fill='%235ca4ff'/%3E%3Ccircle cx='9' cy='36' r='8' fill='%235ca4ff'/%3E%3C/g%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #0f1115;
+    --surface: #171a1f;
+    --surface2: #1d2127;
+    --surface3: #23272e;
+    --floating-bg: #12151a;
+    --border: #2b313a;
+    --border-strong: #3c454f;
+    --accent: #5ca4ff;
+    --accent2: #2f6fd0;
+    --accent-soft: rgba(92, 164, 255, 0.12);
+    --cyan: #34e0c4;
+    --text: #edf0f3;
+    --text2: #b3bcc7;
+    --text3: #86929f;
+    --ok: #4cc38a;
+    --ok-soft: rgba(76, 195, 138, 0.14);
+    --part: #e8b04b;
+    --part-soft: rgba(232, 176, 75, 0.14);
+    --exp: #b48cff;
+    --exp-soft: rgba(180, 140, 255, 0.14);
+    --todo: #86929f;
+    --todo-soft: rgba(134, 146, 159, 0.14);
+    --block: #ff7a7a;
+    --block-soft: rgba(255, 122, 122, 0.13);
+    --radius: 10px;
+    --radius-sm: 6px;
+    --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue", "Segoe UI", system-ui, Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background:
+      radial-gradient(55% 42% at 6% 4%, rgba(52, 224, 196, 0.075), rgba(52, 224, 196, 0.026) 36%, transparent 68%),
+      radial-gradient(60% 45% at 82% -8%, rgba(92, 164, 255, 0.1), transparent 62%),
+      var(--bg);
+    background-attachment: fixed;
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 15px;
+    line-height: 1.55;
+    overflow-x: hidden;
+  }
+  a { color: var(--accent); }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 16px; }
+
+  /* Grid backdrop like the canvas */
+  .gridbg {
+    position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background-image:
+      linear-gradient(rgba(92,164,255,0.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(92,164,255,0.05) 1px, transparent 1px);
+    background-size: 40px 40px;
+    mask-image: radial-gradient(80% 60% at 50% 0%, #000 30%, transparent 85%);
+    -webkit-mask-image: radial-gradient(80% 60% at 50% 0%, #000 30%, transparent 85%);
+  }
+  main, header, nav, footer { position: relative; z-index: 1; }
+
+  /* Top bar */
+  .topbar {
+    position: sticky; top: 0; z-index: 10;
+    background: rgba(15, 17, 21, 0.82);
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--border);
+  }
+  .topbar .wrap { display: flex; align-items: center; gap: 14px; height: 52px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 650; letter-spacing: 0.01em; white-space: nowrap; }
+  .brand svg { width: 26px; height: 26px; flex: none; }
+  .nav { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; margin-left: auto; }
+  .nav::-webkit-scrollbar { display: none; }
+  .nav a {
+    color: var(--text2); text-decoration: none; font-size: 13px; padding: 6px 10px; border-radius: 999px;
+    white-space: nowrap; border: 1px solid transparent;
+  }
+  .nav a:hover, .nav a:focus-visible { color: var(--text); background: var(--surface2); border-color: var(--border); outline: none; }
+  .nav a.active { color: var(--accent); background: var(--accent-soft); border-color: rgba(92,164,255,0.35); }
+
+  /* Sections */
+  section { padding: 44px 0 8px; scroll-margin-top: 60px; }
+  .eyebrow { font-size: 12px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--accent); font-weight: 650; margin: 0 0 6px; }
+  h1 { font-size: clamp(28px, 5vw, 44px); line-height: 1.12; margin: 0 0 14px; letter-spacing: -0.01em; }
+  h2 { font-size: clamp(22px, 3.4vw, 30px); line-height: 1.2; margin: 0 0 8px; letter-spacing: -0.005em; }
+  h3 { font-size: 16px; margin: 0 0 6px; }
+  .lead { color: var(--text2); font-size: 16px; max-width: 70ch; margin: 0 0 18px; }
+  .muted { color: var(--text3); }
+  .small { font-size: 13px; }
+
+  .card {
+    background: linear-gradient(180deg, var(--surface) 0%, var(--floating-bg) 100%);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px;
+  }
+
+  /* Hero */
+  .hero { padding-top: 40px; }
+  .hero-grid { display: grid; grid-template-columns: 1.35fr 1fr; gap: 20px; align-items: stretch; }
+  .tldr { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+  .tldr li { display: grid; grid-template-columns: 22px 1fr; gap: 10px; align-items: start; }
+  .tldr .dot { width: 22px; height: 22px; border-radius: 6px; display: grid; place-items: center; font-size: 12px; font-weight: 700; margin-top: 1px; }
+  .gauge-card { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 6px; }
+  .gauge { width: min(230px, 62vw); height: auto; }
+  .gauge .track { stroke: var(--surface3); }
+  .gauge .val { stroke: url(#gaugeGrad); stroke-linecap: round; transition: stroke-dashoffset 1.8s cubic-bezier(.2,.8,.2,1); }
+  .gauge text { fill: var(--text); font-family: var(--font); }
+  .gauge-note { font-size: 13px; color: var(--text2); max-width: 30ch; }
+  .tag { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 2px 9px; border-radius: 999px; border: 1px solid var(--border-strong); color: var(--text2); white-space: nowrap; }
+
+  /* KPIs */
+  .kpis { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
+  .kpi { padding: 14px; }
+  .kpi .num { font-size: clamp(22px, 3.4vw, 30px); font-weight: 700; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
+  .kpi .lbl { color: var(--text2); font-size: 13px; }
+
+  /* Track bars */
+  .tracks { display: grid; gap: 14px; }
+  .track-row { display: grid; grid-template-columns: 240px 1fr 52px; gap: 14px; align-items: center; }
+  .track-row .name { font-weight: 600; }
+  .track-row .name small { display: block; font-weight: 400; color: var(--text3); font-size: 12.5px; }
+  .bar { height: 10px; border-radius: 999px; background: var(--surface3); overflow: hidden; position: relative; }
+  .bar > i { position: absolute; inset: 0 auto 0 0; width: var(--w, 0); border-radius: 999px; transition: width 1.6s cubic-bezier(.2,.8,.2,1); }
+  .js .bar > i:not(.go) { width: 0; }
+  .bar > i::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.28), transparent); transform: translateX(-100%); animation: sheen 2.8s ease-in-out infinite; animation-delay: 1.8s; }
+  .pct { text-align: right; font-weight: 650; font-variant-numeric: tabular-nums; }
+
+  /* Filters */
+  .filters { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 16px; }
+  .chip {
+    font: inherit; font-size: 13px; color: var(--text2); background: var(--surface2);
+    border: 1px solid var(--border); border-radius: 999px; padding: 6px 12px; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 7px;
+  }
+  .chip:hover { color: var(--text); border-color: var(--border-strong); }
+  .chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .chip[aria-pressed="true"] { color: var(--text); background: var(--accent-soft); border-color: rgba(92,164,255,0.5); }
+  .chip .count { font-size: 11.5px; color: var(--text3); font-variant-numeric: tabular-nums; }
+  .sw { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+
+  .status { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 2px 9px; border-radius: 999px; white-space: nowrap; }
+  .s-ok { color: var(--ok); background: var(--ok-soft); }
+  .s-part { color: var(--part); background: var(--part-soft); }
+  .s-exp { color: var(--exp); background: var(--exp-soft); }
+  .s-todo { color: var(--text2); background: var(--todo-soft); }
+  .s-block { color: var(--block); background: var(--block-soft); }
+  .s-run { color: var(--accent); background: var(--accent-soft); }
+
+  /* Areas grid */
+  .areas { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .area { padding: 16px; display: flex; flex-direction: column; gap: 6px; transition: transform .25s ease, border-color .25s ease, opacity .3s ease; }
+  .area:hover { transform: translateY(-2px); border-color: var(--border-strong); }
+  .area .head { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
+  .area p { margin: 0; color: var(--text2); font-size: 14px; }
+  .area .gap { color: var(--text3); font-size: 13px; }
+  .area.hidden { display: none; }
+
+  /* Columns for "kvar att bygga" */
+  .cols { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .col h3 { display: flex; align-items: center; gap: 8px; }
+  .col ul { margin: 8px 0 0; padding-left: 18px; color: var(--text2); }
+  .col li { margin: 6px 0; }
+  .col li b { color: var(--text); font-weight: 600; }
+
+  /* Release stepper */
+  .steps { list-style: none; margin: 0; padding: 0; position: relative; }
+  .steps::before { content: ""; position: absolute; left: 15px; top: 8px; bottom: 8px; width: 2px; background: var(--border); }
+  .step.done::after { content: ""; position: absolute; left: 15px; top: 42px; height: calc(100% - 32px); width: 2px; background: linear-gradient(var(--accent), var(--cyan)); transform-origin: top; transition: transform .7s ease; }
+  .js .reveal:not(.in) .step.done::after { transform: scaleY(0); }
+  .step.done:nth-child(2)::after { transition-delay: .5s; }
+  .step.done:nth-child(3)::after { transition-delay: 1s; }
+  .step { position: relative; display: grid; grid-template-columns: 32px 1fr; gap: 14px; padding: 10px 0; }
+  .node { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: var(--surface2); border: 2px solid var(--border-strong); font-size: 13px; font-weight: 700; color: var(--text2); z-index: 1; }
+  .step.done .node { border-color: var(--ok); color: var(--ok); background: #13231c; }
+  .step.run .node { border-color: var(--accent); color: var(--accent); background: #142033; box-shadow: 0 0 0 0 rgba(92,164,255,0.5); animation: pulse 2.2s infinite; }
+  .step.todo .node { border-style: dashed; }
+  .step .body { padding-top: 3px; }
+  .step .body .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .step .body p { margin: 4px 0 0; color: var(--text2); font-size: 14px; }
+
+  /* Decisions */
+  .decisions { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  .decision { padding: 16px; display: flex; flex-direction: column; gap: 8px; }
+  .decision .row { display: flex; flex-wrap: wrap; gap: 6px; }
+  .decision p { margin: 0; color: var(--text2); font-size: 14px; }
+  .decision .rec { font-size: 13.5px; color: var(--text); border-left: 2px solid var(--accent); padding-left: 10px; }
+  .decision.hidden { display: none; }
+
+  /* Agent pipeline */
+  .pipe { position: relative; display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; margin: 8px 0 18px; }
+  .pipe-svg { position: absolute; left: 0; right: 0; top: 34px; height: 4px; width: 100%; overflow: visible; pointer-events: none; }
+  .pipe-svg line { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 6 8; animation: flow 1.2s linear infinite; opacity: .8; }
+  .pstep { position: relative; z-index: 1; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .picon { width: 68px; height: 68px; border-radius: 14px; display: grid; place-items: center; background: var(--surface2); border: 1px solid var(--border-strong); }
+  .picon svg { width: 30px; height: 30px; stroke: var(--accent); fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+  .pstep b { font-size: 13.5px; }
+  .pstep span { font-size: 12px; color: var(--text3); line-height: 1.35; }
+  .agent-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .checklist { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 8px; }
+  .checklist li { display: grid; grid-template-columns: 20px 1fr; gap: 8px; color: var(--text2); font-size: 14px; }
+  .checklist li b { color: var(--text); font-weight: 600; }
+  .ic { width: 18px; height: 18px; border-radius: 5px; display: grid; place-items: center; font-size: 11px; font-weight: 800; margin-top: 2px; }
+  .ic.ok { background: var(--ok-soft); color: var(--ok); }
+  .ic.no { background: var(--todo-soft); color: var(--text2); }
+  .ic.exp { background: var(--exp-soft); color: var(--exp); }
+
+  /* Now */
+  .now { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  .now .card { display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: start; }
+  .spinner { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--surface3); border-top-color: var(--accent); animation: spin 1.1s linear infinite; margin-top: 3px; }
+  .waiting { width: 18px; height: 18px; border-radius: 50%; border: 2px dashed var(--part); margin-top: 3px; }
+  .now p { margin: 2px 0 0; color: var(--text2); font-size: 14px; }
+
+  footer { padding: 40px 0 60px; color: var(--text3); font-size: 13px; }
+  footer code { font-family: var(--mono); font-size: 12px; color: var(--text2); }
+
+  /* Reveal */
+  .js .reveal { opacity: 0; transform: translateY(14px); transition: opacity .7s ease, transform .7s cubic-bezier(.2,.8,.2,1); }
+  .js .reveal.in { opacity: 1; transform: none; }
+  html:not(.js) .filters { display: none; }
+
+  @keyframes sheen { 0% { transform: translateX(-100%); } 60%, 100% { transform: translateX(100%); } }
+  @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(92,164,255,0.45); } 70% { box-shadow: 0 0 0 10px rgba(92,164,255,0); } 100% { box-shadow: 0 0 0 0 rgba(92,164,255,0); } }
+  @keyframes flow { to { stroke-dashoffset: -28; } }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  @media (max-width: 960px) {
+    .kpis { grid-template-columns: repeat(3, 1fr); }
+    .areas { grid-template-columns: repeat(2, 1fr); }
+    .pipe { grid-template-columns: repeat(4, 1fr); row-gap: 18px; }
+    .pipe-svg { display: none; }
+  }
+  @media (max-width: 760px) {
+    body { font-size: 15px; }
+    .hero-grid, .cols, .decisions, .agent-grid, .now { grid-template-columns: 1fr; }
+    .kpis { grid-template-columns: repeat(2, 1fr); }
+    .kpis .kpi:last-child { grid-column: span 2; }
+    .areas { grid-template-columns: 1fr; }
+    .track-row { grid-template-columns: 1fr 46px; row-gap: 6px; }
+    .track-row .name { grid-column: 1 / -1; }
+    .pipe { grid-template-columns: repeat(2, 1fr); }
+    .brand .full { display: none; }
+    section { padding-top: 34px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    .js .reveal { opacity: 1; transform: none; transition: none; }
+    .bar > i, .gauge .val, .step.done::after { transition: none; }
+    .bar > i::after, .pipe-svg line, .spinner, .step.run .node { animation: none; }
+    .area { transition: none; }
+  }
+</style>
+</head>
+<body>
+<div class="gridbg" aria-hidden="true"></div>
+
+<header class="topbar">
+  <div class="wrap">
+    <div class="brand">
+      <svg viewBox="0 0 48 48" aria-hidden="true"><rect x="1" y="1" width="46" height="46" rx="7" fill="#1b2537"/><g transform="translate(3.6 3.6) scale(0.85)"><path fill-rule="evenodd" d="M6 9h36v30H6Zm6 6v18h24V15Z" fill="#eef2f9"/><circle cx="39" cy="12" r="8" fill="#5ca4ff"/><circle cx="9" cy="36" r="8" fill="#5ca4ff"/></g></svg>
+      <span>Kretsverket <span class="full muted">· lägesrapport</span></span>
+    </div>
+    <nav class="nav" aria-label="Avsnitt">
+      <a href="#oversikt">Översikt</a>
+      <a href="#pa-plats">På plats</a>
+      <a href="#kvar">Kvar</a>
+      <a href="#release">Release</a>
+      <a href="#beslut">Beslut</a>
+      <a href="#agent">Agent</a>
+      <a href="#nu">Pågår nu</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- Översikt -->
+  <section id="oversikt" class="hero">
+    <p class="eyebrow">Läge 13 oktober 2026 · version 0.4.0, 0.5.0 på väg</p>
+    <h1>Ritverktyget fungerar.<br>Det som återstår är release och fackgranskning.</h1>
+    <p class="lead">Kretsverket går att använda för att rita elscheman på riktigt: sidor, symboler, kablar, titelrutor, dellista, utskrift och export. Det som skiljer oss från en första release är mest att få appen signerad och testad som paketerad macOS-app, och att en elektriker godkänner fackinnehållet.</p>
+
+    <div class="hero-grid">
+      <div class="card reveal">
+        <h3>Kort sagt</h3>
+        <ul class="tldr">
+          <li><span class="dot s-ok">✓</span><span><b>Kärnan är klar.</b> 12 av 19 områden har status klart, inklusive spara/öppna, utskrift, DXF/SVG/PNG och Dellista.</span></li>
+          <li><span class="dot s-part">!</span><span><b>Fackinnehållet väntar på granskning.</b> Beteckningsklasser, det svenska symbolpaketet, Dellistmallar och startmallen ska godkännas av David.</span></li>
+          <li><span class="dot s-block">→</span><span><b>Releasen är flaskhalsen.</b> Ingen signering, ingen paketerad macOS-smoke och ingen fastställd release-ribba ännu.</span></li>
+          <li><span class="dot s-exp">AI</span><span><b>Assistenten fungerar, men experimentellt.</b> Den kräver skrivbordsappen och godkännande per ändring, och har ingen mätning som visar att den håller för vanliga användare.</span></li>
+        </ul>
+      </div>
+      <div class="card gauge-card reveal">
+        <svg class="gauge" viewBox="0 0 200 200" role="img" aria-label="Uppskattning: cirka 65 procent av vägen till en första macOS-release">
+          <defs>
+            <linearGradient id="gaugeGrad" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stop-color="#5ca4ff"/><stop offset="1" stop-color="#34e0c4"/>
+            </linearGradient>
+          </defs>
+          <circle class="track" cx="100" cy="100" r="82" fill="none" stroke-width="14"/>
+          <circle class="val" id="gaugeVal" cx="100" cy="100" r="82" fill="none" stroke-width="14"
+                  stroke-dasharray="515.2" stroke-dashoffset="180.3" transform="rotate(-90 100 100)"/>
+          <text x="100" y="98" text-anchor="middle" font-size="44" font-weight="700"><tspan id="gaugeNum">65</tspan><tspan font-size="22" dx="2">%</tspan></text>
+          <text x="100" y="126" text-anchor="middle" font-size="12.5" fill="#b3bcc7">mot första release</text>
+        </svg>
+        <p class="gauge-note">Min uppskattning, viktad per spår nedan. Siffran är ett stöd för samtalet, inte ett mätvärde.</p>
+      </div>
+    </div>
+
+    <div class="kpis" style="margin-top:14px">
+      <div class="card kpi reveal"><div class="num" data-count="5.5" data-decimals="1" data-suffix=" mån">5,5 mån</div><div class="lbl">sedan första commit (26 april)</div></div>
+      <div class="card kpi reveal"><div class="num" data-count="925" data-prefix="">925</div><div class="lbl">mergade pull requests</div></div>
+      <div class="card kpi reveal"><div class="num" data-count="130" data-suffix=" k">130 k</div><div class="lbl">rader TypeScript i appen</div></div>
+      <div class="card kpi reveal"><div class="num" data-count="12884">12 884</div><div class="lbl">enhetstester (Vitest)</div></div>
+      <div class="card kpi reveal"><div class="num" data-count="2500">2 500</div><div class="lbl">webbläsartester (Playwright)</div></div>
+    </div>
+
+    <div class="card reveal" style="margin-top:14px">
+      <h3>Fyra spår mot release</h3>
+      <p class="muted small" style="margin:0 0 14px">Uppskattad färdiggrad per spår. Totalen ovan väger in att release-spåret tar längst tid.</p>
+      <div class="tracks">
+        <div class="track-row"><div class="name">Ritverktyg och arbetsflöde<small>rita, spara, skriva ut, exportera</small></div><div class="bar"><i data-w="88" style="--w:88%;background:linear-gradient(90deg,#2f6fd0,#5ca4ff)"></i></div><div class="pct">88 %</div></div>
+        <div class="track-row"><div class="name">Elektriskt fackinnehåll<small>symboler, beteckningar, mallar granskade</small></div><div class="bar"><i data-w="45" style="--w:45%;background:linear-gradient(90deg,#b8862f,#e8b04b)"></i></div><div class="pct">45 %</div></div>
+        <div class="track-row"><div class="name">Release och distribution<small>macOS: signering, paketering, smoke</small></div><div class="bar"><i data-w="20" style="--w:20%;background:linear-gradient(90deg,#b34a4a,#ff7a7a)"></i></div><div class="pct">20 %</div></div>
+        <div class="track-row"><div class="name">Agentisk Kretsverket<small>Assistent, experimentell</small></div><div class="bar"><i data-w="45" style="--w:45%;background:linear-gradient(90deg,#7a52d6,#b48cff)"></i></div><div class="pct">45 %</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- På plats -->
+  <section id="pa-plats">
+    <p class="eyebrow">Vad finns redan</p>
+    <h2>Det här är på plats</h2>
+    <p class="lead">Alla huvudområden i appen och deras status enligt projektets egen nulägesbeskrivning. Filtrera för att se vad som är klart och vad som bara delvis finns.</p>
+    <div class="filters" role="group" aria-label="Filtrera områden">
+      <button class="chip" data-filter="all" aria-pressed="true">Alla <span class="count" data-c="all">19</span></button>
+      <button class="chip" data-filter="ok" aria-pressed="false"><span class="sw" style="background:var(--ok)"></span>Klart <span class="count" data-c="ok">12</span></button>
+      <button class="chip" data-filter="part" aria-pressed="false"><span class="sw" style="background:var(--part)"></span>Delvis <span class="count" data-c="part">4</span></button>
+      <button class="chip" data-filter="exp" aria-pressed="false"><span class="sw" style="background:var(--exp)"></span>Experimentellt <span class="count" data-c="exp">3</span></button>
+    </div>
+    <div class="areas" id="areas">
+      <article class="card area reveal" data-s="ok">
+        <div class="head"><h3>Hem och projekt</h3><span class="status s-ok">Klart</span></div>
+        <p>Flera öppna projekt, var och ett med egen fil, historik och osparade ändringar. Upp till tio sidflikar.</p>
+        <div class="gap">Saknas: senaste filer.</div>
+      </article>
+      <article class="card area reveal" data-s="ok">
+        <div class="head"><h3>Explorer och sidor</h3><span class="status s-ok">Klart</span></div>
+        <p>Projektträd, sidgrupper, sök, duplicera (Ctrl/Cmd+D), byt namn (F2), Jämför och Kontroll.</p>
+      </article>
+      <article class="card area reveal" data-s="ok">
+        <div class="head"><h3>Sida, rutnät och vy</h3><span class="status s-ok">Klart</span></div>
+        <p>A4 och A3, stående eller liggande, rutnät, fäst mot rutnät, mjuk zoom och panorering.</p>
+      </article>
+      <article class="card area reveal" data-s="ok">
+        <div class="head"><h3>Ritobjekt och markering</h3><span class="status s-ok">Klart</span></div>
+        <p>Rita, flytta, skala, rotera, kopiera och byta stil, allt med ångra och gör om.</p>
+      </article>
+      <article class="card area reveal" data-s="part">
+        <div class="head"><h3>Linjer, kablar och måttpilar</h3><span class="status s-part">Delvis</span></div>
+        <p>Linjer blir kablar med metadata, nummer och anslutningar. Måttpilar med etiketter.</p>
+        <div class="gap">Medvetet: ingen nätlista eller automatisk koppling.</div>
+      </article>
+      <article class="card area reveal" data-s="ok">
+        <div class="head"><h3>Symboler och Symbol Editor</h3><span class="status s-ok">Klart</span></div>
+        <p>Inbyggda och egna symboler, lokalt bibliotek, .kretsym-filer och IEC 81346-2-beteckningar.</p>
+        <div class="gap">Väntar: elektrikergranskning av klasser. Delade bibliotek senare.</div>
+      </article>
+      <article class="card area reveal" data-s="part">
+        <div class="head"><h3>Text och metadata</h3><span class="status s-part">Delvis</span></div>
+        <p>Text, dynamisk text med formler, metadataredigerare och revisioner.</p>
+        <div class="gap">Saknas: metadata per objekt.</div>
+      </article>
+      <article class="card area reveal" data-s="ok">
+        <div class="head"><h3>Bilder</h3><span class="status s-ok">Klart</span></div>
+        <p>Infoga, beskära, filtrera, spegla och rotera bilder.</p>
+      </article>
+      <article class="card area reveal" data-s="exp">
+        <div class="head"><h3>Skanna, spåra och OCR</h3><span class="status s-exp">Experimentellt</span></div>
+        <p>Importera foton och PDF:er, spåra linjer, läsa text lokalt eller med AI.</p>
+        <div class="gap">Experimentellt: kvalitet och prestanda förbättras.</div>
+      </article>
+      <article class="card area reveal" data-s="part">
+        <div class="head"><h3>Titelrutor</h3><span class="status s-part">Delvis</span></div>
+        <p>Mallar per sida, standardmall, låsning, appbibliotek och .kretsruta-filer.</p>
+        <div class="gap">Saknas: delade bibliotek, separat gruppmeny.</div>
+      </article>
+      <article class="card area reveal" data-s="ok">
+        <div class="head"><h3>Dellista</h3><span class="status s-ok">Klart</span></div>
+        <p>Genererade och manuella listor, sortering, filter, CSV/XLSX in och ut, egen utskrift.</p>
+        <div class="gap">Väntar: granskning av mallkolumner.</div>
+      </article>
+      <article class="card area reveal" data-s="ok">
+        <div class="head"><h3>Spara, öppna och stäng</h3><span class="status s-ok">Klart</span></div>
+        <p>Strikt .krets v2, skydd mot dataförlust, återställning efter krasch, varning för nyare filer.</p>
+      </article>
+      <article class="card area reveal" data-s="ok">
+        <div class="head"><h3>Utskrift och export</h3><span class="status s-ok">Klart</span></div>
+        <p>Utskrift och PDF via webbläsaren, samt DXF, SVG och PNG.</p>
+        <div class="gap">Ingen egen PDF-motor (medvetet).</div>
+      </article>
+      <article class="card area reveal" data-s="ok">
+        <div class="head"><h3>Teman och inställningar</h3><span class="status s-ok">Klart</span></div>
+        <p>Tio färgpaletter, mörkt och ljust läge, hög kontrast, UI-storlek.</p>
+      </article>
+      <article class="card area reveal" data-s="ok">
+        <div class="head"><h3>Menyer och kommandon</h3><span class="status s-ok">Klart</span></div>
+        <p>Programmeny, native-menyer på macOS, kommandosök (Ctrl/Cmd+K), Hjälp med Kom igång.</p>
+      </article>
+      <article class="card area reveal" data-s="part">
+        <div class="head"><h3>Tangentbord och tillgänglighet</h3><span class="status s-part">Delvis</span></div>
+        <p>Rita och navigera med tangentbord, och förklaringar på knappar som inte går att använda.</p>
+        <div class="gap">Symbol Editor och vissa detaljer kräver fortfarande mus.</div>
+      </article>
+      <article class="card area reveal" data-s="exp">
+        <div class="head"><h3>Skrivbordsapp (Tauri)</h3><span class="status s-exp">Experimentellt</span></div>
+        <p>Native-menyer, säkra fildialoger, lokal OCR och skyddad stängning.</p>
+        <div class="gap">Ingen signering eller distribution än.</div>
+      </article>
+      <article class="card area reveal" data-s="exp">
+        <div class="head"><h3>Assistent (AI)</h3><span class="status s-exp">Experimentellt</span></div>
+        <p>Granskar ritningen och fyller i metadata med förslag som du godkänner.</p>
+        <div class="gap">Bakom experimentflagga, bara i skrivbordsappen.</div>
+      </article>
+      <article class="card area reveal" data-s="ok">
+        <div class="head"><h3>Testning och kvalitet</h3><span class="status s-ok">Klart</span></div>
+        <p>ESLint, Vitest, Playwright och en lokal grind som måste vara grön före merge.</p>
+      </article>
+    </div>
+  </section>
+
+  <!-- Kvar -->
+  <section id="kvar">
+    <p class="eyebrow">Vad återstår</p>
+    <h2>Kvar att bygga</h2>
+    <p class="lead">Grupperat efter när det behövs. Mycket av det som saknas är medvetna avgränsningar för den första versionen, inte buggar.</p>
+    <div class="cols">
+      <div class="card col reveal">
+        <h3><span class="status s-block">Före release</span></h3>
+        <ul>
+          <li><b>Signerad och notariserad macOS-app</b> med fastställt bundle-id.</li>
+          <li><b>Paketerad smoke på macOS:</b> öppna, spara, exportera, skriva ut och OCR i den byggda appen.</li>
+          <li><b>Verifiera sparade PDF:er</b> från utskrift (beslutat 5 oktober).</li>
+          <li><b>Elektrikergranskning</b> av beteckningsklasser, symbolpaket, Dellistmallar och startmall.</li>
+          <li><b>Release-ribba och versionspolicy</b> nedskriven.</li>
+        </ul>
+      </div>
+      <div class="card col reveal">
+        <h3><span class="status s-part">Nära efter release</span></h3>
+        <ul>
+          <li><b>Kablar:</b> bättre kabelvägar och korsreferenser mellan sidor. Det blir inte en verifierad nätlista.</li>
+          <li><b>Skanning:</b> bättre spårkvalitet och prestanda, automatisk foto- och sidkorrigering.</li>
+          <li><b>Tangentbord:</b> mer redigering utan mus, t.ex. i Symbol Editor.</li>
+          <li><b>Fler svenska symboler</b> och fler startmallar (laddbox, solcell, motorstart).</li>
+          <li><b>Senaste filer</b> och mappar i skrivbordsappen.</li>
+        </ul>
+      </div>
+      <div class="card col reveal">
+        <h3><span class="status s-todo">Senare</span></h3>
+        <ul>
+          <li><b>Delade och team-bibliotek</b> för symboler, med versionshantering.</li>
+          <li><b>Windows och Linux</b> som paketerade plattformar, med uppdaterare.</li>
+          <li><b>Egen PDF-motor</b>, bara om mätningar visar att webbläsarutskriften inte räcker.</li>
+          <li><b>Molndokument</b>, som än så länge bara är planering.</li>
+          <li><b>Assistenten till vanliga användare</b>, efter mätbar kvalitet.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- Release -->
+  <section id="release">
+    <p class="eyebrow">Vägen till en första release</p>
+    <h2>Vad som krävs för release</h2>
+    <p class="lead">Beslutat: första releasen är <b>bara macOS</b>. Stegen nedan i ungefärlig ordning. De gröna är klara, det blå pågår och de streckade är inte påbörjade.</p>
+    <div class="card reveal">
+      <ol class="steps" id="steps">
+        <li class="step done"><span class="node">✓</span><div class="body"><div class="row"><b>Kärnfunktioner</b><span class="status s-ok">Klart</span></div><p>Ritverktyg, strikt filformat (.krets v2), utskrift, DXF/SVG/PNG, Dellista, titelrutor.</p></div></li>
+        <li class="step done"><span class="node">✓</span><div class="body"><div class="row"><b>Kvalitetsgrind</b><span class="status s-ok">Klart</span></div><p><code>npm run gate</code>: 12 884 enhetstester och 2 500 webbläsartester körs lokalt före varje merge. CI är avstängt för att hålla nere kostnaderna.</p></div></li>
+        <li class="step done"><span class="node">✓</span><div class="body"><div class="row"><b>Skydd för filversioner</b><span class="status s-ok">Klart</span></div><p>Äldre versioner varnar och tvingar Spara som när en fil är skriven av en nyare version. Det skyddar David, Peter och Dadda när de kör olika byggen.</p></div></li>
+        <li class="step run"><span class="node">4</span><div class="body"><div class="row"><b>Elektrikergranskning</b><span class="status s-run">Pågår</span></div><p>Symbolpaket 1 och villacentral-mallen förbereds som utkast till David. Beteckningsklasser och Dellistmallar väntar också.</p></div></li>
+        <li class="step todo"><span class="node">5</span><div class="body"><div class="row"><b>Beslut om release-ribba</b><span class="status s-block">Öppet beslut</span></div><p>Signering, behörighetsgranskning och vilka paketerade tester som måste vara gröna.</p></div></li>
+        <li class="step todo"><span class="node">6</span><div class="body"><div class="row"><b>Bundle-id och namn</b><span class="status s-block">Öppet beslut</span></div><p>Hugrverk-identitet för appen. Den ska vara bestämd före första publika binären och är billig att besluta tidigt.</p></div></li>
+        <li class="step todo"><span class="node">7</span><div class="body"><div class="row"><b>Signering och notarisering</b><span class="status s-todo">Ej påbörjat</span></div><p>Apple Developer-certifikat, notarisering och en byggprocess som går att upprepa.</p></div></li>
+        <li class="step todo"><span class="node">8</span><div class="body"><div class="row"><b>Paketerad macOS-smoke</b><span class="status s-todo">Ej påbörjat</span></div><p>Öppna, spara, exportera, skriva ut och OCR i den signerade appen, plus utskriftsdialogen och säkerhetskontroller av navigering, CSP och sidecar.</p></div></li>
+        <li class="step todo"><span class="node">9</span><div class="body"><div class="row"><b>Första release</b><span class="status s-todo">Mål</span></div><p>Signerad macOS-app till en avgränsad grupp, med Assistenten avstängd eller tydligt märkt som experimentell.</p></div></li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- Beslut -->
+  <section id="beslut">
+    <p class="eyebrow">Öppna frågor</p>
+    <h2>Beslut som återstår</h2>
+    <p class="lead">Bara de som är öppna i dag. De röda behöver fattas före release, de övriga kan vänta.</p>
+    <div class="filters" role="group" aria-label="Filtrera beslut">
+      <button class="chip" data-dfilter="all" aria-pressed="true">Alla <span class="count" data-dc="all">12</span></button>
+      <button class="chip" data-dfilter="block" aria-pressed="false"><span class="sw" style="background:var(--block)"></span>Före release <span class="count" data-dc="block">4</span></button>
+      <button class="chip" data-dfilter="later" aria-pressed="false"><span class="sw" style="background:var(--text3)"></span>Kan vänta <span class="count" data-dc="later">8</span></button>
+    </div>
+    <div class="decisions" id="decisions">
+      <article class="card decision reveal" data-b="block">
+        <div class="row"><span class="status s-block">Före release</span></div>
+        <h3>Release-ribba</h3>
+        <p>Vad måste vara uppfyllt innan vi delar ut byggen: signering, behörighetsgranskning och paketerade tester.</p>
+        <div class="rec">Mitt förslag: signerad och notariserad macOS-app, grön grind och en paketerad smoke av öppna, spara, exportera, skriv ut och OCR.</div>
+      </article>
+      <article class="card decision reveal" data-b="block">
+        <div class="row"><span class="status s-block">Före release</span></div>
+        <h3>Bundle-id och namn</h3>
+        <p>Appens identitet (Hugrverk reverse domain) och nyckelringens tjänstenamn. Ska vara bestämt före första publika binären.</p>
+        <div class="rec">Mitt förslag: besluta nu, det är billigt och svårt att ändra efteråt.</div>
+      </article>
+      <article class="card decision reveal" data-b="block">
+        <div class="row"><span class="status s-block">Före release</span></div>
+        <h3>Assistenten i första releasen</h3>
+        <p>Ska den följa med? Den saknar mätning mot riktiga modeller.</p>
+        <div class="rec">Mitt förslag: avstängd som standard, eller tydligt märkt som experimentell och bara för interna användare.</div>
+      </article>
+      <article class="card decision reveal" data-b="block">
+        <div class="row"><span class="status s-block">Före release</span></div>
+        <h3>Elektrikergodkännande</h3>
+        <p>Inte ett designbeslut men ett godkännande: beteckningsklasser, symbolpaket 1, Dellistmallar och startmall.</p>
+        <div class="rec">Ägare: David.</div>
+      </article>
+      <article class="card decision reveal" data-b="later">
+        <div class="row"><span class="status s-todo">Kan vänta</span></div>
+        <h3>Uppdatera placerade symboler från källan</h3>
+        <p>När en symbol ändras i ett bibliotek: hur följer redan placerade instanser med (identitet, anslutningar, text)?</p>
+        <div class="rec">Behövs först med delade bibliotek.</div>
+      </article>
+      <article class="card decision reveal" data-b="later">
+        <div class="row"><span class="status s-todo">Kan vänta</span></div>
+        <h3>Samma projektnamn på Hem</h3>
+        <p>Två öppna projekt eller återställningskopior med samma titel går inte att skilja åt.</p>
+        <div class="rec">Granskningens förslag: visa filnamnet när det finns.</div>
+      </article>
+      <article class="card decision reveal" data-b="later">
+        <div class="row"><span class="status s-todo">Kan vänta</span></div>
+        <h3>Behörigheter för mappar</h3>
+        <p>Hur skrivbordsappen ska få åtkomst till mappar och bibliotek utöver dagens fildialoger.</p>
+        <div class="rec">Kopplat till senaste filer och mappar efter release.</div>
+      </article>
+      <article class="card decision reveal" data-b="later">
+        <div class="row"><span class="status s-todo">Kan vänta</span></div>
+        <h3>Assistentens ändringar och revisioner</h3>
+        <p>Ska godkända ändringar också skapa en dokumentrevision? Hur ska leverantörsfel visas utan att störa ritandet?</p>
+        <div class="rec">Besluta innan Assistenten släpps brett.</div>
+      </article>
+      <article class="card decision reveal" data-b="later">
+        <div class="row"><span class="status s-todo">Kan vänta</span></div>
+        <h3>AI-spårning och ChatGPT-plan</h3>
+        <p>Om modeller ska spåra skannade ritningar, och om OCR ska kunna gå via ChatGPT-abonnemang.</p>
+        <div class="rec">Utredning, ingen brådska.</div>
+      </article>
+      <article class="card decision reveal" data-b="later">
+        <div class="row"><span class="status s-todo">Kan vänta</span></div>
+        <h3>Molndokument</h3>
+        <p>Sex grundfrågor om vad ett molndokument är, konflikter, revisioner och synk.</p>
+        <div class="rec">Utanför nuvarande omfattning.</div>
+      </article>
+      <article class="card decision reveal" data-b="later">
+        <div class="row"><span class="status s-todo">Kan vänta</span></div>
+        <h3>Vad är betalt</h3>
+        <p>Vilka delar av det agentiska som blir Pro, Team eller Enterprise.</p>
+        <div class="rec">Affärsbeslut. Licenser och betalning är utanför appens omfattning just nu.</div>
+      </article>
+      <article class="card decision reveal" data-b="later">
+        <div class="row"><span class="status s-todo">Kan vänta</span></div>
+        <h3>Mindre omordningsknappar i Explorer</h3>
+        <p>Sidgruppernas 20 px-knappar är under WCAG 2.5.8, men större knappar får inte plats i den smala raden.</p>
+        <div class="rec">Kräver en designidé.</div>
+      </article>
+    </div>
+  </section>
+
+  <!-- Agent -->
+  <section id="agent">
+    <p class="eyebrow">Agentisk Kretsverket</p>
+    <h2>Hur vi ligger till med Assistenten</h2>
+    <p class="lead">Du skriver vad du vill ha ändrat. Assistenten tar fram ett förslag som du granskar och godkänner innan något ändras i ritningen. Hela kedjan finns och fungerar i skrivbordsappen bakom en experimentflagga.</p>
+
+    <div class="card reveal">
+      <div class="pipe">
+        <svg class="pipe-svg" preserveAspectRatio="none" viewBox="0 0 100 4" aria-hidden="true"><line x1="7" y1="2" x2="93" y2="2" vector-effect="non-scaling-stroke"/></svg>
+        <div class="pstep"><div class="picon"><svg viewBox="0 0 24 24"><path d="M4 5h16v10H8l-4 4z"/></svg></div><b>Begäran</b><span>"Granska ritning", "Fyll i metadata" eller fri text</span></div>
+        <div class="pstep"><div class="picon"><svg viewBox="0 0 24 24"><path d="M6 3h9l3 3v15H6z"/><path d="M9 11h6M9 15h6"/></svg></div><b>Underlag</b><span>Aktiv sida, symbolkatalog och metadata, med person- och företagsnamn maskade</span></div>
+        <div class="pstep"><div class="picon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4M5 5l3 3M16 16l3 3M5 19l3-3M16 8l3-3"/></svg></div><b>Modell</b><span>Codex (ChatGPT-inloggning) eller Claude API med egen nyckel</span></div>
+        <div class="pstep"><div class="picon"><svg viewBox="0 0 24 24"><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"/><path d="M9 12l2 2 4-4"/></svg></div><b>Validering</b><span>Typade operationer kontrolleras, med en reparationsrunda</span></div>
+        <div class="pstep"><div class="picon"><svg viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></div><b>Förhandsvisning</b><span>Sammanfattning, fynd och varje fältändring</span></div>
+        <div class="pstep"><div class="picon"><svg viewBox="0 0 24 24"><path d="M5 12l4 4 10-10"/></svg></div><b>Godkänn</b><span>Du väljer ändringarna själv. Inget ändras automatiskt.</span></div>
+        <div class="pstep"><div class="picon"><svg viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h11a5 5 0 010 10h-3"/></svg></div><b>Ett ångra-steg</b><span>Allt som godkänns blir ett enda ångra-steg</span></div>
+      </div>
+    </div>
+
+    <div class="agent-grid" style="margin-top:12px">
+      <div class="card reveal">
+        <h3>På plats</h3>
+        <ul class="checklist">
+          <li><span class="ic ok">✓</span><span><b>Ren domänkärna</b> utan React (operationer, validering, kompilering, ångra-historik). Det gör agenten testbar utan gränssnitt.</span></li>
+          <li><span class="ic ok">✓</span><span><b>Två leverantörer:</b> Codex via ChatGPT-inloggning, och Claude API med egen nyckel i macOS nyckelring, via en Rust-proxy med månadstak.</span></li>
+          <li><span class="ic ok">✓</span><span><b>Säkerhet:</b> nycklar lämnar aldrig JavaScript eller .krets-filen. Förslag på inaktuell ritning stoppas.</span></li>
+          <li><span class="ic ok">✓</span><span><b>Golden tasks:</b> inspelade modellsvar spelas upp i testerna, så kedjan testas utan nätverk.</span></li>
+          <li><span class="ic ok">✓</span><span><b>AI-läsning av text</b> i skannade OCR-regioner med egen nyckel.</span></li>
+          <li><span class="ic ok">✓</span><span><b>CLI</b> (<code>krets</code>) för headless DXF-export.</span></li>
+        </ul>
+      </div>
+      <div class="card reveal">
+        <h3>Inte klart</h3>
+        <ul class="checklist">
+          <li><span class="ic exp">!</span><span><b>Ingen mätning mot riktiga modeller.</b> För att släppa till användare krävs minst 90 % lyckade testuppgifter, noll regelbrott och noll orelaterade ändringar. Det är inte mätt än.</span></li>
+          <li><span class="ic no">–</span><span><b>Bara skrivbordsappen.</b> I webbläsaren visas bara ett meddelande.</span></li>
+          <li><span class="ic no">–</span><span><b>Inga bilder eller skanningar</b> skickas till modellen (medvetet beslut för v1).</span></li>
+          <li><span class="ic no">–</span><span><b>Ingen AI-spårning</b> av skannade ritningar och ingen ChatGPT-plan-väg för OCR än.</span></li>
+          <li><span class="ic no">–</span><span><b>MCP-server</b> för externa agenter är planerad senare, ovanpå CLI:t.</span></li>
+          <li><span class="ic no">–</span><span><b>Claude-förslag</b> är inte schemalåsta; kostnader är uppskattningar.</span></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- Pågår nu -->
+  <section id="nu">
+    <p class="eyebrow">Den här veckan</p>
+    <h2>Pågår just nu</h2>
+    <p class="lead">Arbetet drivs av en orkestrerare (Claude) och upp till fyra parallella Luna-agenter. Varje ändring granskas av en andra agent, läses av orkestreraren och går igenom hela grinden innan merge.</p>
+    <div class="now">
+      <div class="card reveal"><span class="waiting" aria-hidden="true"></span><div><b>Svenskt symbolpaket 1</b> <span class="status s-part">Väntar på David</span><p>12 installationssymboler, bland annat JFB, huvudbrytare, elmätare, laddbox och solcellsväxelriktare. Versionen höjs till 0.5.0 så att äldre byggen varnar.</p></div></div>
+      <div class="card reveal"><span class="waiting" aria-hidden="true"></span><div><b>Villacentral i "Nytt från mall"</b> <span class="status s-part">Väntar på David</span><p>Ett enlinjeschema med namnruta som startpunkt för nya projekt.</p></div></div>
+      <div class="card reveal"><span class="spinner" aria-hidden="true"></span><div><b>Lint-skuld i projektets kärna</b> <span class="status s-run">Pågår</span><p>De sista 72 dolda varningarna i projektets tillståndsfil tas bort. Två riktiga buggar har hittats i tidigare omgångar.</p></div></div>
+      <div class="card reveal"><span class="spinner" aria-hidden="true"></span><div><b>Granskningar</b> <span class="status s-run">Pågår</span><p>Projektlivscykel (Hem, spara, stäng), kortkommandon och att Hjälp-texterna stämmer.</p></div></div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="wrap">
+  <p>Källor i repot: <code>docs/CURRENT_STATE.md</code>, <code>docs/ROADMAP.md</code>, <code>docs/KNOWN_GAPS.md</code>, <code>docs/DECISIONS.md</code>, <code>docs/BACKLOG.md</code> och <code>docs/proposals/INTEGRATED_PLAN.md</code>, läst på main 13 oktober 2026. Procentsatserna är uppskattningar, inte mätvärden.</p>
+</footer>
+
+<script>
+(() => {
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // Filters: the cards are in the markup; this only hides and shows them.
+  function wireFilter(attr, rootId, dataKey) {
+    const root = document.getElementById(rootId);
+    document.querySelectorAll('[' + attr + ']').forEach(btn => btn.addEventListener('click', () => {
+      document.querySelectorAll('[' + attr + ']').forEach(b => b.setAttribute('aria-pressed', String(b === btn)));
+      const f = btn.getAttribute(attr);
+      root.querySelectorAll('[data-' + dataKey + ']').forEach(el => el.classList.toggle('hidden', f !== 'all' && el.dataset[dataKey] !== f));
+    }));
+  }
+  wireFilter('data-filter', 'areas', 's');
+  wireFilter('data-dfilter', 'decisions', 'b');
+
+  if (reduce) {
+    document.querySelectorAll('.reveal').forEach(el => el.classList.add('in'));
+    document.querySelectorAll('.bar > i').forEach(i => i.classList.add('go'));
+    return;
+  }
+
+  // Start animated values from zero; the markup holds the final values for previews without JS.
+  const fmt = (n, dec) => n.toLocaleString('sv-SE', { minimumFractionDigits: dec, maximumFractionDigits: dec });
+  const counters = [...document.querySelectorAll('[data-count]')];
+  counters.forEach(el => { el.textContent = fmt(0, parseInt(el.dataset.decimals || '0', 10)) + (el.dataset.suffix || ''); });
+  function countUp(el) {
+    const target = parseFloat(el.dataset.count);
+    const dec = parseInt(el.dataset.decimals || '0', 10);
+    const suffix = el.dataset.suffix || '';
+    const t0 = performance.now(), dur = 1400;
+    const tick = now => {
+      const p = Math.min(1, (now - t0) / dur);
+      el.textContent = fmt(target * (1 - Math.pow(1 - p, 3)), dec) + suffix;
+      if (p < 1) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }
+
+  const GAUGE = 65, LEN = 515.2;
+  const gauge = document.getElementById('gaugeVal');
+  const gaugeNum = document.getElementById('gaugeNum');
+  gauge.style.transition = 'none';
+  gauge.style.strokeDashoffset = String(LEN);
+  gaugeNum.textContent = '0';
+  gauge.getBoundingClientRect();
+  gauge.style.transition = '';
+  function runGauge() {
+    gauge.style.strokeDashoffset = String(LEN * (1 - GAUGE / 100));
+    const t0 = performance.now(), dur = 1800;
+    const tick = now => {
+      const p = Math.min(1, (now - t0) / dur);
+      gaugeNum.textContent = Math.round(GAUGE * (1 - Math.pow(1 - p, 3)));
+      if (p < 1) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }
+
+  if (!('IntersectionObserver' in window)) {
+    document.querySelectorAll('.reveal').forEach(el => el.classList.add('in'));
+    counters.forEach(countUp);
+    document.querySelectorAll('.bar > i').forEach(i => i.classList.add('go'));
+    runGauge();
+    return;
+  }
+  const io = new IntersectionObserver(entries => {
+    for (const en of entries) {
+      if (!en.isIntersecting) continue;
+      const el = en.target;
+      io.unobserve(el);
+      el.classList.add('in');
+      el.querySelectorAll('[data-count]').forEach(countUp);
+      el.querySelectorAll('.bar > i').forEach(i => i.classList.add('go'));
+      if (el.classList.contains('gauge-card')) runGauge();
+    }
+  }, { threshold: 0.12 });
+  document.querySelectorAll('.reveal').forEach(el => io.observe(el));
+
+  // Active nav link
+  const links = [...document.querySelectorAll('.nav a')];
+  const navIo = new IntersectionObserver(entries => {
+    entries.forEach(en => {
+      if (!en.isIntersecting) return;
+      links.forEach(a => a.classList.toggle('active', a.getAttribute('href') === '#' + en.target.id));
+      const active = links.find(a => a.classList.contains('active'));
+      if (active) active.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+    });
+  }, { rootMargin: '-45% 0px -50% 0px' });
+  links.forEach(a => { const sec = document.querySelector(a.getAttribute('href')); if (sec) navIo.observe(sec); });
+})();
+</script>
+</body>
+</html>

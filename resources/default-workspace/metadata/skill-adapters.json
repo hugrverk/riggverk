@@ -288,6 +288,29 @@
         "cursor"
       ]
     },
+    "kretsverket-status-report": {
+      "canonical": "skills/kretsverket/kretsverket-status-report/SKILL.md",
+      "outputs": {
+        "claude": "templates/skills/claude/kretsverket-status-report/SKILL.md",
+        "codex": "templates/skills/codex/kretsverket-status-report/SKILL.md",
+        "cursor": "templates/skills/cursor/kretsverket-status-report/SKILL.md",
+        "opencode": "templates/skills/opencode/kretsverket-status-report/SKILL.md"
+      },
+      "overlays": {
+        "claude": [],
+        "codex": [],
+        "cursor": [
+          "templates/skills/_overlays/global/cursor.md"
+        ],
+        "opencode": []
+      },
+      "targets": [
+        "codex",
+        "opencode",
+        "claude",
+        "cursor"
+      ]
+    },
     "kretsverket-symbol-system": {
       "canonical": "skills/kretsverket/kretsverket-symbol-system/SKILL.md",
       "outputs": {

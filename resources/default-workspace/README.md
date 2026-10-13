@@ -11,7 +11,7 @@ Requires Python 3 on `PATH` (config merges and generators). The CLI scripts also
 ## What lives here
 
 - **docs/** - guides and reference. **docs/prompt-templates/** holds the Prompt, Goal Prompt, and Batch Prompt templates; they appear under Library -> Docs.
-- **skills/** - canonical skill sources. 22 skills ship with the default workspace.
+- **skills/** - canonical skill sources. 23 skills ship with the default workspace.
 - **templates/skills/** - generated harness-specific skill adapters and overlay sources.
 - **templates/** - source templates for agent rules (`global-agent-rules.md`, composed under `sync/`), OpenCode config, Codex config (`codex/`), and Cursor assets (`cursor/`).
 - **agents/**, **agent-specs/** - OpenCode agents and the shared agent bodies.

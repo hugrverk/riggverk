@@ -1,6 +1,6 @@
 # Skills
 
-The bundled default workspace contains **22 skills**: 22 canonical semantic skill sources. Source layout may be root-level (`skills/<skill>/SKILL.md`) or grouped one level deep (`skills/<group>/<skill>/SKILL.md`). Harness-specific adapters are generated under `templates/skills/<harness>/<skill>/SKILL.md`. Installed harness skills are always flat (`<harness-skill-root>/<name>/SKILL.md`).
+The bundled default workspace contains **23 skills**: 23 canonical semantic skill sources. Source layout may be root-level (`skills/<skill>/SKILL.md`) or grouped one level deep (`skills/<group>/<skill>/SKILL.md`). Harness-specific adapters are generated under `templates/skills/<harness>/<skill>/SKILL.md`. Installed harness skills are always flat (`<harness-skill-root>/<name>/SKILL.md`).
 
 Do not duplicate full `SKILL.md` content here. This file is an index for choosing the right skill.
 
@@ -32,7 +32,7 @@ Do not duplicate full `SKILL.md` content here. This file is an index for choosin
 | --- | --- |
 | `wordpress-woocommerce` | Working on WordPress/WooCommerce themes, templates, hooks, filters, plugins, REST/AJAX, checkout/cart/product UI, security, i18n, and frontend integration. |
 
-## Kretsverket Skills (4)
+## Kretsverket Skills (5)
 
 Grouped source: `skills/kretsverket/<skill>/SKILL.md`.
 
@@ -42,6 +42,7 @@ Grouped source: `skills/kretsverket/<skill>/SKILL.md`.
 | `kretsverket-file-compatibility` | `.krets` / `.kretsym` persistence, parsing, migrations, defaults, and untrusted imports. |
 | `kretsverket-symbol-system` | Symbol Editor sandbox, definitions, instances, imports, nested symbols, anchors, and placed-instance updates. |
 | `kretsverket-electrical-drawing` | Wire semantics, terminal bindings, crossings, references, and drawing-versus-netlist boundaries. |
+| `kretsverket-status-report` | A Swedish one-file HTML lägesrapport (progress, what remains, release, open decisions) built from the bundled template with fresh facts from `origin/main`. Ships `assets/report-template.html` and `scripts/verify-report.mjs`. |
 
 ## Routing boundaries
 
@@ -71,6 +72,7 @@ Grouped source: `skills/kretsverket/<skill>/SKILL.md`.
 - Kretsverket persistence or files: `kretsverket-file-compatibility`.
 - Kretsverket symbols: `kretsverket-symbol-system`.
 - Kretsverket electrical drawing: `kretsverket-electrical-drawing`.
+- Kretsverket lägesrapport or statusrapport: `kretsverket-status-report`.
 - Prototyping before implementation: `prototype`; add `frontend-design` for UI prototypes.
 - Pausing, executor reports, or context transfer: `handoff`; add `context-budget` for large reports.
 - Release readiness: `release-check`.

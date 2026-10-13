@@ -968,6 +968,19 @@
       "action": "update"
     },
     {
+      "identity": "skill:kretsverket-status-report",
+      "path_classes": [
+        "runtime-skill",
+        "harness-skill",
+        "codex-legacy-skill"
+      ],
+      "digests": [
+        "sha256:52b843f5bb6e3661f340fd7170b04d64d5c4f395add73279bbb9b9b8ff57e233",
+        "sha256:de98d5e293fc2d9f056a2b3a61119db876f81fac03bd4702c073b7d466324eb8"
+      ],
+      "action": "update"
+    },
+    {
       "identity": "skill:kretsverket-symbol-system",
       "path_classes": [
         "runtime-skill",
@@ -1232,6 +1245,7 @@
         "sha256:7affc0d7f5796c1aaf78bf1e52cf9a6c0309a03c5239c0a73422624080ee3b8f",
         "sha256:8201bd073472b34ee39f1daaddb6f8608796f99763a5b3dd130844441125d9f9",
         "sha256:88514db4e1b07b4d5ae0767263997b76f2650639e1682a20ff18f3f2ed434d51",
+        "sha256:88a7610ca02d879a026e0bcc092f9f199337963ceeb74a5256c7e7afc73e84a7",
         "sha256:8af29fef01554b9dc00a850848b52f8321b6a368a95a1419808ac7f80d3ea1d0",
         "sha256:8c436b00e1d972efd450ba7b7b1d9f29d29ab8e685f4451b6502df6f94b24fd2",
         "sha256:8c5e017468ae6b2d281a8ab5e505d09d2ac5a594880a351e3f1366f0870efac7",
@@ -1253,6 +1267,7 @@
         "sha256:d690124626bb6b163a23d8e39e2881dfa58bb2683ba8a838e840256d3d9c66ef",
         "sha256:d6f42198aab8583a82391f7843d6c308c929958e263692c4d8402ca0230605de",
         "sha256:d8052acc7c84d91c1d16b64dfdd106ce719c21e777ac9ea2de062aa3cb0a1780",
+        "sha256:daa57f5918728cb245fbe1937dc99b0d7a3d3f73a7750038342d36fd59585451",
         "sha256:e0082c16aad6cf3ffbae412dcd83f3f49de15b65f70adbb00e40ef7530018079",
         "sha256:e0a875c50ad781ed799675ebfe292b75d565facccdb2106a8a1ecc85c8807472",
         "sha256:e175654b5e11280ec7245cc5d0380208b214a64aeceb801a3bfd502baf09c1bb",
@@ -1704,6 +1719,7 @@
         "sha256:10bd861915f9cd37c7d51bf1db56735bd0b6e1ddf1148266711b1251ee3b2b10",
         "sha256:14bbbd26e75efeae3812042da95ddba8ffe757b68daa8d178877991838207e30",
         "sha256:1899cd7be82c50bf23d9ab4afca9a39593e4ec4adf6277f5baabd03ffb719d6b",
+        "sha256:1c6d1ae7eb352f033883ec9e032fe4c71c8943d9485257dae0ca1081e9aa801b",
         "sha256:2510d667ab01c21f097404849626710f859d7ca8f667f618a42b44a19a308c8d",
         "sha256:2a392fa062a9d206e37e2f060c7c4dc8e0fdc5a57a04b724dc7d0d4b499b9d34",
         "sha256:30597250e0ca399e1c1af47f493d84918291045b537e56ec701b2ad0d304e49f",
@@ -1724,6 +1740,7 @@
         "sha256:9965cfcd3433265006e1e6f0fbacc2f3a008c51a5938ad9a9df2c9a85e4e3ec3",
         "sha256:9b7cb3aea2e19c5c4db20cb2dd662f49075e19bca07bbf00b048a83480c88081",
         "sha256:9c0a9968b3ac036b2cfd5d8798357f190cc607936c704523f497d84d78c01fa0",
+        "sha256:9cfaeab28725d482996a40623fc445694f72ef5bf66bea3592b1667f740a4ab5",
         "sha256:a32736d8f2f43b1aae8c9895c4c0277d5de5484c3fa2f529cb5102061feb4552",
         "sha256:a4f690195d3fd6f9f47ffb433f9b400fcd7ca437b060451bc6fdeb75b4e906fd",
         "sha256:b57cfbd73b5982e75f93d7d77f25856b13ff6e27276ea50e1f3cba35f07a745b",
@@ -2015,8 +2032,10 @@
       "digests": [
         "sha256:0214e89f639c7a0cf45489cad1eff956e8d13091fa79e6be0d0f88db148976d2",
         "sha256:3b181518c1e433be23e1ffb4f3a0f1ab865c824db8a9ea3f45a5158c7496da91",
+        "sha256:66219fdb41d0fb7ce7ce87e83194af30f2f1899f591ed7eefb9e39e25c711f74",
         "sha256:9ca7e48444abf251b31073cd7feef9e79291baf52665665e4d9ac55a4a2bef97",
         "sha256:9e7bd3ba81a7e63500ec71916881b85d39f0e9da131fb466df0565a250ff2366",
+        "sha256:cc1e1a5499ce4472d890e4b4083da3c25ea8c8bb2d6b99745fa2d74f3d8fdd23",
         "sha256:fcae3dced1dc2ff2b15ca433ea6fa1c80a40497ee87e0681b0a07ac31fdd30e6"
       ],
       "action": "update"
@@ -2420,6 +2439,26 @@
         "sha256:8296e42286e33203ded59b400c6f527e938880dc3ea026077d8b42386cee548d",
         "sha256:a3e11e0a51240dc16aadb959ee611ae86487c1fd300cfa754e07232da814d4f4",
         "sha256:d11229736fed39faefd3c96320fcafeac9c3b65c593fe27a55357c67f5ae0f41"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:skills/kretsverket/kretsverket-status-report/assets/report-template.html",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:2b05e53d2df8a1498aba268d80d16084209cfccfbbc89a9e7acb05b5e54715b3"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:skills/kretsverket/kretsverket-status-report/scripts/verify-report.mjs",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:9a922a9dac0b17c160437e2f4ee82203011712ef1cbf2389cafeedd26b398b22"
       ],
       "action": "update"
     },
@@ -3356,6 +3395,16 @@
       "action": "update"
     },
     {
+      "identity": "workspace:file:templates/skills/claude/kretsverket-status-report/SKILL.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:16562ee7911db4fcd4d1f2fd3461e11872c5ba46243b29862e2edd8ecb2baafc"
+      ],
+      "action": "update"
+    },
+    {
       "identity": "workspace:file:templates/skills/claude/kretsverket-symbol-system/SKILL.md",
       "path_classes": [
         "workspace-doc"
@@ -3644,6 +3693,16 @@
         "sha256:12eb8193a0e593b7afe3a850919dbd2b2a6ea092807baf8fe867e7d5c71a0a5b",
         "sha256:9f6a8df7a3cab82b8624840cdaf40a59c75ca182ceb2226f8e046cfcc3fefadd",
         "sha256:a61e7e311be7c23d9d6e178df6e794e609f1b8a5804630faddcd0b23db5937cd"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:templates/skills/codex/kretsverket-status-report/SKILL.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:16562ee7911db4fcd4d1f2fd3461e11872c5ba46243b29862e2edd8ecb2baafc"
       ],
       "action": "update"
     },
@@ -3940,6 +3999,16 @@
       "action": "update"
     },
     {
+      "identity": "workspace:file:templates/skills/cursor/kretsverket-status-report/SKILL.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:9ab8530a48b572f6d840eb5443992b65cfc5986e271ed0e4a8da8ed24815ce5f"
+      ],
+      "action": "update"
+    },
+    {
       "identity": "workspace:file:templates/skills/cursor/kretsverket-symbol-system/SKILL.md",
       "path_classes": [
         "workspace-doc"
@@ -4228,6 +4297,16 @@
         "sha256:0010926abdf50acc070f8df9fb2206fc6bb5ad73ab61506a69cc45d1ed7c595b",
         "sha256:2dbe1f955fa0656686462ae28db05facd814a1927d92fb634d000371b552ba24",
         "sha256:a61e7e311be7c23d9d6e178df6e794e609f1b8a5804630faddcd0b23db5937cd"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:templates/skills/opencode/kretsverket-status-report/SKILL.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:16562ee7911db4fcd4d1f2fd3461e11872c5ba46243b29862e2edd8ecb2baafc"
       ],
       "action": "update"
     },

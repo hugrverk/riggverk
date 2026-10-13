@@ -17,7 +17,7 @@ ADAPTER_MANIFEST = WS_ROOT / "metadata/skill-adapters.json"
 AGENTS_METADATA = WS_ROOT / "metadata/agents.json"
 AGENT_ADAPTERS_MANIFEST = WS_ROOT / "metadata/agent-adapters.json"
 CLAUDE_AGENT_HEADERS = WS_ROOT / "templates/claude/agents"
-EXPECTED_COUNT = 22
+EXPECTED_COUNT = 23
 
 EXPECTED_SKILLS = {
     "accessibility-review",
@@ -33,6 +33,7 @@ EXPECTED_SKILLS = {
     "kretsverket-electrical-drawing",
     "kretsverket-file-compatibility",
     "kretsverket-symbol-system",
+    "kretsverket-status-report",
     "minimal-implementation",
     "prototype",
     "release-check",
