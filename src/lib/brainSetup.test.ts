@@ -15,6 +15,7 @@ const EXPECTED_SKILLS = [
   "kretsverket-electrical-drawing",
   "kretsverket-file-compatibility",
   "kretsverket-symbol-system",
+  "kretsverket-status-report",
   "minimal-implementation",
   "prototype",
   "release-check",
@@ -42,7 +43,7 @@ const REMOVED_SKILLS = [
 ] as const;
 
 describe("buildBrainSetupBlock", () => {
-  it("represents all 22 expected skill names", () => {
+  it("represents all 23 expected skill names", () => {
     const block = buildBrainSetupBlock();
     for (const skill of EXPECTED_SKILLS) {
       expect(block).toContain(`${skill}:`);
