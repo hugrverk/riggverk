@@ -453,6 +453,29 @@
         "cursor"
       ]
     },
+    "security-audit": {
+      "canonical": "skills/security-audit/SKILL.md",
+      "outputs": {
+        "claude": "templates/skills/claude/security-audit/SKILL.md",
+        "codex": "templates/skills/codex/security-audit/SKILL.md",
+        "cursor": "templates/skills/cursor/security-audit/SKILL.md",
+        "opencode": "templates/skills/opencode/security-audit/SKILL.md"
+      },
+      "overlays": {
+        "claude": [],
+        "codex": [],
+        "cursor": [
+          "templates/skills/_overlays/global/cursor.md"
+        ],
+        "opencode": []
+      },
+      "targets": [
+        "codex",
+        "opencode",
+        "claude",
+        "cursor"
+      ]
+    },
     "security-review": {
       "canonical": "skills/security-review/SKILL.md",
       "outputs": {

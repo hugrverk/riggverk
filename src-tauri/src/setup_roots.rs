@@ -82,7 +82,7 @@ mod tests {
             crate::skill_discovery::discover_skill_catalog(&resolved)
                 .expect("bundled catalog")
                 .len(),
-            23
+            24
         );
         let _ = std::fs::remove_dir_all(runtime);
     }

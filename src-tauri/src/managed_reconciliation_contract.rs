@@ -628,7 +628,7 @@ mod tests {
             discover_skill_catalog(&workspace)
                 .expect("installed catalog")
                 .len(),
-            23
+            24
         );
         assert!(read_managed_state(&workspace).is_some());
         let current = crate::installation_status::status_for_surfaces(
@@ -653,7 +653,7 @@ mod tests {
             discover_skill_catalog(&fixture.ws)
                 .expect("runtime catalog")
                 .len(),
-            35
+            36
         );
         assert_eq!(
             fs::read_dir(fixture.ws.join("agents"))
@@ -765,7 +765,7 @@ mod tests {
         let catalog = discover_skill_catalog(&fixture.ws).expect("catalog");
         assert_eq!(
             catalog.len(),
-            24,
+            25,
             "modified stale runtime skill is preserved"
         );
         assert!(
@@ -785,8 +785,8 @@ mod tests {
         for harness in ["cursor", "claude", "codex"] {
             assert_eq!(
                 fixture.harness_skill_count(harness),
-                23,
-                "{harness} should have 23 skills after reconciliation"
+                24,
+                "{harness} should have 24 skills after reconciliation"
             );
             let dest = agent_global_skills_dest(harness).expect("dest");
             for removed in REMOVED_SKILL_NAMES {
@@ -798,8 +798,8 @@ mod tests {
         }
         assert_eq!(
             fixture.harness_skill_count("opencode"),
-            24,
-            "modified stale OpenCode skill should remain beside 23 current names"
+            25,
+            "modified stale OpenCode skill should remain beside 24 current names"
         );
         assert!(
             agent_global_skills_dest("opencode")
