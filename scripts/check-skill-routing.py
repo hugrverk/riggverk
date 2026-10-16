@@ -17,7 +17,7 @@ ADAPTER_MANIFEST = WS_ROOT / "metadata/skill-adapters.json"
 AGENTS_METADATA = WS_ROOT / "metadata/agents.json"
 AGENT_ADAPTERS_MANIFEST = WS_ROOT / "metadata/agent-adapters.json"
 CLAUDE_AGENT_HEADERS = WS_ROOT / "templates/claude/agents"
-EXPECTED_COUNT = 23
+EXPECTED_COUNT = 24
 
 EXPECTED_SKILLS = {
     "accessibility-review",
@@ -39,6 +39,7 @@ EXPECTED_SKILLS = {
     "release-check",
     "retro",
     "screenshot-review",
+    "security-audit",
     "security-review",
     "tdd",
     "wordpress-woocommerce",
@@ -107,6 +108,9 @@ MIGRATION_FIXTURE_ALLOWLIST = {
     REPO_ROOT / "src-tauri/src/commands/setup.rs",
     WS_ROOT / "metadata/pre-manifest-ownership.json",
     WS_ROOT / "metadata/shipped-digests.json",
+    # Vendored upstream text (cloudflare/security-audit-skill) uses "triage" in its plain sense.
+    WS_ROOT / "skills/security-audit/SKILL.md",
+    *(WS_ROOT / f"templates/skills/{harness}/security-audit/SKILL.md" for harness in ("claude", "codex", "cursor", "opencode")),
 }
 
 DEPRECATED_METADATA_PREFIX = "resources/default-workspace/metadata/deprecated-skills"

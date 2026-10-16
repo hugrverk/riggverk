@@ -274,6 +274,9 @@
       "sha256:a1d757a29e904771311130792883650429040ed0412064f82787fca482740fed",
       "sha256:e03331d933da05bf18f991a9030370dfe71cdd518930097d9bddb6e84fdc0dfa"
     ],
+    "skills/security-audit/SKILL.md": [
+      "sha256:4ef9d998f89ad51893cbc073068371aabca51c20663009901d18639563bb4e86"
+    ],
     "skills/security-review/SKILL.md": [
       "sha256:1ce6808d6a86b8918d8a230dc8f8f4773defbebdba8103e1874818395086c7bc",
       "sha256:3b01e84d18654d54926a2a9343e93af224ea5848feb31e3f0e21354c0c44e68d",
@@ -517,6 +520,9 @@
       "sha256:a6125893d0475669aa9a4dcef0c3df2f0f3afb009d219eaf55803306818d8587",
       "sha256:b43d955972d3bd855097e02109f8d4e4eb0ffc23fa225ce602decdd63fd97eea"
     ],
+    "templates/skills/claude/security-audit/SKILL.md": [
+      "sha256:8b2cce88f6f48359941fc51c067058d461a7d943de8e189047e211f018e3a302"
+    ],
     "templates/skills/claude/security-review/SKILL.md": [
       "sha256:141e9805413e9122b3c49cd64cdcbe29861f9c729971f30b400f8e04d0fa0e4b",
       "sha256:1a0d42fa57120f3286bd6e4ea04134b92eaac9320b9a6a6e403ea50f6e6f4bbb",
@@ -621,6 +627,9 @@
       "sha256:0ef57d7e5c741f82c12bcb6baff8eb0f38a2a8cdf3a27f44ac66ac339fc3ec27",
       "sha256:2d5c1ff02c503fb956174a01c1ffa54be0e1a4a5117da1c7842cbae809b9b22b",
       "sha256:8426c8bf2a6f302356444b50d883465ede7a120dd468d7305c0c1c6133305c9e"
+    ],
+    "templates/skills/codex/security-audit/SKILL.md": [
+      "sha256:8b2cce88f6f48359941fc51c067058d461a7d943de8e189047e211f018e3a302"
     ],
     "templates/skills/codex/security-review/SKILL.md": [
       "sha256:2ec65ef38d69cf4a5a98d60641e9b632cd65571efd3b716a35e39e3834624002",
@@ -727,6 +736,9 @@
       "sha256:4984df5afd03cc5ecbaab52a43416bcf4e438570bde0b4c6073ebf058016e8e8",
       "sha256:ae73650b2cd08a5506df342e62d117381700ef6dadfb097b338f568cf4b62bee"
     ],
+    "templates/skills/cursor/security-audit/SKILL.md": [
+      "sha256:997451a21469bd0ced13819302c01303378ffe341a14826b59d08c93b745ab3a"
+    ],
     "templates/skills/cursor/security-review/SKILL.md": [
       "sha256:426a4fd648ce18a46e00a01274f5e006000758fb73814212230ec215bc4f696c",
       "sha256:86f120f784bf7d549ea8ad3a50e4b9595e8a8241f3dd179fa532e9a9eccac02e",
@@ -831,6 +843,9 @@
       "sha256:2d5c1ff02c503fb956174a01c1ffa54be0e1a4a5117da1c7842cbae809b9b22b",
       "sha256:4156a59096fa60becca69ebee599665ad9417ed122c0162c6a245af6df91440d",
       "sha256:c0247b9d46acb21b90a658e697cc68952c4e2c27852b7d72cefce08a91f24b23"
+    ],
+    "templates/skills/opencode/security-audit/SKILL.md": [
+      "sha256:8b2cce88f6f48359941fc51c067058d461a7d943de8e189047e211f018e3a302"
     ],
     "templates/skills/opencode/security-review/SKILL.md": [
       "sha256:4812ba2c0cfcb0547b6c6aedc470159fff60faf63e8ec742ccad7a258d009397",

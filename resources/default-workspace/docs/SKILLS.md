@@ -1,10 +1,10 @@
 # Skills
 
-The bundled default workspace contains **23 skills**: 23 canonical semantic skill sources. Source layout may be root-level (`skills/<skill>/SKILL.md`) or grouped one level deep (`skills/<group>/<skill>/SKILL.md`). Harness-specific adapters are generated under `templates/skills/<harness>/<skill>/SKILL.md`. Installed harness skills are always flat (`<harness-skill-root>/<name>/SKILL.md`).
+The bundled default workspace contains **24 skills**: 24 canonical semantic skill sources. Source layout may be root-level (`skills/<skill>/SKILL.md`) or grouped one level deep (`skills/<group>/<skill>/SKILL.md`). Harness-specific adapters are generated under `templates/skills/<harness>/<skill>/SKILL.md`. Installed harness skills are always flat (`<harness-skill-root>/<name>/SKILL.md`).
 
 Do not duplicate full `SKILL.md` content here. This file is an index for choosing the right skill.
 
-## General Skills (17)
+## General Skills (18)
 
 | Skill | Use When |
 | --- | --- |
@@ -22,6 +22,7 @@ Do not duplicate full `SKILL.md` content here. This file is an index for choosin
 | `retro` | User-invoked only (`/retro`): reviewing a named coding session and proposing ranked, evidence-traced improvements to steering files, checks, and tooling. Proposals only. |
 | `release-check` | Running pre-merge or pre-deploy readiness checks, including tests, migrations, env risk, smoke routes, and rollback. |
 | `screenshot-review` | Reviewing supplied UI screenshots before implementation or for responsive/layout critique. |
+| `security-audit` | An explicit full codebase security audit or pen test: Cloudflare's six-phase workflow with independent verification and validated `findings.json`. Vendored (MIT); companion files and validators ship in `skills/security-audit/`. |
 | `security-review` | Reviewing auth, authorization, input, secrets, uploads, API endpoints, payments, shell execution, or sensitive data. |
 | `tdd` | Using a narrow red-green-refactor loop for behavior changes, fixes, regressions, and tests. |
 | `zoom-out` | Explaining unfamiliar code in broader system context before editing. |
@@ -54,6 +55,7 @@ Grouped source: `skills/kretsverket/<skill>/SKILL.md`.
 | `frontend-design` / `accessibility-review` | Frontend-design includes baseline a11y during implementation; accessibility-review is a specialist audit. |
 | `frontend-design` / `browser-qa` | Frontend-design owns visual direction; browser-qa supplies runtime verification evidence. |
 | `handoff` / `release-check` | Handoff compacts session state; release-check validates merge/deploy readiness. |
+| `security-review` / `security-audit` | Security-review checks a change or answers a focused question in the current context; security-audit runs a full multi-agent audit of a whole codebase only when one is explicitly asked for. |
 | `security-review` / `sentinel` (agent) | Skill guides the review in the current context; sentinel agent performs an independent read-only review of a finished diff. |
 | `retro` / `context-budget` | Retro mines one named session for environment fixes; context-budget audits instruction surfaces without a session. |
 | `zoom-out` / repo-scout (agent) | Zoom-out explains code context in chat; repo-scout agent maps unfamiliar repos read-only before implementation. |
@@ -67,6 +69,7 @@ Grouped source: `skills/kretsverket/<skill>/SKILL.md`.
 - Frontend implementation: `frontend-design`; add `browser-qa` for runtime verification and `accessibility-review` for UI risk.
 - Screenshot-driven UI: `screenshot-review`, then `frontend-design`.
 - Security-sensitive changes: `security-review`; add `database-migrations` for schema/data work.
+- Full codebase security audit or pen test: `security-audit`.
 - WooCommerce work: `wordpress-woocommerce` plus generic implementation, QA, accessibility, security, or release skills as relevant.
 - Kretsverket editor or canvas: `kretsverket-editor-change`.
 - Kretsverket persistence or files: `kretsverket-file-compatibility`.

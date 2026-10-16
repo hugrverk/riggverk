@@ -21,6 +21,7 @@ const EXPECTED_SKILLS = [
   "release-check",
   "retro",
   "screenshot-review",
+  "security-audit",
   "security-review",
   "tdd",
   "wordpress-woocommerce",
@@ -43,7 +44,7 @@ const REMOVED_SKILLS = [
 ] as const;
 
 describe("buildBrainSetupBlock", () => {
-  it("represents all 23 expected skill names", () => {
+  it("represents all 24 expected skill names", () => {
     const block = buildBrainSetupBlock();
     for (const skill of EXPECTED_SKILLS) {
       expect(block).toContain(`${skill}:`);

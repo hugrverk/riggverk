@@ -1101,6 +1101,19 @@
       "action": "update"
     },
     {
+      "identity": "skill:security-audit",
+      "path_classes": [
+        "runtime-skill",
+        "harness-skill",
+        "codex-legacy-skill"
+      ],
+      "digests": [
+        "sha256:238c2923a61de36468bacdcbf943b28433e5a06d2ba7d2267ed3fe3aadbb92b7",
+        "sha256:4ef9d998f89ad51893cbc073068371aabca51c20663009901d18639563bb4e86"
+      ],
+      "action": "update"
+    },
+    {
       "identity": "skill:security-review",
       "path_classes": [
         "runtime-skill",
@@ -1221,6 +1234,7 @@
         "sha256:1a4adeeeda450f9d6aa4a24da526e7decc574796396c51119b5c23c0bd027c21",
         "sha256:1b7545a43cb8026c0bf45012ab43b75b0f644b1aa47bee31218f776cb0fa44ce",
         "sha256:1d76576ab4385b985bea8c1ca57c51f891289005324970c8f30ac28f3aa3fa05",
+        "sha256:2a9d94cb52ef9178f5d9daa613d45e3359d594721c7c06d80676ec7bc7263105",
         "sha256:2d887d348824313a474b412506dff665363d9f6ff13136953089557ece757c52",
         "sha256:2dd5027ab9cb22d740a39d3379edf6dfa025763f6cd5be82cb526e565223cfb6",
         "sha256:308ecf0e02b661a66521c04f641564c6616645edd6f201f60384fd8928cbf971",
@@ -1255,6 +1269,7 @@
         "sha256:9f9d41aa6116c1c1828c2883eafb998588c410adfc8d76ce450a766e7f5111f7",
         "sha256:a353c7107e3957c1119688713dc226c77e3b19c6e19e160d443f71f060763a10",
         "sha256:ad6b96e84ec1776324e0b5d7c1f1195890b7248bc0a2743a6c972e2065a77db3",
+        "sha256:af00f4d1a5333991c0e664894d0ea656f56bc78b53c7d0e436bb334c97b54f62",
         "sha256:b2ac0090e7e1a09e2892302505b7a269db2b9983b4d34866abf30364c29ab489",
         "sha256:ba1c4121421dcac2f111728e442b96bd53fa2c51d9aa7550083cb46619f66a5a",
         "sha256:bcae2a6b61dd641e45b714c1f5d4513b72da01a305d09765d31d1dfda0f1c4f5",
@@ -1723,6 +1738,7 @@
         "sha256:2510d667ab01c21f097404849626710f859d7ca8f667f618a42b44a19a308c8d",
         "sha256:2a392fa062a9d206e37e2f060c7c4dc8e0fdc5a57a04b724dc7d0d4b499b9d34",
         "sha256:30597250e0ca399e1c1af47f493d84918291045b537e56ec701b2ad0d304e49f",
+        "sha256:309212f8d6a34025502fae8e137b2321fd2737b4d939be51ec2bf7acacd20ff2",
         "sha256:325482edeea21d97b80cf52da880008780087809bed0a790769ce6ae9fac5ff8",
         "sha256:3733d3d8eeeadd65e8a58bd4e94ca82181e17b0861381e468ed3e12c59204bd4",
         "sha256:39c568f53bb67c04a3408b864f8ce6af22f33d092be3e6d7ee6afd289baf2762",
@@ -1734,6 +1750,7 @@
         "sha256:6ae582c708741f61915f3518bcb465d539255c91531091cafab0fd615edcf30a",
         "sha256:6e8079cf75d8dc19a76e66831fdb5d2cb26b03c15e08c3cd9f9843e576f7293d",
         "sha256:7158a12299e5b55c113f292a0325a6986eb65262c29691b73c3a3b41bd4b1923",
+        "sha256:7e40048b05544b9888b9c9f14604545a309cdb541a0c2921470447aae8ae2107",
         "sha256:8029ed8775419f6b70710f56f63a5d3a6346493963d0b0b3ddeb54a4a42b3d62",
         "sha256:887cc337a1a8b0548828c6b7f77321d930f7d212385b1a18601d92f1bd05cce5",
         "sha256:8c16fed63329ab77ad88197a2317e03d7c6ff1b7b3885561579652c1ba463eae",
@@ -2031,10 +2048,12 @@
       ],
       "digests": [
         "sha256:0214e89f639c7a0cf45489cad1eff956e8d13091fa79e6be0d0f88db148976d2",
+        "sha256:1f9a101c006d05e6880a0b8ab8ca174b4693e93bf5ad037b1bc2079933985ea1",
         "sha256:3b181518c1e433be23e1ffb4f3a0f1ab865c824db8a9ea3f45a5158c7496da91",
         "sha256:66219fdb41d0fb7ce7ce87e83194af30f2f1899f591ed7eefb9e39e25c711f74",
         "sha256:9ca7e48444abf251b31073cd7feef9e79291baf52665665e4d9ac55a4a2bef97",
         "sha256:9e7bd3ba81a7e63500ec71916881b85d39f0e9da131fb466df0565a250ff2366",
+        "sha256:adc404c62877b7e00706543b626a84bb90d562db469a15904291c33102c2d59b",
         "sha256:cc1e1a5499ce4472d890e4b4083da3c25ea8c8bb2d6b99745fa2d74f3d8fdd23",
         "sha256:fcae3dced1dc2ff2b15ca433ea6fa1c80a40497ee87e0681b0a07ac31fdd30e6"
       ],
@@ -2459,6 +2478,196 @@
       ],
       "digests": [
         "sha256:9a922a9dac0b17c160437e2f4ee82203011712ef1cbf2389cafeedd26b398b22"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:skills/security-audit/AI-AND-LLM.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:0d57a4d8b1ce05015e867bc89277aabf80f4a3031beba42df4481fc92027f83b"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:skills/security-audit/ATTACK-CLASSES.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:fff6ce0269696d17bda38bfeb27410bdce820f2299cb68a7ceb81883204a3604"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:skills/security-audit/CLIENT-SIDE.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:e9098dc5da89a996e28c25e9e3e3e976ec777a19c4f05c9a04cd4c0d4a3ce120"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:skills/security-audit/CLOUD-AND-DEPLOYMENT.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:29514d7c3a9e83d48f1f519e70e8b2fde4e1d1ac92d2500737b6c8be718c3b2d"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:skills/security-audit/DATA-ISOLATION-AND-LIFECYCLE.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:5c546940150363cb4039038e2c00c080a8d302e7a2e50f72f3960e4c67801b5e"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:skills/security-audit/DESKTOP-MOBILE-AND-LOCAL-IPC.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:055fec61e744d5ba434cbf0c1f2994b1f83d961f5e43d89cc0bb690d16a11f3b"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:skills/security-audit/HUNTING.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:b980765f1a616a141044b00e3dcbb7c36ec4d7cf43740d85985d0bdbca9cfe91"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:skills/security-audit/LICENSE",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:c007a58f958f8a5b2870aa35d8a17aa72a546447aecee6d2b72e19fea530890b"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:skills/security-audit/MEMORY-SAFETY-AND-BINARY.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:c88390b508fc86838b7b12889499fabf28acfe32ca34f2d4ff655a420264f44f"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:skills/security-audit/PROTOCOLS-RPC-AND-MESSAGING.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:2bc534260d9842cc9a6bb15615e58c5350201008880083da78969bdeb657a7ce"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:skills/security-audit/RECONNAISSANCE.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:a02316fae383754621d312215170479685f85c1142b6c117a9a03c6ad8f907e4"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:skills/security-audit/RESOURCE-EXHAUSTION-AND-AVAILABILITY.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:a9590f9966de194e51dd7c82f930bc910662f0275357e433e33758756755ec8d"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:skills/security-audit/SUPPLY-CHAIN-AND-RELEASE.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:c1eb0a8b9a6ab1e979b214ee70fd8fff4c173d4063fd82df82fc5269cb115c17"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:skills/security-audit/UPSTREAM.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:7137b108f3e3ec4766d1ba8edd419c49e96a22505aba9588284867835d6eaf69"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:skills/security-audit/VALIDATION-AND-REPORTING.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:943e68578aa1d7031282837d1455cf64d1e95d032c9df09b3f182ce134e89072"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:skills/security-audit/WEB-PROTOCOL-AND-AUTH.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:757c5191cc397ad7145ffe5b6ffa438bdd36fefd351da640267630d05f01bfae"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:skills/security-audit/report-schema.json",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:7bea150f30dcef07df1859d33d01406953cf600f6a08250e1e59e10f252e2c4c"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:skills/security-audit/validate-coverage-ledger.cjs",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:db2d1a36031ed1552e1d45cefe1da591ef4eebf2d3f3ee3b0298d07051e3a312"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:skills/security-audit/validate-findings.cjs",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:31dabfb5ed2454e4bfa5000fe0f2600df0df9f7ad1781a2fdb9a98a50f507963"
       ],
       "action": "update"
     },
@@ -3483,6 +3692,16 @@
       "action": "update"
     },
     {
+      "identity": "workspace:file:templates/skills/claude/security-audit/SKILL.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:284a7e1ddaeddb8dc34cb63a9ae13d78a38f93d2f06535a6a139399d078f2947"
+      ],
+      "action": "update"
+    },
+    {
       "identity": "workspace:file:templates/skills/claude/security-review/SKILL.md",
       "path_classes": [
         "workspace-doc"
@@ -3781,6 +4000,16 @@
         "sha256:2b61d266c956ec346784b9972a1e4566ffee1186a41209afb96a106023e9c539",
         "sha256:8426c8bf2a6f302356444b50d883465ede7a120dd468d7305c0c1c6133305c9e",
         "sha256:a993c5627cd2b0eed4a7eae34147579d4b6fa68ab0d951672b4c3504b59a441e"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:templates/skills/codex/security-audit/SKILL.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:284a7e1ddaeddb8dc34cb63a9ae13d78a38f93d2f06535a6a139399d078f2947"
       ],
       "action": "update"
     },
@@ -4087,6 +4316,16 @@
       "action": "update"
     },
     {
+      "identity": "workspace:file:templates/skills/cursor/security-audit/SKILL.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:8fee55cf4f3dce2895a7b3eae4a0c425dc2ba8f6f5eecc151999e1cd58853d76"
+      ],
+      "action": "update"
+    },
+    {
       "identity": "workspace:file:templates/skills/cursor/security-review/SKILL.md",
       "path_classes": [
         "workspace-doc"
@@ -4385,6 +4624,16 @@
         "sha256:4156a59096fa60becca69ebee599665ad9417ed122c0162c6a245af6df91440d",
         "sha256:c0247b9d46acb21b90a658e697cc68952c4e2c27852b7d72cefce08a91f24b23",
         "sha256:e45e7a701c680bdfe5c4c40493decde69be845c2dcf9ab640dbc0ab8eaa17e55"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:templates/skills/opencode/security-audit/SKILL.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:284a7e1ddaeddb8dc34cb63a9ae13d78a38f93d2f06535a6a139399d078f2947"
       ],
       "action": "update"
     },

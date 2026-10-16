@@ -52,7 +52,7 @@ Both the runtime workspace and every harness file are installed from the package
 
 ## Skills
 
-The bundled semantic catalog contains exactly 23 canonical skills (17 general, 1 WordPress, 5 Kretsverket). `retro` is user-invoked only.
+The bundled semantic catalog contains exactly 24 canonical skills (18 general, 1 WordPress, 5 Kretsverket). `retro` is user-invoked only.
 
 ```text
 skills/<skill>/SKILL.md
