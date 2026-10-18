@@ -1,14 +1,14 @@
 //! Runtime health of the light harnesses (GitHub Copilot, Pi, Kilo Code), read only.
 //!
-//! What it looks at: the harness CLI's version, and whether the bundled skills are installed in
-//! the folders the harness reads. Rules and MCP are not managed for these harnesses yet, so there
-//! is nothing to report on them.
+//! What it looks at: the harness CLI's version, whether the managed rules block is in the harness's
+//! rules file, and whether the bundled skills are installed in the folders the harness reads. MCP
+//! is not managed for these harnesses yet, so there is nothing to report on it.
 //!
 //! What it never does: run any CLI subcommand but `--version` (`copilot version` asks the network,
 //! `pi --help` writes files into the agent dir, `kilo debug *` prints the resolved config with its
-//! secrets), read an auth, settings or config file of the harness, or keep any raw output. The
-//! version probe is bounded, parse-only and runs from a neutral working directory
-//! (`opencode_cli::probe_version_with_env`).
+//! secrets), read an auth, settings or config file of the harness, show any text of the rules
+//! file, or keep any raw output. The version probe is bounded, parse-only and runs from a neutral
+//! working directory (`opencode_cli::probe_version_with_env`).
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -16,9 +16,11 @@ use std::time::Duration;
 use serde::Serialize;
 
 use super::opencode_cli::{probe_version_with_env, VersionProbe, VERSION_TIMEOUT};
+use super::workspace::setup_workspace_target_path;
 use crate::agent_targets::{self, HarnessId};
-use crate::commands::workspace::configured_workspace_path;
+use crate::installation_status::{status_for_surfaces, InstallationState};
 use crate::light_harness::{self, LightHarness};
+use crate::rules_block::{RulesConflict, RulesLayout};
 use crate::settings;
 use crate::skill_health::skill_files_status;
 use crate::skill_roots::{codex_home_is_custom, roots_read_by, unserved, SkillRoot, SkillScope};
@@ -50,12 +52,32 @@ pub struct LightSkillsHealth {
     pub roots: Vec<String>,
 }
 
+/// The rules row of the health.
+#[derive(Serialize, Clone, Debug, PartialEq, Eq)]
+pub struct LightRulesHealth {
+    /// `synced`, `stale` (a base update is waiting), `missing` (no file yet), `diverged` (a
+    /// conflict the app leaves alone), `off` (the rules target is switched off in Settings) or
+    /// `unknown`.
+    pub status: String,
+    /// The rules file as people know it (`~/.pi/agent/AGENTS.md`).
+    pub path: String,
+    /// Non-blank lines of the user's own around the block; kept on every update.
+    pub refinement_lines: usize,
+    /// The user chose to manage a hand-edited file themselves.
+    pub user_managed: bool,
+    /// Why the file is left alone, when it is a conflict.
+    pub conflict_reason: Option<RulesConflict>,
+    /// The status line of the surface (counts and reasons only, never file text).
+    pub detail: String,
+}
+
 #[derive(Serialize, Clone, Debug, PartialEq, Eq)]
 pub struct LightRuntimeHealth {
     pub harness: HarnessId,
-    /// The skills status: the only part the app manages for these harnesses so far.
+    /// The skills status; when the skills are fine, the rules status (unless that target is off).
     pub status: String,
     pub cli: LightCliHealth,
+    pub rules: LightRulesHealth,
     pub skills: LightSkillsHealth,
     pub warnings: Vec<String>,
     pub next_action: String,
@@ -276,19 +298,139 @@ fn inspect_skills(
     }
 }
 
-/// The environment variable that moves the harness's own skills folder, which the app does not
-/// follow.
-fn relocating_variable(harness: HarnessId) -> Option<(&'static str, &'static str)> {
+// ── Rules ──
+
+/// What the harness's rules file looks like: the same planner the harness page and Install use,
+/// reduced to a status and the surface's own detail line.
+fn inspect_rules(harness: &LightHarness, inputs: &Inputs) -> LightRulesHealth {
+    let rules = &harness.rules;
+    let path = rules.display_path(inputs.home);
+    let health = |status: &str, detail: &str| LightRulesHealth {
+        status: status.into(),
+        path: path.clone(),
+        refinement_lines: 0,
+        user_managed: false,
+        conflict_reason: None,
+        detail: detail.into(),
+    };
+    if !inputs.rules_on {
+        return health("off", "switched off in Settings");
+    }
+    let Some(workspace_root) = inputs.workspace_root else {
+        return health("unknown", "no workspace is set up");
+    };
+    let Ok(status) = status_for_surfaces(&[rules.surface], workspace_root, inputs.home) else {
+        return health("unknown", "the rules file could not be checked");
+    };
+    let Some(surface) = status.surfaces.into_iter().next() else {
+        return health("unknown", "the rules file could not be checked");
+    };
+    let absent = surface
+        .rules
+        .as_ref()
+        .is_some_and(|file| file.layout == RulesLayout::Absent);
+    let verdict = match surface.state {
+        InstallationState::NotInstalled => "missing",
+        InstallationState::UpdateAvailable if absent => "missing",
+        InstallationState::UpdateAvailable => "stale",
+        InstallationState::Current => "synced",
+        InstallationState::Conflict => "diverged",
+        InstallationState::Unavailable => "unknown",
+    };
+    LightRulesHealth {
+        status: verdict.into(),
+        path,
+        refinement_lines: surface
+            .rules
+            .as_ref()
+            .map_or(0, |file| file.refinement_lines),
+        user_managed: surface.rules.as_ref().is_some_and(|file| file.user_managed),
+        conflict_reason: surface.rules.as_ref().and_then(|file| file.conflict_reason),
+        detail: surface.detail,
+    }
+}
+
+/// The folder of a displayed path: `~/.pi/agent` for `~/.pi/agent/AGENTS.md`.
+fn folder_of(path: &str) -> &str {
+    path.rsplit_once('/').map_or(path, |(folder, _)| folder)
+}
+
+fn names_list(names: &[&str]) -> String {
+    names.join(", ")
+}
+
+/// Warnings about the rules file. Static notes appear while the rules target is on; the others
+/// only when the situation is there.
+fn rules_warnings(
+    harness: &LightHarness,
+    rules: &LightRulesHealth,
+    inputs: &Inputs,
+) -> Vec<String> {
+    let mut warnings = Vec::new();
+    if rules.status == "off" {
+        return warnings;
+    }
+    let label = &harness.label;
+    let spec = &harness.rules;
+    let dest = spec.resolve_dest(inputs.home);
+    let folder = folder_of(&rules.path);
+    let masking = spec.masking_files(&dest);
+    if !masking.is_empty() {
+        warnings.push(format!(
+            "{names} in {folder} replaces {file}, so {label} never reads the managed block. Remove or rename it.",
+            names = names_list(&masking),
+            file = spec.file_label,
+        ));
+    }
+    let peers = spec.peer_context_files(&dest);
+    if !peers.is_empty() && !std::fs::metadata(&dest).is_ok_and(|meta| meta.is_file()) {
+        warnings.push(format!(
+            "{label} reads one context file per folder: {folder} has {names} and no {file}. Riggverk does not create {file} (it would hide yours); add the base to {names} by hand or rename it to {file}.",
+            names = names_list(&peers),
+            file = spec.file_label,
+        ));
+    }
+    if let Some(shadowed) = &spec.shadows {
+        warnings.push(format!(
+            "{label} loads one global rules file and {path} comes first: while it exists {label} does not read {shadowed}. Move what {label} should keep from there below the managed block.",
+            path = rules.path
+        ));
+    }
+    if harness.id == HarnessId::Copilot && inputs.claude_rules_managed {
+        warnings.push(
+            "VS Code can load both ~/.claude/CLAUDE.md and ~/.copilot/copilot-instructions.md, so the shared base may appear twice there. The Copilot CLI reads only ~/.copilot.".to_string(),
+        );
+    }
+    warnings
+}
+
+/// The environment variable that moves the harness's own folder, which the app does not follow.
+fn relocating_variable(harness: HarnessId) -> Option<&'static str> {
     match harness {
-        HarnessId::Copilot => Some(("COPILOT_HOME", "~/.copilot/skills")),
-        HarnessId::Pi => Some(("PI_CODING_AGENT_DIR", "~/.pi/agent/skills")),
+        HarnessId::Copilot => Some("COPILOT_HOME"),
+        HarnessId::Pi => Some("PI_CODING_AGENT_DIR"),
         _ => None,
     }
 }
 
-fn next_action(label: &str, skills: &LightSkillsHealth) -> String {
+/// The overall status: the skills', or the rules' once the skills are fine and the rules target
+/// is on.
+fn overall_status(skills: &LightSkillsHealth, rules: &LightRulesHealth) -> String {
+    if skills.status == "synced" && rules.status != "off" {
+        rules.status.clone()
+    } else {
+        skills.status.clone()
+    }
+}
+
+fn next_action(label: &str, skills: &LightSkillsHealth, rules: &LightRulesHealth) -> String {
     match skills.status.as_str() {
-        "synced" => "No runtime action needed.".into(),
+        "synced" => match rules.status.as_str() {
+            "missing" | "stale" => format!("Run Install or Update on the {label} page."),
+            "diverged" => format!("Resolve the rules file conflict on the {label} page."),
+            "unknown" => format!("Riggverk cannot check the {label} rules file; open the {label} page for details."),
+            _ => "No runtime action needed.".into(),
+        },
         "unserved" => format!("Disable Codex or unset CODEX_HOME to install skills for {label}."),
         "unknown" => format!("Riggverk cannot read its bundled skills; reinstall the app ({label} skills not checked)."),
         _ => format!("Run Install or Update on the {label} page."),
@@ -304,6 +446,12 @@ struct Inputs<'a> {
     /// Names of the variables in `relocating_variable` that are set in the app's environment.
     set_variables: &'a [&'a str],
     version_timeout: Duration,
+    /// The workspace the rules are planned for; `None` when none can be resolved.
+    workspace_root: Option<&'a Path>,
+    /// The harness's rules target is switched on in Settings.
+    rules_on: bool,
+    /// Claude is enabled and its rules target is on (Copilot's VS Code note depends on it).
+    claude_rules_managed: bool,
 }
 
 fn compute_health(harness: &LightHarness, inputs: &Inputs) -> LightRuntimeHealth {
@@ -320,6 +468,7 @@ fn compute_health(harness: &LightHarness, inputs: &Inputs) -> LightRuntimeHealth
         Some(inputs.home),
         inputs.version_timeout,
     );
+    let rules = inspect_rules(harness, inputs);
     let mut warnings = Vec::new();
     if skills.status == "unserved" {
         warnings.push(format!(
@@ -327,38 +476,49 @@ fn compute_health(harness: &LightHarness, inputs: &Inputs) -> LightRuntimeHealth
             label = harness.label
         ));
     }
-    if let Some((variable, folder)) = relocating_variable(harness.id) {
+    if let Some(variable) = relocating_variable(harness.id) {
         if inputs.set_variables.contains(&variable) {
             warnings.push(format!(
-                "{variable} is set in Riggverk's environment; {} is only read at {folder}.",
-                harness.label
+                "{variable} is set in Riggverk's environment; Riggverk writes {path} anyway, which {label} reads only without it.",
+                path = rules.path,
+                label = harness.label
             ));
         }
     }
+    warnings.extend(rules_warnings(harness, &rules, inputs));
     LightRuntimeHealth {
         harness: harness.id,
-        status: skills.status.clone(),
-        next_action: next_action(&harness.label, &skills),
+        status: overall_status(&skills, &rules),
+        next_action: next_action(&harness.label, &skills, &rules),
         cli,
+        rules,
         skills,
         warnings,
     }
 }
 
-/// Read-only health of one light harness: its CLI version and its skills.
+/// Read-only health of one light harness: its CLI version, its rules file and its skills.
 ///
-/// Runs `<cli> --version` (bounded, parse-only) and compares installed skill files with the
-/// bundle. Nothing of the harness's own folders is read besides the skills folders it shares.
+/// Runs `<cli> --version` (bounded, parse-only), classifies the rules file against the managed
+/// block and compares installed skill files with the bundle. Nothing of the harness's own
+/// folders is read besides the rules file and the folder next to it, and the skills folders it
+/// shares.
 #[tauri::command(async)]
 pub fn get_light_runtime_health(harness: HarnessId) -> Result<LightRuntimeHealth, String> {
     let descriptor = light_harness::descriptor(harness)
         .ok_or_else(|| format!("{} is not a light harness", harness.as_str()))?;
     let home = agent_targets::home_dir()?;
-    let workspace_root = configured_workspace_path(&settings::load()).unwrap_or_default();
-    let bundled = crate::setup_roots::bundled_root_for(&workspace_root).ok();
+    let loaded = settings::load();
+    let workspace_root = setup_workspace_target_path().ok();
+    let bundled = workspace_root
+        .as_deref()
+        .and_then(|root| crate::setup_roots::bundled_root_for(root).ok());
     let enabled = settings::try_load()
         .ok()
         .map(|loaded| loaded.enabled_harness_ids);
+    let target_on = |target: &str| loaded.enabled_target_ids.iter().any(|id| id == target);
+    let claude_rules_managed =
+        settings::harness_enabled(&loaded, HarnessId::Claude) && target_on("claude_rules");
     let set_variables: Vec<&str> = ["COPILOT_HOME", "PI_CODING_AGENT_DIR"]
         .into_iter()
         .filter(|name| std::env::var_os(name).is_some_and(|value| !value.is_empty()))
@@ -374,6 +534,9 @@ pub fn get_light_runtime_health(harness: HarnessId) -> Result<LightRuntimeHealth
             codex_custom: codex_home_is_custom(&home),
             set_variables: &set_variables,
             version_timeout: VERSION_TIMEOUT,
+            workspace_root: workspace_root.as_deref(),
+            rules_on: target_on(&descriptor.rules.target_id),
+            claude_rules_managed,
         },
     ))
 }
@@ -851,6 +1014,9 @@ mod tests {
                 codex_custom: false,
                 set_variables: &["PI_CODING_AGENT_DIR"],
                 version_timeout: Duration::from_secs(10),
+                workspace_root: None,
+                rules_on: false,
+                claude_rules_managed: false,
             },
         );
         assert_eq!(health.harness, HarnessId::Pi);
@@ -859,7 +1025,8 @@ mod tests {
         assert_eq!(health.skills.roots, ["~/.agents/skills"]);
         assert_eq!(health.warnings.len(), 1, "{:?}", health.warnings);
         assert!(health.warnings[0].contains("PI_CODING_AGENT_DIR"));
-        assert!(health.warnings[0].contains("~/.pi/agent/skills"));
+        assert!(health.warnings[0].contains("~/.pi/agent/AGENTS.md"));
+        assert_eq!(health.rules.status, "off");
         assert_eq!(health.next_action, "No runtime action needed.");
 
         let json = serde_json::to_value(&health).expect("serialize");
@@ -883,6 +1050,9 @@ mod tests {
                 codex_custom: true,
                 set_variables: &[],
                 version_timeout: Duration::from_secs(1),
+                workspace_root: None,
+                rules_on: false,
+                claude_rules_managed: false,
             },
         );
         assert_eq!(health.status, "unserved");

@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use std::path::{Component, Path, PathBuf};
 
 use crate::agent_skill_targets::codex_home;
+use crate::light_harness::LightHarnessId;
 use crate::setup_lifecycle::SetupSurfaceId;
 use crate::skill_roots::{SkillRoot, SkillScope};
 
@@ -68,6 +69,11 @@ pub enum ArtifactId {
     CodexLegacySkill(SkillName),
     /// Installed runtime workspace bundled file (workspace-relative path).
     WorkspaceFile(WorkspaceRelPath),
+
+    // ── Light tier ──
+    /// The managed rules block of a light harness (`metadata/light-harnesses.json` names the
+    /// file and the base). The harness id is validated, so a manifest cannot name a central one.
+    HarnessRules(LightHarnessId),
 
     // ── Skills ──
     /// One file of a skill (`SKILL.md` or a supporting file) in one skill root.
@@ -353,6 +359,7 @@ impl ArtifactId {
             }
             ArtifactId::SkillFile(file) => file.dest(home),
             ArtifactId::WorkspaceFile(rel) => Ok(workspace_root.join(rel.as_str())),
+            ArtifactId::HarnessRules(harness) => Ok(light_rules(*harness)?.resolve_dest(home)),
         }
     }
 
@@ -370,6 +377,7 @@ impl ArtifactId {
             ArtifactId::SkillFile(file) if file.root == SkillRoot::CodexHome => {
                 self.codex_allowlist_root(home, workspace_root)
             }
+            ArtifactId::HarnessRules(harness) => Ok(light_rules(*harness)?.allowlist_root(home)),
             _ => Ok(home.to_path_buf()),
         }
     }
@@ -430,6 +438,9 @@ impl ArtifactId {
             ArtifactId::CodexLegacySkill(name) => Some(skill_source(workspace_root, name.as_str())),
             ArtifactId::SkillFile(file) => Some(file.source(workspace_root)),
             ArtifactId::WorkspaceFile(rel) => Some(workspace_root.join(rel.as_str())),
+            ArtifactId::HarnessRules(harness) => harness
+                .rules()
+                .map(|rules| workspace_root.join(&rules.source_rel)),
         }
     }
 
@@ -480,7 +491,10 @@ impl ArtifactId {
     pub fn is_rules_block(&self) -> bool {
         matches!(
             self,
-            ArtifactId::OpenCodeRules | ArtifactId::CodexRules | ArtifactId::ClaudeRules
+            ArtifactId::OpenCodeRules
+                | ArtifactId::CodexRules
+                | ArtifactId::ClaudeRules
+                | ArtifactId::HarnessRules(_)
         )
     }
 
@@ -507,8 +521,18 @@ impl ArtifactId {
             | ArtifactId::CodexLegacySkill(_)
             | ArtifactId::SkillFile(_) => SetupSurfaceId::Skills,
             ArtifactId::WorkspaceFile(_) => SetupSurfaceId::WorkspaceBundle,
+            ArtifactId::HarnessRules(harness) => harness.rules_surface(),
         }
     }
+}
+
+/// The rules block of `harness`; an error only when the embedded descriptor is invalid.
+fn light_rules(
+    harness: LightHarnessId,
+) -> Result<&'static crate::light_harness::LightRules, String> {
+    harness
+        .rules()
+        .ok_or_else(|| "the light harness descriptor is unavailable".to_string())
 }
 
 fn resolve_cursor_paths() -> Result<crate::cursor_profile_paths::CursorProfilePaths, String> {
@@ -639,6 +663,13 @@ pub fn expand_surface(
         ),
         SetupSurfaceId::Skills => expand_skill_surface(workspace_root, scope),
         SetupSurfaceId::CursorMcp => Ok(vec![ArtifactId::CursorMcp]),
+        light @ (SetupSurfaceId::CopilotRules
+        | SetupSurfaceId::PiRules
+        | SetupSurfaceId::KiloRules) => light
+            .harness()
+            .and_then(LightHarnessId::new)
+            .map(|harness| vec![ArtifactId::HarnessRules(harness)])
+            .ok_or_else(|| "light rules surface without a light harness".to_string()),
         SetupSurfaceId::WorkspaceBundle => expand_workspace_bundle(workspace_root),
         SetupSurfaceId::ClaudeSkills
         | SetupSurfaceId::OpenCodeSkills
@@ -675,13 +706,28 @@ pub fn reject_broad_artifact_root(path: &Path) -> Result<(), String> {
     if let Some(home) = dirs_home() {
         let home_str = home.to_string_lossy();
         let home_norm = home_str.trim_end_matches('/');
-        let broad_roots = [
+        let mut broad_roots = vec![
             format!("{home_norm}/.cursor"),
             format!("{home_norm}/.claude"),
             format!("{home_norm}/.codex"),
             format!("{home_norm}/.agents"),
             format!("{home_norm}/.config/opencode"),
+            // The light tier's own folders.
+            format!("{home_norm}/.copilot"),
+            format!("{home_norm}/.pi"),
+            format!("{home_norm}/.pi/agent"),
+            format!("{home_norm}/.kilo"),
+            format!("{home_norm}/.config/kilo"),
         ];
+        // Kilo's config folder moves with XDG_CONFIG_HOME.
+        if let Some(xdg) = std::env::var("XDG_CONFIG_HOME")
+            .ok()
+            .map(|value| value.trim().trim_end_matches('/').to_string())
+            .filter(|value| !value.is_empty())
+        {
+            broad_roots.push(xdg.clone());
+            broad_roots.push(format!("{xdg}/kilo"));
+        }
         for root in &broad_roots {
             if normalized == root.as_str() || normalized == format!("{root}/").as_str() {
                 return Err(format!(
@@ -1140,6 +1186,12 @@ mod tests {
             r#"{"type":"WorkspaceFile","name":"../x"}"#,
             r#"{"type":"WorkspaceFile","name":"/etc/passwd"}"#,
             r#"{"type":"WorkspaceFile","name":""}"#,
+            r#"{"type":"HarnessRules","name":"claude"}"#,
+            r#"{"type":"HarnessRules","name":"codex"}"#,
+            r#"{"type":"HarnessRules","name":"cursor"}"#,
+            r#"{"type":"HarnessRules","name":"opencode"}"#,
+            r#"{"type":"HarnessRules","name":"../pi"}"#,
+            r#"{"type":"HarnessRules","name":""}"#,
         ] {
             let parsed = serde_json::from_str::<ArtifactId>(json);
             assert!(parsed.is_err(), "{json} must not deserialize: {parsed:?}");
@@ -1493,5 +1545,141 @@ mod tests {
                 home.join(".codex/agents/repo-scout.toml")
             );
         }
+    }
+
+    // ── Light tier rules ──
+
+    fn light(harness: crate::agent_targets::HarnessId) -> ArtifactId {
+        ArtifactId::HarnessRules(LightHarnessId::new(harness).expect("light harness"))
+    }
+
+    #[test]
+    fn harness_rules_artifacts_resolve_from_the_descriptor() {
+        use crate::agent_targets::HarnessId;
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        std::env::remove_var("XDG_CONFIG_HOME");
+        let home = temp_dir("light-rules-user");
+        let ws = temp_dir("light-rules-ws");
+        let cases = [
+            (
+                HarnessId::Copilot,
+                ".copilot/copilot-instructions.md",
+                "copilot-rules.md",
+            ),
+            (HarnessId::Pi, ".pi/agent/AGENTS.md", "pi-rules.md"),
+            (HarnessId::Kilo, ".config/kilo/AGENTS.md", "kilo-rules.md"),
+        ];
+        assert_eq!(
+            cases.len(),
+            crate::light_harness::light_harnesses().len(),
+            "a new light harness needs a case here"
+        );
+        for (harness, dest, source) in cases {
+            let artifact = light(harness);
+            assert_eq!(artifact.resolve_dest(&home, &ws).unwrap(), home.join(dest));
+            assert_eq!(
+                artifact.resolve_source(&ws),
+                Some(ws.join("templates/sync").join(source))
+            );
+            assert_eq!(artifact.allowlist_root(&home, &ws).unwrap(), home);
+            assert!(artifact.is_rules_block());
+            let surface = artifact.surface();
+            assert_eq!(surface.harness(), Some(harness));
+            assert_eq!(
+                expand_surface(surface, &ws, &SkillScope::all()).unwrap(),
+                vec![artifact.clone()]
+            );
+            let json = serde_json::to_string(&artifact).unwrap();
+            assert_eq!(
+                json,
+                format!(r#"{{"type":"HarnessRules","name":"{}"}}"#, harness.as_str())
+            );
+            assert_eq!(serde_json::from_str::<ArtifactId>(&json).unwrap(), artifact);
+        }
+    }
+
+    #[test]
+    fn the_kilo_rules_file_follows_xdg_config_home_and_widens_the_allowlist_only_outside_home() {
+        use crate::agent_targets::HarnessId;
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        let home = temp_dir("kilo-xdg-user");
+        let xdg = temp_dir("kilo-xdg-config");
+        let ws = temp_dir("kilo-xdg-ws");
+        let kilo = light(HarnessId::Kilo);
+        let copilot = light(HarnessId::Copilot);
+
+        std::env::set_var("XDG_CONFIG_HOME", &xdg);
+        assert_eq!(
+            kilo.resolve_dest(&home, &ws).unwrap(),
+            xdg.join("kilo/AGENTS.md")
+        );
+        assert_eq!(kilo.allowlist_root(&home, &ws).unwrap(), xdg);
+        assert_eq!(
+            copilot.resolve_dest(&home, &ws).unwrap(),
+            home.join(".copilot/copilot-instructions.md"),
+            "only Kilo follows XDG_CONFIG_HOME"
+        );
+        assert_eq!(copilot.allowlist_root(&home, &ws).unwrap(), home);
+
+        let inside = home.join("dotfiles");
+        std::env::set_var("XDG_CONFIG_HOME", &inside);
+        assert_eq!(
+            kilo.resolve_dest(&home, &ws).unwrap(),
+            inside.join("kilo/AGENTS.md")
+        );
+        assert_eq!(kilo.allowlist_root(&home, &ws).unwrap(), home);
+
+        // A relative value is ignored, like a blank one.
+        std::env::set_var("XDG_CONFIG_HOME", "relative/config");
+        assert_eq!(
+            kilo.resolve_dest(&home, &ws).unwrap(),
+            home.join(".config/kilo/AGENTS.md")
+        );
+        std::env::set_var("XDG_CONFIG_HOME", "  ");
+        assert_eq!(
+            kilo.resolve_dest(&home, &ws).unwrap(),
+            home.join(".config/kilo/AGENTS.md")
+        );
+    }
+
+    #[test]
+    fn the_light_folders_are_broad_roots_no_artifact_may_own() {
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        std::env::remove_var("XDG_CONFIG_HOME");
+        let home = dirs_home().expect("home");
+        for rel in [
+            ".copilot",
+            ".pi",
+            ".pi/agent",
+            ".kilo",
+            ".config/kilo",
+            ".claude",
+            ".config/opencode",
+        ] {
+            assert!(
+                reject_broad_artifact_root(&home.join(rel)).is_err(),
+                "{rel}"
+            );
+            let with_slash = format!("{}/", home.join(rel).display());
+            assert!(
+                reject_broad_artifact_root(Path::new(&with_slash)).is_err(),
+                "{rel}/"
+            );
+        }
+        for rel in [
+            ".copilot/copilot-instructions.md",
+            ".pi/agent/AGENTS.md",
+            ".config/kilo/AGENTS.md",
+        ] {
+            assert!(reject_broad_artifact_root(&home.join(rel)).is_ok(), "{rel}");
+        }
+        let xdg = temp_dir("broad-xdg");
+        std::env::set_var("XDG_CONFIG_HOME", &xdg);
+        assert!(reject_broad_artifact_root(&xdg).is_err());
+        assert!(reject_broad_artifact_root(&xdg.join("kilo")).is_err());
+        assert!(reject_broad_artifact_root(&xdg.join("kilo/AGENTS.md")).is_ok());
     }
 }

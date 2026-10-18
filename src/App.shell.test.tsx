@@ -96,6 +96,7 @@ function installBackend(overrides: Partial<AppSettings> = {}): Backend {
           harness: args?.harness,
           status: "synced",
           cli: { status: "found", version: "1.3.0", source: "path", detail: "found" },
+          rules: { status: "synced", path: "~/.pi/agent/AGENTS.md", refinement_lines: 0, user_managed: false, conflict_reason: null, detail: "installed and current" },
           skills: { status: "synced", synced: 17, expected: 17, roots: ["~/.agents/skills"] },
           warnings: [],
           next_action: "No runtime action needed.",

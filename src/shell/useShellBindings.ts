@@ -3,7 +3,7 @@ import type { Binding } from "../keyboard/registry";
 import { useKeymap } from "../keyboard/useKeymap";
 import { isEditableEventTarget } from "../lib/isEditableEventTarget";
 import { useShellState } from "./ShellState";
-import type { ViewDef } from "./views";
+import { MAX_NUMBERED_TABS, type ViewDef } from "./views";
 
 interface ShellBindingsOptions {
   tabs: readonly ViewDef[];
@@ -22,7 +22,7 @@ export function useShellBindings({ tabs, goTo, hasError, onDismissError }: Shell
   const { openCommandLine, openHelp } = useShellState();
 
   const bindings: Binding[] = [
-    ...tabs.slice(0, 9).map((def, index): Binding => ({
+    ...tabs.slice(0, MAX_NUMBERED_TABS).map((def, index): Binding => ({
       id: `shell.view.${index + 1}`,
       keys: String(index + 1),
       title: `Go to ${def.label}`,

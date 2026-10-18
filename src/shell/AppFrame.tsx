@@ -11,7 +11,7 @@ import { StatusBar } from "./StatusBar";
 import { TopLine } from "./TopLine";
 import { useShellBindings } from "./useShellBindings";
 import { useViewFocus } from "./useViewFocus";
-import { viewDef, visibleViews, type AppView } from "./views";
+import { numberedTabCount, viewDef, visibleViews, type AppView } from "./views";
 
 export interface AppFrameProps {
   view: AppView;
@@ -102,7 +102,7 @@ export function AppFrame({
       <div className="view-area" ref={viewAreaRef}>
         {children}
       </div>
-      <StatusBar viewLabel={viewDef(view).tab} right={statusRight} />
+      <StatusBar viewLabel={viewDef(view).tab} tabCount={numberedTabCount(tabs)} right={statusRight} />
       <CommandLine />
       <HelpOverlay />
       {boot && <Boot info={{ harnesses: enabledHarnessIds, ...boot }} run={bootRun} onDone={afterBoot} />}

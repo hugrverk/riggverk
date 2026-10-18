@@ -29,6 +29,9 @@ HARNESS_RULES = {
     "claude": "templates/sync/claude-rules.md",
     "codex": "templates/sync/codex-rules.md",
     "opencode": "templates/sync/opencode-rules.md",
+    "copilot": "templates/sync/copilot-rules.md",
+    "pi": "templates/sync/pi-rules.md",
+    "kilo": "templates/sync/kilo-rules.md",
 }
 INDEX_NAME = "index.json"
 MAX_BYTES = 256 * 1024

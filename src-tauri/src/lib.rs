@@ -42,6 +42,8 @@ mod app_data_migration_contract;
 #[cfg(test)]
 mod identity_contract;
 #[cfg(test)]
+mod light_harness_contract;
+#[cfg(test)]
 mod managed_reconciliation_contract;
 #[cfg(test)]
 mod opencode_model_override_contract;

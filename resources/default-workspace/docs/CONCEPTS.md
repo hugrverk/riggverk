@@ -40,7 +40,7 @@ Config files hold tool settings such as permissions, models, and MCP servers. Th
 
 ## Targets and surfaces
 
-A **surface** is one installable group (for example `claude_rules`, `open_code_config`, `cursor_mcp`, `skills`, `workspace_bundle`). A **target** is a toggle that gates one or more surfaces: rules, agents, and config per harness, and `cursor_setup`. A target that is off is excluded from preview, apply, and status. Fresh settings enable every target except `codex_config`. Skills and the workspace bundle are never gated. Harness enablement (Settings) is separate: a disabled harness is hidden and cannot be written. Codex, OpenCode, Claude, and Cursor are on by default; Copilot, Pi, and Kilo (skills only so far) are off until you turn them on.
+A **surface** is one installable group (for example `claude_rules`, `open_code_config`, `cursor_mcp`, `skills`, `workspace_bundle`). A **target** is a toggle that gates one or more surfaces: rules, agents, and config per harness, and `cursor_setup`. A target that is off is excluded from preview, apply, and status. Fresh settings enable every target except `codex_config` (the light harnesses' `copilot_rules`, `pi_rules`, and `kilo_rules` are on, and act once their harness is). Skills and the workspace bundle are never gated. Harness enablement (Settings) is separate: a disabled harness is hidden and cannot be written. Codex, OpenCode, Claude, and Cursor are on by default; Copilot, Pi, and Kilo (a rules file and the shared skills) are off until you turn them on.
 
 ## Install review and transactions
 

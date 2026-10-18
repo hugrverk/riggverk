@@ -19,6 +19,18 @@
       "appendix": "templates/rules/cursor.md",
       "output": "templates/cursor/user-rules.md",
       "title": "Cursor User Rules"
+    },
+    "copilot": {
+      "appendix": "templates/rules/copilot.md",
+      "output": "templates/sync/copilot-rules.md"
+    },
+    "pi": {
+      "appendix": "templates/rules/pi.md",
+      "output": "templates/sync/pi-rules.md"
+    },
+    "kilo": {
+      "appendix": "templates/rules/kilo.md",
+      "output": "templates/sync/kilo-rules.md"
     }
   }
 }

@@ -6,10 +6,12 @@ The app keeps one list of harnesses in several places that no compiler connects:
   Rust   `HarnessId` (agent_targets.rs): the variants, `ALL`, `DEFAULT_ON`, `as_str`, `is_light`
   Rust   the skill read folders and load flags (skill_roots.rs, skill_loads.rs), the setup surfaces
          (setup_lifecycle.rs) and the target registry (agent_targets.rs `targets()`)
-  JSON   resources/default-workspace/metadata/light-harnesses.json: the light tier's label and CLI
+  JSON   resources/default-workspace/metadata/light-harnesses.json: the light tier's label, CLI and
+         rules file; its rules adapter lives in metadata/rules-adapters.json and
+         scripts/generate-rules-history.py
   TS     `CENTRAL_AGENTS`, `LIGHT_AGENTS`, `INSTALL_AGENTS` (types.ts), the surface, label and tab
-         tables (harnessInstallation.ts), the view definitions (shell/views.ts), the page wiring
-         (App.tsx)
+         tables (harnessInstallation.ts), the rules tables (rulesView.ts), the view definitions
+         (shell/views.ts), the page wiring (App.tsx)
 
 A harness added in one place and forgotten in another shows up as a tab that renders nothing, a
 Settings toggle that cannot be saved or a health row that never loads. This check compares them
@@ -30,9 +32,13 @@ RUST_LIFECYCLE = "src-tauri/src/setup_lifecycle.rs"
 RUST_ROOTS = "src-tauri/src/skill_roots.rs"
 RUST_LOADS = "src-tauri/src/skill_loads.rs"
 RUST_LIB = "src-tauri/src/lib.rs"
-DESCRIPTOR = "resources/default-workspace/metadata/light-harnesses.json"
+WS = "resources/default-workspace"
+DESCRIPTOR = f"{WS}/metadata/light-harnesses.json"
+RULES_ADAPTERS = f"{WS}/metadata/rules-adapters.json"
+RULES_HISTORY = "scripts/generate-rules-history.py"
 TS_TYPES = "src/types.ts"
 TS_INSTALL = "src/lib/harnessInstallation.ts"
+TS_RULES = "src/lib/rulesView.ts"
 TS_VIEWS = "src/shell/views.ts"
 TS_APP = "src/App.tsx"
 TS_HEALTH = "src/hooks/useWorkspaceHealthController.ts"
@@ -44,8 +50,11 @@ INPUTS = (
     RUST_LOADS,
     RUST_LIB,
     DESCRIPTOR,
+    RULES_ADAPTERS,
+    RULES_HISTORY,
     TS_TYPES,
     TS_INSTALL,
+    TS_RULES,
     TS_VIEWS,
     TS_APP,
     TS_HEALTH,
@@ -292,7 +301,10 @@ def check_harness_ids(root: Path) -> list[str]:
         "SetupSurfaceId::ALL",
         [serde_name(name, surface_rename) for name in surfaces_all],
     )
+    # The registry is the literal rows of `targets()` plus one `<harness>_rules` row per light harness,
+    # derived from the descriptor in its order.
     registry = re.findall(r'^\s*id:\s*"(\w+)"', rust_fn_body(targets, "pub fn targets()", RUST_TARGETS), flags=re.MULTILINE)
+    registry += [f"{key}_rules" for key in keys]
     target_union = ts_union(install, "SetupTargetId", TS_INSTALL)
     same_set("SetupTargetId", "SetupTargetId", target_union, "targets()", registry)
     same_sequence(
@@ -303,6 +315,41 @@ def check_harness_ids(root: Path) -> list[str]:
         registry,
     )
     same_set("TARGET_SURFACES", "TARGET_SURFACES", ts_record_keys(install, "TARGET_SURFACES", TS_INSTALL), "SetupTargetId", target_union)
+
+    # The rules file of each light harness: its adapter, the base it carries and the tables that name it.
+    adapters = json.loads(read(RULES_ADAPTERS)).get("harnesses", {})
+    history = read(RULES_HISTORY)
+    rules_union = ts_union(types, "RulesSurfaceId", TS_TYPES)
+    rules_ts = read(TS_RULES)
+    rules_surface = dict(re.findall(r'^  (\w+):\s*"([^"]+)"', _block(rules_ts, "RULES_SURFACE", TS_RULES), flags=re.MULTILINE))
+    rules_files = dict(re.findall(r'^  (\w+):\s*"([^"]+)"', _block(rules_ts, "RULES_FILE_NAME", TS_RULES), flags=re.MULTILINE))
+    rules_harnesses = ts_array(rules_ts, "RULES_HARNESSES", TS_RULES)
+    for key in light_ts:
+        rules = harnesses[key].get("rules")
+        if not isinstance(rules, dict):
+            raise Mismatch(f"{DESCRIPTOR}: {key} has no rules section")
+        adapter, target_rel = rules.get("adapter"), rules.get("target_rel")
+        if not isinstance(adapter, str) or not isinstance(target_rel, str):
+            raise Mismatch(f"{DESCRIPTOR}: {key} rules need an adapter and a target_rel")
+        output = f"templates/sync/{adapter}-rules.md"
+        entry = adapters.get(adapter)
+        if not isinstance(entry, dict) or entry.get("output") != output:
+            raise Mismatch(f"{RULES_ADAPTERS}: adapter {adapter!r} of {key} must produce {output}")
+        if not re.search(rf'"{re.escape(adapter)}":\s*"{re.escape(output)}"', history):
+            raise Mismatch(f"{RULES_HISTORY}: HARNESS_RULES has no {adapter!r} -> {output}")
+        surface = f"{key}_rules"
+        if surface not in rules_union:
+            raise Mismatch(f"RulesSurfaceId has no {surface}")
+        if rules_surface.get(key) != surface:
+            raise Mismatch(f"RULES_SURFACE says {rules_surface.get(key)!r} for {key}, the descriptor needs {surface}")
+        if key not in rules_harnesses:
+            raise Mismatch(f"RULES_HARNESSES has no {key}")
+        file_name = target_rel.rsplit("/", 1)[-1]
+        if rules_files.get(key, "AGENTS.md") != file_name:
+            raise Mismatch(f"rulesFileName says {rules_files.get(key, 'AGENTS.md')!r} for {key}, the descriptor's file is {file_name!r}")
+        surfaces_line = re.search(rf"^  {key}:\s*\[([^\]]*)\]", _block(install, "HARNESS_SURFACES", TS_INSTALL), flags=re.MULTILINE)
+        if not surfaces_line or surface not in re.findall(r'"([^"]+)"', surfaces_line.group(1)):
+            raise Mismatch(f"HARNESS_SURFACES.{key} does not list {surface}")
 
     # Wiring: the page, the health loader and the command exist for every light harness.
     app = read(TS_APP)
@@ -316,7 +363,7 @@ def check_harness_ids(root: Path) -> list[str]:
 
     return [
         f"{len(wire)} harnesses ({len(wire_default)} central, {len(wire_light)} light) agree across Rust, TypeScript and the descriptor",
-        f"{len(folders_wire)} skill folders, {len(flags_wire)} load flags, {len(surfaces_all)} surfaces, {len(registry)} targets",
+        f"{len(folders_wire)} skill folders, {len(flags_wire)} load flags, {len(surfaces_all)} surfaces, {len(registry)} targets, {len(light_ts)} light rules files",
     ]
 
 

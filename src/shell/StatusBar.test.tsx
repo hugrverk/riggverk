@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Binding } from "../keyboard/registry";
 import { useKeymap } from "../keyboard/useKeymap";
 import { renderInFrame } from "../test/renderWithShell";
+import { CENTRAL_AGENTS, INSTALL_AGENTS } from "../types";
 import { Pane } from "../ui/Pane";
 import { PaneList } from "../ui/PaneList";
 import { useConfirmMode, useStatusContext, useShellState } from "./ShellState";
@@ -152,6 +153,28 @@ describe("StatusBar", () => {
     fireEvent.click(apply);
     expect(run).not.toHaveBeenCalled();
     expect(within(status()).queryByRole("button", { name: /hidden/ })).toBeNull();
+  });
+
+  it("reads the tab hint from the number of visible tabs, up to the nine the digit keys reach", () => {
+    const tabHint = () => status().querySelector(".hints > span")!.textContent;
+    // Workspace, four harnesses, Library, Settings.
+    renderInFrame(<View />);
+    expect(tabHint()).toBe("1–7 tab");
+    cleanup();
+    // Workspace, Codex, Cursor, Library, Settings.
+    renderInFrame(<View />, { enabledHarnessIds: ["codex", "cursor"] });
+    expect(tabHint()).toBe("1–5 tab");
+    cleanup();
+    renderInFrame(<View />, { enabledHarnessIds: [] });
+    expect(tabHint()).toBe("1–3 tab");
+    cleanup();
+    // Seven harnesses make ten tabs: Settings loses its digit, so the hint stops at 9.
+    renderInFrame(<View />, { enabledHarnessIds: [...INSTALL_AGENTS] });
+    expect(tabHint()).toBe("1–9 tab");
+    cleanup();
+    // One light harness on top of the four central ones: eight tabs.
+    renderInFrame(<View />, { enabledHarnessIds: [...CENTRAL_AGENTS, "kilo"] });
+    expect(tabHint()).toBe("1–8 tab");
   });
 
   it("offers the command-line and help hints in NORMAL mode and row hints while a list has focus", () => {

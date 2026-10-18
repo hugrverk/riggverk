@@ -332,6 +332,12 @@ pub enum RulesConflict {
     LegacyDiverged,
     /// Marker lines are duplicated, unpaired, or out of order.
     MalformedMarkers,
+    /// Another file in the same folder takes precedence over the rules file, so the block would
+    /// never load (Pi: `AGENTS.override.md`).
+    MaskedByOverride,
+    /// The harness reads one context file per folder, there is another one and no rules file yet:
+    /// creating the rules file would hide the user's file (Pi: `CLAUDE.md`).
+    PeerContextFile,
 }
 
 impl RulesConflict {
@@ -340,6 +346,10 @@ impl RulesConflict {
             Self::BaseBlockEdited => "the managed base block was edited",
             Self::LegacyDiverged => "the file differs from every base Riggverk shipped",
             Self::MalformedMarkers => "the base block markers are malformed",
+            Self::MaskedByOverride => "an override file in the same folder masks this file",
+            Self::PeerContextFile => {
+                "another context file in the same folder would be hidden by a new one"
+            }
         }
     }
 }

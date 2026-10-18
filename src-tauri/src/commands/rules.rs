@@ -14,6 +14,7 @@ use super::setup::{apply_planned_artifacts, SetupResult};
 use super::workspace::setup_workspace_target_path;
 use crate::apply_progress::ProgressReporter;
 use crate::artifact_registry::ArtifactId;
+use crate::light_harness::LightHarnessId;
 use crate::rules_block::{self, RulesConflict, RulesPlan};
 use crate::rules_convert::{self, ConversionOrigin};
 use crate::rules_diff;
@@ -37,6 +38,13 @@ fn rules_target(surface: &str) -> Result<(SetupSurfaceId, ArtifactId), String> {
         SetupSurfaceId::ClaudeRules => ArtifactId::ClaudeRules,
         SetupSurfaceId::CodexRules => ArtifactId::CodexRules,
         SetupSurfaceId::OpenCodeRules => ArtifactId::OpenCodeRules,
+        SetupSurfaceId::CopilotRules | SetupSurfaceId::PiRules | SetupSurfaceId::KiloRules => {
+            surface_id
+                .harness()
+                .and_then(LightHarnessId::new)
+                .map(ArtifactId::HarnessRules)
+                .ok_or_else(|| format!("{surface} is not a rules surface"))?
+        }
         _ => return Err(format!("{surface} is not a rules surface")),
     };
     let settings = crate::settings::load();
@@ -49,6 +57,9 @@ fn rules_target(surface: &str) -> Result<(SetupSurfaceId, ArtifactId), String> {
 fn file_label(artifact: &ArtifactId) -> &'static str {
     match artifact {
         ArtifactId::ClaudeRules => "CLAUDE.md",
+        ArtifactId::HarnessRules(harness) => harness
+            .rules()
+            .map_or("AGENTS.md", |rules| rules.file_label.as_str()),
         _ => "AGENTS.md",
     }
 }
@@ -372,6 +383,12 @@ fn plan_conversion(
         let reason = match context.assessment.plan {
             RulesPlan::Conflict(RulesConflict::MalformedMarkers) => {
                 "the base block markers are malformed; fix or remove them by hand first".to_string()
+            }
+            RulesPlan::Conflict(RulesConflict::MaskedByOverride) => {
+                "another file in the same folder masks this one, so the harness never reads it; remove or rename that file first".to_string()
+            }
+            RulesPlan::Conflict(RulesConflict::PeerContextFile) => {
+                "the harness reads another context file in this folder; add the base to that file by hand or move it first".to_string()
             }
             _ => {
                 "this file is managed by the base block already; use the regular update".to_string()

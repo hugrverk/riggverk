@@ -733,6 +733,16 @@ fn apply_rules_artifact(
 ) -> Result<(), String> {
     let root = artifact.allowlist_root(home, workspace_root)?;
     if let Some(rewrite) = rewrite {
+        // A file beside the rules file can keep its harness from reading it (Pi); it may have
+        // appeared since the preview, which only compares the rules file itself.
+        if let crate::artifact_registry::ArtifactId::HarnessRules(harness) = artifact {
+            if let Some(conflict) = harness.rules().and_then(|rules| rules.preflight(dest)) {
+                return Err(format!(
+                    "refusing to change rules file: {}",
+                    conflict.message()
+                ));
+            }
+        }
         // An explicit conversion writes exactly the previewed content, and only
         // over the file the preview was computed from.
         let installed =
@@ -748,6 +758,17 @@ fn apply_rules_artifact(
         .map_err(|e| format!("write rules file {}: {e}", dest.display()));
     }
     setup_transaction::ensure_rules_apply_allowed(artifact, workspace_root, home)?;
+    // A harness that keeps its folder owner-only (Pi makes its agent folder 0700) gets the
+    // folders the app creates for the file the same way.
+    if let crate::artifact_registry::ArtifactId::HarnessRules(harness) = artifact {
+        if let (true, Some(folder)) = (
+            harness.rules().is_some_and(|rules| rules.private_dir),
+            dest.parent(),
+        ) {
+            crate::safe_filesystem::create_private_directory_all_no_symlinks(folder, &root)
+                .map_err(|e| format!("create {}: {e}", folder.display()))?;
+        }
+    }
     let source_text = fs::read_to_string(source)
         .map_err(|e| format!("read rules source {}: {e}", source.display()))?;
     let rendered = if dest.exists() {
@@ -1907,17 +1928,27 @@ pub fn rollback_transaction(
                 message: format!("Rollback preflight failed: symlinked destination: {e}"),
             };
         }
-        let allowlist = if matches!(
-            op.artifact,
-            crate::artifact_registry::ArtifactId::WorkspaceFile(_)
-        ) {
-            &ws_root
-        } else {
-            &home
+        // The folder the artifact is written inside: the workspace, a customised `CODEX_HOME` or
+        // `XDG_CONFIG_HOME` outside home, else home.
+        let allowlist = match op.artifact.allowlist_root(&home, &ws_root) {
+            Ok(root) => root,
+            Err(e) => {
+                return SetupResult {
+                    success: false,
+                    transaction_id: transaction_id.to_string(),
+                    applied: vec![],
+                    failed: vec![e],
+                    rolled_back: vec![],
+                    manual_steps: vec![],
+                    message: "Rollback preflight failed: cannot resolve destination".to_string(),
+                };
+            }
         };
-        if let Err(e) =
-            setup_transaction::reject_symlink_parent_chain(&dest, allowlist, "rollback destination")
-        {
+        if let Err(e) = setup_transaction::reject_symlink_parent_chain(
+            &dest,
+            &allowlist,
+            "rollback destination",
+        ) {
             return SetupResult {
                 success: false,
                 transaction_id: transaction_id.to_string(),
@@ -2167,8 +2198,35 @@ fn plan_surfaces(
     };
     let mut plan = crate::setup_lifecycle::plan_setup(&request, &states);
     attach_skill_details(&mut plan, ws_root, home);
+    attach_rules_details(&mut plan, home);
     attach_plan_preview(&mut plan, ws_root, home)?;
     Ok(plan)
+}
+
+/// A new rules file can shadow another file its harness reads (Kilo loads one global rules file,
+/// this one first): the review says so beside the file it creates.
+fn attach_rules_details(plan: &mut SetupPlan, home: &Path) {
+    for op in plan
+        .operations
+        .iter_mut()
+        .filter(|op| op.kind == OperationKind::Create)
+    {
+        let Some(harness) = op
+            .surface
+            .harness()
+            .and_then(crate::light_harness::descriptor)
+            .filter(|harness| harness.rules.surface == op.surface)
+        else {
+            continue;
+        };
+        if let Some(shadowed) = &harness.rules.shadows {
+            op.details.push(format!(
+                "+ {} ({} stops reading {shadowed} while this file exists)",
+                harness.rules.display_path(home),
+                harness.label
+            ));
+        }
+    }
 }
 
 /// Fills the review lines of the skills surface: what is created, updated and removed in each

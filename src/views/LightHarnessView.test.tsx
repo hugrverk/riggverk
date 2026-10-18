@@ -10,7 +10,15 @@ import {
   STATUS_DATA,
   surfaceStatus,
 } from "../test/pageFixtures";
-import { LIGHT_AGENTS, type EffectiveSkillLoads, type LightAgent, type LightRuntimeHealth } from "../types";
+import {
+  LIGHT_AGENTS,
+  type AgentTargetMeta,
+  type EffectiveSkillLoads,
+  type LightAgent,
+  type LightRuntimeHealth,
+  type RulesStatus,
+  type SetupSurfaceId,
+} from "../types";
 import { LightHarnessView } from "./LightHarnessView";
 import type { HarnessViewProps } from "./pageTypes";
 
@@ -22,11 +30,21 @@ afterEach(() => {
 
 const LABELS: Record<LightAgent, string> = { copilot: "Copilot", pi: "Pi", kilo: "Kilo" };
 
+const RULES_TARGETS: AgentTargetMeta[] = [
+  { id: "copilot_rules", label: "copilot rules", harness: "copilot", kind: "rules", target_rel: ".copilot/copilot-instructions.md", source_rel: "templates/sync/copilot-rules.md" },
+  { id: "pi_rules", label: "pi rules", harness: "pi", kind: "rules", target_rel: ".pi/agent/AGENTS.md", source_rel: "templates/sync/pi-rules.md" },
+  { id: "kilo_rules", label: "kilo rules", harness: "kilo", kind: "rules", target_rel: ".config/kilo/AGENTS.md", source_rel: "templates/sync/kilo-rules.md" },
+];
+
+const rulesSurface = (harness: LightAgent) => `${harness}_rules` as SetupSurfaceId;
+const absentRules: RulesStatus = { layout: "absent", refinement_lines: 0, user_managed: false };
+
 function health(overrides: Partial<LightRuntimeHealth> = {}): LightRuntimeHealth {
   return {
     harness: "pi",
     status: "synced",
     cli: { status: "found", version: "1.3.0", source: "path", detail: "Pi 1.3.0" },
+    rules: { status: "synced", path: "~/.pi/agent/AGENTS.md", refinement_lines: 0, user_managed: false, conflict_reason: null, detail: "installed and current" },
     skills: { status: "synced", synced: 17, expected: 17, roots: ["~/.agents/skills"] },
     warnings: [],
     next_action: "No runtime action needed.",
@@ -37,12 +55,16 @@ function health(overrides: Partial<LightRuntimeHealth> = {}): LightRuntimeHealth
 function props(harness: LightAgent, overrides: Partial<HarnessViewProps> = {}): HarnessViewProps {
   return {
     appSettings: settingsOf({ enabled_harness_ids: [harness] }),
-    agentTargets: [],
+    agentTargets: RULES_TARGETS,
     settingsSaveStatus: "saved",
     onToggleTarget: vi.fn(),
     skillLoads: skillLoadsOf(),
     overview: overviewOf({
-      [harness]: installationStatus("update_available", [surfaceStatus("skills", "update_available")], { update_count: 1 }),
+      [harness]: installationStatus(
+        "update_available",
+        [{ ...surfaceStatus(rulesSurface(harness), "not_installed", "not installed"), rules: absentRules }, surfaceStatus("skills", "update_available")],
+        { create_count: 1, update_count: 1 },
+      ),
     }),
     install: installScreenOf(),
     backupRoot: "/tmp/backups",
@@ -80,26 +102,83 @@ function facts(root: HTMLElement): Record<string, string> {
 }
 
 describe("LightHarnessView", () => {
-  it.each(LIGHT_AGENTS)("renders the %s page with the skills surface as its only row, and no target toggle", harness => {
+  it.each(LIGHT_AGENTS)("renders the %s page with a rules row that has a target toggle and a skills row that has none", harness => {
     renderLight(harness, null);
     const label = LABELS[harness];
     const rows = within(screen.getByRole("listbox", { name: `${label} surfaces` })).getAllByRole("option");
-    expect(rows).toHaveLength(1);
-    expect(rows[0]!.textContent).toContain("skills");
-    expect(rows[0]!.textContent).not.toContain("[x]");
-    expect(rows[0]!.textContent).not.toContain("[ ]");
+    expect(rows).toHaveLength(2);
+    expect(rows[0]!.textContent).toContain("rules");
+    expect(rows[0]!.textContent).toContain("[x]");
+    expect(rows[0]!.textContent).toContain(RULES_TARGETS.find(target => target.harness === harness)!.target_rel);
+    expect(rows[1]!.textContent).toContain("skills");
+    expect(rows[1]!.textContent).not.toContain("[x]");
+    expect(rows[1]!.textContent).not.toContain("[ ]");
     expect(screen.getByRole("region", { name: label })).toBeTruthy();
   });
 
-  it("shows the CLI version and the skills of a synced harness, with no rules and no MCP row", () => {
+  it("shows the CLI version, the rules file and the skills of a synced harness, with no MCP row", () => {
     renderLight("pi", health());
     const pi = detail("Pi");
     expect(pi.textContent).toContain("runtime · synced");
-    expect(facts(pi)).toMatchObject({ cli: "1.3.0", skills: "synced · 17/17" });
-    expect(facts(pi)).not.toHaveProperty("rules");
+    expect(facts(pi)).toMatchObject({ cli: "1.3.0", rules: "synced", skills: "synced · 17/17" });
     expect(facts(pi)).not.toHaveProperty("mcp");
     // Nothing to do while synced.
     expect(facts(pi)).not.toHaveProperty("next");
+  });
+
+  it("puts a stale, conflicting or switched-off rules file into the runtime rows and the verdict", () => {
+    renderLight("kilo", health({
+      harness: "kilo",
+      status: "stale",
+      rules: { status: "stale", path: "~/.config/kilo/AGENTS.md", refinement_lines: 5, user_managed: false, conflict_reason: null, detail: "base update available; refinements: 5 lines preserved" },
+      next_action: "Run Install or Update on the Kilo page.",
+    }));
+    const kilo = detail("Kilo");
+    expect(kilo.textContent).toContain("runtime · stale");
+    expect(facts(kilo)).toMatchObject({ rules: "stale · base update available; refinements: 5 lines preserved", next: "run Install or Update on the Kilo page" });
+    cleanup();
+
+    renderLight("pi", health({
+      status: "diverged",
+      rules: { status: "diverged", path: "~/.pi/agent/AGENTS.md", refinement_lines: 0, user_managed: false, conflict_reason: "masked_by_override", detail: "an override file in the same folder masks this file, left as is" },
+      warnings: ["AGENTS.override.md in ~/.pi/agent replaces AGENTS.md, so Pi never reads the managed block. Remove or rename it."],
+      next_action: "Resolve the rules file conflict on the Pi page.",
+    }));
+    const pi = detail("Pi");
+    expect(pi.textContent).toContain("runtime · diverged");
+    expect(facts(pi).rules).toContain("masks this file");
+    expect(facts(pi).warnings).toContain("AGENTS.override.md");
+    cleanup();
+
+    renderLight("copilot", health({
+      harness: "copilot",
+      rules: { status: "off", path: "~/.copilot/copilot-instructions.md", refinement_lines: 0, user_managed: false, conflict_reason: null, detail: "switched off in Settings" },
+    }));
+    expect(facts(detail("Copilot")).rules).toBe("off · target switched off in Settings");
+  });
+
+  it("shows why a masked or hidden rules file is left alone, and offers no conversion for it", () => {
+    const masked: RulesStatus = { layout: "block", refinement_lines: 0, user_managed: false, conflict_reason: "masked_by_override" };
+    renderLight("pi", health(), {
+      overview: overviewOf({
+        pi: installationStatus("conflict", [{ ...surfaceStatus("pi_rules", "conflict", "masked"), rules: masked }, surfaceStatus("skills", "current")], { conflict_count: 1 }),
+      }),
+    });
+    const pi = detail("Pi");
+    expect(facts(pi)).toMatchObject({
+      state: "masked by another file: left as is",
+      why: "another file in the folder masks this one, so the harness never reads it",
+    });
+    expect(facts(pi).fix).toContain("remove or rename the other file");
+    cleanup();
+
+    const peer: RulesStatus = { layout: "absent", refinement_lines: 0, user_managed: false, conflict_reason: "peer_context_file" };
+    renderLight("pi", health(), {
+      overview: overviewOf({
+        pi: installationStatus("conflict", [{ ...surfaceStatus("pi_rules", "conflict", "hidden"), rules: peer }, surfaceStatus("skills", "current")], { conflict_count: 1 }),
+      }),
+    });
+    expect(facts(detail("Pi")).state).toBe("another context file would be hidden: nothing written");
   });
 
   it("says where a CLI was found when only nvm has it, and why it is missing otherwise", () => {
@@ -162,6 +241,10 @@ describe("LightHarnessView", () => {
       foreign_duplicates: [],
     } satisfies EffectiveSkillLoads);
     renderLight("kilo", health({ harness: "kilo" }), { skillLoads });
+    // The cursor starts on the rules row; the skills row is the second.
+    const surfaces = screen.getByRole("listbox", { name: "Kilo surfaces" });
+    surfaces.focus();
+    fireEvent.keyDown(surfaces, { key: "j" });
     expect(facts(detail("Kilo")).reads).toBe("~/.kilo/skills (missing), ~/.agents/skills, ~/.claude/skills");
   });
 

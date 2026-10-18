@@ -54,7 +54,9 @@ function unavailable(action: RulesAction, model: RulesModel | null, label: strin
     case "diff":
       return model.diffDisabled || "no rules file is installed";
     case "convert":
-      return model.kind === "malformed" ? "the markers are malformed; fix them by hand first" : "the file is not a conflict; there is nothing to convert";
+      if (model.kind === "malformed") return "the markers are malformed; fix them by hand first";
+      if (model.kind === "blocked") return "another file in the folder keeps the harness from reading this one; sort that out first";
+      return "the file is not a conflict; there is nothing to convert";
     case "leave":
       return model.user_managed ? "already left as is (:rules manage hands it back)" : "the file is not a conflict; there is nothing to leave as is";
     case "manage":

@@ -102,6 +102,9 @@ const TARGETS: AgentTargetMeta[] = [
   { id: "opencode_config", label: "opencode config", harness: "opencode", kind: "config", target_rel: ".config/opencode/opencode.json", source_rel: "templates/opencode.json" },
   { id: "codex_config", label: "codex config", harness: "codex", kind: "config", target_rel: ".codex/config.toml", source_rel: "templates/codex/config.toml" },
   { id: "cursor_setup", label: "cursor global agents", harness: "cursor", kind: "agents", target_rel: ".cursor/agents", source_rel: "templates/cursor/agents" },
+  { id: "copilot_rules", label: "copilot rules", harness: "copilot", kind: "rules", target_rel: ".copilot/copilot-instructions.md", source_rel: "templates/sync/copilot-rules.md" },
+  { id: "pi_rules", label: "pi rules", harness: "pi", kind: "rules", target_rel: ".pi/agent/AGENTS.md", source_rel: "templates/sync/pi-rules.md" },
+  { id: "kilo_rules", label: "kilo rules", harness: "kilo", kind: "rules", target_rel: ".config/kilo/AGENTS.md", source_rel: "templates/sync/kilo-rules.md" },
 ];
 
 let settings: AppSettings = {
@@ -132,6 +135,9 @@ const SURFACE_LABELS: Record<SetupSurfaceId, string> = {
   skills: "Skills",
   cursor_agents: "Cursor agents",
   cursor_mcp: "Cursor MCP",
+  copilot_rules: "Copilot rules",
+  pi_rules: "Pi rules",
+  kilo_rules: "Kilo rules",
   workspace_bundle: "Workspace bundle",
 };
 
@@ -147,6 +153,9 @@ const SURFACE_PATHS: Record<SetupSurfaceId, string> = {
   skills: "~/.claude/skills and ~/.agents/skills",
   cursor_agents: "~/.cursor/agents",
   cursor_mcp: "~/.cursor/mcp.json",
+  copilot_rules: "~/.copilot/copilot-instructions.md",
+  pi_rules: "~/.pi/agent/AGENTS.md",
+  kilo_rules: "~/.config/kilo/AGENTS.md",
   workspace_bundle: "~/.config/agent-workspace",
 };
 
@@ -187,7 +196,7 @@ let transactionSeq = 0;
 
 /* ---- rules files (managed base block) ---- */
 
-const RULES_SURFACES: RulesSurfaceId[] = ["claude_rules", "codex_rules", "open_code_rules"];
+const RULES_SURFACES: RulesSurfaceId[] = ["claude_rules", "codex_rules", "open_code_rules", "copilot_rules", "pi_rules", "kilo_rules"];
 
 function isRulesSurface(surface: SetupSurfaceId): surface is RulesSurfaceId {
   return (RULES_SURFACES as SetupSurfaceId[]).includes(surface);
@@ -216,6 +225,10 @@ const RULES_VARIANTS: Record<string, RulesVariant> = {
   update: { state: "update_available", file: { layout: "block", refinement_lines: 14, user_managed: false } },
   current: { state: "current", file: { layout: "block", refinement_lines: 3, user_managed: false } },
   absent: { state: "not_installed", file: { layout: "absent", refinement_lines: 0, user_managed: false } },
+  /** Pi: `AGENTS.override.md` next to the rules file. */
+  masked: { state: "conflict", file: { layout: "block", refinement_lines: 0, conflict_reason: "masked_by_override", user_managed: false } },
+  /** Pi: a `CLAUDE.md` and no `AGENTS.md`. */
+  peer: { state: "conflict", file: { layout: "absent", refinement_lines: 0, conflict_reason: "peer_context_file", user_managed: false } },
 };
 
 const rulesFiles = new Map<RulesSurfaceId, RulesStatus>();
@@ -234,6 +247,9 @@ function seedRules() {
       set("claude_rules", requested ?? RULES_VARIANTS.edited!);
       set("codex_rules", RULES_VARIANTS.update!);
       set("open_code_rules", RULES_VARIANTS.legacy!);
+      set("copilot_rules", RULES_VARIANTS.absent!);
+      set("pi_rules", RULES_VARIANTS.masked!);
+      set("kilo_rules", RULES_VARIANTS.update!);
       break;
     case "empty":
       for (const surface of RULES_SURFACES) set(surface, RULES_VARIANTS.current!);
@@ -242,6 +258,8 @@ function seedRules() {
       set("claude_rules", RULES_VARIANTS.update!);
       set("codex_rules", RULES_VARIANTS.current!);
       set("open_code_rules", { state: "update_available", file: { layout: "block", refinement_lines: 0, user_managed: false } });
+      // The light harnesses are off until Settings turns them on; once on, nothing is installed yet.
+      for (const surface of ["copilot_rules", "pi_rules", "kilo_rules"] as const) set(surface, RULES_VARIANTS.absent!);
       break;
   }
 }
@@ -257,6 +275,8 @@ function rulesDetail(file: RulesStatus, state: InstallationState): string {
     case "base_block_edited": return `base block was edited, left as is${kept}`;
     case "legacy_diverged": return "file differs from every shipped base, left as is";
     case "malformed_markers": return `base block markers are malformed (${MALFORMED_TEXT[file.malformed_reason ?? "missing_end"]}), left as is`;
+    case "masked_by_override": return "an override file in the same folder masks this file, left as is";
+    case "peer_context_file": return "another context file in this folder would be hidden by a new one, nothing written";
   }
   if (state === "update_available") return `base update available${kept}`;
   if (state === "not_installed") return "not installed";
@@ -374,6 +394,8 @@ function mockRulesConversion(surface: RulesSurfaceId): RulesConversionPreview {
   });
   if (!file || file.layout === "absent") return refused("no rules file is installed");
   if (file.layout === "malformed") return refused("the base block markers are malformed; fix or remove them by hand first");
+  if (file.conflict_reason === "masked_by_override") return refused("another file in the same folder masks this one, so the harness never reads it; remove or rename that file first");
+  if (file.conflict_reason === "peer_context_file") return refused("the harness reads another context file in this folder; add the base to that file by hand or move it first");
   if (!file || !convertible(file)) return refused("this file is managed by the base block already; use the regular update");
   const edited = file.layout === "block";
   rulesPreviewSeq += 1;
@@ -661,7 +683,7 @@ function diagnostics(): WorkspaceDiagnostics {
       { kind: "file", path: `${WORKSPACE}/metadata/manifest.json`, exists: valid },
     ],
     enabled_rule_targets: TARGETS.filter(t => t.kind === "rules" && enabled.has(t.id)).length,
-    total_rule_targets: 3,
+    total_rule_targets: 6,
     enabled_config_targets: TARGETS.filter(t => t.kind === "config" && enabled.has(t.id)).length,
     total_config_targets: 2,
     backup_root: BACKUP_ROOT,
@@ -804,20 +826,48 @@ function lightHealth(harness: LightAgent): LightRuntimeHealth {
     : state === "current" ? "synced" : state === "update_available" ? "partial" : state === "conflict" ? "diverged" : "missing";
   const synced = status === "synced" ? expected : status === "partial" ? Math.max(expected - 3, 0) : 0;
   const label = harness === "copilot" ? "Copilot" : harness === "pi" ? "Pi" : "Kilo";
+  const rulesSurface = `${harness}_rules` as RulesSurfaceId;
+  const rulesState = surfaceStates.get(rulesSurface) ?? "not_installed";
+  const rulesFile = rulesFiles.get(rulesSurface);
+  const rulesOn = settings.enabled_target_ids.includes(rulesSurface);
+  const rulesStatus = !rulesOn
+    ? "off"
+    : rulesState === "current" ? "synced" : rulesState === "update_available" ? "stale" : rulesState === "conflict" ? "diverged" : "missing";
+  const rules: LightRuntimeHealth["rules"] = {
+    status: rulesStatus,
+    path: SURFACE_PATHS[rulesSurface],
+    refinement_lines: rulesFile?.refinement_lines ?? 0,
+    user_managed: rulesFile?.user_managed ?? false,
+    conflict_reason: rulesFile?.conflict_reason ?? null,
+    detail: rulesFile ? rulesDetail(rulesFile, rulesState) : "not installed",
+  };
+  const rulesWarnings =
+    rulesStatus === "off"
+      ? []
+      : harness === "kilo"
+        ? [`Kilo loads one global rules file and ${rules.path} comes first: while it exists Kilo does not read ~/.claude/CLAUDE.md. Move what Kilo should keep from there below the managed block.`]
+        : harness === "pi" && rulesFile?.conflict_reason === "masked_by_override"
+          ? ["AGENTS.override.md in ~/.pi/agent replaces AGENTS.md, so Pi never reads the managed block. Remove or rename it."]
+          : harness === "copilot" && settings.enabled_harness_ids.includes("claude") && settings.enabled_target_ids.includes("claude_rules")
+            ? ["VS Code can load both ~/.claude/CLAUDE.md and ~/.copilot/copilot-instructions.md, so the shared base may appear twice there. The Copilot CLI reads only ~/.copilot."]
+            : [];
   const cli: LightRuntimeHealth["cli"] =
     harness === "copilot"
       ? { status: "found", version: "1.0.98", source: "path", detail: "Copilot 1.0.98" }
       : harness === "pi"
         ? { status: "missing", version: null, source: null, detail: "pi is not on PATH; Riggverk does not read your shell profile, so start it from a shell where pi runs" }
         : { status: "found", version: "7.8.12", source: "nvm", detail: "Kilo 7.8.12 (found in nvm v24.14.0, not on PATH)" };
+  const overall = status === "synced" && rulesStatus !== "off" ? rulesStatus : status;
   return {
     harness,
-    status,
+    status: overall,
     cli,
+    rules,
     skills: { status, synced, expected, roots: unserved ? [] : harness === "kilo" ? ["~/.claude/skills", "~/.agents/skills"] : ["~/.agents/skills"] },
-    warnings: unserved
-      ? [`No skills are installed for ${label}: it reads ~/.agents/skills, and a customised CODEX_HOME keeps Codex out of that folder.`]
-      : [],
+    warnings: [
+      ...(unserved ? [`No skills are installed for ${label}: it reads ~/.agents/skills, and a customised CODEX_HOME keeps Codex out of that folder.`] : []),
+      ...rulesWarnings,
+    ],
     next_action: unserved
       ? `Disable Codex or unset CODEX_HOME to install skills for ${label}.`
       : status === "synced" ? "No runtime action needed." : `Run Install or Update on the ${label} page.`,

@@ -13,6 +13,11 @@ Installed rule targets:
 | Codex | `$CODEX_HOME/AGENTS.md` (default `~/.codex/AGENTS.md`) |
 | OpenCode | `~/.config/opencode/AGENTS.md` |
 | Claude Code | `~/.claude/CLAUDE.md` |
+| GitHub Copilot | `~/.copilot/copilot-instructions.md` |
+| Pi | `~/.pi/agent/AGENTS.md` |
+| Kilo Code | `$XDG_CONFIG_HOME/kilo/AGENTS.md` (default `~/.config/kilo/AGENTS.md`) |
+
+Copilot, Pi, and Kilo are the opt-in light tier: their rules targets (`copilot_rules`, `pi_rules`, `kilo_rules`) act once the harness is enabled in Settings.
 
 Cursor User Rules are version-controlled separately in `templates/cursor/user-rules.md` and copied manually into Cursor Settings. Riggverk does not write undocumented Cursor rule state.
 
@@ -37,10 +42,18 @@ Everything before or after the block is yours and is kept byte-for-byte. Put you
 | no markers, equals an earlier base or empty | wraps it in the block after a full backup |
 | no markers, anything else | conflict `legacy_diverged`; file untouched |
 | duplicate, unpaired, or reordered markers; not UTF-8; over 4 MB | conflict `malformed_markers`; nothing written |
+| Pi: `AGENTS.override.md` next to the file | conflict `masked_by_override`; left as is |
+| Pi: no `AGENTS.md`, but `CLAUDE.md` in the same folder | conflict `peer_context_file`; nothing created |
 
 Resolving a conflict on the harness page: `d` shows the diff, `v` (**Convert**) writes the current base as the block and moves the sections you changed (or added) below the END marker, previewed and backed up, and `m` (**Leave as is**) records that you manage the file; the app then reports "base updates available, you manage this file" and does not write it until you convert. `:rules` does the same from the command line. A rollback of a block update restores only the previous block, so text you added afterwards stays.
 
 Codex reads `AGENTS.override.md` instead of `AGENTS.md` when it is non-empty, which silently drops the base. The Codex runtime pane warns about it.
+
+Pi loads one context file per folder: `AGENTS.override.md`, else `AGENTS.md`, else `CLAUDE.md`. An `AGENTS.override.md` hides the block, and a new `AGENTS.md` would hide your `CLAUDE.md`, so the app refuses both and leaves the other file alone; remove, rename, or merge it first. Convert and Leave as is are not offered for these two. The folders the app creates for Pi's file are owner-only.
+
+Kilo loads one global rules file: its own `AGENTS.md`, else `~/.claude/CLAUDE.md`. Once the managed file exists, Kilo stops reading `~/.claude/CLAUDE.md`, so anything you want Kilo to keep from there belongs below the END marker. The review of a new Kilo file and the Kilo page say so.
+
+VS Code can load both `~/.claude/CLAUDE.md` and `~/.copilot/copilot-instructions.md` in Copilot sessions, so with Claude's rules managed the shared base may appear twice there. The Copilot CLI reads only `~/.copilot`.
 
 ## Shared semantic agent bodies
 

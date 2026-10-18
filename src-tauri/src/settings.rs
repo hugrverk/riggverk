@@ -50,8 +50,16 @@ pub struct AppSettings {
 }
 
 /// Bump when the default set of enabled targets changes in a way that existing
-/// settings files must be migrated for.
-pub const TARGET_DEFAULTS_VERSION: u32 = 1;
+/// settings files must be migrated for, and add the new targets to [`TARGETS_ADDED_IN`].
+pub const TARGET_DEFAULTS_VERSION: u32 = 2;
+
+/// The targets each defaults version added, and nothing else. A file written under an older
+/// version gains the targets of the later versions and keeps every toggle it has: re-applying the
+/// whole default set would switch back on what the user turned off.
+///
+/// Version 1 is the first to gate Install by target (`migrate_target_defaults` handles the files
+/// below it by moving them to the full default set); version 2 added the light tier's rules.
+const TARGETS_ADDED_IN: &[(u32, &[&str])] = &[(2, &["copilot_rules", "pi_rules", "kilo_rules"])];
 
 impl Default for AppSettings {
     fn default() -> Self {
@@ -276,13 +284,33 @@ fn managed_target_ids(settings: &AppSettings) -> Vec<String> {
 /// surface of an enabled harness regardless of `enabled_target_ids`. Move such
 /// files to the current defaults, and keep every target the user had enabled or
 /// whose surface already holds managed records so nothing is silently dropped.
+///
+/// A file already gated by target (version 1 or later) only gains the targets that the versions
+/// after it added, when they are on by default.
 fn migrate_target_defaults(settings: &mut AppSettings) -> bool {
     if settings.target_defaults_version >= TARGET_DEFAULTS_VERSION {
         return false;
     }
-    let mut ids = agent_targets::default_enabled_ids();
-    ids.extend(settings.enabled_target_ids.iter().cloned());
-    ids.extend(managed_target_ids(settings));
+    let ids = if settings.target_defaults_version == 0 {
+        let mut ids = agent_targets::default_enabled_ids();
+        ids.extend(settings.enabled_target_ids.iter().cloned());
+        ids.extend(managed_target_ids(settings));
+        ids
+    } else {
+        let defaults = agent_targets::default_enabled_ids();
+        let mut ids = settings.enabled_target_ids.clone();
+        for (version, added) in TARGETS_ADDED_IN {
+            if *version > settings.target_defaults_version {
+                ids.extend(
+                    added
+                        .iter()
+                        .map(|id| id.to_string())
+                        .filter(|id| defaults.contains(id)),
+                );
+            }
+        }
+        ids
+    };
     settings.enabled_target_ids = agent_targets::normalize_enabled_ids(&ids);
     settings.target_defaults_version = TARGET_DEFAULTS_VERSION;
     true
@@ -541,9 +569,10 @@ fn save_inner(settings: &mut AppSettings) -> Result<AppSettings, String> {
 mod tests {
     use super::{
         effective_enabled_target_ids, enabled_setup_surfaces, get_settings_snapshot,
-        get_settings_snapshot_with_mutate, load, mutate_settings, normalize, normalize_for_save,
-        save_with_revision_check, validate_hex_color, AppSettings, MutationOutcome,
-        SETTINGS_CONFLICT_ERROR, SETTINGS_CORRUPT_RECOVERY_MESSAGE, TARGET_DEFAULTS_VERSION,
+        get_settings_snapshot_with_mutate, harness_enabled, load, mutate_settings, normalize,
+        normalize_for_save, save_with_revision_check, validate_hex_color, AppSettings,
+        MutationOutcome, SETTINGS_CONFLICT_ERROR, SETTINGS_CORRUPT_RECOVERY_MESSAGE,
+        TARGETS_ADDED_IN, TARGET_DEFAULTS_VERSION,
     };
     use crate::agent_targets;
     use crate::path_utils::is_legacy_default_workspace_path;
@@ -749,7 +778,7 @@ mod tests {
     }
 
     #[test]
-    fn a_light_harness_gates_nothing_but_the_shared_skills_surface() {
+    fn a_light_harness_gates_the_shared_skills_surface_and_its_own_rules_target() {
         use crate::setup_lifecycle::SetupSurfaceId;
         let mut settings = AppSettings {
             enabled_harness_ids: vec![agent_targets::HarnessId::Pi],
@@ -758,7 +787,18 @@ mod tests {
         normalize(&mut settings);
         assert_eq!(
             enabled_setup_surfaces(&settings),
-            vec![SetupSurfaceId::Skills, SetupSurfaceId::WorkspaceBundle]
+            vec![
+                SetupSurfaceId::Skills,
+                SetupSurfaceId::PiRules,
+                SetupSurfaceId::WorkspaceBundle
+            ]
+        );
+        assert_eq!(effective_enabled_target_ids(&settings), ["pi_rules"]);
+        settings.enabled_target_ids.retain(|id| id != "pi_rules");
+        assert_eq!(
+            enabled_setup_surfaces(&settings),
+            vec![SetupSurfaceId::Skills, SetupSurfaceId::WorkspaceBundle],
+            "the target toggle switches the rules surface off on its own"
         );
         assert!(effective_enabled_target_ids(&settings).is_empty());
     }
@@ -1295,11 +1335,29 @@ mod tests {
             .collect()
     }
 
+    /// The rules surfaces of the light tier, which is off until a harness is enabled.
+    const LIGHT_RULES_SURFACES: [crate::setup_lifecycle::SetupSurfaceId; 3] = [
+        crate::setup_lifecycle::SetupSurfaceId::CopilotRules,
+        crate::setup_lifecycle::SetupSurfaceId::PiRules,
+        crate::setup_lifecycle::SetupSurfaceId::KiloRules,
+    ];
+
     #[test]
-    fn default_settings_gate_only_the_codex_config_surface() {
+    fn default_settings_gate_only_the_codex_config_surface_and_the_light_harnesses() {
         use crate::setup_lifecycle::SetupSurfaceId;
+        let mut excluded = vec![SetupSurfaceId::CodexConfig];
+        excluded.extend(LIGHT_RULES_SURFACES);
         assert_eq!(
             enabled_setup_surfaces(&AppSettings::default()),
+            surfaces_without(&excluded)
+        );
+        // With every harness enabled, only Codex config stays out.
+        let all = AppSettings {
+            enabled_harness_ids: agent_targets::HarnessId::ALL.to_vec(),
+            ..AppSettings::default()
+        };
+        assert_eq!(
+            enabled_setup_surfaces(&all),
             surfaces_without(&[SetupSurfaceId::CodexConfig])
         );
     }
@@ -1319,14 +1377,16 @@ mod tests {
         settings
             .enabled_target_ids
             .retain(|id| id != "claude_agents" && id != "cursor_setup");
+        let mut excluded = vec![
+            SetupSurfaceId::CodexConfig,
+            SetupSurfaceId::ClaudeAgents,
+            SetupSurfaceId::CursorAgents,
+            SetupSurfaceId::CursorMcp,
+        ];
+        excluded.extend(LIGHT_RULES_SURFACES);
         assert_eq!(
             enabled_setup_surfaces(&settings),
-            surfaces_without(&[
-                SetupSurfaceId::CodexConfig,
-                SetupSurfaceId::ClaudeAgents,
-                SetupSurfaceId::CursorAgents,
-                SetupSurfaceId::CursorMcp,
-            ])
+            surfaces_without(&excluded)
         );
     }
 
@@ -1543,6 +1603,109 @@ mod tests {
 
             assert_eq!(load().enabled_target_ids, vec!["codex_rules".to_string()]);
         });
+    }
+
+    fn settings_json_at_version(version: u32, enabled_targets: &[&str]) -> String {
+        let mut json = serde_json::to_value(AppSettings::default()).expect("serialize defaults");
+        let object = json.as_object_mut().expect("settings object");
+        object.insert("target_defaults_version".into(), serde_json::json!(version));
+        object.insert(
+            "enabled_target_ids".into(),
+            serde_json::json!(enabled_targets),
+        );
+        json.to_string()
+    }
+
+    #[test]
+    fn a_version_1_file_gains_only_the_light_rules_targets_and_keeps_what_the_user_turned_off() {
+        with_temp_home(|dir| {
+            std::env::remove_var("AGENT_WORKSPACE_PATH");
+            // Every version 1 default except `claude_agents` and `opencode_rules`, which the
+            // user switched off; `codex_config` was switched on.
+            write_settings_file(
+                dir,
+                &settings_json_at_version(
+                    1,
+                    &[
+                        "codex_rules",
+                        "claude_rules",
+                        "opencode_agents",
+                        "codex_agents",
+                        "opencode_config",
+                        "cursor_setup",
+                        "codex_config",
+                    ],
+                ),
+            );
+
+            let migrated = get_settings_snapshot().expect("snapshot").settings;
+            assert_eq!(migrated.target_defaults_version, TARGET_DEFAULTS_VERSION);
+            assert_eq!(
+                migrated.enabled_target_ids,
+                [
+                    "codex_rules",
+                    "claude_rules",
+                    "opencode_agents",
+                    "codex_agents",
+                    "opencode_config",
+                    "codex_config",
+                    "cursor_setup",
+                    "copilot_rules",
+                    "pi_rules",
+                    "kilo_rules",
+                ],
+                "registry order; claude_agents and opencode_rules stay off"
+            );
+            assert_eq!(migrated.revision, 1, "the migration is persisted");
+            assert_eq!(
+                get_settings_snapshot().expect("again").settings,
+                migrated,
+                "and runs once"
+            );
+        });
+    }
+
+    #[test]
+    fn a_version_1_file_with_every_target_off_gains_only_the_three_light_rules_targets() {
+        with_temp_home(|dir| {
+            std::env::remove_var("AGENT_WORKSPACE_PATH");
+            write_settings_file(dir, &settings_json_at_version(1, &[]));
+            assert_eq!(
+                load().enabled_target_ids,
+                ["copilot_rules", "pi_rules", "kilo_rules"]
+            );
+        });
+    }
+
+    #[test]
+    fn a_light_harness_stays_off_after_the_migration_so_nothing_is_written() {
+        use crate::agent_targets::HarnessId;
+        with_temp_home(|dir| {
+            std::env::remove_var("AGENT_WORKSPACE_PATH");
+            write_settings_file(dir, &settings_json_at_version(1, &["codex_rules"]));
+            let settings = load();
+            assert!(settings
+                .enabled_target_ids
+                .contains(&"kilo_rules".to_string()));
+            assert!(!harness_enabled(&settings, HarnessId::Kilo));
+            assert!(!enabled_setup_surfaces(&settings)
+                .contains(&crate::setup_lifecycle::SetupSurfaceId::KiloRules));
+        });
+    }
+
+    #[test]
+    fn every_targets_added_in_a_version_is_a_default_target_of_that_version() {
+        let defaults = agent_targets::default_enabled_ids();
+        let known: Vec<&str> = agent_targets::targets().iter().map(|t| t.id).collect();
+        let mut previous = 1;
+        for (version, added) in TARGETS_ADDED_IN {
+            assert!(*version > previous && *version <= TARGET_DEFAULTS_VERSION);
+            previous = *version;
+            for id in *added {
+                assert!(known.contains(id), "{id}");
+                assert!(defaults.contains(&id.to_string()), "{id}");
+            }
+        }
     }
 
     #[test]
