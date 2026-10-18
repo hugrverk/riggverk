@@ -107,7 +107,8 @@ fn override_dir(variable: &str, home: &Path) -> Option<PathBuf> {
 
 /// A folder some harness reads skills from. A superset of [`SkillRoot`]: `DotCodex` is read by
 /// Cursor but the app never installs into it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum ReadFolder {
     Claude,
     Agents,
@@ -119,6 +120,15 @@ pub enum ReadFolder {
 }
 
 impl ReadFolder {
+    pub const ALL: [ReadFolder; 6] = [
+        ReadFolder::Claude,
+        ReadFolder::Agents,
+        ReadFolder::CodexHome,
+        ReadFolder::DotCodex,
+        ReadFolder::OpenCode,
+        ReadFolder::Cursor,
+    ];
+
     /// The install root that is this folder, when the app can install into it.
     pub fn root(self) -> Option<SkillRoot> {
         match self {

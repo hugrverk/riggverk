@@ -185,6 +185,26 @@ describe("runtimeRowsFor", () => {
   });
 });
 
+describe("skill load rows among the runtime rows", () => {
+  const LOADS = [{ label: "skill loads", value: "3 skills, 1 copy each", tone: "ok" as const }];
+  const labelsOf = (rows: ReturnType<typeof runtimeRowsFor>) => rows.map(row => row.label);
+
+  it("go below the skills row, where the harness has one", () => {
+    expect(labelsOf(runtimeRowsFor({ harness: "claude", health: CLAUDE }, LOADS))).toEqual(["rules", "agents", "skills", "skill loads", "claude cli"]);
+  });
+
+  it("go below the agents row where it has none (OpenCode)", () => {
+    const labels = labelsOf(runtimeRowsFor({ harness: "opencode", health: opencodeHealth() }, LOADS));
+    expect(labels.indexOf("skill loads")).toBe(labels.indexOf("agents") + 1);
+    expect(labels).not.toContain("skills");
+  });
+
+  it("show while the health is not loaded, and change nothing without them", () => {
+    expect(runtimeRowsFor({ harness: "codex", health: null }, LOADS)).toEqual(LOADS);
+    expect(runtimeRowsFor({ harness: "claude", health: CLAUDE })).toEqual(runtimeRowsFor({ harness: "claude", health: CLAUDE }, []));
+  });
+});
+
 describe("codex runtime rows", () => {
   it("leaves out the AGENTS.override.md warning, which the page shows as an alert", () => {
     const detail = "AGENTS.override.md replaces AGENTS.md for Codex";

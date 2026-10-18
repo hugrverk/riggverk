@@ -3,7 +3,7 @@ use std::path::Path;
 
 use super::content::DocumentContent;
 use super::process::{run_cmd, ActionResult};
-use super::workspace::{path_arg, workspace_root};
+use super::workspace::{path_arg, setup_workspace_target_path, workspace_root};
 use crate::path_safety::reject_symlink;
 #[cfg(test)]
 use crate::skills_install::discover_workspace_skills;
@@ -199,6 +199,29 @@ pub(crate) fn discover_skills(root: &Path) -> Result<Vec<SkillSummary>, String> 
 pub fn list_skills() -> Result<Vec<SkillSummary>, String> {
     let root = workspace_root()?;
     discover_skills(&root)
+}
+
+/// The skill copies each enabled harness loads and the problems among them (see `skill_loads`).
+///
+/// Read-only. It lists the skills folders the enabled harnesses read and opens the `SKILL.md` of
+/// their subfolders, nothing else, so it runs off the main thread.
+#[tauri::command(async)]
+pub fn get_effective_skill_loads() -> Result<crate::skill_loads::EffectiveSkillLoads, String> {
+    let settings = crate::settings::try_load()
+        .map_err(|error| format!("cannot tell which harnesses are enabled: {error}"))?;
+    let workspace_root = setup_workspace_target_path()?;
+    let home = crate::agent_targets::home_dir()?;
+    let bundled_root = crate::setup_roots::bundled_root_for(&workspace_root)?;
+    let records = crate::managed_state::read_managed_state(&workspace_root)
+        .map(|state| state.artifacts)
+        .unwrap_or_default();
+    let proof = crate::skill_loads::OwnershipProof::new(&bundled_root, &records)?;
+    Ok(crate::skill_loads::effective_skill_loads(
+        &home,
+        &settings.enabled_harness_ids,
+        &crate::skill_loads::FolderPaths::resolve(&home),
+        &proof,
+    ))
 }
 
 #[tauri::command]

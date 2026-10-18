@@ -18,6 +18,13 @@ import {
   type StateDisplay,
 } from "../lib/installationView";
 import { rulesModelFor, rulesOverrideWarning, rulesSurfaceOf } from "../lib/rulesView";
+import {
+  skillLoadProblemCount,
+  skillLoadRows,
+  skillReadsRows,
+  summarizeSkillLoads,
+  withSkillProblems,
+} from "../lib/skillLoadRows";
 import { useNotify } from "../shell/ShellState";
 import { Glyph } from "../ui/Glyph";
 import { Kv, type KvItem } from "../ui/Kv";
@@ -51,6 +58,7 @@ export function HarnessPage({
   runtime,
   runtimeExtra,
   appSettings,
+  skillLoads,
   agentTargets,
   settingsSaveStatus,
   onToggleTarget,
@@ -164,15 +172,20 @@ export function HarnessPage({
   const override = rulesOverrideWarning(runtime.harness === "codex" ? runtime.health : null);
   const conflictDetails = entry?.status?.conflict_details ?? [];
 
+  // Names the harness loads from several folders: the skills row says how many, whatever its install state.
+  const skillProblems = skillLoadProblemCount(summarizeSkillLoads(skillLoads.loads, harness));
   // A file the user keeps is not current and not a conflict; the rules model says so.
-  const displayOf = (row: HarnessRowModel): StateDisplay =>
-    row.surface === rulesSurface && rulesModel?.display ? rulesModel.display : row.display;
+  const displayOf = (row: HarnessRowModel): StateDisplay => {
+    if (row.surface === rulesSurface && rulesModel?.display) return rulesModel.display;
+    return row.surface === "skills" && row.state !== "off" ? withSkillProblems(row.display, skillProblems) : row.display;
+  };
   const selectedDisplay = selected ? displayOf(selected) : null;
   const showRules = rulesModel !== null && selected?.surface === rulesSurface;
   // What is true of the whole harness follows the surface's own facts, so one column of labels carries both.
   const facts: KvItem[] = [
     // The state is the detail title's; the facts are what the title cannot say.
     ...(selected ? surfaceFacts(selected, !showRules) : []),
+    ...(selected?.surface === "skills" ? skillReadsRows(skillLoads, harness) : []),
     ...(entry?.error ? [{ label: "status", value: `failed: ${entry.error}`, tone: "fail" as const, wrap: true }] : []),
     ...(conflictDetails.length > 0 ? [{ label: "preserved", value: conflictDetails.join(", "), tone: "warn" as const, wrap: true }] : []),
   ];
@@ -259,7 +272,7 @@ export function HarnessPage({
           {"runtime · "}
           <span className={toneClass(verdict.tone) || undefined}>{verdict.text}</span>
         </div>
-        {workspaceValid && <Kv items={runtimeRowsFor(runtime)} />}
+        {workspaceValid && <Kv items={runtimeRowsFor(runtime, skillLoadRows(skillLoads, harness))} />}
         {workspaceValid && runtimeExtra}
       </Pane>
 
