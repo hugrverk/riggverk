@@ -51,6 +51,6 @@ pub use setup::{
 pub use skills::{list_skills, open_skill, read_skill};
 pub use status::get_status;
 pub use workspace::{
-    get_workspace_diagnostics, open_default_workspace_folder, read_brain_setup_seed,
-    reset_active_workspace_path, try_set_active_workspace_path,
+    get_workspace_diagnostics, open_default_workspace_folder, reset_active_workspace_path,
+    try_set_active_workspace_path,
 };

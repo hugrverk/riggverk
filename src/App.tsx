@@ -66,15 +66,12 @@ function AppShell() {
     codexRuntimeHealth,
     cursorProfileHealth,
     claudeRuntimeHealth,
-    brainSetupText,
-    brainSetupSource,
     fetchStatus,
     loadWorkspaceDiagnostics,
     loadOpenCodeRuntimeHealth,
     loadCodexRuntimeHealth,
     loadCursorProfileHealth,
     loadClaudeRuntimeHealth,
-    loadBrainSetupSeed,
     resetWorkspaceHealthState,
     clearHarnessHealth,
     isInvalidWorkspaceError,
@@ -386,10 +383,6 @@ function AppShell() {
     loadWorkspaceDiagnostics,
     loadWorkspaceResources,
   ]);
-
-  useEffect(() => {
-    loadBrainSetupSeed();
-  }, [appSettings?.workspace_path, loadBrainSetupSeed]);
 
   const lastWorkspaceRefreshRef = useRef(0);
   const switchView = useCallback(async (v: View) => {
@@ -843,9 +836,6 @@ function AppShell() {
             onSelectConfigSource={selectConfigSourceType}
             configEditorSourceSaveMessage={configEditorSourceSaveMessage}
             configEditorSourceContent={configEditorSourceContent}
-            // Brain Setup
-            brainSetupText={brainSetupText}
-            brainSetupSource={brainSetupSource}
             // Common
             workspaceValid={workspaceValid}
             showConfigs={configTargets.length > 0}

@@ -57,7 +57,7 @@ export interface AppCommandDeps {
   setError: (message: string | null) => void;
 }
 
-const LIBRARY_SOURCES: LibrarySourceType[] = ["docs", "rules", "skills", "agents", "configs", "brain"];
+const LIBRARY_SOURCES: LibrarySourceType[] = ["docs", "rules", "skills", "agents", "configs"];
 const APPEARANCES: AppSettings["appearance"][] = ["dark", "light", "system"];
 
 function updateTargets(enabled: readonly InstallAgent[]): OverviewId[] {

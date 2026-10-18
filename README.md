@@ -97,7 +97,7 @@ Tabs in order (press `1`-`7`; disabled harnesses are hidden and the rest renumbe
 
 - Workspace - harness list with install state, surfaces, installed-state matrix, release-check, uninstall with preview, session-scoped **Recover previous uninstall**, backups folder, output.
 - Codex, OpenCode, Cursor, Claude - target toggles (Space, autosaved), surfaces, runtime health, install review. OpenCode adds the model override.
-- Library - an items list and one document pane (rendered, or its source while editing) for docs, rules, skills, runtime agents, configs, and Brain Setup. Saves write the runtime workspace only (`:w`, `:q`).
+- Library - an items list and one document pane (rendered, or its source while editing) for docs, rules, skills, runtime agents, and configs. Saves write the runtime workspace only (`:w`, `:q`).
 - Settings - harnesses, appearance, text size, motion, landing page, colors, workspace.
 
 Full uninstall removes proven app-owned files, preserves modified and unknown files, leaves merge-managed configs and rules files in place, and records a rollback-capable transaction. **Recover previous uninstall** exists only for the current app session.

@@ -27,7 +27,6 @@ import type {
   ApplyProgress,
   BackupRunDetails,
   BackupRunSummary,
-  BrainSetupSeedResult,
   ClaudeRuntimeHealth,
   CodexRuntimeHealth,
   ConfigEditorSourceMeta,
@@ -1120,8 +1119,6 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
       return scenario === "error" ? unavailable() : cursorHealth();
     case "get_claude_runtime_health":
       return claudeHealth();
-    case "read_brain_setup_seed":
-      return { status: "found", source: `${WORKSPACE}/templates/brain-setup.md`, content: "# Brain setup\n\nPaste this block into the harness you are configuring.\n\n- Workspace: ~/.config/agent-workspace\n- Skills: 18\n" } satisfies BrainSetupSeedResult;
     case "list_skills":
       return skills;
     case "read_skill": {

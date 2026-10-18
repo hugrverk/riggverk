@@ -124,11 +124,9 @@ New files have no backup. Restore by rollback while the transaction is in this s
 
 ## Library
 
-Panes: **items** and the open **document**, which shows the item rendered (Markdown, or formatted JSON for configs) and turns into its source text while you edit. Sources: Docs, Rules, Skills, Runtime agents, Configs, Brain Setup (`[` `]` to switch). Docs are grouped Start, Guides, Reference, Cursor, Configs, and Context. `i` or Enter edits, Escape returns to the rendered view, `Mod+s` or `:w` saves, `:q` closes and asks before discarding edits.
+Panes: **items** and the open **document**, which shows the item rendered (Markdown, or formatted JSON for configs) and turns into its source text while you edit. Sources: Docs, Rules, Skills, Runtime agents, Configs (`[` `]` to switch). Docs are grouped Start, Guides, Reference, Cursor, Configs, and Context. `i` or Enter edits, Escape returns to the rendered view, `Mod+s` or `:w` saves, `:q` closes and asks before discarding edits.
 
 The Library edits the runtime workspace copy. Saves back up the file first and refuse symlinks. They do not change what harnesses receive, and an edited bundled file becomes a conflict for later updates ([TROUBLESHOOTING.md](TROUBLESHOOTING.md#conflicts)). A doc that differs from the bundled one shows a stale-doc warning.
-
-Brain Setup is a copy-paste instruction block for external assistants. It runs nothing and changes no targets.
 
 ## Settings
 

@@ -29,7 +29,7 @@ CI runs this POSIX check on Ubuntu and macOS. Windows CI runs frontend, build, a
 ./scripts/smoke-tauri-runtime.sh
 ```
 
-Isolated temp `HOME` and workspace path; exercises the Rust command handlers the app calls (status, diagnostics, OpenCode and Cursor health, Brain Setup). `release-check.sh` already runs it. It does not automate the webview.
+Isolated temp `HOME` and workspace path; exercises the Rust command handlers the app calls (status, diagnostics, OpenCode and Cursor health). `release-check.sh` already runs it. It does not automate the webview.
 
 ## Browser-only checks
 

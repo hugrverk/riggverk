@@ -1,8 +1,8 @@
 /* ── library view ──
    Two panes on the shared .screen grid: [1] items (with the source switcher) and [2] the open item, rendered
-   (or its source textarea while editing; Brain Setup shows its copy block there). Row, pane, kv and filter
+   (or its source textarea while editing). Row, pane, kv and filter
    styling is in _primitives.scss; this file only adds the layout and the few Library-specific parts (source
-   switcher, textarea, rendered markdown, config JSON, brain block). */
+   switcher, textarea, rendered markdown, config JSON). */
 
 .library {
   grid-template-columns: minmax(280px, 1fr) minmax(0, 2fr);
@@ -270,29 +270,4 @@
   white-space: pre;
   overflow-x: auto;
   background: transparent;
-}
-
-/* ---- brain setup ---- */
-
-.brain-setup-lib-summary {
-  max-width: 62ch;
-  margin: 0 0 var(--lh);
-  padding: 0 10px;
-  color: var(--text-muted);
-}
-
-.brain-setup-lib-body .copyable-block-terminal {
-  margin: 0 10px;
-}
-
-/* The block scrolls sideways locally; the pane body scrolls vertically. */
-.brain-setup-lib-body .copyable-block-content {
-  overflow: auto;
-}
-
-.brain-setup-lib-body .brain-setup-pre {
-  margin: 0;
-  font-size: var(--fs-sm);
-  line-height: var(--lh);
-  white-space: pre;
 }

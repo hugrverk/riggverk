@@ -55,7 +55,3 @@ Selecting a workspace folder is still a trust decision: do not run scripts from 
 ## Backups
 
 Before overwriting or removing a file, Install, uninstall, and Library saves copy it to the backup root, owner-only: `<root>/setup/<transaction id>/...` for installs, `<root>/docs/<id>-<timestamp>/` for Library saves. Previews and dry runs write nothing. Layout and locations: [USING_THE_APP.md](USING_THE_APP.md#backups).
-
-## Brain Setup
-
-A copy-paste instruction block for external AI assistants covering skill routing, security rules, and verification. It runs no agents and changes no targets or config.

@@ -6,7 +6,7 @@
 mod tests {
     use crate::commands::{
         apply_setup, get_cursor_profile_health, get_opencode_runtime_health, get_status,
-        get_workspace_diagnostics, preview_setup, read_brain_setup_seed,
+        get_workspace_diagnostics, preview_setup,
     };
     use serde_json::Value;
     use std::path::PathBuf;
@@ -138,17 +138,6 @@ mod tests {
             Some("synced")
         );
 
-        let brain = serde_json::to_value(read_brain_setup_seed().expect("read_brain_setup_seed"))
-            .expect("serialize brain setup");
-        assert_eq!(field(&brain, "status").as_str(), Some("missing"));
-        assert_eq!(field(&brain, "content").as_str(), Some(""));
-
-        let private_seed = workspace_canonical.join("templates/context/saved-memory.md");
-        assert!(
-            !private_seed.is_file(),
-            "private brain seed must not exist: {}",
-            private_seed.display()
-        );
         let private_context_dir = workspace_canonical.join("private-context");
         assert!(
             !private_context_dir.exists(),

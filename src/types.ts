@@ -305,12 +305,6 @@ export interface OpenCodeModelSelection {
   small_model: string;
 }
 
-export interface BrainSetupSeedResult {
-  status: string;
-  source: string;
-  content: string;
-}
-
 export interface CodexRuntimeCheck {
   id: string;
   label: string;
