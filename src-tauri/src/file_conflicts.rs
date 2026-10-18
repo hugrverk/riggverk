@@ -300,7 +300,7 @@ fn read_by(unit: &Unit<'_>, surface: SetupSurfaceId, scope: Option<&SkillScope>)
     }
 }
 
-fn unit_folder(unit: &Unit<'_>, home: &Path, workspace_root: &Path) -> String {
+pub fn unit_folder(unit: &Unit<'_>, home: &Path, workspace_root: &Path) -> String {
     if let Some(root) = unit.root {
         return root.display().to_string();
     }
@@ -620,6 +620,59 @@ pub fn diff_unit(unit: &Unit<'_>, workspace_root: &Path, home: &Path) -> FileDif
     }
 }
 
+// ── Take bundled ──
+
+/// One file a take-bundled review replaces.
+#[derive(Debug, Clone, Serialize)]
+pub struct TakeBundledFile {
+    pub rel: String,
+    pub state: UnitState,
+    /// Where the backup of your file lands, below the backup folder of the transaction.
+    pub backup_name: String,
+    /// `sha256:` and the first twelve hex digits of your file as it is now.
+    pub installed_digest: String,
+    /// The same for the bundled file that replaces it.
+    pub bundled_digest: String,
+}
+
+/// The files of `unit` that `operations` (from `take_bundled_operations`) replace, at most
+/// [`MAX_UNIT_FILES`], and how many more there are. Digests only, never file text.
+pub fn take_bundled_files(
+    unit: &Unit<'_>,
+    operations: &[PlannedArtifact],
+    workspace_root: &Path,
+    home: &Path,
+) -> (Vec<TakeBundledFile>, usize) {
+    let bundled_root = crate::setup_roots::bundled_root_for(workspace_root).ok();
+    let files = unit
+        .files
+        .iter()
+        .take(MAX_UNIT_FILES)
+        .filter_map(|file| {
+            let overwrite = operations
+                .iter()
+                .find(|operation| operation.artifact == file.artifact)?
+                .overwrite
+                .as_ref()?;
+            let bundled = bundled_root.as_deref().and_then(|root| {
+                crate::setup_fingerprint::artifact_source_digest(&file.artifact, root, home).ok()
+            });
+            let status = file_status(file, &dest_file_name(&file.artifact, home, workspace_root));
+            Some(TakeBundledFile {
+                rel: status.rel,
+                state: status.state,
+                backup_name: format!(
+                    "artifacts/{}",
+                    crate::setup_transaction::artifact_backup_rel(&file.artifact)
+                ),
+                installed_digest: short(&overwrite.expected_installed_digest),
+                bundled_digest: bundled.as_deref().map(short).unwrap_or_default(),
+            })
+        })
+        .collect();
+    (files, unit.files.len().saturating_sub(MAX_UNIT_FILES))
+}
+
 /// Whether the operation is a file the user keeps.
 pub fn is_kept(operation: &PlannedArtifact) -> bool {
     operation.kind == OperationKind::Manual
@@ -648,6 +701,7 @@ mod tests {
             rules_rewrite: None,
             mcp: None,
             file,
+            overwrite: None,
         }
     }
 
