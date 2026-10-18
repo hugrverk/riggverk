@@ -1,11 +1,14 @@
-//! End-to-end contract for the managed rules block of the light harnesses (Copilot, Pi, Kilo).
+//! End-to-end contract for the managed rules block and the managed Playwright MCP entry of the
+//! light harnesses (Copilot, Pi, Kilo).
 //!
 //! Drives the real preview, apply, rollback, status, conversion and health paths against a temp
 //! HOME and workspace, once per harness; never touches the real profile or any real folder of a
 //! harness. The block semantics themselves are pinned for Claude in `rules_block_contract`; this
 //! file proves the descriptor-driven artifacts get the same ones, plus what is specific to the
 //! tier: Pi's masking and peer files, Kilo's `XDG_CONFIG_HOME`, owner-only folders for Pi, the
-//! health row and the review note.
+//! health row and the review note. The `mcp` module does the same for the MCP entry: a strict JSON
+//! merge of one key that leaves the user's other servers and their order alone, and refuses, with
+//! zero mutation and no file text in any message, what it cannot read as strict JSON.
 
 #[cfg(test)]
 mod tests {
@@ -1045,5 +1048,1379 @@ mod tests {
             .retain(|id| *id != HarnessId::Claude);
         crate::settings::save_with_revision_check(settings, None).unwrap();
         assert!(!health(&copilot).warnings.iter().any(vscode));
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════════════════════════
+    // The managed Playwright MCP entry
+    // ═════════════════════════════════════════════════════════════════════════════════════════════
+
+    mod mcp {
+        use std::ops::Deref;
+        use std::path::Path;
+
+        use serde_json::{json, Value};
+
+        use super::*;
+        use crate::light_harness::LightMcp;
+        use crate::light_mcp::{EntryState, Refusal};
+
+        /// What the user keeps in an MCP file; neither may ever show up in a message of the app.
+        const SECRET: &str = "sk-live-not-a-real-secret";
+        const PRIVATE_NAME: &str = "my-private-server";
+
+        fn spec_of(harness: HarnessId) -> &'static LightMcp {
+            &light_harness::descriptor(harness)
+                .expect("light harness")
+                .mcp
+        }
+
+        fn mcp_artifact(harness: HarnessId) -> ArtifactId {
+            ArtifactId::HarnessMcp(LightHarnessId::new(harness).expect("light"))
+        }
+
+        fn mcp_wire(harness: HarnessId) -> String {
+            format!("{}_mcp", harness.as_str())
+        }
+
+        /// Every harness and every target on (the Kilo MCP target is off by default).
+        fn enable_everything() {
+            let mut targets = crate::agent_targets::default_enabled_ids();
+            targets.push("kilo_mcp".to_string());
+            let settings = crate::settings::AppSettings {
+                enabled_harness_ids: HarnessId::ALL.to_vec(),
+                enabled_target_ids: crate::agent_targets::normalize_enabled_ids(&targets),
+                ..crate::settings::AppSettings::default()
+            };
+            crate::settings::save_with_revision_check(settings, None).expect("settings");
+        }
+
+        struct M(Env);
+
+        impl Deref for M {
+            type Target = Env;
+            fn deref(&self) -> &Env {
+                &self.0
+            }
+        }
+
+        fn mcp_env(label: &str, harness: HarnessId) -> M {
+            let env = Env::new(label, harness);
+            enable_everything();
+            M(env)
+        }
+
+        fn each_mcp(label: &str, body: impl Fn(&M)) {
+            for harness in LIGHT {
+                let env = mcp_env(label, harness);
+                body(&env);
+            }
+        }
+
+        impl M {
+            fn spec(&self) -> &'static LightMcp {
+                spec_of(self.harness)
+            }
+
+            fn artifact(&self) -> ArtifactId {
+                mcp_artifact(self.harness)
+            }
+
+            fn surface(&self) -> SetupSurfaceId {
+                self.spec().surface
+            }
+
+            fn wire(&self) -> String {
+                mcp_wire(self.harness)
+            }
+
+            fn root_key(&self) -> &'static str {
+                self.spec().root_key.as_str()
+            }
+
+            fn dest(&self) -> PathBuf {
+                self.spec().resolve_dest(&self.home)
+            }
+
+            fn put(&self, content: impl AsRef<[u8]>) {
+                let path = self.dest();
+                fs::create_dir_all(path.parent().unwrap()).unwrap();
+                fs::write(path, content).unwrap();
+            }
+
+            fn bytes(&self) -> Vec<u8> {
+                fs::read(self.dest()).unwrap()
+            }
+
+            fn json(&self) -> Value {
+                serde_json::from_slice(&self.bytes()).expect("the file is JSON")
+            }
+
+            fn expected(&self) -> Value {
+                let bundled = crate::setup_roots::bundled_root().expect("bundled root");
+                crate::light_mcp::expected_entry(self.spec(), &bundled, &self.home).expect("entry")
+            }
+
+            /// A file of the user's: other servers (one with a literal token, one with an
+            /// authorization header), other top-level keys, no Playwright entry.
+            fn user_file(&self) -> String {
+                let mut root = serde_json::Map::new();
+                root.insert("theme".into(), json!("dark"));
+                root.insert(
+                    self.root_key().into(),
+                    json!({
+                        "github": {"command": "npx", "env": {"GITHUB_TOKEN": SECRET}},
+                        "docs": {"url": "https://example.com/mcp", "headers": {"Authorization": "Bearer abc"}},
+                    }),
+                );
+                root.insert("last".into(), json!([1, 2, 3]));
+                serde_json::to_string_pretty(&Value::Object(root)).unwrap() + "\n"
+            }
+
+            fn plan_mcp(&self) -> setup_transaction::PlannedArtifact {
+                setup_transaction::plan_artifacts_for_surfaces(
+                    &[self.surface()],
+                    &self.ws,
+                    &self.home,
+                )
+                .expect("plan")
+                .into_iter()
+                .next()
+                .expect("planned artifact")
+            }
+
+            fn apply_mcp(&self) -> SetupResult {
+                let plan = preview_setup(vec![self.wire()]).expect("preview");
+                apply_setup(
+                    vec![self.wire()],
+                    false,
+                    plan.plan_fingerprint,
+                    plan.preview_token,
+                )
+                .expect("apply")
+            }
+
+            fn status_mcp(&self) -> crate::installation_status::InstallationStatus {
+                status_for_surfaces(&[self.surface()], &self.ws, &self.home).expect("status")
+            }
+
+            fn record_mcp(&self, hash: &str) {
+                write_managed_state_atomic(
+                    &self.ws,
+                    &ManagedState {
+                        schema_version: MANAGED_STATE_SCHEMA_VERSION,
+                        bundled_version: crate::stable_digest::bytes(b"bundle"),
+                        artifacts: vec![ManagedArtifactRecord {
+                            identity: artifact_identity(&self.artifact()),
+                            hash: hash.to_string(),
+                            surface: None,
+                        }],
+                    },
+                )
+                .expect("managed state");
+            }
+
+            fn recorded_mcp(&self) -> Option<String> {
+                let identity = artifact_identity(&self.artifact());
+                read_managed_state(&self.ws)?
+                    .artifacts
+                    .into_iter()
+                    .find(|record| record.identity == identity)
+                    .map(|record| record.hash)
+            }
+
+            /// The digest the app records for the entry the file holds now.
+            fn entry_digest(&self) -> String {
+                crate::setup_fingerprint::artifact_installed_managed_digest(
+                    &self.artifact(),
+                    &self.ws,
+                    &self.home,
+                )
+                .unwrap()
+            }
+
+            fn health_mcp(&self) -> crate::commands::light_runtime::LightRuntimeHealth {
+                super::health(self)
+            }
+
+            /// The names of the files in the folder of the MCP file.
+            fn folder_listing(&self) -> Vec<String> {
+                let mut names: Vec<String> = fs::read_dir(self.dest().parent().unwrap())
+                    .map(|entries| {
+                        entries
+                            .flatten()
+                            .map(|entry| entry.file_name().to_string_lossy().into_owned())
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                names.sort();
+                names
+            }
+
+            /// Every sentence the app says about the file, to prove none carries its text.
+            fn everything_said(&self) -> String {
+                let mut said = Vec::new();
+                let plan = preview_setup(vec![self.wire()]).unwrap();
+                for op in plan.operations.iter().chain(&plan.conflicts) {
+                    said.push(op.summary.clone());
+                    said.extend(op.conflict_description.clone());
+                    said.extend(op.details.clone());
+                }
+                said.push(plan.summary.clone());
+                let status = self.status_mcp();
+                said.push(status.summary.clone());
+                said.extend(status.conflict_details.clone());
+                for surface in &status.surfaces {
+                    said.push(surface.detail.clone());
+                }
+                said.push(
+                    setup_transaction::ensure_mcp_apply_allowed(
+                        &self.artifact(),
+                        &self.ws,
+                        &self.home,
+                    )
+                    .err()
+                    .unwrap_or_default(),
+                );
+                said.push(
+                    apply_setup(vec![self.wire()], false, None, None)
+                        .err()
+                        .unwrap_or_default(),
+                );
+                said.push(serde_json::to_string(&self.health_mcp()).unwrap());
+                said.join("\n")
+            }
+
+            /// The file must be left exactly as it was, with nothing written anywhere.
+            fn assert_refused(&self, before: &[u8]) {
+                assert!(setup_transaction::ensure_mcp_apply_allowed(
+                    &self.artifact(),
+                    &self.ws,
+                    &self.home
+                )
+                .is_err());
+                let folder = self.folder_listing();
+                let backups = self.backup_entries();
+                let plan = preview_setup(vec![self.wire()]).unwrap();
+                assert!(!plan.has_pending_changes, "{}", self.harness.as_str());
+                assert!(plan.is_blocked);
+                assert!(plan.plan_fingerprint.is_none());
+                assert!(apply_setup(vec![self.wire()], false, None, None).is_err());
+                assert_eq!(self.bytes(), before, "the file is untouched");
+                assert_eq!(self.folder_listing(), folder, "nothing else is written");
+                assert_eq!(self.backup_entries(), backups, "no transaction is started");
+            }
+        }
+
+        // ── The descriptor, the surface, the target and the artifact agree ──
+
+        #[test]
+        fn each_harness_has_one_mcp_target_one_surface_and_one_artifact() {
+            for harness in LIGHT {
+                let mcp = spec_of(harness);
+                assert_eq!(mcp.target_id, mcp_wire(harness));
+                assert_eq!(mcp.surface.harness(), Some(harness));
+                assert_eq!(
+                    serde_json::to_value(mcp.surface).unwrap(),
+                    json!(mcp_wire(harness))
+                );
+                assert_eq!(mcp_artifact(harness).surface(), mcp.surface);
+                assert!(!mcp_artifact(harness).is_rules_block());
+                assert_eq!(
+                    crate::agent_targets::target_surfaces(&mcp.target_id),
+                    [mcp.surface]
+                );
+                assert_eq!(
+                    crate::agent_targets::surface_target_id(mcp.surface),
+                    Some(mcp.target_id.as_str())
+                );
+                assert!(SetupSurfaceId::ALL.contains(&mcp.surface));
+                let target = crate::agent_targets::targets()
+                    .into_iter()
+                    .find(|target| target.id == mcp.target_id)
+                    .expect("target");
+                assert!(matches!(target.kind, crate::agent_targets::TargetKind::Mcp));
+                assert_eq!(target.source_rel, mcp.template_rel);
+                assert_eq!(
+                    crate::agent_targets::default_enabled_ids().contains(&mcp.target_id),
+                    harness != HarnessId::Kilo,
+                    "every MCP target is on by default but Kilo's, whose config file may hold provider keys"
+                );
+                let identity = artifact_identity(&mcp_artifact(harness));
+                assert_eq!(
+                    identity,
+                    format!(r#"{{"type":"HarnessMcp","name":"{}"}}"#, harness.as_str())
+                );
+                assert_eq!(
+                    serde_json::from_str::<ArtifactId>(&identity).unwrap(),
+                    mcp_artifact(harness)
+                );
+            }
+            for central in ["claude", "codex", "cursor", "opencode", "../pi", ""] {
+                let json = format!(r#"{{"type":"HarnessMcp","name":"{central}"}}"#);
+                assert!(serde_json::from_str::<ArtifactId>(&json).is_err(), "{json}");
+            }
+        }
+
+        #[test]
+        fn labels_and_backup_names_are_distinct_per_harness_and_per_artifact() {
+            let mut backups = std::collections::HashSet::new();
+            for harness in LIGHT {
+                let mcp = mcp_artifact(harness);
+                let rules = artifact_of(harness);
+                for artifact in [&mcp, &rules] {
+                    assert!(backups.insert(setup_transaction::artifact_backup_rel(artifact)));
+                }
+                assert_eq!(
+                    setup_transaction::artifact_backup_rel(&mcp),
+                    format!("{}-mcp", harness.as_str())
+                );
+                assert_eq!(
+                    crate::installation_status::artifact_label(&mcp),
+                    format!(
+                        "{} Playwright MCP entry",
+                        light_harness::display_name(harness)
+                    )
+                );
+            }
+        }
+
+        // ── Create ──
+
+        #[test]
+        fn a_missing_file_is_created_with_only_the_entry_and_is_then_current() {
+            each_mcp("create", |env| {
+                let planned = env.plan_mcp();
+                assert_eq!(planned.kind, OperationKind::Create);
+                assert_eq!(planned.previous_state, PreviousState::Absent);
+                assert_eq!(planned.rollback_action, RollbackAction::RemoveCreatedFile);
+                assert_eq!(planned.mcp, Some(EntryState::Absent));
+                assert_eq!(env.status_mcp().state, InstallationState::NotInstalled);
+
+                let result = env.apply_mcp();
+                assert!(result.success, "{}", result.message);
+                let mut root = serde_json::Map::new();
+                root.insert(
+                    env.root_key().into(),
+                    json!({ "playwright": env.expected() }),
+                );
+                assert_eq!(
+                    env.json(),
+                    Value::Object(root),
+                    "the file holds the entry and nothing else"
+                );
+                assert!(String::from_utf8(env.bytes()).unwrap().ends_with("}\n"));
+                assert_eq!(env.recorded_mcp(), Some(env.entry_digest()));
+                assert_eq!(
+                    env.recorded_mcp(),
+                    Some(
+                        crate::setup_fingerprint::artifact_source_digest(
+                            &env.artifact(),
+                            &crate::setup_roots::bundled_root().unwrap(),
+                            &env.home
+                        )
+                        .unwrap()
+                    )
+                );
+                assert_eq!(env.plan_mcp().kind, OperationKind::NoChange);
+                let status = env.status_mcp();
+                assert_eq!(status.state, InstallationState::Current);
+                assert_eq!(status.surfaces[0].detail, "installed and current");
+
+                let rolled = rollback_setup_transaction(result.transaction_id, false).unwrap();
+                assert!(rolled.success, "{}", rolled.message);
+                assert!(
+                    !env.dest().exists(),
+                    "a rollback removes the file the apply created"
+                );
+            });
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn a_new_mcp_file_is_owner_only_and_only_pis_folders_are() {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = |path: &Path| fs::metadata(path).unwrap().permissions().mode() & 0o777;
+            for harness in LIGHT {
+                let env = mcp_env("modes", harness);
+                assert!(env.apply_mcp().success);
+                assert_eq!(mode(&env.dest()), 0o600, "{}", harness.as_str());
+                let folder = env.dest().parent().unwrap().to_path_buf();
+                if harness == HarnessId::Pi {
+                    assert_eq!(mode(&env.home.join(".pi")), 0o700);
+                    assert_eq!(mode(&folder), 0o700);
+                } else {
+                    assert_ne!(mode(&folder), 0o700, "{}", harness.as_str());
+                }
+            }
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn an_existing_mcp_file_keeps_its_permissions() {
+            use std::os::unix::fs::PermissionsExt;
+            each_mcp("keep-mode", |env| {
+                env.put(env.user_file());
+                fs::set_permissions(env.dest(), fs::Permissions::from_mode(0o644)).unwrap();
+                assert!(env.apply_mcp().success);
+                assert_eq!(
+                    fs::metadata(env.dest()).unwrap().permissions().mode() & 0o777,
+                    0o644
+                );
+            });
+        }
+
+        // ── Merge into a file with other servers ──
+
+        #[test]
+        fn a_file_with_other_servers_gets_the_entry_and_every_other_value_and_key_order_is_kept() {
+            each_mcp("merge", |env| {
+                let original = env.user_file();
+                env.put(&original);
+                let planned = env.plan_mcp();
+                // Never a create over the user's file, so a rollback cannot delete it.
+                assert_eq!(planned.kind, OperationKind::Update);
+                assert_eq!(planned.previous_state, PreviousState::MergeableConfigFile);
+                assert_eq!(
+                    planned.rollback_action,
+                    RollbackAction::RestoreManagedConfigFile
+                );
+                assert_eq!(planned.mcp, Some(EntryState::EntryMissing));
+                let status = env.status_mcp();
+                assert_eq!(status.state, InstallationState::UpdateAvailable);
+                assert_eq!(status.counts.conflict_count, 0);
+                assert!(status.surfaces[0].detail.contains("will be added"));
+                assert!(status.surfaces[0]
+                    .detail
+                    .contains("your other servers stay"));
+
+                // The user's tokens and headers are theirs: the merge is not refused for them.
+                let result = env.apply_mcp();
+                assert!(result.success, "{}", result.message);
+                let before: Value = serde_json::from_str(&original).unwrap();
+                let after = env.json();
+                let keys = |value: &Value| -> Vec<String> {
+                    value.as_object().unwrap().keys().cloned().collect()
+                };
+                assert_eq!(keys(&after), keys(&before), "top-level key order");
+                let servers_before = &before[env.root_key()];
+                let servers_after = &after[env.root_key()];
+                let mut expected_servers = keys(servers_before);
+                expected_servers.push("playwright".into());
+                assert_eq!(
+                    keys(servers_after),
+                    expected_servers,
+                    "the entry is appended"
+                );
+                for server in ["github", "docs"] {
+                    assert_eq!(servers_after[server], servers_before[server], "{server}");
+                }
+                assert_eq!(servers_after["github"]["env"]["GITHUB_TOKEN"], SECRET);
+                assert_eq!(after["theme"], before["theme"]);
+                assert_eq!(after["last"], before["last"]);
+                assert_eq!(servers_after["playwright"], env.expected());
+                assert_eq!(env.plan_mcp().kind, OperationKind::NoChange);
+                assert_eq!(env.recorded_mcp(), Some(env.entry_digest()));
+
+                let rolled = rollback_setup_transaction(result.transaction_id, false).unwrap();
+                assert!(rolled.success, "{}", rolled.message);
+                assert_eq!(
+                    String::from_utf8(env.bytes()).unwrap(),
+                    original,
+                    "a rollback restores the user's file byte for byte"
+                );
+            });
+        }
+
+        #[test]
+        fn a_rollback_after_later_edits_takes_out_only_the_added_entry() {
+            each_mcp("rollback-merge", |env| {
+                env.put(env.user_file());
+                let result = env.apply_mcp();
+                assert!(result.success, "{}", result.message);
+
+                // The user adds a server and a key after the apply.
+                let mut edited = env.json();
+                edited[env.root_key()]["later"] = json!({"command": "later"});
+                edited["added"] = json!(true);
+                env.put(serde_json::to_string_pretty(&edited).unwrap());
+
+                let rolled = rollback_setup_transaction(result.transaction_id, false).unwrap();
+                assert!(rolled.success, "{}", rolled.message);
+                let after = env.json();
+                assert!(after[env.root_key()].get("playwright").is_none());
+                assert_eq!(after[env.root_key()]["later"], json!({"command": "later"}));
+                assert_eq!(after["added"], json!(true));
+                assert_eq!(
+                    after[env.root_key()]["github"]["env"]["GITHUB_TOKEN"],
+                    SECRET
+                );
+            });
+        }
+
+        #[test]
+        fn a_rollback_never_overwrites_an_entry_the_user_edited_after_the_apply() {
+            each_mcp("rollback-edited", |env| {
+                env.put(env.user_file());
+                let result = env.apply_mcp();
+                assert!(result.success, "{}", result.message);
+                let mut edited = env.json();
+                edited[env.root_key()]["playwright"]["mine"] = json!(true);
+                let text = serde_json::to_string_pretty(&edited).unwrap();
+                env.put(&text);
+                let rolled = rollback_setup_transaction(result.transaction_id, false).unwrap();
+                assert!(!rolled.success, "the user's edit is preserved");
+                assert_eq!(String::from_utf8(env.bytes()).unwrap(), text);
+            });
+        }
+
+        #[test]
+        fn a_servers_key_the_apply_created_goes_with_the_entry_on_a_rollback() {
+            each_mcp("rollback-key", |env| {
+                env.put("{\n  \"theme\": \"dark\"\n}\n");
+                let result = env.apply_mcp();
+                assert!(result.success, "{}", result.message);
+                assert!(env.json().get(env.root_key()).is_some());
+                // A later edit elsewhere forces the projection restore.
+                let mut edited = env.json();
+                edited["later"] = json!(1);
+                env.put(serde_json::to_string_pretty(&edited).unwrap());
+                let rolled = rollback_setup_transaction(result.transaction_id, false).unwrap();
+                assert!(rolled.success, "{}", rolled.message);
+                assert_eq!(env.json(), json!({"theme": "dark", "later": 1}));
+            });
+        }
+
+        #[test]
+        fn an_empty_file_counts_as_no_servers_and_is_restored_empty() {
+            each_mcp("empty", |env| {
+                env.put("");
+                let planned = env.plan_mcp();
+                assert_eq!(planned.kind, OperationKind::Update);
+                assert_eq!(planned.mcp, Some(EntryState::EntryMissing));
+                let result = env.apply_mcp();
+                assert!(result.success, "{}", result.message);
+                assert_eq!(
+                    env.json()[env.root_key()]["playwright"],
+                    env.expected(),
+                    "the write repairs a file Pi would refuse"
+                );
+                let rolled = rollback_setup_transaction(result.transaction_id, false).unwrap();
+                assert!(rolled.success, "{}", rolled.message);
+                assert_eq!(env.bytes(), b"");
+            });
+        }
+
+        #[test]
+        fn an_entry_that_is_already_current_needs_no_change() {
+            each_mcp("equal", |env| {
+                let mut file: Value = serde_json::from_str(&env.user_file()).unwrap();
+                file[env.root_key()]["playwright"] = env.expected();
+                let text = serde_json::to_string(&file).unwrap();
+                env.put(&text);
+                assert_eq!(env.plan_mcp().kind, OperationKind::NoChange);
+                assert_eq!(env.plan_mcp().mcp, Some(EntryState::Equal));
+                assert_eq!(env.status_mcp().state, InstallationState::Current);
+                let plan = preview_setup(vec![env.wire()]).unwrap();
+                assert!(!plan.has_pending_changes && plan.plan_fingerprint.is_none());
+                assert_eq!(String::from_utf8(env.bytes()).unwrap(), text);
+            });
+        }
+
+        // ── An entry named playwright that is not the managed one ──
+
+        #[test]
+        fn a_differing_entry_without_a_record_is_the_users_own_and_stays_untouched() {
+            each_mcp("differs", |env| {
+                let mut file: Value = serde_json::from_str(&env.user_file()).unwrap();
+                file[env.root_key()]["playwright"] =
+                    json!({"command": "my-own-playwright", "args": ["--headless"]});
+                let text = serde_json::to_string_pretty(&file).unwrap();
+                env.put(&text);
+
+                let planned = env.plan_mcp();
+                assert_eq!(planned.kind, OperationKind::Conflict);
+                assert_eq!(planned.previous_state, PreviousState::Conflict);
+                assert_eq!(planned.rollback_action, RollbackAction::NoAction);
+                assert_eq!(planned.mcp, Some(EntryState::Differs));
+                let status = env.status_mcp();
+                assert_eq!(status.state, InstallationState::Conflict);
+                assert!(
+                    status.surfaces[0].detail.contains("already exists"),
+                    "{}",
+                    status.surfaces[0].detail
+                );
+                assert_eq!(
+                    status.conflict_details,
+                    [format!(
+                        "{} Playwright MCP entry",
+                        light_harness::display_name(env.harness)
+                    )]
+                );
+                env.assert_refused(text.as_bytes());
+                let said = env.everything_said();
+                assert!(
+                    !said.contains("my-own-playwright") && !said.contains(SECRET),
+                    "{said}"
+                );
+            });
+        }
+
+        #[test]
+        fn an_entry_the_app_wrote_and_the_user_then_edited_is_a_conflict() {
+            each_mcp("edited-after", |env| {
+                env.put(env.user_file());
+                assert!(env.apply_mcp().success);
+                let recorded = env.recorded_mcp();
+                assert!(recorded.is_some());
+                let mut edited = env.json();
+                edited[env.root_key()]["playwright"]["args"] = json!(["--my-flag"]);
+                let text = serde_json::to_string_pretty(&edited).unwrap();
+                env.put(&text);
+
+                assert_eq!(env.plan_mcp().kind, OperationKind::Conflict);
+                env.assert_refused(text.as_bytes());
+                assert_eq!(env.recorded_mcp(), recorded);
+            });
+        }
+
+        #[test]
+        fn an_entry_the_app_wrote_earlier_is_updated_when_the_bundled_one_moves_on() {
+            each_mcp("moves-on", |env| {
+                // The entry an older version wrote, recorded when it did.
+                let mut file: Value = serde_json::from_str(&env.user_file()).unwrap();
+                let mut old = env.expected();
+                old["description"] = json!("an older entry");
+                file[env.root_key()]["playwright"] = old.clone();
+                let original = serde_json::to_string_pretty(&file).unwrap() + "\n";
+                env.put(&original);
+                env.record_mcp(&env.entry_digest());
+
+                let planned = env.plan_mcp();
+                assert_eq!(planned.kind, OperationKind::Update);
+                assert_eq!(planned.previous_state, PreviousState::MergeableConfigFile);
+                assert_eq!(planned.mcp, Some(EntryState::Differs));
+                assert!(env.status_mcp().surfaces[0]
+                    .detail
+                    .contains("update available"));
+
+                let result = env.apply_mcp();
+                assert!(result.success, "{}", result.message);
+                assert_eq!(env.json()[env.root_key()]["playwright"], env.expected());
+                assert_eq!(env.json()[env.root_key()]["github"]["command"], "npx");
+                assert_eq!(env.recorded_mcp(), Some(env.entry_digest()));
+
+                // A rollback of a replaced entry brings the old one back.
+                let rolled = rollback_setup_transaction(result.transaction_id, false).unwrap();
+                assert!(rolled.success, "{}", rolled.message);
+                assert_eq!(String::from_utf8(env.bytes()).unwrap(), original);
+
+                // And with an edit elsewhere in between, only the entry goes back.
+                let result = env.apply_mcp();
+                assert!(result.success, "{}", result.message);
+                let mut edited = env.json();
+                edited["added"] = json!(true);
+                env.put(serde_json::to_string_pretty(&edited).unwrap());
+                let rolled = rollback_setup_transaction(result.transaction_id, false).unwrap();
+                assert!(rolled.success, "{}", rolled.message);
+                assert_eq!(env.json()[env.root_key()]["playwright"], old);
+                assert_eq!(env.json()["added"], json!(true));
+            });
+        }
+
+        #[test]
+        fn a_user_who_removed_the_entry_after_the_app_wrote_it_gets_it_back_without_a_conflict() {
+            each_mcp("removed", |env| {
+                env.put(env.user_file());
+                assert!(env.apply_mcp().success);
+                let mut edited = env.json();
+                edited[env.root_key()]
+                    .as_object_mut()
+                    .unwrap()
+                    .shift_remove("playwright");
+                env.put(serde_json::to_string_pretty(&edited).unwrap());
+                let planned = env.plan_mcp();
+                assert_eq!(planned.kind, OperationKind::Update);
+                assert_eq!(planned.mcp, Some(EntryState::EntryMissing));
+                assert!(env.apply_mcp().success);
+                assert_eq!(env.plan_mcp().kind, OperationKind::NoChange);
+            });
+        }
+
+        // ── Files the app does not edit ──
+
+        fn refused_cases(root_key: &str) -> Vec<(&'static str, Vec<u8>, Refusal)> {
+            vec![
+                (
+                    "line comment",
+                    format!("// {SECRET}\n{{\"{root_key}\":{{}}}}\n").into_bytes(),
+                    Refusal::Comments,
+                ),
+                (
+                    "block comment",
+                    format!("{{/* {SECRET} */ \"{root_key}\":{{}}}}").into_bytes(),
+                    Refusal::Comments,
+                ),
+                (
+                    "trailing comma",
+                    format!(
+                        "{{\"{root_key}\":{{\"{PRIVATE_NAME}\":{{\"env\":{{\"TOKEN\":\"{SECRET}\"}}}}}},}}"
+                    )
+                    .into_bytes(),
+                    Refusal::TrailingComma,
+                ),
+                (
+                    "byte order mark",
+                    [&[0xEF, 0xBB, 0xBF][..], b"{}"].concat(),
+                    Refusal::ByteOrderMark,
+                ),
+                (
+                    "array at the top",
+                    format!("[\"{SECRET}\"]").into_bytes(),
+                    Refusal::RootNotObject,
+                ),
+                (
+                    "servers key that is not an object",
+                    format!("{{\"{root_key}\":[\"{SECRET}\"]}}").into_bytes(),
+                    Refusal::KeyNotObject,
+                ),
+                (
+                    "not UTF-8",
+                    b"{\"a\":\"\xFF\xFE\"}".to_vec(),
+                    Refusal::NotUtf8,
+                ),
+                (
+                    "truncated",
+                    format!("{{\"{root_key}\":{{\"{PRIVATE_NAME}\":\"{SECRET}").into_bytes(),
+                    Refusal::NotJson,
+                ),
+                (
+                    "too large",
+                    format!("{{\"pad\":\"{}\"}}", "a".repeat(1024 * 1024)).into_bytes(),
+                    Refusal::TooLarge,
+                ),
+            ]
+        }
+
+        #[test]
+        fn files_the_app_does_not_edit_are_refused_with_zero_mutation_and_no_file_text() {
+            for harness in LIGHT {
+                for (name, content, refusal) in refused_cases(spec_of(harness).root_key.as_str()) {
+                    let env = mcp_env("refused", harness);
+                    env.put(&content);
+                    let label = format!("{} {name}", harness.as_str());
+
+                    let planned = env.plan_mcp();
+                    assert_eq!(planned.kind, OperationKind::Conflict, "{label}");
+                    assert_eq!(planned.previous_state, PreviousState::Conflict, "{label}");
+                    assert_eq!(planned.rollback_action, RollbackAction::NoAction, "{label}");
+                    assert_eq!(planned.mcp, Some(EntryState::Refused(refusal)), "{label}");
+                    let status = env.status_mcp();
+                    assert_eq!(status.state, InstallationState::Conflict, "{label}");
+                    assert!(
+                        status.surfaces[0].detail.contains(refusal.message()),
+                        "{label}: {}",
+                        status.surfaces[0].detail
+                    );
+                    assert!(
+                        status.surfaces[0].detail.contains("strict JSON"),
+                        "{label}: {}",
+                        status.surfaces[0].detail
+                    );
+                    env.assert_refused(&content);
+                    let said = env.everything_said();
+                    for text in [SECRET, PRIVATE_NAME, "sk-live"] {
+                        assert!(!said.contains(text), "{label}: {said}");
+                    }
+                    // The same file stays refused after a record is written: it never unlocks.
+                    env.record_mcp(&crate::stable_digest::bytes(&content));
+                    assert_eq!(env.plan_mcp().kind, OperationKind::Conflict, "{label}");
+                }
+            }
+        }
+
+        #[cfg(unix)]
+        #[test]
+        fn a_symlink_or_a_folder_in_place_of_the_file_is_never_written_through() {
+            each_mcp("not-a-file", |env| {
+                let elsewhere = env.base.join("elsewhere.json");
+                fs::write(&elsewhere, "{}").unwrap();
+                fs::create_dir_all(env.dest().parent().unwrap()).unwrap();
+                std::os::unix::fs::symlink(&elsewhere, env.dest()).unwrap();
+                let planned = env.plan_mcp();
+                assert_eq!(planned.kind, OperationKind::Conflict);
+                assert_eq!(
+                    planned.mcp,
+                    Some(EntryState::Refused(Refusal::NotRegularFile))
+                );
+                assert!(apply_setup(vec![env.wire()], false, None, None).is_err());
+                assert_eq!(fs::read_to_string(&elsewhere).unwrap(), "{}");
+                fs::remove_file(env.dest()).unwrap();
+
+                fs::create_dir(env.dest()).unwrap();
+                assert_eq!(env.plan_mcp().kind, OperationKind::Conflict);
+                assert!(apply_setup(vec![env.wire()], false, None, None).is_err());
+                assert!(env.dest().is_dir());
+            });
+        }
+
+        // ── Kilo: which of its files ──
+
+        #[test]
+        fn kilo_uses_an_existing_kilo_jsonc_then_an_existing_kilo_json_else_creates_kilo_jsonc() {
+            let env = mcp_env("kilo-files", HarnessId::Kilo);
+            let folder = env.home.join(".config/kilo");
+            let jsonc = folder.join("kilo.jsonc");
+            let json_file = folder.join("kilo.json");
+
+            // Neither exists: kilo.jsonc is created, kilo.json is not.
+            assert_eq!(env.dest(), jsonc);
+            let result = env.apply_mcp();
+            assert!(result.success, "{}", result.message);
+            assert!(jsonc.is_file() && !json_file.exists());
+            assert_eq!(env.json()["mcp"]["playwright"], env.expected());
+            let rolled = rollback_setup_transaction(result.transaction_id, false).unwrap();
+            assert!(rolled.success, "{}", rolled.message);
+            assert!(!jsonc.exists());
+
+            // Only kilo.json: it gets the entry; no kilo.jsonc appears.
+            fs::create_dir_all(&folder).unwrap();
+            fs::write(&json_file, "{\"model\": \"x\"}\n").unwrap();
+            assert_eq!(env.dest(), json_file);
+            let result = env.apply_mcp();
+            assert!(result.success, "{}", result.message);
+            assert!(!jsonc.exists());
+            assert_eq!(env.json()["mcp"]["playwright"], env.expected());
+            assert_eq!(env.json()["model"], "x");
+            let rolled = rollback_setup_transaction(result.transaction_id, false).unwrap();
+            assert!(rolled.success, "{}", rolled.message);
+            assert_eq!(
+                fs::read_to_string(&json_file).unwrap(),
+                "{\"model\": \"x\"}\n"
+            );
+
+            // Both: kilo.jsonc, which Kilo merges over kilo.json; kilo.json is not touched.
+            fs::write(
+                &jsonc,
+                "{\n  \"$schema\": \"https://app.kilo.ai/config.json\"\n}\n",
+            )
+            .unwrap();
+            assert_eq!(env.dest(), jsonc);
+            assert_eq!(env.plan_mcp().mcp, Some(EntryState::EntryMissing));
+            let result = env.apply_mcp();
+            assert!(result.success, "{}", result.message);
+            let after = env.json();
+            let keys: Vec<&String> = after.as_object().unwrap().keys().collect();
+            assert_eq!(
+                keys,
+                ["$schema", "mcp"],
+                "the first-run file keeps its schema"
+            );
+            assert_eq!(
+                fs::read_to_string(&json_file).unwrap(),
+                "{\"model\": \"x\"}\n"
+            );
+            assert!(result.success);
+        }
+
+        #[test]
+        fn the_kilo_mcp_file_follows_xdg_config_home() {
+            let env = mcp_env("kilo-xdg", HarnessId::Kilo);
+            let moved = env.base.join("xdg-config");
+            fs::create_dir_all(&moved).unwrap();
+            std::env::set_var("XDG_CONFIG_HOME", &moved);
+            assert_eq!(env.dest(), moved.join("kilo/kilo.jsonc"));
+            assert_eq!(
+                env.spec().allowlist_root(&env.home),
+                moved,
+                "outside the home folder the moved folder is the allowlisted root"
+            );
+            let result = env.apply_mcp();
+            assert!(result.success, "{}", result.message);
+            assert!(moved.join("kilo/kilo.jsonc").is_file());
+            assert!(!env.home.join(".config/kilo").exists());
+            let rolled = rollback_setup_transaction(result.transaction_id, false).unwrap();
+            assert!(rolled.success, "{}", rolled.message);
+            assert!(!moved.join("kilo/kilo.jsonc").exists());
+        }
+
+        // ── Gating ──
+
+        #[test]
+        fn kilos_mcp_target_is_off_in_a_fresh_profile_and_the_others_are_on() {
+            // Every harness on, every target at its default.
+            let env = Env::new("mcp-defaults", HarnessId::Kilo);
+            // Kilo's entry is dropped silently: nothing is planned, nothing is written.
+            let plan = preview_setup(vec!["kilo_mcp".into()]).unwrap();
+            assert!(plan.operations.is_empty() && !plan.has_pending_changes);
+            assert!(!spec_of(HarnessId::Kilo).resolve_dest(&env.home).exists());
+            for harness in [HarnessId::Copilot, HarnessId::Pi] {
+                let plan = preview_setup(vec![mcp_wire(harness)]).unwrap();
+                assert_eq!(plan.operations.len(), 1, "{}", harness.as_str());
+                assert_eq!(plan.operations[0].kind, OperationKind::Create);
+            }
+        }
+
+        #[test]
+        fn a_disabled_harness_or_a_switched_off_target_is_never_planned_or_written_for_mcp() {
+            for harness in LIGHT {
+                let env = mcp_env("mcp-gating", harness);
+                let mut settings = crate::settings::load();
+                settings.enabled_harness_ids.retain(|id| *id != harness);
+                crate::settings::save_with_revision_check(settings, None).unwrap();
+                let error = preview_setup(vec![env.wire()]).unwrap_err();
+                assert!(error.contains("Harness disabled"), "{error}");
+                assert!(apply_setup(vec![env.wire()], false, None, None).is_err());
+                assert!(!env.dest().exists());
+
+                enable_everything();
+                let mut settings = crate::settings::load();
+                settings
+                    .enabled_target_ids
+                    .retain(|id| *id != env.spec().target_id);
+                crate::settings::save_with_revision_check(settings, None).unwrap();
+                let plan = preview_setup(vec![env.wire()]).unwrap();
+                assert!(plan.operations.is_empty() && !plan.has_pending_changes);
+                assert!(!env.dest().exists());
+            }
+        }
+
+        // ── Preview, fingerprint ──
+
+        #[test]
+        fn the_review_names_the_file_the_entry_goes_into() {
+            each_mcp("review", |env| {
+                let shown = env.spec().display_path(&env.home);
+                let plan = preview_setup(vec![env.wire()]).unwrap();
+                assert_eq!(
+                    plan.operations[0].details,
+                    [format!(
+                        "+ {shown} (new file, owner-only; adds the playwright entry)"
+                    )]
+                );
+                env.put(env.user_file());
+                let plan = preview_setup(vec![env.wire()]).unwrap();
+                assert_eq!(
+                    plan.operations[0].details,
+                    [format!(
+                        "~ {shown} (adds or updates the playwright entry; your other servers stay)"
+                    )]
+                );
+            });
+        }
+
+        #[test]
+        fn the_fingerprint_changes_only_when_the_managed_entry_changes() {
+            each_mcp("fingerprint", |env| {
+                let fingerprint = |env: &M| {
+                    let planned = setup_transaction::plan_artifacts_for_surfaces(
+                        &[env.surface()],
+                        &env.ws,
+                        &env.home,
+                    )
+                    .unwrap();
+                    setup_transaction::compute_plan_fingerprint(
+                        &env.ws,
+                        &[env.surface()],
+                        &planned,
+                        &env.home,
+                    )
+                    .unwrap()
+                };
+                let mut file: Value = serde_json::from_str(&env.user_file()).unwrap();
+                env.put(serde_json::to_string_pretty(&file).unwrap());
+                let base = fingerprint(env);
+
+                file["theme"] = json!("light");
+                env.put(serde_json::to_string_pretty(&file).unwrap());
+                assert_eq!(fingerprint(env), base, "an unrelated key");
+                file[env.root_key()]["third"] = json!({"command": "third"});
+                env.put(serde_json::to_string_pretty(&file).unwrap());
+                assert_eq!(fingerprint(env), base, "another server");
+                env.put(serde_json::to_string(&file).unwrap());
+                assert_eq!(fingerprint(env), base, "the layout");
+
+                file[env.root_key()]["playwright"] = json!({"command": "mine"});
+                env.put(serde_json::to_string_pretty(&file).unwrap());
+                let other = fingerprint(env);
+                assert_ne!(other, base, "an entry of the user's own");
+                file[env.root_key()]["playwright"] = json!({"command": "mine too"});
+                env.put(serde_json::to_string_pretty(&file).unwrap());
+                assert_ne!(fingerprint(env), other, "another entry");
+
+                fs::remove_file(env.dest()).unwrap();
+                assert_ne!(fingerprint(env), base, "no file");
+            });
+        }
+
+        #[test]
+        fn a_file_that_changes_after_the_preview_is_refused_at_apply() {
+            each_mcp("changed", |env| {
+                env.put(env.user_file());
+                let plan = preview_setup(vec![env.wire()]).unwrap();
+                assert!(plan.plan_fingerprint.is_some());
+
+                // The user adds an entry of their own, or a comment, in between.
+                let mut file = env.json();
+                file[env.root_key()]["playwright"] = json!({"command": "mine"});
+                let edited = serde_json::to_string_pretty(&file).unwrap();
+                env.put(&edited);
+                let error = apply_setup(
+                    vec![env.wire()],
+                    false,
+                    plan.plan_fingerprint.clone(),
+                    plan.preview_token.clone(),
+                )
+                .map(|result| result.message)
+                .unwrap_or_else(|error| error);
+                assert!(
+                    error.contains("mismatch") || error.contains("blocked"),
+                    "{error}"
+                );
+                assert_eq!(String::from_utf8(env.bytes()).unwrap(), edited);
+
+                env.put(format!("// {SECRET}\n{{}}"));
+                let error = apply_setup(
+                    vec![env.wire()],
+                    false,
+                    plan.plan_fingerprint,
+                    plan.preview_token,
+                )
+                .map(|result| result.message)
+                .unwrap_or_else(|error| error);
+                assert!(!error.contains(SECRET), "{error}");
+                assert_eq!(
+                    String::from_utf8(env.bytes()).unwrap(),
+                    format!("// {SECRET}\n{{}}")
+                );
+                assert_eq!(env.backup_entries(), 0);
+            });
+        }
+
+        // ── Uninstall ──
+
+        #[test]
+        fn uninstall_keeps_the_mcp_file_and_never_lists_it_as_removable() {
+            each_mcp("uninstall", |env| {
+                env.put(env.user_file());
+                assert!(env.apply_mcp().success);
+                let plan =
+                    setup_transaction::plan_artifacts_for_uninstall(&env.ws, &env.home).unwrap();
+                assert!(plan.merged.contains(&env.artifact()));
+                assert!(plan.removals.iter().all(|op| op.artifact != env.artifact()));
+                assert!(!plan.preserved.contains(&env.artifact()));
+                assert_eq!(env.json()[env.root_key()]["playwright"], env.expected());
+
+                // Even a file that only the app wrote is kept: the user may have added to it.
+                fs::remove_file(env.dest()).unwrap();
+                assert!(env.apply_mcp().success);
+                let plan =
+                    setup_transaction::plan_artifacts_for_uninstall(&env.ws, &env.home).unwrap();
+                assert!(plan.merged.contains(&env.artifact()));
+                assert!(plan.removals.iter().all(|op| op.artifact != env.artifact()));
+
+                // A file the app never wrote into is the user's alone: it is not reported at all.
+                for content in [env.user_file(), format!("// {SECRET}\n{{}}"), String::new()] {
+                    env.put(&content);
+                    let plan = setup_transaction::plan_artifacts_for_uninstall(&env.ws, &env.home)
+                        .unwrap();
+                    for listed in [
+                        plan.merged.contains(&env.artifact()),
+                        plan.preserved.contains(&env.artifact()),
+                        plan.removals.iter().any(|op| op.artifact == env.artifact()),
+                    ] {
+                        assert!(!listed, "{content:?}");
+                    }
+                    assert_eq!(String::from_utf8(env.bytes()).unwrap(), content);
+                }
+            });
+        }
+
+        // ── Rules and MCP in one transaction ──
+
+        #[test]
+        fn rules_and_mcp_of_a_harness_are_one_transaction_with_distinct_backups() {
+            for harness in LIGHT {
+                let env = mcp_env("together", harness);
+                env.put(env.user_file());
+                let before = env.bytes();
+                let wires = vec![wire(harness), mcp_wire(harness)];
+                let plan = preview_setup(wires.clone()).unwrap();
+                assert_eq!(plan.operations.len(), 2);
+                let result =
+                    apply_setup(wires, false, plan.plan_fingerprint, plan.preview_token).unwrap();
+                assert!(result.success, "{}", result.message);
+                assert!(rules_of(harness).resolve_dest(&env.home).is_file());
+                assert_eq!(env.json()[env.root_key()]["playwright"], env.expected());
+                let rolled = rollback_setup_transaction(result.transaction_id, false).unwrap();
+                assert!(rolled.success, "{}", rolled.message);
+                assert!(!rules_of(harness).resolve_dest(&env.home).exists());
+                assert_eq!(env.bytes(), before);
+            }
+        }
+
+        // ── Health ──
+
+        #[test]
+        fn the_health_mcp_row_follows_the_file() {
+            each_mcp("health", |env| {
+                let path = env.spec().display_path(&env.home);
+                let missing = env.health_mcp();
+                assert_eq!(missing.mcp.status, "missing");
+                assert_eq!(missing.mcp.path, path);
+                assert_eq!(missing.mcp.detail, "no file yet");
+                assert_eq!(missing.mcp.playwright_version, None);
+
+                env.put(env.user_file());
+                let no_entry = env.health_mcp();
+                assert_eq!(no_entry.mcp.status, "missing");
+                assert!(no_entry.mcp.detail.contains("your other servers stay"));
+
+                assert!(env.apply_mcp().success);
+                let synced = env.health_mcp();
+                assert_eq!(synced.mcp.status, "synced");
+                assert_eq!(synced.mcp.detail, "installed and current");
+                assert_eq!(synced.mcp.playwright_version.as_deref(), Some("0.0.48"));
+
+                // The recorded entry of an older version, still the app's: stale, not diverged.
+                let mut file = env.json();
+                file[env.root_key()]["playwright"]["description"] = json!("older");
+                env.put(serde_json::to_string_pretty(&file).unwrap());
+                env.record_mcp(&env.entry_digest());
+                assert_eq!(env.health_mcp().mcp.status, "stale");
+
+                // An entry of the user's own.
+                env.record_mcp(&crate::stable_digest::bytes(b"something else"));
+                let diverged = env.health_mcp();
+                assert_eq!(diverged.mcp.status, "diverged");
+                assert!(diverged.mcp.detail.contains("already exists"));
+
+                // A file the app does not edit.
+                env.put(format!("// {SECRET}\n{{}}"));
+                let invalid = env.health_mcp();
+                assert_eq!(invalid.mcp.status, "invalid");
+                assert!(invalid.mcp.detail.contains("comments"));
+                assert_eq!(invalid.mcp.playwright_version, None);
+                let json = serde_json::to_string(&invalid).unwrap();
+                assert!(
+                    !json.contains(SECRET) && !json.contains("sk-live"),
+                    "{json}"
+                );
+            });
+        }
+
+        #[test]
+        fn the_health_mcp_row_is_off_when_the_target_is_switched_off() {
+            each_mcp("health-off", |env| {
+                let mut settings = crate::settings::load();
+                settings
+                    .enabled_target_ids
+                    .retain(|id| *id != env.spec().target_id);
+                crate::settings::save_with_revision_check(settings, None).unwrap();
+                env.put(format!("// {SECRET}\n{{}}"));
+                let off = env.health_mcp();
+                assert_eq!(off.mcp.status, "off");
+                assert_ne!(off.status, "off");
+                assert!(off.warnings.iter().all(|w| !w.contains("exposure")));
+            });
+        }
+
+        #[test]
+        fn the_health_warns_that_pi_does_not_declare_the_tools_and_that_kilo_files_can_shadow_the_entry(
+        ) {
+            let pi = mcp_env("health-pi-note", HarnessId::Pi);
+            let note = pi
+                .health_mcp()
+                .warnings
+                .into_iter()
+                .find(|w| w.contains("exposure"))
+                .expect("exposure note");
+            assert!(
+                note.contains("direct") && note.contains("codemode"),
+                "{note}"
+            );
+            drop(pi);
+
+            for harness in [HarnessId::Copilot, HarnessId::Kilo] {
+                let env = mcp_env("health-no-note", harness);
+                assert!(
+                    env.health_mcp()
+                        .warnings
+                        .iter()
+                        .all(|w| !w.contains("exposure")),
+                    "{}",
+                    harness.as_str()
+                );
+            }
+
+            let kilo = mcp_env("health-kilo-shadow", HarnessId::Kilo);
+            let shadow = |w: &String| w.contains("win over");
+            assert!(!kilo.health_mcp().warnings.iter().any(shadow));
+            fs::create_dir_all(kilo.home.join(".kilo")).unwrap();
+            fs::write(kilo.home.join(".kilo/kilo.jsonc"), format!("// {SECRET}")).unwrap();
+            fs::create_dir_all(kilo.home.join(".config/kilo")).unwrap();
+            fs::write(kilo.home.join(".config/kilo/opencode.json"), "{}").unwrap();
+            let health = kilo.health_mcp();
+            let warning = health
+                .warnings
+                .iter()
+                .find(|w| shadow(w))
+                .expect("shadow warning");
+            assert!(
+                warning.contains("~/.config/kilo/opencode.json")
+                    && warning.contains("~/.kilo/kilo.jsonc")
+                    && warning.contains("~/.config/kilo/kilo.jsonc"),
+                "{warning}"
+            );
+            assert!(!serde_json::to_string(&health).unwrap().contains(SECRET));
+        }
+
+        // ── The bundled entries ──
+
+        fn bundled_json(rel: &str) -> Value {
+            let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../resources/default-workspace")
+                .join(rel);
+            serde_json::from_str(&fs::read_to_string(path).expect("bundled file"))
+                .expect("bundled JSON")
+        }
+
+        #[test]
+        fn every_entry_pins_the_playwright_version_and_chooses_system_chrome_inline() {
+            let home = Path::new("/home/someone");
+            let bundled =
+                Path::new(env!("CARGO_MANIFEST_DIR")).join("../resources/default-workspace");
+            let browsers = crate::commands::cursor_profile::resolve_playwright_browsers_path(home)
+                .expect("browsers path")
+                .to_string_lossy()
+                .into_owned();
+            for harness in LIGHT {
+                let entry =
+                    crate::light_mcp::expected_entry(spec_of(harness), &bundled, home).unwrap();
+                let text = entry.to_string();
+                assert!(text.contains("@playwright/mcp@0.0.48"), "{text}");
+                assert!(!text.contains("@latest"), "{text}");
+                // The sidecar is owned by the OpenCode config surface, and a missing file
+                // crashes the server: these entries do not depend on it.
+                assert!(
+                    !text.contains("--config") && !text.contains("playwright-mcp"),
+                    "{text}"
+                );
+                // System Chrome in an isolated profile, which is what the sidecar resolves to.
+                assert!(
+                    text.contains(r#""--browser","chrome","--isolated""#),
+                    "{text}"
+                );
+                assert!(!text.contains("chromium"), "{text}");
+                assert!(text.contains(&browsers), "{text}");
+                assert!(!text.contains("__PLAYWRIGHT_"), "{text}");
+                assert_eq!(
+                    crate::light_mcp::pinned_version(&entry).as_deref(),
+                    Some("0.0.48")
+                );
+            }
+        }
+
+        #[test]
+        fn the_entry_shapes_are_the_ones_each_harness_reads() {
+            let copilot = bundled_json("templates/mcp/copilot.playwright.json");
+            let keys = |value: &Value| -> Vec<String> {
+                let mut keys: Vec<String> = value.as_object().unwrap().keys().cloned().collect();
+                keys.sort();
+                keys
+            };
+            assert_eq!(keys(&copilot), ["args", "command", "env", "tools", "type"]);
+            assert_eq!(copilot["type"], "local");
+            assert_eq!(copilot["command"], "npx");
+            assert_eq!(copilot["tools"], json!(["*"]));
+
+            // Pi refuses `type: "local"` and a command that is an array.
+            let pi = bundled_json("templates/mcp/pi.playwright.json");
+            assert_eq!(keys(&pi), ["args", "command", "description", "env"]);
+            assert!(pi.get("type").is_none() && pi.get("exposure").is_none());
+            assert_eq!(pi["command"], "npx");
+            assert!(pi["description"]
+                .as_str()
+                .is_some_and(|text| !text.is_empty()));
+            assert_eq!(pi["args"], copilot["args"]);
+            assert_eq!(pi["env"], copilot["env"]);
+            assert_eq!(copilot["args"].as_array().unwrap()[0], "-y");
+        }
+
+        #[test]
+        fn kilos_entry_is_the_opencode_entry_apart_from_the_browser_flags() {
+            let kilo = bundled_json("templates/mcp/kilo.playwright.json");
+            let opencode = bundled_json("templates/opencode.json");
+            let opencode = &opencode["mcp"]["playwright"];
+            let keys = |value: &Value| -> std::collections::BTreeSet<String> {
+                value.as_object().unwrap().keys().cloned().collect()
+            };
+            assert_eq!(keys(&kilo), keys(opencode));
+            for key in ["type", "environment", "enabled"] {
+                assert_eq!(kilo[key], opencode[key], "{key}");
+            }
+            let mut command: Vec<Value> = opencode["command"].as_array().unwrap().clone();
+            assert_eq!(
+                &command[command.len() - 2..],
+                [json!("--config"), json!("__PLAYWRIGHT_MCP_CONFIG_PATH__")],
+                "the OpenCode entry ends with the sidecar flag"
+            );
+            command.truncate(command.len() - 2);
+            command.extend([json!("--browser"), json!("chrome"), json!("--isolated")]);
+            assert_eq!(kilo["command"], Value::Array(command.clone()));
+            // Key order and every value too: the entry is the OpenCode one in all but the flags.
+            let mut expected = opencode.clone();
+            expected["command"] = Value::Array(command);
+            assert_eq!(kilo.to_string(), expected.to_string());
+        }
+
+        #[test]
+        fn the_central_harnesses_keep_the_sidecar_entries() {
+            // Cursor and OpenCode are unchanged: they still point at the sidecar config.
+            let cursor = bundled_json("templates/cursor/mcp/playwright.mcp.json");
+            assert!(cursor
+                .to_string()
+                .contains("__PLAYWRIGHT_MCP_CONFIG_PATH__"));
+            let opencode = bundled_json("templates/opencode.json");
+            assert!(opencode["mcp"]["playwright"]
+                .to_string()
+                .contains("__PLAYWRIGHT_MCP_CONFIG_PATH__"));
+        }
+
+        #[test]
+        fn the_bundled_templates_carry_no_credentials_and_a_poisoned_one_is_refused() {
+            let home = Path::new("/home/someone");
+            let bundled =
+                Path::new(env!("CARGO_MANIFEST_DIR")).join("../resources/default-workspace");
+            for harness in LIGHT {
+                let text =
+                    fs::read_to_string(bundled.join(&spec_of(harness).template_rel)).unwrap();
+                assert!(!crate::commands::cursor_profile::json_has_unsafe_literals(
+                    &text
+                ));
+            }
+            let dir = std::env::temp_dir().join(format!(
+                "aw-light-poisoned-{}",
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_nanos()
+            ));
+            fs::create_dir_all(dir.join("templates/mcp")).unwrap();
+            let pi = spec_of(HarnessId::Pi);
+            for body in [
+                format!(r#"{{"command":"npx","env":{{"API_KEY":"{SECRET}"}}}}"#),
+                r#"{"command":"npx","headers":{"Authorization":"Bearer abc"}}"#.to_string(),
+                r#"{"command":"npx","args":["__PLAYWRIGHT_UNKNOWN__"]}"#.to_string(),
+                "[]".to_string(),
+                "{".to_string(),
+            ] {
+                fs::write(dir.join(&pi.template_rel), body).unwrap();
+                assert!(
+                    crate::light_mcp::expected_entry(pi, &dir, home).is_err(),
+                    "a template the app would write must be clean"
+                );
+            }
+            let _ = fs::remove_dir_all(dir);
+        }
     }
 }

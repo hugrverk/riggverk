@@ -254,7 +254,7 @@ export interface EffectiveSkillLoads {
 }
 
 export interface AgentTargetMeta {
-  id: string; label: string; harness: InstallAgent; kind: "rules" | "agents" | "config"; target_rel: string; source_rel: string;
+  id: string; label: string; harness: InstallAgent; kind: "rules" | "agents" | "config" | "mcp"; target_rel: string; source_rel: string;
 }
 
 export interface ConfigEditorSourceMeta {
@@ -535,13 +535,30 @@ export interface LightRulesHealth {
   detail: string;
 }
 
-/** Runtime health of Copilot, Pi and Kilo (`get_light_runtime_health`). MCP is not managed yet. */
+/** The managed Playwright entry in the MCP file of a light harness. */
+export interface LightMcpHealth {
+  /**
+   * `synced`, `missing` (no file or no entry yet), `stale` (an update of the entry waits), `diverged` (an entry of the
+   * user's own under the managed key), `invalid` (a file the app does not edit: comments, a trailing comma, ...),
+   * `off` (target switched off) or `unknown`.
+   */
+  status: string;
+  /** The MCP file as people know it (`~/.copilot/mcp-config.json`). */
+  path: string;
+  /** The Playwright version the installed entry pins, when it names one. */
+  playwright_version: string | null;
+  /** The status line: counts and fixed phrases, never file text. */
+  detail: string;
+}
+
+/** Runtime health of Copilot, Pi and Kilo (`get_light_runtime_health`). */
 export interface LightRuntimeHealth {
   harness: LightAgent;
-  /** The skills status; once the skills are fine, the rules status (unless that target is off). */
+  /** The skills status; once the skills are fine, the rules status, then the MCP status (each unless its target is off). */
   status: string;
   cli: LightCliHealth;
   rules: LightRulesHealth;
+  mcp: LightMcpHealth;
   skills: LightSkillsHealth;
   warnings: string[];
   next_action: string;
@@ -570,6 +587,9 @@ export type SetupSurfaceId =
   | "copilot_rules"
   | "pi_rules"
   | "kilo_rules"
+  | "copilot_mcp"
+  | "pi_mcp"
+  | "kilo_mcp"
   | "workspace_bundle";
 
 export type OperationKind =

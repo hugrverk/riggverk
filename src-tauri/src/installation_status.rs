@@ -216,6 +216,14 @@ fn surface_status(
     let detail = assessment
         .and_then(|(a, user_managed)| rules_detail(&a, user_managed))
         .unwrap_or(detail);
+    let detail = own
+        .iter()
+        .find_map(|p| {
+            p.mcp.and_then(|state| {
+                mcp_detail(state, p.kind, setup_transaction::mcp_entry_key(&p.artifact))
+            })
+        })
+        .unwrap_or(detail);
     let rules = assessment.map(|(a, user_managed)| RulesStatus {
         layout: a.layout,
         refinement_lines: a.refinement_lines,
@@ -232,6 +240,26 @@ fn surface_status(
         state,
         detail,
         rules,
+    }
+}
+
+/// Status line for an MCP surface of a light harness; `None` where the generic one says it all.
+/// Counts and fixed phrases only, never text of the file.
+fn mcp_detail(
+    state: crate::light_mcp::EntryState,
+    kind: OperationKind,
+    entry_key: &str,
+) -> Option<String> {
+    use crate::light_mcp::EntryState;
+    match (state, kind) {
+        (EntryState::EntryMissing, OperationKind::Update) => Some(format!(
+            "the {entry_key} entry will be added; your other servers stay"
+        )),
+        (EntryState::Differs, OperationKind::Update) => {
+            Some(format!("update available for the {entry_key} entry"))
+        }
+        (_, OperationKind::Conflict) => state.conflict_reason(entry_key),
+        _ => None,
     }
 }
 
@@ -312,6 +340,10 @@ pub(crate) fn artifact_label(artifact: &crate::artifact_registry::ArtifactId) ->
             "{} rules",
             crate::light_harness::display_name(harness.harness())
         ),
+        ArtifactId::HarnessMcp(harness) => format!(
+            "{} Playwright MCP entry",
+            crate::light_harness::display_name(harness.harness())
+        ),
     }
 }
 
@@ -330,6 +362,7 @@ mod tests {
             rollback_action: RollbackAction::NoAction,
             rules: None,
             rules_rewrite: None,
+            mcp: None,
         }
     }
 

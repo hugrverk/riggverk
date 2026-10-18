@@ -22,22 +22,25 @@ describe("defaultSettings", () => {
     ]);
   });
 
-  it("enables every rules, agents and config target except codex_config", () => {
+  it("enables every rules, agents, config and MCP target except codex_config and kilo_mcp", () => {
     expect(defaultSettings().enabled_target_ids).toBe(DEFAULT_TARGET_IDS);
     expect([...DEFAULT_TARGET_IDS].sort()).toEqual([
       "claude_agents",
       "claude_rules",
       "codex_agents",
       "codex_rules",
+      "copilot_mcp",
       "copilot_rules",
       "cursor_setup",
       "kilo_rules",
       "opencode_agents",
       "opencode_config",
       "opencode_rules",
+      "pi_mcp",
       "pi_rules",
     ]);
     expect(DEFAULT_TARGET_IDS).not.toContain("codex_config");
+    expect(DEFAULT_TARGET_IDS).not.toContain("kilo_mcp");
   });
 });
 

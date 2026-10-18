@@ -60,14 +60,14 @@ Defaults:
 
 - Package: `@playwright/mcp@0.0.48` (`PLAYWRIGHT_MCP_VERSION` overrides it)
 - MCP config: `~/.config/playwright-mcp/config.json` (or `PLAYWRIGHT_MCP_CONFIG_PATH`) from `templates/playwright-mcp.config.json`
-- Browser: **Chromium** via MCP config (`browserName: chromium`, `isolated: true`) — not the Chrome channel
+- Browser: `browserName: chromium` and `isolated: true` in the MCP config. On `@playwright/mcp@0.0.48` that configuration resolves to the `chrome` channel, that is the system Google Chrome, not Playwright's bundled Chromium (which `--browser chromium` selects); this was read from the resolved configuration, not from a launch. Verify with one real launch before relying on either
 - Binaries: shared cache (`~/Library/Caches/ms-playwright` on macOS, `$XDG_CACHE_HOME/ms-playwright` on Linux, `~/AppData/Local/ms-playwright` on Windows; `PLAYWRIGHT_BROWSERS_PATH` overrides)
 
 On macOS, Playwright’s Chromium bundle may still show **Google Chrome for Testing.app** inside the cache. That is expected and is not the same as requiring Chrome Stable/Beta/Dev/Canary.
 
 Do **not** set `PLAYWRIGHT_BROWSERS_PATH=0`. That forces project-local browsers under `node_modules` and defeats the shared-cache default.
 
-The app installs the Playwright MCP config with the OpenCode config target and renders user-specific paths into the OpenCode MCP entry. The Cursor page merges only the `playwright` server into `~/.cursor/mcp.json` (existing servers are preserved; existing files are backed up first).
+The app installs the Playwright MCP config with the OpenCode config target and renders user-specific paths into the OpenCode MCP entry. The Cursor page merges only the `playwright` server into `~/.cursor/mcp.json` (existing servers are preserved; existing files are backed up first). Both entries pass `--config` with that file, and the server fails to start when the file is missing, so with the OpenCode config target off the Cursor entry has no config to read. The GitHub Copilot, Pi and Kilo entries do not depend on it: they pass `--browser chrome --isolated` instead (see `docs/WORKSPACE_CONTRACT.md` in the app repository).
 
 Security note: Playwright MCP provides privileged browser automation tools. Its documented default tool list includes an unsafe code execution tool, and no stable server-side option to disable only that tool is currently documented. Do not use it on private or authenticated sites unless the runtime agent permissions and prompt scope are appropriate. Isolated sessions do not persist logged-in browser state between runs.
 

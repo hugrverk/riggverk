@@ -1,0 +1,17 @@
+{
+  "type": "local",
+  "command": "npx",
+  "args": [
+    "-y",
+    "@playwright/mcp@0.0.48",
+    "--browser",
+    "chrome",
+    "--isolated"
+  ],
+  "env": {
+    "PLAYWRIGHT_BROWSERS_PATH": "__PLAYWRIGHT_BROWSERS_PATH__"
+  },
+  "tools": [
+    "*"
+  ]
+}

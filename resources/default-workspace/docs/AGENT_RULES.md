@@ -118,6 +118,8 @@ Cursor includes:
 
 Cursor global setup also manages the canonical skill catalog and the named Playwright MCP entry. User Rules, Auto Review, general permissions, and project `.cursor/*` remain manual or project-owned.
 
+GitHub Copilot, Pi, and Kilo (the opt-in light tier) get the named Playwright MCP entry in their own MCP file as well: `~/.copilot/mcp-config.json`, `~/.pi/agent/mcp.json`, and `kilo.jsonc` (else `kilo.json`) in Kilo's config folder. Targets `copilot_mcp` and `pi_mcp` are on by default; `kilo_mcp` is off until you switch it on, because Kilo's main config file may hold provider keys. The app edits strict JSON only and changes only that entry: a file with comments or a trailing comma, or an entry named `playwright` that is yours, is left as is.
+
 ## Changing the shared rules and agents
 
 Rules and agents installed by the app come from the app's bundle. To change them for everyone, edit them in the app source repository:

@@ -146,6 +146,7 @@ fn source_keys(artifact: &ArtifactId, bundled_root: &Path) -> Vec<String> {
         | ArtifactId::CodexRules
         | ArtifactId::ClaudeRules
         | ArtifactId::HarnessRules(_)
+        | ArtifactId::HarnessMcp(_)
         | ArtifactId::CursorMcp
         | ArtifactId::WorkspaceFile(_) => Vec::new(),
     }

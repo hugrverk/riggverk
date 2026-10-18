@@ -219,6 +219,9 @@ pub struct PlannedArtifact {
     /// Exact content for an explicit rules conversion; `None` for every
     /// regular plan.
     pub rules_rewrite: Option<RulesRewrite>,
+    /// How the managed entry stands in the MCP file of a light harness; `None` for every other
+    /// artifact and when the entry template or the descriptor is unavailable.
+    pub mcp: Option<crate::light_mcp::EntryState>,
 }
 
 /// A rules file the user chose to convert: the complete new content, and the
@@ -543,9 +546,19 @@ pub fn detect_surface_state(
     workspace_root: &Path,
     home: &Path,
 ) -> (SetupSurfaceId, OperationKind, String) {
-    let kinds: Vec<OperationKind> =
+    let (kinds, conflict_reason): (Vec<OperationKind>, Option<String>) =
         match plan_artifacts_for_surfaces(&[surface], workspace_root, home) {
-            Ok(planned) if !planned.is_empty() => planned.iter().map(|p| p.kind).collect(),
+            Ok(planned) if !planned.is_empty() => {
+                // Why an MCP file is left alone, so the review says it beside the conflict.
+                let reason = planned
+                    .iter()
+                    .filter(|p| p.kind == OperationKind::Conflict)
+                    .find_map(|p| {
+                        p.mcp
+                            .and_then(|state| state.conflict_reason(mcp_entry_key(&p.artifact)))
+                    });
+                (planned.iter().map(|p| p.kind).collect(), reason)
+            }
             // No harness is enabled: no skill is wanted anywhere, and nothing is removed.
             Ok(_) if surface.canonical() == SetupSurfaceId::Skills => {
                 return (
@@ -574,7 +587,10 @@ pub fn detect_surface_state(
         OperationKind::NoChange => format!("{} synced", surface.label()),
         OperationKind::Create => format!("{} not installed", surface.label()),
         OperationKind::Update => format!("{} differs from source", surface.label()),
-        OperationKind::Conflict => format!("{} has conflicts", surface.label()),
+        OperationKind::Conflict => match conflict_reason {
+            Some(reason) => format!("{}: {reason}", surface.label()),
+            None => format!("{} has conflicts", surface.label()),
+        },
         // Only a rules file the user chose to manage plans as Manual.
         OperationKind::Manual => format!(
             "{}: you manage this file; base updates are skipped",
@@ -605,7 +621,7 @@ fn artifact_kind(artifact: &ArtifactId) -> ArtifactKind {
         | ArtifactId::CodexSkill(_)
         | ArtifactId::ClaudeSkill(_)
         | ArtifactId::CursorSkill(_) => ArtifactKind::SkillFile,
-        ArtifactId::CursorMcp => ArtifactKind::McpConfig,
+        ArtifactId::CursorMcp | ArtifactId::HarnessMcp(_) => ArtifactKind::McpConfig,
     }
 }
 
@@ -735,6 +751,21 @@ pub fn detect_artifact_state(
                 (OperationKind::Update, PreviousState::ManagedFile)
             }
         }
+        ArtifactKind::McpConfig if matches!(artifact, ArtifactId::HarnessMcp(_)) => {
+            use crate::light_mcp::EntryState;
+            match harness_mcp_state(artifact, workspace_root, &bundled_root, home) {
+                None => (OperationKind::Unavailable, PreviousState::Unavailable),
+                Some(EntryState::Absent) => (OperationKind::Create, PreviousState::Absent),
+                // The merge rewrites only the managed entry and keeps every other server.
+                Some(EntryState::EntryMissing | EntryState::Differs) => {
+                    (OperationKind::Update, PreviousState::MergeableConfigFile)
+                }
+                Some(EntryState::Equal) => {
+                    (OperationKind::NoChange, PreviousState::MergeableConfigFile)
+                }
+                Some(EntryState::Refused(_)) => (OperationKind::Conflict, PreviousState::Conflict),
+            }
+        }
         ArtifactKind::McpConfig => {
             let status = crate::cursor_profile_ops::mcp_diff_status(
                 &bundled_root,
@@ -837,6 +868,126 @@ fn assess_rules(
     Some(assessment)
 }
 
+/// The state of the managed entry in the MCP file of a light harness. `None` when the
+/// descriptor, the destination or the bundled entry cannot be used.
+fn harness_mcp_state(
+    artifact: &ArtifactId,
+    workspace_root: &Path,
+    bundled_root: &Path,
+    home: &Path,
+) -> Option<crate::light_mcp::EntryState> {
+    let ArtifactId::HarnessMcp(harness) = artifact else {
+        return None;
+    };
+    let spec = harness.mcp()?;
+    let dest = artifact.resolve_dest(home, workspace_root).ok()?;
+    let source = artifact.resolve_source(bundled_root)?;
+    reject_symlink(&source, "source").ok()?;
+    let expected = crate::light_mcp::expected_entry(spec, bundled_root, home).ok()?;
+    // A symlink or anything else that is not a regular file is refused by the read itself.
+    Some(crate::light_mcp::assess(spec, &dest, &expected))
+}
+
+/// One MCP entry planned as an operation.
+struct McpPlan {
+    state: Option<crate::light_mcp::EntryState>,
+    kind: OperationKind,
+    previous_state: PreviousState,
+}
+
+/// Plans the managed entry of a light harness's MCP file, or `None` for any other artifact.
+///
+/// A file without the entry is merged into (never created over, so a rollback cannot delete the
+/// user's file). An entry of that name that differs is the user's own unless a record proves the
+/// app wrote it, and then only while it is still what the app wrote: otherwise it is a conflict,
+/// and so is a file the app does not edit (comments, trailing comma, byte order mark, ...).
+fn plan_mcp_artifact(
+    artifact: &ArtifactId,
+    workspace_root: &Path,
+    bundled_root: &Path,
+    home: &Path,
+    managed_hash: Option<&str>,
+) -> Option<McpPlan> {
+    use crate::light_mcp::EntryState;
+    if !matches!(artifact, ArtifactId::HarnessMcp(_)) {
+        return None;
+    }
+    let Some(state) = harness_mcp_state(artifact, workspace_root, bundled_root, home) else {
+        return Some(McpPlan {
+            state: None,
+            kind: OperationKind::Unavailable,
+            previous_state: PreviousState::Unavailable,
+        });
+    };
+    let (kind, previous_state) = match state {
+        EntryState::Absent => (OperationKind::Create, PreviousState::Absent),
+        EntryState::EntryMissing => (OperationKind::Update, PreviousState::MergeableConfigFile),
+        EntryState::Equal => (OperationKind::NoChange, PreviousState::MergeableConfigFile),
+        EntryState::Differs if managed_hash.is_some() => refine_with_managed_hash(
+            OperationKind::Update,
+            PreviousState::MergeableConfigFile,
+            artifact,
+            workspace_root,
+            bundled_root,
+            home,
+            managed_hash,
+        ),
+        EntryState::Differs | EntryState::Refused(_) => {
+            (OperationKind::Conflict, PreviousState::Conflict)
+        }
+    };
+    Some(McpPlan {
+        state: Some(state),
+        kind,
+        previous_state,
+    })
+}
+
+/// The key the app manages in the MCP file of `artifact`, for messages.
+pub(crate) fn mcp_entry_key(artifact: &ArtifactId) -> &'static str {
+    match artifact {
+        ArtifactId::HarnessMcp(harness) => harness
+            .mcp()
+            .map_or("playwright", |mcp| mcp.entry_key.as_str()),
+        _ => "playwright",
+    }
+}
+
+/// Re-checks, at apply time, that an MCP file may still be written: the plan came from an
+/// earlier read, and a file the app does not edit, or an entry of the user's own, must never be
+/// replaced.
+pub fn ensure_mcp_apply_allowed(
+    artifact: &ArtifactId,
+    workspace_root: &Path,
+    home: &Path,
+) -> Result<(), String> {
+    let managed = crate::managed_state::read_managed_state(workspace_root);
+    let records = records_with_bootstrap(workspace_root, home, managed.as_ref());
+    let identity = crate::managed_state::artifact_identity(artifact);
+    let managed_hash = managed_hash_for(&identity, &records);
+    let bundled_root = crate::setup_roots::bundled_root_for(workspace_root)?;
+    let plan = plan_mcp_artifact(
+        artifact,
+        workspace_root,
+        &bundled_root,
+        home,
+        managed_hash.as_deref(),
+    )
+    .ok_or_else(|| "not an MCP entry".to_string())?;
+    match (plan.kind, plan.state) {
+        (OperationKind::Unavailable, _) => {
+            Err("the MCP entry or its file is unavailable; nothing written".to_string())
+        }
+        (OperationKind::Conflict, state) => Err(format!(
+            "refusing to change the MCP file: {}",
+            state
+                .and_then(|state| state.conflict_reason(mcp_entry_key(artifact)))
+                .unwrap_or_else(|| "it has a conflict".to_string())
+        )),
+        _ => Ok(()),
+    }
+}
+
 /// Block classification for the plan, or `None` for non-rules artifacts and
 /// rules artifacts whose source or destination cannot be used.
 fn plan_rules_artifact(
@@ -925,6 +1076,7 @@ pub fn conversion_operation(
         rollback_action: rollback_action_for(OperationKind::Update, PreviousState::ManagedFile),
         rules: Some(assessment),
         rules_rewrite: Some(rewrite),
+        mcp: None,
     }
 }
 
@@ -1157,7 +1309,7 @@ pub fn plan_artifacts_for_uninstall(
                 .resolve_dest(home, workspace_root)
                 .map(|dest| dest.is_file())
                 .unwrap_or(false);
-            if exists {
+            if exists && holds_managed_entry(&artifact, home, workspace_root) {
                 merged.push(artifact);
             }
             continue;
@@ -1200,6 +1352,7 @@ pub fn plan_artifacts_for_uninstall(
                 ),
                 rules: None,
                 rules_rewrite: None,
+                mcp: None,
             });
         } else {
             preserved.push(artifact);
@@ -1253,6 +1406,7 @@ pub fn plan_artifacts_for_uninstall(
                     rollback_action,
                     rules: None,
                     rules_rewrite: None,
+                    mcp: None,
                 });
             }
             OperationKind::Conflict => preserved.push(artifact),
@@ -1265,6 +1419,23 @@ pub fn plan_artifacts_for_uninstall(
         preserved,
         merged,
     })
+}
+
+/// Whether a merge-managed file may hold something of the app's. The MCP file of a light harness
+/// the app never wrote into is the user's alone, and is not reported as merged; one that cannot be
+/// read as strict JSON was never written by the app either.
+fn holds_managed_entry(artifact: &ArtifactId, home: &Path, workspace_root: &Path) -> bool {
+    let ArtifactId::HarnessMcp(harness) = artifact else {
+        return true;
+    };
+    let (Some(spec), Ok(dest)) = (harness.mcp(), artifact.resolve_dest(home, workspace_root))
+    else {
+        return false;
+    };
+    crate::light_mcp::read(&dest, spec)
+        .ok()
+        .flatten()
+        .is_some_and(|document| document.entry(spec).is_some())
 }
 
 /// Whether a rules file carries user text around its managed block.
@@ -1393,8 +1564,15 @@ pub fn plan_artifacts_for_surfaces_in(
         let identity = crate::managed_state::artifact_identity(&artifact);
         let managed_hash = managed_hash_for(&identity, &records);
         let rules = plan_rules_artifact(&artifact, workspace_root, home, managed_hash.as_deref());
-        let (kind, previous_state) = match &rules {
-            Some(assessment) => {
+        let mcp = plan_mcp_artifact(
+            &artifact,
+            workspace_root,
+            &bundled_root,
+            home,
+            managed_hash.as_deref(),
+        );
+        let (kind, previous_state) = match (&rules, &mcp) {
+            (Some(assessment), _) => {
                 let (kind, previous_state) = rules_outcome(assessment.plan);
                 // A hand-edited file the user chose to manage stays untouched
                 // and reports no conflict; it needs their own action.
@@ -1407,7 +1585,8 @@ pub fn plan_artifacts_for_surfaces_in(
                     (kind, previous_state)
                 }
             }
-            None => {
+            (None, Some(plan)) => (plan.kind, plan.previous_state),
+            (None, None) => {
                 let (kind, previous_state) = detect_artifact_state(&artifact, workspace_root, home);
                 let (kind, previous_state) = refine_with_managed_hash(
                     kind,
@@ -1442,6 +1621,7 @@ pub fn plan_artifacts_for_surfaces_in(
             rollback_action,
             rules,
             rules_rewrite: None,
+            mcp: mcp.and_then(|plan| plan.state),
         });
     }
 
@@ -1506,6 +1686,7 @@ pub fn plan_artifacts_for_surfaces_in(
             rollback_action,
             rules: None,
             rules_rewrite: None,
+            mcp: None,
         });
     }
     // Removals go last, whatever order the stale artifacts were found in (stable: the order inside
@@ -1673,6 +1854,7 @@ pub fn artifact_backup_rel(artifact: &ArtifactId) -> String {
         ArtifactId::CodexRules => "codex-rules".into(),
         ArtifactId::ClaudeRules => "claude-rules".into(),
         ArtifactId::HarnessRules(harness) => format!("{}-rules", harness.harness().as_str()),
+        ArtifactId::HarnessMcp(harness) => format!("{}-mcp", harness.harness().as_str()),
         ArtifactId::CursorMcp => "cursor-mcp".into(),
         ArtifactId::OpenCodeAgent(name) => format!("opencode-agent-{}", name.as_str()),
         ArtifactId::CodexAgent(name) => format!("codex-agent-{}", name.as_str()),
@@ -2579,6 +2761,20 @@ fn restore_artifact_from_backup_with_mode(
                             allowlist_root,
                         )
                         .map_err(|e| format!("write cursor mcp: {e}"))?;
+                    } else if let ArtifactId::HarnessMcp(harness) = &op.artifact {
+                        // Put the previous entry back, or take the added one out; the rest of
+                        // the file is whatever it is now.
+                        let spec = harness.mcp().ok_or_else(|| {
+                            "the light harness descriptor is unavailable".to_string()
+                        })?;
+                        let rendered =
+                            crate::light_mcp::render_restored(spec, &dest, &backup_path)?;
+                        crate::safe_filesystem::write_regular_file_atomic(
+                            &dest,
+                            rendered.as_bytes(),
+                            allowlist_root,
+                        )
+                        .map_err(|e| format!("write MCP file: {e}"))?;
                     } else if op.artifact.is_rules_block() {
                         // Put the previous base back inside the block; the
                         // user's text around it is whatever it is now.

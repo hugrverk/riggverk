@@ -190,7 +190,6 @@ fn create_root_directory_all_with(root: &Path, private: bool) -> Result<(), Stri
     Ok(())
 }
 
-#[cfg(test)]
 pub fn create_directory_all_no_symlinks(
     path: &Path,
     allowlisted_root: &Path,

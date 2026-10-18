@@ -709,6 +709,11 @@ done
 printf '  opencode.base.json + opencode.policy.json: valid strict JSON\n'
 python3 -m json.tool resources/default-workspace/templates/playwright-mcp.config.json >/dev/null
 printf '  playwright-mcp.config.json: valid strict JSON\n'
+# The light tier's entries are written into the user's files as parsed JSON.
+for entry_template in resources/default-workspace/templates/mcp/*.playwright.json; do
+  python3 -m json.tool "$entry_template" >/dev/null
+done
+printf '  templates/mcp/*.playwright.json: valid strict JSON\n'
 
 step "bundled default Playwright MCP guardrails"
 bash scripts/check-playwright-mcp.sh

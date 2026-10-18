@@ -103,15 +103,18 @@ const TARGETS: AgentTargetMeta[] = [
   { id: "codex_config", label: "codex config", harness: "codex", kind: "config", target_rel: ".codex/config.toml", source_rel: "templates/codex/config.toml" },
   { id: "cursor_setup", label: "cursor global agents", harness: "cursor", kind: "agents", target_rel: ".cursor/agents", source_rel: "templates/cursor/agents" },
   { id: "copilot_rules", label: "copilot rules", harness: "copilot", kind: "rules", target_rel: ".copilot/copilot-instructions.md", source_rel: "templates/sync/copilot-rules.md" },
+  { id: "copilot_mcp", label: "copilot mcp", harness: "copilot", kind: "mcp", target_rel: ".copilot/mcp-config.json", source_rel: "templates/mcp/copilot.playwright.json" },
   { id: "pi_rules", label: "pi rules", harness: "pi", kind: "rules", target_rel: ".pi/agent/AGENTS.md", source_rel: "templates/sync/pi-rules.md" },
+  { id: "pi_mcp", label: "pi mcp", harness: "pi", kind: "mcp", target_rel: ".pi/agent/mcp.json", source_rel: "templates/mcp/pi.playwright.json" },
   { id: "kilo_rules", label: "kilo rules", harness: "kilo", kind: "rules", target_rel: ".config/kilo/AGENTS.md", source_rel: "templates/sync/kilo-rules.md" },
+  { id: "kilo_mcp", label: "kilo mcp", harness: "kilo", kind: "mcp", target_rel: ".config/kilo/kilo.jsonc", source_rel: "templates/mcp/kilo.playwright.json" },
 ];
 
 let settings: AppSettings = {
   appearance,
   app_font_size: "medium",
   workspace_path: null,
-  enabled_target_ids: TARGETS.map(t => t.id).filter(id => id !== "codex_config"),
+  enabled_target_ids: TARGETS.map(t => t.id).filter(id => id !== "codex_config" && id !== "kilo_mcp"),
   enabled_harness_ids: ["codex", "opencode", "claude", "cursor"],
   accent_color: null,
   background_color: null,
@@ -138,6 +141,9 @@ const SURFACE_LABELS: Record<SetupSurfaceId, string> = {
   copilot_rules: "Copilot rules",
   pi_rules: "Pi rules",
   kilo_rules: "Kilo rules",
+  copilot_mcp: "Copilot MCP",
+  pi_mcp: "Pi MCP",
+  kilo_mcp: "Kilo MCP",
   workspace_bundle: "Workspace bundle",
 };
 
@@ -156,10 +162,14 @@ const SURFACE_PATHS: Record<SetupSurfaceId, string> = {
   copilot_rules: "~/.copilot/copilot-instructions.md",
   pi_rules: "~/.pi/agent/AGENTS.md",
   kilo_rules: "~/.config/kilo/AGENTS.md",
+  copilot_mcp: "~/.copilot/mcp-config.json",
+  pi_mcp: "~/.pi/agent/mcp.json",
+  kilo_mcp: "~/.config/kilo/kilo.jsonc",
   workspace_bundle: "~/.config/agent-workspace",
 };
 
 const ALL_SURFACES = Object.keys(SURFACE_LABELS) as SetupSurfaceId[];
+const LIGHT_MCP_SURFACES = ["copilot_mcp", "pi_mcp", "kilo_mcp"] as const;
 
 function initialSurfaceStates(): Map<SetupSurfaceId, InstallationState> {
   const states = new Map<SetupSurfaceId, InstallationState>();
@@ -175,6 +185,10 @@ function initialSurfaceStates(): Map<SetupSurfaceId, InstallationState> {
       states.set("claude_agents", "update_available");
       states.set("skills", "conflict");
       states.set("cursor_mcp", "conflict");
+      // Pi's file has comments, which the app does not edit; Kilo's entry has an update waiting.
+      states.set("copilot_mcp", "not_installed");
+      states.set("pi_mcp", "conflict");
+      states.set("kilo_mcp", "update_available");
       break;
     case "empty":
       break;
@@ -185,6 +199,8 @@ function initialSurfaceStates(): Map<SetupSurfaceId, InstallationState> {
       states.set("claude_agents", "update_available");
       states.set("skills", "update_available");
       states.set("codex_config", "unavailable");
+      // The light harnesses are off until Settings turns them on; once on, nothing is installed yet.
+      for (const surface of LIGHT_MCP_SURFACES) states.set(surface, "not_installed");
       break;
   }
   return states;
@@ -467,7 +483,10 @@ function surfaceDetail(surface: SetupSurfaceId, state: InstallationState): strin
   switch (state) {
     case "current": return `installed · ${BUNDLE_DIGEST}`;
     case "update_available": return `bundle ${BUNDLE_DIGEST} → installed ${INSTALLED_DIGEST}`;
-    case "conflict": return `${SURFACE_PATHS[surface]} modified locally since install; preserved`;
+    case "conflict":
+      return surface === "pi_mcp"
+        ? "the file has comments; the app edits strict JSON only and writes nothing"
+        : `${SURFACE_PATHS[surface]} modified locally since install; preserved`;
     case "not_installed": return "not installed";
     case "unavailable": return "target disabled in settings";
   }
@@ -857,20 +876,40 @@ function lightHealth(harness: LightAgent): LightRuntimeHealth {
       : harness === "pi"
         ? { status: "missing", version: null, source: null, detail: "pi is not on PATH; Riggverk does not read your shell profile, so start it from a shell where pi runs" }
         : { status: "found", version: "7.8.12", source: "nvm", detail: "Kilo 7.8.12 (found in nvm v24.14.0, not on PATH)" };
-  const overall = status === "synced" && rulesStatus !== "off" ? rulesStatus : status;
+  const mcpSurface = `${harness}_mcp` as (typeof LIGHT_MCP_SURFACES)[number];
+  const mcpState = surfaceStates.get(mcpSurface) ?? "not_installed";
+  const mcpOn = settings.enabled_target_ids.includes(mcpSurface);
+  const mcpStatus = !mcpOn
+    ? "off"
+    : mcpState === "current" ? "synced" : mcpState === "update_available" ? "stale" : mcpState === "conflict" ? "invalid" : "missing";
+  const mcp: LightRuntimeHealth["mcp"] = {
+    status: mcpStatus,
+    path: SURFACE_PATHS[mcpSurface],
+    playwright_version: mcpStatus === "synced" || mcpStatus === "stale" ? "0.0.48" : null,
+    detail: mcpStatus === "synced" ? "installed and current" : surfaceDetail(mcpSurface, mcpState),
+  };
+  const mcpWarnings =
+    mcpStatus !== "off" && harness === "pi"
+      ? ["Pi does not declare the tools of this server to the model until the entry sets exposure (for example \"direct\"); by default they are callable from codemode scripts only."]
+      : [];
+  const overall = status !== "synced"
+    ? status
+    : rulesStatus !== "off" && rulesStatus !== "synced" ? rulesStatus : mcpStatus !== "off" && mcpStatus !== "synced" ? mcpStatus : "synced";
   return {
     harness,
     status: overall,
     cli,
     rules,
+    mcp,
     skills: { status, synced, expected, roots: unserved ? [] : harness === "kilo" ? ["~/.claude/skills", "~/.agents/skills"] : ["~/.agents/skills"] },
     warnings: [
       ...(unserved ? [`No skills are installed for ${label}: it reads ~/.agents/skills, and a customised CODEX_HOME keeps Codex out of that folder.`] : []),
       ...rulesWarnings,
+      ...mcpWarnings,
     ],
     next_action: unserved
       ? `Disable Codex or unset CODEX_HOME to install skills for ${label}.`
-      : status === "synced" ? "No runtime action needed." : `Run Install or Update on the ${label} page.`,
+      : overall === "synced" ? "No runtime action needed." : `Run Install or Update on the ${label} page.`,
   };
 }
 

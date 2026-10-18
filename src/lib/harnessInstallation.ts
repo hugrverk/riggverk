@@ -12,16 +12,16 @@ import {
 /**
  * Every surface of a harness, regardless of target toggles. Use `enabledSurfacesForHarness` to install.
  * `skills` is listed for every harness but belongs to none: one global surface installs into the folders
- * all the enabled harnesses read. The light harnesses (Copilot, Pi, Kilo) add one rules file each.
+ * all the enabled harnesses read. The light harnesses (Copilot, Pi, Kilo) add one rules file and one MCP entry each.
  */
 export const HARNESS_SURFACES: Record<InstallAgent, SetupSurfaceId[]> = {
   codex: ["codex_config", "codex_agents", "codex_rules", "skills"],
   opencode: ["open_code_config", "open_code_agents", "open_code_rules", "skills"],
   claude: ["claude_rules", "claude_agents", "skills"],
   cursor: ["cursor_agents", "skills", "cursor_mcp"],
-  copilot: ["copilot_rules", "skills"],
-  pi: ["pi_rules", "skills"],
-  kilo: ["kilo_rules", "skills"],
+  copilot: ["copilot_rules", "skills", "copilot_mcp"],
+  pi: ["pi_rules", "skills", "pi_mcp"],
+  kilo: ["kilo_rules", "skills", "kilo_mcp"],
 };
 
 /** Surfaces shown on every harness page that belong to no single harness. */
@@ -38,8 +38,11 @@ export type SetupTargetId =
   | "claude_agents"
   | "cursor_setup"
   | "copilot_rules"
+  | "copilot_mcp"
   | "pi_rules"
-  | "kilo_rules";
+  | "pi_mcp"
+  | "kilo_rules"
+  | "kilo_mcp";
 
 /**
  * Surfaces gated by each target toggle. Mirrors `agent_targets::target_surfaces` in the backend.
@@ -56,12 +59,18 @@ export const TARGET_SURFACES: Record<SetupTargetId, readonly SetupSurfaceId[]> =
   claude_agents: ["claude_agents"],
   cursor_setup: ["cursor_agents", "cursor_mcp"],
   copilot_rules: ["copilot_rules"],
+  copilot_mcp: ["copilot_mcp"],
   pi_rules: ["pi_rules"],
+  pi_mcp: ["pi_mcp"],
   kilo_rules: ["kilo_rules"],
+  kilo_mcp: ["kilo_mcp"],
 };
 
-/** Targets that start OFF (`codex_config` rewrites the user's Codex approval/sandbox posture). */
-const DEFAULT_DISABLED_TARGET_IDS: readonly SetupTargetId[] = ["codex_config"];
+/**
+ * Targets that start OFF: `codex_config` rewrites the user's Codex approval/sandbox posture, `kilo_mcp` edits Kilo's
+ * main config file, which may hold provider keys.
+ */
+const DEFAULT_DISABLED_TARGET_IDS: readonly SetupTargetId[] = ["codex_config", "kilo_mcp"];
 
 /** Target ids in backend registry order (`agent_targets::targets`), which settings normalize to. */
 const TARGET_IDS_REGISTRY_ORDER: readonly SetupTargetId[] = [
@@ -75,8 +84,11 @@ const TARGET_IDS_REGISTRY_ORDER: readonly SetupTargetId[] = [
   "codex_config",
   "cursor_setup",
   "copilot_rules",
+  "copilot_mcp",
   "pi_rules",
+  "pi_mcp",
   "kilo_rules",
+  "kilo_mcp",
 ];
 
 /** Mirrors `agent_targets::default_enabled_ids`. */
