@@ -394,7 +394,7 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> CodexRuntimeHea
                         skills_source_invalid = true;
                         has_fail = true;
                         warnings.push(format!(
-                            "missing Codex skill adapter source for {}",
+                            "missing Codex skill source for {}",
                             skill_name.as_str()
                         ));
                         continue;
@@ -413,7 +413,7 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> CodexRuntimeHea
                             skills_source_invalid = true;
                             has_fail = true;
                             warnings.push(format!(
-                                "missing Codex skill adapter source for {}",
+                                "missing Codex skill source for {}",
                                 skill_name.as_str()
                             ));
                         }
@@ -817,23 +817,10 @@ apps._default.default_tools_approval_mode = "prompt"
     }
 
     fn add_skill(ws: &Path, home: &Path, name: &str) {
-        write_file(
-            &ws.join(format!("skills/{name}/SKILL.md")),
-            &format!(
-                "---\nname: {name}\ndescription: test skill\ntargets: codex, opencode, claude, cursor\n---\n# canonical\n"
-            ),
-        );
-        write_file(
-            &ws.join(format!("templates/skills/codex/{name}/SKILL.md")),
-            &format!(
-                "---\nname: {name}\ndescription: test skill\ntargets: codex\n---\n# codex adapter\n"
-            ),
-        );
+        let canonical = crate::test_env::write_canonical_skill(ws, None, name, "canonical");
         write_file(
             &home.join(format!(".codex/skills/{name}/SKILL.md")),
-            &format!(
-                "---\nname: {name}\ndescription: test skill\ntargets: codex\n---\n# codex adapter\n"
-            ),
+            &fs::read_to_string(canonical).expect("read canonical skill"),
         );
     }
 
@@ -1096,9 +1083,9 @@ sandbox_mode = "workspace-write"
     }
 
     #[test]
-    fn test_codex_skills_synced_against_generated_adapter() {
-        let ws = temp_root("skill-adapter");
-        let home = temp_root("skill-adapter-home");
+    fn test_codex_skills_synced_against_the_canonical_skill() {
+        let ws = temp_root("skill-canonical");
+        let home = temp_root("skill-canonical-home");
         add_rules(&ws, &home);
         add_config(&ws, &home, "");
         add_agent(&ws, &home, "repo_scout.toml", "name = \"repo_scout\"\n");
@@ -1114,16 +1101,16 @@ sandbox_mode = "workspace-write"
     }
 
     #[test]
-    fn test_codex_skills_diverge_when_installed_content_is_canonical_only() {
-        let ws = temp_root("skill-canonical-installed");
-        let home = temp_root("skill-canonical-installed-home");
+    fn test_codex_skills_diverge_when_installed_content_differs_from_the_canonical_skill() {
+        let ws = temp_root("skill-diverged");
+        let home = temp_root("skill-diverged-home");
         add_rules(&ws, &home);
         add_config(&ws, &home, "");
         add_agent(&ws, &home, "repo_scout.toml", "name = \"repo_scout\"\n");
         add_skill(&ws, &home, "diagnose");
         write_file(
             &home.join(".codex/skills/diagnose/SKILL.md"),
-            "---\nname: diagnose\ndescription: test skill\ntargets: codex, opencode, claude, cursor\n---\n# canonical\n",
+            "---\nname: diagnose\ndescription: test skill\ntargets: codex\n---\n# an older per-harness copy\n",
         );
 
         let health = compute_health(&ws, &home);
@@ -1133,33 +1120,5 @@ sandbox_mode = "workspace-write"
         assert_eq!(health.skills_status, "diverged");
         assert_eq!(health.skills_synced_count, 0);
         assert_eq!(health.skills_diverged_count, 1);
-    }
-
-    #[test]
-    fn test_codex_skills_missing_when_generated_adapter_source_missing() {
-        let ws = temp_root("skill-adapter-missing");
-        let home = temp_root("skill-adapter-missing-home");
-        add_rules(&ws, &home);
-        add_config(&ws, &home, "");
-        add_agent(&ws, &home, "repo_scout.toml", "name = \"repo_scout\"\n");
-        write_file(
-            &ws.join("skills/diagnose/SKILL.md"),
-            "---\nname: diagnose\ndescription: test skill\ntargets: codex, opencode, claude, cursor\n---\n# canonical\n",
-        );
-        write_file(
-            &home.join(".codex/skills/diagnose/SKILL.md"),
-            "---\nname: diagnose\ndescription: test skill\ntargets: codex, opencode, claude, cursor\n---\n# canonical\n",
-        );
-
-        let health = compute_health(&ws, &home);
-        cleanup(&ws);
-        cleanup(&home);
-
-        assert_eq!(health.skills_status, "missing");
-        assert_eq!(health.status, "missing");
-        assert!(health
-            .warnings
-            .iter()
-            .any(|w| w.contains("missing Codex skill adapter source")));
     }
 }

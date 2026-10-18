@@ -307,23 +307,11 @@ mod tests {
     }
 
     fn write_claude_skill(ws: &Path, home: &Path, name: &str) {
-        write_file(
-            &ws.join(format!("skills/test-group/{name}/SKILL.md")),
-            &format!(
-                "---\nname: {name}\ndescription: test skill\ntargets: claude\n---\n# Canonical\n"
-            ),
-        );
-        write_file(
-            &ws.join(format!("templates/skills/claude/{name}/SKILL.md")),
-            &format!(
-                "---\nname: {name}\ndescription: test skill\ntargets: claude\n---\n# Claude adapter\n"
-            ),
-        );
+        let canonical =
+            crate::test_env::write_canonical_skill(ws, Some("test-group"), name, "Canonical");
         write_file(
             &home.join(format!(".claude/skills/{name}/SKILL.md")),
-            &format!(
-                "---\nname: {name}\ndescription: test skill\ntargets: claude\n---\n# Claude adapter\n"
-            ),
+            &fs::read_to_string(canonical).expect("read canonical skill"),
         );
     }
 
@@ -566,9 +554,9 @@ mod tests {
     }
 
     #[test]
-    fn health_reports_skills_synced_against_generated_adapter() {
-        let home = temp_dir("claude-skill-adapter");
-        let ws = temp_dir("claude-skill-adapter-ws");
+    fn health_reports_skills_synced_against_the_canonical_skill() {
+        let home = temp_dir("claude-skill-canonical");
+        let ws = temp_dir("claude-skill-canonical-ws");
         write_claude_skill(&ws, &home, "claude-skill");
 
         let health = compute_health(&ws, &home);
@@ -578,32 +566,13 @@ mod tests {
     }
 
     #[test]
-    fn health_reports_skills_not_synced_when_installed_content_is_canonical_only() {
-        let home = temp_dir("claude-skill-canonical-installed");
-        let ws = temp_dir("claude-skill-canonical-installed-ws");
+    fn health_reports_skills_not_synced_when_installed_content_differs_from_the_canonical_skill() {
+        let home = temp_dir("claude-skill-diverged");
+        let ws = temp_dir("claude-skill-diverged-ws");
         write_claude_skill(&ws, &home, "claude-skill");
         write_file(
             &home.join(".claude/skills/claude-skill/SKILL.md"),
-            "---\nname: claude-skill\ndescription: test skill\ntargets: claude\n---\n# Canonical\n",
-        );
-
-        let health = compute_health(&ws, &home);
-        assert!(!health.skills_synced);
-        assert_eq!(health.expected_skill_count, 1);
-        assert_eq!(health.installed_skill_count, 1);
-    }
-
-    #[test]
-    fn health_reports_skills_not_synced_when_generated_adapter_source_missing() {
-        let home = temp_dir("claude-skill-adapter-missing");
-        let ws = temp_dir("claude-skill-adapter-missing-ws");
-        write_file(
-            &ws.join("skills/test-group/claude-skill/SKILL.md"),
-            "---\nname: claude-skill\ndescription: test skill\ntargets: claude\n---\n# Canonical\n",
-        );
-        write_file(
-            &home.join(".claude/skills/claude-skill/SKILL.md"),
-            "---\nname: claude-skill\ndescription: test skill\ntargets: claude\n---\n# Canonical\n",
+            "---\nname: claude-skill\ndescription: test skill\ntargets: claude\n---\n# An older per-harness copy\n",
         );
 
         let health = compute_health(&ws, &home);

@@ -764,7 +764,9 @@
       ],
       "digests": [
         "sha256:1746af0204c1d398d2a65d1aaff458a479dd457b2687762981f053a5c3cfdcf3",
+        "sha256:186e69ca46d66b916c83c501ffb4946dcacc4bce1d956593d447a30b2dad2c6b",
         "sha256:3eadff493e957be3cec79bbca52e89b738f155f943efcae54c2ad9237896c878",
+        "sha256:4f4550f956c01ae6eecb032b9bc6db0cd3eb86dbc650cbe85aa0f3b73e97d4d1",
         "sha256:65c12ac3aa5de8a2595cf1e5d67ef077992cccbff59977d61918341f0269e605",
         "sha256:74bc5f54dfe6061b3a064669099103b420f69624f91fe2d437e0b2a242364e26",
         "sha256:7c32c40b2b86b133e919c6ec79c50239322d3b3f53811947876c19ea681750ef",
@@ -816,12 +818,14 @@
         "sha256:033bf5e0b3b8eae5530fb4b11c027054511bf490507d6fa8f2ec05dad84e931f",
         "sha256:0f81af64ba50f3f729ea151824b26bd82922e37568a84e155a3a7f9d7c349a6b",
         "sha256:5f54ef4686d5ddcc3eb2b2c0c9679c8888779add142772413c144f379ad6ef01",
+        "sha256:606534442137f1264f7a2b33b7bd2b4308ee0918283bc95e4773ae4bb75978d2",
         "sha256:70242b1c0f6a595b0dc141ff1619e5c2f52c457ba8a15636424bda49fcce975c",
         "sha256:768183e183181d8db7d58d0efa4fefa5a09a7276e5471b665386a9b589e502d0",
         "sha256:82dd5c84e969e91da905aca6d82dcd5a79c08d192cf59f81903374554dc405ca",
         "sha256:89229da1b97db99e0364373f830f37fd204090a42e8a187cbc3a71f47f26fcd8",
         "sha256:92cc37ad44a494758affbdc1e3a3e8658a926f39145901a2b30f1b5346b7cae9",
         "sha256:a55d7cda977f6eccd874d288c0e387f2eb282d1872e56152659ff1f31f37f39c",
+        "sha256:ac9163206620f03d2bd5fb390b4aee6cbfaf81504256b18d87c84b6a9fe6801c",
         "sha256:b07c5ada6b77935055e2c89f8f7db02c3943d199f82c40cf3da708c6d68e2f64",
         "sha256:bb05cd1124a8e14b0f116658f4e9cee1c3c818323971b0e9c4d83dd4b5297118",
         "sha256:bf1ef1a9950504276939fa24439b4780e7b647cf5f35294ac41a9345be02ac3f",
@@ -891,6 +895,7 @@
         "sha256:1fc1b8432bee2695dbdabbfc3ecbe567ba83214fcaf18a72ac6a1b3998f4a9a3",
         "sha256:339b0a6a6c1c5122807ab5436cd68df8364bcb90f019ca318dfdd7d066bab6ef",
         "sha256:34773cd172eb23be7828b1cb169483929fc5b25d5c2ecf2b3d088c55bdf7dcba",
+        "sha256:4463631ee103d9fa109d845e98bd06edb484c7ac38adb5c7b70d2efb1ac8173c",
         "sha256:46a7b93452601223e6f5d813019892817a4e5745dc3f6ae6166b93fb15c95efe",
         "sha256:4d70e96b0fe5f20000a018423636469f14a30bcbdb354556e3fc4c62523a2a9c",
         "sha256:59d3dcc2954c6e910c1bc422f46039d12c597b1c03901defeea99afebb981cb5",
@@ -901,7 +906,8 @@
         "sha256:eb77bda2264b0f09c4e574a482f157755573aa5f0e109e621f6f4379253805dd",
         "sha256:ec8d02981ae0a34097da800507a8b645fb4c2da582919d77b77e571bbb6b4a0f",
         "sha256:f06072d3e998d75dcb25e64e08e6d09db323b190197ac3480863a19a4026d7d8",
-        "sha256:f842f1bed01d271bc11d44916b39a7cf44524fd53403c3c1f730bbcf6db1f385"
+        "sha256:f842f1bed01d271bc11d44916b39a7cf44524fd53403c3c1f730bbcf6db1f385",
+        "sha256:fc270f0e6e5771538bf81d45ddfeb9084d19aff53ba14196282d4cf85aa76885"
       ],
       "action": "update"
     },
@@ -916,8 +922,10 @@
         "sha256:3fdb80936ecfd3f299bfdc3399cbc5fc6d94a688b6088ba7073cdf22fe4c4e0f",
         "sha256:41729b34e42eba1c70389f25c45b38286bb7ce7b500c621cd1d277fe07db91fe",
         "sha256:4912b9c781fe8fdb6d2dc6f5a83ca9ce9548d3c65253654eea97dc2a23ec024d",
+        "sha256:57881eb0e442f4eda1d71130fcd509f22467645674f6c28dba87cf1092dac8a6",
         "sha256:5c0984408486d465d90aaaa031b62eaf0efd17ce0250777add749d3d4a73c279",
         "sha256:8ddeecaf5d66e9de5f67ed7ce2ba5c5ce86442f7d97104f75517310f0791299f",
+        "sha256:b2c129501378ac1fd8d503df52d815ce97f5f9270b870863893608dec331e8a0",
         "sha256:d8d1aa4bda004bdf7b345bad0fd3a6f1a0c2620913de41c3afe464827ba2d933",
         "sha256:dfe0cdbbfd58156a85edd4f3fa646f186c5bfc59dc82ca5fdf04fd984bb763b9",
         "sha256:e12e29868f567b3ab38a335e659f3a3b2be416ca9c1ae39fd1af1957516001ec"
@@ -1083,6 +1091,8 @@
         "sha256:5cc8fcb800726bec49d30c570d890400d035824be1935ca042b6831307e5bba2",
         "sha256:730d21fde5bd174b32130826e1feb147d720856dd0497a16cc430d474864551a",
         "sha256:a1c12b130e3b9d2d83abdab8e55b6ece62b5bc99f2c3958fb8e0c86ae0c9dbc0",
+        "sha256:cb320cd0a34828cdace55989923629a349a74fd96a175b53fbf9ab715c760220",
+        "sha256:d823962df3139611923fefa9b87b14ee5b09b90e138c8e5498923c4e1266c70b",
         "sha256:e0344fe1000469716135b664a316da87e722a0b0a68ea9ce122ff1ed21253e0b",
         "sha256:e324315ae8d4e3c5fb60e79ab20a987144a34d66be9dd5440275879a42f226f2",
         "sha256:ea532ba7f0eedff2f7409108d9b66debfffa575e8db552b95d65e960c251245d",
@@ -1154,6 +1164,7 @@
         "sha256:3b01e84d18654d54926a2a9343e93af224ea5848feb31e3f0e21354c0c44e68d",
         "sha256:3bf91f47dee5e07c7c484de99d0d392080217b8a6c09c6b6a1dede0abf0571f0",
         "sha256:3ecf073d88c787b6bc94647774c1d47f933dc6fffe6247d00ba419b12b5402cf",
+        "sha256:42da31c7d7b3f0a5b5889f48c7837d48bd289b9289eabb96ca1853f0b6cdf826",
         "sha256:57dd5cf908a53e99a521fd78ffe35f6cddc8e1b814036f594b8ad10c8b78ebbb",
         "sha256:67a52d9805bcce3115b62540beddbca7cd53330d4db5eb332f3c37835406932c",
         "sha256:709480767e98508192fd2622a9030b5cc5e84b806207a6df6748928b9e9d28df",
@@ -1163,7 +1174,8 @@
         "sha256:d1fe12bfa099464e4140819750bb441dc282d434a2ca195372468f4917799030",
         "sha256:d589151ebdf778ea2a7a48720e1f06cfd1575d67a658460761a26d26bf4b1064",
         "sha256:d5c9bd97eee73237c5d17aa85e0daee7acdbb85d21c894c82f884863ca6c8654",
-        "sha256:e03ced2100075da5d4c2f3cdffcc0966d4c41d982502c264063870f9d7093b13"
+        "sha256:e03ced2100075da5d4c2f3cdffcc0966d4c41d982502c264063870f9d7093b13",
+        "sha256:e4c0707335e885eb0abec060ef89980f87aa10dc32c597f821642670f3614a91"
       ],
       "action": "update"
     },
@@ -1258,6 +1270,7 @@
         "sha256:0b9a3f553fb52830f15044253c3ad2de779031c7608d43f74b907f85cd5ac09b",
         "sha256:0c8d07b637e4de4bf81078188fff4e92d42cecce7a03a309614462d30daeef06",
         "sha256:0d5aeac9db72fa61a869364042fa5544a7c19974bd6af774a41a7c10fb3b3a07",
+        "sha256:0e3baa159ab7d03c807a43a2d6ee2e6d4fd177da2c04974fb0a7f593f4135e37",
         "sha256:120a587e1748a91399407f6e67143803c7345a7131620d5d39614e5a1539b877",
         "sha256:126d59f4851041ba7183c9946253dd5a3c3f183aa57fb36aeaaa31dc94966ca3",
         "sha256:133125c8b698b405b56785bb38bcdad11340463f3b1ba02b403d3069db904e9f",
@@ -1276,6 +1289,7 @@
         "sha256:42060407e9c4d424803b800687d6c48722719cccb6148e1104b6f884736ebf2e",
         "sha256:49cba5e4c0d6cd1b87e0218e4d4e42c5c0747405d9ca23fa9a8c96e1f09439a9",
         "sha256:4bfecfb1dcaadc520a653958131c78bdfb38ce801ff1181b581450250c543851",
+        "sha256:4d707c516136e1ba82c7952b7302bddfebac6b7e9ea0ed677c27e45822e5acb1",
         "sha256:4ded267c1613da55ed2eaa5c3f1897112bcd16b9289d57b6c29360a819e10c69",
         "sha256:5129b43f069e2ad37873218ba666e52111245e102b1db0372570834f7446af57",
         "sha256:56cbbfe4194f87af26f9ebf204b0e690899d6ff2a17a3b167b6a3d20ac1a4529",
@@ -1308,6 +1322,8 @@
         "sha256:ba1c4121421dcac2f111728e442b96bd53fa2c51d9aa7550083cb46619f66a5a",
         "sha256:bcae2a6b61dd641e45b714c1f5d4513b72da01a305d09765d31d1dfda0f1c4f5",
         "sha256:c211292e7907f3176d14fb17994711548768a24d7fc850aa3ad6e2d1e273649b",
+        "sha256:cd21f75bdec0c867a42d8f77165fbb16ae4122ab9fd1384c2611107d0d618ccb",
+        "sha256:cd3c225d973dde8f45697a39eea8759b633b62e145225e46c2d3279f84d69b69",
         "sha256:cfffe34c40946067bce4f00234f594e97763c1b16047e58f6bb9aa0957bc3105",
         "sha256:d047979d5abe9a7d9be0b49ed2ad0e0de865ef7d3dc1e4079c31422864f737c8",
         "sha256:d0672a0ccfd8aca4e474764a99b4496fd4ca428e470f9225e4ce6e4a06e0a93d",
@@ -1672,6 +1688,7 @@
         "sha256:15695a7ff5227e7aa6684c32b8e2ca722f47d0cb11bc1dd91be499baf3767107",
         "sha256:176903b22b0475a2dfd6ba532aee0650df4dcc837db21261c1b54f609c00240c",
         "sha256:1d5b044a02f0325e594f5f9848b5559a151789eddef3944c539e52768f6482ab",
+        "sha256:20244ec931a7a87b575b7ace644a5d433e407d5128e944a9ff7ea69990c1573f",
         "sha256:2716322f8bb66dce9e2281a31293131a2dc7d3b51a9f80be68ba386663927dc9",
         "sha256:2cdeaeb2afe7a67bd6de8f79e5b4585bc038f20401d8bf34e7b8bfcaa54bce66",
         "sha256:318ad793145ae2770c27e9835e4a02db652abd3f7a16453266f3e830b317c2ed",
@@ -1679,6 +1696,7 @@
         "sha256:35dfaa0aedfea8b9398da540cbc1dcbdec8be3aac95d8b15fa3ecd5a1eaa6630",
         "sha256:4694aa2e98b30979b556de5ba9dedd70ba83d27917a80e21cf6621bbc4c118e6",
         "sha256:47453e2ccd3b577d79cb04173d2113a17c772b5eacd1cdc63c1c55e8fe42af89",
+        "sha256:4b85014d9a8c6808c63bd5d7a7afe98dcf5391e1e406f2a44f8512908ffca3ef",
         "sha256:529715089de9085f79d2f69c50f911472be3f9b6c385ddf02a6fda0cdf79c52f",
         "sha256:596b3caddf5565f25562795f220355b83748967cd2806401cda297125c9916cf",
         "sha256:5bc7759f38f5dca19dd07dddbfa5d0a8d57fb5a5844f8c556f5a390e61773b83",
@@ -1687,6 +1705,7 @@
         "sha256:750b45aaa2bf17c7a0d24ce73a13223c7a8a766fc48ea898aeb6cc74f9202283",
         "sha256:7a1ed6eca75c4ad538f3f3a8b24f7e39777ff5f4b6290bbd4903ca9a5d7d68ff",
         "sha256:8a4ee89c6761e275c301b02569eba321d3c9bc04532eb7b88e0c1644b2e034fb",
+        "sha256:91bd6db38155bb685557982b94b8b9871c9451dfbade01909700f609ffabc0ef",
         "sha256:934adf425076a891861910984e6ca3a23cb6908405d0c55645a1c2356a4788af",
         "sha256:949ed780ebcc56cde331e86c971d6f50f477eaa8abcd847fcfea7be1d4a54398",
         "sha256:a331afdcce73d17b80b65606c3a9f3e2fc7d302fa64b2fa89e07f8473c640869",
@@ -1696,6 +1715,7 @@
         "sha256:ae47642ed3ef75650d5820f67eea67d6a413ef5867d60d5bc891da094156a470",
         "sha256:b03508272df565308437502f04e16bab8da12462ef05816addfe29df5422195a",
         "sha256:b2b80f905c2ffc91ffb9d20be3fff2b7a8184b62acfe6344e9a57fde838dbfea",
+        "sha256:b651cd804673c0ebb9ed53d63ccdc66fbec7d92d88a8c3b885ecd852c0e2fb22",
         "sha256:bd36aa03ea8ae9f77ca984085ebcc42b2dcab2b9c59948860cc88588b9e98ac5",
         "sha256:c4ea7c973049a5b97ac599b3a72a951ce7c9df07ef9b003afd17b6b0a5d6cc20",
         "sha256:c6af052c6874a29d89f66e2c662886ca4c77d1c28931e726d316b3aa2015b94c",
@@ -1800,6 +1820,7 @@
         "sha256:1899cd7be82c50bf23d9ab4afca9a39593e4ec4adf6277f5baabd03ffb719d6b",
         "sha256:1c6d1ae7eb352f033883ec9e032fe4c71c8943d9485257dae0ca1081e9aa801b",
         "sha256:2510d667ab01c21f097404849626710f859d7ca8f667f618a42b44a19a308c8d",
+        "sha256:25194bf6cd1da4766af9ef80c069a468047a91e9272f59c650afdb2727e4a4f6",
         "sha256:2a392fa062a9d206e37e2f060c7c4dc8e0fdc5a57a04b724dc7d0d4b499b9d34",
         "sha256:2b888f2b5249e297889f6f8ca6dae41064ee8f4685b36eda00c2f183dfd0d288",
         "sha256:30597250e0ca399e1c1af47f493d84918291045b537e56ec701b2ad0d304e49f",
@@ -1816,6 +1837,7 @@
         "sha256:6e8079cf75d8dc19a76e66831fdb5d2cb26b03c15e08c3cd9f9843e576f7293d",
         "sha256:7158a12299e5b55c113f292a0325a6986eb65262c29691b73c3a3b41bd4b1923",
         "sha256:7e40048b05544b9888b9c9f14604545a309cdb541a0c2921470447aae8ae2107",
+        "sha256:7e77b43266f3159ed9b808acf1dbe6f759bc4d6bd6059e3f7541651ca667eff2",
         "sha256:8029ed8775419f6b70710f56f63a5d3a6346493963d0b0b3ddeb54a4a42b3d62",
         "sha256:887cc337a1a8b0548828c6b7f77321d930f7d212385b1a18601d92f1bd05cce5",
         "sha256:8c16fed63329ab77ad88197a2317e03d7c6ff1b7b3885561579652c1ba463eae",
@@ -1825,12 +1847,14 @@
         "sha256:9cfaeab28725d482996a40623fc445694f72ef5bf66bea3592b1667f740a4ab5",
         "sha256:a32736d8f2f43b1aae8c9895c4c0277d5de5484c3fa2f529cb5102061feb4552",
         "sha256:a4f690195d3fd6f9f47ffb433f9b400fcd7ca437b060451bc6fdeb75b4e906fd",
+        "sha256:b41c2e6d54bc2f43166915defc4ba1d55f472c3e492e62e54ee59e46a7882ae8",
         "sha256:b57cfbd73b5982e75f93d7d77f25856b13ff6e27276ea50e1f3cba35f07a745b",
         "sha256:c37987f023aac3a0bbe421de7aae434ac7a9c60ee23189367ea86959b325f5c4",
         "sha256:c875bbe32c64c7610b404976a9da8c3c7e0a2352feaef00fad5e9110ccec191f",
         "sha256:d0427fb2ce6c9bc31453c0d16c00282374fce533c6a643070bec3dab13dd0ab2",
         "sha256:d7a265bb9924ccc694f936c9600040ad5e41acff01537286b7d9cd05a7beb0b4",
         "sha256:d9a9d0c9d45a51c3b2020268bc719a6c26913374a21b19007015d29061a67f9f",
+        "sha256:db30f0bb503ba63e17b39eab5c1cdb09ebe0b3ef7b90e9e5d9dc3f2dddc8bf02",
         "sha256:e66f8d2f7f0d699684bfe2be7b286f90f0be95b6bb2a6bbc90573ebd5542cb18",
         "sha256:ea3647954cae510a2e5cee55c4c1ddc841b66f5a3466bcf58424690bbad6ef43",
         "sha256:ee28bbfbf55c96f3c4fb539fe0e10a6439782ea8d2b08ee5bb764cc0bea6cb31",
@@ -2105,26 +2129,6 @@
       "action": "update"
     },
     {
-      "identity": "workspace:file:metadata/skill-adapters.json",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:0214e89f639c7a0cf45489cad1eff956e8d13091fa79e6be0d0f88db148976d2",
-        "sha256:1e5f20ea60db1fdf7848f4362eae29743249e488a030b1c6a2fa2fef0caa0764",
-        "sha256:1f9a101c006d05e6880a0b8ab8ca174b4693e93bf5ad037b1bc2079933985ea1",
-        "sha256:3a649d70540bc9b8b49a9f67e63a2b6c10f2310ee76c28513a44061e843249a6",
-        "sha256:3b181518c1e433be23e1ffb4f3a0f1ab865c824db8a9ea3f45a5158c7496da91",
-        "sha256:66219fdb41d0fb7ce7ce87e83194af30f2f1899f591ed7eefb9e39e25c711f74",
-        "sha256:9ca7e48444abf251b31073cd7feef9e79291baf52665665e4d9ac55a4a2bef97",
-        "sha256:9e7bd3ba81a7e63500ec71916881b85d39f0e9da131fb466df0565a250ff2366",
-        "sha256:adc404c62877b7e00706543b626a84bb90d562db469a15904291c33102c2d59b",
-        "sha256:cc1e1a5499ce4472d890e4b4083da3c25ea8c8bb2d6b99745fa2d74f3d8fdd23",
-        "sha256:fcae3dced1dc2ff2b15ca433ea6fa1c80a40497ee87e0681b0a07ac31fdd30e6"
-      ],
-      "action": "update"
-    },
-    {
       "identity": "workspace:file:scripts/ensure-codex-routing-defaults.py",
       "path_classes": [
         "workspace-doc"
@@ -2344,7 +2348,9 @@
         "workspace-doc"
       ],
       "digests": [
-        "sha256:7137b108f3e3ec4766d1ba8edd419c49e96a22505aba9588284867835d6eaf69"
+        "sha256:7137b108f3e3ec4766d1ba8edd419c49e96a22505aba9588284867835d6eaf69",
+        "sha256:bbe4f891fe23691f63908107e8a7685f578c305687cab548b679e9b8b35c12e9",
+        "sha256:ca010d4d9cc5471069e565ccdda4c62845f9512c1c10bebde06f3dff30e0a013"
       ],
       "action": "update"
     },
@@ -3059,1394 +3065,6 @@
         "sha256:63803066f0213daa088131624e9fb0e7e7ff07c7df0d45e44fc532c8fc4dbd11",
         "sha256:9eec81aa0f36ccd2ac88ea4e599a43e88f0cbdb4645ed2d15816655c06f5df8d",
         "sha256:b5497cfbaa13dd30a6ccd80e731e15e167933a33a6aecc991816e8e7379f1913"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/_overlays/global/cursor.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:0ad282f1370e271eeddad133857562a95fd9425867d593041e0107babc9c01e9",
-        "sha256:8f0eb979b222da1bdb29a376e94de20eebafee898e6ce1b0e4decb3393c78d10",
-        "sha256:c0a9da7617a18a5c70121a00068bb600fd304adf6a15744926a62c6873730be1"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/_overlays/skills/browser-qa/claude.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:94164d24b96f1caac07fcd7d1084a8cb969432992b5d6a8e9633f026ca12c1c6"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/_overlays/skills/browser-qa/codex.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:14bfefc5df007ef86b00731e6ff9b5dade2a7d8055fb47305b800e5351b99966"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/_overlays/skills/current-docs/claude.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:83c608f9befff420b50b23cbd377438089e59131107705642708dec54a015359"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/_overlays/skills/frontend-design/codex.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:49b79cecf3c8c5e2699449819ddec1b077422e689bde0b7d9e3d161235929232"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/_overlays/skills/handoff/claude.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:8a3a77fc948d9a7e2e60b9c15015bc60a14ad12a1190d7a662d9e77df03dc529",
-        "sha256:c286e6933f1862a8d37ed470e1c7197eda4353fb70617320d1ce3fc5e7bd57c1",
-        "sha256:f41eb19f9499a6aaa4827257af7244e72801de5e42ba9bd407e5cdccf855de27"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/_overlays/skills/release-check/claude.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:ca5c5a4545bfd3db7c12618671b63039f36f5a96b798af9082f5221d4d59df69",
-        "sha256:e139f961367d692e65a574f0f93223df4d355eeaaa33f7ab502b54ee533091ef",
-        "sha256:f342e41de0c632f9b6b00153da85ebd641acd31e21ef7961d57a6b357384895f"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/_overlays/skills/release-check/opencode.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:10d3d6351b214619c4cff147494223be01bc3d247f9f19a5567697da4c99bb1e"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/_overlays/skills/security-review/claude.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:200c65625de2dff41a12d7dffd9b1b2fcd234fde94edcb040056161f3460f6b0",
-        "sha256:3eb058074cf16c2d3ec4f2566dc40fee90a26b130ca0abc1b8bf3e227201aa95",
-        "sha256:7791d99656129d8eb6224bbd314c68f76c9918cb46acb0ebdbea34a1426834ed"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/claude/accessibility-review/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:0af53fd0e341f97f6ef6fce6009126843c73ceddecacaf8a092b57a6cedeacd0",
-        "sha256:1edc65d75a9c6a296ddf10a2ba9fb77e745225e770f1b50d5f05388a4fa7dbde",
-        "sha256:818e832bf5e67c2b633b02903e27ec784d12c18f0723950dad698bbf7f6c31b3",
-        "sha256:c132b0af0d169977c47cf92639db3ccda76995431e716a9f3a0d10236e59f360",
-        "sha256:efc88edf97cf51e876a9f3ebd079d1c7bd4c43755dbb341aa2b302311bd46c76"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/claude/adversarial-implementation/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:e270b406605c444470a62850527c346f8097ecce237c4f0b4887b0c393fecfd5"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/claude/browser-qa/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:3a9ad2bc3e0efd9f2019ffef5d191fd57f4bb812b9e55f9799c7b19901df1aa7",
-        "sha256:90406f2bb13384b684437a3485cc766d8a61909a90b0fc7cc05e24d4f4e679eb",
-        "sha256:941b2da01a82263fc575c311b107f5c7aa300337e55d7e4c84a9fb672e5ce732",
-        "sha256:e87a75426e2cfcb4bf3718798dfb7d2133325d9ca740a7aca8c91aac8b0b4d66",
-        "sha256:ec8193402c4b4e82b3171956af2e21ed47d01b23e948e7b4846c918f3ef531ef"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/claude/context-budget/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:7d7c3889d1df588862688aa150cecaeec9cd30ae8f129c1ea7cb16dc2f4f87e7",
-        "sha256:cdc73f73d02e3838e57b109a42e6e49ad28478bf044a99f76373ee2a8d22a63a",
-        "sha256:d6d03d72943a75a0fcf5d2cd28ef3feb006850b12588214a3231a8903890c5d6",
-        "sha256:eaa3b59870f8d5639870ed85ce441492f5b8e02fc924f830656eea6a3bafae40",
-        "sha256:f2468f17d55557ee1a7c481f5dce8b0bb9e9552256030f85a76b3a378aa1ad44"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/claude/current-docs/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:00a59b05626cb0578935f94aa9b57287a22c42407d744e543f2789cae9a250fa",
-        "sha256:81d40af4522184e57e276d567fe815ca1977a8b9a5fe017483a50f59e18c97fc",
-        "sha256:aa7e165d99bc877647b1ad30a383596f01bb118d701f0ea80f1c1fa00d311847",
-        "sha256:e2c0ab67f5cc97a8ebd70e2775b57d601264abebe961d8d07b7eb73bdac8d258",
-        "sha256:fd8a0ac7ceb54262edeaddb7280abdfdf722bcc7f842d91e01cff8700b10d5c8"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/claude/database-migrations/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:246a3489426fd48115ca744744380dee393f8ad97afe96f8f54f5b2fec29c97d",
-        "sha256:2622f962be58635c61ef37ca45fbd025272032574667fa46c33c7925d6cbecb1",
-        "sha256:3ca1712ea5eb75302b0bf6c09a9245d4ff9cbf2b68255081100874e4eda26242",
-        "sha256:717cf8719e664b93d063026abdef5deb5f44dfd869e10d7c95e039d85ac883ab",
-        "sha256:e448b5d6fcb5061a93926168a569eef670d0aee3f9d9546b2d9905d02b26560b"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/claude/diagnose/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:113063ad4b076868ee0ae633ac0fbfb2c67f1c45dae641dff2e1f694cd729c79",
-        "sha256:2fd30d5145b80c08ba1a5eee69feded6ace1d7afa4a125945d202f1eee0f399d",
-        "sha256:691dfba2d2ea6506359fe1c8a0d5225d677a0cb56e4266eca3849957296663ad",
-        "sha256:79da6c63a61a27effa14136c0d310b6ff63ef76b6464dfc4e51979b3e13d98d6",
-        "sha256:c8f8078d2fc8fcd4440885f3c43871e0ec1774345629b59b2d32665c57d1f230"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/claude/frontend-design/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:2adffe9654aed1f830253d6da387f202b12f01a01f706b51f2217aff73a620ee",
-        "sha256:455e2e922a4b964cfec8120a39900277c8bdd29f9eaefaf4226b5b8411916af4",
-        "sha256:5f84a1559abf2a0554616d2d3e47c7f0ebdffa208b4c2cbb3f23c578b4e6218d"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/claude/handoff/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:5108ae63b36b228fdcb297ce8deaaff6de0a1610e8f60c85df3119816c8bd691",
-        "sha256:7651309833b6ee29b671312a5a141ef64190be03e88eda7c9405b246f49d3a12",
-        "sha256:877d7a185c28033487317d2d8c6e6643f4687de8ee555a7bb6e930b790696f33",
-        "sha256:90a91a631bb5093b4bc9218461cf6ee4c85b0ece2d1ab3f56a0e7832983f5402",
-        "sha256:d3d5a538ab3adfab4b64f046613750203a65383846c1d26ec026707849be8e41"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/claude/implementation-plan/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:091f97e8815287df685192f9940d4e27f198ee0eaeb18771aeb4a0491242d216",
-        "sha256:1642e8133005d2108bfff1167202a3047a343cedb0c23beaa3693b09a42ca4ac",
-        "sha256:20187cddf373d42a5c69cf6a7d74295b342f8e7cafcdd7df24cc3710a6482261",
-        "sha256:50b120401e18d03c8f65303a268b6cf96d9c23d62caef495f4693f934a20c6de",
-        "sha256:9af9ac615cceb80c1e54a20705fda33ef0c3fdb945c802fecd6a8dcac9adb5dd",
-        "sha256:9cdb1384c002ea6a66c0e42b010959306195417f50f75f37082acc1710edf340",
-        "sha256:c3d78e923f08c923013bb1f7df2b786e22a286cfc25238e3371f8d6a5ffecc86"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/claude/kretsverket-editor-change/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:3d9b187fa291f2c9db6fa86af1b4fb95d5c6444854aa5189b308b8950edb652f",
-        "sha256:624534c9de4687578a3d8da936d8c5348ea9749fe91d78b905777a4a3215167e",
-        "sha256:79f208db5ebe9379898624fc56e2315e163f8c3210d6c0eea7f3cfdaa2b0c423"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/claude/kretsverket-electrical-drawing/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:2a3dc5aeee8d8a549773b90c2b269398955419f300681dd0aa3b0c2205d92d51",
-        "sha256:a6d9d2e6a13d066b969e18194f4e8d0d654be322e1dff397e0e774bde483cb3d",
-        "sha256:b6819e64b8b652e884c067bce2efa238e515e0bdb015afedba2afe11b7bd6e2b"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/claude/kretsverket-file-compatibility/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:32264e1333ed2df0f304adbe5faec02e98749806190956057a306fe82591628a",
-        "sha256:a249634e2397b3bb0bf57a33b83e1a2450a1b750acdf30c162ede4f53ed2cc64",
-        "sha256:a61e7e311be7c23d9d6e178df6e794e609f1b8a5804630faddcd0b23db5937cd"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/claude/kretsverket-status-report/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:16562ee7911db4fcd4d1f2fd3461e11872c5ba46243b29862e2edd8ecb2baafc"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/claude/kretsverket-symbol-system/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:4df7cee70274936ce06cbfbe3cc43594d606cb70b65fae0b481471ad785ee7b0",
-        "sha256:5e38879a9947e68a5774f209a777accb557ca8c6f45b6a4c507db3854fb5d24e",
-        "sha256:e0321a667c48c02dfe2b37e66896e29113a3edc0aa5d3f4d5a71c146017d3fd7"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/claude/minimal-implementation/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:822f08ae33a5b53247dd4776f46beee9ec85fe874c8666f4a1d75ea7150225a3",
-        "sha256:b7cb174f46e751d9179059e41fc1f05023eaff70cc6c37c536e4c08d799ff9cc",
-        "sha256:ecb6d1d854f02f3a1d52f4b6ad3212ad442d14e3efddeafe2f803e6a0ebbec60"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/claude/prototype/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:04e33eaf2616acbd2dfb4f71709a1e9385d71191ee3df0918926939a0a07caac",
-        "sha256:20d358f6b42d30290116e8670c049745b998b07ff5fec62c2f60b1f9c9b4263d",
-        "sha256:4aa9413d38f71b756a22b1146db0e228e277e4df93fe2cefe8fe2b291c3e02f2",
-        "sha256:645b2fbaf73b2044cf5ea88d951ebbcc2f707efe41f9d3f0a2a11049e0b74051",
-        "sha256:820b1a2706e5358a7c91a3636c3489b286a2a7a0dccdb38d1c687a6d37767aa8",
-        "sha256:8511ade961b5ea8a12a02b1bc598c15f87fe05ad800726bd212639c5b6756960",
-        "sha256:bc3a68d05e96c79e1a5c8897e120e4ada06b1a8ffd014fcc9d1c4624b3046e6f"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/claude/release-check/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:06dd67cb2b55188ae1a3bcb7579d2fc1883ed752e97b86c802a23c75d8eb7ece",
-        "sha256:1a4f32102d05475270fdfe71f2f76ad09e7b0060d637858a2925a7368e643828",
-        "sha256:c54a0cf16db9ad00135488e5bc0e5f3a5e8bbc03298d03e670a2aa9225697c02",
-        "sha256:e6dfe63baea61a55f53aabc7031219267bfc0e8e450462e0fc66baa349c07fe9",
-        "sha256:f5a64bc1f8f5a43830368efccdc9037585f00c4820b94830bf213aadb05931f6"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/claude/retro/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:5dee77b063779549ddcd64d611ef3544b813b9491559f0791990315e590fe560"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/claude/screenshot-review/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:2b61d266c956ec346784b9972a1e4566ffee1186a41209afb96a106023e9c539",
-        "sha256:45c8e871a79b495e784056b27ff75dbb27a38af64a206fc1bb45fdd41e7c51c4",
-        "sha256:a6125893d0475669aa9a4dcef0c3df2f0f3afb009d219eaf55803306818d8587",
-        "sha256:b43d955972d3bd855097e02109f8d4e4eb0ffc23fa225ce602decdd63fd97eea",
-        "sha256:ffa8987ef5f402403723b43b38bdce84745305628e8ddfb53e99616d018d1b9e"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/claude/security-audit/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:284a7e1ddaeddb8dc34cb63a9ae13d78a38f93d2f06535a6a139399d078f2947"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/claude/security-review/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:141e9805413e9122b3c49cd64cdcbe29861f9c729971f30b400f8e04d0fa0e4b",
-        "sha256:1a0d42fa57120f3286bd6e4ea04134b92eaac9320b9a6a6e403ea50f6e6f4bbb",
-        "sha256:4717887c19cdc16c918bff4f6511499b24027a621e1d1b4a30fbb74c15b2ef0d",
-        "sha256:557b151f9463930daed99263b6519276ed06d4f967458bc42129e3796223ccb2",
-        "sha256:9add05488145895242f085a83629957b20964a54fb5cd909532253ed368ca10d"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/claude/tdd/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:1eeaab47109d502068f78ac32acbc06272953034843fd536e46a1d5d4811866d",
-        "sha256:2ed5052d85502935180f1bd6a1ebf60b0c9e4fd4defc9f0b2e4ba64c1e3e5740",
-        "sha256:dfda4860469ec7c3944e045a1fb9c7a26a7dfebd915d246c4555990c45f026cf"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/claude/wordpress-woocommerce/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:64342979eb9d69b5c46867357e1331f37461cf9ede8e5c075e83056218cf9016",
-        "sha256:6ff614d6f5da630ac407aa325751ccadbe9f6ca77de2029841205c26621815ed",
-        "sha256:92bd89da05fe2747562498536f287a1b23a6f17d56fab21d0e5398cab98ccc93",
-        "sha256:c55f2817365aea6174a343ad42c4d723097e5afdfde567d764c04da265a1eb8e",
-        "sha256:f0eed76e0cc3f58f1e03ef8b7d386becad38a3aba44efef21bf7ee4aa5b156ee"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/claude/zoom-out/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:3fb6da20cc1fc4ab6d3999beaf13d197bd63dcda227bf2911390f78d4fe672d6",
-        "sha256:7a4637dda30ddadb2a8a00aeef0c205d25ac8940cd87646c7b63df368e689ed9",
-        "sha256:85aaaee632eb2e69156062cf876ede8bb7f244e58872a8079bbaca6b8ae51f34",
-        "sha256:a9262bf882bc04d6524b48f48e3c241ecdd0c2e8b8c38c84532ce465dcf5d6ca",
-        "sha256:cefd57010e45ff88e3303b68b282de0bd0be04ed958753c026a700a0dd30fd97"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/codex/accessibility-review/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:0af53fd0e341f97f6ef6fce6009126843c73ceddecacaf8a092b57a6cedeacd0",
-        "sha256:0d25870eb1296054fe2b2d1d6ea80e18dd30bf3b288382f350110b2de644716b",
-        "sha256:106cbc051551a9991e8ac042630ab45ff967f9be606496732fff4afd65a835f9",
-        "sha256:8db4b8524084f2991410ace69aa1fcf33c14b086e2ad61092a077008079bc20b",
-        "sha256:a113a23924bb6ff66a41338106dc8d106a986986ce3278ab449d47386781385a"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/codex/adversarial-implementation/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:e270b406605c444470a62850527c346f8097ecce237c4f0b4887b0c393fecfd5"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/codex/browser-qa/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:573b8d2b92799e3471b5a76aabddef19e6f2b30868b47cbf7b903db4fe2001c8",
-        "sha256:72cfd58bf14367e6d8806e56785e81742629303cce22aff28a2aeb6c238d4a13",
-        "sha256:8d7ca9fff5c8739dc9759e7c648abf029c17b5025a65994d65d29fc07fc30b51",
-        "sha256:b39d258669b19d1ee84edaea44c3cc890fa839e0cf71e6fb29b07afeabc2c98b",
-        "sha256:fa806ed829a0dcc25d6f864575c7b4f9a10dbcb81c4af3db9384fc333b7c3805"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/codex/context-budget/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:0e3661e087f9b36b8358f0e4790430fd3df5cfa06f82a759d082769af40460de",
-        "sha256:11ef6eec1b34cfffdd4e2e1940d2498eba7db034f179a417d2e435504a70e476",
-        "sha256:37a5209fed6465ed147cb91fd399644ec72f6929bd9ec1acd612de725b1e6d85",
-        "sha256:bcf287c86ea3aa8ac30c0d32941206118cad66f1d41ef82c4bd373f1b894acc7",
-        "sha256:f2468f17d55557ee1a7c481f5dce8b0bb9e9552256030f85a76b3a378aa1ad44"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/codex/current-docs/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:2d835e58340d5546dca61373adf84fccff84c4b922d8ed13965234787e9dfac8",
-        "sha256:4684a3e7d28619828e59edfb8807d2086324738deeeb2e1ca21869774e171d6a",
-        "sha256:5b1a3ac2d53f20233fcde6a5cd39153ef7e881dec8a202300b759317b6bc2fe0",
-        "sha256:cccac1572563d7e3b2828634a2a268aadcb8aecd447cc71617134cac6cb47497",
-        "sha256:dcdbb834b8af8a6bddc6040baddd08d9e2d66715a176be3aaf9dcddee2ef8e2a"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/codex/database-migrations/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:246a3489426fd48115ca744744380dee393f8ad97afe96f8f54f5b2fec29c97d",
-        "sha256:290cf4b9c27701eef4a0339cfb9d1a89e4dad00b949ea7173d0a157d842dd0a7",
-        "sha256:598596b0ae0f77b07f228e924c805954aac26e4c9680814918e816f62efc4fd7",
-        "sha256:a220df768306db11083080d25eb16a161e1f30b489933a77137562b3912b4fa9",
-        "sha256:f69e72b7e6f888eb8f9f9141a79219bfc922ae7dd0f72f5ad95b8210576b0896"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/codex/diagnose/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:3661fb0e66042051fa748287caab7979421c3dd79e3fcdd786bc68bbe76c038c",
-        "sha256:405eab31a6f6b76662e6e3feed8ddc87cb074c0d7b31b1f0a40e990b637e7afe",
-        "sha256:79da6c63a61a27effa14136c0d310b6ff63ef76b6464dfc4e51979b3e13d98d6",
-        "sha256:9de23c63093cc4fc81d7f8cfa849628dd3e83a3d8fbe2d80362a3b850dda2a92",
-        "sha256:bd04bc4c21382164f4410e4e5915c4b063b050fa7816c7ff159d5d6f5a0dbdcc"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/codex/frontend-design/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:769c7842cb2128f9c8cbf7a5eee00cb35430287d4f7c95d997e0523271b9a6f0",
-        "sha256:7ce382b32579bb37e43313884ee266c42670c47a1c636b0039d23cf15c59e91c",
-        "sha256:90b59d810c55929bc0896b907acf5f54eb8908dca5fd2d73f27de7af74cc3325"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/codex/handoff/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:1b28f1106d7534cdaaab0bf034f496dc215b773703d59072b9572e69ffac7e8b",
-        "sha256:d506a43490cbf56188248e0bc2fd495e5aef31b48e9d1ed69724ab8bd6b55332",
-        "sha256:e67a8d04190de6fa801d6f42de6f7237047cd54362a1beb908de6a2e8f6e26b9"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/codex/implementation-plan/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:1642e8133005d2108bfff1167202a3047a343cedb0c23beaa3693b09a42ca4ac",
-        "sha256:17ff994030c3dffb0540d0bdc120e288910956b5354a0da99af2cf3f6749576c",
-        "sha256:20187cddf373d42a5c69cf6a7d74295b342f8e7cafcdd7df24cc3710a6482261",
-        "sha256:4011da1a4f1950bf40e6d82ef0bd3b76261d32607aede3ec98e8f5839d091181",
-        "sha256:768be4d226f97e0a83e5d9fa87b43817a47139cf01dc93b580a1263703d96b2b",
-        "sha256:9cdb1384c002ea6a66c0e42b010959306195417f50f75f37082acc1710edf340",
-        "sha256:c50aada2c3449f40da223a6ace60230ddead7abd2e4f1c2a1d7f111135009d70"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/codex/kretsverket-editor-change/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:5ba418b265002459baac715ff25db73aec27d422cfd64a25779be04119ce3c5e",
-        "sha256:624534c9de4687578a3d8da936d8c5348ea9749fe91d78b905777a4a3215167e",
-        "sha256:68d41d3d6c4854b22edb3aa300c42312c7c0c3bd79d912aa19dc63bedc6e6fda"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/codex/kretsverket-electrical-drawing/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:274edab35188ee1c1d6148e501353f2df8a18bd44093cc3f0c9bb20158cc48be",
-        "sha256:b6819e64b8b652e884c067bce2efa238e515e0bdb015afedba2afe11b7bd6e2b",
-        "sha256:c49b58c1302990ec130ff32a50c15b74a08d222b2be312df887c8dd6f80d4b5c"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/codex/kretsverket-file-compatibility/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:12eb8193a0e593b7afe3a850919dbd2b2a6ea092807baf8fe867e7d5c71a0a5b",
-        "sha256:9f6a8df7a3cab82b8624840cdaf40a59c75ca182ceb2226f8e046cfcc3fefadd",
-        "sha256:a61e7e311be7c23d9d6e178df6e794e609f1b8a5804630faddcd0b23db5937cd"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/codex/kretsverket-status-report/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:16562ee7911db4fcd4d1f2fd3461e11872c5ba46243b29862e2edd8ecb2baafc"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/codex/kretsverket-symbol-system/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:2a01297bb9226c5fde292f7205e29add0ab905c71a3409c24d1f7e6a7c1885b5",
-        "sha256:5e38879a9947e68a5774f209a777accb557ca8c6f45b6a4c507db3854fb5d24e",
-        "sha256:7f2069541487db3689b4a2c70d4dd28238dd9b5dd5c10eecdb68280e28117cc5"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/codex/minimal-implementation/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:1179098e1682008a81bc3e0d54eb1671c3fc1ce6e5053aa5e3eba201b9f26212",
-        "sha256:2521079acc9663c5b2d6a282947f926b971c6d76a1bfe1805bea7a6e623a5d0a",
-        "sha256:ecb6d1d854f02f3a1d52f4b6ad3212ad442d14e3efddeafe2f803e6a0ebbec60"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/codex/prototype/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:2c005eab1bbf08ad8edc398bbeed629bb5bd71ee9ca66d21e47ac981a83a0a89",
-        "sha256:48a0dfe52e218ffa5533f3f36b1a24ba4f4810da89196d1ca01298ea109c679a",
-        "sha256:645b2fbaf73b2044cf5ea88d951ebbcc2f707efe41f9d3f0a2a11049e0b74051",
-        "sha256:87e12140b03d904813d411b41b6cb6a07748b56c5775f268b2b99b84bf7a30b4",
-        "sha256:a55ff77a8ffdb5851080e252565301a1a779630bf40ab1b665bd9e95eb7f5efa",
-        "sha256:aaf8989c50a079750f82468804204c0e8e73ce8e901bc2864c9ff45df16b67fa",
-        "sha256:f81276e56e575c731cb94884b495e97420a34fc4ee0a0c41ae46a178fdc697b9"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/codex/release-check/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:4f7a7456ed4c7b04587ca236509949ae75805b00f4c021a4a2a35c0ad7ee138a",
-        "sha256:61e1f73375599da02688c474454066512d74e7557be33a2c00ca616b9316b098",
-        "sha256:971e16c3d97b4171c8a210ef7cb34c3e785bba80370b7310a7cb7e8171b40f94",
-        "sha256:d64075a524d58394d0debe01c110697c81d7cedfd4eccb7a629f7bb9d5d34ae4",
-        "sha256:e9206a4b591180bba7b86158583786930ea737017d6b98af5a1de7bc386460bd"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/codex/retro/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:5dee77b063779549ddcd64d611ef3544b813b9491559f0791990315e590fe560"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/codex/screenshot-review/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:0b944da44111685fb2c6f96504843f3214e610adc5e5684ee9c69d9c79c179ab",
-        "sha256:0ef57d7e5c741f82c12bcb6baff8eb0f38a2a8cdf3a27f44ac66ac339fc3ec27",
-        "sha256:2b61d266c956ec346784b9972a1e4566ffee1186a41209afb96a106023e9c539",
-        "sha256:8426c8bf2a6f302356444b50d883465ede7a120dd468d7305c0c1c6133305c9e",
-        "sha256:a993c5627cd2b0eed4a7eae34147579d4b6fa68ab0d951672b4c3504b59a441e"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/codex/security-audit/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:284a7e1ddaeddb8dc34cb63a9ae13d78a38f93d2f06535a6a139399d078f2947"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/codex/security-review/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:27e1620795ac99070eac28603bf67adca1a9e61d22d362f19ed283b750bc41c6",
-        "sha256:2ec65ef38d69cf4a5a98d60641e9b632cd65571efd3b716a35e39e3834624002",
-        "sha256:470e4393ae121a1acc70f5a2abcf178c458de1bb582511a98603a12ea174c778",
-        "sha256:e2366919227cf31792f71e2f6dfd5df82e9fe3ad6ecb100635ff6ee6c6ad9fe9",
-        "sha256:ed9b911e754037467e36fd74d51e2032521b91df569c7b1e40ce7afd7e221063"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/codex/tdd/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:0048064f2b25b6063a49439ce44b1f00f638ab5fe0cce55369a23249dc00fd8d",
-        "sha256:2ed5052d85502935180f1bd6a1ebf60b0c9e4fd4defc9f0b2e4ba64c1e3e5740",
-        "sha256:d3c1df957d747bdd52e3b5d593448e79503997c7f134460d3af4b892931b0315"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/codex/wordpress-woocommerce/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:0eddde68635e4fb0a5f49db44a73291645452902612d2b25f3780322f8f645f2",
-        "sha256:2a65c6dbb30de1e3944e1cc9a03db29834ab2d387d2357d3a897b4108c8e7af8",
-        "sha256:7457a6fb339c59d6f9ab265c03b6674849c608958e7288afde723d2e47e214f5",
-        "sha256:7d31895d57419ea4870678f98c575db68540df2f6a344a3b96aaaf99e6a7a015",
-        "sha256:f0eed76e0cc3f58f1e03ef8b7d386becad38a3aba44efef21bf7ee4aa5b156ee"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/codex/zoom-out/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:0b26786ce7f555dff969b543c5471d2d234a2ea8859c41c2139ae731ad24e32e",
-        "sha256:1c0f74b94a3fb1308827169c7bfa892b8a7f3366e3da1c111874c8e13131fe48",
-        "sha256:50411f437556bf7a6a6d0813a83e059c1c77c7f7261ceb1a4c48515f285c8101",
-        "sha256:7a4637dda30ddadb2a8a00aeef0c205d25ac8940cd87646c7b63df368e689ed9",
-        "sha256:f1827dc178ef8607e82adca57fe86cbeffadb5f19d1eff944dc75680d13d9f9f"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/cursor/accessibility-review/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:04c2c6f7ed321f71edb8b4403b8b46ba0c9d370c16341ae54bec5c98153968d0",
-        "sha256:42f685fbb2e9cd9d413f784a35b8461251f4d15708d296b871d3f64564014bd2",
-        "sha256:ad53f39df9698bba92e3577f9123fd96f887a91a17e4e4ee926681874f0e735e",
-        "sha256:b28eb01e872bb11adc95c73f20082406c20b9688a9fb9231f993d34e630852f5",
-        "sha256:e01b2cb3e017f73f42e709780c3a7c44b9437e3e0a3d56be1acbab5f505f3aae"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/cursor/adversarial-implementation/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:3c5a29a6ec712705ff50b6a2e8229b2ff172aa4bedd352a6aa77c596ba54491f"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/cursor/browser-qa/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:260551a0f3890785de4be5cba01e57721e1f1ff2ef22eabafd6b58754524017f",
-        "sha256:53f3173b9e026bca36aa98581844a704ff45912085227241018aaed8ebfcccd5",
-        "sha256:67306574c892d57bc3ba023c85bd4afb5118a563bea12db4648193a862c504fc",
-        "sha256:b020d1f9342e7e15a138ff76308958b050e00ec5d1fdcc3f77def2f4c28d474c",
-        "sha256:f96f78c1265b15e7ebbb74a8918a37bfd0c567988f18406e5991389cc8eb0ce0"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/cursor/context-budget/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:15148503799b7bed85e69895b15de1885cce3be05316c21cebc33870ef42f6b2",
-        "sha256:5d4dc2deaf6972f135c96ef9ffe35359f569dbbb059ce7f313a408fea85ed55a",
-        "sha256:b5f8bcf27b8b1de2ae00dfb18a6b2d09aba8e8e167eec0eac5bff566511638ab",
-        "sha256:bec8ead63e8e81d3c5233286430179411fb3698e7bddaaa4bd45db44acc1fc8e",
-        "sha256:d0189d1f7a2363e424bdeff95dac6c5a42221f71557f9e5765873145ad49649b"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/cursor/current-docs/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:16127222e2adf3030d8407f77da61fb8529d03373e14201fa2b15816d2d73bab",
-        "sha256:2de242eeb4a44c46b300ce1c4362a9bf9a568360e2aa03e1b191008bfc7f3f1c",
-        "sha256:447916026f09ddf7aa4ecfe8caecd3540e3c6a1dc7c912d734960cc299ae4c7e",
-        "sha256:b274d6c0685d1137d559fdc992f4187f250e0643f08c7a7dbad85423cb7e1950",
-        "sha256:c18bd120eb71c4c0e77a247b0a5862e1c8a19973ce87a9597998189d1e8c2988"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/cursor/database-migrations/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:228fd3a2cdf3b3a6d1039744f0ba6c672fc5f9b1d12b44981f8b67bad27825f6",
-        "sha256:642d702e46a1f175c2502154a2df8246a6bf1445b592690c71bbff345c540a1f",
-        "sha256:8365d6f825de3677f8370b366676387b896abcbb7117bf366d6b98ff4d96ea27",
-        "sha256:e2d91d632f46f1cdb28526e48cc38ad7a1be4a00dfc912e4071dbbf909613b31",
-        "sha256:e79072dbb36519f449bcb9c5c31228eb87cf539e5a3ad78d40392874518a839f"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/cursor/diagnose/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:036a016ac0f6ad2a5419e6d3aff1c8c3a484f22166ab7433cfd825b1250e5fc0",
-        "sha256:35345e43a905143a7f1d153cff65dbbf658ad1df4d2aa1373858fc3c4abb3765",
-        "sha256:5ba6e95d94f956ebba26ee143cc0ff7197711ff0fbe4770d10da83defad82497",
-        "sha256:8cd21a9e65b899835ab31d6a33115320f7117a10821ce8d506d19fdc383ecafa",
-        "sha256:c53e77df44f56cc2dd8f3b2f6fa8dce3df40d5feaac4b11088dd9ee62a2da50e"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/cursor/frontend-design/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:5d95aa93fc127c315b00e1a1fe10268c4cf0c3644c964adc5ed7ec561dc610ff",
-        "sha256:bbbbc639b51affefa4eaa12c18c2a3f8aa4a31b3f320c464738410a1beb47cf2",
-        "sha256:ca1335ae4402573c90f95b5e0bdcd69cad0cfc064c8911b61ff87a516c94d566"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/cursor/handoff/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:8eafba99896ae5ee7ec53520af2cfe0f57a90f423a0918b030d313a8de32c3f6",
-        "sha256:cf76a3d5cd4ae36ea51dc93306ed144552377074e6612b3830901a8186b9b9e9",
-        "sha256:e1bb74021a69672790799254476d3ca357b39a28f8327b7abecb6b0025b6497c"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/cursor/implementation-plan/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:00765beb6b439b22b191e0377b802c8054104e5e84999efd9ab94be72eaaefa4",
-        "sha256:369611305c06444d6a3496f324b99df7d61250524d3259cd92dbfe6431b10c57",
-        "sha256:5c30a62c381b6f4e615a4afe5931057f2757da4489abf1d4ef5c9829bb54536c",
-        "sha256:8cbcfd140604a5a065d398de0f512e9a3e1ad13a65a7d0472827685605d84a81",
-        "sha256:c952d187256e93efa70d0fda44c0e7912b41f5e4f19191b05edfec010f7e35b9",
-        "sha256:e41cd4f93b83aed019a9c955dd79fa9b6d8db8fd48708358a47423a58bc50e48",
-        "sha256:fb2fc79a0e030f630837f981de10053b3b298dc2ab87438b8ca8a7735c2d6ce2"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/cursor/kretsverket-editor-change/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:5ea88be7e49b5688689e1fe407823c3508dfd196cbae13c25dcaf19447eb3970",
-        "sha256:9bf62d5e397f71ca4d6b59254c16056d69a6446e1a57b6980e2b10b1b2bad04b",
-        "sha256:bcb190e9d809cd1a091dc685792fbc97bfe80260ae4fc607818e4a20669db95a"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/cursor/kretsverket-electrical-drawing/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:1ab3e4e710c670315859b0a31cc3e041a14d1d48b6a2c13228fdc928ca4f815c",
-        "sha256:e455ce74c9518d5b655ebd5138ee720e8ae39cf79bdebb3d41dc4e04ae1e6b3a",
-        "sha256:f6b39fc6bb99625c629928dc38be97272c2a41dc13a9e58cd9d57718b60963f0"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/cursor/kretsverket-file-compatibility/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:65ccad233c4b08850478267ebc8b077abc3ab586493731f002f54b3b6e421298",
-        "sha256:832029de7c615580e4b5375c3731989dde560406c88275f2bd92be416e45deaf",
-        "sha256:a954bebf14fc2b96a913b2f282070553ba3ea942c5fc0486a28b2d8da58beb44"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/cursor/kretsverket-status-report/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:9ab8530a48b572f6d840eb5443992b65cfc5986e271ed0e4a8da8ed24815ce5f"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/cursor/kretsverket-symbol-system/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:0024c0437da9ddf0daaba7ce1a3122ce082e64394347a51dcef10f91e146b679",
-        "sha256:7aa2be86e18c1af0a7c61ddd4feff163e7bcfb7f52a385624a5781ab3f5e9372",
-        "sha256:e64f28215d64383935a9c83df1d665004324a62a78ffdf8ae24ae7fd49d94df3"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/cursor/minimal-implementation/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:56d5f489c5ce6877ccf9f3f17f8f6e089f259e079297dca04fda3a97c7a805f4",
-        "sha256:7437c40ae7509ff00e1cb78fa598f5aa559b5346776621d30648eb98828a8f57",
-        "sha256:aa124721f0cc77aa00426aadb2a767c09b6ce4fdbf1ea8ce1a994652b4670c2e"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/cursor/prototype/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:01db4f5d54b7827754c6800961fc26fbe38a29b435c3f7b7393e621fbdb468f1",
-        "sha256:87e8ada1aa00b17175ec316112d08d74bd2c2d21717c7d3607e6c6e77aad54d6",
-        "sha256:ba94917348bba49a840dabdd260e2e27d75afcd29c04c6d89dba1f9ecfcc4634",
-        "sha256:baa49539846367aa0673a514b18964072a0f31b9ca2a72a4b12edd1c281b8c99",
-        "sha256:d1f50e92e50e55245afdbac3d30adc79068d42baeb7efdf13060b93009a07f03",
-        "sha256:e3253fd9896e35ad80ab9602f24e98fbd0fb5c0703ab0d3b1b7f0f0707866414",
-        "sha256:fff0066fedc4bd5f948f7d0f9580ee1610f16d7648db02047fcd987def10d696"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/cursor/release-check/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:303efdf5ddae1af1f9829396d361a06fb3f2ca965decfa6a2e043ddd6dc50acb",
-        "sha256:6b5e1f59e210681f782f58a5d17cb9f2e391b39092b56852fbb70a5afd07f51d",
-        "sha256:94525138eba5a4f6fee00488058068d4568da19dabb44b38befd068c0f306b55",
-        "sha256:a3fbafd8dc34afba2cbdafdb35079e43ca411b8cad98a680feaf9050f0e32c72",
-        "sha256:b0c10ffc48002f2d705fc9609c0dfd6d4b80eb578533933b03405cc90db511c0"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/cursor/retro/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:1c1ea8dc09c3d13244f89cb084a3b4f6550586989882a66a9f977874feea62b8"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/cursor/screenshot-review/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:0a0a42f5c719232019146dae99e28cd58e0c97977113a4a527a4b27d0dc3fb77",
-        "sha256:190ce3274cb9ef8b04b3347c177a0099bd112c899452c96f26065e1ddde1f7a2",
-        "sha256:3212231a94380c2bf9914f03123e235a29ef9246b3bfddf7e9e8718c13266afe",
-        "sha256:3fb2d111454a10ba49d36e5666327569b40caf75b868c6ffa1fa1481efd5ef69",
-        "sha256:ae73650b2cd08a5506df342e62d117381700ef6dadfb097b338f568cf4b62bee"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/cursor/security-audit/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:8fee55cf4f3dce2895a7b3eae4a0c425dc2ba8f6f5eecc151999e1cd58853d76"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/cursor/security-review/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:0ba68d15829a2e104569d62e0b246c333a8fdef7d870ce532d4aa87e007f5278",
-        "sha256:4ba278d5ee2a28ac9fea842b0851600922239889441cbd03d88dff9a612982e7",
-        "sha256:86f120f784bf7d549ea8ad3a50e4b9595e8a8241f3dd179fa532e9a9eccac02e",
-        "sha256:bf423eaf38acaf5edaeff8f7ceba5d0ec704b496b67a38dd7e39295628c5cfaa",
-        "sha256:f45a42762c02fad044fd6aa63fba98caedfa02c0addca89bd3794181335d3c78"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/cursor/tdd/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:31bbbefa1f610ddc192ed92e0a023941ab7f7bfd77c99d10866688ef303e6663",
-        "sha256:3b1c3720c5af68d8ca2bb21187780d0ef92d01fb11726c81d8a10711557715c1",
-        "sha256:d1dd66bf0b1e2fe3c1d1537d458933ab3b8c55338b1b91983e6f19162a2a9f15"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/cursor/wordpress-woocommerce/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:11eb75269b22350f61e43cdb4dd1079c53fb39a0b5ea0990aae02a4822eb41cf",
-        "sha256:12a3a13831fca5d8d29153d94249492dddff1e231da7074338160c09102a99bc",
-        "sha256:1bf5860c7deef1f53a6f6bbb21c73dc9e965d9a50a0d1b9988120b270438a63e",
-        "sha256:be284e5c2110ada1c0b1a5bd4e9f8bb0c90492a6a7e48657304c431b4f7d49ea",
-        "sha256:f96e392c4d6f8d49d95741d8953689201283b09b41c26769031cbc1cb081ebce"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/cursor/zoom-out/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:3c62ea73403bb739cec47e9118239691e07d201af3cd645280807d0f161ebe65",
-        "sha256:5dc561ae3cc97d6790ad9bd4e99d8bf8bc1ced86f15712937bed23053d209c9c",
-        "sha256:c773db7680277581cb09fa6852c4b9106d9f665bbf511cf4758d92d7d1d006a4",
-        "sha256:d258782a3c88440500449d34c9b30c0b365aebb619234dbe37f3fe18e108d7dd",
-        "sha256:f90a19233b7b51210fc82037eb139e03fc60a517e7e765320859e583d099dcbe"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/opencode/accessibility-review/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:0434ba0885d368507ce6c93fcf6c01e97077626e4c78837ebf8d2126a75fb619",
-        "sha256:0af53fd0e341f97f6ef6fce6009126843c73ceddecacaf8a092b57a6cedeacd0",
-        "sha256:603ab04e972fb9ba83762142537718d805fe6514ab5e964aa3d627868dba4a58",
-        "sha256:90251d98575f848da52fe97d651c1c6e9820710a757bf47e61c2c4877457e3a6",
-        "sha256:f18f427609f020b70f865690d22b3b262fff4947b74681794f8437a7e50d21e9"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/opencode/adversarial-implementation/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:e270b406605c444470a62850527c346f8097ecce237c4f0b4887b0c393fecfd5"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/opencode/browser-qa/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:2963e6626db5f2f3d355ca8b9a4d2d3a281cc82636cf2804439f1328e1086f92",
-        "sha256:b1bf9eb415d112bbd853ccc7d46f79d3bff0acc500a148f7b4088e658b12c97b",
-        "sha256:b6eec90b99a72fb7b4e07148715f57fde79db28cf2dd5a333ee959957c444a97",
-        "sha256:b81ba9e603719a48831c92f2a95038f02861c67ac1f51b66796d5e7c89aa648a",
-        "sha256:d1c70f5116ad434e17f6c6e8d2efb7e30ee7b85187085b5e20ea244afb732e46"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/opencode/context-budget/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:0238aee0c82f0f9b2e8fed2245104c8c4bdcb1505327c718b62dac32b60a7537",
-        "sha256:15667741e63b695e07e3dc0e993650ad7083605f27a1dd4b88159432191107e3",
-        "sha256:478c9f70b6eaac445475d84ea04dc53fcd1bf477f16ac647f01f9585fe0495b6",
-        "sha256:735670ae8a6a6a307bd6ef8acb5807cfd64dbcdee84378145c3e5a7783bbad7d",
-        "sha256:f2468f17d55557ee1a7c481f5dce8b0bb9e9552256030f85a76b3a378aa1ad44"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/opencode/current-docs/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:0f50740e509393b972677af3d2dbed71e4675f884207811b418fe6142ecbadd7",
-        "sha256:2d835e58340d5546dca61373adf84fccff84c4b922d8ed13965234787e9dfac8",
-        "sha256:972e5938401e63d1c0586e0062bae27f71a1afbd7c79cf4015d6d270e6877487",
-        "sha256:aaf37d7f9c5608c8beb5f6c71ce523df2f9a5f2f4ffffc94eebe6720b9109b22",
-        "sha256:bf0f9c57832b2a7cf2fc8e159750b8c4bbfc08257720dcc48a81cf96ff4125cc"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/opencode/database-migrations/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:005d8038906c7f0a5782d7aa44e56ca60bf4256c161226e749329bf36de992da",
-        "sha256:23f267d898e1bad70e72e2958240d297da538a2904f3d032cfcbbbbef9155765",
-        "sha256:246a3489426fd48115ca744744380dee393f8ad97afe96f8f54f5b2fec29c97d",
-        "sha256:753cfb76873605fa585a4b9502b94146c8cc0b7cc8b0df20228f7ebe6adcfb1f",
-        "sha256:c0aee335699cedef6f395899b2db73787296e842b556bdaf9a742b005048e0d9"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/opencode/diagnose/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:001b5933e90201d8c647ffb315a43900c2dbcc13f5bf765818f62d32f9e02eb4",
-        "sha256:79da6c63a61a27effa14136c0d310b6ff63ef76b6464dfc4e51979b3e13d98d6",
-        "sha256:84f8438fc10f2611e33f6536b4eb9887f4d0985df04bad0bb8385a5e2fb9d6e0",
-        "sha256:f8d8fac784245c4262f8b045f28c03cf0986df685bae050aeacddb6d4a21823a",
-        "sha256:ff1f0673e4c47a781da1b5b1865a53221eb08a4744a88c71514af386197c0ffe"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/opencode/frontend-design/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:455e2e922a4b964cfec8120a39900277c8bdd29f9eaefaf4226b5b8411916af4",
-        "sha256:64b820dc7f45c53eb584ab99280385883cb31bed526aef473cd7e5f75a9b7667",
-        "sha256:672b5706d615081c9b3e629bbd696a12d9a9930280f4ef628ec3e6560c5a4706"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/opencode/handoff/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:c3a6125c9d382f673d19d8a9446ba6b5aaebcfc4e8912c7bdc10d52cbd9f74cd",
-        "sha256:e67a8d04190de6fa801d6f42de6f7237047cd54362a1beb908de6a2e8f6e26b9",
-        "sha256:f41a944b68b2554ea9291beafe620365eb74c1ce79b81e7a143aed44fd4f7d60"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/opencode/implementation-plan/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:0400306217edd2f80701cdf3417a34364061a1c7d50301f5c17b56f524e60bb1",
-        "sha256:1642e8133005d2108bfff1167202a3047a343cedb0c23beaa3693b09a42ca4ac",
-        "sha256:20187cddf373d42a5c69cf6a7d74295b342f8e7cafcdd7df24cc3710a6482261",
-        "sha256:25f2b0e04ad3af5a0456e81b707c0d6fc9ee6abfcb5c09af6b9f34a04615ee44",
-        "sha256:4ac5d00a6be9dce4c44ccc1b3111743e8a17596e0ad7c43fe3257c09f4c9f96f",
-        "sha256:9cdb1384c002ea6a66c0e42b010959306195417f50f75f37082acc1710edf340",
-        "sha256:aef4ed0a77fc3277a06ac93541cbc22ebfe05aa587e232f54d916640faffd5e7"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/opencode/kretsverket-editor-change/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:21aaaee74ce91a9ed73e39024a965fd93ddd3069782894a0d1350361ca13187b",
-        "sha256:624534c9de4687578a3d8da936d8c5348ea9749fe91d78b905777a4a3215167e",
-        "sha256:7e801c0d5efc10a6916aa6feff4701ff6953557d3c3a9e4861053212d4f1af3a"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/opencode/kretsverket-electrical-drawing/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:36d2b561e4141c376c5ca0809ba18c73c3f8889b110dbb9c2b33571103a2223c",
-        "sha256:813a0f58e7caed33540b06ddf1187eb0ccd2bfb0844eece8570980ffb0f0b031",
-        "sha256:b6819e64b8b652e884c067bce2efa238e515e0bdb015afedba2afe11b7bd6e2b"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/opencode/kretsverket-file-compatibility/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:0010926abdf50acc070f8df9fb2206fc6bb5ad73ab61506a69cc45d1ed7c595b",
-        "sha256:2dbe1f955fa0656686462ae28db05facd814a1927d92fb634d000371b552ba24",
-        "sha256:a61e7e311be7c23d9d6e178df6e794e609f1b8a5804630faddcd0b23db5937cd"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/opencode/kretsverket-status-report/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:16562ee7911db4fcd4d1f2fd3461e11872c5ba46243b29862e2edd8ecb2baafc"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/opencode/kretsverket-symbol-system/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:5e38879a9947e68a5774f209a777accb557ca8c6f45b6a4c507db3854fb5d24e",
-        "sha256:a2a4f30223f17b3d027a975a5d8899bc395c28807a42af32694297ad2c31a6c6",
-        "sha256:f7e003da21511d4b70f57077d80c53af319b9c83c085e88a0cbf413179040108"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/opencode/minimal-implementation/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:08344f8c20420b923ba85a0a68ea4aee8cee0fc4a6217e2300fb634ab0309ac2",
-        "sha256:ecb6d1d854f02f3a1d52f4b6ad3212ad442d14e3efddeafe2f803e6a0ebbec60",
-        "sha256:f30295c0ab00c3a20f3f8665de210fa31a082b71c9422c06c4ea29375b7946e5"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/opencode/prototype/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:38532267bf6738c9b4829ea0b8914764def9eb8307b15cca7fe9e4790fea5c47",
-        "sha256:3e6da8e1cb714368c4bfbe745c1fb7e48871f9f79cf583e2ae8f565e5aaa7ec7",
-        "sha256:645b2fbaf73b2044cf5ea88d951ebbcc2f707efe41f9d3f0a2a11049e0b74051",
-        "sha256:8bed57e881b64770f7774a93dbc53b004522d83a537ad95ae4408e0d26f52ab1",
-        "sha256:8fc34ad7e6ddb510858b334610646a5fd398723bf768804eb704c02e65b11c98",
-        "sha256:947b7c0e0ab6a5dbceceb9353eaf92319f3f3f25b6b25c1dd41e0b277591ccf6",
-        "sha256:fcab0bd22b600e1d30e4a3e974d592a2e23572679c4b5707e095d5d2fcb3d740"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/opencode/release-check/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:1d08f9df30ecb275ed08b1240d968cdc586059cf6730485e1863ae3ab9806056",
-        "sha256:4c67170ccab8772e9cb47c44a56797a24c41b420562e5388d8808e1e25baecde",
-        "sha256:5b72123d7b5d7b12cd5a7f69f58fbd194dbb5de2511e71ae48d9daecabcddafd",
-        "sha256:e88292ef08a029392d359015a551e54fe49772d827edfe44dbf4f026f4f95bbe",
-        "sha256:fa8cd8ed41d443670b0888cd049f88c6fb9e1a587141fec3ffc5d8eb2d124734"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/opencode/retro/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:5dee77b063779549ddcd64d611ef3544b813b9491559f0791990315e590fe560"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/opencode/screenshot-review/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:2b61d266c956ec346784b9972a1e4566ffee1186a41209afb96a106023e9c539",
-        "sha256:3cc663c9653fda6830977aacf0e542b67750687f353057d3ab4a696998642a8b",
-        "sha256:4156a59096fa60becca69ebee599665ad9417ed122c0162c6a245af6df91440d",
-        "sha256:c0247b9d46acb21b90a658e697cc68952c4e2c27852b7d72cefce08a91f24b23",
-        "sha256:e45e7a701c680bdfe5c4c40493decde69be845c2dcf9ab640dbc0ab8eaa17e55"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/opencode/security-audit/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:284a7e1ddaeddb8dc34cb63a9ae13d78a38f93d2f06535a6a139399d078f2947"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/opencode/security-review/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:27e1620795ac99070eac28603bf67adca1a9e61d22d362f19ed283b750bc41c6",
-        "sha256:4812ba2c0cfcb0547b6c6aedc470159fff60faf63e8ec742ccad7a258d009397",
-        "sha256:826f56c54447922d36a37072c98f70097fe2eede2234b05dd4dd59f064f536b4",
-        "sha256:f271a9bcde5a4982e47007a75c06b374a148e556d0e36b01928f52296f55b0b8",
-        "sha256:f731becdbf91f6ad05138401d827cbbdc2d4ef0a6a38a5196123a53358a728ec"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/opencode/tdd/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:2ed5052d85502935180f1bd6a1ebf60b0c9e4fd4defc9f0b2e4ba64c1e3e5740",
-        "sha256:60a8cc8bb34a018d67462e1bfc2bd98b1230c0a95369bbb7a6ba883e5b20f729",
-        "sha256:7b5b1eb79c711e0ca2aba4d5dfea3ba877f96c58fecd9dc3b352970da7084172"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/opencode/wordpress-woocommerce/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:13daa1679f75481195b11c6967f31750c7c5f98ce4b473a3e1ac0c3aadc8f0fc",
-        "sha256:33ccf33ad74aafd60d6f402739f6beabaa0c475f33e12e5a57940f14d3c3383a",
-        "sha256:8f290a456f2c204dacff83c655b2e4aabe254eb83db847054c7f43759f8394a7",
-        "sha256:ab981017a8622858da6d1bdf3ad5d3cec866a742ff64575f62e433f61a059369",
-        "sha256:f0eed76e0cc3f58f1e03ef8b7d386becad38a3aba44efef21bf7ee4aa5b156ee"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/skills/opencode/zoom-out/SKILL.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:1b379479fdfc854d436791f58ed63a15c6e0bf9909c7aa61a5cb9dec303ad0cf",
-        "sha256:37fc3df00682ac82c7b25e0c10135cc56a13d3c6291394bd5afaf2147c9572a7",
-        "sha256:7a4637dda30ddadb2a8a00aeef0c205d25ac8940cd87646c7b63df368e689ed9",
-        "sha256:80280384407a8c746a0d3e24a887a1b5150ff9f846af6f951f67b737c08ba864",
-        "sha256:812b19a5c88dd3672060336de935d3587ef092745f2374061c5466d16e41968b"
       ],
       "action": "update"
     },

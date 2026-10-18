@@ -56,3 +56,10 @@ Done when: each load-bearing claim cites a primary source with version and retri
 - Do not browse for local repo facts that can be inspected directly.
 - Do not treat outdated blog posts as authoritative.
 - Do not claim "latest" or "current" unless current primary evidence was checked.
+
+## Harness notes
+
+### Claude Code
+
+- Use WebSearch to locate current primary sources and WebFetch to read them; check for an `llms.txt` index on documentation sites first.
+- Pin claims to the fetched page, not memory, and note the retrieval date for fast-moving APIs.

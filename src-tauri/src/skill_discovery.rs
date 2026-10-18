@@ -325,6 +325,20 @@ pub fn skill_names_for_harness(
         .collect())
 }
 
+/// Path of the canonical `SKILL.md` of the skill called `name`, the one install source every
+/// harness copies byte for byte.
+///
+/// Looked up through the catalog, so root-level and grouped skills resolve alike. A name the
+/// catalog does not hold (a retired skill, or a catalog that fails validation) resolves to the
+/// root-level location, which callers then find missing instead of having no path to check.
+pub fn canonical_skill_md(workspace_root: &Path, name: &str) -> PathBuf {
+    discover_skill_catalog(workspace_root)
+        .ok()
+        .and_then(|catalog| catalog.into_iter().find(|skill| skill.name == name))
+        .map(|skill| skill.skill_md_path)
+        .unwrap_or_else(|| workspace_root.join("skills").join(name).join("SKILL.md"))
+}
+
 /// Require every skill to declare at least one known harness target.
 pub fn validate_skill_targets(catalog: &[DiscoveredSkill]) -> Result<(), String> {
     let allowed: HashSet<&str> = VALID_SKILL_AGENTS.iter().copied().collect();

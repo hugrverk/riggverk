@@ -104,10 +104,7 @@ pub(crate) fn sync_skill_dirs_status(
     let mut missing = 0;
     let mut diverged = 0;
     for name in skill_names {
-        let source = workspace_root
-            .join("templates/skills/cursor")
-            .join(name)
-            .join("SKILL.md");
+        let source = crate::skill_discovery::canonical_skill_md(workspace_root, name);
         if !source.is_file() {
             diverged += 1;
             continue;
@@ -579,7 +576,7 @@ mod tests {
     }
 
     #[test]
-    fn cursor_skill_status_compares_generated_adapter_not_canonical_source() {
+    fn cursor_skill_status_compares_the_canonical_skill_file() {
         use std::fs;
         use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -587,25 +584,25 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let root = std::env::temp_dir().join(format!("cursor-skill-adapter-ws-{nonce}"));
+        let root = std::env::temp_dir().join(format!("cursor-skill-canonical-ws-{nonce}"));
         let target_root = root.join("cursor-skills");
-        let adapter = root.join("templates/skills/cursor/frontend-design");
         let canonical = root.join("skills/frontend-design");
         let installed = target_root.join("frontend-design");
-        fs::create_dir_all(&adapter).expect("adapter dir");
         fs::create_dir_all(&canonical).expect("canonical dir");
         fs::create_dir_all(&installed).expect("installed dir");
-        fs::write(adapter.join("SKILL.md"), "adapter skill\n").expect("write adapter");
-        fs::write(canonical.join("SKILL.md"), "canonical skill\n").expect("write canonical");
-        fs::write(installed.join("SKILL.md"), "adapter skill\n").expect("write installed");
+        let skill =
+            "---\nname: frontend-design\ndescription: test skill\ntargets: cursor\n---\n# Skill\n";
+        fs::write(canonical.join("SKILL.md"), skill).expect("write canonical");
+        fs::write(installed.join("SKILL.md"), skill).expect("write installed");
+        let names = [String::from("frontend-design")];
 
-        let (status, installed_count, expected_count) =
-            sync_skill_dirs_status(&root, &target_root, &[String::from("frontend-design")]);
+        let synced = sync_skill_dirs_status(&root, &target_root, &names);
+        fs::write(installed.join("SKILL.md"), "an older per-harness copy\n").expect("diverge");
+        let diverged = sync_skill_dirs_status(&root, &target_root, &names);
         let _ = fs::remove_dir_all(&root);
 
-        assert_eq!(status, "synced");
-        assert_eq!(installed_count, 1);
-        assert_eq!(expected_count, 1);
+        assert_eq!(synced, ("synced".to_string(), 1, 1));
+        assert_eq!(diverged, ("diverged".to_string(), 0, 1));
     }
 
     #[test]
