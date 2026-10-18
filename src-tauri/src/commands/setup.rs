@@ -4678,4 +4678,190 @@ mod tests {
             crate::installation_status::InstallationState::Current
         );
     }
+
+    // ── Cursor MCP merge into an existing mcp.json ──
+
+    /// A `~/.cursor/mcp.json` the user already has: two servers of their own and a key the
+    /// app does not manage, but no `playwright` entry.
+    const CURSOR_USER_MCP: &str = r#"{
+  "mcpServers": {
+    "zeta": { "command": "zeta-mcp", "args": ["--flag", "1"] },
+    "alpha": { "url": "https://example.invalid/mcp" }
+  },
+  "extra": true
+}
+"#;
+
+    fn seed_cursor_mcp(env: &TempSetupEnv, content: &str) -> PathBuf {
+        let path = env.home.join(".cursor/mcp.json");
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(&path, content).unwrap();
+        path
+    }
+
+    #[test]
+    fn cursor_mcp_with_other_servers_and_no_playwright_plans_a_mergeable_update() {
+        let env = TempSetupEnv::new("cursor-mcp-partial-plan");
+        seed_cursor_mcp(&env, CURSOR_USER_MCP);
+
+        let planned = env.plan(&[SetupSurfaceId::CursorMcp]);
+        assert_eq!(planned.len(), 1, "{planned:?}");
+        assert_eq!(planned[0].artifact, ArtifactId::CursorMcp);
+        assert_eq!(planned[0].kind, OperationKind::Update);
+        assert_eq!(
+            planned[0].previous_state,
+            setup_transaction::PreviousState::MergeableConfigFile
+        );
+        assert_eq!(
+            planned[0].rollback_action,
+            setup_transaction::RollbackAction::RestoreManagedConfigFile
+        );
+
+        let plan = preview_setup(vec!["cursor_mcp".into()]).expect("preview");
+        assert!(!plan.is_blocked, "{:?}", plan.operations);
+        assert!(plan.has_pending_changes);
+        assert!(plan.preview_token.is_some());
+        let kinds: Vec<OperationKind> = plan.operations.iter().map(|op| op.kind).collect();
+        assert_eq!(kinds, vec![OperationKind::Update]);
+    }
+
+    fn apply_cursor_mcp() -> SetupResult {
+        let plan = preview_setup(vec!["cursor_mcp".into()]).expect("preview");
+        apply_setup(
+            vec!["cursor_mcp".into()],
+            true,
+            plan.plan_fingerprint.clone(),
+            plan.preview_token.clone(),
+        )
+        .expect("apply")
+    }
+
+    fn server_names(config: &serde_json::Value) -> Vec<&str> {
+        config["mcpServers"]
+            .as_object()
+            .expect("mcpServers object")
+            .keys()
+            .map(String::as_str)
+            .collect()
+    }
+
+    #[test]
+    fn cursor_mcp_apply_adds_only_playwright_and_keeps_the_other_servers() {
+        let env = TempSetupEnv::new("cursor-mcp-partial-apply");
+        let path = seed_cursor_mcp(&env, CURSOR_USER_MCP);
+
+        let result = apply_cursor_mcp();
+        assert!(result.success, "{}", result.message);
+
+        let before: serde_json::Value = serde_json::from_str(CURSOR_USER_MCP).unwrap();
+        let after: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(server_names(&after), vec!["zeta", "alpha", "playwright"]);
+        for server in ["zeta", "alpha"] {
+            assert_eq!(
+                after["mcpServers"][server], before["mcpServers"][server],
+                "{server} must keep its value"
+            );
+        }
+        assert_eq!(after["extra"], before["extra"]);
+        let args = after["mcpServers"]["playwright"]["args"].to_string();
+        assert!(args.contains("@playwright/mcp"), "{args}");
+
+        // The merged file is the app's projection now, so nothing is pending.
+        let plan = preview_setup(vec!["cursor_mcp".into()]).expect("preview");
+        assert!(!plan.has_pending_changes, "{:?}", plan.operations);
+        assert!(!plan.is_blocked);
+    }
+
+    #[test]
+    fn cursor_mcp_apply_without_a_servers_key_keeps_the_rest_of_the_file() {
+        let env = TempSetupEnv::new("cursor-mcp-no-servers-key");
+        let path = seed_cursor_mcp(&env, "{\n  \"theme\": \"dark\"\n}\n");
+
+        let result = apply_cursor_mcp();
+        assert!(result.success, "{}", result.message);
+
+        let after: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(after["theme"], "dark");
+        assert_eq!(server_names(&after), vec!["playwright"]);
+    }
+
+    #[test]
+    fn cursor_mcp_rollback_restores_the_existing_file_byte_for_byte() {
+        let env = TempSetupEnv::new("cursor-mcp-partial-rollback");
+        let path = seed_cursor_mcp(&env, CURSOR_USER_MCP);
+
+        let result = apply_cursor_mcp();
+        assert!(result.success, "{}", result.message);
+        assert_ne!(fs::read(&path).unwrap(), CURSOR_USER_MCP.as_bytes());
+
+        let rolled_back = rollback_transaction(
+            &result.transaction_id,
+            false,
+            &mut ProgressReporter::silent(),
+        );
+        assert!(rolled_back.success, "{}", rolled_back.message);
+        assert_eq!(fs::read(&path).unwrap(), CURSOR_USER_MCP.as_bytes());
+    }
+
+    #[test]
+    fn cursor_mcp_rollback_removes_the_added_entry_and_keeps_later_user_edits() {
+        let env = TempSetupEnv::new("cursor-mcp-partial-rollback-merge");
+        let path = seed_cursor_mcp(&env, CURSOR_USER_MCP);
+
+        let result = apply_cursor_mcp();
+        assert!(result.success, "{}", result.message);
+
+        // The user adds a server after the apply: the file no longer matches what the apply
+        // wrote, but the managed playwright entry is untouched.
+        let mut edited: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        edited["mcpServers"]["omega"] = serde_json::json!({ "command": "omega-mcp" });
+        fs::write(&path, serde_json::to_string_pretty(&edited).unwrap()).unwrap();
+
+        let rolled_back = rollback_transaction(
+            &result.transaction_id,
+            false,
+            &mut ProgressReporter::silent(),
+        );
+        assert!(rolled_back.success, "{}", rolled_back.message);
+        let after: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(server_names(&after), vec!["zeta", "alpha", "omega"]);
+        assert_eq!(after["extra"], serde_json::json!(true));
+    }
+
+    #[test]
+    fn cursor_mcp_with_an_unusable_existing_file_stays_unavailable_and_untouched() {
+        let cases: [(&str, &[u8]); 4] = [
+            ("invalid-json", b"{not json"),
+            ("unreadable", &[0xff, 0xfe, 0x00]),
+            ("not-an-object", b"[]"),
+            ("servers-not-an-object", b"{\"mcpServers\": []}"),
+        ];
+        for (label, bytes) in cases {
+            let env = TempSetupEnv::new(&format!("cursor-mcp-unusable-{label}"));
+            let path = env.home.join(".cursor/mcp.json");
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(&path, bytes).unwrap();
+
+            let planned = env.plan(&[SetupSurfaceId::CursorMcp]);
+            assert_eq!(planned[0].kind, OperationKind::Unavailable, "{label}");
+
+            let plan = preview_setup(vec!["cursor_mcp".into()]).expect("preview");
+            assert!(plan.is_blocked, "{label}: {:?}", plan.operations);
+            assert!(plan.plan_fingerprint.is_none(), "{label}");
+            let applied = apply_setup(vec!["cursor_mcp".into()], true, None, None);
+            assert!(
+                !applied.as_ref().is_ok_and(|result| result.success),
+                "{label}: {applied:?}"
+            );
+            assert_eq!(fs::read(&path).unwrap(), bytes, "{label}: file changed");
+            assert!(
+                !env.base.join("backups").exists(),
+                "{label}: nothing may be backed up for a refused plan"
+            );
+        }
+    }
 }

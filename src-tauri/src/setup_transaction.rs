@@ -743,12 +743,15 @@ pub fn detect_artifact_state(
                 },
             );
             // The Cursor MCP merge rewrites only the managed playwright
-            // entry and preserves every other server, so divergence is
+            // entry and preserves every other server, so divergence, and a
+            // file that has other servers but no playwright entry yet, are
             // mergeable rather than whole-file ownership.
             match status.as_str() {
                 "synced" => (OperationKind::NoChange, PreviousState::MergeableConfigFile),
                 "missing" => (OperationKind::Create, PreviousState::Absent),
-                "diverged" => (OperationKind::Update, PreviousState::MergeableConfigFile),
+                "diverged" | "partial" => {
+                    (OperationKind::Update, PreviousState::MergeableConfigFile)
+                }
                 _ => (OperationKind::Unavailable, PreviousState::Unavailable),
             }
         }
@@ -2536,17 +2539,23 @@ fn restore_artifact_from_backup_with_mode(
                         let backup_projection = backup_json
                             .get("mcpServers")
                             .and_then(|v| v.get("playwright"))
-                            .cloned()
-                            .ok_or_else(|| {
-                                "backup cursor mcp missing playwright projection".to_string()
-                            })?;
+                            .cloned();
                         let mut merged = installed_json;
                         let servers = merged
                             .as_object_mut()
                             .and_then(|obj| obj.get_mut("mcpServers"))
                             .and_then(|v| v.as_object_mut())
                             .ok_or_else(|| "installed cursor mcp missing mcpServers".to_string())?;
-                        servers.insert("playwright".to_string(), backup_projection);
+                        match backup_projection {
+                            Some(projection) => {
+                                servers.insert("playwright".to_string(), projection);
+                            }
+                            // The backup had no playwright entry, so the apply added it:
+                            // take it out again and keep the user's other servers.
+                            None => {
+                                servers.shift_remove("playwright");
+                            }
+                        }
                         crate::safe_filesystem::write_regular_file_atomic(
                             &dest,
                             (serde_json::to_string_pretty(&merged)
