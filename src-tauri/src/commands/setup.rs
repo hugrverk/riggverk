@@ -4460,6 +4460,77 @@ mod tests {
         assert_eq!(fs::read_to_string(backup).unwrap(), "app copy");
     }
 
+    #[test]
+    fn opencode_apply_preserves_user_secrets_and_never_returns_them() {
+        const KEY_MARKER: &str = "test-secret-openkey-12345";
+        const TOKEN_MARKER: &str = "test-secret-token-value-55555";
+
+        let env = TempSetupEnv::new("opencode-secret-apply");
+        let config_path = env.home.join(".config/opencode/opencode.json");
+        fs::create_dir_all(config_path.parent().unwrap()).unwrap();
+        let user_config = serde_json::json!({
+            "model": "test-model",
+            "small_model": "test-small",
+            "provider": {
+                "custom-provider": {
+                    "api_key": KEY_MARKER,
+                    "models": {"gpt-4": {"limit": {"context": 100000}}}
+                }
+            },
+            "mcp": {
+                "custom-mcp": {"command": ["custom"], "env": {"TOKEN": TOKEN_MARKER}}
+            },
+            "unknown-key": "should-preserve"
+        });
+        fs::write(&config_path, user_config.to_string()).unwrap();
+
+        let plan = preview_setup(vec!["open_code_config".into()]).expect("preview");
+        let result = apply_setup(
+            vec!["open_code_config".into()],
+            true,
+            plan.plan_fingerprint.clone(),
+            plan.preview_token.clone(),
+        )
+        .expect("apply");
+        assert!(result.success, "{}", result.message);
+
+        // The user-owned keys survive byte for byte; the managed keys follow the bundled template.
+        let installed: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&config_path).unwrap()).unwrap();
+        for key in ["provider", "unknown-key"] {
+            assert_eq!(installed[key], user_config[key], "{key} must be preserved");
+        }
+        assert_eq!(
+            installed["mcp"]["custom-mcp"], user_config["mcp"]["custom-mcp"],
+            "a user MCP server must be preserved"
+        );
+        let template_path = crate::setup_roots::bundled_root_for(&env.ws)
+            .expect("bundled root")
+            .join("templates/opencode.json");
+        let template: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(template_path).unwrap()).unwrap();
+        let rendered = crate::commands::render_expected_opencode_config(&template, &env.home)
+            .expect("rendered config");
+        assert!(
+            crate::commands::managed_opencode_keys_match(&installed, &rendered),
+            "managed keys must be applied"
+        );
+        assert_ne!(installed["model"], user_config["model"]);
+
+        // Nothing the UI receives, nor the ownership record, carries the user's secrets.
+        let state_file = fs::read_to_string(crate::managed_state::managed_state_path(&env.ws))
+            .expect("managed state is written");
+        for (label, text) in [
+            ("preview", serde_json::to_string(&plan).unwrap()),
+            ("apply result", serde_json::to_string(&result).unwrap()),
+            ("managed state", state_file),
+        ] {
+            for marker in [KEY_MARKER, TOKEN_MARKER] {
+                assert!(!text.contains(marker), "{label} leaked {marker}");
+            }
+        }
+    }
+
     // ── Target gating ──
 
     fn disable_targets(ids: &[&str]) {
