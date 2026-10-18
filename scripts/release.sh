@@ -399,7 +399,11 @@ cmd_publish() {
     notes_file="release-notes/$version.md"
     release_tags | python3 scripts/release_tools.py check-newer "$version" || problem "$version cannot be published"
     [ -s "$notes_file" ] || problem "$notes_file is missing or empty (was the release PR merged?)"
-    python3 scripts/generate-release-notes.py --check || problem "the bundled what's new does not match release-notes/"
+    if python3 scripts/generate-release-notes.py --check >/dev/null; then
+      info "checked: the bundled what's new matches release-notes/"
+    else
+      problem "the bundled what's new does not match release-notes/"
+    fi
     if git rev-parse --verify --quiet "refs/tags/v$version" >/dev/null || remote_tag_exists "v$version"; then
       problem "tag v$version already exists"
     fi
