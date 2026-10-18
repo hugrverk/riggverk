@@ -363,6 +363,23 @@ def main() -> None:
     registry = read(TAURI / "artifact_registry.rs")
     if "SkillDir" in registry or "SkillFile" not in registry:
         fail("skill artifacts must use the SkillFile model")
+    # Skills are one global surface installed per read folder: the retired per-harness skill surfaces
+    # only exist to parse old manifests and records, and are never planned.
+    lifecycle = read(TAURI / "setup_lifecycle.rs")
+    all_surfaces = re.search(r"pub const ALL: &'static \[SetupSurfaceId\] = &\[(.*?)\];", lifecycle, re.S)
+    if not all_surfaces:
+        fail("SetupSurfaceId::ALL not found")
+    if "SetupSurfaceId::Skills" not in all_surfaces.group(1):
+        fail("SetupSurfaceId::ALL must contain the global Skills surface")
+    for retired_surface in ("ClaudeSkills", "OpenCodeSkills", "CodexSkills", "CursorSkills"):
+        if retired_surface in all_surfaces.group(1):
+            fail(f"retired per-harness skill surface {retired_surface} must not be in SetupSurfaceId::ALL")
+    skill_roots = read(TAURI / "skill_roots.rs")
+    for needed in ("pub fn install_roots", "pub fn readers", "pub struct SkillScope", "pub fn codex_home_is_custom"):
+        if needed not in skill_roots:
+            fail(f"skill_roots.rs must define {needed!r}: skills are installed per read folder")
+    if "SkillScope" not in transaction or "scope_for_surfaces" not in transaction:
+        fail("setup_transaction must plan the skills surface for the roots of a SkillScope")
     bootstrap = read(TAURI / "managed_bootstrap.rs")
     if "STILL_CURRENT_CHANGED_DOCS" in bootstrap:
         fail("Rust must not duplicate historical ownership digests")

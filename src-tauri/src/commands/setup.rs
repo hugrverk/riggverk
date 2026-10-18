@@ -2178,7 +2178,7 @@ fn attach_skill_details(plan: &mut SetupPlan, workspace_root: &Path, home: &Path
     let mentions_skills = plan
         .operations
         .iter()
-        .any(|op| op.surface == SetupSurfaceId::Skills);
+        .any(|op| matches!(op.surface, SetupSurfaceId::Skills));
     if !mentions_skills {
         return;
     }
@@ -2197,7 +2197,7 @@ fn attach_skill_details(plan: &mut SetupPlan, workspace_root: &Path, home: &Path
         .iter_mut()
         .chain(plan.conflicts.iter_mut())
         .chain(plan.manual_steps.iter_mut())
-        .filter(|op| op.surface == SetupSurfaceId::Skills)
+        .filter(|op| matches!(op.surface, SetupSurfaceId::Skills))
     {
         op.details = details.clone();
     }

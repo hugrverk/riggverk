@@ -112,6 +112,9 @@ ACTIVE_DOC_SOURCES = [
     WS_ROOT / "docs/USING_THE_APP.md",
     WS_ROOT / "docs/OPENCODE_CONFIG.md",
     WS_ROOT / "docs/CODEX_CONFIG.md",
+    WS_ROOT / "docs/WORKFLOWS.md",
+    WS_ROOT / "docs/TROUBLESHOOTING.md",
+    WS_ROOT / "templates/cursor/README.md",
 ]
 
 MIGRATION_FIXTURE_ALLOWLIST = {
@@ -444,6 +447,20 @@ def validate_canonical_skill_files(discovered: dict[str, Path]) -> None:
         validate_harness_notes(path, frontmatter, body)
 
 
+# Phrases of the retired model, one skills folder per harness (Codex in $CODEX_HOME/skills, Cursor
+# in ~/.cursor/skills, ~/.agents/skills as an "old" Codex location).
+STALE_SKILL_FOLDER_CLAIMS = [
+    "skills install to `$CODEX_HOME/skills` (typically",
+    "Codex: `$CODEX_HOME/skills` (typically",
+    "`~/.cursor/skills` (managed skills",
+    "OpenCode: `~/.config/opencode/skills`\n- Claude Code",
+    "Copies under the old `~/.agents/skills`",
+    "migrate; diverged copies stay conflicts",
+    "to the bundled OpenCode global skills path",
+    "installs to each harness skill root",
+    "Skills follow their harness",
+]
+
 STALE_CLAIMS = [
     # Count claims
     ("28 bundled skill", "stale skill count 28"),
@@ -454,8 +471,9 @@ STALE_CLAIMS = [
     # Profile claims
     ("target profile preset", "stale target profile preset claim"),
     ("Manual target selection", "stale manual target selection claim"),
-    # Config path claims (outside migration docs)
-    ("~/.agents/skills", "stale old Codex skills path (~/.agents/skills -> ~/.codex/skills)"),
+    # Skills folders: skills are one surface installed into the folders the enabled harnesses read
+    # (~/.claude/skills, ~/.agents/skills; $CODEX_HOME/skills only with a customised CODEX_HOME).
+    *[(claim, "stale skills folder claim (see docs/WORKSPACE_CONTRACT.md, Installed skill layout)") for claim in STALE_SKILL_FOLDER_CLAIMS],
     # Skill selection claims
     ("auto-selected skills", "stale auto-selected skills claim"),
     ("per-workspace skill selection", "stale per-workspace skill selection claim"),
@@ -470,14 +488,8 @@ STALE_CLAIMS_ALLOWLIST = {
     "resources/default-workspace/templates/cursor/global-profile.json": {
         "starter skills",  # Cursor profile describes skills surface, not the adapter agents
     },
-    "resources/default-workspace/docs/CODEX_CONFIG.md": {
-        "~/.agents/skills",  # Documents previous app location alongside current $CODEX_HOME/skills
-    },
     "resources/default-workspace/README.md": {
         "starter skills",  # Describes Cursor setup with separate agents and skills surfaces
-    },
-    "README.md": {
-        "~/.agents/skills",  # Documents previous app location alongside current $CODEX_HOME/skills
     },
 }
 
@@ -512,6 +524,11 @@ def validate_routing_sources(discovered: set[str]) -> None:
             fail(f"{source}: stale skill count 28")
         if "flat-only" in text.lower() or "root-level layout only" in text.lower():
             fail(f"{source}: stale flat-only source layout claim")
+        for claim in STALE_SKILL_FOLDER_CLAIMS:
+            if claim in text:
+                fail(f"{source}: stale skills folder claim: found '{claim}'")
+        if source.name == "codex.md" and "~/.agents/skills" not in text:
+            fail(f"{source}: the Codex rules must name ~/.agents/skills as the Codex skills folder")
         for removed in REMOVED_SKILLS:
             if removed in text:
                 fail(f"{source}: references removed skill {removed}")

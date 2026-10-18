@@ -1047,10 +1047,14 @@ scan_forbidden '(^|[^[:alnum:]_])eval([^[:alnum:]_]|$)' 'eval'
 scan_forbidden 'npx[[:space:]]+skills' 'npx skills'
 scan_forbidden 'skills@latest' 'skills@latest'
 if ! search_has_match 'codex_home\(home\)\.join\("skills"\)' src-tauri/src/agent_skill_targets.rs; then
-  printf 'FAIL: Codex global skills path must use $CODEX_HOME/skills\n' >&2
+  printf 'FAIL: the Codex home skills folder must be $CODEX_HOME/skills (used with a customised CODEX_HOME)\n' >&2
   exit 1
 fi
-printf '  Codex $CODEX_HOME/skills path guard verified\n'
+if ! search_has_match 'home\.join\("\.agents"\)\.join\("skills"\)' src-tauri/src/agent_skill_targets.rs; then
+  printf 'FAIL: the default Codex skills folder must be ~/.agents/skills\n' >&2
+  exit 1
+fi
+printf '  Codex skills folder guards verified ($CODEX_HOME/skills when customised, ~/.agents/skills by default)\n'
 
 step "routing profile bloat guard"
 scan_forbidden 'RoutingProfile|routing/profiles|get_routing_profiles|save_routing_profiles|read_routing_profiles_file|buildProfileHeader|copyMetadataBlock|profileStatus|RoutingMatrix|routingCompatibility|routingTemplates' 'routing profile bloat (removed profiles must not be reintroduced)'
