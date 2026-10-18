@@ -232,6 +232,8 @@ export function useAppCommands(deps: AppCommandDeps): void {
     },
     {
       name: "preview",
+      // `:p` was a unique prefix until `:pi` existed; an exact alias beats a prefix match.
+      aliases: ["p"],
       summary: "show what update would change without applying",
       group: "Workspace",
       args: targetArgs,

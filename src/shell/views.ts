@@ -7,6 +7,9 @@ export type AppView =
   | "opencode"
   | "cursor"
   | "claude"
+  | "copilot"
+  | "pi"
+  | "kilo"
   | "library"
   | "settings";
 
@@ -30,6 +33,9 @@ const HARNESS_SHORT: Record<InstallAgent, string> = {
   opencode: "oc",
   cursor: "cur",
   claude: "cl",
+  copilot: "cop",
+  pi: "pi",
+  kilo: "kilo",
 };
 
 /** Tab order: workspace, harnesses, library, settings. */

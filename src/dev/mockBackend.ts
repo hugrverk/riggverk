@@ -12,13 +12,15 @@
  *   fresh     nothing installed, no backups, no transactions
  *   error     status/diagnostics calls fail (exercises the error line)
  *   empty     valid workspace with no docs, skills or agents
- * `&theme=light|dark|system` sets the persisted appearance.
+ * `&theme=light|dark|system` sets the persisted appearance. Copilot, Pi and Kilo are off until Settings turns
+ * them on; `&light=unserved` leaves Copilot and Pi without a skills folder (an isolated Codex home).
  *
  * Mutating commands update in-memory state so install/rollback/save flows round-trip. Apply, uninstall and
  * rollback emit `apply-progress` events like the backend does (backup, then one file at a time, then done).
  */
 import { emit } from "@tauri-apps/api/event";
 import { mockIPC } from "@tauri-apps/api/mocks";
+import { isLightAgent } from "../lib/harnessInstallation";
 import type {
   ActionResult,
   AgentMetadataListResponse,
@@ -40,6 +42,8 @@ import type {
   InstallAgent,
   InstallationState,
   InstallationStatus,
+  LightAgent,
+  LightRuntimeHealth,
   ListAvailableModelsResult,
   OpenCodeModelSelection,
   OpenCodeRuntimeHealth,
@@ -787,6 +791,39 @@ function claudeHealth(): ClaudeRuntimeHealth {
   };
 }
 
+/**
+ * Copilot, Pi and Kilo. The CLI differs per harness so every row shows once: Copilot is on PATH, Pi is not found,
+ * Kilo is found in nvm. `&light=unserved` leaves Copilot and Pi without a skills folder (Codex isolated).
+ */
+function lightHealth(harness: LightAgent): LightRuntimeHealth {
+  const unserved = params.get("light") === "unserved" && harness !== "kilo";
+  const state = scenario === "fresh" ? "not_installed" : (surfaceStates.get("skills") ?? "not_installed");
+  const expected = scenario === "empty" ? 0 : skills.length;
+  const status = unserved
+    ? "unserved"
+    : state === "current" ? "synced" : state === "update_available" ? "partial" : state === "conflict" ? "diverged" : "missing";
+  const synced = status === "synced" ? expected : status === "partial" ? Math.max(expected - 3, 0) : 0;
+  const label = harness === "copilot" ? "Copilot" : harness === "pi" ? "Pi" : "Kilo";
+  const cli: LightRuntimeHealth["cli"] =
+    harness === "copilot"
+      ? { status: "found", version: "1.0.98", source: "path", detail: "Copilot 1.0.98" }
+      : harness === "pi"
+        ? { status: "missing", version: null, source: null, detail: "pi is not on PATH; Riggverk does not read your shell profile, so start it from a shell where pi runs" }
+        : { status: "found", version: "7.8.12", source: "nvm", detail: "Kilo 7.8.12 (found in nvm v24.14.0, not on PATH)" };
+  return {
+    harness,
+    status,
+    cli,
+    skills: { status, synced, expected, roots: unserved ? [] : harness === "kilo" ? ["~/.claude/skills", "~/.agents/skills"] : ["~/.agents/skills"] },
+    warnings: unserved
+      ? [`No skills are installed for ${label}: it reads ~/.agents/skills, and a customised CODEX_HOME keeps Codex out of that folder.`]
+      : [],
+    next_action: unserved
+      ? `Disable Codex or unset CODEX_HOME to install skills for ${label}.`
+      : status === "synced" ? "No runtime action needed." : `Run Install or Update on the ${label} page.`,
+  };
+}
+
 /* ---- library ---- */
 
 const SKILL_ROWS: Array<[string, string, string, string]> = [
@@ -991,11 +1028,15 @@ async function emitProgress(task: string, files: string[], options: { backup?: b
 
 /* ---- effective skill loads ---- */
 
+/** Copilot, Pi and Kilo list their folders by precedence: the first one holding a name wins. */
 const SKILL_READ_FOLDERS: Record<InstallAgent, SkillReadFolder[]> = {
   claude: ["claude"],
   codex: ["agents", "codex_home"],
   opencode: ["claude", "agents", "open_code"],
   cursor: ["cursor", "agents", "claude", "dot_codex"],
+  copilot: ["copilot", "agents"],
+  pi: ["pi_agent", "agents"],
+  kilo: ["kilo", "agents", "claude"],
 };
 
 const SKILL_FOLDER_PATHS: Record<SkillReadFolder, string> = {
@@ -1005,15 +1046,18 @@ const SKILL_FOLDER_PATHS: Record<SkillReadFolder, string> = {
   dot_codex: "~/.codex/skills",
   open_code: "~/.config/opencode/skills",
   cursor: "~/.cursor/skills",
+  copilot: "~/.copilot/skills",
+  pi_agent: "~/.pi/agent/skills",
+  kilo: "~/.kilo/skills",
 };
 
 /** The folders skills are installed into for these harnesses (default Codex home), as the backend picks them. */
 function installedSkillFolders(enabled: readonly InstallAgent[]): SkillReadFolder[] {
   const on = (harness: InstallAgent) => enabled.includes(harness);
-  return [
-    ...(on("claude") ? ["claude" as const] : []),
-    ...(on("codex") || ((on("opencode") || on("cursor")) && !on("claude")) ? ["agents" as const] : []),
-  ];
+  // Copilot and Pi read ~/.agents/skills only; OpenCode, Cursor and Kilo are served by it unless Claude is on.
+  const agents =
+    on("codex") || on("copilot") || on("pi") || ((on("opencode") || on("cursor") || on("kilo")) && !on("claude"));
+  return [...(on("claude") ? ["claude" as const] : []), ...(agents ? ["agents" as const] : [])];
 }
 
 /** A 12-digit pseudo hash: equal seeds give equal hashes. */
@@ -1044,7 +1088,14 @@ function skillFlags(harness: InstallAgent, copies: readonly SkillCopy[]): SkillL
   if (harness === "codex") return ["plain_mention_ambiguous"];
   if (harness === "cursor") return ["possible_duplicate"];
   if (harness === "opencode") return [copies.every(copy => copy.hash === copies[0].hash) ? "duplicate_identical" : "winner_nondeterministic"];
+  if (isLightAgent(harness)) return [copies.every(copy => copy.hash === copies[0].hash) ? "duplicate_identical" : "shadowed_by_folder_order"];
   return [];
+}
+
+/** The copy that is loaded: the only one, or the first of a harness that ranks its folders (copies are in folder order). */
+function skillWinner(harness: InstallAgent, copies: readonly SkillCopy[]): number | null {
+  if (copies.length === 1) return 0;
+  return isLightAgent(harness) && copies.length > 1 && copies[0].folder !== copies[1].folder ? 0 : null;
 }
 
 function effectiveSkillLoads(): EffectiveSkillLoads {
@@ -1072,7 +1123,7 @@ function effectiveSkillLoads(): EffectiveSkillLoads {
     }
     const loaded: SkillLoad[] = [...byName]
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([name, copies]) => ({ name, copies, winner: copies.length === 1 ? 0 : null, flags: skillFlags(harness, copies) }));
+      .map(([name, copies]) => ({ name, copies, winner: skillWinner(harness, copies), flags: skillFlags(harness, copies) }));
     return {
       harness,
       folders: reads.map(folder => ({ folder, path: SKILL_FOLDER_PATHS[folder], exists: installed.includes(folder) || extras.some(copy => copy.folder === folder) })),
@@ -1215,6 +1266,9 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
       return scenario === "error" ? unavailable() : cursorHealth();
     case "get_claude_runtime_health":
       return claudeHealth();
+    case "get_light_runtime_health":
+      await delay(150);
+      return lightHealth(arg<LightAgent>(args, "harness"));
     case "list_skills":
       return skills;
     case "get_effective_skill_loads":

@@ -19,7 +19,7 @@ export interface SkillLoadsView {
   error: string | null;
 }
 
-/** Whether a flag is worth a warning. Identical copies only show up in OpenCode's log. */
+/** Whether a flag is worth a warning. Identical copies only show up in a log or a diagnostic of the harness. */
 export function isWarningFlag(flag: SkillLoadFlag): boolean {
   return flag !== "duplicate_identical";
 }
@@ -30,7 +30,7 @@ export interface HarnessLoadSummary {
   names: number;
   /** Names with several copies, all of them the app's: `u` can fix them. */
   flagged: SkillLoad[];
-  /** Names with several byte-identical copies in OpenCode: information only. */
+  /** Names with several byte-identical copies (OpenCode, Kilo): information only. */
   identical: SkillLoad[];
   /** Names with several copies, some of them the user's: the app cannot fix them. */
   foreign: ForeignSkillDuplicate[];
@@ -86,6 +86,7 @@ function effectOf(flag: SkillLoadFlag): string {
     case "plain_mention_ambiguous": return "plain $name mention is ambiguous";
     case "winner_nondeterministic": return "winner varies between runs";
     case "possible_duplicate": return "possible duplicate";
+    case "shadowed_by_folder_order": return "first folder wins, the others are hidden";
     case "duplicate_identical": return "identical copies";
     case "foreign_copy": return "yours, AW cannot fix";
   }

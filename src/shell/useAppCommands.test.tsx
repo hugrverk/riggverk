@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { InstallationOverview, OverviewEntry } from "../hooks/useInstallationOverview";
-import type { InstallationStatus } from "../types";
+import { INSTALL_AGENTS, type InstallationStatus } from "../types";
 import { useCommandList } from "../keyboard/context";
 import { parseCommandLine, type CommandSpec } from "../keyboard/commands/parser";
 import { renderInFrame } from "../test/renderWithShell";
@@ -110,6 +110,25 @@ describe("useAppCommands", () => {
       setup(deps);
       runLine(line);
       expect(deps.switchView).toHaveBeenCalledWith(view);
+    });
+
+    it.each([
+      ["copilot", "copilot"],
+      ["pi", "pi"],
+      ["kilo", "kilo"],
+    ])(":%s opens the %s page once the harness is on", (line, view) => {
+      const deps = makeDeps({ enabledHarnessIds: [...INSTALL_AGENTS] });
+      setup(deps);
+      runLine(line);
+      expect(deps.switchView).toHaveBeenCalledWith(view);
+    });
+
+    it("a light harness that is off is refused with the reason, like any hidden harness", () => {
+      const deps = makeDeps();
+      setup(deps);
+      runLine("pi");
+      expect(commandLineError()).toBe("pi: pi is hidden in Settings");
+      expect(deps.switchView).not.toHaveBeenCalled();
     });
 
     it(":library <source> also selects the source", () => {
@@ -382,6 +401,30 @@ describe("useAppCommands", () => {
       setup(deps);
       runLine("preview claude");
       expect(deps.openInstall).toHaveBeenCalledWith("claude", { readOnly: true });
+    });
+
+    it(":p is still preview with :pi around, and :pi is the Pi page", () => {
+      const deps = makeDeps({ enabledHarnessIds: [...INSTALL_AGENTS] });
+      setup(deps);
+      // Not ambiguous between preview and pi: the exact alias wins over a prefix match.
+      runLine("p codex");
+      expect(deps.openInstall).toHaveBeenCalledWith("codex", { readOnly: true });
+      expect(deps.switchView).not.toHaveBeenCalled();
+      runLine("p --all");
+      expect(deps.openInstall).toHaveBeenLastCalledWith("all", { readOnly: true });
+      runLine("pi");
+      expect(deps.switchView).toHaveBeenLastCalledWith("pi");
+      runLine("pr claude");
+      expect(deps.openInstall).toHaveBeenLastCalledWith("claude", { readOnly: true });
+    });
+
+    it("updates a light harness by name", () => {
+      const deps = makeDeps({ enabledHarnessIds: [...INSTALL_AGENTS] });
+      setup(deps);
+      runLine("update kilo");
+      expect(deps.openInstall).toHaveBeenLastCalledWith("kilo");
+      runLine("update pi");
+      expect(deps.openInstall).toHaveBeenLastCalledWith("pi");
     });
   });
 

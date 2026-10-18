@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { dirtyTabAriaLabel } from "../lib/editorGuards";
-import { INSTALL_AGENTS, type InstallAgent } from "../types";
+import { DEFAULT_ENABLED_HARNESS_IDS } from "../lib/harnessInstallation";
+import type { InstallAgent } from "../types";
 import { visibleViews, type AppView } from "./views";
 
 export interface TopLineProps {
@@ -25,7 +26,7 @@ export function TopLine({
   view,
   libraryDirty,
   settingsErrored,
-  enabledHarnessIds = INSTALL_AGENTS,
+  enabledHarnessIds = DEFAULT_ENABLED_HARNESS_IDS,
   onSwitchView,
   right,
 }: TopLineProps) {

@@ -1,7 +1,7 @@
 import { useRef, type ReactNode } from "react";
 import { focusDefaultPane } from "../keyboard/focus";
+import { DEFAULT_ENABLED_HARNESS_IDS } from "../lib/harnessInstallation";
 import type { InstallAgent } from "../types";
-import { INSTALL_AGENTS } from "../types";
 import { Glyph } from "../ui/Glyph";
 import { Boot, type BootInfo } from "./Boot";
 import { CommandLine } from "./CommandLine";
@@ -45,7 +45,7 @@ export function AppFrame({
   onSwitchView,
   libraryDirty,
   settingsErrored,
-  enabledHarnessIds = INSTALL_AGENTS,
+  enabledHarnessIds = DEFAULT_ENABLED_HARNESS_IDS,
   error,
   onDismissError,
   topRight,

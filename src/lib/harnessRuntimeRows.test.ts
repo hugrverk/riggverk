@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import type { ClaudeRuntimeHealth, CodexRuntimeHealth, CursorProfileHealth, OpenCodeRuntimeHealth } from "../types";
+import type {
+  ClaudeRuntimeHealth,
+  CodexRuntimeHealth,
+  CursorProfileHealth,
+  LightRuntimeHealth,
+  OpenCodeRuntimeHealth,
+} from "../types";
 import { runtimeRowsFor, runtimeVerdict } from "./harnessRuntimeRows";
 
 const CLAUDE: ClaudeRuntimeHealth = {
@@ -227,5 +233,51 @@ describe("codex runtime rows", () => {
     } as unknown as CodexRuntimeHealth;
     const warnings = runtimeRowsFor({ harness: "codex", health }).filter(row => row.id?.startsWith("warning-"));
     expect(warnings.map(row => [row.label, row.value])).toEqual([["warnings", "another warning"]]);
+  });
+});
+
+describe("light harness runtime rows", () => {
+  const LOADS = [{ label: "skill loads", value: "3 skills, 1 copy each", tone: "ok" as const }];
+  const labelsOf = (rows: ReturnType<typeof runtimeRowsFor>) => rows.map(row => row.label);
+  const health =(overrides: Partial<LightRuntimeHealth> = {}): LightRuntimeHealth => ({
+    harness: "kilo",
+    status: "synced",
+    cli: { status: "found", version: "7.8.12", source: "path", detail: "Kilo 7.8.12" },
+    skills: { status: "synced", synced: 17, expected: 17, roots: ["~/.claude/skills", "~/.agents/skills"] },
+    warnings: [],
+    next_action: "No runtime action needed.",
+    ...overrides,
+  });
+
+  it("lists the CLI and the skills only, with the skill loads below the skills row", () => {
+    const rows = runtimeRowsFor({ harness: "kilo", health: health() }, LOADS);
+    expect(labelsOf(rows)).toEqual(["cli", "skills", "skill loads"]);
+    expect(rows[0]).toEqual({ label: "cli", value: "7.8.12", tone: "ok" });
+    expect(rows[1]).toEqual({ label: "skills", value: "synced · 17/17", tone: "ok" });
+  });
+
+  it("takes its verdict from the skills status, and calls a harness with no folder unserved", () => {
+    expect(runtimeVerdict({ harness: "pi", health: health({ harness: "pi" }) })).toEqual({ text: "synced", tone: "ok" });
+    expect(runtimeVerdict({ harness: "pi", health: health({ harness: "pi", status: "partial" }) })).toEqual({ text: "partial", tone: "warn" });
+    expect(runtimeVerdict({ harness: "pi", health: health({ harness: "pi", status: "unserved" }) })).toEqual({ text: "unserved", tone: "warn" });
+    expect(runtimeVerdict({ harness: "pi", health: null })).toEqual({ text: "not loaded", tone: "dim" });
+  });
+
+  it("keeps the next step out of a synced harness's way, and shows it with the warnings otherwise", () => {
+    const synced = runtimeRowsFor({ harness: "copilot", health: health({ harness: "copilot" }) });
+    expect(synced.some(row => row.label === "next")).toBe(false);
+    const missing = runtimeRowsFor({
+      harness: "copilot",
+      health: health({
+        harness: "copilot",
+        status: "missing",
+        skills: { status: "missing", synced: 0, expected: 17, roots: ["~/.agents/skills"] },
+        warnings: ["COPILOT_HOME is set"],
+        next_action: "Run Install or Update on the Copilot page.",
+      }),
+    });
+    expect(missing.find(row => row.label === "next")?.value).toBe("run Install or Update on the Copilot page");
+    expect(missing.find(row => row.label === "warnings")?.value).toBe("COPILOT_HOME is set");
+    expect(missing.find(row => row.label === "skills")).toMatchObject({ value: "missing · 0/17", tone: "fail" });
   });
 });

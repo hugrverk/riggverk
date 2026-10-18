@@ -4,6 +4,9 @@ import type {
   ClaudeRuntimeHealth,
   CodexRuntimeHealth,
   CursorProfileHealth,
+  LightAgent,
+  LightCliHealth,
+  LightRuntimeHealth,
   OpenCodeCliHealth,
   OpenCodeRuntimeHealth,
 } from "../types";
@@ -14,7 +17,8 @@ export type HarnessRuntimeHealth =
   | { harness: "codex"; health: CodexRuntimeHealth | null }
   | { harness: "opencode"; health: OpenCodeRuntimeHealth | null }
   | { harness: "claude"; health: ClaudeRuntimeHealth | null }
-  | { harness: "cursor"; health: CursorProfileHealth | null };
+  | { harness: "cursor"; health: CursorProfileHealth | null }
+  | { harness: LightAgent; health: LightRuntimeHealth | null };
 
 function toneOf(status: string): Tone {
   const tone = runtimeChipTone(status);
@@ -129,6 +133,30 @@ function cursorRows(health: CursorProfileHealth): KvItem[] {
   ];
 }
 
+/** The CLI version, or why there is none. Nothing but `--version` is ever run, so there is nothing else to show. */
+function lightCliRow(cli: LightCliHealth): KvItem {
+  switch (cli.status) {
+    case "found": return { label: "cli", value: `${cli.version ?? "found"}${cli.source === "nvm" ? " · nvm" : ""}`, tone: "ok" };
+    case "missing": return { label: "cli", value: cli.detail, tone: "dim", wrap: true };
+    default: return { label: "cli", value: "found · version unknown", tone: "dim" };
+  }
+}
+
+/** Skills are the only thing managed for the light harnesses so far: no rules and no MCP rows yet. */
+function lightRows(health: LightRuntimeHealth): KvItem[] {
+  const { skills } = health;
+  return [
+    lightCliRow(health.cli),
+    {
+      label: "skills",
+      value: `${runtimeChipLabel(skills.status).toLowerCase()} · ${skills.synced}/${skills.expected}`,
+      tone: toneOf(skills.status),
+    },
+    ...nextRows(health.status, health.next_action),
+    ...warningRows(health.warnings),
+  ];
+}
+
 function claudeRows(health: ClaudeRuntimeHealth): KvItem[] {
   return [
     flagRow("rules", health.rules_synced),
@@ -146,6 +174,9 @@ function healthRows({ harness, health }: HarnessRuntimeHealth): KvItem[] {
     case "opencode": return opencodeRows(health);
     case "cursor": return cursorRows(health);
     case "claude": return claudeRows(health);
+    case "copilot":
+    case "pi":
+    case "kilo": return lightRows(health);
   }
 }
 
