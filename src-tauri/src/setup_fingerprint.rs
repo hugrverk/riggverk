@@ -63,7 +63,7 @@ fn hash_toml_value(value: &toml::Value) -> String {
 fn artifact_kind(artifact: &ArtifactId) -> ArtifactKind {
     match artifact {
         ArtifactId::WorkspaceFile(_) => ArtifactKind::RulesFile,
-        ArtifactId::CodexLegacySkill(_) => ArtifactKind::SkillFile,
+        ArtifactId::CodexLegacySkill(_) | ArtifactId::SkillFile(_) => ArtifactKind::SkillFile,
         ArtifactId::OpenCodeConfig | ArtifactId::CodexConfig => ArtifactKind::ConfigFile,
         ArtifactId::OpenCodeTui => ArtifactKind::TuiConfig,
         ArtifactId::OpenCodePlaywrightMcp => ArtifactKind::McpConfig,

@@ -554,7 +554,7 @@ pub fn detect_surface_state(
 fn artifact_kind(artifact: &ArtifactId) -> ArtifactKind {
     match artifact {
         ArtifactId::WorkspaceFile(_) => ArtifactKind::RulesFile,
-        ArtifactId::CodexLegacySkill(_) => ArtifactKind::SkillFile,
+        ArtifactId::CodexLegacySkill(_) | ArtifactId::SkillFile(_) => ArtifactKind::SkillFile,
         ArtifactId::OpenCodeConfig | ArtifactId::CodexConfig => ArtifactKind::ConfigFile,
         ArtifactId::OpenCodeTui => ArtifactKind::TuiConfig,
         ArtifactId::OpenCodePlaywrightMcp => ArtifactKind::McpConfig,
@@ -678,6 +678,8 @@ pub fn detect_artifact_state(
         ArtifactKind::SkillFile => {
             if !source.is_file() {
                 (OperationKind::Unavailable, PreviousState::Unavailable)
+            } else if skill_destination_blocked(artifact, &dest, home, workspace_root) {
+                (OperationKind::Conflict, PreviousState::Conflict)
             } else if !dest.is_file() {
                 (OperationKind::Create, PreviousState::Absent)
             } else if file_eq(&dest, &source) {
@@ -716,6 +718,38 @@ pub fn detect_artifact_state(
             }
         }
     }
+}
+
+/// Whether something already on disk keeps a skill file from being written or removed: a symlink
+/// in the folders above it (a symlinked skills root included), a destination that is not a
+/// regular file, or a file where one of its directories must be. Such a file is preserved as a
+/// conflict at plan time; apply would otherwise fail on it and roll the whole transaction back.
+fn skill_destination_blocked(
+    artifact: &ArtifactId,
+    dest: &Path,
+    home: &Path,
+    workspace_root: &Path,
+) -> bool {
+    let Ok(root) = artifact.allowlist_root(home, workspace_root) else {
+        return true;
+    };
+    if reject_symlink_parent_chain(dest, &root, "destination").is_err() {
+        return true;
+    }
+    if fs::symlink_metadata(dest).is_ok_and(|meta| !meta.is_file()) {
+        return true;
+    }
+    let mut ancestor = dest.parent();
+    while let Some(dir) = ancestor {
+        if dir == root || !dir.starts_with(&root) {
+            break;
+        }
+        if fs::symlink_metadata(dir).is_ok_and(|meta| !meta.is_dir()) {
+            return true;
+        }
+        ancestor = dir.parent();
+    }
+    false
 }
 
 /// Classify a rules artifact's installed file against its bundled source.
@@ -998,6 +1032,10 @@ fn detect_stale_artifact_state(
     if !dest.exists() {
         return (OperationKind::NoChange, PreviousState::Absent);
     }
+    if artifact.is_skill_file() && skill_destination_blocked(artifact, &dest, home, workspace_root)
+    {
+        return (OperationKind::Conflict, PreviousState::Conflict);
+    }
     let installed = match crate::setup_fingerprint::artifact_installed_managed_digest(
         artifact,
         workspace_root,
@@ -1011,12 +1049,13 @@ fn detect_stale_artifact_state(
     if managed_hash.is_none() && !shipped {
         return (OperationKind::Conflict, PreviousState::Conflict);
     }
-    if let ArtifactId::CodexLegacySkill(name) = artifact {
-        let Some(current) = crate::artifact_registry::SkillName::new(name.as_str().to_string())
-            .map(ArtifactId::CodexSkill)
-        else {
-            return (OperationKind::Conflict, PreviousState::Conflict);
-        };
+    // The previous Codex folder: a copy that duplicates the one Codex reads now is looked at
+    // before it is removed.
+    if let Some(file) = artifact
+        .as_skill_file()
+        .filter(|file| file.root == crate::skill_roots::SkillRoot::Agents && file.rel.is_skill_md())
+    {
+        let current = ArtifactId::skill_md(crate::skill_roots::SkillRoot::CodexHome, file.skill);
         let current_dest = match current.resolve_dest(home, workspace_root) {
             Ok(path) => path,
             Err(_) => return (OperationKind::Conflict, PreviousState::Conflict),
@@ -1148,9 +1187,20 @@ pub fn plan_artifacts_for_uninstall(
         &records,
         &canonical_identities,
     )?;
+    let handled_destinations: HashSet<PathBuf> = removals
+        .iter()
+        .map(|operation| &operation.artifact)
+        .chain(preserved.iter())
+        .chain(merged.iter())
+        .filter_map(|artifact| artifact.resolve_dest(home, workspace_root).ok())
+        .collect();
     for artifact in stale {
         let identity = crate::managed_state::artifact_identity(&artifact);
-        if !seen.insert(identity.clone()) {
+        if !seen.insert(identity.clone())
+            || artifact
+                .resolve_dest(home, workspace_root)
+                .is_ok_and(|dest| handled_destinations.contains(&dest))
+        {
             continue;
         }
         let managed_hash = managed_hash_for(&identity, &records);
@@ -1335,6 +1385,12 @@ pub fn plan_artifacts_for_surfaces(
 
     let requested_surfaces: std::collections::HashSet<SetupSurfaceId> =
         surfaces.iter().copied().collect();
+    // One file is never both wanted and stale: whatever has a wanted artifact's destination is
+    // that artifact, however an older record named it.
+    let wanted_destinations: HashSet<PathBuf> = planned
+        .iter()
+        .filter_map(|operation| operation.artifact.resolve_dest(home, workspace_root).ok())
+        .collect();
     let stale = crate::managed_bootstrap::collect_stale_removal_artifacts(
         workspace_root,
         home,
@@ -1348,7 +1404,11 @@ pub fn plan_artifacts_for_surfaces(
             continue;
         }
         let identity = crate::managed_state::artifact_identity(&artifact);
-        if seen.contains(&identity) {
+        if seen.contains(&identity)
+            || artifact
+                .resolve_dest(home, workspace_root)
+                .is_ok_and(|dest| wanted_destinations.contains(&dest))
+        {
             continue;
         }
         seen.insert(identity.clone());
@@ -1448,6 +1508,14 @@ pub fn artifact_backup_rel(artifact: &ArtifactId) -> String {
         ArtifactId::CodexAgent(name) => format!("codex-agent-{}", name.as_str()),
         ArtifactId::ClaudeAgent(name) => format!("claude-agent-{}", name.as_str()),
         ArtifactId::CursorAgent(name) => format!("cursor-agent-{}", name.as_str()),
+        // `~` appears in neither a skill name nor a skill file path, so the name ends at the first
+        // one and every `~` after it stands for a `/`: two files never share a backup.
+        ArtifactId::SkillFile(file) => format!(
+            "skill-{}-{}~{}",
+            file.root.label(),
+            file.skill.as_str(),
+            file.rel.as_str().replace('/', "~")
+        ),
         ArtifactId::OpenCodeSkill(name) => format!("opencode-skill-{}", name.as_str()),
         ArtifactId::CodexSkill(name) => format!("codex-skill-{}", name.as_str()),
         ArtifactId::ClaudeSkill(name) => format!("claude-skill-{}", name.as_str()),
@@ -1457,11 +1525,44 @@ pub fn artifact_backup_rel(artifact: &ArtifactId) -> String {
             format!("workspace-file-{}", rel.as_str().replace('/', "__"))
         }
     };
-    if id.len() > MAX_LEN {
-        id[..MAX_LEN].to_string()
-    } else {
-        id
+    if id.len() <= MAX_LEN {
+        return id;
     }
+    // A name over the cap keeps a digest of the whole id, so two long ids never share a backup.
+    let digest = crate::stable_digest::bytes(id.as_bytes());
+    let suffix = digest.strip_prefix("sha256:").unwrap_or(&digest);
+    let mut cut = MAX_LEN - 9;
+    while !id.is_char_boundary(cut) {
+        cut -= 1;
+    }
+    format!("{}-{}", &id[..cut], &suffix[..8])
+}
+
+/// After a skill file was removed: remove the directories it left empty, from its own directory
+/// up to the skill's directory, never the skill root. A directory that still holds anything (a
+/// sibling file the user added, a supporting file) stays, and so does everything above it.
+pub fn remove_empty_skill_directories(
+    artifact: &ArtifactId,
+    dest: &Path,
+    home: &Path,
+    allowlist_root: &Path,
+) -> Result<(), String> {
+    let Some(file) = artifact.as_skill_file() else {
+        return Ok(());
+    };
+    let skill_root = file.root.path(home)?;
+    let mut current = dest.parent();
+    while let Some(dir) = current {
+        if dir == skill_root || !dir.starts_with(&skill_root) {
+            break;
+        }
+        crate::safe_filesystem::remove_empty_directory_no_symlinks(dir, allowlist_root)?;
+        if dir.exists() {
+            break;
+        }
+        current = dir.parent();
+    }
+    Ok(())
 }
 
 pub fn operation_may_have_been_modified(status: ApplyStatus) -> bool {
@@ -2332,21 +2433,7 @@ fn restore_artifact_from_backup_with_mode(
                 crate::safe_filesystem::remove_regular_file_no_symlinks(&dest, allowlist_root)
                     .map_err(|e| format!("remove created file: {e}"))?;
             }
-            if matches!(
-                op.artifact,
-                ArtifactId::OpenCodeSkill(_)
-                    | ArtifactId::CodexSkill(_)
-                    | ArtifactId::ClaudeSkill(_)
-                    | ArtifactId::CursorSkill(_)
-                    | ArtifactId::CodexLegacySkill(_)
-            ) {
-                if let Some(parent) = dest.parent() {
-                    crate::safe_filesystem::remove_empty_directory_no_symlinks(
-                        parent,
-                        allowlist_root,
-                    )?;
-                }
-            }
+            remove_empty_skill_directories(&op.artifact, &dest, home, allowlist_root)?;
             Ok(())
         }
         RollbackAction::NoAction => Ok(()),
@@ -2357,6 +2444,7 @@ fn restore_artifact_from_backup_with_mode(
 mod tests {
     use super::*;
     use crate::artifact_registry::ArtifactId;
+    use crate::skill_roots::SkillRoot;
     use std::fs;
 
     fn temp(label: &str) -> PathBuf {
@@ -2371,7 +2459,16 @@ mod tests {
     fn expand_bundled_opencode_skills_count() {
         let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../resources/default-workspace");
         let artifacts = expand_surface_fail_closed(SetupSurfaceId::OpenCodeSkills, &repo).unwrap();
-        assert_eq!(artifacts.len(), 25);
+        let skill_md = artifacts
+            .iter()
+            .filter(|artifact| matches!(artifact, ArtifactId::SkillFile(file) if file.rel.is_skill_md()))
+            .count();
+        assert_eq!(skill_md, 25, "one SKILL.md per bundled skill");
+        assert_eq!(
+            artifacts.len() - skill_md,
+            21,
+            "supporting files of the bundled skills"
+        );
     }
 
     #[test]
@@ -2382,14 +2479,15 @@ mod tests {
         fs::create_dir_all(&ws).unwrap();
         let name = |name: &str| crate::artifact_registry::SkillName::new(name).unwrap();
 
-        let missing = ArtifactId::OpenCodeSkill(name("no-such-skill"));
+        let skill_md = |root, name| ArtifactId::skill_md(root, name);
+        let missing = skill_md(SkillRoot::OpenCode, name("no-such-skill"));
         assert_eq!(
             detect_artifact_state(&missing, &ws, &home),
             (OperationKind::Unavailable, PreviousState::Unavailable)
         );
         for artifact in [
-            ArtifactId::OpenCodeSkill(name("tdd")),
-            ArtifactId::ClaudeSkill(name("tdd")),
+            skill_md(SkillRoot::OpenCode, name("tdd")),
+            skill_md(SkillRoot::Claude, name("tdd")),
         ] {
             assert_eq!(
                 detect_artifact_state(&artifact, &ws, &home),
@@ -3087,8 +3185,10 @@ mod tests {
         let (base, home, ws) = shipped_fixture("stale-shipped");
         let bundled = crate::setup_roots::bundled_root().unwrap();
         let retired = crate::managed_bootstrap::REMOVED_SKILL_NAMES[0];
-        let artifact =
-            ArtifactId::ClaudeSkill(crate::artifact_registry::SkillName::new(retired).unwrap());
+        let artifact = ArtifactId::skill_md(
+            SkillRoot::Claude,
+            crate::artifact_registry::SkillName::new(retired).unwrap(),
+        );
         let dest = artifact.resolve_dest(&home, &ws).unwrap();
         let shipped = b"a version the app shipped\n";
         let key = format!("skills/{retired}/SKILL.md");
@@ -3121,8 +3221,10 @@ mod tests {
         let (base, home, ws) = shipped_fixture("stale-malformed");
         let bundled = crate::setup_roots::bundled_root().unwrap();
         let retired = crate::managed_bootstrap::REMOVED_SKILL_NAMES[0];
-        let artifact =
-            ArtifactId::ClaudeSkill(crate::artifact_registry::SkillName::new(retired).unwrap());
+        let artifact = ArtifactId::skill_md(
+            SkillRoot::Claude,
+            crate::artifact_registry::SkillName::new(retired).unwrap(),
+        );
         let dest = artifact.resolve_dest(&home, &ws).unwrap();
         write_file(&dest, b"a version the app shipped\n");
         let _inject = crate::shipped_digests::test_override::inject("{ not json");
@@ -3145,8 +3247,8 @@ mod tests {
         crate::test_env::set_test_user_dirs(&home);
         let bundled = crate::setup_roots::bundled_root().unwrap();
         let name = crate::artifact_registry::SkillName::new("tdd").unwrap();
-        let legacy = ArtifactId::CodexLegacySkill(name.clone());
-        let current = ArtifactId::CodexSkill(name);
+        let legacy = ArtifactId::skill_md(SkillRoot::Agents, name.clone());
+        let current = ArtifactId::skill_md(SkillRoot::CodexHome, name);
         let shipped = b"a version the app shipped\n";
         let _inject = inject_shipped("templates/skills/codex/tdd/SKILL.md", shipped);
         write_file(&legacy.resolve_dest(&home, &ws).unwrap(), shipped);
@@ -3198,6 +3300,212 @@ mod tests {
             refine(Some(&stale_record)),
             (OperationKind::Conflict, PreviousState::Conflict)
         );
+        let _ = fs::remove_dir_all(base);
+    }
+
+    // ── Skill files ──
+
+    fn bundled_repo() -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../resources/default-workspace")
+    }
+
+    /// Every artifact the bundle can install, plus the old Codex folder copy of each skill.
+    fn every_bundled_artifact() -> Vec<ArtifactId> {
+        let repo = bundled_repo();
+        let mut artifacts = Vec::new();
+        for surface in SetupSurfaceId::ALL {
+            artifacts.extend(expand_surface_fail_closed(*surface, &repo).unwrap());
+        }
+        let names =
+            crate::artifact_registry::discover_skill_names_for_harness(&repo, "codex").unwrap();
+        artifacts.extend(
+            names
+                .into_iter()
+                .map(|name| ArtifactId::skill_md(SkillRoot::Agents, name)),
+        );
+        artifacts
+    }
+
+    #[test]
+    fn backup_ids_are_unique_across_the_bundle_and_within_the_length_cap() {
+        let artifacts = every_bundled_artifact();
+        let mut seen = HashSet::new();
+        for artifact in &artifacts {
+            let id = artifact_backup_rel(artifact);
+            assert!(id.len() <= 120, "{id}");
+            assert!(seen.insert(id.clone()), "{id} names two artifacts");
+        }
+        assert!(artifacts.len() > 300, "{}", artifacts.len());
+    }
+
+    #[test]
+    fn skill_backup_ids_cannot_collide_through_dashes_underscores_or_slashes() {
+        let file = |root, skill: &str, rel: &str| {
+            artifact_backup_rel(&ArtifactId::skill_file(
+                root,
+                crate::artifact_registry::SkillName::new(skill).unwrap(),
+                crate::artifact_registry::SkillRelPath::new(rel).unwrap(),
+            ))
+        };
+        let ids = [
+            file(SkillRoot::Claude, "a-b", "c"),
+            file(SkillRoot::Claude, "a", "b-c"),
+            file(SkillRoot::Claude, "a", "b/c"),
+            file(SkillRoot::Claude, "a", "b__c"),
+            file(SkillRoot::Claude, "a", "b_c"),
+            file(SkillRoot::CodexHome, "a", "b/c"),
+            file(SkillRoot::Agents, "a", "b/c"),
+        ];
+        let unique: HashSet<&String> = ids.iter().collect();
+        assert_eq!(unique.len(), ids.len(), "{ids:?}");
+    }
+
+    #[test]
+    fn a_backup_id_over_the_cap_keeps_a_digest_of_the_whole_id() {
+        let rel = |name: &str| {
+            artifact_backup_rel(&ArtifactId::WorkspaceFile(
+                crate::artifact_registry::WorkspaceRelPath::new(format!(
+                    "docs/{}/{name}.md",
+                    "long-directory-name".repeat(8)
+                ))
+                .unwrap(),
+            ))
+        };
+        let (first, second) = (rel("first"), rel("second"));
+        assert!(first.len() <= 120 && second.len() <= 120);
+        assert_ne!(
+            first, second,
+            "ids that differ only past the cap stay distinct"
+        );
+    }
+
+    #[test]
+    fn removing_a_skill_file_removes_the_directories_it_empties_up_to_the_skill_root_only() {
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        let base = temp("empty-skill-dirs");
+        let home = base.join("home");
+        fs::create_dir_all(&home).unwrap();
+        crate::test_env::set_test_user_dirs(&home);
+        let ws = base.join("ws");
+        let name = crate::artifact_registry::SkillName::new("some-skill").unwrap();
+        let artifact = |rel: &str| {
+            ArtifactId::skill_file(
+                SkillRoot::Claude,
+                name.clone(),
+                crate::artifact_registry::SkillRelPath::new(rel).unwrap(),
+            )
+        };
+        let skills = home.join(".claude/skills");
+        let clean = |artifact: &ArtifactId| {
+            let dest = artifact.resolve_dest(&home, &ws).unwrap();
+            fs::remove_file(&dest).unwrap();
+            remove_empty_skill_directories(artifact, &dest, &home, &home).unwrap();
+        };
+
+        // Emptied directories go, from the file's own up to the skill's.
+        let deep = artifact("assets/deep/page.html");
+        write_file(&deep.resolve_dest(&home, &ws).unwrap(), b"x");
+        clean(&deep);
+        assert!(!skills.join("some-skill").exists());
+        assert!(skills.is_dir(), "the skill root is never removed");
+
+        // A foreign file keeps its directory and everything above it.
+        let owned = artifact("assets/deep/page.html");
+        write_file(&owned.resolve_dest(&home, &ws).unwrap(), b"x");
+        write_file(&skills.join("some-skill/assets/mine.md"), b"mine");
+        clean(&owned);
+        assert!(!skills.join("some-skill/assets/deep").exists());
+        assert!(skills.join("some-skill/assets/mine.md").is_file());
+
+        // A sibling file of the skill keeps the skill directory.
+        fs::remove_file(skills.join("some-skill/assets/mine.md")).unwrap();
+        fs::remove_dir(skills.join("some-skill/assets")).unwrap();
+        let md = artifact("SKILL.md");
+        write_file(&md.resolve_dest(&home, &ws).unwrap(), b"x");
+        write_file(&skills.join("some-skill/notes.md"), b"mine");
+        clean(&md);
+        assert!(skills.join("some-skill/notes.md").is_file());
+
+        // Anything that is not a skill file is left alone.
+        let rules_dir = home.join(".claude");
+        remove_empty_skill_directories(
+            &ArtifactId::ClaudeRules,
+            &rules_dir.join("x"),
+            &home,
+            &home,
+        )
+        .unwrap();
+        assert!(rules_dir.is_dir());
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn a_full_install_with_every_leftover_removal_stays_under_the_operation_limit() {
+        let installable: usize = SetupSurfaceId::ALL
+            .iter()
+            .map(|surface| {
+                expand_surface_fail_closed(*surface, &bundled_repo())
+                    .unwrap()
+                    .len()
+            })
+            .sum();
+        // What an upgrade can add: the old Codex folder copy of each skill, and the per-harness
+        // adapters (100) older versions copied into the runtime workspace.
+        let skills = 25;
+        let leftovers = skills + 100;
+        assert!(
+            installable + leftovers <= MAX_MANIFEST_OPERATIONS,
+            "{installable} installable artifacts and {leftovers} removals exceed {MAX_MANIFEST_OPERATIONS}"
+        );
+    }
+
+    #[test]
+    fn a_stale_artifact_at_a_wanted_destination_is_planned_once_as_the_wanted_one() {
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        let (base, home, ws) = shipped_fixture("same-destination");
+        crate::test_env::set_test_user_dirs(&home);
+        // Codex reads the folder that older versions cleaned up as legacy: both roots coincide.
+        unsafe {
+            std::env::remove_var("CODEX_HOME");
+            std::env::set_var("CODEX_SKILLS_PATH", home.join(".agents/skills"));
+        }
+        let name = crate::artifact_registry::SkillName::new("tdd").unwrap();
+        let wanted = ArtifactId::skill_md(SkillRoot::CodexHome, name.clone());
+        let legacy = ArtifactId::skill_md(SkillRoot::Agents, name);
+        let dest = wanted.resolve_dest(&home, &ws).unwrap();
+        assert_eq!(dest, legacy.resolve_dest(&home, &ws).unwrap());
+        let source = fs::read(
+            wanted
+                .resolve_source(&crate::setup_roots::bundled_root().unwrap())
+                .unwrap(),
+        )
+        .unwrap();
+        write_file(&dest, &source);
+        let state = crate::managed_state::ManagedState {
+            schema_version: crate::managed_state::MANAGED_STATE_SCHEMA_VERSION,
+            bundled_version: crate::stable_digest::bytes(b"bundle"),
+            artifacts: [&wanted, &legacy]
+                .iter()
+                .map(|artifact| crate::managed_state::ManagedArtifactRecord {
+                    identity: crate::managed_state::artifact_identity(artifact),
+                    hash: crate::stable_digest::bytes(&source),
+                    surface: None,
+                })
+                .collect(),
+        };
+        crate::managed_state::write_managed_state_atomic(&ws, &state).unwrap();
+
+        let planned =
+            plan_artifacts_for_surfaces(&[SetupSurfaceId::CodexSkills], &ws, &home).expect("plan");
+        let for_dest: Vec<_> = planned
+            .iter()
+            .filter(|operation| operation.artifact.resolve_dest(&home, &ws).as_ref() == Ok(&dest))
+            .collect();
+        assert_eq!(for_dest.len(), 1, "{for_dest:?}");
+        assert_eq!(for_dest[0].artifact, wanted);
+        assert_eq!(for_dest[0].kind, OperationKind::NoChange);
         let _ = fs::remove_dir_all(base);
     }
 }

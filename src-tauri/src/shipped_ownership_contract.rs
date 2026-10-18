@@ -24,6 +24,7 @@ mod tests {
     use crate::setup_lifecycle::{OperationKind, SetupPlan, SetupSurfaceId};
     use crate::setup_transaction::{plan_artifacts_for_surfaces, PreviousState, RollbackAction};
     use crate::shipped_digests::test_override;
+    use crate::skill_roots::SkillRoot;
     use crate::stable_digest;
     use crate::test_env::{guard, guard::EnvRestore, set_test_user_dirs};
 
@@ -226,8 +227,8 @@ mod tests {
                 SetupSurfaceId::ClaudeAgents,
             ],
         );
-        let claude_skill = ArtifactId::ClaudeSkill(skill("tdd"));
-        let codex_skill = ArtifactId::CodexSkill(skill("tdd"));
+        let claude_skill = ArtifactId::skill_md(SkillRoot::Claude, skill("tdd"));
+        let codex_skill = ArtifactId::skill_md(SkillRoot::CodexHome, skill("tdd"));
         let agent = ArtifactId::ClaudeAgent(AgentName::new("verifier").expect("agent"));
         let old_skill = b"an older claude tdd skill\n";
         let old_codex = b"an older codex tdd skill\n";
@@ -304,7 +305,7 @@ mod tests {
     #[test]
     fn edited_content_stays_a_conflict_and_is_never_overwritten() {
         let env = Installed::new("edited", FILE_SURFACES);
-        let artifact = ArtifactId::ClaudeSkill(skill("tdd"));
+        let artifact = ArtifactId::skill_md(SkillRoot::Claude, skill("tdd"));
         let shipped = b"an older claude tdd skill\n";
         let edited = b"the user edited an older claude tdd skill\n";
         env.write(&artifact, edited);
@@ -333,7 +334,7 @@ mod tests {
     #[test]
     fn a_shipped_version_without_a_record_updates() {
         let env = Installed::new("no-record", FILE_SURFACES);
-        let artifact = ArtifactId::ClaudeSkill(skill("tdd"));
+        let artifact = ArtifactId::skill_md(SkillRoot::Claude, skill("tdd"));
         let shipped = b"an older claude tdd skill\n";
         env.write(&artifact, shipped);
         env.set_record(&artifact, None);
@@ -360,8 +361,8 @@ mod tests {
         let env = Installed::new("retired", FILE_SURFACES);
         // Two skills the app no longer ships.
         let retired_name = REMOVED_SKILL_NAMES[0];
-        let retired = ArtifactId::ClaudeSkill(skill(retired_name));
-        let edited = ArtifactId::ClaudeSkill(skill(REMOVED_SKILL_NAMES[1]));
+        let retired = ArtifactId::skill_md(SkillRoot::Claude, skill(retired_name));
+        let edited = ArtifactId::skill_md(SkillRoot::Claude, skill(REMOVED_SKILL_NAMES[1]));
         let shipped = b"the last shipped version of a retired skill\n";
         let user_text = b"the user rewrote a retired skill\n";
         for (artifact, bytes) in [(&retired, &shipped[..]), (&edited, &user_text[..])] {
@@ -404,8 +405,8 @@ mod tests {
     #[test]
     fn uninstall_removes_a_shipped_version_and_preserves_an_edit() {
         let env = Installed::new("uninstall", FILE_SURFACES);
-        let shipped_artifact = ArtifactId::ClaudeSkill(skill("tdd"));
-        let edited_artifact = ArtifactId::ClaudeSkill(skill("diagnose"));
+        let shipped_artifact = ArtifactId::skill_md(SkillRoot::Claude, skill("tdd"));
+        let edited_artifact = ArtifactId::skill_md(SkillRoot::Claude, skill("diagnose"));
         let shipped = b"an older claude tdd skill\n";
         env.write(&shipped_artifact, shipped);
         env.set_record(&shipped_artifact, Some(b"a stale recorded hash"));
@@ -510,7 +511,7 @@ mod tests {
     #[test]
     fn unparsable_metadata_keeps_every_recorded_mismatch_a_conflict() {
         let env = Installed::new("malformed", FILE_SURFACES);
-        let artifact = ArtifactId::ClaudeSkill(skill("tdd"));
+        let artifact = ArtifactId::skill_md(SkillRoot::Claude, skill("tdd"));
         env.write(&artifact, b"an older claude tdd skill\n");
         env.set_record(&artifact, Some(b"a stale recorded hash"));
         for raw in ["", "{ not json", r#"{"schema": 1, "sources": {}}"#] {
@@ -526,7 +527,7 @@ mod tests {
     #[test]
     fn a_file_changed_after_preview_fails_the_apply_untouched() {
         let env = Installed::new("changed-after-preview", FILE_SURFACES);
-        let artifact = ArtifactId::ClaudeSkill(skill("tdd"));
+        let artifact = ArtifactId::skill_md(SkillRoot::Claude, skill("tdd"));
         let shipped = b"an older claude tdd skill\n";
         env.write(&artifact, shipped);
         env.set_record(&artifact, Some(b"a stale recorded hash"));
@@ -561,7 +562,7 @@ mod tests {
             if old == current {
                 continue;
             }
-            let artifact = ArtifactId::ClaudeSkill(skill(name));
+            let artifact = ArtifactId::skill_md(SkillRoot::Claude, skill(name));
             env.write(&artifact, &old);
             env.set_record(&artifact, Some(b"a stale recorded hash"));
             assert_eq!(
@@ -607,22 +608,22 @@ mod tests {
         let current = fs::read(bundled().join("skills/release-check/SKILL.md")).expect("current");
         let cases = [
             (
-                ArtifactId::ClaudeSkill(name.clone()),
+                ArtifactId::skill_md(SkillRoot::Claude, name.clone()),
                 SetupSurfaceId::ClaudeSkills,
                 "claude",
             ),
             (
-                ArtifactId::CodexSkill(name.clone()),
+                ArtifactId::skill_md(SkillRoot::CodexHome, name.clone()),
                 SetupSurfaceId::CodexSkills,
                 "codex",
             ),
             (
-                ArtifactId::OpenCodeSkill(name.clone()),
+                ArtifactId::skill_md(SkillRoot::OpenCode, name.clone()),
                 SetupSurfaceId::OpenCodeSkills,
                 "opencode",
             ),
             (
-                ArtifactId::CursorSkill(name),
+                ArtifactId::skill_md(SkillRoot::Cursor, name),
                 SetupSurfaceId::CursorSkills,
                 "cursor",
             ),
@@ -696,10 +697,10 @@ mod tests {
             ))
             .expect("canonical skill");
             for artifact in [
-                ArtifactId::ClaudeSkill(name.clone()),
-                ArtifactId::CodexSkill(name.clone()),
-                ArtifactId::OpenCodeSkill(name.clone()),
-                ArtifactId::CursorSkill(name.clone()),
+                ArtifactId::skill_md(SkillRoot::Claude, name.clone()),
+                ArtifactId::skill_md(SkillRoot::CodexHome, name.clone()),
+                ArtifactId::skill_md(SkillRoot::OpenCode, name.clone()),
+                ArtifactId::skill_md(SkillRoot::Cursor, name.clone()),
             ] {
                 assert_eq!(env.read(&artifact), canonical, "{artifact:?}");
             }

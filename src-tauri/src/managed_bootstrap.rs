@@ -14,6 +14,7 @@ use crate::agent_skill_targets::{codex_legacy_skills_dest, validate_skill_name};
 use crate::artifact_registry::{AgentName, ArtifactId, SkillName, WorkspaceRelPath};
 use crate::managed_state::{artifact_identity, workspace_file_identity, ManagedArtifactRecord};
 use crate::setup_fingerprint::{self, ABSENT_DIGEST};
+use crate::skill_roots::SkillRoot;
 
 /// Skills removed from the canonical 21-skill bundle (old 33-skill installations).
 pub const REMOVED_SKILL_NAMES: &[&str] = &[
@@ -100,14 +101,20 @@ fn skill_identity(name: &str) -> String {
 }
 
 fn historical_identity_and_path_class(artifact: &ArtifactId) -> Option<(String, &'static str)> {
+    if let Some(current) = artifact.current_equivalent() {
+        return historical_identity_and_path_class(&current);
+    }
     match artifact {
-        ArtifactId::OpenCodeSkill(name)
-        | ArtifactId::CodexSkill(name)
-        | ArtifactId::ClaudeSkill(name)
-        | ArtifactId::CursorSkill(name) => Some((skill_identity(name.as_str()), "harness-skill")),
-        ArtifactId::CodexLegacySkill(name) => {
-            Some((skill_identity(name.as_str()), "codex-legacy-skill"))
+        // Only a SKILL.md was ever installed before supporting files were; those have no history.
+        ArtifactId::SkillFile(file) if file.rel.is_skill_md() => {
+            let path_class = if file.root == SkillRoot::Agents {
+                "codex-legacy-skill"
+            } else {
+                "harness-skill"
+            };
+            Some((skill_identity(file.skill.as_str()), path_class))
         }
+        ArtifactId::SkillFile(_) => None,
         ArtifactId::OpenCodeAgent(name) if name.as_str() == LEGACY_SCOUT_AGENT => {
             Some(("legacy-agent:scout".to_string(), "opencode-agent"))
         }
@@ -212,6 +219,16 @@ pub fn stale_workspace_paths(workspace_root: &Path) -> Vec<String> {
     stale
 }
 
+/// The skill folder each harness's skills are installed into.
+fn harness_skill_root(harness: &str) -> SkillRoot {
+    match harness {
+        "opencode" => SkillRoot::OpenCode,
+        "codex" => SkillRoot::CodexHome,
+        "claude" => SkillRoot::Claude,
+        _ => SkillRoot::Cursor,
+    }
+}
+
 /// Build stale harness skill artifacts for removed skills still installed globally.
 pub fn stale_harness_skill_artifacts(
     workspace_root: &Path,
@@ -312,7 +329,7 @@ pub fn codex_legacy_migration_artifacts(
         let Some(sn) = SkillName::new(name) else {
             continue;
         };
-        artifacts.push(ArtifactId::CodexLegacySkill(sn));
+        artifacts.push(ArtifactId::skill_md(SkillRoot::Agents, sn));
     }
     Ok(artifacts)
 }
@@ -328,13 +345,13 @@ pub(crate) fn approved_codex_legacy_digest(
     {
         return true;
     }
-    let ArtifactId::CodexLegacySkill(name) = artifact else {
+    let Some(file) = artifact.as_skill_file() else {
         return false;
     };
-    let Some(current) = SkillName::new(name.as_str().to_string()).map(ArtifactId::CodexSkill)
-    else {
+    if file.root != SkillRoot::Agents || !file.rel.is_skill_md() {
         return false;
-    };
+    }
+    let current = ArtifactId::skill_md(SkillRoot::CodexHome, file.skill);
     let Ok(bundled_root) = crate::setup_roots::bundled_root_for(workspace_root) else {
         return false;
     };
@@ -415,12 +432,7 @@ pub fn infer_bootstrap_records(
         }
     }
     for harness in ["opencode", "codex", "claude", "cursor"] {
-        let map = |sn: SkillName| match harness {
-            "opencode" => ArtifactId::OpenCodeSkill(sn),
-            "codex" => ArtifactId::CodexSkill(sn),
-            "claude" => ArtifactId::ClaudeSkill(sn),
-            _ => ArtifactId::CursorSkill(sn),
-        };
+        let map = |sn: SkillName| ArtifactId::skill_md(harness_skill_root(harness), sn);
         let stale = match stale_harness_skill_artifacts(workspace_root, home, harness, map) {
             Ok(stale) => stale,
             Err(error) => {
@@ -547,12 +559,7 @@ pub fn collect_stale_removal_artifacts(
     if read_managed_state_missing(workspace_root) && workspace_root.join("skills").is_dir() {
         stale.extend(stale_workspace_artifacts(workspace_root)?);
         for harness in ["opencode", "codex", "claude", "cursor"] {
-            let map = |sn: SkillName| match harness {
-                "opencode" => ArtifactId::OpenCodeSkill(sn),
-                "codex" => ArtifactId::CodexSkill(sn),
-                "claude" => ArtifactId::ClaudeSkill(sn),
-                _ => ArtifactId::CursorSkill(sn),
-            };
+            let map = |sn: SkillName| ArtifactId::skill_md(harness_skill_root(harness), sn);
             if let Ok(items) = stale_harness_skill_artifacts(workspace_root, home, harness, map) {
                 stale.extend(items);
             }
@@ -609,6 +616,56 @@ mod tests {
         let first = historical_manifest().expect("historical manifest");
         let second = historical_manifest().expect("historical manifest");
         assert!(std::ptr::eq(first, second));
+    }
+
+    #[test]
+    fn only_a_skill_md_has_pre_manifest_history_and_the_class_follows_the_root() {
+        let name = |value: &str| SkillName::new(value).expect("skill name");
+        for root in [
+            SkillRoot::Claude,
+            SkillRoot::OpenCode,
+            SkillRoot::CodexHome,
+            SkillRoot::Cursor,
+        ] {
+            assert_eq!(
+                historical_identity_and_path_class(&ArtifactId::skill_md(root, name("tdd"))),
+                Some(("skill:tdd".to_string(), "harness-skill")),
+                "{root:?}"
+            );
+        }
+        assert_eq!(
+            historical_identity_and_path_class(&ArtifactId::skill_md(
+                SkillRoot::Agents,
+                name("tdd")
+            )),
+            Some(("skill:tdd".to_string(), "codex-legacy-skill"))
+        );
+        assert_eq!(
+            historical_identity_and_path_class(&ArtifactId::skill_md(
+                SkillRoot::Claude,
+                name("grill-me")
+            )),
+            Some(("removed-skill:grill-me".to_string(), "harness-skill"))
+        );
+        // Supporting files were never installed before this version.
+        assert_eq!(
+            historical_identity_and_path_class(&ArtifactId::skill_file(
+                SkillRoot::Claude,
+                name("security-audit"),
+                crate::artifact_registry::SkillRelPath::new("HUNTING.md").expect("rel"),
+            )),
+            None
+        );
+        // An old identity is classified like the file it stands for.
+        for (legacy, root) in [
+            (ArtifactId::ClaudeSkill(name("tdd")), SkillRoot::Claude),
+            (ArtifactId::CodexLegacySkill(name("tdd")), SkillRoot::Agents),
+        ] {
+            assert_eq!(
+                historical_identity_and_path_class(&legacy),
+                historical_identity_and_path_class(&ArtifactId::skill_md(root, name("tdd")))
+            );
+        }
     }
 
     #[test]

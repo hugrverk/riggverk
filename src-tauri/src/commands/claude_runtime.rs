@@ -188,10 +188,11 @@ fn check_skills_synced(home: &Path, workspace_root: &Path) -> bool {
         if !installed_skill_md.is_file() {
             return false;
         }
-        let Some(source_skill_md) =
-            crate::artifact_registry::ArtifactId::ClaudeSkill(skill_name.clone())
-                .resolve_source(workspace_root)
-        else {
+        let Some(source_skill_md) = crate::artifact_registry::ArtifactId::skill_md(
+            crate::skill_roots::SkillRoot::Claude,
+            skill_name.clone(),
+        )
+        .resolve_source(workspace_root) else {
             return false;
         };
         source_skill_md.is_file() && file_eq(&installed_skill_md, &source_skill_md)

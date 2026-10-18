@@ -9,8 +9,8 @@
 //! digest is listed for its artifact is app-owned and may be updated or removed
 //! with backup and rollback like a recorded one.
 //!
-//! Scope is whole-file copies only: skills, agent files, and the OpenCode
-//! Playwright MCP file. Rules blocks (`metadata/rules-history`), merged configs
+//! Scope is whole-file copies only: skill files (`SKILL.md` and supporting files), agent files,
+//! and the OpenCode Playwright MCP file. Rules blocks (`metadata/rules-history`), merged configs
 //! and workspace files have their own ownership proofs and are never covered.
 //! Missing or malformed metadata proves nothing, so the planner keeps reporting
 //! a conflict.
@@ -104,6 +104,18 @@ fn bundle_relative_key(source: &Path, bundled_root: &Path) -> Option<String> {
 /// cannot name them; their versions stay provable through these keys in the metadata.
 const LEGACY_SKILL_ADAPTER_HARNESSES: [&str; 4] = ["claude", "codex", "opencode", "cursor"];
 
+/// Metadata keys holding the shipped versions of a `SKILL.md`: the generic key of the canonical
+/// file plus the four legacy adapter keys.
+fn skill_md_keys(name: &str) -> Vec<String> {
+    std::iter::once(format!("skills/{name}/SKILL.md"))
+        .chain(
+            LEGACY_SKILL_ADAPTER_HARNESSES
+                .iter()
+                .map(|harness| format!("templates/skills/{harness}/{name}/SKILL.md")),
+        )
+        .collect()
+}
+
 /// Metadata keys holding the shipped versions of an artifact; empty when the
 /// artifact is not a whole-file copy.
 fn source_keys(artifact: &ArtifactId, bundled_root: &Path) -> Vec<String> {
@@ -114,17 +126,11 @@ fn source_keys(artifact: &ArtifactId, bundled_root: &Path) -> Vec<String> {
         | ArtifactId::CodexSkill(name)
         | ArtifactId::ClaudeSkill(name)
         | ArtifactId::CursorSkill(name)
-        | ArtifactId::CodexLegacySkill(name) => {
-            let name = name.as_str();
-            std::iter::once(format!("skills/{name}/SKILL.md"))
-                .chain(
-                    LEGACY_SKILL_ADAPTER_HARNESSES
-                        .iter()
-                        .map(|harness| format!("templates/skills/{harness}/{name}/SKILL.md")),
-                )
-                .collect()
-        }
-        ArtifactId::OpenCodeAgent(_)
+        | ArtifactId::CodexLegacySkill(name) => skill_md_keys(name.as_str()),
+        ArtifactId::SkillFile(file) if file.rel.is_skill_md() => skill_md_keys(file.skill.as_str()),
+        // A supporting file has one source, and its key is that source's bundle-relative path.
+        ArtifactId::SkillFile(_)
+        | ArtifactId::OpenCodeAgent(_)
         | ArtifactId::CodexAgent(_)
         | ArtifactId::ClaudeAgent(_)
         | ArtifactId::CursorAgent(_)
@@ -205,7 +211,8 @@ pub(crate) mod test_override {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::artifact_registry::{AgentName, SkillName, WorkspaceRelPath};
+    use crate::artifact_registry::{AgentName, SkillName, SkillRelPath, WorkspaceRelPath};
+    use crate::skill_roots::SkillRoot;
     use std::path::PathBuf;
 
     fn bundled() -> PathBuf {
@@ -330,6 +337,117 @@ mod tests {
         let legacy = ArtifactId::CodexLegacySkill(SkillName::new("tdd").expect("name"));
         assert!(is_shipped_version(&legacy, &root, &shipped));
         assert!(!is_shipped_version(&claude_agent("tdd"), &root, &shipped));
+    }
+
+    fn skill_file(root: SkillRoot, name: &str, rel: &str) -> ArtifactId {
+        ArtifactId::skill_file(
+            root,
+            SkillName::new(name).expect("skill name"),
+            SkillRelPath::new(rel).expect("rel path"),
+        )
+    }
+
+    #[test]
+    fn a_skill_md_is_proven_through_the_generic_and_the_legacy_adapter_keys_in_every_root() {
+        let root = bundled();
+        let mut keys = vec!["skills/tdd/SKILL.md".to_string()];
+        keys.extend(
+            LEGACY_SKILL_ADAPTER_HARNESSES
+                .iter()
+                .map(|harness| format!("templates/skills/{harness}/tdd/SKILL.md")),
+        );
+        for key in keys {
+            let shipped = digest(format!("version under {key}").as_bytes());
+            let _inject = test_override::inject(&test_override::json_for(
+                &key,
+                std::slice::from_ref(&shipped),
+            ));
+            for skill_root in SkillRoot::ALL {
+                assert!(
+                    is_shipped_version(&ArtifactId::skill_md(skill_root, tdd()), &root, &shipped),
+                    "{key} must prove the {skill_root:?} copy"
+                );
+            }
+            assert!(!is_shipped_version(
+                &skill_file(SkillRoot::Claude, "tdd", "HUNTING.md"),
+                &root,
+                &shipped
+            ));
+        }
+    }
+
+    fn tdd() -> SkillName {
+        SkillName::new("tdd").expect("skill name")
+    }
+
+    #[test]
+    fn a_supporting_file_is_proven_by_the_bundle_relative_path_of_its_source() {
+        let root = bundled();
+        let shipped = digest(b"an older hunting guide");
+        let _inject = test_override::inject(&test_override::json_for(
+            "skills/security-audit/HUNTING.md",
+            std::slice::from_ref(&shipped),
+        ));
+        for skill_root in SkillRoot::ALL {
+            assert!(is_shipped_version(
+                &skill_file(skill_root, "security-audit", "HUNTING.md"),
+                &root,
+                &shipped
+            ));
+        }
+        for other in [
+            skill_file(SkillRoot::Claude, "security-audit", "CLIENT-SIDE.md"),
+            skill_file(SkillRoot::Claude, "security-audit", "SKILL.md"),
+            skill_file(SkillRoot::Claude, "tdd", "HUNTING.md"),
+        ] {
+            assert!(!is_shipped_version(&other, &root, &shipped), "{other:?}");
+        }
+
+        // A grouped skill is keyed by the path it has in the bundle.
+        let grouped = "skills/kretsverket/kretsverket-status-report/assets/report-template.html";
+        let _inject = test_override::inject(&test_override::json_for(
+            grouped,
+            std::slice::from_ref(&shipped),
+        ));
+        assert!(is_shipped_version(
+            &skill_file(
+                SkillRoot::OpenCode,
+                "kretsverket-status-report",
+                "assets/report-template.html"
+            ),
+            &root,
+            &shipped
+        ));
+    }
+
+    #[test]
+    fn current_supporting_files_are_shipped_versions() {
+        let root = bundled();
+        for (skill, rel, source) in [
+            (
+                "security-audit",
+                "HUNTING.md",
+                "skills/security-audit/HUNTING.md",
+            ),
+            (
+                "security-audit",
+                "validate-findings.cjs",
+                "skills/security-audit/validate-findings.cjs",
+            ),
+            (
+                "kretsverket-status-report",
+                "scripts/verify-report.mjs",
+                "skills/kretsverket/kretsverket-status-report/scripts/verify-report.mjs",
+            ),
+        ] {
+            let installed = crate::stable_digest::file(&root.join(source)).expect("hash source");
+            for skill_root in SkillRoot::ALL {
+                assert!(
+                    is_shipped_version(&skill_file(skill_root, skill, rel), &root, &installed),
+                    "{skill}/{rel} in {skill_root:?}"
+                );
+            }
+        }
     }
 
     #[test]

@@ -294,6 +294,12 @@ pub(crate) fn artifact_label(artifact: &crate::artifact_registry::ArtifactId) ->
         ArtifactId::CursorSkill(name) => format!("Cursor skill {}", name.as_str()),
         ArtifactId::CursorMcp => "Cursor Playwright configuration".into(),
         ArtifactId::CodexLegacySkill(name) => format!("Legacy Codex skill {}", name.as_str()),
+        ArtifactId::SkillFile(file) => format!(
+            "Skill {}/{} in {}",
+            file.skill.as_str(),
+            file.rel.as_str(),
+            file.root.display()
+        ),
         ArtifactId::WorkspaceFile(path) => format!("Workspace file {}", path.as_str()),
     }
 }
@@ -354,6 +360,43 @@ mod tests {
         assert_eq!(counts.create_count, 1);
         assert_eq!(counts.conflict_count, 1);
         assert_eq!(conflicts, vec!["OpenCode skill browser-qa"]);
+    }
+
+    #[test]
+    fn skill_file_labels_name_the_skill_file_and_its_folder() {
+        use crate::artifact_registry::SkillRelPath;
+        use crate::skill_roots::SkillRoot;
+        let label = |root, rel: &str| {
+            artifact_label(&ArtifactId::skill_file(
+                root,
+                SkillName::new("tdd").unwrap(),
+                SkillRelPath::new(rel).unwrap(),
+            ))
+        };
+        assert_eq!(
+            label(SkillRoot::Claude, "SKILL.md"),
+            "Skill tdd/SKILL.md in ~/.claude/skills"
+        );
+        assert_eq!(
+            label(SkillRoot::CodexHome, "assets/a.html"),
+            "Skill tdd/assets/a.html in $CODEX_HOME/skills"
+        );
+        assert_eq!(
+            label(SkillRoot::OpenCode, "LICENSE"),
+            "Skill tdd/LICENSE in ~/.config/opencode/skills"
+        );
+        let conflicts = vec![planned(
+            OperationKind::Conflict,
+            ArtifactId::skill_file(
+                SkillRoot::Claude,
+                SkillName::new("security-audit").unwrap(),
+                SkillRelPath::new("HUNTING.md").unwrap(),
+            ),
+        )];
+        assert_eq!(
+            aggregate_state(&conflicts, true).2,
+            vec!["Skill security-audit/HUNTING.md in ~/.claude/skills"]
+        );
     }
 
     #[test]

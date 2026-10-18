@@ -12,6 +12,7 @@ use std::path::{Component, Path, PathBuf};
 
 use crate::agent_skill_targets::codex_home;
 use crate::setup_lifecycle::SetupSurfaceId;
+use crate::skill_roots::SkillRoot;
 
 // ── Artifact identity ──
 
@@ -34,7 +35,7 @@ pub enum ArtifactId {
     OpenCodeRules,
     /// A managed OpenCode agent file
     OpenCodeAgent(AgentName),
-    /// A managed OpenCode SKILL.md file
+    /// Legacy identity of the OpenCode `SKILL.md`; see [`ArtifactId::SkillFile`].
     OpenCodeSkill(SkillName),
 
     // ── Codex ──
@@ -44,7 +45,7 @@ pub enum ArtifactId {
     CodexRules,
     /// A managed Codex agent file
     CodexAgent(AgentName),
-    /// A managed Codex SKILL.md file
+    /// Legacy identity of the Codex `SKILL.md`; see [`ArtifactId::SkillFile`].
     CodexSkill(SkillName),
 
     // ── Claude ──
@@ -52,20 +53,29 @@ pub enum ArtifactId {
     ClaudeRules,
     /// A managed Claude agent file
     ClaudeAgent(AgentName),
-    /// A managed Claude SKILL.md file
+    /// Legacy identity of the Claude `SKILL.md`; see [`ArtifactId::SkillFile`].
     ClaudeSkill(SkillName),
 
     // ── Cursor ──
     /// A managed Cursor global agent file
     CursorAgent(AgentName),
-    /// A managed Cursor SKILL.md file
+    /// Legacy identity of the Cursor `SKILL.md`; see [`ArtifactId::SkillFile`].
     CursorSkill(SkillName),
     /// Named Playwright MCP state (mcp.json)
     CursorMcp,
-    /// Legacy Codex SKILL.md under ~/.codex/skills (migration source only).
+    /// Legacy identity of the Codex `SKILL.md` under `~/.agents/skills` (migration cleanup only);
+    /// see [`ArtifactId::SkillFile`].
     CodexLegacySkill(SkillName),
     /// Installed runtime workspace bundled file (workspace-relative path).
     WorkspaceFile(WorkspaceRelPath),
+
+    // ── Skills ──
+    /// One file of a skill (`SKILL.md` or a supporting file) in one skill root.
+    ///
+    /// The five legacy variants above are what older versions of the app recorded for the
+    /// `SKILL.md` alone. They stay so old managed state and transaction manifests still parse;
+    /// [`ArtifactId::current_equivalent`] maps each to this variant.
+    SkillFile(SkillFileRef),
 }
 
 /// Workspace-relative path for bundled files. Validated at construction and on
@@ -178,6 +188,99 @@ impl SkillName {
     }
 }
 
+/// Path of one file below its skill directory: `SKILL.md`, `HUNTING.md`,
+/// `assets/report-template.html`. Validated at construction and on deserialization, so a manifest
+/// or managed-state record cannot smuggle in a path the installer would refuse.
+///
+/// One to four `/`-separated components of ASCII letters, digits, `.`, `_` and `-`, none of them
+/// starting with a dot (which also rules out `.` and `..`).
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(try_from = "String")]
+pub struct SkillRelPath(String);
+
+impl TryFrom<String> for SkillRelPath {
+    type Error = String;
+
+    fn try_from(rel: String) -> Result<Self, Self::Error> {
+        Self::new(rel.as_str()).ok_or_else(|| format!("invalid skill file path: {rel:?}"))
+    }
+}
+
+impl SkillRelPath {
+    const SKILL_MD: &'static str = "SKILL.md";
+
+    pub fn new(rel: impl Into<String>) -> Option<Self> {
+        let rel = rel.into();
+        let mut components = 0usize;
+        for component in rel.split('/') {
+            components += 1;
+            if components > crate::skill_discovery::MAX_SUPPORT_DEPTH
+                || component.is_empty()
+                || component.starts_with('.')
+                || !component
+                    .chars()
+                    .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '.' | '_' | '-'))
+            {
+                return None;
+            }
+        }
+        Some(Self(rel))
+    }
+
+    pub fn skill_md() -> Self {
+        Self(Self::SKILL_MD.to_string())
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    pub fn is_skill_md(&self) -> bool {
+        self.0 == Self::SKILL_MD
+    }
+}
+
+/// One file of one skill in one skill root: the identity of a `SkillFile` artifact.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct SkillFileRef {
+    pub root: SkillRoot,
+    pub skill: SkillName,
+    pub rel: SkillRelPath,
+}
+
+impl SkillFileRef {
+    pub fn skill_md(root: SkillRoot, skill: SkillName) -> Self {
+        Self {
+            root,
+            skill,
+            rel: SkillRelPath::skill_md(),
+        }
+    }
+
+    /// `<root>/<skill>/<rel>`.
+    fn dest(&self, home: &Path) -> Result<PathBuf, String> {
+        let mut path = self.root.path(home)?.join(self.skill.as_str());
+        for part in self.rel.as_str().split('/') {
+            path.push(part);
+        }
+        Ok(path)
+    }
+
+    /// The bundled file this one is copied from: the canonical `SKILL.md`, or the supporting file
+    /// next to it.
+    fn source(&self, workspace_root: &Path) -> PathBuf {
+        if self.rel.is_skill_md() {
+            return skill_source(workspace_root, self.skill.as_str());
+        }
+        let mut path =
+            crate::skill_discovery::canonical_skill_dir(workspace_root, self.skill.as_str());
+        for part in self.rel.as_str().split('/') {
+            path.push(part);
+        }
+        path
+    }
+}
+
 // ── Artifact metadata ──
 
 /// The kind of artifact for routing detection and execution.
@@ -218,48 +321,37 @@ impl ArtifactId {
             ArtifactId::OpenCodeAgent(name) => {
                 Ok(home.join(".config/opencode/agents").join(name.file_name()))
             }
-            ArtifactId::OpenCodeSkill(name) => Ok(home
-                .join(".config/opencode/skills")
-                .join(name.as_str())
-                .join("SKILL.md")),
+            ArtifactId::OpenCodeSkill(name) => {
+                SkillFileRef::skill_md(SkillRoot::OpenCode, name.clone()).dest(home)
+            }
             ArtifactId::CodexConfig => Ok(absolute_codex_home(home)?.join("config.toml")),
             ArtifactId::CodexRules => Ok(absolute_codex_home(home)?.join("AGENTS.md")),
             ArtifactId::CodexAgent(name) => Ok(absolute_codex_home(home)?
                 .join("agents")
                 .join(name.file_name_with_extension("toml"))),
             ArtifactId::CodexSkill(name) => {
-                let skills = crate::agent_skill_targets::codex_global_skills_dest(home);
-                if !skills.is_absolute() {
-                    return Err(format!(
-                        "Codex skills destination must be an absolute path (check CODEX_HOME and CODEX_SKILLS_PATH): {}",
-                        skills.display()
-                    ));
-                }
-                Ok(skills.join(name.as_str()).join("SKILL.md"))
+                SkillFileRef::skill_md(SkillRoot::CodexHome, name.clone()).dest(home)
             }
             ArtifactId::ClaudeRules => Ok(home.join(".claude/CLAUDE.md")),
             ArtifactId::ClaudeAgent(name) => Ok(home.join(".claude/agents").join(name.file_name())),
-            ArtifactId::ClaudeSkill(name) => Ok(home
-                .join(".claude/skills")
-                .join(name.as_str())
-                .join("SKILL.md")),
+            ArtifactId::ClaudeSkill(name) => {
+                SkillFileRef::skill_md(SkillRoot::Claude, name.clone()).dest(home)
+            }
             ArtifactId::CursorAgent(name) => {
                 let paths = resolve_cursor_paths()?;
                 Ok(paths.agents.join(name.file_name()))
             }
             ArtifactId::CursorSkill(name) => {
-                let paths = resolve_cursor_paths()?;
-                Ok(paths.skills.join(name.as_str()).join("SKILL.md"))
+                SkillFileRef::skill_md(SkillRoot::Cursor, name.clone()).dest(home)
             }
             ArtifactId::CursorMcp => {
                 let paths = resolve_cursor_paths()?;
                 Ok(paths.mcp_config.clone())
             }
             ArtifactId::CodexLegacySkill(name) => {
-                Ok(crate::agent_skill_targets::codex_legacy_skills_dest(home)
-                    .join(name.as_str())
-                    .join("SKILL.md"))
+                SkillFileRef::skill_md(SkillRoot::Agents, name.clone()).dest(home)
             }
+            ArtifactId::SkillFile(file) => file.dest(home),
             ArtifactId::WorkspaceFile(rel) => Ok(workspace_root.join(rel.as_str())),
         }
     }
@@ -274,20 +366,25 @@ impl ArtifactId {
             ArtifactId::CodexConfig
             | ArtifactId::CodexRules
             | ArtifactId::CodexAgent(_)
-            | ArtifactId::CodexSkill(_) => {
-                let dest = self.resolve_dest(home, workspace_root)?;
-                if dest.starts_with(home) {
-                    return Ok(home.to_path_buf());
-                }
-                let codex_root = absolute_codex_home(home)?;
-                Ok(if dest.starts_with(&codex_root) {
-                    codex_root
-                } else {
-                    home.to_path_buf()
-                })
+            | ArtifactId::CodexSkill(_) => self.codex_allowlist_root(home, workspace_root),
+            ArtifactId::SkillFile(file) if file.root == SkillRoot::CodexHome => {
+                self.codex_allowlist_root(home, workspace_root)
             }
             _ => Ok(home.to_path_buf()),
         }
+    }
+
+    fn codex_allowlist_root(&self, home: &Path, workspace_root: &Path) -> Result<PathBuf, String> {
+        let dest = self.resolve_dest(home, workspace_root)?;
+        if dest.starts_with(home) {
+            return Ok(home.to_path_buf());
+        }
+        let codex_root = absolute_codex_home(home)?;
+        Ok(if dest.starts_with(&codex_root) {
+            codex_root
+        } else {
+            home.to_path_buf()
+        })
     }
 
     /// Resolve the source path for this artifact (workspace-relative).
@@ -331,8 +428,51 @@ impl ArtifactId {
                     .join("mcp/playwright.mcp.json"),
             ),
             ArtifactId::CodexLegacySkill(name) => Some(skill_source(workspace_root, name.as_str())),
+            ArtifactId::SkillFile(file) => Some(file.source(workspace_root)),
             ArtifactId::WorkspaceFile(rel) => Some(workspace_root.join(rel.as_str())),
         }
+    }
+
+    /// A skill file of `root`: the `SKILL.md` of `skill`.
+    pub fn skill_md(root: SkillRoot, skill: SkillName) -> Self {
+        ArtifactId::SkillFile(SkillFileRef::skill_md(root, skill))
+    }
+
+    /// A file of `skill` in `root`.
+    pub fn skill_file(root: SkillRoot, skill: SkillName, rel: SkillRelPath) -> Self {
+        ArtifactId::SkillFile(SkillFileRef { root, skill, rel })
+    }
+
+    /// What a legacy skill identity stands for: the same `SKILL.md` at the same destination.
+    fn legacy_skill_file(&self) -> Option<SkillFileRef> {
+        let (root, name) = match self {
+            ArtifactId::OpenCodeSkill(name) => (SkillRoot::OpenCode, name),
+            ArtifactId::CodexSkill(name) => (SkillRoot::CodexHome, name),
+            ArtifactId::ClaudeSkill(name) => (SkillRoot::Claude, name),
+            ArtifactId::CursorSkill(name) => (SkillRoot::Cursor, name),
+            ArtifactId::CodexLegacySkill(name) => (SkillRoot::Agents, name),
+            _ => return None,
+        };
+        Some(SkillFileRef::skill_md(root, name.clone()))
+    }
+
+    /// The `SkillFile` a legacy skill identity stands for. `None` for every artifact that is not
+    /// a legacy skill variant (a `SkillFile` is already current).
+    pub fn current_equivalent(&self) -> Option<ArtifactId> {
+        self.legacy_skill_file().map(ArtifactId::SkillFile)
+    }
+
+    /// The skill file this artifact names, under its current or its legacy identity.
+    pub fn as_skill_file(&self) -> Option<SkillFileRef> {
+        match self {
+            ArtifactId::SkillFile(file) => Some(file.clone()),
+            _ => self.legacy_skill_file(),
+        }
+    }
+
+    /// Whether the artifact is a file of a skill: a `SkillFile` or a legacy skill identity.
+    pub fn is_skill_file(&self) -> bool {
+        self.as_skill_file().is_some()
     }
 
     /// Rules files hold the managed base in a marked block; the rest of the
@@ -364,6 +504,7 @@ impl ArtifactId {
             ArtifactId::CursorSkill(_) => SetupSurfaceId::CursorSkills,
             ArtifactId::CursorMcp => SetupSurfaceId::CursorMcp,
             ArtifactId::CodexLegacySkill(_) => SetupSurfaceId::CodexSkills,
+            ArtifactId::SkillFile(file) => file.root.surface(),
             ArtifactId::WorkspaceFile(_) => SetupSurfaceId::WorkspaceBundle,
         }
     }
@@ -401,15 +542,35 @@ pub fn discover_skill_names_for_harness(
     Ok(out)
 }
 
+/// Every file of every skill that targets `harness`, as `SkillFile` artifacts of `root`: the
+/// `SKILL.md` first, then its supporting files.
 fn expand_skill_surface(
     workspace_root: &Path,
     harness: &str,
-    map: impl Fn(SkillName) -> ArtifactId,
+    root: SkillRoot,
 ) -> Result<Vec<ArtifactId>, String> {
-    Ok(discover_skill_names_for_harness(workspace_root, harness)?
-        .into_iter()
-        .map(map)
-        .collect())
+    let mut skills = crate::skill_discovery::skills_for_harness(workspace_root, harness)?;
+    if skills.is_empty() {
+        return Err(format!("no skills target harness {harness}"));
+    }
+    skills.sort_by(|a, b| a.name.cmp(&b.name));
+    let mut artifacts = Vec::new();
+    for skill in skills {
+        let Some(name) = SkillName::new(skill.name.as_str()) else {
+            return Err("invalid skill name in catalog".to_string());
+        };
+        artifacts.push(ArtifactId::skill_md(root, name.clone()));
+        for rel in crate::skill_discovery::skill_support_files(&skill.source_dir)? {
+            let Some(rel_path) = SkillRelPath::new(rel.as_str()) else {
+                return Err(format!(
+                    "skill {} has a supporting file the installer cannot represent: {rel}",
+                    skill.name
+                ));
+            };
+            artifacts.push(ArtifactId::skill_file(root, name.clone(), rel_path));
+        }
+    }
+    Ok(artifacts)
 }
 
 fn expand_agent_surface(
@@ -443,7 +604,7 @@ pub fn expand_surface(
         ),
         SetupSurfaceId::OpenCodeRules => Ok(vec![ArtifactId::OpenCodeRules]),
         SetupSurfaceId::OpenCodeSkills => {
-            expand_skill_surface(workspace_root, "opencode", ArtifactId::OpenCodeSkill)
+            expand_skill_surface(workspace_root, "opencode", SkillRoot::OpenCode)
         }
         SetupSurfaceId::CodexConfig => Ok(vec![ArtifactId::CodexConfig]),
         SetupSurfaceId::CodexAgents => expand_agent_surface(
@@ -453,7 +614,7 @@ pub fn expand_surface(
         ),
         SetupSurfaceId::CodexRules => Ok(vec![ArtifactId::CodexRules]),
         SetupSurfaceId::CodexSkills => {
-            expand_skill_surface(workspace_root, "codex", ArtifactId::CodexSkill)
+            expand_skill_surface(workspace_root, "codex", SkillRoot::CodexHome)
         }
         SetupSurfaceId::ClaudeRules => Ok(vec![ArtifactId::ClaudeRules]),
         SetupSurfaceId::ClaudeAgents => expand_agent_surface(
@@ -462,7 +623,7 @@ pub fn expand_surface(
             ArtifactId::ClaudeAgent,
         ),
         SetupSurfaceId::ClaudeSkills => {
-            expand_skill_surface(workspace_root, "claude", ArtifactId::ClaudeSkill)
+            expand_skill_surface(workspace_root, "claude", SkillRoot::Claude)
         }
         SetupSurfaceId::CursorAgents => expand_agent_surface(
             workspace_root,
@@ -470,7 +631,7 @@ pub fn expand_surface(
             ArtifactId::CursorAgent,
         ),
         SetupSurfaceId::CursorSkills => {
-            expand_skill_surface(workspace_root, "cursor", ArtifactId::CursorSkill)
+            expand_skill_surface(workspace_root, "cursor", SkillRoot::Cursor)
         }
         SetupSurfaceId::CursorMcp => Ok(vec![ArtifactId::CursorMcp]),
         SetupSurfaceId::WorkspaceBundle => expand_workspace_bundle(workspace_root),
@@ -675,6 +836,12 @@ mod tests {
             ArtifactId::OpenCodeConfig,
             ArtifactId::OpenCodeAgent(AgentName::new("repo-scout").unwrap()),
             ArtifactId::CodexSkill(SkillName::new("my-skill").unwrap()),
+            ArtifactId::skill_md(SkillRoot::CodexHome, SkillName::new("my-skill").unwrap()),
+            ArtifactId::skill_file(
+                SkillRoot::Claude,
+                SkillName::new("security-audit").unwrap(),
+                SkillRelPath::new("assets/report-template.html").unwrap(),
+            ),
         ];
         for id in &ids {
             let json = serde_json::to_string(id).expect("serialize");
@@ -776,10 +943,12 @@ mod tests {
 
         let artifacts = expand_surface(SetupSurfaceId::OpenCodeSkills, &ws).expect("expand");
         assert_eq!(artifacts.len(), 2);
-        assert!(artifacts.contains(&ArtifactId::OpenCodeSkill(
+        assert!(artifacts.contains(&ArtifactId::skill_md(
+            SkillRoot::OpenCode,
             SkillName::new("accessibility-review").unwrap()
         )));
-        assert!(artifacts.contains(&ArtifactId::OpenCodeSkill(
+        assert!(artifacts.contains(&ArtifactId::skill_md(
+            SkillRoot::OpenCode,
             SkillName::new("browser-qa").unwrap()
         )));
     }
@@ -796,7 +965,8 @@ mod tests {
 
         let artifacts = expand_surface(SetupSurfaceId::ClaudeSkills, &ws).expect("expand");
         assert_eq!(artifacts.len(), 1);
-        assert!(artifacts.contains(&ArtifactId::ClaudeSkill(
+        assert!(artifacts.contains(&ArtifactId::skill_md(
+            SkillRoot::Claude,
             SkillName::new("accessibility-review").unwrap()
         )));
     }
@@ -903,7 +1073,7 @@ mod tests {
             let surface = a.surface();
             match a {
                 ArtifactId::CursorAgent(_) => assert_eq!(surface, SetupSurfaceId::CursorAgents),
-                ArtifactId::CursorSkill(_) => assert_eq!(surface, SetupSurfaceId::CursorSkills),
+                ArtifactId::SkillFile(_) => assert_eq!(surface, SetupSurfaceId::CursorSkills),
                 ArtifactId::CursorMcp => assert_eq!(surface, SetupSurfaceId::CursorMcp),
                 _ => panic!("Non-Cursor artifact in Cursor set: {a:?}"),
             }
@@ -930,6 +1100,11 @@ mod tests {
             r#"{"type":"ClaudeAgent","name":"Upper"}"#,
             r#"{"type":"CodexSkill","name":"../x"}"#,
             r#"{"type":"CursorSkill","name":""}"#,
+            r#"{"type":"SkillFile","name":{"root":"claude","skill":"../x","rel":"SKILL.md"}}"#,
+            r#"{"type":"SkillFile","name":{"root":"claude","skill":"tdd","rel":"../SKILL.md"}}"#,
+            r#"{"type":"SkillFile","name":{"root":"claude","skill":"tdd","rel":"/etc/passwd"}}"#,
+            r#"{"type":"SkillFile","name":{"root":"claude","skill":"tdd","rel":""}}"#,
+            r#"{"type":"SkillFile","name":{"root":"home","skill":"tdd","rel":"SKILL.md"}}"#,
             r#"{"type":"WorkspaceFile","name":"../x"}"#,
             r#"{"type":"WorkspaceFile","name":"/etc/passwd"}"#,
             r#"{"type":"WorkspaceFile","name":""}"#,
@@ -966,6 +1141,229 @@ mod tests {
             serde_json::from_str::<ArtifactId>(&json).unwrap(),
             ArtifactId::WorkspaceFile(rel)
         );
+    }
+
+    // ── Skill files ──
+
+    fn skill(name: &str) -> SkillName {
+        SkillName::new(name).unwrap()
+    }
+
+    #[test]
+    fn skill_rel_paths_are_bounded_plain_relative_paths() {
+        for valid in [
+            "SKILL.md",
+            "HUNTING.md",
+            "report-schema.json",
+            "LICENSE",
+            "assets/report-template.html",
+            "scripts/verify-report.mjs",
+            "a/b/c/d.txt",
+            "name_with.dots-and_dashes.v2",
+        ] {
+            assert!(SkillRelPath::new(valid).is_some(), "{valid}");
+        }
+        for invalid in [
+            "",
+            "/etc/passwd",
+            "../SKILL.md",
+            "a/../b",
+            "a//b",
+            "a/",
+            "./a",
+            ".hidden",
+            "a/.hidden",
+            "a\\b",
+            "C:\\x",
+            "a b",
+            "a/b/c/d/e.txt",
+            "caf\u{e9}.md",
+        ] {
+            assert!(SkillRelPath::new(invalid).is_none(), "{invalid:?}");
+        }
+    }
+
+    #[test]
+    fn a_skill_file_has_a_stable_identity() {
+        let artifact = ArtifactId::skill_file(
+            SkillRoot::CodexHome,
+            skill("tdd"),
+            SkillRelPath::new("assets/a.txt").unwrap(),
+        );
+        assert_eq!(
+            crate::managed_state::artifact_identity(&artifact),
+            r#"{"type":"SkillFile","name":{"root":"codex_home","skill":"tdd","rel":"assets/a.txt"}}"#
+        );
+        let parsed: ArtifactId = serde_json::from_str(
+            r#"{"type":"SkillFile","name":{"root":"codex_home","skill":"tdd","rel":"assets/a.txt"}}"#,
+        )
+        .unwrap();
+        assert_eq!(parsed, artifact);
+    }
+
+    #[test]
+    fn legacy_skill_identities_keep_their_destination_source_and_surface() {
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        let home = temp_dir("legacy-equivalent-home");
+        let ws = temp_dir("legacy-equivalent-ws");
+        crate::test_env::set_test_user_dirs(&home);
+        std::env::remove_var("CODEX_HOME");
+        std::env::remove_var("CODEX_SKILLS_PATH");
+        crate::test_env::write_canonical_skill(&ws, None, "tdd", "body");
+        let name = skill("tdd");
+        let cases = [
+            (
+                ArtifactId::ClaudeSkill(name.clone()),
+                SkillRoot::Claude,
+                ".claude/skills",
+            ),
+            (
+                ArtifactId::OpenCodeSkill(name.clone()),
+                SkillRoot::OpenCode,
+                ".config/opencode/skills",
+            ),
+            (
+                ArtifactId::CodexSkill(name.clone()),
+                SkillRoot::CodexHome,
+                ".codex/skills",
+            ),
+            (
+                ArtifactId::CodexLegacySkill(name.clone()),
+                SkillRoot::Agents,
+                ".agents/skills",
+            ),
+            (
+                ArtifactId::CursorSkill(name.clone()),
+                SkillRoot::Cursor,
+                ".cursor/skills",
+            ),
+        ];
+        for (legacy, root, folder) in cases {
+            let current = legacy.current_equivalent().expect("equivalent");
+            assert_eq!(current, ArtifactId::skill_md(root, name.clone()));
+            assert_eq!(
+                legacy.resolve_dest(&home, &ws).unwrap(),
+                current.resolve_dest(&home, &ws).unwrap(),
+                "{legacy:?}"
+            );
+            assert!(
+                current
+                    .resolve_dest(&home, &ws)
+                    .unwrap()
+                    .ends_with(format!("{folder}/tdd/SKILL.md")),
+                "{legacy:?}"
+            );
+            assert_eq!(legacy.resolve_source(&ws), current.resolve_source(&ws));
+            assert_eq!(legacy.surface(), current.surface());
+            assert_eq!(
+                legacy.allowlist_root(&home, &ws).unwrap(),
+                current.allowlist_root(&home, &ws).unwrap()
+            );
+            assert!(legacy.is_skill_file());
+            assert_eq!(legacy.as_skill_file(), current.as_skill_file());
+        }
+        assert_eq!(ArtifactId::ClaudeRules.current_equivalent(), None);
+        assert!(!ArtifactId::ClaudeRules.is_skill_file());
+        assert!(
+            !ArtifactId::WorkspaceFile(WorkspaceRelPath::new("skills/a").unwrap()).is_skill_file()
+        );
+        let _ = fs::remove_dir_all(&home);
+        let _ = fs::remove_dir_all(&ws);
+    }
+
+    #[test]
+    fn skill_surfaces_expand_to_every_file_of_every_skill() {
+        let ws = temp_dir("skill-files");
+        crate::test_env::write_canonical_skill(&ws, None, "plain", "body");
+        crate::test_env::write_canonical_skill(&ws, Some("group"), "report", "body");
+        write_file(&ws.join("skills/plain/HUNTING.md"), "hunting");
+        write_file(&ws.join("skills/plain/LICENSE"), "licence");
+        write_file(
+            &ws.join("skills/group/report/assets/report-template.html"),
+            "<html>",
+        );
+        write_file(&ws.join("skills/group/report/scripts/verify.mjs"), "//");
+        write_file(&ws.join("skills/group/report/.DS_Store"), "ignored");
+
+        let artifacts = expand_surface(SetupSurfaceId::ClaudeSkills, &ws).expect("expand");
+        let files: Vec<(String, String)> = artifacts
+            .iter()
+            .map(|artifact| match artifact {
+                ArtifactId::SkillFile(file) => {
+                    assert_eq!(file.root, SkillRoot::Claude);
+                    (
+                        file.skill.as_str().to_string(),
+                        file.rel.as_str().to_string(),
+                    )
+                }
+                other => panic!("unexpected artifact {other:?}"),
+            })
+            .collect();
+        let expected: Vec<(&str, &str)> = vec![
+            ("plain", "SKILL.md"),
+            ("plain", "HUNTING.md"),
+            ("plain", "LICENSE"),
+            ("report", "SKILL.md"),
+            ("report", "assets/report-template.html"),
+            ("report", "scripts/verify.mjs"),
+        ];
+        let expected: Vec<(String, String)> = expected
+            .into_iter()
+            .map(|(skill, rel)| (skill.to_string(), rel.to_string()))
+            .collect();
+        assert_eq!(files, expected);
+        // Every surface installs the same files into its own root.
+        for (surface, root) in [
+            (SetupSurfaceId::CodexSkills, SkillRoot::CodexHome),
+            (SetupSurfaceId::OpenCodeSkills, SkillRoot::OpenCode),
+            (SetupSurfaceId::CursorSkills, SkillRoot::Cursor),
+        ] {
+            let other = expand_surface(surface, &ws).expect("expand");
+            assert_eq!(other.len(), artifacts.len());
+            assert!(other.iter().all(|artifact| matches!(
+                artifact,
+                ArtifactId::SkillFile(file) if file.root == root
+            )));
+            assert!(other.iter().all(|artifact| artifact.surface() == surface));
+        }
+    }
+
+    #[test]
+    fn supporting_files_resolve_beside_the_canonical_skill_md() {
+        let ws = temp_dir("support-source");
+        let home = temp_dir("support-source-home");
+        crate::test_env::write_canonical_skill(&ws, Some("group"), "report", "body");
+        write_file(
+            &ws.join("skills/group/report/assets/report-template.html"),
+            "<html>",
+        );
+        let template = ArtifactId::skill_file(
+            SkillRoot::OpenCode,
+            skill("report"),
+            SkillRelPath::new("assets/report-template.html").unwrap(),
+        );
+        let source = template.resolve_source(&ws).expect("source");
+        assert!(source.ends_with("skills/group/report/assets/report-template.html"));
+        assert!(source.is_file());
+        let dest = template.resolve_dest(&home, &ws).unwrap();
+        assert!(dest.ends_with(".config/opencode/skills/report/assets/report-template.html"));
+        // A retired skill resolves to a file that is not there.
+        let gone = ArtifactId::skill_file(
+            SkillRoot::Claude,
+            skill("retired"),
+            SkillRelPath::new("HUNTING.md").unwrap(),
+        );
+        assert!(!gone.resolve_source(&ws).expect("source").exists());
+    }
+
+    #[test]
+    fn a_broken_supporting_file_fails_the_expansion() {
+        let ws = temp_dir("support-bad-name");
+        crate::test_env::write_canonical_skill(&ws, None, "plain", "body");
+        write_file(&ws.join("skills/plain/has space.md"), "x");
+        let err = expand_surface(SetupSurfaceId::ClaudeSkills, &ws).expect_err("bad name");
+        assert!(err.contains("has space.md"), "{err}");
     }
 
     // ── CODEX_HOME ──
