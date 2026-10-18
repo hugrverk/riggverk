@@ -47,7 +47,7 @@ pub use setup::{
     apply_setup, apply_uninstall, get_installation_status, preview_setup, preview_uninstall,
     rollback_setup_transaction,
 };
-pub use skills::{list_skills, open_skill, read_skill};
+pub use skills::{get_effective_skill_loads, list_skills, open_skill, read_skill};
 pub use status::get_status;
 pub use workspace::{
     get_workspace_diagnostics, open_default_workspace_folder, reset_active_workspace_path,
