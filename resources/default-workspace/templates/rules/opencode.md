@@ -3,7 +3,7 @@
 - Primary agent is `architect`; delegate investigation, review, security, documentation, and verification to shared subagents via the task tool.
 - Skills install to the bundled OpenCode global skills path in flat layout; sync the full skill catalog.
 - Config, permissions, watcher ignores, and MCP entries follow the bundled OpenCode template and app-managed keys only.
-- Respect permission prompts and sandbox boundaries; commands with mutation, network access, or dependency changes need explicit justification.
+- Respect permission prompts and denials (OpenCode has no OS sandbox); commands with mutation, network access, or dependency changes need explicit justification.
 
 ## OpenCode command output
 

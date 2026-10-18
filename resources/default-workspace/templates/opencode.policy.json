@@ -1,7 +1,12 @@
 {
   "top_level": {
     "*": "ask",
-    "external_directory": "ask",
+    "external_directory": {
+      "*": "ask",
+      "~/.claude/skills/*": "allow",
+      "~/.agents/skills/*": "allow",
+      "~/.config/opencode/skills/*": "allow"
+    },
     "doom_loop": "ask",
     "todowrite": "allow",
     "glob": "allow",
@@ -115,7 +120,10 @@
       "opencode.json",
       "opencode.jsonc",
       ".opencode/**",
-      ".github/workflows/**"
+      ".github/workflows/**",
+      "**/.claude/skills/**",
+      "**/.agents/skills/**",
+      "**/.config/opencode/skills/**"
     ],
     "deny": [
       ".env*",
@@ -328,12 +336,15 @@
       "rm -rf*",
       "rm -fr*",
       "sudo*",
-      "*|bash",
-      "*| bash",
-      "* | bash",
-      "*|sh",
-      "*| sh",
-      "* | sh"
+      "bash",
+      "sh",
+      "zsh",
+      "bash -",
+      "sh -",
+      "zsh -",
+      "bash -s*",
+      "sh -s*",
+      "zsh -s*"
     ],
     "secret_content_commands": [
       "cat",
@@ -392,6 +403,37 @@
       "*.jks",
       "Pulumi.*.yaml"
     ]
+  },
+  "builtin_agents": {
+    "plan": {
+      "permission": {
+        "question": "allow",
+        "plan_exit": "allow",
+        "task": {
+          "*": "deny",
+          "explore": "allow",
+          "repo-scout": "allow",
+          "inspector": "allow",
+          "sentinel": "allow",
+          "verifier": "allow"
+        },
+        "edit": {
+          "*": "deny",
+          ".opencode/plans/*.md": "allow",
+          "*opencode/plans/*.md": "allow"
+        }
+      }
+    },
+    "explore": {
+      "from_base": true,
+      "bash_profile": "bash_readonly",
+      "permission": {
+        "*": "deny",
+        "edit": "deny",
+        "task": "deny",
+        "todowrite": "deny"
+      }
+    }
   },
   "role_profiles": {
     "bash_readonly": {
