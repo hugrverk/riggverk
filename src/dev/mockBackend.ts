@@ -718,6 +718,7 @@ function opencodeHealth(): OpenCodeRuntimeHealth {
     default_agent: fresh ? null : "claude",
     model: fresh ? null : "anthropic/claude-sonnet-4-5",
     small_model: fresh ? null : "anthropic/claude-haiku-4-5",
+    subagent_model: null,
     autoupdate: "true",
     snapshot: true,
     bundled_agent_count: 6,
@@ -931,10 +932,15 @@ const configStore = new Map<string, DocumentContent>([
   ["snapshot", { id: "snapshot", title: "opencode.json (generated)", path: `${WORKSPACE}/generated/opencode.json`, section: "generated", source: "generated", content: "{\n  \"model\": \"anthropic/claude-sonnet-4-5\",\n  \"permission\": { \"bash\": \"ask\", \"edit\": \"allow\" }\n}\n" }],
 ]);
 
-let modelSelection: OpenCodeModelSelection = {
+const BUNDLED_MODEL_SELECTION: OpenCodeModelSelection = {
   model: "anthropic/claude-sonnet-4-5",
   small_model: "anthropic/claude-haiku-4-5",
+  subagent_model: "",
+  model_source: "bundled default",
+  small_model_source: "bundled default",
+  subagent_source: "bundled default",
 };
+let modelSelection: OpenCodeModelSelection = BUNDLED_MODEL_SELECTION;
 
 /* ---- actions ---- */
 
@@ -1170,9 +1176,24 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
       return modelSelection;
     case "list_available_opencode_models":
       return { models: ["anthropic/claude-sonnet-4-5", "anthropic/claude-haiku-4-5", "anthropic/claude-opus-4-1", "openai/gpt-5"], warning: scenario === "error" ? "opencode models: provider list unavailable" : null } satisfies ListAvailableModelsResult;
-    case "update_opencode_model_selection":
-      modelSelection = { model: arg<string>(args, "model"), small_model: arg<string>(args, "smallModel") };
-      return `model set to ${modelSelection.model}`;
+    case "update_opencode_model_selection": {
+      const subagent = arg<string | null>(args, "subagentModel") ?? "";
+      // Like the backend: a value equal to the bundled default is not an override.
+      const model = arg<string>(args, "model");
+      const small = arg<string>(args, "smallModel");
+      modelSelection = {
+        model,
+        small_model: small,
+        subagent_model: subagent,
+        model_source: model === BUNDLED_MODEL_SELECTION.model ? "bundled default" : "override",
+        small_model_source: small === BUNDLED_MODEL_SELECTION.small_model ? "bundled default" : "override",
+        subagent_source: subagent ? "override" : "bundled default",
+      };
+      return `Model selection saved. Run Install/Update to apply model=${modelSelection.model}.`;
+    }
+    case "reset_opencode_model_selection":
+      modelSelection = BUNDLED_MODEL_SELECTION;
+      return "Model override removed. Run Install/Update to apply the bundled defaults.";
     default:
       throw new Error(`mock backend: unhandled command "${cmd}"`);
   }

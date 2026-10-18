@@ -40,7 +40,7 @@ Keys fire only when no text field has focus; Escape leaves a field. `Mod` is Cmd
 | | `r` | Preview again after a stale or expired plan |
 | Harness page, targets | Space | Toggle a target (autosaves) |
 | Harness page, rules row | `d` `v` `m` | Diff, Convert, Leave as is |
-| OpenCode runtime pane | `e` `s` `m` | Edit model override, save it, reload models |
+| OpenCode runtime pane | `e` `s` `x` `R` | Edit model override, save it, reset it to the bundled default, reload models |
 | Library | `[` `]` or `<` `>` | Previous or next source |
 | | `i`, Enter | Edit the open item (skills and other read-only items are not editable) |
 | | `Mod+s` | Save (also `:w`) |
@@ -86,7 +86,7 @@ Codex, OpenCode, Cursor, and Claude each have **targets** (what that harness may
 
 Targets are a multi-select list: Space toggles, the change autosaves, and a target that is off is left out of the plan and shown as `off`. Skills are not a target: one `skills` surface installs into the folders the enabled harnesses read, so an update on any harness page can also touch a folder another harness reads. Codex rules, agents, and config are separate targets; `codex_config` starts off.
 
-OpenCode also shows the model override: `e` edits it, `s` saves it to the app-level override file, and the next OpenCode install writes it into the installed config. Deleting the override file returns to the template values (see [OPENCODE_CONFIG.md](OPENCODE_CONFIG.md)).
+OpenCode also shows the model override for `model`, `small model` and an optional `subagent model` (the models of the five read-only subagents; unset, they use the main model): `e` edits it, `s` saves it to the app-level override file, and the next OpenCode install writes it into the installed config. Each row says `source: override | bundled default` and `state: applied | pending apply (u to update)`. `x` deletes the override and returns every row to the bundled default; the next install applies that and removes the subagent entries (see [OPENCODE_CONFIG.md](OPENCODE_CONFIG.md)).
 
 ## Install review
 

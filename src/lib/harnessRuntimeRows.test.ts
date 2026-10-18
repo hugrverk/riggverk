@@ -21,6 +21,7 @@ function opencodeHealth(overrides: Partial<OpenCodeRuntimeHealth> = {}): OpenCod
     default_agent: "architect",
     model: null,
     small_model: null,
+    subagent_model: null,
     autoupdate: "notify",
     snapshot: true,
     bundled_agent_count: 6,

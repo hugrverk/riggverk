@@ -281,6 +281,8 @@ export interface OpenCodeRuntimeHealth {
   default_agent: string | null;
   model: string | null;
   small_model: string | null;
+  /** The model all five subagent roles are pinned to in the installed config; null when they inherit. */
+  subagent_model: string | null;
   autoupdate: string | null;
   snapshot: boolean | null;
   bundled_agent_count: number;
@@ -292,7 +294,7 @@ export interface OpenCodeRuntimeHealth {
   cli: OpenCodeCliHealth | null;
   /** `opencode.json` against the bundled render: synced, diverged, missing, invalid or unknown. */
   config_status: string;
-  /** Managed keys that differ: top-level names, `mcp.<server>` and `agent.<name>`. */
+  /** Managed keys that differ: top-level names, `mcp.<server>`, `agent.<name>` and `agent.<role>.model`. */
   config_diverged_keys: string[];
   /** Global `AGENTS.md` against the bundled rules: synced, diverged, missing or unknown. */
   rules_status: string;
@@ -318,9 +320,19 @@ export interface ListAvailableModelsResult {
   warning: string | null;
 }
 
+/** Where a model value comes from: the app-level override file, or the template. */
+export type OpenCodeModelSource = "override" | "bundled default";
+
 export interface OpenCodeModelSelection {
   model: string;
   small_model: string;
+  /** The model the subagent roles run on; empty while they inherit `model`. */
+  subagent_model: string;
+  /** Each value has its own source: only a value the user changed is an override. */
+  model_source: OpenCodeModelSource;
+  small_model_source: OpenCodeModelSource;
+  /** `override` while a subagent model is set, `bundled default` while the roles inherit `model`. */
+  subagent_source: OpenCodeModelSource;
 }
 
 export interface CodexRuntimeCheck {
