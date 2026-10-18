@@ -22,14 +22,15 @@
 | OpenCode config | `~/.config/opencode/opencode.json` | Managed-key merge. |
 | OpenCode TUI config | `~/.config/opencode/tui.json` | Whole-file managed copy. |
 | Playwright MCP config | `~/.config/playwright-mcp/config.json` (or `PLAYWRIGHT_MCP_CONFIG_PATH`) | Rendered from `templates/playwright-mcp.config.json`. |
-| OpenCode agents / skills | `~/.config/opencode/agents/`, `~/.config/opencode/skills/` | |
+| OpenCode agents | `~/.config/opencode/agents/` | |
 | OpenCode rules | `~/.config/opencode/AGENTS.md` | Managed block merge. |
 | Codex config | `$CODEX_HOME/config.toml` (default `~/.codex/config.toml`) | Allowlisted keys only; `model` and `model_reasoning_effort` create-only. Target `codex_config`, off by default. |
-| Codex agents / skills | `$CODEX_HOME/agents/`, `$CODEX_HOME/skills/` | |
+| Codex agents | `$CODEX_HOME/agents/` | |
 | Codex rules | `$CODEX_HOME/AGENTS.md` | Managed block merge. |
 | Claude rules | `~/.claude/CLAUDE.md` | Managed block merge. |
-| Claude agents / skills | `~/.claude/agents/`, `~/.claude/skills/` | |
-| Cursor agents / skills | `~/.cursor/agents/`, `~/.cursor/skills/` | |
+| Claude agents | `~/.claude/agents/` | |
+| Cursor agents | `~/.cursor/agents/` | |
+| Skills (all harnesses) | `~/.claude/skills/`, `~/.agents/skills/`, and `$CODEX_HOME/skills/` with a customised `CODEX_HOME` | Chosen from the enabled harnesses. The app's copies in `~/.config/opencode/skills/`, `~/.cursor/skills/` and `$CODEX_HOME/skills/` from older versions are removed on update. Per-file ownership, backup and rollback; your files and dot directories are never touched. |
 | Cursor MCP | `~/.cursor/mcp.json` | Playwright entry only. |
 
 Rules files are read in full (up to 4 MB) to locate the managed block. Only the bytes between the BEGIN and END markers are written; text outside them is preserved byte-for-byte, and a file with malformed markers, a diverged pre-block file, or an edited block is refused with zero mutation. The only explicit exception is the user-confirmed rules conversion, which previews the exact resulting file and runs as a backed-up transaction. Backups copy the whole file, so user text in a rules file is stored in the backup root like any other backed-up target. The "leave as is" choice is stored as non-secret identities in `<workspace>/.agent-workspace/rules-preferences.json`.

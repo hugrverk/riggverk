@@ -61,9 +61,9 @@ skills/<group>/<skill>/SKILL.md
 
 One optional group level is supported; deeper nesting is invalid. Every harness installs the canonical `SKILL.md` byte for byte; there are no generated per-harness copies. Text meant for one harness sits at the end of the file under `## Harness notes` (`### Claude Code`, `### Codex`, `### OpenCode`, `### Cursor`), and `python3 scripts/check-skill-routing.py` validates the structure.
 
-Installed layout is flat and holds the whole skill directory: `<harness-skill-root>/<skill-name>/SKILL.md` plus the skill's supporting files at their relative paths. Global destinations: Codex `$CODEX_HOME/skills` (typically `~/.codex/skills`), OpenCode `~/.config/opencode/skills`, Claude Code `~/.claude/skills`, Cursor `~/.cursor/skills`.
+Installed layout is flat and holds the whole skill directory: `<skills-folder>/<skill-name>/SKILL.md` plus the skill's supporting files at their relative paths. Skills are one surface for all harnesses and are installed into the folders the enabled harnesses read: Claude Code `~/.claude/skills`, Codex `~/.agents/skills` (`$CODEX_HOME/skills` with a customised `CODEX_HOME`), and `~/.agents/skills` for OpenCode or Cursor when neither of those is wanted already. The app's copies from older versions in `~/.config/opencode/skills`, `~/.cursor/skills` and `$CODEX_HOME/skills` are removed on update; an edited copy stays.
 
-All skills support all four harnesses. Skills surfaces are not gated by target toggles. Deprecated Agent Workspace skills are matched against bundled reference snapshots: identical managed copies are removed after backup, diverged and unknown copies are preserved.
+All skills support all four harnesses. The skills surface is not gated by target toggles. Deprecated Agent Workspace skills are matched against bundled reference snapshots: identical managed copies are removed after backup, diverged and unknown copies are preserved.
 
 ## Rules
 
@@ -87,7 +87,7 @@ Generated adapters must stay current with their sources; repository checks fail 
 ## Harness ownership
 
 - **OpenCode**: composed rules, native agents, skills, managed config keys (including `lsp: true` for the built-in language servers), `tui.json`, and the named Playwright MCP entry. User provider blocks, unrelated MCP entries, and unknown keys are preserved. The supported runtime is **OpenCode 1.x** (npm `opencode-ai` or `anomalyco/tap/opencode`); Homebrew core's `opencode` installs 2.x, which is detected and flagged but not supported, and the app keeps writing the 1.x config format. Details and the LSP opt-outs are in `docs/OPENCODE_CONFIG.md`.
-- **Codex**: rules, TOML agents, skills, and allowlisted config defaults in `$CODEX_HOME/config.toml` (default `~/.codex/config.toml`). `approval_policy`, `approvals_reviewer`, `sandbox_mode`, and `apps._default.*` follow the template. `model` and `model_reasoning_effort` are create-only: written (`gpt-6.1-sol`, `xhigh`) only when the file has no value, then yours. The `codex_config` target is off by default. A non-empty `AGENTS.override.md` makes Codex ignore `AGENTS.md`; Codex health warns about it. Legacy app-shaped profile selectors and tables are removed during migration only. Copies under the old `~/.agents/skills` location are detected for migration to `$CODEX_HOME/skills`; diverged copies stay conflicts.
+- **Codex**: rules, TOML agents, skills, and allowlisted config defaults in `$CODEX_HOME/config.toml` (default `~/.codex/config.toml`). `approval_policy`, `approvals_reviewer`, `sandbox_mode`, and `apps._default.*` follow the template. `model` and `model_reasoning_effort` are create-only: written (`gpt-6.1-sol`, `xhigh`) only when the file has no value, then yours. The `codex_config` target is off by default. A non-empty `AGENTS.override.md` makes Codex ignore `AGENTS.md`; Codex health warns about it. Legacy app-shaped profile selectors and tables are removed during migration only. Skills install to `~/.agents/skills` (`$CODEX_HOME/skills` with a customised `CODEX_HOME`); the app's older copies in `$CODEX_HOME/skills` are removed on update, and diverged copies stay.
 - **Claude Code**: rules, subagents, and skills. Claude settings, authentication, trust state, caches, and user-scoped MCP credentials stay Claude-managed and are not read or written.
 - **Cursor**: six global agents, skills, and the named Playwright MCP entry in `~/.cursor/mcp.json`, via native Rust operations. User Rules and Auto Review stay manual. Project `.cursor/*`, project agents, project MCP, `.cursorignore`, and `AGENTS.md` are never written.
 
@@ -126,8 +126,8 @@ Harness enablement is an explicit preference, not tool detection. Re-enabling re
 | --- | --- | --- |
 | `AGENT_WORKSPACE_PATH` | app, dev/test | Overrides the workspace path. Takes precedence over Settings. |
 | `AGENT_WORKSPACE_BACKUP_DIR` | app | Overrides the backup root. Must not be `/`, the home directory, or a drive root. |
-| `CODEX_HOME` | app | Codex home for config, rules, agents, and skills (default `~/.codex`). |
-| `CODEX_SKILLS_PATH`, `CLAUDE_SKILLS_PATH`, `OPENCODE_SKILLS_PATH`, `CURSOR_SKILLS_PATH`, `CURSOR_AGENTS_PATH`, `CURSOR_MCP_CONFIG_PATH` | app | Skill, agent, and MCP path overrides for isolation and tests. |
+| `CODEX_HOME` | app | Codex home for config, rules, and agents (default `~/.codex`); a customised home also holds Codex's skills. |
+| `CODEX_SKILLS_PATH`, `CLAUDE_SKILLS_PATH`, `OPENCODE_SKILLS_PATH`, `CURSOR_SKILLS_PATH`, `CURSOR_AGENTS_PATH`, `CURSOR_MCP_CONFIG_PATH` | app | Skill, agent, and MCP path overrides for isolation and tests. `CLAUDE_SKILLS_PATH` must lie inside the home folder; `OPENCODE_SKILLS_PATH` and `CURSOR_SKILLS_PATH` only locate the older copies that are cleaned up. |
 | `PLAYWRIGHT_MCP_CONFIG_PATH`, `PLAYWRIGHT_BROWSERS_PATH` | app | Playwright MCP config file and browser cache. Do not set `PLAYWRIGHT_BROWSERS_PATH=0`. |
 | `XDG_CONFIG_HOME` | app (Linux) | Moves the app support and backup dirs. |
 

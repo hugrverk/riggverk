@@ -57,7 +57,7 @@ On the output pane press `z` (or `:rollback`). The app does a dry run, shows wha
 
 ## Add a skill of your own
 
-Skills you add to the runtime workspace are not installed; harness installs come from the app's bundled catalog. Put a personal skill straight into the harness folder (`~/.claude/skills/<name>/SKILL.md`, `~/.cursor/skills/`, `$CODEX_HOME/skills/`, `~/.config/opencode/skills/`). Unknown skills there are preserved. To change the bundled catalog, edit the app source repository.
+Skills you add to the runtime workspace are not installed; harness installs come from the app's bundled catalog. Put a personal skill straight into a skills folder your harness reads (`~/.claude/skills/<name>/SKILL.md` or `~/.agents/skills/<name>/SKILL.md`). Unknown skills there are preserved. To change the bundled catalog, edit the app source repository.
 
 ## Move the workspace
 
