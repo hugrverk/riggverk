@@ -71,6 +71,7 @@ import type {
   SkillSummary,
   StatusData,
   SurfaceInstallationStatus,
+  TakeBundledPreview,
   UninstallPlanView,
   WorkspaceDiagnostics,
 } from "../types";
@@ -607,6 +608,79 @@ function setFilesKept(surface: FilesSurfaceId, keys: string[], kept: boolean) {
   if (surface === "skills") {
     surfaceStates.set("skills", units.some(unit => unit.state === "conflict") ? "conflict" : "current");
   }
+}
+
+let takeBundledSeq = 0;
+let takeBundledOpen: { surface: FilesSurfaceId; key: string; fingerprint: string; token: string; state: FileUnit["state"] } | null = null;
+/** The unit a take bundled replaced, by transaction, so the rollback brings the conflict back. */
+const takeBundledSnapshots = new Map<string, { surface: FilesSurfaceId; unit: FileUnit }>();
+
+function mockTakeBundled(surface: FilesSurfaceId, keys: string[]): TakeBundledPreview {
+  const [key] = keys;
+  if (keys.length !== 1 || !key) throw new Error("the mock takes one skill or agent at a time");
+  const diff = mockFileDiff(surface, key);
+  const unit = (fileUnits.get(surface) ?? []).find(candidate => candidate.key === key)!;
+  if (!unit.wanted) throw new Error("no bundled copy is wanted in this folder");
+  takeBundledSeq += 1;
+  const fingerprint = `${fakeHash(`take-bundled-${key}`)}${fakeHash(`seq-${takeBundledSeq}`)}`;
+  const token = `tok-take-${takeBundledSeq}`;
+  takeBundledOpen = { surface, key, fingerprint, token, state: unit.state };
+  const prefix = surface === "skills" ? `skill-${unit.key.split(":")[1]}-${unit.name}` : `${surface.replace("_agents", "")}-agent-${unit.name}`;
+  return {
+    surface,
+    units: [
+      {
+        key,
+        name: unit.name,
+        folder: unit.folder,
+        more_files: 0,
+        diff,
+        files: unit.files.map(file => ({
+          rel: file.rel,
+          state: file.state,
+          backup_name: `artifacts/${prefix}~${file.rel.replace(/\//g, "~")}`,
+          installed_digest: `sha256:${fakeHash(`${key}${file.rel}mine`)}`,
+          bundled_digest: `sha256:${fakeHash(`${key}${file.rel}bundled`)}`,
+        })),
+      },
+    ],
+    plan_fingerprint: fingerprint,
+    preview_token: token,
+  };
+}
+
+function applyTakeBundled(surface: FilesSurfaceId, keys: string[], fingerprint: string | null, token: string | null): SetupResult {
+  const open = takeBundledOpen;
+  const key = keys[0];
+  if (!open || open.surface !== surface || open.key !== key || fingerprint !== open.fingerprint) {
+    throw new Error("Plan fingerprint mismatch: the files changed after preview. Re-run preview before applying.");
+  }
+  if (token !== open.token) throw new Error("invalid or expired preview token");
+  const units = fileUnits.get(surface) ?? [];
+  const unit = units.find(candidate => candidate.key === key);
+  if (!unit || unit.state !== open.state) {
+    throw new Error("Plan fingerprint mismatch: the files changed after preview. Re-run preview before applying.");
+  }
+  takeBundledOpen = null;
+  transactionSeq += 1;
+  const id = `2026-10-06T08-50-00Z-${(0x9b00 + transactionSeq).toString(16)}`;
+  takeBundledSnapshots.set(id, { surface, unit: { ...unit, files: unit.files.map(file => ({ ...file })) } });
+  fileUnits.set(surface, units.filter(candidate => candidate.key !== key));
+  if (surface === "skills") {
+    surfaceStates.set("skills", units.some(candidate => candidate.key !== key && candidate.state === "conflict") ? "conflict" : "current");
+  }
+  lastTransactionId = id;
+  const applied = unit.files.map(file => `${unit.folder}/${unit.kind === "skill" ? `${unit.name}/` : ""}${file.rel}`);
+  backups.unshift({ id, timestamp: new Date().toISOString(), path: `${BACKUP_ROOT}/${id}`, targets: [surface], file_count: applied.length });
+  return {
+    success: true,
+    transaction_id: id,
+    applied,
+    failed: [],
+    rolled_back: [],
+    manual_steps: [],
+    message: `applied ${applied.length} · preserved 0 · failed 0 · transaction ${id} recorded`,
+  };
 }
 
 function surfaceDetail(surface: SetupSurfaceId, state: InstallationState): string {
@@ -1444,6 +1518,18 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
       await delay(100);
       setFilesKept(arg<FilesSurfaceId>(args, "surface"), arg<string[]>(args, "units"), arg<boolean>(args, "kept"));
       return null;
+    case "preview_take_bundled":
+      await delay(200);
+      return mockTakeBundled(arg<FilesSurfaceId>(args, "surface"), arg<string[]>(args, "units"));
+    case "apply_take_bundled": {
+      const surface = arg<FilesSurfaceId>(args, "surface");
+      const unit = (fileUnits.get(surface) ?? []).find(candidate => candidate.key === arg<string[]>(args, "units")[0]);
+      await emitProgress(
+        "apply_take_bundled",
+        (unit?.files ?? []).map(file => `${unit?.folder ?? ""}/${file.rel}`),
+      );
+      return applyTakeBundled(surface, arg<string[]>(args, "units"), arg<string | null>(args, "planFingerprint"), arg<string | null>(args, "previewToken"));
+    }
     case "rollback_setup_transaction": {
       const dryRun = arg<boolean>(args, "dryRun");
       const id = arg<string>(args, "transactionId");
@@ -1454,7 +1540,14 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
       }
       if (!dryRun) {
         const snapshot = rulesSnapshots.get(id);
-        if (snapshot) {
+        const replaced = takeBundledSnapshots.get(id);
+        if (replaced) {
+          // Your files are back; the choice to keep them is not, like the backend.
+          const units = fileUnits.get(replaced.surface) ?? [];
+          fileUnits.set(replaced.surface, [...units, { ...replaced.unit, state: "conflict", files: replaced.unit.files.map(file => ({ ...file, state: "conflict", bundle_changed: false })) }]);
+          if (replaced.surface === "skills") surfaceStates.set("skills", "conflict");
+          takeBundledSnapshots.delete(id);
+        } else if (snapshot) {
           for (const [surface, file, state] of snapshot) {
             rulesFiles.set(surface, file);
             surfaceStates.set(surface, state);

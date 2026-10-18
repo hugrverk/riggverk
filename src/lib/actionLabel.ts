@@ -8,6 +8,7 @@ const ACTION_LABELS: Record<string, string> = {
 const ACTION_PREFIXES: Record<string, string> = {
   apply_setup: "",
   apply_rules_conversion: "convert ",
+  apply_take_bundled: "take bundled ",
 };
 
 /**

@@ -9,6 +9,7 @@ import {
   isFilesSurface,
   markedUnit,
   nextUnitKey,
+  NO_BUNDLED_COPY,
   resolvePointer,
   unitFilesText,
   unitLine,
@@ -193,8 +194,24 @@ describe("fileGates", () => {
     expect(handBack.next.visible).toBe(false);
   });
 
+  it("offers take bundled for a unit in conflict and a kept one alike", () => {
+    expect(fileGates(two, conflict, CONTEXT).bundled).toEqual({ visible: true, reason: null });
+    expect(fileGates(modelOf([kept]), kept, CONTEXT).bundled).toEqual({ visible: true, reason: null });
+  });
+
+  it("offers take bundled disabled with a reason for a unit the bundle no longer ships in its folder", () => {
+    const retired = unit({ wanted: false });
+    expect(fileGates(modelOf([retired]), retired, CONTEXT).bundled).toEqual({ visible: true, reason: NO_BUNDLED_COPY });
+    // Keeping and the diff are still there: only the replacement has nothing to take.
+    expect(fileGates(modelOf([retired]), retired, CONTEXT).keep).toEqual({ visible: true, reason: null });
+    // The permanent reason wins over a passing one.
+    expect(fileGates(modelOf([retired]), retired, { ...CONTEXT, busyLabel: "update claude" }).bundled.reason).toBe(NO_BUNDLED_COPY);
+  });
+
   it("gives the reason an action waits: a running task, or a review that is open", () => {
     expect(fileGates(two, conflict, { ...CONTEXT, busyLabel: "update claude" }).keep.reason).toBe("update claude is running");
+    expect(fileGates(two, conflict, { ...CONTEXT, busyLabel: "update claude" }).bundled.reason).toBe("update claude is running");
+    expect(fileGates(two, conflict, { ...CONTEXT, blockedBy: "close the conflict review first" }).bundled.reason).toBe("close the conflict review first");
     expect(fileGates(two, conflict, { ...CONTEXT, blockedBy: "close the install review first" }).diff.reason).toBe("close the install review first");
     // Marking a unit reads nothing and writes nothing: only an open review gets in its way.
     expect(fileGates(two, conflict, { ...CONTEXT, busyLabel: "update claude" }).next.reason).toBeNull();
@@ -216,15 +233,15 @@ describe("texts", () => {
   });
 
   it("points the workspace page at the harness page and the keys there", () => {
-    expect(filesPageHint(modelOf([unit()]), "claude")).toBe("open the claude page: d diff · m keep mine");
+    expect(filesPageHint(modelOf([unit()]), "claude")).toBe("open the claude page: d diff · b take bundled · m keep mine");
     const kept = unit({ state: "kept", files: [{ rel: "SKILL.md", state: "kept", reason: "edited", bundle_changed: false }] });
-    expect(filesPageHint(modelOf([kept]), "claude")).toBe("open the claude page: d diff · m hand back");
+    expect(filesPageHint(modelOf([kept]), "claude")).toBe("open the claude page: d diff · b take bundled · m hand back");
   });
 
   it("points the install review at the page where a file in conflict is resolved", () => {
-    expect(resolvePointer("skills")).toBe("resolve from a harness page: d diff · m keep mine");
-    expect(resolvePointer("claude_agents")).toBe("resolve from the Claude page: d diff · m keep mine");
-    expect(resolvePointer("open_code_agents")).toBe("resolve from the OpenCode page: d diff · m keep mine");
+    expect(resolvePointer("skills")).toBe("resolve from a harness page: d diff · b take bundled · m keep mine");
+    expect(resolvePointer("claude_agents")).toBe("resolve from the Claude page: d diff · b take bundled · m keep mine");
+    expect(resolvePointer("open_code_agents")).toBe("resolve from the OpenCode page: d diff · b take bundled · m keep mine");
     expect(resolvePointer("claude_rules")).toBeNull();
     expect(resolvePointer("workspace_bundle")).toBeNull();
   });

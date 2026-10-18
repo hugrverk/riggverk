@@ -17,12 +17,13 @@ import { useShellState } from "../shell/ShellState";
 import type { FilesSurfaceId, FileUnit } from "../types";
 import type { FileConflictFlow } from "./useFileConflictFlow";
 
-export type FileAction = "diff" | "mine" | "manage";
+export type FileAction = "diff" | "bundled" | "mine" | "manage";
 
-const ACTIONS: readonly FileAction[] = ["diff", "mine", "manage"];
+const ACTIONS: readonly FileAction[] = ["diff", "bundled", "mine", "manage"];
 
 const ACTION_SUMMARY: Record<FileAction, string> = {
   diff: "show your file against the bundled one",
+  bundled: "replace your file by the bundled one; yours is backed up first",
   mine: "keep your version; updates never write it and bundled updates stay visible",
   manage: "hand a kept file back to the app",
 };
@@ -71,10 +72,11 @@ function keepMessage(unit: FileUnit): string {
 }
 
 /**
- * `c` next conflict, `d` diff and `m` keep mine / hand back on a harness page, and the `:resolve` command. All of
- * them read the same gates, so a key and its command are available in exactly the same situations. Keeping and
- * handing back write the choice only (`kept-files.json`), never a skill or agent file; keeping asks first, handing
- * back does not, and the diff goes through the review pane.
+ * `c` next conflict, `d` diff, `b` take bundled and `m` keep mine / hand back on a harness page, and the `:resolve`
+ * command. All of them read the same gates, so a key and its command are available in exactly the same situations.
+ * Keeping and handing back write the choice only (`kept-files.json`), never a skill or agent file; keeping asks
+ * first, handing back does not. The diff and take bundled go through the review pane: take bundled is the only one
+ * that writes a skill or agent file, and only after the review's `y`.
  */
 export function useFileConflictActions({
   harness,
@@ -139,11 +141,12 @@ export function useFileConflictActions({
     const { model, unit } = target;
     onMark(unit.key);
     if (action === "diff") void flow.openDiff(model.surface, unit.key);
+    else if (action === "bundled") void flow.openBundled(model.surface, unit.key);
     else void setKept(model.surface, unit, action === "mine");
   };
 
   const gateFor = (action: FileAction, found: FileGates): FileGate =>
-    action === "diff" ? found.diff : action === "mine" ? found.keep : found.manage;
+    action === "diff" ? found.diff : action === "bundled" ? found.bundled : action === "mine" ? found.keep : found.manage;
 
   // ── Keys ──
   const run = (action: FileAction) => {
@@ -166,6 +169,17 @@ export function useFileConflictActions({
       paneId,
       when: whenFor(gates.diff),
       run: () => run("diff"),
+    },
+    {
+      id: `${harness}.${paneId}.files-bundled`,
+      keys: "b",
+      title: "Replace the marked skill or agent by the bundled version; yours is backed up first",
+      hint: "take bundled",
+      group: "Conflicts",
+      scope: "pane",
+      paneId,
+      when: whenFor(gates.bundled),
+      run: () => run("bundled"),
     },
     {
       id: `${harness}.${paneId}.files-keep`,
@@ -218,11 +232,13 @@ export function useFileConflictActions({
   const unavailable = (action: FileAction, unit: FileUnit): string =>
     action === "mine"
       ? `${unit.name} is already kept (:resolve manage hands it back)`
-      : `${unit.name} is not kept (:resolve mine keeps it)`;
+      : action === "bundled"
+        ? `${unit.name} has no bundled copy to take`
+        : `${unit.name} is not kept (:resolve mine keeps it)`;
 
   const resolveCommand: CommandSpec = {
     name: "resolve",
-    summary: "diff, keep or hand back a conflicting skill or agent file",
+    summary: "diff, take the bundled version of, keep or hand back a conflicting skill or agent file",
     group: "Conflicts",
     args: [
       { name: "action", kind: "enum", values: ACTIONS, describe: value => ACTION_SUMMARY[value as FileAction] },

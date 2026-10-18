@@ -136,10 +136,15 @@ export interface FileGate {
   reason: string | null;
 }
 
+/** Why take bundled is offered but cannot run on a unit the bundle no longer ships in its folder. */
+export const NO_BUNDLED_COPY = "no bundled copy is wanted in this folder";
+
 export interface FileGates {
   /** `c`: mark the next unit. */
   next: FileGate;
   diff: FileGate;
+  /** `b`: replace the unit's files by the bundled ones (yours are backed up). */
+  bundled: FileGate;
   /** `m` on a unit in conflict: keep my version. */
   keep: FileGate;
   /** `m` on a unit the user keeps: hand it back. */
@@ -154,15 +159,17 @@ export interface FileGateContext {
   blockedBy: string | null;
 }
 
-/** What `c`, `d` and `m` (and `:resolve ...`) may do for the marked unit right now. */
+/** What `c`, `d`, `b` and `m` (and `:resolve ...`) may do for the marked unit right now. */
 export function fileGates(model: FileConflictModel | null, unit: FileUnit | null, context: FileGateContext): FileGates {
   const hidden: FileGate = { visible: false, reason: null };
-  if (!model || !unit || !context.workspaceValid) return { next: hidden, diff: hidden, keep: hidden, manage: hidden };
+  if (!model || !unit || !context.workspaceValid) return { next: hidden, diff: hidden, bundled: hidden, keep: hidden, manage: hidden };
   const wait = context.blockedBy ?? (context.busyLabel ? `${context.busyLabel} is running` : null);
   const gate = (visible: boolean): FileGate => ({ visible, reason: visible ? wait : null });
   return {
     next: { visible: model.units.length > 1, reason: model.units.length > 1 ? context.blockedBy : null },
     diff: gate(true),
+    // A conflicting or a kept unit alike; a retired skill has no bundled copy to take.
+    bundled: { visible: true, reason: unit.wanted ? wait : NO_BUNDLED_COPY },
     keep: gate(unit.state === "conflict"),
     manage: gate(unit.state === "kept"),
   };
@@ -178,12 +185,15 @@ export function filesCountsText(model: FileConflictModel): string {
 
 /** What the workspace page tells about the skill and agent files it cannot act on: where the actions are. */
 export function filesPageHint(model: FileConflictModel, pageLabel: string): string {
-  const keys = model.units.some(unit => unit.state === "kept") && model.conflicts === 0 ? "d diff · m hand back" : "d diff · m keep mine";
+  const keys =
+    model.units.some(unit => unit.state === "kept") && model.conflicts === 0
+      ? "d diff · b take bundled · m hand back"
+      : "d diff · b take bundled · m keep mine";
   return `open the ${pageLabel} page: ${keys}`;
 }
 
 /** The pointer line in the install review's detail of a file in conflict. */
 export function resolvePointer(surface: SetupSurfaceId): string | null {
   if (!isFilesSurface(surface)) return null;
-  return `resolve from ${pageOf(surface)}: d diff · m keep mine`;
+  return `resolve from ${pageOf(surface)}: d diff · b take bundled · m keep mine`;
 }

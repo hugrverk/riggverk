@@ -8,6 +8,8 @@ import type {
   RulesConversionPreview,
   RulesDiffView,
   SetupPlan,
+  SetupResult,
+  TakeBundledPreview,
   WorkspaceDiagnostics,
 } from "../types";
 
@@ -154,5 +156,40 @@ describe("mock backend: skill and agent files in conflict or kept", () => {
     expect((await statusOf("claude_agents")).files).toMatchObject({ conflicts: 1, kept: 1 });
     await expect(invoke("set_files_kept", { surface: "claude_agents", units: ["agent:nope"], kept: true })).rejects.toThrow("no conflicting or kept files");
     await expect(invoke("set_files_kept", { surface: "claude_agents", units: [], kept: true })).rejects.toThrow("at least one");
+  });
+
+  it("takes the bundled version of a unit only with the preview's own proof, and the rollback brings the conflict back", async () => {
+    const preview = await invoke<TakeBundledPreview>("preview_take_bundled", { surface: "claude_agents", units: ["agent:sentinel"] });
+    expect(preview.units).toHaveLength(1);
+    expect(preview.units[0]!.files[0]).toMatchObject({ rel: "sentinel.md", state: "kept", backup_name: expect.stringContaining("artifacts/") });
+    expect(preview.units[0]!.diff.files[0]!.kind).toBe("text");
+    await expect(invoke("preview_take_bundled", { surface: "claude_agents", units: ["agent:nope"] })).rejects.toThrow("no conflicting or kept files");
+
+    // Proof from nowhere, or for another preview, changes nothing.
+    await expect(
+      invoke("apply_take_bundled", { surface: "claude_agents", units: ["agent:sentinel"], planFingerprint: "0".repeat(64), previewToken: preview.preview_token }),
+    ).rejects.toThrow("mismatch");
+    expect((await statusOf("claude_agents")).files!.units.map(unit => unit.key)).toContain("agent:sentinel");
+
+    const result = await invoke<SetupResult>("apply_take_bundled", {
+      surface: "claude_agents",
+      units: ["agent:sentinel"],
+      planFingerprint: preview.plan_fingerprint,
+      previewToken: preview.preview_token,
+    });
+    expect(result).toMatchObject({ success: true, applied: ["~/.claude/agents/sentinel.md"] });
+    expect((await statusOf("claude_agents")).files!.units.map(unit => unit.key)).toEqual(["agent:verifier"]);
+    // A token is used once.
+    await expect(
+      invoke("apply_take_bundled", { surface: "claude_agents", units: ["agent:sentinel"], planFingerprint: preview.plan_fingerprint, previewToken: preview.preview_token }),
+    ).rejects.toThrow("mismatch");
+
+    const rolled = await invoke<SetupResult>("rollback_setup_transaction", { transactionId: result.transaction_id, dryRun: false });
+    expect(rolled.success).toBe(true);
+    // The file is back, but not the choice to keep it.
+    expect((await statusOf("claude_agents")).files!.units.map(unit => [unit.key, unit.state])).toEqual([
+      ["agent:verifier", "conflict"],
+      ["agent:sentinel", "conflict"],
+    ]);
   });
 });

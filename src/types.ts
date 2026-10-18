@@ -175,6 +175,36 @@ export interface FileDiffView {
   truncated: boolean;
 }
 
+/** One file a take-bundled review replaces. Digests only: the file text travels in the diff. */
+export interface TakeBundledFile {
+  /** Path below the skill directory, or the agent file name. */
+  rel: string;
+  state: FileUnitState;
+  /** Where your file is backed up, below the backup folder of the transaction (`artifacts/...`). */
+  backup_name: string;
+  /** `sha256:` and twelve hex digits of your file as it is now, and of the bundled file that replaces it. */
+  installed_digest: string;
+  bundled_digest: string;
+}
+
+export interface TakeBundledUnit {
+  key: string;
+  name: string;
+  folder: string;
+  files: TakeBundledFile[];
+  /** Files beyond the ones listed; they are replaced too. */
+  more_files: number;
+  diff: FileDiffView;
+}
+
+/** What replacing the files of these units by the bundled ones would do (`preview_take_bundled`), and the proof to apply it. */
+export interface TakeBundledPreview {
+  surface: FilesSurfaceId;
+  units: TakeBundledUnit[];
+  plan_fingerprint: string;
+  preview_token: string;
+}
+
 /** The surfaces that hold a rules file with the managed base block. */
 export type RulesSurfaceId =
   | "claude_rules"
@@ -735,7 +765,7 @@ export interface UninstallPlanView {
  * the task's own result.
  */
 export interface ApplyProgress {
-  /** The backend command (`apply_setup`, `apply_uninstall`, `apply_rules_conversion`, `rollback_setup_transaction`). */
+  /** The backend command (`apply_setup`, `apply_uninstall`, `apply_rules_conversion`, `apply_take_bundled`, `rollback_setup_transaction`). */
   task: string;
   phase: "backup" | "apply" | "done";
   done: number;

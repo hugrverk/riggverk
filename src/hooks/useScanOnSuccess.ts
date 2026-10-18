@@ -8,8 +8,8 @@ const SCAN_ANIMATION = "view-scan";
 /** The sweep lasts 520 ms; this is the safety net for an animation that never reports its end. */
 const SCAN_FALLBACK_MS = 900;
 
-/** Backend commands whose success is worth a flourish: an install, a rules conversion, a rollback. */
-const SWEEP_COMMANDS = new Set(["apply_setup", "apply_rules_conversion", "rollback_setup_transaction"]);
+/** Backend commands whose success is worth a flourish: an install, a rules conversion, a take bundled, a rollback. */
+const SWEEP_COMMANDS = new Set(["apply_setup", "apply_rules_conversion", "apply_take_bundled", "rollback_setup_transaction"]);
 
 function earnsSweep(result: ActionResult | null): boolean {
   if (!result?.success) return false;
