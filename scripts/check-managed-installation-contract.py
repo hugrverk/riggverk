@@ -221,17 +221,18 @@ def main() -> None:
     if generated_python:
         fail("bundled default workspace contains generated Python cache files")
 
-    # The catalog size is not pinned here: the canonical tree is the source of
-    # truth and must agree with the generated adapter metadata.
+    # The catalog size is not pinned here: the canonical tree is the source of truth, and every
+    # harness installs its SKILL.md directly, so there is no generated skill output to keep current.
     skills = list((ROOT / "resources/default-workspace/skills").rglob("SKILL.md"))
-    adapter_metadata = json.loads(
-        read(ROOT / "resources/default-workspace/metadata/skill-adapters.json")
-    )
-    if not skills or len(skills) != len(adapter_metadata.get("skills", {})):
-        fail(
-            f"bundled skills ({len(skills)}) must match metadata/skill-adapters.json "
-            f"({len(adapter_metadata.get('skills', {}))}); run scripts/generate-skill-adapters.py --write"
-        )
+    if not skills:
+        fail("bundled skills are missing under resources/default-workspace/skills")
+    for retired in (
+        ROOT / "resources/default-workspace/templates/skills",
+        ROOT / "resources/default-workspace/metadata/skill-adapters.json",
+        ROOT / "scripts/generate-skill-adapters.py",
+    ):
+        if retired.exists():
+            fail(f"per-harness skill adapters are retired; remove {retired.relative_to(ROOT)}")
 
     ownership_path = (
         ROOT
@@ -411,7 +412,7 @@ def main() -> None:
         "python3 scripts/generate-pre-manifest-ownership.py --check",
         "python3 scripts/generate-rules-history.py --check",
         "python3 scripts/generate-shipped-digests.py --check",
-        "python3 scripts/generate-skill-adapters.py --check",
+        "python3 scripts/check-skill-routing.py",
         "bash scripts/smoke-pre-manifest-upgrade.sh",
     ):
         if command not in release:

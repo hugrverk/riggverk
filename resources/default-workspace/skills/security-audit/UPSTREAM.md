@@ -15,4 +15,4 @@ Only `SKILL.md` differs from upstream; every other vendored file is byte-identic
 
 1. Clone upstream and diff its `skills/security-audit/` against this directory, ignoring `SKILL.md`, `LICENSE`, this file and the files listed above as not vendored.
 2. Copy the changed files, then reapply the local changes above to the new upstream `SKILL.md`.
-3. Run `node validate-findings.test.cjs` and `node validate-coverage-ledger.test.cjs` in the upstream clone (not vendored here), regenerate the skill adapters and metadata, and record the new commit above.
+3. Run `node validate-findings.test.cjs` and `node validate-coverage-ledger.test.cjs` in the upstream clone (not vendored here), regenerate the shipped digests and pre-manifest ownership metadata, and record the new commit above.

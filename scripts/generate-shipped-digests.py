@@ -10,16 +10,17 @@ prove that, without keeping the old versions themselves.
 
 Format: {"schema": 1, "sources": {"<bundle-relative path>": ["sha256:<hex>", ...]}}
 Keys are the bundle sources a file-copy artifact resolves to (see
-ArtifactId::resolve_source): templates/skills/<harness>/<name>/SKILL.md,
-templates/claude/agents/<name>.md, templates/cursor/agents/<name>.md,
-templates/codex/agents/<name>.toml, agents/<name>.md and
-templates/playwright-mcp.config.json. Skills also have the logical key
-skills/<name>/SKILL.md: the history of the generic skill (older installs copied
-it directly, wherever it lived under skills/) plus its metadata/deprecated-skills
-copy. Each list holds every committed version of that path plus the working-tree
-version. Retired skills and agents are included so stale removal can prove
-ownership. Digests use the format of setup_fingerprint::hash_file. Binary and
-oversized versions are skipped.
+ArtifactId::resolve_source): templates/claude/agents/<name>.md,
+templates/cursor/agents/<name>.md, templates/codex/agents/<name>.toml,
+agents/<name>.md and templates/playwright-mcp.config.json. Every harness installs the canonical
+skill file, so a skill's key is the logical skills/<name>/SKILL.md: the history of the generic skill
+(wherever it lived under skills/) plus its metadata/deprecated-skills copy. Until the canonical
+file became the install source the app shipped one generated adapter per harness; those versions
+stay provable under the legacy keys templates/skills/<harness>/<name>/SKILL.md, which only the
+repository history still holds (the source keys in shipped_digests.rs name the same four
+harnesses). Each list holds every committed version of that path plus the working-tree version.
+Retired skills and agents are included so stale removal can prove ownership. Digests use the
+format of setup_fingerprint::hash_file. Binary and oversized versions are skipped.
 
 Usage:
   python3 scripts/generate-shipped-digests.py --check
@@ -46,7 +47,8 @@ HARNESSES = ("claude", "codex", "cursor", "opencode")
 # Name grammars of SkillName and AgentName in src-tauri/src/artifact_registry.rs.
 SKILL = r"[a-z0-9-]+"
 AGENT = r"[a-z0-9_-]+"
-ADAPTER_SKILL = re.compile(rf"^templates/skills/(?:{'|'.join(HARNESSES)})/({SKILL})/SKILL\.md$")
+# Per-harness adapters are gone from the working tree; their versions live in the history only.
+LEGACY_ADAPTER_SKILL = re.compile(rf"^templates/skills/(?:{'|'.join(HARNESSES)})/({SKILL})/SKILL\.md$")
 # Skills may sit one category directory deep (skills/<category>/<name>/SKILL.md).
 GENERIC_SKILL = re.compile(rf"^skills/(?:{SKILL}/)?({SKILL})/SKILL\.md$")
 DEPRECATED_SKILL = re.compile(rf"^metadata/deprecated-skills/({SKILL})/SKILL\.md$")
@@ -85,7 +87,7 @@ def digest(raw: bytes) -> str:
 
 def source_key(rel: str) -> str | None:
     """Map a bundle-relative path to the metadata key it is recorded under."""
-    if ADAPTER_SKILL.match(rel) or any(pattern.match(rel) for pattern in AGENT_FILES):
+    if LEGACY_ADAPTER_SKILL.match(rel) or any(pattern.match(rel) for pattern in AGENT_FILES):
         return rel
     if rel in SINGLE_FILES:
         return rel

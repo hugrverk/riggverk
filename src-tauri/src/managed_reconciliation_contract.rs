@@ -870,7 +870,7 @@ mod tests {
     }
 
     #[test]
-    fn pre_manifest_crlf_harness_skills_upgrade_to_generated_adapters() {
+    fn pre_manifest_crlf_harness_skills_upgrade_to_the_shared_skill() {
         let _guard = guard::lock();
         let _restore = EnvRestore::capture();
         let fixture =
@@ -894,14 +894,14 @@ mod tests {
         );
         let source = exact_cursor
             .resolve_source(&fixture.ws)
-            .expect("adapter source");
+            .expect("skill source");
         let dest = exact_cursor
             .resolve_dest(&fixture.home, &fixture.ws)
-            .expect("adapter dest");
+            .expect("skill dest");
         assert_eq!(
-            fs::read(dest).expect("installed adapter"),
-            fs::read(source).expect("source adapter"),
-            "installed Cursor skill should be the generated adapter"
+            fs::read(dest).expect("installed skill"),
+            fs::read(source).expect("source skill"),
+            "installed Cursor skill should be the shared canonical skill"
         );
 
         fixture.cleanup();

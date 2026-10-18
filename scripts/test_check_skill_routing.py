@@ -57,10 +57,6 @@ class CheckSkillRoutingTests(unittest.TestCase):
         self.assertIn(old, text)
         path.write_text(text.replace(old, new, 1), encoding="utf-8")
 
-    def regenerate(self) -> None:
-        result = run(self.tree, "generate-skill-adapters.py", "--write")
-        self.assertEqual(result.returncode, 0, result.stderr)
-
     def assert_fails(self, message: str) -> None:
         result = run(self.tree, "check-skill-routing.py")
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
@@ -69,6 +65,67 @@ class CheckSkillRoutingTests(unittest.TestCase):
     def test_baseline_passes(self) -> None:
         result = run(self.tree, "check-skill-routing.py")
         self.assertEqual(result.returncode, 0, result.stderr)
+
+    def append(self, path: Path, text: str) -> None:
+        path.write_text(path.read_text(encoding="utf-8") + text, encoding="utf-8")
+
+    def test_injection_syntax_outside_claude_notes_fails(self) -> None:
+        self.append(self.skill("tdd"), "\nCheck: !`git status`\n")
+        self.assert_fails("Claude injection syntax is only allowed")
+
+    def test_injection_fence_outside_claude_notes_fails(self) -> None:
+        self.append(self.skill("tdd"), "\n```!\ngit status\n```\n")
+        self.assert_fails("Claude injection syntax is only allowed")
+
+    def test_injection_syntax_in_another_harness_subsection_fails(self) -> None:
+        self.edit(self.skill("browser-qa"), "### Codex\n\n", "### Codex\n\n- Run !`ls` first.\n")
+        self.assert_fails("Claude injection syntax is only allowed")
+
+    def test_injection_syntax_in_claude_notes_passes(self) -> None:
+        self.assertIn("!`", self.skill("release-check").read_text(encoding="utf-8"))
+        result = run(self.tree, "check-skill-routing.py")
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_harness_notes_out_of_order_fails(self) -> None:
+        path = self.skill("browser-qa")
+        text = path.read_text(encoding="utf-8")
+        claude = text.index("### Claude Code")
+        codex = text.index("### Codex")
+        path.write_text(text[:claude] + text[codex:] + "\n" + text[claude:codex].rstrip("\n") + "\n", encoding="utf-8")
+        self.assert_fails("harness notes must follow the order")
+
+    def test_unknown_harness_subsection_fails(self) -> None:
+        self.edit(self.skill("browser-qa"), "### Codex\n", "### Gemini\n")
+        self.assert_fails("subsections must be from")
+
+    def test_text_before_first_harness_subsection_fails(self) -> None:
+        self.edit(self.skill("browser-qa"), "## Harness notes\n\n", "## Harness notes\n\nLoose text.\n\n")
+        self.assert_fails("text between '## Harness notes' and its first subsection")
+
+    def test_harness_notes_must_be_the_last_section(self) -> None:
+        self.append(self.skill("browser-qa"), "\n## Extra\n\nMore.\n")
+        self.assert_fails("must be the last '##' section")
+
+    def test_claude_only_frontmatter_needs_claude_notes(self) -> None:
+        self.edit(self.skill("tdd"), "category: ", "allowed-tools: Bash(ls *)\ncategory: ")
+        self.assert_fails("Claude-only frontmatter")
+
+    def test_duplicate_frontmatter_key_fails(self) -> None:
+        self.edit(self.skill("release-check"), "agent: verifier\n", "agent: verifier\nagent: other\n")
+        self.assert_fails("duplicate frontmatter keys ['agent']")
+
+    def test_crlf_and_bom_fail(self) -> None:
+        path = self.skill("tdd")
+        path.write_bytes(path.read_bytes().replace(b"\n", b"\r\n"))
+        self.assert_fails("LF line endings")
+        path.write_bytes(b"\xef\xbb\xbf" + path.read_bytes().replace(b"\r\n", b"\n"))
+        self.assert_fails("UTF-8 BOM")
+
+    def test_leftover_per_harness_adapter_fails(self) -> None:
+        adapter = self.tree / WS / "templates/skills/claude/tdd/SKILL.md"
+        adapter.parent.mkdir(parents=True)
+        adapter.write_text(self.skill("tdd").read_text(encoding="utf-8"), encoding="utf-8")
+        self.assert_fails("templates/skills is retired")
 
     def test_description_over_300_chars_fails(self) -> None:
         self.edit(self.skill("tdd"), "Not for unknown root causes (diagnose).", "Not for unknown root causes (diagnose). " + "x" * 80)
@@ -111,7 +168,6 @@ class CheckSkillRoutingTests(unittest.TestCase):
     def test_user_invoked_flag_on_routed_skill_fails(self) -> None:
         # zoom-out is routed by the global rules; hiding it from the model would be a contradiction.
         self.edit(self.skill("zoom-out"), "category: architecture", "disable-model-invocation: true\ncategory: architecture")
-        self.regenerate()
         self.assert_fails("names user-invoked skill `zoom-out`")
 
     def test_user_invoked_skill_in_composed_sync_rules_fails(self) -> None:

@@ -20,7 +20,7 @@ So editing a file in the workspace changes what the Library shows, not what Clau
 | Concept | Location | Purpose |
 |---------|----------|---------|
 | Docs | `docs/` | Guides and reference |
-| Skills | `skills/`, `templates/skills/` | Canonical skill sources and generated harness adapters |
+| Skills | `skills/` | Canonical skill sources, installed unchanged into every harness |
 | Templates | `templates/` | Source templates for rules and config |
 | Scripts | `scripts/` | CLI installers and helpers, optional |
 | Runtime agents | `agents/`, `agent-specs/` | OpenCode agents and shared agent bodies |
@@ -28,7 +28,7 @@ So editing a file in the workspace changes what the Library shows, not what Clau
 
 ## Skills
 
-Reusable agent instruction files. Canonical skills live under `skills/` (22 in the bundle, all for Codex, OpenCode, Claude, and Cursor). Generated adapters under `templates/skills/<harness>/<skill>/SKILL.md` are what gets installed, flat, to each harness's global skills folder. Skills follow their harness and are never gated by target toggles. See [SKILLS.md](SKILLS.md).
+Reusable agent instruction files. Canonical skills live under `skills/` (25 in the bundle, all for Codex, OpenCode, Claude, and Cursor). The same `SKILL.md` is installed, flat, to each harness's global skills folder; notes meant for one harness sit at the end of the file under `## Harness notes`. Skills follow their harness and are never gated by target toggles. See [SKILLS.md](SKILLS.md).
 
 ## Rules and the managed block
 

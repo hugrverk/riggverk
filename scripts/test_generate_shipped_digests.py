@@ -29,10 +29,26 @@ class ShippedDigestsGeneratorTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.generator = load_generator()
 
-    def test_file_copy_sources_keep_their_own_path_as_key(self) -> None:
+    def test_legacy_per_harness_skill_adapters_keep_their_own_path_as_key(self) -> None:
         for rel in (
             "templates/skills/claude/frontend-design/SKILL.md",
             "templates/skills/codex/tdd/SKILL.md",
+            "templates/skills/opencode/release-check/SKILL.md",
+            "templates/skills/cursor/handoff/SKILL.md",
+        ):
+            self.assertEqual(self.generator.source_key(rel), rel)
+
+    def test_legacy_adapter_harnesses_match_the_app_source_keys(self) -> None:
+        rust = (ROOT / "src-tauri/src/shipped_digests.rs").read_text(encoding="utf-8")
+        match = re.search(r"LEGACY_SKILL_ADAPTER_HARNESSES: \[&str; \d+\] = \[([^\]]*)\]", rust)
+        self.assertIsNotNone(match)
+        self.assertEqual(
+            sorted(re.findall(r'"([a-z]+)"', match.group(1))),
+            sorted(self.generator.HARNESSES),
+        )
+
+    def test_file_copy_sources_keep_their_own_path_as_key(self) -> None:
+        for rel in (
             "templates/claude/agents/repo-scout.md",
             "templates/cursor/agents/verifier.md",
             "templates/codex/agents/security_reviewer.toml",
@@ -113,10 +129,11 @@ class ShippedDigestsGeneratorTests(unittest.TestCase):
             self.assertIn(self.generator.digest(raw), sources.get(key, []), key)
             covered += 1
         self.assertGreater(covered, 0)
-        self.assertTrue(
-            any(re.match(r"^templates/skills/claude/", key) for key in sources),
-            "adapter skill history must be present",
-        )
+        for harness in self.generator.HARNESSES:
+            self.assertTrue(
+                any(re.match(rf"^templates/skills/{harness}/", key) for key in sources),
+                f"{harness} adapter history must stay provable",
+            )
 
 
 if __name__ == "__main__":

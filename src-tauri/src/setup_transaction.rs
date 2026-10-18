@@ -2375,22 +2375,30 @@ mod tests {
     }
 
     #[test]
-    fn missing_generated_skill_adapter_is_unavailable() {
-        let home = temp("missing-adapter-home");
-        let ws = temp("missing-adapter-ws");
+    fn skill_without_a_canonical_source_is_unavailable_and_with_one_is_created() {
+        let home = temp("skill-source-home");
+        let ws = temp("skill-source-ws");
         fs::create_dir_all(&home).unwrap();
-        fs::create_dir_all(ws.join("skills/test-skill")).unwrap();
-        fs::write(
-            ws.join("skills/test-skill/SKILL.md"),
-            "---\nname: test-skill\ndescription: test skill\ntargets: opencode\n---\n# test-skill\n",
-        )
-        .unwrap();
-        let artifact = ArtifactId::OpenCodeSkill(
-            crate::artifact_registry::SkillName::new("test-skill").unwrap(),
+        fs::create_dir_all(&ws).unwrap();
+        let name = |name: &str| crate::artifact_registry::SkillName::new(name).unwrap();
+
+        let missing = ArtifactId::OpenCodeSkill(name("no-such-skill"));
+        assert_eq!(
+            detect_artifact_state(&missing, &ws, &home),
+            (OperationKind::Unavailable, PreviousState::Unavailable)
         );
-        let (kind, previous) = detect_artifact_state(&artifact, &ws, &home);
-        assert_eq!(kind, OperationKind::Unavailable);
-        assert_eq!(previous, PreviousState::Unavailable);
+        for artifact in [
+            ArtifactId::OpenCodeSkill(name("tdd")),
+            ArtifactId::ClaudeSkill(name("tdd")),
+        ] {
+            assert_eq!(
+                detect_artifact_state(&artifact, &ws, &home),
+                (OperationKind::Create, PreviousState::Absent),
+                "{artifact:?}"
+            );
+        }
+        let _ = fs::remove_dir_all(&home);
+        let _ = fs::remove_dir_all(&ws);
     }
 
     #[test]
@@ -3083,7 +3091,7 @@ mod tests {
             ArtifactId::ClaudeSkill(crate::artifact_registry::SkillName::new(retired).unwrap());
         let dest = artifact.resolve_dest(&home, &ws).unwrap();
         let shipped = b"a version the app shipped\n";
-        let key = format!("templates/skills/claude/{retired}/SKILL.md");
+        let key = format!("skills/{retired}/SKILL.md");
         let _inject = inject_shipped(&key, shipped);
         let other_record = crate::stable_digest::bytes(b"an older recorded hash");
         let detect = |record: Option<&str>| {

@@ -27,9 +27,14 @@ mod tests {
     use crate::stable_digest;
     use crate::test_env::{guard, guard::EnvRestore, set_test_user_dirs};
 
-    const SKILL_SOURCE: &str = "templates/skills/claude/tdd/SKILL.md";
+    /// The canonical SKILL.md every harness installs; also the generic shipped-digest key.
+    const SKILL_SOURCE: &str = "skills/tdd/SKILL.md";
     const AGENT_SOURCE: &str = "templates/claude/agents/verifier.md";
-    const CODEX_SKILL_SOURCE: &str = "templates/skills/codex/tdd/SKILL.md";
+    /// Source keys of the per-harness adapters the app shipped before the canonical file.
+    const LEGACY_CLAUDE_SKILL_SOURCE: &str = "templates/skills/claude/tdd/SKILL.md";
+    const LEGACY_CODEX_SKILL_SOURCE: &str = "templates/skills/codex/tdd/SKILL.md";
+    /// The last commit that shipped one SKILL.md adapter per harness.
+    const LAST_PER_HARNESS_ADAPTERS_COMMIT: &str = "fa9e0b48";
 
     fn surface_name(surface: SetupSurfaceId) -> String {
         serde_json::to_value(surface)
@@ -192,6 +197,25 @@ mod tests {
         .expect("apply_setup")
     }
 
+    /// A bundled file as it was committed at `commit`.
+    fn git_show(commit: &str, rel: &str) -> Vec<u8> {
+        let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..");
+        let output = Command::new("git")
+            .args([
+                "show",
+                &format!("{commit}:resources/default-workspace/{rel}"),
+            ])
+            .current_dir(&repo)
+            .output()
+            .expect("run git show");
+        assert!(
+            output.status.success(),
+            "old shipped file missing: {rel}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        output.stdout
+    }
+
     #[test]
     fn shipped_versions_update_despite_a_stale_record_and_roll_back() {
         let env = Installed::new(
@@ -232,8 +256,8 @@ mod tests {
         drop(_none);
 
         let _inject = test_override::inject(&shipped_json(&[
-            (SKILL_SOURCE, old_skill),
-            (CODEX_SKILL_SOURCE, old_codex),
+            (LEGACY_CLAUDE_SKILL_SOURCE, old_skill),
+            (LEGACY_CODEX_SKILL_SOURCE, old_codex),
             (AGENT_SOURCE, old_agent),
         ]));
         let planned =
@@ -257,7 +281,7 @@ mod tests {
         assert!(applied.success, "apply: {}", applied.message);
         for (artifact, source) in [
             (&claude_skill, SKILL_SOURCE),
-            (&codex_skill, CODEX_SKILL_SOURCE),
+            (&codex_skill, SKILL_SOURCE),
             (&agent, AGENT_SOURCE),
         ] {
             let current = fs::read(bundled().join(source)).expect("current source");
@@ -528,28 +552,12 @@ mod tests {
     #[test]
     fn versions_shipped_at_an_old_commit_update_with_the_real_metadata() {
         let env = Installed::new("real-history", FILE_SURFACES);
-        let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..");
-        let show = |rel: &str| -> Vec<u8> {
-            let output = Command::new("git")
-                .args([
-                    "show",
-                    &format!("0e042154:resources/default-workspace/{rel}"),
-                ])
-                .current_dir(&repo)
-                .output()
-                .expect("run git show");
-            assert!(
-                output.status.success(),
-                "old shipped file missing: {rel}: {}",
-                String::from_utf8_lossy(&output.stderr)
-            );
-            output.stdout
-        };
+        let show = |rel: &str| git_show("0e042154", rel);
         let mut replayed = 0;
         for name in ["frontend-design", "diagnose", "tdd", "security-review"] {
-            let rel = format!("templates/skills/claude/{name}/SKILL.md");
-            let old = show(&rel);
-            let current = fs::read(bundled().join(&rel)).expect("current source");
+            let old = show(&format!("templates/skills/claude/{name}/SKILL.md"));
+            let current = fs::read(bundled().join(format!("skills/{name}/SKILL.md")))
+                .expect("current source");
             if old == current {
                 continue;
             }
@@ -584,5 +592,117 @@ mod tests {
         assert!(applied.success, "apply: {}", applied.message);
         let current = fs::read(bundled().join(AGENT_SOURCE)).expect("current agent");
         assert_eq!(env.read(&verifier), current);
+    }
+
+    /// The per-harness adapters the app shipped before every harness installed the canonical
+    /// SKILL.md are still app-owned, with the real embedded metadata and no managed-state at all.
+    /// A hand-edited copy of the same file stays a conflict.
+    #[test]
+    fn old_per_harness_variants_update_without_managed_state_and_an_edit_conflicts() {
+        let env = Installed::new("old-variants", FILE_SURFACES);
+        std::fs::remove_file(crate::managed_state::managed_state_path(&env.ws))
+            .expect("remove managed state");
+        assert!(read_managed_state(&env.ws).is_none());
+        let name = skill("release-check");
+        let current = fs::read(bundled().join("skills/release-check/SKILL.md")).expect("current");
+        let cases = [
+            (
+                ArtifactId::ClaudeSkill(name.clone()),
+                SetupSurfaceId::ClaudeSkills,
+                "claude",
+            ),
+            (
+                ArtifactId::CodexSkill(name.clone()),
+                SetupSurfaceId::CodexSkills,
+                "codex",
+            ),
+            (
+                ArtifactId::OpenCodeSkill(name.clone()),
+                SetupSurfaceId::OpenCodeSkills,
+                "opencode",
+            ),
+            (
+                ArtifactId::CursorSkill(name),
+                SetupSurfaceId::CursorSkills,
+                "cursor",
+            ),
+        ];
+        for (artifact, surface, harness) in &cases {
+            let old = git_show(
+                LAST_PER_HARNESS_ADAPTERS_COMMIT,
+                &format!("templates/skills/{harness}/release-check/SKILL.md"),
+            );
+            assert_ne!(
+                old, current,
+                "{harness}: the old adapter differs from the shared file"
+            );
+            let dest = env.path(artifact);
+            fs::create_dir_all(dest.parent().expect("parent")).expect("skill dir");
+
+            fs::write(&dest, &old).expect("install old variant");
+            assert_eq!(
+                env.planned(*surface, artifact),
+                OperationKind::Update,
+                "{harness}: an old per-harness variant is app-owned"
+            );
+
+            let mut edited = old.clone();
+            edited.extend_from_slice(b"\nmy own note\n");
+            fs::write(&dest, &edited).expect("install edited variant");
+            assert_eq!(
+                env.planned(*surface, artifact),
+                OperationKind::Conflict,
+                "{harness}: a hand-edited variant is not"
+            );
+        }
+
+        // An old Claude variant is replaced by the shared file and recorded.
+        let claude = &cases[0].0;
+        let dest = env.path(claude);
+        fs::write(
+            &dest,
+            git_show(
+                LAST_PER_HARNESS_ADAPTERS_COMMIT,
+                "templates/skills/claude/release-check/SKILL.md",
+            ),
+        )
+        .expect("install old variant");
+        let applied = apply_from(&env.preview(&[SetupSurfaceId::ClaudeSkills]));
+        assert!(applied.success, "apply: {}", applied.message);
+        assert_eq!(env.read(claude), current);
+        assert_eq!(env.record(claude), Some(stable_digest::bytes(&current)));
+    }
+
+    /// One shared SKILL.md: every harness folder receives the canonical file byte for byte.
+    #[test]
+    fn every_harness_installs_identical_bytes_for_the_same_skill() {
+        let env = Installed::new(
+            "identical-bytes",
+            &[
+                SetupSurfaceId::ClaudeSkills,
+                SetupSurfaceId::CodexSkills,
+                SetupSurfaceId::OpenCodeSkills,
+                SetupSurfaceId::CursorSkills,
+            ],
+        );
+        let names =
+            crate::artifact_registry::discover_skill_names_for_harness(&bundled(), "claude")
+                .expect("bundled skills");
+        assert!(!names.is_empty());
+        for name in names {
+            let canonical = fs::read(crate::skill_discovery::canonical_skill_md(
+                &bundled(),
+                name.as_str(),
+            ))
+            .expect("canonical skill");
+            for artifact in [
+                ArtifactId::ClaudeSkill(name.clone()),
+                ArtifactId::CodexSkill(name.clone()),
+                ArtifactId::OpenCodeSkill(name.clone()),
+                ArtifactId::CursorSkill(name.clone()),
+            ] {
+                assert_eq!(env.read(&artifact), canonical, "{artifact:?}");
+            }
+        }
     }
 }
