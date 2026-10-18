@@ -13,7 +13,7 @@ It does:
 - Install and update the workspace and each harness from its bundled copy, after showing a plan.
 - Keep your own text in rules files, and your own keys in config files.
 - Back up what it overwrites, and roll back the last install.
-- Let you edit workspace docs, rules, agents, and configs in the Library, and build prompts.
+- Let you edit workspace docs, rules, agents, and configs in the Library.
 
 It does not:
 
@@ -38,7 +38,7 @@ Fresh settings enable every target except `codex_config`, which rewrites your Co
 
 | Key | Action |
 | --- | --- |
-| `1`-`8` | Go to a tab (workspace, codex, opencode, cursor, claude, library, prompts, settings) |
+| `1`-`7` | Go to a tab (workspace, codex, opencode, cursor, claude, library, settings) |
 | `h` `l` | Previous or next pane |
 | `j` `k` | Move in a list |
 | `u` | Review and apply an install or update |

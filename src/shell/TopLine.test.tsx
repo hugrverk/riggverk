@@ -12,7 +12,7 @@ function tabLabels(container: HTMLElement): Array<string | null> {
 }
 
 describe("TopLine", () => {
-  it("renders Library, Prompt Builder and Settings after the harnesses, in tab order", () => {
+  it("renders Library and Settings after the harnesses, in tab order", () => {
     const { container } = render(
       <TopLine view="start" libraryDirty={false} settingsErrored={false} onSwitchView={vi.fn()} />,
     );
@@ -24,7 +24,6 @@ describe("TopLine", () => {
       "Cursor",
       "Claude",
       "Library",
-      "Prompt Builder",
       "Settings",
     ]);
   });
@@ -48,7 +47,7 @@ describe("TopLine", () => {
     expect(screen.getByRole("button", { name: "Codex" })).not.toBeNull();
     expect(screen.getByRole("button", { name: "Library" })).not.toBeNull();
     const numbers = Array.from(container.querySelectorAll("button.tab b")).map(el => el.textContent);
-    expect(numbers).toEqual(["1", "2", "3", "4", "5", "6", "7"]);
+    expect(numbers).toEqual(["1", "2", "3", "4", "5", "6"]);
     expect(screen.getByRole("button", { name: "Library" }).getAttribute("aria-keyshortcuts")).toBe("5");
   });
 
@@ -56,14 +55,14 @@ describe("TopLine", () => {
     const { container } = render(
       <TopLine view="start" libraryDirty={false} settingsErrored={false} enabledHarnessIds={[]} onSwitchView={vi.fn()} />,
     );
-    expect(tabLabels(container)).toEqual(["Workspace", "Library", "Prompt Builder", "Settings"]);
+    expect(tabLabels(container)).toEqual(["Workspace", "Library", "Settings"]);
   });
 
   it("routes clicks to the correct direct view", () => {
     const onSwitchView = vi.fn<(view: AppView) => void>();
     render(<TopLine view="start" libraryDirty={false} settingsErrored={false} onSwitchView={onSwitchView} />);
-    fireEvent.click(screen.getByRole("button", { name: "Prompt Builder" }));
-    expect(onSwitchView).toHaveBeenLastCalledWith("prompts");
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    expect(onSwitchView).toHaveBeenLastCalledWith("settings");
     fireEvent.click(screen.getByRole("button", { name: "Library" }));
     expect(onSwitchView).toHaveBeenLastCalledWith("library");
     fireEvent.click(screen.getByRole("button", { name: "Workspace" }));
@@ -72,20 +71,20 @@ describe("TopLine", () => {
 
   it("marks the matching tab with aria-current=page", () => {
     const { rerender } = render(
-      <TopLine view="prompts" libraryDirty={false} settingsErrored={false} onSwitchView={vi.fn()} />,
+      <TopLine view="settings" libraryDirty={false} settingsErrored={false} onSwitchView={vi.fn()} />,
     );
-    expect(screen.getByRole("button", { name: "Prompt Builder" }).getAttribute("aria-current")).toBe("page");
+    expect(screen.getByRole("button", { name: "Settings" }).getAttribute("aria-current")).toBe("page");
     expect(screen.getByRole("button", { name: "Library" }).getAttribute("aria-current")).toBeNull();
 
     rerender(<TopLine view="library" libraryDirty={false} settingsErrored={false} onSwitchView={vi.fn()} />);
-    expect(screen.getByRole("button", { name: "Prompt Builder" }).getAttribute("aria-current")).toBeNull();
+    expect(screen.getByRole("button", { name: "Settings" }).getAttribute("aria-current")).toBeNull();
     expect(screen.getByRole("button", { name: "Library" }).getAttribute("aria-current")).toBe("page");
   });
 
   it("exposes positional aria-keyshortcuts on every tab", () => {
     render(<TopLine view="start" libraryDirty={false} settingsErrored={false} onSwitchView={vi.fn()} />);
     expect(screen.getByRole("button", { name: "Workspace" }).getAttribute("aria-keyshortcuts")).toBe("1");
-    expect(screen.getByRole("button", { name: "Settings" }).getAttribute("aria-keyshortcuts")).toBe("8");
+    expect(screen.getByRole("button", { name: "Settings" }).getAttribute("aria-keyshortcuts")).toBe("7");
   });
 
   it("exposes unsaved and error state in the accessible names of Library and Settings, with a warning dot", () => {

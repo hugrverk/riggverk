@@ -34,7 +34,6 @@ describe("useLandingView", () => {
     const { navigate, rerender } = setup({ landingView: undefined, currentView: "start" });
     rerender({ landingView: "start", currentView: "start" });
     rerender({ landingView: "start", currentView: "settings" });
-    rerender({ landingView: "prompts", currentView: "settings" });
     rerender({ landingView: "library", currentView: "settings" });
     expect(navigate).not.toHaveBeenCalled();
   });

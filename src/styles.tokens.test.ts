@@ -12,7 +12,6 @@ const stylePartials = [
   "_targets.scss",
   "_workspace.scss",
   "_library.scss",
-  "_tools-prompt.scss",
   "_dialogs.scss",
   "_terminal.scss",
 ];

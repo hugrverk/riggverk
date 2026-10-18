@@ -1262,6 +1262,7 @@
         "sha256:5129b43f069e2ad37873218ba666e52111245e102b1db0372570834f7446af57",
         "sha256:56cbbfe4194f87af26f9ebf204b0e690899d6ff2a17a3b167b6a3d20ac1a4529",
         "sha256:600fb8126bb5c8301374e23aaf487c37b4b89dec1f67a6c8e8bfba1ee2428cf5",
+        "sha256:62f0684bc3bf8d6111f6a1a0404cb9b1db639a133dafecff7eb57cc8edbc3a82",
         "sha256:6399b3828421c61abe6e2b2043b5db27ccceb5fdaaa21d9b69ff653151d9a9be",
         "sha256:66b2882a52370b8c1c5d858280f4fbf612bce471c455a0399184789dad5b1dc3",
         "sha256:66e0f333b3f23de17096718bc2967fe6edf35b47338ab65f1a6273dd13b6f8b0",
@@ -1288,6 +1289,7 @@
         "sha256:b2ac0090e7e1a09e2892302505b7a269db2b9983b4d34866abf30364c29ab489",
         "sha256:ba1c4121421dcac2f111728e442b96bd53fa2c51d9aa7550083cb46619f66a5a",
         "sha256:bcae2a6b61dd641e45b714c1f5d4513b72da01a305d09765d31d1dfda0f1c4f5",
+        "sha256:c211292e7907f3176d14fb17994711548768a24d7fc850aa3ad6e2d1e273649b",
         "sha256:cfffe34c40946067bce4f00234f594e97763c1b16047e58f6bb9aa0957bc3105",
         "sha256:d047979d5abe9a7d9be0b49ed2ad0e0de865ef7d3dc1e4079c31422864f737c8",
         "sha256:d0672a0ccfd8aca4e474764a99b4496fd4ca428e470f9225e4ce6e4a06e0a93d",
@@ -1804,6 +1806,7 @@
         "sha256:173063dd530e18d8c2832889935b7e4b8f01f51def98ab9a5078bf9a43137964",
         "sha256:2c9f8e2eb5cacbd04dc5f6ca4f191bdcf7b37cf386cfae06553edcb50d889db7",
         "sha256:300156502da94ac3635bcb1dec9e3badf4cb43adbfa39f7a46a4650e3d60d942",
+        "sha256:50cbffd003f7e0497db9a7dd6a4ce9fd346cf66f92c094fb5c74e173d2f81f8f",
         "sha256:54b6982e0503ef6707cc04b96b1b775b82e9890fda7b96e24b851dc71e1de389",
         "sha256:5f8ee6550733992af9894fbdf0f3a534ad85c96a11f3e1cd1b181576636eb4e8",
         "sha256:60444d318b52f8ba8817f84fa514db7e993c2026d246e0e8f3c0d65af2f819de",
@@ -1813,6 +1816,7 @@
         "sha256:8df0db06e62b96647a201c3c3fdb496f89e635742d2447bde791ab26329b50b0",
         "sha256:9d97ce70e8577b8ea92ba593d31f6f40297333f1f627f5981d215bd472c2915b",
         "sha256:a9d1f2886c4d644dc78d52a04f9acffa416fd5774bb7a7c07ea418e80e85a908",
+        "sha256:c7fad8fa82699b6db973aa7941e6cc9184ce5004d1d4432bd04e0b02d6bff758",
         "sha256:d1e5a707471fd4d4704a05b807c63efd1c6bdc5d4b2eb092ff731a872c4b6f81",
         "sha256:e1a5fd8831a8eee82d865d978005afba3960d124659f102bc7d686b4b4504a13",
         "sha256:e3039572bf4688f3554faf1bd342526d630f715a489d789900a1dced5b490f37",
@@ -1862,6 +1866,7 @@
         "sha256:111a78f4bed2a4e76edc8be00395296372248a7d8a315034c5722d2401df715d",
         "sha256:14c8994971c3e714599143d34c4a0d372ee858a245260a007e6e4c5482a6ff9d",
         "sha256:15d3f9383b8f79884353606fdb813bac7780eb37d7a143d3c54f2e148b1b2b8f",
+        "sha256:179f82108b2da24a44a65a608f08805e27d829ebbc14bff7b47dfd9fc26f021f",
         "sha256:22f30da39a5d8e92bbc0194c388526a32c012eb77f39dc4e249d3083d5131834",
         "sha256:28f8cbd2e6e3aac37f01243f1348202dcdf9a4496b4ace749f533f40bfd20038",
         "sha256:3bea18a73d3dc8b11650bbb2a956d49fd7259ee32d37442c2acb8c31d5f2da2f",
@@ -1897,6 +1902,7 @@
         "sha256:ab309c9ea324d777757cc240336dfccc90b1600112c8c1f756eb42769cfc1f8e",
         "sha256:abfa4d359cd4ca98fc8b9c3ae5caff2858a0c5047882548b9ed0249e502b8e71",
         "sha256:b1116ee1844ec2a8b8289a601ca19f8e7706894dda697e1e95cbd3451b50150b",
+        "sha256:b6e1867ecfd9770bf982ed7bd276eb3aa40dc0afce590ea14c22248bea52282a",
         "sha256:b989a2d39a40a7b3ae41c16ac2038c06d0a04ade716260f34244ca265d8d0eab",
         "sha256:bd1e8a6993b906397994edc01e35e7d1950843ad411b02cbed8b4791c84c31ca",
         "sha256:c60ae65a2d9cec29929ae8b167495681232e8511fb82286217e39fd88e1f9cd0",
@@ -1949,36 +1955,6 @@
         "sha256:fb22aae1a73d41c5e3b74b8d0b936b9c40c59c4d8d420a1acd14e9e7206b5b1a",
         "sha256:fc5622c5c835fa8aa157d614f4c7a74db36bc8b81fd9b2cd9ed7165a0a2da917",
         "sha256:fcf824ef93dd2b5db9a6af790a065719828ce56e4e0e2b47dff7747a1200716c"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:docs/prompt-templates/batch-prompt.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:f935000fd23efc7d2e84a58274f066ed6c3c5ecbf11d200ace4d5a7a797cb49f"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:docs/prompt-templates/goal-prompt.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:b45c998e367c540cec5ec9c45ff0504b40e9e7c4fd81abd6a4b45186af20df2e"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:docs/prompt-templates/prompt.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:fb8bd4380638fb0724ec2feae8e375c8963fc4f95246629290e39be1a2ddc665"
       ],
       "action": "update"
     },

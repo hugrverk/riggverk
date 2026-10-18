@@ -467,7 +467,7 @@ describe("LibraryView Docs list", () => {
   });
 
   it("shows the stale banner only for a valid workspace with missing bundled docs", () => {
-    const health: DocsHealth = { missing_count: 2, missing_prompt_template_docs: false, missing_sample: [] };
+    const health: DocsHealth = { missing_count: 2, missing_sample: [] };
     const { update } = renderLibrary({ docs, docsHealth: health, workspaceValid: true });
     expect(screen.getByText("Bundled docs need update")).not.toBeNull();
 
@@ -480,9 +480,9 @@ describe("LibraryView Docs list", () => {
 
   it("sends the stale banner action to the workspace repair page", () => {
     const onGoToWorkspaceRepair = vi.fn();
-    const health: DocsHealth = { missing_count: 1, missing_prompt_template_docs: true, missing_sample: [] };
+    const health: DocsHealth = { missing_count: 1, missing_sample: [] };
     renderLibrary({ docs, docsHealth: health, onGoToWorkspaceRepair });
-    expect(screen.getByText(/Prompt Templates and other bundled docs are missing/)).not.toBeNull();
+    expect(screen.getByText("1 bundled doc is missing from this workspace.")).not.toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "open workspace update" }));
     expect(onGoToWorkspaceRepair).toHaveBeenCalledTimes(1);
   });

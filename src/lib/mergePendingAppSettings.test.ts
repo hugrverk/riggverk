@@ -42,7 +42,7 @@ describe("mergePendingAppSettings", () => {
 
   it("returns the acknowledged settings when nothing is pending", () => {
     const savedSerialized = serializeSettingsForCompare(base);
-    const acknowledged = { ...base, revision: 9, landing_view: "prompts" };
+    const acknowledged = { ...base, revision: 9, landing_view: "library" };
     expect(mergePendingLocalOntoAcknowledged(acknowledged, base, savedSerialized)).toBe(acknowledged);
   });
 });

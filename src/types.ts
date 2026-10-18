@@ -24,7 +24,6 @@ export interface DocSummary {
 
 export interface DocsHealth {
   missing_count: number;
-  missing_prompt_template_docs: boolean;
   missing_sample: string[];
 }
 

@@ -4294,6 +4294,79 @@ mod tests {
         );
     }
 
+    #[test]
+    fn a_workspace_doc_dropped_from_the_bundle_is_a_backed_up_stale_removal() {
+        let env = TempSetupEnv::new("stale-workspace-doc");
+        // Prompt template docs shipped before the Prompt Builder was removed.
+        let stale_doc = |rel: &str| {
+            ArtifactId::WorkspaceFile(crate::artifact_registry::WorkspaceRelPath::new(rel).unwrap())
+        };
+        let (untouched, edited) = (
+            stale_doc("docs/prompt-templates/prompt.md"),
+            stale_doc("docs/prompt-templates/goal-prompt.md"),
+        );
+        let mut records = Vec::new();
+        for artifact in [&untouched, &edited] {
+            let dest = artifact.resolve_dest(&env.home, &env.ws).unwrap();
+            fs::create_dir_all(dest.parent().unwrap()).unwrap();
+            fs::write(&dest, "app copy").unwrap();
+            records.push(crate::managed_state::ManagedArtifactRecord {
+                identity: crate::managed_state::artifact_identity(artifact),
+                hash: crate::stable_digest::bytes(b"app copy"),
+                surface: None,
+            });
+        }
+        let edited_dest = edited.resolve_dest(&env.home, &env.ws).unwrap();
+        fs::write(&edited_dest, "my own changes").unwrap();
+        crate::managed_state::write_managed_state_atomic(
+            &env.ws,
+            &crate::managed_state::ManagedState {
+                schema_version: crate::managed_state::MANAGED_STATE_SCHEMA_VERSION,
+                bundled_version: crate::stable_digest::bytes(b"bundle"),
+                artifacts: records,
+            },
+        )
+        .unwrap();
+
+        let planned = env.plan(&[SetupSurfaceId::WorkspaceBundle]);
+        let kind_of = |artifact: &ArtifactId| {
+            planned
+                .iter()
+                .find(|p| &p.artifact == artifact)
+                .map(|p| p.kind)
+        };
+        assert_eq!(kind_of(&untouched), Some(OperationKind::Remove));
+        assert_eq!(kind_of(&edited), Some(OperationKind::Conflict));
+
+        let stale: Vec<_> = planned
+            .iter()
+            .filter(|p| p.artifact == untouched || p.artifact == edited)
+            .cloned()
+            .collect();
+        let result = apply_planned_artifacts(&stale, vec![], None, &mut ProgressReporter::silent());
+        assert!(result.success, "{}", result.message);
+        assert!(!untouched.resolve_dest(&env.home, &env.ws).unwrap().exists());
+        assert_eq!(
+            fs::read_to_string(&edited_dest).unwrap(),
+            "my own changes",
+            "a user-modified retired doc must be preserved"
+        );
+
+        let manifest = read_manifest(&result.transaction_id);
+        let removed = manifest
+            .operations
+            .iter()
+            .find(|op| op.artifact == untouched && op.kind == OperationKind::Remove)
+            .expect("the removal is recorded in the transaction");
+        let backup_rel = removed.backup_rel.as_ref().expect("removal is backed up");
+        let backup = backup_root()
+            .unwrap()
+            .join("setup")
+            .join(&result.transaction_id)
+            .join(backup_rel);
+        assert_eq!(fs::read_to_string(backup).unwrap(), "app copy");
+    }
+
     // ── Target gating ──
 
     fn disable_targets(ids: &[&str]) {

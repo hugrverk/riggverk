@@ -105,7 +105,6 @@ describe("useAppCommands", () => {
       ["opencode", "opencode"],
       ["cursor", "cursor"],
       ["claude", "claude"],
-      ["prompts", "prompts"],
       ["settings", "settings"],
       ["lib", "library"],
     ])(":%s switches to %s through switchView", (line, view) => {
@@ -503,7 +502,6 @@ describe("useAppCommands", () => {
       "opencode",
       "cursor",
       "claude",
-      "prompts",
       "library",
       "settings",
       "theme",

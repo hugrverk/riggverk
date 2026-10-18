@@ -259,15 +259,15 @@ describe("useAppSettingsController autosave", () => {
     });
 
     await act(async () => {
-      result.current.setLandingView("prompts");
+      result.current.setLandingView("library");
     });
     await act(async () => {
       await result.current.retrySaveSettings();
     });
 
     const updates = invoke.mock.calls.filter(([cmd]) => cmd === "update_settings");
-    expect(updates[1][1].settings.landing_view).toBe("prompts");
-    expect(result.current.appSettings?.landing_view).toBe("prompts");
+    expect(updates[1][1].settings.landing_view).toBe("library");
+    expect(result.current.appSettings?.landing_view).toBe("library");
   });
 
   it("reports an error and keeps edits when the retry conflicts again", async () => {

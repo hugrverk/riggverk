@@ -855,7 +855,6 @@ if (scenario !== "empty") {
   const docRows: Array<[string, string, string]> = [
     ["readme", "README", "root"],
     ["skills-catalog", "SKILLS", "docs"],
-    ["prompt-template", "PROMPT_TEMPLATE", "docs"],
     ["harness-matrix", "HARNESS_MATRIX", "docs"],
     ["backlog", "BACKLOG", "docs"],
   ];
@@ -1134,7 +1133,7 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
     case "list_docs":
       return [...docStore.values()].map(({ id, title, path, section, source }) => ({ id, title, path, section, source })) satisfies DocSummary[];
     case "get_docs_health":
-      return { missing_count: scenario === "conflict" ? 1 : 0, missing_prompt_template_docs: false, missing_sample: scenario === "conflict" ? ["docs/RELEASE.md"] : [] } satisfies DocsHealth;
+      return { missing_count: scenario === "conflict" ? 1 : 0, missing_sample: scenario === "conflict" ? ["docs/RELEASE.md"] : [] } satisfies DocsHealth;
     case "read_doc": {
       const doc = docStore.get(arg<string>(args, "id"));
       if (!doc) throw new Error("doc not found");

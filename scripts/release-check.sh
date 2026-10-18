@@ -944,17 +944,6 @@ for doc in \
 done
 printf '  bundled docs verified non-empty\n'
 
-for doc in \
-  resources/default-workspace/docs/prompt-templates/prompt.md \
-  resources/default-workspace/docs/prompt-templates/goal-prompt.md \
-  resources/default-workspace/docs/prompt-templates/batch-prompt.md; do
-  if [ ! -s "$doc" ]; then
-    printf 'FAIL: prompt template doc missing or empty: %s\n' "$doc" >&2
-    exit 1
-  fi
-done
-printf '  prompt template docs verified non-empty\n'
-
 step "curated Library Docs registry"
 python3 scripts/check-curated-library-docs.py
 
@@ -1897,10 +1886,6 @@ if search_has_match 'repair|update resources|SetupLifecycle|WorkspaceSkillsVerif
   exit 1
 fi
 printf '  Start unified installation owner verified\n'
-
-step "Prompt Builder template contract"
-bash scripts/run-ts-check.sh scripts/check-prompt-loops-templates.ts
-printf '  Prompt Builder skill-weave + clean prompt-block checks ok\n'
 
 step "UI selected-state and stale selector regressions"
 bash scripts/check-ui-regressions.sh

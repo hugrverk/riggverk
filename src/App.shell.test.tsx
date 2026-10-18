@@ -129,7 +129,7 @@ describe("App shell", () => {
     await ready();
     fireEvent.keyDown(document.body, { key: "3" });
     await waitFor(() => expect(currentTab()).toBe("OpenCode"));
-    fireEvent.keyDown(document.body, { key: "8" });
+    fireEvent.keyDown(document.body, { key: "7" });
     await waitFor(() => expect(currentTab()).toBe("Settings"));
     await screen.findByRole("region", { name: "Settings" });
     fireEvent.keyDown(document.body, { key: "1" });

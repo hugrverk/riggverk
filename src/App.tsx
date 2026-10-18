@@ -4,7 +4,6 @@ import { version as APP_VERSION } from "../package.json";
 import { LEAVE_DIRTY_MESSAGE } from "./lib/editorGuards";
 import { invokeOpen } from "./lib/invokeOpen";
 import { useConfirm } from "./components/ConfirmDialog";
-import { ViewFallback } from "./components/ViewFallback";
 import { useBackups } from "./lib/useBackups";
 import { useUninstallRecovery } from "./lib/useUninstallRecovery";
 import { useWorkspaceActions } from "./lib/useWorkspaceActions";
@@ -26,7 +25,6 @@ import { ClaudeView } from "./views/ClaudeView";
 import { OpenCodeView } from "./views/OpenCodeView";
 import { StartView } from "./views/StartView";
 const LibraryView = lazy(() => import("./views/LibraryView").then(m => ({ default: m.LibraryView })));
-const PromptLoopsTool = lazy(() => import("./tools/promptLoops/PromptLoopsTool").then(m => ({ default: m.PromptLoopsTool })));
 const SettingsView = lazy(() => import("./views/SettingsView").then(m => ({ default: m.SettingsView })));
 import { harnessForView } from "./lib/harnessInstallation";
 import { filterVisibleMetadataTargets } from "./lib/harnessVisibility";
@@ -852,12 +850,6 @@ function AppShell() {
             workspaceValid={workspaceValid}
             showConfigs={configTargets.length > 0}
           />
-          </Suspense>
-        )}
-
-        {view === "prompts" && (
-          <Suspense fallback={<ViewFallback title="Prompt Builder" />}>
-            <PromptLoopsTool />
           </Suspense>
         )}
 

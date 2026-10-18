@@ -141,7 +141,7 @@ fn normalize_motion(settings: &mut AppSettings) {
 
 fn normalize_landing_view(value: &str) -> String {
     match value {
-        "start" | "prompts" | "library" => value.to_string(),
+        "start" | "library" => value.to_string(),
         _ => default_landing_view(),
     }
 }
@@ -1275,15 +1275,18 @@ mod tests {
         normalize_for_save(&mut settings).expect("save normalization");
         assert_eq!(settings.landing_view, "start");
 
-        for view in ["start", "prompts", "library"] {
+        for view in ["start", "library"] {
             settings.landing_view = view.into();
             normalize_for_save(&mut settings).expect("save normalization");
             assert_eq!(settings.landing_view, view);
         }
 
-        settings.landing_view = "repo-dashboard".into();
-        normalize_for_save(&mut settings).expect("save normalization");
-        assert_eq!(settings.landing_view, "start");
+        // Views that no longer exist load and save as the workspace view.
+        for removed in ["repo-dashboard", "prompts"] {
+            settings.landing_view = removed.into();
+            normalize_for_save(&mut settings).expect("save normalization");
+            assert_eq!(settings.landing_view, "start");
+        }
     }
 
     #[test]

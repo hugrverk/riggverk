@@ -77,11 +77,9 @@ if not paths:
 skip_dirs = {".git", "dist", "node_modules", "target"}
 regex = re.compile(pattern)
 
-
 def excluded(path: Path) -> bool:
     name = path.as_posix()
     return any(fnmatch.fnmatch(name, glob) for glob in exclude_globs)
-
 
 def iter_files(root: Path):
     if root.is_file():
@@ -96,7 +94,6 @@ def iter_files(root: Path):
             path = Path(current) / name
             if not excluded(path):
                 yield path
-
 
 found = False
 for root in map(Path, paths):
@@ -134,9 +131,6 @@ if search 'border-left:[^;]*2px solid (var\(--accent\)|currentColor)' src/styles
 fi
 
 for selector in \
-  prompt-loops-sidebar-foot \
-  prompt-loops-detail-actions \
-  prompt-loops-btn \
   tools-placeholder \
   app-header \
   nav-icon \
@@ -146,7 +140,6 @@ for selector in \
     fail "deprecated UI selector still present: $selector"
   fi
 done
-
 
 if ! search -U '\.brain-setup-lib-body \.copyable-block-content \{[^}]*overflow: auto;' src/styles >"$ui_tmp"; then
   fail "Brain Setup Library content must define a local scroll container"
@@ -189,17 +182,6 @@ if ! search 'font:\s*inherit' src/styles >"$ui_tmp"; then
   fail "form controls must inherit typography"
 fi
 
-if ! search 'prompt-loops-group-select' src/tools/promptLoops/PromptLoopsTool.tsx >"$ui_tmp"; then
-  fail "Prompt Builder group select must exist"
-fi
-if search 'prompt-loops-sidebar' src/tools --glob '!**/*.test.*' >"$ui_tmp"; then
-  cat "$ui_tmp" >&2
-  fail "legacy tool sidebars must not return"
-fi
-if ! search 'ToolSectionTabs|tool-section-tabs' src/tools/promptLoops/PromptLoopsTool.tsx >"$ui_tmp"; then
-  fail "tool section tabs must exist in Prompt Builder"
-fi
-
 for obsolete in \
   'ToolsView' \
   'ToolsSwitcher' \
@@ -214,12 +196,6 @@ for obsolete in \
   fi
 done
 
-
-if search 'prompt-loops-pill">1–4|tool-sidebar-hints' src/tools/promptLoops/PromptLoopsTool.tsx >"$ui_tmp"; then
-  cat "$ui_tmp" >&2
-  fail "Prompt Builder shortcut hint block must not return"
-fi
-
 if ! search 'lib-docs-markdown' src/views/library/DocContent.tsx >"$ui_tmp"; then
   fail "Library document preview must render the scoped reading surface"
 fi
@@ -229,9 +205,6 @@ fi
 if search 'view === "tools"|AppHeaderView.*tools|"tools"' src/App.tsx src/shell/TopLine.tsx src/shell/views.ts >"$ui_tmp"; then
   cat "$ui_tmp" >&2
   fail "obsolete Tools view must not return in navigation"
-fi
-if ! search '"prompts"' src/shell/TopLine.tsx src/shell/views.ts src/App.tsx >"$ui_tmp"; then
-  fail "direct Prompt Builder view must exist"
 fi
 
 # The shipped UI is offline-first: fonts are vendored and nothing may load from a remote origin.

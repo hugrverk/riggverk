@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import type { AppView } from "../shell/views";
 
-const LANDING_VIEWS: readonly string[] = ["prompts", "library"];
+const LANDING_VIEWS: readonly string[] = ["library"];
 
 interface LandingViewOptions {
   /** Persisted `landing_view`; undefined until settings have loaded. */
