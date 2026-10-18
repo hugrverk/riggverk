@@ -732,18 +732,17 @@ fn apply_rules_artifact(
     rewrite: Option<&setup_transaction::RulesRewrite>,
 ) -> Result<(), String> {
     let root = artifact.allowlist_root(home, workspace_root)?;
-    // A harness that keeps its folder owner-only (Pi makes its agent folder 0700) gets the
-    // folders the app creates for the file the same way.
-    if let crate::artifact_registry::ArtifactId::HarnessRules(harness) = artifact {
-        if let (true, Some(folder)) = (
-            harness.rules().is_some_and(|rules| rules.private_dir),
-            dest.parent(),
-        ) {
-            crate::safe_filesystem::create_private_directory_all_no_symlinks(folder, &root)
-                .map_err(|e| format!("create {}: {e}", folder.display()))?;
-        }
-    }
     if let Some(rewrite) = rewrite {
+        // A file beside the rules file can keep its harness from reading it (Pi); it may have
+        // appeared since the preview, which only compares the rules file itself.
+        if let crate::artifact_registry::ArtifactId::HarnessRules(harness) = artifact {
+            if let Some(conflict) = harness.rules().and_then(|rules| rules.preflight(dest)) {
+                return Err(format!(
+                    "refusing to change rules file: {}",
+                    conflict.message()
+                ));
+            }
+        }
         // An explicit conversion writes exactly the previewed content, and only
         // over the file the preview was computed from.
         let installed =
@@ -759,6 +758,17 @@ fn apply_rules_artifact(
         .map_err(|e| format!("write rules file {}: {e}", dest.display()));
     }
     setup_transaction::ensure_rules_apply_allowed(artifact, workspace_root, home)?;
+    // A harness that keeps its folder owner-only (Pi makes its agent folder 0700) gets the
+    // folders the app creates for the file the same way.
+    if let crate::artifact_registry::ArtifactId::HarnessRules(harness) = artifact {
+        if let (true, Some(folder)) = (
+            harness.rules().is_some_and(|rules| rules.private_dir),
+            dest.parent(),
+        ) {
+            crate::safe_filesystem::create_private_directory_all_no_symlinks(folder, &root)
+                .map_err(|e| format!("create {}: {e}", folder.display()))?;
+        }
+    }
     let source_text = fs::read_to_string(source)
         .map_err(|e| format!("read rules source {}: {e}", source.display()))?;
     let rendered = if dest.exists() {

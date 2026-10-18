@@ -625,6 +625,36 @@ mod tests {
     }
 
     #[test]
+    fn a_conversion_is_refused_when_an_override_appears_after_its_preview() {
+        let env = Env::new("convert-masked", HarnessId::Pi);
+        env.write(USER_FILE);
+        let preview = preview_rules_conversion(env.wire()).unwrap();
+        assert!(preview.applicable, "{:?}", preview.reason);
+
+        fs::write(env.sibling("AGENTS.override.md"), "x").unwrap();
+        let error = apply_rules_conversion(
+            env.wire(),
+            preview.plan_fingerprint.clone(),
+            preview.preview_token.clone(),
+        )
+        .map(|result| result.message)
+        .unwrap_or_else(|error| error);
+        assert!(
+            error.contains("masks") || error.contains("mismatch") || error.contains("refusing"),
+            "{error}"
+        );
+        assert_eq!(env.read(), USER_FILE, "nothing was written");
+        assert_eq!(env.backup_entries(), 0);
+
+        fs::remove_file(env.sibling("AGENTS.override.md")).unwrap();
+        let fresh = preview_rules_conversion(env.wire()).unwrap();
+        let result =
+            apply_rules_conversion(env.wire(), fresh.plan_fingerprint, fresh.preview_token)
+                .unwrap();
+        assert!(result.success, "{}", result.message);
+    }
+
+    #[test]
     fn pi_with_a_claude_md_and_no_agents_md_is_not_given_a_file_that_would_hide_it() {
         let env = Env::new("peer", HarnessId::Pi);
         let peer = env.sibling("CLAUDE.md");

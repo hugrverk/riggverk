@@ -229,7 +229,7 @@ impl LightRules {
             .map(str::trim)
             .filter(|value| !value.is_empty())
             .map(PathBuf::from)
-            .filter(|dir| dir.is_absolute())
+            .filter(|dir| is_plain_absolute_dir(dir))
     }
 
     /// The folder the file must stay inside when it is written, backed up, restored or removed:
@@ -286,6 +286,16 @@ impl LightRules {
         }
         None
     }
+}
+
+/// An absolute folder that is not the file system root and has no `..` in it: it becomes the
+/// allowlisted root of a file, so it must name one place.
+fn is_plain_absolute_dir(dir: &Path) -> bool {
+    dir.is_absolute()
+        && dir.parent().is_some()
+        && !dir
+            .components()
+            .any(|part| matches!(part, std::path::Component::ParentDir))
 }
 
 fn join_rel(base: PathBuf, rel: &str) -> PathBuf {
@@ -893,10 +903,19 @@ mod tests {
             kilo.resolve_dest_with(home, Some("/data/config")),
             Path::new("/data/config").join("kilo").join("AGENTS.md")
         );
-        // A relative value is not a path the XDG specification allows: it is ignored.
+        // A relative value is not a path the XDG specification allows: it is ignored. So is one
+        // that is the file system root or climbs with `..`, which would widen the allowlist.
+        for bad in ["relative/dir", "/", "/data/../etc", "/data/config/.."] {
+            assert_eq!(
+                kilo.resolve_dest_with(home, Some(bad)),
+                home.join(".config").join("kilo").join("AGENTS.md"),
+                "{bad}"
+            );
+            assert_eq!(kilo.allowlist_root_with(home, Some(bad)), home, "{bad}");
+        }
         assert_eq!(
-            kilo.resolve_dest_with(home, Some("relative/dir")),
-            home.join(".config").join("kilo").join("AGENTS.md")
+            kilo.resolve_dest_with(home, Some("/data/config/")),
+            Path::new("/data/config").join("kilo").join("AGENTS.md")
         );
     }
 
