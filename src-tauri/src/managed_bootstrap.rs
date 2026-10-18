@@ -590,4 +590,107 @@ mod tests {
         let other = ArtifactId::OpenCodeAgent(AgentName::new("custom").expect("custom"));
         assert!(!approved_historical_digest(&other, "remove", &digest));
     }
+
+    // ── Skills the app may have installed, found on disk without a record ──
+
+    fn scan_fixture(label: &str) -> (std::path::PathBuf, std::path::PathBuf, std::path::PathBuf) {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        let base = std::env::temp_dir().join(format!("aw-legacy-scan-{label}-{nanos}"));
+        let home = base.join("home");
+        let ws = base.join("runtime");
+        fs::create_dir_all(&home).expect("home");
+        fs::create_dir_all(ws.join("skills")).expect("runtime skills");
+        (base, home, ws)
+    }
+
+    fn put(path: &Path, text: &str) {
+        fs::create_dir_all(path.parent().expect("parent")).expect("dir");
+        fs::write(path, text).expect("file");
+    }
+
+    fn clear_skill_env() {
+        for variable in [
+            "CODEX_HOME",
+            "CODEX_SKILLS_PATH",
+            "CLAUDE_SKILLS_PATH",
+            "OPENCODE_SKILLS_PATH",
+            "CURSOR_SKILLS_PATH",
+        ] {
+            unsafe { std::env::remove_var(variable) };
+        }
+    }
+
+    #[test]
+    fn the_scan_finds_current_skills_only_in_unwanted_roots_and_retired_ones_everywhere() {
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        let (base, home, ws) = scan_fixture("roots");
+        crate::test_env::set_test_user_dirs(&home);
+        clear_skill_env();
+        let retired = REMOVED_SKILL_NAMES[0];
+        for root in SkillRoot::ALL {
+            let dir = root.path(&home).expect("root");
+            put(&dir.join("tdd/SKILL.md"), "tdd\n");
+            put(&dir.join(retired).join("SKILL.md"), "retired\n");
+            // Not the app's: foreign skills, dot directories, directories without a SKILL.md.
+            put(&dir.join("my-own-skill/SKILL.md"), "mine\n");
+            put(&dir.join(".system/tdd/SKILL.md"), "codex\n");
+            put(&dir.join("zoom-out/notes.md"), "no SKILL.md\n");
+        }
+        // A bundled supporting file next to an old copy is a candidate too, a file of the user's
+        // is not.
+        let opencode = SkillRoot::OpenCode.path(&home).unwrap();
+        put(&opencode.join("security-audit/SKILL.md"), "old\n");
+        put(&opencode.join("security-audit/HUNTING.md"), "old\n");
+        put(&opencode.join("security-audit/my-notes.md"), "mine\n");
+
+        let wanted = SkillScope::of(&[SkillRoot::Claude, SkillRoot::Agents]);
+        let found = legacy_skill_artifacts(&ws, &home, &wanted).expect("scan");
+        let has = |root: SkillRoot, skill: &str, rel: &str| {
+            found.contains(&ArtifactId::skill_file(
+                root,
+                SkillName::new(skill).unwrap(),
+                crate::artifact_registry::SkillRelPath::new(rel).unwrap(),
+            ))
+        };
+        for root in SkillRoot::ALL {
+            let is_wanted = wanted.contains(root);
+            assert_eq!(has(root, "tdd", "SKILL.md"), !is_wanted, "tdd in {root:?}");
+            assert!(has(root, retired, "SKILL.md"), "{retired} in {root:?}");
+            assert!(!has(root, "my-own-skill", "SKILL.md"), "{root:?}");
+            assert!(!has(root, "zoom-out", "notes.md"), "{root:?}");
+        }
+        assert!(found.iter().all(|artifact| !artifact
+            .as_skill_file()
+            .expect("skill file")
+            .skill
+            .as_str()
+            .starts_with('.')));
+        assert!(has(SkillRoot::OpenCode, "security-audit", "SKILL.md"));
+        assert!(has(SkillRoot::OpenCode, "security-audit", "HUNTING.md"));
+        assert!(!has(SkillRoot::OpenCode, "security-audit", "my-notes.md"));
+        let _ = fs::remove_dir_all(base);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn the_scan_skips_symlinked_skills() {
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        let (base, home, ws) = scan_fixture("symlink");
+        crate::test_env::set_test_user_dirs(&home);
+        clear_skill_env();
+        let elsewhere = base.join("elsewhere/tdd");
+        put(&elsewhere.join("SKILL.md"), "tdd\n");
+        let root = SkillRoot::OpenCode.path(&home).unwrap();
+        fs::create_dir_all(&root).unwrap();
+        std::os::unix::fs::symlink(&elsewhere, root.join("tdd")).unwrap();
+        let found = legacy_skill_artifacts(&ws, &home, &SkillScope::of(&[SkillRoot::Claude]))
+            .expect("scan");
+        assert!(found.is_empty(), "{found:?}");
+        let _ = fs::remove_dir_all(base);
+    }
 }
