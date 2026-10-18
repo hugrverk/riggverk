@@ -226,6 +226,17 @@ pub struct PlannedArtifact {
     /// Set on a skill or agent file in conflict the user can resolve (and on one the user keeps);
     /// `None` for every other artifact and for a conflict something blocks.
     pub file: Option<crate::file_conflicts::FileConflict>,
+    /// Set only by [`plan_take_bundled`]: the user's file in conflict is replaced by the bundled one,
+    /// and only while it is still the file the user reviewed. `None` for every regular plan.
+    pub overwrite: Option<Overwrite>,
+}
+
+/// A skill or agent file the user chose to replace by the bundled version (their version is backed
+/// up first). Apply refuses to write when the file changed since the preview.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Overwrite {
+    /// Digest of the installed file the preview was computed from.
+    pub expected_installed_digest: String,
 }
 
 /// A rules file the user chose to convert: the complete new content, and the
@@ -395,6 +406,18 @@ pub fn consume_preview_token(token: &str) -> Result<(), String> {
     }
     entry.consumed = true;
     Ok(())
+}
+
+/// Makes every issued token older than its lifetime, as if the preview had been left open.
+#[cfg(test)]
+pub fn expire_preview_tokens_for_test() {
+    if let Ok(mut map) = preview_tokens().lock() {
+        for entry in map.values_mut() {
+            entry.issued_at = SystemTime::now()
+                .checked_sub(std::time::Duration::from_secs(PREVIEW_TOKEN_TTL_SECS + 1))
+                .unwrap_or(UNIX_EPOCH);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -1092,6 +1115,7 @@ pub fn conversion_operation(
         rules_rewrite: Some(rewrite),
         mcp: None,
         file: None,
+        overwrite: None,
     }
 }
 
@@ -1117,6 +1141,174 @@ pub fn conversion_fingerprint(
         rewrite.expected_installed_digest.clone(),
         crate::stable_digest::bytes(rewrite.content.as_bytes()),
     ])
+}
+
+/// Why no unit of that key can be replaced; a fixed phrase, never file text.
+const TAKE_BUNDLED_UNKNOWN: &str = "this skill or agent has no conflicting or kept files right now";
+
+/// The operations that replace the files of these units by the bundled ones, from a fresh plan of
+/// `surface`. See [`take_bundled_operations`].
+pub fn plan_take_bundled(
+    surface: SetupSurfaceId,
+    unit_keys: &[String],
+    workspace_root: &Path,
+    home: &Path,
+) -> Result<Vec<PlannedArtifact>, String> {
+    let planned = plan_artifacts_for_surfaces(&[surface], workspace_root, home)?;
+    take_bundled_operations(&planned, surface, unit_keys, workspace_root, home)
+}
+
+/// The operations that replace the files of these units by the bundled ones, taken from `planned`
+/// (a plan of `surface`).
+///
+/// Only the currently resolvable files of the named units are selected: files in conflict, and
+/// files the user keeps. Everything else in the plan (other conflicts, other safe updates) is left
+/// out, so exactly the chosen files are written. The request fails closed: a unit that is unknown,
+/// no longer a conflict, blocked by a link or a folder, or not wanted in its folder is an error and
+/// nothing is selected. Each operation is an `Update` of a managed file (so it is backed up, rolled
+/// back and recorded like any update) carrying the digest of the file as it is now.
+pub fn take_bundled_operations(
+    planned: &[PlannedArtifact],
+    surface: SetupSurfaceId,
+    unit_keys: &[String],
+    workspace_root: &Path,
+    home: &Path,
+) -> Result<Vec<PlannedArtifact>, String> {
+    if !crate::file_conflicts::is_files_surface(surface) {
+        return Err(format!("{} has no skill or agent files", surface.label()));
+    }
+    if unit_keys.is_empty() {
+        return Err("name at least one skill or agent".to_string());
+    }
+    let units = crate::file_conflicts::units(planned);
+    let mut seen = HashSet::new();
+    let mut operations = Vec::new();
+    for key in unit_keys.iter().filter(|key| seen.insert(key.as_str())) {
+        let unit = units
+            .iter()
+            .find(|candidate| &candidate.key == key)
+            .ok_or_else(|| TAKE_BUNDLED_UNKNOWN.to_string())?;
+        if !unit.wanted {
+            return Err("no bundled copy is wanted in this folder".to_string());
+        }
+        for operation in &unit.files {
+            let resolvable = operation.file.is_some_and(|file| file.wanted)
+                && matches!(
+                    operation.kind,
+                    OperationKind::Conflict | OperationKind::Manual
+                )
+                && crate::kept_files::is_keepable(&operation.artifact);
+            if !resolvable {
+                return Err(TAKE_BUNDLED_UNKNOWN.to_string());
+            }
+            let (source, dest) =
+                validate_artifact_source_dest(&operation.artifact, workspace_root, home)
+                    .map_err(|_| BLOCKED_FILE.to_string())?;
+            if skill_destination_blocked(&operation.artifact, &dest, home, workspace_root)
+                || !dest.is_file()
+                || !source.is_file()
+            {
+                return Err(BLOCKED_FILE.to_string());
+            }
+            // The backup reads the whole file into memory, and the file is the user's: bound it.
+            let size = fs::metadata(&dest)
+                .map_err(|e| format!("read {}: {e}", dest.display()))?
+                .len();
+            if size > MAX_REPLACED_FILE_BYTES {
+                return Err(
+                    "a file is too large to back up here; nothing can be replaced".to_string(),
+                );
+            }
+            let installed = crate::stable_digest::file(&dest)?;
+            if crate::stable_digest::file(&source)? == installed {
+                // Already the bundled file: there is nothing to replace.
+                return Err(TAKE_BUNDLED_UNKNOWN.to_string());
+            }
+            operations.push(PlannedArtifact {
+                artifact: operation.artifact.clone(),
+                surface: operation.surface,
+                kind: OperationKind::Update,
+                previous_state: PreviousState::ManagedFile,
+                rollback_action: rollback_action_for(
+                    OperationKind::Update,
+                    PreviousState::ManagedFile,
+                ),
+                rules: None,
+                rules_rewrite: None,
+                mcp: None,
+                // Kept for the fingerprint: keeping or handing back after the preview makes it stale.
+                file: operation.file,
+                overwrite: Some(Overwrite {
+                    expected_installed_digest: installed,
+                }),
+            });
+        }
+    }
+    Ok(operations)
+}
+
+const BLOCKED_FILE: &str = "a link or folder is in the way; nothing can be replaced here";
+/// Largest installed file a take bundled replaces (it is backed up first).
+const MAX_REPLACED_FILE_BYTES: u64 = 64 * 1024 * 1024;
+
+/// Fingerprint of a take-bundled request: the regular plan fingerprint of the operations plus, for
+/// every file, the exact digest of the installed file the user reviewed and whether they keep it.
+/// An edit of a file, or keeping or handing back one, after the preview therefore changes it.
+pub fn overwrite_fingerprint(
+    workspace_root: &Path,
+    home: &Path,
+    operations: &[PlannedArtifact],
+) -> Result<String, String> {
+    if operations.is_empty() {
+        return Err("take bundled without files".to_string());
+    }
+    let mut surfaces: Vec<SetupSurfaceId> = Vec::new();
+    let mut files: Vec<String> = Vec::new();
+    for operation in operations {
+        let overwrite = operation
+            .overwrite
+            .as_ref()
+            .ok_or_else(|| "take bundled without a reviewed file".to_string())?;
+        if !surfaces.contains(&operation.surface) {
+            surfaces.push(operation.surface);
+        }
+        let kept = operation.file.is_some_and(|file| file.kept.is_some());
+        files.push(format!(
+            "{}={}:{}",
+            crate::managed_state::artifact_identity(&operation.artifact),
+            overwrite.expected_installed_digest,
+            if kept { "kept" } else { "conflict" }
+        ));
+    }
+    files.sort();
+    let mut parts = vec![
+        compute_plan_fingerprint(workspace_root, &surfaces, operations, home)?,
+        "take_bundled".to_string(),
+    ];
+    parts.extend(files);
+    stable_fingerprint(&parts)
+}
+
+/// Re-checks, at write time, that a file may still be replaced by the bundled one: it is a skill
+/// or agent file, a regular file with no link in its path, and still the bytes the user reviewed.
+/// The plan came from an earlier read, and an edit made since must never be overwritten.
+pub fn ensure_overwrite_allowed(
+    artifact: &ArtifactId,
+    workspace_root: &Path,
+    home: &Path,
+    overwrite: &Overwrite,
+) -> Result<(), String> {
+    if !crate::kept_files::is_keepable(artifact) {
+        return Err("only a skill or agent file can be replaced by the bundled one".to_string());
+    }
+    let dest = artifact.resolve_dest(home, workspace_root)?;
+    if skill_destination_blocked(artifact, &dest, home, workspace_root) || !dest.is_file() {
+        return Err(BLOCKED_FILE.to_string());
+    }
+    if crate::stable_digest::file(&dest)? != overwrite.expected_installed_digest {
+        return Err("file changed since preview; preview again".to_string());
+    }
+    Ok(())
 }
 
 /// Re-checks, at apply time, that a rules file may still be written: the plan
@@ -1369,6 +1561,7 @@ pub fn plan_artifacts_for_uninstall(
                 rules_rewrite: None,
                 mcp: None,
                 file: None,
+                overwrite: None,
             });
         } else {
             preserved.push(artifact);
@@ -1424,6 +1617,7 @@ pub fn plan_artifacts_for_uninstall(
                     rules_rewrite: None,
                     mcp: None,
                     file: None,
+                    overwrite: None,
                 });
             }
             OperationKind::Conflict => preserved.push(artifact),
@@ -1659,6 +1853,7 @@ pub fn plan_artifacts_for_surfaces_in(
             rules_rewrite: None,
             mcp: mcp.and_then(|plan| plan.state),
             file,
+            overwrite: None,
         });
     }
 
@@ -1744,6 +1939,7 @@ pub fn plan_artifacts_for_surfaces_in(
             rules_rewrite: None,
             mcp: None,
             file,
+            overwrite: None,
         });
     }
     keep_stale_units_whole(&mut planned);

@@ -105,14 +105,14 @@ describe("StartView skill and agent files", () => {
     renderInFrame(<StartView {...props({ overview: overviewWith(CONFLICT, { conflict_count: 1 }) })} />);
     expect(detail().textContent).not.toContain("in conflict");
     moveTo("claude");
-    expect(detail().textContent).toContain("1 in conflict · open the claude page: d diff · m keep mine");
+    expect(detail().textContent).toContain("1 in conflict · open the claude page: d diff · b take bundled · m keep mine");
   });
 
   it("tells the files the user keeps beside a current harness, and does not call it plain current", () => {
     renderInFrame(<StartView {...props({ overview: overviewWith(KEPT, { kept_count: 1 }) })} />);
     expect(listRow("claude").textContent).toContain("current · you manage 1");
     moveTo("claude");
-    expect(detail().textContent).toContain("you manage 1 · open the claude page: d diff · m hand back");
+    expect(detail().textContent).toContain("you manage 1 · open the claude page: d diff · b take bundled · m hand back");
     const skills = within(screen.getByRole("list", { name: "claude surfaces" })).getAllByRole("listitem").find(row => row.textContent!.includes("skills"))!;
     expect(skills.querySelector(".meta")!.textContent).toBe("you manage");
   });

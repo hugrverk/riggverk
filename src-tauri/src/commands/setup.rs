@@ -839,10 +839,20 @@ fn apply_single_artifact(
     workspace_root: &Path,
     home: &Path,
     rules_rewrite: Option<&setup_transaction::RulesRewrite>,
+    overwrite: Option<&setup_transaction::Overwrite>,
 ) -> Result<(), String> {
     let (source, dest) =
         setup_transaction::validate_artifact_source_dest(artifact, workspace_root, home)?;
     let root = artifact.allowlist_root(home, workspace_root)?;
+
+    // A replacement the user asked for writes over their own file: only a skill or agent file, and
+    // only while it is still the file they reviewed. Checked before any branch below can write.
+    if let Some(overwrite) = overwrite {
+        if rules_rewrite.is_some() {
+            return Err("a file cannot be both converted and replaced".to_string());
+        }
+        setup_transaction::ensure_overwrite_allowed(artifact, workspace_root, home, overwrite)?;
+    }
 
     if source.is_dir() {
         if dest.exists() {
@@ -1402,7 +1412,13 @@ fn run_planned_artifacts(
         let mutation = if matches!(p.kind, OperationKind::Remove) {
             remove_single_artifact(&p.artifact, &ws_root, &home)
         } else {
-            apply_single_artifact(&p.artifact, &ws_root, &home, p.rules_rewrite.as_ref())
+            apply_single_artifact(
+                &p.artifact,
+                &ws_root,
+                &home,
+                p.rules_rewrite.as_ref(),
+                p.overwrite.as_ref(),
+            )
         };
         if let Err(e) = mutation {
             manifest.operations[operation_index].apply_status =
@@ -1593,7 +1609,7 @@ fn run_planned_artifacts(
     // A file the app wrote or removed is the app's again, so a choice to keep the user's version of
     // it ends here: a later edit must be a new conflict, not silently covered by an old choice.
     // Cleared only once the transaction is complete, so a failed apply (rolled back) loses nothing.
-    let rewritten: Vec<String> = manifest
+    let mut rewritten: Vec<String> = manifest
         .operations
         .iter()
         .filter(|operation| {
@@ -1604,6 +1620,16 @@ fn run_planned_artifacts(
         })
         .map(|operation| crate::managed_state::artifact_identity(&operation.artifact))
         .collect();
+    // So is a kept file that became the bundled file without an app write (the user copied it in
+    // by hand): its choice is inert, and would silently cover the next edit.
+    rewritten.extend(crate::kept_files::matching_the_bundle(
+        &ws_root,
+        &home,
+        |artifact| {
+            setup_transaction::detect_artifact_state(artifact, &ws_root, &home).0
+                == OperationKind::NoChange
+        },
+    ));
     if let Err(error) = crate::kept_files::release(&ws_root, &rewritten) {
         manual_steps.push(format!(
             "The files were applied, but a choice to keep your version of one of them could not be cleared: {error}"
@@ -2839,7 +2865,7 @@ mod tests {
             crate::skill_roots::SkillRoot::OpenCode,
             crate::artifact_registry::SkillName::new("frontend-design").unwrap(),
         );
-        apply_single_artifact(&artifact, &ws, &resolved_home, None).expect("apply skill");
+        apply_single_artifact(&artifact, &ws, &resolved_home, None, None).expect("apply skill");
         let source = artifact
             .resolve_source(&crate::setup_roots::bundled_root().expect("bundled root"))
             .expect("skill source");
@@ -2855,6 +2881,116 @@ mod tests {
             .unwrap(),
             "keep me"
         );
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    /// A temp home and a copy of the bundled workspace. The caller holds the environment guards.
+    fn overwrite_env(label: &str) -> (PathBuf, PathBuf, PathBuf) {
+        let base = std::env::temp_dir().join(format!(
+            "aw-setup-overwrite-{label}-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = fs::remove_dir_all(&base);
+        let home = base.join("home");
+        let ws = base.join("workspace");
+        fs::create_dir_all(&home).expect("home");
+        copy_dir_all(&bundled_workspace_src(), &ws).expect("copy workspace");
+        set_test_user_dirs(&home);
+        let resolved_home = crate::platform_paths::resolve_user_home(
+            &crate::platform_paths::PlatformEnv::from_process_env(),
+            crate::platform_paths::Platform::current(),
+        )
+        .expect("home");
+        (base, resolved_home, ws)
+    }
+
+    fn tdd_skill() -> ArtifactId {
+        ArtifactId::skill_md(
+            crate::skill_roots::SkillRoot::Claude,
+            crate::artifact_registry::SkillName::new("tdd").unwrap(),
+        )
+    }
+
+    #[test]
+    fn an_overwrite_replaces_only_the_file_the_user_reviewed() {
+        let _guard = guard::lock();
+        let _restore = guard::EnvRestore::capture();
+        let (base, home, ws) = overwrite_env("reviewed");
+        let artifact = tdd_skill();
+        let dest = artifact.resolve_dest(&home, &ws).expect("dest");
+        fs::create_dir_all(dest.parent().unwrap()).expect("dest parent");
+        fs::write(&dest, "my own tdd\n").expect("user file");
+        let reviewed = setup_transaction::Overwrite {
+            expected_installed_digest: crate::stable_digest::bytes(b"my own tdd\n"),
+        };
+
+        // Edited after the preview: refused, and the edit is still there.
+        fs::write(&dest, "edited after the preview\n").expect("edit");
+        let error = apply_single_artifact(&artifact, &ws, &home, None, Some(&reviewed))
+            .expect_err("the file changed");
+        assert!(error.contains("changed since preview"), "{error}");
+        assert_eq!(fs::read(&dest).unwrap(), b"edited after the preview\n");
+
+        // As reviewed: replaced by the bundled file.
+        fs::write(&dest, "my own tdd\n").expect("restore");
+        apply_single_artifact(&artifact, &ws, &home, None, Some(&reviewed)).expect("overwrite");
+        let source = artifact
+            .resolve_source(&crate::setup_roots::bundled_root().expect("bundled root"))
+            .expect("source");
+        assert_eq!(fs::read(&dest).unwrap(), fs::read(source).unwrap());
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn an_overwrite_refuses_a_link_and_anything_that_is_not_a_skill_or_agent_file() {
+        let _guard = guard::lock();
+        let _restore = guard::EnvRestore::capture();
+        let (base, home, ws) = overwrite_env("refused");
+        let artifact = tdd_skill();
+        let dest = artifact.resolve_dest(&home, &ws).expect("dest");
+        fs::create_dir_all(dest.parent().unwrap()).expect("dest parent");
+        let target = base.join("precious.md");
+        fs::write(&target, "my own tdd\n").expect("target");
+        std::os::unix::fs::symlink(&target, &dest).expect("symlink");
+        let reviewed = setup_transaction::Overwrite {
+            expected_installed_digest: crate::stable_digest::bytes(b"my own tdd\n"),
+        };
+
+        // The digest matches the file behind the link; the link itself is refused all the same.
+        assert!(apply_single_artifact(&artifact, &ws, &home, None, Some(&reviewed)).is_err());
+        assert_eq!(fs::read(&target).unwrap(), b"my own tdd\n");
+        assert!(fs::symlink_metadata(&dest)
+            .unwrap()
+            .file_type()
+            .is_symlink());
+
+        // Only skill and agent files can be replaced this way, whatever the digest says.
+        let rules = ArtifactId::ClaudeRules;
+        let rules_dest = rules.resolve_dest(&home, &ws).expect("rules dest");
+        fs::create_dir_all(rules_dest.parent().unwrap()).expect("rules parent");
+        fs::write(&rules_dest, "my own rules\n").expect("rules file");
+        let rules_reviewed = setup_transaction::Overwrite {
+            expected_installed_digest: crate::stable_digest::bytes(b"my own rules\n"),
+        };
+        let error = apply_single_artifact(&rules, &ws, &home, None, Some(&rules_reviewed))
+            .expect_err("not a skill or agent file");
+        assert!(error.contains("only a skill or agent file"), "{error}");
+        assert_eq!(fs::read(&rules_dest).unwrap(), b"my own rules\n");
+
+        // And never together with a conversion.
+        let rewrite = setup_transaction::RulesRewrite {
+            content: "converted\n".to_string(),
+            expected_installed_digest: crate::stable_digest::bytes(b"my own rules\n"),
+        };
+        assert!(
+            apply_single_artifact(&rules, &ws, &home, Some(&rewrite), Some(&rules_reviewed))
+                .is_err()
+        );
+        assert_eq!(fs::read(&rules_dest).unwrap(), b"my own rules\n");
         let _ = fs::remove_dir_all(&base);
     }
 
@@ -2907,11 +3043,11 @@ mod tests {
                 .collect::<Vec<_>>()
         );
         for (artifact, rel) in &cases {
-            apply_single_artifact(artifact, &ws, &home, None)
+            apply_single_artifact(artifact, &ws, &home, None, None)
                 .unwrap_or_else(|e| panic!("apply {artifact:?}: {e}"));
             assert!(codex.join(rel).is_file(), "{artifact:?} not written");
             // A second apply replaces the installed file.
-            apply_single_artifact(artifact, &ws, &home, None)
+            apply_single_artifact(artifact, &ws, &home, None, None)
                 .unwrap_or_else(|e| panic!("re-apply {artifact:?}: {e}"));
         }
         assert!(!home.join(".codex").exists());
@@ -3006,7 +3142,7 @@ mod tests {
         std::os::unix::fs::symlink(&real_config, &config_link).unwrap();
         // No need to create source - validate_artifact_source_dest will reject first
         let artifact = ArtifactId::OpenCodeRules;
-        let err = apply_single_artifact(&artifact, &base, &base, None)
+        let err = apply_single_artifact(&artifact, &base, &base, None, None)
             .expect_err("symlinked parent apply must be rejected");
         assert!(err.contains("symlink") || err.contains("parent"), "{err}");
         let _ = fs::remove_dir_all(&base);
@@ -3033,7 +3169,7 @@ mod tests {
         )
         .unwrap();
         let artifact = ArtifactId::OpenCodeRules;
-        let err = apply_single_artifact(&artifact, &base, &base, None)
+        let err = apply_single_artifact(&artifact, &base, &base, None, None)
             .expect_err("dangling destination must be rejected");
         assert!(err.contains("symlink"), "{err}");
         let _ = fs::remove_dir_all(&base);

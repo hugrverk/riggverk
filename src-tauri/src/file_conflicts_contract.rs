@@ -14,10 +14,14 @@ mod tests {
 
     use crate::agent_targets::HarnessId;
     use crate::artifact_registry::{ArtifactId, SkillName, SkillRelPath};
+    use crate::commands::setup::rollback_setup_transaction;
     use crate::commands::setup::{
         apply_setup, apply_uninstall, preview_setup, preview_uninstall, SetupResult,
     };
-    use crate::commands::{preview_file_diff, set_files_kept};
+    use crate::commands::{
+        apply_take_bundled, preview_file_diff, preview_take_bundled, set_files_kept,
+        TakeBundledPreview,
+    };
     use crate::file_conflicts::{ConflictReason, DiffKind, UnitState};
     use crate::installation_status::{status_for_surfaces, InstallationState, InstallationStatus};
     use crate::kept_files::KEPT_FILES_REL;
@@ -255,6 +259,69 @@ mod tests {
         /// Every file of the backup folder, to see whether an operation made a backup.
         fn backups(&self) -> BTreeSet<String> {
             files_below(&self.base.join("backups"))
+        }
+
+        /// The transactions that made a backup: an operation that refuses must add none.
+        fn transactions(&self) -> BTreeSet<String> {
+            fs::read_dir(self.base.join("backups/setup"))
+                .map(|entries| {
+                    entries
+                        .flatten()
+                        .map(|entry| entry.file_name().to_string_lossy().into_owned())
+                        .collect()
+                })
+                .unwrap_or_default()
+        }
+
+        fn preview_take(
+            &self,
+            surface: SetupSurfaceId,
+            units: &[&str],
+        ) -> Result<TakeBundledPreview, String> {
+            preview_take_bundled(
+                surface_name(surface),
+                units.iter().map(|unit| unit.to_string()).collect(),
+            )
+        }
+
+        /// Applies exactly what `preview` showed.
+        fn apply_take(
+            &self,
+            surface: SetupSurfaceId,
+            units: &[&str],
+            preview: &TakeBundledPreview,
+        ) -> Result<SetupResult, String> {
+            self.apply_take_with(
+                surface,
+                units,
+                Some(preview.plan_fingerprint.clone()),
+                Some(preview.preview_token.clone()),
+            )
+        }
+
+        fn apply_take_with(
+            &self,
+            surface: SetupSurfaceId,
+            units: &[&str],
+            fingerprint: Option<String>,
+            token: Option<String>,
+        ) -> Result<SetupResult, String> {
+            apply_take_bundled(
+                surface_name(surface),
+                units.iter().map(|unit| unit.to_string()).collect(),
+                fingerprint,
+                token,
+            )
+        }
+
+        /// The bundled bytes of a skill or agent file.
+        fn bundled_bytes(&self, artifact: &ArtifactId) -> Vec<u8> {
+            fs::read(artifact.resolve_source(&bundled()).expect("source")).expect("bundled file")
+        }
+
+        /// Where the transaction `id` backed up `name` (`artifacts/...`).
+        fn backed_up(&self, id: &str, name: &str) -> PathBuf {
+            self.base.join("backups/setup").join(id).join(name)
         }
     }
 
@@ -1110,5 +1177,798 @@ mod tests {
         let value = serde_json::to_value(&status).expect("serialize");
         assert!(value["surfaces"][0].get("files").is_none());
         assert_eq!(value["counts"]["kept_count"], 0);
+    }
+
+    // ── 8. Take bundled ──
+
+    fn digest(bytes: &[u8]) -> String {
+        stable_digest::bytes(bytes)
+    }
+
+    /// `sha256:` and twelve hex digits, as a preview shows them.
+    fn short(bytes: &[u8]) -> String {
+        digest(bytes).chars().take(19).collect()
+    }
+
+    #[test]
+    fn take_bundled_replaces_exactly_the_chosen_files_and_backs_up_what_the_user_wrote() {
+        let env = Env::new("take-happy", &SKILLS);
+        let mine = b"my own tdd\n";
+        env.write(&tdd(), mine);
+        env.keep(SetupSurfaceId::Skills, "skill:claude:tdd")
+            .expect("keep");
+        // A conflict and a kept file of other skills: not chosen, so left alone.
+        let diagnose = skill_file(SkillRoot::Claude, "diagnose", "SKILL.md");
+        env.write(&diagnose, b"my own diagnose\n");
+        let handoff = skill_file(SkillRoot::Claude, "handoff", "SKILL.md");
+        env.write(&handoff, b"my own handoff\n");
+        env.keep(SetupSurfaceId::Skills, "skill:claude:handoff")
+            .expect("keep");
+        // A safe update the regular update would apply, and take bundled must not.
+        let outdated = skill_file(SkillRoot::Claude, "security-audit", "ATTACK-CLASSES.md");
+        let older = b"attack classes of an older version\n";
+        env.write(&outdated, older);
+        env.set_record(&outdated, older);
+        assert_eq!(env.kind(&SKILLS, &outdated), OperationKind::Update);
+
+        let transactions = env.transactions();
+        let preview = env
+            .preview_take(SetupSurfaceId::Skills, &["skill:claude:tdd"])
+            .expect("preview");
+        assert_eq!(preview.surface, SetupSurfaceId::Skills);
+        assert_eq!(preview.units.len(), 1);
+        let unit = &preview.units[0];
+        assert_eq!(
+            (unit.key.as_str(), unit.name.as_str(), unit.folder.as_str()),
+            ("skill:claude:tdd", "tdd", "~/.claude/skills")
+        );
+        assert_eq!(unit.more_files, 0);
+        assert_eq!(unit.files.len(), 1);
+        let file = &unit.files[0];
+        let bundled_tdd = env.bundled_bytes(&tdd());
+        assert_eq!(file.rel, "SKILL.md");
+        assert_eq!(file.state, UnitState::Kept);
+        assert_eq!(file.backup_name, "artifacts/skill-claude-tdd~SKILL.md");
+        assert_eq!(file.installed_digest, short(mine));
+        assert_eq!(file.bundled_digest, short(&bundled_tdd));
+        assert_eq!(unit.diff.files.len(), 1);
+        assert_eq!(unit.diff.files[0].kind, DiffKind::Text);
+        assert!(!preview.plan_fingerprint.is_empty() && !preview.preview_token.is_empty());
+        assert_eq!(
+            fs::read(env.path(&tdd())).expect("file"),
+            mine,
+            "the preview writes nothing"
+        );
+        assert_eq!(env.transactions(), transactions);
+
+        let result = env
+            .apply_take(SetupSurfaceId::Skills, &["skill:claude:tdd"], &preview)
+            .expect("apply");
+        assert!(result.success, "apply: {}", result.message);
+        assert_eq!(result.applied.len(), 1, "{:?}", result.applied);
+        assert!(result.manual_steps.is_empty(), "{:?}", result.manual_steps);
+
+        assert_eq!(fs::read(env.path(&tdd())).expect("file"), bundled_tdd);
+        assert_eq!(
+            fs::read(env.backed_up(&result.transaction_id, &file.backup_name)).expect("backup"),
+            mine,
+            "the backup holds the exact bytes the user had"
+        );
+        assert_eq!(
+            env.record(&tdd()),
+            Some(digest(&bundled_tdd)),
+            "the app owns the file again"
+        );
+        assert_eq!(env.kind(&SKILLS, &tdd()), OperationKind::NoChange);
+
+        // Exactly the chosen file was written.
+        assert_eq!(
+            fs::read(env.path(&diagnose)).expect("diagnose"),
+            b"my own diagnose\n"
+        );
+        assert_eq!(env.kind(&SKILLS, &diagnose), OperationKind::Conflict);
+        assert_eq!(
+            fs::read(env.path(&handoff)).expect("handoff"),
+            b"my own handoff\n"
+        );
+        assert_eq!(env.kind(&SKILLS, &handoff), OperationKind::Manual);
+        assert_eq!(fs::read(env.path(&outdated)).expect("outdated"), older);
+        assert_eq!(env.kind(&SKILLS, &outdated), OperationKind::Update);
+        // The choice for the replaced file ended; the one for the other kept file did not.
+        let kept = fs::read_to_string(env.kept_path()).expect("kept-files.json");
+        assert!(!kept.contains("tdd"), "{kept}");
+        assert!(kept.contains("handoff"), "{kept}");
+    }
+
+    #[test]
+    fn take_bundled_replaces_every_conflicting_file_of_a_skill() {
+        let env = Env::new("take-skill", &SKILLS);
+        let unit = "skill:claude:security-audit";
+        let hunting = skill_file(SkillRoot::Claude, "security-audit", "HUNTING.md");
+        let client = skill_file(SkillRoot::Claude, "security-audit", "CLIENT-SIDE.md");
+        let other = skill_file(SkillRoot::Claude, "security-audit", "UPSTREAM.md");
+        env.write(&hunting, b"mine hunting\n");
+        env.write(&client, b"mine client\n");
+        // A file of the same skill that is not in conflict stays as it is.
+
+        let preview = env
+            .preview_take(SetupSurfaceId::Skills, &[unit])
+            .expect("preview");
+        let rels: BTreeSet<&str> = preview.units[0]
+            .files
+            .iter()
+            .map(|file| file.rel.as_str())
+            .collect();
+        assert_eq!(rels, BTreeSet::from(["HUNTING.md", "CLIENT-SIDE.md"]));
+        let result = env
+            .apply_take(SetupSurfaceId::Skills, &[unit], &preview)
+            .expect("apply");
+        assert!(result.success, "apply: {}", result.message);
+        assert_eq!(result.applied.len(), 2);
+        for (rel, artifact, mine) in [
+            ("HUNTING.md", &hunting, &b"mine hunting\n"[..]),
+            ("CLIENT-SIDE.md", &client, &b"mine client\n"[..]),
+        ] {
+            assert_eq!(
+                fs::read(env.path(artifact)).expect("replaced"),
+                env.bundled_bytes(artifact)
+            );
+            let name = format!("artifacts/skill-claude-security-audit~{rel}");
+            assert_eq!(
+                fs::read(env.backed_up(&result.transaction_id, &name)).expect("backup"),
+                mine
+            );
+        }
+        assert_eq!(
+            fs::read(env.path(&other)).expect("untouched"),
+            env.bundled_bytes(&other)
+        );
+        assert!(env.pending(&SKILLS).is_empty(), "nothing is left to do");
+    }
+
+    #[test]
+    fn take_bundled_replaces_the_agent_file_of_every_harness() {
+        let surfaces = [
+            SetupSurfaceId::ClaudeAgents,
+            SetupSurfaceId::OpenCodeAgents,
+            SetupSurfaceId::CursorAgents,
+            SetupSurfaceId::CodexAgents,
+        ];
+        let env = Env::new("take-agents", &surfaces);
+        for surface in surfaces {
+            let agent = env
+                .plan(&[surface])
+                .into_iter()
+                .map(|planned| planned.artifact)
+                .next()
+                .unwrap_or_else(|| panic!("an agent on {surface:?}"));
+            let (ArtifactId::ClaudeAgent(name)
+            | ArtifactId::OpenCodeAgent(name)
+            | ArtifactId::CursorAgent(name)
+            | ArtifactId::CodexAgent(name)) = &agent
+            else {
+                panic!("{surface:?} plans {agent:?}");
+            };
+            let unit = format!("agent:{}", name.as_str());
+            let mine = format!("my own {} agent\n", name.as_str());
+            env.write(&agent, mine.as_bytes());
+            assert_eq!(env.kind(&[surface], &agent), OperationKind::Conflict);
+
+            let preview = env
+                .preview_take(surface, &[unit.as_str()])
+                .expect("preview");
+            assert_eq!(preview.units[0].files.len(), 1, "{surface:?}");
+            let backup = preview.units[0].files[0].backup_name.clone();
+            let result = env
+                .apply_take(surface, &[unit.as_str()], &preview)
+                .expect("apply");
+            assert!(result.success, "{surface:?}: {}", result.message);
+            assert_eq!(
+                fs::read(env.path(&agent)).expect("agent"),
+                env.bundled_bytes(&agent),
+                "{surface:?}"
+            );
+            assert_eq!(
+                fs::read(env.backed_up(&result.transaction_id, &backup)).expect("backup"),
+                mine.as_bytes(),
+                "{surface:?}"
+            );
+            assert_eq!(env.kind(&[surface], &agent), OperationKind::NoChange);
+        }
+    }
+
+    // ── 9. Take bundled refuses, and changes nothing ──
+
+    impl Env {
+        /// A refused take bundled left every named file as it was and made no backup.
+        fn assert_untouched(
+            &self,
+            transactions: &BTreeSet<String>,
+            files: &[(&ArtifactId, &[u8])],
+        ) {
+            assert_eq!(&self.transactions(), transactions, "a backup was made");
+            for (artifact, bytes) in files {
+                assert_eq!(
+                    fs::read(self.path(artifact)).expect("file"),
+                    *bytes,
+                    "{artifact:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn take_bundled_refuses_a_file_edited_after_the_preview() {
+        let env = Env::new("take-edited", &SKILLS);
+        env.write(&tdd(), b"my own tdd\n");
+        let preview = env
+            .preview_take(SetupSurfaceId::Skills, &["skill:claude:tdd"])
+            .expect("preview");
+        let edited = b"my own tdd, edited after the preview\n";
+        env.write(&tdd(), edited);
+        let transactions = env.transactions();
+
+        let error = env
+            .apply_take(SetupSurfaceId::Skills, &["skill:claude:tdd"], &preview)
+            .unwrap_err();
+        assert!(error.contains("mismatch"), "{error}");
+        env.assert_untouched(&transactions, &[(&tdd(), &edited[..])]);
+        // A fresh preview of the file as it is now applies.
+        let fresh = env
+            .preview_take(SetupSurfaceId::Skills, &["skill:claude:tdd"])
+            .expect("fresh preview");
+        assert_eq!(
+            fresh.units[0].files[0].installed_digest,
+            short(edited),
+            "the new preview shows the new file"
+        );
+        let result = env
+            .apply_take(SetupSurfaceId::Skills, &["skill:claude:tdd"], &fresh)
+            .expect("apply");
+        assert!(result.success, "{}", result.message);
+    }
+
+    #[test]
+    fn take_bundled_refuses_missing_foreign_and_spent_proof() {
+        let env = Env::new("take-proof", &SKILLS);
+        let mine = b"my own tdd\n";
+        env.write(&tdd(), mine);
+        let diagnose = skill_file(SkillRoot::Claude, "diagnose", "SKILL.md");
+        let mine_diagnose = b"my own diagnose\n";
+        env.write(&diagnose, mine_diagnose);
+        let tdd_unit = "skill:claude:tdd";
+        let diagnose_unit = "skill:claude:diagnose";
+        let surface = SetupSurfaceId::Skills;
+        let preview = env.preview_take(surface, &[tdd_unit]).expect("preview");
+        let other = env
+            .preview_take(surface, &[diagnose_unit])
+            .expect("preview of another skill");
+        let fingerprint = Some(preview.plan_fingerprint.clone());
+        let token = Some(preview.preview_token.clone());
+        let transactions = env.transactions();
+        let untouched = || {
+            env.assert_untouched(
+                &transactions,
+                &[(&tdd(), &mine[..]), (&diagnose, &mine_diagnose[..])],
+            )
+        };
+
+        // Proof that is missing, malformed or not from a preview.
+        for (label, fp, tok) in [
+            ("no fingerprint", None, token.clone()),
+            ("no token", fingerprint.clone(), None),
+            (
+                "malformed fingerprint",
+                Some("not hex!".to_string()),
+                token.clone(),
+            ),
+            ("foreign fingerprint", Some("a".repeat(64)), token.clone()),
+            ("foreign token", fingerprint.clone(), Some("f".repeat(64))),
+        ] {
+            let error = env
+                .apply_take_with(surface, &[tdd_unit], fp, tok)
+                .expect_err(label);
+            assert!(!error.is_empty(), "{label}");
+            untouched();
+        }
+
+        // A preview of another skill authorises nothing here.
+        assert!(env
+            .apply_take_with(
+                surface,
+                &[diagnose_unit],
+                Some(other.plan_fingerprint.clone()),
+                token.clone()
+            )
+            .is_err());
+        assert!(env
+            .apply_take_with(
+                surface,
+                &[tdd_unit],
+                Some(other.plan_fingerprint.clone()),
+                Some(other.preview_token.clone())
+            )
+            .is_err());
+        assert!(env
+            .apply_take_with(
+                surface,
+                &[tdd_unit, diagnose_unit],
+                fingerprint.clone(),
+                token.clone()
+            )
+            .is_err());
+        untouched();
+
+        // A token that outlived its time.
+        crate::setup_transaction::expire_preview_tokens_for_test();
+        let error = env
+            .apply_take_with(surface, &[tdd_unit], fingerprint.clone(), token.clone())
+            .unwrap_err();
+        assert!(error.contains("expired"), "{error}");
+        untouched();
+
+        // A token that was used: the second apply of the same preview is refused.
+        let again = env.preview_take(surface, &[tdd_unit]).expect("preview");
+        let result = env.apply_take(surface, &[tdd_unit], &again).expect("apply");
+        assert!(result.success, "{}", result.message);
+        env.write(&tdd(), mine);
+        let transactions_after = env.transactions();
+        let error = env.apply_take(surface, &[tdd_unit], &again).unwrap_err();
+        assert!(error.contains("already used"), "{error}");
+        env.assert_untouched(&transactions_after, &[(&tdd(), &mine[..])]);
+    }
+
+    #[test]
+    fn take_bundled_refuses_units_it_cannot_replace() {
+        let env = Env::new("take-units", &SKILLS);
+        let surface = SetupSurfaceId::Skills;
+        let mine = b"my own tdd\n";
+        env.write(&tdd(), mine);
+        let transactions = env.transactions();
+
+        // Unknown, clean, empty, too many, and the wrong surface. Errors never echo the key.
+        for unit in [
+            "skill:claude:no-such-skill",
+            "skill:claude:diagnose",
+            "../../etc/passwd",
+        ] {
+            let error = env.preview_take(surface, &[unit]).unwrap_err();
+            assert!(error.contains("no conflicting or kept files"), "{error}");
+            assert!(!error.contains("passwd"), "{error}");
+        }
+        assert!(env.preview_take(surface, &[]).is_err());
+        let many: Vec<String> = (0..11).map(|n| format!("skill:claude:s{n}")).collect();
+        assert!(preview_take_bundled("skills".into(), many).is_err());
+        for wrong in [
+            "claude_rules",
+            "workspace_bundle",
+            "codex_config",
+            "claude_skills",
+            "nope",
+        ] {
+            assert!(
+                preview_take_bundled(wrong.into(), vec!["skill:claude:tdd".into()]).is_err(),
+                "{wrong}"
+            );
+            assert!(
+                apply_take_bundled(
+                    wrong.into(),
+                    vec!["skill:claude:tdd".into()],
+                    Some("a".repeat(64)),
+                    Some("t".into())
+                )
+                .is_err(),
+                "{wrong}"
+            );
+        }
+        assert!(env
+            .preview_take(SetupSurfaceId::ClaudeAgents, &["skill:claude:tdd"])
+            .is_err());
+        env.assert_untouched(&transactions, &[(&tdd(), &mine[..])]);
+
+        // A retired skill: the bundle has no copy to take.
+        let retired = skill_file(SkillRoot::Claude, "retired-kept", "SKILL.md");
+        env.write(&retired, b"retired skill\n");
+        env.set_record(&retired, b"retired skill\n");
+        let edited = b"my own copy of the retired skill\n";
+        env.write(&retired, edited);
+        assert!(env
+            .planned(&SKILLS, &retired)
+            .file
+            .is_some_and(|file| !file.wanted));
+        let error = env
+            .preview_take(surface, &["skill:claude:retired-kept"])
+            .unwrap_err();
+        assert!(error.contains("no bundled copy"), "{error}");
+        env.keep(surface, "skill:claude:retired-kept")
+            .expect("keep");
+        let error = env
+            .preview_take(surface, &["skill:claude:retired-kept"])
+            .unwrap_err();
+        assert!(error.contains("no bundled copy"), "a kept one too: {error}");
+        env.assert_untouched(&transactions, &[(&retired, &edited[..])]);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn take_bundled_offers_nothing_for_a_link_or_a_folder_in_the_way() {
+        let env = Env::new("take-blocked", &SKILLS);
+        let surface = SetupSurfaceId::Skills;
+        let claude = env.root(SkillRoot::Claude);
+        let elsewhere = env.base.join("elsewhere");
+        fs::create_dir_all(&elsewhere).expect("target");
+        fs::write(elsewhere.join("SKILL.md"), "mine\n").expect("target file");
+        fs::remove_dir_all(claude.join("tdd")).expect("remove tdd");
+        std::os::unix::fs::symlink(&elsewhere, claude.join("tdd")).expect("symlink");
+        let hunting = skill_file(SkillRoot::Claude, "security-audit", "HUNTING.md");
+        fs::remove_file(env.path(&hunting)).expect("remove file");
+        fs::create_dir_all(env.path(&hunting)).expect("dir in the way");
+        let transactions = env.transactions();
+
+        for unit in ["skill:claude:tdd", "skill:claude:security-audit"] {
+            let error = env.preview_take(surface, &[unit]).unwrap_err();
+            assert!(error.contains("no conflicting or kept files"), "{error}");
+        }
+        assert_eq!(env.transactions(), transactions);
+        assert_eq!(
+            fs::read(elsewhere.join("SKILL.md")).expect("target"),
+            b"mine\n",
+            "nothing was written through the link"
+        );
+        assert!(env.path(&hunting).is_dir());
+    }
+
+    #[test]
+    fn take_bundled_refuses_a_unit_that_is_no_longer_a_conflict() {
+        let env = Env::new("take-resolved", &SKILLS);
+        let surface = SetupSurfaceId::Skills;
+        env.write(&tdd(), b"my own tdd\n");
+        let preview = env
+            .preview_take(surface, &["skill:claude:tdd"])
+            .expect("preview");
+        // The user copies the bundled file in by hand: nothing is left to replace.
+        let bundled_tdd = env.bundled_bytes(&tdd());
+        env.write(&tdd(), &bundled_tdd);
+        let transactions = env.transactions();
+
+        let error = env
+            .apply_take(surface, &["skill:claude:tdd"], &preview)
+            .unwrap_err();
+        assert!(error.contains("no conflicting or kept files"), "{error}");
+        env.assert_untouched(&transactions, &[(&tdd(), &bundled_tdd[..])]);
+        assert!(env.preview_take(surface, &["skill:claude:tdd"]).is_err());
+    }
+
+    #[test]
+    fn take_bundled_refuses_a_file_too_large_to_back_up() {
+        let env = Env::new("take-large", &SKILLS);
+        // A sparse file just over the limit: nothing is read to find that out.
+        let large = fs::File::create(env.path(&tdd())).expect("create");
+        large.set_len(64 * 1024 * 1024 + 1).expect("set length");
+        drop(large);
+        let transactions = env.transactions();
+
+        let error = env
+            .preview_take(SetupSurfaceId::Skills, &["skill:claude:tdd"])
+            .unwrap_err();
+        assert!(error.contains("too large to back up"), "{error}");
+        assert_eq!(env.transactions(), transactions);
+        assert_eq!(
+            fs::metadata(env.path(&tdd())).expect("file").len(),
+            64 * 1024 * 1024 + 1
+        );
+        // The same file at the limit is replaced.
+        let at_limit = fs::File::options()
+            .write(true)
+            .open(env.path(&tdd()))
+            .expect("open");
+        at_limit.set_len(64 * 1024 * 1024).expect("set length");
+        drop(at_limit);
+        assert!(env
+            .preview_take(SetupSurfaceId::Skills, &["skill:claude:tdd"])
+            .is_ok());
+    }
+
+    #[test]
+    fn a_take_bundled_proof_cannot_drive_an_install_and_an_install_proof_cannot_drive_a_take_bundled(
+    ) {
+        let env = Env::new("take-cross", &SKILLS);
+        let surface = SetupSurfaceId::Skills;
+        let mine = b"my own tdd\n";
+        env.write(&tdd(), mine);
+        let outdated = skill_file(SkillRoot::Claude, "security-audit", "ATTACK-CLASSES.md");
+        let older = b"attack classes of an older version\n";
+        env.write(&outdated, older);
+        env.set_record(&outdated, older);
+
+        let install = env.preview(&SKILLS);
+        let take = env
+            .preview_take(surface, &["skill:claude:tdd"])
+            .expect("preview");
+        let transactions = env.transactions();
+
+        let result = apply_setup(
+            vec!["skills".to_string()],
+            true,
+            Some(take.plan_fingerprint.clone()),
+            Some(take.preview_token.clone()),
+        );
+        assert!(
+            !matches!(&result, Ok(done) if done.success),
+            "a take bundled proof drove an install: {result:?}"
+        );
+        let error = env
+            .apply_take_with(
+                surface,
+                &["skill:claude:tdd"],
+                install.plan_fingerprint.clone(),
+                install.preview_token.clone(),
+            )
+            .unwrap_err();
+        assert!(error.contains("mismatch"), "{error}");
+        env.assert_untouched(
+            &transactions,
+            &[(&tdd(), &mine[..]), (&outdated, &older[..])],
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn take_bundled_refuses_a_link_swapped_in_after_the_preview() {
+        let env = Env::new("take-swapped", &SKILLS);
+        let surface = SetupSurfaceId::Skills;
+        let mine = b"my own tdd\n";
+        env.write(&tdd(), mine);
+        let target = env.base.join("precious.md");
+        fs::write(&target, "precious\n").expect("target");
+
+        // The file becomes a link to a file outside the skill folders.
+        let preview = env
+            .preview_take(surface, &["skill:claude:tdd"])
+            .expect("preview");
+        fs::remove_file(env.path(&tdd())).expect("remove");
+        std::os::unix::fs::symlink(&target, env.path(&tdd())).expect("symlink");
+        let transactions = env.transactions();
+        assert!(env
+            .apply_take(surface, &["skill:claude:tdd"], &preview)
+            .is_err());
+        assert_eq!(fs::read(&target).expect("target"), b"precious\n");
+        assert!(fs::symlink_metadata(env.path(&tdd()))
+            .expect("link")
+            .file_type()
+            .is_symlink());
+        assert_eq!(env.transactions(), transactions);
+
+        // The folder of the skill becomes a link to a copy outside the skill folders.
+        fs::remove_file(env.path(&tdd())).expect("remove link");
+        env.write(&tdd(), mine);
+        let preview = env
+            .preview_take(surface, &["skill:claude:tdd"])
+            .expect("preview");
+        let skill_dir = env.root(SkillRoot::Claude).join("tdd");
+        let outside = env.base.join("tdd-copy");
+        fs::create_dir_all(&outside).expect("outside");
+        fs::write(outside.join("SKILL.md"), mine).expect("copy");
+        fs::remove_dir_all(&skill_dir).expect("remove skill dir");
+        std::os::unix::fs::symlink(&outside, &skill_dir).expect("symlink dir");
+        assert!(env
+            .apply_take(surface, &["skill:claude:tdd"], &preview)
+            .is_err());
+        assert_eq!(fs::read(outside.join("SKILL.md")).expect("copy"), mine);
+        assert_eq!(env.transactions(), transactions);
+    }
+
+    // ── 10. Rolling a take bundled back ──
+
+    #[test]
+    fn rolling_back_a_take_bundled_restores_the_users_file_and_the_previous_record() {
+        let env = Env::new("take-rollback", &SKILLS);
+        let surface = SetupSurfaceId::Skills;
+        let older = b"an older tdd the app wrote\n";
+        let mine = b"my own tdd\n";
+        env.write(&tdd(), mine);
+        env.set_record(&tdd(), older);
+        env.keep(surface, "skill:claude:tdd").expect("keep");
+        assert_eq!(env.kind(&SKILLS, &tdd()), OperationKind::Manual);
+
+        let preview = env
+            .preview_take(surface, &["skill:claude:tdd"])
+            .expect("preview");
+        let result = env
+            .apply_take(surface, &["skill:claude:tdd"], &preview)
+            .expect("apply");
+        assert!(result.success, "{}", result.message);
+        assert_eq!(env.record(&tdd()), Some(digest(&env.bundled_bytes(&tdd()))));
+
+        let rolled = rollback_setup_transaction(result.transaction_id, false).expect("rollback");
+        assert!(rolled.success, "{}", rolled.message);
+        assert_eq!(fs::read(env.path(&tdd())).expect("file"), mine);
+        assert_eq!(
+            env.record(&tdd()),
+            Some(digest(older)),
+            "the previous managed state is back"
+        );
+        // The choice to keep it is not restored (documented): the file is a conflict again.
+        assert_eq!(env.kind(&SKILLS, &tdd()), OperationKind::Conflict);
+    }
+
+    #[test]
+    fn rolling_back_a_take_bundled_keeps_an_edit_made_after_it() {
+        let env = Env::new("take-rollback-edited", &SKILLS);
+        let surface = SetupSurfaceId::Skills;
+        env.write(&tdd(), b"my own tdd\n");
+        let preview = env
+            .preview_take(surface, &["skill:claude:tdd"])
+            .expect("preview");
+        let result = env
+            .apply_take(surface, &["skill:claude:tdd"], &preview)
+            .expect("apply");
+        assert!(result.success, "{}", result.message);
+
+        let later = b"my own tdd, written again after take bundled\n";
+        env.write(&tdd(), later);
+        let rolled = rollback_setup_transaction(result.transaction_id, false).expect("rollback");
+        assert!(!rolled.success, "{}", rolled.message);
+        assert!(
+            rolled.message.contains("changed since apply"),
+            "{}",
+            rolled.message
+        );
+        assert_eq!(
+            fs::read(env.path(&tdd())).expect("file"),
+            later,
+            "the later edit is preserved"
+        );
+    }
+
+    // ── 12. Keeping or handing back after a preview makes the apply stale ──
+
+    #[test]
+    fn keeping_or_handing_back_after_a_take_bundled_preview_makes_it_stale() {
+        let env = Env::new("take-stale", &SKILLS);
+        let surface = SetupSurfaceId::Skills;
+        let mine = b"my own tdd\n";
+        env.write(&tdd(), mine);
+
+        // Previewed as a conflict; kept before the apply.
+        let preview = env
+            .preview_take(surface, &["skill:claude:tdd"])
+            .expect("preview");
+        env.keep(surface, "skill:claude:tdd").expect("keep");
+        let transactions = env.transactions();
+        let error = env
+            .apply_take(surface, &["skill:claude:tdd"], &preview)
+            .unwrap_err();
+        assert!(error.contains("mismatch"), "{error}");
+        env.assert_untouched(&transactions, &[(&tdd(), &mine[..])]);
+
+        // Previewed as a kept file; handed back before the apply.
+        let preview = env
+            .preview_take(surface, &["skill:claude:tdd"])
+            .expect("preview");
+        assert_eq!(preview.units[0].files[0].state, UnitState::Kept);
+        env.hand_back(surface, "skill:claude:tdd")
+            .expect("hand back");
+        let error = env
+            .apply_take(surface, &["skill:claude:tdd"], &preview)
+            .unwrap_err();
+        assert!(error.contains("mismatch"), "{error}");
+        env.assert_untouched(&transactions, &[(&tdd(), &mine[..])]);
+    }
+
+    #[test]
+    fn handing_back_after_an_install_preview_makes_that_apply_stale() {
+        let env = Env::new("setup-stale", &SKILLS);
+        let surface = SetupSurfaceId::Skills;
+        let mine = b"my own tdd\n";
+        env.write(&tdd(), mine);
+        env.keep(surface, "skill:claude:tdd").expect("keep");
+        // Something to apply, so the install preview is not empty.
+        let outdated = skill_file(SkillRoot::Claude, "security-audit", "ATTACK-CLASSES.md");
+        let older = b"attack classes of an older version\n";
+        env.write(&outdated, older);
+        env.set_record(&outdated, older);
+        let plan = env.preview(&SKILLS);
+        assert!(!plan.is_blocked);
+
+        env.hand_back(surface, "skill:claude:tdd")
+            .expect("hand back");
+        let transactions = env.transactions();
+        let result = apply_setup(
+            vec!["skills".to_string()],
+            true,
+            plan.plan_fingerprint.clone(),
+            plan.preview_token.clone(),
+        );
+        let error = result.expect_err("the stale preview is refused");
+        assert!(error.contains("mismatch"), "{error}");
+        env.assert_untouched(
+            &transactions,
+            &[(&tdd(), &mine[..]), (&outdated, &older[..])],
+        );
+    }
+
+    // ── A kept choice that has become inert ──
+
+    #[test]
+    fn a_kept_file_that_became_the_bundled_file_by_hand_loses_its_choice_at_the_next_apply() {
+        let env = Env::new("inert", &SKILLS);
+        let surface = SetupSurfaceId::Skills;
+        env.write(&tdd(), b"my own tdd\n");
+        env.keep(surface, "skill:claude:tdd").expect("keep");
+
+        // The user copies the bundled file in by hand: no app write ends the choice.
+        let bundled_tdd = env.bundled_bytes(&tdd());
+        env.write(&tdd(), &bundled_tdd);
+        assert_eq!(env.kind(&SKILLS, &tdd()), OperationKind::NoChange);
+        assert!(
+            fs::read_to_string(env.kept_path())
+                .expect("kept-files.json")
+                .contains("tdd"),
+            "the entry is inert but still there"
+        );
+
+        // Any apply that completes ends it, whichever files it writes.
+        let missing = skill_file(SkillRoot::Claude, "diagnose", "SKILL.md");
+        fs::remove_file(env.path(&missing)).expect("remove");
+        let result = env.apply(&SKILLS);
+        assert!(result.success, "apply: {}", result.message);
+        assert!(result.manual_steps.is_empty(), "{:?}", result.manual_steps);
+        let kept: serde_json::Value =
+            serde_json::from_slice(&fs::read(env.kept_path()).expect("kept-files.json"))
+                .expect("json");
+        assert_eq!(kept["kept"], serde_json::json!([]));
+
+        // A later edit is a new conflict, not silently a file the user keeps.
+        env.write(&tdd(), b"edited again\n");
+        let planned = env.planned(&SKILLS, &tdd());
+        assert_eq!(planned.kind, OperationKind::Conflict);
+        assert!(planned.file.is_some_and(|file| file.kept.is_none()));
+    }
+
+    #[test]
+    fn an_apply_keeps_the_choice_of_a_file_that_still_differs_from_the_bundle() {
+        let env = Env::new("inert-not", &SKILLS);
+        let surface = SetupSurfaceId::Skills;
+        env.write(&tdd(), b"my own tdd\n");
+        env.keep(surface, "skill:claude:tdd").expect("keep");
+        let missing = skill_file(SkillRoot::Claude, "diagnose", "SKILL.md");
+        fs::remove_file(env.path(&missing)).expect("remove");
+
+        let result = env.apply(&SKILLS);
+        assert!(result.success, "apply: {}", result.message);
+        assert_eq!(env.kind(&SKILLS, &tdd()), OperationKind::Manual);
+        assert!(fs::read_to_string(env.kept_path())
+            .expect("kept-files.json")
+            .contains("tdd"));
+    }
+
+    #[test]
+    fn a_choice_for_another_folder_is_not_ended_by_a_file_that_matches_elsewhere() {
+        let env = Env::new("inert-dest", &SKILLS);
+        let surface = SetupSurfaceId::Skills;
+        env.write(&tdd(), b"my own tdd\n");
+        env.keep(surface, "skill:claude:tdd").expect("keep");
+        // The entry was made for another destination (the folder moved): it is inert for this one
+        // and must not be touched by the matching rule either way.
+        let raw = fs::read_to_string(env.kept_path())
+            .expect("kept-files.json")
+            .replace(
+                "~/.claude/skills/tdd/SKILL.md",
+                "~/elsewhere/skills/tdd/SKILL.md",
+            );
+        fs::write(env.kept_path(), &raw).expect("rewrite");
+        let bundled_tdd = env.bundled_bytes(&tdd());
+        env.write(&tdd(), &bundled_tdd);
+        let missing = skill_file(SkillRoot::Claude, "diagnose", "SKILL.md");
+        fs::remove_file(env.path(&missing)).expect("remove");
+
+        let result = env.apply(&SKILLS);
+        assert!(result.success, "apply: {}", result.message);
+        assert_eq!(
+            fs::read_to_string(env.kept_path()).expect("kept-files.json"),
+            raw,
+            "an entry for another destination is left as it is"
+        );
     }
 }

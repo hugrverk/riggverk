@@ -107,7 +107,7 @@ describe("buildPlanGroups", () => {
       ["conflict", "conflict", "~/.agents/skills/tdd", "edited, kept", false, true],
       ["manual", "manual", "~/.claude/skills/diagnose", "you manage; bundled update available", false, false],
     ]);
-    expect(rows[1]!.detail).toContain("resolve from a harness page: d diff · m keep mine");
+    expect(rows[1]!.detail).toContain("resolve from a harness page: d diff · b take bundled · m keep mine");
     // Only a file in conflict is pointed at the resolve keys; a kept one is already resolved.
     expect(rows[0]!.detail.join(" ")).not.toContain("resolve from");
     expect(rows[2]!.detail.join(" ")).not.toContain("resolve from");
@@ -126,7 +126,7 @@ describe("buildPlanGroups", () => {
       ),
     );
     const detail = (index: number) => groups[index]!.rows[0]!.detail;
-    expect(detail(0)).toContain("resolve from the Claude page: d diff · m keep mine");
+    expect(detail(0)).toContain("resolve from the Claude page: d diff · b take bundled · m keep mine");
     expect(detail(1).join(" ")).not.toContain("resolve from");
     expect(detail(2).join(" ")).not.toContain("resolve from");
   });

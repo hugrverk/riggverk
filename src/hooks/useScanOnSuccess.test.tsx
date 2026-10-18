@@ -52,12 +52,15 @@ describe("useScanOnSuccess", () => {
     expect(scanning()).toBe(false);
   });
 
-  it("sweeps for a rollback and for a rules conversion", () => {
+  it("sweeps for a rollback, a rules conversion and a take bundled", () => {
     const { rerender } = mount();
     rerender({ running: null, log: ROLLBACK });
     expect(scanning()).toBe(true);
     animationEnd("view-scan");
     rerender({ running: null, log: { ...APPLY, action: "apply_rules_conversion codex rules" } });
+    expect(scanning()).toBe(true);
+    animationEnd("view-scan");
+    rerender({ running: null, log: { ...APPLY, action: "apply_take_bundled tdd" } });
     expect(scanning()).toBe(true);
   });
 

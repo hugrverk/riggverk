@@ -74,7 +74,7 @@ Use fixture files in the isolated `HOME` (`~/.claude/CLAUDE.md`, `~/.codex/AGENT
 - [ ] Malformed markers (duplicate, unpaired, reordered) refuse with zero mutation
 - [ ] Non-empty `AGENTS.override.md` next to Codex rules produces a Codex health warning
 
-## 5b. Skill and agent conflicts (diff, keep mine, hand back)
+## 5b. Skill and agent conflicts (diff, keep mine, hand back, take bundled)
 
 Use the isolated `HOME`; install the skills and agents first, then edit `~/.claude/skills/tdd/SKILL.md` and `~/.claude/agents/verifier.md`.
 
@@ -86,7 +86,11 @@ Use the isolated `HOME`; install the skills and agents first, then edit `~/.clau
 - [ ] `m` on a kept unit hands it back at once and the file is a conflict again
 - [ ] A skill directory that is a symlink, or a directory where a file belongs, is a conflict with no `d` or `m`
 - [ ] A retired skill (not bundled) that you edited and kept survives `u` with all its files; uninstall leaves kept files and `kept-files.json`
-- [ ] The workspace page lists the harness with "you manage N" or "N in conflict" and points at the harness page; `:resolve diff tdd` does what `d` does
+- [ ] Take bundled: edit `~/.claude/skills/tdd/SKILL.md` (and one more file of another skill, which you leave alone), press `b` on `tdd`. The review writes nothing and shows the files, the backup name (`artifacts/skill-claude-tdd~SKILL.md`), the diff and "your files are backed up first"; Enter does nothing; `n` cancels. After `y` the file equals the bundled one, the unit is gone from the list, the other conflict is untouched, other pending updates were not applied, and the choice to keep it (if it was kept) is gone
+- [ ] The backup of that transaction (backup folder, `setup/<run>/artifacts/skill-claude-tdd~SKILL.md`) holds your exact bytes; `z` restores them and the unit is a conflict again (not kept); if you edit the file again after take bundled, `z` leaves your edit and says so
+- [ ] Take bundled is disabled with its reason on a retired skill and while another task runs; after keeping or handing back with a review open, `y` is refused as stale and `r` previews again
+- [ ] Copy the bundled file over a kept file by hand, then run any Install: the choice for that file is gone (its next edit is a conflict, not silently kept)
+- [ ] The workspace page lists the harness with "you manage N" or "N in conflict" and points at the harness page; `:resolve diff tdd` does what `d` does and `:resolve bundled tdd` opens the same review as `b`
 
 ## 6. Rollback and uninstall
 
@@ -179,8 +183,8 @@ Use the isolated `HOME`; install the skills and agents first, then edit `~/.clau
 - [ ] Block create/update, conflict, convert, leave-as-is passed
 - Notes: ________
 
-### Skill and agent conflicts (diff, keep mine, hand back)
-- [ ] Conflict listing, diff, keep, hand back, blocked files passed
+### Skill and agent conflicts (diff, keep mine, hand back, take bundled)
+- [ ] Conflict listing, diff, keep, hand back, take bundled and its rollback, blocked files passed
 - Notes: ________
 
 ### Rollback and uninstall

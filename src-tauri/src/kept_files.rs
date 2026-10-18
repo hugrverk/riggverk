@@ -151,6 +151,36 @@ impl KeptFiles {
     }
 }
 
+/// Identities of the kept files that now equal the bundled file, for the destination they were kept
+/// at. `equals_bundle` decides for one artifact whether its installed file is the bundled one.
+///
+/// Such an entry is inert: the file is current, so it plans as no change and the choice is never
+/// consulted. It must not outlive that, or a later edit of the file would be taken for a file the
+/// user still keeps. The caller releases them.
+pub fn matching_the_bundle(
+    workspace_root: &Path,
+    home: &Path,
+    equals_bundle: impl Fn(&ArtifactId) -> bool,
+) -> Vec<String> {
+    let Stored::Usable(entries) = read_stored(workspace_root) else {
+        return Vec::new();
+    };
+    entries
+        .into_iter()
+        .filter(|entry| {
+            crate::managed_bootstrap::artifact_from_identity(&entry.identity)
+                .ok()
+                .is_some_and(|artifact| {
+                    is_keepable(&artifact)
+                        && dest_label(&artifact, home, workspace_root)
+                            .is_ok_and(|dest| dest == entry.dest)
+                        && equals_bundle(&artifact)
+                })
+        })
+        .map(|entry| entry.identity)
+        .collect()
+}
+
 /// A file to keep.
 pub struct Keep {
     pub artifact: ArtifactId,

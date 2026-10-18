@@ -350,6 +350,21 @@ def main() -> None:
         fail("apply_planned_artifacts must delegate to run_planned_artifacts")
     if "consume_preview_token" not in function_body(setup_code, "run_planned_artifacts"):
         fail("preview token consumption must remain inside the apply body (run_planned_artifacts)")
+    # Taking the bundled version of a skill or agent file overwrites the user's file: it is an ordinary
+    # transaction through the apply owner (backup, manifest, validation, rollback), and the single
+    # place that consumes the token. No other module may consume one or write the file itself.
+    conflict_commands = production_code[TAURI / "commands/file_conflicts.rs"]
+    if not re.search(
+        r"\bapply_planned_artifacts\s*\(", function_body(conflict_commands, "apply_take_bundled")
+    ):
+        fail("apply_take_bundled must apply through apply_planned_artifacts")
+    for path in (
+        TAURI / "commands/file_conflicts.rs",
+        TAURI / "file_conflicts.rs",
+        TAURI / "kept_files.rs",
+    ):
+        if re.search(r"\bconsume_preview_token\b", production_code[path]):
+            fail(f"{path.relative_to(ROOT)} consumes a preview token; only the apply owner may")
 
     require(
         TAURI / "setup_transaction.rs",

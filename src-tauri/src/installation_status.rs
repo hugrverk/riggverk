@@ -413,6 +413,7 @@ mod tests {
             rules_rewrite: None,
             mcp: None,
             file: None,
+            overwrite: None,
         }
     }
 

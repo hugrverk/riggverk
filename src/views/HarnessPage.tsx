@@ -62,7 +62,8 @@ const NO_TOGGLE = "\u00a0\u00a0\u00a0";
  * toggle of the target that gates it (Space toggles, the change autosaves), [2] the detail of the row under the
  * cursor and the harness's runtime facts, then the output strip. Update and preview open the install review in
  * place of the pair; `d` and `v` on the rules row open the rules review (a diff, or the preview of converting
- * it) the same way, and `d` on a skills or agents row with files in conflict opens the conflict review (a diff).
+ * it) the same way, and `d` or `b` on a skills or agents row with files in conflict opens the conflict review (a
+ * diff, or the preview of taking the bundled version).
  */
 export function HarnessPage({
   harness,
@@ -127,7 +128,7 @@ export function HarnessPage({
   }, [installOpen, rulesFlow.close]);
 
   // Skill and agent files in conflict, or kept: c, d and m act on them while the cursor is on their row.
-  const conflictFlow = useFileConflictFlow();
+  const conflictFlow = useFileConflictFlow({ runWorkspaceTask, refresh: refreshAfterApply, onApplied });
   const fileModels = workspaceValid
     ? filesSurfacesOf(harness).flatMap((surface): FileConflictModel[] => {
         const model = fileConflictModelFor(entry?.status, surface);
@@ -220,6 +221,7 @@ export function HarnessPage({
           onMark={setMarkedKey}
           onToggleKept={files.toggleKept}
           busyLabel={wsRunning}
+          backupRoot={backupRoot}
         />
         {outputStrip()}
       </section>

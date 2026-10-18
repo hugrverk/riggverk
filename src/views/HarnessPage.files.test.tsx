@@ -22,6 +22,9 @@ import type {
   FileUnit,
   FileUnitFile,
   RulesStatus,
+  SetupResult,
+  TakeBundledPreview,
+  TakeBundledUnit,
 } from "../types";
 import { ClaudeView } from "./ClaudeView";
 import type { HarnessViewProps } from "./pageTypes";
@@ -197,6 +200,40 @@ function view(name: string, files: FileDiffEntry[], overrides: Partial<FileDiffV
   return { name, folder: "~/.claude/skills", files, more_files: 0, truncated: false, ...overrides };
 }
 
+const APPLY_RESULT: SetupResult = {
+  success: true,
+  transaction_id: "tx-take-1",
+  applied: ["~/.claude/skills/tdd/SKILL.md"],
+  failed: [],
+  rolled_back: [],
+  manual_steps: [],
+  message: "Successfully applied 1 artifact(s)",
+};
+
+function bundledUnit(overrides: Partial<TakeBundledUnit> = {}): TakeBundledUnit {
+  return {
+    key: "skill:claude:tdd",
+    name: "tdd",
+    folder: "~/.claude/skills",
+    files: [
+      {
+        rel: "SKILL.md",
+        state: "conflict",
+        backup_name: "artifacts/skill-claude-tdd~SKILL.md",
+        installed_digest: "sha256:0123456789ab",
+        bundled_digest: "sha256:ba9876543210",
+      },
+    ],
+    more_files: 0,
+    diff: view("tdd", [entry("SKILL.md")]),
+    ...overrides,
+  };
+}
+
+function takePreview(overrides: Partial<TakeBundledPreview> = {}): TakeBundledPreview {
+  return { surface: "skills", units: [bundledUnit()], plan_fingerprint: "fp-take-1234567890", preview_token: "tok-take-1", ...overrides };
+}
+
 function backend(overrides: Record<string, (args: Record<string, unknown>) => unknown> = {}) {
   invokeMock.mockImplementation(async (command: string, args: Record<string, unknown> = {}) => {
     const handler = overrides[command];
@@ -206,6 +243,12 @@ function backend(overrides: Record<string, (args: Record<string, unknown>) => un
         return view(String(args.unit).split(":").pop()!, [entry("SKILL.md")]);
       case "set_files_kept":
         return null;
+      case "preview_take_bundled": {
+        const key = (args.units as string[])[0]!;
+        return takePreview({ surface: args.surface as TakeBundledPreview["surface"], units: [bundledUnit({ key, name: key.split(":").pop()! })] });
+      }
+      case "apply_take_bundled":
+        return APPLY_RESULT;
       default:
         throw new Error(`unexpected ${command}`);
     }
@@ -710,5 +753,312 @@ describe(":resolve command", () => {
     renderClaude({});
     run("resolve diff");
     expect(screen.getByRole("alert").textContent).toContain("there are no conflicting or kept skill or agent files on this page");
+  });
+});
+
+describe("take bundled (b, y)", () => {
+  async function openPreview(seed: Seed = { skills: [TDD] }, overrides: Partial<HarnessViewProps> = {}, handlers: Record<string, (args: Record<string, unknown>) => unknown> = {}) {
+    backend(handlers);
+    const rendered = renderClaude(seed, overrides);
+    moveTo("skills");
+    press("b");
+    await screen.findByLabelText("Take bundled summary");
+    // `y` and `n` belong to the review pane: on a slow runner focus lands there a tick after the preview renders.
+    await waitFor(() => expect(review().contains(document.activeElement)).toBe(true));
+    return rendered;
+  }
+
+  it("is offered on skills and agents rows with files, and nowhere else", () => {
+    backend();
+    renderClaude({ skills: [TDD], rules: rules({ conflict_reason: "base_block_edited" }) });
+    focusSurfaces();
+    expect(hint(/take bundled/)).toBeNull();
+    moveTo("skills");
+    expect(hint(/take bundled/)).not.toBeNull();
+    moveTo("agents");
+    expect(hint(/take bundled/)).toBeNull();
+    press("b");
+    expect(invokeMock).not.toHaveBeenCalled();
+  });
+
+  it("is offered on a unit the user keeps too", () => {
+    backend();
+    renderClaude({ skills: [DIAGNOSE] });
+    moveTo("skills");
+    expect(hint(/take bundled/)).not.toBeNull();
+    expect(hint(/hand back/)).not.toBeNull();
+  });
+
+  it("previews with exact args: the files that go, where yours is backed up, and the diff, and writes nothing", async () => {
+    await openPreview();
+    expect(invokeMock).toHaveBeenCalledWith("preview_take_bundled", { surface: "skills", units: ["skill:claude:tdd"] });
+    expect(mode()).toBe("CONFIRM");
+    const summary = screen.getByLabelText("Take bundled summary").textContent!;
+    expect(summary).toContain("tdd · ~/.claude/skills");
+    expect(summary).toContain("Claude, OpenCode");
+    expect(summary).toContain("1 file: artifacts/skill-claude-tdd~SKILL.md");
+    expect(summary).toContain("everything else");
+    const pane = review();
+    expect(pane.querySelector(".pane-title")!.textContent).toContain("take bundled");
+    expect(pane.querySelector(".pane-title")!.textContent).toContain("+1 −1");
+    expect(pane.querySelector(".diff-line.remove .diff-text")!.textContent).toBe("Write the failing test first.");
+    expect(pane.querySelector(".q")!.textContent).toBe("replace your tdd with the bundled version? your files are backed up first");
+    expect(pane.querySelector(".bk")!.textContent).toContain("backup → /tmp/backups/<run> · transaction recorded · rollback available");
+    // Only the preview was asked for; the page's pair is replaced by the one pane and the output strip.
+    expect(invokeMock.mock.calls.map(call => call[0])).toEqual(["preview_take_bundled"]);
+    expect(screen.queryByRole("listbox", { name: "Claude surfaces" })).toBeNull();
+  });
+
+  it("counts the files of a skill and lists the backups, a few at a time", async () => {
+    const files = ["A.md", "B.md", "C.md", "D.md", "E.md", "F.md"].map(rel => ({
+      rel,
+      state: "conflict" as const,
+      backup_name: `artifacts/skill-agents-security-audit~${rel}`,
+      installed_digest: "sha256:0123456789ab",
+      bundled_digest: "sha256:ba9876543210",
+    }));
+    await openPreview({ skills: [AUDIT] }, {}, {
+      preview_take_bundled: () => takePreview({ units: [bundledUnit({ key: "skill:agents:security-audit", name: "security-audit", folder: "~/.agents/skills", files, more_files: 2, diff: view("security-audit", [entry("A.md")]) })] }),
+    });
+    expect(screen.getByLabelText("Take bundled summary").textContent).toContain("security-audit (8 files) · ~/.agents/skills");
+    expect(screen.getByLabelText("Take bundled summary").textContent).toContain("8 files: artifacts/skill-agents-security-audit~A.md, artifacts/skill-agents-security-audit~B.md");
+    expect(screen.getByLabelText("Take bundled summary").textContent).toContain("+4 more");
+    expect(review().querySelector(".q")!.textContent).toBe("replace your security-audit (8 files) with the bundled version? your files are backed up first");
+  });
+
+  it("applies with exactly the preview's fingerprint and token on y, reports into the output, and offers the rollback", async () => {
+    const { p } = await openPreview();
+    press("y");
+    await waitFor(() => expect(p.onApplied).toHaveBeenCalledTimes(1));
+    expect(invokeMock).toHaveBeenLastCalledWith("apply_take_bundled", {
+      surface: "skills",
+      units: ["skill:claude:tdd"],
+      planFingerprint: "fp-take-1234567890",
+      previewToken: "tok-take-1",
+    });
+    // The transaction is the rollback candidate (`z`).
+    expect(p.onApplied).toHaveBeenCalledWith(APPLY_RESULT);
+    expect(p.tasks.mock).toHaveBeenCalledTimes(1);
+    expect(p.tasks.mock.mock.calls[0]![0]).toMatchObject({ label: "take bundled tdd", action: "apply_take_bundled" });
+    await waitFor(() => expect(p.refreshAfterApply).toHaveBeenCalledTimes(1));
+    const log = p.tasks.logs[0]!;
+    expect(log).toMatchObject({ success: true, action: "apply_take_bundled tdd", exit_code: 0 });
+    expect(log.stdout).toContain("take bundled tdd · fingerprint verified");
+    expect(log.stdout).toContain("applied      tdd · yours backed up");
+    expect(log.stdout).toContain("transaction tx-take-1 recorded · rollback available");
+    // The review closes and the page's panes come back.
+    expect(await screen.findByRole("listbox", { name: "Claude surfaces" })).toBeTruthy();
+    await waitFor(() => expect(mode()).toBe("NORMAL"));
+  });
+
+  it("never applies on Enter, and y is also a button", async () => {
+    const { p } = await openPreview();
+    press("Enter");
+    expect(invokeMock).not.toHaveBeenCalledWith("apply_take_bundled", expect.anything());
+    // The review pane's hints reach the status bar once it has focus, which lags a tick on a loaded runner.
+    fireEvent.click(await statusBar().findByRole("button", { name: /apply/ }));
+    await waitFor(() => expect(p.onApplied).toHaveBeenCalledTimes(1));
+  });
+
+  it("cancels with n and Escape and writes nothing", async () => {
+    await openPreview();
+    press("n");
+    expect(invokeMock).not.toHaveBeenCalledWith("apply_take_bundled", expect.anything());
+    expect(screen.getByRole("listbox", { name: "Claude surfaces" })).toBeTruthy();
+    expect(mode()).toBe("NORMAL");
+    press("b");
+    await screen.findByLabelText("Take bundled summary");
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    expect(screen.queryByRole("region", { name: "Conflict review" })).toBeNull();
+    expect(invokeMock).not.toHaveBeenCalledWith("apply_take_bundled", expect.anything());
+  });
+
+  it("applies once however often y is pressed, and cannot be cancelled while it runs", async () => {
+    let finish: (result: SetupResult) => void = () => {};
+    const pending = new Promise<SetupResult>(resolve => {
+      finish = resolve;
+    });
+    const { p } = await openPreview({ skills: [TDD] }, {}, { apply_take_bundled: () => pending });
+    press("y");
+    press("y");
+    await waitFor(() => expect(invokeMock.mock.calls.filter(call => call[0] === "apply_take_bundled")).toHaveLength(1));
+    expect(review().querySelector(".q")!.textContent).toBe("applying: backing up, then writing…");
+    press("n");
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    expect(review()).toBeTruthy();
+    expect(statusBar().queryByRole("button", { name: /cancel/ })?.getAttribute("title")).toBe("applying; it cannot be cancelled");
+    await act(async () => finish(APPLY_RESULT));
+    await waitFor(() => expect(p.onApplied).toHaveBeenCalledTimes(1));
+    expect(await screen.findByRole("listbox", { name: "Claude surfaces" })).toBeTruthy();
+  });
+
+  it("keeps a rejected apply (stale fingerprint) in the review, reports it in the output, and previews again on r", async () => {
+    let previews = 0;
+    const { p } = await openPreview({ skills: [TDD] }, {}, {
+      preview_take_bundled: () => takePreview({ preview_token: `tok-${++previews}` }),
+      apply_take_bundled: () => {
+        throw new Error("Plan fingerprint mismatch: the files changed after preview. Re-run preview before applying.");
+      },
+    });
+    press("y");
+    expect((await screen.findByRole("alert")).textContent).toContain("Plan fingerprint mismatch");
+    expect(review().textContent).toContain("Nothing was written; preview again to review the files as they are now.");
+    expect(p.onApplied).not.toHaveBeenCalled();
+    expect(p.tasks.logs[0]).toMatchObject({ success: false, action: "apply_take_bundled tdd" });
+    expect(p.tasks.logs[0]!.stderr).toContain("Plan fingerprint mismatch");
+    press("r");
+    await screen.findByLabelText("Take bundled summary");
+    expect(previews).toBe(2);
+  });
+
+  it("shows a failed preview with a way to try again, and offers no apply", async () => {
+    let attempts = 0;
+    backend({
+      preview_take_bundled: () => {
+        attempts += 1;
+        if (attempts === 1) throw new Error("this skill or agent has no conflicting or kept files right now");
+        return takePreview();
+      },
+    });
+    renderClaude({ skills: [TDD] });
+    moveTo("skills");
+    press("b");
+    expect((await screen.findByRole("alert")).textContent).toContain("has no conflicting or kept files right now");
+    expect(review().textContent).toContain("The take-bundled preview could not be computed. Nothing was written.");
+    press("y");
+    expect(invokeMock).not.toHaveBeenCalledWith("apply_take_bundled", expect.anything());
+    press("r");
+    await screen.findByLabelText("Take bundled summary");
+    expect(attempts).toBe(2);
+  });
+
+  it("waits for a running task before it applies, and before it previews", async () => {
+    const { p, rerenderFrame } = await openPreview();
+    rerenderFrame(<ClaudeView {...p} wsRunning="uninstall" runtimeHealth={CLAUDE_HEALTH} />);
+    const apply = statusBar().getByRole("button", { name: /apply/ });
+    expect(apply.getAttribute("title")).toBe("uninstall is running");
+    press("y");
+    expect(invokeMock).not.toHaveBeenCalledWith("apply_take_bundled", expect.anything());
+    cleanup();
+
+    invokeMock.mockClear();
+    backend();
+    renderClaude({ skills: [TDD] }, { wsRunning: "update claude" });
+    moveTo("skills");
+    expect(hint(/take bundled/)?.getAttribute("title")).toBe("update claude is running");
+    press("b");
+    expect(invokeMock).not.toHaveBeenCalled();
+  });
+
+  it("is disabled with its reason for a skill the bundle no longer ships, though keeping and the diff still work", () => {
+    backend();
+    renderClaude({ skills: [unit({ key: "skill:claude:retired", name: "retired", wanted: false })] });
+    moveTo("skills");
+    expect(hint(/take bundled/)?.getAttribute("title")).toBe("no bundled copy is wanted in this folder");
+    expect(hint(/diff/)?.getAttribute("title")).toBeNull();
+    press("b");
+    expect(invokeMock).not.toHaveBeenCalled();
+  });
+
+  it("opens from the diff with b, and offers keeping only there", async () => {
+    backend();
+    renderClaude({ skills: [TDD] });
+    moveTo("skills");
+    press("d");
+    await screen.findByRole("group", { name: "SKILL.md: yours to bundled" });
+    await waitFor(() => expect(review().contains(document.activeElement)).toBe(true));
+    expect(await statusBar().findByRole("button", { name: /take bundled/ })).toBeTruthy();
+    press("b");
+    await screen.findByLabelText("Take bundled summary");
+    expect(invokeMock).toHaveBeenLastCalledWith("preview_take_bundled", { surface: "skills", units: ["skill:claude:tdd"] });
+    expect(statusBar().queryByRole("button", { name: /keep mine/ })).toBeNull();
+    expect(statusBar().queryByRole("button", { name: /take bundled/ })).toBeNull();
+    expect(statusBar().queryByRole("button", { name: /apply/ })).not.toBeNull();
+    // [ and ] would open another unit's diff: not in a preview that is about to be applied.
+    press("]");
+    expect(invokeMock).not.toHaveBeenCalledWith("preview_file_diff", expect.objectContaining({ unit: "skill:agents:security-audit" }));
+  });
+
+  it("tells a kept unit that taking the bundled version ends the choice", async () => {
+    await openPreview({ skills: [DIAGNOSE] }, {}, {
+      preview_take_bundled: () => takePreview({ units: [bundledUnit({ key: "skill:claude:diagnose", name: "diagnose", files: [{ ...bundledUnit().files[0]!, state: "kept" }] })] }),
+    });
+    expect(review().textContent).toContain("You keep your version now. After taking the bundled one Riggverk manages it again");
+  });
+
+  it("masks token shapes in the diff of the preview too", async () => {
+    await openPreview();
+    expect(review().textContent).not.toContain(FAKE_GH);
+    expect(review().textContent).toContain("Write one failing test. token [REDACTED]");
+  });
+
+  it("gives way to the install review when it opens", async () => {
+    const { p, rerenderFrame } = await openPreview();
+    const install = installScreenOf(flowOf([op("claude_rules", "update")], { label: "update claude", surfaces: ["claude_rules"] }), "claude");
+    rerenderFrame(<ClaudeView {...p} install={install} runtimeHealth={CLAUDE_HEALTH} />);
+    expect(screen.getByRole("grid", { name: "Install plan" })).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "Conflict review" })).toBeNull();
+    expect(invokeMock).not.toHaveBeenCalledWith("apply_take_bundled", expect.anything());
+  });
+
+  it("takes an agent the same way", async () => {
+    backend();
+    const { p } = renderClaude({ agents: [VERIFIER] });
+    moveTo("agents");
+    press("b");
+    await screen.findByLabelText("Take bundled summary");
+    expect(invokeMock).toHaveBeenLastCalledWith("preview_take_bundled", { surface: "claude_agents", units: ["agent:verifier"] });
+    await waitFor(() => expect(review().contains(document.activeElement)).toBe(true));
+    press("y");
+    await waitFor(() => expect(p.onApplied).toHaveBeenCalledTimes(1));
+    expect(invokeMock).toHaveBeenLastCalledWith("apply_take_bundled", {
+      surface: "claude_agents",
+      units: ["agent:verifier"],
+      planFingerprint: "fp-take-1234567890",
+      previewToken: "tok-take-1",
+    });
+  });
+});
+
+describe(":resolve bundled", () => {
+  function run(line: string) {
+    fireEvent.keyDown(document.body, { key: ":", shiftKey: true });
+    const input = screen.getByRole("combobox", { name: "Command" }) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: line } });
+    fireEvent.keyDown(input, { key: "Enter" });
+  }
+
+  it("opens the same preview as b, for the marked unit or a named one", async () => {
+    backend();
+    renderClaude({ skills: [TDD, AUDIT], agents: [VERIFIER] });
+    moveTo("skills");
+    run("resolve bundled");
+    await screen.findByLabelText("Take bundled summary");
+    expect(invokeMock).toHaveBeenLastCalledWith("preview_take_bundled", { surface: "skills", units: ["skill:claude:tdd"] });
+    press("n");
+
+    run("resolve bundled verifier");
+    await waitFor(() => expect(invokeMock).toHaveBeenLastCalledWith("preview_take_bundled", { surface: "claude_agents", units: ["agent:verifier"] }));
+    // The command only previews: nothing is applied without y.
+    expect(invokeMock).not.toHaveBeenCalledWith("apply_take_bundled", expect.anything());
+  });
+
+  it("is refused in the same situations the key is, with the same reason", () => {
+    backend();
+    renderClaude({ skills: [unit({ key: "skill:claude:retired", name: "retired", wanted: false })] }, { wsRunning: "update claude" });
+    moveTo("skills");
+    run("resolve bundled retired");
+    expect(screen.getByRole("alert").textContent).toContain("resolve bundled: no bundled copy is wanted in this folder");
+    fireEvent.keyDown(screen.getByRole("combobox", { name: "Command" }), { key: "Escape" });
+    cleanup();
+
+    renderClaude({ skills: [TDD] }, { wsRunning: "update claude" });
+    moveTo("skills");
+    run("resolve bundled");
+    expect(screen.getByRole("alert").textContent).toContain("resolve bundled: update claude is running");
+    fireEvent.keyDown(screen.getByRole("combobox", { name: "Command" }), { key: "Escape" });
+    run("resolve bundled nothing-here");
+    expect(screen.getByRole("alert").textContent).toContain("resolve bundled: no skill or agent named nothing-here is in conflict or kept here");
+    expect(invokeMock).not.toHaveBeenCalled();
   });
 });
