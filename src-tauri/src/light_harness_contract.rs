@@ -2366,7 +2366,11 @@ mod tests {
             );
             command.truncate(command.len() - 2);
             command.extend([json!("--browser"), json!("chrome"), json!("--isolated")]);
-            assert_eq!(kilo["command"], Value::Array(command));
+            assert_eq!(kilo["command"], Value::Array(command.clone()));
+            // Key order and every value too: the entry is the OpenCode one in all but the flags.
+            let mut expected = opencode.clone();
+            expected["command"] = Value::Array(command);
+            assert_eq!(kilo.to_string(), expected.to_string());
         }
 
         #[test]
