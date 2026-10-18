@@ -1639,6 +1639,79 @@ mod tests {
         assert!(env.preview_take(surface, &["skill:claude:tdd"]).is_err());
     }
 
+    #[test]
+    fn take_bundled_refuses_a_file_too_large_to_back_up() {
+        let env = Env::new("take-large", &SKILLS);
+        // A sparse file just over the limit: nothing is read to find that out.
+        let large = fs::File::create(env.path(&tdd())).expect("create");
+        large.set_len(64 * 1024 * 1024 + 1).expect("set length");
+        drop(large);
+        let transactions = env.transactions();
+
+        let error = env
+            .preview_take(SetupSurfaceId::Skills, &["skill:claude:tdd"])
+            .unwrap_err();
+        assert!(error.contains("too large to back up"), "{error}");
+        assert_eq!(env.transactions(), transactions);
+        assert_eq!(
+            fs::metadata(env.path(&tdd())).expect("file").len(),
+            64 * 1024 * 1024 + 1
+        );
+        // The same file at the limit is replaced.
+        let at_limit = fs::File::options()
+            .write(true)
+            .open(env.path(&tdd()))
+            .expect("open");
+        at_limit.set_len(64 * 1024 * 1024).expect("set length");
+        drop(at_limit);
+        assert!(env
+            .preview_take(SetupSurfaceId::Skills, &["skill:claude:tdd"])
+            .is_ok());
+    }
+
+    #[test]
+    fn a_take_bundled_proof_cannot_drive_an_install_and_an_install_proof_cannot_drive_a_take_bundled(
+    ) {
+        let env = Env::new("take-cross", &SKILLS);
+        let surface = SetupSurfaceId::Skills;
+        let mine = b"my own tdd\n";
+        env.write(&tdd(), mine);
+        let outdated = skill_file(SkillRoot::Claude, "security-audit", "ATTACK-CLASSES.md");
+        let older = b"attack classes of an older version\n";
+        env.write(&outdated, older);
+        env.set_record(&outdated, older);
+
+        let install = env.preview(&SKILLS);
+        let take = env
+            .preview_take(surface, &["skill:claude:tdd"])
+            .expect("preview");
+        let transactions = env.transactions();
+
+        let result = apply_setup(
+            vec!["skills".to_string()],
+            true,
+            Some(take.plan_fingerprint.clone()),
+            Some(take.preview_token.clone()),
+        );
+        assert!(
+            !matches!(&result, Ok(done) if done.success),
+            "a take bundled proof drove an install: {result:?}"
+        );
+        let error = env
+            .apply_take_with(
+                surface,
+                &["skill:claude:tdd"],
+                install.plan_fingerprint.clone(),
+                install.preview_token.clone(),
+            )
+            .unwrap_err();
+        assert!(error.contains("mismatch"), "{error}");
+        env.assert_untouched(
+            &transactions,
+            &[(&tdd(), &mine[..]), (&outdated, &older[..])],
+        );
+    }
+
     #[cfg(unix)]
     #[test]
     fn take_bundled_refuses_a_link_swapped_in_after_the_preview() {

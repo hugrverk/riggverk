@@ -1210,6 +1210,15 @@ pub fn take_bundled_operations(
             {
                 return Err(BLOCKED_FILE.to_string());
             }
+            // The backup reads the whole file into memory, and the file is the user's: bound it.
+            let size = fs::metadata(&dest)
+                .map_err(|e| format!("read {}: {e}", dest.display()))?
+                .len();
+            if size > MAX_REPLACED_FILE_BYTES {
+                return Err(
+                    "a file is too large to back up here; nothing can be replaced".to_string(),
+                );
+            }
             let installed = crate::stable_digest::file(&dest)?;
             if crate::stable_digest::file(&source)? == installed {
                 // Already the bundled file: there is nothing to replace.
@@ -1239,6 +1248,8 @@ pub fn take_bundled_operations(
 }
 
 const BLOCKED_FILE: &str = "a link or folder is in the way; nothing can be replaced here";
+/// Largest installed file a take bundled replaces (it is backed up first).
+const MAX_REPLACED_FILE_BYTES: u64 = 64 * 1024 * 1024;
 
 /// Fingerprint of a take-bundled request: the regular plan fingerprint of the operations plus, for
 /// every file, the exact digest of the installed file the user reviewed and whether they keep it.
