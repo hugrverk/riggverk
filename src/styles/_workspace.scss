@@ -70,7 +70,7 @@
 
 /* Every key/value block of a detail pane shares one label column, so the values of consecutive blocks (surface
    facts, rules file, runtime, verify) line up instead of each block sizing its own. 13ch fits the longest label
-   (`release-check`, `default agent`); a longer one still widens its own block. */
+   (`default agent`); a longer one still widens its own block. */
 .screen.pair .pane-body .kv {
   grid-template-columns: minmax(13ch, max-content) minmax(0, 1fr);
 }

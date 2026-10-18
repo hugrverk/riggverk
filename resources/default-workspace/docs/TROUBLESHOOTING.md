@@ -108,7 +108,3 @@ The Bash scripts support macOS and Linux. On Git Bash or MSYS they refuse to run
 ```
 
 Without `--apply` they write nothing.
-
-## Release-check unavailable
-
-The bundled workspace has no `scripts/release-check.sh`, so **release-check** is disabled. Run `./scripts/release-check.sh` from the app repository checkout.

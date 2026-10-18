@@ -661,7 +661,6 @@ function diagnostics(): WorkspaceDiagnostics {
     total_config_targets: 2,
     backup_root: BACKUP_ROOT,
     backup_root_exists: backups.length > 0,
-    release_check_available: valid,
     bundled_resources_status: valid ? "current" : "missing",
     missing_bundled_count: valid ? 0 : 12,
     missing_bundled_sample: valid ? [] : ["skills/diagnose/SKILL.md", "agents/verifier.md"],
@@ -944,21 +943,6 @@ function actionResult(action: string, success: boolean, stdout: string, stderr =
   return { success, action, stdout, stderr, exit_code: success ? 0 : 1 };
 }
 
-async function runAction(action: string): Promise<ActionResult> {
-  await delay(900);
-  switch (action) {
-    case "release_check":
-      return actionResult(
-        action,
-        scenario !== "error",
-        "git           clean · main · ahead 0\ncargo test    212 passed\nvitest        302 passed · 0 skipped\nmanifest      402 files · digest a7c3e1\nrelease-check ok\n",
-        scenario === "error" ? "release-check: workspace invalid" : "",
-      );
-    default:
-      return actionResult(action, true, `${action}: ok\n`);
-  }
-}
-
 /* ---- apply progress ---- */
 
 const MOCK_SKILLS = ["handoff", "diagnose", "implementation-plan", "release-check"];
@@ -1105,8 +1089,6 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
       for (const surface of ALL_SURFACES) surfaceStates.set(surface, "not_installed");
       lastTransactionId = "2026-10-06T09-00-00Z-u001";
       return { success: true, transaction_id: lastTransactionId, applied: ["~/.claude/CLAUDE.md", "~/.codex/agents"], failed: [], rolled_back: [], manual_steps: [], message: "uninstalled 2 · preserved 1 · merged 1" } satisfies SetupResult;
-    case "run_action":
-      return runAction(arg<string>(args, "action"));
     case "list_backups":
       return backups;
     case "get_backup_details":

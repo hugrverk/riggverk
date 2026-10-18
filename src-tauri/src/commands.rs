@@ -1,4 +1,3 @@
-mod actions;
 pub(crate) mod backups;
 mod claude_runtime;
 mod codex_runtime;
@@ -24,7 +23,6 @@ mod skills;
 mod status;
 mod workspace;
 
-pub use actions::run_action;
 pub use backups::{get_backup_details, list_backups, open_backups_folder};
 pub use claude_runtime::get_claude_runtime_health;
 pub use codex_runtime::get_codex_runtime_health;

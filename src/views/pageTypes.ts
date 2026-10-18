@@ -14,7 +14,6 @@ export interface PageOutputProps {
   status: StatusData | null;
   workspaceValid: boolean;
   gitAvailable: boolean;
-  canRunReleaseCheck: boolean;
   onClearOutput: () => void;
 }
 

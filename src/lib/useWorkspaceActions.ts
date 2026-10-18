@@ -1,25 +1,15 @@
 import { useState, useCallback, useRef } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import type { ActionResult } from "../components/TerminalOutput";
-import type { WorkspaceDiagnostics } from "../types";
 import { wait } from "./timing";
 
 const MIN_RUNNING_MS = 700;
 
 interface UseWorkspaceActionsOptions {
-  fetchStatus: (generation?: number) => Promise<void>;
-  isInvalidWorkspaceError: (e: unknown) => boolean;
-  workspaceDiagnostics: WorkspaceDiagnostics | null;
   setError: (msg: string | null) => void;
 }
 
 export function useWorkspaceActions(opts: UseWorkspaceActionsOptions) {
-  const {
-    fetchStatus,
-    isInvalidWorkspaceError,
-    workspaceDiagnostics,
-    setError,
-  } = opts;
+  const { setError } = opts;
 
   const workspaceActionLockRef = useRef(false);
   const workspaceActionRequestIdRef = useRef(0);
@@ -33,44 +23,6 @@ export function useWorkspaceActions(opts: UseWorkspaceActionsOptions) {
   const [wsLog, setWsLog] = useState<ActionResult | null>(null);
   const [wsRunning, setWsRunning] = useState<string | null>(null);
   const [wsLogCompletedAt, setWsLogCompletedAt] = useState<number | null>(null);
-
-  const runWsAction = useCallback(async (action: string, label: string) => {
-    if (workspaceActionLockRef.current) return;
-    workspaceActionLockRef.current = true;
-    const requestId = ++workspaceActionRequestIdRef.current;
-    const isCurrentAction = () => workspaceActionRequestIdRef.current === requestId;
-    const startedAt = performance.now();
-    setWsRunning(label); setError(null);
-    try {
-      if (action === "release_check" && workspaceDiagnostics && !workspaceDiagnostics.valid) {
-        if (isCurrentAction()) {
-          setWsLog({ success: false, action, stdout: "", stderr: "No valid workspace installed. Install it from the Workspace page.", exit_code: null });
-        }
-        setWsLogCompletedAt(Date.now());
-        return;
-      }
-      const result = await invoke<ActionResult>("run_action", { action });
-      if (!isCurrentAction()) return;
-      setWsLog(result);
-      setWsLogCompletedAt(Date.now());
-      if (result.success) setError(null);
-      if (!action.startsWith("open_")) fetchStatus();
-    } catch (e) {
-      if (!isCurrentAction()) return;
-      if (isInvalidWorkspaceError(e)) {
-        setWsLog({ success: false, action, stdout: "", stderr: "No valid workspace installed. Install it from the Workspace page.", exit_code: null });
-      } else {
-        setError(`${action}: ${e}`);
-      }
-      setWsLogCompletedAt(Date.now());
-    }
-    finally {
-      const remaining = MIN_RUNNING_MS - (performance.now() - startedAt);
-      if (remaining > 0) await wait(remaining);
-      if (isCurrentAction()) setWsRunning(null);
-      workspaceActionLockRef.current = false;
-    }
-  }, [fetchStatus, workspaceDiagnostics, isInvalidWorkspaceError, setError]);
 
   /** Generic terminal task runner. Wraps an async task with action lock,
    *  request cancellation, min-running delay, wsRunning/wsLog/wsLogCompletedAt.
@@ -124,7 +76,6 @@ export function useWorkspaceActions(opts: UseWorkspaceActionsOptions) {
     wsRunning,
     wsLog,
     wsLogCompletedAt,
-    runWsAction,
     runWsTask,
     workspaceActionRequestIdRef,
     resetTerminalOutput,

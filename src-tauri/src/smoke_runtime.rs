@@ -77,12 +77,6 @@ mod tests {
             field(&diagnostics, "resolved_path").as_str(),
             Some(workspace_canonical.to_string_lossy().as_ref())
         );
-        // The bundled default workspace ships no scripts/release-check.sh (that
-        // script lives in the app repository), so it must not be reported.
-        assert_eq!(
-            field(&diagnostics, "release_check_available"),
-            &Value::Bool(false)
-        );
 
         let status =
             serde_json::to_value(get_status().expect("get_status")).expect("serialize status");

@@ -74,7 +74,7 @@ Still honored from repository config: filter drivers (`filter.<name>.clean` and 
 
 ## Scripts
 
-The app runs its `python3` merge and generator helpers from the bundled, read-only copy, never from the editable runtime workspace, with fixed arguments. It never uses `sh -c` or a shell plugin (`check-shell-spawn.py` enforces this in release-check). The one exception is the user-triggered release check (`R` on the Workspace page, `:release-check`): it runs `scripts/release-check.sh` from the workspace when that file exists, and only after a confirmation that names the folder. The bundled workspace does not contain it, so the action is unavailable unless you put the script there yourself; treat a workspace you did not create as untrusted before running it.
+The app runs its `python3` merge and generator helpers from the bundled, read-only copy, never from the editable runtime workspace, with fixed arguments. It never uses `sh -c` or a shell plugin (`check-shell-spawn.py` enforces this in release-check).
 
 The CLI scripts in `scripts/` are for operators and are not called by the app (except the bundled Python helpers). They default to dry-run, require `--apply` to write, back up an existing target and verify the copy before overwriting it, refuse a rules file that holds a managed block, refuse broad backup and agents directories, and take target overrides from `--target` or environment variables. They are macOS and Linux only; Git Bash and MSYS are refused unless `AGENT_WORKSPACE_BACKUP_DIR` is set.
 
@@ -90,7 +90,7 @@ The CLI scripts in `scripts/` are for operators and are not called by the app (e
 
 ## Process output
 
-Command output is redacted for display and capped at 16 MB per stream. Helper subprocesses run with a 120 s default timeout; a timeout kills the whole process group. The release check gets a longer limit.
+Command output is redacted for display and capped at 16 MB per stream. Helper subprocesses run with a 120 s default timeout; a timeout kills the whole process group.
 
 ## Release verification
 

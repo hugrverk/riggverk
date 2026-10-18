@@ -95,7 +95,7 @@ Generated adapters must stay current with their sources; repository checks fail 
 
 Tabs in order (press `1`-`7`; disabled harnesses are hidden and the rest renumber): workspace, codex, opencode, cursor, claude, library, settings. `?` lists every key and command; `:` opens the command line.
 
-- Workspace - harness list with install state, surfaces, installed-state matrix, release-check, uninstall with preview, session-scoped **Recover previous uninstall**, backups folder, output.
+- Workspace - harness list with install state, surfaces, installed-state matrix, uninstall with preview, session-scoped **Recover previous uninstall**, backups folder, output.
 - Codex, OpenCode, Cursor, Claude - target toggles (Space, autosaved), surfaces, runtime health, install review. OpenCode adds the model override.
 - Library - an items list and one document pane (rendered, or its source while editing) for docs, rules, skills, runtime agents, and configs. Saves write the runtime workspace only (`:w`, `:q`).
 - Settings - harnesses, appearance, text size, motion, landing page, colors, workspace.
@@ -141,7 +141,7 @@ Overrides are honored in release builds too. Use them with a temporary `HOME` wh
 - Existing files that Install or a Library save would overwrite are backed up first, owner-only (0700 dirs, 0600 files on Unix).
 - Config and rules merges preserve user-owned content or refuse unsafe writes with zero mutation.
 - Credential-bearing files and unrelated personal files are outside the workspace contract.
-- Python generators and merge scripts run from the bundled copy, never from the workspace. The user-triggered release check is the exception: it runs `scripts/release-check.sh` from the workspace if you put one there, after a confirmation that names the folder.
+- Python generators and merge scripts run from the bundled copy, never from the workspace.
 
 See `docs/SECURITY_MODEL.md` for the full boundaries.
 

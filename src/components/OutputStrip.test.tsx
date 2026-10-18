@@ -30,7 +30,6 @@ function props(overrides: Partial<OutputStripProps> = {}): OutputStripProps {
     status: STATUS,
     workspaceValid: true,
     gitAvailable: true,
-    canRunReleaseCheck: true,
     ...overrides,
   };
 }
@@ -131,12 +130,12 @@ describe("OutputStrip", () => {
       expect(line().querySelector(".g")!.className).toContain("c-fail");
     });
 
-    it("names a release check the same way finished as while it ran", () => {
-      const { rerenderFrame } = renderInFrame(<OutputStrip {...props({ wsRunning: "release-check" })} />);
-      expect(line().textContent).toContain("release-check");
-      rerenderFrame(<OutputStrip {...props({ wsLog: { ...APPLY, action: "release_check" } })} />);
-      expect(line().textContent).toContain("✓release-check · ok");
-      expect(line().textContent).not.toContain("release_check");
+    it("names an uninstall the same way finished as while it ran", () => {
+      const { rerenderFrame } = renderInFrame(<OutputStrip {...props({ wsRunning: "uninstall" })} />);
+      expect(line().textContent).toContain("uninstall");
+      rerenderFrame(<OutputStrip {...props({ wsLog: { ...APPLY, action: "apply_uninstall" } })} />);
+      expect(line().textContent).toContain("✓uninstall · ok");
+      expect(line().textContent).not.toContain("apply_uninstall");
     });
 
     it("offers the transaction z would roll back, as its own button beside the result only", () => {

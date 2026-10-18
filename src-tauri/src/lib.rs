@@ -55,7 +55,7 @@ use commands::{
     open_opencode_config_source, open_skill, preview_rules_conversion, preview_rules_diff,
     preview_setup, preview_uninstall, read_agent_source, read_agent_template, read_config_template,
     read_doc, read_opencode_config_source, read_opencode_model_selection, read_skill,
-    reset_active_workspace_path, rollback_setup_transaction, run_action, save_agent_source,
+    reset_active_workspace_path, rollback_setup_transaction, save_agent_source,
     save_agent_template, save_doc, save_opencode_config_source, set_rules_user_managed,
     try_set_active_workspace_path, update_opencode_model_selection, update_settings,
 };
@@ -81,7 +81,6 @@ pub fn run() {
             open_default_workspace_folder,
             try_set_active_workspace_path,
             reset_active_workspace_path,
-            run_action,
             get_claude_runtime_health,
             get_codex_runtime_health,
             get_cursor_profile_health,

@@ -192,9 +192,9 @@ describe("InstallPlanPane", () => {
     });
 
     it("waits for an unrelated running task like the key does", () => {
-      const { onApply } = renderPane(makeFlow(), { busyLabel: "release-check" });
+      const { onApply } = renderPane(makeFlow(), { busyLabel: "uninstall" });
       const apply = confirmLine().getByRole("button", { name: "apply" });
-      expect(apply.getAttribute("title")).toBe("release-check is running");
+      expect(apply.getAttribute("title")).toBe("uninstall is running");
       fireEvent.click(apply);
       expect(onApply).not.toHaveBeenCalled();
     });
@@ -263,11 +263,11 @@ describe("InstallPlanPane", () => {
   });
 
   it("waits for an unrelated running task before applying", () => {
-    const { onApply } = renderPane(makeFlow(), { busyLabel: "release-check" });
+    const { onApply } = renderPane(makeFlow(), { busyLabel: "uninstall" });
     press("y");
     expect(onApply).not.toHaveBeenCalled();
     const apply = bar().getByRole("button", { name: /apply/ });
-    expect(apply.getAttribute("title")).toBe("release-check is running");
+    expect(apply.getAttribute("title")).toBe("uninstall is running");
   });
 
   it("has no apply path for a read-only preview", () => {

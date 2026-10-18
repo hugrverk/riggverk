@@ -1,6 +1,5 @@
 /** Whole action ids and the label the strip showed while they ran. */
 const ACTION_LABELS: Record<string, string> = {
-  release_check: "release-check",
   apply_uninstall: "uninstall",
   rollback_setup_transaction: "rollback",
 };
@@ -13,8 +12,7 @@ const ACTION_PREFIXES: Record<string, string> = {
 
 /**
  * The display name of an `ActionResult.action`: the same words the output strip showed while the task ran, so a
- * finished task is not renamed (`release-check` running, `release_check` done). Unknown ids keep their words with
- * dashes instead of underscores.
+ * finished task is not renamed. Unknown ids keep their words with dashes instead of underscores.
  */
 export function actionLabel(action: string): string {
   const exact = ACTION_LABELS[action];

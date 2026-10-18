@@ -17,7 +17,7 @@ import { VIEW_DEFS, type AppView } from "./views";
 export interface AppCommandDeps {
   enabledHarnessIds: readonly InstallAgent[];
   workspaceValid: boolean;
-  /** Label of the workspace task in flight (apply, release-check, ...), or null. */
+  /** Label of the workspace task in flight (apply, uninstall, ...), or null. */
   busyLabel: string | null;
   overview?: InstallationOverview;
   /** The app's single navigation path. */
@@ -32,8 +32,6 @@ export interface AppCommandDeps {
   clearOutput: () => void;
   /** Text of the last output (stdout + stderr), or null when there is none. */
   outputText: string | null;
-  canRunReleaseCheck: boolean;
-  runReleaseCheck: () => void;
   /**
    * Opens the install review on the target's page: previews, then asks y or n before anything is written.
    * `readOnly` shows the plan without an apply path. Surfaces whose target toggle is off are never part of it.
@@ -69,7 +67,7 @@ function isDarkNow(): boolean {
 }
 
 /**
- * Global command set for `:` (view switches, theme, refresh, open, clear, copy, help, release-check,
+ * Global command set for `:` (view switches, theme, refresh, open, clear, copy, help,
  * update, preview, rollback, uninstall). Views add their own through `useCommands` while mounted.
  *
  * Mutating commands never write directly: `update` and `preview` open the install review (plan table, then
@@ -222,14 +220,6 @@ export function useAppCommands(deps: AppCommandDeps): void {
       group: "App",
       enabled: () => (currentMotion() === "full" ? true : "the launch sequence needs motion: full"),
       run: () => replayBoot(),
-    },
-    {
-      name: "release-check",
-      aliases: ["rc"],
-      summary: "run the workspace release check",
-      group: "Workspace",
-      enabled: guarded(workspaceReason, busyReason, () => (deps.canRunReleaseCheck ? true : "release-check is not available in this workspace")),
-      run: () => deps.runReleaseCheck(),
     },
     {
       name: "update",

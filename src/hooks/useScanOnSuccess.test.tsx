@@ -69,12 +69,11 @@ describe("useScanOnSuccess", () => {
     expect(scanning()).toBe(true);
   });
 
-  it("does nothing for a failure, an uninstall, a release check or an action it does not know", () => {
+  it("does nothing for a failure, an uninstall or an action it does not know", () => {
     const { rerender } = mount();
     for (const log of [
       { ...APPLY, success: false },
       { ...APPLY, action: "apply_uninstall" },
-      { ...APPLY, action: "release_check" },
       { ...APPLY, action: "apply_setup_extra" },
     ]) {
       rerender({ running: null, log });
