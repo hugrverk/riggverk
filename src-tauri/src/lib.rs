@@ -10,6 +10,7 @@ mod cursor_profile_paths;
 mod executable_resolver;
 mod installation_status;
 mod light_harness;
+mod light_mcp;
 mod managed_bootstrap;
 mod managed_state;
 mod mutation_lock;

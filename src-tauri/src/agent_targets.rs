@@ -63,6 +63,9 @@ pub enum TargetKind {
     Agents,
     #[serde(rename = "config")]
     Config,
+    /// The managed entry of an MCP file (the light tier).
+    #[serde(rename = "mcp")]
+    Mcp,
 }
 
 pub struct AgentSyncTarget {
@@ -159,19 +162,26 @@ pub fn targets() -> Vec<AgentSyncTarget> {
             source_rel: "templates/cursor/agents",
         },
     ];
-    // The light tier's rows come from the descriptor, in its order.
-    all.extend(
-        crate::light_harness::light_harnesses()
-            .iter()
-            .map(|harness| AgentSyncTarget {
-                id: &harness.rules.target_id,
-                label: &harness.rules.target_label,
-                harness: harness.id,
-                kind: TargetKind::Rules,
-                target_rel: &harness.rules.target_rel,
-                source_rel: &harness.rules.source_rel,
-            }),
-    );
+    // The light tier's rows come from the descriptor, in its order: per harness the rules file,
+    // then the MCP entry.
+    for harness in crate::light_harness::light_harnesses() {
+        all.push(AgentSyncTarget {
+            id: &harness.rules.target_id,
+            label: &harness.rules.target_label,
+            harness: harness.id,
+            kind: TargetKind::Rules,
+            target_rel: &harness.rules.target_rel,
+            source_rel: &harness.rules.source_rel,
+        });
+        all.push(AgentSyncTarget {
+            id: &harness.mcp.target_id,
+            label: &harness.mcp.target_label,
+            harness: harness.id,
+            kind: TargetKind::Mcp,
+            target_rel: &harness.mcp.target_rel,
+            source_rel: &harness.mcp.template_rel,
+        });
+    }
     all
 }
 
@@ -214,6 +224,8 @@ fn default_disabled(target_id: &str) -> bool {
     DEFAULT_DISABLED_TARGET_IDS.contains(&target_id)
         || crate::light_harness::rules_for_target(target_id)
             .is_some_and(|harness| !harness.rules.default_enabled)
+        || crate::light_harness::mcp_for_target(target_id)
+            .is_some_and(|harness| !harness.mcp.default_enabled)
 }
 
 pub fn default_enabled_ids() -> Vec<String> {
@@ -240,6 +252,10 @@ pub fn target_surfaces(target_id: &str) -> &'static [SetupSurfaceId] {
         "cursor_setup" => &[SetupSurfaceId::CursorAgents, SetupSurfaceId::CursorMcp],
         other => crate::light_harness::rules_for_target(other)
             .map(|harness| std::slice::from_ref(&harness.rules.surface))
+            .or_else(|| {
+                crate::light_harness::mcp_for_target(other)
+                    .map(|harness| std::slice::from_ref(&harness.mcp.surface))
+            })
             .unwrap_or(&[]),
     }
 }
@@ -380,11 +396,11 @@ mod tests {
     }
 
     #[test]
-    fn default_enabled_ids_cover_every_target_except_codex_config() {
+    fn default_enabled_ids_cover_every_target_except_codex_config_and_kilo_mcp() {
         let mut expected: Vec<String> = targets()
             .iter()
             .map(|t| t.id.to_string())
-            .filter(|id| id != "codex_config")
+            .filter(|id| id != "codex_config" && id != "kilo_mcp")
             .collect();
         let mut actual = default_enabled_ids();
         expected.sort();
@@ -399,9 +415,15 @@ mod tests {
             "claude_rules",
             "claude_agents",
             "cursor_setup",
+            "copilot_mcp",
+            "pi_mcp",
         ] {
             assert!(actual.contains(&id.to_string()), "{id} must default ON");
         }
+        assert!(
+            !actual.contains(&"kilo_mcp".to_string()),
+            "Kilo's config file is credentials-adjacent: its MCP entry is opt-in"
+        );
     }
 
     #[test]
@@ -560,24 +582,34 @@ mod tests {
             "codex_config",
             "cursor_setup",
             "copilot_rules",
+            "copilot_mcp",
             "pi_rules",
+            "pi_mcp",
             "kilo_rules",
+            "kilo_mcp",
         ]
         .into_iter()
         .collect();
-        assert_eq!(ids, expected, "targets() must contain exactly 12 known IDs");
+        assert_eq!(ids, expected, "targets() must contain exactly 15 known IDs");
     }
 
     #[test]
-    fn the_light_rules_targets_come_from_the_descriptor_after_the_central_ones() {
+    fn the_light_targets_come_from_the_descriptor_after_the_central_ones() {
         let all = targets();
         let ids: Vec<&str> = all.iter().map(|t| t.id).collect();
         assert_eq!(
-            &ids[ids.len() - 3..],
-            ["copilot_rules", "pi_rules", "kilo_rules"],
-            "descriptor order, after cursor_setup"
+            &ids[ids.len() - 6..],
+            [
+                "copilot_rules",
+                "copilot_mcp",
+                "pi_rules",
+                "pi_mcp",
+                "kilo_rules",
+                "kilo_mcp"
+            ],
+            "descriptor order, per harness the rules file and then the MCP entry, after cursor_setup"
         );
-        assert_eq!(ids[ids.len() - 4], "cursor_setup");
+        assert_eq!(ids[ids.len() - 7], "cursor_setup");
         let pi = all.iter().find(|t| t.id == "pi_rules").expect("pi_rules");
         assert_eq!(pi.harness, HarnessId::Pi);
         assert!(matches!(pi.kind, TargetKind::Rules));
@@ -596,12 +628,31 @@ mod tests {
             6,
             "the three central and the three light rules targets"
         );
-        for id in ["copilot_rules", "pi_rules", "kilo_rules"] {
+        for id in [
+            "copilot_rules",
+            "pi_rules",
+            "kilo_rules",
+            "copilot_mcp",
+            "pi_mcp",
+        ] {
             assert!(
                 default_enabled_ids().contains(&id.to_string()),
                 "{id} defaults ON"
             );
         }
+        assert!(!default_enabled_ids().contains(&"kilo_mcp".to_string()));
+        let kilo_mcp = all.iter().find(|t| t.id == "kilo_mcp").expect("kilo_mcp");
+        assert_eq!(kilo_mcp.harness, HarnessId::Kilo);
+        assert!(matches!(kilo_mcp.kind, TargetKind::Mcp));
+        assert_eq!(kilo_mcp.target_rel, ".config/kilo/kilo.jsonc");
+        assert_eq!(kilo_mcp.source_rel, "templates/mcp/kilo.playwright.json");
+        assert_eq!(target_surfaces("kilo_mcp"), [SetupSurfaceId::KiloMcp]);
+        assert_eq!(surface_target_id(SetupSurfaceId::PiMcp), Some("pi_mcp"));
+        assert_eq!(target_harness("copilot_mcp"), Some(HarnessId::Copilot));
+        assert_eq!(
+            serde_json::to_value(TargetKind::Mcp).unwrap(),
+            serde_json::json!("mcp")
+        );
     }
 
     #[test]

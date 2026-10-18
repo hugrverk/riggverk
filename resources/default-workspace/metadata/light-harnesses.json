@@ -8,6 +8,13 @@
         "adapter": "copilot",
         "target_rel": ".copilot/copilot-instructions.md",
         "default_enabled": true
+      },
+      "mcp": {
+        "target_rel": ".copilot/mcp-config.json",
+        "root_key": "mcpServers",
+        "entry_key": "playwright",
+        "template": "templates/mcp/copilot.playwright.json",
+        "default_enabled": true
       }
     },
     "pi": {
@@ -20,6 +27,17 @@
         "private_dir": true,
         "masked_by": ["AGENTS.override.md"],
         "peer_files": ["CLAUDE.md", "CLAUDE.MD", "AGENTS.MD"]
+      },
+      "mcp": {
+        "target_rel": ".pi/agent/mcp.json",
+        "root_key": "mcpServers",
+        "entry_key": "playwright",
+        "template": "templates/mcp/pi.playwright.json",
+        "default_enabled": true,
+        "private_dir": true,
+        "notes": [
+          "Pi does not declare the tools of this server to the model until the entry sets exposure (for example \"direct\"); by default they are callable from codemode scripts only."
+        ]
       }
     },
     "kilo": {
@@ -31,6 +49,17 @@
         "default_enabled": true,
         "xdg_config_home": true,
         "shadows": ".claude/CLAUDE.md"
+      },
+      "mcp": {
+        "target_rel": ".config/kilo/kilo.jsonc",
+        "alt_target_rel": [".config/kilo/kilo.json"],
+        "root_key": "mcp",
+        "entry_key": "playwright",
+        "template": "templates/mcp/kilo.playwright.json",
+        "default_enabled": false,
+        "xdg_config_home": true,
+        "shadowed_by_siblings": ["opencode.json", "opencode.jsonc"],
+        "shadowed_by_home": [".kilo/kilo.json", ".kilo/kilo.jsonc"]
       }
     }
   }

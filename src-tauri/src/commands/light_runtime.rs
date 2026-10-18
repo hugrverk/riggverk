@@ -1,13 +1,15 @@
 //! Runtime health of the light harnesses (GitHub Copilot, Pi, Kilo Code), read only.
 //!
 //! What it looks at: the harness CLI's version, whether the managed rules block is in the harness's
-//! rules file, and whether the bundled skills are installed in the folders the harness reads. MCP
-//! is not managed for these harnesses yet, so there is nothing to report on it.
+//! rules file, whether the managed Playwright entry is in its MCP file (the entry only: the user's
+//! other servers are not read into the health), and whether the bundled skills are installed in the
+//! folders the harness reads.
 //!
 //! What it never does: run any CLI subcommand but `--version` (`copilot version` asks the network,
 //! `pi --help` writes files into the agent dir, `kilo debug *` prints the resolved config with its
-//! secrets), read an auth, settings or config file of the harness, show any text of the rules
-//! file, or keep any raw output. The version probe is bounded, parse-only and runs from a neutral
+//! secrets; `pi mcp list` spawns the servers; `copilot mcp` and `kilo mcp` are not needed), read an
+//! auth, settings or config file of the harness, show any text of the rules or MCP file, or keep
+//! any raw output. The version probe is bounded, parse-only and runs from a neutral
 //! working directory (`opencode_cli::probe_version_with_env`).
 
 use std::path::{Path, PathBuf};
@@ -20,8 +22,11 @@ use super::workspace::setup_workspace_target_path;
 use crate::agent_targets::{self, HarnessId};
 use crate::installation_status::{status_for_surfaces, InstallationState};
 use crate::light_harness::{self, LightHarness};
+use crate::light_mcp::EntryState;
 use crate::rules_block::{RulesConflict, RulesLayout};
 use crate::settings;
+use crate::setup_lifecycle::OperationKind;
+use crate::setup_transaction;
 use crate::skill_health::skill_files_status;
 use crate::skill_roots::{codex_home_is_custom, roots_read_by, unserved, SkillRoot, SkillScope};
 
@@ -71,13 +76,31 @@ pub struct LightRulesHealth {
     pub detail: String,
 }
 
+/// The MCP row of the health: the managed Playwright entry in the harness's MCP file.
+#[derive(Serialize, Clone, Debug, PartialEq, Eq)]
+pub struct LightMcpHealth {
+    /// `synced`, `missing` (no file or no entry yet), `stale` (an update of the entry waits),
+    /// `diverged` (an entry of the user's own under the managed key), `invalid` (a file the app
+    /// does not edit: comments, a trailing comma, ...), `off` (the MCP target is switched off in
+    /// Settings) or `unknown`.
+    pub status: String,
+    /// The MCP file as people know it (`~/.copilot/mcp-config.json`).
+    pub path: String,
+    /// The Playwright version the installed entry pins, when it names one.
+    pub playwright_version: Option<String>,
+    /// The status line (counts and fixed phrases, never file text).
+    pub detail: String,
+}
+
 #[derive(Serialize, Clone, Debug, PartialEq, Eq)]
 pub struct LightRuntimeHealth {
     pub harness: HarnessId,
-    /// The skills status; when the skills are fine, the rules status (unless that target is off).
+    /// The skills status; when the skills are fine, the rules status, then the MCP status (each
+    /// unless its target is off).
     pub status: String,
     pub cli: LightCliHealth,
     pub rules: LightRulesHealth,
+    pub mcp: LightMcpHealth,
     pub skills: LightSkillsHealth,
     pub warnings: Vec<String>,
     pub next_action: String,
@@ -350,6 +373,76 @@ fn inspect_rules(harness: &LightHarness, inputs: &Inputs) -> LightRulesHealth {
     }
 }
 
+// ── MCP ──
+
+/// What the harness's MCP file holds of the managed entry: the planner the harness page and
+/// Install use, reduced to a status and the surface's own detail line. Nothing of the file but
+/// the entry is looked at, and no text of it is kept.
+fn inspect_mcp(harness: &LightHarness, inputs: &Inputs) -> LightMcpHealth {
+    let mcp = &harness.mcp;
+    let path = mcp.display_path(inputs.home);
+    let health = |status: &str, detail: &str| LightMcpHealth {
+        status: status.into(),
+        path: path.clone(),
+        playwright_version: None,
+        detail: detail.into(),
+    };
+    if !inputs.mcp_on {
+        return health("off", "switched off in Settings");
+    }
+    let Some(workspace_root) = inputs.workspace_root else {
+        return health("unknown", "no workspace is set up");
+    };
+    let Ok(planned) =
+        setup_transaction::plan_artifacts_for_surfaces(&[mcp.surface], workspace_root, inputs.home)
+    else {
+        return health("unknown", "the MCP file could not be checked");
+    };
+    let Some(entry) = planned.first() else {
+        return health("unknown", "the MCP file could not be checked");
+    };
+    let key = mcp.entry_key.as_str();
+    let (status, detail) = match (entry.kind, entry.mcp) {
+        (OperationKind::NoChange, _) => ("synced", "installed and current".to_string()),
+        (OperationKind::Create, _) => ("missing", "no file yet".to_string()),
+        (OperationKind::Update, Some(EntryState::Differs)) => {
+            ("stale", format!("update available for the {key} entry"))
+        }
+        (OperationKind::Update, _) => (
+            "missing",
+            format!("the file has no {key} entry; it will be added and your other servers stay"),
+        ),
+        (OperationKind::Conflict, Some(state @ EntryState::Refused(_))) => {
+            ("invalid", state.conflict_reason(key).unwrap_or_default())
+        }
+        (OperationKind::Conflict, state) => (
+            "diverged",
+            state
+                .and_then(|state| state.conflict_reason(key))
+                .unwrap_or_else(|| "the entry is left as is".to_string()),
+        ),
+        _ => ("unknown", "the MCP file could not be checked".to_string()),
+    };
+    let version = if matches!(entry.mcp, Some(EntryState::Equal | EntryState::Differs)) {
+        crate::light_mcp::read(&mcp.resolve_dest(inputs.home), mcp)
+            .ok()
+            .flatten()
+            .and_then(|document| {
+                document
+                    .entry(mcp)
+                    .and_then(crate::light_mcp::pinned_version)
+            })
+    } else {
+        None
+    };
+    LightMcpHealth {
+        status: status.into(),
+        path,
+        playwright_version: version,
+        detail,
+    }
+}
+
 /// The folder of a displayed path: `~/.pi/agent` for `~/.pi/agent/AGENTS.md`.
 fn folder_of(path: &str) -> &str {
     path.rsplit_once('/').map_or(path, |(folder, _)| folder)
@@ -404,6 +497,27 @@ fn rules_warnings(
     warnings
 }
 
+/// Warnings about the MCP file, while its target is on: what the descriptor notes, and the files
+/// that exist and win over the file the entry is written to.
+fn mcp_warnings(harness: &LightHarness, mcp: &LightMcpHealth, inputs: &Inputs) -> Vec<String> {
+    if mcp.status == "off" {
+        return Vec::new();
+    }
+    let spec = &harness.mcp;
+    let mut warnings = spec.notes.clone();
+    let shadowing = spec.shadowing_files(inputs.home);
+    if !shadowing.is_empty() {
+        warnings.push(format!(
+            "{files} win over {path} in {label}, so a {key} entry there hides the one Riggverk manages. Riggverk does not read them.",
+            files = shadowing.join(", "),
+            path = mcp.path,
+            label = harness.label,
+            key = spec.entry_key,
+        ));
+    }
+    warnings
+}
+
 /// The environment variable that moves the harness's own folder, which the app does not follow.
 fn relocating_variable(harness: HarnessId) -> Option<&'static str> {
     match harness {
@@ -414,21 +528,37 @@ fn relocating_variable(harness: HarnessId) -> Option<&'static str> {
 }
 
 /// The overall status: the skills', or the rules' once the skills are fine and the rules target
-/// is on.
-fn overall_status(skills: &LightSkillsHealth, rules: &LightRulesHealth) -> String {
-    if skills.status == "synced" && rules.status != "off" {
-        rules.status.clone()
-    } else {
+/// is on, or the MCP's once both are fine and the MCP target is on.
+fn overall_status(
+    skills: &LightSkillsHealth,
+    rules: &LightRulesHealth,
+    mcp: &LightMcpHealth,
+) -> String {
+    if skills.status != "synced" {
         skills.status.clone()
+    } else if rules.status != "off" && rules.status != "synced" {
+        rules.status.clone()
+    } else if mcp.status != "off" && mcp.status != "synced" {
+        mcp.status.clone()
+    } else {
+        "synced".to_string()
     }
 }
 
-fn next_action(label: &str, skills: &LightSkillsHealth, rules: &LightRulesHealth) -> String {
+fn next_action(
+    label: &str,
+    skills: &LightSkillsHealth,
+    rules: &LightRulesHealth,
+    mcp: &LightMcpHealth,
+) -> String {
     match skills.status.as_str() {
-        "synced" => match rules.status.as_str() {
-            "missing" | "stale" => format!("Run Install or Update on the {label} page."),
-            "diverged" => format!("Resolve the rules file conflict on the {label} page."),
-            "unknown" => format!("Riggverk cannot check the {label} rules file; open the {label} page for details."),
+        "synced" => match (rules.status.as_str(), mcp.status.as_str()) {
+            ("missing" | "stale", _) => format!("Run Install or Update on the {label} page."),
+            ("diverged", _) => format!("Resolve the rules file conflict on the {label} page."),
+            ("unknown", _) => format!("Riggverk cannot check the {label} rules file; open the {label} page for details."),
+            (_, "missing" | "stale") => format!("Run Install or Update on the {label} page."),
+            (_, "diverged" | "invalid") => format!("Resolve the MCP file conflict on the {label} page."),
+            (_, "unknown") => format!("Riggverk cannot check the {label} MCP file; open the {label} page for details."),
             _ => "No runtime action needed.".into(),
         },
         "unserved" => format!("Disable Codex or unset CODEX_HOME to install skills for {label}."),
@@ -450,6 +580,8 @@ struct Inputs<'a> {
     workspace_root: Option<&'a Path>,
     /// The harness's rules target is switched on in Settings.
     rules_on: bool,
+    /// The harness's MCP target is switched on in Settings.
+    mcp_on: bool,
     /// Claude is enabled and its rules target is on (Copilot's VS Code note depends on it).
     claude_rules_managed: bool,
 }
@@ -469,6 +601,7 @@ fn compute_health(harness: &LightHarness, inputs: &Inputs) -> LightRuntimeHealth
         inputs.version_timeout,
     );
     let rules = inspect_rules(harness, inputs);
+    let mcp = inspect_mcp(harness, inputs);
     let mut warnings = Vec::new();
     if skills.status == "unserved" {
         warnings.push(format!(
@@ -486,23 +619,27 @@ fn compute_health(harness: &LightHarness, inputs: &Inputs) -> LightRuntimeHealth
         }
     }
     warnings.extend(rules_warnings(harness, &rules, inputs));
+    warnings.extend(mcp_warnings(harness, &mcp, inputs));
     LightRuntimeHealth {
         harness: harness.id,
-        status: overall_status(&skills, &rules),
-        next_action: next_action(&harness.label, &skills, &rules),
+        status: overall_status(&skills, &rules, &mcp),
+        next_action: next_action(&harness.label, &skills, &rules, &mcp),
         cli,
         rules,
+        mcp,
         skills,
         warnings,
     }
 }
 
-/// Read-only health of one light harness: its CLI version, its rules file and its skills.
+/// Read-only health of one light harness: its CLI version, its rules file, its MCP entry and its
+/// skills.
 ///
 /// Runs `<cli> --version` (bounded, parse-only), classifies the rules file against the managed
-/// block and compares installed skill files with the bundle. Nothing of the harness's own
-/// folders is read besides the rules file and the folder next to it, and the skills folders it
-/// shares.
+/// block, looks for the managed entry in the MCP file and compares installed skill files with the
+/// bundle. Nothing of the harness's own folders is read besides the rules file and the folder
+/// next to it, the MCP file (its managed entry only; the files that win over it are only looked
+/// for) and the skills folders it shares.
 #[tauri::command(async)]
 pub fn get_light_runtime_health(harness: HarnessId) -> Result<LightRuntimeHealth, String> {
     let descriptor = light_harness::descriptor(harness)
@@ -536,6 +673,7 @@ pub fn get_light_runtime_health(harness: HarnessId) -> Result<LightRuntimeHealth
             version_timeout: VERSION_TIMEOUT,
             workspace_root: workspace_root.as_deref(),
             rules_on: target_on(&descriptor.rules.target_id),
+            mcp_on: target_on(&descriptor.mcp.target_id),
             claude_rules_managed,
         },
     ))
@@ -1016,6 +1154,7 @@ mod tests {
                 version_timeout: Duration::from_secs(10),
                 workspace_root: None,
                 rules_on: false,
+                mcp_on: false,
                 claude_rules_managed: false,
             },
         );
@@ -1052,6 +1191,7 @@ mod tests {
                 version_timeout: Duration::from_secs(1),
                 workspace_root: None,
                 rules_on: false,
+                mcp_on: false,
                 claude_rules_managed: false,
             },
         );
@@ -1066,6 +1206,112 @@ mod tests {
             "{}",
             health.next_action
         );
+    }
+
+    fn skills_row(status: &str) -> LightSkillsHealth {
+        LightSkillsHealth {
+            status: status.into(),
+            synced: 0,
+            expected: 0,
+            roots: Vec::new(),
+        }
+    }
+
+    fn rules_row(status: &str) -> LightRulesHealth {
+        LightRulesHealth {
+            status: status.into(),
+            path: "~/x.md".into(),
+            refinement_lines: 0,
+            user_managed: false,
+            conflict_reason: None,
+            detail: String::new(),
+        }
+    }
+
+    fn mcp_row(status: &str) -> LightMcpHealth {
+        LightMcpHealth {
+            status: status.into(),
+            path: "~/x.json".into(),
+            playwright_version: None,
+            detail: String::new(),
+        }
+    }
+
+    #[test]
+    fn the_overall_status_follows_the_skills_then_the_rules_then_the_mcp_entry() {
+        let status = |skills: &str, rules: &str, mcp: &str| {
+            overall_status(&skills_row(skills), &rules_row(rules), &mcp_row(mcp))
+        };
+        assert_eq!(status("synced", "synced", "synced"), "synced");
+        assert_eq!(status("missing", "stale", "invalid"), "missing");
+        assert_eq!(status("synced", "stale", "invalid"), "stale");
+        assert_eq!(status("synced", "synced", "invalid"), "invalid");
+        assert_eq!(status("synced", "off", "diverged"), "diverged");
+        // A target that is switched off never counts against the harness.
+        assert_eq!(status("synced", "off", "off"), "synced");
+        assert_eq!(status("synced", "synced", "off"), "synced");
+        assert_eq!(status("partial", "off", "off"), "partial");
+    }
+
+    #[test]
+    fn the_next_action_names_the_rules_file_or_the_mcp_file() {
+        let action = |skills: &str, rules: &str, mcp: &str| {
+            next_action("Pi", &skills_row(skills), &rules_row(rules), &mcp_row(mcp))
+        };
+        assert_eq!(
+            action("synced", "synced", "synced"),
+            "No runtime action needed."
+        );
+        assert_eq!(action("synced", "off", "off"), "No runtime action needed.");
+        assert_eq!(
+            action("synced", "synced", "missing"),
+            "Run Install or Update on the Pi page."
+        );
+        assert_eq!(
+            action("synced", "synced", "stale"),
+            "Run Install or Update on the Pi page."
+        );
+        for status in ["diverged", "invalid"] {
+            assert_eq!(
+                action("synced", "synced", status),
+                "Resolve the MCP file conflict on the Pi page."
+            );
+        }
+        assert!(action("synced", "synced", "unknown").contains("MCP file"));
+        // The rules file is named first, as before.
+        assert!(action("synced", "diverged", "invalid").contains("rules file"));
+        assert_eq!(
+            action("synced", "missing", "diverged"),
+            "Run Install or Update on the Pi page."
+        );
+        assert!(action("unserved", "synced", "invalid").contains("CODEX_HOME"));
+    }
+
+    #[test]
+    fn a_pinned_version_is_read_from_the_entry_and_nothing_else() {
+        use crate::light_mcp::pinned_version;
+        let pinned = |entry: serde_json::Value| pinned_version(&entry);
+        assert_eq!(
+            pinned(serde_json::json!({"args": ["-y", "@playwright/mcp@0.0.48", "--isolated"]}))
+                .as_deref(),
+            Some("0.0.48")
+        );
+        assert_eq!(
+            pinned(serde_json::json!({"command": ["npx", "@playwright/mcp@1.2.3-rc.1"]}))
+                .as_deref(),
+            Some("1.2.3-rc.1")
+        );
+        for entry in [
+            serde_json::json!({"args": ["@playwright/mcp@"]}),
+            serde_json::json!({"args": ["@playwright/mcp@1;rm -rf"]}),
+            serde_json::json!({"args": ["@playwright/mcp@sk-live token"]}),
+            serde_json::json!({"args": [1, 2]}),
+            serde_json::json!({"command": "@playwright/mcp@0.0.48"}),
+            serde_json::json!({}),
+            serde_json::json!("@playwright/mcp@0.0.48"),
+        ] {
+            assert_eq!(pinned(entry.clone()), None, "{entry}");
+        }
     }
 
     #[test]
