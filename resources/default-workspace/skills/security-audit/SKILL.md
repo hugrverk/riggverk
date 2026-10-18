@@ -13,7 +13,7 @@ Find vulnerabilities that violate a real trust boundary, then give owners the so
 
 Done when: in full audit mode, all Phase 6 artifacts are written and both validators pass, or `run_status: "incomplete"` is recorded with its exact reason and disclosed in the report; in guidance mode, the question is answered with source evidence.
 
-Agent Workspace: harness copies of this skill contain only this file. Its companion files, `report-schema.json` and the validators live in `skills/security-audit/` in the Agent Workspace folder (default `~/.config/agent-workspace`); resolve every relative link in this file against that directory. Vendored from cloudflare/security-audit-skill; see `UPSTREAM.md` there. For reviewing a change or a focused security question, prefer `security-review`.
+Agent Workspace: this skill is installed as a whole directory, so its companion files, `report-schema.json` and the validators, sit next to this file; resolve every relative link in this file against the directory that holds it. Vendored from cloudflare/security-audit-skill; see `UPSTREAM.md` next to this file. For reviewing a change or a focused security question, prefer `security-review`.
 
 ## Agent Workspace rules
 
@@ -62,7 +62,7 @@ Use dummy principals, fixtures, and secrets. Do not probe deployed endpoints, ex
 
 In full audit mode, resolve these values before reconnaissance:
 
-- **Skill directory**: the absolute directory holding this skill's companion files and validators: `skills/security-audit/` in the Agent Workspace folder (see the note above), not a harness copy that contains only `SKILL.md`.
+- **Skill directory**: the absolute directory that holds this `SKILL.md`; the companion files and validators sit next to it.
 - **Target**: the absolute repository root under review.
 - **Repo name**: a stable repository identifier from the directory or local Git remote.
 - **Output directory**: a new writable directory outside the target, defaulting to `~/security-audit-skill/<repo-name>/run-<N>`, where `<N>` is the next unused integer. Use a directory inside the target only when the user explicitly selects it and the parent verifies that version control ignores the whole directory. Otherwise stop and request an external path.
