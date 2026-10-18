@@ -236,6 +236,7 @@ python3 scripts/generate-shipped-digests.py --check
 
 step "release tooling and bundled what's new"
 run_python_unittests scripts/test_release_tools.py
+run_python_unittests scripts/test_release_sh.py
 python3 scripts/generate-release-notes.py --check
 printf '  app version %s agrees across package.json, tauri.conf.json, Cargo.toml and both lock files\n' \
   "$(python3 scripts/release_tools.py check-versions)"
