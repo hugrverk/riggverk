@@ -11,7 +11,7 @@ import {
   STATUS_DATA,
   surfaceStatus,
 } from "../test/pageFixtures";
-import type { AgentTargetMeta, ApplyProgress, ClaudeRuntimeHealth, CodexRuntimeHealth, OpenCodeRuntimeHealth } from "../types";
+import type { AgentTargetMeta, ApplyProgress, ClaudeRuntimeHealth, CodexRuntimeHealth, OpenCodeModelSelection, OpenCodeRuntimeHealth } from "../types";
 import { ClaudeView } from "./ClaudeView";
 import { CodexView } from "./CodexView";
 import { CursorView } from "./CursorView";
@@ -372,38 +372,58 @@ describe("HarnessPage", () => {
 
 describe("OpenCodeView model override", () => {
   const OPENCODE_HEALTH = { status: "synced", tui_status: "synced", agent_mismatches: [], warnings: [], cli: null, config_status: "synced", config_diverged_keys: [], rules_status: "synced", playwright_mcp_version: null, bundled_agent_count: 3, installed_bundled_agent_count: 3, default_agent: "build", autoupdate: "true", summary: "ok", next_action: "" } as unknown as OpenCodeRuntimeHealth;
+  const BUNDLED: OpenCodeModelSelection = {
+    model: "anthropic/claude-sonnet-4-5",
+    small_model: "anthropic/claude-haiku-4-5",
+    subagent_model: "",
+    source: "bundled default",
+    subagent_source: "bundled default",
+  };
+  const MODELS = ["anthropic/claude-sonnet-4-5", "anthropic/claude-haiku-4-5", "openai/gpt-5"];
 
-  function backend(saveResult = "Saved model selection") {
-    let selection = { model: "anthropic/claude-sonnet-4-5", small_model: "anthropic/claude-haiku-4-5" };
-    invokeMock.mockImplementation(async (command: string, args?: { model?: string; smallModel?: string }) => {
+  function backend({ saveResult = "Saved model selection", initial = BUNDLED, models = MODELS, warning = null }: { saveResult?: string; initial?: OpenCodeModelSelection; models?: string[]; warning?: string | null } = {}) {
+    let selection = initial;
+    invokeMock.mockImplementation(async (command: string, args?: { model?: string; smallModel?: string; subagentModel?: string | null }) => {
       switch (command) {
         case "read_opencode_model_selection":
           return selection;
         case "list_available_opencode_models":
-          return { models: ["anthropic/claude-sonnet-4-5", "anthropic/claude-haiku-4-5", "openai/gpt-5"], warning: null };
-        case "update_opencode_model_selection":
-          selection = { model: args!.model!, small_model: args!.smallModel! };
+          return { models, warning };
+        case "update_opencode_model_selection": {
+          const subagent = args!.subagentModel ?? "";
+          selection = { model: args!.model!, small_model: args!.smallModel!, subagent_model: subagent, source: "override", subagent_source: subagent ? "override" : "bundled default" };
           return saveResult;
+        }
+        case "reset_opencode_model_selection":
+          selection = BUNDLED;
+          return "Model override removed. Run Install/Update to apply the bundled defaults.";
         default:
           throw new Error(`unexpected ${command}`);
       }
     });
   }
 
-  function renderOpenCode(onModelUpdated = vi.fn()) {
+  function renderOpenCode(onModelUpdated = vi.fn(), runtimeHealth: OpenCodeRuntimeHealth = OPENCODE_HEALTH) {
     const merged = props({ appSettings: settingsOf() });
-    renderInFrame(<OpenCodeView {...merged} runtimeHealth={OPENCODE_HEALTH} onModelUpdated={onModelUpdated} />);
+    renderInFrame(<OpenCodeView {...merged} runtimeHealth={runtimeHealth} onModelUpdated={onModelUpdated} />);
     return { onModelUpdated };
   }
+
+  const model = () => screen.getByLabelText("model") as HTMLSelectElement;
+  const subagent = () => screen.getByLabelText("subagent model") as HTMLSelectElement;
+  const paneBody = () => screen.getByRole("region", { name: "OpenCode detail" }).querySelector(".pane-body") as HTMLElement;
+  const loaded = () => waitFor(() => expect(model().tagName === "SELECT" && model().value).toBe("anthropic/claude-sonnet-4-5"));
+  const sourceLines = () => [...screen.getByRole("region", { name: "Model selection" }).querySelectorAll("dd")].map(dd => dd.textContent!).filter(text => text.startsWith("source:"));
+  const diverged = (...keys: string[]) => ({ ...OPENCODE_HEALTH, config_status: "diverged", config_diverged_keys: keys }) as OpenCodeRuntimeHealth;
 
   it("keeps working: loads the selection, edits it in place and saves it", async () => {
     backend();
     const { onModelUpdated } = renderOpenCode();
     // The field is a text input until the model list arrives, then a select: look it up again each time.
-    const model = () => screen.getByLabelText("model") as HTMLSelectElement;
-    await waitFor(() => expect(model().tagName === "SELECT" && model().value).toBe("anthropic/claude-sonnet-4-5"));
+    await loaded();
     const small = screen.getByLabelText("small model") as HTMLSelectElement;
     expect(small.value).toBe("anthropic/claude-haiku-4-5");
+    expect(subagent().value).toBe("");
 
     const detailPane = screen.getByRole("region", { name: "OpenCode detail" });
     act(() => (detailPane.querySelector(".pane-body") as HTMLElement).focus());
@@ -417,6 +437,7 @@ describe("OpenCodeView model override", () => {
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("update_opencode_model_selection", {
       model: "openai/gpt-5",
       smallModel: "anthropic/claude-haiku-4-5",
+      subagentModel: null,
     }));
     await waitFor(() => expect(onModelUpdated).toHaveBeenCalledTimes(1));
     expect(await within(detailPane).findByText("Saved model selection")).toBeTruthy();
@@ -439,9 +460,8 @@ describe("OpenCodeView model override", () => {
   it("saves from the keyboard with s once there is a change", async () => {
     backend();
     const { onModelUpdated } = renderOpenCode();
-    const model = () => screen.getByLabelText("model") as HTMLSelectElement;
-    await waitFor(() => expect(model().tagName === "SELECT" && model().value).toBe("anthropic/claude-sonnet-4-5"));
-    const body = screen.getByRole("region", { name: "OpenCode detail" }).querySelector(".pane-body") as HTMLElement;
+    await loaded();
+    const body = paneBody();
     act(() => body.focus());
     fireEvent.keyDown(body, { key: "s" });
     expect(onModelUpdated).not.toHaveBeenCalled();
@@ -452,7 +472,7 @@ describe("OpenCodeView model override", () => {
 
   it("falls back to text inputs when nothing is known and rejects a model without a provider", async () => {
     invokeMock.mockImplementation(async (command: string) => {
-      if (command === "read_opencode_model_selection") return { model: "", small_model: "" };
+      if (command === "read_opencode_model_selection") return { ...BUNDLED, model: "", small_model: "" };
       if (command === "list_available_opencode_models") return { models: [], warning: "opencode models: unavailable" };
       throw new Error(`unexpected ${command}`);
     });
@@ -461,6 +481,7 @@ describe("OpenCodeView model override", () => {
     // No model list and nothing configured: the fields stay text inputs.
     await screen.findByText("opencode models: unavailable");
     expect(model().tagName).toBe("INPUT");
+    expect((screen.getByLabelText("subagent model") as HTMLInputElement).tagName).toBe("INPUT");
     fireEvent.change(model(), { target: { value: "gpt-5" } });
     expect(screen.getByRole("alert").textContent).toBe("Must be provider/model format");
     expect(model().getAttribute("aria-invalid")).toBe("true");
@@ -477,6 +498,240 @@ describe("OpenCodeView model override", () => {
     renderInFrame(<OpenCodeView {...merged} runtimeHealth={null} onModelUpdated={vi.fn()} />);
     expect(invokeMock).not.toHaveBeenCalled();
     expect(screen.queryByLabelText("model")).toBeNull();
+  });
+
+  describe("subagent model", () => {
+    it("is optional: it starts as inherit, and picking a model saves it with the other two", async () => {
+      backend();
+      const { onModelUpdated } = renderOpenCode();
+      await loaded();
+      expect([...subagent().options].map(option => option.textContent)[0]).toBe("inherit main model");
+      expect(sourceLines()[2]).toContain("source: bundled default");
+
+      fireEvent.change(subagent(), { target: { value: "openai/gpt-5" } });
+      const body = paneBody();
+      act(() => body.focus());
+      fireEvent.keyDown(body, { key: "s" });
+
+      await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("update_opencode_model_selection", {
+        model: "anthropic/claude-sonnet-4-5",
+        smallModel: "anthropic/claude-haiku-4-5",
+        subagentModel: "openai/gpt-5",
+      }));
+      await waitFor(() => expect(onModelUpdated).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(subagent().value).toBe("openai/gpt-5"));
+      expect(sourceLines()[2]).toContain("source: override");
+    });
+
+    it("can be cleared by choosing inherit and saving", async () => {
+      backend({ initial: { ...BUNDLED, subagent_model: "openai/gpt-5", source: "override", subagent_source: "override" } });
+      renderOpenCode();
+      await waitFor(() => expect(subagent().value).toBe("openai/gpt-5"));
+      fireEvent.change(subagent(), { target: { value: "" } });
+      const body = paneBody();
+      act(() => body.focus());
+      fireEvent.keyDown(body, { key: "s" });
+      await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("update_opencode_model_selection", expect.objectContaining({ subagentModel: null })));
+    });
+
+    it("rejects a value without a provider", async () => {
+      backend();
+      renderOpenCode();
+      await loaded();
+      fireEvent.change(subagent(), { target: { value: "__custom__" } });
+      const input = await waitFor(() => {
+        const found = screen.getByLabelText("subagent model") as HTMLInputElement;
+        expect(found.tagName).toBe("INPUT");
+        return found;
+      });
+      fireEvent.change(input, { target: { value: "gpt-5" } });
+      expect(screen.getByRole("alert").textContent).toBe("Must be provider/model format");
+      const body = paneBody();
+      act(() => body.focus());
+      await waitFor(() => expect(hint(/save model/).getAttribute("title")).toBe("Must be provider/model format"));
+    });
+  });
+
+  describe("source and state", () => {
+    it("shows the bundled default as applied when the installed config matches", async () => {
+      backend();
+      renderOpenCode();
+      await loaded();
+      await waitFor(() => expect(sourceLines()).toHaveLength(3));
+      expect(sourceLines()).toEqual([
+        "source: bundled default · state: applied",
+        "source: bundled default · state: applied",
+        "source: bundled default · state: applied",
+      ]);
+    });
+
+    it("shows an override as pending apply, with the update key, while the installed config differs", async () => {
+      backend({ initial: { ...BUNDLED, model: "openai/gpt-5", source: "override" } });
+      renderOpenCode(vi.fn(), diverged("model"));
+      await waitFor(() => expect(model().value).toBe("openai/gpt-5"));
+      await waitFor(() => expect(sourceLines()).toHaveLength(3));
+      const [main, small, sub] = sourceLines();
+      expect(main).toBe("source: override · state: pending apply (u to update)");
+      // Only the managed keys that differ are pending: the small model and the subagent model are installed.
+      expect(small).toBe("source: override · state: applied");
+      expect(sub).toBe("source: bundled default · state: applied");
+    });
+
+    it("marks the subagent model pending when any role entry differs", async () => {
+      backend({ initial: { ...BUNDLED, subagent_model: "openai/gpt-5", source: "override", subagent_source: "override" } });
+      renderOpenCode(vi.fn(), diverged("agent.inspector.model", "agent.scribe.model"));
+      await waitFor(() => expect(subagent().value).toBe("openai/gpt-5"));
+      await waitFor(() => expect(sourceLines()).toHaveLength(3));
+      expect(sourceLines()).toEqual([
+        "source: override · state: applied",
+        "source: override · state: applied",
+        "source: override · state: pending apply (u to update)",
+      ]);
+    });
+
+    it("is pending everywhere while nothing is installed, and says no state while health is unknown", async () => {
+      backend();
+      renderOpenCode(vi.fn(), { ...OPENCODE_HEALTH, config_status: "missing" } as OpenCodeRuntimeHealth);
+      await waitFor(() => expect(sourceLines()).toHaveLength(3));
+      expect(sourceLines().every(line => line.endsWith("state: pending apply (u to update)"))).toBe(true);
+      cleanup();
+
+      backend();
+      renderOpenCode(vi.fn(), null as unknown as OpenCodeRuntimeHealth);
+      await waitFor(() => expect(sourceLines()).toHaveLength(3));
+      expect(sourceLines()).toEqual(["source: bundled default", "source: bundled default", "source: bundled default"]);
+    });
+  });
+
+  describe("reset", () => {
+    const OVERRIDE: OpenCodeModelSelection = { model: "openai/gpt-5", small_model: "anthropic/claude-haiku-4-5", subagent_model: "anthropic/claude-haiku-4-5", source: "override", subagent_source: "override" };
+
+    it("deletes the override with x and returns every row to the bundled default", async () => {
+      backend({ initial: OVERRIDE });
+      const { onModelUpdated } = renderOpenCode();
+      await waitFor(() => expect(model().value).toBe("openai/gpt-5"));
+      const body = paneBody();
+      act(() => body.focus());
+      expect(hint(/reset model/).getAttribute("aria-disabled")).toBeNull();
+
+      fireEvent.keyDown(body, { key: "x" });
+
+      await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("reset_opencode_model_selection"));
+      await waitFor(() => expect(onModelUpdated).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(model().value).toBe("anthropic/claude-sonnet-4-5"));
+      expect(subagent().value).toBe("");
+      expect(await within(screen.getByRole("region", { name: "OpenCode detail" })).findByText(/Model override removed/)).toBeTruthy();
+      await waitFor(() => expect(sourceLines()[0]).toContain("source: bundled default"));
+      expect(sourceLines()[2]).toContain("source: bundled default");
+    });
+
+    it("drops unsaved edits along with the override", async () => {
+      backend({ initial: OVERRIDE });
+      renderOpenCode();
+      await waitFor(() => expect(model().value).toBe("openai/gpt-5"));
+      fireEvent.change(model(), { target: { value: "anthropic/claude-haiku-4-5" } });
+      const body = paneBody();
+      act(() => body.focus());
+      fireEvent.keyDown(body, { key: "x" });
+      await waitFor(() => expect(model().value).toBe("anthropic/claude-sonnet-4-5"));
+    });
+
+    it("is offered only while an override exists", async () => {
+      backend();
+      renderOpenCode();
+      await loaded();
+      const body = paneBody();
+      act(() => body.focus());
+      await waitFor(() => expect(hint(/reset model/).getAttribute("title")).toBe("no override to reset"));
+      fireEvent.keyDown(body, { key: "x" });
+      expect(invokeMock).not.toHaveBeenCalledWith("reset_opencode_model_selection");
+    });
+
+    it("reports a failed reset and leaves the rows as they were", async () => {
+      backend({ initial: OVERRIDE });
+      const base = invokeMock.getMockImplementation()!;
+      invokeMock.mockImplementation(async (command: string, args?: unknown) => {
+        if (command === "reset_opencode_model_selection") throw new Error("failed to remove model override: denied");
+        return base(command, args);
+      });
+      const { onModelUpdated } = renderOpenCode();
+      await waitFor(() => expect(model().value).toBe("openai/gpt-5"));
+      const body = paneBody();
+      act(() => body.focus());
+      fireEvent.keyDown(body, { key: "x" });
+      expect(await screen.findByText("failed to remove model override: denied")).toBeTruthy();
+      expect(model().value).toBe("openai/gpt-5");
+      expect(onModelUpdated).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("options", () => {
+    it("groups the models by provider", async () => {
+      backend();
+      renderOpenCode();
+      await loaded();
+      const groups = [...model().querySelectorAll("optgroup")].map(group => [group.label, [...group.querySelectorAll("option")].map(option => option.value)]);
+      expect(groups).toEqual([
+        ["anthropic", ["anthropic/claude-haiku-4-5", "anthropic/claude-sonnet-4-5"]],
+        ["openai", ["openai/gpt-5"]],
+      ]);
+    });
+
+    it("marks a value that opencode models does not list, and only that one", async () => {
+      backend({ initial: { ...BUNDLED, model: "gone/model-1", source: "override" } });
+      renderOpenCode();
+      await waitFor(() => expect(model().value).toBe("gone/model-1"));
+      const labels = [...model().querySelectorAll("option")].map(option => option.textContent);
+      expect(labels).toContain("gone/model-1 (not in opencode models)");
+      expect(labels).toContain("openai/gpt-5");
+      expect(labels.filter(label => label?.includes("not in opencode models"))).toHaveLength(1);
+    });
+
+    it("marks nothing unavailable while the listing is unknown or partial", async () => {
+      backend({ initial: { ...BUNDLED, model: "gone/model-1", source: "override" }, warning: "opencode models reported a non-zero exit." });
+      renderOpenCode();
+      await waitFor(() => expect(model().value).toBe("gone/model-1"));
+      await screen.findByText("opencode models reported a non-zero exit.");
+      expect([...model().querySelectorAll("option")].some(option => option.textContent?.includes("not in opencode models"))).toBe(false);
+    });
+
+    it("takes a custom provider as text and goes back to the list with Esc", async () => {
+      backend();
+      renderOpenCode();
+      await loaded();
+      fireEvent.change(model(), { target: { value: "__custom__" } });
+      const input = await waitFor(() => {
+        const found = screen.getByLabelText("model") as HTMLInputElement;
+        expect(found.tagName).toBe("INPUT");
+        return found;
+      });
+      await waitFor(() => expect(document.activeElement).toBe(input));
+      fireEvent.change(input, { target: { value: "lmstudio/google/gemma-3n" } });
+
+      const body = paneBody();
+      act(() => body.focus());
+      fireEvent.keyDown(body, { key: "s" });
+      await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("update_opencode_model_selection", expect.objectContaining({ model: "lmstudio/google/gemma-3n" })));
+      // The saved value is back in the list, marked as one opencode models does not know.
+      await waitFor(() => expect(model().tagName).toBe("SELECT"));
+      expect(model().value).toBe("lmstudio/google/gemma-3n");
+      expect([...model().options].find(option => option.value === "lmstudio/google/gemma-3n")!.textContent).toContain("not in opencode models");
+    });
+
+    it("leaves the custom input for the list on Esc", async () => {
+      backend();
+      renderOpenCode();
+      await loaded();
+      fireEvent.change(model(), { target: { value: "__custom__" } });
+      const input = await waitFor(() => {
+        const found = screen.getByLabelText("model") as HTMLInputElement;
+        expect(found.tagName).toBe("INPUT");
+        return found;
+      });
+      fireEvent.keyDown(input, { key: "Escape" });
+      await waitFor(() => expect(model().tagName).toBe("SELECT"));
+      expect(model().value).toBe("anthropic/claude-sonnet-4-5");
+    });
   });
 });
 
