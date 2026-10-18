@@ -108,6 +108,25 @@ const MANAGED_TOP_LEVEL_KEYS: &[&str] = &[
     "permission",
 ];
 
+/// MCP servers the app manages under `mcp` (`mcp_servers` in the metadata file).
+const MANAGED_MCP_SERVERS: &[&str] = &["playwright"];
+
+/// Built-in agents whose `agent.<name>.permission` block the app manages (`agent_permissions`
+/// in the metadata file).
+///
+/// OpenCode builds `plan` and `explore` as defaults + a read-only restriction + the global
+/// `permission`, so the global block re-opens them. The `agent.<name>.permission` block is
+/// appended after the global one and restores the restriction. Only that block is managed: the
+/// rest of `agent.<name>` (model, prompt, ...) and every other agent name stay user-owned.
+const MANAGED_AGENT_PERMISSIONS: &[&str] = &["plan", "explore"];
+
+fn agent_permission<'a>(
+    config: &'a serde_json::Value,
+    name: &str,
+) -> Option<&'a serde_json::Value> {
+    config.get("agent")?.get(name)?.get("permission")
+}
+
 pub(crate) fn extract_managed_opencode_config(config: &serde_json::Value) -> serde_json::Value {
     let mut managed = serde_json::Map::new();
     if let Some(obj) = config.as_object() {
@@ -116,10 +135,25 @@ pub(crate) fn extract_managed_opencode_config(config: &serde_json::Value) -> ser
                 managed.insert((*key).to_string(), value.clone());
             }
         }
-        if let Some(playwright) = obj.get("mcp").and_then(|mcp| mcp.get("playwright")) {
-            let mut mcp = serde_json::Map::new();
-            mcp.insert("playwright".to_string(), playwright.clone());
+        let mut mcp = serde_json::Map::new();
+        for server in MANAGED_MCP_SERVERS {
+            if let Some(entry) = obj.get("mcp").and_then(|mcp| mcp.get(*server)) {
+                mcp.insert((*server).to_string(), entry.clone());
+            }
+        }
+        if !mcp.is_empty() {
             managed.insert("mcp".to_string(), serde_json::Value::Object(mcp));
+        }
+        let mut agent = serde_json::Map::new();
+        for name in MANAGED_AGENT_PERMISSIONS {
+            if let Some(permission) = agent_permission(config, name) {
+                let mut entry = serde_json::Map::new();
+                entry.insert("permission".to_string(), permission.clone());
+                agent.insert((*name).to_string(), serde_json::Value::Object(entry));
+            }
+        }
+        if !agent.is_empty() {
+            managed.insert("agent".to_string(), serde_json::Value::Object(agent));
         }
     }
     serde_json::Value::Object(managed)
@@ -153,11 +187,14 @@ pub(crate) fn managed_opencode_keys_match(
 ) -> bool {
     let installed = extract_managed_opencode_config(installed);
     let rendered = extract_managed_opencode_config(rendered);
+    // Rule order is policy (last match wins) in the global block and in the agent blocks.
     installed == rendered
-        && match (installed.get("permission"), rendered.get("permission")) {
-            (Some(a), Some(b)) => ordered_json_eq(a, b),
-            _ => true,
-        }
+        && ["permission", "agent"].iter().all(|key| {
+            match (installed.get(*key), rendered.get(*key)) {
+                (Some(a), Some(b)) => ordered_json_eq(a, b),
+                _ => true,
+            }
+        })
 }
 
 /// Merge managed keys from `managed` into `installed`, preserving unrelated user-owned fields.
@@ -177,12 +214,30 @@ pub(crate) fn merge_managed_opencode_config(
             target.insert((*key).to_string(), value.clone());
         }
     }
-    if let Some(managed_mcp) = managed_obj.get("mcp").and_then(|v| v.get("playwright")) {
-        let mcp = target
-            .entry("mcp")
-            .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
-        if let Some(mcp_obj) = mcp.as_object_mut() {
-            mcp_obj.insert("playwright".to_string(), managed_mcp.clone());
+    for server in MANAGED_MCP_SERVERS {
+        if let Some(managed_server) = managed_obj.get("mcp").and_then(|v| v.get(*server)) {
+            let mcp = target
+                .entry("mcp")
+                .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
+            if let Some(mcp_obj) = mcp.as_object_mut() {
+                mcp_obj.insert((*server).to_string(), managed_server.clone());
+            }
+        }
+    }
+    for name in MANAGED_AGENT_PERMISSIONS {
+        if let Some(permission) = agent_permission(managed, name) {
+            let agent = target
+                .entry("agent")
+                .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
+            let Some(agent_obj) = agent.as_object_mut() else {
+                continue;
+            };
+            let entry = agent_obj
+                .entry((*name).to_string())
+                .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
+            if let Some(entry_obj) = entry.as_object_mut() {
+                entry_obj.insert("permission".to_string(), permission.clone());
+            }
         }
     }
     merged
@@ -3125,6 +3180,135 @@ mod tests {
         assert_eq!(ordered, sorted);
         assert!(managed_opencode_keys_match(&ordered, &ordered));
         assert!(!managed_opencode_keys_match(&sorted, &ordered));
+    }
+
+    fn bundled_managed_keys() -> serde_json::Value {
+        let text = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../resources/default-workspace/metadata/opencode-managed-keys.json"
+        ));
+        serde_json::from_str(text).expect("managed keys metadata")
+    }
+
+    fn string_list(value: &serde_json::Value, key: &str) -> Vec<String> {
+        value[key]
+            .as_array()
+            .unwrap_or_else(|| panic!("metadata {key} must be an array"))
+            .iter()
+            .map(|item| item.as_str().expect("string").to_string())
+            .collect()
+    }
+
+    #[test]
+    fn test_managed_key_lists_match_the_metadata_file() {
+        let metadata = bundled_managed_keys();
+        let expect = |list: &[&str]| list.iter().map(|k| k.to_string()).collect::<Vec<_>>();
+        assert_eq!(
+            string_list(&metadata, "top_level"),
+            expect(MANAGED_TOP_LEVEL_KEYS)
+        );
+        assert_eq!(
+            string_list(&metadata, "mcp_servers"),
+            expect(MANAGED_MCP_SERVERS)
+        );
+        assert_eq!(
+            string_list(&metadata, "agent_permissions"),
+            expect(MANAGED_AGENT_PERMISSIONS)
+        );
+    }
+
+    #[test]
+    fn test_bundled_template_manages_exactly_the_listed_agent_blocks() {
+        let template: serde_json::Value =
+            serde_json::from_str(&bundled_template("opencode.json")).expect("template");
+        let agents: Vec<&str> = json_keys(&template["agent"]);
+        assert_eq!(agents, MANAGED_AGENT_PERMISSIONS);
+        for name in MANAGED_AGENT_PERMISSIONS {
+            assert_eq!(json_keys(&template["agent"][*name]), ["permission"]);
+        }
+        let managed = extract_managed_opencode_config(&template);
+        assert_eq!(managed["agent"], template["agent"]);
+    }
+
+    #[test]
+    fn test_merge_managed_agent_permissions_keeps_user_agent_entries() {
+        let template: serde_json::Value = serde_json::from_str(
+            r#"{"permission":{"*":"ask"},
+                "agent":{"plan":{"permission":{"edit":{"*":"deny"}}},
+                         "explore":{"permission":{"*":"deny","read":"allow"}}}}"#,
+        )
+        .expect("template");
+        let installed: serde_json::Value = serde_json::from_str(
+            r#"{"agent":{"plan":{"model":"mine/plan","permission":{"edit":"allow"}},
+                         "review":{"permission":{"edit":"deny"}}}}"#,
+        )
+        .expect("installed");
+
+        let merged =
+            merge_managed_opencode_config(&installed, &extract_managed_opencode_config(&template));
+
+        assert_eq!(merged["agent"]["plan"]["model"], "mine/plan");
+        assert_eq!(
+            merged["agent"]["plan"]["permission"], template["agent"]["plan"]["permission"],
+            "the managed permission block is reset to the bundled one"
+        );
+        assert_eq!(merged["agent"]["review"], installed["agent"]["review"]);
+        assert_eq!(
+            merged["agent"]["explore"]["permission"],
+            template["agent"]["explore"]["permission"]
+        );
+    }
+
+    #[test]
+    fn test_merge_managed_agent_permissions_into_a_config_without_agents() {
+        let template: serde_json::Value =
+            serde_json::from_str(r#"{"agent":{"plan":{"permission":{"edit":{"*":"deny"}}}}}"#)
+                .expect("template");
+        let merged = merge_managed_opencode_config(
+            &serde_json::json!({"theme": "mine"}),
+            &extract_managed_opencode_config(&template),
+        );
+        assert_eq!(merged["theme"], "mine");
+        assert_eq!(merged["agent"], template["agent"]);
+        // A malformed user `agent` value is left alone instead of being overwritten or panicking.
+        let broken = merge_managed_opencode_config(
+            &serde_json::json!({"agent": "oops"}),
+            &extract_managed_opencode_config(&template),
+        );
+        assert_eq!(broken["agent"], "oops");
+    }
+
+    #[test]
+    fn test_managed_keys_match_covers_agent_permissions() {
+        let rendered: serde_json::Value = serde_json::from_str(
+            r#"{"agent":{"plan":{"permission":{"edit":{"*":"deny","docs/**":"allow"}}}}}"#,
+        )
+        .expect("rendered");
+        let widened: serde_json::Value = serde_json::from_str(
+            r#"{"agent":{"plan":{"permission":{"edit":{"*":"allow","docs/**":"allow"}}}}}"#,
+        )
+        .expect("widened");
+        let reordered: serde_json::Value = serde_json::from_str(
+            r#"{"agent":{"plan":{"permission":{"edit":{"docs/**":"allow","*":"deny"}}}}}"#,
+        )
+        .expect("reordered");
+        let with_user_keys: serde_json::Value = serde_json::from_str(
+            r#"{"agent":{"plan":{"model":"mine/plan","permission":{"edit":{"*":"deny","docs/**":"allow"}}},
+                         "review":{"description":"mine"}}}"#,
+        )
+        .expect("user keys");
+
+        assert!(managed_opencode_keys_match(&rendered, &rendered));
+        assert!(!managed_opencode_keys_match(&widened, &rendered));
+        assert!(!managed_opencode_keys_match(&reordered, &rendered));
+        assert!(!managed_opencode_keys_match(
+            &serde_json::json!({}),
+            &rendered
+        ));
+        assert!(
+            managed_opencode_keys_match(&with_user_keys, &rendered),
+            "unmanaged agent keys must not read as drift"
+        );
     }
 
     #[test]
