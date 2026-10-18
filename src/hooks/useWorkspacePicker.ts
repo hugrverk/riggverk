@@ -33,7 +33,7 @@ export interface WorkspacePicker {
 export function describeRefusedWorkspace(path: string, message: string): string {
   if (!message.toLowerCase().includes("invalid workspace path")) return message;
   const detail = message.match(/\(([^()]+)\)\s*$/)?.[1];
-  return `${path} is not an Agent Workspace folder${detail ? ` (${detail})` : ""}`;
+  return `${path} is not a Riggverk workspace folder${detail ? ` (${detail})` : ""}`;
 }
 
 /**

@@ -485,7 +485,7 @@ pub fn get_cursor_profile_health() -> Result<CursorProfileHealth, String> {
                 .into()
         }
         "synced" => {
-            "Cursor setup is synced. Select Auto Review in Cursor Settings > Agents > Run Mode. Agent Workspace cannot verify the active run mode."
+            "Cursor setup is synced. Select Auto Review in Cursor Settings > Agents > Run Mode. Riggverk cannot verify the active run mode."
                 .into()
         }
         "missing" => {

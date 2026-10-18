@@ -86,6 +86,14 @@ pub fn resolve_user_home(env: &PlatformEnv, platform: Platform) -> Result<PathBu
     Err("user home directory is not set (HOME or USERPROFILE)".into())
 }
 
+/// Per-user directory for settings, the OpenCode model override, and backups.
+///
+/// The directory name `ai.agentworkspace.app` is a stable data location. It is
+/// deliberately NOT the Tauri bundle identifier (`se.hugrverk.riggverk`) and
+/// must never be derived from it, from the product name, or from the Cargo
+/// package name: renaming the app must not move or orphan existing user data.
+/// `identity_contract` pins both sides. Moving the directory needs its own
+/// migration.
 pub fn app_support_dir(env: &PlatformEnv, platform: Platform) -> Result<PathBuf, String> {
     match platform {
         Platform::MacOS => {

@@ -3,7 +3,7 @@
   "setup_runtime": "native",
   "profile": {
     "id": "agent-workspace-cursor",
-    "name": "Agent Workspace Cursor Setup",
+    "name": "Riggverk Cursor Setup",
     "description": "Cursor setup assets for global agents, canonical bundled skills, and Playwright MCP. Auto Review and permissions remain IDE-managed."
   },
   "global_profile": "templates/cursor/global-profile.json",
@@ -35,10 +35,10 @@
   ],
   "notes": [
     "Primary workflow: apply Cursor setup from the app to Cursor agents, canonical bundled skills, and Playwright MCP.",
-    "Select Auto Review manually in Cursor Settings > Agents > Run Mode; Agent Workspace does not inspect or write undocumented Cursor runtime state.",
+    "Select Auto Review manually in Cursor Settings > Agents > Run Mode; Riggverk does not inspect or write undocumented Cursor runtime state.",
     "User Rules remain manually managed in Cursor Settings; this setup does not write a global User Rules file.",
     "Project rules, project MCP, project agents, project ignore files, and AGENTS.md are never written by the global setup flow.",
-    "A one-time cleanup removes the legacy Agent Workspace-owned playwright:* mcpAllowlist entry during apply when present.",
+    "A one-time cleanup removes the legacy Riggverk-owned playwright:* mcpAllowlist entry during apply when present.",
     "Never store credentials or private configuration in workspace templates."
   ]
 }

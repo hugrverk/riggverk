@@ -48,6 +48,22 @@ Before sharing a build, run [APP_RELEASE_SMOKE.md](./APP_RELEASE_SMOKE.md) in th
 
 Tab order is workspace, codex, opencode, cursor, claude, library, settings.
 
+## Installing a local build
+
+The app bundle is `Riggverk.app` (executable `riggverk`, identifier `se.hugrverk.riggverk`). Earlier builds were named `Agent Workspace.app` with a different identifier, so installing Riggverk is not an in-place overwrite: macOS treats it as a separate app. Both read and write the same settings, backups, and workspace, and nothing stops them from running at the same time, so never leave both installed.
+
+1. Quit the old app (`Agent Workspace`) if it is running.
+2. Build: `npm run tauri build` (`npm run tauri build -- --bundles app` skips the disk image).
+3. Install: `ditto "src-tauri/target/release/bundle/macos/Riggverk.app" /Applications/Riggverk.app`.
+4. Launch Riggverk. Check that the Workspace page and Settings still show your workspace and settings.
+5. Move `/Applications/Agent Workspace.app` to the Trash, then re-pin the Dock item.
+
+The old `Agent Workspace.app` that an earlier build left in `src-tauri/target/release/bundle/macos` is harmless, but `scripts/release-size-report.sh` lists it. Delete it or run `cargo clean`.
+
+Nothing moves with the rename. The app support directory (`ai.agentworkspace.app`, holding `settings.json`, the OpenCode model override, and `backups/`) keeps its name on purpose and is not derived from the bundle identifier; see the paths in [SECURITY_MODEL.md](./SECURITY_MODEL.md). The workspace stays at `~/.config/agent-workspace`. The bundle is ad-hoc signed and not notarized, so Gatekeeper and any folder-access prompts apply as for any local build.
+
+Name manual zips `Riggverk-v<version>-<channel>-macOS.zip`. Release notes for testers who still have the old app must say: quit `Agent Workspace`, move it to the Trash, then install `Riggverk.app`.
+
 ## Remaining limits
 
 - The release check does not replace webview smoke for view wiring, install behavior in an installed bundle, or native open and folder-picker behavior.

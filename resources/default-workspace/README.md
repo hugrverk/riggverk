@@ -1,8 +1,8 @@
-# Agent Workspace
+# Riggverk workspace
 
 Your workspace for agent skills, rules, configuration, and scripts.
 
-This directory holds the docs, skills, templates, config, and scripts that the Agent Workspace app displays and installs into agent tool folders. It is user-owned and can be versioned with Git. Installs always come from the app's bundled copy; edits you make here do not change what the tools receive (see [docs/CONCEPTS.md](docs/CONCEPTS.md)).
+This directory holds the docs, skills, templates, config, and scripts that the Riggverk app displays and installs into agent tool folders. It is user-owned and can be versioned with Git. Installs always come from the app's bundled copy; edits you make here do not change what the tools receive (see [docs/CONCEPTS.md](docs/CONCEPTS.md)).
 
 Workspace files are plain text and not encrypted. Do not store secrets, tokens, passwords, private keys, cookies, auth headers, signed or private URLs, or `.env` values here, and do not commit them.
 

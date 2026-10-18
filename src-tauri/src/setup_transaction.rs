@@ -1319,7 +1319,7 @@ fn log_skipped_bootstrap(skipped: &[String]) {
     };
     for reason in skipped {
         if logged.insert(reason.clone()) {
-            eprintln!("agent-workspace: skipped historical-ownership check: {reason}");
+            eprintln!("riggverk: skipped historical-ownership check: {reason}");
         }
     }
 }

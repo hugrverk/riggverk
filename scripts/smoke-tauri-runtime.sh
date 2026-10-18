@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Backend/runtime smoke for Agent Workspace Tauri command handlers.
+# Backend/runtime smoke for Riggverk Tauri command handlers.
 # Uses an isolated temp HOME and AGENT_WORKSPACE_PATH — never writes real harness dirs.
 #
 # Tauri webview UI automation is not run here (Playwright against Vite lacks invoke IPC).

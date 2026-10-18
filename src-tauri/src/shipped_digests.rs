@@ -84,7 +84,7 @@ fn embedded() -> Option<&'static ShippedDigests> {
                 "../../resources/default-workspace/metadata/shipped-digests.json"
             ));
             if let Err(error) = &parsed {
-                eprintln!("agent-workspace: shipped-version ownership proof disabled: {error}");
+                eprintln!("riggverk: shipped-version ownership proof disabled: {error}");
             }
             parsed
         })

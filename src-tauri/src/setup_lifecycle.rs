@@ -1,7 +1,7 @@
 //! Unified setup lifecycle types and planner.
 //!
 //! Models the detect → compare → preview → apply → validate → repair → rollback
-//! lifecycle for all Agent Workspace managed surfaces.
+//! lifecycle for all Riggverk managed surfaces.
 //!
 //! Phase ownership:
 //! - detect / compare  → setup_transaction (artifact aggregation)

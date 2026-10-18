@@ -605,7 +605,7 @@ describe("SettingsView workspace row", () => {
   it("shows what came back, an error for a refused folder and a confirmation for a switch", async () => {
     const onChooseWorkspace = vi
       .fn<() => Promise<{ ok: boolean; text: string } | null>>()
-      .mockResolvedValueOnce({ ok: false, text: "/tmp/x is not an Agent Workspace folder (missing README.md)" })
+      .mockResolvedValueOnce({ ok: false, text: "/tmp/x is not a Riggverk workspace folder (missing README.md)" })
       .mockResolvedValueOnce({ ok: true, text: "workspace set to /tmp/y" })
       .mockResolvedValueOnce(null);
     renderSettings({ onChooseWorkspace });
@@ -613,7 +613,7 @@ describe("SettingsView workspace row", () => {
     const status = () => within(workspaceRow()).getByRole("status", { name: "Workspace change" });
 
     fireEvent.click(choose());
-    await vi.waitFor(() => expect(status().textContent).toContain("not an Agent Workspace folder"));
+    await vi.waitFor(() => expect(status().textContent).toContain("not a Riggverk workspace folder"));
     expect(status().querySelector(".c-fail")).not.toBeNull();
 
     fireEvent.click(choose());

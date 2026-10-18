@@ -6,7 +6,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-echo "=== Agent Workspace Size Report ==="
+echo "=== Riggverk Size Report ==="
 echo "Date: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
 echo "Commit: $(cd "$ROOT_DIR" && git rev-parse --short HEAD 2>/dev/null || echo 'unknown')"
 echo ""

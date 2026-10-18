@@ -63,7 +63,7 @@ pub struct RulesStatus {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub malformed_reason: Option<MalformedReason>,
     /// The user chose to manage this hand-edited file themselves: it is not
-    /// reported as a conflict and Agent Workspace leaves it alone.
+    /// reported as a conflict and Riggverk leaves it alone.
     pub user_managed: bool,
 }
 

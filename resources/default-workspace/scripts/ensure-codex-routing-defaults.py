@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Ensure Agent Workspace-managed Codex routing defaults in config.toml.
+"""Ensure Riggverk-managed Codex routing defaults in config.toml.
 
 This script patches only the explicit model/routing/approval defaults listed in
 MANAGED_PATHS. It never prints full config contents so private user settings and

@@ -26,7 +26,7 @@ type BootStep = (typeof STEPS)[number];
 function bootLine(step: BootStep, info: BootInfo): BootLine | null {
   switch (step) {
     case "version":
-      return { label: "❯ ", value: info.version ? `agent-workspace ${info.version}` : "agent-workspace" };
+      return { label: "❯ ", value: info.version ? `riggverk ${info.version}` : "riggverk" };
     case "workspace":
       return info.workspace === undefined ? null : { label: "  workspace  ", value: info.workspace ?? "no workspace" };
     case "branch":

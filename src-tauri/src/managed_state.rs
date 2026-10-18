@@ -1,6 +1,6 @@
 //! Compact managed artifact state for setup reconciliation.
 //!
-//! Records only app-owned artifacts that Agent Workspace has successfully applied.
+//! Records only app-owned artifacts that Riggverk has successfully applied.
 //! Unknown files are never added merely because they live inside a managed parent.
 
 use std::collections::{HashMap, HashSet};

@@ -362,14 +362,14 @@ fn compute_health_with_bundle(
     });
 
     // Codex reads AGENTS.override.md instead of AGENTS.md when it has content,
-    // which silently drops the Agent Workspace base.
+    // which silently drops the Riggverk base block.
     let override_path = codex_dir.join("AGENTS.override.md");
     if std::fs::read(&override_path)
         .is_ok_and(|content| content.iter().any(|byte| !byte.is_ascii_whitespace()))
     {
         has_warn = true;
         let detail = format!(
-            "{} exists and replaces AGENTS.md; the Agent Workspace base is not loaded until it is removed or emptied",
+            "{} exists and replaces AGENTS.md; the Riggverk base block is not loaded until it is removed or emptied",
             override_path.display()
         );
         checks.push(CodexRuntimeCheck {

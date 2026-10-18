@@ -2,9 +2,9 @@
 
 ## Supported OpenCode version
 
-Agent Workspace manages the **OpenCode 1.x** config format (`opencode.json`, `tui.json`, `agents/*.md`) and is verified against OpenCode 1.19.3. Install 1.x with npm (`npm i -g opencode-ai`) or the Homebrew tap (`brew install anomalyco/tap/opencode`). Homebrew core's `opencode` formula installs **2.x**, so check `opencode --version` after installing.
+Riggverk manages the **OpenCode 1.x** config format (`opencode.json`, `tui.json`, `agents/*.md`) and is verified against OpenCode 1.19.3. Install 1.x with npm (`npm i -g opencode-ai`) or the Homebrew tap (`brew install anomalyco/tap/opencode`). Homebrew core's `opencode` formula installs **2.x**, so check `opencode --version` after installing.
 
-OpenCode 2.x is detected, not supported. It migrates the 1.x config in memory and does not read `tui.json`. The OpenCode runtime pane shows the detected version in its `cli` row and warns on 2.x. A 2.x-native config is a separate future project; until then Agent Workspace keeps writing the 1.x keys. On 2.x the model list is read with `opencode models --standalone` (2.x has no `--pure`, and without `--standalone` it would use a background service); on 1.x it is `opencode models --pure`.
+OpenCode 2.x is detected, not supported. It migrates the 1.x config in memory and does not read `tui.json`. The OpenCode runtime pane shows the detected version in its `cli` row and warns on 2.x. A 2.x-native config is a separate future project; until then Riggverk keeps writing the 1.x keys. On 2.x the model list is read with `opencode models --standalone` (2.x has no `--pure`, and without `--standalone` it would use a background service); on 1.x it is `opencode models --pure`.
 
 The CLI is looked up on `PATH`, then in `/opt/homebrew/bin`, `/usr/local/bin` and `~/.opencode/bin` (the official installer's directory), because an app started from Finder has a short `PATH`.
 
@@ -175,7 +175,7 @@ Opt-outs:
 
 Install does **not** overwrite the entire installed `opencode.json`. It merges only the keys listed in `metadata/opencode-managed-keys.json` (model, `lsp`, permissions, the `permission` block of the built-in `plan` and `explore` agents, `agent.<role>.model` of the five subagents while a subagent model override is set, Playwright MCP, compaction, watcher, and related settings). User `provider` blocks, non-Playwright MCP servers and other `agent` entries and keys are preserved. Managed keys are reset to the bundled values on every update, so keep your own settings in unmanaged keys.
 
-Legacy `~/.config/opencode/agents/scout.md` files from the pre-rename Agent Workspace scout are removed on agent sync when frontmatter is `name: scout`.
+Legacy `~/.config/opencode/agents/scout.md` files from the pre-rename scout agent are removed on agent sync when frontmatter is `name: scout`.
 
 ## Install workflow
 

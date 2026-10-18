@@ -1,6 +1,6 @@
 # Cursor MCP Examples
 
-MCP configuration is explicit opt-in. Agent Workspace only manages the global Cursor MCP file at `~/.cursor/mcp.json`.
+MCP configuration is explicit opt-in. Riggverk only manages the global Cursor MCP file at `~/.cursor/mcp.json`.
 
 Review every MCP server before enabling it. MCP servers can access external services and execute code through their transport, so treat this directory as high-risk template material.
 
@@ -10,4 +10,4 @@ Rules:
 - Use Cursor environment interpolation for auth-like values, for example `${env:EXAMPLE_API_KEY}`.
 - Prefer local stdio examples for starter templates.
 - Keep project-specific MCP config outside this global profile.
-- Playwright MCP support belongs in MCP config. Agent Workspace does not manage Cursor permissions templates or sandbox profiles.
+- Playwright MCP support belongs in MCP config. Riggverk does not manage Cursor permissions templates or sandbox profiles.

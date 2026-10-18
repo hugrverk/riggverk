@@ -271,7 +271,7 @@ const RULES_BASE_LINES = [
   "# Global Agent Rules",
   "",
   "## Priority",
-  "Repository reality overrides assumptions. Explicit user instructions override these defaults. Instructions after the Agent Workspace base block are the user's refinements and override the base where they conflict.",
+  "Repository reality overrides assumptions. Explicit user instructions override these defaults. Instructions after the Riggverk base block are the user's refinements and override the base where they conflict.",
   "",
   "## Communication",
   "Be direct, dense, technical, and concise. Respond in the user's language. Use English for code, comments, identifiers, commits, filenames, docs, and agent prompts.",
@@ -351,7 +351,7 @@ function conversionResult(file: RulesStatus): string {
     ? ["", "## Communication", "Be direct and concise. Respond in the user's language, and in Swedish for Swedish user-facing copy.", "Prefer short answers; no praise or filler.", "", "## My refinements", "Never run destructive git commands without asking first."]
     : ["", "## Communication", "Be direct and concise. Swedish copy for Swedish user-facing text.", "", "## Local tooling", "Use rtk for inspection-style commands.", "Prefer small diffs."];
   return [
-    "<!-- BEGIN AGENT-WORKSPACE BASE: managed by Agent Workspace; edits inside are replaced on update; add refinements below END -->",
+    "<!-- BEGIN AGENT-WORKSPACE BASE: managed by Riggverk; edits inside are replaced on update; add refinements below END -->",
     ...RULES_BASE_LINES,
     "<!-- END AGENT-WORKSPACE BASE -->",
     ...refinements,
@@ -388,7 +388,7 @@ function mockRulesConversion(surface: RulesSurfaceId): RulesConversionPreview {
       "--- installed",
       "+++ after conversion",
       "@@ -1,6 +1,18 @@",
-      "+<!-- BEGIN AGENT-WORKSPACE BASE: managed by Agent Workspace; edits inside are replaced on update; add refinements below END -->",
+      "+<!-- BEGIN AGENT-WORKSPACE BASE: managed by Riggverk; edits inside are replaced on update; add refinements below END -->",
       " # Global Agent Rules",
       " ",
       " ## Priority",
@@ -674,7 +674,7 @@ function codexHealth(): CodexRuntimeHealth {
   const fresh = scenario === "fresh";
   // Codex reads AGENTS.override.md instead of AGENTS.md when it has content, which drops the base.
   const override = scenario === "conflict";
-  const overrideDetail = `${HOME}/.codex/AGENTS.override.md exists and replaces AGENTS.md; the Agent Workspace base is not loaded until it is removed or emptied`;
+  const overrideDetail = `${HOME}/.codex/AGENTS.override.md exists and replaces AGENTS.md; the Riggverk base block is not loaded until it is removed or emptied`;
   const status = fresh ? "missing" : "synced";
   return {
     status,

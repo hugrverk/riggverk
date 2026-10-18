@@ -272,6 +272,7 @@ fi
 for stale_pattern in \
   'public app source' \
   'public Agent Workspace' \
+  'public Riggverk' \
   'public starter' \
   'public workspace contract' \
   'public app contract' \
@@ -987,6 +988,29 @@ if search_quiet 'window\.maximize\(\)' src-tauri/src/lib.rs; then
   exit 1
 fi
 printf '  main window opens centered at 1280x800\n'
+
+step "product identity: Riggverk name, stable technical identifiers"
+# The product is Riggverk. Markers, env vars and paths in users' files and
+# environments keep their historical names on purpose. Env var names are not
+# reachable by unit tests without being set, so guard the literals here; the
+# Rust identity_contract tests pin the rest.
+if ! search_quiet -F 'AGENT_WORKSPACE_PATH' src-tauri/src/commands/workspace.rs; then
+  printf 'FAIL: AGENT_WORKSPACE_PATH env var must stay in commands/workspace.rs\n' >&2
+  exit 1
+fi
+if ! search_quiet -F 'AGENT_WORKSPACE_BACKUP_DIR' src-tauri/src/commands/backups.rs; then
+  printf 'FAIL: AGENT_WORKSPACE_BACKUP_DIR env var must stay in commands/backups.rs\n' >&2
+  exit 1
+fi
+if ! search_quiet -F 'BEGIN AGENT-WORKSPACE BASE' src-tauri/src/rules_block.rs; then
+  printf 'FAIL: rules markers must stay BEGIN/END AGENT-WORKSPACE BASE in rules_block.rs\n' >&2
+  exit 1
+fi
+if search_pruned_fixed_has_match 'Agent Workspace' src README.md index.html src-tauri/tauri.conf.json; then
+  printf 'FAIL: old product name "Agent Workspace" found in app sources (use Riggverk)\n' >&2
+  exit 1
+fi
+printf '  product name is Riggverk; stable technical identifiers kept\n'
 
 step "bundled skill catalog and routing alignment"
 python3 scripts/check-skill-routing.py

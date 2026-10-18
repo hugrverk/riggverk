@@ -200,7 +200,7 @@ describe("App", () => {
 
       await waitFor(() =>
         expect(row.getByRole("status", { name: "Workspace change" }).textContent).toContain(
-          "/tmp/invalid-folder is not an Agent Workspace folder (missing .agent-workspace/workspace.json)",
+          "/tmp/invalid-folder is not a Riggverk workspace folder (missing .agent-workspace/workspace.json)",
         ),
       );
       expect(row.getByText("/tmp/ws")).toBeTruthy();

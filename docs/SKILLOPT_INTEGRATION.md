@@ -1,6 +1,6 @@
 # SkillOpt Integration Evaluation
 
-Decision record for whether Agent Workspace should integrate `microsoft/SkillOpt` (including its `skillopt-sleep` mode). Companion document: `docs/SKILL_CATALOG_AUDIT.md`.
+Decision record for whether Riggverk should integrate `microsoft/SkillOpt` (including its `skillopt-sleep` mode). Companion document: `docs/SKILL_CATALOG_AUDIT.md`.
 
 ## Decision
 
@@ -18,7 +18,7 @@ A custom environment requires three components under `skillopt/envs/<name>/`: `d
 
 | Concern | Assessment |
 | --- | --- |
-| **Security model conflict** | `skillopt-sleep` harvests local agent transcripts and runs a background scheduler. `docs/SECURITY_MODEL.md` commits Agent Workspace to no transcript/credential-surface inspection, no background mutation, and opt-in writes only. Bundling or recommending sleep mode inside the app would break that contract. |
+| **Security model conflict** | `skillopt-sleep` harvests local agent transcripts and runs a background scheduler. `docs/SECURITY_MODEL.md` commits Riggverk to no transcript/credential-surface inspection, no background mutation, and opt-in writes only. Bundling or recommending sleep mode inside the app would break that contract. |
 | **No objective scorer exists** | SkillOpt's core requirement is a scoring function over rollouts. AW skills are process-guidance documents (routing, invariants, reporting contracts), not benchmark tasks. There is currently no dataset or scorer for "did `minimal-implementation` produce better patches", so the validation gate — the part that makes SkillOpt trustworthy — cannot be built cheaply. Without it, SkillOpt degenerates to an LLM rewriting prompts. |
 | **Cost** | Each optimization run is many agent rollouts × optimizer-model calls against paid APIs, per skill. For 21 skills this is a recurring, non-trivial spend with unquantified benefit. |
 | **Maintenance** | A Python dependency tree (plus `.env`-based API credentials, Gradio UI) added to a Tauri/TypeScript/Rust repo with a deliberately small script surface. v0.x project churn would land on a solo maintainer. |

@@ -1,7 +1,7 @@
 //! Managed base block inside a user-owned rules file.
 //!
 //! `~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, and `~/.config/opencode/AGENTS.md`
-//! hold the Agent Workspace base between two marker lines. Agent Workspace owns
+//! hold the Riggverk base between two marker lines. Riggverk owns
 //! only the bytes between the markers; everything before BEGIN and after END is
 //! the user's refinement layer and is preserved byte for byte.
 //!
@@ -20,12 +20,12 @@ use serde::Serialize;
 
 use crate::stable_digest;
 
-pub const BEGIN_MARKER: &str = "<!-- BEGIN AGENT-WORKSPACE BASE: managed by Agent Workspace; edits inside are replaced on update; add refinements below END -->";
+pub const BEGIN_MARKER: &str = "<!-- BEGIN AGENT-WORKSPACE BASE: managed by Riggverk; edits inside are replaced on update; add refinements below END -->";
 pub const END_MARKER: &str = "<!-- END AGENT-WORKSPACE BASE -->";
 
 /// A BEGIN line is recognized by its stable prefix and closing `-->`, so the
 /// explanatory prose inside the comment can change without orphaning old files.
-const BEGIN_PREFIX: &str = "<!-- BEGIN AGENT-WORKSPACE BASE";
+pub(crate) const BEGIN_PREFIX: &str = "<!-- BEGIN AGENT-WORKSPACE BASE";
 const BOM: &str = "\u{feff}";
 
 /// Largest rules file read and rewritten. Real files are a few kilobytes; a
@@ -326,9 +326,9 @@ fn strip_fence_indent(line: &str) -> Option<&str> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RulesConflict {
-    /// The managed block differs from every base Agent Workspace shipped.
+    /// The managed block differs from every base Riggverk shipped.
     BaseBlockEdited,
-    /// A pre-block file whose content is not a base Agent Workspace shipped.
+    /// A pre-block file whose content is not a base Riggverk shipped.
     LegacyDiverged,
     /// Marker lines are duplicated, unpaired, or out of order.
     MalformedMarkers,
@@ -338,7 +338,7 @@ impl RulesConflict {
     pub fn message(self) -> &'static str {
         match self {
             Self::BaseBlockEdited => "the managed base block was edited",
-            Self::LegacyDiverged => "the file differs from every base Agent Workspace shipped",
+            Self::LegacyDiverged => "the file differs from every base Riggverk shipped",
             Self::MalformedMarkers => "the base block markers are malformed",
         }
     }
