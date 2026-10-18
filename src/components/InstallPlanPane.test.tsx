@@ -25,7 +25,7 @@ function op(surface: SetupSurfaceId, kind: PlannedOperation["kind"], extra: Part
 
 const REQUEST: InstallFlowRequest = {
   label: "update claude",
-  surfaces: ["claude_rules", "claude_agents", "claude_skills"],
+  surfaces: ["claude_rules", "claude_agents", "skills"],
 };
 
 function planOf(operations: PlannedOperation[], overrides: Partial<SetupPlan> = {}): SetupPlan {
@@ -47,7 +47,7 @@ function planOf(operations: PlannedOperation[], overrides: Partial<SetupPlan> = 
 const MIXED_OPS: PlannedOperation[] = [
   op("claude_rules", "update", { summary: "Update ~/.claude/CLAUDE.md" }),
   op("claude_agents", "update", { details: ["+ create agents/sentinel.md", "~ update agents/verifier.md"] }),
-  op("claude_skills", "conflict", {
+  op("skills", "conflict", {
     summary: "skills differ",
     conflict_description: "~/.claude/skills was modified locally since install",
   }),
@@ -116,7 +116,7 @@ describe("InstallPlanPane", () => {
     expect(Array.from(grid().querySelectorAll("tr.g")).map(row => row.textContent)).toEqual([
       "claude rules",
       "claude agents",
-      "claude skills",
+      "skills",
     ]);
     const rows = Array.from(grid().querySelectorAll("tbody tr:not(.g)"));
     expect(rows.map(row => row.querySelector("td.op")!.textContent!.trim())).toEqual([
@@ -180,7 +180,7 @@ describe("InstallPlanPane", () => {
     });
 
     it("disables apply with the reason the key would give, and still cancels", () => {
-      const flow = makeFlow({ operations: [op("claude_skills", "conflict")] });
+      const flow = makeFlow({ operations: [op("skills", "conflict")] });
       const { onApply } = renderPane(flow);
       const apply = confirmLine().getByRole("button", { name: "apply" });
       expect(apply.getAttribute("aria-disabled")).toBe("true");
@@ -252,7 +252,7 @@ describe("InstallPlanPane", () => {
   });
 
   it("does not apply a plan with nothing safe in it, and says why", () => {
-    const { onApply } = renderPane(makeFlow({ operations: [op("claude_skills", "conflict")] }));
+    const { onApply } = renderPane(makeFlow({ operations: [op("skills", "conflict")] }));
     press("y");
     expect(onApply).not.toHaveBeenCalled();
     const apply = bar().getByRole("button", { name: /apply/ });
@@ -321,9 +321,9 @@ describe("InstallPlanPane", () => {
     expect(cursorRow().textContent).toContain("agents/sentinel.md");
     press("j");
     press("j");
-    expect(cursorRow().textContent).toContain("claude skills");
+    expect(cursorRow().textContent).toContain("skills");
     press("j");
-    expect(cursorRow().textContent).toContain("claude skills");
+    expect(cursorRow().textContent).toContain("skills");
     press("k");
     expect(cursorRow().textContent).toContain("agents/verifier.md");
     expect(grid().getAttribute("aria-activedescendant")).toBe(cursorRow().id);
@@ -333,11 +333,11 @@ describe("InstallPlanPane", () => {
     const ops = [...MIXED_OPS, op("cursor_mcp", "conflict", { summary: "mcp differs" })];
     renderPane(makeFlow({ operations: ops, request: { ...REQUEST, surfaces: [...REQUEST.surfaces, "cursor_mcp"] } }));
     press("c");
-    expect(cursorRow().textContent).toContain("claude skills");
+    expect(cursorRow().textContent).toContain("skills");
     press("c");
     expect(cursorRow().textContent).toContain("cursor mcp");
     press("c");
-    expect(cursorRow().textContent).toContain("claude skills");
+    expect(cursorRow().textContent).toContain("skills");
   });
 
   it("offers c only when there is a conflict", () => {
@@ -438,7 +438,7 @@ describe("InstallPlanPane with the install flow", () => {
   });
 
   it("does not call apply_setup for a plan without safe operations", async () => {
-    renderInFrame(<FlowHarness plan={planOf([op("claude_skills", "conflict")])} />);
+    renderInFrame(<FlowHarness plan={planOf([op("skills", "conflict")])} />);
     await screen.findByRole("grid", { name: "Install plan" });
     press("y");
     await act(async () => {

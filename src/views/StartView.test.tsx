@@ -61,7 +61,7 @@ const OVERVIEW = overviewOf({
   workspace: installationStatus("current", [surfaceStatus("workspace_bundle", "current", "installed · a7c3e1")]),
   codex: installationStatus("current", [
     surfaceStatus("codex_rules", "current"),
-    surfaceStatus("codex_skills", "current"),
+    surfaceStatus("skills", "current"),
   ]),
   opencode: installationStatus("update_available", [surfaceStatus("open_code_config", "update_available")], { update_count: 2 }),
   claude: installationStatus(
@@ -69,7 +69,7 @@ const OVERVIEW = overviewOf({
     [
       surfaceStatus("claude_rules", "update_available", "bundle a7c3e1 → installed 91be20"),
       surfaceStatus("claude_agents", "current"),
-      surfaceStatus("claude_skills", "conflict", "modified locally since install"),
+      surfaceStatus("skills", "conflict", "modified locally since install"),
     ],
     { update_count: 1, conflict_count: 1 },
     { conflict_details: ["~/.claude/skills modified locally"] },

@@ -91,8 +91,15 @@ const KIND_STYLE: Record<PlanRowKind, { glyph: GlyphName; label: string; tone: T
   unavailable: { glyph: "none", label: "unavailable", tone: "dim" },
 };
 
-const DETAIL_KIND: Record<string, PlanRowKind> = { "+": "create", "~": "update", "−": "remove", "-": "remove" };
-const DETAIL_LINE = /^\s*([+~−-])\s+(?:(?:create|update|remove)\s+)?(.*?)\s*$/;
+/** `!` marks a file that stays because the user edited it (a conflict inside an otherwise safe surface). */
+const DETAIL_KIND: Record<string, PlanRowKind> = {
+  "+": "create",
+  "~": "update",
+  "−": "remove",
+  "-": "remove",
+  "!": "conflict",
+};
+const DETAIL_LINE = /^\s*([+~−!-])\s+(?:(?:create|update|remove)\s+)?(.*?)\s*$/;
 const TRAILING_NOTE = /^(.*?)\s*\((.+)\)$/;
 
 function unique(lines: Array<string | null | undefined>): string[] {

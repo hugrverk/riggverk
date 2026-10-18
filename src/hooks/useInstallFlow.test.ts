@@ -60,14 +60,14 @@ function setupResult(overrides: Partial<SetupResult> = {}): SetupResult {
 
 const request: InstallFlowRequest = {
   label: "update codex",
-  surfaces: ["codex_agents", "codex_rules", "codex_skills"],
+  surfaces: ["codex_agents", "codex_rules", "skills"],
 };
 
 const mixedPlan = plan(
   [
     op("codex_rules", "update"),
     op("codex_agents", "create"),
-    op("codex_skills", "conflict"),
+    op("skills", "conflict"),
   ],
   { synced: ["codex_config"] },
 );
@@ -111,7 +111,7 @@ describe("useInstallFlow state machine", () => {
     expect(hook.result.current.request).toEqual(request);
     expect(hook.result.current.review).toBeNull();
     expect(invoke.mock.calls).toEqual([
-      ["preview_setup", { surfaces: ["codex_agents", "codex_rules", "codex_skills"] }],
+      ["preview_setup", { surfaces: ["codex_agents", "codex_rules", "skills"] }],
     ]);
 
     await act(async () => {
@@ -140,10 +140,10 @@ describe("useInstallFlow state machine", () => {
         [
           op("codex_rules", "update"),
           op("codex_agents", "create"),
-          op("claude_skills", "remove"),
-          op("codex_skills", "conflict"),
+          op("skills", "remove"),
+          op("open_code_config", "conflict"),
           manual,
-          op("cursor_skills", "unavailable"),
+          op("cursor_agents", "unavailable"),
         ],
         { synced: ["codex_config", "claude_rules"] },
       ),
@@ -158,10 +158,10 @@ describe("useInstallFlow state machine", () => {
       unavailable: 1,
       unchanged: 2,
     });
-    expect(review.safeOperations.map((o) => o.surface)).toEqual(["codex_rules", "codex_agents", "claude_skills"]);
-    expect(review.conflicts.map((o) => o.surface)).toEqual(["codex_skills"]);
+    expect(review.safeOperations.map((o) => o.surface)).toEqual(["codex_rules", "codex_agents", "skills"]);
+    expect(review.conflicts.map((o) => o.surface)).toEqual(["open_code_config"]);
     expect(review.manualSteps).toEqual([manual]);
-    expect(review.applySurfaces).toEqual(["codex_rules", "codex_agents", "claude_skills"]);
+    expect(review.applySurfaces).toEqual(["codex_rules", "codex_agents", "skills"]);
     expect(review.canApply).toBe(true);
   });
 
@@ -186,11 +186,11 @@ describe("useInstallFlow state machine", () => {
     });
 
     expect(invoke.mock.calls).toEqual([
-      ["preview_setup", { surfaces: ["codex_agents", "codex_rules", "codex_skills"] }],
+      ["preview_setup", { surfaces: ["codex_agents", "codex_rules", "skills"] }],
       [
         "apply_setup",
         {
-          // codex_skills is a conflict and codex_config is already synced: neither is applied.
+          // skills is a conflict and codex_config is already synced: neither is applied.
           surfaces: ["codex_rules", "codex_agents"],
           skipManual: true,
           planFingerprint: "fp-1",
@@ -274,7 +274,7 @@ describe("useInstallFlow state machine", () => {
 
   it("cannot apply a plan with no safe operations", async () => {
     const hook = setup();
-    await startAndReview(hook, plan([op("codex_skills", "conflict"), op("cursor_mcp", "manual")]));
+    await startAndReview(hook, plan([op("skills", "conflict"), op("cursor_mcp", "manual")]));
     expect(hook.result.current.status).toBe("review");
     expect(hook.result.current.review?.canApply).toBe(false);
     expect(hook.result.current.review?.counts.conflict).toBe(1);
@@ -675,7 +675,7 @@ describe("describeInstallReview", () => {
 
   it("states the safe changes and skipped conflicts", () => {
     expect(
-      describePlan([op("codex_rules", "update"), op("codex_agents", "create"), op("codex_skills", "conflict")]),
+      describePlan([op("codex_rules", "update"), op("codex_agents", "create"), op("skills", "conflict")]),
     ).toBe("apply 2 safe changes, skip 1 conflict");
   });
 
@@ -685,7 +685,7 @@ describe("describeInstallReview", () => {
 
   it("reports nothing to apply", () => {
     expect(describePlan([])).toBe("nothing to apply");
-    expect(describePlan([op("codex_skills", "conflict"), op("claude_skills", "conflict")])).toBe(
+    expect(describePlan([op("skills", "conflict"), op("claude_rules", "conflict")])).toBe(
       "nothing safe to apply, 2 conflicts",
     );
   });
