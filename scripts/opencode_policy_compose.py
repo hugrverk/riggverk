@@ -38,8 +38,11 @@ POLICY_SECTION_KEYS: dict[str, set[str] | None] = {
     "read": {"default", "deny", "allow_override"},
     "edit": {"default", "allow", "ask", "deny", "allow_override"},
     "bash": {"default", "allow", "ask", "deny", "secret_content_commands", "secret_content_patterns"},
+    "builtin_agents": None,
     "role_profiles": None,
 }
+
+BUILTIN_AGENT_KEYS = {"permission", "from_base", "bash_profile"}
 
 
 def unknown_policy_keys(policy: dict[str, Any]) -> list[str]:
@@ -51,6 +54,8 @@ def unknown_policy_keys(policy: dict[str, Any]) -> list[str]:
         allowed = POLICY_SECTION_KEYS[key]
         if allowed is not None and isinstance(value, dict):
             problems.extend(f"{key}.{sub}" for sub in value if sub not in allowed)
+    for name, entry in policy.get("builtin_agents", {}).items():
+        problems.extend(f"builtin_agents.{name}.{sub}" for sub in entry if sub not in BUILTIN_AGENT_KEYS)
     return problems
 
 
@@ -62,12 +67,28 @@ def load_policy() -> dict[str, Any]:
     return policy
 
 
+def with_root_forms(patterns: list[str]) -> list[str]:
+    """Pair every `**/P` pattern with the root form `P`.
+
+    OpenCode matches read and edit rules against the worktree-relative path, and `**/P`
+    compiles to `^.*.*/P$`, so it needs a `/` before `P` and never matches `P` at the
+    worktree root (`wp-config.php`, `secrets/prod.json`).
+    """
+    out: list[str] = []
+    for pattern in patterns:
+        if pattern.startswith("**/") and pattern[3:] not in out:
+            out.append(pattern[3:])
+        if pattern not in out:
+            out.append(pattern)
+    return out
+
+
 def build_read_section(policy: dict[str, Any]) -> dict[str, str]:
     read_policy = policy.get("read", {})
     result: dict[str, str] = {"*": read_policy.get("default", "allow")}
-    for pattern in read_policy.get("deny", []):
+    for pattern in with_root_forms(read_policy.get("deny", [])):
         result[pattern] = "deny"
-    for pattern in read_policy.get("allow_override", []):
+    for pattern in with_root_forms(read_policy.get("allow_override", [])):
         result[pattern] = "allow"
     return result
 
@@ -79,9 +100,9 @@ def build_edit_section(policy: dict[str, Any]) -> dict[str, str]:
         result[pattern] = "allow"
     for pattern in edit_policy.get("ask", []):
         result[pattern] = "ask"
-    for pattern in edit_policy.get("deny", []):
+    for pattern in with_root_forms(edit_policy.get("deny", [])):
         result[pattern] = "deny"
-    for pattern in edit_policy.get("allow_override", []):
+    for pattern in with_root_forms(edit_policy.get("allow_override", [])):
         result[pattern] = "allow"
     return result
 
@@ -209,6 +230,28 @@ def compose_role_permission(role_override: dict[str, Any]) -> dict[str, Any]:
     _apply_profile_replacements(policy, merged, composition)
     permission_override = role_override.get("permission", {})
     return _merge_permission(merged, permission_override, replace_sections)
+
+
+def build_builtin_agent_overrides(policy: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Managed `agent.<name>.permission` entries that restore OpenCode's built-in read-only agents.
+
+    OpenCode builds a built-in agent as defaults + its own restriction + the user `permission`
+    (agent.ts), so the global AW block silently widens `plan` and `explore`. The config's
+    `agent.<name>.permission` is appended after the user ruleset and wins. An entry either
+    carries only the delta (`plan`), or is composed from the base permission with a bash profile
+    (`from_base`, `explore`), because a trailing `"*": "deny"` has to be followed by every re-allow.
+    """
+    overrides: dict[str, dict[str, Any]] = {}
+    for name, entry in policy.get("builtin_agents", {}).items():
+        permission: dict[str, Any] = {}
+        if entry.get("from_base"):
+            permission = build_base_permission(policy)
+            if entry.get("bash_profile"):
+                permission["bash"] = build_bash_profile(policy, entry["bash_profile"])
+        for key, value in entry.get("permission", {}).items():
+            permission[key] = json.loads(json.dumps(value))
+        overrides[name] = {"permission": permission}
+    return overrides
 
 
 def _yaml_quote(value: str) -> str:

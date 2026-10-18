@@ -60,8 +60,11 @@ POLICY_SECTION_KEYS = {
     "read": {"default", "deny", "allow_override"},
     "edit": {"default", "allow", "ask", "deny", "allow_override"},
     "bash": {"default", "allow", "ask", "deny", "secret_content_commands", "secret_content_patterns"},
+    "builtin_agents": None,
     "role_profiles": None,
 }
+
+BUILTIN_AGENT_KEYS = {"permission", "from_base", "bash_profile"}
 
 # Non-permission keys emitted first, in this order. Unknown keys from
 # opencode.base.json follow them; "permission" is generated from the policy.
@@ -85,14 +88,30 @@ def load_json(path, label):
         sys.exit(1)
 
 
+def with_root_forms(patterns):
+    """Pair every `**/P` pattern with the root form `P`.
+
+    OpenCode matches read and edit rules against the worktree-relative path, and `**/P`
+    compiles to `^.*.*/P$`, so it needs a `/` before `P` and never matches `P` at the
+    worktree root (`wp-config.php`, `secrets/prod.json`).
+    """
+    out = []
+    for pattern in patterns:
+        if pattern.startswith("**/") and pattern[3:] not in out:
+            out.append(pattern[3:])
+        if pattern not in out:
+            out.append(pattern)
+    return out
+
+
 def build_read_section(policy):
     """Build read permission section from policy data."""
     read_policy = policy.get("read", {})
     result = {}
     result["*"] = read_policy.get("default", "allow")
-    for pattern in read_policy.get("deny", []):
+    for pattern in with_root_forms(read_policy.get("deny", [])):
         result[pattern] = "deny"
-    for pattern in read_policy.get("allow_override", []):
+    for pattern in with_root_forms(read_policy.get("allow_override", [])):
         result[pattern] = "allow"
     return result
 
@@ -106,9 +125,9 @@ def build_edit_section(policy):
         result[pattern] = "allow"
     for pattern in edit_policy.get("ask", []):
         result[pattern] = "ask"
-    for pattern in edit_policy.get("deny", []):
+    for pattern in with_root_forms(edit_policy.get("deny", [])):
         result[pattern] = "deny"
-    for pattern in edit_policy.get("allow_override", []):
+    for pattern in with_root_forms(edit_policy.get("allow_override", [])):
         result[pattern] = "allow"
     return result
 
@@ -168,6 +187,45 @@ def build_permission(policy):
     return perm
 
 
+def build_bash_profile(policy, profile_name):
+    """Build a role bash profile: its own rules, plus every deny of the base bash section."""
+    profiles = policy.get("role_profiles", {})
+    if profile_name not in profiles:
+        print(f"ERROR: unknown role profile: {profile_name}", file=sys.stderr)
+        sys.exit(1)
+    profile = profiles[profile_name]
+    result = {"*": profile.get("default", "deny")}
+    for action in ("allow", "ask", "deny"):
+        for pattern in profile.get(action, []):
+            result[pattern] = action
+    for pattern, action in build_bash_section(policy).items():
+        if action == "deny":
+            result[pattern] = "deny"
+    return result
+
+
+def build_builtin_agent_overrides(policy):
+    """Managed `agent.<name>.permission` entries that restore OpenCode's built-in read-only agents.
+
+    OpenCode builds a built-in agent as defaults + its own restriction + the user `permission`
+    (agent.ts), so the global AW block silently widens `plan` and `explore`. The config's
+    `agent.<name>.permission` is appended after the user ruleset and wins. An entry either
+    carries only the delta (`plan`), or is composed from the base permission with a bash profile
+    (`from_base`, `explore`), because a trailing `"*": "deny"` has to be followed by every re-allow.
+    """
+    overrides = {}
+    for name, entry in policy.get("builtin_agents", {}).items():
+        permission = {}
+        if entry.get("from_base"):
+            permission = build_permission(policy)
+            if entry.get("bash_profile"):
+                permission["bash"] = build_bash_profile(policy, entry["bash_profile"])
+        for key, value in entry.get("permission", {}).items():
+            permission[key] = json.loads(json.dumps(value))
+        overrides[name] = {"permission": permission}
+    return overrides
+
+
 def unknown_policy_keys(policy):
     """Return policy keys that build_permission would silently ignore."""
     problems = []
@@ -178,6 +236,8 @@ def unknown_policy_keys(policy):
         allowed = POLICY_SECTION_KEYS[key]
         if allowed is not None and isinstance(value, dict):
             problems.extend(f"{key}.{sub}" for sub in value if sub not in allowed)
+    for name, entry in policy.get("builtin_agents", {}).items():
+        problems.extend(f"builtin_agents.{name}.{sub}" for sub in entry if sub not in BUILTIN_AGENT_KEYS)
     return problems
 
 
@@ -204,8 +264,11 @@ def generate_config():
         if key not in config:
             config[key] = value
 
-    # Build and append permission
+    # Build and append permission, then the managed built-in agent overrides
     config["permission"] = build_permission(policy)
+    agent = build_builtin_agent_overrides(policy)
+    if agent:
+        config["agent"] = agent
 
     return config
 
