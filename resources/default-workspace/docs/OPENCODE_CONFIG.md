@@ -83,25 +83,54 @@ OpenCode agent permissions are composed at generation time from `templates/openc
 Role boundaries:
 
 - **architect** — implementation edits, bounded bash, approved subagent delegation
-- **repo-scout**, **inspector**, **sentinel** — strictly read-only (no edit, no task delegation, exact inspection bash only; no shell composition, redirects, or argument wildcards)
+- **repo-scout**, **inspector**, **sentinel** — read-only by policy (no edit, no task delegation, exact inspection bash only; no argument wildcards, and redirects and shell composition are denied by rule — see "Limits of bash rules" for what a rule cannot see)
 - **verifier** — exact non-destructive test/lint/build/cargo commands only; no source edit, git staging/commits, fix modes, snapshot updates, or arbitrary trailing arguments. Project-owned verification scripts are a deliberate trust boundary: they may create disposable build/test artifacts, but the Verifier profile must not receive arbitrary arguments beyond the reviewed exact command forms.
 - **scribe** — documentation paths only (`README.md`, `docs/**`, and related doc files); no source-code edit or mutating bash
 
-In the app source repository, `scripts/validate_opencode_permissions.py` asserts the composed contract and `scripts/generate-agent-adapters.py --check` verifies deterministic generated adapters; neither ships in the installed workspace.
+In the app source repository, `scripts/validate_opencode_permissions.py` asserts the composed contract and `scripts/generate-agent-adapters.py --check` verifies deterministic generated adapters; neither ships in the installed workspace. The validator evaluates rules the way OpenCode 1.19.3 does (worktree-relative read/edit paths, one bash pattern per command of a compound, built-in agent rulesets); the shell splitting was checked against the installed OpenCode with `opencode debug agent <name> --pure --tool bash`.
 
 The default template is conservative:
 
 - Sharing is disabled
 - Most operations default to "ask"
 - Read access is broadly allowed except for secret-bearing files (`.env` files, SSH private keys, kubeconfig, Terraform state/vars, Ansible vaults, shell history, local credential files)
-- Native read/grep/list tools are preferred for file inspection because they honor read-deny rules
+- The native `read` tool honors read-deny rules. `grep` does not: it only asks the `grep` permission (allowed) and then returns matching lines from every file ripgrep reads, so it can show the contents of any file that is not gitignored, even one that `read` denies. Keep secrets gitignored or outside the project. `glob` and `list` return names only
 - Bash content commands (`cat`, `head`, `tail`, `sed`, `grep`, `rg`, `git grep`) are ask-gated because bash permissions are separate from read permissions
 - Secret-file protections exist in read, edit, and bash permissions for: `.env` files, SSH private keys (`id_rsa`, `id_ed25519`, `id_ecdsa`, `id_dsa`), `kubeconfig` and `.kube/**`, Terraform state/vars (`terraform.tfstate*`, `terraform.tfvars`, `*.tfvars`), Ansible vault files (`vault.yml`, `secrets.yml`), shell history (`.bash_history`, `.zsh_history`), and local credential files (`master.key`, `.pgpass`, `.my.cnf`, `.envrc`, `*.ppk`, `*.jks`, `Pulumi.*.yaml`)
-- Write access is restricted to source code directories
-- Destructive commands (`sudo`, `rm -rf`, `git reset --hard`, `git clean -fdx`, pipe-to-bash) are denied globally and in each agent
+- OpenCode matches read and edit rules against the path relative to the worktree, and `**/P` needs a `/` before `P`. Every `**/P` secret rule therefore has a root twin `P`, so `wp-config.php`, `.npmrc`, `server.key`, `.git/config` and `secrets/**` are protected at the worktree root and nested; files outside the worktree match `**/P` through their `../` prefix
+- Edits are allowed under common source directories (`src/**`, `app/**`, `lib/**`, `tests/**`, `docs/**`, `scripts/**`, WordPress themes, ...) and for `*.md`, `*.ts`, `*.tsx`, `*.js`, `*.jsx`, `*.css` and `*.scss` files anywhere in the worktree. Everything else asks, as do package manifests and lock files, `AGENTS.md`, `opencode.json`, `.opencode/**`, workflows and skill folders outside the worktree. Secret files are denied
+- Destructive commands (`sudo`, `rm -rf`, `git reset --hard`, `git clean -fdx`) are denied globally and in each agent. So is piping into a shell (see "Compound commands"); other interpreters such as `python3` or `node` still ask
 - Cargo verification commands (`cargo fmt`, `cargo check`, `cargo clippy`, `cargo test`) are allow-listed where verification is expected
 - `git checkout` and `git pull` are ask-gated because they can change working-tree state at runtime
 - `npm run dev` and other dev server commands are ask-gated in the bundled default starter template
+
+### Compound commands
+
+OpenCode 1.19.3 parses a bash call with tree-sitter and asks the `bash` permission once per command node, with that node's own text: `a | b`, `a && b`, `a || b`, `a ; b`, `a & b`, a newline, a subshell and the contents of `$( )`, backticks and `<( )` are separate commands, and the strictest answer wins (deny, then ask, then allow). `cd`, `export`, `declare`, `readonly`, `local`, `unset` and `[ ]` tests are not matched. Consequences for the rules:
+
+- `curl … | bash` is the two commands `curl …` (ask) and `bash`. A rule like `*|bash` can never match it, so the bare shells are denied instead: `bash`, `sh`, `zsh`, their `-` forms and `-s*` forms. `bash script.sh` and `bash -c …` are different commands and keep asking
+- Rules that look for an operator inside a command (`*|*`, `*&&*`, `*;*`, `*||*`) only match when the operator is quoted or inside a substitution. The read-only profiles keep them as defense in depth; what actually stops `git status && touch x` there is that `touch x` is evaluated on its own and the profile denies by default
+- A redirect stays in the command it follows (`git status > f` matches `*>*`), but a redirect after a later `|`, `&&` or `||` element is not part of any command (`git status && git status > f` is evaluated as `git status` twice)
+
+### Limits of bash rules
+
+- The redirect gap above is OpenCode behaviour, not something a rule can see: an allow-listed command can write a file when a redirect hides behind a second command, in every bash profile, including the read-only roles. Treat those roles as read-only by policy, and review what they run
+- `bash -c "…"`, `eval` and scripts run commands that no rule sees; they ask by default
+- `grep` ignores read-deny rules (see above)
+- The permission rules are not an OS sandbox
+
+### Built-in agents (`plan`, `explore`)
+
+OpenCode builds its built-in agents as defaults, then the agent's own restriction, then the global `permission`, so the global block of this template would re-open `plan` ("Disallows all edit tools") and `explore` (read-only) for edits and delegation. The template therefore carries `agent.plan.permission` and `agent.explore.permission`, which OpenCode appends after the global block:
+
+- **plan** — `edit` is denied except plan files (`.opencode/plans/*.md` and `*opencode/plans/*.md`, which covers the plan folder in OpenCode's data dir); `question` and `plan_exit` are allowed; `task` is limited to `explore`, `repo-scout`, `inspector`, `sentinel` and `verifier`, so plan cannot delegate to `general` or `scribe` and edit that way. Bash follows the global profile
+- **explore** — the `repo-scout` read-only profile with a deny default: no edit tools, no `task`, no `todowrite`, no MCP tools, the read-only bash profile and the same secret read denies
+
+The bundled agents (`architect` and the five subagents) keep self-contained permission blocks. `build` and `general` follow the global block (including `question: deny`). Both entries are managed sub-entries, so your own `agent.*` keys, including other keys of `agent.plan`, are preserved on install.
+
+### External directories
+
+A bare `external_directory: ask` would cancel OpenCode's built-in allowance for skill folders, so reading a skill's supporting files outside the worktree would prompt every time. The template keeps `"*": "ask"` and restates the allowance for the folders OpenCode loads skills from: `~/.claude/skills/*`, `~/.config/opencode/skills/*` and the `skills` folder under `~/.agents`. Because `*.md` edits are allowed, editing a file in those folders from another worktree still asks. OpenCode's tool-output folder is re-added by OpenCode itself. OpenCode's own temp folder (`<os temp dir>/opencode`) is not restated: its path differs per platform and cannot be written as a stable pattern, so reading there prompts.
 
 ## TUI config
 
@@ -109,7 +138,7 @@ The default template is conservative:
 
 ## Managed-key merge
 
-Install does **not** overwrite the entire installed `opencode.json`. It merges only the keys listed in `metadata/opencode-managed-keys.json` (model, permissions, Playwright MCP, compaction, watcher, and related settings). User `provider` blocks and non-Playwright MCP servers are preserved. Managed keys are reset to the bundled values on every update, so keep your own settings in unmanaged keys.
+Install does **not** overwrite the entire installed `opencode.json`. It merges only the keys listed in `metadata/opencode-managed-keys.json` (model, permissions, the `permission` block of the built-in `plan` and `explore` agents, Playwright MCP, compaction, watcher, and related settings). User `provider` blocks, non-Playwright MCP servers and other `agent` entries are preserved. Managed keys are reset to the bundled values on every update, so keep your own settings in unmanaged keys.
 
 Legacy `~/.config/opencode/agents/scout.md` files from the pre-rename Agent Workspace scout are removed on agent sync when frontmatter is `name: scout`.
 
@@ -123,7 +152,7 @@ Both JSON files are validated before and after the write. Existing files that di
 
 ## App-level model override
 
-The OpenCode tab has a model override in its runtime pane (`e` edit, `s` save, `m` reload the model list). A saved selection is stored in an app-level override file:
+The OpenCode tab has a model override in its runtime pane (`e` edit, `s` save, `R` reload the model list). A saved selection is stored in an app-level override file:
 
 | Platform | Override file |
 |----------|---------------|
