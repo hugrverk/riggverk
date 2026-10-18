@@ -37,7 +37,7 @@ Playwright MCP is defined in `templates/opencode.base.json` and included in the 
 
 Defaults:
 
-- Package: `@playwright/mcp@0.0.48` (the CLI script accepts `PLAYWRIGHT_MCP_VERSION`)
+- Package: `@playwright/mcp@0.0.48` (`PLAYWRIGHT_MCP_VERSION` overrides it)
 - MCP config: `~/.config/playwright-mcp/config.json` (or `PLAYWRIGHT_MCP_CONFIG_PATH`) from `templates/playwright-mcp.config.json`
 - Browser: **Chromium** via MCP config (`browserName: chromium`, `isolated: true`) — not the Chrome channel
 - Binaries: shared cache (`~/Library/Caches/ms-playwright` on macOS, `$XDG_CACHE_HOME/ms-playwright` on Linux, `~/AppData/Local/ms-playwright` on Windows; `PLAYWRIGHT_BROWSERS_PATH` overrides)
@@ -46,7 +46,7 @@ On macOS, Playwright’s Chromium bundle may still show **Google Chrome for Test
 
 Do **not** set `PLAYWRIGHT_BROWSERS_PATH=0`. That forces project-local browsers under `node_modules` and defeats the shared-cache default.
 
-The app installs the Playwright MCP config with the OpenCode config target and renders user-specific paths into the OpenCode MCP entry. The Cursor page merges only the `playwright` server into `~/.cursor/mcp.json` (existing servers are preserved; existing files are backed up first). The CLI equivalent is `./scripts/install-opencode-config.sh --apply` (`--apply-cursor` for Cursor).
+The app installs the Playwright MCP config with the OpenCode config target and renders user-specific paths into the OpenCode MCP entry. The Cursor page merges only the `playwright` server into `~/.cursor/mcp.json` (existing servers are preserved; existing files are backed up first).
 
 Security note: Playwright MCP provides privileged browser automation tools. Its documented default tool list includes an unsafe code execution tool, and no stable server-side option to disable only that tool is currently documented. Do not use it on private or authenticated sites unless the runtime agent permissions and prompt scope are appropriate. Isolated sessions do not persist logged-in browser state between runs.
 
@@ -109,7 +109,7 @@ The default template is conservative:
 
 ## Managed-key merge
 
-Install does **not** overwrite the entire installed `opencode.json`, in the app or in `./scripts/install-opencode-config.sh --apply`. It merges only the keys listed in `metadata/opencode-managed-keys.json` (model, permissions, Playwright MCP, compaction, watcher, and related settings). User `provider` blocks and non-Playwright MCP servers are preserved. Managed keys are reset to the bundled values on every update, so keep your own settings in unmanaged keys.
+Install does **not** overwrite the entire installed `opencode.json`. It merges only the keys listed in `metadata/opencode-managed-keys.json` (model, permissions, Playwright MCP, compaction, watcher, and related settings). User `provider` blocks and non-Playwright MCP servers are preserved. Managed keys are reset to the bundled values on every update, so keep your own settings in unmanaged keys.
 
 Legacy `~/.config/opencode/agents/scout.md` files from the pre-rename Agent Workspace scout are removed on agent sync when frontmatter is `name: scout`.
 
@@ -119,7 +119,7 @@ Legacy `~/.config/opencode/agents/scout.md` files from the pre-rename Agent Work
 2. Press `p` to preview or `u` to review, then `y` to apply.
 3. The install merges the managed keys into `~/.config/opencode/opencode.json`, writes `tui.json`, the Playwright MCP config, and `~/.config/opencode/agents/*.md`. Extra agent files already in that directory are not deleted.
 
-Both JSON files are validated before and after the write. Existing files that differ are backed up first. The CLI equivalent is `./scripts/install-opencode-config.sh --diff` then `--apply` (dry-run by default).
+Both JSON files are validated before and after the write. Existing files that differ are backed up first.
 
 ## App-level model override
 

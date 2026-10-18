@@ -47,7 +47,7 @@ Tab keys below assume the default order: workspace, codex, opencode, cursor, cla
 - [ ] A stale plan (change the installed file between preview and `y`) fails with a re-preview prompt; `r` previews again
 - [ ] `:update codex`, `:update --all`, `:preview opencode` open the same review; `:update` without a target explains itself
 - [ ] Each page has exactly one install path (`u`); no per-surface mutation or duplicate skills install controls exist
-- [ ] Workspace page: `R` release-check state matches script availability; `o` opens the workspace folder; `B` opens the backups folder; `r` refreshes
+- [ ] Workspace page: `o` opens the workspace folder; `B` opens the backups folder; `r` refreshes
 
 ## 4. Target toggles
 
@@ -117,12 +117,11 @@ Use fixture files in the isolated `HOME` (`~/.claude/CLAUDE.md`, `~/.codex/AGENT
 
 ## 9. Library
 
-- [ ] Library shows the items list and one document pane (rendered by default); `[` `]` (and `<` `>`) switch among docs, rules, skills, agents, configs, brain
+- [ ] Library shows the items list and one document pane (rendered by default); `[` `]` (and `<` `>`) switch among docs, rules, skills, agents, configs
 - [ ] `i` or Enter swaps the rendered document for its source (never for read-only items such as skills); `Mod+s` and `:w` save; Escape returns to the rendered view; `h` returns to the list; `:q` asks before discarding edits; `:reset` discards them; `n` creates a doc; `o` opens externally
 - [ ] Docs: select, preview, edit, dirty state, save, reset, create form, stale bundled-doc warning, Markdown table, fenced code, code copy
 - [ ] Saving over an existing file creates `docs/<id>-<timestamp>/` in the backup root; a symlinked doc is refused
 - [ ] Library edits do not change what a harness install writes (installs come from the bundle)
-- [ ] Brain Setup copy block works and changes no targets
 - [ ] No Tools icon or tool switcher exists
 
 ## 10. Known limitations
@@ -130,7 +129,6 @@ Use fixture files in the isolated `HOME` (`~/.claude/CLAUDE.md`, `~/.codex/AGENT
 - Workspace marker is `.agent-workspace/workspace.json`; the default workspace path is `~/.config/agent-workspace`
 - Uninstall recovery and the in-app rollback of the last install are session-scoped; they are not rediscovered after a restart even when transaction evidence remains on disk
 - Opening folders uses the macOS `open` command only
-- Bash CLI scripts do not run on Windows (Git Bash and MSYS are refused)
 - Python 3 must be on `PATH` for config merges and generators
 
 ## 11. Pass / fail report template

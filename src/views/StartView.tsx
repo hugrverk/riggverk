@@ -2,7 +2,6 @@ import { useState } from "react";
 import { InstallPlanPane } from "../components/InstallPlanPane";
 import { OutputStrip, useFocusOutputOnNewTransaction } from "../components/OutputStrip";
 import { SurfaceMatrix } from "../components/SurfaceMatrix";
-import { completedLabel } from "../components/TerminalOutput";
 import { UninstallCard } from "../components/UninstallCard";
 import { UninstallRecoveryCard } from "../components/UninstallRecoveryCard";
 import type { OverviewId } from "../hooks/useInstallationOverview";
@@ -47,7 +46,6 @@ export interface StartViewProps extends PageOutputProps, PageInstallProps {
   uninstallPreviewRequested: boolean;
   onUninstallPreviewHandled: () => void;
   onOpenFolder: () => void;
-  onReleaseCheck: () => void;
   backupCount: number;
   onOpenBackupsFolder: () => void;
 }
@@ -76,7 +74,6 @@ export function StartView({
   uninstallPreviewRequested,
   onUninstallPreviewHandled,
   onOpenFolder,
-  onReleaseCheck,
   backupCount,
   onOpenBackupsFolder,
   wsLog,
@@ -86,7 +83,6 @@ export function StartView({
   status,
   workspaceValid,
   gitAvailable,
-  canRunReleaseCheck,
   onClearOutput,
 }: StartViewProps) {
   useFocusOutputOnNewTransaction(rollbackTransactionId);
@@ -102,25 +98,7 @@ export function StartView({
   const previewDisabled = previewDisabledFor(selected, { workspaceValid, busyLabel: wsRunning });
   const showPlan = install.isOpenOn("start");
 
-  const releaseCheckState = !workspaceValid
-    ? false
-    : busy
-      ? `${wsRunning} is running`
-      : canRunReleaseCheck
-        ? true
-        : "release-check is not available in this workspace";
   const statusBindings: Binding[] = [
-    {
-      id: "start.detail.release-check",
-      keys: "R",
-      title: "Run the release check",
-      hint: "release-check",
-      group: "Verify",
-      scope: "pane",
-      paneId: "detail",
-      when: () => releaseCheckState,
-      run: () => onReleaseCheck(),
-    },
     {
       id: "start.detail.open-folder",
       keys: "o",
@@ -170,7 +148,6 @@ export function StartView({
       status={status}
       workspaceValid={workspaceValid}
       gitAvailable={gitAvailable}
-      canRunReleaseCheck={canRunReleaseCheck}
       onClear={onClearOutput}
       onRefresh={onRefresh}
       rollbackTransactionId={rollbackTransactionId}
@@ -216,17 +193,7 @@ export function StartView({
     ...(selected === "workspace" ? [{ label: "path", value: resolvedPath, wrap: true }] : []),
   ];
 
-  const lastCheck = wsLog?.action === "release_check" ? wsLog : null;
   const verifyItems: KvItem[] = [
-    {
-      label: "release-check",
-      value: lastCheck
-        ? `${lastCheck.success ? "ok" : "failed"}${wsLogCompletedAt ? ` · ${completedLabel(wsLogCompletedAt)}` : ""}`
-        : canRunReleaseCheck
-          ? "not run this session"
-          : "not available",
-      tone: lastCheck ? (lastCheck.success ? "ok" : "fail") : "dim",
-    },
     {
       label: "backups",
       value: `${backupCount} run${backupCount === 1 ? "" : "s"}${backupRoot ? ` · ${backupRoot}` : ""}`,

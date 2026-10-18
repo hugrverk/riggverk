@@ -38,8 +38,6 @@ Agent Workspace does not inspect or write undocumented Cursor runtime state and 
 
 ## Other assets
 
-- `user-rules.md` — copy manually into Cursor Settings > Rules > User Rules (`install-cursor-workspace.sh --copy-user-rules`)
+- `user-rules.md` — copy manually into Cursor Settings > Rules > User Rules
 - `rules/*.mdc` — reference project-rule templates only; not installed by the app setup
 - `mcp/` — Playwright MCP template used by setup merge
-
-`scripts/install-cursor-workspace.sh` remains a small CLI helper for User Rules, opening Cursor Settings, and optional project-target installs. Global setup is not implemented in that script and it never writes `~/.cursor/agents`.

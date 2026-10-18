@@ -24,8 +24,6 @@ export interface OutputStripProps {
   status: StatusData | null;
   workspaceValid: boolean;
   gitAvailable: boolean;
-  /** Accepted so a page can pass the same props as it did to the old output pane; the strip lists no commands to try. */
-  canRunReleaseCheck?: boolean;
   /** `C`: clear the output. */
   onClear?: () => void;
   /** `r`: refresh status. */

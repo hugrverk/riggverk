@@ -1,4 +1,3 @@
-mod actions;
 pub(crate) mod backups;
 mod claude_runtime;
 mod codex_runtime;
@@ -24,7 +23,6 @@ mod skills;
 mod status;
 mod workspace;
 
-pub use actions::run_action;
 pub use backups::{get_backup_details, list_backups, open_backups_folder};
 pub use claude_runtime::get_claude_runtime_health;
 pub use codex_runtime::get_codex_runtime_health;
@@ -51,6 +49,6 @@ pub use setup::{
 pub use skills::{list_skills, open_skill, read_skill};
 pub use status::get_status;
 pub use workspace::{
-    get_workspace_diagnostics, open_default_workspace_folder, read_brain_setup_seed,
-    reset_active_workspace_path, try_set_active_workspace_path,
+    get_workspace_diagnostics, open_default_workspace_folder, reset_active_workspace_path,
+    try_set_active_workspace_path,
 };

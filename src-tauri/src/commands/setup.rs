@@ -4367,6 +4367,170 @@ mod tests {
         assert_eq!(fs::read_to_string(backup).unwrap(), "app copy");
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn retired_cli_scripts_are_backed_up_stale_removals_and_empty_lib_dir_is_pruned() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let env = TempSetupEnv::new("stale-cli-scripts");
+        // Installer scripts shipped before the app became the only installer.
+        let stale_script = |rel: &str| {
+            ArtifactId::WorkspaceFile(crate::artifact_registry::WorkspaceRelPath::new(rel).unwrap())
+        };
+        let (untouched, nested, edited) = (
+            stale_script("scripts/install-skills.sh"),
+            stale_script("scripts/lib/platform-paths.sh"),
+            stale_script("scripts/bootstrap.sh"),
+        );
+        let kept = env.ws.join("scripts/generate-opencode-config.py");
+        fs::create_dir_all(kept.parent().unwrap()).unwrap();
+        fs::write(&kept, "kept helper").unwrap();
+        let mut records = Vec::new();
+        for artifact in [&untouched, &nested, &edited] {
+            let dest = artifact.resolve_dest(&env.home, &env.ws).unwrap();
+            fs::create_dir_all(dest.parent().unwrap()).unwrap();
+            fs::write(&dest, "app copy").unwrap();
+            fs::set_permissions(&dest, fs::Permissions::from_mode(0o755)).unwrap();
+            records.push(crate::managed_state::ManagedArtifactRecord {
+                identity: crate::managed_state::artifact_identity(artifact),
+                hash: crate::stable_digest::bytes(b"app copy"),
+                surface: None,
+            });
+        }
+        let edited_dest = edited.resolve_dest(&env.home, &env.ws).unwrap();
+        fs::write(&edited_dest, "my own changes").unwrap();
+        crate::managed_state::write_managed_state_atomic(
+            &env.ws,
+            &crate::managed_state::ManagedState {
+                schema_version: crate::managed_state::MANAGED_STATE_SCHEMA_VERSION,
+                bundled_version: crate::stable_digest::bytes(b"bundle"),
+                artifacts: records,
+            },
+        )
+        .unwrap();
+
+        let planned = env.plan(&[SetupSurfaceId::WorkspaceBundle]);
+        let kind_of = |artifact: &ArtifactId| {
+            planned
+                .iter()
+                .find(|p| &p.artifact == artifact)
+                .map(|p| p.kind)
+        };
+        assert_eq!(kind_of(&untouched), Some(OperationKind::Remove));
+        assert_eq!(kind_of(&nested), Some(OperationKind::Remove));
+        assert_eq!(kind_of(&edited), Some(OperationKind::Conflict));
+
+        let stale: Vec<_> = planned
+            .iter()
+            .filter(|p| [&untouched, &nested, &edited].contains(&&p.artifact))
+            .cloned()
+            .collect();
+        let result = apply_planned_artifacts(&stale, vec![], None, &mut ProgressReporter::silent());
+        assert!(result.success, "{}", result.message);
+        assert!(!untouched.resolve_dest(&env.home, &env.ws).unwrap().exists());
+        assert!(!nested.resolve_dest(&env.home, &env.ws).unwrap().exists());
+        assert!(
+            !env.ws.join("scripts/lib").exists(),
+            "the emptied lib directory is pruned"
+        );
+        assert!(kept.is_file(), "a kept helper and its folder stay");
+        assert_eq!(
+            fs::read_to_string(&edited_dest).unwrap(),
+            "my own changes",
+            "a user-modified retired script must be preserved"
+        );
+        assert_eq!(
+            fs::metadata(&edited_dest).unwrap().permissions().mode() & 0o777,
+            0o755,
+            "a preserved script keeps its executable bit"
+        );
+
+        let manifest = read_manifest(&result.transaction_id);
+        let removed = manifest
+            .operations
+            .iter()
+            .find(|op| op.artifact == nested && op.kind == OperationKind::Remove)
+            .expect("the removal is recorded in the transaction");
+        let backup_rel = removed.backup_rel.as_ref().expect("removal is backed up");
+        let backup = backup_root()
+            .unwrap()
+            .join("setup")
+            .join(&result.transaction_id)
+            .join(backup_rel);
+        assert_eq!(fs::read_to_string(backup).unwrap(), "app copy");
+    }
+
+    #[test]
+    fn opencode_apply_preserves_user_secrets_and_never_returns_them() {
+        const KEY_MARKER: &str = "test-secret-openkey-12345";
+        const TOKEN_MARKER: &str = "test-secret-token-value-55555";
+
+        let env = TempSetupEnv::new("opencode-secret-apply");
+        let config_path = env.home.join(".config/opencode/opencode.json");
+        fs::create_dir_all(config_path.parent().unwrap()).unwrap();
+        let user_config = serde_json::json!({
+            "model": "test-model",
+            "small_model": "test-small",
+            "provider": {
+                "custom-provider": {
+                    "api_key": KEY_MARKER,
+                    "models": {"gpt-4": {"limit": {"context": 100000}}}
+                }
+            },
+            "mcp": {
+                "custom-mcp": {"command": ["custom"], "env": {"TOKEN": TOKEN_MARKER}}
+            },
+            "unknown-key": "should-preserve"
+        });
+        fs::write(&config_path, user_config.to_string()).unwrap();
+
+        let plan = preview_setup(vec!["open_code_config".into()]).expect("preview");
+        let result = apply_setup(
+            vec!["open_code_config".into()],
+            true,
+            plan.plan_fingerprint.clone(),
+            plan.preview_token.clone(),
+        )
+        .expect("apply");
+        assert!(result.success, "{}", result.message);
+
+        // The user-owned keys survive byte for byte; the managed keys follow the bundled template.
+        let installed: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&config_path).unwrap()).unwrap();
+        for key in ["provider", "unknown-key"] {
+            assert_eq!(installed[key], user_config[key], "{key} must be preserved");
+        }
+        assert_eq!(
+            installed["mcp"]["custom-mcp"], user_config["mcp"]["custom-mcp"],
+            "a user MCP server must be preserved"
+        );
+        let template_path = crate::setup_roots::bundled_root_for(&env.ws)
+            .expect("bundled root")
+            .join("templates/opencode.json");
+        let template: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(template_path).unwrap()).unwrap();
+        let rendered = crate::commands::render_expected_opencode_config(&template, &env.home)
+            .expect("rendered config");
+        assert!(
+            crate::commands::managed_opencode_keys_match(&installed, &rendered),
+            "managed keys must be applied"
+        );
+        assert_ne!(installed["model"], user_config["model"]);
+
+        // Nothing the UI receives, nor the ownership record, carries the user's secrets.
+        let state_file = fs::read_to_string(crate::managed_state::managed_state_path(&env.ws))
+            .expect("managed state is written");
+        for (label, text) in [
+            ("preview", serde_json::to_string(&plan).unwrap()),
+            ("apply result", serde_json::to_string(&result).unwrap()),
+            ("managed state", state_file),
+        ] {
+            for marker in [KEY_MARKER, TOKEN_MARKER] {
+                assert!(!text.contains(marker), "{label} leaked {marker}");
+            }
+        }
+    }
+
     // ── Target gating ──
 
     fn disable_targets(ids: &[&str]) {

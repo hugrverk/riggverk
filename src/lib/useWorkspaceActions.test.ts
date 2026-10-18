@@ -22,12 +22,7 @@ describe("useWorkspaceActions", () => {
     let renders = 0;
     const { result } = renderHook(() => {
       renders += 1;
-      return useWorkspaceActions({
-        fetchStatus: async () => {},
-        isInvalidWorkspaceError: () => false,
-        workspaceDiagnostics: null,
-        setError: () => {},
-      });
+      return useWorkspaceActions({ setError: () => {} });
     });
 
     let release: (value: ActionResult) => void = () => {};

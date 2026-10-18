@@ -3,9 +3,6 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
-printf '\n==> workspace script gate\n'
-bash "$repo_root/scripts/check-workspace-script-actions.sh"
-
 cd "$repo_root/src-tauri"
 
 printf '\n==> rust gate\n'

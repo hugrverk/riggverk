@@ -62,7 +62,6 @@ function installBackend(overrides: Partial<AppSettings> = {}): Backend {
           total_config_targets: 0,
           backup_root: "/tmp/backups",
           backup_root_exists: false,
-          release_check_available: false,
           bundled_resources_status: "current",
           missing_bundled_count: 0,
           missing_bundled_sample: [],
@@ -241,7 +240,6 @@ describe("App shell", () => {
     fireEvent.keyDown(document.body, { key: "?", shiftKey: true });
     const help = screen.getByRole("dialog", { name: "Keyboard help" });
     expect(help.textContent).toContain("Go to Workspace");
-    expect(help.textContent).toContain("release-check");
     fireEvent.keyDown(help, { key: "Escape" });
     expect(screen.queryByRole("dialog", { name: "Keyboard help" })).toBeNull();
     await act(async () => {});

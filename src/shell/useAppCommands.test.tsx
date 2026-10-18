@@ -43,8 +43,6 @@ function makeDeps(overrides: Partial<AppCommandDeps> = {}): AppCommandDeps {
     openBackups: vi.fn(),
     clearOutput: vi.fn(),
     outputText: "stdout line",
-    canRunReleaseCheck: true,
-    runReleaseCheck: vi.fn(),
     openInstall: vi.fn(),
     rollbackTransactionId: null,
     requestRollback: vi.fn(),
@@ -237,10 +235,10 @@ describe("useAppCommands", () => {
     });
 
     it("clear is refused while a task is running", () => {
-      const deps = makeDeps({ busyLabel: "release-check" });
+      const deps = makeDeps({ busyLabel: "uninstall" });
       setup(deps);
       runLine("clear");
-      expect(commandLineError()).toBe("clear: release-check is running");
+      expect(commandLineError()).toBe("clear: uninstall is running");
       expect(deps.clearOutput).not.toHaveBeenCalled();
     });
 
@@ -273,25 +271,6 @@ describe("useAppCommands", () => {
       setup(makeDeps());
       runLine("help");
       expect(screen.getByRole("dialog", { name: "Keyboard help" })).not.toBeNull();
-    });
-
-    it("release-check (rc) runs when available and explains when it is not", () => {
-      const ok = makeDeps();
-      const { unmount } = setup(ok);
-      runLine("rc");
-      expect(ok.runReleaseCheck).toHaveBeenCalledTimes(1);
-      unmount();
-
-      const unavailable = makeDeps({ canRunReleaseCheck: false });
-      const second = setup(unavailable);
-      runLine("release-check");
-      expect(commandLineError()).toBe("release-check: release-check is not available in this workspace");
-      second.unmount();
-
-      const noWorkspace = makeDeps({ workspaceValid: false });
-      setup(noWorkspace);
-      runLine("rc");
-      expect(commandLineError()).toBe("release-check: no valid workspace installed");
     });
   });
 
@@ -399,7 +378,7 @@ describe("useAppCommands", () => {
     });
 
     it("stays available while a task runs, since it writes nothing", () => {
-      const deps = makeDeps({ busyLabel: "release-check" });
+      const deps = makeDeps({ busyLabel: "uninstall" });
       setup(deps);
       runLine("preview claude");
       expect(deps.openInstall).toHaveBeenCalledWith("claude", { readOnly: true });
@@ -511,7 +490,6 @@ describe("useAppCommands", () => {
       "copy",
       "help",
       "boot",
-      "release-check",
       "update",
       "preview",
       "rollback",

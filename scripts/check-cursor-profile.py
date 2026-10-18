@@ -8,7 +8,7 @@ import re
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[1] / "resources" / "default-workspace"
 CURSOR = ROOT / "templates" / "cursor"
 MANIFEST = CURSOR / "manifest.json"
 MCP_DIR = CURSOR / "mcp"

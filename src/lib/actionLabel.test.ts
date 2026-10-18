@@ -3,7 +3,6 @@ import { actionLabel } from "./actionLabel";
 
 describe("actionLabel", () => {
   it("names a finished task the way the strip named it while it ran", () => {
-    expect(actionLabel("release_check")).toBe("release-check");
     expect(actionLabel("apply_setup update claude")).toBe("update claude");
     expect(actionLabel("apply_setup install workspace")).toBe("install workspace");
     expect(actionLabel("apply_rules_conversion claude rules")).toBe("convert claude rules");

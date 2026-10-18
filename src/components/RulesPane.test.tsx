@@ -107,9 +107,9 @@ describe("RulesPane", () => {
   });
 
   it("holds apply while another task runs and says why", () => {
-    const flow = renderPane({ status: "conversion", surface: "codex_rules", preview: PREVIEW }, { busyLabel: "release-check" });
+    const flow = renderPane({ status: "conversion", surface: "codex_rules", preview: PREVIEW }, { busyLabel: "uninstall" });
     const apply = within(screen.getByLabelText("Status bar")).getByRole("button", { name: /apply/ });
-    expect(apply.getAttribute("title")).toBe("release-check is running");
+    expect(apply.getAttribute("title")).toBe("uninstall is running");
     press("y");
     expect(flow.apply).not.toHaveBeenCalled();
   });
@@ -165,9 +165,9 @@ describe("RulesPane", () => {
     });
 
     it("hold apply for a running task or a preview without a token, with the reason", () => {
-      const busy = renderPane({ status: "conversion", surface: "codex_rules", preview: PREVIEW }, { busyLabel: "release-check" });
+      const busy = renderPane({ status: "conversion", surface: "codex_rules", preview: PREVIEW }, { busyLabel: "uninstall" });
       const apply = confirmLine().getByRole("button", { name: "apply" });
-      expect(apply.getAttribute("title")).toBe("release-check is running");
+      expect(apply.getAttribute("title")).toBe("uninstall is running");
       fireEvent.click(apply);
       expect(busy.apply).not.toHaveBeenCalled();
       cleanup();

@@ -238,7 +238,6 @@ export interface WorkspaceDiagnostics {
   total_config_targets: number;
   backup_root: string;
   backup_root_exists: boolean;
-  release_check_available: boolean;
   bundled_resources_status: BundledResourcesStatus;
   missing_bundled_count: number;
   missing_bundled_sample: string[];
@@ -303,12 +302,6 @@ export interface ListAvailableModelsResult {
 export interface OpenCodeModelSelection {
   model: string;
   small_model: string;
-}
-
-export interface BrainSetupSeedResult {
-  status: string;
-  source: string;
-  content: string;
 }
 
 export interface CodexRuntimeCheck {
