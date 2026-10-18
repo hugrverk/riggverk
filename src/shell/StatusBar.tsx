@@ -12,6 +12,8 @@ const ALWAYS_VISIBLE_HINT_IDS = new Set(["shell.command", "shell.help"]);
 export interface StatusBarProps {
   /** Current view, shown as the first context segment. */
   viewLabel: string;
+  /** How many tabs the digit keys reach (`numberedTabCount`); the tab hint reads `1–<tabCount>`. */
+  tabCount: number;
   /** Right-aligned text (backups, runtime availability, ...). */
   right?: ReactNode;
 }
@@ -23,7 +25,7 @@ export interface StatusBarProps {
  * row movement) are plain text because they are not single actions. When the bar is too narrow the hints drop
  * from the end, a whole hint at a time; `:` command and `?` help sit in their own group and always stay.
  */
-export function StatusBar({ viewLabel, right }: StatusBarProps) {
+export function StatusBar({ viewLabel, tabCount, right }: StatusBarProps) {
   const mode = useShellMode();
   const { statusContext, notice, noticeTone, noticeId, echo } = useShellState();
   const { pendingChord, activePaneId, inList } = useKeymapState();
@@ -67,7 +69,13 @@ export function StatusBar({ viewLabel, right }: StatusBarProps) {
         {mode === "NORMAL" && (
           <>
             <span>
-              <Kbd>1</Kbd>–<Kbd>7</Kbd> tab
+              <Kbd>1</Kbd>
+              {tabCount > 1 && (
+                <>
+                  –<Kbd>{tabCount}</Kbd>
+                </>
+              )}{" "}
+              tab
             </span>
             <span>
               <Kbd>h</Kbd>

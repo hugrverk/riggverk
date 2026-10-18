@@ -62,3 +62,11 @@ export function viewDef(view: AppView): ViewDef {
 export function visibleViews(enabledHarnessIds: readonly InstallAgent[]): ViewDef[] {
   return VIEW_DEFS.filter(def => !def.harness || enabledHarnessIds.includes(def.harness));
 }
+
+/** Digit keys 1-9 switch tabs; a tenth tab and any after it have no digit (`Mod+,` still opens Settings). */
+export const MAX_NUMBERED_TABS = 9;
+
+/** How many of `tabs` the digit keys reach. */
+export function numberedTabCount(tabs: readonly ViewDef[]): number {
+  return Math.min(tabs.length, MAX_NUMBERED_TABS);
+}
