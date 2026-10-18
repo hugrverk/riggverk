@@ -244,19 +244,54 @@ describe("light harness runtime rows", () => {
     status: "synced",
     cli: { status: "found", version: "7.8.12", source: "path", detail: "Kilo 7.8.12" },
     rules: { status: "synced", path: "~/.config/kilo/AGENTS.md", refinement_lines: 0, user_managed: false, conflict_reason: null, detail: "installed and current" },
+    mcp: { status: "synced", path: "~/.config/kilo/kilo.jsonc", playwright_version: "0.0.48", detail: "installed and current" },
     skills: { status: "synced", synced: 17, expected: 17, roots: ["~/.claude/skills", "~/.agents/skills"] },
     warnings: [],
     next_action: "No runtime action needed.",
     ...overrides,
   });
   const rulesHealth = (rules: Partial<LightRuntimeHealth["rules"]>) => health({ rules: { ...health().rules, ...rules } });
+  const mcpHealth = (mcp: Partial<LightRuntimeHealth["mcp"]>) => health({ mcp: { ...health().mcp, ...mcp } });
 
-  it("lists the CLI, the rules file and the skills, with the skill loads below the skills row", () => {
+  it("lists the CLI, the rules file, the Playwright entry and the skills, with the skill loads below the skills row", () => {
     const rows = runtimeRowsFor({ harness: "kilo", health: health() }, LOADS);
-    expect(labelsOf(rows)).toEqual(["cli", "rules", "skills", "skill loads"]);
+    expect(labelsOf(rows)).toEqual(["cli", "rules", "mcp playwright", "skills", "skill loads"]);
     expect(rows[0]).toEqual({ label: "cli", value: "7.8.12", tone: "ok" });
     expect(rows[1]).toEqual({ label: "rules", value: "synced", tone: "ok", wrap: false });
-    expect(rows[2]).toEqual({ label: "skills", value: "synced · 17/17", tone: "ok" });
+    expect(rows[2]).toEqual({ label: "mcp playwright", value: "synced · 0.0.48", tone: "ok", wrap: false });
+    expect(rows[3]).toEqual({ label: "skills", value: "synced · 17/17", tone: "ok" });
+  });
+
+  it("says what is wrong with the Playwright entry in the mcp row", () => {
+    const row = (mcp: Partial<LightRuntimeHealth["mcp"]>) => runtimeRowsFor({ harness: "kilo", health: mcpHealth(mcp) }).find(candidate => candidate.label === "mcp playwright");
+    expect(row({ status: "missing", playwright_version: null, detail: "no file yet" })).toEqual({
+      label: "mcp playwright",
+      value: "missing · no file yet",
+      tone: "fail",
+      wrap: true,
+    });
+    expect(row({ status: "stale", detail: "update available for the playwright entry" })).toMatchObject({
+      value: "stale · 0.0.48 · update available for the playwright entry",
+      tone: "warn",
+      wrap: true,
+    });
+    expect(row({ status: "diverged", playwright_version: null, detail: "an entry named playwright already exists and differs from the managed one; rename or remove it to let the app manage the entry" })).toMatchObject({
+      value: "diverged · an entry named playwright already exists and differs from the managed one; rename or remove it to let the app manage the entry",
+      tone: "warn",
+    });
+    expect(row({ status: "invalid", playwright_version: null, detail: "the file has comments; the app edits strict JSON only and writes nothing" })).toMatchObject({
+      value: "invalid · the file has comments; the app edits strict JSON only and writes nothing",
+      tone: "fail",
+    });
+    expect(row({ status: "off", playwright_version: null, detail: "switched off in Settings" })).toEqual({
+      label: "mcp playwright",
+      value: "off · target switched off in Settings",
+      tone: "dim",
+    });
+    expect(row({ status: "unknown", playwright_version: null, detail: "the MCP file could not be checked" })).toMatchObject({
+      value: "unknown · the MCP file could not be checked",
+      tone: "dim",
+    });
   });
 
   it("says what is wrong with the rules file in the rules row", () => {

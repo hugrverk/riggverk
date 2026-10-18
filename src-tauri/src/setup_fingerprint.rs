@@ -79,7 +79,7 @@ fn artifact_kind(artifact: &ArtifactId) -> ArtifactKind {
         | ArtifactId::CodexSkill(_)
         | ArtifactId::ClaudeSkill(_)
         | ArtifactId::CursorSkill(_) => ArtifactKind::SkillFile,
-        ArtifactId::CursorMcp => ArtifactKind::McpConfig,
+        ArtifactId::CursorMcp | ArtifactId::HarnessMcp(_) => ArtifactKind::McpConfig,
     }
 }
 
@@ -122,6 +122,43 @@ fn cursor_playwright_projection_from_template(
             )
         })
         .ok_or_else(|| "cursor mcp template missing playwright entry".into())
+}
+
+/// The Playwright entry a light harness's MCP file is meant to hold.
+fn harness_mcp_entry(
+    artifact: &ArtifactId,
+    bundled_root: &Path,
+    home: &Path,
+) -> Result<serde_json::Value, String> {
+    let ArtifactId::HarnessMcp(harness) = artifact else {
+        return Err(format!("not an MCP entry: {artifact:?}"));
+    };
+    let spec = harness
+        .mcp()
+        .ok_or_else(|| "the light harness descriptor is unavailable".to_string())?;
+    crate::light_mcp::expected_entry(spec, bundled_root, home)
+}
+
+/// Digest of the managed entry of a light harness's MCP file: the entry's, [`ABSENT_DIGEST`] when
+/// there is no file or no entry, and a fixed digest per refusal for a file the app does not edit
+/// (nothing of its text goes in, and such a file is never written).
+fn harness_mcp_digest_from_path(artifact: &ArtifactId, path: &Path) -> Result<String, String> {
+    let ArtifactId::HarnessMcp(harness) = artifact else {
+        return Err(format!("not an MCP entry: {artifact:?}"));
+    };
+    let spec = harness
+        .mcp()
+        .ok_or_else(|| "the light harness descriptor is unavailable".to_string())?;
+    match crate::light_mcp::read(path, spec) {
+        Ok(None) => Ok(ABSENT_DIGEST.into()),
+        Ok(Some(document)) => match document.entry(spec) {
+            Some(entry) => hash_json_value(entry),
+            None => Ok(ABSENT_DIGEST.into()),
+        },
+        Err(refusal) => Ok(hash_bytes(
+            format!("unusable-mcp-file:{refusal:?}").as_bytes(),
+        )),
+    }
 }
 
 /// Hash canonical source content for an artifact. Missing source is an error.
@@ -181,6 +218,9 @@ pub fn artifact_source_digest(
         ArtifactKind::McpConfig if artifact == &ArtifactId::CursorMcp => {
             let projection = cursor_playwright_projection_from_template(workspace_root, home)?;
             hash_json_value(&projection)
+        }
+        ArtifactKind::McpConfig if matches!(artifact, ArtifactId::HarnessMcp(_)) => {
+            hash_json_value(&harness_mcp_entry(artifact, workspace_root, home)?)
         }
         _ => Err(format!(
             "unsupported artifact for source digest: {:?}",
@@ -266,6 +306,9 @@ pub fn artifact_installed_managed_digest_from_path(
                 Some(projection) => hash_json_value(projection),
                 None => Ok(ABSENT_DIGEST.into()),
             }
+        }
+        ArtifactKind::McpConfig if matches!(artifact, ArtifactId::HarnessMcp(_)) => {
+            harness_mcp_digest_from_path(artifact, path)
         }
         _ => Err(format!(
             "unsupported artifact for managed digest from path: {:?}",

@@ -6,8 +6,8 @@ The app keeps one list of harnesses in several places that no compiler connects:
   Rust   `HarnessId` (agent_targets.rs): the variants, `ALL`, `DEFAULT_ON`, `as_str`, `is_light`
   Rust   the skill read folders and load flags (skill_roots.rs, skill_loads.rs), the setup surfaces
          (setup_lifecycle.rs) and the target registry (agent_targets.rs `targets()`)
-  JSON   resources/default-workspace/metadata/light-harnesses.json: the light tier's label, CLI and
-         rules file; its rules adapter lives in metadata/rules-adapters.json and
+  JSON   resources/default-workspace/metadata/light-harnesses.json: the light tier's label, CLI,
+         rules file and MCP entry; its rules adapter lives in metadata/rules-adapters.json and
          scripts/generate-rules-history.py
   TS     `CENTRAL_AGENTS`, `LIGHT_AGENTS`, `INSTALL_AGENTS` (types.ts), the surface, label and tab
          tables (harnessInstallation.ts), the rules tables (rulesView.ts), the view definitions
@@ -301,10 +301,14 @@ def check_harness_ids(root: Path) -> list[str]:
         "SetupSurfaceId::ALL",
         [serde_name(name, surface_rename) for name in surfaces_all],
     )
-    # The registry is the literal rows of `targets()` plus one `<harness>_rules` row per light harness,
-    # derived from the descriptor in its order.
+    # The registry is the literal rows of `targets()` plus, per light harness in descriptor order, its
+    # `<harness>_rules` row and its `<harness>_mcp` row, both derived from the descriptor.
     registry = re.findall(r'^\s*id:\s*"(\w+)"', rust_fn_body(targets, "pub fn targets()", RUST_TARGETS), flags=re.MULTILINE)
-    registry += [f"{key}_rules" for key in keys]
+    for key in keys:
+        entry = harnesses[key]
+        if not isinstance(entry.get("rules"), dict) or not isinstance(entry.get("mcp"), dict):
+            raise Mismatch(f"{DESCRIPTOR}: {key} needs a rules and an mcp section")
+        registry += [f"{key}_rules", f"{key}_mcp"]
     target_union = ts_union(install, "SetupTargetId", TS_INSTALL)
     same_set("SetupTargetId", "SetupTargetId", target_union, "targets()", registry)
     same_sequence(
@@ -351,6 +355,37 @@ def check_harness_ids(root: Path) -> list[str]:
         if not surfaces_line or surface not in re.findall(r'"([^"]+)"', surfaces_line.group(1)):
             raise Mismatch(f"HARNESS_SURFACES.{key} does not list {surface}")
 
+    # The MCP entry of each light harness: its surface, its target, its default and the kind of target.
+    surfaces_wire = [serde_name(name, surface_rename) for name in surfaces_all]
+    target_surfaces = _block(install, "TARGET_SURFACES", TS_INSTALL)
+    disabled_ts = ts_array(install, "DEFAULT_DISABLED_TARGET_IDS", TS_INSTALL)
+    expected_disabled = {"codex_config"}
+    meta = re.search(r"export interface AgentTargetMeta\s*\{(.*?)\n\}", types, re.DOTALL)
+    if not meta or '"mcp"' not in re.sub(r"\s+", " ", meta.group(1)).split("kind:")[-1].split(";")[0]:
+        raise Mismatch(f"{TS_TYPES}: AgentTargetMeta.kind must include \"mcp\" (Rust TargetKind::Mcp)")
+    if not re.search(r'#\[serde\(rename = "mcp"\)\]\s*Mcp\b', targets):
+        raise Mismatch(f"{RUST_TARGETS}: TargetKind::Mcp must serialize as \"mcp\"")
+    for key in light_ts:
+        mcp = harnesses[key]["mcp"]
+        target, surface = f"{key}_mcp", f"{key}_mcp"
+        for field in ("target_rel", "root_key", "entry_key", "template"):
+            if not isinstance(mcp.get(field), str) or not mcp[field]:
+                raise Mismatch(f"{DESCRIPTOR}: {key} mcp needs a {field}")
+        if not isinstance(mcp.get("default_enabled"), bool):
+            raise Mismatch(f"{DESCRIPTOR}: {key} mcp needs default_enabled")
+        if surface not in surfaces_wire:
+            raise Mismatch(f"SetupSurfaceId::ALL has no {surface}")
+        surfaces_line = re.search(rf"^  {key}:\s*\[([^\]]*)\]", _block(install, "HARNESS_SURFACES", TS_INSTALL), flags=re.MULTILINE)
+        if not surfaces_line or surface not in re.findall(r'"([^"]+)"', surfaces_line.group(1)):
+            raise Mismatch(f"HARNESS_SURFACES.{key} does not list {surface}")
+        if not re.search(rf'^  {target}:\s*\["{surface}"\]', target_surfaces, flags=re.MULTILINE):
+            raise Mismatch(f"TARGET_SURFACES.{target} must gate exactly {surface}")
+        if not mcp["default_enabled"]:
+            expected_disabled.add(target)
+        if not harnesses[key]["rules"].get("default_enabled", True):
+            expected_disabled.add(f"{key}_rules")
+    same_set("DEFAULT_DISABLED_TARGET_IDS", "DEFAULT_DISABLED_TARGET_IDS", disabled_ts, "the targets that start off", sorted(expected_disabled))
+
     # Wiring: the page, the health loader and the command exist for every light harness.
     app = read(TS_APP)
     if "LightHarnessView" not in app or "LIGHT_AGENTS" not in app:
@@ -363,7 +398,7 @@ def check_harness_ids(root: Path) -> list[str]:
 
     return [
         f"{len(wire)} harnesses ({len(wire_default)} central, {len(wire_light)} light) agree across Rust, TypeScript and the descriptor",
-        f"{len(folders_wire)} skill folders, {len(flags_wire)} load flags, {len(surfaces_all)} surfaces, {len(registry)} targets, {len(light_ts)} light rules files",
+        f"{len(folders_wire)} skill folders, {len(flags_wire)} load flags, {len(surfaces_all)} surfaces, {len(registry)} targets, {len(light_ts)} light rules files and MCP entries",
     ]
 
 

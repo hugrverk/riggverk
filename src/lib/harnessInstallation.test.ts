@@ -42,8 +42,8 @@ const ALL_SURFACES: SetupSurfaceId[] = [
   ...new Set<SetupSurfaceId>(["workspace_bundle", ...INSTALL_AGENTS.flatMap((harness) => HARNESS_SURFACES[harness])]),
 ];
 
-/** The rules surfaces of the light tier, which only an enabled light harness offers. */
-const LIGHT_RULES_SURFACES: SetupSurfaceId[] = ["copilot_rules", "pi_rules", "kilo_rules"];
+/** The rules and MCP surfaces of the light tier, which only an enabled light harness offers. */
+const LIGHT_SURFACES: SetupSurfaceId[] = ["copilot_rules", "pi_rules", "kilo_rules", "copilot_mcp", "pi_mcp", "kilo_mcp"];
 
 describe("harnessInstallation", () => {
   it("maps each harness to setup surfaces", () => {
@@ -92,8 +92,11 @@ describe("target to surface mapping", () => {
       claude_agents: ["claude_agents"],
       cursor_setup: ["cursor_agents", "cursor_mcp"],
       copilot_rules: ["copilot_rules"],
+      copilot_mcp: ["copilot_mcp"],
       pi_rules: ["pi_rules"],
+      pi_mcp: ["pi_mcp"],
       kilo_rules: ["kilo_rules"],
+      kilo_mcp: ["kilo_mcp"],
     });
   });
 
@@ -116,9 +119,10 @@ describe("target to surface mapping", () => {
     expect(harnessForSurface("workspace_bundle")).toBeNull();
   });
 
-  it("defaults every target on except codex_config", () => {
+  it("defaults every target on except codex_config and kilo_mcp", () => {
     expect(DEFAULT_ENABLED_TARGET_IDS).not.toContain("codex_config");
-    const expected = (Object.keys(TARGET_SURFACES) as SetupTargetId[]).filter((id) => id !== "codex_config");
+    expect(DEFAULT_ENABLED_TARGET_IDS).not.toContain("kilo_mcp");
+    const expected = (Object.keys(TARGET_SURFACES) as SetupTargetId[]).filter((id) => id !== "codex_config" && id !== "kilo_mcp");
     expect([...DEFAULT_ENABLED_TARGET_IDS].sort()).toEqual(expected.sort());
   });
 });
@@ -165,7 +169,7 @@ describe("target-filtered surfaces", () => {
   it("builds the all-surfaces request from workspace plus enabled harnesses", () => {
     const surfaces = enabledSetupSurfaces(defaults());
     expect(surfaces).toEqual(
-      ALL_SURFACES.filter((surface) => surface !== "codex_config" && !LIGHT_RULES_SURFACES.includes(surface)),
+      ALL_SURFACES.filter((surface) => surface !== "codex_config" && !LIGHT_SURFACES.includes(surface)),
     );
     expect(surfaces[0]).toBe("workspace_bundle");
 
@@ -220,36 +224,58 @@ describe("the light tier (Copilot, Pi, Kilo)", () => {
     for (const other of ["start", "library", "settings", "copilots", ""]) expect(harnessForView(other)).toBeNull();
   });
 
-  it("offers its rules file, gated by the harness's own target, and the shared skills surface", () => {
+  it("offers its rules file and its MCP entry, each gated by the harness's own target, and the shared skills surface", () => {
     for (const harness of LIGHT_AGENTS) {
       const rules = `${harness}_rules` as SetupSurfaceId;
-      expect(HARNESS_SURFACES[harness]).toEqual([rules, "skills"]);
+      const mcp = `${harness}_mcp` as SetupSurfaceId;
+      expect(HARNESS_SURFACES[harness]).toEqual([rules, "skills", mcp]);
       expect(harnessForSurface(rules)).toBe(harness);
+      expect(harnessForSurface(mcp)).toBe(harness);
+      // Kilo's MCP target starts off: it edits Kilo's main config file.
+      const mcpOn = harness !== "kilo";
       const on = defaults({ enabled_harness_ids: [harness] });
-      expect(enabledSurfacesForHarness(harness, on)).toEqual([rules, "skills"]);
+      expect(enabledSurfacesForHarness(harness, on)).toEqual(mcpOn ? [rules, "skills", mcp] : [rules, "skills"]);
       expect(harnessSurfaceStates(harness, on)).toEqual([
         { surface: rules, enabled: true, targetId: rules },
         { surface: "skills", enabled: true, targetId: null },
+        { surface: mcp, enabled: mcpOn, targetId: mcp },
       ]);
       expect(enabledSurfacesForHarness(harness, defaults())).toEqual([]);
-      // The target toggle alone switches the rules file off; skills stay.
-      const targetOff = defaults({
+      // The target toggles alone switch the files off; skills stay.
+      const targetsOff = defaults({
         enabled_harness_ids: [harness],
-        enabled_target_ids: DEFAULT_ENABLED_TARGET_IDS.filter((id) => id !== rules),
+        enabled_target_ids: DEFAULT_ENABLED_TARGET_IDS.filter((id) => id !== rules && id !== mcp),
       });
-      expect(enabledSurfacesForHarness(harness, targetOff)).toEqual(["skills"]);
-      expect(disabledSurfacesForHarness(harness, targetOff)).toEqual([rules]);
+      expect(enabledSurfacesForHarness(harness, targetsOff)).toEqual(["skills"]);
+      expect(disabledSurfacesForHarness(harness, targetsOff)).toEqual([rules, mcp]);
+      // Each target switches only its own surface.
+      const rulesOff = defaults({
+        enabled_harness_ids: [harness],
+        enabled_target_ids: [...DEFAULT_ENABLED_TARGET_IDS, mcp].filter((id) => id !== rules),
+      });
+      expect(enabledSurfacesForHarness(harness, rulesOff)).toEqual(["skills", mcp]);
     }
   });
 
-  it("defaults the light rules targets on and puts them after cursor_setup, as the backend registry does", () => {
+  it("defaults the light targets on, Kilo's MCP target aside, and puts them after cursor_setup, as the backend registry does", () => {
     for (const harness of LIGHT_AGENTS) expect(DEFAULT_ENABLED_TARGET_IDS).toContain(`${harness}_rules`);
-    expect(DEFAULT_ENABLED_TARGET_IDS.slice(-3)).toEqual(["copilot_rules", "pi_rules", "kilo_rules"]);
+    for (const harness of ["copilot", "pi"] as const) expect(DEFAULT_ENABLED_TARGET_IDS).toContain(`${harness}_mcp`);
+    expect(DEFAULT_ENABLED_TARGET_IDS.slice(-5)).toEqual(["copilot_rules", "copilot_mcp", "pi_rules", "pi_mcp", "kilo_rules"]);
   });
 
-  it("adds only the rules surfaces of the enabled light harnesses to an update-all request", () => {
+  it("adds only the surfaces of the enabled light harnesses to an update-all request", () => {
     const withLight = defaults({ enabled_harness_ids: [...INSTALL_AGENTS] });
-    expect(enabledSetupSurfaces(withLight)).toEqual([...enabledSetupSurfaces(defaults()), ...LIGHT_RULES_SURFACES]);
-    expect(enabledSetupSurfaces(defaults({ enabled_harness_ids: ["pi"] }))).toEqual(["workspace_bundle", "pi_rules", "skills"]);
+    expect(enabledSetupSurfaces(withLight)).toEqual([
+      ...enabledSetupSurfaces(defaults()),
+      "copilot_rules",
+      "copilot_mcp",
+      "pi_rules",
+      "pi_mcp",
+      "kilo_rules",
+    ]);
+    expect(enabledSetupSurfaces(defaults({ enabled_harness_ids: ["pi"] }))).toEqual(["workspace_bundle", "pi_rules", "skills", "pi_mcp"]);
+    // Kilo's entry joins the request once its target is switched on.
+    const kiloMcp = defaults({ enabled_harness_ids: ["kilo"], enabled_target_ids: [...DEFAULT_ENABLED_TARGET_IDS, "kilo_mcp"] });
+    expect(enabledSetupSurfaces(kiloMcp)).toEqual(["workspace_bundle", "kilo_rules", "skills", "kilo_mcp"]);
   });
 });

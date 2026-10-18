@@ -6,6 +6,7 @@ import type {
   CursorProfileHealth,
   LightAgent,
   LightCliHealth,
+  LightMcpHealth,
   LightRulesHealth,
   LightRuntimeHealth,
   OpenCodeCliHealth,
@@ -150,12 +151,27 @@ function lightRulesRow(rules: LightRulesHealth): KvItem {
   return { label: "rules", value: `${runtimeChipLabel(rules.status).toLowerCase()}${extra}`, tone: toneOf(rules.status), wrap: extra !== "" };
 }
 
-/** The CLI, the rules file and the skills are managed for the light harnesses; there is no MCP row yet. */
+/** The Playwright entry in the MCP file: its status, the pinned version, and what the backend says unless that adds nothing. */
+function lightMcpRow(mcp: LightMcpHealth): KvItem {
+  if (mcp.status === "off") return { label: "mcp playwright", value: "off · target switched off in Settings", tone: "dim" };
+  const version = mcp.status === "synced" || mcp.status === "stale" ? (mcp.playwright_version ?? "") : "";
+  const extra = [version, mcp.status === "synced" || !mcp.detail ? "" : mcp.detail].filter(Boolean);
+  const wrap = mcp.status !== "synced" && mcp.detail !== "";
+  return {
+    label: "mcp playwright",
+    value: [runtimeChipLabel(mcp.status).toLowerCase(), ...extra].join(" · "),
+    tone: toneOf(mcp.status),
+    wrap,
+  };
+}
+
+/** The CLI, the rules file, the Playwright MCP entry and the skills are managed for the light harnesses. */
 function lightRows(health: LightRuntimeHealth): KvItem[] {
   const { skills } = health;
   return [
     lightCliRow(health.cli),
     lightRulesRow(health.rules),
+    lightMcpRow(health.mcp),
     {
       label: "skills",
       value: `${runtimeChipLabel(skills.status).toLowerCase()} · ${skills.synced}/${skills.expected}`,

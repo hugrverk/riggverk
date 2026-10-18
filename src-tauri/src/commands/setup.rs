@@ -792,6 +792,48 @@ fn apply_rules_artifact(
         .map_err(|e| format!("write rules file {}: {e}", dest.display()))
 }
 
+/// Write the managed entry into the MCP file of a light harness. Only that entry changes: the
+/// user's other servers keep their values and their order. A file the app does not edit (comments,
+/// a trailing comma, ...) or an entry of the user's own is refused before anything is written. A
+/// new file is owner-only (0600), and so are the folders created for it when the descriptor says
+/// the harness keeps its folder that way.
+fn apply_mcp_artifact(
+    harness: crate::light_harness::LightHarnessId,
+    workspace_root: &Path,
+    home: &Path,
+    dest: &Path,
+    root: &Path,
+) -> Result<(), String> {
+    let artifact = crate::artifact_registry::ArtifactId::HarnessMcp(harness);
+    setup_transaction::ensure_mcp_apply_allowed(&artifact, workspace_root, home)?;
+    let spec = harness
+        .mcp()
+        .ok_or_else(|| "the light harness descriptor is unavailable".to_string())?;
+    let entry = crate::light_mcp::expected_entry(
+        spec,
+        &crate::setup_roots::bundled_root_for(workspace_root)?,
+        home,
+    )?;
+    let document = crate::light_mcp::read(dest, spec)
+        .map_err(|refusal| format!("refusing to change the MCP file: {}", refusal.message()))?;
+    let existed = document.is_some();
+    let rendered = crate::light_mcp::render(spec, document, entry)?;
+    if let Some(folder) = dest.parent() {
+        let created = if spec.private_dir {
+            crate::safe_filesystem::create_private_directory_all_no_symlinks(folder, root)
+        } else {
+            crate::safe_filesystem::create_directory_all_no_symlinks(folder, root)
+        };
+        created.map_err(|e| format!("create {}: {e}", folder.display()))?;
+    }
+    if existed {
+        crate::safe_filesystem::write_regular_file_atomic(dest, rendered.as_bytes(), root)
+    } else {
+        crate::safe_filesystem::write_private_regular_file_atomic(dest, rendered.as_bytes(), root)
+    }
+    .map_err(|e| format!("write MCP file {}: {e}", dest.display()))
+}
+
 fn apply_single_artifact(
     artifact: &crate::artifact_registry::ArtifactId,
     workspace_root: &Path,
@@ -821,6 +863,10 @@ fn apply_single_artifact(
             home,
             rules_rewrite,
         );
+    }
+
+    if let crate::artifact_registry::ArtifactId::HarnessMcp(harness) = artifact {
+        return apply_mcp_artifact(*harness, workspace_root, home, &dest, &root);
     }
 
     if artifact == &crate::artifact_registry::ArtifactId::CursorMcp {
@@ -2199,8 +2245,41 @@ fn plan_surfaces(
     let mut plan = crate::setup_lifecycle::plan_setup(&request, &states);
     attach_skill_details(&mut plan, ws_root, home);
     attach_rules_details(&mut plan, home);
+    attach_mcp_details(&mut plan, home);
     attach_plan_preview(&mut plan, ws_root, home)?;
     Ok(plan)
+}
+
+/// The review of an MCP entry names the file it goes into: a new file, or the entry in a file the
+/// user keeps their other servers in.
+fn attach_mcp_details(plan: &mut SetupPlan, home: &Path) {
+    for op in plan
+        .operations
+        .iter_mut()
+        .filter(|op| matches!(op.kind, OperationKind::Create | OperationKind::Update))
+    {
+        let Some(harness) = op
+            .surface
+            .harness()
+            .and_then(crate::light_harness::descriptor)
+            .filter(|harness| harness.mcp.surface == op.surface)
+        else {
+            continue;
+        };
+        let mcp = &harness.mcp;
+        let path = mcp.display_path(home);
+        op.details.push(if op.kind == OperationKind::Create {
+            format!(
+                "+ {path} (new file, owner-only; adds the {} entry)",
+                mcp.entry_key
+            )
+        } else {
+            format!(
+                "~ {path} (adds or updates the {} entry; your other servers stay)",
+                mcp.entry_key
+            )
+        });
+    }
 }
 
 /// A new rules file can shadow another file its harness reads (Kilo loads one global rules file,

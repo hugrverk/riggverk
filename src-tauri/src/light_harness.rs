@@ -1,7 +1,8 @@
 //! The light tier: GitHub Copilot, Pi and Kilo Code.
 //!
 //! A light harness gets the shared skills (through the folders it reads, see
-//! [`crate::skill_roots`]), one managed rules block and a runtime health row set. Install facts
+//! [`crate::skill_roots`]), one managed rules block, one managed Playwright MCP entry and a
+//! runtime health row set. Install facts
 //! that are data live in
 //! `resources/default-workspace/metadata/light-harnesses.json`. That file is embedded at build time
 //! and never read from the runtime workspace, so nothing the user edits can redirect what the app
@@ -25,13 +26,19 @@ const SCHEMA_VERSION: u32 = 1;
 const MAX_LABEL_CHARS: usize = 24;
 const MAX_REL_CHARS: usize = 120;
 const MAX_FILE_NAMES: usize = 8;
+const MAX_NOTES: usize = 3;
+const MAX_NOTE_CHARS: usize = 240;
+const MAX_KEY_CHARS: usize = 32;
+/// Where the entry templates live in the bundle.
+const MCP_TEMPLATE_DIR: &str = "templates/mcp/";
 /// Where the generated rules bases live in the bundle (`scripts/generate-agent-rules.py`).
 const RULES_SOURCE_DIR: &str = "templates/sync";
 /// `$XDG_CONFIG_HOME` stands in for this folder of the home directory.
 const XDG_CONFIG_DEFAULT: &str = ".config/";
 
-/// Files a descriptor may never name as a rules target: the harnesses keep credentials, state and
-/// permissions in them.
+/// Files a descriptor may never name as a target: the harnesses keep credentials, state and
+/// permissions in them. A harness's MCP file (`mcp.json`, `mcp-config.json`, `kilo.jsonc`) is the
+/// one deliberate write beside the rules file, and edits one key only.
 const DENIED_FILE_NAMES: &[&str] = &[
     "config.json",
     "settings.json",
@@ -41,8 +48,6 @@ const DENIED_FILE_NAMES: &[&str] = &[
     "providers.json",
     "permissions-config.json",
     "lsp-config.json",
-    "mcp.json",
-    "mcp-config.json",
     ".claude.json",
 ];
 /// Folders (or name prefixes) a descriptor may never write into.
@@ -70,6 +75,7 @@ struct RawHarness {
     label: String,
     cli: RawCli,
     rules: RawRules,
+    mcp: RawMcp,
 }
 
 #[derive(Deserialize)]
@@ -106,6 +112,39 @@ struct RawRules {
     shadows: Option<String>,
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawMcp {
+    /// The MCP file below the home directory (below `.config/` when `xdg_config_home`).
+    target_rel: String,
+    /// Other files the harness reads as well, in the order the app prefers them when the file
+    /// above does not exist.
+    #[serde(default)]
+    alt_target_rel: Vec<String>,
+    /// The key that holds the servers (`mcpServers`, `mcp`).
+    root_key: String,
+    /// The key of the one server the app manages.
+    entry_key: String,
+    /// The entry, as a file of the bundle below `templates/mcp/`.
+    template: String,
+    /// Whether the target is on for a fresh install and for a settings file that predates it.
+    default_enabled: bool,
+    #[serde(default)]
+    xdg_config_home: bool,
+    /// Folders the app creates for the file are owner-only (0700).
+    #[serde(default)]
+    private_dir: bool,
+    /// Files next to the chosen file that the harness reads after it, so they win over the entry.
+    #[serde(default)]
+    shadowed_by_siblings: Vec<String>,
+    /// Files below the home directory that win over the chosen file.
+    #[serde(default)]
+    shadowed_by_home: Vec<String>,
+    /// Warnings the health shows while the target is on.
+    #[serde(default)]
+    notes: Vec<String>,
+}
+
 /// One light harness as the descriptor describes it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LightHarness {
@@ -116,6 +155,34 @@ pub struct LightHarness {
     pub cli_program: String,
     /// The managed rules block.
     pub rules: LightRules,
+    /// The managed Playwright MCP entry.
+    pub mcp: LightMcp,
+}
+
+/// The managed MCP entry of a light harness: which file holds it, under which keys, and what the
+/// entry is.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LightMcp {
+    /// `<harness>_mcp`: the settings toggle of the surface.
+    pub target_id: String,
+    /// `<harness> mcp`.
+    pub target_label: String,
+    /// The entry template below the bundled root: `templates/mcp/<harness>.playwright.json`.
+    pub template_rel: String,
+    /// The default location below the home directory; the settings and the page show it.
+    pub target_rel: String,
+    /// Other files the harness reads, in preference order (below `.config/` like `target_rel`).
+    pub alt_target_rel: Vec<String>,
+    pub root_key: String,
+    pub entry_key: String,
+    pub default_enabled: bool,
+    pub xdg_config_home: bool,
+    pub private_dir: bool,
+    pub shadowed_by_siblings: Vec<String>,
+    pub shadowed_by_home: Vec<String>,
+    pub notes: Vec<String>,
+    /// The setup surface that owns the entry.
+    pub surface: SetupSurfaceId,
 }
 
 /// The rules block of a light harness: where the file is, which base it carries and what makes
@@ -184,6 +251,17 @@ impl LightHarnessId {
     pub fn rules_surface(self) -> SetupSurfaceId {
         SetupSurfaceId::light_rules(self.0).unwrap_or(SetupSurfaceId::WorkspaceBundle)
     }
+
+    /// The MCP entry of the harness, with the same caveat as [`Self::descriptor`].
+    pub fn mcp(self) -> Option<&'static LightMcp> {
+        self.descriptor().map(|harness| &harness.mcp)
+    }
+
+    /// The setup surface that owns the harness's MCP entry, with the same caveat as
+    /// [`Self::rules_surface`].
+    pub fn mcp_surface(self) -> SetupSurfaceId {
+        SetupSurfaceId::light_mcp(self.0).unwrap_or(SetupSurfaceId::WorkspaceBundle)
+    }
 }
 
 impl LightRules {
@@ -197,39 +275,19 @@ impl LightRules {
     }
 
     fn resolve_dest_with(&self, home: &Path, xdg_config_home: Option<&str>) -> PathBuf {
-        if let Some(dir) = self.xdg_dir(xdg_config_home) {
-            // `parse` guarantees the default location starts with `.config/`.
-            let rest = self
-                .target_rel
-                .strip_prefix(XDG_CONFIG_DEFAULT)
-                .unwrap_or(&self.target_rel);
-            return join_rel(dir, rest);
-        }
-        join_rel(home.to_path_buf(), &self.target_rel)
+        place(
+            home,
+            xdg_config_home,
+            self.xdg_config_home,
+            &self.target_rel,
+        )
     }
 
     /// The rules file as people know it: `~/...`, or `$XDG_CONFIG_HOME/...` for a file that lives
     /// outside the home directory.
     pub fn display_path(&self, home: &Path) -> String {
-        let dest = self.resolve_dest(home);
-        if let Ok(rel) = dest.strip_prefix(home) {
-            return format!("~/{}", rel.to_string_lossy().replace('\\', "/"));
-        }
-        match self.target_rel.strip_prefix(XDG_CONFIG_DEFAULT) {
-            Some(rest) if self.xdg_config_home => format!("$XDG_CONFIG_HOME/{rest}"),
-            _ => format!("~/{}", self.target_rel),
-        }
-    }
-
-    fn xdg_dir(&self, xdg_config_home: Option<&str>) -> Option<PathBuf> {
-        if !self.xdg_config_home {
-            return None;
-        }
-        xdg_config_home
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .map(PathBuf::from)
-            .filter(|dir| is_plain_absolute_dir(dir))
+        let xdg = std::env::var("XDG_CONFIG_HOME").ok();
+        display_of(home, xdg.as_deref(), self.xdg_config_home, &self.target_rel)
     }
 
     /// The folder the file must stay inside when it is written, backed up, restored or removed:
@@ -240,13 +298,12 @@ impl LightRules {
     }
 
     fn allowlist_root_with(&self, home: &Path, xdg_config_home: Option<&str>) -> PathBuf {
-        let dest = self.resolve_dest_with(home, xdg_config_home);
-        if dest.starts_with(home) {
-            return home.to_path_buf();
-        }
-        self.xdg_dir(xdg_config_home)
-            .filter(|dir| dest.starts_with(dir))
-            .unwrap_or_else(|| home.to_path_buf())
+        root_of(
+            home,
+            xdg_config_home,
+            self.xdg_config_home,
+            &self.target_rel,
+        )
     }
 
     /// The files of `names` that exist next to `dest`. Only regular files count: the harness
@@ -288,6 +345,66 @@ impl LightRules {
     }
 }
 
+impl LightMcp {
+    /// The file the entry goes into, for `home`: the first of `target_rel` and `alt_target_rel`
+    /// that exists (in any form: a symlink or a folder in the way is reported, not skipped), else
+    /// `target_rel`, which the app then creates.
+    pub fn resolve_dest(&self, home: &Path) -> PathBuf {
+        let xdg = std::env::var("XDG_CONFIG_HOME").ok();
+        self.resolve_dest_with(home, xdg.as_deref())
+    }
+
+    fn chosen_rel(&self, home: &Path, xdg_config_home: Option<&str>) -> &str {
+        std::iter::once(&self.target_rel)
+            .chain(&self.alt_target_rel)
+            .find(|rel| {
+                let path = place(home, xdg_config_home, self.xdg_config_home, rel);
+                std::fs::symlink_metadata(path).is_ok()
+            })
+            .unwrap_or(&self.target_rel)
+    }
+
+    fn resolve_dest_with(&self, home: &Path, xdg_config_home: Option<&str>) -> PathBuf {
+        let rel = self.chosen_rel(home, xdg_config_home);
+        place(home, xdg_config_home, self.xdg_config_home, rel)
+    }
+
+    /// The MCP file as people know it (`~/...`, or `$XDG_CONFIG_HOME/...`).
+    pub fn display_path(&self, home: &Path) -> String {
+        let xdg = std::env::var("XDG_CONFIG_HOME").ok();
+        let rel = self.chosen_rel(home, xdg.as_deref());
+        display_of(home, xdg.as_deref(), self.xdg_config_home, rel)
+    }
+
+    /// The folder the file must stay inside when it is written, backed up, restored or removed.
+    pub fn allowlist_root(&self, home: &Path) -> PathBuf {
+        let xdg = std::env::var("XDG_CONFIG_HOME").ok();
+        let rel = self.chosen_rel(home, xdg.as_deref());
+        root_of(home, xdg.as_deref(), self.xdg_config_home, rel)
+    }
+
+    /// The files that exist and win over the MCP file, as people know them. Only whether they
+    /// exist is looked at: they may hold anything.
+    pub fn shadowing_files(&self, home: &Path) -> Vec<String> {
+        let xdg = std::env::var("XDG_CONFIG_HOME").ok();
+        let rel = self.chosen_rel(home, xdg.as_deref());
+        let shown = display_of(home, xdg.as_deref(), self.xdg_config_home, rel);
+        let dest = place(home, xdg.as_deref(), self.xdg_config_home, rel);
+        let folder = shown.rsplit_once('/').map_or("", |(folder, _)| folder);
+        let is_file = |path: PathBuf| std::fs::metadata(path).is_ok_and(|m| m.is_file());
+        let next_to = self.shadowed_by_siblings.iter().filter_map(|name| {
+            let sibling = dest.parent()?.join(name);
+            is_file(sibling).then(|| format!("{folder}/{name}"))
+        });
+        let below_home = self
+            .shadowed_by_home
+            .iter()
+            .filter(|rel| is_file(join_rel(home.to_path_buf(), rel)))
+            .map(|rel| format!("~/{rel}"));
+        next_to.chain(below_home).collect()
+    }
+}
+
 /// An absolute folder that is not the file system root and has no `..` in it: it becomes the
 /// allowlisted root of a file, so it must name one place.
 fn is_plain_absolute_dir(dir: &Path) -> bool {
@@ -300,6 +417,54 @@ fn is_plain_absolute_dir(dir: &Path) -> bool {
 
 fn join_rel(base: PathBuf, rel: &str) -> PathBuf {
     rel.split('/').fold(base, |path, part| path.join(part))
+}
+
+/// `$XDG_CONFIG_HOME` as a plain absolute folder, when a file follows it and the variable is set
+/// to one. A relative value is ignored, as the XDG Base Directory specification says: file
+/// operations would resolve it against the working directory, where no harness looks for it.
+fn xdg_dir(follow_xdg: bool, xdg_config_home: Option<&str>) -> Option<PathBuf> {
+    if !follow_xdg {
+        return None;
+    }
+    xdg_config_home
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
+        .filter(|dir| is_plain_absolute_dir(dir))
+}
+
+/// `rel` (a path below `home`) for `home`, or below `$XDG_CONFIG_HOME` when `follow_xdg` and the
+/// variable is set to an absolute path. `parse` guarantees such a `rel` starts with `.config/`.
+fn place(home: &Path, xdg_config_home: Option<&str>, follow_xdg: bool, rel: &str) -> PathBuf {
+    if let Some(dir) = xdg_dir(follow_xdg, xdg_config_home) {
+        return join_rel(dir, rel.strip_prefix(XDG_CONFIG_DEFAULT).unwrap_or(rel));
+    }
+    join_rel(home.to_path_buf(), rel)
+}
+
+/// The folder a placed file must stay inside: `home`, or `$XDG_CONFIG_HOME` when the file lives
+/// there outside `home`.
+fn root_of(home: &Path, xdg_config_home: Option<&str>, follow_xdg: bool, rel: &str) -> PathBuf {
+    let dest = place(home, xdg_config_home, follow_xdg, rel);
+    if dest.starts_with(home) {
+        return home.to_path_buf();
+    }
+    xdg_dir(follow_xdg, xdg_config_home)
+        .filter(|dir| dest.starts_with(dir))
+        .unwrap_or_else(|| home.to_path_buf())
+}
+
+/// A placed file as people know it: `~/...`, or `$XDG_CONFIG_HOME/...` for a file that lives
+/// outside the home directory.
+fn display_of(home: &Path, xdg_config_home: Option<&str>, follow_xdg: bool, rel: &str) -> String {
+    let dest = place(home, xdg_config_home, follow_xdg, rel);
+    if let Ok(below_home) = dest.strip_prefix(home) {
+        return format!("~/{}", below_home.to_string_lossy().replace('\\', "/"));
+    }
+    match rel.strip_prefix(XDG_CONFIG_DEFAULT) {
+        Some(rest) if follow_xdg => format!("$XDG_CONFIG_HOME/{rest}"),
+        _ => format!("~/{rel}"),
+    }
 }
 
 fn is_plain_label(label: &str) -> bool {
@@ -347,18 +512,18 @@ fn parse_file_names(
     key: &str,
     field: &str,
     names: Vec<String>,
-    own: &str,
+    own: &[&str],
 ) -> Result<Vec<String>, String> {
     let mut seen = HashSet::new();
     if names.len() > MAX_FILE_NAMES {
         return Err(format!(
-            "{key}: rules.{field} lists more than {MAX_FILE_NAMES} files"
+            "{key}: {field} lists more than {MAX_FILE_NAMES} files"
         ));
     }
     for name in &names {
-        if !is_plain_name(name) || name == own || !seen.insert(name.as_str()) {
+        if !is_plain_name(name) || own.contains(&name.as_str()) || !seen.insert(name.as_str()) {
             return Err(format!(
-                "{key}: rules.{field} has an entry that is not a plain, unique file name"
+                "{key}: {field} has an entry that is not a plain, unique file name"
             ));
         }
     }
@@ -405,8 +570,8 @@ fn parse_rules(id: HarnessId, raw: RawRules) -> Result<LightRules, String> {
             "{key}: rules.xdg_config_home needs a target_rel of the form .config/<folder>/<file>"
         ));
     }
-    let masked_by = parse_file_names(key, "masked_by", raw.masked_by, &file_label)?;
-    let peer_files = parse_file_names(key, "peer_files", raw.peer_files, &file_label)?;
+    let masked_by = parse_file_names(key, "rules.masked_by", raw.masked_by, &[&file_label])?;
+    let peer_files = parse_file_names(key, "rules.peer_files", raw.peer_files, &[&file_label])?;
     let shadows = match raw.shadows {
         None => None,
         Some(shadowed) if is_plain_rel(&shadowed) && shadowed != rel => {
@@ -429,6 +594,156 @@ fn parse_rules(id: HarnessId, raw: RawRules) -> Result<LightRules, String> {
         masked_by,
         peer_files,
         shadows,
+        surface,
+    })
+}
+
+/// A JSON object key the app reads and writes: plain, so it cannot name a path or a pattern.
+fn is_json_key(key: &str) -> bool {
+    !key.is_empty()
+        && key.len() <= MAX_KEY_CHARS
+        && key
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-'))
+}
+
+/// Text for the health: ASCII letters, digits, punctuation and spaces, nothing a UI would
+/// interpret.
+fn is_plain_note(note: &str) -> bool {
+    !note.is_empty()
+        && note.len() <= MAX_NOTE_CHARS
+        && note.trim() == note
+        && note.chars().all(|c| c.is_ascii_graphic() || c == ' ')
+}
+
+/// A relative path of a JSON file inside a folder of the harness (`<folder>/<name>.json[c]`) that
+/// is neither a file the app never writes nor inside the folder of a central harness.
+fn parse_mcp_file(key: &str, field: &str, rel: &str) -> Result<(), String> {
+    let parts: Vec<&str> = rel.split('/').collect();
+    let file = parts.last().copied().unwrap_or_default();
+    if !is_plain_rel(rel)
+        || parts.len() < 2
+        || !(file.ends_with(".json") || file.ends_with(".jsonc"))
+    {
+        return Err(format!(
+            "{key}: mcp.{field} must be a JSON file inside a folder of the harness"
+        ));
+    }
+    if DENIED_FILE_NAMES.contains(&file)
+        || parts[..parts.len() - 1].iter().any(|part| {
+            DENIED_FOLDERS.contains(part)
+                || DENIED_FOLDER_PREFIXES
+                    .iter()
+                    .any(|prefix| part.starts_with(prefix))
+        })
+    {
+        return Err(format!(
+            "{key}: mcp.{field} names a file or folder the app never writes"
+        ));
+    }
+    if CENTRAL_ROOTS.iter().any(|root| is_under(rel, root)) {
+        return Err(format!(
+            "{key}: mcp.{field} is inside the folder of a central harness"
+        ));
+    }
+    Ok(())
+}
+
+fn parse_mcp(id: HarnessId, raw: RawMcp) -> Result<LightMcp, String> {
+    let key = id.as_str();
+    parse_mcp_file(key, "target_rel", &raw.target_rel)?;
+    let folder = raw
+        .target_rel
+        .rsplit_once('/')
+        .map_or("", |(folder, _)| folder);
+    if raw.alt_target_rel.len() > MAX_FILE_NAMES {
+        return Err(format!(
+            "{key}: mcp.alt_target_rel lists more than {MAX_FILE_NAMES} files"
+        ));
+    }
+    let mut files = vec![raw.target_rel.as_str()];
+    for rel in &raw.alt_target_rel {
+        parse_mcp_file(key, "alt_target_rel", rel)?;
+        if rel.rsplit_once('/').map(|(alt_folder, _)| alt_folder) != Some(folder)
+            || files.contains(&rel.as_str())
+        {
+            return Err(format!(
+                "{key}: mcp.alt_target_rel must list other files of the same folder"
+            ));
+        }
+        files.push(rel);
+    }
+    if raw.xdg_config_home
+        && files
+            .iter()
+            .any(|rel| !rel.starts_with(XDG_CONFIG_DEFAULT) || rel.split('/').count() < 3)
+    {
+        return Err(format!(
+            "{key}: mcp.xdg_config_home needs files of the form .config/<folder>/<file>"
+        ));
+    }
+    if !is_json_key(&raw.root_key) || !is_json_key(&raw.entry_key) || raw.root_key == raw.entry_key
+    {
+        return Err(format!(
+            "{key}: mcp.root_key and mcp.entry_key must be two different plain keys"
+        ));
+    }
+    if !is_plain_rel(&raw.template)
+        || !raw.template.starts_with(MCP_TEMPLATE_DIR)
+        || !raw.template.ends_with(".json")
+        || raw.template.matches('/').count() != MCP_TEMPLATE_DIR.matches('/').count()
+    {
+        return Err(format!(
+            "{key}: mcp.template must be a JSON file directly in {MCP_TEMPLATE_DIR}"
+        ));
+    }
+    let names: Vec<&str> = files
+        .iter()
+        .filter_map(|rel| rel.rsplit_once('/').map(|(_, name)| name))
+        .collect();
+    let shadowed_by_siblings = parse_file_names(
+        key,
+        "mcp.shadowed_by_siblings",
+        raw.shadowed_by_siblings,
+        &names,
+    )?;
+    if raw.shadowed_by_home.len() > MAX_FILE_NAMES {
+        return Err(format!(
+            "{key}: mcp.shadowed_by_home lists more than {MAX_FILE_NAMES} files"
+        ));
+    }
+    let mut seen = HashSet::new();
+    for rel in &raw.shadowed_by_home {
+        if !is_plain_rel(rel)
+            || rel.split('/').count() < 2
+            || files.contains(&rel.as_str())
+            || !seen.insert(rel)
+        {
+            return Err(format!(
+                "{key}: mcp.shadowed_by_home has an entry that is not a plain, unique file path"
+            ));
+        }
+    }
+    if raw.notes.len() > MAX_NOTES || !raw.notes.iter().all(|note| is_plain_note(note)) {
+        return Err(format!(
+            "{key}: mcp.notes has more than {MAX_NOTES} entries or one that is not short plain text"
+        ));
+    }
+    let surface = SetupSurfaceId::light_mcp(id).ok_or_else(|| format!("{key}: no MCP surface"))?;
+    Ok(LightMcp {
+        target_id: format!("{key}_mcp"),
+        target_label: format!("{key} mcp"),
+        template_rel: raw.template,
+        target_rel: raw.target_rel,
+        alt_target_rel: raw.alt_target_rel,
+        root_key: raw.root_key,
+        entry_key: raw.entry_key,
+        default_enabled: raw.default_enabled,
+        xdg_config_home: raw.xdg_config_home,
+        private_dir: raw.private_dir,
+        shadowed_by_siblings,
+        shadowed_by_home: raw.shadowed_by_home,
+        notes: raw.notes,
         surface,
     })
 }
@@ -466,6 +781,7 @@ fn parse(text: &str) -> Result<Vec<LightHarness>, String> {
                 label: harness.label,
                 cli_program: harness.cli.program,
                 rules: parse_rules(id, harness.rules)?,
+                mcp: parse_mcp(id, harness.mcp)?,
             },
         );
     }
@@ -479,15 +795,28 @@ fn parse(text: &str) -> Result<Vec<LightHarness>, String> {
                 .ok_or_else(|| format!("light harness {} has no entry", id.as_str()))
         })
         .collect::<Result<_, _>>()?;
-    // Two harnesses never share a rules file, a base or a history folder.
+    // Two harnesses never share a rules file, a base or a history folder, an MCP file or a
+    // template.
     let mut files = HashSet::new();
     let mut adapters = HashSet::new();
+    let mut templates = HashSet::new();
     for harness in &ordered {
         if !files.insert(harness.rules.target_rel.as_str())
             || !adapters.insert(harness.rules.adapter.as_str())
         {
             return Err(format!(
                 "{}: rules.target_rel or rules.adapter is used by another harness",
+                harness.id.as_str()
+            ));
+        }
+        let mcp = &harness.mcp;
+        if !templates.insert(mcp.template_rel.as_str())
+            || std::iter::once(&mcp.target_rel)
+                .chain(&mcp.alt_target_rel)
+                .any(|rel| !files.insert(rel.as_str()))
+        {
+            return Err(format!(
+                "{}: an mcp file or template is used by another harness",
                 harness.id.as_str()
             ));
         }
@@ -517,6 +846,13 @@ pub fn rules_for_target(target_id: &str) -> Option<&'static LightHarness> {
     light_harnesses()
         .iter()
         .find(|harness| harness.rules.target_id == target_id)
+}
+
+/// The light harness whose MCP toggle is `target_id`.
+pub fn mcp_for_target(target_id: &str) -> Option<&'static LightHarness> {
+    light_harnesses()
+        .iter()
+        .find(|harness| harness.mcp.target_id == target_id)
 }
 
 #[cfg(test)]
@@ -688,6 +1024,13 @@ mod tests {
                 "rules": {
                     "adapter": "x",
                     "target_rel": ".x/AGENTS.md",
+                    "default_enabled": true
+                },
+                "mcp": {
+                    "target_rel": ".x/mcp.json",
+                    "root_key": "mcpServers",
+                    "entry_key": "playwright",
+                    "template": "templates/mcp/x.playwright.json",
                     "default_enabled": true
                 },
             });
@@ -983,5 +1326,372 @@ mod tests {
             rules_of("kilo").preflight(Path::new("/nope/AGENTS.md")),
             None
         );
+    }
+
+    // ── The MCP entry ──
+
+    fn mcp_of(key: &str) -> &'static LightMcp {
+        &descriptor(
+            HarnessId::ALL
+                .iter()
+                .copied()
+                .find(|id| id.as_str() == key)
+                .expect("harness id"),
+        )
+        .expect("light harness")
+        .mcp
+    }
+
+    #[test]
+    fn the_embedded_mcp_sections_pin_every_file_the_app_writes() {
+        let summary: Vec<_> = light_harnesses()
+            .iter()
+            .map(|harness| {
+                let mcp = &harness.mcp;
+                (
+                    mcp.target_id.as_str(),
+                    mcp.target_rel.as_str(),
+                    mcp.alt_target_rel
+                        .iter()
+                        .map(String::as_str)
+                        .collect::<Vec<_>>(),
+                    mcp.root_key.as_str(),
+                    mcp.entry_key.as_str(),
+                    mcp.template_rel.as_str(),
+                    mcp.default_enabled,
+                    mcp.xdg_config_home,
+                    mcp.private_dir,
+                    mcp.surface,
+                )
+            })
+            .collect();
+        assert_eq!(
+            summary,
+            vec![
+                (
+                    "copilot_mcp",
+                    ".copilot/mcp-config.json",
+                    vec![],
+                    "mcpServers",
+                    "playwright",
+                    "templates/mcp/copilot.playwright.json",
+                    true,
+                    false,
+                    false,
+                    SetupSurfaceId::CopilotMcp
+                ),
+                (
+                    "pi_mcp",
+                    ".pi/agent/mcp.json",
+                    vec![],
+                    "mcpServers",
+                    "playwright",
+                    "templates/mcp/pi.playwright.json",
+                    true,
+                    false,
+                    true,
+                    SetupSurfaceId::PiMcp
+                ),
+                (
+                    "kilo_mcp",
+                    ".config/kilo/kilo.jsonc",
+                    vec![".config/kilo/kilo.json"],
+                    "mcp",
+                    "playwright",
+                    "templates/mcp/kilo.playwright.json",
+                    false,
+                    true,
+                    false,
+                    SetupSurfaceId::KiloMcp
+                ),
+            ]
+        );
+        assert_eq!(
+            mcp_for_target("kilo_mcp").map(|harness| harness.id),
+            Some(HarnessId::Kilo)
+        );
+        assert!(mcp_for_target("kilo_rules").is_none());
+        assert!(mcp_for_target("cursor_setup").is_none());
+        assert_eq!(mcp_of("pi").notes.len(), 1);
+        assert!(mcp_of("pi").notes[0].contains("exposure"));
+        assert!(mcp_of("copilot").notes.is_empty() && mcp_of("kilo").notes.is_empty());
+        assert_eq!(
+            mcp_of("kilo").shadowed_by_siblings,
+            ["opencode.json", "opencode.jsonc"]
+        );
+        assert_eq!(
+            mcp_of("kilo").shadowed_by_home,
+            [".kilo/kilo.json", ".kilo/kilo.jsonc"]
+        );
+    }
+
+    #[test]
+    fn every_mcp_template_exists_in_the_bundle() {
+        let resources =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../resources/default-workspace");
+        for harness in light_harnesses() {
+            assert!(
+                resources.join(&harness.mcp.template_rel).is_file(),
+                "{}",
+                harness.mcp.template_rel
+            );
+        }
+    }
+
+    #[test]
+    fn mcp_files_are_json_files_inside_the_harness_folder_that_the_app_may_write() {
+        for rel in [
+            "",
+            "/etc/mcp.json",
+            "../mcp.json",
+            ".pi//mcp.json",
+            ".pi\\agent\\mcp.json",
+            "mcp.json",
+            ".pi/agent/mcp.txt",
+            ".pi/agent/mcp",
+            ".pi/agent/auth.json",
+            ".pi/agent/settings.json",
+            ".pi/agent/models.json",
+            ".pi/agent/models-store.json",
+            ".copilot/config.json",
+            ".copilot/permissions-config.json",
+            ".copilot/mcp-oauth-config/mcp.json",
+            ".copilot/mcp-secrets/mcp.json",
+            ".copilot/session-state/mcp.json",
+            ".copilot/installed-plugins/mcp.json",
+            ".claude/mcp.json",
+            ".codex/mcp.json",
+            ".cursor/mcp.json",
+            ".agents/mcp.json",
+            ".config/opencode/opencode.json",
+            &format!(".pi/{}/mcp.json", "a".repeat(120)),
+        ] {
+            let mut value = valid();
+            value["harnesses"]["pi"]["mcp"]["target_rel"] = serde_json::json!(rel);
+            assert!(parse_value(&value).is_err(), "{rel:?}");
+        }
+        for rel in [
+            ".pi/agent/mcp.json",
+            ".pi/agent/servers.jsonc",
+            ".pi/mcp.json",
+        ] {
+            let mut value = valid();
+            value["harnesses"]["pi"]["mcp"]["target_rel"] = serde_json::json!(rel);
+            assert!(parse_value(&value).is_ok(), "{rel:?}");
+        }
+    }
+
+    #[test]
+    fn alternative_mcp_files_are_other_files_of_the_same_folder() {
+        for alt in [
+            serde_json::json!([".config/kilo/kilo.jsonc"]),
+            serde_json::json!([".config/kilo/kilo.json", ".config/kilo/kilo.json"]),
+            serde_json::json!([".config/other/kilo.json"]),
+            serde_json::json!([".config/kilo/sub/kilo.json"]),
+            serde_json::json!([".config/kilo/config.json"]),
+            serde_json::json!([".config/kilo/kilo.txt"]),
+            serde_json::json!(["../kilo.json"]),
+            serde_json::json!((0..9)
+                .map(|n| format!(".config/kilo/k{n}.json"))
+                .collect::<Vec<_>>()),
+        ] {
+            let mut value = valid();
+            value["harnesses"]["kilo"]["mcp"]["alt_target_rel"] = alt.clone();
+            assert!(parse_value(&value).is_err(), "{alt}");
+        }
+        let mut value = valid();
+        value["harnesses"]["kilo"]["mcp"]["alt_target_rel"] = serde_json::json!([]);
+        assert!(parse_value(&value).is_ok());
+    }
+
+    #[test]
+    fn the_mcp_keys_template_and_lists_are_plain() {
+        let cases: [(&str, serde_json::Value); 17] = [
+            ("root_key", serde_json::json!("")),
+            ("root_key", serde_json::json!("a.b")),
+            ("root_key", serde_json::json!("mcp servers")),
+            ("root_key", serde_json::json!("playwright")),
+            ("entry_key", serde_json::json!("")),
+            ("entry_key", serde_json::json!("../x")),
+            ("entry_key", serde_json::json!("mcpServers")),
+            ("template", serde_json::json!("templates/mcp/../x.json")),
+            ("template", serde_json::json!("templates/mcp/sub/x.json")),
+            ("template", serde_json::json!("templates/sync/pi-rules.md")),
+            ("template", serde_json::json!("/templates/mcp/x.json")),
+            ("template", serde_json::json!("templates/mcp/x.txt")),
+            ("shadowed_by_siblings", serde_json::json!(["a/b.json"])),
+            ("shadowed_by_siblings", serde_json::json!(["mcp.json"])),
+            ("shadowed_by_home", serde_json::json!(["../x.json"])),
+            ("shadowed_by_home", serde_json::json!(["x.json", "x.json"])),
+            ("shadowed_by_home", serde_json::json!(["x.json"])),
+        ];
+        for (field, bad) in cases {
+            let mut value = valid();
+            value["harnesses"]["pi"]["mcp"][field] = bad.clone();
+            assert!(parse_value(&value).is_err(), "{field} {bad}");
+        }
+        for notes in [
+            serde_json::json!([""]),
+            serde_json::json!(["<b>x</b>\n"]),
+            serde_json::json!([" padded"]),
+            serde_json::json!(["caf\u{e9}"]),
+            serde_json::json!(["a", "b", "c", "d"]),
+            serde_json::json!(["x".repeat(241)]),
+        ] {
+            let mut value = valid();
+            value["harnesses"]["pi"]["mcp"]["notes"] = notes.clone();
+            assert!(parse_value(&value).is_err(), "{notes}");
+        }
+        let mut value = valid();
+        value["harnesses"]["pi"]["mcp"]["extra"] = serde_json::json!(true);
+        assert!(
+            parse_value(&value).is_err(),
+            "no field the app does not read"
+        );
+        let mut value = valid();
+        value["harnesses"]["pi"]
+            .as_object_mut()
+            .unwrap()
+            .remove("mcp");
+        assert!(
+            parse_value(&value).is_err(),
+            "a light harness has an mcp section"
+        );
+    }
+
+    #[test]
+    fn the_mcp_xdg_flag_needs_files_in_a_folder_of_the_config_directory() {
+        for rel in [
+            ".kilo/kilo.jsonc",
+            ".config/kilo.jsonc",
+            ".config2/kilo/kilo.jsonc",
+        ] {
+            let mut value = valid();
+            value["harnesses"]["kilo"]["mcp"]["target_rel"] = serde_json::json!(rel);
+            value["harnesses"]["kilo"]["mcp"]["alt_target_rel"] = serde_json::json!([]);
+            assert!(parse_value(&value).is_err(), "{rel:?}");
+        }
+    }
+
+    #[test]
+    fn two_harnesses_never_share_an_mcp_file_or_template() {
+        let mut value = valid();
+        value["harnesses"]["kilo"]["mcp"]["template"] =
+            serde_json::json!("templates/mcp/pi.playwright.json");
+        assert!(parse_value(&value).is_err());
+        let mut value = valid();
+        value["harnesses"]["copilot"]["mcp"]["target_rel"] =
+            serde_json::json!(".pi/agent/mcp.json");
+        assert!(parse_value(&value).is_err());
+    }
+
+    #[test]
+    fn the_mcp_file_is_chosen_from_what_exists_kilo_jsonc_first() {
+        let kilo = mcp_of("kilo");
+        let home = temp("mcp-choice");
+        let folder = home.join(".config/kilo");
+        let jsonc = folder.join("kilo.jsonc");
+        let json = folder.join("kilo.json");
+        assert_eq!(
+            kilo.resolve_dest_with(&home, None),
+            jsonc,
+            "nothing exists: create jsonc"
+        );
+
+        std::fs::create_dir_all(&folder).unwrap();
+        std::fs::write(&json, "{}").unwrap();
+        assert_eq!(
+            kilo.resolve_dest_with(&home, None),
+            json,
+            "only kilo.json exists"
+        );
+        std::fs::write(&jsonc, "{}").unwrap();
+        assert_eq!(
+            kilo.resolve_dest_with(&home, None),
+            jsonc,
+            "both exist: jsonc"
+        );
+        std::fs::remove_file(&jsonc).unwrap();
+        assert_eq!(kilo.resolve_dest_with(&home, None), json);
+
+        // A folder in the way is a file that exists in some form: it is chosen and reported.
+        std::fs::remove_file(&json).unwrap();
+        std::fs::create_dir(&jsonc).unwrap();
+        assert_eq!(kilo.resolve_dest_with(&home, None), jsonc);
+        std::fs::remove_dir(&jsonc).unwrap();
+
+        // Harnesses without alternatives always use their one file.
+        assert_eq!(
+            mcp_of("copilot").resolve_dest_with(&home, None),
+            home.join(".copilot/mcp-config.json")
+        );
+        assert_eq!(
+            mcp_of("pi").resolve_dest_with(&home, Some("/data/config")),
+            home.join(".pi/agent/mcp.json"),
+            "only Kilo follows XDG_CONFIG_HOME"
+        );
+        let _ = std::fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn the_kilo_mcp_file_follows_xdg_config_home_like_the_rules_file() {
+        let kilo = mcp_of("kilo");
+        let home = temp("mcp-xdg");
+        let xdg = temp("mcp-xdg-config");
+        let xdg_str = xdg.to_str().unwrap();
+        assert_eq!(
+            kilo.resolve_dest_with(&home, Some(xdg_str)),
+            xdg.join("kilo/kilo.jsonc")
+        );
+        // The choice looks in the moved folder, not in ~/.config.
+        std::fs::create_dir_all(home.join(".config/kilo")).unwrap();
+        std::fs::write(home.join(".config/kilo/kilo.json"), "{}").unwrap();
+        assert_eq!(
+            kilo.resolve_dest_with(&home, Some(xdg_str)),
+            xdg.join("kilo/kilo.jsonc")
+        );
+        std::fs::create_dir_all(xdg.join("kilo")).unwrap();
+        std::fs::write(xdg.join("kilo/kilo.json"), "{}").unwrap();
+        assert_eq!(
+            kilo.resolve_dest_with(&home, Some(xdg_str)),
+            xdg.join("kilo/kilo.json")
+        );
+        // A relative value is ignored.
+        assert_eq!(
+            kilo.resolve_dest_with(&home, Some("relative")),
+            home.join(".config/kilo/kilo.json")
+        );
+        let _ = std::fs::remove_dir_all(home);
+        let _ = std::fs::remove_dir_all(xdg);
+    }
+
+    #[test]
+    fn files_that_win_over_the_kilo_entry_are_named_by_existence_only() {
+        let kilo = mcp_of("kilo");
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        std::env::remove_var("XDG_CONFIG_HOME");
+        let home = temp("mcp-shadow");
+        assert!(kilo.shadowing_files(&home).is_empty());
+        std::fs::create_dir_all(home.join(".config/kilo")).unwrap();
+        std::fs::create_dir_all(home.join(".kilo")).unwrap();
+        std::fs::write(home.join(".config/kilo/opencode.jsonc"), "// secrets").unwrap();
+        std::fs::write(home.join(".kilo/kilo.json"), "{}").unwrap();
+        // A folder with such a name does not count.
+        std::fs::create_dir(home.join(".kilo/kilo.jsonc")).unwrap();
+        assert_eq!(
+            kilo.shadowing_files(&home),
+            ["~/.config/kilo/opencode.jsonc", "~/.kilo/kilo.json"]
+        );
+        assert!(mcp_of("copilot").shadowing_files(&home).is_empty());
+        let _ = std::fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn a_light_harness_id_resolves_its_mcp_entry_and_surface() {
+        let pi = LightHarnessId::new(HarnessId::Pi).expect("light");
+        assert_eq!(pi.mcp().map(|mcp| mcp.target_id.as_str()), Some("pi_mcp"));
+        assert_eq!(pi.mcp_surface(), SetupSurfaceId::PiMcp);
+        assert_eq!(pi.rules_surface(), SetupSurfaceId::PiRules);
     }
 }

@@ -51,15 +51,19 @@ pub struct AppSettings {
 
 /// Bump when the default set of enabled targets changes in a way that existing
 /// settings files must be migrated for, and add the new targets to [`TARGETS_ADDED_IN`].
-pub const TARGET_DEFAULTS_VERSION: u32 = 2;
+pub const TARGET_DEFAULTS_VERSION: u32 = 3;
 
 /// The targets each defaults version added, and nothing else. A file written under an older
 /// version gains the targets of the later versions and keeps every toggle it has: re-applying the
 /// whole default set would switch back on what the user turned off.
 ///
 /// Version 1 is the first to gate Install by target (`migrate_target_defaults` handles the files
-/// below it by moving them to the full default set); version 2 added the light tier's rules.
-const TARGETS_ADDED_IN: &[(u32, &[&str])] = &[(2, &["copilot_rules", "pi_rules", "kilo_rules"])];
+/// below it by moving them to the full default set); version 2 added the light tier's rules and
+/// version 3 its MCP entries (`kilo_mcp` is off by default, so it is not added).
+const TARGETS_ADDED_IN: &[(u32, &[&str])] = &[
+    (2, &["copilot_rules", "pi_rules", "kilo_rules"]),
+    (3, &["copilot_mcp", "pi_mcp"]),
+];
 
 impl Default for AppSettings {
     fn default() -> Self {
@@ -778,7 +782,7 @@ mod tests {
     }
 
     #[test]
-    fn a_light_harness_gates_the_shared_skills_surface_and_its_own_rules_target() {
+    fn a_light_harness_gates_the_shared_skills_surface_and_its_own_targets() {
         use crate::setup_lifecycle::SetupSurfaceId;
         let mut settings = AppSettings {
             enabled_harness_ids: vec![agent_targets::HarnessId::Pi],
@@ -790,15 +794,29 @@ mod tests {
             vec![
                 SetupSurfaceId::Skills,
                 SetupSurfaceId::PiRules,
+                SetupSurfaceId::PiMcp,
                 SetupSurfaceId::WorkspaceBundle
             ]
         );
-        assert_eq!(effective_enabled_target_ids(&settings), ["pi_rules"]);
+        assert_eq!(
+            effective_enabled_target_ids(&settings),
+            ["pi_rules", "pi_mcp"]
+        );
         settings.enabled_target_ids.retain(|id| id != "pi_rules");
         assert_eq!(
             enabled_setup_surfaces(&settings),
-            vec![SetupSurfaceId::Skills, SetupSurfaceId::WorkspaceBundle],
+            vec![
+                SetupSurfaceId::Skills,
+                SetupSurfaceId::PiMcp,
+                SetupSurfaceId::WorkspaceBundle
+            ],
             "the target toggle switches the rules surface off on its own"
+        );
+        settings.enabled_target_ids.retain(|id| id != "pi_mcp");
+        assert_eq!(
+            enabled_setup_surfaces(&settings),
+            vec![SetupSurfaceId::Skills, SetupSurfaceId::WorkspaceBundle],
+            "and the MCP surface on its own"
         );
         assert!(effective_enabled_target_ids(&settings).is_empty());
     }
@@ -1335,30 +1353,34 @@ mod tests {
             .collect()
     }
 
-    /// The rules surfaces of the light tier, which is off until a harness is enabled.
-    const LIGHT_RULES_SURFACES: [crate::setup_lifecycle::SetupSurfaceId; 3] = [
+    /// The rules and MCP surfaces of the light tier, which is off until a harness is enabled.
+    const LIGHT_SURFACES: [crate::setup_lifecycle::SetupSurfaceId; 6] = [
         crate::setup_lifecycle::SetupSurfaceId::CopilotRules,
         crate::setup_lifecycle::SetupSurfaceId::PiRules,
         crate::setup_lifecycle::SetupSurfaceId::KiloRules,
+        crate::setup_lifecycle::SetupSurfaceId::CopilotMcp,
+        crate::setup_lifecycle::SetupSurfaceId::PiMcp,
+        crate::setup_lifecycle::SetupSurfaceId::KiloMcp,
     ];
 
     #[test]
     fn default_settings_gate_only_the_codex_config_surface_and_the_light_harnesses() {
         use crate::setup_lifecycle::SetupSurfaceId;
         let mut excluded = vec![SetupSurfaceId::CodexConfig];
-        excluded.extend(LIGHT_RULES_SURFACES);
+        excluded.extend(LIGHT_SURFACES);
         assert_eq!(
             enabled_setup_surfaces(&AppSettings::default()),
             surfaces_without(&excluded)
         );
-        // With every harness enabled, only Codex config stays out.
+        // With every harness enabled, only Codex config and Kilo's MCP entry (both off by default
+        // as targets) stay out.
         let all = AppSettings {
             enabled_harness_ids: agent_targets::HarnessId::ALL.to_vec(),
             ..AppSettings::default()
         };
         assert_eq!(
             enabled_setup_surfaces(&all),
-            surfaces_without(&[SetupSurfaceId::CodexConfig])
+            surfaces_without(&[SetupSurfaceId::CodexConfig, SetupSurfaceId::KiloMcp])
         );
     }
 
@@ -1383,7 +1405,7 @@ mod tests {
             SetupSurfaceId::CursorAgents,
             SetupSurfaceId::CursorMcp,
         ];
-        excluded.extend(LIGHT_RULES_SURFACES);
+        excluded.extend(LIGHT_SURFACES);
         assert_eq!(
             enabled_setup_surfaces(&settings),
             surfaces_without(&excluded)
@@ -1617,7 +1639,7 @@ mod tests {
     }
 
     #[test]
-    fn a_version_1_file_gains_only_the_light_rules_targets_and_keeps_what_the_user_turned_off() {
+    fn a_version_1_file_gains_only_the_light_targets_and_keeps_what_the_user_turned_off() {
         with_temp_home(|dir| {
             std::env::remove_var("AGENT_WORKSPACE_PATH");
             // Every version 1 default except `claude_agents` and `opencode_rules`, which the
@@ -1651,10 +1673,12 @@ mod tests {
                     "codex_config",
                     "cursor_setup",
                     "copilot_rules",
+                    "copilot_mcp",
                     "pi_rules",
+                    "pi_mcp",
                     "kilo_rules",
                 ],
-                "registry order; claude_agents and opencode_rules stay off"
+                "registry order; claude_agents and opencode_rules stay off, kilo_mcp is not a default"
             );
             assert_eq!(migrated.revision, 1, "the migration is persisted");
             assert_eq!(
@@ -1666,13 +1690,51 @@ mod tests {
     }
 
     #[test]
-    fn a_version_1_file_with_every_target_off_gains_only_the_three_light_rules_targets() {
+    fn a_version_1_file_with_every_target_off_gains_only_the_default_light_targets() {
         with_temp_home(|dir| {
             std::env::remove_var("AGENT_WORKSPACE_PATH");
             write_settings_file(dir, &settings_json_at_version(1, &[]));
             assert_eq!(
                 load().enabled_target_ids,
-                ["copilot_rules", "pi_rules", "kilo_rules"]
+                [
+                    "copilot_rules",
+                    "copilot_mcp",
+                    "pi_rules",
+                    "pi_mcp",
+                    "kilo_rules"
+                ]
+            );
+        });
+    }
+
+    #[test]
+    fn a_version_2_file_gains_only_the_mcp_targets_and_never_re_enables_what_was_turned_off() {
+        with_temp_home(|dir| {
+            std::env::remove_var("AGENT_WORKSPACE_PATH");
+            // The user switched `copilot_rules`, `claude_agents` and every MCP-less default off,
+            // and kept `kilo_rules`.
+            write_settings_file(
+                dir,
+                &settings_json_at_version(2, &["codex_rules", "cursor_setup", "kilo_rules"]),
+            );
+            let migrated = get_settings_snapshot().expect("snapshot").settings;
+            assert_eq!(migrated.target_defaults_version, TARGET_DEFAULTS_VERSION);
+            assert_eq!(
+                migrated.enabled_target_ids,
+                [
+                    "codex_rules",
+                    "cursor_setup",
+                    "copilot_mcp",
+                    "pi_mcp",
+                    "kilo_rules"
+                ],
+                "copilot_rules stays off, kilo_mcp is not added"
+            );
+            assert_eq!(migrated.revision, 1, "the migration is persisted");
+            assert_eq!(
+                load().enabled_target_ids,
+                migrated.enabled_target_ids,
+                "and runs once"
             );
         });
     }

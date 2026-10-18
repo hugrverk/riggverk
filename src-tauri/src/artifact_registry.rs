@@ -74,6 +74,10 @@ pub enum ArtifactId {
     /// The managed rules block of a light harness (`metadata/light-harnesses.json` names the
     /// file and the base). The harness id is validated, so a manifest cannot name a central one.
     HarnessRules(LightHarnessId),
+    /// The managed Playwright entry of a light harness's MCP file (the descriptor names the file,
+    /// the keys and the entry template). Only that entry is the app's; the rest of the file is
+    /// the user's.
+    HarnessMcp(LightHarnessId),
 
     // ── Skills ──
     /// One file of a skill (`SKILL.md` or a supporting file) in one skill root.
@@ -360,6 +364,7 @@ impl ArtifactId {
             ArtifactId::SkillFile(file) => file.dest(home),
             ArtifactId::WorkspaceFile(rel) => Ok(workspace_root.join(rel.as_str())),
             ArtifactId::HarnessRules(harness) => Ok(light_rules(*harness)?.resolve_dest(home)),
+            ArtifactId::HarnessMcp(harness) => Ok(light_mcp(*harness)?.resolve_dest(home)),
         }
     }
 
@@ -378,6 +383,7 @@ impl ArtifactId {
                 self.codex_allowlist_root(home, workspace_root)
             }
             ArtifactId::HarnessRules(harness) => Ok(light_rules(*harness)?.allowlist_root(home)),
+            ArtifactId::HarnessMcp(harness) => Ok(light_mcp(*harness)?.allowlist_root(home)),
             _ => Ok(home.to_path_buf()),
         }
     }
@@ -441,6 +447,9 @@ impl ArtifactId {
             ArtifactId::HarnessRules(harness) => harness
                 .rules()
                 .map(|rules| workspace_root.join(&rules.source_rel)),
+            ArtifactId::HarnessMcp(harness) => harness
+                .mcp()
+                .map(|mcp| workspace_root.join(&mcp.template_rel)),
         }
     }
 
@@ -522,6 +531,7 @@ impl ArtifactId {
             | ArtifactId::SkillFile(_) => SetupSurfaceId::Skills,
             ArtifactId::WorkspaceFile(_) => SetupSurfaceId::WorkspaceBundle,
             ArtifactId::HarnessRules(harness) => harness.rules_surface(),
+            ArtifactId::HarnessMcp(harness) => harness.mcp_surface(),
         }
     }
 }
@@ -532,6 +542,13 @@ fn light_rules(
 ) -> Result<&'static crate::light_harness::LightRules, String> {
     harness
         .rules()
+        .ok_or_else(|| "the light harness descriptor is unavailable".to_string())
+}
+
+/// The MCP entry of `harness`; an error only when the embedded descriptor is invalid.
+fn light_mcp(harness: LightHarnessId) -> Result<&'static crate::light_harness::LightMcp, String> {
+    harness
+        .mcp()
         .ok_or_else(|| "the light harness descriptor is unavailable".to_string())
 }
 
@@ -670,6 +687,13 @@ pub fn expand_surface(
             .and_then(LightHarnessId::new)
             .map(|harness| vec![ArtifactId::HarnessRules(harness)])
             .ok_or_else(|| "light rules surface without a light harness".to_string()),
+        light @ (SetupSurfaceId::CopilotMcp | SetupSurfaceId::PiMcp | SetupSurfaceId::KiloMcp) => {
+            light
+                .harness()
+                .and_then(LightHarnessId::new)
+                .map(|harness| vec![ArtifactId::HarnessMcp(harness)])
+                .ok_or_else(|| "light MCP surface without a light harness".to_string())
+        }
         SetupSurfaceId::WorkspaceBundle => expand_workspace_bundle(workspace_root),
         SetupSurfaceId::ClaudeSkills
         | SetupSurfaceId::OpenCodeSkills
@@ -1192,6 +1216,12 @@ mod tests {
             r#"{"type":"HarnessRules","name":"opencode"}"#,
             r#"{"type":"HarnessRules","name":"../pi"}"#,
             r#"{"type":"HarnessRules","name":""}"#,
+            r#"{"type":"HarnessMcp","name":"claude"}"#,
+            r#"{"type":"HarnessMcp","name":"codex"}"#,
+            r#"{"type":"HarnessMcp","name":"cursor"}"#,
+            r#"{"type":"HarnessMcp","name":"opencode"}"#,
+            r#"{"type":"HarnessMcp","name":"../pi"}"#,
+            r#"{"type":"HarnessMcp","name":""}"#,
         ] {
             let parsed = serde_json::from_str::<ArtifactId>(json);
             assert!(parsed.is_err(), "{json} must not deserialize: {parsed:?}");
@@ -1596,6 +1626,61 @@ mod tests {
                 format!(r#"{{"type":"HarnessRules","name":"{}"}}"#, harness.as_str())
             );
             assert_eq!(serde_json::from_str::<ArtifactId>(&json).unwrap(), artifact);
+        }
+    }
+
+    #[test]
+    fn harness_mcp_artifacts_resolve_from_the_descriptor() {
+        use crate::agent_targets::HarnessId;
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        std::env::remove_var("XDG_CONFIG_HOME");
+        let home = temp_dir("light-mcp-user");
+        let ws = temp_dir("light-mcp-ws");
+        let cases = [
+            (
+                HarnessId::Copilot,
+                ".copilot/mcp-config.json",
+                "copilot.playwright.json",
+            ),
+            (HarnessId::Pi, ".pi/agent/mcp.json", "pi.playwright.json"),
+            (
+                HarnessId::Kilo,
+                ".config/kilo/kilo.jsonc",
+                "kilo.playwright.json",
+            ),
+        ];
+        assert_eq!(
+            cases.len(),
+            crate::light_harness::light_harnesses().len(),
+            "a new light harness needs a case here"
+        );
+        for (harness, dest, source) in cases {
+            let artifact =
+                ArtifactId::HarnessMcp(LightHarnessId::new(harness).expect("light harness"));
+            assert_eq!(artifact.resolve_dest(&home, &ws).unwrap(), home.join(dest));
+            assert_eq!(
+                artifact.resolve_source(&ws),
+                Some(ws.join("templates/mcp").join(source))
+            );
+            assert_eq!(artifact.allowlist_root(&home, &ws).unwrap(), home);
+            assert!(!artifact.is_rules_block());
+            assert!(!artifact.is_skill_file());
+            let surface = artifact.surface();
+            assert_eq!(surface.harness(), Some(harness));
+            assert_ne!(
+                surface,
+                light(harness).surface(),
+                "the rules file and the MCP entry are two surfaces"
+            );
+            assert_eq!(
+                expand_surface(surface, &ws, &SkillScope::all()).unwrap(),
+                vec![artifact.clone()]
+            );
+            assert!(
+                reject_broad_artifact_root(&home.join(dest)).is_ok(),
+                "{dest}"
+            );
         }
     }
 

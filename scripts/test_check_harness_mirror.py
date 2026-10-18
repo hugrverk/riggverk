@@ -126,7 +126,7 @@ class CheckHarnessMirrorTests(unittest.TestCase):
         self.assert_fails("HARNESS_LABELS")
 
     def test_surfaces_missing_for_a_harness(self) -> None:
-        self.edit(mirror.TS_INSTALL, '  kilo: ["kilo_rules", "skills"],\n', "")
+        self.edit(mirror.TS_INSTALL, '  kilo: ["kilo_rules", "skills", "kilo_mcp"],\n', "")
         self.assert_fails("HARNESS_SURFACES")
 
     def test_a_view_missing_for_a_harness(self) -> None:
@@ -177,11 +177,23 @@ class CheckHarnessMirrorTests(unittest.TestCase):
         self.assert_fails("ReadFolder::ALL")
 
     def test_a_surface_only_one_side_knows(self) -> None:
-        self.edit(mirror.TS_TYPES, '  | "workspace_bundle";', '  | "workspace_bundle"\n  | "kilo_mcp";')
+        self.edit(mirror.TS_TYPES, '  | "workspace_bundle";', '  | "workspace_bundle"\n  | "kilo_extra";')
         self.assert_fails("SetupSurfaceId")
 
     def test_a_light_rules_target_the_ui_does_not_list(self) -> None:
-        self.edit(mirror.TS_INSTALL, '  "pi_rules",\n  "kilo_rules",\n];', '  "kilo_rules",\n];')
+        self.edit(mirror.TS_INSTALL, '  "pi_rules",\n  "pi_mcp",\n', '  "pi_mcp",\n')
+        self.assert_fails("TARGET_IDS_REGISTRY_ORDER")
+
+    def test_a_light_mcp_target_the_ui_does_not_list(self) -> None:
+        self.edit(mirror.TS_INSTALL, '  "pi_mcp",\n  "kilo_rules",\n', '  "kilo_rules",\n')
+        self.assert_fails("TARGET_IDS_REGISTRY_ORDER")
+
+    def test_mcp_rows_in_another_order_than_the_registry(self) -> None:
+        self.edit(
+            mirror.TS_INSTALL,
+            '  "copilot_rules",\n  "copilot_mcp",\n  "pi_rules",\n',
+            '  "copilot_mcp",\n  "copilot_rules",\n  "pi_rules",\n',
+        )
         self.assert_fails("TARGET_IDS_REGISTRY_ORDER")
 
     def test_a_target_only_the_backend_knows(self) -> None:
@@ -207,7 +219,7 @@ class CheckHarnessMirrorTests(unittest.TestCase):
         self.assert_fails("rulesFileName")
 
     def test_a_harness_page_without_its_rules_surface(self) -> None:
-        self.edit(mirror.TS_INSTALL, '  pi: ["pi_rules", "skills"],', '  pi: ["skills"],')
+        self.edit(mirror.TS_INSTALL, '  pi: ["pi_rules", "skills", "pi_mcp"],', '  pi: ["skills", "pi_mcp"],')
         self.assert_fails("HARNESS_SURFACES.pi")
 
     def test_an_adapter_that_does_not_produce_the_derived_base(self) -> None:
@@ -221,6 +233,51 @@ class CheckHarnessMirrorTests(unittest.TestCase):
     def test_a_history_map_that_forgets_a_light_harness(self) -> None:
         self.edit(mirror.RULES_HISTORY, '    "pi": "templates/sync/pi-rules.md",\n', "")
         self.assert_fails("HARNESS_RULES has no 'pi'")
+
+    # The MCP entry of each light harness
+
+    def test_a_harness_page_without_its_mcp_surface(self) -> None:
+        self.edit(mirror.TS_INSTALL, '  pi: ["pi_rules", "skills", "pi_mcp"],', '  pi: ["pi_rules", "skills"],')
+        self.assert_fails("HARNESS_SURFACES.pi does not list pi_mcp")
+
+    def test_an_mcp_target_that_gates_the_wrong_surface(self) -> None:
+        self.edit(mirror.TS_INSTALL, '  pi_mcp: ["pi_mcp"],', '  pi_mcp: ["pi_rules"],')
+        self.assert_fails("TARGET_SURFACES.pi_mcp must gate exactly pi_mcp")
+
+    def test_an_mcp_surface_the_backend_does_not_have(self) -> None:
+        self.edit(mirror.RUST_LIFECYCLE, "        SetupSurfaceId::PiMcp,\n", "")
+        self.assert_fails("SetupSurfaceId")
+
+    def test_a_target_kind_the_ui_does_not_know(self) -> None:
+        self.edit(mirror.TS_TYPES, 'kind: "rules" | "agents" | "config" | "mcp";', 'kind: "rules" | "agents" | "config";')
+        self.assert_fails("AgentTargetMeta.kind")
+
+    def test_a_target_kind_rust_would_write_under_another_name(self) -> None:
+        self.edit(mirror.RUST_TARGETS, '#[serde(rename = "mcp")]', '#[serde(rename = "server")]')
+        self.assert_fails("TargetKind::Mcp")
+
+    def test_a_target_the_ui_starts_on_that_the_descriptor_starts_off(self) -> None:
+        self.edit(mirror.TS_INSTALL, '["codex_config", "kilo_mcp"]', '["codex_config"]')
+        self.assert_fails("DEFAULT_DISABLED_TARGET_IDS")
+
+    def test_a_target_the_ui_starts_off_that_the_descriptor_starts_on(self) -> None:
+        self.edit(mirror.TS_INSTALL, '["codex_config", "kilo_mcp"]', '["codex_config", "kilo_mcp", "pi_mcp"]')
+        self.assert_fails("DEFAULT_DISABLED_TARGET_IDS")
+
+    def test_a_descriptor_default_the_ui_does_not_follow(self) -> None:
+        self.edit(mirror.DESCRIPTOR, '"default_enabled": false,\n        "xdg_config_home": true,\n        "shadowed_by_siblings"', '"default_enabled": true,\n        "xdg_config_home": true,\n        "shadowed_by_siblings"')
+        self.assert_fails("DEFAULT_DISABLED_TARGET_IDS")
+
+    def test_a_harness_without_an_mcp_section(self) -> None:
+        path = self.tree / mirror.DESCRIPTOR
+        descriptor = json.loads(path.read_text(encoding="utf-8"))
+        del descriptor["harnesses"]["kilo"]["mcp"]
+        path.write_text(json.dumps(descriptor), encoding="utf-8")
+        self.assert_fails("kilo needs a rules and an mcp section")
+
+    def test_an_mcp_section_without_its_template(self) -> None:
+        self.edit(mirror.DESCRIPTOR, '"template": "templates/mcp/kilo.playwright.json",', '"template": "",')
+        self.assert_fails("kilo mcp needs a template")
 
     # Wiring
 
