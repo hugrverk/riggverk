@@ -945,7 +945,7 @@ done
 printf '  bundled agent bash deny coverage verified for expanded secret patterns\n'
 
 step "harness pages use one managed installation owner"
-for view in ClaudeView CodexView CursorView OpenCodeView; do
+for view in ClaudeView CodexView CursorView OpenCodeView LightHarnessView; do
   path="src/views/${view}.tsx"
   if [ "$(grep -c '<HarnessPage' "$path")" -ne 1 ]; then
     printf 'FAIL: %s must render exactly one HarnessPage\n' "$path" >&2
@@ -961,6 +961,10 @@ if search_has_match 'sync_claude_agents|diff_claude_agents|sync_opencode_agents|
   exit 1
 fi
 printf '  one managed installation owner verified on each harness page\n'
+
+step "harness ids agree across Rust, TypeScript and the light descriptor"
+python3 scripts/check-harness-mirror.py
+run_python_unittests scripts/test_check_harness_mirror.py
 
 step "regression: no stale config + agents labels in app UI"
 if search_has_match 'config \+ agents' src/views src/App.tsx; then
