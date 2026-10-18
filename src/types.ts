@@ -328,8 +328,9 @@ export interface OpenCodeModelSelection {
   small_model: string;
   /** The model the subagent roles run on; empty while they inherit `model`. */
   subagent_model: string;
-  /** Source of `model` and `small_model`: the override file always holds both. */
-  source: OpenCodeModelSource;
+  /** Each value has its own source: only a value the user changed is an override. */
+  model_source: OpenCodeModelSource;
+  small_model_source: OpenCodeModelSource;
   /** `override` while a subagent model is set, `bundled default` while the roles inherit `model`. */
   subagent_source: OpenCodeModelSource;
 }

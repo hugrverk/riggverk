@@ -241,7 +241,7 @@ export function OpenCodeModelRows({ workspaceValid, health, onModelUpdated }: Op
   const smallError = draftSmall && !draftSmall.includes("/") ? FORMAT_ERROR : null;
   const subagentError = draftSubagent && !draftSubagent.includes("/") ? FORMAT_ERROR : null;
   const canSave = workspaceValid && hasChanges && !modelError && !smallError && !subagentError && !saving;
-  const hasOverride = selection?.source === "override";
+  const hasOverride = [selection?.model_source, selection?.small_model_source, selection?.subagent_source].includes("override");
 
   const handleSave = useCallback(async () => {
     if (!canSave) return;
@@ -379,10 +379,10 @@ export function OpenCodeModelRows({ workspaceValid, health, onModelUpdated }: Op
   const items: KvItem[] = [
     { label: <label htmlFor={modelId}>model</label>, value: field(modelId, draftModel, setDraftModel, modelError, { fieldRef: firstFieldRef }), id: "model" },
     ...errorRow(modelId, modelError),
-    ...sourceRow("model", selection?.source, modelState),
+    ...sourceRow("model", selection?.model_source, modelState),
     { label: <label htmlFor={smallModelId}>small model</label>, value: field(smallModelId, draftSmall, setDraftSmall, smallError), id: "small" },
     ...errorRow(smallModelId, smallError),
-    ...sourceRow("small", selection?.source, smallState),
+    ...sourceRow("small", selection?.small_model_source, smallState),
     {
       label: <label htmlFor={subagentModelId}>subagent model</label>,
       value: field(subagentModelId, draftSubagent, setDraftSubagent, subagentError, { emptyLabel: "inherit main model", placeholder: "inherit main model" }),
@@ -403,8 +403,9 @@ export function OpenCodeModelRows({ workspaceValid, health, onModelUpdated }: Op
         </p>
       )}
       <p className="c-dim runtime-note">
-        Stored in app settings and applied on the next OpenCode update; workspace templates are not edited. Saving stores all three values.
-        The subagent model pins repo-scout, inspector, sentinel, verifier and scribe; unset, they use the main model.
+        Stored in app settings and applied on the next OpenCode update; workspace templates are not edited. Saving stores only the values you
+        changed: one equal to the bundled default keeps following it. The subagent model pins repo-scout, inspector, sentinel, verifier and
+        scribe; unset, they use the main model.
       </p>
     </section>
   );

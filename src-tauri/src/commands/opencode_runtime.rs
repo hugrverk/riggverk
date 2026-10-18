@@ -504,8 +504,8 @@ fn pin_subagent_model(config: &mut serde_json::Map<String, serde_json::Value>, m
 /// Render workspace `templates/opencode.json` the way an install renders it before sync.
 ///
 /// Applies Playwright placeholder transformations and overlays the app-level model override
-/// (`model`, `small_model` and the optional subagent model as `agent.<role>.model` entries) if
-/// present so that the installed config comparison reflects any user model selection.
+/// (`model`, `small_model` and the subagent model as `agent.<role>.model` entries, each only if
+/// the file holds it) so that the installed config comparison reflects any user model selection.
 pub(crate) fn render_expected_opencode_config(
     template_json: &serde_json::Value,
     home_dir: &Path,
@@ -523,22 +523,22 @@ pub(crate) fn render_expected_opencode_config(
     // Overlay app-level model override if present. Status/render callers pass the
     // resolved user home explicitly, so tests and smoke runs must not read a
     // real app-support override from the process environment by accident.
-    let override_selection = opencode_model_selection_path_for_home(home_dir)
+    // Each value is its own override: one the file does not hold keeps the template's.
+    let model_override = opencode_model_selection_path_for_home(home_dir)
         .ok()
-        .and_then(|path| read_stored_opencode_model_selection_from_path(&path));
-    if let Some(override_selection) = override_selection {
-        if let Some(obj) = rendered.as_object_mut() {
-            obj.insert(
-                "model".to_string(),
-                serde_json::Value::String(override_selection.model),
-            );
+        .and_then(|path| read_stored_opencode_model_override_from_path(&path));
+    if let (Some(model_override), Some(obj)) = (model_override, rendered.as_object_mut()) {
+        if let Some(model) = model_override.model {
+            obj.insert("model".to_string(), serde_json::Value::String(model));
+        }
+        if let Some(small_model) = model_override.small_model {
             obj.insert(
                 "small_model".to_string(),
-                serde_json::Value::String(override_selection.small_model),
+                serde_json::Value::String(small_model),
             );
-            if !override_selection.subagent_model.is_empty() {
-                pin_subagent_model(obj, &override_selection.subagent_model);
-            }
+        }
+        if let Some(subagent_model) = model_override.subagent_model {
+            pin_subagent_model(obj, &subagent_model);
         }
     }
 
@@ -1762,37 +1762,64 @@ pub struct OpenCodeModelSelection {
     pub small_model: String,
     /// The model the subagent roles run on; empty while they inherit `model`.
     pub subagent_model: String,
-    /// `override` or `bundled default`, for `model` and `small_model`. The override file always
-    /// holds both, so they share a source.
-    pub source: String,
+    /// `override` while the override file holds `model`, else `bundled default`.
+    pub model_source: String,
+    /// `override` while the override file holds `small_model`, else `bundled default`.
+    pub small_model_source: String,
     /// `override` while a subagent model is set, `bundled default` while the roles inherit `model`.
     pub subagent_source: String,
-}
-
-impl OpenCodeModelSelection {
-    fn bundled(model: String, small_model: String) -> Self {
-        Self {
-            model,
-            small_model,
-            subagent_model: String::new(),
-            source: SOURCE_BUNDLED.to_string(),
-            subagent_source: SOURCE_BUNDLED.to_string(),
-        }
-    }
 }
 
 const DEFAULT_MODEL: &str = "opencode-go/glm-5.2";
 const DEFAULT_SMALL_MODEL: &str = "opencode-go/deepseek-v4.1-flash";
 
+/// The values the user chose. A value that is `None` is not an override: `model` and `small_model`
+/// follow the bundled default (so a later change of that default still reaches the user), and the
+/// subagents inherit `model`.
+#[derive(Clone, Debug, Default, PartialEq)]
+struct ModelOverride {
+    model: Option<String>,
+    small_model: Option<String>,
+    subagent_model: Option<String>,
+}
+
+impl ModelOverride {
+    fn is_empty(&self) -> bool {
+        self.model.is_none() && self.small_model.is_none() && self.subagent_model.is_none()
+    }
+
+    /// The selection of these values over the bundled `defaults` (`model`, `small_model`).
+    fn selection_over(&self, defaults: (String, String)) -> OpenCodeModelSelection {
+        let source = |value: &Option<String>| {
+            if value.is_some() {
+                SOURCE_OVERRIDE
+            } else {
+                SOURCE_BUNDLED
+            }
+        };
+        OpenCodeModelSelection {
+            model: self.model.clone().unwrap_or(defaults.0),
+            small_model: self.small_model.clone().unwrap_or(defaults.1),
+            subagent_model: self.subagent_model.clone().unwrap_or_default(),
+            model_source: source(&self.model).to_string(),
+            small_model_source: source(&self.small_model).to_string(),
+            subagent_source: source(&self.subagent_model).to_string(),
+        }
+    }
+}
+
 /// App-level model selection override stored outside workspace templates.
 ///
-/// `subagent_model` is optional and absent unless set, so a file written by an older app version
-/// reads as "subagents inherit the main model", and a newer file still reads in an older one.
+/// Every value is optional and absent unless the user chose it, so `schema_version` stays 1: a file
+/// from an app version that always wrote `model` and `small_model` reads as two explicit overrides,
+/// and a newer file still reads in an older version (which needs both, and ignores it otherwise).
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 struct StoredOpenCodeModelSelection {
     schema_version: u32,
-    model: String,
-    small_model: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    model: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    small_model: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     subagent_model: Option<String>,
 }
@@ -1837,20 +1864,21 @@ fn opencode_model_selection_path_for_home(home_dir: &Path) -> Result<std::path::
         .map(|p| p.join("opencode-model-selection.json"))
 }
 
-/// Read the stored model selection override.
-/// Returns None if the file is missing, invalid, or contains empty/invalid model IDs.
-fn read_stored_opencode_model_selection() -> Option<OpenCodeModelSelection> {
+/// Read the stored model override.
+/// Returns None if the file is missing, invalid or holds no valid value.
+fn read_stored_opencode_model_override() -> Option<ModelOverride> {
     let path = match opencode_model_selection_path() {
         Ok(p) => p,
         Err(_) => return None,
     };
-    read_stored_opencode_model_selection_from_path(&path)
+    read_stored_opencode_model_override_from_path(&path)
 }
 
-/// Read model selection override from a specific path (testable).
-fn read_stored_opencode_model_selection_from_path(
-    path: &std::path::Path,
-) -> Option<OpenCodeModelSelection> {
+/// Read the model override from a specific path (testable).
+///
+/// A value that is empty or not `provider/model` is dropped on its own: it follows the default
+/// instead of discarding the values around it.
+fn read_stored_opencode_model_override_from_path(path: &std::path::Path) -> Option<ModelOverride> {
     if !path.is_file() {
         return None;
     }
@@ -1859,28 +1887,13 @@ fn read_stored_opencode_model_selection_from_path(
     if stored.schema_version != 1 {
         return None;
     }
-    if stored.model.is_empty() || stored.small_model.is_empty() {
-        return None;
-    }
-    let model = validate_model_id(&stored.model).ok()?;
-    let small_model = validate_model_id(&stored.small_model).ok()?;
-    // A malformed subagent model must not discard the main selection: the roles inherit instead.
-    let subagent_model = stored
-        .subagent_model
-        .and_then(|id| validate_model_id(&id).ok())
-        .unwrap_or_default();
-    let subagent_source = if subagent_model.is_empty() {
-        SOURCE_BUNDLED
-    } else {
-        SOURCE_OVERRIDE
+    let valid = |id: Option<String>| id.and_then(|id| validate_model_id(&id).ok());
+    let model_override = ModelOverride {
+        model: valid(stored.model),
+        small_model: valid(stored.small_model),
+        subagent_model: valid(stored.subagent_model),
     };
-    Some(OpenCodeModelSelection {
-        model,
-        small_model,
-        subagent_model,
-        source: SOURCE_OVERRIDE.to_string(),
-        subagent_source: subagent_source.to_string(),
-    })
+    (!model_override.is_empty()).then_some(model_override)
 }
 
 /// `opencode models` may refresh its provider catalog over the network.
@@ -1978,57 +1991,46 @@ fn run_models_listing(
     Ok(ListAvailableModelsResult { models, warning })
 }
 
-/// Read the current model, small_model and subagent model, each with its source.
-/// Priority: 1) app-level override file, 2) workspace `templates/opencode.base.json`, 3) hardcoded
-/// defaults. The template has no subagent model: without an override the subagents inherit `model`.
-#[tauri::command]
-pub fn read_opencode_model_selection() -> Result<OpenCodeModelSelection, String> {
-    // 1. Check app-level override file first
-    if let Some(override_selection) = read_stored_opencode_model_selection() {
-        return Ok(override_selection);
-    }
-
-    // 2. Fall back to workspace template
+/// The bundled `model` and `small_model`: the workspace `templates/opencode.base.json`, else the
+/// hardcoded defaults.
+fn bundled_model_defaults() -> Result<(String, String), String> {
     use crate::commands::workspace::configured_workspace_path;
     use crate::settings;
 
-    let workspace_root = match configured_workspace_path(&settings::load()) {
-        Some(p) => p,
-        None => {
-            return Ok(OpenCodeModelSelection::bundled(
-                DEFAULT_MODEL.to_string(),
-                DEFAULT_SMALL_MODEL.to_string(),
-            ));
-        }
+    let fallback = || (DEFAULT_MODEL.to_string(), DEFAULT_SMALL_MODEL.to_string());
+    let Some(workspace_root) = configured_workspace_path(&settings::load()) else {
+        return Ok(fallback());
     };
     let base_path = workspace_root.join("templates/opencode.base.json");
-
     if !base_path.is_file() {
-        return Ok(OpenCodeModelSelection::bundled(
-            DEFAULT_MODEL.to_string(),
-            DEFAULT_SMALL_MODEL.to_string(),
-        ));
+        return Ok(fallback());
     }
 
     let content = std::fs::read_to_string(&base_path)
         .map_err(|e| format!("failed to read opencode.base.json: {}", e))?;
     let json: serde_json::Value =
         serde_json::from_str(&content).map_err(|e| format!("invalid JSON: {}", e))?;
+    let field = |key: &str, default: &str| {
+        json.get(key)
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+            .unwrap_or(default)
+            .to_string()
+    };
+    Ok((
+        field("model", DEFAULT_MODEL),
+        field("small_model", DEFAULT_SMALL_MODEL),
+    ))
+}
 
-    let model = json
-        .get("model")
-        .and_then(|v| v.as_str())
-        .filter(|s| !s.is_empty())
-        .unwrap_or(DEFAULT_MODEL)
-        .to_string();
-    let small_model = json
-        .get("small_model")
-        .and_then(|v| v.as_str())
-        .filter(|s| !s.is_empty())
-        .unwrap_or(DEFAULT_SMALL_MODEL)
-        .to_string();
-
-    Ok(OpenCodeModelSelection::bundled(model, small_model))
+/// Read the current model, small_model and subagent model, each with its source.
+/// A value comes from the app-level override file when that holds it, else from the workspace
+/// `templates/opencode.base.json`, else from the hardcoded defaults. The template has no subagent
+/// model: without an override the subagents inherit `model`.
+#[tauri::command]
+pub fn read_opencode_model_selection() -> Result<OpenCodeModelSelection, String> {
+    let model_override = read_stored_opencode_model_override().unwrap_or_default();
+    Ok(model_override.selection_over(bundled_model_defaults()?))
 }
 
 /// Validate a model ID in `provider/model` format and return it trimmed.
@@ -2060,8 +2062,11 @@ fn validate_model_id(id: &str) -> Result<String, String> {
     Ok(trimmed.to_string())
 }
 
-/// Update `model`, `small_model` and the optional subagent model in the app-level override file.
-/// A missing or empty `subagent_model` means the subagent roles inherit `model`.
+/// Update the app-level override file from the three values the pane shows.
+///
+/// Only a value the user changed is stored: a `model` or `small_model` equal to the current bundled
+/// default is left out and keeps following it, and a missing or empty `subagent_model` means the
+/// roles inherit `model`. When nothing is left the file is deleted instead of written empty.
 ///
 /// Does NOT mutate workspace templates/opencode.base.json or templates/opencode.json.
 /// The override is stored outside the workspace and applied on the next Install/Update.
@@ -2081,25 +2086,59 @@ pub fn update_opencode_model_selection(
         Some(id) => Some(validate_model_id(id)?),
     };
 
-    let override_path = opencode_model_selection_path()?;
+    let (default_model, default_small_model) = bundled_model_defaults()?;
+    let follows_default = model == default_model || small_model == default_small_model;
+    let model_override = ModelOverride {
+        model: (model != default_model).then(|| model.clone()),
+        small_model: (small_model != default_small_model).then(|| small_model.clone()),
+        subagent_model: subagent_model.clone(),
+    };
 
+    let override_path = opencode_model_selection_path()?;
+    if model_override.is_empty() {
+        match std::fs::remove_file(&override_path) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(format!("failed to remove model override: {error}")),
+        }
+    } else {
+        let stored = StoredOpenCodeModelSelection {
+            schema_version: 1,
+            model: model_override.model.clone(),
+            small_model: model_override.small_model.clone(),
+            subagent_model: model_override.subagent_model.clone(),
+        };
+        write_model_override_file(&override_path, &stored)?;
+    }
+
+    let subagent_note = match &subagent_model {
+        Some(id) => format!(", subagent_model={id}"),
+        None => ", subagents inherit the model".to_string(),
+    };
+    let default_note = if follows_default {
+        " A value equal to the bundled default is not stored and keeps following it."
+    } else {
+        ""
+    };
+    Ok(format!(
+        "Model selection saved. Run Install/Update to apply model={}, small_model={}{}.{}",
+        model, small_model, subagent_note, default_note
+    ))
+}
+
+/// Atomic write: unique temp file next to the target, fsync, then rename.
+fn write_model_override_file(
+    override_path: &Path,
+    stored: &StoredOpenCodeModelSelection,
+) -> Result<(), String> {
     // Ensure parent directory exists
     if let Some(parent) = override_path.parent() {
         std::fs::create_dir_all(parent)
             .map_err(|e| format!("failed to create app settings directory: {}", e))?;
     }
-
-    let stored = StoredOpenCodeModelSelection {
-        schema_version: 1,
-        model: model.clone(),
-        small_model: small_model.clone(),
-        subagent_model: subagent_model.clone(),
-    };
-
     let content =
-        serde_json::to_string_pretty(&stored).map_err(|e| format!("serialization error: {}", e))?;
+        serde_json::to_string_pretty(stored).map_err(|e| format!("serialization error: {}", e))?;
 
-    // Atomic write: unique temp file next to the target, fsync, then rename.
     static TMP_SEQUENCE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let tmp_name = format!(
         ".{}.{}-{}.tmp",
@@ -2124,19 +2163,11 @@ pub fn update_opencode_model_selection(
         let _ = std::fs::remove_file(&tmp_path);
         return Err(format!("failed to write model override: {}", e));
     }
-    if let Err(e) = std::fs::rename(&tmp_path, &override_path) {
+    if let Err(e) = std::fs::rename(&tmp_path, override_path) {
         let _ = std::fs::remove_file(&tmp_path);
         return Err(format!("failed to save model override: {}", e));
     }
-
-    let subagent_note = match &subagent_model {
-        Some(id) => format!(", subagent_model={id}"),
-        None => ", subagents inherit the model".to_string(),
-    };
-    Ok(format!(
-        "Model selection saved. Run Install/Update to apply model={}, small_model={}{}.",
-        model, small_model, subagent_note
-    ))
+    Ok(())
 }
 
 /// Delete the app-level override file, so the next Install/Update applies the bundled defaults
@@ -4252,72 +4283,162 @@ mod tests {
         path
     }
 
+    fn override_of(
+        model: Option<&str>,
+        small: Option<&str>,
+        subagent: Option<&str>,
+    ) -> ModelOverride {
+        let own = |value: Option<&str>| value.map(str::to_string);
+        ModelOverride {
+            model: own(model),
+            small_model: own(small),
+            subagent_model: own(subagent),
+        }
+    }
+
+    fn read_override_text(name: &str, content: &str) -> Option<ModelOverride> {
+        let dir = temp_root(name);
+        let path = write_override_file(&dir, "override.json", content);
+        let read = read_stored_opencode_model_override_from_path(&path);
+        cleanup(&dir);
+        read
+    }
+
     #[test]
-    fn test_read_stored_model_selection_returns_none_when_file_missing() {
+    fn test_read_stored_model_override_returns_none_when_file_missing() {
         let dir = temp_root("override-missing");
         let path = dir.join("nonexistent.json");
-        assert!(read_stored_opencode_model_selection_from_path(&path).is_none());
+        assert!(read_stored_opencode_model_override_from_path(&path).is_none());
         cleanup(&dir);
     }
 
     #[test]
-    fn test_read_stored_model_selection_returns_none_when_invalid_json() {
-        let dir = temp_root("override-bad-json");
-        let path = write_override_file(&dir, "override.json", "not json {{{");
-        assert!(read_stored_opencode_model_selection_from_path(&path).is_none());
-        cleanup(&dir);
+    fn test_read_stored_model_override_returns_none_when_invalid_json() {
+        assert!(read_override_text("override-bad-json", "not json {{{").is_none());
     }
 
     #[test]
-    fn test_read_stored_model_selection_parses_valid_file() {
-        let dir = temp_root("override-valid");
-        let path = write_override_file(
-            &dir,
-            "override.json",
+    fn test_read_stored_model_override_parses_a_file_with_both_main_models() {
+        // The shape every earlier app version wrote: two explicit overrides, no subagent model.
+        let read = read_override_text(
+            "override-valid",
             r#"{"schema_version":1,"model":"test/a","small_model":"test/b"}"#,
         );
-        let result = read_stored_opencode_model_selection_from_path(&path);
-        assert!(result.is_some());
-        let sel = result.unwrap();
-        assert_eq!(sel.model, "test/a");
-        assert_eq!(sel.small_model, "test/b");
-        cleanup(&dir);
+        assert_eq!(
+            read,
+            Some(override_of(Some("test/a"), Some("test/b"), None))
+        );
     }
 
     #[test]
-    fn test_read_stored_model_selection_returns_none_on_wrong_schema_version() {
-        let dir = temp_root("override-schema");
-        let path = write_override_file(
-            &dir,
-            "override.json",
+    fn test_read_stored_model_override_returns_none_on_wrong_schema_version() {
+        let read = read_override_text(
+            "override-schema",
             r#"{"schema_version":99,"model":"test/a","small_model":"test/b"}"#,
         );
-        assert!(read_stored_opencode_model_selection_from_path(&path).is_none());
-        cleanup(&dir);
+        assert!(read.is_none());
     }
 
     #[test]
-    fn test_read_stored_model_selection_returns_none_on_invalid_model_id() {
-        let dir = temp_root("override-bad-model");
-        let path = write_override_file(
-            &dir,
-            "override.json",
-            r#"{"schema_version":1,"model":"invalid","small_model":"test/b"}"#,
-        );
-        assert!(read_stored_opencode_model_selection_from_path(&path).is_none());
-        cleanup(&dir);
+    fn test_stored_override_values_are_optional_and_independent() {
+        for (content, expected) in [
+            (
+                r#"{"schema_version":1,"subagent_model":" e/f "}"#,
+                override_of(None, None, Some("e/f")),
+            ),
+            (
+                r#"{"schema_version":1,"small_model":"c/d"}"#,
+                override_of(None, Some("c/d"), None),
+            ),
+            (
+                r#"{"schema_version":1,"model":"a/b","small_model":"c/d","subagent_model":"e/f"}"#,
+                override_of(Some("a/b"), Some("c/d"), Some("e/f")),
+            ),
+        ] {
+            assert_eq!(
+                read_override_text("override-optional", content),
+                Some(expected)
+            );
+        }
     }
 
     #[test]
-    fn test_read_stored_model_selection_returns_none_on_empty_model() {
-        let dir = temp_root("override-empty-model");
-        let path = write_override_file(
-            &dir,
-            "override.json",
-            r#"{"schema_version":1,"model":"","small_model":"test/b"}"#,
+    fn test_a_malformed_stored_value_is_dropped_without_discarding_the_others() {
+        for (content, expected) in [
+            (
+                r#"{"schema_version":1,"model":"invalid","small_model":"test/b"}"#,
+                override_of(None, Some("test/b"), None),
+            ),
+            (
+                r#"{"schema_version":1,"model":"","small_model":"test/b"}"#,
+                override_of(None, Some("test/b"), None),
+            ),
+            (
+                r#"{"schema_version":1,"model":"a/b","small_model":"c/d","subagent_model":"nope"}"#,
+                override_of(Some("a/b"), Some("c/d"), None),
+            ),
+        ] {
+            assert_eq!(
+                read_override_text("override-malformed", content),
+                Some(expected)
+            );
+        }
+    }
+
+    #[test]
+    fn test_a_file_without_a_usable_value_is_no_override() {
+        for content in [
+            r#"{"schema_version":1}"#,
+            r#"{"schema_version":1,"model":"invalid","subagent_model":""}"#,
+        ] {
+            assert!(
+                read_override_text("override-empty", content).is_none(),
+                "{content}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_selection_takes_each_value_from_its_own_source() {
+        let defaults = || ("def/large".to_string(), "def/small".to_string());
+
+        let none = ModelOverride::default().selection_over(defaults());
+        assert_eq!(
+            (none.model.as_str(), none.small_model.as_str()),
+            ("def/large", "def/small")
         );
-        assert!(read_stored_opencode_model_selection_from_path(&path).is_none());
-        cleanup(&dir);
+        assert_eq!(none.subagent_model, "");
+        for source in [
+            &none.model_source,
+            &none.small_model_source,
+            &none.subagent_source,
+        ] {
+            assert_eq!(source, "bundled default");
+        }
+
+        let only_small = override_of(None, Some("mine/small"), None).selection_over(defaults());
+        assert_eq!(only_small.model, "def/large");
+        assert_eq!(only_small.small_model, "mine/small");
+        assert_eq!(
+            (
+                only_small.model_source.as_str(),
+                only_small.small_model_source.as_str(),
+                only_small.subagent_source.as_str()
+            ),
+            ("bundled default", "override", "bundled default")
+        );
+
+        let only_subagent = override_of(None, None, Some("mine/sub")).selection_over(defaults());
+        assert_eq!(only_subagent.model, "def/large");
+        assert_eq!(only_subagent.subagent_model, "mine/sub");
+        assert_eq!(
+            (
+                only_subagent.model_source.as_str(),
+                only_subagent.small_model_source.as_str(),
+                only_subagent.subagent_source.as_str()
+            ),
+            ("bundled default", "bundled default", "override")
+        );
     }
 
     #[test]
@@ -4412,8 +4533,8 @@ mod tests {
         // write override file (don't use real app support path, use our test path)
         let stored = StoredOpenCodeModelSelection {
             schema_version: 1,
-            model: "new-provider/new-model".to_string(),
-            small_model: "new-provider/new-small".to_string(),
+            model: Some("new-provider/new-model".to_string()),
+            small_model: Some("new-provider/new-small".to_string()),
             subagent_model: None,
         };
         let content = serde_json::to_string_pretty(&stored).unwrap();
@@ -4892,15 +5013,15 @@ exit 64"#
 
     const ROLES: [&str; 5] = ["repo-scout", "inspector", "sentinel", "verifier", "scribe"];
 
-    /// Write the app-level override of an isolated `home`: the main models of
-    /// `setup_synced_workspace` plus an optional subagent model.
+    /// Write the app-level override of an isolated `home`: only a subagent model, as a pane save
+    /// that changed nothing else leaves it. The main models keep following the template.
     fn write_override_for_home(home: &Path, subagent: Option<&str>) -> PathBuf {
         let path = opencode_model_selection_path_for_home(home).expect("override path");
         fs::create_dir_all(path.parent().expect("parent")).expect("create app support dir");
         let stored = StoredOpenCodeModelSelection {
             schema_version: 1,
-            model: "opencode-go/glm-5.2".to_string(),
-            small_model: "opencode-go/deepseek-v4.1-flash".to_string(),
+            model: None,
+            small_model: None,
             subagent_model: subagent.map(str::to_string),
         };
         fs::write(&path, serde_json::to_string_pretty(&stored).expect("json")).expect("write");
@@ -4915,49 +5036,50 @@ exit 64"#
     }
 
     #[test]
-    fn test_stored_selection_reads_the_optional_subagent_model() {
-        let dir = temp_root("override-subagent");
-        let read = |content: &str| {
-            let path = write_override_file(&dir, "override.json", content);
-            read_stored_opencode_model_selection_from_path(&path).expect("override reads")
-        };
-
-        let with = read(
-            r#"{"schema_version":1,"model":"a/b","small_model":"c/d","subagent_model":" e/f "}"#,
-        );
-        assert_eq!(with.subagent_model, "e/f");
-        assert_eq!(
-            (with.source.as_str(), with.subagent_source.as_str()),
-            ("override", "override")
-        );
-
-        // A file from an app version without the field: the roles inherit the main model.
-        let without = read(r#"{"schema_version":1,"model":"a/b","small_model":"c/d"}"#);
-        assert_eq!(without.subagent_model, "");
-        assert_eq!(
-            (without.source.as_str(), without.subagent_source.as_str()),
-            ("override", "bundled default")
-        );
-
-        // A malformed subagent model does not discard the main selection.
-        let malformed = read(
-            r#"{"schema_version":1,"model":"a/b","small_model":"c/d","subagent_model":"nope"}"#,
-        );
-        assert_eq!(
-            (malformed.model.as_str(), malformed.subagent_model.as_str()),
-            ("a/b", "")
-        );
-        cleanup(&dir);
-    }
-
-    #[test]
     fn test_override_without_a_subagent_model_renders_no_agent_entries_for_the_roles() {
         let home = temp_root("render-no-subagent");
-        write_override_for_home(&home, None);
+        let path = opencode_model_selection_path_for_home(&home).expect("override path");
+        write_override_file(
+            path.parent().expect("parent"),
+            "opencode-model-selection.json",
+            r#"{"schema_version":1,"model":"mine/large","small_model":"mine/small"}"#,
+        );
         let rendered =
             render_expected_opencode_config(&template_with_plan_block(), &home).expect("render");
         cleanup(&home);
+        assert_eq!(rendered["model"], "mine/large");
         assert_eq!(json_keys(&rendered["agent"]), ["plan"]);
+    }
+
+    #[test]
+    fn test_render_applies_only_the_values_the_override_holds() {
+        let home = temp_root("render-partial");
+        let path = opencode_model_selection_path_for_home(&home).expect("override path");
+        write_override_file(
+            path.parent().expect("parent"),
+            "opencode-model-selection.json",
+            r#"{"schema_version":1,"small_model":"mine/small"}"#,
+        );
+        let template =
+            |model: &str| serde_json::json!({"model": model, "small_model": "tpl/small"});
+
+        let first =
+            render_expected_opencode_config(&template("tpl/large-1"), &home).expect("render");
+        // The bundled default moves on (a model that is no longer listed, say): the value the user
+        // never chose follows it, the one they chose stays.
+        let later =
+            render_expected_opencode_config(&template("tpl/large-2"), &home).expect("render");
+        cleanup(&home);
+
+        assert_eq!(first["model"], "tpl/large-1");
+        assert_eq!(later["model"], "tpl/large-2");
+        for rendered in [&first, &later] {
+            assert_eq!(rendered["small_model"], "mine/small");
+            assert!(
+                rendered.get("agent").is_none(),
+                "no subagent model, no role entries"
+            );
+        }
     }
 
     #[test]

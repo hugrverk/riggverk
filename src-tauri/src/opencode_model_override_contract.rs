@@ -203,6 +203,182 @@ fn read_stored_override() -> serde_json::Value {
         .expect("parse stored override")
 }
 
+/// The `model`, `small_model` and subagent sources of a selection, as the pane receives them.
+fn sources(selection: &impl serde::Serialize) -> Vec<String> {
+    let json = serde_json::to_value(selection).expect("serialize selection");
+    ["model_source", "small_model_source", "subagent_source"]
+        .iter()
+        .map(|key| json[key].as_str().expect("source is a string").to_string())
+        .collect()
+}
+
+/// The bundled `model` and `small_model` of an isolated home (no override, no workspace).
+fn bundled_defaults() -> (String, String) {
+    let selection = crate::commands::read_opencode_model_selection().expect("read defaults");
+    (selection.model, selection.small_model)
+}
+
+fn stored_keys() -> Vec<String> {
+    let mut keys: Vec<String> = read_stored_override()
+        .as_object()
+        .expect("stored override is an object")
+        .keys()
+        .cloned()
+        .collect();
+    keys.sort();
+    keys
+}
+
+#[test]
+fn saving_only_a_subagent_model_leaves_the_main_models_following_the_bundled_default() {
+    with_isolated_home("subagent-only", |home| {
+        let (default_model, default_small) = bundled_defaults();
+
+        // The pane sends all three values; the two the user did not change equal the defaults.
+        crate::commands::update_opencode_model_selection(
+            default_model.clone(),
+            default_small.clone(),
+            Some("cheap/fast".to_string()),
+        )
+        .expect("save a subagent model only");
+
+        assert_eq!(stored_keys(), ["schema_version", "subagent_model"]);
+        let selection = crate::commands::read_opencode_model_selection().expect("read");
+        assert_eq!(selection.model, default_model);
+        assert_eq!(selection.small_model, default_small);
+        assert_eq!(selection.subagent_model, "cheap/fast");
+        assert_eq!(
+            sources(&selection),
+            ["bundled default", "bundled default", "override"]
+        );
+
+        // The bundled default moves on: the next install reaches the user, the subagent model stays.
+        let template =
+            |model: &str, small: &str| serde_json::json!({"model": model, "small_model": small});
+        let install = |installed: &serde_json::Value, template: &serde_json::Value| {
+            let rendered = crate::commands::render_expected_opencode_config(template, home)
+                .expect("render expected config");
+            crate::commands::merge_managed_opencode_config(
+                installed,
+                &crate::commands::extract_managed_opencode_config(&rendered),
+            )
+        };
+        let first = install(
+            &serde_json::json!({}),
+            &template("bundled/large-1", "bundled/small-1"),
+        );
+        assert_eq!(first["model"], "bundled/large-1");
+        let later = install(&first, &template("bundled/large-2", "bundled/small-2"));
+        assert_eq!(later["model"], "bundled/large-2");
+        assert_eq!(later["small_model"], "bundled/small-2");
+        for role in ROLES {
+            assert_eq!(later["agent"][role]["model"], "cheap/fast", "{role}");
+        }
+    });
+}
+
+#[test]
+fn values_equal_to_the_bundled_default_are_not_stored() {
+    with_isolated_home("equal-default", |_home| {
+        let (default_model, default_small) = bundled_defaults();
+
+        crate::commands::update_opencode_model_selection(
+            default_model.clone(),
+            "mine/small".to_string(),
+            None,
+        )
+        .expect("save a small model only");
+        assert_eq!(stored_keys(), ["schema_version", "small_model"]);
+        let selection = crate::commands::read_opencode_model_selection().expect("read");
+        assert_eq!(
+            sources(&selection),
+            ["bundled default", "override", "bundled default"]
+        );
+
+        // Changing the model too stores it; setting it back to the default drops it again.
+        crate::commands::update_opencode_model_selection(
+            "mine/large".to_string(),
+            "mine/small".to_string(),
+            None,
+        )
+        .expect("save both");
+        assert_eq!(stored_keys(), ["model", "schema_version", "small_model"]);
+        crate::commands::update_opencode_model_selection(
+            default_model.clone(),
+            "mine/small".to_string(),
+            None,
+        )
+        .expect("save the default model again");
+        assert_eq!(stored_keys(), ["schema_version", "small_model"]);
+
+        // Nothing left to override: the file is deleted, not written empty.
+        let message =
+            crate::commands::update_opencode_model_selection(default_model, default_small, None)
+                .expect("save only defaults");
+        assert!(message.contains("not stored"), "{message}");
+        assert!(
+            !stored_override_path().exists(),
+            "{:?}",
+            stored_override_path()
+        );
+        let selection = crate::commands::read_opencode_model_selection().expect("read");
+        assert_eq!(sources(&selection), ["bundled default"; 3]);
+
+        // Saving defaults when there is no file is fine too.
+        let (model, small) = bundled_defaults();
+        crate::commands::update_opencode_model_selection(model, small, None)
+            .expect("save defaults without an override");
+        assert!(!stored_override_path().exists());
+    });
+}
+
+#[test]
+fn an_old_file_with_both_main_models_still_applies_both_as_explicit_overrides() {
+    with_isolated_home("old-file", |home| {
+        let (default_model, _) = bundled_defaults();
+        let path = stored_override_path();
+        fs::create_dir_all(path.parent().expect("parent")).expect("create app support dir");
+        // What every earlier app version wrote: both models, no subagent model. The first equals
+        // the bundled default, which an old file keeps as an explicit override.
+        fs::write(
+            &path,
+            format!(
+                r#"{{"schema_version":1,"model":"{default_model}","small_model":"old/small"}}"#
+            ),
+        )
+        .expect("write old override");
+
+        let selection = crate::commands::read_opencode_model_selection().expect("read");
+        assert_eq!(selection.model, default_model);
+        assert_eq!(selection.small_model, "old/small");
+        assert_eq!(
+            sources(&selection),
+            ["override", "override", "bundled default"]
+        );
+
+        let template = serde_json::json!({"model": "tpl/large", "small_model": "tpl/small"});
+        let rendered = crate::commands::render_expected_opencode_config(&template, home)
+            .expect("render expected config");
+        assert_eq!(rendered["model"], default_model.as_str());
+        assert_eq!(rendered["small_model"], "old/small");
+        assert!(rendered.get("agent").is_none());
+
+        // A pane save that only adds a subagent model keeps the explicit small model. The model
+        // equals the bundled default, so it is stored as absent from now on and follows it.
+        crate::commands::update_opencode_model_selection(
+            selection.model.clone(),
+            selection.small_model.clone(),
+            Some("cheap/fast".to_string()),
+        )
+        .expect("save with a subagent model");
+        assert_eq!(
+            stored_keys(),
+            ["schema_version", "small_model", "subagent_model"]
+        );
+        assert_eq!(read_stored_override()["small_model"], "old/small");
+    });
+}
+
 #[test]
 fn subagent_model_is_stored_with_the_override_and_cleared_by_saving_without_it() {
     with_isolated_home("subagent-store", |_home| {
@@ -216,13 +392,7 @@ fn subagent_model_is_stored_with_the_override_and_cleared_by_saving_without_it()
 
         let selection = crate::commands::read_opencode_model_selection().expect("read override");
         assert_eq!(selection.subagent_model, "cheap/fast");
-        assert_eq!(
-            (
-                selection.source.as_str(),
-                selection.subagent_source.as_str()
-            ),
-            ("override", "override")
-        );
+        assert_eq!(sources(&selection), ["override", "override", "override"]);
         assert_eq!(read_stored_override()["subagent_model"], "cheap/fast");
 
         // An empty value means "inherit the main model": the key is not stored at all.
@@ -236,8 +406,10 @@ fn subagent_model_is_stored_with_the_override_and_cleared_by_saving_without_it()
             let selection =
                 crate::commands::read_opencode_model_selection().expect("read override");
             assert_eq!(selection.subagent_model, "");
-            assert_eq!(selection.source, "override");
-            assert_eq!(selection.subagent_source, "bundled default");
+            assert_eq!(
+                sources(&selection),
+                ["override", "override", "bundled default"]
+            );
             assert!(read_stored_override().get("subagent_model").is_none());
         }
     });
@@ -381,13 +553,7 @@ fn reset_deletes_the_override_and_returns_to_the_bundled_default() {
         let selection = crate::commands::read_opencode_model_selection().expect("read");
         assert_ne!(selection.model, "main/large");
         assert_eq!(selection.subagent_model, "");
-        assert_eq!(
-            (
-                selection.source.as_str(),
-                selection.subagent_source.as_str()
-            ),
-            ("bundled default", "bundled default")
-        );
+        assert_eq!(sources(&selection), ["bundled default"; 3]);
 
         // Resetting what is not there is not an error.
         assert!(crate::commands::reset_opencode_model_selection().is_ok());
@@ -401,7 +567,7 @@ fn reset_removes_an_override_file_that_no_longer_parses() {
         fs::create_dir_all(path.parent().expect("parent")).expect("create app support dir");
         fs::write(&path, "{not json").expect("write corrupt override");
         let selection = crate::commands::read_opencode_model_selection().expect("read");
-        assert_eq!(selection.source, "bundled default");
+        assert_eq!(sources(&selection), ["bundled default"; 3]);
 
         crate::commands::reset_opencode_model_selection().expect("reset");
         assert!(!path.exists());

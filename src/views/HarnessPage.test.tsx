@@ -376,7 +376,8 @@ describe("OpenCodeView model override", () => {
     model: "anthropic/claude-sonnet-4-5",
     small_model: "anthropic/claude-haiku-4-5",
     subagent_model: "",
-    source: "bundled default",
+    model_source: "bundled default",
+    small_model_source: "bundled default",
     subagent_source: "bundled default",
   };
   const MODELS = ["anthropic/claude-sonnet-4-5", "anthropic/claude-haiku-4-5", "openai/gpt-5"];
@@ -391,7 +392,15 @@ describe("OpenCodeView model override", () => {
           return { models, warning };
         case "update_opencode_model_selection": {
           const subagent = args!.subagentModel ?? "";
-          selection = { model: args!.model!, small_model: args!.smallModel!, subagent_model: subagent, source: "override", subagent_source: subagent ? "override" : "bundled default" };
+          // Like the backend: only a value that differs from the bundled default is an override.
+          selection = {
+            model: args!.model!,
+            small_model: args!.smallModel!,
+            subagent_model: subagent,
+            model_source: args!.model === BUNDLED.model ? "bundled default" : "override",
+            small_model_source: args!.smallModel === BUNDLED.small_model ? "bundled default" : "override",
+            subagent_source: subagent ? "override" : "bundled default",
+          };
           return saveResult;
         }
         case "reset_opencode_model_selection":
@@ -520,11 +529,12 @@ describe("OpenCodeView model override", () => {
       }));
       await waitFor(() => expect(onModelUpdated).toHaveBeenCalledTimes(1));
       await waitFor(() => expect(subagent().value).toBe("openai/gpt-5"));
-      expect(sourceLines()[2]).toContain("source: override");
+      // Only what the user changed is an override: the main models keep following the bundled default.
+      expect(sourceLines().map(line => line.split(" · ")[0])).toEqual(["source: bundled default", "source: bundled default", "source: override"]);
     });
 
     it("can be cleared by choosing inherit and saving", async () => {
-      backend({ initial: { ...BUNDLED, subagent_model: "openai/gpt-5", source: "override", subagent_source: "override" } });
+      backend({ initial: { ...BUNDLED, subagent_model: "openai/gpt-5", subagent_source: "override" } });
       renderOpenCode();
       await waitFor(() => expect(subagent().value).toBe("openai/gpt-5"));
       fireEvent.change(subagent(), { target: { value: "" } });
@@ -566,25 +576,26 @@ describe("OpenCodeView model override", () => {
     });
 
     it("shows an override as pending apply, with the update key, while the installed config differs", async () => {
-      backend({ initial: { ...BUNDLED, model: "openai/gpt-5", source: "override" } });
+      backend({ initial: { ...BUNDLED, model: "openai/gpt-5", model_source: "override" } });
       renderOpenCode(vi.fn(), diverged("model"));
       await waitFor(() => expect(model().value).toBe("openai/gpt-5"));
       await waitFor(() => expect(sourceLines()).toHaveLength(3));
       const [main, small, sub] = sourceLines();
       expect(main).toBe("source: override · state: pending apply (u to update)");
       // Only the managed keys that differ are pending: the small model and the subagent model are installed.
-      expect(small).toBe("source: override · state: applied");
+      // Each value has its own source: the small model was never overridden.
+      expect(small).toBe("source: bundled default · state: applied");
       expect(sub).toBe("source: bundled default · state: applied");
     });
 
     it("marks the subagent model pending when any role entry differs", async () => {
-      backend({ initial: { ...BUNDLED, subagent_model: "openai/gpt-5", source: "override", subagent_source: "override" } });
+      backend({ initial: { ...BUNDLED, subagent_model: "openai/gpt-5", subagent_source: "override" } });
       renderOpenCode(vi.fn(), diverged("agent.inspector.model", "agent.scribe.model"));
       await waitFor(() => expect(subagent().value).toBe("openai/gpt-5"));
       await waitFor(() => expect(sourceLines()).toHaveLength(3));
       expect(sourceLines()).toEqual([
-        "source: override · state: applied",
-        "source: override · state: applied",
+        "source: bundled default · state: applied",
+        "source: bundled default · state: applied",
         "source: override · state: pending apply (u to update)",
       ]);
     });
@@ -604,7 +615,7 @@ describe("OpenCodeView model override", () => {
   });
 
   describe("reset", () => {
-    const OVERRIDE: OpenCodeModelSelection = { model: "openai/gpt-5", small_model: "anthropic/claude-haiku-4-5", subagent_model: "anthropic/claude-haiku-4-5", source: "override", subagent_source: "override" };
+    const OVERRIDE: OpenCodeModelSelection = { model: "openai/gpt-5", small_model: "anthropic/claude-haiku-4-5", subagent_model: "anthropic/claude-haiku-4-5", model_source: "override", small_model_source: "bundled default", subagent_source: "override" };
 
     it("deletes the override with x and returns every row to the bundled default", async () => {
       backend({ initial: OVERRIDE });
@@ -678,7 +689,7 @@ describe("OpenCodeView model override", () => {
     });
 
     it("marks a value that opencode models does not list, and only that one", async () => {
-      backend({ initial: { ...BUNDLED, model: "gone/model-1", source: "override" } });
+      backend({ initial: { ...BUNDLED, model: "gone/model-1", model_source: "override" } });
       renderOpenCode();
       await waitFor(() => expect(model().value).toBe("gone/model-1"));
       const labels = [...model().querySelectorAll("option")].map(option => option.textContent);
@@ -688,7 +699,7 @@ describe("OpenCodeView model override", () => {
     });
 
     it("marks nothing unavailable while the listing is unknown or partial", async () => {
-      backend({ initial: { ...BUNDLED, model: "gone/model-1", source: "override" }, warning: "opencode models reported a non-zero exit." });
+      backend({ initial: { ...BUNDLED, model: "gone/model-1", model_source: "override" }, warning: "opencode models reported a non-zero exit." });
       renderOpenCode();
       await waitFor(() => expect(model().value).toBe("gone/model-1"));
       await screen.findByText("opencode models reported a non-zero exit.");

@@ -198,8 +198,9 @@ Keys in the pane: `e` edit, `s` save, `x` reset to the bundled default, `R` relo
 
 Each value has a line under it:
 
-- `source: override | bundled default`. `override` means the app-level file below holds the value. `bundled default` means the template's value, or for the subagent model "inherit the main model". `model` and `small model` are always saved together, so they share a source: saving only a new subagent model also stores the two current main values.
+- `source: override | bundled default`. `override` means the app-level file below holds the value. `bundled default` means the template's value, or for the subagent model "inherit the main model". Each of the three values has its own source: only a value you changed is an override.
 - `state: applied | pending apply (u to update)`. The saved override (or the bundled default) is compared with the installed `opencode.json`: `pending apply` means an install (`u`, then `y`) would still change that value, for the subagent model when any of the five role entries differs. The state is left out while runtime health is not loaded.
+- Saving (`s`) stores only the values that differ from the current bundled default. A `model` or `small model` equal to it is left out of the file and keeps following the template, so a later change of the bundled default (a model that is no longer listed, say) reaches you with the next install. Setting a value back to the bundled default and saving drops it from the file again. When nothing is left, the file is deleted instead of being written empty. Saving only a new subagent model therefore leaves `model` and `small model` on the bundled default.
 - `x` deletes the override file in one step and returns all three rows to the bundled default (unsaved edits are dropped too). The installed config keeps its values until the next install, which writes the bundled models and removes the subagent entries. `x` is offered only while an override exists.
 
 The options of each field are grouped by provider (`<optgroup>`). A value that `opencode models` does not list (a provider that is not signed in, a removed model, a typed custom one) stays selectable but is marked `(not in opencode models)`; nothing is marked while the list is unavailable or incomplete. For a custom provider choose `custom provider/model…`, which turns the field into a text input (Esc returns to the list). The text input is also used while no model list is available.
@@ -214,11 +215,11 @@ A saved selection is stored in an app-level override file:
 | Linux | `${XDG_CONFIG_HOME:-~/.config}/ai.agentworkspace.app/opencode-model-selection.json` |
 | Windows | `%APPDATA%\ai.agentworkspace.app\opencode-model-selection.json` |
 
-This file is **not** part of the workspace templates. It is an app-preference file stored outside the workspace source tree. It does not affect `templates/opencode.base.json` or `templates/opencode.json`. It holds `schema_version`, `model`, `small_model` and, only while set, `subagent_model`; an override saved by an older app version has no `subagent_model` and reads as "inherit". A `subagent_model` that is not `provider/model` is ignored while the two main models are kept.
+This file is **not** part of the workspace templates. It is an app-preference file stored outside the workspace source tree. It does not affect `templates/opencode.base.json` or `templates/opencode.json`. It holds `schema_version` and, only for the values you chose, `model`, `small_model` and `subagent_model`. A file written by an earlier app version has both `model` and `small_model` and no `subagent_model`: it reads as two explicit overrides (and "inherit" for the subagents) and keeps applying both until you change them back to the bundled default or press `x`. A value that is not `provider/model` is ignored on its own; the others still apply.
 
-The override takes effect on the next OpenCode install (`u`, `y`). The installed `~/.config/opencode/opencode.json` receives the selected model and small_model from the override file. Workspace templates are not mutated.
+The override takes effect on the next OpenCode install (`u`, `y`). The installed `~/.config/opencode/opencode.json` receives the `model`, `small_model` and subagent entries the override file holds; every other value comes from the template. Workspace templates are not mutated.
 
-If no override exists, the workspace `templates/opencode.base.json` values are used as the source of truth for model selection.
+A value the override does not hold is read from the workspace `templates/opencode.base.json` (or the built-in defaults) as the source of truth for model selection.
 
 ### Subagent model
 
