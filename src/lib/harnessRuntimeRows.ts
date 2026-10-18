@@ -4,6 +4,7 @@ import type {
   ClaudeRuntimeHealth,
   CodexRuntimeHealth,
   CursorProfileHealth,
+  OpenCodeCliHealth,
   OpenCodeRuntimeHealth,
 } from "../types";
 import { runtimeChipLabel, runtimeChipTone } from "./runtimeUi";
@@ -66,11 +67,49 @@ function codexRows(health: CodexRuntimeHealth): KvItem[] {
   ];
 }
 
+/** The CLI version, or why there is none. An unsupported major's full explanation is in the warnings. */
+function opencodeCliRow(cli: OpenCodeCliHealth | null): KvItem[] {
+  if (!cli) return [];
+  switch (cli.status) {
+    case "supported": return [{ label: "cli", value: cli.version ?? "found", tone: "ok" }];
+    case "unsupported": return [{ label: "cli", value: `${cli.version ?? "unknown"} · unsupported`, tone: "warn" }];
+    case "missing": return [{ label: "cli", value: cli.detail, tone: "warn", wrap: true }];
+    default: return [{ label: "cli", value: "found · version unknown", tone: "dim" }];
+  }
+}
+
+/** `installed/bundled`, then the files that are not as bundled, grouped by their status: "missing: a.md". */
+function opencodeAgentsRow(health: OpenCodeRuntimeHealth): KvItem {
+  const filesByStatus = new Map<string, string[]>();
+  for (const { status, filename } of health.agent_mismatches) filesByStatus.set(status, [...(filesByStatus.get(status) ?? []), filename]);
+  const groups = [...filesByStatus].map(([status, files]) => `${status}: ${files.join(", ")}`);
+  return {
+    label: "agents",
+    value: [`${health.installed_bundled_agent_count}/${health.bundled_agent_count} installed`, ...groups].join(" · "),
+    tone: groups.length > 0 ? "warn" : "ok",
+    wrap: groups.length > 0,
+  };
+}
+
+/** The status, then the managed keys that differ from the bundled config. */
+function opencodeConfigRow(health: OpenCodeRuntimeHealth): KvItem {
+  const keys = health.config_diverged_keys;
+  const status = runtimeChipLabel(health.config_status).toLowerCase();
+  return { label: "config", value: keys.length > 0 ? `${status} · ${keys.join(", ")}` : status, tone: toneOf(health.config_status), wrap: keys.length > 0 };
+}
+
 function opencodeRows(health: OpenCodeRuntimeHealth): KvItem[] {
+  const playwright = health.playwright_mcp_version;
   return [
+    ...opencodeCliRow(health.cli),
     ...textRow("default agent", health.default_agent),
     ...textRow("autoupdate", health.autoupdate),
-    { label: "agents", value: `${health.installed_bundled_agent_count}/${health.bundled_agent_count} installed`, tone: health.agent_mismatches.length > 0 ? "warn" : "ok" },
+    statusRow("rules", health.rules_status),
+    opencodeAgentsRow(health),
+    opencodeConfigRow(health),
+    playwright
+      ? { label: "mcp playwright", value: playwright, tone: health.config_diverged_keys.includes("mcp.playwright") ? "warn" as const : "ok" as const }
+      : { label: "mcp playwright", value: "none", tone: "dim" as const },
     statusRow("tui", health.tui_status),
     ...nextRows(health.status, health.next_action),
     ...warningRows(health.warnings),
