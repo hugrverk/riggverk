@@ -8,6 +8,7 @@ import {
   op,
   overviewOf,
   settingsOf,
+  skillLoadsOf,
   STATUS_DATA,
   surfaceStatus,
 } from "../test/pageFixtures";
@@ -112,6 +113,7 @@ function props(overrides: Partial<HarnessViewProps> = {}): HarnessViewProps & { 
     agentTargets: TARGETS,
     settingsSaveStatus: "saved",
     onToggleTarget: vi.fn(),
+    skillLoads: skillLoadsOf(),
     overview: overviewOf({}),
     install: installScreenOf(),
     backupRoot: "/tmp/backups",

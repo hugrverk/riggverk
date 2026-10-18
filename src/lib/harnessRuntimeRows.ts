@@ -138,8 +138,7 @@ function claudeRows(health: ClaudeRuntimeHealth): KvItem[] {
   ];
 }
 
-/** `key  value` rows for the runtime section of a harness page. */
-export function runtimeRowsFor({ harness, health }: HarnessRuntimeHealth): KvItem[] {
+function healthRows({ harness, health }: HarnessRuntimeHealth): KvItem[] {
   // Not loaded yet: the heading says so.
   if (!health) return [];
   switch (harness) {
@@ -148,6 +147,22 @@ export function runtimeRowsFor({ harness, health }: HarnessRuntimeHealth): KvIte
     case "cursor": return cursorRows(health);
     case "claude": return claudeRows(health);
   }
+}
+
+/** The skill-load rows go below the skills row, or the agents row where there is none (OpenCode), else last. */
+function withSkillLoadRows(rows: KvItem[], skillLoadRows: readonly KvItem[]): KvItem[] {
+  if (skillLoadRows.length === 0) return rows;
+  const after = ["skills", "agents"].map(label => rows.findIndex(row => row.label === label)).find(index => index >= 0);
+  const at = after === undefined ? rows.length : after + 1;
+  return [...rows.slice(0, at), ...skillLoadRows, ...rows.slice(at)];
+}
+
+/**
+ * `key  value` rows for the runtime section of a harness page. `skillLoadRows` (which skill copies the harness
+ * loads) come from the load view, not from the health, so they are shown even while the health is not loaded.
+ */
+export function runtimeRowsFor(runtime: HarnessRuntimeHealth, skillLoadRows: readonly KvItem[] = []): KvItem[] {
+  return withSkillLoadRows(healthRows(runtime), skillLoadRows);
 }
 
 /** Short verdict for the runtime group heading: "synced", "diverged", "not loaded". */

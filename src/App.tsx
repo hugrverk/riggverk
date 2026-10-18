@@ -13,6 +13,7 @@ import { useApplyProgress } from "./hooks/useApplyProgress";
 import { useScanOnSuccess } from "./hooks/useScanOnSuccess";
 import { useWorkspacePicker } from "./hooks/useWorkspacePicker";
 import { workspaceTaskBlockedMessage } from "./lib/workspaceErrors";
+import { useEffectiveSkillLoads } from "./hooks/useEffectiveSkillLoads";
 import { useInstallationOverview } from "./hooks/useInstallationOverview";
 import { useInstallScreen } from "./hooks/useInstallScreen";
 import { useRollbackRequest } from "./hooks/useRollbackRequest";
@@ -584,10 +585,23 @@ function AppShell() {
     enabledTargetIds: savedSelection?.targetIds,
     refreshKey: overviewRefreshKey,
   });
+  // The folders the overview describes, read as the harnesses will load them.
+  const skillLoads = useEffectiveSkillLoads({
+    workspaceValid,
+    busy: wsRunning !== null,
+    enabledHarnessIds: savedSelection?.harnessIds ?? [],
+    refreshKey: overviewRefreshKey,
+  });
 
   const refreshAll = useCallback(async () => {
-    await Promise.all([loadWorkspaceDiagnostics(), loadWorkspaceResources(), loadBackups(), overview.refresh()]);
-  }, [loadWorkspaceDiagnostics, loadWorkspaceResources, loadBackups, overview.refresh]);
+    await Promise.all([
+      loadWorkspaceDiagnostics(),
+      loadWorkspaceResources(),
+      loadBackups(),
+      overview.refresh(),
+      skillLoads.refresh(),
+    ]);
+  }, [loadWorkspaceDiagnostics, loadWorkspaceResources, loadBackups, overview.refresh, skillLoads.refresh]);
 
   // What the Start and harness pages share: the output pane, the install review and the rollback path.
   const pageProps = {
@@ -611,6 +625,7 @@ function AppShell() {
     runWorkspaceTask: runWsTask,
     refreshAfterApply,
     onApplied,
+    skillLoads,
     appSettings,
     agentTargets: visibleAgentTargets,
     settingsSaveStatus,
