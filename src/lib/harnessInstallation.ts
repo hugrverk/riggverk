@@ -12,16 +12,16 @@ import {
 /**
  * Every surface of a harness, regardless of target toggles. Use `enabledSurfacesForHarness` to install.
  * `skills` is listed for every harness but belongs to none: one global surface installs into the folders
- * all the enabled harnesses read. The light harnesses (Copilot, Pi, Kilo) have nothing else yet.
+ * all the enabled harnesses read. The light harnesses (Copilot, Pi, Kilo) add one rules file each.
  */
 export const HARNESS_SURFACES: Record<InstallAgent, SetupSurfaceId[]> = {
   codex: ["codex_config", "codex_agents", "codex_rules", "skills"],
   opencode: ["open_code_config", "open_code_agents", "open_code_rules", "skills"],
   claude: ["claude_rules", "claude_agents", "skills"],
   cursor: ["cursor_agents", "skills", "cursor_mcp"],
-  copilot: ["skills"],
-  pi: ["skills"],
-  kilo: ["skills"],
+  copilot: ["copilot_rules", "skills"],
+  pi: ["pi_rules", "skills"],
+  kilo: ["kilo_rules", "skills"],
 };
 
 /** Surfaces shown on every harness page that belong to no single harness. */
@@ -36,7 +36,10 @@ export type SetupTargetId =
   | "opencode_config"
   | "claude_rules"
   | "claude_agents"
-  | "cursor_setup";
+  | "cursor_setup"
+  | "copilot_rules"
+  | "pi_rules"
+  | "kilo_rules";
 
 /**
  * Surfaces gated by each target toggle. Mirrors `agent_targets::target_surfaces` in the backend.
@@ -52,6 +55,9 @@ export const TARGET_SURFACES: Record<SetupTargetId, readonly SetupSurfaceId[]> =
   claude_rules: ["claude_rules"],
   claude_agents: ["claude_agents"],
   cursor_setup: ["cursor_agents", "cursor_mcp"],
+  copilot_rules: ["copilot_rules"],
+  pi_rules: ["pi_rules"],
+  kilo_rules: ["kilo_rules"],
 };
 
 /** Targets that start OFF (`codex_config` rewrites the user's Codex approval/sandbox posture). */
@@ -68,6 +74,9 @@ const TARGET_IDS_REGISTRY_ORDER: readonly SetupTargetId[] = [
   "opencode_config",
   "codex_config",
   "cursor_setup",
+  "copilot_rules",
+  "pi_rules",
+  "kilo_rules",
 ];
 
 /** Mirrors `agent_targets::default_enabled_ids`. */

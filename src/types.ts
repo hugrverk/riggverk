@@ -88,13 +88,28 @@ export interface SurfaceInstallationStatus {
 }
 
 /** The surfaces that hold a rules file with the managed base block. */
-export type RulesSurfaceId = "claude_rules" | "codex_rules" | "open_code_rules";
+export type RulesSurfaceId =
+  | "claude_rules"
+  | "codex_rules"
+  | "open_code_rules"
+  | "copilot_rules"
+  | "pi_rules"
+  | "kilo_rules";
 
 /** `absent` (no file), `block` (managed markers), `legacy` (no markers) or `malformed` (markers cannot be split). */
 export type RulesLayout = "absent" | "block" | "legacy" | "malformed";
 
-/** Why the app leaves a rules file alone. */
-export type RulesConflictReason = "base_block_edited" | "legacy_diverged" | "malformed_markers";
+/**
+ * Why the app leaves a rules file alone. The last two are not about the file itself: another file in its folder
+ * keeps the harness from reading it (`masked_by_override`), or the harness reads another file there and a new
+ * one would hide it (`peer_context_file`).
+ */
+export type RulesConflictReason =
+  | "base_block_edited"
+  | "legacy_diverged"
+  | "malformed_markers"
+  | "masked_by_override"
+  | "peer_context_file";
 
 export type RulesMalformedReason =
   | "not_utf8"
@@ -505,12 +520,26 @@ export interface LightSkillsHealth {
   roots: string[];
 }
 
-/** Runtime health of Copilot, Pi and Kilo (`get_light_runtime_health`). Rules and MCP are not managed yet. */
+export interface LightRulesHealth {
+  /** `synced`, `stale` (a base update waits), `missing`, `diverged` (a conflict), `off` (target switched off) or `unknown`. */
+  status: string;
+  /** The rules file as people know it (`~/.pi/agent/AGENTS.md`). */
+  path: string;
+  /** Non-blank lines of the user's own around the block; kept on every update. */
+  refinement_lines: number;
+  user_managed: boolean;
+  conflict_reason?: RulesConflictReason | null;
+  /** The surface's status line: counts and reasons, never file text. */
+  detail: string;
+}
+
+/** Runtime health of Copilot, Pi and Kilo (`get_light_runtime_health`). MCP is not managed yet. */
 export interface LightRuntimeHealth {
   harness: LightAgent;
-  /** The skills status: the only part the app manages for these harnesses so far. */
+  /** The skills status; once the skills are fine, the rules status (unless that target is off). */
   status: string;
   cli: LightCliHealth;
+  rules: LightRulesHealth;
   skills: LightSkillsHealth;
   warnings: string[];
   next_action: string;
@@ -536,6 +565,9 @@ export type SetupSurfaceId =
   | "skills"
   | "cursor_agents"
   | "cursor_mcp"
+  | "copilot_rules"
+  | "pi_rules"
+  | "kilo_rules"
   | "workspace_bundle";
 
 export type OperationKind =

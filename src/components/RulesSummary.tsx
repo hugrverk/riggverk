@@ -20,6 +20,9 @@ export function RulesSummary({ model, error }: { model: RulesModel; error?: stri
     ...(model.kind === "malformed"
       ? [{ label: "fix", value: "fix the markers by hand; the app never rewrites a file whose block it cannot split", tone: "dim" as const, wrap: true }]
       : []),
+    ...(model.kind === "blocked"
+      ? [{ label: "fix", value: "remove or rename the other file, or add the base to it by hand; the app does not touch it", tone: "dim" as const, wrap: true }]
+      : []),
   ];
   return (
     <>

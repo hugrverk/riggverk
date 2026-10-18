@@ -29,10 +29,13 @@ describe("defaultSettings", () => {
       "claude_rules",
       "codex_agents",
       "codex_rules",
+      "copilot_rules",
       "cursor_setup",
+      "kilo_rules",
       "opencode_agents",
       "opencode_config",
       "opencode_rules",
+      "pi_rules",
     ]);
     expect(DEFAULT_TARGET_IDS).not.toContain("codex_config");
   });

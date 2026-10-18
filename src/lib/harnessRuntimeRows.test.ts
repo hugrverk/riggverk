@@ -243,17 +243,41 @@ describe("light harness runtime rows", () => {
     harness: "kilo",
     status: "synced",
     cli: { status: "found", version: "7.8.12", source: "path", detail: "Kilo 7.8.12" },
+    rules: { status: "synced", path: "~/.config/kilo/AGENTS.md", refinement_lines: 0, user_managed: false, conflict_reason: null, detail: "installed and current" },
     skills: { status: "synced", synced: 17, expected: 17, roots: ["~/.claude/skills", "~/.agents/skills"] },
     warnings: [],
     next_action: "No runtime action needed.",
     ...overrides,
   });
+  const rulesHealth = (rules: Partial<LightRuntimeHealth["rules"]>) => health({ rules: { ...health().rules, ...rules } });
 
-  it("lists the CLI and the skills only, with the skill loads below the skills row", () => {
+  it("lists the CLI, the rules file and the skills, with the skill loads below the skills row", () => {
     const rows = runtimeRowsFor({ harness: "kilo", health: health() }, LOADS);
-    expect(labelsOf(rows)).toEqual(["cli", "skills", "skill loads"]);
+    expect(labelsOf(rows)).toEqual(["cli", "rules", "skills", "skill loads"]);
     expect(rows[0]).toEqual({ label: "cli", value: "7.8.12", tone: "ok" });
-    expect(rows[1]).toEqual({ label: "skills", value: "synced · 17/17", tone: "ok" });
+    expect(rows[1]).toEqual({ label: "rules", value: "synced", tone: "ok", wrap: false });
+    expect(rows[2]).toEqual({ label: "skills", value: "synced · 17/17", tone: "ok" });
+  });
+
+  it("says what is wrong with the rules file in the rules row", () => {
+    const row = (rules: Partial<LightRuntimeHealth["rules"]>) => runtimeRowsFor({ harness: "kilo", health: rulesHealth(rules) }).find(candidate => candidate.label === "rules");
+    expect(row({ status: "missing", detail: "1 to install" })).toMatchObject({ value: "missing", tone: "fail" });
+    expect(row({ status: "stale", detail: "base update available; refinements: 5 lines preserved" })).toMatchObject({
+      value: "stale · base update available; refinements: 5 lines preserved",
+      tone: "warn",
+      wrap: true,
+    });
+    expect(row({ status: "diverged", conflict_reason: "masked_by_override", detail: "an override file in the same folder masks this file, left as is" })).toMatchObject({
+      value: "diverged · an override file in the same folder masks this file, left as is",
+      tone: "warn",
+    });
+    expect(row({ status: "off", detail: "switched off in Settings" })).toEqual({ label: "rules", value: "off · target switched off in Settings", tone: "dim" });
+    expect(row({ status: "unknown", detail: "the rules file could not be checked" })).toMatchObject({ value: "unknown · the rules file could not be checked", tone: "dim" });
+  });
+
+  it("takes the verdict from the overall status, which the backend moves to the rules once the skills are fine", () => {
+    expect(runtimeVerdict({ harness: "kilo", health: health({ status: "stale" }) })).toEqual({ text: "stale", tone: "warn" });
+    expect(runtimeVerdict({ harness: "kilo", health: health({ status: "diverged" }) })).toEqual({ text: "diverged", tone: "warn" });
   });
 
   it("takes its verdict from the skills status, and calls a harness with no folder unserved", () => {

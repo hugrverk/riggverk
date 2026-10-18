@@ -6,6 +6,7 @@ import type {
   CursorProfileHealth,
   LightAgent,
   LightCliHealth,
+  LightRulesHealth,
   LightRuntimeHealth,
   OpenCodeCliHealth,
   OpenCodeRuntimeHealth,
@@ -142,11 +143,19 @@ function lightCliRow(cli: LightCliHealth): KvItem {
   }
 }
 
-/** Skills are the only thing managed for the light harnesses so far: no rules and no MCP rows yet. */
+/** The rules file: its status, and what the backend says about it unless that adds nothing. */
+function lightRulesRow(rules: LightRulesHealth): KvItem {
+  if (rules.status === "off") return { label: "rules", value: "off · target switched off in Settings", tone: "dim" };
+  const extra = rules.status === "missing" || rules.detail === "installed and current" || !rules.detail ? "" : ` · ${rules.detail}`;
+  return { label: "rules", value: `${runtimeChipLabel(rules.status).toLowerCase()}${extra}`, tone: toneOf(rules.status), wrap: extra !== "" };
+}
+
+/** The CLI, the rules file and the skills are managed for the light harnesses; there is no MCP row yet. */
 function lightRows(health: LightRuntimeHealth): KvItem[] {
   const { skills } = health;
   return [
     lightCliRow(health.cli),
+    lightRulesRow(health.rules),
     {
       label: "skills",
       value: `${runtimeChipLabel(skills.status).toLowerCase()} · ${skills.synced}/${skills.expected}`,

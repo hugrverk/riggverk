@@ -42,6 +42,9 @@ const ALL_SURFACES: SetupSurfaceId[] = [
   ...new Set<SetupSurfaceId>(["workspace_bundle", ...INSTALL_AGENTS.flatMap((harness) => HARNESS_SURFACES[harness])]),
 ];
 
+/** The rules surfaces of the light tier, which only an enabled light harness offers. */
+const LIGHT_RULES_SURFACES: SetupSurfaceId[] = ["copilot_rules", "pi_rules", "kilo_rules"];
+
 describe("harnessInstallation", () => {
   it("maps each harness to setup surfaces", () => {
     expect(HARNESS_SURFACES.codex).toContain("skills");
@@ -88,6 +91,9 @@ describe("target to surface mapping", () => {
       claude_rules: ["claude_rules"],
       claude_agents: ["claude_agents"],
       cursor_setup: ["cursor_agents", "cursor_mcp"],
+      copilot_rules: ["copilot_rules"],
+      pi_rules: ["pi_rules"],
+      kilo_rules: ["kilo_rules"],
     });
   });
 
@@ -158,7 +164,9 @@ describe("target-filtered surfaces", () => {
 
   it("builds the all-surfaces request from workspace plus enabled harnesses", () => {
     const surfaces = enabledSetupSurfaces(defaults());
-    expect(surfaces).toEqual(ALL_SURFACES.filter((surface) => surface !== "codex_config"));
+    expect(surfaces).toEqual(
+      ALL_SURFACES.filter((surface) => surface !== "codex_config" && !LIGHT_RULES_SURFACES.includes(surface)),
+    );
     expect(surfaces[0]).toBe("workspace_bundle");
 
     const claudeOnly = defaults({ enabled_harness_ids: ["claude"] });
@@ -212,19 +220,36 @@ describe("the light tier (Copilot, Pi, Kilo)", () => {
     for (const other of ["start", "library", "settings", "copilots", ""]) expect(harnessForView(other)).toBeNull();
   });
 
-  it("offers the shared skills surface and nothing else, gated by no target", () => {
+  it("offers its rules file, gated by the harness's own target, and the shared skills surface", () => {
     for (const harness of LIGHT_AGENTS) {
-      expect(HARNESS_SURFACES[harness]).toEqual(["skills"]);
+      const rules = `${harness}_rules` as SetupSurfaceId;
+      expect(HARNESS_SURFACES[harness]).toEqual([rules, "skills"]);
+      expect(harnessForSurface(rules)).toBe(harness);
       const on = defaults({ enabled_harness_ids: [harness] });
-      expect(enabledSurfacesForHarness(harness, on)).toEqual(["skills"]);
-      expect(harnessSurfaceStates(harness, on)).toEqual([{ surface: "skills", enabled: true, targetId: null }]);
+      expect(enabledSurfacesForHarness(harness, on)).toEqual([rules, "skills"]);
+      expect(harnessSurfaceStates(harness, on)).toEqual([
+        { surface: rules, enabled: true, targetId: rules },
+        { surface: "skills", enabled: true, targetId: null },
+      ]);
       expect(enabledSurfacesForHarness(harness, defaults())).toEqual([]);
+      // The target toggle alone switches the rules file off; skills stay.
+      const targetOff = defaults({
+        enabled_harness_ids: [harness],
+        enabled_target_ids: DEFAULT_ENABLED_TARGET_IDS.filter((id) => id !== rules),
+      });
+      expect(enabledSurfacesForHarness(harness, targetOff)).toEqual(["skills"]);
+      expect(disabledSurfacesForHarness(harness, targetOff)).toEqual([rules]);
     }
   });
 
-  it("adds no surface to an update-all request beyond the ones the harnesses already list", () => {
+  it("defaults the light rules targets on and puts them after cursor_setup, as the backend registry does", () => {
+    for (const harness of LIGHT_AGENTS) expect(DEFAULT_ENABLED_TARGET_IDS).toContain(`${harness}_rules`);
+    expect(DEFAULT_ENABLED_TARGET_IDS.slice(-3)).toEqual(["copilot_rules", "pi_rules", "kilo_rules"]);
+  });
+
+  it("adds only the rules surfaces of the enabled light harnesses to an update-all request", () => {
     const withLight = defaults({ enabled_harness_ids: [...INSTALL_AGENTS] });
-    expect(enabledSetupSurfaces(withLight)).toEqual(enabledSetupSurfaces(defaults()));
-    expect(enabledSetupSurfaces(defaults({ enabled_harness_ids: ["pi"] }))).toEqual(["workspace_bundle", "skills"]);
+    expect(enabledSetupSurfaces(withLight)).toEqual([...enabledSetupSurfaces(defaults()), ...LIGHT_RULES_SURFACES]);
+    expect(enabledSetupSurfaces(defaults({ enabled_harness_ids: ["pi"] }))).toEqual(["workspace_bundle", "pi_rules", "skills"]);
   });
 });

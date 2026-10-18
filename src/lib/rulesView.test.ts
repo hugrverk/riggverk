@@ -1,7 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { installationStatus, surfaceStatus } from "../test/pageFixtures";
 import type { InstallationState, RulesStatus } from "../types";
-import { refinementText, rulesModel, rulesModelFor, rulesStatusOf, rulesSurfaceOf } from "./rulesView";
+import {
+  refinementText,
+  rulesFileName,
+  rulesGates,
+  RULES_HARNESSES,
+  rulesModel,
+  rulesModelFor,
+  rulesPageHint,
+  rulesStatusOf,
+  rulesSurfaceOf,
+} from "./rulesView";
 
 function rules(overrides: Partial<RulesStatus> = {}): RulesStatus {
   return { layout: "block", refinement_lines: 0, user_managed: false, ...overrides };
@@ -62,6 +72,34 @@ describe("rulesModel", () => {
     expect(m.reason).toBe("the base block was edited");
   });
 
+  it("calls a file that another file masks blocked: no conversion, no leave-as-is, the diff only when there is a file", () => {
+    const m = rulesModel("pi_rules", "conflict", rules({ conflict_reason: "masked_by_override" }));
+    expect(m).toMatchObject({
+      kind: "blocked",
+      tone: "fail",
+      convertible: false,
+      headline: "masked by another file: left as is",
+      reason: "another file in the folder masks this one, so the harness never reads it",
+      diffDisabled: false,
+    });
+    const gates = rulesGates(m, { workspaceValid: true, busyLabel: null, blockedBy: null });
+    expect(gates.diff.visible).toBe(true);
+    expect([gates.convert.visible, gates.leave.visible, gates.manage.visible]).toEqual([false, false, false]);
+    expect(rulesPageHint(m, "Pi")).toContain("another file in the rules folder");
+  });
+
+  it("calls a missing file that a peer would be hidden by blocked, not not installed", () => {
+    const m = rulesModel("pi_rules", "conflict", rules({ layout: "absent", conflict_reason: "peer_context_file" }));
+    expect(m).toMatchObject({
+      kind: "blocked",
+      headline: "another context file would be hidden: nothing written",
+      reason: "the harness reads another context file in the folder, which a new file would hide",
+      diffDisabled: "no rules file is installed",
+      convertible: false,
+    });
+    expect(rulesGates(m, { workspaceValid: true, busyLabel: null, blockedBy: null }).diff.visible).toBe(true);
+  });
+
   it("has no diff for a missing file", () => {
     const m = model("not_installed", { layout: "absent" });
     expect(m).toMatchObject({ kind: "absent", diffDisabled: "no rules file is installed" });
@@ -73,7 +111,21 @@ describe("rules surfaces", () => {
     expect(rulesSurfaceOf("codex")).toBe("codex_rules");
     expect(rulesSurfaceOf("opencode")).toBe("open_code_rules");
     expect(rulesSurfaceOf("claude")).toBe("claude_rules");
+    expect(rulesSurfaceOf("copilot")).toBe("copilot_rules");
+    expect(rulesSurfaceOf("pi")).toBe("pi_rules");
+    expect(rulesSurfaceOf("kilo")).toBe("kilo_rules");
     expect(rulesSurfaceOf("cursor")).toBeNull();
+  });
+
+  it("offers the rules command for every harness that has a rules surface", () => {
+    expect([...RULES_HARNESSES]).toEqual(["codex", "opencode", "claude", "copilot", "pi", "kilo"]);
+    for (const harness of RULES_HARNESSES) expect(rulesSurfaceOf(harness)).not.toBeNull();
+  });
+
+  it("names the file each harness's rules surface writes", () => {
+    expect(rulesFileName("claude")).toBe("CLAUDE.md");
+    expect(rulesFileName("copilot")).toBe("copilot-instructions.md");
+    for (const harness of ["codex", "opencode", "pi", "kilo"] as const) expect(rulesFileName(harness)).toBe("AGENTS.md");
   });
 
   it("reads the block details from the installation status", () => {

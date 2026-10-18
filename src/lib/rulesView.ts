@@ -18,6 +18,9 @@ const RULES_SURFACE: Partial<Record<InstallAgent, RulesSurfaceId>> = {
   codex: "codex_rules",
   opencode: "open_code_rules",
   claude: "claude_rules",
+  copilot: "copilot_rules",
+  pi: "pi_rules",
+  kilo: "kilo_rules",
 };
 
 export function rulesSurfaceOf(harness: InstallAgent): RulesSurfaceId | null {
@@ -25,7 +28,7 @@ export function rulesSurfaceOf(harness: InstallAgent): RulesSurfaceId | null {
 }
 
 /** Harnesses that have a rules surface, in the order the command line offers them. */
-export const RULES_HARNESSES: readonly InstallAgent[] = ["codex", "opencode", "claude"];
+export const RULES_HARNESSES: readonly InstallAgent[] = ["codex", "opencode", "claude", "copilot", "pi", "kilo"];
 
 /** The block details the backend reported for `surface`, or null (surface off, not fetched, or not a rules surface). */
 export function rulesStatusOf(status: InstallationStatus | null | undefined, surface: RulesSurfaceId): RulesStatus | null {
@@ -43,6 +46,8 @@ const CONFLICT_TEXT: Record<RulesConflictReason, string> = {
   base_block_edited: "the base block was edited",
   legacy_diverged: "the file differs from every shipped base",
   malformed_markers: "the base block markers are malformed",
+  masked_by_override: "another file in the folder masks this one, so the harness never reads it",
+  peer_context_file: "the harness reads another context file in the folder, which a new file would hide",
 };
 
 const MALFORMED_TEXT: Record<RulesMalformedReason, string> = {
@@ -72,7 +77,9 @@ export type RulesKind =
   /** The user keeps a hand-edited file; base updates are available but never applied. */
   | "managed"
   /** Markers that cannot be split; nothing but a manual fix helps. */
-  | "malformed";
+  | "malformed"
+  /** Another file in the folder decides what the harness reads; the app writes nothing until that is sorted out. */
+  | "blocked";
 
 export interface RulesModel {
   surface: RulesSurfaceId;
@@ -140,6 +147,20 @@ export function rulesModel(surface: RulesSurfaceId, state: InstallationState, ru
       diffDisabled,
     };
   }
+  if (rules.conflict_reason === "masked_by_override" || rules.conflict_reason === "peer_context_file") {
+    return {
+      ...base,
+      kind: "blocked",
+      headline:
+        rules.conflict_reason === "masked_by_override"
+          ? "masked by another file: left as is"
+          : "another context file would be hidden: nothing written",
+      tone: "fail",
+      display: null,
+      diffMode,
+      diffDisabled,
+    };
+  }
   if (rules.user_managed) {
     return {
       ...base,
@@ -188,9 +209,14 @@ export function rulesModelFor(harness: InstallAgent, status: InstallationStatus 
   return rulesModel(surface, row.state, row.rules);
 }
 
-/** The file a harness's rules surface writes, for messages. */
+/** The file a harness's rules surface writes, for messages. Mirrors the file name of each `target_rel`. */
+const RULES_FILE_NAME: Partial<Record<InstallAgent, string>> = {
+  claude: "CLAUDE.md",
+  copilot: "copilot-instructions.md",
+};
+
 export function rulesFileName(harness: InstallAgent): string {
-  return harness === "claude" ? "CLAUDE.md" : "AGENTS.md";
+  return RULES_FILE_NAME[harness] ?? "AGENTS.md";
 }
 
 /** Whether an action is offered (`visible`) and, when it is offered but cannot run now, why not (`reason`). */
@@ -241,6 +267,8 @@ export function rulesPageHint(model: RulesModel, pageLabel: string): string | nu
       return `open the ${pageLabel} page: d diff · v convert · m hand back`;
     case "malformed":
       return "fix the markers by hand; the app never rewrites them";
+    case "blocked":
+      return `open the ${pageLabel} page: another file in the rules folder decides what the harness reads`;
     default:
       return null;
   }
