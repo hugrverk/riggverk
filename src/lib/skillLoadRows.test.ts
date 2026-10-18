@@ -177,6 +177,20 @@ describe("skillLoadRows", () => {
     expect(rows[2]).toMatchObject({ label: "", value: "mine · yours, AW cannot fix · ~/.agents/skills + ~/.codex/skills", tone: "warn" });
   });
 
+  it("says the app leaves the user's own copies alone when every one of them is kept", () => {
+    const kept = (folder: SkillReadFolder) => copy(folder, "mine", { owner: "foreign", current: false, kept: true });
+    const own = load("mine", [kept("agents"), kept("codex_home")], ["foreign_copy"]);
+    const view = loadsOf([harnessOf("codex", CODEX_FOLDERS, [own])], [{ name: "mine", harnesses: ["codex"], copies: own.copies }]);
+    expect(skillLoadRows(view, "codex")[1]).toMatchObject({
+      value: "mine · yours (kept), Riggverk leaves it alone · ~/.agents/skills + ~/.codex/skills",
+      tone: "warn",
+    });
+    // One copy that is not kept: the app still cannot fix it.
+    const mixed = load("mine", [kept("agents"), copy("codex_home", "mine", { owner: "foreign", current: false })], ["foreign_copy"]);
+    const mixedView = loadsOf([harnessOf("codex", CODEX_FOLDERS, [mixed])], [{ name: "mine", harnesses: ["codex"], copies: mixed.copies }]);
+    expect(skillLoadRows(mixedView, "codex")[1]!.value).toContain("yours, AW cannot fix");
+  });
+
   it("shows a harness only the foreign duplicates that reach it", () => {
     const foreign: ForeignSkillDuplicate = { name: "mine", harnesses: ["cursor"], copies: [] };
     const view = loadsOf([harnessOf("codex", CODEX_FOLDERS, [single("a")]), harnessOf("cursor", ["cursor"], [])], [foreign]);

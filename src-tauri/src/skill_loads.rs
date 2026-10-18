@@ -63,6 +63,8 @@ pub struct SkillCopy {
     pub owner: Owner,
     /// The file equals the bundled `SKILL.md` of that skill
     pub current: bool,
+    /// The copy is the user's own, and they chose to keep it (see [`crate::kept_files`])
+    pub kept: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -187,6 +189,8 @@ pub struct OwnershipProof {
     records: HashMap<String, String>,
     /// Bundled skill name to the digest of its `SKILL.md`
     current: HashMap<String, String>,
+    /// The `SKILL.md` files the user keeps
+    kept: crate::kept_files::KeptFiles,
 }
 
 impl OwnershipProof {
@@ -207,7 +211,32 @@ impl OwnershipProof {
                 .map(|record| (record.identity.clone(), record.hash.clone()))
                 .collect(),
             current,
+            kept: crate::kept_files::KeptFiles::default(),
         })
+    }
+
+    /// The same proof, knowing which of the user's copies they keep.
+    pub fn with_kept(mut self, kept: crate::kept_files::KeptFiles) -> Self {
+        self.kept = kept;
+        self
+    }
+
+    /// Whether the user keeps the `SKILL.md` in `skill_dir` below `folder`. The choice is for the
+    /// file at one destination, so a copy in another folder or path is not covered.
+    fn is_kept(
+        &self,
+        folder: ReadFolder,
+        skill_dir: &Path,
+        skill_dir_name: &str,
+        home: &Path,
+    ) -> bool {
+        let (Some(root), Some(skill)) = (folder.root(), SkillName::new(skill_dir_name)) else {
+            return false;
+        };
+        self.kept.contains(
+            &ArtifactId::skill_md(root, skill),
+            &display_path(&skill_dir.join("SKILL.md"), home),
+        )
     }
 
     /// Owner of the copy in `skill_dir_name` below `folder`, and whether it is the bundled version.
@@ -393,7 +422,7 @@ fn clean_name(raw: &str) -> String {
 }
 
 /// `~/...` for a path below the home folder, the plain path otherwise.
-fn display_path(path: &Path, home: &Path) -> String {
+pub(crate) fn display_path(path: &Path, home: &Path) -> String {
     match path.strip_prefix(home) {
         Ok(rest) if rest.as_os_str().is_empty() => "~".to_string(),
         Ok(rest) => format!(
@@ -501,6 +530,8 @@ pub fn effective_skill_loads(
                     continue;
                 }
                 let (owner, current) = proof.classify(folder, &found.dir_name, &found.digest);
+                let kept = owner == Owner::Foreign
+                    && proof.is_kept(folder, &found.dir, &found.dir_name, home);
                 by_name
                     .entry(found.name.clone())
                     .or_default()
@@ -510,6 +541,7 @@ pub fn effective_skill_loads(
                         hash: short_hash(&found.digest),
                         owner,
                         current,
+                        kept,
                     });
             }
         }
@@ -1331,6 +1363,7 @@ mod tests {
             hash: "abc".into(),
             owner: Owner::Foreign,
             current: false,
+            kept: true,
         };
         let json = serde_json::to_value(&copy).unwrap();
         assert_eq!(json["folder"], "dot_codex");

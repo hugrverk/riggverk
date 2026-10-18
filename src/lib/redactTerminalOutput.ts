@@ -45,18 +45,38 @@ const GITHUB_PAT_RE = /\bgithub_pat_[A-Za-z0-9_]{20,}\b/g;
 const OPENAI_TOKEN_RE = /\bsk-[A-Za-z0-9_-]{20,}\b/g;
 const JWT_RE = /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/g;
 
-export function redactTerminalOutput(input: string): string {
-  if (!input) return input;
+/** Private-key blocks and the credential headers: shapes that are secrets wherever they appear. */
+function maskKeysAndHeaders(input: string): string {
+  return input
+    .replace(PRIVATE_KEY_BLOCK_RE, REDACTED)
+    .replace(AUTH_HEADER_RE, `$1${REDACTED}`)
+    .replace(COOKIE_HEADER_RE, `$1${REDACTED}`);
+}
 
-  return redactAssignments(
-    input
-      .replace(PRIVATE_KEY_BLOCK_RE, REDACTED)
-      .replace(AUTH_HEADER_RE, `$1${REDACTED}`)
-      .replace(COOKIE_HEADER_RE, `$1${REDACTED}`),
-  )
+/** Signed-URL parameters and the token shapes of well-known vendors. */
+function maskTokenShapes(input: string): string {
+  return input
     .replace(SIGNED_QUERY_PARAM_RE, `$1${REDACTED}`)
     .replace(GITHUB_PAT_RE, REDACTED)
     .replace(GITHUB_TOKEN_RE, REDACTED)
     .replace(OPENAI_TOKEN_RE, REDACTED)
     .replace(JWT_RE, REDACTED);
+}
+
+export function redactTerminalOutput(input: string): string {
+  if (!input) return input;
+
+  return maskTokenShapes(redactAssignments(maskKeysAndHeaders(input)));
+}
+
+/**
+ * Redaction for text that is read as prose, such as a diff of a skill or agent file. The `name=value` rule is left
+ * out: `session: ...` and `token: ...` are ordinary words in a skill, and masking them would make the diff
+ * unreadable. What is still masked are shapes that are secrets wherever they appear: private-key blocks,
+ * Authorization and Cookie headers, signed-URL parameters and the tokens of well-known vendors.
+ */
+export function redactDiffText(input: string): string {
+  if (!input) return input;
+
+  return maskTokenShapes(maskKeysAndHeaders(input));
 }

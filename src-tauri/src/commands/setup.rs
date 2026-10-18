@@ -1590,6 +1590,26 @@ fn run_planned_artifacts(
         });
     }
 
+    // A file the app wrote or removed is the app's again, so a choice to keep the user's version of
+    // it ends here: a later edit must be a new conflict, not silently covered by an old choice.
+    // Cleared only once the transaction is complete, so a failed apply (rolled back) loses nothing.
+    let rewritten: Vec<String> = manifest
+        .operations
+        .iter()
+        .filter(|operation| {
+            matches!(
+                operation.kind,
+                OperationKind::Create | OperationKind::Update | OperationKind::Remove
+            )
+        })
+        .map(|operation| crate::managed_state::artifact_identity(&operation.artifact))
+        .collect();
+    if let Err(error) = crate::kept_files::release(&ws_root, &rewritten) {
+        manual_steps.push(format!(
+            "The files were applied, but a choice to keep your version of one of them could not be cleared: {error}"
+        ));
+    }
+
     let applied_count = applied.len();
     SetupResult {
         success: true,

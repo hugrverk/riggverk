@@ -1,11 +1,22 @@
 import { useEffect, useState, type ReactNode } from "react";
+import { ConflictPane } from "../components/ConflictPane";
+import { FileConflictSummary } from "../components/FileConflictSummary";
 import { InstallPlanPane } from "../components/InstallPlanPane";
 import { OutputStrip, useFocusOutputOnNewTransaction } from "../components/OutputStrip";
 import { RulesPane } from "../components/RulesPane";
 import { RulesSummary } from "../components/RulesSummary";
+import { useFileConflictActions } from "../hooks/useFileConflictActions";
+import { useFileConflictFlow } from "../hooks/useFileConflictFlow";
 import { useRulesActions } from "../hooks/useRulesActions";
 import { useRulesFlow } from "../hooks/useRulesFlow";
 import { useKeymap } from "../keyboard/useKeymap";
+import {
+  fileConflictModelFor,
+  filesSurfacesOf,
+  isFilesSurface,
+  withFileConflicts,
+  type FileConflictModel,
+} from "../lib/fileConflicts";
 import { HARNESS_LABELS } from "../lib/harnessInstallation";
 import { runtimeRowsFor, runtimeVerdict, type HarnessRuntimeHealth } from "../lib/harnessRuntimeRows";
 import {
@@ -51,7 +62,7 @@ const NO_TOGGLE = "\u00a0\u00a0\u00a0";
  * toggle of the target that gates it (Space toggles, the change autosaves), [2] the detail of the row under the
  * cursor and the harness's runtime facts, then the output strip. Update and preview open the install review in
  * place of the pair; `d` and `v` on the rules row open the rules review (a diff, or the preview of converting
- * it) the same way.
+ * it) the same way, and `d` on a skills or agents row with files in conflict opens the conflict review (a diff).
  */
 export function HarnessPage({
   harness,
@@ -85,6 +96,7 @@ export function HarnessPage({
   useFocusOutputOnNewTransaction(rollbackTransactionId);
   const entry = overview.entries[harness];
   const [cursor, setCursor] = useState<string | null>(null);
+  const [markedKey, setMarkedKey] = useState<string | null>(null);
   const saving = settingsSaveStatus === "saving" || settingsSaveStatus === "pending";
 
   const update = updateActionFor(harness, entry, { workspaceValid, busyLabel: wsRunning, settingsSaving: saving });
@@ -114,6 +126,37 @@ export function HarnessPage({
     if (installOpen) rulesFlow.close();
   }, [installOpen, rulesFlow.close]);
 
+  // Skill and agent files in conflict, or kept: c, d and m act on them while the cursor is on their row.
+  const conflictFlow = useFileConflictFlow();
+  const fileModels = workspaceValid
+    ? filesSurfacesOf(harness).flatMap((surface): FileConflictModel[] => {
+        const model = fileConflictModelFor(entry?.status, surface);
+        return model ? [model] : [];
+      })
+    : [];
+  const activeModel = fileModels.find(model => model.surface === selected?.surface) ?? null;
+  const files = useFileConflictActions({
+    harness,
+    models: fileModels,
+    activeSurface: activeModel?.surface ?? null,
+    workspaceValid,
+    busyLabel: wsRunning,
+    installOpen,
+    rulesOpen: rulesFlow.open,
+    flow: conflictFlow,
+    paneIds: ["surfaces", "detail"],
+    markedKey,
+    onMark: setMarkedKey,
+    // The kept flag of a skill copy shows in the skill loads too.
+    reload: async () => {
+      await Promise.all([overview.refresh(), skillLoads.refresh()]);
+    },
+  });
+  // Another review opening closes the conflict review; the install and rules reviews win.
+  useEffect(() => {
+    if (installOpen || rulesFlow.open) conflictFlow.close();
+  }, [installOpen, rulesFlow.open, conflictFlow.close]);
+
   useKeymap(
     installBindings({
       idPrefix: harness,
@@ -124,7 +167,7 @@ export function HarnessPage({
       onPreview: () => void install.open(harness, { readOnly: true }),
       onRefresh: () => void overview.refresh(),
     }),
-    { enabled: !installOpen && !rulesFlow.open },
+    { enabled: !installOpen && !rulesFlow.open && !conflictFlow.open },
   );
 
   const outputStrip = () => (
@@ -166,6 +209,23 @@ export function HarnessPage({
     );
   }
 
+  const conflictReview = conflictFlow.state;
+  if (conflictReview.status !== "idle") {
+    const reviewed = fileModels.find(model => model.surface === conflictReview.surface);
+    return (
+      <section className="screen review" aria-label={`${label} conflict review`}>
+        <ConflictPane
+          flow={conflictFlow}
+          units={reviewed?.units ?? []}
+          onMark={setMarkedKey}
+          onToggleKept={files.toggleKept}
+          busyLabel={wsRunning}
+        />
+        {outputStrip()}
+      </section>
+    );
+  }
+
   const harnessState = targetMeta(entry, { workspaceValid, id: harness });
   // Without a workspace there is no runtime to judge: the heading says so and no rows follow.
   const verdict = workspaceValid ? runtimeVerdict(runtime) : { text: "no valid workspace", tone: "dim" as const };
@@ -177,7 +237,9 @@ export function HarnessPage({
   // A file the user keeps is not current and not a conflict; the rules model says so.
   const displayOf = (row: HarnessRowModel): StateDisplay => {
     if (row.surface === rulesSurface && rulesModel?.display) return rulesModel.display;
-    return row.surface === "skills" && row.state !== "off" ? withSkillProblems(row.display, skillProblems) : row.display;
+    const base = row.surface === "skills" && row.state !== "off" ? withSkillProblems(row.display, skillProblems) : row.display;
+    // Files in conflict or kept are told on their row: "update · 2 conflicts", "current · you manage 1".
+    return isFilesSurface(row.surface) ? withFileConflicts(base, fileModels.find(model => model.surface === row.surface) ?? null) : base;
   };
   const selectedDisplay = selected ? displayOf(selected) : null;
   const showRules = rulesModel !== null && selected?.surface === rulesSurface;
@@ -187,7 +249,8 @@ export function HarnessPage({
     ...(selected ? surfaceFacts(selected, !showRules) : []),
     ...(selected?.surface === "skills" ? skillReadsRows(skillLoads, harness) : []),
     ...(entry?.error ? [{ label: "status", value: `failed: ${entry.error}`, tone: "fail" as const, wrap: true }] : []),
-    ...(conflictDetails.length > 0 ? [{ label: "preserved", value: conflictDetails.join(", "), tone: "warn" as const, wrap: true }] : []),
+    // The files in conflict have their own lines below; this list would name every one of them.
+    ...(conflictDetails.length > 0 && !activeModel ? [{ label: "preserved", value: conflictDetails.join(", "), tone: "warn" as const, wrap: true }] : []),
   ];
 
   const onToggle = (row: HarnessRowModel) => {
@@ -268,6 +331,7 @@ export function HarnessPage({
         )}
         {facts.length > 0 && <Kv items={facts} />}
         {showRules && <RulesSummary model={rulesModel} error={rules.error} />}
+        {activeModel && <FileConflictSummary model={activeModel} markedKey={markedKey} error={files.error} />}
         <div className="group">
           {"runtime · "}
           <span className={toneClass(verdict.tone) || undefined}>{verdict.text}</span>

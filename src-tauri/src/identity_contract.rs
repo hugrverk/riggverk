@@ -12,6 +12,7 @@
 mod tests {
     use serde_json::Value;
 
+    use crate::kept_files::KEPT_FILES_REL;
     use crate::managed_state::MANAGED_STATE_REL;
     use crate::platform_paths::{
         app_support_dir, default_installed_workspace_path, legacy_app_support_dir, Platform,
@@ -136,6 +137,7 @@ mod tests {
             RULES_PREFERENCES_REL,
             ".agent-workspace/rules-preferences.json"
         );
+        assert_eq!(KEPT_FILES_REL, ".agent-workspace/kept-files.json");
 
         let marker_paths: Vec<&str> = crate::commands::default_workspace_files()
             .into_iter()

@@ -4,6 +4,7 @@ use std::path::Path;
 
 use serde::Serialize;
 
+use crate::file_conflicts::{self, FilesStatus};
 use crate::rules_block::{MalformedReason, RulesConflict, RulesLayout, RulesPlan};
 use crate::setup_lifecycle::{OperationKind, SetupSurfaceId};
 use crate::setup_transaction;
@@ -24,6 +25,8 @@ pub struct InstallationCounts {
     pub update_count: usize,
     pub remove_count: usize,
     pub conflict_count: usize,
+    /// Skill and agent files the user keeps: not conflicts, never written by an update.
+    pub kept_count: usize,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -47,6 +50,9 @@ pub struct SurfaceInstallationStatus {
     /// Block details for rules surfaces; absent for every other surface.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rules: Option<RulesStatus>,
+    /// Conflicting and kept files for the skills and agent surfaces; absent while there are none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub files: Option<FilesStatus>,
 }
 
 /// How a rules file relates to the managed base block.
@@ -76,6 +82,7 @@ fn aggregate_state(
         update_count: 0,
         remove_count: 0,
         conflict_count: 0,
+        kept_count: 0,
     };
     let mut conflicts = Vec::new();
     let mut has_apply = false;
@@ -102,6 +109,7 @@ fn aggregate_state(
             }
             OperationKind::Unavailable => has_unavailable = true,
             OperationKind::NoChange => has_present = true,
+            OperationKind::Manual if file_conflicts::is_kept(p) => counts.kept_count += 1,
             _ => {}
         }
     }
@@ -150,9 +158,24 @@ pub fn status_for_surfaces(
         }
         InstallationState::Unavailable => "Unavailable on this system".into(),
     };
+    // The folders each file's harnesses read, only worked out when there are files to report.
+    let scope = if planned.iter().any(|p| p.file.is_some()) {
+        setup_transaction::scope_for_surfaces(surfaces, home).ok()
+    } else {
+        None
+    };
     let per_surface = surfaces
         .iter()
-        .map(|surface| surface_status(*surface, &planned, has_trusted_state))
+        .map(|surface| {
+            surface_status(
+                *surface,
+                &planned,
+                has_trusted_state,
+                scope.as_ref(),
+                workspace_root,
+                home,
+            )
+        })
         .collect();
     Ok(InstallationStatus {
         state,
@@ -167,6 +190,9 @@ fn surface_status(
     surface: SetupSurfaceId,
     planned: &[setup_transaction::PlannedArtifact],
     has_trusted_state: bool,
+    scope: Option<&crate::skill_roots::SkillScope>,
+    workspace_root: &Path,
+    home: &Path,
 ) -> SurfaceInstallationStatus {
     let own: Vec<setup_transaction::PlannedArtifact> = planned
         .iter()
@@ -209,6 +235,11 @@ fn surface_status(
         InstallationState::Conflict => format!("{} conflicts preserved", counts.conflict_count),
         InstallationState::Unavailable => "unavailable".to_string(),
     };
+    let files = file_conflicts::files_status(surface, &own, scope, workspace_root, home);
+    let detail = match &files {
+        Some(files) => files_detail(detail, state, current_count, files.kept),
+        None => detail,
+    };
     let assessment = own.iter().find_map(|p| {
         p.rules
             .map(|rules| (rules, p.kind == OperationKind::Manual))
@@ -240,7 +271,25 @@ fn surface_status(
         state,
         detail,
         rules,
+        files,
     }
+}
+
+/// The status line of a skills or agents surface with files the user keeps. Counts only, never
+/// the text of a file.
+fn files_detail(
+    detail: String,
+    state: InstallationState,
+    current_count: usize,
+    kept: usize,
+) -> String {
+    if kept == 0 {
+        return detail;
+    }
+    if state == InstallationState::Current && current_count == 0 {
+        return format!("you manage {kept} file{}", if kept == 1 { "" } else { "s" });
+    }
+    format!("{detail}; you manage {kept}")
 }
 
 /// Status line for an MCP surface of a light harness; `None` where the generic one says it all.
@@ -363,6 +412,7 @@ mod tests {
             rules: None,
             rules_rewrite: None,
             mcp: None,
+            file: None,
         }
     }
 

@@ -88,6 +88,49 @@ describe("buildPlanGroups", () => {
     expect(describePlanCounts(countPlanRows([group]))).toBe("apply 2 safe changes, skip 1 conflict");
   });
 
+  it("reads a skill the user keeps (=) as a manual row, and points a skill in conflict at the page that resolves it", () => {
+    const skills = review(
+      [
+        op("skills", "update", {
+          details: [
+            "~ ~/.claude/skills (3 skills, 5 files)",
+            "! ~/.agents/skills/tdd (edited, kept)",
+            "= ~/.claude/skills/diagnose (you manage; bundled update available)",
+          ],
+        }),
+      ],
+      ["skills"],
+    );
+    const rows = buildPlanGroups(skills)[0]!.rows;
+    expect(rows.map(row => [row.kind, row.label, row.file, row.note, row.safe, row.conflict])).toEqual([
+      ["update", "update", "~/.claude/skills", "3 skills, 5 files", true, false],
+      ["conflict", "conflict", "~/.agents/skills/tdd", "edited, kept", false, true],
+      ["manual", "manual", "~/.claude/skills/diagnose", "you manage; bundled update available", false, false],
+    ]);
+    expect(rows[1]!.detail).toContain("resolve from a harness page: d diff · m keep mine");
+    // Only a file in conflict is pointed at the resolve keys; a kept one is already resolved.
+    expect(rows[0]!.detail.join(" ")).not.toContain("resolve from");
+    expect(rows[2]!.detail.join(" ")).not.toContain("resolve from");
+    expect(describePlanCounts(countPlanRows([buildPlanGroups(skills)[0]!]))).toBe("apply 1 safe change, skip 1 conflict, 1 manual step left to you");
+  });
+
+  it("points an agent in conflict at its harness page, and leaves every other conflict without a pointer", () => {
+    const groups = buildPlanGroups(
+      review(
+        [
+          op("claude_agents", "conflict", { conflict_description: "agents were edited" }),
+          op("claude_rules", "conflict", { conflict_description: "rules were edited" }),
+          op("cursor_mcp", "conflict", { conflict_description: "mcp.json was edited" }),
+        ],
+        ["claude_agents", "claude_rules", "cursor_mcp"],
+      ),
+    );
+    const detail = (index: number) => groups[index]!.rows[0]!.detail;
+    expect(detail(0)).toContain("resolve from the Claude page: d diff · m keep mine");
+    expect(detail(1).join(" ")).not.toContain("resolve from");
+    expect(detail(2).join(" ")).not.toContain("resolve from");
+  });
+
   it("shows an operation without detail lines as one row labelled with the surface", () => {
     const rules = buildPlanGroups(MIXED)[0]!.rows;
     expect(rules).toHaveLength(1);

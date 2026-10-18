@@ -319,7 +319,15 @@ def main() -> None:
         "set_permissions",
     )
     production_code: dict[Path, str] = {}
-    for path in (TAURI / "commands/setup.rs", TAURI / "setup_transaction.rs"):
+    for path in (
+        TAURI / "commands/setup.rs",
+        TAURI / "setup_transaction.rs",
+        # Keeping the user's version of a skill or agent file writes only kept-files.json, through
+        # safe_filesystem; diffing writes nothing.
+        TAURI / "kept_files.rs",
+        TAURI / "file_conflicts.rs",
+        TAURI / "commands/file_conflicts.rs",
+    ):
         # Whole production file, minus #[cfg(test)] items; comments and string
         # literals are blanked so only real calls count.
         production = blank_rust(production_rust(path), comments=True, strings=True)
@@ -329,6 +337,8 @@ def main() -> None:
                 fail(
                     f"{path.relative_to(ROOT)} bypasses safe_filesystem with {mutation}"
                 )
+    if "write_regular_file_atomic" not in production_code[TAURI / "kept_files.rs"]:
+        fail("kept_files.rs must publish kept-files.json through safe_filesystem")
     # The preview token is consumed exactly once, inside the apply owner.
     setup_code = production_code[TAURI / "commands/setup.rs"]
     if len(re.findall(r"\bconsume_preview_token\b", setup_code)) != 1:

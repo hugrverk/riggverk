@@ -375,10 +375,17 @@ pub fn plan_setup(
                 conflicts.push(op);
             }
             OperationKind::Manual => {
-                let step = format!(
-                    "{} is managed by you, so base updates are not applied. Review the diff or hand it back from the harness page.",
-                    surface.label()
-                );
+                let step = if crate::file_conflicts::is_files_surface(*surface) {
+                    format!(
+                        "{} has files you manage, so bundled updates are not applied to them. Review the diff or hand them back from the harness page.",
+                        surface.label()
+                    )
+                } else {
+                    format!(
+                        "{} is managed by you, so base updates are not applied. Review the diff or hand it back from the harness page.",
+                        surface.label()
+                    )
+                };
                 let op = PlannedOperation {
                     surface: *surface,
                     kind,

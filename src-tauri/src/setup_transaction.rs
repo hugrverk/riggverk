@@ -15,6 +15,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::artifact_registry::{ArtifactId, ArtifactKind};
 use crate::commands::file_eq;
+use crate::file_conflicts::is_kept;
 use crate::setup_lifecycle::{OperationKind, SetupSurfaceId};
 use crate::skill_roots::SkillScope;
 
@@ -222,6 +223,9 @@ pub struct PlannedArtifact {
     /// How the managed entry stands in the MCP file of a light harness; `None` for every other
     /// artifact and when the entry template or the descriptor is unavailable.
     pub mcp: Option<crate::light_mcp::EntryState>,
+    /// Set on a skill or agent file in conflict the user can resolve (and on one the user keeps);
+    /// `None` for every other artifact and for a conflict something blocks.
+    pub file: Option<crate::file_conflicts::FileConflict>,
 }
 
 /// A rules file the user chose to convert: the complete new content, and the
@@ -546,7 +550,7 @@ pub fn detect_surface_state(
     workspace_root: &Path,
     home: &Path,
 ) -> (SetupSurfaceId, OperationKind, String) {
-    let (kinds, conflict_reason): (Vec<OperationKind>, Option<String>) =
+    let (kinds, conflict_reason, manual_count): (Vec<OperationKind>, Option<String>, usize) =
         match plan_artifacts_for_surfaces(&[surface], workspace_root, home) {
             Ok(planned) if !planned.is_empty() => {
                 // Why an MCP file is left alone, so the review says it beside the conflict.
@@ -557,7 +561,11 @@ pub fn detect_surface_state(
                         p.mcp
                             .and_then(|state| state.conflict_reason(mcp_entry_key(&p.artifact)))
                     });
-                (planned.iter().map(|p| p.kind).collect(), reason)
+                let manual = planned
+                    .iter()
+                    .filter(|p| p.kind == OperationKind::Manual)
+                    .count();
+                (planned.iter().map(|p| p.kind).collect(), reason, manual)
             }
             // No harness is enabled: no skill is wanted anywhere, and nothing is removed.
             Ok(_) if surface.canonical() == SetupSurfaceId::Skills => {
@@ -591,7 +599,13 @@ pub fn detect_surface_state(
             Some(reason) => format!("{}: {reason}", surface.label()),
             None => format!("{} has conflicts", surface.label()),
         },
-        // Only a rules file the user chose to manage plans as Manual.
+        // Skill and agent files the user keeps.
+        OperationKind::Manual if crate::file_conflicts::is_files_surface(surface) => format!(
+            "{}: you manage {manual_count} file{}; bundled updates are skipped",
+            surface.label(),
+            if manual_count == 1 { "" } else { "s" }
+        ),
+        // A rules file the user chose to manage.
         OperationKind::Manual => format!(
             "{}: you manage this file; base updates are skipped",
             surface.label()
@@ -1077,6 +1091,7 @@ pub fn conversion_operation(
         rules: Some(assessment),
         rules_rewrite: Some(rewrite),
         mcp: None,
+        file: None,
     }
 }
 
@@ -1353,6 +1368,7 @@ pub fn plan_artifacts_for_uninstall(
                 rules: None,
                 rules_rewrite: None,
                 mcp: None,
+                file: None,
             });
         } else {
             preserved.push(artifact);
@@ -1407,6 +1423,7 @@ pub fn plan_artifacts_for_uninstall(
                     rules: None,
                     rules_rewrite: None,
                     mcp: None,
+                    file: None,
                 });
             }
             OperationKind::Conflict => preserved.push(artifact),
@@ -1556,6 +1573,7 @@ pub fn plan_artifacts_for_surfaces_in(
         };
 
     let artifacts = expand_surfaces_to_artifacts(surfaces, workspace_root, scope)?;
+    let kept = crate::kept_files::KeptFiles::load(workspace_root);
     let mut planned = Vec::new();
     let mut seen = std::collections::HashSet::new();
     for artifact in artifacts {
@@ -1571,6 +1589,7 @@ pub fn plan_artifacts_for_surfaces_in(
             home,
             managed_hash.as_deref(),
         );
+        let mut file = None;
         let (kind, previous_state) = match (&rules, &mcp) {
             (Some(assessment), _) => {
                 let (kind, previous_state) = rules_outcome(assessment.plan);
@@ -1601,12 +1620,29 @@ pub fn plan_artifacts_for_surfaces_in(
                 // except mergeable configs (their merge rewrites only managed
                 // keys and preserves user-owned content by construction) and
                 // files that are byte-for-byte a version the app shipped.
-                if managed_hash.is_none()
+                let (kind, previous_state) = if managed_hash.is_none()
                     && matches!(kind, OperationKind::Update)
                     && !matches!(previous_state, PreviousState::MergeableConfigFile)
                     && !installed_is_shipped_version(&artifact, workspace_root, &bundled_root, home)
                 {
                     (OperationKind::Conflict, PreviousState::Conflict)
+                } else {
+                    (kind, previous_state)
+                };
+                // A skill or agent file the user can resolve; one they keep is left alone.
+                if kind == OperationKind::Conflict {
+                    file = file_conflict(
+                        &artifact,
+                        workspace_root,
+                        &bundled_root,
+                        home,
+                        &kept,
+                        managed_hash.as_deref(),
+                        true,
+                    );
+                }
+                if file.is_some_and(|file| file.kept.is_some()) {
+                    (OperationKind::Manual, previous_state)
                 } else {
                     (kind, previous_state)
                 }
@@ -1622,6 +1658,7 @@ pub fn plan_artifacts_for_surfaces_in(
             rules,
             rules_rewrite: None,
             mcp: mcp.and_then(|plan| plan.state),
+            file,
         });
     }
 
@@ -1676,6 +1713,25 @@ pub fn plan_artifacts_for_surfaces_in(
         if matches!(kind, OperationKind::NoChange | OperationKind::Unavailable) {
             continue;
         }
+        // An edited copy of a retired skill is the user's to resolve too; one they keep stays.
+        let file = (kind == OperationKind::Conflict)
+            .then(|| {
+                file_conflict(
+                    &artifact,
+                    workspace_root,
+                    &bundled_root,
+                    home,
+                    &kept,
+                    managed_hash.as_deref(),
+                    false,
+                )
+            })
+            .flatten();
+        let kind = if file.is_some_and(|file| file.kept.is_some()) {
+            OperationKind::Manual
+        } else {
+            kind
+        };
         let surface = artifact.surface();
         let rollback_action = rollback_action_for(kind, previous_state);
         planned.push(PlannedArtifact {
@@ -1687,12 +1743,85 @@ pub fn plan_artifacts_for_surfaces_in(
             rules: None,
             rules_rewrite: None,
             mcp: None,
+            file,
         });
     }
+    keep_stale_units_whole(&mut planned);
     // Removals go last, whatever order the stale artifacts were found in (stable: the order inside
     // each group is kept).
     planned.sort_by_key(|operation| operation.kind == OperationKind::Remove);
     Ok(planned)
+}
+
+/// A skill or agent file in conflict the user could resolve, with whether they keep it. `None`
+/// when something blocks the file (a link in its path, a folder where it belongs): that stays a
+/// plain conflict nothing here can resolve. `wanted` is whether the bundle wants the file here.
+fn file_conflict(
+    artifact: &ArtifactId,
+    workspace_root: &Path,
+    bundled_root: &Path,
+    home: &Path,
+    kept: &crate::kept_files::KeptFiles,
+    managed_hash: Option<&str>,
+    wanted: bool,
+) -> Option<crate::file_conflicts::FileConflict> {
+    use crate::file_conflicts::{ConflictReason, FileConflict, KeptState};
+    if !crate::kept_files::is_keepable(artifact) {
+        return None;
+    }
+    let dest = artifact.resolve_dest(home, workspace_root).ok()?;
+    if skill_destination_blocked(artifact, &dest, home, workspace_root) || !dest.is_file() {
+        return None;
+    }
+    let entry = kept.entry(
+        artifact,
+        &crate::kept_files::dest_label(artifact, home, workspace_root).ok()?,
+    );
+    Some(FileConflict {
+        reason: if managed_hash.is_some() {
+            ConflictReason::Edited
+        } else {
+            ConflictReason::Unproven
+        },
+        kept: entry.map(|entry| KeptState {
+            // A file nothing bundles here has no update to wait for.
+            bundle_changed: wanted
+                && crate::setup_fingerprint::artifact_source_digest(artifact, bundled_root, home)
+                    .is_ok_and(|current| entry.bundle.as_deref() != Some(current.as_str())),
+        }),
+        wanted,
+    })
+}
+
+/// A retired skill with a file the user keeps keeps all its files: removing the others would leave
+/// half a skill behind. Its other removals become manual steps.
+fn keep_stale_units_whole(planned: &mut [PlannedArtifact]) {
+    use crate::artifact_registry::ArtifactId::SkillFile;
+    let kept_units: HashSet<_> = planned
+        .iter()
+        .filter(|operation| crate::file_conflicts::is_kept(operation))
+        .filter(|operation| operation.file.is_some_and(|file| !file.wanted))
+        .filter_map(|operation| match &operation.artifact {
+            SkillFile(file) => Some((file.root, file.skill.clone())),
+            _ => None,
+        })
+        .collect();
+    if kept_units.is_empty() {
+        return;
+    }
+    for operation in planned
+        .iter_mut()
+        .filter(|operation| operation.kind == OperationKind::Remove)
+    {
+        let SkillFile(file) = &operation.artifact else {
+            continue;
+        };
+        if kept_units.contains(&(file.root, file.skill.clone())) {
+            operation.kind = OperationKind::Manual;
+            operation.rollback_action =
+                rollback_action_for(OperationKind::Manual, operation.previous_state);
+        }
+    }
 }
 
 /// Review lines for the skills surface, one per folder and kind, in the shape the review table
@@ -1703,13 +1832,14 @@ pub fn plan_artifacts_for_surfaces_in(
 /// ~ ~/.claude/skills (3 skills, 5 files)
 /// - $CODEX_HOME/skills (25 skills, owned copies)
 /// ! ~/.cursor/skills/tdd (edited, kept)
+/// = ~/.claude/skills/diagnose (you manage; bundled update available)
 /// ```
 ///
 /// Creations, updates and removals are summarised per folder; every skill that stays because it
 /// was edited or is in the way gets its own line, with the harnesses that read both that copy
-/// and the installed one.
+/// and the installed one. `=` marks a skill with a file the user keeps.
 pub fn skill_plan_details(planned: &[PlannedArtifact], scope: &SkillScope) -> Vec<String> {
-    use std::collections::BTreeSet;
+    use std::collections::{BTreeMap, BTreeSet};
     let count = |n: usize, noun: &str| format!("{n} {noun}{}", if n == 1 { "" } else { "s" });
     let mut lines = Vec::new();
     for (sign, kind, owned) in [
@@ -1740,42 +1870,82 @@ pub fn skill_plan_details(planned: &[PlannedArtifact], scope: &SkillScope) -> Ve
             ));
         }
     }
-    let mut kept: BTreeSet<(usize, String)> = BTreeSet::new();
-    for file in planned
+    // The skills that stay as they are, per folder and name: edited ones (conflicts) and the ones
+    // the user keeps.
+    #[derive(Default)]
+    struct Held {
+        conflict: bool,
+        kept: bool,
+        update: bool,
+        wanted: bool,
+    }
+    let mut held: BTreeMap<(usize, String), Held> = BTreeMap::new();
+    for operation in planned
         .iter()
-        .filter(|operation| operation.kind == OperationKind::Conflict)
-        .filter_map(|operation| operation.artifact.as_skill_file())
+        .filter(|operation| operation.kind == OperationKind::Conflict || is_kept(operation))
     {
+        let Some(file) = operation.artifact.as_skill_file() else {
+            continue;
+        };
         let order = crate::skill_roots::SkillRoot::ALL
             .iter()
             .position(|root| *root == file.root)
             .unwrap_or_default();
+        let entry = held
+            .entry((order, file.skill.as_str().to_string()))
+            .or_default();
+        match operation
+            .file
+            .and_then(|file| file.kept.map(|kept| (kept, file.wanted)))
+        {
+            Some((kept, wanted)) => {
+                entry.kept = true;
+                entry.update |= kept.bundle_changed;
+                entry.wanted = wanted;
+            }
+            None => entry.conflict = true,
+        }
+    }
+    for ((order, skill), held) in held {
+        let root = crate::skill_roots::SkillRoot::ALL[order];
         let readers: Vec<&str> = scope
             .harnesses()
             .iter()
             .filter(|harness| {
-                !scope.contains(file.root)
+                !scope.contains(root)
                     && crate::skill_roots::readers(**harness)
                         .iter()
-                        .any(|folder| folder.root() == Some(file.root))
+                        .any(|folder| folder.root() == Some(root))
             })
             .map(|harness| harness_name(*harness))
             .collect();
-        let note = match readers.as_slice() {
-            [] => "edited, kept".to_string(),
-            [one] => format!("edited, kept; {one} reads both copies"),
-            many => format!("edited, kept; {} read both copies", many.join(", ")),
+        let reads = match readers.as_slice() {
+            [] => String::new(),
+            [one] => format!("; {one} reads both copies"),
+            many => format!("; {} read both copies", many.join(", ")),
         };
-        kept.insert((
-            order,
-            format!("! {}/{} ({note})", file.root.display(), file.skill.as_str()),
-        ));
+        if held.conflict {
+            lines.push(format!(
+                "! {}/{skill} (edited, kept{reads})",
+                root.display()
+            ));
+        }
+        if held.kept {
+            let bundle = match (held.wanted, held.update) {
+                (false, _) => "",
+                (true, true) => "; bundled update available",
+                (true, false) => "; bundle unchanged",
+            };
+            lines.push(format!(
+                "= {}/{skill} (you manage{bundle}{reads})",
+                root.display()
+            ));
+        }
     }
-    lines.extend(kept.into_iter().map(|(_, line)| line));
     lines
 }
 
-fn harness_name(harness: crate::agent_targets::HarnessId) -> &'static str {
+pub(crate) fn harness_name(harness: crate::agent_targets::HarnessId) -> &'static str {
     use crate::agent_targets::HarnessId;
     match harness {
         HarnessId::Claude => "Claude",

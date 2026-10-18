@@ -29,7 +29,7 @@ type EnabledSettings = Pick<AppSettings, "enabled_target_ids" | "enabled_harness
 
 /**
  * A surface state as the pages show it: the backend states plus `off` (target toggle), `unknown` (not fetched)
- * and `user_managed` (a rules file the user chose to manage; the backend reports it as current).
+ * and `user_managed` (a rules file, or skill or agent files, the user chose to keep; the backend reports it as current).
  */
 export type SurfaceDisplayState = InstallationState | "off" | "unknown" | "user_managed";
 
@@ -79,7 +79,7 @@ export interface TargetMeta {
   tone: Tone;
 }
 
-/** The right-hand cell of a harness-list row: "current", "2 to update", "1 conflict", "…". */
+/** The right-hand cell of a harness-list row: "current", "current · you manage 2", "2 to update", "1 conflict", "…". */
 export function targetMeta(entry: OverviewEntry | undefined, options: { workspaceValid: boolean; id: OverviewId }): TargetMeta {
   if (!options.workspaceValid) {
     return options.id === "workspace" ? { text: "setup needed", tone: "warn" } : { text: "needs workspace", tone: "dim" };
@@ -94,8 +94,11 @@ export function targetMeta(entry: OverviewEntry | undefined, options: { workspac
     return { text: safe > 0 ? `${safe} to update · ${plural(conflicts, "conflict")}` : plural(conflicts, "conflict"), tone: "fail" };
   }
   switch (status.state) {
-    case "current":
-      return { text: "current", tone: "ok" };
+    case "current": {
+      // Files the user keeps are not conflicts and not current: they have bundled updates the app never applies.
+      const kept = status.counts.kept_count ?? 0;
+      return kept > 0 ? { text: `current · you manage ${kept}`, tone: "warn" } : { text: "current", tone: "ok" };
+    }
     case "unavailable":
       return { text: "unavailable", tone: "dim" };
     case "not_installed":
@@ -150,7 +153,8 @@ export function surfaceRowsFor(
       };
     }
     const row = statusRow(entry?.status, surface);
-    const state: SurfaceDisplayState = row?.rules?.user_managed ? "user_managed" : (row?.state ?? "unknown");
+    const keepsFiles = row?.state === "current" && (row.files?.kept ?? 0) > 0;
+    const state: SurfaceDisplayState = row?.rules?.user_managed || keepsFiles ? "user_managed" : (row?.state ?? "unknown");
     return {
       surface,
       name: surfaceShortName(surface),

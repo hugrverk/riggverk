@@ -2,6 +2,7 @@ import type { InstallFlowRequest, InstallReview } from "../hooks/useInstallFlow"
 import type { GlyphName } from "../ui/Glyph";
 import type { Tone } from "../ui/tone";
 import type { AppSettings, InstallAgent, PlannedOperation, SetupResult, SetupSurfaceId } from "../types";
+import { resolvePointer } from "./fileConflicts";
 import {
   enabledSetupSurfaces,
   enabledSurfacesForHarness,
@@ -91,15 +92,19 @@ const KIND_STYLE: Record<PlanRowKind, { glyph: GlyphName; label: string; tone: T
   unavailable: { glyph: "none", label: "unavailable", tone: "dim" },
 };
 
-/** `!` marks a file that stays because the user edited it (a conflict inside an otherwise safe surface). */
+/**
+ * `!` marks a file that stays because the user edited it (a conflict inside an otherwise safe surface), `=` one the
+ * user chose to keep (a manual step: updates never write it).
+ */
 const DETAIL_KIND: Record<string, PlanRowKind> = {
   "+": "create",
   "~": "update",
   "−": "remove",
   "-": "remove",
   "!": "conflict",
+  "=": "manual",
 };
-const DETAIL_LINE = /^\s*([+~−!-])\s+(?:(?:create|update|remove)\s+)?(.*?)\s*$/;
+const DETAIL_LINE = /^\s*([+~−!=-])\s+(?:(?:create|update|remove)\s+)?(.*?)\s*$/;
 const TRAILING_NOTE = /^(.*?)\s*\((.+)\)$/;
 
 function unique(lines: Array<string | null | undefined>): string[] {
@@ -128,6 +133,12 @@ function rowFor(
   };
 }
 
+/** Where a skill or agent file in conflict is resolved: the review itself only reports it. */
+function resolveLines(kind: PlanRowKind, surface: SetupSurfaceId): string[] {
+  const pointer = kind === "conflict" ? resolvePointer(surface) : null;
+  return pointer ? [pointer] : [];
+}
+
 function rowsForOperation(op: PlannedOperation): PlanRow[] {
   const kind = op.kind as PlanRowKind;
   if (!(kind in KIND_STYLE)) return [];
@@ -142,11 +153,11 @@ function rowsForOperation(op: PlannedOperation): PlanRow[] {
       const withNote = TRAILING_NOTE.exec(match[2]!);
       const file = withNote ? withNote[1]! : match[2]!;
       const note = withNote ? withNote[2]! : "";
-      return rowFor(op.surface, index, rowKind, file, note, unique([...baseDetail, line]));
+      return rowFor(op.surface, index, rowKind, file, note, unique([...baseDetail, line, ...resolveLines(rowKind, op.surface)]));
     });
   }
   const note = op.conflict_description ?? op.manual_step ?? op.summary;
-  return [rowFor(op.surface, 0, kind, surfaceTitle(op.surface), note, unique([...baseDetail, ...lines]))];
+  return [rowFor(op.surface, 0, kind, surfaceTitle(op.surface), note, unique([...baseDetail, ...lines, ...resolveLines(kind, op.surface)]))];
 }
 
 /** Rows grouped by surface, in request order; unchanged surfaces keep a header with no rows. */
