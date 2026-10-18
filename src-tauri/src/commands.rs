@@ -5,7 +5,7 @@ mod content;
 pub(crate) mod cursor_profile;
 mod defaults;
 pub(crate) use defaults::default_workspace_files;
-mod light_runtime;
+pub(crate) mod light_runtime;
 mod opencode_cli;
 mod opencode_runtime;
 mod process;

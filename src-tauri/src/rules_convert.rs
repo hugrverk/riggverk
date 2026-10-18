@@ -41,6 +41,7 @@ pub fn history_harness(artifact: &ArtifactId) -> Option<&'static str> {
         ArtifactId::ClaudeRules => Some("claude"),
         ArtifactId::CodexRules => Some("codex"),
         ArtifactId::OpenCodeRules => Some("opencode"),
+        ArtifactId::HarnessRules(harness) => harness.rules().map(|rules| rules.adapter.as_str()),
         _ => None,
     }
 }

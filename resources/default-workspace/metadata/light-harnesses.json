@@ -3,15 +3,35 @@
   "harnesses": {
     "copilot": {
       "label": "Copilot",
-      "cli": { "program": "copilot" }
+      "cli": { "program": "copilot" },
+      "rules": {
+        "adapter": "copilot",
+        "target_rel": ".copilot/copilot-instructions.md",
+        "default_enabled": true
+      }
     },
     "pi": {
       "label": "Pi",
-      "cli": { "program": "pi" }
+      "cli": { "program": "pi" },
+      "rules": {
+        "adapter": "pi",
+        "target_rel": ".pi/agent/AGENTS.md",
+        "default_enabled": true,
+        "private_dir": true,
+        "masked_by": ["AGENTS.override.md"],
+        "peer_files": ["CLAUDE.md", "CLAUDE.MD", "AGENTS.MD"]
+      }
     },
     "kilo": {
       "label": "Kilo",
-      "cli": { "program": "kilo" }
+      "cli": { "program": "kilo" },
+      "rules": {
+        "adapter": "kilo",
+        "target_rel": ".config/kilo/AGENTS.md",
+        "default_enabled": true,
+        "xdg_config_home": true,
+        "shadows": ".claude/CLAUDE.md"
+      }
     }
   }
 }

@@ -54,6 +54,12 @@ pub enum SetupSurfaceId {
     CursorSkills,
     /// Cursor Playwright MCP state (mcp.json merge)
     CursorMcp,
+    /// GitHub Copilot instructions (`~/.copilot/copilot-instructions.md`)
+    CopilotRules,
+    /// Pi context file (`~/.pi/agent/AGENTS.md`)
+    PiRules,
+    /// Kilo Code global rules (`$XDG_CONFIG_HOME/kilo/AGENTS.md`, `~/.config/kilo/AGENTS.md`)
+    KiloRules,
     /// Installed runtime workspace bundled files
     WorkspaceBundle,
 }
@@ -72,6 +78,9 @@ impl SetupSurfaceId {
         SetupSurfaceId::Skills,
         SetupSurfaceId::CursorAgents,
         SetupSurfaceId::CursorMcp,
+        SetupSurfaceId::CopilotRules,
+        SetupSurfaceId::PiRules,
+        SetupSurfaceId::KiloRules,
         SetupSurfaceId::WorkspaceBundle,
     ];
 
@@ -93,6 +102,9 @@ impl SetupSurfaceId {
             SetupSurfaceId::CursorAgents => "Cursor Agents",
             SetupSurfaceId::CursorSkills => "Cursor Skills",
             SetupSurfaceId::CursorMcp => "Cursor MCP",
+            SetupSurfaceId::CopilotRules => "Copilot Rules",
+            SetupSurfaceId::PiRules => "Pi Rules",
+            SetupSurfaceId::KiloRules => "Kilo Rules",
             SetupSurfaceId::WorkspaceBundle => "Workspace Resources",
         }
     }
@@ -118,6 +130,17 @@ impl SetupSurfaceId {
         }
     }
 
+    /// The rules surface of a light harness; `None` for a central harness (their rules surfaces
+    /// are named by the variants above).
+    pub fn light_rules(harness: HarnessId) -> Option<SetupSurfaceId> {
+        match harness {
+            HarnessId::Copilot => Some(SetupSurfaceId::CopilotRules),
+            HarnessId::Pi => Some(SetupSurfaceId::PiRules),
+            HarnessId::Kilo => Some(SetupSurfaceId::KiloRules),
+            HarnessId::Codex | HarnessId::OpenCode | HarnessId::Claude | HarnessId::Cursor => None,
+        }
+    }
+
     /// The harness a surface belongs to. `Skills` serves every harness, so it belongs to none.
     pub fn harness(self) -> Option<HarnessId> {
         match self {
@@ -129,6 +152,9 @@ impl SetupSurfaceId {
             | SetupSurfaceId::CodexRules => Some(HarnessId::Codex),
             SetupSurfaceId::ClaudeRules | SetupSurfaceId::ClaudeAgents => Some(HarnessId::Claude),
             SetupSurfaceId::CursorAgents | SetupSurfaceId::CursorMcp => Some(HarnessId::Cursor),
+            SetupSurfaceId::CopilotRules => Some(HarnessId::Copilot),
+            SetupSurfaceId::PiRules => Some(HarnessId::Pi),
+            SetupSurfaceId::KiloRules => Some(HarnessId::Kilo),
             SetupSurfaceId::Skills
             | SetupSurfaceId::ClaudeSkills
             | SetupSurfaceId::OpenCodeSkills

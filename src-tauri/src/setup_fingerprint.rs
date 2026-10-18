@@ -67,9 +67,10 @@ fn artifact_kind(artifact: &ArtifactId) -> ArtifactKind {
         ArtifactId::OpenCodeConfig | ArtifactId::CodexConfig => ArtifactKind::ConfigFile,
         ArtifactId::OpenCodeTui => ArtifactKind::TuiConfig,
         ArtifactId::OpenCodePlaywrightMcp => ArtifactKind::McpConfig,
-        ArtifactId::OpenCodeRules | ArtifactId::CodexRules | ArtifactId::ClaudeRules => {
-            ArtifactKind::RulesFile
-        }
+        ArtifactId::OpenCodeRules
+        | ArtifactId::CodexRules
+        | ArtifactId::ClaudeRules
+        | ArtifactId::HarnessRules(_) => ArtifactKind::RulesFile,
         ArtifactId::OpenCodeAgent(_)
         | ArtifactId::CodexAgent(_)
         | ArtifactId::ClaudeAgent(_)

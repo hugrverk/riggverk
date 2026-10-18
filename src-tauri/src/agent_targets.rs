@@ -85,7 +85,7 @@ pub struct AgentTargetMeta {
 }
 
 pub fn targets() -> Vec<AgentSyncTarget> {
-    vec![
+    let mut all = vec![
         AgentSyncTarget {
             id: "codex_rules",
             label: "codex rules",
@@ -158,7 +158,21 @@ pub fn targets() -> Vec<AgentSyncTarget> {
             target_rel: ".cursor/agents",
             source_rel: "templates/cursor/agents",
         },
-    ]
+    ];
+    // The light tier's rows come from the descriptor, in its order.
+    all.extend(
+        crate::light_harness::light_harnesses()
+            .iter()
+            .map(|harness| AgentSyncTarget {
+                id: &harness.rules.target_id,
+                label: &harness.rules.target_label,
+                harness: harness.id,
+                kind: TargetKind::Rules,
+                target_rel: &harness.rules.target_rel,
+                source_rel: &harness.rules.source_rel,
+            }),
+    );
+    all
 }
 
 pub fn rule_targets() -> Vec<AgentSyncTarget> {
@@ -192,14 +206,21 @@ pub fn editable_config_targets() -> Vec<AgentSyncTarget> {
 }
 
 /// Targets that stay OFF until the user opts in. `codex_config` rewrites the
-/// user's approval and sandbox posture in `~/.codex/config.toml`.
+/// user's approval and sandbox posture in `~/.codex/config.toml`. A light harness target is off
+/// when its descriptor says so.
 const DEFAULT_DISABLED_TARGET_IDS: &[&str] = &["codex_config"];
+
+fn default_disabled(target_id: &str) -> bool {
+    DEFAULT_DISABLED_TARGET_IDS.contains(&target_id)
+        || crate::light_harness::rules_for_target(target_id)
+            .is_some_and(|harness| !harness.rules.default_enabled)
+}
 
 pub fn default_enabled_ids() -> Vec<String> {
     targets()
         .iter()
         .map(|target| target.id)
-        .filter(|id| !DEFAULT_DISABLED_TARGET_IDS.contains(id))
+        .filter(|id| !default_disabled(id))
         .map(str::to_string)
         .collect()
 }
@@ -217,7 +238,9 @@ pub fn target_surfaces(target_id: &str) -> &'static [SetupSurfaceId] {
         "claude_rules" => &[SetupSurfaceId::ClaudeRules],
         "claude_agents" => &[SetupSurfaceId::ClaudeAgents],
         "cursor_setup" => &[SetupSurfaceId::CursorAgents, SetupSurfaceId::CursorMcp],
-        _ => &[],
+        other => crate::light_harness::rules_for_target(other)
+            .map(|harness| std::slice::from_ref(&harness.rules.surface))
+            .unwrap_or(&[]),
     }
 }
 
@@ -536,10 +559,49 @@ mod tests {
             "opencode_config",
             "codex_config",
             "cursor_setup",
+            "copilot_rules",
+            "pi_rules",
+            "kilo_rules",
         ]
         .into_iter()
         .collect();
-        assert_eq!(ids, expected, "targets() must contain exactly 9 known IDs");
+        assert_eq!(ids, expected, "targets() must contain exactly 12 known IDs");
+    }
+
+    #[test]
+    fn the_light_rules_targets_come_from_the_descriptor_after_the_central_ones() {
+        let all = targets();
+        let ids: Vec<&str> = all.iter().map(|t| t.id).collect();
+        assert_eq!(
+            &ids[ids.len() - 3..],
+            ["copilot_rules", "pi_rules", "kilo_rules"],
+            "descriptor order, after cursor_setup"
+        );
+        assert_eq!(ids[ids.len() - 4], "cursor_setup");
+        let pi = all.iter().find(|t| t.id == "pi_rules").expect("pi_rules");
+        assert_eq!(pi.harness, HarnessId::Pi);
+        assert!(matches!(pi.kind, TargetKind::Rules));
+        assert_eq!(pi.label, "pi rules");
+        assert_eq!(pi.target_rel, ".pi/agent/AGENTS.md");
+        assert_eq!(pi.source_rel, "templates/sync/pi-rules.md");
+        assert_eq!(target_surfaces("kilo_rules"), [SetupSurfaceId::KiloRules]);
+        assert_eq!(
+            surface_target_id(SetupSurfaceId::CopilotRules),
+            Some("copilot_rules")
+        );
+        assert_eq!(target_harness("copilot_rules"), Some(HarnessId::Copilot));
+        let rules: Vec<&str> = rule_targets().iter().map(|t| t.id).collect();
+        assert_eq!(
+            rules.len(),
+            6,
+            "the three central and the three light rules targets"
+        );
+        for id in ["copilot_rules", "pi_rules", "kilo_rules"] {
+            assert!(
+                default_enabled_ids().contains(&id.to_string()),
+                "{id} defaults ON"
+            );
+        }
     }
 
     #[test]

@@ -593,9 +593,10 @@ fn artifact_kind(artifact: &ArtifactId) -> ArtifactKind {
         ArtifactId::OpenCodeConfig | ArtifactId::CodexConfig => ArtifactKind::ConfigFile,
         ArtifactId::OpenCodeTui => ArtifactKind::TuiConfig,
         ArtifactId::OpenCodePlaywrightMcp => ArtifactKind::McpConfig,
-        ArtifactId::OpenCodeRules | ArtifactId::CodexRules | ArtifactId::ClaudeRules => {
-            ArtifactKind::RulesFile
-        }
+        ArtifactId::OpenCodeRules
+        | ArtifactId::CodexRules
+        | ArtifactId::ClaudeRules
+        | ArtifactId::HarnessRules(_) => ArtifactKind::RulesFile,
         ArtifactId::OpenCodeAgent(_)
         | ArtifactId::CodexAgent(_)
         | ArtifactId::ClaudeAgent(_)
@@ -819,12 +820,21 @@ fn assess_rules(
         },
         Err(_) => None,
     };
-    Some(crate::rules_block::assess(
+    let mut assessment = crate::rules_block::assess(
         installed.as_deref(),
         &source_text,
         managed_hash,
         &|digest| crate::managed_bootstrap::approved_rules_base_digest(artifact, digest),
-    ))
+    );
+    // A file in the same folder can keep the harness from reading the block at all; writing
+    // would then change nothing the harness sees (a masking override) or hide the user's own
+    // context file (a peer), so the plan is a conflict whatever the file itself holds.
+    if let ArtifactId::HarnessRules(harness) = artifact {
+        if let Some(conflict) = harness.rules().and_then(|rules| rules.preflight(dest)) {
+            assessment.plan = crate::rules_block::RulesPlan::Conflict(conflict);
+        }
+    }
+    Some(assessment)
 }
 
 /// Block classification for the plan, or `None` for non-rules artifacts and
@@ -1662,6 +1672,7 @@ pub fn artifact_backup_rel(artifact: &ArtifactId) -> String {
         ArtifactId::CodexConfig => "codex-config".into(),
         ArtifactId::CodexRules => "codex-rules".into(),
         ArtifactId::ClaudeRules => "claude-rules".into(),
+        ArtifactId::HarnessRules(harness) => format!("{}-rules", harness.harness().as_str()),
         ArtifactId::CursorMcp => "cursor-mcp".into(),
         ArtifactId::OpenCodeAgent(name) => format!("opencode-agent-{}", name.as_str()),
         ArtifactId::CodexAgent(name) => format!("codex-agent-{}", name.as_str()),

@@ -271,6 +271,13 @@ fn rules_detail(
                 .map(MalformedReason::message)
                 .unwrap_or("unreadable")
         )),
+        RulesPlan::Conflict(RulesConflict::MaskedByOverride) => {
+            Some("an override file in the same folder masks this file, left as is".to_string())
+        }
+        RulesPlan::Conflict(RulesConflict::PeerContextFile) => Some(
+            "another context file in this folder would be hidden by a new one, nothing written"
+                .to_string(),
+        ),
     }
 }
 
@@ -301,6 +308,10 @@ pub(crate) fn artifact_label(artifact: &crate::artifact_registry::ArtifactId) ->
             file.root.display()
         ),
         ArtifactId::WorkspaceFile(path) => format!("Workspace file {}", path.as_str()),
+        ArtifactId::HarnessRules(harness) => format!(
+            "{} rules",
+            crate::light_harness::display_name(harness.harness())
+        ),
     }
 }
 
