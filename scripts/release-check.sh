@@ -777,8 +777,12 @@ if ! grep -q '"model": "opencode-go/glm-5.2"' resources/default-workspace/templa
   printf 'FAIL: bundled opencode.json missing expected GLM 5.2 model\n' >&2
   exit 1
 fi
-if ! grep -q '"small_model": "opencode-go/deepseek-v4-flash"' resources/default-workspace/templates/opencode.json; then
-  printf 'FAIL: bundled opencode.json missing expected DeepSeek v4 Flash small_model\n' >&2
+if ! grep -q '"small_model": "opencode-go/deepseek-v4.1-flash"' resources/default-workspace/templates/opencode.json; then
+  printf 'FAIL: bundled opencode.json missing expected DeepSeek v4.1 Flash small_model\n' >&2
+  exit 1
+fi
+if ! grep -q '"lsp": true' resources/default-workspace/templates/opencode.json; then
+  printf 'FAIL: bundled opencode.json missing lsp true\n' >&2
   exit 1
 fi
 if ! grep -q '"autoupdate": "notify"' resources/default-workspace/templates/opencode.json; then
@@ -789,7 +793,7 @@ if ! grep -q '"snapshot": true' resources/default-workspace/templates/opencode.j
   printf 'FAIL: bundled opencode.json missing snapshot true\n' >&2
   exit 1
 fi
-printf '  opencode.json: default_agent=architect model=glm-5.2 small_model=deepseek-v4-flash autoupdate=notify snapshot=true\n'
+printf '  opencode.json: default_agent=architect model=glm-5.2 small_model=deepseek-v4.1-flash lsp=true autoupdate=notify snapshot=true\n'
 
 step "bundled default tui.json"
 if [ ! -f resources/default-workspace/templates/tui.json ]; then

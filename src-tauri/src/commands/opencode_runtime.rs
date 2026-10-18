@@ -103,6 +103,7 @@ const MANAGED_TOP_LEVEL_KEYS: &[&str] = &[
     "model",
     "small_model",
     "default_agent",
+    "lsp",
     "compaction",
     "watcher",
     "permission",
@@ -1333,7 +1334,7 @@ pub struct OpenCodeModelSelection {
 }
 
 const DEFAULT_MODEL: &str = "opencode-go/glm-5.2";
-const DEFAULT_SMALL_MODEL: &str = "opencode-go/deepseek-v4-flash";
+const DEFAULT_SMALL_MODEL: &str = "opencode-go/deepseek-v4.1-flash";
 
 /// App-level model selection override stored outside workspace templates.
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
@@ -1673,7 +1674,7 @@ mod tests {
         write_file(
             &ws,
             "templates/opencode.base.json",
-            r#"{"default_agent":"architect","model":"opencode-go/glm-5.2","small_model":"opencode-go/deepseek-v4-flash"}"#,
+            r#"{"default_agent":"architect","model":"opencode-go/glm-5.2","small_model":"opencode-go/deepseek-v4.1-flash"}"#,
         );
         write_file(
             &ws,
@@ -1711,7 +1712,7 @@ mod tests {
         assert_eq!(health.model, Some("opencode-go/glm-5.2".into()));
         assert_eq!(
             health.small_model,
-            Some("opencode-go/deepseek-v4-flash".into())
+            Some("opencode-go/deepseek-v4.1-flash".into())
         );
         assert_eq!(health.bundled_agent_count, 2);
         assert_eq!(health.installed_bundled_agent_count, 2);
@@ -3215,6 +3216,41 @@ mod tests {
             string_list(&metadata, "agent_permissions"),
             expect(MANAGED_AGENT_PERMISSIONS)
         );
+    }
+
+    #[test]
+    fn test_fallback_model_constants_match_the_bundled_base_template() {
+        let base: serde_json::Value =
+            serde_json::from_str(&bundled_template("opencode.base.json")).expect("base template");
+        assert_eq!(base["model"], DEFAULT_MODEL);
+        assert_eq!(base["small_model"], DEFAULT_SMALL_MODEL);
+    }
+
+    #[test]
+    fn test_lsp_is_a_managed_key_that_installs_and_is_compared() {
+        let template: serde_json::Value =
+            serde_json::from_str(&bundled_template("opencode.json")).expect("template");
+        assert_eq!(template["lsp"], true, "the bundled config enables built-in LSP");
+        assert_eq!(
+            extract_managed_opencode_config(&template)["lsp"],
+            true,
+            "lsp is part of the managed projection"
+        );
+
+        // A user's own `lsp: false` is reset on install, other user keys survive.
+        let installed: serde_json::Value =
+            serde_json::from_str(r#"{"lsp":false,"provider":{"mine":{}}}"#).expect("installed");
+        let merged =
+            merge_managed_opencode_config(&installed, &extract_managed_opencode_config(&template));
+        assert_eq!(merged["lsp"], true);
+        assert_eq!(merged["provider"], installed["provider"]);
+
+        // Health sees a config that predates the key, or turns it off, as diverged.
+        assert!(managed_opencode_keys_match(&merged, &template));
+        assert!(!managed_opencode_keys_match(&installed, &template));
+        let mut without = merged.clone();
+        without.as_object_mut().expect("object").remove("lsp");
+        assert!(!managed_opencode_keys_match(&without, &template));
     }
 
     #[test]

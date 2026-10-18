@@ -4,7 +4,7 @@
   "autoupdate": "notify",
   "snapshot": true,
   "model": "opencode-go/glm-5.2",
-  "small_model": "opencode-go/deepseek-v4-flash",
+  "small_model": "opencode-go/deepseek-v4.1-flash",
   "default_agent": "architect",
   "mcp": {
     "playwright": {
@@ -22,6 +22,7 @@
       "enabled": true
     }
   },
+  "lsp": true,
   "compaction": {
     "auto": true,
     "prune": true,
