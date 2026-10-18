@@ -32,6 +32,8 @@ A conflict is a file the app will not overwrite because it cannot prove it owns 
 - **Deleted `.agent-workspace/managed-state.json`**: this is the ownership record. Without it the app cannot prove it owns what it installed, so any file that is not an exact copy of a bundled version becomes a conflict. Restore it from a backup (`setup/<transaction id>/managed-state.previous.json`) or resolve each file as above. It describes this machine's installs; do not copy it to another machine.
 - **Rules file (`CLAUDE.md`, `AGENTS.md`)**: see the next section.
 - **Skill you installed by hand with the same name**: diverged copies are preserved. Rename yours or delete it to take the bundled one.
+- **Supporting file of a skill you edited** (for example `~/.claude/skills/security-audit/HUNTING.md`): that one file is a conflict and stays as you left it; the other files of the skill still update, so the skill can mix your file with newer ones. To take the bundled version, move or delete your copy and install again. To keep yours, do nothing.
+- **Something in the way inside a skill folder**: a symlink in the path (including a symlinked skills folder), a directory where a skill file belongs, or a file where a skill needs a directory is shown as a conflict for the files below it, and nothing there is written. Move it aside and install again. A file you added to a skill folder is never touched.
 
 ## Rules file conflicts
 

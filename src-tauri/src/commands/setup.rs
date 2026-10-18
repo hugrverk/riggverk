@@ -682,18 +682,7 @@ fn remove_single_artifact(
         crate::safe_filesystem::remove_regular_file_no_symlinks(&dest, root)
             .map_err(|e| format!("remove {}: {e}", dest.display()))?;
     }
-    if matches!(
-        artifact,
-        crate::artifact_registry::ArtifactId::OpenCodeSkill(_)
-            | crate::artifact_registry::ArtifactId::CodexSkill(_)
-            | crate::artifact_registry::ArtifactId::ClaudeSkill(_)
-            | crate::artifact_registry::ArtifactId::CursorSkill(_)
-            | crate::artifact_registry::ArtifactId::CodexLegacySkill(_)
-    ) {
-        if let Some(parent) = dest.parent() {
-            crate::safe_filesystem::remove_empty_directory_no_symlinks(parent, root)?;
-        }
-    }
+    setup_transaction::remove_empty_skill_directories(artifact, &dest, home, root)?;
     if matches!(
         artifact,
         crate::artifact_registry::ArtifactId::WorkspaceFile(_)
@@ -2639,7 +2628,8 @@ mod tests {
             "keep me",
         )
         .expect("unknown sibling");
-        let artifact = ArtifactId::OpenCodeSkill(
+        let artifact = ArtifactId::skill_md(
+            crate::skill_roots::SkillRoot::OpenCode,
             crate::artifact_registry::SkillName::new("frontend-design").unwrap(),
         );
         apply_single_artifact(&artifact, &ws, &resolved_home, None).expect("apply skill");
@@ -4242,7 +4232,10 @@ mod tests {
     fn stale_removal_never_deletes_a_user_modified_file() {
         let env = TempSetupEnv::new("stale-removal");
         let stale_skill = |name: &str| {
-            ArtifactId::ClaudeSkill(crate::artifact_registry::SkillName::new(name).unwrap())
+            ArtifactId::skill_md(
+                crate::skill_roots::SkillRoot::Claude,
+                crate::artifact_registry::SkillName::new(name).unwrap(),
+            )
         };
         let (untouched, edited) = (stale_skill("grill-me"), stale_skill("caveman"));
         let mut records = Vec::new();

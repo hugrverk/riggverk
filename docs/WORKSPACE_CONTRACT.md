@@ -68,10 +68,12 @@ Skill names from frontmatter must be globally unique across root-level and group
 
 ## Installed skill layout
 
-Source grouping never changes harness installation layout. Every supported skill installs flat:
+Source grouping never changes harness installation layout. Every supported skill installs flat, as a whole directory: its `SKILL.md` and every supporting file next to it, at the same relative paths as in the bundle:
 
 ```text
 <harness-skill-root>/<skill-name>/SKILL.md
+<harness-skill-root>/<skill-name>/<supporting file>            (HUNTING.md, LICENSE, ...)
+<harness-skill-root>/<skill-name>/assets/report-template.html  (nested files keep their directories)
 ```
 
 Global destinations:
@@ -85,7 +87,9 @@ All 25 current bundled skills target Codex, OpenCode, Claude, and Cursor. Sync-a
 
 ## Skill sources
 
-Canonical skill files under `skills/` are the single source for every harness. Managed setup copies each `SKILL.md` byte for byte into every harness skill folder; there are no generated per-harness adapters. Harness-specific text lives at the end of the file under `## Harness notes` (`### Claude Code`, `### Codex`, `### OpenCode`, `### Cursor`, in that order). Claude-only frontmatter keys and Claude's `!` command injection are allowed only together with the Claude Code notes, and `scripts/check-skill-routing.py` enforces the structure in the source repository. That script lives in the source repository's `scripts/`, not in the installed workspace; skills added to a runtime workspace are not discovered for install. A skill without a canonical file is unavailable; production setup has no other source. Destination paths remain unchanged and are still single `SKILL.md` files. No supporting files or skill directories are owned by managed setup.
+Canonical skill files under `skills/` are the single source for every harness. Managed setup copies each `SKILL.md` byte for byte into every harness skill folder; there are no generated per-harness adapters. Harness-specific text lives at the end of the file under `## Harness notes` (`### Claude Code`, `### Codex`, `### OpenCode`, `### Cursor`, in that order). Claude-only frontmatter keys and Claude's `!` command injection are allowed only together with the Claude Code notes, and `scripts/check-skill-routing.py` enforces the structure in the source repository. That script lives in the source repository's `scripts/`, not in the installed workspace; skills added to a runtime workspace are not discovered for install. A skill without a canonical file is unavailable; production setup has no other source. Destination folders are unchanged. What changed is the unit of ownership: every file of a skill, `SKILL.md` and supporting files alike, is one managed artifact (`SkillFile`: skill root, skill name, relative path), copied byte for byte from the skill's directory in the bundle. There is no artifact for a directory, so Agent Workspace never owns a skill folder as a whole.
+
+Supporting files are the regular files below the skill directory: no symlinks, no dot entries, at most four path components, at most 64 files and 2 MiB per skill, at most 1 MiB per file, and no nested `SKILL.md`. A bundled skill that breaks a bound is a packaging error and installs nothing. File modes are not copied: an executable source installs as an ordinary readable file, and the skills run their scripts through `node <path>`.
 
 ## Skill ownership and cleanup
 
@@ -96,7 +100,7 @@ Installed skill files are user-owned after installation. Agent Workspace may:
 - remove only known deprecated copies that still match an Agent Workspace reference snapshot
 - update or remove a copy that is byte-for-byte a version the app shipped, even when `managed-state.json` records no or a different hash for it (see Managed ownership below)
 
-Diverged deprecated copies, edited copies, and unknown skills are preserved.
+Diverged deprecated copies, edited copies, and unknown skills are preserved. This holds per file: an edited supporting file is a conflict by itself and is left as is, while its siblings still update. A file you add inside a skill directory is never touched. Removing a skill (a retired one, or uninstall) removes only the files the app owns, then the directories that became empty, from the file's own directory up to the skill's directory and never the skill root; a directory that still holds one of your files stays. A symlink in a skill's path (a symlinked skills root included), a directory where a file belongs, or a file where a directory belongs is a conflict for the files below it, found while planning rather than failing the apply.
 
 Deprecated removal creates a transaction backup before deletion. Rollback validates the transaction, resolves the current destination from the harness registry, rejects destination mismatch and occupied targets, stages restores, and preserves the backup transaction.
 
@@ -200,7 +204,7 @@ Packaged source and runtime destination are resolved independently by `SetupRoot
 
 Managed ownership is recorded in `.agent-workspace/managed-state.json` schema 2 with stable SHA-256 digests. First-run adoption and stale cleanup require an exact canonical or historical digest. Unknown files and modified historical copies remain conflicts and are never claimed or deleted.
 
-A whole-file copy artifact (harness skill, harness agent, OpenCode Playwright MCP file) whose bytes are exactly a version the app shipped is app-owned even when its recorded hash differs or is missing, for example after an older app version or legacy script synced it without recording ownership. The planner then updates or removes it like a recorded file, with backup and rollback. `metadata/shipped-digests.json` lists those versions per bundle source path (every committed version plus the current one, including retired skills and agents); `scripts/generate-shipped-digests.py` keeps it current and `release-check` verifies it. Rules blocks (`metadata/rules-history`), merge-managed configs, and workspace files have their own proofs and are not covered. Missing or malformed metadata proves nothing, so those files stay conflicts.
+A whole-file copy artifact (a harness skill file, harness agent, OpenCode Playwright MCP file) whose bytes are exactly a version the app shipped is app-owned even when its recorded hash differs or is missing, for example after an older app version or legacy script synced it without recording ownership. The planner then updates or removes it like a recorded file, with backup and rollback. `metadata/shipped-digests.json` lists those versions per bundle source path (every committed version plus the current one, including retired skills and agents). A `SKILL.md` is listed under the logical key `skills/<name>/SKILL.md`, which also covers the per-harness adapters older versions installed; a supporting file is listed under its own bundle-relative path, such as `skills/security-audit/HUNTING.md`. Managed-state records written under the old per-harness skill identities are read as the `SkillFile` identity of the same `SKILL.md`, and old transaction manifests with those identities still roll back; `scripts/generate-shipped-digests.py` keeps it current and `release-check` verifies it. Rules blocks (`metadata/rules-history`), merge-managed configs, and workspace files have their own proofs and are not covered. Missing or malformed metadata proves nothing, so those files stay conflicts.
 
 OpenCode agent permissions are composed from `templates/opencode.policy.json` plus `templates/opencode/agents/*.role.json`. Restrictive roles use `composition.replace_sections` so inherited bash/edit capabilities are replaced, not shallow-merged. `scripts/validate_opencode_permissions.py` guards the semantic contract in release-check.
 

@@ -726,6 +726,24 @@ mod tests {
         assert!(err.contains("outside"), "{err}");
         let _ = fs::remove_dir_all(&base);
     }
+    #[cfg(unix)]
+    #[test]
+    fn copying_an_executable_source_writes_a_readable_file() {
+        use std::os::unix::fs::PermissionsExt;
+        let base = temp("exec-source");
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(&base).unwrap();
+        let src = base.join("validate.cjs");
+        fs::write(&src, b"#!/usr/bin/env node\n").unwrap();
+        fs::set_permissions(&src, fs::Permissions::from_mode(0o755)).unwrap();
+        let dst = base.join("out/nested/validate.cjs");
+        copy_regular_file_no_symlinks(&src, &dst, &base).unwrap();
+        let mode = fs::metadata(&dst).unwrap().permissions().mode();
+        assert_ne!(mode & 0o400, 0, "owner can read the copy: {mode:o}");
+        assert_eq!(fs::read(&dst).unwrap(), fs::read(&src).unwrap());
+        let _ = fs::remove_dir_all(&base);
+    }
+
     #[test]
     fn regular_file_copy_roundtrip() {
         let base = temp("reg-copy");

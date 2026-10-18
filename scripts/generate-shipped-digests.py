@@ -18,7 +18,10 @@ skill file, so a skill's key is the logical skills/<name>/SKILL.md: the history 
 file became the install source the app shipped one generated adapter per harness; those versions
 stay provable under the legacy keys templates/skills/<harness>/<name>/SKILL.md, which only the
 repository history still holds (the source keys in shipped_digests.rs name the same four
-harnesses). Each list holds every committed version of that path plus the working-tree version.
+harnesses). A skill's supporting files (skills/security-audit/HUNTING.md,
+skills/kretsverket/kretsverket-status-report/assets/report-template.html) are installed next to
+its SKILL.md and each has one source, so each is keyed by its own bundle-relative path. Each list
+holds every committed version of that path plus the working-tree version.
 Retired skills and agents are included so stale removal can prove ownership. Digests use the
 format of setup_fingerprint::hash_file. Binary and oversized versions are skipped.
 
@@ -52,6 +55,10 @@ LEGACY_ADAPTER_SKILL = re.compile(rf"^templates/skills/(?:{'|'.join(HARNESSES)})
 # Skills may sit one category directory deep (skills/<category>/<name>/SKILL.md).
 GENERIC_SKILL = re.compile(rf"^skills/(?:{SKILL}/)?({SKILL})/SKILL\.md$")
 DEPRECATED_SKILL = re.compile(rf"^metadata/deprecated-skills/({SKILL})/SKILL\.md$")
+# Supporting files of a skill: skills/[<category>/]<name>/<rel>, rel being up to four path
+# components of the grammar of SkillRelPath (no dot entries). Any SKILL.md is the skill file itself.
+SUPPORT_SEGMENT = r"(?!\.)[A-Za-z0-9._-]+"
+SKILL_SUPPORT_FILE = re.compile(rf"^skills/(?:{SUPPORT_SEGMENT}/){{1,5}}{SUPPORT_SEGMENT}$")
 AGENT_FILES = (
     re.compile(rf"^agents/{AGENT}\.md$"),
     re.compile(rf"^templates/(?:claude|cursor)/agents/{AGENT}\.md$"),
@@ -94,6 +101,8 @@ def source_key(rel: str) -> str | None:
     match = GENERIC_SKILL.match(rel) or DEPRECATED_SKILL.match(rel)
     if match:
         return f"skills/{match.group(1)}/SKILL.md"
+    if SKILL_SUPPORT_FILE.match(rel) and rel.rsplit("/", 1)[-1] != "SKILL.md":
+        return rel
     return None
 
 

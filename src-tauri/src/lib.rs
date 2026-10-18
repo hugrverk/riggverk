@@ -28,6 +28,7 @@ mod setup_transaction;
 mod shell_runtime;
 mod shipped_digests;
 mod skill_discovery;
+mod skill_roots;
 mod skills_install;
 mod stable_digest;
 
@@ -39,6 +40,8 @@ mod opencode_model_override_contract;
 mod rules_block_contract;
 #[cfg(test)]
 mod shipped_ownership_contract;
+#[cfg(test)]
+mod skill_files_contract;
 #[cfg(test)]
 mod smoke_runtime;
 #[cfg(test)]

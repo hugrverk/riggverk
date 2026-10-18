@@ -70,6 +70,30 @@ class ShippedDigestsGeneratorTests(unittest.TestCase):
             "skills/kretsverket-symbol-system/SKILL.md",
         )
 
+    def test_skill_supporting_files_keep_their_own_path_as_key(self) -> None:
+        for rel in (
+            "skills/security-audit/HUNTING.md",
+            "skills/security-audit/LICENSE",
+            "skills/security-audit/validate-findings.cjs",
+            "skills/kretsverket/kretsverket-status-report/assets/report-template.html",
+            "skills/kretsverket/kretsverket-status-report/scripts/verify-report.mjs",
+            "skills/some-skill/a/b/c/d.txt",
+            "skills/some-group/some-skill/a/b/c/d.txt",
+        ):
+            self.assertEqual(self.generator.source_key(rel), rel)
+
+    def test_supporting_file_keys_mirror_the_app_path_grammar(self) -> None:
+        for rel in (
+            "skills/README.md",
+            "skills/tdd/.DS_Store",
+            "skills/tdd/.hidden/page.md",
+            "skills/tdd/assets/.gitkeep",
+            "skills/security-audit/has space.md",
+            "skills/some-group/some-skill/a/b/c/d/e.txt",
+            "skills/a/b/c/SKILL.md",
+        ):
+            self.assertIsNone(self.generator.source_key(rel), rel)
+
     def test_out_of_scope_paths_have_no_key(self) -> None:
         for rel in (
             "templates/sync/claude-rules.md",
@@ -129,6 +153,12 @@ class ShippedDigestsGeneratorTests(unittest.TestCase):
             self.assertIn(self.generator.digest(raw), sources.get(key, []), key)
             covered += 1
         self.assertGreater(covered, 0)
+        for key in (
+            "skills/security-audit/HUNTING.md",
+            "skills/security-audit/validate-coverage-ledger.cjs",
+            "skills/kretsverket/kretsverket-status-report/assets/report-template.html",
+        ):
+            self.assertIn(key, sources, "bundled supporting files must be provable")
         for harness in self.generator.HARNESSES:
             self.assertTrue(
                 any(re.match(rf"^templates/skills/{harness}/", key) for key in sources),

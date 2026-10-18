@@ -26,6 +26,7 @@ mod tests {
         self, ArtifactTransactionManifest, TransactionStatus, UninstallArtifactPlan,
     };
     use crate::skill_discovery::discover_skill_catalog;
+    use crate::skill_roots::SkillRoot;
     use crate::test_env::{guard, guard::EnvRestore, set_test_user_dirs};
 
     fn current_bundled_workspace_src() -> PathBuf {
@@ -710,11 +711,11 @@ mod tests {
                 ))
                 .expect("deprecated skill path"),
             ),
-            ArtifactId::OpenCodeSkill(coverage_skill.clone()),
-            ArtifactId::CodexSkill(coverage_skill.clone()),
-            ArtifactId::ClaudeSkill(coverage_skill.clone()),
-            ArtifactId::CursorSkill(coverage_skill.clone()),
-            ArtifactId::CodexLegacySkill(coverage_skill),
+            ArtifactId::skill_md(SkillRoot::OpenCode, coverage_skill.clone()),
+            ArtifactId::skill_md(SkillRoot::CodexHome, coverage_skill.clone()),
+            ArtifactId::skill_md(SkillRoot::Claude, coverage_skill.clone()),
+            ArtifactId::skill_md(SkillRoot::Cursor, coverage_skill.clone()),
+            ArtifactId::skill_md(SkillRoot::Agents, coverage_skill),
         ] {
             assert_planned_kind(&planned, artifact, OperationKind::Remove);
         }
@@ -843,7 +844,8 @@ mod tests {
             managed_state_path(&fixture.ws).is_file(),
             "managed state should be written"
         );
-        let exact_cursor = ArtifactId::CursorSkill(
+        let exact_cursor = ArtifactId::skill_md(
+            SkillRoot::Cursor,
             SkillName::new("accessibility-review").expect("canonical skill"),
         );
         assert!(
@@ -854,7 +856,8 @@ mod tests {
                     == crate::managed_state::artifact_identity(&exact_cursor)),
             "selected exact current artifacts should be adopted"
         );
-        let conflicted = ArtifactId::OpenCodeSkill(
+        let conflicted = ArtifactId::skill_md(
+            SkillRoot::OpenCode,
             SkillName::new("accessibility-review").expect("canonical skill"),
         );
         assert!(
@@ -880,7 +883,8 @@ mod tests {
         let result = apply_surfaces_from_preview(&plan);
         assert!(result.success, "apply failed: {}", result.message);
 
-        let exact_cursor = ArtifactId::CursorSkill(
+        let exact_cursor = ArtifactId::skill_md(
+            SkillRoot::Cursor,
             SkillName::new("accessibility-review").expect("canonical skill"),
         );
         let managed = read_managed_state(&fixture.ws).expect("managed-state.json");

@@ -385,8 +385,11 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> CodexRuntimeHea
             Ok(skill_names) => {
                 for skill_name in skill_names {
                     skills_expected_count += 1;
-                    let source_md =
-                        ArtifactId::CodexSkill(skill_name.clone()).resolve_source(workspace_root);
+                    let source_md = ArtifactId::skill_md(
+                        crate::skill_roots::SkillRoot::CodexHome,
+                        skill_name.clone(),
+                    )
+                    .resolve_source(workspace_root);
                     let target_md = skills_target_root
                         .join(skill_name.as_str())
                         .join("SKILL.md");

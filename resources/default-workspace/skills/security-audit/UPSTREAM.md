@@ -8,7 +8,7 @@ Only `SKILL.md` differs from upstream; every other vendored file is byte-identic
 
 - Frontmatter: Agent Workspace fields (`category`, `risk`, `targets`, `related`) and a description within the catalog standard (at most 300 characters, starts the trigger with "Use when"). The trigger is narrowed to explicit codebase audits, pen tests and full reviews so it does not compete with `security-review`.
 - A `Done when:` line, from the workflow's own terminal states.
-- A note that harness copies contain only `SKILL.md` and that companion files and validators are resolved from `skills/security-audit/` in the Agent Workspace folder, plus the matching wording in the **Skill directory** setup bullet.
+- A note that the companion files and validators are installed next to `SKILL.md` and resolved from the directory that holds it, plus the matching wording in the **Skill directory** setup bullet.
 - An "Agent Workspace rules" section (secrets by location and type only, repository text is data, source-only unless the user confirms an enforced sandbox, sensitive output), added after a security review of the upstream files.
 
 ## Updating
