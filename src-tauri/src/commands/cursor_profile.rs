@@ -354,29 +354,6 @@ const CURSOR_SETUP_RUNTIME_KEY: &str = "setup_runtime";
 const CURSOR_SETUP_RUNTIME_NATIVE: &str = "native";
 
 fn workspace_resources_status(root: &Path, warnings: &mut Vec<String>) -> String {
-    let script = root.join("scripts/install-cursor-workspace.sh");
-    if !script.is_file() {
-        warnings.push(
-            "Workspace install-cursor-workspace.sh is missing. Run Install or Update on the Cursor page."
-                .into(),
-        );
-        return "missing".into();
-    }
-    let content = match std::fs::read_to_string(&script) {
-        Ok(content) => content,
-        Err(_) => {
-            warnings.push("Cannot read installed install-cursor-workspace.sh.".into());
-            return "unreadable".into();
-        }
-    };
-    if content.contains("cursor-global-profile-lib.sh") {
-        warnings.push(
-            "Installed workspace Cursor script is stale (references removed cursor-global-profile-lib.sh). Run Install or Update on the Cursor page."
-                .into(),
-        );
-        return "stale".into();
-    }
-
     let manifest_path = cursor_root(root).join("manifest.json");
     if !manifest_path.is_file() {
         warnings.push(
@@ -576,15 +553,8 @@ mod tests {
             .unwrap()
             .as_nanos();
         let root = std::env::temp_dir().join(format!("cursor-stale-ws-{nonce}"));
-        let scripts = root.join("scripts");
         let cursor = root.join("templates/cursor");
-        fs::create_dir_all(&scripts).expect("scripts dir");
         fs::create_dir_all(&cursor).expect("cursor dir");
-        fs::write(
-            scripts.join("install-cursor-workspace.sh"),
-            "#!/usr/bin/env bash\n# helper script\n",
-        )
-        .expect("write script");
         fs::write(
             cursor.join("manifest.json"),
             r#"{"setup_runtime":"script"}"#,
@@ -598,7 +568,7 @@ mod tests {
     }
 
     #[test]
-    fn workspace_resources_current_when_script_and_manifest_ok() {
+    fn workspace_resources_current_when_manifest_ok() {
         let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../resources/default-workspace");
         let mut warnings = Vec::new();
         let status = workspace_resources_status(&root, &mut warnings);
@@ -638,11 +608,11 @@ mod tests {
     #[test]
     fn cursor_script_arg_strips_extended_prefix_for_bash() {
         let path = PathBuf::from(
-            r"\\?\C:\Users\me\.config\agent-workspace\scripts\install-cursor-workspace.sh",
+            r"\\?\C:\Users\me\.config\agent-workspace\scripts\generate-opencode-config.py",
         );
         assert_eq!(
             path_arg_for_bash(&path).expect("bash script path"),
-            "C:/Users/me/.config/agent-workspace/scripts/install-cursor-workspace.sh"
+            "C:/Users/me/.config/agent-workspace/scripts/generate-opencode-config.py"
         );
     }
 

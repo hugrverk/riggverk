@@ -47,30 +47,6 @@ pub(crate) fn workspace_marker_defs() -> &'static [MarkerDef] {
         },
         MarkerDef {
             kind: MarkerKind::File,
-            rel_path: "scripts/bootstrap.sh",
-        },
-        MarkerDef {
-            kind: MarkerKind::File,
-            rel_path: "scripts/install-agent-rules.sh",
-        },
-        MarkerDef {
-            kind: MarkerKind::File,
-            rel_path: "scripts/install-opencode-config.sh",
-        },
-        MarkerDef {
-            kind: MarkerKind::File,
-            rel_path: "scripts/install-codex-config.sh",
-        },
-        MarkerDef {
-            kind: MarkerKind::File,
-            rel_path: "scripts/install-cursor-workspace.sh",
-        },
-        MarkerDef {
-            kind: MarkerKind::File,
-            rel_path: "scripts/install-skills.sh",
-        },
-        MarkerDef {
-            kind: MarkerKind::File,
             rel_path: "templates/global-agent-rules.md",
         },
         MarkerDef {
@@ -224,10 +200,6 @@ fn push_cursor_rule_marker(markers: &mut Vec<WorkspaceMarkerStatus>, base: &Path
     });
 }
 
-fn release_check_available(root: &Path) -> bool {
-    root.join("scripts/release-check.sh").is_file()
-}
-
 #[derive(Serialize)]
 pub struct WorkspaceMarkerStatus {
     kind: String,
@@ -248,7 +220,6 @@ pub struct WorkspaceDiagnostics {
     total_config_targets: usize,
     backup_root: String,
     backup_root_exists: bool,
-    release_check_available: bool,
     /// `current` when all bundled default files exist; `missing` when any are absent.
     bundled_resources_status: String,
     missing_bundled_count: usize,
@@ -338,7 +309,6 @@ fn workspace_diagnostics_for_unconfigured(
         total_config_targets: total_configs,
         backup_root,
         backup_root_exists,
-        release_check_available: false,
         bundled_resources_status,
         missing_bundled_count,
         missing_bundled_sample,
@@ -447,11 +417,6 @@ pub fn get_workspace_diagnostics() -> Result<WorkspaceDiagnostics, String> {
         }
         Err(_) => (String::new(), false),
     };
-    let release_check_available = resolved_path
-        .as_ref()
-        .map(|p| release_check_available(Path::new(p)))
-        .unwrap_or(false);
-
     let (bundled_resources_status, missing_bundled_count, missing_bundled_sample) = resolved_path
         .as_ref()
         .map(|p| bundled_resources_fields(Path::new(p)))
@@ -469,7 +434,6 @@ pub fn get_workspace_diagnostics() -> Result<WorkspaceDiagnostics, String> {
         total_config_targets: total_configs,
         backup_root,
         backup_root_exists,
-        release_check_available,
         bundled_resources_status,
         missing_bundled_count,
         missing_bundled_sample,
@@ -564,67 +528,13 @@ pub fn open_default_workspace_folder() -> Result<ActionResult, String> {
     ))
 }
 
-const BRAIN_SETUP_SEED_REL: &str = "templates/context/saved-memory.md";
-
-#[derive(Serialize)]
-pub struct BrainSetupSeedResult {
-    pub status: String,
-    pub source: String,
-    pub content: String,
-}
-
-fn read_brain_setup_seed_under_root(root: &Path) -> Result<BrainSetupSeedResult, String> {
-    let path = root.join(BRAIN_SETUP_SEED_REL);
-    if !path.is_file() {
-        return Ok(BrainSetupSeedResult {
-            status: "missing".into(),
-            source: "generated fallback".into(),
-            content: String::new(),
-        });
-    }
-
-    let canonical = path
-        .canonicalize()
-        .map_err(|e| format!("resolve brain setup seed: {e}"))?;
-    let root_canonical = root
-        .canonicalize()
-        .map_err(|e| format!("resolve workspace root: {e}"))?;
-    if !canonical.starts_with(&root_canonical) {
-        return Err("brain setup seed path escapes workspace".into());
-    }
-
-    let content =
-        fs::read_to_string(&canonical).map_err(|e| format!("read brain setup seed: {e}"))?;
-    Ok(BrainSetupSeedResult {
-        status: "found".into(),
-        source: "workspace saved-memory.md".into(),
-        content,
-    })
-}
-
-#[tauri::command]
-pub fn read_brain_setup_seed() -> Result<BrainSetupSeedResult, String> {
-    let root = match workspace_root() {
-        Ok(root) => root,
-        Err(_) => {
-            return Ok(BrainSetupSeedResult {
-                status: "invalid_workspace".into(),
-                source: "generated fallback".into(),
-                content: String::new(),
-            });
-        }
-    };
-    read_brain_setup_seed_under_root(&root)
-}
-
 #[cfg(test)]
 mod tests {
     use super::{
         configured_workspace_path, default_installed_workspace_path,
-        persisted_workspace_path_is_valid, read_brain_setup_seed_under_root,
-        repair_workspace_target_path, reset_active_workspace_path, scrub_stale_workspace_path,
-        try_set_active_workspace_path, validate_workspace_root,
-        workspace_diagnostics_for_unconfigured, BRAIN_SETUP_SEED_REL, NO_WORKSPACE_SELECTED,
+        persisted_workspace_path_is_valid, repair_workspace_target_path,
+        reset_active_workspace_path, scrub_stale_workspace_path, try_set_active_workspace_path,
+        validate_workspace_root, workspace_diagnostics_for_unconfigured, NO_WORKSPACE_SELECTED,
     };
     use crate::settings::AppSettings;
     use std::fs;
@@ -657,28 +567,6 @@ mod tests {
     fn setup_valid_workspace(name: &str) -> PathBuf {
         let root = temp_root(name);
         write_file(&root, ".agent-workspace/workspace.json", "{}");
-        write_file(&root, "scripts/bootstrap.sh", "#!/usr/bin/env bash\n");
-        write_file(
-            &root,
-            "scripts/install-agent-rules.sh",
-            "#!/usr/bin/env bash\n",
-        );
-        write_file(
-            &root,
-            "scripts/install-opencode-config.sh",
-            "#!/usr/bin/env bash\n",
-        );
-        write_file(
-            &root,
-            "scripts/install-codex-config.sh",
-            "#!/usr/bin/env bash\n",
-        );
-        write_file(
-            &root,
-            "scripts/install-cursor-workspace.sh",
-            "#!/usr/bin/env bash\n",
-        );
-        write_file(&root, "scripts/install-skills.sh", "#!/usr/bin/env bash\n");
         write_file(&root, "templates/global-agent-rules.md", "# rules\n");
         write_file(&root, "templates/opencode.json", "{}");
         write_file(&root, "templates/codex/config.toml", "profile = \"safe\"\n");
@@ -705,28 +593,6 @@ mod tests {
     fn accepts_valid_workspace_without_app_source() {
         let root = temp_root("no-app-source");
         write_file(&root, ".agent-workspace/workspace.json", "{}");
-        write_file(&root, "scripts/bootstrap.sh", "#!/usr/bin/env bash\n");
-        write_file(
-            &root,
-            "scripts/install-agent-rules.sh",
-            "#!/usr/bin/env bash\n",
-        );
-        write_file(
-            &root,
-            "scripts/install-opencode-config.sh",
-            "#!/usr/bin/env bash\n",
-        );
-        write_file(
-            &root,
-            "scripts/install-codex-config.sh",
-            "#!/usr/bin/env bash\n",
-        );
-        write_file(
-            &root,
-            "scripts/install-cursor-workspace.sh",
-            "#!/usr/bin/env bash\n",
-        );
-        write_file(&root, "scripts/install-skills.sh", "#!/usr/bin/env bash\n");
         write_file(&root, "templates/global-agent-rules.md", "# rules\n");
         write_file(&root, "templates/opencode.json", "{}");
         write_file(&root, "templates/codex/config.toml", "profile = \"safe\"\n");
@@ -751,28 +617,6 @@ mod tests {
     #[test]
     fn rejects_workspace_missing_marker_file() {
         let root = temp_root("missing-marker");
-        write_file(&root, "scripts/bootstrap.sh", "#!/usr/bin/env bash\n");
-        write_file(
-            &root,
-            "scripts/install-agent-rules.sh",
-            "#!/usr/bin/env bash\n",
-        );
-        write_file(
-            &root,
-            "scripts/install-opencode-config.sh",
-            "#!/usr/bin/env bash\n",
-        );
-        write_file(
-            &root,
-            "scripts/install-codex-config.sh",
-            "#!/usr/bin/env bash\n",
-        );
-        write_file(
-            &root,
-            "scripts/install-cursor-workspace.sh",
-            "#!/usr/bin/env bash\n",
-        );
-        write_file(&root, "scripts/install-skills.sh", "#!/usr/bin/env bash\n");
         write_file(&root, "templates/global-agent-rules.md", "# rules\n");
         write_file(&root, "templates/opencode.json", "{}");
         write_file(
@@ -799,8 +643,8 @@ mod tests {
         let scripts = root.join("scripts");
         fs::create_dir_all(&scripts).expect("create fake scripts dir");
         fs::write(
-            scripts.join("install-agent-rules.sh"),
-            "#!/usr/bin/env bash\n",
+            scripts.join("generate-opencode-config.py"),
+            "#!/usr/bin/env python3\n",
         )
         .expect("write fake script");
 
@@ -817,28 +661,6 @@ mod tests {
     fn accepts_workspace_with_ux_cursor_rule() {
         let root = temp_root("ux-cursor-rule");
         write_file(&root, ".agent-workspace/workspace.json", "{}");
-        write_file(&root, "scripts/bootstrap.sh", "#!/usr/bin/env bash\n");
-        write_file(
-            &root,
-            "scripts/install-agent-rules.sh",
-            "#!/usr/bin/env bash\n",
-        );
-        write_file(
-            &root,
-            "scripts/install-opencode-config.sh",
-            "#!/usr/bin/env bash\n",
-        );
-        write_file(
-            &root,
-            "scripts/install-codex-config.sh",
-            "#!/usr/bin/env bash\n",
-        );
-        write_file(
-            &root,
-            "scripts/install-cursor-workspace.sh",
-            "#!/usr/bin/env bash\n",
-        );
-        write_file(&root, "scripts/install-skills.sh", "#!/usr/bin/env bash\n");
         write_file(&root, "templates/global-agent-rules.md", "# rules\n");
         write_file(&root, "templates/opencode.json", "{}");
         write_file(&root, "templates/codex/config.toml", "profile = \"safe\"\n");
@@ -865,28 +687,6 @@ mod tests {
     fn accepts_workspace_without_cursor_readme() {
         let root = temp_root("no-cursor-readme");
         write_file(&root, ".agent-workspace/workspace.json", "{}");
-        write_file(&root, "scripts/bootstrap.sh", "#!/usr/bin/env bash\n");
-        write_file(
-            &root,
-            "scripts/install-agent-rules.sh",
-            "#!/usr/bin/env bash\n",
-        );
-        write_file(
-            &root,
-            "scripts/install-opencode-config.sh",
-            "#!/usr/bin/env bash\n",
-        );
-        write_file(
-            &root,
-            "scripts/install-codex-config.sh",
-            "#!/usr/bin/env bash\n",
-        );
-        write_file(
-            &root,
-            "scripts/install-cursor-workspace.sh",
-            "#!/usr/bin/env bash\n",
-        );
-        write_file(&root, "scripts/install-skills.sh", "#!/usr/bin/env bash\n");
         write_file(&root, "templates/global-agent-rules.md", "# rules\n");
         write_file(&root, "templates/opencode.json", "{}");
         write_file(&root, "templates/codex/config.toml", "profile = \"safe\"\n");
@@ -912,23 +712,6 @@ mod tests {
     fn rejects_workspace_without_cursor_mdc_rule() {
         let root = temp_root("no-cursor-mdc");
         write_file(&root, ".agent-workspace/workspace.json", "{}");
-        write_file(&root, "scripts/bootstrap.sh", "#!/usr/bin/env bash\n");
-        write_file(
-            &root,
-            "scripts/install-agent-rules.sh",
-            "#!/usr/bin/env bash\n",
-        );
-        write_file(
-            &root,
-            "scripts/install-opencode-config.sh",
-            "#!/usr/bin/env bash\n",
-        );
-        write_file(
-            &root,
-            "scripts/install-cursor-workspace.sh",
-            "#!/usr/bin/env bash\n",
-        );
-        write_file(&root, "scripts/install-skills.sh", "#!/usr/bin/env bash\n");
         write_file(&root, "templates/global-agent-rules.md", "# rules\n");
         write_file(&root, "templates/opencode.json", "{}");
         mkdir(&root, "templates/cursor/agents");
@@ -949,23 +732,6 @@ mod tests {
     fn rejects_workspace_missing_cursor_rules_dir() {
         let root = temp_root("no-cursor-rules");
         write_file(&root, ".agent-workspace/workspace.json", "{}");
-        write_file(&root, "scripts/bootstrap.sh", "#!/usr/bin/env bash\n");
-        write_file(
-            &root,
-            "scripts/install-agent-rules.sh",
-            "#!/usr/bin/env bash\n",
-        );
-        write_file(
-            &root,
-            "scripts/install-opencode-config.sh",
-            "#!/usr/bin/env bash\n",
-        );
-        write_file(
-            &root,
-            "scripts/install-cursor-workspace.sh",
-            "#!/usr/bin/env bash\n",
-        );
-        write_file(&root, "scripts/install-skills.sh", "#!/usr/bin/env bash\n");
         write_file(&root, "templates/global-agent-rules.md", "# rules\n");
         write_file(&root, "templates/opencode.json", "{}");
         mkdir(&root, "templates/cursor/agents");
@@ -1120,18 +886,6 @@ mod tests {
     }
 
     #[test]
-    fn release_check_script_availability_uses_workspace_script_path() {
-        let root = temp_root("release-check-available");
-        assert!(!super::release_check_available(&root));
-
-        write_file(&root, "scripts/release-check.sh", "#!/usr/bin/env bash\n");
-        let exists = super::release_check_available(&root);
-        cleanup(&root);
-
-        assert!(exists);
-    }
-
-    #[test]
     fn try_set_active_workspace_path_rejects_invalid_directory() {
         let path = std::env::temp_dir()
             .join("agent-workspace-not-a-valid-root")
@@ -1199,12 +953,6 @@ mod tests {
             let default = default_installed_workspace_path().expect("default path");
             for rel in [
                 ".agent-workspace/workspace.json",
-                "scripts/bootstrap.sh",
-                "scripts/install-agent-rules.sh",
-                "scripts/install-opencode-config.sh",
-                "scripts/install-codex-config.sh",
-                "scripts/install-cursor-workspace.sh",
-                "scripts/install-skills.sh",
                 "templates/global-agent-rules.md",
                 "templates/opencode.json",
                 "templates/codex/config.toml",
@@ -1248,32 +996,6 @@ mod tests {
             validate_workspace_root(PathBuf::from(&path)).is_ok(),
             "only valid workspace roots may be activated"
         );
-        cleanup(&root);
-    }
-
-    #[test]
-    fn brain_setup_seed_reads_existing_file() {
-        let root = setup_valid_workspace("brain-seed-found");
-        mkdir(&root, "templates/context");
-        write_file(&root, BRAIN_SETUP_SEED_REL, "# saved memory seed\n");
-
-        let result = read_brain_setup_seed_under_root(&root).expect("read seed");
-        assert_eq!(result.status, "found");
-        assert_eq!(result.source, "workspace saved-memory.md");
-        assert!(result.content.contains("saved memory seed"));
-
-        cleanup(&root);
-    }
-
-    #[test]
-    fn brain_setup_seed_missing_returns_safe_status() {
-        let root = setup_valid_workspace("brain-seed-missing");
-
-        let result = read_brain_setup_seed_under_root(&root).expect("read seed");
-        assert_eq!(result.status, "missing");
-        assert_eq!(result.source, "generated fallback");
-        assert!(result.content.is_empty());
-
         cleanup(&root);
     }
 }

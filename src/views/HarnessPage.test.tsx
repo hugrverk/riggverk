@@ -98,7 +98,6 @@ function props(overrides: Partial<HarnessViewProps> = {}): HarnessViewProps {
     status: STATUS_DATA,
     workspaceValid: true,
     gitAvailable: true,
-    canRunReleaseCheck: true,
     onClearOutput: vi.fn(),
     ...overrides,
   };

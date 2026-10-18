@@ -20,17 +20,8 @@ In the app, the config is the `codex_config` target on the Codex page. It is **o
 
 The app installs from its bundled template, not from `templates/codex/config.toml` in your workspace. Python 3 must be on `PATH`.
 
-## CLI
-
-```bash
-./scripts/install-codex-config.sh --diff    # preview
-./scripts/install-codex-config.sh --apply   # merge managed keys
-```
-
-Dry-run is the default. The target is `$CODEX_HOME/config.toml`, or `CODEX_CONFIG_PATH` (script only). `--apply --force-overwrite` replaces the whole file after a backup; it is advanced and not used by the app.
-
 ## Agents, rules, skills
 
-- Native agents: `templates/codex/agents/*.toml` install to `$CODEX_HOME/agents`. The CLI helper is `./scripts/install-codex-agents.sh`.
+- Native agents: `templates/codex/agents/*.toml` install to `$CODEX_HOME/agents`.
 - Rules: `$CODEX_HOME/AGENTS.md`, merge-managed ([AGENT_RULES.md](AGENT_RULES.md)). A non-empty `AGENTS.override.md` makes Codex ignore it.
 - Skills: the app installs to `$CODEX_HOME/skills` (typically `~/.codex/skills`). Codex's own documentation also names `~/.agents/skills` as a user skills folder; which one your Codex version reads is not verified here, so confirm with Codex if a skill does not show up. Copies under the older `~/.agents/skills` app location are migrated by the managed update; diverged copies stay conflicts and are not removed.

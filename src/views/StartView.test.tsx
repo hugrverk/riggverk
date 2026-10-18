@@ -95,7 +95,6 @@ function props(overrides: Partial<StartViewProps> = {}): StartViewProps {
     uninstallPreviewRequested: false,
     onUninstallPreviewHandled: vi.fn(),
     onOpenFolder: vi.fn(),
-    onReleaseCheck: vi.fn(),
     backupCount: 2,
     onOpenBackupsFolder: vi.fn(),
     wsLog: null,
@@ -105,7 +104,6 @@ function props(overrides: Partial<StartViewProps> = {}): StartViewProps {
     status: STATUS_DATA,
     workspaceValid: true,
     gitAvailable: true,
-    canRunReleaseCheck: true,
     onClearOutput: vi.fn(),
     ...overrides,
   };
@@ -204,15 +202,13 @@ describe("StartView panes", () => {
   });
 
   it("shows status, verification and the last transaction for the selected target", () => {
-    renderStart({ rollbackTransactionId: "1710000000000", wsLog: { success: true, action: "release_check", stdout: "ok", stderr: "", exit_code: 0 }, wsLogCompletedAt: Date.now() });
+    renderStart({ rollbackTransactionId: "1710000000000" });
     const pane = detail();
     // The state is the title's ("workspace · current"); the status rows add the path.
     expect(pane.querySelector(".pane-title")!.textContent).toContain("workspace · current");
     expect(within(pane).getByLabelText("workspace status").textContent).not.toContain("current");
     expect(within(pane).getByLabelText("workspace status").textContent).toContain("/tmp/workspace");
     const verify = within(pane).getByLabelText("Verification and backups");
-    expect(verify.textContent).toContain("release-check");
-    expect(verify.textContent).toContain("ok");
     expect(verify.textContent).toContain("2 runs · /tmp/backups");
     expect(verify.textContent).toContain("1710000000000 · rollback available");
   });
@@ -303,20 +299,16 @@ describe("StartView keys", () => {
     expect(p.onNavigate).toHaveBeenCalledWith("codex");
   });
 
-  it("offers the release check, the folder and the backups while the detail pane has focus", () => {
+  it("offers the folder and the backups while the detail pane has focus", () => {
     const { props: p } = renderStart();
     const body = within(detail()).getByRole("group", { name: "workspace detail" });
     act(() => body.focus());
-    fireEvent.click(hint(/release-check/));
     fireEvent.click(hint(/open folder/));
     fireEvent.click(hint(/backups/));
-    expect(p.onReleaseCheck).toHaveBeenCalledTimes(1);
     expect(p.onOpenFolder).toHaveBeenCalledTimes(1);
     expect(p.onOpenBackupsFolder).toHaveBeenCalledTimes(1);
-    fireEvent.keyDown(body, { key: "R", shiftKey: true });
     fireEvent.keyDown(body, { key: "o" });
     fireEvent.keyDown(body, { key: "B", shiftKey: true });
-    expect(p.onReleaseCheck).toHaveBeenCalledTimes(2);
     expect(p.onOpenFolder).toHaveBeenCalledTimes(2);
     expect(p.onOpenBackupsFolder).toHaveBeenCalledTimes(2);
   });

@@ -70,7 +70,6 @@ export function HarnessPage({
   status,
   workspaceValid,
   gitAvailable,
-  canRunReleaseCheck,
   onClearOutput,
 }: HarnessPageProps) {
   const label = HARNESS_LABELS[harness];
@@ -129,7 +128,6 @@ export function HarnessPage({
       status={status}
       workspaceValid={workspaceValid}
       gitAvailable={gitAvailable}
-      canRunReleaseCheck={canRunReleaseCheck}
       onClear={onClearOutput}
       onRefresh={onRefresh}
       rollbackTransactionId={rollbackTransactionId}

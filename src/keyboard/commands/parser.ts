@@ -56,7 +56,7 @@ export interface ParseFailure {
 export type ParseResult = ParsedCommand | ParseFailure;
 
 export interface CommandSpec {
-  /** Canonical name, lower-case: "update", "release-check". */
+  /** Canonical name, lower-case: "update", "uninstall". */
   name: string;
   aliases?: readonly string[];
   summary: string;

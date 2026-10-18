@@ -141,10 +141,6 @@ for selector in \
   fi
 done
 
-if ! search -U '\.brain-setup-lib-body \.copyable-block-content \{[^}]*overflow: auto;' src/styles >"$ui_tmp"; then
-  fail "Brain Setup Library content must define a local scroll container"
-fi
-
 if ! search 'data-app-font-size' src/lib/settingsDraft.ts >"$ui_tmp"; then
   fail "app font-size setting must set a root data attribute"
 fi

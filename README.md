@@ -95,9 +95,9 @@ Generated adapters must stay current with their sources; repository checks fail 
 
 Tabs in order (press `1`-`7`; disabled harnesses are hidden and the rest renumber): workspace, codex, opencode, cursor, claude, library, settings. `?` lists every key and command; `:` opens the command line.
 
-- Workspace - harness list with install state, surfaces, installed-state matrix, release-check, uninstall with preview, session-scoped **Recover previous uninstall**, backups folder, output.
+- Workspace - harness list with install state, surfaces, installed-state matrix, uninstall with preview, session-scoped **Recover previous uninstall**, backups folder, output.
 - Codex, OpenCode, Cursor, Claude - target toggles (Space, autosaved), surfaces, runtime health, install review. OpenCode adds the model override.
-- Library - an items list and one document pane (rendered, or its source while editing) for docs, rules, skills, runtime agents, configs, and Brain Setup. Saves write the runtime workspace only (`:w`, `:q`).
+- Library - an items list and one document pane (rendered, or its source while editing) for docs, rules, skills, runtime agents, and configs. Saves write the runtime workspace only (`:w`, `:q`).
 - Settings - harnesses, appearance, text size, motion, landing page, colors, workspace.
 
 Full uninstall removes proven app-owned files, preserves modified and unknown files, leaves merge-managed configs and rules files in place, and records a rollback-capable transaction. **Recover previous uninstall** exists only for the current app session.
@@ -125,12 +125,11 @@ Harness enablement is an explicit preference, not tool detection. Re-enabling re
 | Variable | Scope | Effect |
 | --- | --- | --- |
 | `AGENT_WORKSPACE_PATH` | app, dev/test | Overrides the workspace path. Takes precedence over Settings. |
-| `AGENT_WORKSPACE_BACKUP_DIR` | app, scripts | Overrides the backup root. Must not be `/`, the home directory, or a drive root. |
-| `CODEX_HOME` | app, scripts | Codex home for config, rules, agents, and skills (default `~/.codex`). |
+| `AGENT_WORKSPACE_BACKUP_DIR` | app | Overrides the backup root. Must not be `/`, the home directory, or a drive root. |
+| `CODEX_HOME` | app | Codex home for config, rules, agents, and skills (default `~/.codex`). |
 | `CODEX_SKILLS_PATH`, `CLAUDE_SKILLS_PATH`, `OPENCODE_SKILLS_PATH`, `CURSOR_SKILLS_PATH`, `CURSOR_AGENTS_PATH`, `CURSOR_MCP_CONFIG_PATH` | app | Skill, agent, and MCP path overrides for isolation and tests. |
-| `PLAYWRIGHT_MCP_CONFIG_PATH`, `PLAYWRIGHT_BROWSERS_PATH` | app, scripts | Playwright MCP config file and browser cache. Do not set `PLAYWRIGHT_BROWSERS_PATH=0`. |
-| `XDG_CONFIG_HOME` | app, scripts (Linux) | Moves the app support and backup dirs. |
-| `CODEX_CONFIG_PATH`, `CODEX_AGENTS_PATH`, `OPENCODE_AGENTS_PATH`, `CLAUDE_RULES_PATH`, `*_AGENTS_DIR` | scripts only | Target overrides for the CLI scripts; the app ignores them. |
+| `PLAYWRIGHT_MCP_CONFIG_PATH`, `PLAYWRIGHT_BROWSERS_PATH` | app | Playwright MCP config file and browser cache. Do not set `PLAYWRIGHT_BROWSERS_PATH=0`. |
+| `XDG_CONFIG_HOME` | app (Linux) | Moves the app support and backup dirs. |
 
 Overrides are honored in release builds too. Use them with a temporary `HOME` when testing.
 
@@ -141,13 +140,13 @@ Overrides are honored in release builds too. Use them with a temporary `HOME` wh
 - Existing files that Install or a Library save would overwrite are backed up first, owner-only (0700 dirs, 0600 files on Unix).
 - Config and rules merges preserve user-owned content or refuse unsafe writes with zero mutation.
 - Credential-bearing files and unrelated personal files are outside the workspace contract.
-- Python generators and merge scripts run from the bundled copy, never from the workspace. The user-triggered release check is the exception: it runs `scripts/release-check.sh` from the workspace if you put one there, after a confirmation that names the folder.
+- Python generators and merge scripts run from the bundled copy, never from the workspace.
 
 See `docs/SECURITY_MODEL.md` for the full boundaries.
 
 ## Verification
 
-CI runs the POSIX installer and release checks on Ubuntu and macOS. Windows CI runs frontend and native Rust app checks; the Bash scripts are not supported there (see `docs/RELEASE.md`).
+CI runs the release check on Ubuntu and macOS. Windows CI runs frontend and native Rust app checks; the Bash release check is not supported there (see `docs/RELEASE.md`).
 
 ```bash
 python3 scripts/generate-agent-adapters.py --check

@@ -94,7 +94,6 @@ STATIC_ROUTING_SOURCES = [
     WS_ROOT / "docs/SKILLS.md",
     WS_ROOT / "templates/global-agent-rules.md",
     WS_ROOT / "templates/cursor/user-rules.md",
-    REPO_ROOT / "src/lib/brainSetup.ts",
     AGENTS_METADATA,
 ]
 
@@ -116,7 +115,6 @@ ACTIVE_DOC_SOURCES = [
 ]
 
 MIGRATION_FIXTURE_ALLOWLIST = {
-    REPO_ROOT / "src/lib/brainSetup.test.ts",
     REPO_ROOT / "scripts/check-skill-routing.py",
     REPO_ROOT / "src-tauri/src/managed_reconciliation_contract.rs",
     REPO_ROOT / "src-tauri/src/managed_bootstrap.rs",

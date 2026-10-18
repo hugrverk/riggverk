@@ -62,16 +62,7 @@ def main() -> None:
     refresh = managed_refresh_paths(manifest_text)
 
     required_scripts = {
-        "scripts/install-agent-rules.sh",
-        "scripts/install-runtime-agents.sh",
-        "scripts/install-opencode-config.sh",
-        "scripts/merge-opencode-config.py",
         "scripts/generate-opencode-config.py",
-        "scripts/playwright-mcp-lib.sh",
-        "scripts/lib/platform-paths.sh",
-        "scripts/check-playwright-mcp.sh",
-        "scripts/install-codex-config.sh",
-        "scripts/install-codex-agents.sh",
         "scripts/merge-codex-config.py",
         "scripts/ensure-codex-routing-defaults.py",
     }
@@ -81,12 +72,9 @@ def main() -> None:
         "templates/playwright-mcp.config.json",
     }
     required_refresh = {
-        "scripts/install-agent-rules.sh",
-        "scripts/install-runtime-agents.sh",
-        "scripts/install-opencode-config.sh",
-        "scripts/install-codex-config.sh",
-        "scripts/lib/platform-paths.sh",
-        "scripts/ensure-codex-routing-defaults.py",
+        "templates/cursor/manifest.json",
+        "templates/cursor/global-profile.json",
+        "templates/cursor/mcp/playwright.mcp.json",
     }
     required_cursor_adapters = {
         "templates/cursor/agents/verifier.md",
@@ -102,7 +90,7 @@ def main() -> None:
     for rel in sorted(required_templates - templates):
         fail(f"Templates section missing: {rel}")
     for rel in sorted(required_refresh - refresh):
-        fail(f"managed refresh list missing app action script: {rel}")
+        fail(f"managed refresh list missing Cursor profile template: {rel}")
     for rel in sorted(required_cursor_adapters - templates):
         fail(f"Templates section missing Cursor adapter: {rel}")
     for rel in sorted(required_cursor_adapters):
@@ -149,8 +137,8 @@ def main() -> None:
             fail(f"managed refresh must not overwrite editable source: {rel}")
 
     print(
-        "  bundled manifest: runtime installers + Cursor adapters + skills tree listed; "
-        "app action scripts refreshable backup-first"
+        "  bundled manifest: app-run helper scripts + Cursor adapters + skills tree listed; "
+        "Cursor profile templates refreshable backup-first"
     )
 
 

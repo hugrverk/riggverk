@@ -1,9 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
-import { useCallback, useMemo, useState, type MutableRefObject } from "react";
-import { buildBrainSetupBlock } from "../lib/brainSetup";
+import { useCallback, useState, type MutableRefObject } from "react";
 import { isInvalidWorkspaceError } from "../lib/workspaceErrors";
 import type {
-  BrainSetupSeedResult,
   ClaudeRuntimeHealth,
   CodexRuntimeHealth,
   CursorProfileHealth,
@@ -30,7 +28,6 @@ export function useWorkspaceHealthController({
   const [codexRuntimeHealth, setCodexRuntimeHealth] = useState<CodexRuntimeHealth | null>(null);
   const [cursorProfileHealth, setCursorProfileHealth] = useState<CursorProfileHealth | null>(null);
   const [claudeRuntimeHealth, setClaudeRuntimeHealth] = useState<ClaudeRuntimeHealth | null>(null);
-  const [brainSetupSeed, setBrainSetupSeed] = useState<BrainSetupSeedResult | null>(null);
 
   const fetchStatus = useCallback(async (generation = workspaceLoadGenerationRef.current) => {
     try {
@@ -100,15 +97,6 @@ export function useWorkspaceHealthController({
     }
   }, [isWorkspaceLoadCurrent, workspaceLoadGenerationRef]);
 
-  const loadBrainSetupSeed = useCallback(async () => {
-    try {
-      const result = await invoke<BrainSetupSeedResult>("read_brain_setup_seed");
-      setBrainSetupSeed(result);
-    } catch {
-      setBrainSetupSeed(null);
-    }
-  }, []);
-
   const resetWorkspaceHealthState = useCallback(() => {
     setStatus(null);
     setWorkspaceDiagnostics(null);
@@ -127,17 +115,6 @@ export function useWorkspaceHealthController({
     }
   }, []);
 
-  const brainSetupText = useMemo(() => {
-    if (brainSetupSeed?.status === "found" && brainSetupSeed.content.trim()) {
-      return brainSetupSeed.content;
-    }
-    return buildBrainSetupBlock();
-  }, [brainSetupSeed]);
-
-  const brainSetupSource = brainSetupSeed?.status === "found" && brainSetupSeed.content.trim()
-    ? brainSetupSeed.source
-    : "generated fallback";
-
   return {
     status,
     workspaceDiagnostics,
@@ -145,16 +122,12 @@ export function useWorkspaceHealthController({
     codexRuntimeHealth,
     cursorProfileHealth,
     claudeRuntimeHealth,
-    brainSetupSeed,
-    brainSetupText,
-    brainSetupSource,
     fetchStatus,
     loadWorkspaceDiagnostics,
     loadOpenCodeRuntimeHealth,
     loadCodexRuntimeHealth,
     loadCursorProfileHealth,
     loadClaudeRuntimeHealth,
-    loadBrainSetupSeed,
     resetWorkspaceHealthState,
     clearHarnessHealth,
     isInvalidWorkspaceError,

@@ -6,7 +6,7 @@ This directory holds the docs, skills, templates, config, and scripts that the A
 
 Workspace files are plain text and not encrypted. Do not store secrets, tokens, passwords, private keys, cookies, auth headers, signed or private URLs, or `.env` values here, and do not commit them.
 
-Requires Python 3 on `PATH` (config merges and generators). The CLI scripts also need Bash and run on macOS and Linux only.
+Requires Python 3 on `PATH` (config merges and generators).
 
 ## What lives here
 
@@ -15,25 +15,15 @@ Requires Python 3 on `PATH` (config merges and generators). The CLI scripts also
 - **templates/** - source templates for agent rules (`global-agent-rules.md`, composed under `sync/`), OpenCode config, Codex config (`codex/`), and Cursor assets (`cursor/`).
 - **agents/**, **agent-specs/** - OpenCode agents and the shared agent bodies.
 - **metadata/** - generated manifests and the history of shipped rules bases.
-- **scripts/** - CLI installers and helpers for use outside the app.
+- **scripts/** - Python helpers (OpenCode config generator, Codex config merges). The app runs its own bundled copies.
 - **.agent-workspace/** - identity marker and ownership records (`workspace.json`, `managed-state.json`, `rules-preferences.json`). Do not delete. They describe this machine's installs, so leave `managed-state.json` and `rules-preferences.json` out of Git.
 
 ## Scripts
 
-The app does not call the installer scripts; it installs natively and uses only its own bundled Python helpers. The scripts are a command-line alternative for operators.
-
-All installer scripts default to dry-run. `--apply` writes, `--diff` shows differences, `--quiet` gives compact output, `--help` shows usage. Before overwriting an existing target they copy it to the backup root and stop when that copy fails. They refuse a rules file that holds the app's managed block, and broad backup or agents directories. Run them from the workspace root.
-
-macOS and Linux only. On Windows use the app; Git Bash and MSYS are refused unless `AGENT_WORKSPACE_BACKUP_DIR` is set, and the scripts are not tested there.
+The app is the installer. It installs natively and runs only its own bundled copies of these Python helpers, never the ones in this folder. They are here to read, and `generate-opencode-config.py` can be run by hand. Python 3 is all they need.
 
 - `generate-opencode-config.py` - builds `templates/opencode.json` from `opencode.base.json` and `opencode.policy.json`. `--check` verifies, `--write` regenerates.
-- `install-agent-rules.sh` - copies composed rules to Codex, OpenCode, and Claude paths (`--codex`, `--opencode`, `--claude`, `--all`).
-- `install-opencode-config.sh` - managed-key merge into the OpenCode config, `tui.json`, agents, and the Playwright MCP config. `--apply-cursor` also merges the Playwright server into `~/.cursor/mcp.json`. Pinned `@playwright/mcp@0.0.48`, Chromium, shared browser cache.
-- `install-codex-config.sh` - managed-key merge into the Codex config. `--force-overwrite` replaces the whole file after backup (advanced).
-- `install-codex-agents.sh`, `install-runtime-agents.sh` - Codex TOML agents, and OpenCode or Claude Markdown agents.
-- `install-cursor-workspace.sh` - Cursor User Rules helper and project installs. It never writes `~/.cursor/agents`.
-- `install-skills.sh` - installs generated skill adapters (`--agent`, `--global`, `--dry-run`, `--apply`).
-- `bootstrap.sh` - runs rules, config, and skills together.
+- `merge-codex-config.py`, `ensure-codex-routing-defaults.py` - merge the managed Codex keys and routing defaults into `config.toml` while keeping your own settings.
 
 Backups: `~/Library/Application Support/ai.agentworkspace.app/backups` on macOS, `${XDG_CONFIG_HOME:-~/.config}/ai.agentworkspace.app/backups` on Linux, or `AGENT_WORKSPACE_BACKUP_DIR`. Layout in [docs/USING_THE_APP.md](docs/USING_THE_APP.md#backups).
 

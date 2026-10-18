@@ -10,12 +10,4 @@ Files:
 - `mcp/` contains optional MCP snippets. Review before use.
 - `agents/` contains the native Codex agents (`*.toml`).
 
-Preview differences with:
-
-```bash
-./scripts/install-codex-config.sh --diff
-```
-
-`./scripts/install-codex-config.sh --apply` merges only the managed keys into `$CODEX_HOME/config.toml` (default `~/.codex/config.toml`). `./scripts/install-codex-agents.sh --apply` syncs the bundled agents to `$CODEX_HOME/agents`. Both are dry-run by default. In the app these are the `codex_config` (off by default) and `codex_agents` targets; see [docs/CODEX_CONFIG.md](../../docs/CODEX_CONFIG.md).
-
-Full-file replacement remains available with `--apply --force-overwrite` for deliberate advanced use.
+In the app, press `p` to preview the differences and `u` to review and apply. The merge touches only the managed keys of `$CODEX_HOME/config.toml` (default `~/.codex/config.toml`), and the bundled agents install to `$CODEX_HOME/agents`. These are the `codex_config` (off by default) and `codex_agents` targets; see [docs/CODEX_CONFIG.md](../../docs/CODEX_CONFIG.md).

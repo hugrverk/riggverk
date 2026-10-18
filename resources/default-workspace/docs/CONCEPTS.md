@@ -22,7 +22,7 @@ So editing a file in the workspace changes what the Library shows, not what Clau
 | Docs | `docs/` | Guides and reference |
 | Skills | `skills/` | Canonical skill sources, installed unchanged into every harness |
 | Templates | `templates/` | Source templates for rules and config |
-| Scripts | `scripts/` | CLI installers and helpers, optional |
+| Scripts | `scripts/` | Python helpers the app runs from its bundled copy |
 | Runtime agents | `agents/`, `agent-specs/` | OpenCode agents and shared agent bodies |
 | Ownership records | `.agent-workspace/` | Identity, managed-state digests, "leave as is" choices |
 
@@ -48,14 +48,10 @@ Install is a two-step action. Preview computes a plan and the review shows every
 
 ## Scripts
 
-`scripts/` holds optional CLI installers and helpers. The app does not call the installers. They default to dry-run, back up before overwriting, and need Python 3 and Bash (macOS and Linux). The app itself runs only its own bundled Python helpers, never scripts from the workspace. See the [workspace README](../README.md).
+`scripts/` holds the Python helpers (OpenCode generator, Codex config merges). The app runs only its own bundled copies, never scripts from the workspace. See the [workspace README](../README.md).
 
 Selecting a workspace folder is still a trust decision: do not run scripts from a folder you did not create.
 
 ## Backups
 
 Before overwriting or removing a file, Install, uninstall, and Library saves copy it to the backup root, owner-only: `<root>/setup/<transaction id>/...` for installs, `<root>/docs/<id>-<timestamp>/` for Library saves. Previews and dry runs write nothing. Layout and locations: [USING_THE_APP.md](USING_THE_APP.md#backups).
-
-## Brain Setup
-
-A copy-paste instruction block for external AI assistants covering skill routing, security rules, and verification. It runs no agents and changes no targets or config.

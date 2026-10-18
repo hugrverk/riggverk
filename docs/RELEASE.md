@@ -9,11 +9,11 @@ Run the repository release check from the repository root:
 It writes only ignored build artifacts in the repository and temporary directories. Apply smokes run against a temporary `HOME`, workspace, and backup root, so the real home is never touched. Order and contents change often; read the `step` lines in the script. In outline it runs:
 
 - `git status --short` and `git diff --check`
-- shell syntax checks and the bundled installer guard (dry-run default, backup-first, fail-fast)
+- shell syntax checks
 - README and docs drift (`check-readme-docs-drift.py`), the curated Library docs registry, and the default-workspace copy list
 - generator currency: agent adapters, rule adapters, OpenCode config snapshot, pre-manifest ownership, rules history, shipped digests
 - skill catalog and routing checks (`check-skill-routing.py`) and OpenCode permission composition and contract
-- merge-script unit tests, bundled-script temp-HOME apply smokes (OpenCode config, runtime agents, Cursor setup), and the pre-manifest upgrade smoke
+- merge-script unit tests, the Codex merge secret-marker guard, and the pre-manifest upgrade smoke
 - forbidden source scans (shell command strings, `eval`, removed skill flows) and managed-installation contract guards, including the single reviewed install owner
 - frontend gate: `npm test` and `npm run build`
 - Rust gate: `cargo fmt --check`, `cargo check`, `cargo clippy -D warnings`, `cargo test`
@@ -21,7 +21,7 @@ It writes only ignored build artifacts in the repository and temporary directori
 
 It does not drive the Tauri webview, install into a real profile, or read `.env` files.
 
-CI runs this POSIX check on Ubuntu and macOS. Windows CI runs frontend, build, and Rust format, check, Clippy, and tests, which cover native app path logic. The Bash scripts under `resources/default-workspace/scripts/` are macOS and Linux only; on Git Bash or MSYS they refuse to run unless `AGENT_WORKSPACE_BACKUP_DIR` is set, and WSL behaves as Linux. Use the app on Windows.
+CI runs this POSIX check on Ubuntu and macOS. Windows CI runs frontend, build, and Rust format, check, Clippy, and tests, which cover native app path logic. The Bash release check is macOS and Linux only (WSL behaves as Linux); use the app on Windows.
 
 ## Backend runtime smoke
 
@@ -29,7 +29,7 @@ CI runs this POSIX check on Ubuntu and macOS. Windows CI runs frontend, build, a
 ./scripts/smoke-tauri-runtime.sh
 ```
 
-Isolated temp `HOME` and workspace path; exercises the Rust command handlers the app calls (status, diagnostics, OpenCode and Cursor health, Brain Setup). `release-check.sh` already runs it. It does not automate the webview.
+Isolated temp `HOME` and workspace path; exercises the Rust command handlers the app calls (status, diagnostics, OpenCode and Cursor health). `release-check.sh` already runs it. It does not automate the webview.
 
 ## Browser-only checks
 

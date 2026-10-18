@@ -128,7 +128,6 @@ function props(overrides: Partial<HarnessViewProps> = {}): HarnessViewProps & { 
     status: STATUS_DATA,
     workspaceValid: true,
     gitAvailable: true,
-    canRunReleaseCheck: true,
     onClearOutput: vi.fn(),
     ...overrides,
     tasks,
@@ -627,9 +626,9 @@ describe("rules conversion (v, y)", () => {
 
   it("waits for a running task before it applies", async () => {
     const { p, rerenderFrame } = await openPreview();
-    rerenderFrame(<ClaudeView {...p} wsRunning="release-check" runtimeHealth={CLAUDE_HEALTH} />);
+    rerenderFrame(<ClaudeView {...p} wsRunning="uninstall" runtimeHealth={CLAUDE_HEALTH} />);
     const apply = statusBar().getByRole("button", { name: /apply/ });
-    expect(apply.getAttribute("title")).toBe("release-check is running");
+    expect(apply.getAttribute("title")).toBe("uninstall is running");
     press("y");
     expect(invokeMock).not.toHaveBeenCalledWith("apply_rules_conversion", expect.anything());
   });

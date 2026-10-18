@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../resources/default-workspace" && pwd)"
 failed=0
 
 fail() {
@@ -13,17 +13,15 @@ pass() {
   printf 'PASS %s\n' "$1"
 }
 
-exclude=(--glob '!**/check-playwright-mcp.sh')
-
 search_has_match() {
   local pattern="$1"
   shift
   local tmp
   tmp="$(mktemp)"
   if command -v rg >/dev/null 2>&1; then
-    rg -n "${exclude[@]}" -e "$pattern" "$@" >"$tmp" || true
+    rg -n -e "$pattern" "$@" >"$tmp" || true
   else
-    find "$@" -type f ! -name check-playwright-mcp.sh \
+    find "$@" -type f \
       -exec grep -n -E -e "$pattern" /dev/null {} \; \
       >"$tmp" || true
   fi
@@ -57,7 +55,7 @@ fi
 # Neutral example paths such as /Users/example are allowed.
 home_path_pattern='/(Users|home)/[A-Za-z0-9._-]+'
 home_path_allowed='/(Users|home)/(example|Shared|user|username|you)([^A-Za-z0-9._-]|$)'
-if grep -R -h -E -e "$home_path_pattern" --exclude=check-playwright-mcp.sh "$repo_root/templates" "$repo_root/scripts" 2>/dev/null \
+if grep -R -h -E -e "$home_path_pattern" "$repo_root/templates" "$repo_root/scripts" 2>/dev/null \
   | grep -v -E -e "$home_path_allowed" >/dev/null; then
   fail 'hardcoded /Users/<name> or /home/<name> path found in templates/scripts'
 else

@@ -123,11 +123,4 @@ In the source repository `python3 scripts/check-skill-routing.py` validates ever
 
 In the app, press `u` on a harness page and confirm with `y`. The install covers the shared `SKILL.md` of the whole bundled catalog for that harness, globally, in flat single-file layout. Skills are not gated by target toggles and always come from the app's bundle: a skill you add to the runtime workspace is not installed, and a personal skill belongs directly in the harness skill folder, where unknown skills are preserved.
 
-The CLI equivalent installs from this workspace's adapters and is dry-run by default:
-
-```bash
-./scripts/install-skills.sh --dry-run --agent opencode --global
-./scripts/install-skills.sh --apply --agent cursor --global   # backs up a differing SKILL.md first
-```
-
 Some harnesses also scan other harnesses' skill folders (for example OpenCode and Cursor read `~/.claude/skills`). If you install for several harnesses, a skill can be listed more than once there; every copy is the same file, so precedence does not change what the model reads.
