@@ -76,7 +76,7 @@ fn frontmatter_has_name_field(front: &str) -> bool {
         .any(|line| line.trim_start().starts_with("name:"))
 }
 
-/// Expected installed bytes for a bundled runtime agent (matches install-runtime-agents.sh staging).
+/// Expected installed bytes for a bundled runtime agent (the bytes an install stages).
 fn expected_runtime_agent_content(
     source: &str,
     stem: &str,

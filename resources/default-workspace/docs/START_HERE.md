@@ -4,7 +4,7 @@
 
 A directory of docs, skills, templates, and scripts, plus the Agent Workspace app that installs it. The app puts a runtime copy at `~/.config/agent-workspace`, shows what is installed where, and installs rules, agents, skills, and config into Codex, OpenCode, Cursor, and Claude Code. Every write is reviewed first.
 
-Requirements: Python 3 on `PATH` (config merges and generators). The optional CLI scripts also need Bash on macOS or Linux.
+Requirements: Python 3 on `PATH` (config merges and generators).
 
 ## What the app does and does not do
 

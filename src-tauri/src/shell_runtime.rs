@@ -81,11 +81,11 @@ mod tests {
     #[test]
     fn extended_windows_path_becomes_forward_slash_for_bash() {
         let path = Path::new(
-            r"\\?\C:\Users\me\.config\agent-workspace\scripts\install-cursor-workspace.sh",
+            r"\\?\C:\Users\me\.config\agent-workspace\scripts\generate-opencode-config.py",
         );
         assert_eq!(
             path_arg_for_bash(path).expect("bash path"),
-            "C:/Users/me/.config/agent-workspace/scripts/install-cursor-workspace.sh"
+            "C:/Users/me/.config/agent-workspace/scripts/generate-opencode-config.py"
         );
     }
 
@@ -100,11 +100,11 @@ mod tests {
 
     #[test]
     fn path_with_spaces_stays_single_bash_argument_string() {
-        let path = Path::new(r"C:\Users\me\My Workspace\install-cursor-workspace.sh");
+        let path = Path::new(r"C:\Users\me\My Workspace\generate-opencode-config.py");
         let bash_path = path_arg_for_bash(path).expect("bash path");
         assert_eq!(
             bash_path,
-            "C:/Users/me/My Workspace/install-cursor-workspace.sh"
+            "C:/Users/me/My Workspace/generate-opencode-config.py"
         );
         assert!(bash_path.contains(' '));
         assert!(!bash_path.starts_with(r"\\?\"));
@@ -113,11 +113,11 @@ mod tests {
     #[test]
     fn native_process_path_preserves_extended_prefix() {
         let path = Path::new(
-            r"\\?\C:\Users\me\.config\agent-workspace\scripts\install-cursor-workspace.sh",
+            r"\\?\C:\Users\me\.config\agent-workspace\scripts\generate-opencode-config.py",
         );
         assert_eq!(
             path_arg_for_native_process(path).expect("native path"),
-            r"\\?\C:\Users\me\.config\agent-workspace\scripts\install-cursor-workspace.sh"
+            r"\\?\C:\Users\me\.config\agent-workspace\scripts\generate-opencode-config.py"
         );
     }
 

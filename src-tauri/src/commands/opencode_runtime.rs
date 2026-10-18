@@ -94,7 +94,7 @@ const PLAYWRIGHT_MCP_VERSION_DEFAULT: &str = "0.0.48";
 const PLAYWRIGHT_MCP_CONFIG_PLACEHOLDER: &str = "__PLAYWRIGHT_MCP_CONFIG_PATH__";
 const PLAYWRIGHT_BROWSERS_PLACEHOLDER: &str = "__PLAYWRIGHT_BROWSERS_PATH__";
 
-/// Keys merged by `scripts/merge-opencode-config.py` / `metadata/opencode-managed-keys.json`.
+/// Keys the app manages in opencode.json (`metadata/opencode-managed-keys.json`).
 const MANAGED_TOP_LEVEL_KEYS: &[&str] = &[
     "$schema",
     "share",
@@ -207,12 +207,12 @@ fn is_legacy_aw_scout(path: &Path) -> bool {
         .any(|line| line.trim() == "name: scout")
 }
 
-/// Default browser cache path (mirrors `playwright-mcp-lib.sh`).
+/// Default browser cache path.
 fn default_playwright_browsers_path(home_dir: &Path) -> Option<std::path::PathBuf> {
     crate::commands::cursor_profile::default_playwright_browsers_path(home_dir)
 }
 
-/// Default Playwright MCP config path (mirrors `playwright-mcp-lib.sh`).
+/// Default Playwright MCP config path.
 fn default_playwright_mcp_config_path(home_dir: &Path) -> std::path::PathBuf {
     if let Ok(path) = std::env::var("PLAYWRIGHT_MCP_CONFIG_PATH") {
         if !path.is_empty() {
@@ -272,7 +272,7 @@ fn transform_playwright_json(
     }
 }
 
-/// Render workspace `templates/opencode.json` the way `install-opencode-config.sh` would before sync.
+/// Render workspace `templates/opencode.json` the way an install renders it before sync.
 ///
 /// Applies Playwright placeholder transformations and overlays the app-level model override
 /// if present so that the installed config comparison reflects any user model selection.
@@ -322,7 +322,7 @@ fn installed_config_matches_rendered(
         .map(|expected| managed_opencode_keys_match(installed_json, &expected))
 }
 
-/// Sync status for `get_status` / dashboard (same staged output as `install-opencode-config.sh`).
+/// Sync status for `get_status` / dashboard (compares the staged output an install would write).
 pub(crate) fn opencode_config_sync_status(workspace_root: &Path, home_dir: &Path) -> String {
     let template_path = workspace_root.join("templates/opencode.json");
     let installed_path = home_dir.join(".config/opencode/opencode.json");
@@ -2376,18 +2376,6 @@ mod tests {
 
     fn write_marker_workspace(root: &Path) {
         write_file(root, ".agent-workspace/workspace.json", "{}");
-        write_file(root, "scripts/bootstrap.sh", "#!/usr/bin/env bash\n");
-        write_file(
-            root,
-            "scripts/install-agent-rules.sh",
-            "#!/usr/bin/env bash\n",
-        );
-        write_file(
-            root,
-            "scripts/install-opencode-config.sh",
-            "#!/usr/bin/env bash\n",
-        );
-        write_file(root, "scripts/install-skills.sh", "#!/usr/bin/env bash\n");
         write_file(root, "templates/global-agent-rules.md", "# rules\n");
         write_file(root, "templates/opencode.json", "{}");
         write_file(root, "README.md", "# readme\n");
@@ -2725,18 +2713,6 @@ mod tests {
         write_file(&ws, "templates/opencode.json", r#"{}"#);
         write_file(&ws, "templates/tui.json", r#"{}"#);
         write_file(&ws, ".agent-workspace/workspace.json", "{}");
-        write_file(&ws, "scripts/bootstrap.sh", "#!/usr/bin/env bash\n");
-        write_file(
-            &ws,
-            "scripts/install-agent-rules.sh",
-            "#!/usr/bin/env bash\n",
-        );
-        write_file(
-            &ws,
-            "scripts/install-opencode-config.sh",
-            "#!/usr/bin/env bash\n",
-        );
-        write_file(&ws, "scripts/install-skills.sh", "#!/usr/bin/env bash\n");
         write_file(&ws, "templates/global-agent-rules.md", "# rules\n");
         write_file(&ws, "README.md", "# readme\n");
         fs::create_dir_all(ws.join("skills")).expect("create skills dir");
@@ -2790,18 +2766,6 @@ mod tests {
         write_file(&ws, "templates/opencode.json", r#"{}"#);
         write_file(&ws, "templates/tui.json", r#"{}"#);
         write_file(&ws, ".agent-workspace/workspace.json", "{}");
-        write_file(&ws, "scripts/bootstrap.sh", "#!/usr/bin/env bash\n");
-        write_file(
-            &ws,
-            "scripts/install-agent-rules.sh",
-            "#!/usr/bin/env bash\n",
-        );
-        write_file(
-            &ws,
-            "scripts/install-opencode-config.sh",
-            "#!/usr/bin/env bash\n",
-        );
-        write_file(&ws, "scripts/install-skills.sh", "#!/usr/bin/env bash\n");
         write_file(&ws, "templates/global-agent-rules.md", "# rules\n");
         write_file(&ws, "README.md", "# readme\n");
         fs::create_dir_all(ws.join("skills")).expect("create skills dir");
@@ -3216,18 +3180,6 @@ mod tests {
         write_file(&ws, "templates/opencode.json", r#"{}"#);
         write_file(&ws, "templates/tui.json", r#"{}"#);
         write_file(&ws, ".agent-workspace/workspace.json", "{}");
-        write_file(&ws, "scripts/bootstrap.sh", "#!/usr/bin/env bash\n");
-        write_file(
-            &ws,
-            "scripts/install-agent-rules.sh",
-            "#!/usr/bin/env bash\n",
-        );
-        write_file(
-            &ws,
-            "scripts/install-opencode-config.sh",
-            "#!/usr/bin/env bash\n",
-        );
-        write_file(&ws, "scripts/install-skills.sh", "#!/usr/bin/env bash\n");
         write_file(&ws, "templates/global-agent-rules.md", "# rules\n");
         write_file(&ws, "README.md", "# readme\n");
         fs::create_dir_all(ws.join("skills")).expect("create skills dir");
@@ -3335,18 +3287,6 @@ mod tests {
         write_file(&ws, "templates/opencode.json", r#"{}"#);
         write_file(&ws, "templates/tui.json", r#"{}"#);
         write_file(&ws, ".agent-workspace/workspace.json", "{}");
-        write_file(&ws, "scripts/bootstrap.sh", "#!/usr/bin/env bash\n");
-        write_file(
-            &ws,
-            "scripts/install-agent-rules.sh",
-            "#!/usr/bin/env bash\n",
-        );
-        write_file(
-            &ws,
-            "scripts/install-opencode-config.sh",
-            "#!/usr/bin/env bash\n",
-        );
-        write_file(&ws, "scripts/install-skills.sh", "#!/usr/bin/env bash\n");
         write_file(&ws, "templates/global-agent-rules.md", "# rules\n");
         write_file(&ws, "README.md", "# readme\n");
         fs::create_dir_all(ws.join("skills")).expect("create skills dir");
@@ -3432,18 +3372,6 @@ mod tests {
         write_file(&ws, "templates/opencode.json", r#"{}"#);
         write_file(&ws, "templates/tui.json", r#"{}"#);
         write_file(&ws, ".agent-workspace/workspace.json", "{}");
-        write_file(&ws, "scripts/bootstrap.sh", "#!/usr/bin/env bash\n");
-        write_file(
-            &ws,
-            "scripts/install-agent-rules.sh",
-            "#!/usr/bin/env bash\n",
-        );
-        write_file(
-            &ws,
-            "scripts/install-opencode-config.sh",
-            "#!/usr/bin/env bash\n",
-        );
-        write_file(&ws, "scripts/install-skills.sh", "#!/usr/bin/env bash\n");
         write_file(&ws, "templates/global-agent-rules.md", "# rules\n");
         write_file(&ws, "README.md", "# readme\n");
         fs::create_dir_all(ws.join("skills")).expect("create skills dir");

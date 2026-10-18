@@ -46,7 +46,6 @@ function props(overrides: Partial<StartViewProps> = {}): StartViewProps {
     uninstallPreviewRequested: false,
     onUninstallPreviewHandled: vi.fn(),
     onOpenFolder: vi.fn(),
-    onReleaseCheck: vi.fn(),
     backupCount: 2,
     onOpenBackupsFolder: vi.fn(),
     wsLog: null,
@@ -56,7 +55,6 @@ function props(overrides: Partial<StartViewProps> = {}): StartViewProps {
     status: STATUS_DATA,
     workspaceValid: true,
     gitAvailable: true,
-    canRunReleaseCheck: true,
     onClearOutput: vi.fn(),
     ...overrides,
   };

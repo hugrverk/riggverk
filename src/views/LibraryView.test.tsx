@@ -96,8 +96,6 @@ function baseProps(overrides: Partial<LibraryViewProps> = {}): LibraryViewProps 
     onSelectConfigSource: noop,
     configEditorSourceSaveMessage: "",
     configEditorSourceContent: null,
-    brainSetupText: "",
-    brainSetupSource: "",
     workspaceValid: true,
     showConfigs: true,
     ...overrides,
@@ -225,7 +223,6 @@ describe("LibraryView layout", () => {
       "skills",
       "agents",
       "configs",
-      "brain",
     ]);
     expect(within(group).getByRole("button", { name: /^docs/ }).getAttribute("aria-current")).toBe("true");
   });
@@ -505,11 +502,11 @@ describe("LibraryView source switching", () => {
     press(list, ">");
     expect(onSetSourceType).toHaveBeenLastCalledWith("rules");
     press(list, "[");
-    expect(onSetSourceType).toHaveBeenLastCalledWith("brain");
+    expect(onSetSourceType).toHaveBeenLastCalledWith("configs");
     press(list, "<");
-    expect(onSetSourceType).toHaveBeenLastCalledWith("brain");
+    expect(onSetSourceType).toHaveBeenLastCalledWith("configs");
 
-    update({ sourceType: "brain", onSetSourceType, brainSetupText: "text", brainSetupSource: "src" });
+    update({ sourceType: "configs", onSetSourceType });
     press(screen.getByRole("listbox"), "]");
     expect(onSetSourceType).toHaveBeenLastCalledWith("docs");
   });
@@ -518,7 +515,7 @@ describe("LibraryView source switching", () => {
     const onSetSourceType = vi.fn();
     renderLibrary({ sourceType: "agents", showConfigs: false, onSetSourceType, agentSources: [] });
     press(screen.getByRole("button", { name: /^agents/ }), "]");
-    expect(onSetSourceType).toHaveBeenLastCalledWith("brain");
+    expect(onSetSourceType).toHaveBeenLastCalledWith("docs");
   });
 
   it("switches source with the clickable source buttons", () => {
@@ -560,7 +557,7 @@ describe("LibraryView status-bar hints", () => {
     fireEvent.click(statusHint("] next source"));
     expect(onSetSourceType).toHaveBeenLastCalledWith("rules");
     fireEvent.click(statusHint("[ prev source"));
-    expect(onSetSourceType).toHaveBeenLastCalledWith("brain");
+    expect(onSetSourceType).toHaveBeenLastCalledWith("configs");
     fireEvent.click(statusHint("o open"));
     expect(onOpenDoc).toHaveBeenCalledWith("a");
 
@@ -582,9 +579,6 @@ describe("LibraryView status-bar hints", () => {
     focusList();
     expect(queryStatusHint("/ filter")).not.toBeNull();
     update({ sourceType: "rules" });
-    focusList();
-    expect(queryStatusHint("/ filter")).toBeNull();
-    update({ sourceType: "brain", brainSetupText: "text", brainSetupSource: "src" });
     focusList();
     expect(queryStatusHint("/ filter")).toBeNull();
   });
@@ -1300,7 +1294,7 @@ describe("LibraryView new doc form", () => {
   });
 });
 
-describe("LibraryView Rules and Brain Setup", () => {
+describe("LibraryView Rules", () => {
   it("lists the rules template with the targets it installs to", () => {
     const template = makeDoc("tpl", "tpl", "# Rules");
     renderLibrary({
@@ -1317,20 +1311,5 @@ describe("LibraryView Rules and Brain Setup", () => {
     expect(within(meta).getByText(".claude/CLAUDE.md")).not.toBeNull();
     expect(within(meta).queryByText(".claude/agents")).toBeNull();
     expect(screen.getByText("template only")).not.toBeNull();
-  });
-
-  it("shows the Brain Setup block as a copyable pane and moves into it with Enter", () => {
-    renderLibrary({ sourceType: "brain", brainSetupText: "BRAIN BLOCK TEXT", brainSetupSource: "templates/brain.md" });
-    expect(screen.getByText("BRAIN BLOCK TEXT")).not.toBeNull();
-    expect(screen.getByRole("button", { name: "Copy" })).not.toBeNull();
-    expect(screen.queryByRole("region", { name: "Preview" })).toBeNull();
-    expect(screen.getByRole("region", { name: "Brain Setup" }).querySelector(".pane-title")!.textContent).toContain("templates/brain.md");
-    press(focusList(), "Enter");
-    expect(document.activeElement).toBe(screen.getByRole("group", { name: "Brain Setup" }));
-  });
-
-  it("explains an invalid workspace in Brain Setup", () => {
-    renderLibrary({ sourceType: "brain", workspaceValid: false });
-    expect(screen.getAllByText(/No valid workspace/).length).toBeGreaterThan(0);
   });
 });

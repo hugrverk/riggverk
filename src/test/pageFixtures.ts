@@ -28,7 +28,6 @@ export const VALID_DIAGNOSTICS: WorkspaceDiagnostics = {
   total_config_targets: 2,
   backup_root: "/tmp/backups",
   backup_root_exists: true,
-  release_check_available: true,
   bundled_resources_status: "current",
   missing_bundled_count: 0,
   missing_bundled_sample: [],
@@ -39,7 +38,6 @@ export const INVALID_DIAGNOSTICS: WorkspaceDiagnostics = {
   resolved_path: null,
   valid: false,
   error: "workspace missing",
-  release_check_available: false,
   bundled_resources_status: "missing",
 };
 

@@ -6,7 +6,7 @@
 mod tests {
     use crate::commands::{
         apply_setup, get_cursor_profile_health, get_opencode_runtime_health, get_status,
-        get_workspace_diagnostics, preview_setup, read_brain_setup_seed,
+        get_workspace_diagnostics, preview_setup,
     };
     use serde_json::Value;
     use std::path::PathBuf;
@@ -19,6 +19,24 @@ mod tests {
         let path = std::env::var("AGENT_WORKSPACE_PATH")
             .expect("AGENT_WORKSPACE_PATH must be set for runtime smoke");
         PathBuf::from(path.trim())
+    }
+
+    /// Preview and apply surfaces through the production setup lifecycle.
+    fn apply_surfaces(ids: &[&str]) {
+        let surfaces: Vec<String> = ids.iter().map(|s| s.to_string()).collect();
+        let plan = preview_setup(surfaces.clone()).expect("preview setup");
+        let apply = apply_setup(
+            surfaces,
+            true,
+            plan.plan_fingerprint.clone(),
+            plan.preview_token.clone(),
+        )
+        .expect("apply setup");
+        assert!(
+            apply.success,
+            "smoke apply failed for {ids:?}: {} failed={:?}",
+            apply.message, apply.failed
+        );
     }
 
     fn field<'a>(value: &'a Value, key: &str) -> &'a Value {
@@ -77,12 +95,8 @@ mod tests {
             field(&diagnostics, "resolved_path").as_str(),
             Some(workspace_canonical.to_string_lossy().as_ref())
         );
-        // The bundled default workspace ships no scripts/release-check.sh (that
-        // script lives in the app repository), so it must not be reported.
-        assert_eq!(
-            field(&diagnostics, "release_check_available"),
-            &Value::Bool(false)
-        );
+
+        apply_surfaces(&["open_code_config", "open_code_agents", "claude_agents"]);
 
         let status =
             serde_json::to_value(get_status().expect("get_status")).expect("serialize status");
@@ -105,24 +119,7 @@ mod tests {
             field(&opencode, "summary")
         );
 
-        // Apply cursor surfaces through the production setup lifecycle.
-        let cursor_surfaces: Vec<String> = ["cursor_agents", "cursor_skills", "cursor_mcp"]
-            .iter()
-            .map(|s| s.to_string())
-            .collect();
-        let plan = preview_setup(cursor_surfaces.clone()).expect("preview cursor setup");
-        let apply = apply_setup(
-            cursor_surfaces,
-            true,
-            plan.plan_fingerprint.clone(),
-            plan.preview_token.clone(),
-        )
-        .expect("apply cursor setup");
-        assert!(
-            apply.success,
-            "cursor smoke apply failed: {} failed={:?}",
-            apply.message, apply.failed
-        );
+        apply_surfaces(&["cursor_agents", "cursor_skills", "cursor_mcp"]);
 
         let cursor =
             serde_json::to_value(get_cursor_profile_health().expect("get_cursor_profile_health"))
@@ -138,17 +135,6 @@ mod tests {
             Some("synced")
         );
 
-        let brain = serde_json::to_value(read_brain_setup_seed().expect("read_brain_setup_seed"))
-            .expect("serialize brain setup");
-        assert_eq!(field(&brain, "status").as_str(), Some("missing"));
-        assert_eq!(field(&brain, "content").as_str(), Some(""));
-
-        let private_seed = workspace_canonical.join("templates/context/saved-memory.md");
-        assert!(
-            !private_seed.is_file(),
-            "private brain seed must not exist: {}",
-            private_seed.display()
-        );
         let private_context_dir = workspace_canonical.join("private-context");
         assert!(
             !private_context_dir.exists(),

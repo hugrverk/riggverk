@@ -262,7 +262,6 @@ export function buildEntry(props: LibraryViewProps): LibraryEntry | null {
     case "skills": return skillEntry(props);
     case "agents": return agentEntry(props);
     case "configs": return configEntry(props);
-    case "brain": return null;
   }
 }
 
@@ -275,6 +274,5 @@ export function emptyStateHint(source: LibrarySourceType, workspaceValid: boolea
     case "skills": return "Select a skill to preview";
     case "agents": return "Select an agent to preview";
     case "configs": return "Select a config target to preview";
-    case "brain": return "Brain Setup is loading";
   }
 }

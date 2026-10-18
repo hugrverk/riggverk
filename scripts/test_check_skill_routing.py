@@ -26,8 +26,6 @@ def build_tree(dest: Path) -> None:
     shutil.copytree(ROOT / WS, dest / WS)
     shutil.copytree(ROOT / "docs", dest / "docs")
     shutil.copy2(ROOT / "README.md", dest / "README.md")
-    (dest / "src/lib").mkdir(parents=True)
-    shutil.copy2(ROOT / "src/lib/brainSetup.ts", dest / "src/lib/brainSetup.ts")
 
 
 def run(tree: Path, script: str, *args: str) -> subprocess.CompletedProcess[str]:

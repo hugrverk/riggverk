@@ -14,8 +14,6 @@ import type {
   SkillSummary,
 } from "../types";
 import { AgentItemList } from "./library/AgentItemList";
-import { BrainItemList } from "./library/BrainItemList";
-import { BrainPane } from "./library/BrainPane";
 import { ConfigItemList } from "./library/ConfigItemList";
 import { CreateDocForm } from "./library/CreateDocForm";
 import { DocItemList } from "./library/DocItemList";
@@ -26,7 +24,7 @@ import { SkillItemList } from "./library/SkillItemList";
 import { SourceSwitcher, type LibrarySourceTab } from "./library/SourceSwitcher";
 import { useLibraryKeys } from "./library/useLibraryKeys";
 
-export type LibrarySourceType = "docs" | "rules" | "skills" | "agents" | "configs" | "brain";
+export type LibrarySourceType = "docs" | "rules" | "skills" | "agents" | "configs";
 
 const SOURCE_TYPES: { id: LibrarySourceType; label: string; title: string }[] = [
   { id: "docs", label: "docs", title: "Docs" },
@@ -34,7 +32,6 @@ const SOURCE_TYPES: { id: LibrarySourceType; label: string; title: string }[] = 
   { id: "skills", label: "skills", title: "Skills" },
   { id: "agents", label: "agents", title: "Runtime agents" },
   { id: "configs", label: "configs", title: "Configs" },
-  { id: "brain", label: "brain", title: "Brain Setup" },
 ];
 
 /** A pending "open it for editing" request outlives the open item it waits for only this long. */
@@ -130,10 +127,6 @@ export interface LibraryViewProps {
   configEditorSourceSaveMessage: string;
   configEditorSourceContent: DocumentContent | null;
 
-  // Brain Setup
-  brainSetupText: string;
-  brainSetupSource: string;
-
   // Common
   workspaceValid: boolean;
   showConfigs: boolean;
@@ -154,8 +147,7 @@ function sourceCount(props: LibraryViewProps, type: LibrarySourceType): number |
 
 /**
  * Library: [1] item list of the active source (with the source switcher), [2] the open item as one document
- * pane: the working copy rendered, or its source textarea while editing. Brain Setup has nothing to edit, so
- * its second pane is one copy block.
+ * pane: the working copy rendered, or its source textarea while editing.
  *
  * The preview/edit mode props (`docMode`, ...) stay in the contract with the controller; the pane keeps its
  * own view/edit state (below), which resets with the open item, so they are not needed.
@@ -169,7 +161,6 @@ export function LibraryView(props: LibraryViewProps) {
   const [focusRequest, setFocusRequest] = useState<string | null>(null);
 
   const entry = buildEntry(props);
-  const isBrain = sourceType === "brain";
   const followCursor = !(entry?.dirty ?? false);
 
   // Edit mode belongs to one open item: switching to another (or to none) returns to the rendered view.
@@ -244,10 +235,6 @@ export function LibraryView(props: LibraryViewProps) {
   }, [focusRequest, entryKey]);
 
   const onActivate = (key: string) => {
-    if (isBrain) {
-      focusPaneById("editor", rootRef.current ?? document);
-      return;
-    }
     setFocusRequest(key);
   };
 
@@ -319,15 +306,6 @@ export function LibraryView(props: LibraryViewProps) {
         />
       );
       break;
-    case "brain":
-      list = (
-        <BrainItemList
-          brainSetupSource={props.brainSetupSource}
-          workspaceValid={workspaceValid}
-          onActivate={onActivate}
-        />
-      );
-      break;
   }
 
   // Opening the form from `n` or its status-bar hint puts the cursor in its title field.
@@ -363,26 +341,18 @@ export function LibraryView(props: LibraryViewProps) {
         {list}
       </Pane>
 
-      {isBrain ? (
-        <BrainPane
-          workspaceValid={workspaceValid}
-          brainSetupText={props.brainSetupText}
-          brainSetupSource={props.brainSetupSource}
-        />
-      ) : (
-        <DocumentPane
-          entry={entry}
-          emptyHint={
-            sourceType === "configs" && props.activeConfigTargetId === "opencode_config" && workspaceValid
-              ? "Loading config source…"
-              : emptyStateHint(sourceType, workspaceValid)
-          }
-          editing={editing}
-          textareaRef={textareaRef}
-          top={createForm}
-          onClose={close}
-        />
-      )}
+      <DocumentPane
+        entry={entry}
+        emptyHint={
+          sourceType === "configs" && props.activeConfigTargetId === "opencode_config" && workspaceValid
+            ? "Loading config source…"
+            : emptyStateHint(sourceType, workspaceValid)
+        }
+        editing={editing}
+        textareaRef={textareaRef}
+        top={createForm}
+        onClose={close}
+      />
     </div>
   );
 }

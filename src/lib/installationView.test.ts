@@ -177,7 +177,7 @@ describe("updateActionFor", () => {
   it("names the reason it is off", () => {
     expect(updateActionFor("claude", entry("claude", status("current")), idle).disabled).toMatch(/already current/);
     expect(updateActionFor("claude", entry("claude", status("unavailable")), idle).disabled).toMatch(/unavailable/);
-    expect(updateActionFor("claude", entry("claude", status("update_available")), { ...idle, busyLabel: "release-check" }).disabled).toBe("release-check is running");
+    expect(updateActionFor("claude", entry("claude", status("update_available")), { ...idle, busyLabel: "uninstall" }).disabled).toBe("uninstall is running");
     expect(updateActionFor("claude", entry("claude", status("update_available")), { ...idle, settingsSaving: true }).disabled).toBe("saving target changes");
     expect(updateActionFor("claude", undefined, { ...idle, workspaceValid: false }).disabled).toBe("no valid workspace installed");
     expect(updateActionFor("claude", entry("claude", null, { loading: true }), idle).disabled).toBe("checking status…");

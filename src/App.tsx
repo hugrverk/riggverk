@@ -66,15 +66,12 @@ function AppShell() {
     codexRuntimeHealth,
     cursorProfileHealth,
     claudeRuntimeHealth,
-    brainSetupText,
-    brainSetupSource,
     fetchStatus,
     loadWorkspaceDiagnostics,
     loadOpenCodeRuntimeHealth,
     loadCodexRuntimeHealth,
     loadCursorProfileHealth,
     loadClaudeRuntimeHealth,
-    loadBrainSetupSeed,
     resetWorkspaceHealthState,
     clearHarnessHealth,
     isInvalidWorkspaceError,
@@ -223,16 +220,10 @@ function AppShell() {
     wsRunning,
     wsLog,
     wsLogCompletedAt,
-    runWsAction,
     runWsTask,
     workspaceActionRequestIdRef,
     resetTerminalOutput,
-  } = useWorkspaceActions({
-    fetchStatus,
-    isInvalidWorkspaceError,
-    workspaceDiagnostics,
-    setError,
-  });
+  } = useWorkspaceActions({ setError });
 
   const wsProgress = useApplyProgress(wsRunning);
   // A successful apply or rollback sweeps one line down the view area (full motion only).
@@ -386,10 +377,6 @@ function AppShell() {
     loadWorkspaceDiagnostics,
     loadWorkspaceResources,
   ]);
-
-  useEffect(() => {
-    loadBrainSetupSeed();
-  }, [appSettings?.workspace_path, loadBrainSetupSeed]);
 
   const lastWorkspaceRefreshRef = useRef(0);
   const switchView = useCallback(async (v: View) => {
@@ -586,18 +573,6 @@ function AppShell() {
   const visibleSkillIds = useMemo(() => new Set(visibleSkills.map(skill => skill.id)), [visibleSkills]);
   const visibleAgentIds = useMemo(() => new Set(visibleAgentSources.map(agent => agent.id)), [visibleAgentSources]);
   const workspaceValid = workspaceDiagnostics?.valid === true;
-  const canRunReleaseCheck = workspaceValid && workspaceDiagnostics?.release_check_available === true;
-  // release-check is the one action that executes a script from the active (user-chosen) workspace,
-  // so it always names the exact folder and asks first.
-  const runReleaseCheck = useCallback(async () => {
-    const root = workspaceDiagnostics?.resolved_path ?? "the active workspace";
-    const ok = await confirm({
-      title: "Run release-check",
-      message: `This runs scripts/release-check.sh from ${root}. It executes code from that folder; only continue for a workspace you trust.`,
-      confirmLabel: "run",
-    });
-    if (ok) void runWsAction("release_check", "release-check");
-  }, [confirm, runWsAction, workspaceDiagnostics?.resolved_path]);
   const gitAvailable = status?.git_available === true;
 
   const overview = useInstallationOverview({
@@ -623,7 +598,6 @@ function AppShell() {
     status,
     workspaceValid,
     gitAvailable,
-    canRunReleaseCheck,
     onClearOutput: resetTerminalOutput,
     overview,
     install,
@@ -670,8 +644,6 @@ function AppShell() {
     openBackups: openBackupsFolder,
     clearOutput: resetTerminalOutput,
     outputText,
-    canRunReleaseCheck,
-    runReleaseCheck: () => void runReleaseCheck(),
     openInstall: install.open,
     rollbackTransactionId,
     requestRollback,
@@ -722,7 +694,6 @@ function AppShell() {
             uninstallPreviewRequested={uninstallPreviewRequested}
             onUninstallPreviewHandled={() => setUninstallPreviewRequested(false)}
             onOpenFolder={openDefaultWorkspaceFolder}
-            onReleaseCheck={() => void runReleaseCheck()}
             backupCount={backups.length}
             onOpenBackupsFolder={openBackupsFolder}
           />
@@ -843,9 +814,6 @@ function AppShell() {
             onSelectConfigSource={selectConfigSourceType}
             configEditorSourceSaveMessage={configEditorSourceSaveMessage}
             configEditorSourceContent={configEditorSourceContent}
-            // Brain Setup
-            brainSetupText={brainSetupText}
-            brainSetupSource={brainSetupSource}
             // Common
             workspaceValid={workspaceValid}
             showConfigs={configTargets.length > 0}

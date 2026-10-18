@@ -27,8 +27,7 @@ Keys fire only when no text field has focus; Escape leaves a field. `Mod` is Cmd
 | Workspace and harness pages | `u` | Review and apply an install or update |
 | | `p` | Preview only |
 | | `r` | Refresh status |
-| Workspace status pane | `R` | Run the release check (when available) |
-| | `o` | Open the workspace folder |
+| Workspace status pane | `o` | Open the workspace folder |
 | | `B` | Open the backups folder |
 | Output pane | `y` | Copy output |
 | | `C` | Clear |
@@ -66,7 +65,6 @@ Keys fire only when no text field has focus; Escape leaves a field. `Mod` is Cmd
 | `:rollback` | Dry run, then confirm, then restore the last transaction |
 | `:uninstall` | Open the uninstall preview |
 | `:rules ...` | Rules diff, convert, and leave-as-is (see `:help`) |
-| `:release-check` (`:rc`) | Run the release check, when the workspace has the script |
 | `:refresh`, `:clear`, `:copy`, `:open folder`, `:open backups` | Status, output, folders |
 | `:theme <dark, light, system, or toggle>` | Appearance |
 | `:w`, `:q`, `:reset` | Library: save, close (asks before discarding), discard edits |
@@ -80,7 +78,7 @@ States: `current`, `update`, `not installed`, `conflict`, `unavailable`, and `of
 
 The cursor row decides what `u` installs: `workspace` installs the workspace bundle; a harness row installs that harness. Harness artifacts are not part of the workspace install.
 
-Status pane: **release-check** (needs `scripts/release-check.sh` in the workspace, which the bundled workspace does not contain), **backups** (run count and folder), **last tx** (the transaction `z` can roll back). Enter on a harness row opens its page.
+Status pane: **backups** (run count and folder), **last tx** (the transaction `z` can roll back). Enter on a harness row opens its page.
 
 ## Harness pages
 
@@ -113,7 +111,7 @@ Anything Install, uninstall, or a Library save would overwrite or remove is copi
                                     /artifacts/<artifact id>
                                     /managed-state.previous.json
 <backup root>/docs/<doc id>-<timestamp>/<file>        Library saves
-<backup root>/<YYYYMMDD-HHMMSS>/<label>/<file>        CLI scripts and Cursor operations
+<backup root>/<YYYYMMDD-HHMMSS>/<label>/<file>        Cursor operations (and the retired CLI scripts)
 ```
 
 New files have no backup. Restore by rollback while the transaction is in this session, otherwise by copying a file out of `artifacts/` by hand (the artifact id names the destination).
@@ -124,11 +122,9 @@ New files have no backup. Restore by rollback while the transaction is in this s
 
 ## Library
 
-Panes: **items** and the open **document**, which shows the item rendered (Markdown, or formatted JSON for configs) and turns into its source text while you edit. Sources: Docs, Rules, Skills, Runtime agents, Configs, Brain Setup (`[` `]` to switch). Docs are grouped Start, Guides, Reference, Cursor, Configs, and Context. `i` or Enter edits, Escape returns to the rendered view, `Mod+s` or `:w` saves, `:q` closes and asks before discarding edits.
+Panes: **items** and the open **document**, which shows the item rendered (Markdown, or formatted JSON for configs) and turns into its source text while you edit. Sources: Docs, Rules, Skills, Runtime agents, Configs (`[` `]` to switch). Docs are grouped Start, Guides, Reference, Cursor, Configs, and Context. `i` or Enter edits, Escape returns to the rendered view, `Mod+s` or `:w` saves, `:q` closes and asks before discarding edits.
 
 The Library edits the runtime workspace copy. Saves back up the file first and refuse symlinks. They do not change what harnesses receive, and an edited bundled file becomes a conflict for later updates ([TROUBLESHOOTING.md](TROUBLESHOOTING.md#conflicts)). A doc that differs from the bundled one shows a stale-doc warning.
-
-Brain Setup is a copy-paste instruction block for external assistants. It runs nothing and changes no targets.
 
 ## Settings
 
@@ -137,9 +133,5 @@ Harnesses (which tools appear and may be written), appearance (dark, light, syst
 Workspace: `c` chooses another folder, which must pass the workspace markers; `R` returns to `~/.config/agent-workspace`. `AGENT_WORKSPACE_PATH` overrides both. Generator scripts the app runs always come from its bundled copy, not from the chosen folder.
 
 Disabling a harness hides it and blocks new writes to it. It does not delete files or forget target choices, and re-enabling does not install.
-
-## Release check
-
-`R` on the Workspace page, or `:release-check`, runs `scripts/release-check.sh` from the workspace. The bundled workspace does not contain that script, so the action is unavailable unless you add it. Run the app repository's own `./scripts/release-check.sh` from its checkout instead.
 
 See [WORKFLOWS.md](WORKFLOWS.md) for recipes.

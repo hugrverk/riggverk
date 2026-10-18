@@ -1126,7 +1126,6 @@ mod tests {
             "docs/TROUBLESHOOTING.md",
             "docs/USING_THE_APP.md",
             "docs/WORKFLOWS.md",
-            "scripts/install-skills.sh",
             "scripts/merge-codex-config.py",
         ] {
             assert_planned_kind(

@@ -40,7 +40,7 @@ Everything before or after the block is yours and is kept byte-for-byte. Put you
 
 Resolving a conflict on the harness page: `d` shows the diff, `v` (**Convert**) writes the current base as the block and moves the sections you changed (or added) below the END marker, previewed and backed up, and `m` (**Leave as is**) records that you manage the file; the app then reports "base updates available, you manage this file" and does not write it until you convert. `:rules` does the same from the command line. A rollback of a block update restores only the previous block, so text you added afterwards stays.
 
-Codex reads `AGENTS.override.md` instead of `AGENTS.md` when it is non-empty, which silently drops the base. The Codex runtime pane warns about it. The CLI script `install-agent-rules.sh` refuses a file that holds the block.
+Codex reads `AGENTS.override.md` instead of `AGENTS.md` when it is non-empty, which silently drops the base. The Codex runtime pane warns about it.
 
 ## Shared semantic agent bodies
 
