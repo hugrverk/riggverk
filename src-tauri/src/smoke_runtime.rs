@@ -119,7 +119,7 @@ mod tests {
             field(&opencode, "summary")
         );
 
-        apply_surfaces(&["cursor_agents", "cursor_skills", "cursor_mcp"]);
+        apply_surfaces(&["cursor_agents", "skills", "cursor_mcp"]);
 
         let cursor =
             serde_json::to_value(get_cursor_profile_health().expect("get_cursor_profile_health"))

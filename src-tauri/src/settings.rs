@@ -406,6 +406,25 @@ pub fn load() -> AppSettings {
         .unwrap_or_default()
 }
 
+/// Read settings for a caller that must not act on guessed values. A missing file is the
+/// defaults; a file that cannot be read or parsed is an error instead of the defaults, so
+/// "which harnesses are enabled" is never answered from a fallback.
+pub fn try_load() -> Result<AppSettings, String> {
+    let path = settings_file()?;
+    let json = match fs::read_to_string(&path) {
+        Ok(json) => json,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(AppSettings::default());
+        }
+        Err(error) => return Err(format!("read settings: {error}")),
+    };
+    let mut settings = serde_json::from_str::<AppSettings>(&json)
+        .map_err(|error| format!("settings file is not valid: {error}"))?;
+    normalize(&mut settings);
+    migrate_target_defaults(&mut settings);
+    Ok(settings)
+}
+
 #[cfg(test)]
 pub fn get_settings_snapshot() -> Result<GetSettingsResponse, String> {
     get_settings_snapshot_with_mutate(|_| Ok(MutationOutcome::Unchanged))
@@ -707,9 +726,13 @@ mod tests {
             vec!["codex_rules".to_string(), "opencode_config".to_string()]
         );
         assert!(effective_enabled_target_ids(&settings).is_empty());
+        // Skills belong to no single harness; with none enabled they are planned as nothing.
         assert_eq!(
             enabled_setup_surfaces(&settings),
-            vec![crate::setup_lifecycle::SetupSurfaceId::WorkspaceBundle]
+            vec![
+                crate::setup_lifecycle::SetupSurfaceId::Skills,
+                crate::setup_lifecycle::SetupSurfaceId::WorkspaceBundle
+            ]
         );
     }
 

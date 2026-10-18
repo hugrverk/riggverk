@@ -5,6 +5,7 @@ use super::content::DocumentContent;
 use super::process::{run_cmd, ActionResult};
 use super::workspace::{path_arg, workspace_root};
 use crate::path_safety::reject_symlink;
+#[cfg(test)]
 use crate::skills_install::discover_workspace_skills;
 
 #[derive(Serialize)]
@@ -272,6 +273,7 @@ fn extract_frontmatter_list(content: &str, key: &str) -> Vec<String> {
         .collect()
 }
 
+#[cfg(test)]
 pub(crate) fn workspace_skill_names(root: &Path) -> Result<Vec<String>, String> {
     let mut names: Vec<String> = discover_workspace_skills(&root.join("skills"))?
         .into_keys()

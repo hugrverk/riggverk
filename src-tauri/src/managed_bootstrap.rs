@@ -10,11 +10,11 @@ use std::sync::OnceLock;
 
 use serde::Deserialize;
 
-use crate::agent_skill_targets::{codex_legacy_skills_dest, validate_skill_name};
+use crate::agent_skill_targets::validate_skill_name;
 use crate::artifact_registry::{AgentName, ArtifactId, SkillName, WorkspaceRelPath};
 use crate::managed_state::{artifact_identity, workspace_file_identity, ManagedArtifactRecord};
 use crate::setup_fingerprint::{self, ABSENT_DIGEST};
-use crate::skill_roots::SkillRoot;
+use crate::skill_roots::{SkillRoot, SkillScope};
 
 /// Skills removed from the canonical 21-skill bundle (old 33-skill installations).
 pub const REMOVED_SKILL_NAMES: &[&str] = &[
@@ -219,60 +219,66 @@ pub fn stale_workspace_paths(workspace_root: &Path) -> Vec<String> {
     stale
 }
 
-/// The skill folder each harness's skills are installed into.
-fn harness_skill_root(harness: &str) -> SkillRoot {
-    match harness {
-        "opencode" => SkillRoot::OpenCode,
-        "codex" => SkillRoot::CodexHome,
-        "claude" => SkillRoot::Claude,
-        _ => SkillRoot::Cursor,
-    }
-}
-
-/// Build stale harness skill artifacts for removed skills still installed globally.
-pub fn stale_harness_skill_artifacts(
+/// Skills an older version installed that a plan has to look for on disk because no managed
+/// record names them (the managed state is missing): in every skill root,
+///
+/// - a skill the app no longer ships (and the retired `scout`), and
+/// - in a root `wanted` does not name, any skill the app ships now: the copies older versions put
+///   into per-harness folders. For those the supporting files that exist count too.
+///
+/// A candidate is only a candidate: its content must still be proven app-owned (a shipped
+/// version) before it is removed, and an edited copy is a conflict. Dot entries
+/// (`$CODEX_HOME/skills/.system` among them), symlinks, foreign skills and unknown files are
+/// never candidates.
+pub fn legacy_skill_artifacts(
     workspace_root: &Path,
-    _home: &Path,
-    harness: &str,
-    map: impl Fn(SkillName) -> ArtifactId,
+    home: &Path,
+    wanted: &SkillScope,
 ) -> Result<Vec<ArtifactId>, String> {
-    let dest_root = crate::agent_skill_targets::agent_global_skills_dest(harness)?;
-    if !dest_root.is_dir() {
-        return Ok(Vec::new());
-    }
     let bundled_root = crate::setup_roots::bundled_root_for(workspace_root)?;
-    let canonical: HashSet<String> =
-        crate::artifact_registry::discover_skill_names_for_harness(&bundled_root, harness)?
-            .into_iter()
-            .map(|n| n.as_str().to_string())
-            .collect();
-
-    let mut stale = Vec::new();
-    for entry in fs::read_dir(&dest_root).map_err(|e| format!("read skills dir: {e}"))? {
-        let entry = entry.map_err(|e| format!("read entry: {e}"))?;
-        if entry.file_type().map(|t| t.is_symlink()).unwrap_or(false) {
-            return Err(format!(
-                "refusing symlink skill: {}",
-                entry.path().display()
-            ));
-        }
-        if !entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
-            continue;
-        }
-        let name = entry.file_name().to_string_lossy().into_owned();
-        if canonical.contains(&name) {
-            continue;
-        }
-        if !REMOVED_SKILL_NAMES.contains(&name.as_str()) && name != LEGACY_SCOUT_AGENT {
-            continue;
-        }
-        validate_skill_name(&name, "bootstrap stale scan")?;
-        let Some(sn) = SkillName::new(name) else {
+    let current = crate::artifact_registry::catalog_skill_files(&bundled_root)?;
+    let mut artifacts = Vec::new();
+    for root in SkillRoot::ALL {
+        let Ok(dir) = root.path(home) else {
             continue;
         };
-        stale.push(map(sn));
+        let Ok(entries) = fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let Ok(kind) = entry.file_type() else {
+                continue;
+            };
+            if kind.is_symlink() || !kind.is_dir() {
+                continue;
+            }
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if name.starts_with('.') || !entry.path().join("SKILL.md").is_file() {
+                continue;
+            }
+            let retired =
+                REMOVED_SKILL_NAMES.contains(&name.as_str()) || name == LEGACY_SCOUT_AGENT;
+            let shipped = current.iter().find(|skill| skill.name.as_str() == name);
+            if validate_skill_name(&name, "bootstrap skill scan").is_err() {
+                continue;
+            }
+            let Some(sn) = SkillName::new(name) else {
+                continue;
+            };
+            match shipped {
+                Some(skill) if !wanted.contains(root) => {
+                    for rel in &skill.files {
+                        if rel.is_skill_md() || entry.path().join(rel.as_str()).is_file() {
+                            artifacts.push(ArtifactId::skill_file(root, sn.clone(), rel.clone()));
+                        }
+                    }
+                }
+                None if retired => artifacts.push(ArtifactId::skill_md(root, sn)),
+                _ => {}
+            }
+        }
     }
-    Ok(stale)
+    Ok(artifacts)
 }
 
 /// Stale OpenCode agent scout.md when repo-scout is canonical.
@@ -289,74 +295,6 @@ pub fn stale_opencode_scout_agent(workspace_root: &Path, home: &Path) -> Option<
     } else {
         None
     }
-}
-
-/// Codex legacy path skills that match canonical or old runtime sources.
-pub fn codex_legacy_migration_artifacts(
-    workspace_root: &Path,
-    home: &Path,
-) -> Result<Vec<ArtifactId>, String> {
-    let legacy_root = codex_legacy_skills_dest(home);
-    if !legacy_root.is_dir() {
-        return Ok(Vec::new());
-    }
-    let bundled_root = crate::setup_roots::bundled_root_for(workspace_root)?;
-    let canonical: HashSet<String> =
-        crate::artifact_registry::discover_skill_names_for_harness(&bundled_root, "codex")?
-            .into_iter()
-            .map(|name| name.as_str().to_string())
-            .collect();
-    let mut artifacts = Vec::new();
-    for entry in fs::read_dir(&legacy_root).map_err(|e| format!("read legacy codex skills: {e}"))? {
-        let entry = entry.map_err(|e| format!("read entry: {e}"))?;
-        let name = entry.file_name().to_string_lossy().into_owned();
-        if name.starts_with('.') || name == ".system" {
-            continue;
-        }
-        if entry.file_type().map(|t| t.is_symlink()).unwrap_or(false) {
-            return Err(format!(
-                "refusing symlink legacy skill: {}",
-                entry.path().display()
-            ));
-        }
-        if !entry.path().join("SKILL.md").is_file() {
-            continue;
-        }
-        if !canonical.contains(&name) && !REMOVED_SKILL_NAMES.contains(&name.as_str()) {
-            continue;
-        }
-        validate_skill_name(&name, "codex legacy scan")?;
-        let Some(sn) = SkillName::new(name) else {
-            continue;
-        };
-        artifacts.push(ArtifactId::skill_md(SkillRoot::Agents, sn));
-    }
-    Ok(artifacts)
-}
-
-pub(crate) fn approved_codex_legacy_digest(
-    artifact: &ArtifactId,
-    digest: &str,
-    workspace_root: &Path,
-    home: &Path,
-) -> bool {
-    if approved_historical_digest(artifact, "remove", digest)
-        || approved_historical_digest(artifact, "update", digest)
-    {
-        return true;
-    }
-    let Some(file) = artifact.as_skill_file() else {
-        return false;
-    };
-    if file.root != SkillRoot::Agents || !file.rel.is_skill_md() {
-        return false;
-    }
-    let current = ArtifactId::skill_md(SkillRoot::CodexHome, file.skill);
-    let Ok(bundled_root) = crate::setup_roots::bundled_root_for(workspace_root) else {
-        return false;
-    };
-    setup_fingerprint::artifact_source_digest(&current, &bundled_root, home)
-        .is_ok_and(|current_digest| current_digest == digest)
 }
 
 /// Result of [`infer_bootstrap_records`].
@@ -410,6 +348,7 @@ pub fn infer_bootstrap_records(
     let canonical = crate::setup_transaction::expand_surfaces_to_artifacts(
         crate::setup_lifecycle::SetupSurfaceId::ALL,
         workspace_root,
+        &SkillScope::all(),
     )?;
     for artifact in canonical {
         let identity = artifact_identity(&artifact);
@@ -431,33 +370,30 @@ pub fn infer_bootstrap_records(
             });
         }
     }
-    for harness in ["opencode", "codex", "claude", "cursor"] {
-        let map = |sn: SkillName| ArtifactId::skill_md(harness_skill_root(harness), sn);
-        let stale = match stale_harness_skill_artifacts(workspace_root, home, harness, map) {
-            Ok(stale) => stale,
-            Err(error) => {
-                inference.skipped.push(format!("{harness} skills: {error}"));
-                continue;
-            }
-        };
-        for artifact in stale {
-            let identity = artifact_identity(&artifact);
-            if known_identities.contains(&identity) {
-                continue;
-            }
-            let Some(hash) =
-                inspect_installed_digest(&mut inference, &artifact, workspace_root, home)
-            else {
-                continue;
-            };
-            if approved_historical_digest(&artifact, "remove", &hash) {
-                inference.records.push(ManagedArtifactRecord {
-                    identity,
-                    hash,
-                    surface: Some(format!("{:?}", artifact.surface()).to_lowercase()),
-                });
+    // Skills the app no longer ships, wherever an older version put them. Skills it ships now were
+    // handled above, in every root.
+    match legacy_skill_artifacts(workspace_root, home, &SkillScope::all()) {
+        Ok(retired) => {
+            for artifact in retired {
+                let identity = artifact_identity(&artifact);
+                if known_identities.contains(&identity) {
+                    continue;
+                }
+                let Some(hash) =
+                    inspect_installed_digest(&mut inference, &artifact, workspace_root, home)
+                else {
+                    continue;
+                };
+                if approved_historical_digest(&artifact, "remove", &hash) {
+                    inference.records.push(ManagedArtifactRecord {
+                        identity,
+                        hash,
+                        surface: surface_record_label(&artifact),
+                    });
+                }
             }
         }
+        Err(error) => inference.skipped.push(format!("retired skills: {error}")),
     }
     if let Some(agent) = stale_opencode_scout_agent(workspace_root, home) {
         let identity = artifact_identity(&agent);
@@ -474,31 +410,6 @@ pub fn infer_bootstrap_records(
                 }
             }
         }
-    }
-    match codex_legacy_migration_artifacts(workspace_root, home) {
-        Ok(legacy) => {
-            for artifact in legacy {
-                let identity = artifact_identity(&artifact);
-                if known_identities.contains(&identity) {
-                    continue;
-                }
-                let Some(hash) =
-                    inspect_installed_digest(&mut inference, &artifact, workspace_root, home)
-                else {
-                    continue;
-                };
-                if approved_codex_legacy_digest(&artifact, &hash, workspace_root, home) {
-                    inference.records.push(ManagedArtifactRecord {
-                        identity,
-                        hash,
-                        surface: Some("codex_skills".into()),
-                    });
-                }
-            }
-        }
-        Err(error) => inference
-            .skipped
-            .push(format!("codex legacy skills: {error}")),
     }
     inference
         .records
@@ -543,6 +454,7 @@ pub fn collect_stale_removal_artifacts(
     home: &Path,
     managed_records: &[ManagedArtifactRecord],
     canonical_identities: &HashSet<String>,
+    wanted: &SkillScope,
 ) -> Result<Vec<ArtifactId>, String> {
     let mut stale = Vec::new();
     for record in managed_records {
@@ -558,17 +470,11 @@ pub fn collect_stale_removal_artifacts(
     }
     if read_managed_state_missing(workspace_root) && workspace_root.join("skills").is_dir() {
         stale.extend(stale_workspace_artifacts(workspace_root)?);
-        for harness in ["opencode", "codex", "claude", "cursor"] {
-            let map = |sn: SkillName| ArtifactId::skill_md(harness_skill_root(harness), sn);
-            if let Ok(items) = stale_harness_skill_artifacts(workspace_root, home, harness, map) {
-                stale.extend(items);
-            }
+        if let Ok(items) = legacy_skill_artifacts(workspace_root, home, wanted) {
+            stale.extend(items);
         }
         if let Some(a) = stale_opencode_scout_agent(workspace_root, home) {
             stale.push(a);
-        }
-        if let Ok(items) = codex_legacy_migration_artifacts(workspace_root, home) {
-            stale.extend(items);
         }
     }
     stale.sort_by_key(artifact_identity);

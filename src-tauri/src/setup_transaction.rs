@@ -16,9 +16,23 @@ use serde::{Deserialize, Serialize};
 use crate::artifact_registry::{ArtifactId, ArtifactKind};
 use crate::commands::file_eq;
 use crate::setup_lifecycle::{OperationKind, SetupSurfaceId};
+use crate::skill_roots::SkillScope;
 
 pub const ARTIFACT_MANIFEST_SCHEMA_VERSION: u32 = 5;
-const MAX_MANIFEST_OPERATIONS: usize = 500;
+/// Most operations one transaction manifest may hold; a manifest outside `1..=` this is refused
+/// before anything is written or replayed.
+///
+/// It bounds the work one transaction can ask for: apply rewrites the whole manifest (fsynced)
+/// before every operation and rollback replays all of them, so the cost grows with the square of
+/// the count, and a damaged or hand-made manifest must not be able to ask for an unbounded amount.
+/// A plan over the limit fails before the first write, so an upgrade that does not fit is one the
+/// user can never apply: the limit has to cover the largest legitimate first upgrade with room
+/// to spare. That is a profile from before the shared skill files with all four harnesses enabled:
+/// the whole bundle (about 125 workspace files), the 110 retired adapter and manifest files, the
+/// skills in the two folders that are wanted (92 files), the app's older copies in every other
+/// folder (75, and 60 more for skills the app dropped long ago) and the agent, rules and
+/// config files: 516 operations, tested in `skill_folders_contract`.
+pub(crate) const MAX_MANIFEST_OPERATIONS: usize = 1024;
 
 /// Error reported when rollback finds user changes made after apply. Callers
 /// compare against it to tell a preserved user edit from a real failure.
@@ -400,16 +414,25 @@ pub fn workspace_key(workspace_root: &Path) -> Result<String, String> {
     Ok(workspace_root.to_string_lossy().into_owned())
 }
 
+/// Expands surfaces to artifacts. A retired per-harness skill surface is the `Skills` surface,
+/// and a surface asked for twice is expanded once. Only `Skills` may expand to nothing (no
+/// harness is enabled); any other empty expansion is an error.
 pub fn expand_surfaces_to_artifacts(
     surfaces: &[SetupSurfaceId],
     _workspace_root: &Path,
+    scope: &SkillScope,
 ) -> Result<Vec<ArtifactId>, String> {
     let bundled_root = crate::setup_roots::bundled_root_for(_workspace_root)?;
     let mut artifacts: Vec<ArtifactId> = Vec::new();
     let mut seen = HashSet::new();
+    let mut seen_surfaces = HashSet::new();
     for surface in surfaces {
-        let expanded = expand_surface_fail_closed(*surface, &bundled_root)?;
-        if expanded.is_empty() {
+        let surface = surface.canonical();
+        if !seen_surfaces.insert(surface) {
+            continue;
+        }
+        let expanded = expand_surface_fail_closed(surface, &bundled_root, scope)?;
+        if expanded.is_empty() && surface != SetupSurfaceId::Skills {
             return Err(format!(
                 "surface {} expanded to zero artifacts",
                 surface.label()
@@ -431,8 +454,9 @@ pub fn expand_surfaces_to_artifacts(
 pub fn expand_surface_fail_closed(
     surface: SetupSurfaceId,
     workspace_root: &Path,
+    scope: &SkillScope,
 ) -> Result<Vec<ArtifactId>, String> {
-    crate::artifact_registry::expand_surface(surface, workspace_root)
+    crate::artifact_registry::expand_surface(surface, workspace_root, scope)
 }
 
 fn user_home() -> Result<PathBuf, String> {
@@ -486,10 +510,13 @@ pub fn aggregate_operation_kind(kinds: &[OperationKind]) -> OperationKind {
     if kinds.is_empty() {
         return OperationKind::Unavailable;
     }
-    if kinds.iter().any(|k| matches!(k, OperationKind::Update)) {
+    let any = |wanted: OperationKind| kinds.contains(&wanted);
+    // A surface that gains files and loses others (skills moving to another folder) differs from
+    // its source; it is neither a plain removal nor a plain creation.
+    if any(OperationKind::Update) || (any(OperationKind::Remove) && any(OperationKind::Create)) {
         return OperationKind::Update;
     }
-    if kinds.iter().any(|k| matches!(k, OperationKind::Remove)) {
+    if any(OperationKind::Remove) {
         return OperationKind::Remove;
     }
     if kinds.iter().any(|k| matches!(k, OperationKind::Create)) {
@@ -519,6 +546,14 @@ pub fn detect_surface_state(
     let kinds: Vec<OperationKind> =
         match plan_artifacts_for_surfaces(&[surface], workspace_root, home) {
             Ok(planned) if !planned.is_empty() => planned.iter().map(|p| p.kind).collect(),
+            // No harness is enabled: no skill is wanted anywhere, and nothing is removed.
+            Ok(_) if surface.canonical() == SetupSurfaceId::Skills => {
+                return (
+                    surface,
+                    OperationKind::NoChange,
+                    format!("{}: no harness is enabled", surface.label()),
+                );
+            }
             Ok(_) => {
                 return (
                     surface,
@@ -1049,38 +1084,6 @@ fn detect_stale_artifact_state(
     if managed_hash.is_none() && !shipped {
         return (OperationKind::Conflict, PreviousState::Conflict);
     }
-    // The previous Codex folder: a copy that duplicates the one Codex reads now is looked at
-    // before it is removed.
-    if let Some(file) = artifact
-        .as_skill_file()
-        .filter(|file| file.root == crate::skill_roots::SkillRoot::Agents && file.rel.is_skill_md())
-    {
-        let current = ArtifactId::skill_md(crate::skill_roots::SkillRoot::CodexHome, file.skill);
-        let current_dest = match current.resolve_dest(home, workspace_root) {
-            Ok(path) => path,
-            Err(_) => return (OperationKind::Conflict, PreviousState::Conflict),
-        };
-        if current_dest.exists() {
-            let current_digest = crate::setup_fingerprint::artifact_installed_managed_digest(
-                &current,
-                workspace_root,
-                home,
-            );
-            // A legacy copy that duplicates the migrated copy or matches an
-            // app-shipped digest is app-owned; anything else is preserved.
-            let duplicate = current_digest.as_deref() == Ok(installed.as_str());
-            if !duplicate
-                && !crate::managed_bootstrap::approved_codex_legacy_digest(
-                    artifact,
-                    &installed,
-                    workspace_root,
-                    home,
-                )
-            {
-                return (OperationKind::Conflict, PreviousState::Conflict);
-            }
-        }
-    }
     if managed_hash == Some(installed.as_str()) || shipped {
         (OperationKind::Remove, PreviousState::ManagedFile)
     } else {
@@ -1111,14 +1114,26 @@ pub fn plan_artifacts_for_uninstall(
     let records = records_with_bootstrap(workspace_root, home, managed.as_ref());
     let bundled_root = crate::setup_roots::bundled_root_for(workspace_root)?;
 
-    let artifacts = expand_surfaces_to_artifacts(SetupSurfaceId::ALL, workspace_root)?;
+    // Uninstall sees every root: copies in folders a harness no longer needs are the app's too.
+    let scope = SkillScope::all();
+    let artifacts = expand_surfaces_to_artifacts(SetupSurfaceId::ALL, workspace_root, &scope)?;
     let mut removals = Vec::new();
     let mut preserved = Vec::new();
     let mut merged = Vec::new();
     let mut seen = std::collections::HashSet::new();
+    // Two skill roots can be one folder (an environment variable names another root); the file is
+    // removed once.
+    let mut skill_destinations: HashSet<PathBuf> = HashSet::new();
     for artifact in artifacts {
         let identity = crate::managed_state::artifact_identity(&artifact);
         seen.insert(identity.clone());
+        if artifact.is_skill_file()
+            && artifact
+                .resolve_dest(home, workspace_root)
+                .is_ok_and(|dest| !skill_destinations.insert(dest))
+        {
+            continue;
+        }
         if matches!(
             artifact_kind(&artifact),
             ArtifactKind::ConfigFile | ArtifactKind::TuiConfig | ArtifactKind::McpConfig
@@ -1180,12 +1195,14 @@ pub fn plan_artifacts_for_uninstall(
 
     // Stale app-owned files from older versions are part of the install too.
     let canonical_identities =
-        crate::managed_state::canonical_artifact_identities(&bundled_root).unwrap_or_default();
+        crate::managed_state::canonical_artifact_identities(&bundled_root, &scope)
+            .unwrap_or_default();
     let stale = crate::managed_bootstrap::collect_stale_removal_artifacts(
         workspace_root,
         home,
         &records,
         &canonical_identities,
+        &scope,
     )?;
     let handled_destinations: HashSet<PathBuf> = removals
         .iter()
@@ -1304,17 +1321,49 @@ fn log_skipped_bootstrap(skipped: &[String]) {
     }
 }
 
+/// Plans `surfaces`. The skills surface is planned for the roots the enabled harnesses read
+/// ([`SkillScope::current`]); it fails when the settings cannot be read, so no removal is ever
+/// planned from a guess.
 pub fn plan_artifacts_for_surfaces(
     surfaces: &[SetupSurfaceId],
     workspace_root: &Path,
     home: &Path,
+) -> Result<Vec<PlannedArtifact>, String> {
+    let scope = scope_for_surfaces(surfaces, home)?;
+    plan_artifacts_for_surfaces_in(surfaces, workspace_root, home, &scope)
+}
+
+/// The skill roots a plan of `surfaces` is made for. Surfaces other than `Skills` do not depend
+/// on the settings, so they are planned without reading them.
+pub fn scope_for_surfaces(surfaces: &[SetupSurfaceId], home: &Path) -> Result<SkillScope, String> {
+    if surfaces
+        .iter()
+        .any(|surface| surface.canonical() == SetupSurfaceId::Skills)
+    {
+        SkillScope::current(home)
+    } else {
+        Ok(SkillScope::all())
+    }
+}
+
+/// [`plan_artifacts_for_surfaces`] for an explicit skill scope.
+///
+/// Operations come in apply order: what is wanted first, removals of what is no longer wanted
+/// last. A skill that moves between folders is therefore present in its new folder before it is
+/// removed from the old one, and one transaction covers both, so a failure or a crash restores
+/// the old state.
+pub fn plan_artifacts_for_surfaces_in(
+    surfaces: &[SetupSurfaceId],
+    workspace_root: &Path,
+    home: &Path,
+    scope: &SkillScope,
 ) -> Result<Vec<PlannedArtifact>, String> {
     let managed = crate::managed_state::read_managed_state(workspace_root);
     let records = records_with_bootstrap(workspace_root, home, managed.as_ref());
 
     let bundled_root = crate::setup_roots::bundled_root_for(workspace_root)?;
     let canonical_identities =
-        match crate::managed_state::canonical_artifact_identities(&bundled_root) {
+        match crate::managed_state::canonical_artifact_identities(&bundled_root, scope) {
             Ok(identities) => identities,
             #[cfg(test)]
             Err(_) => std::collections::HashSet::new(),
@@ -1322,7 +1371,7 @@ pub fn plan_artifacts_for_surfaces(
             Err(error) => return Err(error),
         };
 
-    let artifacts = expand_surfaces_to_artifacts(surfaces, workspace_root)?;
+    let artifacts = expand_surfaces_to_artifacts(surfaces, workspace_root, scope)?;
     let mut planned = Vec::new();
     let mut seen = std::collections::HashSet::new();
     for artifact in artifacts {
@@ -1384,7 +1433,7 @@ pub fn plan_artifacts_for_surfaces(
     }
 
     let requested_surfaces: std::collections::HashSet<SetupSurfaceId> =
-        surfaces.iter().copied().collect();
+        surfaces.iter().map(|surface| surface.canonical()).collect();
     // One file is never both wanted and stale: whatever has a wanted artifact's destination is
     // that artifact, however an older record named it.
     let wanted_destinations: HashSet<PathBuf> = planned
@@ -1396,18 +1445,29 @@ pub fn plan_artifacts_for_surfaces(
         home,
         &records,
         &canonical_identities,
+        scope,
     )?;
+    let mut stale_destinations: HashSet<PathBuf> = HashSet::new();
     for artifact in stale {
         // Stale cleanup stays scoped to the surfaces the caller asked for;
         // a Claude update must not remove Codex or OpenCode files.
         if !requested_surfaces.contains(&artifact.surface()) {
             continue;
         }
+        // With no harness enabled nothing is wanted anywhere, which is not a reason to remove
+        // what is installed: uninstall is the way to do that.
+        if artifact.is_skill_file() && scope.is_empty() {
+            continue;
+        }
         let identity = crate::managed_state::artifact_identity(&artifact);
         if seen.contains(&identity)
             || artifact
                 .resolve_dest(home, workspace_root)
-                .is_ok_and(|dest| wanted_destinations.contains(&dest))
+                .is_ok_and(|dest| {
+                    wanted_destinations.contains(&dest)
+                    // Two skill roots that are one folder: the file is removed once.
+                    || (artifact.is_skill_file() && !stale_destinations.insert(dest))
+                })
         {
             continue;
         }
@@ -1435,7 +1495,100 @@ pub fn plan_artifacts_for_surfaces(
             rules_rewrite: None,
         });
     }
+    // Removals go last, whatever order the stale artifacts were found in (stable: the order inside
+    // each group is kept).
+    planned.sort_by_key(|operation| operation.kind == OperationKind::Remove);
     Ok(planned)
+}
+
+/// Review lines for the skills surface, one per folder and kind, in the shape the review table
+/// reads (`+ file (note)`):
+///
+/// ```text
+/// + ~/.agents/skills (25 skills, 46 files)
+/// ~ ~/.claude/skills (3 skills, 5 files)
+/// - $CODEX_HOME/skills (25 skills, owned copies)
+/// ! ~/.cursor/skills/tdd (edited, kept)
+/// ```
+///
+/// Creations, updates and removals are summarised per folder; every skill that stays because it
+/// was edited or is in the way gets its own line, with the harnesses that read both that copy
+/// and the installed one.
+pub fn skill_plan_details(planned: &[PlannedArtifact], scope: &SkillScope) -> Vec<String> {
+    use std::collections::BTreeSet;
+    let count = |n: usize, noun: &str| format!("{n} {noun}{}", if n == 1 { "" } else { "s" });
+    let mut lines = Vec::new();
+    for (sign, kind, owned) in [
+        ("+", OperationKind::Create, false),
+        ("~", OperationKind::Update, false),
+        ("-", OperationKind::Remove, true),
+    ] {
+        for root in crate::skill_roots::SkillRoot::ALL {
+            let files: Vec<_> = planned
+                .iter()
+                .filter(|operation| operation.kind == kind)
+                .filter_map(|operation| operation.artifact.as_skill_file())
+                .filter(|file| file.root == root)
+                .collect();
+            if files.is_empty() {
+                continue;
+            }
+            let skills: BTreeSet<_> = files.iter().map(|file| file.skill.as_str()).collect();
+            let tail = if owned {
+                "owned copies".to_string()
+            } else {
+                count(files.len(), "file")
+            };
+            lines.push(format!(
+                "{sign} {} ({}, {tail})",
+                root.display(),
+                count(skills.len(), "skill")
+            ));
+        }
+    }
+    let mut kept: BTreeSet<(usize, String)> = BTreeSet::new();
+    for file in planned
+        .iter()
+        .filter(|operation| operation.kind == OperationKind::Conflict)
+        .filter_map(|operation| operation.artifact.as_skill_file())
+    {
+        let order = crate::skill_roots::SkillRoot::ALL
+            .iter()
+            .position(|root| *root == file.root)
+            .unwrap_or_default();
+        let readers: Vec<&str> = scope
+            .harnesses()
+            .iter()
+            .filter(|harness| {
+                !scope.contains(file.root)
+                    && crate::skill_roots::readers(**harness)
+                        .iter()
+                        .any(|folder| folder.root() == Some(file.root))
+            })
+            .map(|harness| harness_name(*harness))
+            .collect();
+        let note = match readers.as_slice() {
+            [] => "edited, kept".to_string(),
+            [one] => format!("edited, kept; {one} reads both copies"),
+            many => format!("edited, kept; {} read both copies", many.join(", ")),
+        };
+        kept.insert((
+            order,
+            format!("! {}/{} ({note})", file.root.display(), file.skill.as_str()),
+        ));
+    }
+    lines.extend(kept.into_iter().map(|(_, line)| line));
+    lines
+}
+
+fn harness_name(harness: crate::agent_targets::HarnessId) -> &'static str {
+    use crate::agent_targets::HarnessId;
+    match harness {
+        HarnessId::Claude => "Claude",
+        HarnessId::Codex => "Codex",
+        HarnessId::OpenCode => "OpenCode",
+        HarnessId::Cursor => "Cursor",
+    }
 }
 
 /// Whether the installed copy is byte-for-byte a version the app shipped for
@@ -2018,6 +2171,14 @@ fn validate_directory_backup_tree(original: &Path, backup: &Path) -> Result<(), 
     Ok(())
 }
 
+/// Whether `recorded` is the surface a manifest operation may name for `artifact`. A skill file
+/// recorded by an older version names the retired per-harness skill surface it was installed
+/// through; such a manifest must still validate so it can be rolled back.
+fn surface_matches(artifact: &ArtifactId, recorded: SetupSurfaceId) -> bool {
+    artifact.surface() == recorded
+        || (artifact.is_skill_file() && recorded.is_retired_skill_surface())
+}
+
 pub fn validate_manifest(
     manifest: &ArtifactTransactionManifest,
     workspace_root: &Path,
@@ -2053,7 +2214,7 @@ pub fn validate_manifest(
         if !seen.insert(op.artifact.clone()) {
             return Err("duplicate artifact id in manifest".into());
         }
-        if op.artifact.surface() != op.surface {
+        if !surface_matches(&op.artifact, op.surface) {
             return Err("artifact surface mismatch".into());
         }
         if let Some(ref rel) = op.backup_rel {
@@ -2456,9 +2617,11 @@ mod tests {
     }
 
     #[test]
-    fn expand_bundled_opencode_skills_count() {
+    fn expand_bundled_skills_count() {
         let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../resources/default-workspace");
-        let artifacts = expand_surface_fail_closed(SetupSurfaceId::OpenCodeSkills, &repo).unwrap();
+        let one_root = SkillScope::of(&[SkillRoot::Claude]);
+        let artifacts =
+            expand_surface_fail_closed(SetupSurfaceId::Skills, &repo, &one_root).unwrap();
         let skill_md = artifacts
             .iter()
             .filter(|artifact| matches!(artifact, ArtifactId::SkillFile(file) if file.rel.is_skill_md()))
@@ -2502,7 +2665,9 @@ mod tests {
     #[test]
     fn workspace_bundle_expands_from_bundled_repo() {
         let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../resources/default-workspace");
-        let artifacts = expand_surface_fail_closed(SetupSurfaceId::WorkspaceBundle, &repo).unwrap();
+        let artifacts =
+            expand_surface_fail_closed(SetupSurfaceId::WorkspaceBundle, &repo, &SkillScope::all())
+                .unwrap();
         assert!(!artifacts.is_empty());
     }
 
@@ -3236,7 +3401,7 @@ mod tests {
     }
 
     #[test]
-    fn codex_legacy_special_case_still_guards_a_shipped_version() {
+    fn a_shipped_copy_in_the_old_codex_folder_is_removed_whatever_else_is_installed() {
         let _guard = crate::test_env::guard::lock();
         let _restore = crate::test_env::guard::EnvRestore::capture();
         unsafe {
@@ -3247,24 +3412,29 @@ mod tests {
         crate::test_env::set_test_user_dirs(&home);
         let bundled = crate::setup_roots::bundled_root().unwrap();
         let name = crate::artifact_registry::SkillName::new("tdd").unwrap();
-        let legacy = ArtifactId::skill_md(SkillRoot::Agents, name.clone());
-        let current = ArtifactId::skill_md(SkillRoot::CodexHome, name);
+        let old = ArtifactId::skill_md(SkillRoot::CodexHome, name.clone());
+        let other = ArtifactId::skill_md(SkillRoot::Agents, name);
         let shipped = b"a version the app shipped\n";
         let _inject = inject_shipped("templates/skills/codex/tdd/SKILL.md", shipped);
-        write_file(&legacy.resolve_dest(&home, &ws).unwrap(), shipped);
-        let detect = || detect_stale_artifact_state(&legacy, &ws, &bundled, &home, None);
+        write_file(&old.resolve_dest(&home, &ws).unwrap(), shipped);
+        let detect = |artifact: &ArtifactId| {
+            detect_stale_artifact_state(artifact, &ws, &bundled, &home, None)
+        };
+        let remove = (OperationKind::Remove, PreviousState::ManagedFile);
 
-        // No migrated copy yet: the shipped legacy copy is the app's to remove.
-        assert_eq!(
-            detect(),
-            (OperationKind::Remove, PreviousState::ManagedFile)
-        );
-        // A different migrated copy exists: the legacy guard decides, as before.
+        assert_eq!(detect(&old), remove);
+        // A different copy in the folder Codex reads now does not change that: each file is
+        // judged on its own bytes.
         write_file(
-            &current.resolve_dest(&home, &ws).unwrap(),
+            &other.resolve_dest(&home, &ws).unwrap(),
             b"the user's own copy\n",
         );
-        assert_eq!(detect(), (OperationKind::Conflict, PreviousState::Conflict));
+        assert_eq!(detect(&old), remove);
+        // The user's copy is not proven app-owned and is kept.
+        assert_eq!(
+            detect(&other),
+            (OperationKind::Conflict, PreviousState::Conflict)
+        );
         let _ = fs::remove_dir_all(base);
     }
 
@@ -3309,20 +3479,14 @@ mod tests {
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../resources/default-workspace")
     }
 
-    /// Every artifact the bundle can install, plus the old Codex folder copy of each skill.
+    /// Every artifact the bundle can install, skill files in every root included.
     fn every_bundled_artifact() -> Vec<ArtifactId> {
         let repo = bundled_repo();
         let mut artifacts = Vec::new();
         for surface in SetupSurfaceId::ALL {
-            artifacts.extend(expand_surface_fail_closed(*surface, &repo).unwrap());
+            artifacts
+                .extend(expand_surface_fail_closed(*surface, &repo, &SkillScope::all()).unwrap());
         }
-        let names =
-            crate::artifact_registry::discover_skill_names_for_harness(&repo, "codex").unwrap();
-        artifacts.extend(
-            names
-                .into_iter()
-                .map(|name| ArtifactId::skill_md(SkillRoot::Agents, name)),
-        );
         artifacts
     }
 
@@ -3441,26 +3605,6 @@ mod tests {
     }
 
     #[test]
-    fn a_full_install_with_every_leftover_removal_stays_under_the_operation_limit() {
-        let installable: usize = SetupSurfaceId::ALL
-            .iter()
-            .map(|surface| {
-                expand_surface_fail_closed(*surface, &bundled_repo())
-                    .unwrap()
-                    .len()
-            })
-            .sum();
-        // What an upgrade can add: the old Codex folder copy of each skill, and the per-harness
-        // adapters (100) older versions copied into the runtime workspace.
-        let skills = 25;
-        let leftovers = skills + 100;
-        assert!(
-            installable + leftovers <= MAX_MANIFEST_OPERATIONS,
-            "{installable} installable artifacts and {leftovers} removals exceed {MAX_MANIFEST_OPERATIONS}"
-        );
-    }
-
-    #[test]
     fn a_stale_artifact_at_a_wanted_destination_is_planned_once_as_the_wanted_one() {
         let _guard = crate::test_env::guard::lock();
         let _restore = crate::test_env::guard::EnvRestore::capture();
@@ -3497,8 +3641,9 @@ mod tests {
         };
         crate::managed_state::write_managed_state_atomic(&ws, &state).unwrap();
 
-        let planned =
-            plan_artifacts_for_surfaces(&[SetupSurfaceId::CodexSkills], &ws, &home).expect("plan");
+        let scope = SkillScope::of(&[SkillRoot::CodexHome]);
+        let planned = plan_artifacts_for_surfaces_in(&[SetupSurfaceId::Skills], &ws, &home, &scope)
+            .expect("plan");
         let for_dest: Vec<_> = planned
             .iter()
             .filter(|operation| operation.artifact.resolve_dest(&home, &ws).as_ref() == Ok(&dest))

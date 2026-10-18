@@ -7,6 +7,10 @@ use crate::cursor_profile_ops::{legacy_permission_cleanup_status, LegacyPermissi
 use crate::cursor_profile_paths::{
     cursor_profile_root_display, resolve_cursor_profile_paths, CursorProfilePaths,
 };
+use crate::skill_health::skill_files_status;
+use crate::skill_roots::{
+    codex_home_is_custom, install_roots, roots_read_by, SkillRoot, SkillScope,
+};
 
 #[derive(Serialize)]
 pub struct CursorProfileHealth {
@@ -88,46 +92,32 @@ pub(crate) fn sync_dir_status(
     (status.into(), installed, sources.len())
 }
 
-pub(crate) fn sync_skill_dirs_status(
-    workspace_root: &Path,
-    target_root: &Path,
-    skill_names: &[String],
-) -> (String, usize, usize) {
-    if skill_names.is_empty() {
-        return ("missing".into(), 0, 0);
-    }
-    if !target_root.exists() {
-        return ("missing".into(), 0, skill_names.len());
-    }
-
-    let mut installed = 0;
-    let mut missing = 0;
-    let mut diverged = 0;
-    for name in skill_names {
-        let source = crate::skill_discovery::canonical_skill_md(workspace_root, name);
-        if !source.is_file() {
-            diverged += 1;
-            continue;
-        }
-        let target = target_root.join(name).join("SKILL.md");
-        if !target.is_file() {
-            missing += 1;
-        } else if file_eq(&source, &target) {
-            installed += 1;
-        } else {
-            diverged += 1;
-        }
-    }
-    let status = if missing == 0 && diverged == 0 {
-        "synced"
-    } else if installed == 0 && diverged == 0 {
-        "missing"
-    } else if missing > 0 && diverged == 0 {
-        "partial"
+/// The installed skill roots Cursor reads: the ones the enabled harnesses need that Cursor looks
+/// in. When the settings cannot be read, or none of them is one Cursor reads, the root an install
+/// for Cursor alone would use.
+fn cursor_skill_roots(home: &Path) -> Vec<SkillRoot> {
+    use crate::agent_targets::HarnessId;
+    let read = SkillScope::current(home)
+        .map(|scope| roots_read_by(HarnessId::Cursor, &scope))
+        .unwrap_or_default();
+    if read.is_empty() {
+        install_roots(&[HarnessId::Cursor], codex_home_is_custom(home))
     } else {
-        "diverged"
-    };
-    (status.into(), installed, skill_names.len())
+        read
+    }
+}
+
+/// Status, synced skills and expected skills of the bundled skills in `roots`. Skills come from
+/// the bundle, so that is what installed files are compared with.
+pub(crate) fn skill_roots_status(
+    bundled_root: Option<&Path>,
+    home: &Path,
+    roots: &[SkillRoot],
+) -> (String, usize, usize) {
+    match bundled_root.map(|bundle| skill_files_status(bundle, home, roots)) {
+        Some(Ok(status)) => (status.label().to_string(), status.synced, status.expected),
+        _ => ("missing".to_string(), 0, 0),
+    }
 }
 
 const DOC_ONLY_KEYS: &[&str] = &[
@@ -209,6 +199,7 @@ pub(crate) fn json_has_unsafe_literals(content: &str) -> bool {
     scan_json_for_unsafe(&parsed, None)
 }
 
+#[cfg(test)]
 pub(crate) fn manifest_recommended_skills(root: &Path) -> Vec<String> {
     super::skills::workspace_skill_names(root).unwrap_or_default()
 }
@@ -441,9 +432,13 @@ pub fn get_cursor_profile_health() -> Result<CursorProfileHealth, String> {
     let (global_agents_status, global_agents_count, expected_global_agents_count) =
         sync_dir_status(&cursor.join("agents"), &paths.agents, "md");
 
-    let recommended_skills = manifest_recommended_skills(&root);
+    let bundled = crate::setup_roots::bundled_root_for(&root).ok();
     let (global_skills_status, global_skills_count, expected_global_skills_count) =
-        sync_skill_dirs_status(&root, &paths.skills, &recommended_skills);
+        skill_roots_status(
+            bundled.as_deref(),
+            &paths.user_home,
+            &cursor_skill_roots(&paths.user_home),
+        );
 
     let mcp_status = global_mcp_status(&paths, &root, &mut warnings);
     let legacy_cleanup_status = legacy_permission_cleanup_status(&paths.permissions)
@@ -576,33 +571,40 @@ mod tests {
     }
 
     #[test]
-    fn cursor_skill_status_compares_the_canonical_skill_file() {
+    fn cursor_skill_status_compares_the_bundled_skill_files_in_the_given_roots() {
         use std::fs;
         use std::time::{SystemTime, UNIX_EPOCH};
 
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
         let nonce = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let root = std::env::temp_dir().join(format!("cursor-skill-canonical-ws-{nonce}"));
-        let target_root = root.join("cursor-skills");
-        let canonical = root.join("skills/frontend-design");
-        let installed = target_root.join("frontend-design");
-        fs::create_dir_all(&canonical).expect("canonical dir");
+        let base = std::env::temp_dir().join(format!("cursor-skill-bundle-{nonce}"));
+        let home = base.join("home");
+        let bundle = base.join("bundle");
+        fs::create_dir_all(&home).expect("home");
+        crate::test_env::set_test_user_dirs(&home);
+        unsafe { std::env::remove_var("CLAUDE_SKILLS_PATH") };
+        crate::test_env::write_canonical_skill(&bundle, None, "frontend-design", "body");
+        let installed = home.join(".claude/skills/frontend-design");
         fs::create_dir_all(&installed).expect("installed dir");
-        let skill =
-            "---\nname: frontend-design\ndescription: test skill\ntargets: cursor\n---\n# Skill\n";
-        fs::write(canonical.join("SKILL.md"), skill).expect("write canonical");
-        fs::write(installed.join("SKILL.md"), skill).expect("write installed");
-        let names = [String::from("frontend-design")];
+        let canonical = fs::read_to_string(bundle.join("skills/frontend-design/SKILL.md")).unwrap();
+        fs::write(installed.join("SKILL.md"), &canonical).expect("write installed");
+        let roots = [SkillRoot::Claude];
 
-        let synced = sync_skill_dirs_status(&root, &target_root, &names);
+        let synced = skill_roots_status(Some(&bundle), &home, &roots);
         fs::write(installed.join("SKILL.md"), "an older per-harness copy\n").expect("diverge");
-        let diverged = sync_skill_dirs_status(&root, &target_root, &names);
-        let _ = fs::remove_dir_all(&root);
+        let diverged = skill_roots_status(Some(&bundle), &home, &roots);
+        let elsewhere = skill_roots_status(Some(&bundle), &home, &[SkillRoot::Agents]);
+        let no_bundle = skill_roots_status(None, &home, &roots);
+        let _ = fs::remove_dir_all(&base);
 
         assert_eq!(synced, ("synced".to_string(), 1, 1));
         assert_eq!(diverged, ("diverged".to_string(), 0, 1));
+        assert_eq!(elsewhere, ("missing".to_string(), 0, 1));
+        assert_eq!(no_bundle, ("missing".to_string(), 0, 0));
     }
 
     #[test]

@@ -12,7 +12,7 @@ use std::path::{Component, Path, PathBuf};
 
 use crate::agent_skill_targets::codex_home;
 use crate::setup_lifecycle::SetupSurfaceId;
-use crate::skill_roots::SkillRoot;
+use crate::skill_roots::{SkillRoot, SkillScope};
 
 // ── Artifact identity ──
 
@@ -484,7 +484,8 @@ impl ArtifactId {
         )
     }
 
-    /// Returns the parent SetupSurfaceId for this artifact.
+    /// Returns the parent SetupSurfaceId for this artifact. Every skill file, whichever folder it
+    /// is in and whichever identity an older version recorded for it, belongs to `Skills`.
     pub fn surface(&self) -> SetupSurfaceId {
         match self {
             ArtifactId::OpenCodeConfig
@@ -492,19 +493,19 @@ impl ArtifactId {
             | ArtifactId::OpenCodePlaywrightMcp => SetupSurfaceId::OpenCodeConfig,
             ArtifactId::OpenCodeRules => SetupSurfaceId::OpenCodeRules,
             ArtifactId::OpenCodeAgent(_) => SetupSurfaceId::OpenCodeAgents,
-            ArtifactId::OpenCodeSkill(_) => SetupSurfaceId::OpenCodeSkills,
             ArtifactId::CodexConfig => SetupSurfaceId::CodexConfig,
             ArtifactId::CodexRules => SetupSurfaceId::CodexRules,
             ArtifactId::CodexAgent(_) => SetupSurfaceId::CodexAgents,
-            ArtifactId::CodexSkill(_) => SetupSurfaceId::CodexSkills,
             ArtifactId::ClaudeRules => SetupSurfaceId::ClaudeRules,
             ArtifactId::ClaudeAgent(_) => SetupSurfaceId::ClaudeAgents,
-            ArtifactId::ClaudeSkill(_) => SetupSurfaceId::ClaudeSkills,
             ArtifactId::CursorAgent(_) => SetupSurfaceId::CursorAgents,
-            ArtifactId::CursorSkill(_) => SetupSurfaceId::CursorSkills,
             ArtifactId::CursorMcp => SetupSurfaceId::CursorMcp,
-            ArtifactId::CodexLegacySkill(_) => SetupSurfaceId::CodexSkills,
-            ArtifactId::SkillFile(file) => file.root.surface(),
+            ArtifactId::OpenCodeSkill(_)
+            | ArtifactId::CodexSkill(_)
+            | ArtifactId::ClaudeSkill(_)
+            | ArtifactId::CursorSkill(_)
+            | ArtifactId::CodexLegacySkill(_)
+            | ArtifactId::SkillFile(_) => SetupSurfaceId::Skills,
             ArtifactId::WorkspaceFile(_) => SetupSurfaceId::WorkspaceBundle,
         }
     }
@@ -522,44 +523,29 @@ fn skill_source(workspace_root: &Path, skill_name: &str) -> PathBuf {
 
 // ── Surface-to-artifact expansion ──
 
-/// Discover skill names for a harness using canonical skill discovery.
-pub fn discover_skill_names_for_harness(
-    workspace_root: &Path,
-    harness_agent: &str,
-) -> Result<Vec<SkillName>, String> {
-    let names = crate::skill_discovery::skill_names_for_harness(workspace_root, harness_agent)?;
-    let mut out = Vec::new();
-    for n in names {
-        let Some(sn) = SkillName::new(n) else {
-            return Err("invalid skill name in catalog".to_string());
-        };
-        out.push(sn);
-    }
-    if out.is_empty() {
-        return Err(format!("no skills target harness {harness_agent}"));
-    }
-    out.sort_by(|a, b| a.as_str().cmp(b.as_str()));
-    Ok(out)
+/// One skill of the catalog with the relative paths of all its files: `SKILL.md` first, then the
+/// supporting files.
+pub struct SkillFiles {
+    pub name: SkillName,
+    pub files: Vec<SkillRelPath>,
 }
 
-/// Every file of every skill that targets `harness`, as `SkillFile` artifacts of `root`: the
-/// `SKILL.md` first, then its supporting files.
-fn expand_skill_surface(
-    workspace_root: &Path,
-    harness: &str,
-    root: SkillRoot,
-) -> Result<Vec<ArtifactId>, String> {
-    let mut skills = crate::skill_discovery::skills_for_harness(workspace_root, harness)?;
+/// Every skill of the catalog with its files. `targets` stays validated metadata and filters
+/// nothing: the folders skills are installed into are shared by harnesses, so a skill cannot be
+/// installed for one of them only.
+pub fn catalog_skill_files(workspace_root: &Path) -> Result<Vec<SkillFiles>, String> {
+    let mut skills = crate::skill_discovery::discover_skill_catalog(workspace_root)
+        .map_err(|e| e.message().to_string())?;
     if skills.is_empty() {
-        return Err(format!("no skills target harness {harness}"));
+        return Err("the skill catalog is empty".to_string());
     }
     skills.sort_by(|a, b| a.name.cmp(&b.name));
-    let mut artifacts = Vec::new();
+    let mut out = Vec::new();
     for skill in skills {
         let Some(name) = SkillName::new(skill.name.as_str()) else {
             return Err("invalid skill name in catalog".to_string());
         };
-        artifacts.push(ArtifactId::skill_md(root, name.clone()));
+        let mut files = vec![SkillRelPath::skill_md()];
         for rel in crate::skill_discovery::skill_support_files(&skill.source_dir)? {
             let Some(rel_path) = SkillRelPath::new(rel.as_str()) else {
                 return Err(format!(
@@ -567,7 +553,33 @@ fn expand_skill_surface(
                     skill.name
                 ));
             };
-            artifacts.push(ArtifactId::skill_file(root, name.clone(), rel_path));
+            files.push(rel_path);
+        }
+        out.push(SkillFiles { name, files });
+    }
+    Ok(out)
+}
+
+/// Every file of every skill as `SkillFile` artifacts, in each root of `scope`: per root, the
+/// skills in name order, each with its `SKILL.md` first.
+fn expand_skill_surface(
+    workspace_root: &Path,
+    scope: &SkillScope,
+) -> Result<Vec<ArtifactId>, String> {
+    if scope.is_empty() {
+        return Ok(Vec::new());
+    }
+    let skills = catalog_skill_files(workspace_root)?;
+    let mut artifacts = Vec::new();
+    for root in scope.roots() {
+        for skill in &skills {
+            for rel in &skill.files {
+                artifacts.push(ArtifactId::skill_file(
+                    *root,
+                    skill.name.clone(),
+                    rel.clone(),
+                ));
+            }
         }
     }
     Ok(artifacts)
@@ -587,11 +599,15 @@ fn expand_agent_surface(
 }
 
 /// Expand a surface ID to its constituent artifact IDs.
+///
+/// `scope` names the skill roots the `Skills` surface expands into; no other surface depends on
+/// it. A retired per-harness skill surface expands like `Skills`.
 pub fn expand_surface(
     surface: SetupSurfaceId,
     workspace_root: &Path,
+    scope: &SkillScope,
 ) -> Result<Vec<ArtifactId>, String> {
-    match surface {
+    match surface.canonical() {
         SetupSurfaceId::OpenCodeConfig => Ok(vec![
             ArtifactId::OpenCodeConfig,
             ArtifactId::OpenCodeTui,
@@ -603,9 +619,6 @@ pub fn expand_surface(
             ArtifactId::OpenCodeAgent,
         ),
         SetupSurfaceId::OpenCodeRules => Ok(vec![ArtifactId::OpenCodeRules]),
-        SetupSurfaceId::OpenCodeSkills => {
-            expand_skill_surface(workspace_root, "opencode", SkillRoot::OpenCode)
-        }
         SetupSurfaceId::CodexConfig => Ok(vec![ArtifactId::CodexConfig]),
         SetupSurfaceId::CodexAgents => expand_agent_surface(
             workspace_root,
@@ -613,28 +626,24 @@ pub fn expand_surface(
             ArtifactId::CodexAgent,
         ),
         SetupSurfaceId::CodexRules => Ok(vec![ArtifactId::CodexRules]),
-        SetupSurfaceId::CodexSkills => {
-            expand_skill_surface(workspace_root, "codex", SkillRoot::CodexHome)
-        }
         SetupSurfaceId::ClaudeRules => Ok(vec![ArtifactId::ClaudeRules]),
         SetupSurfaceId::ClaudeAgents => expand_agent_surface(
             workspace_root,
             crate::agent_discovery::AgentHarness::Claude,
             ArtifactId::ClaudeAgent,
         ),
-        SetupSurfaceId::ClaudeSkills => {
-            expand_skill_surface(workspace_root, "claude", SkillRoot::Claude)
-        }
         SetupSurfaceId::CursorAgents => expand_agent_surface(
             workspace_root,
             crate::agent_discovery::AgentHarness::Cursor,
             ArtifactId::CursorAgent,
         ),
-        SetupSurfaceId::CursorSkills => {
-            expand_skill_surface(workspace_root, "cursor", SkillRoot::Cursor)
-        }
+        SetupSurfaceId::Skills => expand_skill_surface(workspace_root, scope),
         SetupSurfaceId::CursorMcp => Ok(vec![ArtifactId::CursorMcp]),
         SetupSurfaceId::WorkspaceBundle => expand_workspace_bundle(workspace_root),
+        SetupSurfaceId::ClaudeSkills
+        | SetupSurfaceId::OpenCodeSkills
+        | SetupSurfaceId::CodexSkills
+        | SetupSurfaceId::CursorSkills => Err("retired skill surface".to_string()),
     }
 }
 
@@ -727,7 +736,8 @@ mod tests {
     #[test]
     fn opencode_config_expands_to_full_write_set() {
         let ws = temp_dir("oc-config");
-        let artifacts = expand_surface(SetupSurfaceId::OpenCodeConfig, &ws).expect("expand");
+        let artifacts = expand_surface(SetupSurfaceId::OpenCodeConfig, &ws, &SkillScope::all())
+            .expect("expand");
         assert_eq!(artifacts.len(), 3);
         assert!(artifacts.contains(&ArtifactId::OpenCodeConfig));
         assert!(artifacts.contains(&ArtifactId::OpenCodeTui));
@@ -737,7 +747,8 @@ mod tests {
     #[test]
     fn opencode_rules_expands_to_one_artifact() {
         let ws = temp_dir("oc-rules");
-        let artifacts = expand_surface(SetupSurfaceId::OpenCodeRules, &ws).expect("expand");
+        let artifacts =
+            expand_surface(SetupSurfaceId::OpenCodeRules, &ws, &SkillScope::all()).expect("expand");
         assert_eq!(artifacts.len(), 1);
         assert_eq!(artifacts[0], ArtifactId::OpenCodeRules);
     }
@@ -745,14 +756,16 @@ mod tests {
     #[test]
     fn codex_config_is_single_artifact() {
         let ws = temp_dir("codex-cfg");
-        let artifacts = expand_surface(SetupSurfaceId::CodexConfig, &ws).expect("expand");
+        let artifacts =
+            expand_surface(SetupSurfaceId::CodexConfig, &ws, &SkillScope::all()).expect("expand");
         assert_eq!(artifacts.len(), 1);
     }
 
     #[test]
     fn claude_rules_is_single_artifact() {
         let ws = temp_dir("claude-rules");
-        let artifacts = expand_surface(SetupSurfaceId::ClaudeRules, &ws).expect("expand");
+        let artifacts =
+            expand_surface(SetupSurfaceId::ClaudeRules, &ws, &SkillScope::all()).expect("expand");
         assert_eq!(artifacts.len(), 1);
         assert_eq!(artifacts[0], ArtifactId::ClaudeRules);
     }
@@ -764,7 +777,8 @@ mod tests {
         write_file(&ws.join("agents/inspector.md"), "# inspector");
         write_file(&ws.join("agents/.gitkeep"), "");
 
-        let artifacts = expand_surface(SetupSurfaceId::OpenCodeAgents, &ws).expect("expand");
+        let artifacts = expand_surface(SetupSurfaceId::OpenCodeAgents, &ws, &SkillScope::all())
+            .expect("expand");
         assert_eq!(artifacts.len(), 2);
         assert!(artifacts.contains(&ArtifactId::OpenCodeAgent(
             AgentName::new("inspector").unwrap()
@@ -784,7 +798,8 @@ mod tests {
     #[test]
     fn cursor_mcp_is_single_artifact() {
         let ws = temp_dir("cursor-mcp");
-        let artifacts = expand_surface(SetupSurfaceId::CursorMcp, &ws).expect("expand");
+        let artifacts =
+            expand_surface(SetupSurfaceId::CursorMcp, &ws, &SkillScope::all()).expect("expand");
         assert_eq!(artifacts.len(), 1);
         assert_eq!(artifacts[0], ArtifactId::CursorMcp);
     }
@@ -792,7 +807,8 @@ mod tests {
     #[test]
     fn deprecated_cleanup_produces_no_artifacts() {
         let ws = temp_dir("dep-cleanup");
-        let artifacts = expand_surface(SetupSurfaceId::WorkspaceBundle, &ws).expect("expand");
+        let artifacts = expand_surface(SetupSurfaceId::WorkspaceBundle, &ws, &SkillScope::all())
+            .expect("expand");
         assert!(
             artifacts.is_empty(),
             "deprecated cleanup must not produce artifacts"
@@ -805,7 +821,8 @@ mod tests {
         write_file(&ws.join("agents/a.md"), "# a");
         write_file(&ws.join("agents/b.md"), "# b");
 
-        let artifacts = expand_surface(SetupSurfaceId::OpenCodeAgents, &ws).expect("expand");
+        let artifacts = expand_surface(SetupSurfaceId::OpenCodeAgents, &ws, &SkillScope::all())
+            .expect("expand");
         let mut seen = std::collections::HashSet::new();
         for a in &artifacts {
             assert!(seen.insert(a.clone()), "duplicate artifact: {a:?}");
@@ -855,9 +872,10 @@ mod tests {
         let ws = temp_dir("dup-surface");
         write_skill(&ws, "skills/my-skill", "my-skill", "opencode");
 
-        // Expanding OpenCodeSkills twice should produce same result
-        let a1 = expand_surface(SetupSurfaceId::OpenCodeSkills, &ws).expect("expand");
-        let a2 = expand_surface(SetupSurfaceId::OpenCodeSkills, &ws).expect("expand");
+        // Expanding the skills surface twice should produce same result
+        let scope = SkillScope::of(&[SkillRoot::Claude]);
+        let a1 = expand_surface(SetupSurfaceId::Skills, &ws, &scope).expect("expand");
+        let a2 = expand_surface(SetupSurfaceId::Skills, &ws, &scope).expect("expand");
         assert_eq!(a1, a2);
     }
 
@@ -866,7 +884,8 @@ mod tests {
         // Validating that parse_skill_targets doesn't crash on invalid input
         // This is tested through the expansion which only processes valid surfaces
         let ws = temp_dir("unknown-surface");
-        let artifacts = expand_surface(SetupSurfaceId::WorkspaceBundle, &ws).expect("expand");
+        let artifacts = expand_surface(SetupSurfaceId::WorkspaceBundle, &ws, &SkillScope::all())
+            .expect("expand");
         assert!(artifacts.is_empty());
     }
 
@@ -941,14 +960,15 @@ mod tests {
             "codex, opencode, claude, cursor",
         );
 
-        let artifacts = expand_surface(SetupSurfaceId::OpenCodeSkills, &ws).expect("expand");
+        let scope = SkillScope::of(&[SkillRoot::Agents]);
+        let artifacts = expand_surface(SetupSurfaceId::Skills, &ws, &scope).expect("expand");
         assert_eq!(artifacts.len(), 2);
         assert!(artifacts.contains(&ArtifactId::skill_md(
-            SkillRoot::OpenCode,
+            SkillRoot::Agents,
             SkillName::new("accessibility-review").unwrap()
         )));
         assert!(artifacts.contains(&ArtifactId::skill_md(
-            SkillRoot::OpenCode,
+            SkillRoot::Agents,
             SkillName::new("browser-qa").unwrap()
         )));
     }
@@ -963,7 +983,8 @@ mod tests {
             "codex, opencode, claude, cursor",
         );
 
-        let artifacts = expand_surface(SetupSurfaceId::ClaudeSkills, &ws).expect("expand");
+        let scope = SkillScope::of(&[SkillRoot::Claude]);
+        let artifacts = expand_surface(SetupSurfaceId::Skills, &ws, &scope).expect("expand");
         assert_eq!(artifacts.len(), 1);
         assert!(artifacts.contains(&ArtifactId::skill_md(
             SkillRoot::Claude,
@@ -988,9 +1009,16 @@ mod tests {
             "cursor",
         );
 
-        let agents = expand_surface(SetupSurfaceId::CursorAgents, &ws).expect("expand");
-        let skills = expand_surface(SetupSurfaceId::CursorSkills, &ws).expect("expand");
-        let mcp = expand_surface(SetupSurfaceId::CursorMcp, &ws).expect("expand");
+        let agents =
+            expand_surface(SetupSurfaceId::CursorAgents, &ws, &SkillScope::all()).expect("expand");
+        let skills = expand_surface(
+            SetupSurfaceId::Skills,
+            &ws,
+            &SkillScope::of(&[SkillRoot::Claude]),
+        )
+        .expect("expand");
+        let mcp =
+            expand_surface(SetupSurfaceId::CursorMcp, &ws, &SkillScope::all()).expect("expand");
 
         // No overlap between agents and skills
         for a in &agents {
@@ -1028,7 +1056,8 @@ mod tests {
         let ws = temp_dir("cursor-not-root");
         write_file(&ws.join("templates/cursor/agents/repo-scout.md"), "# scout");
 
-        let artifacts = expand_surface(SetupSurfaceId::CursorAgents, &ws).expect("expand");
+        let artifacts =
+            expand_surface(SetupSurfaceId::CursorAgents, &ws, &SkillScope::all()).expect("expand");
         // Each artifact should be an individual agent, not the whole directory
         for a in &artifacts {
             match a {
@@ -1052,11 +1081,13 @@ mod tests {
 
         let all_cursor: Vec<ArtifactId> = [
             SetupSurfaceId::CursorAgents,
-            SetupSurfaceId::CursorSkills,
+            SetupSurfaceId::Skills,
             SetupSurfaceId::CursorMcp,
         ]
         .iter()
-        .flat_map(|s| expand_surface(*s, &ws).expect("expand"))
+        .flat_map(|s| {
+            expand_surface(*s, &ws, &SkillScope::of(&[SkillRoot::Cursor])).expect("expand")
+        })
         .collect();
 
         // Every artifact should have exactly one surface owner
@@ -1073,7 +1104,7 @@ mod tests {
             let surface = a.surface();
             match a {
                 ArtifactId::CursorAgent(_) => assert_eq!(surface, SetupSurfaceId::CursorAgents),
-                ArtifactId::SkillFile(_) => assert_eq!(surface, SetupSurfaceId::CursorSkills),
+                ArtifactId::SkillFile(_) => assert_eq!(surface, SetupSurfaceId::Skills),
                 ArtifactId::CursorMcp => assert_eq!(surface, SetupSurfaceId::CursorMcp),
                 _ => panic!("Non-Cursor artifact in Cursor set: {a:?}"),
             }
@@ -1084,7 +1115,8 @@ mod tests {
     fn cursor_mcp_surface_is_single_bounded_artifact() {
         // CursorMcp maps to exactly one artifact - not a broad root
         let ws = temp_dir("cursor-mcp-bounded");
-        let artifacts = expand_surface(SetupSurfaceId::CursorMcp, &ws).expect("expand");
+        let artifacts =
+            expand_surface(SetupSurfaceId::CursorMcp, &ws, &SkillScope::all()).expect("expand");
         assert_eq!(artifacts.len(), 1);
         assert_eq!(artifacts[0], ArtifactId::CursorMcp);
         assert_eq!(artifacts[0].surface(), SetupSurfaceId::CursorMcp);
@@ -1286,7 +1318,12 @@ mod tests {
         write_file(&ws.join("skills/group/report/scripts/verify.mjs"), "//");
         write_file(&ws.join("skills/group/report/.DS_Store"), "ignored");
 
-        let artifacts = expand_surface(SetupSurfaceId::ClaudeSkills, &ws).expect("expand");
+        let artifacts = expand_surface(
+            SetupSurfaceId::Skills,
+            &ws,
+            &SkillScope::of(&[SkillRoot::Claude]),
+        )
+        .expect("expand");
         let files: Vec<(String, String)> = artifacts
             .iter()
             .map(|artifact| match artifact {
@@ -1313,20 +1350,52 @@ mod tests {
             .map(|(skill, rel)| (skill.to_string(), rel.to_string()))
             .collect();
         assert_eq!(files, expected);
-        // Every surface installs the same files into its own root.
-        for (surface, root) in [
-            (SetupSurfaceId::CodexSkills, SkillRoot::CodexHome),
-            (SetupSurfaceId::OpenCodeSkills, SkillRoot::OpenCode),
-            (SetupSurfaceId::CursorSkills, SkillRoot::Cursor),
-        ] {
-            let other = expand_surface(surface, &ws).expect("expand");
-            assert_eq!(other.len(), artifacts.len());
-            assert!(other.iter().all(|artifact| matches!(
+        // Every root of the scope receives the same files, root by root, and the retired
+        // per-harness surfaces expand like the skills surface.
+        let scope = SkillScope::of(&[SkillRoot::Claude, SkillRoot::Agents, SkillRoot::CodexHome]);
+        let all_roots = expand_surface(SetupSurfaceId::Skills, &ws, &scope).expect("expand");
+        assert_eq!(all_roots.len(), artifacts.len() * 3);
+        for (index, root) in scope.roots().iter().enumerate() {
+            let chunk = &all_roots[index * artifacts.len()..(index + 1) * artifacts.len()];
+            assert!(chunk.iter().all(|artifact| matches!(
                 artifact,
-                ArtifactId::SkillFile(file) if file.root == root
+                ArtifactId::SkillFile(file) if file.root == *root
             )));
-            assert!(other.iter().all(|artifact| artifact.surface() == surface));
+            assert!(chunk
+                .iter()
+                .all(|artifact| artifact.surface() == SetupSurfaceId::Skills));
         }
+        for retired in [
+            SetupSurfaceId::ClaudeSkills,
+            SetupSurfaceId::OpenCodeSkills,
+            SetupSurfaceId::CodexSkills,
+            SetupSurfaceId::CursorSkills,
+        ] {
+            assert_eq!(
+                expand_surface(retired, &ws, &scope).expect("expand"),
+                all_roots
+            );
+        }
+    }
+
+    #[test]
+    fn no_root_in_the_scope_expands_to_no_artifacts() {
+        let ws = temp_dir("skill-no-root");
+        crate::test_env::write_canonical_skill(&ws, None, "plain", "body");
+        let none = SkillScope::for_harnesses(&[], false);
+        assert!(expand_surface(SetupSurfaceId::Skills, &ws, &none)
+            .expect("expand")
+            .is_empty());
+    }
+
+    #[test]
+    fn skills_ignore_the_targets_metadata_because_the_folders_are_shared() {
+        let ws = temp_dir("skill-targets");
+        write_skill(&ws, "skills/only-claude", "only-claude", "claude");
+        write_skill(&ws, "skills/all", "all", "codex, opencode, claude, cursor");
+        let scope = SkillScope::of(&[SkillRoot::Agents]);
+        let artifacts = expand_surface(SetupSurfaceId::Skills, &ws, &scope).expect("expand");
+        assert_eq!(artifacts.len(), 2, "{artifacts:?}");
     }
 
     #[test]
@@ -1362,7 +1431,12 @@ mod tests {
         let ws = temp_dir("support-bad-name");
         crate::test_env::write_canonical_skill(&ws, None, "plain", "body");
         write_file(&ws.join("skills/plain/has space.md"), "x");
-        let err = expand_surface(SetupSurfaceId::ClaudeSkills, &ws).expect_err("bad name");
+        let err = expand_surface(
+            SetupSurfaceId::Skills,
+            &ws,
+            &SkillScope::of(&[SkillRoot::Claude]),
+        )
+        .expect_err("bad name");
         assert!(err.contains("has space.md"), "{err}");
     }
 
