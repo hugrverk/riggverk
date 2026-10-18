@@ -84,9 +84,11 @@ Harness installs need the workspace first. Install it on the Workspace page, the
 ## Settings and targets
 
 - A target that is off is not written. Check Space-toggles on the harness page; `codex_config` is off by default.
-- Disabled harnesses disappear from the tabs and cannot be written; re-enable them in Settings.
+- Disabled harnesses disappear from the tabs and cannot be written; re-enable them in Settings. Copilot, Pi, and Kilo are off by default.
+- A Copilot, Pi, or Kilo page shows `cli  not on PATH`: the app does not read your shell profile. A CLI installed through nvm is found in `~/.nvm/versions/node`; any other location needs the app started from a shell where the CLI runs. The skills row does not depend on the CLI.
+- A Copilot or Pi page shows `unserved`: Codex is enabled with a customised `CODEX_HOME`, and Codex's isolation keeps `~/.agents/skills` (the only shared folder those two read) out of the install. Disable Codex or unset `CODEX_HOME`.
 - Target and harness changes autosave. If the targets pane says `not saved`, press `s` in Settings to retry.
 
 ## Environment overrides
 
-The app honors these in normal use, so check them when paths surprise you: `AGENT_WORKSPACE_PATH`, `AGENT_WORKSPACE_BACKUP_DIR`, `CODEX_HOME` (Codex config, rules, agents, and, when customised, skills), `CODEX_SKILLS_PATH`, `CLAUDE_SKILLS_PATH` (inside your home folder), `OPENCODE_SKILLS_PATH` and `CURSOR_SKILLS_PATH` (only where older copies are cleaned up), `PLAYWRIGHT_MCP_CONFIG_PATH`, `XDG_CONFIG_HOME` (Linux app support).
+The app honors these in normal use, so check them when paths surprise you: `AGENT_WORKSPACE_PATH`, `AGENT_WORKSPACE_BACKUP_DIR`, `CODEX_HOME` (Codex config, rules, agents, and, when customised, skills), `CODEX_SKILLS_PATH`, `CLAUDE_SKILLS_PATH` (inside your home folder), `OPENCODE_SKILLS_PATH` and `CURSOR_SKILLS_PATH` (only where older copies are cleaned up), `PLAYWRIGHT_MCP_CONFIG_PATH`, `XDG_CONFIG_HOME` (Linux app support). `COPILOT_HOME` and `PI_CODING_AGENT_DIR` move those harnesses' own skills folders; the app does not follow them and says so on the page when one is set.

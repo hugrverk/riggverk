@@ -5,6 +5,7 @@ mod content;
 pub(crate) mod cursor_profile;
 mod defaults;
 pub(crate) use defaults::default_workspace_files;
+mod light_runtime;
 mod opencode_cli;
 mod opencode_runtime;
 mod process;
@@ -35,6 +36,7 @@ pub use content::{
     save_agent_source, save_agent_template, save_doc, save_opencode_config_source,
 };
 pub use cursor_profile::get_cursor_profile_health;
+pub use light_runtime::get_light_runtime_health;
 pub use opencode_runtime::{
     get_opencode_runtime_health, list_available_opencode_models, read_opencode_model_selection,
     reset_opencode_model_selection, update_opencode_model_selection,

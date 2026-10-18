@@ -6,7 +6,7 @@ Keys fire only when no text field has focus; Escape leaves a field. `Mod` is Cmd
 
 ## Tabs
 
-`1`-`7` open, in order: workspace, codex, opencode, cursor, claude, library, settings. A harness you disable in Settings is hidden and the remaining tabs renumber. The same names work as commands (`:codex`, `:library docs`).
+`1`-`7` open, in order: workspace, codex, opencode, cursor, claude, library, settings. Copilot, Pi, and Kilo are off by default; once enabled in Settings their tabs follow claude, so the first five keep their numbers (with all seven on, Settings has no digit; `Mod+,` and `:settings` still open it). A harness you disable in Settings is hidden and the remaining tabs renumber. The same names work as commands (`:codex`, `:pi`, `:library docs`).
 
 ## Keyboard reference
 
@@ -59,7 +59,7 @@ Keys fire only when no text field has focus; Escape leaves a field. `Mod` is Cmd
 
 | Command | Effect |
 | --- | --- |
-| `:workspace`, `:codex`, `:opencode`, `:cursor`, `:claude`, `:library [source]`, `:settings` | Open a tab (aliases `:ws`, `:lib`) |
+| `:workspace`, `:codex`, `:opencode`, `:cursor`, `:claude`, `:copilot`, `:pi`, `:kilo`, `:library [source]`, `:settings` | Open a tab (aliases `:ws`, `:lib`); the last three harnesses only while enabled |
 | `:update <target>`, `:update --all` | Open the install review. Targets: `workspace` and the enabled harnesses |
 | `:preview <target>`, `:preview --all` | Same plan with no apply |
 | `:rollback` | Dry run, then confirm, then restore the last transaction |
@@ -82,7 +82,7 @@ Status pane: **backups** (run count and folder), **last tx** (the transaction `z
 
 ## Harness pages
 
-Codex, OpenCode, Cursor, and Claude each have **targets** (what that harness may receive), **surfaces** (installation state per surface), **runtime** (health facts from the installed files; OpenCode also asks its CLI for the version, the default agent and the configured models), and **output**. `u` and `p` review that harness only.
+Codex, OpenCode, Cursor, and Claude each have **targets** (what that harness may receive), **surfaces** (installation state per surface), **runtime** (health facts from the installed files; OpenCode also asks its CLI for the version, the default agent and the configured models), and **output**. `u` and `p` review that harness only. The Copilot, Pi, and Kilo pages are the same page with one surface, `skills`, and no target toggle: their runtime shows the CLI version (the only thing the app asks the CLI, with `--version`) and whether the bundled skills are installed in the folders that harness reads. A CLI the app cannot find says `not on PATH`: the app does not load your shell profile, so a CLI installed through nvm is found in `~/.nvm`, and one installed anywhere else needs the app to be started from a shell where it runs. `unserved` means no skills folder is installed for the harness: Copilot and Pi read only `~/.agents/skills`, which a customised `CODEX_HOME` keeps out of the install.
 
 Targets are a multi-select list: Space toggles, the change autosaves, and a target that is off is left out of the plan and shown as `off`. Skills are not a target: one `skills` surface installs into the folders the enabled harnesses read, so an update on any harness page can also touch a folder another harness reads. Codex rules, agents, and config are separate targets; `codex_config` starts off.
 

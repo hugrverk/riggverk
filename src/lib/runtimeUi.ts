@@ -7,6 +7,7 @@ export function runtimeChipTone(status: string): "ok" | "warn" | "fail" | "muted
     case "missing": return "fail";
     case "invalid": return "fail";
     case "unsafe": return "fail";
+    case "unserved": return "warn";
     default: return "muted";
   }
 }
@@ -20,6 +21,7 @@ export function runtimeChipLabel(status: string): string {
     case "missing": return "Missing";
     case "invalid": return "Invalid";
     case "unsafe": return "Unsafe";
+    case "unserved": return "Unserved";
     default: return "Unknown";
   }
 }

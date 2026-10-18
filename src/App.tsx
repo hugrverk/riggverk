@@ -23,6 +23,7 @@ import { useWorkspaceHealthController } from "./hooks/useWorkspaceHealthControll
 import { CodexView } from "./views/CodexView";
 import { CursorView } from "./views/CursorView";
 import { ClaudeView } from "./views/ClaudeView";
+import { LightHarnessView } from "./views/LightHarnessView";
 import { OpenCodeView } from "./views/OpenCodeView";
 import { StartView } from "./views/StartView";
 const LibraryView = lazy(() => import("./views/LibraryView").then(m => ({ default: m.LibraryView })));
@@ -31,12 +32,13 @@ import { harnessForView } from "./lib/harnessInstallation";
 import { filterVisibleMetadataTargets } from "./lib/harnessVisibility";
 import { redactTerminalOutput } from "./lib/redactTerminalOutput";
 import { AppFrame, ShellProviders, useAppCommands, useShellState, type AppView } from "./shell";
-import type { InstallAgent, SetupResult } from "./types";
+import { LIGHT_AGENTS, type InstallAgent, type SetupResult } from "./types";
 
 type View = AppView;
 
+/** The workspace page and every harness page show diagnostics and runtime health. */
 function isWorkspaceLoadView(view: View): boolean {
-  return view === "start" || view === "codex" || view === "opencode" || view === "cursor" || view === "claude";
+  return view === "start" || harnessForView(view) !== null;
 }
 
 /* ---- main app ---- */
@@ -67,12 +69,14 @@ function AppShell() {
     codexRuntimeHealth,
     cursorProfileHealth,
     claudeRuntimeHealth,
+    lightRuntimeHealth,
     fetchStatus,
     loadWorkspaceDiagnostics,
     loadOpenCodeRuntimeHealth,
     loadCodexRuntimeHealth,
     loadCursorProfileHealth,
     loadClaudeRuntimeHealth,
+    loadLightRuntimeHealth,
     resetWorkspaceHealthState,
     clearHarnessHealth,
     isInvalidWorkspaceError,
@@ -181,6 +185,9 @@ function AppShell() {
       opencode: loadOpenCodeRuntimeHealth,
       claude: loadClaudeRuntimeHealth,
       cursor: loadCursorProfileHealth,
+      copilot: generation => loadLightRuntimeHealth("copilot", generation),
+      pi: generation => loadLightRuntimeHealth("pi", generation),
+      kilo: generation => loadLightRuntimeHealth("kilo", generation),
     };
     await Promise.all(harnesses.map(harness => loaders[harness](generation).catch(() => {})));
   }, [
@@ -188,6 +195,7 @@ function AppShell() {
     loadOpenCodeRuntimeHealth,
     loadClaudeRuntimeHealth,
     loadCursorProfileHealth,
+    loadLightRuntimeHealth,
     workspaceLoadGenerationRef,
   ]);
 
@@ -735,6 +743,17 @@ function AppShell() {
 
         {view === "claude" && enabledHarnessIds.includes("claude") && (
           <ClaudeView {...harnessPageProps} runtimeHealth={claudeRuntimeHealth} />
+        )}
+
+        {LIGHT_AGENTS.map(harness =>
+          view === harness && enabledHarnessIds.includes(harness) ? (
+            <LightHarnessView
+              key={harness}
+              {...harnessPageProps}
+              harness={harness}
+              runtimeHealth={lightRuntimeHealth[harness] ?? null}
+            />
+          ) : null,
         )}
 
         {view === "library" && (

@@ -1,10 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useState, type MutableRefObject } from "react";
+import { isLightAgent } from "../lib/harnessInstallation";
 import { isInvalidWorkspaceError } from "../lib/workspaceErrors";
 import type {
   ClaudeRuntimeHealth,
   CodexRuntimeHealth,
   CursorProfileHealth,
+  LightAgent,
+  LightRuntimeHealth,
   OpenCodeRuntimeHealth,
   StatusData,
   WorkspaceDiagnostics,
@@ -28,6 +31,8 @@ export function useWorkspaceHealthController({
   const [codexRuntimeHealth, setCodexRuntimeHealth] = useState<CodexRuntimeHealth | null>(null);
   const [cursorProfileHealth, setCursorProfileHealth] = useState<CursorProfileHealth | null>(null);
   const [claudeRuntimeHealth, setClaudeRuntimeHealth] = useState<ClaudeRuntimeHealth | null>(null);
+  // Copilot, Pi and Kilo share one command and one page; a harness that is off has no entry.
+  const [lightRuntimeHealth, setLightRuntimeHealth] = useState<Partial<Record<LightAgent, LightRuntimeHealth | null>>>({});
 
   const fetchStatus = useCallback(async (generation = workspaceLoadGenerationRef.current) => {
     try {
@@ -97,6 +102,17 @@ export function useWorkspaceHealthController({
     }
   }, [isWorkspaceLoadCurrent, workspaceLoadGenerationRef]);
 
+  const loadLightRuntimeHealth = useCallback(async (harness: LightAgent, generation = workspaceLoadGenerationRef.current) => {
+    try {
+      const health = await invoke<LightRuntimeHealth>("get_light_runtime_health", { harness });
+      if (!isWorkspaceLoadCurrent(generation)) return;
+      setLightRuntimeHealth(previous => ({ ...previous, [harness]: health }));
+    } catch {
+      if (!isWorkspaceLoadCurrent(generation)) return;
+      setLightRuntimeHealth(previous => ({ ...previous, [harness]: null }));
+    }
+  }, [isWorkspaceLoadCurrent, workspaceLoadGenerationRef]);
+
   const resetWorkspaceHealthState = useCallback(() => {
     setStatus(null);
     setWorkspaceDiagnostics(null);
@@ -104,9 +120,14 @@ export function useWorkspaceHealthController({
     setCodexRuntimeHealth(null);
     setCursorProfileHealth(null);
     setClaudeRuntimeHealth(null);
+    setLightRuntimeHealth({});
   }, []);
 
   const clearHarnessHealth = useCallback((harness: InstallAgent) => {
+    if (isLightAgent(harness)) {
+      setLightRuntimeHealth(previous => ({ ...previous, [harness]: null }));
+      return;
+    }
     switch (harness) {
       case "codex": setCodexRuntimeHealth(null); break;
       case "opencode": setOpencodeRuntimeHealth(null); break;
@@ -122,12 +143,14 @@ export function useWorkspaceHealthController({
     codexRuntimeHealth,
     cursorProfileHealth,
     claudeRuntimeHealth,
+    lightRuntimeHealth,
     fetchStatus,
     loadWorkspaceDiagnostics,
     loadOpenCodeRuntimeHealth,
     loadCodexRuntimeHealth,
     loadCursorProfileHealth,
     loadClaudeRuntimeHealth,
+    loadLightRuntimeHealth,
     resetWorkspaceHealthState,
     clearHarnessHealth,
     isInvalidWorkspaceError,

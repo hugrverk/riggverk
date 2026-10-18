@@ -11,7 +11,7 @@ export AGENT_WORKSPACE_BACKUP_DIR="$HOME/backups"
 npm run tauri dev        # or open the built bundle from this shell
 ```
 
-Tab keys below assume the default order: workspace, codex, opencode, cursor, claude, library, settings (`1`-`7`).
+Tab keys below assume the default order: workspace, codex, opencode, cursor, claude, library, settings (`1`-`7`). Copilot, Pi and Kilo are off by default; once enabled their tabs follow Claude (copilot, pi, kilo) and Library and Settings move up (`1`-`9`, Settings has no digit with all seven on).
 
 ## 1. Preflight
 
@@ -101,7 +101,9 @@ Use fixture files in the isolated `HOME` (`~/.claude/CLAUDE.md`, `~/.codex/AGENT
 
 ## 8. Settings, workspace picker, harness enablement
 
-- [ ] Fresh and legacy settings enable Codex, OpenCode, Claude, and Cursor
+- [ ] Fresh and legacy settings enable Codex, OpenCode, Claude, and Cursor; GitHub Copilot, Pi, and Kilo are listed after them and disabled
+- [ ] Enable Copilot, Pi, and Kilo: three tabs appear after Claude; each page lists the `skills` surface only, shows the CLI version (or "not on PATH" with its reason; an nvm-only install shows `· nvm`) and the skills row; Install or Update then writes `~/.agents/skills` (and nothing under `~/.copilot`, `~/.pi`, `~/.config/kilo`); `:p` still previews and `:pi` opens the Pi page
+- [ ] With Codex enabled and `CODEX_HOME` customised, Copilot and Pi read `unserved` with the warning, nothing is installed for them, and Kilo is served through `~/.claude/skills`
 - [ ] Appearance (dark, light, system), all four text sizes (`small`, `medium`, `large`, `extra-large`), and theme colors autosave; `r` in the appearance pane resets after a confirm
 - [ ] Motion `full` shows the launch sequence, apply progress (bar, file, spinner, elapsed), the success tick and scanline; `subtle` keeps only the progress indicators; `off` (or the OS reduced-motion preference) stops every animation
 - [ ] Landing page selection (`start`, `library`) persists and opens after app restart

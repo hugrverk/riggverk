@@ -1,6 +1,6 @@
 # Riggverk
 
-Riggverk is a local agent environment manager: a Tauri control panel for managing a shared coding-agent workspace across Codex, OpenCode, Claude Code, and Cursor. Keyboard-first terminal-style UI; every write is reviewed before it happens.
+Riggverk is a local agent environment manager: a Tauri control panel for managing a shared coding-agent workspace across Codex, OpenCode, Claude Code, and Cursor, and the shared skills for GitHub Copilot, Pi, and Kilo Code (an opt-in light tier). Keyboard-first terminal-style UI; every write is reviewed before it happens.
 
 The repository contains the application and its canonical bundled workspace. Installed workspaces and harness files are downstream user-owned data. The technical identifiers (the `AGENT-WORKSPACE BASE` rules markers, `~/.config/agent-workspace`, the `.agent-workspace/` marker folder, and the `AGENT_WORKSPACE_*` environment variables) keep their historical names on purpose, so existing installs and files stay valid.
 
@@ -29,7 +29,7 @@ npm run dev           # browser only: Vite on :1420, no Tauri backend
 npm run tauri build
 ```
 
-Browser-only visual QA: open `http://localhost:1420/?mock=<scenario>` while `npm run dev` runs. `main.tsx` swaps in `src/dev/mockBackend.ts` (dev builds only). Scenarios: `default`, `conflict`, `fresh`, `error`, `empty`; `&theme=light|dark|system` sets the appearance.
+Browser-only visual QA: open `http://localhost:1420/?mock=<scenario>` while `npm run dev` runs. `main.tsx` swaps in `src/dev/mockBackend.ts` (dev builds only). Scenarios: `default`, `conflict`, `fresh`, `error`, `empty`; `&theme=light|dark|system` sets the appearance; `&light=unserved` leaves Copilot and Pi without a skills folder (turn them on in Settings first).
 
 Release verification:
 
@@ -61,9 +61,9 @@ skills/<group>/<skill>/SKILL.md
 
 One optional group level is supported; deeper nesting is invalid. Every harness installs the canonical `SKILL.md` byte for byte; there are no generated per-harness copies. Text meant for one harness sits at the end of the file under `## Harness notes` (`### Claude Code`, `### Codex`, `### OpenCode`, `### Cursor`), and `python3 scripts/check-skill-routing.py` validates the structure.
 
-Installed layout is flat and holds the whole skill directory: `<skills-folder>/<skill-name>/SKILL.md` plus the skill's supporting files at their relative paths. Skills are one surface for all harnesses and are installed into the folders the enabled harnesses read: Claude Code `~/.claude/skills`, Codex `~/.agents/skills` (`$CODEX_HOME/skills` with a customised `CODEX_HOME`), and `~/.agents/skills` for OpenCode or Cursor when neither of those is wanted already. The app's copies from older versions in `~/.config/opencode/skills`, `~/.cursor/skills` and `$CODEX_HOME/skills` are removed on update; an edited copy stays.
+Installed layout is flat and holds the whole skill directory: `<skills-folder>/<skill-name>/SKILL.md` plus the skill's supporting files at their relative paths. Skills are one surface for all harnesses and are installed into the folders the enabled harnesses read: Claude Code `~/.claude/skills`, Codex `~/.agents/skills` (`$CODEX_HOME/skills` with a customised `CODEX_HOME`), and `~/.agents/skills` for OpenCode, Cursor or Kilo when neither of those is wanted already. Copilot and Pi read `~/.agents/skills` and no other shared folder, so enabling either adds it; Kilo reads both shared folders. With Codex enabled and a customised `CODEX_HOME` the isolation wins: Copilot and Pi are then reported as unserved and nothing is installed for them. The app's copies from older versions in `~/.config/opencode/skills`, `~/.cursor/skills` and `$CODEX_HOME/skills` are removed on update; an edited copy stays.
 
-All skills support all four harnesses. The skills surface is not gated by target toggles. Deprecated Riggverk skills are matched against bundled reference snapshots: identical managed copies are removed after backup, diverged and unknown copies are preserved.
+All skills support all four central harnesses and the light tier. The skills surface is not gated by target toggles. Deprecated Riggverk skills are matched against bundled reference snapshots: identical managed copies are removed after backup, diverged and unknown copies are preserved.
 
 ## Rules
 
@@ -90,13 +90,14 @@ Generated adapters must stay current with their sources; repository checks fail 
 - **Codex**: rules, TOML agents, skills, and allowlisted config defaults in `$CODEX_HOME/config.toml` (default `~/.codex/config.toml`). `approval_policy`, `approvals_reviewer`, `sandbox_mode`, and `apps._default.*` follow the template. `model` and `model_reasoning_effort` are create-only: written (`gpt-6.1-sol`, `xhigh`) only when the file has no value, then yours. The `codex_config` target is off by default. A non-empty `AGENTS.override.md` makes Codex ignore `AGENTS.md`; Codex health warns about it. Legacy app-shaped profile selectors and tables are removed during migration only. Skills install to `~/.agents/skills` (`$CODEX_HOME/skills` with a customised `CODEX_HOME`); the app's older copies in `$CODEX_HOME/skills` are removed on update, and diverged copies stay.
 - **Claude Code**: rules, subagents, and skills. Claude settings, authentication, trust state, caches, and user-scoped MCP credentials stay Claude-managed and are not read or written.
 - **Cursor**: six global agents, skills, and the named Playwright MCP entry in `~/.cursor/mcp.json`, via native Rust operations. User Rules and Auto Review stay manual. Project `.cursor/*`, project agents, project MCP, `.cursorignore`, and `AGENTS.md` are never written.
+- **GitHub Copilot, Pi, Kilo Code** (the light tier, off by default): skills only so far, in the shared folders above. Nothing in `~/.copilot`, `~/.pi` or `~/.config/kilo` is written; rules and MCP are not managed yet. Their pages show the CLI version and whether the bundled skills are installed where each one reads. The only call made to these CLIs is `<cli> --version` (bounded, parse-only). None of them is on a Finder-launched app's `PATH` when installed through nvm, so the highest version folder of `~/.nvm/versions/node` that has the CLI is used; a CLI installed anywhere else is reported as not on `PATH`, and the app has to be started from a shell where it runs. Checked against Copilot CLI 1.0.98, Pi 1.3.0 and Kilo 7.8.12. `COPILOT_HOME` and `PI_CODING_AGENT_DIR` are not followed.
 
 ## Application surfaces
 
-Tabs in order (press `1`-`7`; disabled harnesses are hidden and the rest renumber): workspace, codex, opencode, cursor, claude, library, settings. `?` lists every key and command; `:` opens the command line.
+Tabs in order (press `1`-`9`; disabled harnesses are hidden and the rest renumber): workspace, codex, opencode, cursor, claude, copilot, pi, kilo, library, settings. Copilot, Pi and Kilo appear after Claude once enabled in Settings, so the first five tabs keep their numbers. With all seven harnesses on, Settings has no digit; `Mod+,` and `:settings` still open it. `?` lists every key and command; `:` opens the command line.
 
 - Workspace - harness list with install state, surfaces, installed-state matrix, uninstall with preview, session-scoped **Recover previous uninstall**, backups folder, output.
-- Codex, OpenCode, Cursor, Claude - target toggles (Space, autosaved), surfaces, runtime health, install review. OpenCode health also asks the installed CLI (version, whether the default agent resolves, whether the configured models are listed; bounded, parse-only, never logged), and the page adds the model override (`model`, `small model` and an optional `subagent model` for the five read-only subagents; each row shows its source and whether it is applied, and `x` resets it to the bundled default).
+- Codex, OpenCode, Cursor, Claude, and the light tier (Copilot, Pi, Kilo; skills row and runtime health only) - target toggles (Space, autosaved), surfaces, runtime health, install review. OpenCode health also asks the installed CLI (version, whether the default agent resolves, whether the configured models are listed; bounded, parse-only, never logged), and the page adds the model override (`model`, `small model` and an optional `subagent model` for the five read-only subagents; each row shows its source and whether it is applied, and `x` resets it to the bundled default).
 - Library - an items list and one document pane (rendered, or its source while editing) for docs, rules, skills, runtime agents, and configs. Saves write the runtime workspace only (`:w`, `:q`).
 - Settings - harnesses, appearance, text size, motion, landing page, colors, workspace.
 
@@ -108,7 +109,7 @@ Stored in `settings.json` under the app support dir; autosaved.
 
 | Setting | Default | Description |
 | --- | --- | --- |
-| `enabled_harness_ids` | `["codex", "opencode", "claude", "cursor"]` | Positive allowlist for visible and writable harnesses. Disabling hides the harness UI and blocks new managed writes without deleting files or target preferences. |
+| `enabled_harness_ids` | `["codex", "opencode", "claude", "cursor"]` | Positive allowlist for visible and writable harnesses; `"copilot"`, `"pi"` and `"kilo"` can be added and are off by default (also for older files that name the four or lack the field). Disabling hides the harness UI and blocks new managed writes without deleting files or target preferences. |
 | `enabled_target_ids` | `["codex_rules", "opencode_rules", "claude_rules", "opencode_agents", "claude_agents", "codex_agents", "opencode_config", "cursor_setup"]` | Targets Install is allowed to write. Toggle with Space on harness pages. A target that is off is skipped by preview, apply, and status. |
 | `workspace_path` | unset (`~/.config/agent-workspace`) | Custom workspace folder chosen in Settings (`c` choose, `R` reset to default). It must pass the workspace markers. Generator scripts the app runs always come from the bundled read-only copy, not from this folder. |
 | `appearance` | `"dark"` | `"dark"`, `"light"`, or `"system"`. |

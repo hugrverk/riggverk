@@ -10,10 +10,26 @@ pub enum HarnessId {
     OpenCode,
     Claude,
     Cursor,
+    /// The light tier (`light_harness`): GitHub Copilot, Pi and Kilo Code.
+    Copilot,
+    Pi,
+    Kilo,
 }
 
 impl HarnessId {
     pub const ALL: &'static [HarnessId] = &[
+        HarnessId::Codex,
+        HarnessId::OpenCode,
+        HarnessId::Claude,
+        HarnessId::Cursor,
+        HarnessId::Copilot,
+        HarnessId::Pi,
+        HarnessId::Kilo,
+    ];
+
+    /// The harnesses enabled on a fresh install, and for a settings file that names none. The
+    /// light tier is opt-in.
+    pub const DEFAULT_ON: &'static [HarnessId] = &[
         HarnessId::Codex,
         HarnessId::OpenCode,
         HarnessId::Claude,
@@ -26,7 +42,16 @@ impl HarnessId {
             HarnessId::OpenCode => "opencode",
             HarnessId::Claude => "claude",
             HarnessId::Cursor => "cursor",
+            HarnessId::Copilot => "copilot",
+            HarnessId::Pi => "pi",
+            HarnessId::Kilo => "kilo",
         }
+    }
+
+    /// Whether the harness is in the light tier: skills reach and runtime health, described by
+    /// `metadata/light-harnesses.json`.
+    pub fn is_light(self) -> bool {
+        matches!(self, HarnessId::Copilot | HarnessId::Pi | HarnessId::Kilo)
     }
 }
 
@@ -217,7 +242,7 @@ pub fn normalize_enabled_ids(raw: &[String]) -> Vec<String> {
 }
 
 pub fn default_enabled_harness_ids() -> Vec<HarnessId> {
-    HarnessId::ALL.to_vec()
+    HarnessId::DEFAULT_ON.to_vec()
 }
 
 pub fn normalize_enabled_harness_ids(raw: &[HarnessId]) -> Vec<HarnessId> {
@@ -561,5 +586,61 @@ mod tests {
         let snapshot = meta.iter().find(|m| m.id == "snapshot").unwrap();
         assert!(!snapshot.editable);
         assert_eq!(snapshot.rel_path, "templates/opencode.json");
+    }
+
+    #[test]
+    fn harness_ids_have_stable_wire_names_in_canonical_order() {
+        let names: Vec<&str> = HarnessId::ALL.iter().map(|id| id.as_str()).collect();
+        assert_eq!(
+            names,
+            ["codex", "opencode", "claude", "cursor", "copilot", "pi", "kilo"]
+        );
+        for id in HarnessId::ALL {
+            assert_eq!(
+                serde_json::to_string(id).unwrap(),
+                format!("\"{}\"", id.as_str())
+            );
+        }
+    }
+
+    #[test]
+    fn the_light_tier_is_opt_in_and_the_four_central_harnesses_stay_on() {
+        assert_eq!(
+            default_enabled_harness_ids(),
+            vec![
+                HarnessId::Codex,
+                HarnessId::OpenCode,
+                HarnessId::Claude,
+                HarnessId::Cursor
+            ]
+        );
+        for id in HarnessId::ALL {
+            assert_eq!(
+                id.is_light(),
+                !HarnessId::DEFAULT_ON.contains(id),
+                "{}",
+                id.as_str()
+            );
+        }
+    }
+
+    #[test]
+    fn enabled_harnesses_normalize_to_canonical_order_with_the_light_tier_last() {
+        let raw = [
+            HarnessId::Kilo,
+            HarnessId::Claude,
+            HarnessId::Pi,
+            HarnessId::Claude,
+            HarnessId::Codex,
+        ];
+        assert_eq!(
+            normalize_enabled_harness_ids(&raw),
+            vec![
+                HarnessId::Codex,
+                HarnessId::Claude,
+                HarnessId::Pi,
+                HarnessId::Kilo
+            ]
+        );
     }
 }

@@ -24,6 +24,8 @@ interface Backend {
   statusRequests: string[][];
   /** When set, update_settings resolves only after this promise does. */
   holdUpdate: Promise<void> | null;
+  /** Harness of every get_light_runtime_health call, in order. */
+  lightHealthRequests: string[];
 }
 
 function installBackend(overrides: Partial<AppSettings> = {}): Backend {
@@ -33,8 +35,9 @@ function installBackend(overrides: Partial<AppSettings> = {}): Backend {
     installation: {},
     statusRequests: [],
     holdUpdate: null,
+    lightHealthRequests: [],
   };
-  invokeMock.mockImplementation((command: string, args?: { settings?: AppSettings; surfaces?: string[] }) => {
+  invokeMock.mockImplementation((command: string, args?: { settings?: AppSettings; surfaces?: string[]; harness?: string }) => {
     backend.commandLog.push(command);
     switch (command) {
       case "get_settings":
@@ -72,10 +75,11 @@ function installBackend(overrides: Partial<AppSettings> = {}): Backend {
         return Promise.resolve(planOf([op("workspace_bundle", "update")]));
       case "get_installation_status": {
         const surface = args?.surfaces?.[0] ?? "";
+        // A light harness has the shared `skills` surface only, so the request does not say which one it is.
         const harness = surface.startsWith("open_code") ? "opencode" : surface.split("_")[0]!;
         backend.statusRequests.push(args?.surfaces ?? []);
         // Like the real command, it answers from the saved settings only.
-        if (harness !== "workspace" && !backend.settings.enabled_harness_ids.includes(harness as InstallAgent)) {
+        if (harness !== "workspace" && harness !== "skills" && !backend.settings.enabled_harness_ids.includes(harness as InstallAgent)) {
           return Promise.reject(`Harness disabled: ${harness}`);
         }
         const state = backend.installation[harness] ?? "current";
@@ -84,6 +88,17 @@ function installBackend(overrides: Partial<AppSettings> = {}): Backend {
           summary: state,
           counts: { create_count: 0, update_count: state === "update_available" ? 2 : 0, remove_count: 0, conflict_count: 0 },
           surfaces: [],
+        });
+      }
+      case "get_light_runtime_health": {
+        backend.lightHealthRequests.push(args?.harness ?? "");
+        return Promise.resolve({
+          harness: args?.harness,
+          status: "synced",
+          cli: { status: "found", version: "1.3.0", source: "path", detail: "found" },
+          skills: { status: "synced", synced: 17, expected: 17, roots: ["~/.agents/skills"] },
+          warnings: [],
+          next_action: "No runtime action needed.",
         });
       }
       default:
@@ -142,6 +157,43 @@ describe("App shell", () => {
     expect(within(nav()).queryByRole("button", { name: "OpenCode" })).toBeNull();
     fireEvent.keyDown(document.body, { key: "3" });
     await waitFor(() => expect(currentTab()).toBe("Claude"));
+  });
+
+  it("hides Copilot, Pi and Kilo by default and asks no health of them", async () => {
+    const backend = installBackend();
+    render(<App />);
+    await ready();
+    for (const name of ["Copilot", "Pi", "Kilo"]) expect(within(nav()).queryByRole("button", { name })).toBeNull();
+    await act(async () => {});
+    expect(backend.lightHealthRequests).toEqual([]);
+  });
+
+  it("puts an enabled light harness after Claude, loads only its health and opens its page", async () => {
+    const backend = installBackend({ enabled_harness_ids: ["codex", "opencode", "claude", "cursor", "pi"] });
+    render(<App />);
+    await within(nav()).findByRole("button", { name: "Pi" });
+    // Workspace, Codex, OpenCode, Cursor, Claude, Pi, Library, Settings.
+    expect(Array.from(nav().querySelectorAll("button.tab")).map(tab => tab.getAttribute("title"))).toEqual([
+      "Workspace", "Codex", "OpenCode", "Cursor", "Claude", "Pi", "Library", "Settings",
+    ]);
+    fireEvent.keyDown(document.body, { key: "6" });
+    await waitFor(() => expect(currentTab()).toBe("Pi"));
+    const detail = await screen.findByRole("region", { name: "Pi detail" });
+    await waitFor(() => expect(detail.textContent).toContain("runtime · synced"));
+    expect(backend.lightHealthRequests.every(harness => harness === "pi")).toBe(true);
+    expect(backend.lightHealthRequests.length).toBeGreaterThan(0);
+  });
+
+  it("shows a light harness tab and loads its health once Settings turns it on", async () => {
+    const backend = installBackend();
+    render(<App />);
+    await ready();
+    fireEvent.keyDown(document.body, { key: ",", ctrlKey: true });
+    const settings = await screen.findByRole("region", { name: "Settings" });
+    fireEvent.click(within(settings).getByRole("checkbox", { name: "kilo" }));
+    await within(nav()).findByRole("button", { name: "Kilo" });
+    await waitFor(() => expect(backend.lightHealthRequests).toEqual(["kilo"]));
+    await waitFor(() => expect(backend.settings.enabled_harness_ids).toEqual(["codex", "opencode", "claude", "cursor", "kilo"]), { timeout: 3000 });
   });
 
   it("opens Settings with Mod+, and via the :settings command", async () => {

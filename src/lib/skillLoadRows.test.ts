@@ -27,6 +27,9 @@ const PATHS: Record<SkillReadFolder, string> = {
   dot_codex: "~/.codex/skills",
   open_code: "~/.config/opencode/skills",
   cursor: "~/.cursor/skills",
+  copilot: "~/.copilot/skills",
+  pi_agent: "~/.pi/agent/skills",
+  kilo: "~/.kilo/skills",
 };
 
 function copy(folder: SkillReadFolder, name: string, extra: Partial<SkillCopy> = {}): SkillCopy {
@@ -140,6 +143,23 @@ describe("skillLoadRows", () => {
     const rows = skillLoadRows(loadsOf([harnessOf("cursor", folders, [dup])]), "cursor");
     expect(rows[0]!.value).toBe("1 name with 2 copies · not verified for your Cursor version");
     expect(rows[1]!.value).toBe("a · ~/.agents/skills + ~/.claude/skills · possible duplicate");
+  });
+
+  it("says which folder wins when Copilot, Pi or Kilo hold different copies, and keeps identical ones quiet", () => {
+    const folders: SkillReadFolder[] = ["copilot", "agents"];
+    const differing = {
+      ...load("a", [copy("copilot", "a"), copy("agents", "a", { hash: "bbbbbbbbbbbb", current: false })], ["shadowed_by_folder_order"]),
+      winner: 0,
+    };
+    const same = { ...load("b", [copy("copilot", "b"), copy("agents", "b")], ["duplicate_identical"]), winner: 0 };
+    const rows = skillLoadRows(loadsOf([harnessOf("copilot", folders, [differing, same])]), "copilot");
+    expect(rows[0]).toMatchObject({ value: "1 name with 2 copies", tone: "warn" });
+    expect(rows[1]!.value).toBe("a · ~/.copilot/skills + ~/.agents/skills · first folder wins, the others are hidden");
+    expect(rows).toHaveLength(2);
+    expect(isWarningFlag("shadowed_by_folder_order")).toBe(true);
+
+    const quiet = skillLoadRows(loadsOf([harnessOf("kilo", ["kilo", "agents", "claude"], [same])]), "kilo");
+    expect(quiet).toEqual([{ label: "skill loads", value: "1 skill · 1 with identical copies", tone: "dim", wrap: true }]);
   });
 
   it("lists the user's own duplicates apart as theirs, and not among the names the app can fix", () => {

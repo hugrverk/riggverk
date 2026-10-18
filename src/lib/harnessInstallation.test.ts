@@ -1,27 +1,39 @@
 import { describe, expect, it } from "vitest";
 import {
+  DEFAULT_ENABLED_HARNESS_IDS,
   DEFAULT_ENABLED_TARGET_IDS,
   disabledSurfacesForHarness,
   enabledSetupSurfaces,
   enabledSurfacesForHarness,
   harnessForSurface,
+  harnessForView,
   harnessSurfaceStates,
+  HARNESS_LABELS,
+  HARNESS_NAV_ORDER,
   HARNESS_SURFACES,
+  isLightAgent,
   isSurfaceEnabled,
   surfacesNeedingApply,
   TARGET_SURFACES,
   targetIdForSurface,
   type SetupTargetId,
 } from "./harnessInstallation";
-import { INSTALL_AGENTS, type AppSettings, type SetupPlan, type SetupSurfaceId } from "../types";
+import {
+  CENTRAL_AGENTS,
+  INSTALL_AGENTS,
+  LIGHT_AGENTS,
+  type AppSettings,
+  type SetupPlan,
+  type SetupSurfaceId,
+} from "../types";
 
 type EnabledSettings = Pick<AppSettings, "enabled_target_ids" | "enabled_harness_ids">;
 
-/** Backend defaults: every harness, every target except codex_config. */
+/** Backend defaults: the four central harnesses, every target except codex_config. */
 function defaults(overrides: Partial<EnabledSettings> = {}): EnabledSettings {
   return {
     enabled_target_ids: [...DEFAULT_ENABLED_TARGET_IDS],
-    enabled_harness_ids: [...INSTALL_AGENTS],
+    enabled_harness_ids: [...DEFAULT_ENABLED_HARNESS_IDS],
     ...overrides,
   };
 }
@@ -173,5 +185,46 @@ describe("target-filtered surfaces", () => {
       "claude_rules",
       "skills",
     ]);
+  });
+});
+
+describe("the light tier (Copilot, Pi, Kilo)", () => {
+  it("is off by default: the defaults are the four central harnesses, as the backend's HarnessId::DEFAULT_ON", () => {
+    expect([...DEFAULT_ENABLED_HARNESS_IDS]).toEqual(["codex", "opencode", "claude", "cursor"]);
+    expect([...DEFAULT_ENABLED_HARNESS_IDS]).toEqual([...CENTRAL_AGENTS]);
+    expect([...INSTALL_AGENTS]).toEqual([...CENTRAL_AGENTS, ...LIGHT_AGENTS]);
+    expect([...LIGHT_AGENTS]).toEqual(["copilot", "pi", "kilo"]);
+  });
+
+  it("follows Claude in the tab order, so the first five tabs keep their numbers", () => {
+    expect(HARNESS_NAV_ORDER).toEqual(["codex", "opencode", "cursor", "claude", "copilot", "pi", "kilo"]);
+    expect([...HARNESS_NAV_ORDER].sort()).toEqual([...INSTALL_AGENTS].sort());
+    expect(HARNESS_LABELS.copilot).toBe("Copilot");
+    expect(Object.keys(HARNESS_LABELS).sort()).toEqual([...INSTALL_AGENTS].sort());
+  });
+
+  it("knows a light harness page and a light agent, and nothing else", () => {
+    for (const harness of LIGHT_AGENTS) {
+      expect(harnessForView(harness)).toBe(harness);
+      expect(isLightAgent(harness)).toBe(true);
+    }
+    for (const harness of CENTRAL_AGENTS) expect(isLightAgent(harness)).toBe(false);
+    for (const other of ["start", "library", "settings", "copilots", ""]) expect(harnessForView(other)).toBeNull();
+  });
+
+  it("offers the shared skills surface and nothing else, gated by no target", () => {
+    for (const harness of LIGHT_AGENTS) {
+      expect(HARNESS_SURFACES[harness]).toEqual(["skills"]);
+      const on = defaults({ enabled_harness_ids: [harness] });
+      expect(enabledSurfacesForHarness(harness, on)).toEqual(["skills"]);
+      expect(harnessSurfaceStates(harness, on)).toEqual([{ surface: "skills", enabled: true, targetId: null }]);
+      expect(enabledSurfacesForHarness(harness, defaults())).toEqual([]);
+    }
+  });
+
+  it("adds no surface to an update-all request beyond the ones the harnesses already list", () => {
+    const withLight = defaults({ enabled_harness_ids: [...INSTALL_AGENTS] });
+    expect(enabledSetupSurfaces(withLight)).toEqual(enabledSetupSurfaces(defaults()));
+    expect(enabledSetupSurfaces(defaults({ enabled_harness_ids: ["pi"] }))).toEqual(["workspace_bundle", "skills"]);
   });
 });

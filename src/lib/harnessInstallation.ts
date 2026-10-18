@@ -1,7 +1,10 @@
 import {
+  CENTRAL_AGENTS,
   INSTALL_AGENTS,
+  LIGHT_AGENTS,
   type AppSettings,
   type InstallAgent,
+  type LightAgent,
   type SetupPlan,
   type SetupSurfaceId,
 } from "../types";
@@ -9,13 +12,16 @@ import {
 /**
  * Every surface of a harness, regardless of target toggles. Use `enabledSurfacesForHarness` to install.
  * `skills` is listed for every harness but belongs to none: one global surface installs into the folders
- * all the enabled harnesses read.
+ * all the enabled harnesses read. The light harnesses (Copilot, Pi, Kilo) have nothing else yet.
  */
 export const HARNESS_SURFACES: Record<InstallAgent, SetupSurfaceId[]> = {
   codex: ["codex_config", "codex_agents", "codex_rules", "skills"],
   opencode: ["open_code_config", "open_code_agents", "open_code_rules", "skills"],
   claude: ["claude_rules", "claude_agents", "skills"],
   cursor: ["cursor_agents", "skills", "cursor_mcp"],
+  copilot: ["skills"],
+  pi: ["skills"],
+  kilo: ["skills"],
 };
 
 /** Surfaces shown on every harness page that belong to no single harness. */
@@ -132,13 +138,24 @@ export const HARNESS_LABELS: Record<InstallAgent, string> = {
   opencode: "OpenCode",
   claude: "Claude",
   cursor: "Cursor",
+  copilot: "Copilot",
+  pi: "Pi",
+  kilo: "Kilo",
 };
-export const HARNESS_NAV_ORDER: InstallAgent[] = ["codex", "opencode", "cursor", "claude"];
+
+/** Tab order of the harness pages. The light tier comes after Claude, so tabs 1-5 keep their numbers. */
+export const HARNESS_NAV_ORDER: InstallAgent[] = ["codex", "opencode", "cursor", "claude", "copilot", "pi", "kilo"];
+
+/** The harnesses on for a fresh install and for a settings file that names none. Mirrors `HarnessId::DEFAULT_ON`. */
+export const DEFAULT_ENABLED_HARNESS_IDS: readonly InstallAgent[] = CENTRAL_AGENTS;
+
+/** Whether `harness` is in the light tier (Copilot, Pi, Kilo): one shared page, health loaded by `get_light_runtime_health`. */
+export function isLightAgent(harness: InstallAgent): harness is LightAgent {
+  return (LIGHT_AGENTS as readonly string[]).includes(harness);
+}
 
 export function harnessForView(view: string): InstallAgent | null {
-  return (["codex", "opencode", "claude", "cursor"] as const).includes(view as InstallAgent)
-    ? view as InstallAgent
-    : null;
+  return (INSTALL_AGENTS as readonly string[]).includes(view) ? (view as InstallAgent) : null;
 }
 
 export const WORKSPACE_SURFACES: SetupSurfaceId[] = ["workspace_bundle"];

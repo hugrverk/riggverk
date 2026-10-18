@@ -1591,6 +1591,9 @@ fn harness_name(harness: crate::agent_targets::HarnessId) -> &'static str {
         HarnessId::Codex => "Codex",
         HarnessId::OpenCode => "OpenCode",
         HarnessId::Cursor => "Cursor",
+        HarnessId::Copilot | HarnessId::Pi | HarnessId::Kilo => {
+            crate::light_harness::display_name(harness)
+        }
     }
 }
 

@@ -2,7 +2,7 @@
 
 ## What this is
 
-A directory of docs, skills, templates, and scripts, plus the Riggverk app that installs it. The app puts a runtime copy at `~/.config/agent-workspace`, shows what is installed where, and installs rules, agents, skills, and config into Codex, OpenCode, Cursor, and Claude Code. Every write is reviewed first.
+A directory of docs, skills, templates, and scripts, plus the Riggverk app that installs it. The app puts a runtime copy at `~/.config/agent-workspace`, shows what is installed where, and installs rules, agents, skills, and config into Codex, OpenCode, Cursor, and Claude Code. GitHub Copilot, Pi, and Kilo Code are an opt-in light tier (Settings): the app installs the shared skills for them and shows their CLI version. Every write is reviewed first.
 
 Requirements: Python 3 on `PATH` (config merges and generators).
 
@@ -38,7 +38,7 @@ Fresh settings enable every target except `codex_config`, which rewrites your Co
 
 | Key | Action |
 | --- | --- |
-| `1`-`7` | Go to a tab (workspace, codex, opencode, cursor, claude, library, settings) |
+| `1`-`7` | Go to a tab (workspace, codex, opencode, cursor, claude, library, settings; copilot, pi and kilo follow claude once enabled) |
 | `h` `l` | Previous or next pane |
 | `j` `k` | Move in a list |
 | `u` | Review and apply an install or update |

@@ -59,9 +59,18 @@ export interface AgentSourceContent {
   id: string; title: string; path: string; content: string; exists: boolean;
 }
 
-export const INSTALL_AGENTS = ["codex", "opencode", "claude", "cursor"] as const;
+/** The harnesses with their own setup (rules, agents, config). On by default. */
+export const CENTRAL_AGENTS = ["codex", "opencode", "claude", "cursor"] as const;
+
+/** The light tier: skills reach and runtime health. Off by default. Mirrors `light-harnesses.json`. */
+export const LIGHT_AGENTS = ["copilot", "pi", "kilo"] as const;
+
+/** Every harness, in the backend's `HarnessId::ALL` order. */
+export const INSTALL_AGENTS = [...CENTRAL_AGENTS, ...LIGHT_AGENTS] as const;
 
 export type InstallAgent = (typeof INSTALL_AGENTS)[number];
+
+export type LightAgent = (typeof LIGHT_AGENTS)[number];
 
 export type InstallationState = "not_installed" | "update_available" | "current" | "conflict" | "unavailable";
 
@@ -160,14 +169,28 @@ export interface InstallationStatus {
 
 // Effective skill loads: which copies of a skill each enabled harness reads (`get_effective_skill_loads`).
 
-/** A skills folder a harness reads; `dot_codex` is the literal `~/.codex/skills`, whatever `CODEX_HOME` says. */
-export type SkillReadFolder = "claude" | "agents" | "codex_home" | "dot_codex" | "open_code" | "cursor";
+/**
+ * A skills folder a harness reads; `dot_codex` is the literal `~/.codex/skills`, whatever `CODEX_HOME` says.
+ * `copilot`, `pi_agent` and `kilo` are the private folders of the light harnesses (`~/.copilot/skills`,
+ * `~/.pi/agent/skills`, `~/.kilo/skills`); the app never installs into them.
+ */
+export type SkillReadFolder =
+  | "claude"
+  | "agents"
+  | "codex_home"
+  | "dot_codex"
+  | "open_code"
+  | "cursor"
+  | "copilot"
+  | "pi_agent"
+  | "kilo";
 
 export type SkillLoadFlag =
   | "plain_mention_ambiguous"
   | "winner_nondeterministic"
   | "duplicate_identical"
   | "possible_duplicate"
+  | "shadowed_by_folder_order"
   | "foreign_copy";
 
 export interface SkillCopy {
@@ -461,6 +484,36 @@ export interface ClaudeRuntimeHealth {
   installed_agent_count: number;
   claude_cli_available: boolean;
   summary: string;
+}
+
+/** The CLI of a light harness, from `<cli> --version` only. */
+export interface LightCliHealth {
+  /** `found` (a version was read), `unknown` (found, no version in time) or `missing`. */
+  status: "found" | "unknown" | "missing" | string;
+  version: string | null;
+  /** `path`, or `nvm` when only a Node version folder of nvm has the program. */
+  source: "path" | "nvm" | string | null;
+  detail: string;
+}
+
+export interface LightSkillsHealth {
+  /** `synced`, `partial`, `missing`, `diverged`, `unserved` (no folder is installed for the harness) or `unknown`. */
+  status: string;
+  synced: number;
+  expected: number;
+  /** The installed folders the harness reads, as people know them (`~/.agents/skills`). */
+  roots: string[];
+}
+
+/** Runtime health of Copilot, Pi and Kilo (`get_light_runtime_health`). Rules and MCP are not managed yet. */
+export interface LightRuntimeHealth {
+  harness: LightAgent;
+  /** The skills status: the only part the app manages for these harnesses so far. */
+  status: string;
+  cli: LightCliHealth;
+  skills: LightSkillsHealth;
+  warnings: string[];
+  next_action: string;
 }
 
 // Unified managed installation types.

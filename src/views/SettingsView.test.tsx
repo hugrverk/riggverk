@@ -202,6 +202,21 @@ describe("SettingsView radio groups", () => {
     fireEvent.click(cursor);
     expect(props.onToggleHarness).toHaveBeenCalledWith("cursor");
   });
+
+  it("offers Copilot, Pi and Kilo after the four central harnesses, off by default", () => {
+    const { props } = renderSettings();
+    const harnesses = ["codex", "opencode", "claude", "cursor", "copilot", "pi", "kilo"];
+    const boxes = harnesses.map(name => screen.getByRole("checkbox", { name }));
+    boxes.slice(1).forEach((box, index) => {
+      expect(boxes[index]!.compareDocumentPosition(box) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+    expect(boxes.map(box => box.getAttribute("aria-checked"))).toEqual(
+      ["true", "true", "true", "true", "false", "false", "false"],
+    );
+    for (const box of boxes.slice(4)) expect(box.textContent).toContain("disabled");
+    fireEvent.click(screen.getByRole("checkbox", { name: "pi" }));
+    expect(props.onToggleHarness).toHaveBeenCalledWith("pi");
+  });
 });
 
 describe("SettingsView motion control", () => {
@@ -650,8 +665,8 @@ describe("SettingsView workspace row", () => {
     renderSettings({ onChooseWorkspace: vi.fn(async () => null), onResetWorkspace: vi.fn(async () => null) });
     const choose = within(workspaceRow()).getByRole("button", { name: /choose…/ });
     focus(radios("Landing page")[0]!);
-    // landing, four harness checkboxes, then the workspace actions.
-    for (let step = 0; step < 5; step += 1) press(document.activeElement!, "j");
+    // landing, seven harness checkboxes, then the workspace actions.
+    for (let step = 0; step < 8; step += 1) press(document.activeElement!, "j");
     expect(document.activeElement).toBe(choose);
     press(document.activeElement!, "k");
     expect(document.activeElement).not.toBe(choose);
