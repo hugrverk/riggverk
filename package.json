@@ -6,7 +6,6 @@
   "scripts": {
     "dev": "vite",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
-    "check:repo-dashboard-contracts": "bash scripts/run-ts-check.sh scripts/check-repo-dashboard-contracts.ts",
     "build": "tsc && vite build",
     "test": "vitest run",
     "test:watch": "vitest",

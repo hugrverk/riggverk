@@ -32,7 +32,6 @@ import type {
   CodexRuntimeHealth,
   ConfigEditorSourceMeta,
   CursorProfileHealth,
-  DiscoverLocalGitReposResult,
   DocSummary,
   DocsHealth,
   DocumentContent,
@@ -44,8 +43,6 @@ import type {
   OpenCodeRuntimeHealth,
   OperationKind,
   PlannedOperation,
-  RepoDashboardSnapshot,
-  RepoPromptContext,
   RulesConversionPreview,
   RulesDiffMode,
   RulesDiffView,
@@ -108,10 +105,6 @@ let settings: AppSettings = {
   foreground_color: null,
   motion: "full",
   landing_view: "start",
-  repo_dashboard_entries: [
-    { id: "agent-workspace", label: "agent-workspace", path: `${HOME}/Projects/agent-workspace`, default_branch: "main" },
-  ],
-  active_repo_dashboard_id: "agent-workspace",
   revision: 3,
 };
 
@@ -947,54 +940,6 @@ let modelSelection: OpenCodeModelSelection = {
   small_model: "anthropic/claude-haiku-4-5",
 };
 
-/* ---- repo dashboard ---- */
-
-function repoSnapshot(repoPath: string): RepoDashboardSnapshot {
-  const now = Math.floor(Date.now() / 1000);
-  const commits = Array.from({ length: 40 }, (_, i) => ({
-    sha: `${(0xa7c3e1 - i * 1234).toString(16).padStart(6, "0")}0000000000000000000000000000000000`,
-    short_sha: (0xa7c3e1 - i * 1234).toString(16).padStart(7, "0").slice(0, 7),
-    author_name: i % 3 === 0 ? "uxsmedjan" : "codex",
-    author_email: "dev@example.com",
-    authored_at: now - i * 86400 * 1.5,
-    subject: ["feat(workspace): modernize skills", "fix(backups): list managed setup", "test(settings): serialize tilde-home test", "docs: add skill catalog audit"][i % 4],
-    is_merge: i % 9 === 0,
-  }));
-  return {
-    repo_path: repoPath,
-    git_available: true,
-    is_repo: true,
-    branch: "feat/hugrverk-overhaul",
-    default_branch: "main",
-    dirty: true,
-    ahead: 12,
-    behind: 0,
-    latest_commit: commits[0],
-    commits,
-    commits_truncated: false,
-    changed_files: [
-      { path: "src/styles/_tokens.scss", status: "M" },
-      { path: "src/dev/mockBackend.ts", status: "A" },
-    ],
-    docs: [
-      { path: "docs/BACKLOG.md", found: true, readable: true, truncated: false, content: "# Backlog\n\n## Queue\n\n| ID | Item | Status | Priority |\n| --- | --- | --- | --- |\n| W-12 | Install preview before apply | open | high |\n| W-13 | Keyboard layer | started | high |\n| W-14 | Library filter | open | medium |\n", read_error: null },
-      { path: "docs/AUDIT.md", found: true, readable: true, truncated: false, content: "# Audit\n\n- [ ] TODO: verify rollback after partial apply\n- [x] FIX: list managed setup backups\n", read_error: null },
-      { path: "README.md", found: true, readable: true, truncated: false, content: "# agent-workspace\n\nControl panel for the Hugrverk harness bundle.\n", read_error: null },
-    ],
-    docs_source: "local-fallback",
-    docs_ref: "main",
-    docs_stale: false,
-    gh: {
-      available: true,
-      authenticated: scenario !== "error",
-      message: scenario === "error" ? "gh auth status: not logged in" : null,
-      merged_prs: [{ number: 41, title: "Serialize env-mutating tests", merged_at: new Date(now * 1000 - 86400000).toISOString(), author: "uxsmedjan", body: null }],
-      open_issues: [{ number: 44, title: "Install preview before apply", state: "open", labels: ["enhancement"] }],
-    },
-    warnings: [],
-  };
-}
-
 /* ---- actions ---- */
 
 function actionResult(action: string, success: boolean, stdout: string, stderr = ""): ActionResult {
@@ -1251,14 +1196,6 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
     case "update_opencode_model_selection":
       modelSelection = { model: arg<string>(args, "model"), small_model: arg<string>(args, "smallModel") };
       return `model set to ${modelSelection.model}`;
-    case "get_repo_dashboard_snapshot":
-      await delay(300);
-      return repoSnapshot(arg<string>(args, "repoPath"));
-    case "discover_local_git_repos":
-      await delay(300);
-      return { repos: [{ label: "kretsverket", path: `${HOME}/Projects/kretsverket`, default_branch: "main", repo_slug: "hugrverk/kretsverket", warnings: [] }], warnings: [] } satisfies DiscoverLocalGitReposResult;
-    case "get_repo_prompt_context":
-      return { repo_slug: "hugrverk/agent-workspace", current_branch: "feat/hugrverk-overhaul", default_branch: "main", is_repo: true, warnings: [] } satisfies RepoPromptContext;
     default:
       throw new Error(`mock backend: unhandled command "${cmd}"`);
   }

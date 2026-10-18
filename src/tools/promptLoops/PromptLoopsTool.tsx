@@ -1,5 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { CopyButton } from "../../components/CopyButton";
 import { ToolSectionTabs } from "../../components/ToolSectionTabs";
 import { focusPaneById } from "../../keyboard/focus";
@@ -8,18 +7,13 @@ import { useKeymap } from "../../keyboard/useKeymap";
 import { useTransientStatus } from "../../lib/useTransientStatus";
 import { Pane } from "../../ui/Pane";
 import { PaneList } from "../../ui/PaneList";
-import type { RepoDashboardEntry } from "../../types";
-import type { RepoPromptContext } from "../../types";
 import {
   composePrompt,
   hasActiveComposerState,
   isOptionDisabled,
-  NO_REPO_CONTEXT_VALUE,
   PROMPT_OPTION_DEFS,
   togglePromptOption,
-  type PromptRepoContextSection,
 } from "./composer";
-import type { PromptLoopContextSeed } from "./contextHandoff";
 import { PROMPT_LOOP_GROUPS } from "./data";
 import type { PromptLoopGroup, PromptLoopItem } from "./types";
 
@@ -32,145 +26,39 @@ function filterItems(group: PromptLoopGroup, query: string): PromptLoopItem[] {
   });
 }
 
-interface PromptLoopsToolProps {
-  contextSeed?: PromptLoopContextSeed | null;
-  /** Called once a seed has been applied so the owner can drop it instead of re-applying it on the next visit. */
-  onContextSeedConsumed?: (seedId: string) => void;
-  savedRepos?: RepoDashboardEntry[];
-  savedReposLoading?: boolean;
-}
-
-export function PromptLoopsTool({
-  contextSeed = null,
-  onContextSeedConsumed,
-  savedRepos = [],
-  savedReposLoading = false,
-}: PromptLoopsToolProps) {
+export function PromptLoopsTool() {
   const [groupIndex, setGroupIndex] = useState(0);
   // The list cursor; falls back to the first prompt when it is unset or filtered out.
   const [itemId, setItemId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const { status, showStatus } = useTransientStatus(1200);
-  const [repoEntryId, setRepoEntryId] = useState(NO_REPO_CONTEXT_VALUE);
   const [taskContext, setTaskContext] = useState("");
   const [selectedOptions, setSelectedOptions] = useState<Set<string>>(() => new Set());
   const [optionsOpen, setOptionsOpen] = useState(false);
-  const [repoPromptContext, setRepoPromptContext] = useState<PromptRepoContextSection | null>(null);
-  const [repoContextLoading, setRepoContextLoading] = useState(false);
-  const [repoContextWarning, setRepoContextWarning] = useState<string | null>(null);
   const taskContextRef = useRef<HTMLTextAreaElement>(null);
-  const repoContextSeqRef = useRef(0);
-  const appliedContextSeedIdRef = useRef<string | null>(null);
 
   const group = PROMPT_LOOP_GROUPS[groupIndex] ?? PROMPT_LOOP_GROUPS[0];
   const items = useMemo(() => filterItems(group, query), [group, query]);
   const activeItem = items.find(item => item.id === itemId) ?? items[0] ?? null;
   const itemNumbers = useMemo(() => new Map(items.map((item, index) => [item.id, index + 1])), [items]);
 
-  const selectedRepoEntry = useMemo(
-    () => savedRepos.find(e => e.id === repoEntryId) ?? null,
-    [savedRepos, repoEntryId],
-  );
-
-  const activeRepoContext = useMemo((): PromptRepoContextSection | null => {
-    if (!selectedRepoEntry) return null;
-    return (
-      repoPromptContext ?? {
-        label: selectedRepoEntry.label,
-        repo_slug: null,
-        current_branch: null,
-        default_branch: selectedRepoEntry.default_branch?.trim() || null,
-      }
-    );
-  }, [selectedRepoEntry, repoPromptContext]);
-
   const composedPrompt = useMemo(() => {
     if (!activeItem) return "";
     return composePrompt({
       basePrompt: activeItem.prompt,
-      repoContext: activeRepoContext,
       taskContext,
       selectedOptionIds: [...selectedOptions],
     });
-  }, [activeItem, activeRepoContext, taskContext, selectedOptions]);
-
-  useEffect(() => {
-    if (!selectedRepoEntry) {
-      setRepoPromptContext(null);
-      setRepoContextLoading(false);
-      setRepoContextWarning(null);
-      return;
-    }
-
-    const seq = ++repoContextSeqRef.current;
-    setRepoContextLoading(true);
-    setRepoContextWarning(null);
-    setRepoPromptContext({
-      label: selectedRepoEntry.label,
-      repo_slug: null,
-      current_branch: null,
-      default_branch: selectedRepoEntry.default_branch?.trim() || null,
-    });
-
-    invoke<RepoPromptContext>("get_repo_prompt_context", {
-      repoPath: selectedRepoEntry.path,
-      defaultBranch: selectedRepoEntry.default_branch ?? null,
-    })
-      .then(ctx => {
-        if (seq !== repoContextSeqRef.current) return;
-        setRepoPromptContext({
-          label: selectedRepoEntry.label,
-          repo_slug: ctx.repo_slug,
-          current_branch: ctx.current_branch,
-          default_branch: ctx.default_branch,
-        });
-      })
-      .catch(() => {
-        if (seq !== repoContextSeqRef.current) return;
-        setRepoContextWarning(
-          "Could not read git metadata; using generic repository context without local path.",
-        );
-        setRepoPromptContext({
-          label: selectedRepoEntry.label,
-          repo_slug: null,
-          current_branch: null,
-          default_branch: selectedRepoEntry.default_branch?.trim() || null,
-        });
-      })
-      .finally(() => {
-        if (seq === repoContextSeqRef.current) setRepoContextLoading(false);
-      });
-  }, [
-    selectedRepoEntry?.id,
-    selectedRepoEntry?.label,
-    selectedRepoEntry?.path,
-    selectedRepoEntry?.default_branch,
-  ]);
+  }, [activeItem, taskContext, selectedOptions]);
 
   const composerActive = hasActiveComposerState({
-    repoEntryId,
     taskContext,
     selectedOptionIds: selectedOptions,
   });
 
-  useEffect(() => {
-    if (!contextSeed) return;
-    if (appliedContextSeedIdRef.current === contextSeed.id) return;
-    appliedContextSeedIdRef.current = contextSeed.id;
-    setTaskContext(contextSeed.taskContext);
-    if (contextSeed.repoEntryId) {
-      setRepoEntryId(contextSeed.repoEntryId);
-    }
-    showStatus("context loaded from Repo Dashboard");
-    onContextSeedConsumed?.(contextSeed.id);
-  }, [contextSeed, onContextSeedConsumed, showStatus]);
-
   const clearComposer = useCallback(() => {
-    setRepoEntryId(NO_REPO_CONTEXT_VALUE);
     setTaskContext("");
     setSelectedOptions(new Set());
-    setRepoPromptContext(null);
-    setRepoContextWarning(null);
   }, []);
 
   const toggleOption = useCallback((optionId: string) => {
@@ -332,37 +220,6 @@ export function PromptLoopsTool({
               </div>
 
               <div className="prompt-loops-composer font-mono">
-                <label className="prompt-loops-composer-field">
-                  <span className="prompt-loops-composer-label">Repo context</span>
-                  <select
-                    className="tool-field prompt-loops-composer-select"
-                    value={repoEntryId}
-                    onChange={e => setRepoEntryId(e.target.value)}
-                    aria-label="Repository context"
-                    disabled={savedReposLoading}
-                  >
-                    <option value={NO_REPO_CONTEXT_VALUE}>No repo context</option>
-                    {savedRepos.map(entry => (
-                      <option key={entry.id} value={entry.id}>{entry.label}</option>
-                    ))}
-                  </select>
-                </label>
-                {!savedReposLoading && savedRepos.length === 0 ? (
-                  <p className="prompt-loops-composer-note text-muted small">
-                    No saved repos yet. Add entries in Repo Dashboard; templates still copy as-is without context.
-                  </p>
-                ) : null}
-                {repoContextLoading ? (
-                  <p className="prompt-loops-composer-note text-muted small" role="status">
-                    Reading git repository context…
-                  </p>
-                ) : null}
-                {repoContextWarning ? (
-                  <p className="prompt-loops-composer-note text-muted small" role="status">
-                    {repoContextWarning}
-                  </p>
-                ) : null}
-
                 <label className="prompt-loops-composer-field">
                   <span className="prompt-loops-composer-label">Task / context (optional)</span>
                   <textarea

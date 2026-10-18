@@ -6,13 +6,13 @@ Keys fire only when no text field has focus; Escape leaves a field. `Mod` is Cmd
 
 ## Tabs
 
-`1`-`9` open, in order: workspace, codex, opencode, cursor, claude, library, repo, prompts, settings. A harness you disable in Settings is hidden and the remaining tabs renumber. The same names work as commands (`:codex`, `:library docs`).
+`1`-`8` open, in order: workspace, codex, opencode, cursor, claude, library, prompts, settings. A harness you disable in Settings is hidden and the remaining tabs renumber. The same names work as commands (`:codex`, `:library docs`).
 
 ## Keyboard reference
 
 | Where | Key | Action |
 | --- | --- | --- |
-| Everywhere | `1`-`9` | Go to a tab |
+| Everywhere | `1`-`8` | Go to a tab |
 | | `h` `l` | Previous or next pane |
 | | `:` or `Mod+k` | Command line |
 | | `?` | Help: every key and command |
@@ -51,9 +51,6 @@ Keys fire only when no text field has focus; Escape leaves a field. `Mod` is Cmd
 | Prompt Builder | `[` `]` or `<` `>` | Previous or next prompt group |
 | | `y` | Copy the composed prompt |
 | | `i` | Edit task context |
-| Repo Dashboard | `<` `>` or `[` `]` | Previous or next section |
-| | `r` | Refresh |
-| | `w` | Fold or expand the warnings strip |
 | Settings | `j` `k` | Next or previous setting |
 | | `r` | Reset appearance to defaults |
 | | `s` | Retry a failed save |
@@ -66,7 +63,7 @@ Keys fire only when no text field has focus; Escape leaves a field. `Mod` is Cmd
 
 | Command | Effect |
 | --- | --- |
-| `:workspace`, `:codex`, `:opencode`, `:cursor`, `:claude`, `:library [source]`, `:repo`, `:prompts`, `:settings` | Open a tab (aliases `:ws`, `:lib`, `:dashboard`) |
+| `:workspace`, `:codex`, `:opencode`, `:cursor`, `:claude`, `:library [source]`, `:prompts`, `:settings` | Open a tab (aliases `:ws`, `:lib`) |
 | `:update <target>`, `:update --all` | Open the install review. Targets: `workspace` and the enabled harnesses |
 | `:preview <target>`, `:preview --all` | Same plan with no apply |
 | `:rollback` | Dry run, then confirm, then restore the last transaction |
@@ -138,16 +135,15 @@ Brain Setup is a copy-paste instruction block for external assistants. It runs n
 
 ## Settings
 
-Harnesses (which tools appear and may be written), appearance (dark, light, system), text size, motion, landing page (workspace, repo dashboard, prompt loops, library), colors, and the workspace folder. Settings autosave; `r` resets appearance after a confirmation.
+Harnesses (which tools appear and may be written), appearance (dark, light, system), text size, motion, landing page (workspace, prompt loops, library), colors, and the workspace folder. Settings autosave; `r` resets appearance after a confirmation.
 
 Workspace: `c` chooses another folder, which must pass the workspace markers; `R` returns to `~/.config/agent-workspace`. `AGENT_WORKSPACE_PATH` overrides both. Generator scripts the app runs always come from its bundled copy, not from the chosen folder.
 
 Disabling a harness hides it and blocks new writes to it. It does not delete files or forget target choices, and re-enabling does not install.
 
-## Prompt Builder and Repo Dashboard
+## Prompt Builder
 
-- **Prompt Builder**: Prompt, Goal Prompt, and Batch Prompt templates composed locally, with optional repository context. `y` copies.
-- **Repo Dashboard**: Overview, Work, and Docs pages for a local git checkout. A refresh runs `git fetch --prune` on the selected repository and, when `gh` is installed and signed in, lists pull requests and issues. This uses your git and `gh` credentials and can change the repository's remote-tracking refs. Open trusted repositories only. Failed fetches or `gh` calls show in the warnings strip (`w`).
+Prompt, Goal Prompt, and Batch Prompt templates composed locally. `y` copies.
 
 ## Release check
 

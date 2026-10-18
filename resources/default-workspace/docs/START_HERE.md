@@ -38,7 +38,7 @@ Fresh settings enable every target except `codex_config`, which rewrites your Co
 
 | Key | Action |
 | --- | --- |
-| `1`-`9` | Go to a tab (workspace, codex, opencode, cursor, claude, library, repo, prompts, settings) |
+| `1`-`8` | Go to a tab (workspace, codex, opencode, cursor, claude, library, prompts, settings) |
 | `h` `l` | Previous or next pane |
 | `j` `k` | Move in a list |
 | `u` | Review and apply an install or update |

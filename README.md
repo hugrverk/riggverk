@@ -6,7 +6,7 @@ The repository contains the application and its canonical bundled workspace. Ins
 
 ## Repository layout
 
-- `src/` - React and Vite frontend (shell, keyboard layer, pages, Library, Prompt Builder, Repo Dashboard).
+- `src/` - React and Vite frontend (shell, keyboard layer, pages, Library, Prompt Builder).
 - `src-tauri/` - trusted filesystem operations, native integrations, validation, backups, and Tauri commands.
 - `resources/default-workspace/` - canonical bundled workspace content (the only source for installs).
 - `scripts/` - repository checks, generators, contract guards, and release verification.
@@ -93,13 +93,12 @@ Generated adapters must stay current with their sources; repository checks fail 
 
 ## Application surfaces
 
-Tabs in order (press `1`-`9`; disabled harnesses are hidden and the rest renumber): workspace, codex, opencode, cursor, claude, library, repo, prompts, settings. `?` lists every key and command; `:` opens the command line.
+Tabs in order (press `1`-`8`; disabled harnesses are hidden and the rest renumber): workspace, codex, opencode, cursor, claude, library, prompts, settings. `?` lists every key and command; `:` opens the command line.
 
 - Workspace - harness list with install state, surfaces, installed-state matrix, release-check, uninstall with preview, session-scoped **Recover previous uninstall**, backups folder, output.
 - Codex, OpenCode, Cursor, Claude - target toggles (Space, autosaved), surfaces, runtime health, install review. OpenCode adds the model override.
 - Library - an items list and one document pane (rendered, or its source while editing) for docs, rules, skills, runtime agents, configs, and Brain Setup. Saves write the runtime workspace only (`:w`, `:q`).
-- Repo Dashboard - local-git-first repository and docs insight with bounded `git fetch --prune` and optional `gh` enrichment. Open trusted repositories only.
-- Prompt Builder - deterministic copy-ready prompt templates (Prompt, Goal Prompt, Batch Prompt) with optional repository context.
+- Prompt Builder - deterministic copy-ready prompt templates (Prompt, Goal Prompt, Batch Prompt).
 - Settings - harnesses, appearance, text size, motion, landing page, colors, workspace.
 
 Full uninstall removes proven app-owned files, preserves modified and unknown files, leaves merge-managed configs and rules files in place, and records a rollback-capable transaction. **Recover previous uninstall** exists only for the current app session.
@@ -116,7 +115,7 @@ Stored in `settings.json` under the app support dir; autosaved.
 | `appearance` | `"dark"` | `"dark"`, `"light"`, or `"system"`. |
 | `app_font_size` | `"medium"` | `"small"`, `"medium"`, `"large"`, `"extra-large"`. |
 | `motion` | `"full"` | `"full"`, `"subtle"`, or `"off"`. `"off"` stops animations and transitions; the OS reduced-motion preference always counts as `"off"`. Older files with `reduce_motion: true` load as `"off"`; the legacy `reduce_motion` flag is still written beside it. |
-| `landing_view` | `"start"` | View shown on start: `"start"`, `"repo-dashboard"`, `"prompts"`, `"library"`. |
+| `landing_view` | `"start"` | View shown on start: `"start"`, `"prompts"`, `"library"`. |
 
 Target toggles gate these surfaces: rules, agents, and config per harness, and Cursor agents plus MCP (`cursor_setup`). `codex_config` is the only target off by default because it rewrites the Codex approval and sandbox posture. Settings files from before target gating are migrated once: every default stays on, and any target you had enabled or whose surface is already managed stays on, so nothing already installed is dropped. Skills and the workspace bundle are never gated.
 
@@ -144,7 +143,6 @@ Overrides are honored in release builds too. Use them with a temporary `HOME` wh
 - Config and rules merges preserve user-owned content or refuse unsafe writes with zero mutation.
 - Credential-bearing files and unrelated personal files are outside the workspace contract.
 - Python generators and merge scripts run from the bundled copy, never from the workspace. The user-triggered release check is the exception: it runs `scripts/release-check.sh` from the workspace if you put one there, after a confirmation that names the folder.
-- Repo Dashboard runs `git fetch --prune` and `gh` against the repository you select, with your own git and `gh` credentials. Git runs with fsmonitor and hooks disabled. Open trusted repositories only.
 
 See `docs/SECURITY_MODEL.md` for the full boundaries.
 

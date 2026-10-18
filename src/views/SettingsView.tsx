@@ -78,7 +78,6 @@ const MOTION_OPTIONS = [
 
 const LANDING_OPTIONS = [
   { value: "start", label: "workspace" },
-  { value: "repo-dashboard", label: "repo dashboard" },
   { value: "prompts", label: "prompt loops" },
   { value: "library", label: "library" },
 ] as const;

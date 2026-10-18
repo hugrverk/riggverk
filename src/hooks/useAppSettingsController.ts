@@ -2,10 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import { useConfirm } from "../components/ConfirmDialog";
 import { isSettingsConflictError } from "../lib/appSettingsMutation";
-import {
-  applyMutationPreservingPendingLocal,
-  mergePendingLocalOntoAcknowledged,
-} from "../lib/mergePendingAppSettings";
+import { mergePendingLocalOntoAcknowledged } from "../lib/mergePendingAppSettings";
 import {
   applyThemeSettings,
   defaultSettings,
@@ -13,7 +10,6 @@ import {
   SETTINGS_AUTOSAVE_DEBOUNCE_MS,
   type SettingsSaveStatus,
 } from "../lib/settingsDraft";
-import type { MutateAppSettings } from "../lib/useSavedRepoEntriesController";
 import { workspaceTaskBlockedMessage } from "../lib/workspaceErrors";
 import type { AgentTargetMeta, AppSettings, GetSettingsResponse, InstallAgent } from "../types";
 
@@ -95,7 +91,6 @@ export function useAppSettingsController({
   const settingsLoadedRef = useRef(false);
   const settingsAutosaveInFlightRef = useRef<string | null>(null);
   const settingsAutosaveSkipRef = useRef(false);
-  const settingsMutationSeqRef = useRef(0);
 
   const settingsDirty = useMemo(() => {
     if (!appSettings || savedSettingsRef.current === null) return false;
@@ -250,7 +245,7 @@ export function useAppSettingsController({
   const resetSettings = useCallback(async () => {
     const confirmed = await confirm({
       title: "Reset appearance",
-      message: "Reset theme, font size, colors and motion to defaults? Workspace and repository settings are kept.",
+      message: "Reset theme, font size, colors and motion to defaults? Workspace settings are kept.",
       confirmLabel: "reset",
       destructive: true,
     });
@@ -258,7 +253,7 @@ export function useAppSettingsController({
     const current = appSettingsRef.current;
     if (!current) return;
 
-    // Appearance only: workspace path, repo dashboard entries, targets, harnesses and landing page stay.
+    // Appearance only: workspace path, targets, harnesses and landing page stay.
     const defaults = defaultSettings();
     const next: AppSettings = {
       ...current,
@@ -434,63 +429,6 @@ export function useAppSettingsController({
 
   const clearSettingsMsg = useCallback(() => setSettingsMsg(null), []);
 
-  const mutateAppSettings = useCallback<MutateAppSettings>(async mutator => {
-    const opId = ++settingsMutationSeqRef.current;
-    const maxAttempts = 3;
-
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      let base = appSettingsRef.current;
-      if (!base) throw new Error("settings not loaded");
-
-      if (attempt > 0) {
-        const latestResponse = await invoke<GetSettingsResponse>("get_settings");
-        const latest = latestResponse.settings;
-        if (opId !== settingsMutationSeqRef.current) {
-          return latest;
-        }
-        settingsRevisionRef.current = latest.revision ?? 0;
-        base = mergePendingLocalOntoAcknowledged(
-          latest,
-          appSettingsRef.current ?? latest,
-          savedSettingsRef.current,
-        );
-      }
-
-      const acknowledgedAtStart = savedSettingsRef.current;
-      const next = mutator(base);
-      const sentSerialized = serializeSettingsForCompare(next);
-
-      try {
-        const saved = await invoke<AppSettings>("update_settings", {
-          settings: next,
-          expectedRevision: settingsRevisionRef.current,
-        });
-        if (opId !== settingsMutationSeqRef.current) {
-          return saved;
-        }
-
-        const merged = applyMutationPreservingPendingLocal(
-          saved,
-          sentSerialized,
-          appSettingsRef.current,
-          acknowledgedAtStart,
-        );
-        settingsRevisionRef.current = saved.revision ?? 0;
-        acknowledgeSaved(saved);
-        setAppSettings(merged);
-        applyThemeSettings(merged);
-        setSettingsAutoSaveError(null);
-        return saved;
-      } catch (error) {
-        if (!isSettingsConflictError(error) || attempt === maxAttempts - 1) {
-          throw error;
-        }
-      }
-    }
-
-    throw new Error("settings conflict");
-  }, [acknowledgeSaved]);
-
   return {
     appSettings,
     savedSelection,
@@ -519,6 +457,5 @@ export function useAppSettingsController({
     toggleHarness,
     clearSettingsMsg,
     setSettingsMsg,
-    mutateAppSettings,
   };
 }

@@ -1,12 +1,7 @@
 /* ── Shared tool chrome ── */
 
 .prompt-loops-list-body .rows,
-.prompt-loops-detail-pane .prompt-loops-prompt,
-.repo-dashboard-list,
-.repo-dashboard-recent-activity-scroll,
-.repo-dashboard-work-column-scroll,
-.repo-dashboard-docs-reader-scroll,
-.repo-dashboard-latest .repo-dashboard-code {
+.prompt-loops-detail-pane .prompt-loops-prompt {
   scrollbar-width: thin;
   scrollbar-color: var(--border-strong) transparent;
 }

@@ -5,11 +5,11 @@ import { PromptLoopsTool } from "./PromptLoopsTool";
 import { PROMPT_LOOP_GROUPS } from "./data";
 import { validatePromptLoopTemplates } from "./validateTemplates";
 
-function renderTool(props: Parameters<typeof PromptLoopsTool>[0] = {}) {
-  return renderWithShell(<PromptLoopsTool {...props} />);
+function renderTool() {
+  return renderWithShell(<PromptLoopsTool />);
 }
 
-/** Rows of the prompt list (the group and repo selects also expose role=option elements). */
+/** Rows of the prompt list (the group select also exposes role=option elements). */
 function promptRows(): HTMLElement[] {
   return within(screen.getByRole("listbox", { name: "Prompts" })).queryAllByRole("option");
 }
@@ -97,31 +97,6 @@ describe("PromptLoopsTool", () => {
     expect(tabs[1]?.getAttribute("aria-selected")).toBe("true");
     expect(tabs[0]?.getAttribute("aria-selected")).toBe("false");
     expect(screen.getByRole("heading", { level: 2 }).textContent).toBe(PROMPT_LOOP_GROUPS[1]!.items[0]!.title);
-  });
-
-  it("applies a context seed once and reports it as consumed", () => {
-    const onContextSeedConsumed = vi.fn();
-    const seed = { id: "seed-1", taskContext: "Selected Repo Dashboard item: fix the thing" };
-    const { rerender } = renderTool({ contextSeed: seed, onContextSeedConsumed });
-
-    const textarea = screen.getByRole("textbox", { name: "Optional task or context" }) as HTMLTextAreaElement;
-    expect(textarea.value).toBe(seed.taskContext);
-    expect(onContextSeedConsumed).toHaveBeenCalledTimes(1);
-    expect(onContextSeedConsumed).toHaveBeenCalledWith("seed-1");
-
-    // Re-rendering with the same seed (owner has not cleared it yet) must not re-apply or re-report it.
-    fireEvent.change(textarea, { target: { value: "edited by the user" } });
-    rerender(<PromptLoopsTool contextSeed={seed} onContextSeedConsumed={onContextSeedConsumed} />);
-    expect((screen.getByRole("textbox", { name: "Optional task or context" }) as HTMLTextAreaElement).value).toBe("edited by the user");
-    expect(onContextSeedConsumed).toHaveBeenCalledTimes(1);
-  });
-
-  it("does not apply anything when the owner has already cleared the seed", () => {
-    const onContextSeedConsumed = vi.fn();
-    renderTool({ contextSeed: null, onContextSeedConsumed });
-    const textarea = screen.getByRole("textbox", { name: "Optional task or context" }) as HTMLTextAreaElement;
-    expect(textarea.value).toBe("");
-    expect(onContextSeedConsumed).not.toHaveBeenCalled();
   });
 
   it("leaves number keys to the shell tab layer and does not switch groups with them", () => {
@@ -215,7 +190,8 @@ describe("PromptLoopsTool", () => {
   it("copies the composed prompt with y and reports it", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText } });
-    renderTool({ contextSeed: { id: "seed-y", taskContext: "ship the fix" } });
+    renderTool();
+    fireEvent.change(screen.getByRole("textbox", { name: "Optional task or context" }), { target: { value: "ship the fix" } });
 
     fireEvent.keyDown(document.body, { key: "y" });
     await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));

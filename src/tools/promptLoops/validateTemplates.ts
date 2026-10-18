@@ -174,53 +174,6 @@ export function validatePromptComposer(): string[] {
     errors.push("composePrompt: whitespace-only task context must not inject");
   }
 
-  const withRepo = composePrompt({
-    basePrompt: base,
-    repoContext: {
-      label: "Demo",
-      repo_slug: "owner/repo",
-      current_branch: "feature/x",
-      default_branch: "main",
-    },
-  });
-  if (
-    !withRepo.includes(base) ||
-    !withRepo.includes("Demo") ||
-    !withRepo.includes("owner/repo") ||
-    !withRepo.includes("feature/x") ||
-    !withRepo.includes("main")
-  ) {
-    errors.push("composePrompt: repo section must include base prompt and git-derived metadata");
-  }
-  const sensitivePatterns = [
-    "Local path:",
-    "/Users/",
-    "https://github.com/",
-    "git@github.com:",
-    "ghp_",
-    "github_pat_",
-  ];
-  for (const pattern of sensitivePatterns) {
-    if (withRepo.includes(pattern)) {
-      errors.push(`composePrompt: repo section must not include sensitive pattern "${pattern}"`);
-    }
-  }
-  const unknownRepo = composePrompt({
-    basePrompt: base,
-    repoContext: {
-      label: "Demo",
-      repo_slug: null,
-      current_branch: null,
-      default_branch: null,
-    },
-  });
-  if (!unknownRepo.includes("Repository: unknown")) {
-    errors.push("composePrompt: missing repo slug must render Repository: unknown");
-  }
-  if (/Kretsverket|hardcoded/i.test(withRepo)) {
-    errors.push("composePrompt: repo section must stay generic (no project names)");
-  }
-
   const gitIds = PROMPT_OPTION_DEFS.filter(d => d.conflictGroup === "git-branch").map(d => d.id);
   let selected = new Set<string>();
   for (const id of gitIds) {

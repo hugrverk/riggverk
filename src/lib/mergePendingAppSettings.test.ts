@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  applyMutationPreservingPendingLocal,
-  mergePendingLocalOntoAcknowledged,
-} from "./mergePendingAppSettings";
+import { mergePendingLocalOntoAcknowledged } from "./mergePendingAppSettings";
 import { serializeSettingsForCompare } from "./settingsDraft";
 import type { AppSettings } from "../types";
 
@@ -17,8 +14,6 @@ const base: AppSettings = {
   foreground_color: null,
   motion: "full",
   landing_view: "start",
-  repo_dashboard_entries: [],
-  active_repo_dashboard_id: null,
   revision: 2,
 };
 
@@ -43,43 +38,11 @@ describe("mergePendingAppSettings", () => {
     expect(rebased.motion).toBe("subtle");
     expect(rebased.landing_view).toBe("library");
     expect(rebased.revision).toBe(6);
-
-    const afterMutation = applyMutationPreservingPendingLocal({ ...base, revision: 7 }, "sent", local, savedSerialized);
-    expect(afterMutation.motion).toBe("subtle");
-    expect(afterMutation.landing_view).toBe("library");
-    expect(afterMutation.revision).toBe(7);
   });
 
   it("returns the acknowledged settings when nothing is pending", () => {
     const savedSerialized = serializeSettingsForCompare(base);
     const acknowledged = { ...base, revision: 9, landing_view: "prompts" };
     expect(mergePendingLocalOntoAcknowledged(acknowledged, base, savedSerialized)).toBe(acknowledged);
-  });
-
-  it("preserves newer local edits after a repository mutation completes", () => {
-    const savedSerialized = serializeSettingsForCompare(base);
-    const sent = serializeSettingsForCompare({
-      ...base,
-      repo_dashboard_entries: [{ id: "r1", label: "R", path: "/tmp/r" }],
-    });
-    const saved = {
-      ...base,
-      revision: 3,
-      repo_dashboard_entries: [{ id: "r1", label: "R", path: "/tmp/r" }],
-      active_repo_dashboard_id: "r1",
-    };
-    const local = { ...saved, appearance: "light" as const };
-    const merged = applyMutationPreservingPendingLocal(saved, sent, local, savedSerialized);
-    expect(merged.appearance).toBe("light");
-    expect(merged.active_repo_dashboard_id).toBe("r1");
-  });
-
-  it("does not roll back fields changed by the mutator itself", () => {
-    const savedSerialized = serializeSettingsForCompare(base);
-    const sent = serializeSettingsForCompare({ ...base, appearance: "light" });
-    const saved = { ...base, revision: 3, appearance: "light" as const };
-    const local = { ...base, appearance: "dark" as const };
-    const merged = applyMutationPreservingPendingLocal(saved, sent, local, savedSerialized);
-    expect(merged.appearance).toBe("light");
   });
 });

@@ -13,15 +13,6 @@ use crate::path_utils::{
 };
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-pub struct RepoDashboardEntry {
-    pub id: String,
-    pub label: String,
-    pub path: String,
-    #[serde(default)]
-    pub default_branch: Option<String>,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct AppSettings {
     pub appearance: String,
     #[serde(default = "default_app_font_size")]
@@ -51,10 +42,6 @@ pub struct AppSettings {
     #[serde(default = "default_landing_view")]
     pub landing_view: String,
     #[serde(default)]
-    pub repo_dashboard_entries: Vec<RepoDashboardEntry>,
-    #[serde(default)]
-    pub active_repo_dashboard_id: Option<String>,
-    #[serde(default)]
     pub revision: u64,
     /// Marker for the enabled-target defaults this file was written under.
     /// Files without it predate target gating and are migrated on load.
@@ -80,8 +67,6 @@ impl Default for AppSettings {
             motion: default_motion(),
             reduce_motion: false,
             landing_view: default_landing_view(),
-            repo_dashboard_entries: Vec::new(),
-            active_repo_dashboard_id: None,
             revision: 0,
             target_defaults_version: TARGET_DEFAULTS_VERSION,
         }
@@ -156,7 +141,7 @@ fn normalize_motion(settings: &mut AppSettings) {
 
 fn normalize_landing_view(value: &str) -> String {
     match value {
-        "start" | "repo-dashboard" | "prompts" | "library" => value.to_string(),
+        "start" | "prompts" | "library" => value.to_string(),
         _ => default_landing_view(),
     }
 }
@@ -211,15 +196,6 @@ fn normalize(settings: &mut AppSettings) {
         .foreground_color
         .as_deref()
         .and_then(validate_hex_color);
-
-    for entry in &mut settings.repo_dashboard_entries {
-        normalize_loaded_repo_dashboard_entry(entry);
-    }
-    settings.active_repo_dashboard_id = settings
-        .active_repo_dashboard_id
-        .as_ref()
-        .map(|id| id.trim().to_string())
-        .filter(|id| !id.is_empty());
 }
 
 fn normalize_for_save(settings: &mut AppSettings) -> Result<(), String> {
@@ -256,14 +232,6 @@ fn normalize_for_save(settings: &mut AppSettings) -> Result<(), String> {
         .foreground_color
         .as_deref()
         .and_then(validate_hex_color);
-
-    normalize_repo_dashboard_entries(&mut settings.repo_dashboard_entries)?;
-
-    settings.active_repo_dashboard_id = settings
-        .active_repo_dashboard_id
-        .as_ref()
-        .map(|id| id.trim().to_string())
-        .filter(|id| !id.is_empty());
 
     // Anything written by this build carries the current target defaults, even
     // when the caller (e.g. the UI) round-tripped an older object without the marker.
@@ -550,41 +518,6 @@ fn save_inner(settings: &mut AppSettings) -> Result<AppSettings, String> {
     Ok(settings.clone())
 }
 
-fn normalize_loaded_repo_dashboard_entry(entry: &mut RepoDashboardEntry) {
-    if entry.label.trim().is_empty() {
-        entry.label = "Repository".into();
-    }
-    if let Some(path) = normalize_user_workspace_path(&entry.path) {
-        entry.path = path;
-    }
-    entry.default_branch = entry
-        .default_branch
-        .as_ref()
-        .map(|b| b.trim().to_string())
-        .filter(|b| !b.is_empty());
-}
-
-fn normalize_repo_dashboard_entries(entries: &mut [RepoDashboardEntry]) -> Result<(), String> {
-    for entry in entries.iter_mut() {
-        entry.label = entry.label.trim().to_string();
-        if entry.label.is_empty() {
-            entry.label = "Repository".into();
-        }
-        entry.id = entry.id.trim().to_string();
-        if entry.id.is_empty() {
-            return Err("repo dashboard entry id cannot be empty".into());
-        }
-        entry.path = normalize_user_workspace_path_for_save(&entry.path)?
-            .ok_or_else(|| format!("repo dashboard path is required for {}", entry.id))?;
-        entry.default_branch = entry
-            .default_branch
-            .as_ref()
-            .map(|b| b.trim().to_string())
-            .filter(|b| !b.is_empty());
-    }
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::{
@@ -619,8 +552,6 @@ mod tests {
             motion: "full".into(),
             reduce_motion: false,
             landing_view: "start".into(),
-            repo_dashboard_entries: Vec::new(),
-            active_repo_dashboard_id: None,
             revision: 0,
             target_defaults_version: TARGET_DEFAULTS_VERSION,
         }
@@ -723,8 +654,6 @@ mod tests {
             motion: "full".into(),
             reduce_motion: false,
             landing_view: "start".into(),
-            repo_dashboard_entries: Vec::new(),
-            active_repo_dashboard_id: None,
             revision: 0,
             target_defaults_version: TARGET_DEFAULTS_VERSION,
         };
@@ -976,8 +905,6 @@ mod tests {
             motion: "full".into(),
             reduce_motion: false,
             landing_view: "start".into(),
-            repo_dashboard_entries: Vec::new(),
-            active_repo_dashboard_id: None,
             revision: 0,
             target_defaults_version: TARGET_DEFAULTS_VERSION,
         };
@@ -999,8 +926,6 @@ mod tests {
             motion: "full".into(),
             reduce_motion: false,
             landing_view: "start".into(),
-            repo_dashboard_entries: Vec::new(),
-            active_repo_dashboard_id: None,
             revision: 0,
             target_defaults_version: TARGET_DEFAULTS_VERSION,
         };
@@ -1350,11 +1275,45 @@ mod tests {
         normalize_for_save(&mut settings).expect("save normalization");
         assert_eq!(settings.landing_view, "start");
 
-        for view in ["start", "repo-dashboard", "prompts", "library"] {
+        for view in ["start", "prompts", "library"] {
             settings.landing_view = view.into();
             normalize_for_save(&mut settings).expect("save normalization");
             assert_eq!(settings.landing_view, view);
         }
+
+        settings.landing_view = "repo-dashboard".into();
+        normalize_for_save(&mut settings).expect("save normalization");
+        assert_eq!(settings.landing_view, "start");
+    }
+
+    #[test]
+    fn legacy_settings_file_with_repo_dashboard_data_loads_and_drops_it_on_save() {
+        with_temp_home(|dir| {
+            let mut json = serde_json::to_value(AppSettings::default()).expect("serialize");
+            let object = json.as_object_mut().expect("settings object");
+            object.insert("landing_view".into(), serde_json::json!("repo-dashboard"));
+            object.insert(
+                "repo_dashboard_entries".into(),
+                serde_json::json!([
+                    { "id": "r1", "label": "Repo", "path": "/tmp/repo", "default_branch": "main" }
+                ]),
+            );
+            object.insert("active_repo_dashboard_id".into(), serde_json::json!("r1"));
+            write_settings_file(dir, &json.to_string());
+
+            let loaded = get_settings_snapshot().expect("snapshot").settings;
+            assert_eq!(loaded.landing_view, "start");
+
+            // The next write persists the normalized view and no longer carries the removed fields.
+            save(loaded).expect("save");
+            let on_disk: serde_json::Value = serde_json::from_str(
+                &fs::read_to_string(settings_path_for_home(dir)).expect("read settings"),
+            )
+            .expect("parse settings");
+            assert_eq!(on_disk["landing_view"], "start");
+            assert!(on_disk.get("repo_dashboard_entries").is_none());
+            assert!(on_disk.get("active_repo_dashboard_id").is_none());
+        });
     }
 
     #[test]

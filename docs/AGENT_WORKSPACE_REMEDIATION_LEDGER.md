@@ -1,6 +1,6 @@
 # Agent Workspace Remediation Ledger
 
-Remediation record. The June 2026 sections below are historical (audit input `agent-workspace-deep-audit-2026-06-06.md`, which is not stored in the repository). The October 2026 overhaul section is the current state; where the two disagree, October wins.
+Remediation record. The June 2026 sections below are historical (audit input `agent-workspace-deep-audit-2026-06-06.md`, which is not stored in the repository). The October 2026 overhaul section is the current state; where the two disagree, October wins. The Repo Dashboard, and the Prompt Builder's repository context that depended on it, were removed afterwards; entries below that name them record what was true at the time.
 
 ## 2026-10 overhaul (branch `feat/hugrverk-overhaul`, from `main` at `66768375`)
 
@@ -130,11 +130,8 @@ Operator must run before sharing builds:
 - [ ] App launch; Start and Workspace health
 - [ ] Library document, agent, and OpenCode config source switching
 - [ ] Save and dirty-state behavior after fast selection changes
-- [ ] Repo Dashboard repository save/import then immediate theme or target change
-- [ ] Prompt Builder repository list refresh
 - [ ] Fenced code blocks and copy controls
 - [ ] Small, medium, and large font settings
-- [ ] Repo Dashboard refresh loads the complete locally available commit history, including repositories with more than 500 commits
 - [ ] No console errors; no credential-bearing output
 
 ## Deferred / blocked (no further autonomous work)

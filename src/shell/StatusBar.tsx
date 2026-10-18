@@ -67,7 +67,7 @@ export function StatusBar({ viewLabel, right }: StatusBarProps) {
         {mode === "NORMAL" && (
           <>
             <span>
-              <Kbd>1</Kbd>–<Kbd>9</Kbd> tab
+              <Kbd>1</Kbd>–<Kbd>8</Kbd> tab
             </span>
             <span>
               <Kbd>h</Kbd>

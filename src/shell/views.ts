@@ -8,7 +8,6 @@ export type AppView =
   | "cursor"
   | "claude"
   | "library"
-  | "repo-dashboard"
   | "prompts"
   | "settings";
 
@@ -34,7 +33,7 @@ const HARNESS_SHORT: Record<InstallAgent, string> = {
   claude: "cl",
 };
 
-/** Tab order: workspace, harnesses, library, repo, prompts, settings. */
+/** Tab order: workspace, harnesses, library, prompts, settings. */
 export const VIEW_DEFS: readonly ViewDef[] = [
   { id: "start", label: "Workspace", tab: "workspace", short: "ws", command: "workspace", aliases: ["start", "ws"] },
   ...HARNESS_NAV_ORDER.map((harness): ViewDef => ({
@@ -47,7 +46,6 @@ export const VIEW_DEFS: readonly ViewDef[] = [
     harness,
   })),
   { id: "library", label: "Library", tab: "library", short: "lib", command: "library", aliases: ["lib"] },
-  { id: "repo-dashboard", label: "Repo Dashboard", tab: "repo", short: "repo", command: "repo", aliases: ["repo-dashboard", "dashboard"] },
   { id: "prompts", label: "Prompt Builder", tab: "prompts", short: "pr", command: "prompts", aliases: ["prompt-builder"] },
   { id: "settings", label: "Settings", tab: "settings", short: "set", command: "settings", aliases: [] },
 ];

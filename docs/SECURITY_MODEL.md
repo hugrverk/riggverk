@@ -6,7 +6,7 @@
 - **Writes are explicit.** Install or Update shows an artifact-level plan (create, update, remove, conflict rows) and writes only after the user presses `y`. Uninstall and rollback show a preview or dry run and ask for confirmation. Library saves write only the selected workspace file. Settings are an app preference and autosave. Nothing is written on launch.
 - **Target toggles gate Install.** A surface whose target toggle or harness is off is excluded from preview, apply, and status; the backend rejects it even if a stale request names it.
 - **No credential use by the app.** The app does not authenticate with, intentionally extract, log, transmit, or expose credential-like values. Allowlisted config files and their backups can contain such values because complete bytes may need to be preserved and restored; that data stays local and is read only for bounded parsing, comparison, merge, and rollback.
-- **No remote control.** The app accepts no remote commands, webhooks, or external IPC. The only network access is the Repo Dashboard, described below. No telemetry, no analytics, no cloud service, no AI model.
+- **No remote control.** The app accepts no remote commands, webhooks, or external IPC. The app makes no network requests. No telemetry, no analytics, no cloud service, no AI model.
 - **No unrelated credential surfaces.** The app does not inspect `.env` files, private keys, browser profiles, sessions, trust databases, keychains, or personal files outside the surfaces below.
 
 ## What the app writes
@@ -64,28 +64,13 @@ OpenCode agent permissions are composed from `templates/opencode.policy.json` pl
 
 Managed writes (Install, uninstall, rollback, backups) reject symlinked targets, symlinked parent chains, and dangling symlinks. Skill discovery rejects symlinked skill roots, groups, and directories. Library document, rules, and config reads and writes enforce workspace containment and refuse symlinks; the custom doc listing skips them.
 
-## Repo Dashboard
+## Git
 
-The Repo Dashboard is the one feature that is not read-only and touches the network. For a repository you select it runs:
+The status panel runs read-only git in the workspace root: `git rev-parse`, `branch`, `status`, and `log`. Nothing fetches, pushes, or contacts a remote.
 
-- `git fetch --quiet --prune -- origin <branch>` (writes remote-tracking refs and `FETCH_HEAD` in that repository's `.git`),
-- `git rev-parse`, `status`, and `log` (local),
-- `gh auth status`, `gh pr list`, and `gh issue list` (optional enrichment, bounded by `--limit`).
+Neutralized for every git call: `core.fsmonitor` (forced off), `core.hooksPath` (empty), `GIT_OPTIONAL_LOCKS=0`, `GIT_TERMINAL_PROMPT=0`, a timeout, a process-group kill, and capped output.
 
-Fetch and `gh` use your own git credential helpers, SSH agent, and `gh` login; the app never reads those credentials.
-
-The dashboard is for repositories you trust. It reduces, but does not remove, what a repository can run through its own `.git/config` and `.gitattributes`.
-
-Neutralized for every git call: `core.fsmonitor` (forced off), `core.hooksPath` (empty), `GIT_OPTIONAL_LOCKS=0`, `GIT_TERMINAL_PROMPT=0`, branch names validated and passed after `--`, the repository top level required, a timeout, a process-group kill, and capped output.
-
-Neutralized for the fetch only:
-
-- `remote.origin.uploadpack` (the fetch passes `--upload-pack=git-upload-pack`; `-c` does not beat repository config for this key),
-- `core.sshCommand` (forced to your system or global value, else `GIT_SSH`, else `ssh`; a `GIT_SSH_COMMAND` you export still wins),
-- `core.gitProxy` (`GIT_PROXY_COMMAND` is set empty unless you export one),
-- transports (`GIT_ALLOW_PROTOCOL=https:http:ssh:git` unless you export one), which blocks `ext::` and local-path origins. A local-path or helper-based origin is not fetched; the dashboard shows the cached ref or the local checkout with a warning.
-
-Still honored from repository config: filter drivers (`filter.<name>.clean` and `process`, which `git status` runs for modified files that a `.gitattributes` rule selects; no filter-free dirty check gives the same answer), credential helpers (`credential.helper`), `url.<base>.insteadOf` rewrites, `core.alternateRefsCommand`, and any other key not listed above. Open only trusted repositories.
+Still honored from repository config: filter drivers (`filter.<name>.clean` and `process`, which `git status` runs for modified files that a `.gitattributes` rule selects; no filter-free dirty check gives the same answer) and any other key not listed above. Treat a workspace you did not create as untrusted.
 
 ## Scripts
 
@@ -98,14 +83,14 @@ The CLI scripts in `scripts/` are for operators and are not called by the app (e
 - `.env` files or arbitrary secret environment values. The app reads documented operational variables (workspace, backup, Codex home, skill roots, Playwright, XDG, `HOME`, `PATH`); their values must not be printed or persisted as user content.
 - Private keys, cookies, or credential stores.
 - Browser profiles, bookmarks, or saved passwords.
-- System keychains, SSH agent state, or GPG state (git and `gh` may use them on their own during Repo Dashboard calls).
+- System keychains, SSH agent state, or GPG state.
 - IDE authentication state, tokens, sessions, or trust databases.
 - Unrelated IDE settings or MCP server payloads outside the allowlisted Cursor MCP entry.
-- Project `.git/` directories, except the Repo Dashboard commands above.
+- Project `.git/` directories, except the read-only git status of the workspace root (see Git).
 
 ## Process output
 
-Command output is redacted for display and capped at 16 MB per stream. Helper subprocesses run with a 120 s default timeout and Repo Dashboard calls with their own; a timeout kills the whole process group. The release check gets a longer limit.
+Command output is redacted for display and capped at 16 MB per stream. Helper subprocesses run with a 120 s default timeout; a timeout kills the whole process group. The release check gets a longer limit.
 
 ## Release verification
 

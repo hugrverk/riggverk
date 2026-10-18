@@ -130,7 +130,7 @@ describe("SettingsView radio groups", () => {
     const { props, rerenderFrame } = renderSettings();
     expect(radios("Theme").map(radio => radio.tabIndex)).toEqual([0, -1, -1]);
     expect(radios("Theme").map(radio => radio.getAttribute("aria-checked"))).toEqual(["true", "false", "false"]);
-    expect(radios("Landing page").map(radio => radio.tabIndex)).toEqual([0, -1, -1, -1]);
+    expect(radios("Landing page").map(radio => radio.tabIndex)).toEqual([0, -1, -1]);
 
     rerenderFrame(<SettingsView {...props} appSettings={{ ...props.appSettings!, appearance: "system" }} />);
     expect(radios("Theme").map(radio => radio.tabIndex)).toEqual([-1, -1, 0]);
@@ -138,8 +138,8 @@ describe("SettingsView radio groups", () => {
 
   it("falls back to the first option as tab stop when the saved value is not offered", () => {
     renderSettings({ appSettings: { ...defaultSettings(), landing_view: "codex" } });
-    expect(radios("Landing page").map(radio => radio.getAttribute("aria-checked"))).toEqual(["false", "false", "false", "false"]);
-    expect(radios("Landing page").map(radio => radio.tabIndex)).toEqual([0, -1, -1, -1]);
+    expect(radios("Landing page").map(radio => radio.getAttribute("aria-checked"))).toEqual(["false", "false", "false"]);
+    expect(radios("Landing page").map(radio => radio.tabIndex)).toEqual([0, -1, -1]);
   });
 
   it("moves and selects with the arrow keys, wrapping at both ends", () => {

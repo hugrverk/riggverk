@@ -95,7 +95,7 @@ The app reads workspace files and displays their state. It does not:
 - Create GitHub remotes or manage auth
 - Push to remotes
 - Run `git pull` or other Git commands for you
-- Look at Git state in the workspace (the Repo Dashboard reads other repositories you select, and runs `git fetch` there)
+- Look at Git state in the workspace
 
 Use your normal Git workflow (CLI, GitHub Desktop, IDE) to manage version history.
 

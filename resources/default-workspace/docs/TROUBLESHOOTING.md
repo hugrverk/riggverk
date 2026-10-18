@@ -109,12 +109,6 @@ The Bash scripts support macOS and Linux. On Git Bash or MSYS they refuse to run
 
 Without `--apply` they write nothing.
 
-## Repo Dashboard warnings
-
-- **Could not fetch latest documentation from origin**: `git fetch` failed (offline, no access, no `origin`). The dashboard shows the cached remote ref.
-- **gh**: not installed or not signed in. Run `gh auth login` yourself; the dashboard only reads.
-- A repository is processed with its own git config. Open only repositories you trust; a refresh runs `git fetch --prune` with your credentials.
-
 ## Release-check unavailable
 
 The bundled workspace has no `scripts/release-check.sh`, so **release-check** is disabled. Run `./scripts/release-check.sh` from the app repository checkout.

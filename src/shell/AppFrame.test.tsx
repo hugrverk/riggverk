@@ -44,7 +44,7 @@ describe("AppFrame", () => {
       expect(onSwitchView).toHaveBeenLastCalledWith("opencode");
       press(document.body, "6");
       expect(onSwitchView).toHaveBeenLastCalledWith("library");
-      press(document.body, "9");
+      press(document.body, "8");
       expect(onSwitchView).toHaveBeenLastCalledWith("settings");
     });
 

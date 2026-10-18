@@ -1902,44 +1902,6 @@ step "Prompt Builder template contract"
 bash scripts/run-ts-check.sh scripts/check-prompt-loops-templates.ts
 printf '  Prompt Builder skill-weave + clean prompt-block checks ok\n'
 
-step "Prompt Builder context handoff contract"
-bash scripts/run-ts-check.sh scripts/check-prompt-context-handoff.ts
-printf '  Prompt Builder context handoff formatter/eligibility checks ok\n'
-
-step "Repo Dashboard model and parser contracts"
-npm run check:repo-dashboard-contracts
-bash scripts/run-ts-check.sh scripts/check-repo-dashboard-model.ts
-bash scripts/run-ts-check.sh scripts/check-repo-dashboard-docs-parser.ts
-bash scripts/run-ts-check.sh scripts/check-repo-dashboard-entries.ts
-bash scripts/run-ts-check.sh scripts/check-repo-dashboard-markdown.ts
-bash scripts/run-ts-check.sh scripts/check-repo-dashboard-docs-workspace.ts
-bash scripts/run-ts-check.sh scripts/check-repo-dashboard-navigation.ts
-if ! search_has_match 'MAX_DOC_CONTENT_BYTES' src-tauri/src/commands/repo_dashboard.rs; then
-  printf 'FAIL: repo dashboard must cap local doc read size\n' >&2
-  exit 1
-fi
-if ! search_has_match 'collect_doc_paths' src-tauri/src/commands/repo_dashboard.rs; then
-  printf 'FAIL: repo dashboard must discover markdown docs\n' >&2
-  exit 1
-fi
-if search_has_match 'buildSourceHealth' src/tools/repoDashboard/model.ts; then
-  printf 'FAIL: repo dashboard must not expose source health helpers\n' >&2
-  exit 1
-fi
-if search_has_match 'Source health' src/tools/repoDashboard/RepoDashboardTool.tsx; then
-  printf 'FAIL: repo dashboard must not render source health\n' >&2
-  exit 1
-fi
-if search_has_match 'hellq|PRIVATE|uxsmedjan|PRIVATE' src/tools/repoDashboard/model.ts; then
-  printf 'FAIL: repo dashboard model must not hardcode personal author patterns\n' >&2
-  exit 1
-fi
-if ! search_has_match 'loadSeqRef' src/tools/repoDashboard/RepoDashboardTool.tsx; then
-  printf 'FAIL: repo dashboard refresh must guard against stale async responses\n' >&2
-  exit 1
-fi
-printf '  Repo Dashboard model/parser/doc-cap/load-seq checks ok\n'
-
 step "UI selected-state and stale selector regressions"
 bash scripts/check-ui-regressions.sh
 

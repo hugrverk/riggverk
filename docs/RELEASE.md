@@ -44,9 +44,9 @@ Before sharing a build, run [APP_RELEASE_SMOKE.md](./APP_RELEASE_SMOKE.md) in th
 - Rollback (`z`) and uninstall with recovery.
 - Workspace picker in Settings.
 - Keyboard layer, tab order, help overlay, command line.
-- Library panes, Prompt Builder, Repo Dashboard.
+- Library panes, Prompt Builder.
 
-Tab order is workspace, codex, opencode, cursor, claude, library, repo, prompts, settings.
+Tab order is workspace, codex, opencode, cursor, claude, library, prompts, settings.
 
 ## Remaining limits
 

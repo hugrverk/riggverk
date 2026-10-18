@@ -1,5 +1,3 @@
-export const NO_REPO_CONTEXT_VALUE = "";
-
 export interface PromptOptionDef {
   id: string;
   label: string;
@@ -79,44 +77,10 @@ export const PROMPT_OPTION_DEFS: readonly PromptOptionDef[] = [
 
 const OPTION_BY_ID = new Map(PROMPT_OPTION_DEFS.map(def => [def.id, def]));
 
-/** Sanitized repo section input for composed prompts (no local paths or raw remotes). */
-export interface PromptRepoContextSection {
-  label: string;
-  repo_slug: string | null;
-  current_branch: string | null;
-  default_branch: string | null;
-  warnings?: readonly string[];
-}
-
 export interface ComposePromptInput {
   basePrompt: string;
-  repoContext?: PromptRepoContextSection | null;
   taskContext?: string;
   selectedOptionIds?: readonly string[];
-}
-
-function displayOrUnknown(value: string | null | undefined): string {
-  const trimmed = value?.trim();
-  return trimmed ? trimmed : "unknown";
-}
-
-function formatRepoContextSection(ctx: PromptRepoContextSection): string {
-  const lines = [
-    "Repository context selected from saved Repo Dashboard entries:",
-    `- Label: ${ctx.label}`,
-    `- Repository: ${displayOrUnknown(ctx.repo_slug)}`,
-    `- Current branch: ${displayOrUnknown(ctx.current_branch)}`,
-    `- Default branch: ${displayOrUnknown(ctx.default_branch)}`,
-  ];
-  if (ctx.repo_slug == null) {
-    lines.push(
-      "- Note: repository identity could not be determined from git; inspect remotes and repo-local docs.",
-    );
-  }
-  lines.push(
-    "The selected repo metadata is only a starting context. Inspect repository reality, repo-local docs, scripts, remotes, and current git state before making claims or edits.",
-  );
-  return lines.join("\n");
 }
 
 function formatTaskContextSection(taskContext: string): string {
@@ -133,16 +97,15 @@ function formatOptionsSection(selectedIds: readonly string[]): string {
 
 /** Pure deterministic composer. Returns exactly basePrompt when nothing is active. */
 export function composePrompt(input: ComposePromptInput): string {
-  const { basePrompt, repoContext, taskContext, selectedOptionIds = [] } = input;
+  const { basePrompt, taskContext, selectedOptionIds = [] } = input;
   const task = taskContext?.trim() ?? "";
   const options = selectedOptionIds.filter(id => OPTION_BY_ID.has(id));
 
-  if (!repoContext && !task && options.length === 0) {
+  if (!task && options.length === 0) {
     return basePrompt;
   }
 
   const sections: string[] = [];
-  if (repoContext) sections.push(formatRepoContextSection(repoContext));
   if (task) sections.push(formatTaskContextSection(task));
   sections.push(basePrompt);
   const optionsBlock = formatOptionsSection(options);
@@ -200,13 +163,8 @@ export function isOptionDisabled(
 }
 
 export function hasActiveComposerState(input: {
-  repoEntryId: string;
   taskContext: string;
   selectedOptionIds: ReadonlySet<string>;
 }): boolean {
-  return (
-    input.repoEntryId !== NO_REPO_CONTEXT_VALUE ||
-    input.taskContext.trim().length > 0 ||
-    input.selectedOptionIds.size > 0
-  );
+  return input.taskContext.trim().length > 0 || input.selectedOptionIds.size > 0;
 }
