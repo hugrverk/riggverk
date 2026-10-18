@@ -3273,26 +3273,6 @@
       "action": "update"
     },
     {
-      "identity": "workspace:file:templates/prompts/goal-prompt.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:3e2e9ddf59caf6ce71ef132f786f68f2ee8b447af69c387d4db5a8c618b461d3"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:templates/prompts/prompt.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:1ba87b4e299b686a60669dcef7d8440589cbec96423f7be1286de1a90730d3fe"
-      ],
-      "action": "update"
-    },
-    {
       "identity": "workspace:file:templates/rules/claude.md",
       "path_classes": [
         "workspace-doc"

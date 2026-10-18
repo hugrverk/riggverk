@@ -73,8 +73,6 @@ pub(super) fn categories() -> Vec<(&'static str, &'static [&'static str])> {
                 "templates/cursor/agents/browser-qa.md",
                 "templates/cursor/agents/repo-scout.md",
                 "templates/cursor/agents/inspector.md",
-                "templates/prompts/prompt.md",
-                "templates/prompts/goal-prompt.md",
             ],
         ),
         (
