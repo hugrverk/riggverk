@@ -40,11 +40,13 @@ pub(super) struct CliVersion {
     pub major: u32,
 }
 
-/// The first `MAJOR.MINOR.PATCH[-pre][+build]` token of `output`, with an optional leading `v`.
-/// Anything else in the output is ignored and never kept.
+/// The first `MAJOR.MINOR.PATCH[-pre][+build]` token of `output`, with an optional leading `v` and
+/// an optional full stop after it (`GitHub Copilot CLI 1.0.98.`). Anything else in the output is
+/// ignored and never kept.
 pub(super) fn parse_version(output: &str) -> Option<CliVersion> {
     output.split_whitespace().find_map(|token| {
         let token = token.strip_prefix('v').unwrap_or(token);
+        let token = token.strip_suffix('.').unwrap_or(token);
         let (core, suffix) = match token.find(['-', '+']) {
             Some(at) => token.split_at(at),
             None => (token, ""),
@@ -96,6 +98,16 @@ pub(super) enum VersionProbe {
 
 /// `opencode --version`, from a neutral working directory.
 pub(super) fn probe_version(program: &str, timeout: Duration) -> VersionProbe {
+    probe_version_with_env(program, timeout, Vec::new())
+}
+
+/// `<program> --version` with `extra_env` set on the child, for a CLI that needs more than the
+/// app's `PATH` to start (a Node script whose `node` is not on it). Nothing else is run.
+pub(super) fn probe_version_with_env(
+    program: &str,
+    timeout: Duration,
+    extra_env: Vec<(String, String)>,
+) -> VersionProbe {
     let result = run_cmd_bounded(
         program,
         &["--version"],
@@ -104,6 +116,7 @@ pub(super) fn probe_version(program: &str, timeout: Duration) -> VersionProbe {
             timeout: Some(timeout),
             stdout_cap: OUTPUT_CAP,
             stderr_cap: OUTPUT_CAP,
+            extra_env,
             ..BoundedCmdOptions::default()
         },
     );
@@ -273,6 +286,18 @@ mod tests {
             Some(("2.1.0-beta.4+build.7".into(), 2))
         );
         assert_eq!(version("0.15.31"), Some(("0.15.31".into(), 0)));
+    }
+
+    #[test]
+    fn a_full_stop_after_the_version_is_not_part_of_it() {
+        // `copilot --version` prints two lines and ends the first with a full stop.
+        let copilot = "GitHub Copilot CLI 1.0.98.\nRun 'copilot update' to check for updates.\n";
+        assert_eq!(version(copilot), Some(("1.0.98".into(), 1)));
+        assert_eq!(version("v2.0.1."), Some(("2.0.1".into(), 2)));
+        // One full stop, and only after a complete version.
+        assert_eq!(version("1.0.98.."), None);
+        assert_eq!(version("1.0."), None);
+        assert_eq!(version("1.0.98.1"), None);
     }
 
     #[test]

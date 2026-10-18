@@ -8,6 +8,10 @@
 //!   are byte for byte equal that is harmless.
 //! - Cursor may list each copy (not verified for every version).
 //! - Claude Code reads one folder, so a skill has one copy.
+//! - Copilot CLI, Pi and Kilo keep one copy per name, chosen by folder order (see
+//!   [`crate::skill_roots::readers`]): Copilot's `~/.copilot/skills` beats `~/.agents/skills`, Pi's
+//!   agent folder beats `~/.agents/skills` (and says so), and Kilo ranks `~/.claude/skills`, then
+//!   `~/.agents/skills`, then `~/.kilo/skills`, the last one winning.
 //!
 //! The scan looks at `<folder>/<dir>/SKILL.md` for the direct, non-hidden subfolders of each
 //! folder a harness reads, and at nothing else: no other file of a skill is opened. It is bounded
@@ -25,7 +29,7 @@ use serde::Serialize;
 use crate::agent_targets::HarnessId;
 use crate::artifact_registry::{ArtifactId, SkillName};
 use crate::managed_state::{artifact_identity, ManagedArtifactRecord};
-use crate::skill_roots::{readers, ReadFolder, SkillRoot};
+use crate::skill_roots::{readers, resolves_duplicates_by_folder_order, ReadFolder, SkillRoot};
 
 /// A `SKILL.md` larger than this is not read (a skill the app ships is a fraction of it).
 pub const MAX_SKILL_MD_BYTES: u64 = 1024 * 1024;
@@ -68,11 +72,15 @@ pub enum SkillLoadFlag {
     PlainMentionAmbiguous,
     /// OpenCode 1.x keeps one copy per name, and which one varies between runs
     WinnerNondeterministic,
-    /// OpenCode with several byte-identical copies: noisy in its log, harmless, so information
-    /// only and no warning
+    /// OpenCode, Copilot, Pi or Kilo with several byte-identical copies: noisy in a log or a
+    /// diagnostic at most, harmless, so information only and no warning
     DuplicateIdentical,
     /// Cursor may list every copy; not verified for every Cursor version
     PossibleDuplicate,
+    /// Copilot, Pi and Kilo load the copy in the folder they rank highest and hide the others,
+    /// with at most a log line or a diagnostic. The copies differ, so the hidden one may not be
+    /// the one the user expects.
+    ShadowedByFolderOrder,
     /// At least one of several copies is the user's own: the app cannot fix it
     ForeignCopy,
 }
@@ -83,8 +91,9 @@ pub struct SkillLoad {
     pub name: String,
     /// Every copy the harness can reach, in the order it reads its folders
     pub copies: Vec<SkillCopy>,
-    /// Index into `copies` of the copy that is loaded when there is only one candidate; `None`
-    /// when the harness loads several or the choice cannot be told
+    /// Index into `copies` of the copy that is loaded when there is only one candidate, or when
+    /// the harness ranks its folders; `None` when the harness loads several or the choice cannot
+    /// be told
     pub winner: Option<usize>,
     pub flags: Vec<SkillLoadFlag>,
 }
@@ -134,7 +143,7 @@ impl FolderPaths {
         for folder in ReadFolder::ALL {
             let path = match folder.root() {
                 Some(root) => root.path(home).ok(),
-                None => Some(home.join(".codex/skills")),
+                None => folder.fixed_path(home),
             };
             if let Some(path) = path {
                 paths.insert(folder, path);
@@ -154,6 +163,9 @@ impl FolderPaths {
                 (ReadFolder::DotCodex, ".codex/skills"),
                 (ReadFolder::OpenCode, ".config/opencode/skills"),
                 (ReadFolder::Cursor, ".cursor/skills"),
+                (ReadFolder::Copilot, ".copilot/skills"),
+                (ReadFolder::PiAgent, ".pi/agent/skills"),
+                (ReadFolder::Kilo, ".kilo/skills"),
             ]
             .into_iter()
             .map(|(folder, rel)| (folder, home.join(rel)))
@@ -424,6 +436,29 @@ fn flags_for(harness: HarnessId, copies: &[SkillCopy]) -> Vec<SkillLoadFlag> {
         }
         HarnessId::Cursor => vec![SkillLoadFlag::PossibleDuplicate],
         HarnessId::Claude => Vec::new(),
+        HarnessId::Copilot | HarnessId::Pi | HarnessId::Kilo => {
+            let same = copies.windows(2).all(|pair| pair[0].hash == pair[1].hash);
+            vec![if same {
+                SkillLoadFlag::DuplicateIdentical
+            } else {
+                SkillLoadFlag::ShadowedByFolderOrder
+            }]
+        }
+    }
+}
+
+/// Index of the copy `harness` loads, when it can be told. A single copy is the one. A harness
+/// that ranks its folders loads the first copy (they are listed in folder order), unless the
+/// first two sit in one folder, where nothing tells their order.
+fn winner_for(harness: HarnessId, copies: &[SkillCopy]) -> Option<usize> {
+    match copies {
+        [_] => Some(0),
+        [first, second, ..]
+            if resolves_duplicates_by_folder_order(harness) && first.folder != second.folder =>
+        {
+            Some(0)
+        }
+        _ => None,
     }
 }
 
@@ -483,7 +518,7 @@ pub fn effective_skill_loads(
             .into_iter()
             .map(|(name, copies)| SkillLoad {
                 flags: flags_for(harness, &copies),
-                winner: (copies.len() == 1).then_some(0),
+                winner: winner_for(harness, &copies),
                 name,
                 copies,
             })
@@ -759,6 +794,167 @@ mod tests {
         assert_eq!(
             flags(&loads, U, "beta"),
             vec![SkillLoadFlag::PossibleDuplicate]
+        );
+    }
+
+    const P: HarnessId = HarnessId::Copilot;
+    const I: HarnessId = HarnessId::Pi;
+    const K: HarnessId = HarnessId::Kilo;
+
+    fn folders_of(loads: &EffectiveSkillLoads, harness: HarnessId) -> Vec<&str> {
+        of(loads, harness)
+            .folders
+            .iter()
+            .map(|folder| folder.path.as_str())
+            .collect()
+    }
+
+    fn copy_folders(load: &SkillLoad) -> Vec<ReadFolder> {
+        load.copies.iter().map(|copy| copy.folder).collect()
+    }
+
+    #[test]
+    fn each_light_harness_lists_the_folders_it_reads_in_precedence_order() {
+        let fixture = Fixture::new("light-folders");
+        let loads = fixture.loads(&[P, I, K]);
+        assert_eq!(
+            folders_of(&loads, P),
+            ["~/.copilot/skills", "~/.agents/skills"]
+        );
+        assert_eq!(
+            folders_of(&loads, I),
+            ["~/.pi/agent/skills", "~/.agents/skills"]
+        );
+        assert_eq!(
+            folders_of(&loads, K),
+            ["~/.kilo/skills", "~/.agents/skills", "~/.claude/skills"]
+        );
+    }
+
+    #[test]
+    fn copilot_and_pi_do_not_read_claude_skills_but_kilo_does() {
+        let fixture = Fixture::new("light-claude");
+        fixture.skill(".claude/skills", "alpha", &fixture.current("alpha"));
+        let loads = fixture.loads(&[P, I, K]);
+        assert!(of(&loads, P).skills.is_empty());
+        assert!(of(&loads, I).skills.is_empty());
+        let alpha = skill(of(&loads, K), "alpha");
+        assert_eq!(copy_folders(alpha), [ReadFolder::Claude]);
+        assert_eq!(alpha.winner, Some(0));
+    }
+
+    #[test]
+    fn copilot_loads_its_own_folder_over_agents_skills() {
+        let fixture = Fixture::new("copilot-two");
+        let (older, _guard) = shipped_alpha_v1();
+        fixture.skill(".agents/skills", "alpha", &older);
+        fixture.skill(".copilot/skills", "alpha", &fixture.current("alpha"));
+        let loads = fixture.loads(&[P]);
+        let alpha = skill(of(&loads, P), "alpha");
+        assert_eq!(
+            copy_folders(alpha),
+            [ReadFolder::Copilot, ReadFolder::Agents],
+            "highest precedence first"
+        );
+        assert_eq!(alpha.winner, Some(0));
+        assert!(alpha.copies[0].current && !alpha.copies[1].current);
+        assert_eq!(alpha.flags, vec![SkillLoadFlag::ShadowedByFolderOrder]);
+    }
+
+    #[test]
+    fn pi_loads_its_agent_folder_over_agents_skills() {
+        let fixture = Fixture::new("pi-two");
+        let (older, _guard) = shipped_alpha_v1();
+        fixture.skill(".pi/agent/skills", "alpha", &older);
+        fixture.skill(".agents/skills", "alpha", &fixture.current("alpha"));
+        let loads = fixture.loads(&[I]);
+        let alpha = skill(of(&loads, I), "alpha");
+        assert_eq!(
+            copy_folders(alpha),
+            [ReadFolder::PiAgent, ReadFolder::Agents]
+        );
+        // The agent folder wins even though its copy is the older one: that is the problem.
+        assert_eq!(alpha.winner, Some(0));
+        assert!(!alpha.copies[0].current);
+        assert_eq!(alpha.flags, vec![SkillLoadFlag::ShadowedByFolderOrder]);
+    }
+
+    #[test]
+    fn kilo_ranks_claude_below_agents_below_its_own_folder_and_the_last_wins() {
+        let fixture = Fixture::new("kilo-three");
+        let (older, _guard) = shipped_alpha_v1();
+        fixture.skill(".claude/skills", "alpha", &older);
+        fixture.skill(".agents/skills", "alpha", &older);
+        fixture.skill(".kilo/skills", "alpha", &fixture.current("alpha"));
+        let loads = fixture.loads(&[K]);
+        let alpha = skill(of(&loads, K), "alpha");
+        assert_eq!(
+            copy_folders(alpha),
+            [ReadFolder::Kilo, ReadFolder::Agents, ReadFolder::Claude]
+        );
+        assert_eq!(alpha.winner, Some(0));
+        assert_eq!(alpha.copies[0].path, "~/.kilo/skills/alpha");
+        assert_eq!(alpha.flags, vec![SkillLoadFlag::ShadowedByFolderOrder]);
+
+        // Without the folder of its own, ~/.agents/skills outranks ~/.claude/skills.
+        fs::remove_file(fixture.home.join(".kilo/skills/alpha/SKILL.md")).unwrap();
+        let loads = fixture.loads(&[K]);
+        let alpha = skill(of(&loads, K), "alpha");
+        assert_eq!(
+            copy_folders(alpha),
+            [ReadFolder::Agents, ReadFolder::Claude]
+        );
+        assert_eq!(alpha.winner, Some(0));
+    }
+
+    #[test]
+    fn identical_copies_in_the_folders_the_app_installs_into_are_information_only() {
+        // What the app itself creates: a byte-identical copy in ~/.claude/skills and ~/.agents/skills.
+        let fixture = Fixture::new("light-identical");
+        fixture.skill(".claude/skills", "alpha", &fixture.current("alpha"));
+        fixture.skill(".agents/skills", "alpha", &fixture.current("alpha"));
+        let loads = fixture.loads(&[P, I, K]);
+        // Copilot and Pi only see ~/.agents/skills: one copy, nothing to report.
+        for harness in [P, I] {
+            let alpha = skill(of(&loads, harness), "alpha");
+            assert_eq!(alpha.copies.len(), 1);
+            assert!(alpha.flags.is_empty(), "{harness:?}");
+        }
+        let alpha = skill(of(&loads, K), "alpha");
+        assert_eq!(alpha.copies.len(), 2);
+        assert_eq!(alpha.flags, vec![SkillLoadFlag::DuplicateIdentical]);
+        assert_eq!(alpha.winner, Some(0));
+        assert_eq!(alpha.copies[0].folder, ReadFolder::Agents);
+        assert!(loads.foreign_duplicates.is_empty());
+    }
+
+    #[test]
+    fn two_copies_in_one_folder_of_a_ranking_harness_have_no_known_winner() {
+        let fixture = Fixture::new("light-same-folder");
+        fixture.skill(".kilo/skills", "alpha", &fixture.current("alpha"));
+        fixture.skill(".kilo/skills", "alpha-again", &fixture.current("alpha"));
+        let loads = fixture.loads(&[K]);
+        let alpha = skill(of(&loads, K), "alpha");
+        assert_eq!(alpha.copies.len(), 2);
+        assert_eq!(alpha.winner, None);
+    }
+
+    #[test]
+    fn a_light_harness_reports_a_skill_of_the_users_as_foreign() {
+        let fixture = Fixture::new("light-foreign");
+        fixture.skill(".copilot/skills", "mine", "---\nname: mine\n---\nv1\n");
+        fixture.skill(".agents/skills", "mine", "---\nname: mine\n---\nv2\n");
+        let loads = fixture.loads(&[P]);
+        let mine = skill(of(&loads, P), "mine");
+        assert_eq!(mine.flags, vec![SkillLoadFlag::ForeignCopy]);
+        assert_eq!(mine.winner, Some(0));
+        assert_eq!(
+            loads
+                .foreign_duplicates
+                .iter()
+                .map(|dup| (dup.name.as_str(), dup.harnesses.clone()))
+                .collect::<Vec<_>>(),
+            vec![("mine", vec![P])]
         );
     }
 
@@ -1151,5 +1347,14 @@ mod tests {
             serde_json::to_value(HarnessId::OpenCode).unwrap(),
             "opencode"
         );
+        assert_eq!(
+            serde_json::to_value(SkillLoadFlag::ShadowedByFolderOrder).unwrap(),
+            "shadowed_by_folder_order"
+        );
+        assert_eq!(
+            serde_json::to_value(ReadFolder::PiAgent).unwrap(),
+            "pi_agent"
+        );
+        assert_eq!(serde_json::to_value(HarnessId::Kilo).unwrap(), "kilo");
     }
 }

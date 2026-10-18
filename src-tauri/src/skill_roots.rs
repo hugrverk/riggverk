@@ -18,7 +18,7 @@ use crate::agent_targets::HarnessId;
 pub enum SkillRoot {
     /// `~/.claude/skills` (`CLAUDE_SKILLS_PATH` when set)
     Claude,
-    /// `~/.agents/skills`: read by Codex, OpenCode and Cursor
+    /// `~/.agents/skills`: read by Codex, OpenCode, Cursor, Kilo, Copilot and Pi
     Agents,
     /// `$CODEX_HOME/skills` (`CODEX_SKILLS_PATH` when set). Installed into only when `CODEX_HOME`
     /// is customised; otherwise a folder older versions filled and that is cleaned up.
@@ -106,7 +106,8 @@ fn override_dir(variable: &str, home: &Path) -> Option<PathBuf> {
 }
 
 /// A folder some harness reads skills from. A superset of [`SkillRoot`]: `DotCodex` is read by
-/// Cursor but the app never installs into it.
+/// Cursor, and the light harnesses each have a folder of their own (`Copilot`, `PiAgent`,
+/// `Kilo`); the app never installs into any of them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ReadFolder {
@@ -117,16 +118,25 @@ pub enum ReadFolder {
     DotCodex,
     OpenCode,
     Cursor,
+    /// `~/.copilot/skills`: private to Copilot CLI (`COPILOT_HOME` moves the real one)
+    Copilot,
+    /// `~/.pi/agent/skills`: private to Pi (`PI_CODING_AGENT_DIR` moves the real one)
+    PiAgent,
+    /// `~/.kilo/skills`: private to Kilo
+    Kilo,
 }
 
 impl ReadFolder {
-    pub const ALL: [ReadFolder; 6] = [
+    pub const ALL: [ReadFolder; 9] = [
         ReadFolder::Claude,
         ReadFolder::Agents,
         ReadFolder::CodexHome,
         ReadFolder::DotCodex,
         ReadFolder::OpenCode,
         ReadFolder::Cursor,
+        ReadFolder::Copilot,
+        ReadFolder::PiAgent,
+        ReadFolder::Kilo,
     ];
 
     /// The install root that is this folder, when the app can install into it.
@@ -137,13 +147,35 @@ impl ReadFolder {
             ReadFolder::CodexHome => Some(SkillRoot::CodexHome),
             ReadFolder::OpenCode => Some(SkillRoot::OpenCode),
             ReadFolder::Cursor => Some(SkillRoot::Cursor),
-            ReadFolder::DotCodex => None,
+            ReadFolder::DotCodex | ReadFolder::Copilot | ReadFolder::PiAgent | ReadFolder::Kilo => {
+                None
+            }
+        }
+    }
+
+    /// Where a folder the app never installs into is, below `home`. These locations are fixed:
+    /// the environment variables that move the real folders are not followed.
+    pub fn fixed_path(self, home: &Path) -> Option<PathBuf> {
+        match self {
+            ReadFolder::DotCodex => Some(home.join(".codex/skills")),
+            ReadFolder::Copilot => Some(home.join(".copilot/skills")),
+            ReadFolder::PiAgent => Some(home.join(".pi/agent/skills")),
+            ReadFolder::Kilo => Some(home.join(".kilo/skills")),
+            _ => None,
         }
     }
 }
 
 /// The folders a harness reads personal (global) skills from. `$CODEX_HOME/skills` is deprecated
 /// for Codex but still read (`.system` below it is Codex's own and never touched).
+///
+/// For Copilot, Pi and Kilo the order is their precedence for one skill name, highest first: the
+/// first folder holding a name wins and hides the others (checked against Copilot CLI 1.0.98, Pi
+/// 1.3.0 and Kilo 7.8.12). The other harnesses' order carries no such meaning.
+///
+/// - Copilot CLI reads `~/.agents/skills` and its own `~/.copilot/skills`, not `~/.claude/skills`.
+/// - Pi reads `~/.agents/skills` and `<agent dir>/skills`, not `~/.claude/skills`.
+/// - Kilo reads `~/.claude/skills` and `~/.agents/skills` by default, and `~/.kilo/skills`.
 pub fn readers(harness: HarnessId) -> &'static [ReadFolder] {
     match harness {
         HarnessId::Claude => &[ReadFolder::Claude],
@@ -155,7 +187,20 @@ pub fn readers(harness: HarnessId) -> &'static [ReadFolder] {
             ReadFolder::Claude,
             ReadFolder::DotCodex,
         ],
+        HarnessId::Copilot => &[ReadFolder::Copilot, ReadFolder::Agents],
+        HarnessId::Pi => &[ReadFolder::PiAgent, ReadFolder::Agents],
+        HarnessId::Kilo => &[ReadFolder::Kilo, ReadFolder::Agents, ReadFolder::Claude],
     }
+}
+
+/// Whether `harness` keeps one copy of a skill name found in several of its folders, chosen by
+/// the folder order of [`readers`] (first wins), instead of loading them all or picking one at
+/// random.
+pub fn resolves_duplicates_by_folder_order(harness: HarnessId) -> bool {
+    matches!(
+        harness,
+        HarnessId::Copilot | HarnessId::Pi | HarnessId::Kilo
+    )
 }
 
 /// Whether Codex reads from a customised home: `CODEX_SKILLS_PATH` is set or `CODEX_HOME` is
@@ -172,12 +217,16 @@ pub fn codex_home_is_custom(home: &Path) -> bool {
 ///
 /// 1. Claude enabled: `~/.claude/skills`.
 /// 2. Codex enabled: `$CODEX_HOME/skills` with a customised `CODEX_HOME`, else `~/.agents/skills`.
-/// 3. OpenCode or Cursor enabled while neither `~/.claude/skills` nor `~/.agents/skills` is in
-///    the set: `~/.claude/skills` when Codex is enabled with a customised home (so Codex never
+/// 3. OpenCode, Cursor or Kilo enabled while neither `~/.claude/skills` nor `~/.agents/skills` is
+///    in the set: `~/.claude/skills` when Codex is enabled with a customised home (so Codex never
 ///    reads an installed copy outside its isolated home), else `~/.agents/skills`.
+/// 4. Copilot or Pi enabled, which read `~/.agents/skills` and no other shared folder:
+///    `~/.agents/skills`, unless Codex is enabled with a customised home. Isolation wins there:
+///    the harness is then [`unserved`].
 ///
-/// Every enabled harness then reads at least one installed root, Codex never reads two, and with
-/// a customised `CODEX_HOME` Codex reads no installed copy outside `$CODEX_HOME/skills`.
+/// Every enabled harness then reads at least one installed root, except an [`unserved`] one; Codex
+/// never reads two, and with a customised `CODEX_HOME` Codex reads no installed copy outside
+/// `$CODEX_HOME/skills`.
 pub fn install_roots(enabled: &[HarnessId], codex_custom: bool) -> Vec<SkillRoot> {
     let on = |harness| enabled.contains(&harness);
     let mut roots = Vec::new();
@@ -191,7 +240,7 @@ pub fn install_roots(enabled: &[HarnessId], codex_custom: bool) -> Vec<SkillRoot
             SkillRoot::Agents
         });
     }
-    if (on(HarnessId::OpenCode) || on(HarnessId::Cursor))
+    if (on(HarnessId::OpenCode) || on(HarnessId::Cursor) || on(HarnessId::Kilo))
         && !roots.contains(&SkillRoot::Claude)
         && !roots.contains(&SkillRoot::Agents)
     {
@@ -201,12 +250,30 @@ pub fn install_roots(enabled: &[HarnessId], codex_custom: bool) -> Vec<SkillRoot
             SkillRoot::Agents
         });
     }
+    if (on(HarnessId::Copilot) || on(HarnessId::Pi))
+        && !roots.contains(&SkillRoot::Agents)
+        && !(on(HarnessId::Codex) && codex_custom)
+    {
+        roots.push(SkillRoot::Agents);
+    }
     roots.sort_by_key(|root| {
         SkillRoot::ALL
             .iter()
             .position(|candidate| candidate == root)
     });
     roots
+}
+
+/// The enabled harnesses that read no root [`install_roots`] picks, in [`HarnessId::ALL`] order.
+/// Only Copilot and Pi can be among them, and only while Codex is enabled with a customised home:
+/// that isolation is kept, so no shared folder is installed for them.
+pub fn unserved(enabled: &[HarnessId], codex_custom: bool) -> Vec<HarnessId> {
+    let scope = SkillScope::for_harnesses(enabled, codex_custom);
+    HarnessId::ALL
+        .iter()
+        .copied()
+        .filter(|harness| enabled.contains(harness) && roots_read_by(*harness, &scope).is_empty())
+        .collect()
 }
 
 /// The roots skills are wanted in. Everything else is a root older versions (or a harness that
@@ -306,6 +373,10 @@ mod tests {
     const X: HarnessId = HarnessId::Codex;
     const O: HarnessId = HarnessId::OpenCode;
     const U: HarnessId = HarnessId::Cursor;
+    /// Copilot, Pi and Kilo.
+    const P: HarnessId = HarnessId::Copilot;
+    const I: HarnessId = HarnessId::Pi;
+    const K: HarnessId = HarnessId::Kilo;
 
     /// All 15 non-empty subsets of the four harnesses.
     fn subsets() -> Vec<Vec<HarnessId>> {
@@ -477,6 +548,236 @@ mod tests {
             ]
         );
         assert_eq!(ReadFolder::DotCodex.root(), None);
+    }
+
+    #[test]
+    fn the_light_harnesses_read_what_their_clis_were_seen_to_read() {
+        // Copilot CLI 1.0.98: ~/.agents/skills and ~/.copilot/skills; ~/.claude/skills is not read.
+        assert_eq!(readers(P), &[ReadFolder::Copilot, ReadFolder::Agents]);
+        // Pi 1.3.0: ~/.agents/skills and <agent dir>/skills; ~/.claude/skills is not read.
+        assert_eq!(readers(I), &[ReadFolder::PiAgent, ReadFolder::Agents]);
+        // Kilo 7.8.12 reads ~/.claude/skills and ~/.agents/skills by default (no toggle needed).
+        assert_eq!(
+            readers(K),
+            &[ReadFolder::Kilo, ReadFolder::Agents, ReadFolder::Claude]
+        );
+        for harness in [P, I, K] {
+            assert!(resolves_duplicates_by_folder_order(harness));
+        }
+        for harness in [C, X, O, U] {
+            assert!(!resolves_duplicates_by_folder_order(harness));
+        }
+    }
+
+    #[test]
+    fn folders_the_app_never_installs_into_have_a_fixed_place_below_home() {
+        let home = Path::new("/home/someone");
+        for folder in ReadFolder::ALL {
+            assert_eq!(
+                folder.fixed_path(home).is_some(),
+                folder.root().is_none(),
+                "{folder:?}"
+            );
+        }
+        let fixed = |folder: ReadFolder| folder.fixed_path(home).unwrap();
+        assert_eq!(fixed(ReadFolder::DotCodex), home.join(".codex/skills"));
+        assert_eq!(fixed(ReadFolder::Copilot), home.join(".copilot/skills"));
+        assert_eq!(fixed(ReadFolder::PiAgent), home.join(".pi/agent/skills"));
+        assert_eq!(fixed(ReadFolder::Kilo), home.join(".kilo/skills"));
+        for (folder, name) in [
+            (ReadFolder::Copilot, "copilot"),
+            (ReadFolder::PiAgent, "pi_agent"),
+            (ReadFolder::Kilo, "kilo"),
+        ] {
+            assert_eq!(
+                serde_json::to_string(&folder).unwrap(),
+                format!("\"{name}\"")
+            );
+        }
+    }
+
+    #[test]
+    fn the_light_tier_adds_no_install_root() {
+        // Worst-case transactions are bounded by the roots; the light tier shares the existing ones.
+        assert_eq!(SkillRoot::ALL.len(), 5);
+        assert_eq!(
+            SkillRoot::ALL
+                .iter()
+                .filter(|root| ReadFolder::ALL
+                    .iter()
+                    .any(|folder| folder.root() == Some(**root)))
+                .count(),
+            5
+        );
+    }
+
+    #[test]
+    fn install_roots_for_the_light_tier_follow_the_table() {
+        use SkillRoot::{Agents as F2, Claude as F1, CodexHome as F3};
+        // (enabled, default CODEX_HOME, custom CODEX_HOME, unserved with a custom CODEX_HOME)
+        #[allow(clippy::type_complexity)]
+        let table: Vec<(
+            Vec<HarnessId>,
+            Vec<SkillRoot>,
+            Vec<SkillRoot>,
+            Vec<HarnessId>,
+        )> = vec![
+            (vec![P], vec![F2], vec![F2], vec![]),
+            (vec![I], vec![F2], vec![F2], vec![]),
+            (vec![K], vec![F2], vec![F2], vec![]),
+            (vec![C, I], vec![F1, F2], vec![F1, F2], vec![]),
+            (vec![C, P], vec![F1, F2], vec![F1, F2], vec![]),
+            (vec![C, K], vec![F1], vec![F1], vec![]),
+            (vec![P, I, K], vec![F2], vec![F2], vec![]),
+            (vec![X, I], vec![F2], vec![F3], vec![I]),
+            (vec![X, P], vec![F2], vec![F3], vec![P]),
+            (vec![X, K], vec![F2], vec![F3, F1], vec![]),
+            (vec![C, X, P], vec![F1, F2], vec![F1, F3], vec![P]),
+            (vec![X, O, I], vec![F2], vec![F3, F1], vec![I]),
+            (vec![X, P, I, K], vec![F2], vec![F3, F1], vec![P, I]),
+            (
+                vec![C, X, O, U, P, I, K],
+                vec![F1, F2],
+                vec![F1, F3],
+                vec![P, I],
+            ),
+        ];
+        let sorted = |mut roots: Vec<SkillRoot>| {
+            roots.sort_by_key(|root| SkillRoot::ALL.iter().position(|c| c == root));
+            roots
+        };
+        for (enabled, default, custom, unserved_custom) in table {
+            assert_eq!(
+                install_roots(&enabled, false),
+                sorted(default),
+                "default {}",
+                name(&enabled)
+            );
+            assert_eq!(
+                install_roots(&enabled, true),
+                sorted(custom),
+                "custom {}",
+                name(&enabled)
+            );
+            assert!(unserved(&enabled, false).is_empty(), "{}", name(&enabled));
+            assert_eq!(
+                unserved(&enabled, true),
+                unserved_custom,
+                "custom {}",
+                name(&enabled)
+            );
+        }
+    }
+
+    /// All 127 non-empty subsets of the seven harnesses.
+    fn all_subsets() -> Vec<Vec<HarnessId>> {
+        let all = HarnessId::ALL;
+        assert_eq!(all.len(), 7);
+        (1u16..(1 << all.len()))
+            .map(|mask| {
+                all.iter()
+                    .enumerate()
+                    .filter(|(index, _)| mask & (1 << index) != 0)
+                    .map(|(_, harness)| *harness)
+                    .collect()
+            })
+            .collect()
+    }
+
+    #[test]
+    fn the_invariants_hold_over_every_subset_of_the_seven_harnesses() {
+        let subsets = all_subsets();
+        assert_eq!(subsets.len(), 127);
+        for custom in [false, true] {
+            for subset in &subsets {
+                let label = format!("{} (custom: {custom})", name(subset));
+                let scope = SkillScope::for_harnesses(subset, custom);
+                let roots = scope.roots();
+                let on = |harness: HarnessId| subset.contains(&harness);
+                let read = |harness| roots_read_by(harness, &scope);
+
+                // I1: every enabled harness reads an installed root, except exactly the unserved
+                // ones, and only Copilot and Pi can be unserved, only behind an isolated Codex.
+                let without_root: Vec<HarnessId> = subset
+                    .iter()
+                    .copied()
+                    .filter(|harness| read(*harness).is_empty())
+                    .collect();
+                assert_eq!(without_root, unserved(subset, custom), "I1 {label}");
+                for harness in &without_root {
+                    assert!(
+                        matches!(harness, HarnessId::Copilot | HarnessId::Pi),
+                        "I1 {label}"
+                    );
+                    assert!(custom && on(X), "I1 {label}");
+                }
+
+                // I2 and I3: Codex reads one installed root, and in a customised home only that.
+                if on(X) {
+                    assert_eq!(read(X).len(), 1, "I2 {label}");
+                    if custom {
+                        assert_eq!(read(X), vec![SkillRoot::CodexHome], "I3 {label}");
+                    }
+                }
+
+                // I4: nothing is installed that no enabled harness needs. Besides the roots
+                // rules 1 and 2 give for Claude and Codex, every root is the only one some
+                // harness reads.
+                for root in roots {
+                    let mandated = (*root == SkillRoot::Claude && on(C))
+                        || (on(X)
+                            && *root
+                                == if custom {
+                                    SkillRoot::CodexHome
+                                } else {
+                                    SkillRoot::Agents
+                                });
+                    let needed = subset.iter().any(|harness| read(*harness) == vec![*root]);
+                    assert!(mandated || needed, "I4 {label}: {root:?} in {roots:?}");
+                }
+
+                // I5: how many installed copies a harness can see.
+                for harness in subset {
+                    let most = match harness {
+                        HarnessId::OpenCode | HarnessId::Cursor | HarnessId::Kilo => 2,
+                        _ => 1,
+                    };
+                    assert!(read(*harness).len() <= most, "I5 {label}: {harness:?}");
+                }
+
+                // I6: only the roots that existed before the light tier are ever chosen.
+                assert!(
+                    roots.iter().all(|root| matches!(
+                        root,
+                        SkillRoot::Claude | SkillRoot::Agents | SkillRoot::CodexHome
+                    )),
+                    "I6 {label}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn enabling_a_light_harness_never_takes_an_install_root_away() {
+        // It adds at most one root, the one the light harness itself needs.
+        for custom in [false, true] {
+            for subset in subsets() {
+                let before = install_roots(&subset, custom);
+                for light in [P, I, K] {
+                    let mut with = subset.clone();
+                    with.push(light);
+                    let after = install_roots(&with, custom);
+                    for root in &before {
+                        assert!(
+                            after.contains(root),
+                            "{} + {light:?} (custom: {custom})",
+                            name(&subset)
+                        );
+                    }
+                    assert!(after.len() <= before.len() + 1);
+                }
+            }
+        }
     }
 
     #[test]

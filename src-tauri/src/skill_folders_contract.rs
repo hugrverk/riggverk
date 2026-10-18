@@ -733,6 +733,139 @@ mod tests {
         assert!(env.dest(SkillRoot::Claude, "tdd", "SKILL.md").is_file());
     }
 
+    // ── The light tier: Copilot, Pi and Kilo read shared folders ──
+
+    const P: HarnessId = HarnessId::Copilot;
+    const I: HarnessId = HarnessId::Pi;
+    const K: HarnessId = HarnessId::Kilo;
+
+    #[test]
+    fn enabling_pi_on_a_claude_only_profile_installs_agents_skills_in_one_transaction() {
+        let env = Env::new("light-pi-on");
+        env.enable(&[C]);
+        assert!(env.apply().success);
+        assert_eq!(env.roots_with_files(), vec![SkillRoot::Claude]);
+        let all = catalog();
+
+        // Pi reads ~/.agents/skills and not ~/.claude/skills: it needs a folder of its own.
+        env.enable(&[C, I]);
+        let plan = env.preview();
+        let op = skills_operation(&plan);
+        assert_eq!(
+            op.details,
+            vec![format!(
+                "+ ~/.agents/skills ({} skills, {} files)",
+                all.len(),
+                file_count(&all)
+            )]
+        );
+        let result = env.apply();
+        assert!(result.success, "{}", result.message);
+        assert_eq!(
+            env.roots_with_files(),
+            vec![SkillRoot::Claude, SkillRoot::Agents]
+        );
+        assert!(!env.preview().has_pending_changes);
+
+        let manifest = env.read_manifest(&result.transaction_id);
+        assert_eq!(manifest.operations.len(), file_count(&all));
+        assert!(manifest
+            .operations
+            .iter()
+            .all(|op| op.kind == OperationKind::Create));
+
+        // Rolling back removes exactly what that transaction wrote.
+        let rolled = rollback_setup_transaction(result.transaction_id, false).expect("rollback");
+        assert!(rolled.success, "{}", rolled.message);
+        assert_eq!(env.roots_with_files(), vec![SkillRoot::Claude]);
+        assert!(files_below(&env.root(SkillRoot::Agents)).is_empty());
+    }
+
+    #[test]
+    fn copilot_and_pi_behind_an_isolated_codex_home_are_unserved_and_agents_skills_stays_empty() {
+        let env = Env::new("light-isolated");
+        env.enable(&[X, P, I]);
+        let isolated = env.isolate_codex_home();
+        assert_eq!(crate::skill_roots::unserved(&[X, P, I], true), vec![P, I]);
+
+        let result = env.apply();
+        assert!(result.success, "{}", result.message);
+        assert!(isolated.join("skills/tdd/SKILL.md").is_file());
+        assert_eq!(
+            env.roots_with_files(),
+            vec![SkillRoot::CodexHome],
+            "isolation wins: nothing is installed into ~/.agents/skills for the unserved"
+        );
+        assert!(!env.preview().has_pending_changes);
+    }
+
+    #[test]
+    fn kilo_behind_an_isolated_codex_home_reads_claude_skills() {
+        let env = Env::new("light-kilo-isolated");
+        env.enable(&[X, K]);
+        let isolated = env.isolate_codex_home();
+        assert!(crate::skill_roots::unserved(&[X, K], true).is_empty());
+
+        let result = env.apply();
+        assert!(result.success, "{}", result.message);
+        assert!(isolated.join("skills/tdd/SKILL.md").is_file());
+        assert!(env.dest(SkillRoot::Claude, "tdd", "SKILL.md").is_file());
+        assert!(!env.root(SkillRoot::Agents).exists());
+    }
+
+    #[test]
+    fn kilo_is_served_by_either_shared_folder_and_adds_none_next_to_claude() {
+        for (enabled, folders) in [
+            (vec![K], vec![SkillRoot::Agents]),
+            (vec![C, K], vec![SkillRoot::Claude]),
+            (vec![X, K], vec![SkillRoot::Agents]),
+            (vec![C, X, K], vec![SkillRoot::Claude, SkillRoot::Agents]),
+        ] {
+            let env = Env::new("light-kilo");
+            env.enable(&enabled);
+            let result = env.apply();
+            assert!(result.success, "{enabled:?}: {}", result.message);
+            assert_eq!(env.roots_with_files(), folders, "{enabled:?}");
+        }
+    }
+
+    #[test]
+    fn disabling_pi_removes_the_copies_the_app_owns_and_keeps_an_edited_one() {
+        let env = Env::new("light-pi-off");
+        env.enable(&[C, I]);
+        assert!(env.apply().success);
+        write(
+            &env.dest(SkillRoot::Agents, "tdd", "SKILL.md"),
+            b"my own tdd\n",
+        );
+        write(
+            &env.dest(SkillRoot::Agents, "tdd", "my-notes.md"),
+            b"mine\n",
+        );
+
+        env.enable(&[C]);
+        let plan = env.preview();
+        let op = skills_operation(&plan);
+        assert!(
+            op.details
+                .contains(&"! ~/.agents/skills/tdd (edited, kept)".to_string()),
+            "{:?}",
+            op.details
+        );
+        let result = env.apply();
+        assert!(result.success, "{}", result.message);
+        assert_eq!(
+            files_below(&env.root(SkillRoot::Agents)),
+            BTreeSet::from(["tdd/SKILL.md".to_string(), "tdd/my-notes.md".to_string()]),
+            "the edited copy and the user's file stay; every other copy of the app goes"
+        );
+        assert_eq!(
+            fs::read(env.dest(SkillRoot::Agents, "tdd", "SKILL.md")).unwrap(),
+            b"my own tdd\n"
+        );
+        assert!(files_below(&env.root(SkillRoot::Claude)).len() > 25);
+    }
+
     // ── The folders older versions filled ──
 
     #[test]

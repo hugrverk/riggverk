@@ -713,6 +713,57 @@ mod tests {
     }
 
     #[test]
+    fn a_settings_file_with_the_four_central_harnesses_stays_at_four() {
+        use agent_targets::HarnessId::{Claude, Codex, Cursor, OpenCode};
+        let mut json = serde_json::to_value(AppSettings::default()).expect("serialize defaults");
+        json["enabled_harness_ids"] = serde_json::json!(["codex", "opencode", "claude", "cursor"]);
+        let loaded: AppSettings = serde_json::from_value(json).expect("load settings");
+        assert_eq!(
+            loaded.enabled_harness_ids,
+            vec![Codex, OpenCode, Claude, Cursor]
+        );
+        assert_eq!(
+            loaded.enabled_harness_ids,
+            agent_targets::default_enabled_harness_ids(),
+            "the light tier is opt-in, also for files written before it existed"
+        );
+        // Nothing the four harnesses gate changes: the light tier has no target yet.
+        assert_eq!(
+            loaded.enabled_target_ids,
+            agent_targets::default_enabled_ids()
+        );
+    }
+
+    #[test]
+    fn light_harnesses_load_in_canonical_order_after_the_central_four() {
+        use agent_targets::HarnessId::{Claude, Copilot, Kilo, Pi};
+        let mut json = serde_json::to_value(AppSettings::default()).expect("serialize defaults");
+        json["enabled_harness_ids"] = serde_json::json!(["kilo", "pi", "claude", "copilot", "pi"]);
+        let loaded: AppSettings = serde_json::from_value(json).expect("load settings");
+        assert_eq!(loaded.enabled_harness_ids, vec![Claude, Copilot, Pi, Kilo]);
+        let saved = serde_json::to_value(&loaded).expect("serialize");
+        assert_eq!(
+            saved["enabled_harness_ids"],
+            serde_json::json!(["claude", "copilot", "pi", "kilo"])
+        );
+    }
+
+    #[test]
+    fn a_light_harness_gates_nothing_but_the_shared_skills_surface() {
+        use crate::setup_lifecycle::SetupSurfaceId;
+        let mut settings = AppSettings {
+            enabled_harness_ids: vec![agent_targets::HarnessId::Pi],
+            ..AppSettings::default()
+        };
+        normalize(&mut settings);
+        assert_eq!(
+            enabled_setup_surfaces(&settings),
+            vec![SetupSurfaceId::Skills, SetupSurfaceId::WorkspaceBundle]
+        );
+        assert!(effective_enabled_target_ids(&settings).is_empty());
+    }
+
+    #[test]
     fn empty_enabled_harness_ids_remains_empty_and_preserves_raw_targets() {
         let mut settings = AppSettings {
             enabled_harness_ids: vec![],

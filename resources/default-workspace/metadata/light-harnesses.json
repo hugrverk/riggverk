@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "harnesses": {
+    "copilot": {
+      "label": "Copilot",
+      "cli": { "program": "copilot" }
+    },
+    "pi": {
+      "label": "Pi",
+      "cli": { "program": "pi" }
+    },
+    "kilo": {
+      "label": "Kilo",
+      "cli": { "program": "kilo" }
+    }
+  }
+}
