@@ -453,7 +453,7 @@ where
     };
     Ok(GetSettingsResponse {
         settings,
-        load_warning: warning,
+        load_warning: warning.or_else(crate::app_data_migration::take_startup_warning),
     })
 }
 

@@ -2908,7 +2908,7 @@ mod tests {
             // install where the app-data dir has never been created.
             std::env::set_var(
                 "AGENT_WORKSPACE_BACKUP_DIR",
-                home.join("Library/Application Support/ai.agentworkspace.app/backups")
+                home.join("Library/Application Support/se.hugrverk.riggverk/backups")
                     .to_string_lossy()
                     .as_ref(),
             );

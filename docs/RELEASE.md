@@ -50,7 +50,7 @@ Tab order is workspace, codex, opencode, cursor, claude, library, settings.
 
 ## Installing a local build
 
-The app bundle is `Riggverk.app` (executable `riggverk`, identifier `se.hugrverk.riggverk`). Earlier builds were named `Agent Workspace.app` with a different identifier, so installing Riggverk is not an in-place overwrite: macOS treats it as a separate app. Both read and write the same settings, backups, and workspace, and nothing stops them from running at the same time, so never leave both installed.
+The app bundle is `Riggverk.app` (executable `riggverk`, identifier `se.hugrverk.riggverk`). Earlier builds were named `Agent Workspace.app` with a different identifier, so installing Riggverk is not an in-place overwrite: macOS treats it as a separate app. Nothing stops both from running at the same time, so never leave both installed, and quit the old one before the first launch of Riggverk (it moves the app data, see [App data move](#app-data-move)).
 
 1. Quit the old app (`Agent Workspace`) if it is running.
 2. Build: `npm run tauri build` (`npm run tauri build -- --bundles app` skips the disk image).
@@ -60,9 +60,34 @@ The app bundle is `Riggverk.app` (executable `riggverk`, identifier `se.hugrverk
 
 The old `Agent Workspace.app` that an earlier build left in `src-tauri/target/release/bundle/macos` is harmless, but `scripts/release-size-report.sh` lists it. Delete it or run `cargo clean`.
 
-Nothing moves with the rename. The app support directory (`ai.agentworkspace.app`, holding `settings.json`, the OpenCode model override, and `backups/`) keeps its name on purpose and is not derived from the bundle identifier; see the paths in [SECURITY_MODEL.md](./SECURITY_MODEL.md). The workspace stays at `~/.config/agent-workspace`. The bundle is ad-hoc signed and not notarized, so Gatekeeper and any folder-access prompts apply as for any local build.
+The workspace stays at `~/.config/agent-workspace`. The bundle is ad-hoc signed and not notarized, so Gatekeeper and any folder-access prompts apply as for any local build.
 
-Name manual zips `Riggverk-v<version>-<channel>-macOS.zip`. Release notes for testers who still have the old app must say: quit `Agent Workspace`, move it to the Trash, then install `Riggverk.app`.
+Name manual zips `Riggverk-v<version>-<channel>-macOS.zip`. Release notes for testers who still have the old app must say: quit `Agent Workspace` first, then install and launch `Riggverk.app` (it moves your settings and backups on first launch), then move the old app to the Trash.
+
+## App data move
+
+The first launch of a build with the move renames the app data directory (`settings.json`, the OpenCode model override, `backups/`) from `ai.agentworkspace.app` to `se.hugrverk.riggverk`, next to it: `~/Library/Application Support` on macOS, `${XDG_CONFIG_HOME:-~/.config}` on Linux, `%APPDATA%` on Windows. It is one atomic rename of the whole directory, so contents, modes, and modification times (which order the backup list) are unchanged, and no second copy of an in-flight setup transaction exists. The app adds `.migrated-from.json` (old and new path, app version, time) to it. Nothing is deleted.
+
+- It runs on every launch that runs the app's setup, including `npm run tauri dev`. Do not start a development build with your real home until you are ready for the real data to move.
+- Quit the old `Agent Workspace` first. An old app that writes during the move can leave a partial old directory, and afterwards it starts from defaults in a new old-named directory that Riggverk ignores.
+- If `se.hugrverk.riggverk` already exists it wins and the old directory is left untouched; the two are never merged. An empty one is replaced.
+- An old path that is a symlink or not a directory is not moved or followed. Settings shows a warning once.
+- If the move fails, the app stops at startup with an error naming both paths and the old directory stays in place. Fix the cause (another running copy, permissions) and start the app again.
+
+To keep a copy before the first launch (macOS): `ditto "$HOME/Library/Application Support/ai.agentworkspace.app" "$HOME/riggverk-appdata-copy"`.
+
+To undo the move, quit Riggverk and rename the directory back, then use the old app:
+
+```sh
+# macOS
+mv "$HOME/Library/Application Support/se.hugrverk.riggverk" "$HOME/Library/Application Support/ai.agentworkspace.app"
+# Linux
+mv "${XDG_CONFIG_HOME:-$HOME/.config}/se.hugrverk.riggverk" "${XDG_CONFIG_HOME:-$HOME/.config}/ai.agentworkspace.app"
+# Windows (PowerShell)
+Move-Item "$env:APPDATA\se.hugrverk.riggverk" "$env:APPDATA\ai.agentworkspace.app"
+```
+
+Launching Riggverk again moves it forward again, replacing the leftover `.migrated-from.json`.
 
 ## Remaining limits
 
