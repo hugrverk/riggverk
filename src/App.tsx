@@ -11,6 +11,7 @@ import { useWorkspaceGeneration } from "./lib/useWorkspaceGeneration";
 import { useAppSettingsController } from "./hooks/useAppSettingsController";
 import { useApplyProgress } from "./hooks/useApplyProgress";
 import { useScanOnSuccess } from "./hooks/useScanOnSuccess";
+import { useWhatsNewOnUpgrade } from "./hooks/useWhatsNewOnUpgrade";
 import { useWorkspacePicker } from "./hooks/useWorkspacePicker";
 import { workspaceTaskBlockedMessage } from "./lib/workspaceErrors";
 import { useEffectiveSkillLoads } from "./hooks/useEffectiveSkillLoads";
@@ -271,6 +272,7 @@ function AppShell() {
     setForegroundColor,
     setMotion,
     setLandingView,
+    setLastSeenVersion,
     toggleTarget,
     toggleHarness,
     clearSettingsMsg,
@@ -652,6 +654,8 @@ function AppShell() {
     if (message.ok) notify(message.text, { tone: "ok" });
     else setError(message.text);
   };
+
+  useWhatsNewOnUpgrade({ settings: appSettings, appVersion: APP_VERSION, recordVersion: setLastSeenVersion });
 
   useAppCommands({
     enabledHarnessIds,

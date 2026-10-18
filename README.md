@@ -39,6 +39,8 @@ Release verification:
 
 Do not claim a release check passed unless it was run and completed successfully. See `docs/RELEASE.md`.
 
+Releases are cut locally: `./scripts/release.sh prepare` (CalVer version, notes draft, release PR) and `./scripts/release.sh publish` (build, ad hoc sign, zip, GitHub release). See `docs/RELEASE.md`.
+
 ## Workspace ownership
 
 1. The source repository.
@@ -124,6 +126,7 @@ Stored in `settings.json` under the app support dir; autosaved.
 | `app_font_size` | `"medium"` | `"small"`, `"medium"`, `"large"`, `"extra-large"`. |
 | `motion` | `"full"` | `"full"`, `"subtle"`, or `"off"`. `"off"` stops animations and transitions; the OS reduced-motion preference always counts as `"off"`. Older files with `reduce_motion: true` load as `"off"`; the legacy `reduce_motion` flag is still written beside it. |
 | `landing_view` | `"start"` | View shown on start: `"start"`, `"library"`. |
+| `last_seen_version` | unset | App version whose "what's new" was handled. Set by the app, not in Settings: it records the version on a fresh install and after the overlay is closed on the first launch after an update. `:whatsnew` opens the notes at any time. |
 
 Target toggles gate these surfaces: rules, agents, and config per harness, Cursor agents plus MCP (`cursor_setup`), the rules file (`copilot_rules`, `pi_rules`, `kilo_rules`) and the Playwright MCP entry (`copilot_mcp`, `pi_mcp`, `kilo_mcp`) of each light harness; they only act once their harness is enabled. Two targets are off by default: `codex_config` because it rewrites the Codex approval and sandbox posture, and `kilo_mcp` because Kilo's main config file may hold provider keys. Settings files from before target gating are migrated once: every default stays on, and any target you had enabled or whose surface is already managed stays on, so nothing already installed is dropped. Later additions to the defaults (the light rules targets, then `copilot_mcp` and `pi_mcp`) are added to older files without touching a toggle you switched off. Skills and the workspace bundle are never gated.
 

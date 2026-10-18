@@ -16,3 +16,4 @@ export { StatusBar, type StatusBarProps } from "./StatusBar";
 export { TopLine, type TopLineProps } from "./TopLine";
 export { useAppCommands, type AppCommandDeps } from "./useAppCommands";
 export { VIEW_DEFS, viewDef, visibleViews, type AppView, type ViewDef } from "./views";
+export { WhatsNewOverlay } from "./WhatsNewOverlay";

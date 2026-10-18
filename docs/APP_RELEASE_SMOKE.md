@@ -28,6 +28,7 @@ Tab keys below assume the default order: workspace, codex, opencode, cursor, cla
 - [ ] Top line tabs match the order above; Mac traffic lights sit on the same 28px line
 - [ ] `?` opens the help overlay listing keys and commands; Escape closes it
 - [ ] `:` opens the command line; `:help`, `:codex`, `:theme toggle`, an unknown command (error, no crash)
+- [ ] `:whatsnew` opens the release notes (Escape closes); the first launch after an update shows them once, a fresh install does not
 - [ ] `Mod+k` opens the command line, `Mod+,` opens Settings, also from inside a text field
 - [ ] `1`-`7` switch tabs; `h` and `l` move between panes; `j`/`k`, `g g`/`G` move in lists; `/` filters a filterable list; Escape clears the filter
 - [ ] Digits and letters typed into a text field are not treated as shortcuts; Escape leaves the field

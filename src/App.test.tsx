@@ -1,11 +1,17 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { open } from "@tauri-apps/plugin-dialog";
+import { version as APP_VERSION } from "../package.json";
 import App from "./App";
 import { defaultSettings } from "./lib/settingsDraft";
 import type { AppSettings } from "./types";
 
 const invokeMock = vi.fn();
+
+// The bundled notes are generated from release-notes/*.md; these tests bring their own.
+vi.mock("./generated/release-notes.json", () => ({
+  default: { releases: [{ version: "0.1.0", sections: [{ title: "New", items: ["Show what changed after an update"] }] }] },
+}));
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: (...args: unknown[]) => invokeMock(...args),
@@ -233,6 +239,66 @@ describe("App", () => {
       await waitFor(() => expect(row.getByText("/tmp/ws")).toBeTruthy());
       expect(backend.settings.workspace_path).toBeNull();
       expect(commandCount(backend, "reset_active_workspace_path")).toBe(1);
+    });
+  });
+
+  describe("what's new", () => {
+    const overlay = () => screen.queryByRole("dialog", { name: "What's new" });
+
+    it("shows the notes once after an update and records the version when they are closed", async () => {
+      const backend = installBackend({ last_seen_version: "0.0.9" });
+      render(<App />);
+
+      const dialog = await screen.findByRole("dialog", { name: "What's new" });
+      expect(dialog.textContent).toContain("Show what changed after an update");
+      expect(backend.settings.last_seen_version).toBe("0.0.9");
+
+      fireEvent.keyDown(dialog, { key: "Escape" });
+      expect(overlay()).toBeNull();
+      await waitFor(() => expect(backend.settings.last_seen_version).toBe(APP_VERSION), { timeout: 3000 });
+      expect(overlay()).toBeNull();
+      cleanup();
+
+      // The next launch has nothing new to show.
+      invokeMock.mockClear();
+      render(<App />);
+      await waitFor(() => expect(commandCount(backend, "get_workspace_diagnostics")).toBeGreaterThanOrEqual(1));
+      expect(overlay()).toBeNull();
+    });
+
+    it("stays closed on a fresh install and only records the version", async () => {
+      const backend = installBackend();
+      expect(backend.settings.last_seen_version).toBeUndefined();
+      render(<App />);
+
+      await waitFor(() => expect(backend.settings.last_seen_version).toBe(APP_VERSION), { timeout: 3000 });
+      expect(overlay()).toBeNull();
+    });
+
+    it("stays closed when this version was already seen", async () => {
+      const backend = installBackend({ last_seen_version: APP_VERSION });
+      render(<App />);
+
+      await waitFor(() => expect(commandCount(backend, "get_workspace_diagnostics")).toBeGreaterThanOrEqual(1));
+      expect(overlay()).toBeNull();
+      expect(commandCount(backend, "update_settings")).toBe(0);
+    });
+
+    it(":whatsnew opens the notes at any time and Esc closes them", async () => {
+      const backend = installBackend({ last_seen_version: APP_VERSION });
+      render(<App />);
+      await waitFor(() => expect(commandCount(backend, "get_workspace_diagnostics")).toBeGreaterThanOrEqual(1));
+
+      fireEvent.keyDown(document.body, { key: ":", shiftKey: true });
+      const input = screen.getByRole("combobox", { name: "Command" });
+      fireEvent.change(input, { target: { value: "whatsnew" } });
+      fireEvent.keyDown(input, { key: "Enter" });
+
+      const dialog = await screen.findByRole("dialog", { name: "What's new" });
+      expect(dialog.textContent).toContain("Show what changed after an update");
+      fireEvent.keyDown(dialog, { key: "Escape" });
+      expect(overlay()).toBeNull();
+      expect(commandCount(backend, "update_settings")).toBe(0);
     });
   });
 });

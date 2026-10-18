@@ -6,7 +6,7 @@ import { MATRIX_LEGEND } from "../lib/installationView";
 import { ActionKey } from "../ui/ActionKey";
 import { Glyph } from "../ui/Glyph";
 import { KeyCaps } from "../ui/Kbd";
-import { trapTab, useRestoreFocus } from "./overlay";
+import { scrollHelpBox, trapTab, useRestoreFocus } from "./overlay";
 import { useShellState } from "./ShellState";
 
 const GROUP_ORDER = ["Navigate", "General", "Lists", "Pane", "Editor", "Overlay"];
@@ -62,46 +62,6 @@ export function groupBindings(entries: readonly RegisteredBinding[], platform: P
 export function HelpOverlay() {
   const { helpOpen } = useShellState();
   return helpOpen ? <HelpBody /> : null;
-}
-
-/** Rows a j/k or arrow press scrolls. */
-const SCROLL_STEP_LINES = 3;
-
-/** Scrolls the box for a key the overlay owns while focus sits on the dialog; false: not a scroll key. */
-function scrollHelpBox(box: HTMLElement | null, event: Pick<ReactKeyboardEvent, "key" | "ctrlKey" | "metaKey" | "altKey">): boolean {
-  if (!box || event.ctrlKey || event.metaKey || event.altKey) return false;
-  const line = parseFloat(getComputedStyle(box).lineHeight) || 20;
-  const page = Math.max(line, box.clientHeight * 0.9);
-  const max = Math.max(0, box.scrollHeight - box.clientHeight);
-  let next: number;
-  switch (event.key) {
-    case "ArrowDown":
-    case "j":
-      next = box.scrollTop + line * SCROLL_STEP_LINES;
-      break;
-    case "ArrowUp":
-    case "k":
-      next = box.scrollTop - line * SCROLL_STEP_LINES;
-      break;
-    case "PageDown":
-      next = box.scrollTop + page;
-      break;
-    case "PageUp":
-      next = box.scrollTop - page;
-      break;
-    case "g":
-    case "Home":
-      next = 0;
-      break;
-    case "G":
-    case "End":
-      next = max;
-      break;
-    default:
-      return false;
-  }
-  box.scrollTop = Math.min(max, Math.max(0, next));
-  return true;
 }
 
 function HelpBody() {

@@ -11,6 +11,7 @@ import { StatusBar } from "./StatusBar";
 import { TopLine } from "./TopLine";
 import { useShellBindings } from "./useShellBindings";
 import { useViewFocus } from "./useViewFocus";
+import { WhatsNewOverlay } from "./WhatsNewOverlay";
 import { numberedTabCount, viewDef, visibleViews, type AppView } from "./views";
 
 export interface AppFrameProps {
@@ -37,8 +38,8 @@ export interface AppFrameProps {
 }
 
 /**
- * Layout of the shell: top line, error line, view area, status bar, plus the command-line and help
- * overlays and the global key layer. Must render inside `ShellProviders`.
+ * Layout of the shell: top line, error line, view area, status bar, plus the command-line, help and
+ * what's new overlays and the global key layer. Must render inside `ShellProviders`.
  */
 export function AppFrame({
   view,
@@ -105,6 +106,7 @@ export function AppFrame({
       <StatusBar viewLabel={viewDef(view).tab} tabCount={numberedTabCount(tabs)} right={statusRight} />
       <CommandLine />
       <HelpOverlay />
+      <WhatsNewOverlay />
       {boot && <Boot info={{ harnesses: enabledHarnessIds, ...boot }} run={bootRun} onDone={afterBoot} />}
     </div>
   );

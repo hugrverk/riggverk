@@ -8,6 +8,7 @@ import {
 import { HARNESS_NAV_ORDER } from "../lib/harnessInstallation";
 import type { InstallTarget } from "../lib/installPlan";
 import { currentMotion } from "../lib/motion";
+import { BUNDLED_RELEASES } from "../lib/releaseNotes";
 import { workspaceTaskBlockedMessage } from "../lib/workspaceErrors";
 import type { AppSettings, InstallAgent } from "../types";
 import type { LibrarySourceType } from "../views/LibraryView";
@@ -67,14 +68,14 @@ function isDarkNow(): boolean {
 }
 
 /**
- * Global command set for `:` (view switches, theme, refresh, open, clear, copy, help,
+ * Global command set for `:` (view switches, theme, refresh, open, clear, copy, help, whatsnew,
  * update, preview, rollback, uninstall). Views add their own through `useCommands` while mounted.
  *
  * Mutating commands never write directly: `update` and `preview` open the install review (plan table, then
  * y to apply), `rollback` asks after a dry run, `uninstall` opens the existing uninstall preview.
  */
 export function useAppCommands(deps: AppCommandDeps): void {
-  const { openHelp, notify, replayBoot } = useShellState();
+  const { openHelp, openWhatsNew, notify, replayBoot } = useShellState();
 
   const targets = () => updateTargets(deps.enabledHarnessIds);
   const busyReason = () => (deps.busyLabel ? `${deps.busyLabel} is running` : true);
@@ -213,6 +214,13 @@ export function useAppCommands(deps: AppCommandDeps): void {
       summary: "show every key binding and command",
       group: "App",
       run: () => openHelp(),
+    },
+    {
+      name: "whatsnew",
+      summary: "show what changed in this and earlier releases",
+      group: "App",
+      enabled: () => (BUNDLED_RELEASES.length > 0 ? true : "this build has no release notes"),
+      run: () => openWhatsNew({ releases: BUNDLED_RELEASES }),
     },
     {
       name: "boot",

@@ -532,6 +532,7 @@ describe("useAppCommands", () => {
       "clear",
       "copy",
       "help",
+      "whatsnew",
       "boot",
       "update",
       "preview",
