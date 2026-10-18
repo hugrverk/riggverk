@@ -727,6 +727,19 @@
       "action": "update"
     },
     {
+      "identity": "skill:adversarial-implementation",
+      "path_classes": [
+        "runtime-skill",
+        "harness-skill",
+        "codex-legacy-skill"
+      ],
+      "digests": [
+        "sha256:861cb6bc2cc5c4c082f7a4b7f4dae793925e050fe46fbf771c17dcdab5d22b13",
+        "sha256:c051d1e0baa36629aed272f394d3ae3a4666adf8454d90d2eb54bc9e9f19b620"
+      ],
+      "action": "update"
+    },
+    {
       "identity": "skill:browser-qa",
       "path_classes": [
         "runtime-skill",
@@ -1224,6 +1237,7 @@
       ],
       "digests": [
         "sha256:0416582841ac6c4c755f00462f2c30750a425d53802315145dc34d084f7ef053",
+        "sha256:0615db69d7d5b838e28174e6bfbc054bad9f3eb3db185d9cbe14d9d792c3a193",
         "sha256:09fd798b14d00855fed5620f95b345d1e90a918de7b5ca6fbb2f3080466803e4",
         "sha256:0b9a3f553fb52830f15044253c3ad2de779031c7608d43f74b907f85cd5ac09b",
         "sha256:0c8d07b637e4de4bf81078188fff4e92d42cecce7a03a309614462d30daeef06",
@@ -1257,6 +1271,7 @@
         "sha256:76e7b1b8757feac0d65b4bb72a84880fa238546ca65a9e90126f6c4c1cb0cef0",
         "sha256:7802e2bf8703f0ebd2bc71752b860cbfc7f2a98e8afcd0f75882ee25b0913fe2",
         "sha256:7affc0d7f5796c1aaf78bf1e52cf9a6c0309a03c5239c0a73422624080ee3b8f",
+        "sha256:7ec84cee018eb1501290288e480821c234cdcb9f192f38adc349f9f9869577b4",
         "sha256:8201bd073472b34ee39f1daaddb6f8608796f99763a5b3dd130844441125d9f9",
         "sha256:88514db4e1b07b4d5ae0767263997b76f2650639e1682a20ff18f3f2ed434d51",
         "sha256:88a7610ca02d879a026e0bcc092f9f199337963ceeb74a5256c7e7afc73e84a7",
@@ -1731,12 +1746,14 @@
         "workspace-doc"
       ],
       "digests": [
+        "sha256:0e15a20b9e1a405dfb6c2b82e923c59087a920c5a395b1564997ac0c6566d42e",
         "sha256:10bd861915f9cd37c7d51bf1db56735bd0b6e1ddf1148266711b1251ee3b2b10",
         "sha256:14bbbd26e75efeae3812042da95ddba8ffe757b68daa8d178877991838207e30",
         "sha256:1899cd7be82c50bf23d9ab4afca9a39593e4ec4adf6277f5baabd03ffb719d6b",
         "sha256:1c6d1ae7eb352f033883ec9e032fe4c71c8943d9485257dae0ca1081e9aa801b",
         "sha256:2510d667ab01c21f097404849626710f859d7ca8f667f618a42b44a19a308c8d",
         "sha256:2a392fa062a9d206e37e2f060c7c4dc8e0fdc5a57a04b724dc7d0d4b499b9d34",
+        "sha256:2b888f2b5249e297889f6f8ca6dae41064ee8f4685b36eda00c2f183dfd0d288",
         "sha256:30597250e0ca399e1c1af47f493d84918291045b537e56ec701b2ad0d304e49f",
         "sha256:309212f8d6a34025502fae8e137b2321fd2737b4d939be51ec2bf7acacd20ff2",
         "sha256:325482edeea21d97b80cf52da880008780087809bed0a790769ce6ae9fac5ff8",
@@ -2048,7 +2065,9 @@
       ],
       "digests": [
         "sha256:0214e89f639c7a0cf45489cad1eff956e8d13091fa79e6be0d0f88db148976d2",
+        "sha256:1e5f20ea60db1fdf7848f4362eae29743249e488a030b1c6a2fa2fef0caa0764",
         "sha256:1f9a101c006d05e6880a0b8ab8ca174b4693e93bf5ad037b1bc2079933985ea1",
+        "sha256:3a649d70540bc9b8b49a9f67e63a2b6c10f2310ee76c28513a44061e843249a6",
         "sha256:3b181518c1e433be23e1ffb4f3a0f1ab865c824db8a9ea3f45a5158c7496da91",
         "sha256:66219fdb41d0fb7ce7ce87e83194af30f2f1899f591ed7eefb9e39e25c711f74",
         "sha256:9ca7e48444abf251b31073cd7feef9e79291baf52665665e4d9ac55a4a2bef97",
@@ -3456,6 +3475,16 @@
       "action": "update"
     },
     {
+      "identity": "workspace:file:templates/skills/claude/adversarial-implementation/SKILL.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:e270b406605c444470a62850527c346f8097ecce237c4f0b4887b0c393fecfd5"
+      ],
+      "action": "update"
+    },
+    {
       "identity": "workspace:file:templates/skills/claude/browser-qa/SKILL.md",
       "path_classes": [
         "workspace-doc"
@@ -3766,6 +3795,16 @@
         "sha256:106cbc051551a9991e8ac042630ab45ff967f9be606496732fff4afd65a835f9",
         "sha256:8db4b8524084f2991410ace69aa1fcf33c14b086e2ad61092a077008079bc20b",
         "sha256:a113a23924bb6ff66a41338106dc8d106a986986ce3278ab449d47386781385a"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:templates/skills/codex/adversarial-implementation/SKILL.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:e270b406605c444470a62850527c346f8097ecce237c4f0b4887b0c393fecfd5"
       ],
       "action": "update"
     },
@@ -4082,6 +4121,16 @@
       "action": "update"
     },
     {
+      "identity": "workspace:file:templates/skills/cursor/adversarial-implementation/SKILL.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:3c5a29a6ec712705ff50b6a2e8229b2ff172aa4bedd352a6aa77c596ba54491f"
+      ],
+      "action": "update"
+    },
+    {
       "identity": "workspace:file:templates/skills/cursor/browser-qa/SKILL.md",
       "path_classes": [
         "workspace-doc"
@@ -4390,6 +4439,16 @@
         "sha256:603ab04e972fb9ba83762142537718d805fe6514ab5e964aa3d627868dba4a58",
         "sha256:90251d98575f848da52fe97d651c1c6e9820710a757bf47e61c2c4877457e3a6",
         "sha256:f18f427609f020b70f865690d22b3b262fff4947b74681794f8437a7e50d21e9"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:templates/skills/opencode/adversarial-implementation/SKILL.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:e270b406605c444470a62850527c346f8097ecce237c4f0b4887b0c393fecfd5"
       ],
       "action": "update"
     },

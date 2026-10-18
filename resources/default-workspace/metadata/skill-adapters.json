@@ -25,6 +25,29 @@
         "cursor"
       ]
     },
+    "adversarial-implementation": {
+      "canonical": "skills/adversarial-implementation/SKILL.md",
+      "outputs": {
+        "claude": "templates/skills/claude/adversarial-implementation/SKILL.md",
+        "codex": "templates/skills/codex/adversarial-implementation/SKILL.md",
+        "cursor": "templates/skills/cursor/adversarial-implementation/SKILL.md",
+        "opencode": "templates/skills/opencode/adversarial-implementation/SKILL.md"
+      },
+      "overlays": {
+        "claude": [],
+        "codex": [],
+        "cursor": [
+          "templates/skills/_overlays/global/cursor.md"
+        ],
+        "opencode": []
+      },
+      "targets": [
+        "codex",
+        "opencode",
+        "claude",
+        "cursor"
+      ]
+    },
     "browser-qa": {
       "canonical": "skills/browser-qa/SKILL.md",
       "outputs": {

@@ -33,7 +33,7 @@ Validation is read-only. It does not run workspace scripts, install files, or in
 
 ## Bundled resources
 
-The default workspace currently contains 24 canonical semantic skills, generated harness skill adapters, shared semantic agent bodies, harness-native agent adapters, composed rule targets, config templates, runtime scripts, and operator documentation.
+The default workspace currently contains 25 canonical semantic skills, generated harness skill adapters, shared semantic agent bodies, harness-native agent adapters, composed rule targets, config templates, runtime scripts, and operator documentation.
 
 Bundled resources are immutable installation input. The explicit **Install or Update** action (`u`, review, `y`):
 
@@ -87,7 +87,7 @@ Global destinations:
 - Claude Code: `~/.claude/skills`
 - Cursor: `~/.cursor/skills`
 
-All 24 current bundled skills target Codex, OpenCode, Claude, and Cursor. Sync-all derives expected skills from the same compatibility metadata used by health checks.
+All 25 current bundled skills target Codex, OpenCode, Claude, and Cursor. Sync-all derives expected skills from the same compatibility metadata used by health checks.
 
 ## Skill adapters
 

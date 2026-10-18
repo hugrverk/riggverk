@@ -115,6 +115,9 @@
       "sha256:ea2016c0c9b4c38b3a1bb26d8b2ea98067be4baac19450881085abe98edf383a",
       "sha256:ebf2a25f4b84b1e6f142c3704671837859000b256def0385e0a6be7bb7146940"
     ],
+    "skills/adversarial-implementation/SKILL.md": [
+      "sha256:c051d1e0baa36629aed272f394d3ae3a4666adf8454d90d2eb54bc9e9f19b620"
+    ],
     "skills/agent-report-review/SKILL.md": [
       "sha256:da9b69ed07462bd62f0e38898af6887d0114bf2801a0ab571bc5656add4ed24f",
       "sha256:f95b371d66f1e2fb72e69be132443433f0298334ebe13f69d5eae81a40919dff",
@@ -438,6 +441,9 @@
       "sha256:818e832bf5e67c2b633b02903e27ec784d12c18f0723950dad698bbf7f6c31b3",
       "sha256:dbae48bd5ae9fd5016c810d5f5974159c3fbc53247ab04ba2ccfd27651487f6e"
     ],
+    "templates/skills/claude/adversarial-implementation/SKILL.md": [
+      "sha256:3f84056d4d9ac7d14d335069cc9970a607799739be04b9e192405e9c5354c2c4"
+    ],
     "templates/skills/claude/browser-qa/SKILL.md": [
       "sha256:3a9ad2bc3e0efd9f2019ffef5d191fd57f4bb812b9e55f9799c7b19901df1aa7",
       "sha256:941b2da01a82263fc575c311b107f5c7aa300337e55d7e4c84a9fb672e5ce732",
@@ -547,6 +553,9 @@
       "sha256:a113a23924bb6ff66a41338106dc8d106a986986ce3278ab449d47386781385a",
       "sha256:dbae48bd5ae9fd5016c810d5f5974159c3fbc53247ab04ba2ccfd27651487f6e"
     ],
+    "templates/skills/codex/adversarial-implementation/SKILL.md": [
+      "sha256:3f84056d4d9ac7d14d335069cc9970a607799739be04b9e192405e9c5354c2c4"
+    ],
     "templates/skills/codex/browser-qa/SKILL.md": [
       "sha256:8d7ca9fff5c8739dc9759e7c648abf029c17b5025a65994d65d29fc07fc30b51",
       "sha256:ddd60278cdd4e1c81b59b05cc46065640275a2a8a39d08363f42f50695f4dd33",
@@ -655,6 +664,9 @@
       "sha256:8e6bae21b7fcffe2afdc13f41a84eae389226fd37ffbf3ea48ae0826fd1728ce",
       "sha256:b28eb01e872bb11adc95c73f20082406c20b9688a9fb9231f993d34e630852f5"
     ],
+    "templates/skills/cursor/adversarial-implementation/SKILL.md": [
+      "sha256:40754ff745349524f419876e0ca81bb2ad5548a7fe368d161041cadf09bf15b5"
+    ],
     "templates/skills/cursor/browser-qa/SKILL.md": [
       "sha256:67306574c892d57bc3ba023c85bd4afb5118a563bea12db4648193a862c504fc",
       "sha256:a4a9fc3d9982c7051f3f5d422b287aa5818c8eb6af06050edfd5a0fb5d59d407",
@@ -762,6 +774,9 @@
       "sha256:603ab04e972fb9ba83762142537718d805fe6514ab5e964aa3d627868dba4a58",
       "sha256:dbae48bd5ae9fd5016c810d5f5974159c3fbc53247ab04ba2ccfd27651487f6e",
       "sha256:f18f427609f020b70f865690d22b3b262fff4947b74681794f8437a7e50d21e9"
+    ],
+    "templates/skills/opencode/adversarial-implementation/SKILL.md": [
+      "sha256:3f84056d4d9ac7d14d335069cc9970a607799739be04b9e192405e9c5354c2c4"
     ],
     "templates/skills/opencode/browser-qa/SKILL.md": [
       "sha256:2963e6626db5f2f3d355ca8b9a4d2d3a281cc82636cf2804439f1328e1086f92",

@@ -3,6 +3,7 @@ import { buildBrainSetupBlock } from "./brainSetup";
 
 const EXPECTED_SKILLS = [
   "accessibility-review",
+  "adversarial-implementation",
   "browser-qa",
   "context-budget",
   "current-docs",
@@ -44,7 +45,7 @@ const REMOVED_SKILLS = [
 ] as const;
 
 describe("buildBrainSetupBlock", () => {
-  it("represents all 24 expected skill names", () => {
+  it("represents all 25 expected skill names", () => {
     const block = buildBrainSetupBlock();
     for (const skill of EXPECTED_SKILLS) {
       expect(block).toContain(`${skill}:`);

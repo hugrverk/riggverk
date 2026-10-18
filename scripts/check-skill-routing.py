@@ -17,10 +17,11 @@ ADAPTER_MANIFEST = WS_ROOT / "metadata/skill-adapters.json"
 AGENTS_METADATA = WS_ROOT / "metadata/agents.json"
 AGENT_ADAPTERS_MANIFEST = WS_ROOT / "metadata/agent-adapters.json"
 CLAUDE_AGENT_HEADERS = WS_ROOT / "templates/claude/agents"
-EXPECTED_COUNT = 24
+EXPECTED_COUNT = 25
 
 EXPECTED_SKILLS = {
     "accessibility-review",
+    "adversarial-implementation",
     "browser-qa",
     "context-budget",
     "current-docs",
