@@ -74,9 +74,6 @@ pub fn run() {
                 .map_err(|e| format!("resolve bundled workspace: {e}"))?;
             setup_roots::initialize(bundled)?;
             apply_progress::install(app.handle().clone());
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.maximize();
-            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
