@@ -1658,12 +1658,20 @@ if ! search_quiet "default-workspace" src-tauri/tauri.conf.json; then
   printf 'FAIL: tauri conf missing bundled default workspace resource path\n' >&2
   exit 1
 fi
-if ! search_quiet 'get_webview_window\("main"\)' src-tauri/src/lib.rs \
-  || ! search_quiet 'window\.maximize\(\)' src-tauri/src/lib.rs; then
-  printf 'FAIL: Tauri startup must maximize the main window\n' >&2
+# The main window opens centered at the owner's chosen size; startup must not maximize it.
+python3 - <<'PY'
+import json
+window = json.load(open("src-tauri/tauri.conf.json"))["app"]["windows"][0]
+expected = {"width": 1280, "height": 800, "center": True}
+actual = {key: window.get(key) for key in expected}
+if actual != expected:
+    raise SystemExit(f"FAIL: main window must open centered at 1280x800, found {actual}")
+PY
+if search_quiet 'window\.maximize\(\)' src-tauri/src/lib.rs; then
+  printf 'FAIL: Tauri startup must not maximize the main window\n' >&2
   exit 1
 fi
-printf '  main window startup maximize hook verified\n'
+printf '  main window opens centered at 1280x800\n'
 
 step "bundled skill catalog and routing alignment"
 python3 scripts/check-skill-routing.py

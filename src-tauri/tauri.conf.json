@@ -14,8 +14,8 @@
     "windows": [
       {
         "title": "Agent Workspace",
-        "width": 1240,
-        "height": 760,
+        "width": 1280,
+        "height": 800,
         "resizable": true,
         "minWidth": 980,
         "minHeight": 620,

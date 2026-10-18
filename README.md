@@ -20,7 +20,7 @@ Requirements:
 
 - Node.js 22 (CI version; Vite 8 needs 20.19+ or 22.12+) and npm 10+
 - stable Rust toolchain (CI pins 1.97.1)
-- Python 3 and Bash for the generators, merge scripts, and release check
+- Python 3.11 or newer (the release check uses `tomllib`) and Bash for the generators, merge scripts, and release check
 
 ```bash
 npm install
