@@ -3,6 +3,7 @@ use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use super::opencode_cli::{self, AgentProbe, CliVersion, OpenCodeCliHealth, VersionProbe};
 use super::process::{run_cmd_bounded, ActionResult, BoundedCmdOptions, BoundedCmdResult};
 use super::status::file_eq;
 
@@ -37,6 +38,17 @@ pub struct OpenCodeRuntimeHealth {
     pub extra_installed_agent_count: usize,
     pub agent_mismatches: Vec<OpenCodeAgentMismatch>,
     pub warnings: Vec<String>,
+    /// The installed CLI; `None` until it has been probed.
+    pub cli: Option<OpenCodeCliHealth>,
+    /// `opencode.json` against the bundled render: `synced`, `diverged`, `missing`, `invalid` or
+    /// `unknown` (nothing to compare against).
+    pub config_status: String,
+    /// Managed keys that differ: top-level names, `mcp.<server>` and `agent.<name>`.
+    pub config_diverged_keys: Vec<String>,
+    /// Global `AGENTS.md` against the bundled rules: `synced`, `diverged`, `missing` or `unknown`.
+    pub rules_status: String,
+    /// The `@playwright/mcp` version pinned in the installed config.
+    pub playwright_mcp_version: Option<String>,
     // New TUI fields
     pub template_tui_path: String,
     pub installed_tui_path: String,
@@ -103,6 +115,7 @@ const MANAGED_TOP_LEVEL_KEYS: &[&str] = &[
     "model",
     "small_model",
     "default_agent",
+    "lsp",
     "compaction",
     "watcher",
     "permission",
@@ -181,20 +194,65 @@ fn ordered_json_eq(a: &serde_json::Value, b: &serde_json::Value) -> bool {
     }
 }
 
+/// Names of the managed keys on which `installed` differs from `rendered`: a top-level key,
+/// `mcp.<server>` or `agent.<name>`, in that order.
+///
+/// Rule order is policy (last match wins) in the global `permission` block and in the managed
+/// agent blocks, so a reordered block counts as different there.
+pub(crate) fn differing_managed_opencode_keys(
+    installed: &serde_json::Value,
+    rendered: &serde_json::Value,
+) -> Vec<String> {
+    let installed = extract_managed_opencode_config(installed);
+    let rendered = extract_managed_opencode_config(rendered);
+    let differs = |a: Option<&serde_json::Value>, b: Option<&serde_json::Value>, ordered: bool| {
+        match (a, b) {
+            (Some(a), Some(b)) if ordered => !ordered_json_eq(a, b),
+            (Some(a), Some(b)) => a != b,
+            (None, None) => false,
+            _ => true,
+        }
+    };
+    let entry = |config: &serde_json::Value,
+                 group: &str,
+                 name: &str|
+     -> Option<serde_json::Value> { config.get(group)?.get(name).cloned() };
+    let mut keys = Vec::new();
+    for key in MANAGED_TOP_LEVEL_KEYS {
+        if differs(
+            installed.get(*key),
+            rendered.get(*key),
+            *key == "permission",
+        ) {
+            keys.push((*key).to_string());
+        }
+    }
+    for server in MANAGED_MCP_SERVERS {
+        let (a, b) = (
+            entry(&installed, "mcp", server),
+            entry(&rendered, "mcp", server),
+        );
+        if differs(a.as_ref(), b.as_ref(), false) {
+            keys.push(format!("mcp.{server}"));
+        }
+    }
+    for name in MANAGED_AGENT_PERMISSIONS {
+        let (a, b) = (
+            entry(&installed, "agent", name),
+            entry(&rendered, "agent", name),
+        );
+        if differs(a.as_ref(), b.as_ref(), true) {
+            keys.push(format!("agent.{name}"));
+        }
+    }
+    keys
+}
+
 pub(crate) fn managed_opencode_keys_match(
     installed: &serde_json::Value,
     rendered: &serde_json::Value,
 ) -> bool {
-    let installed = extract_managed_opencode_config(installed);
-    let rendered = extract_managed_opencode_config(rendered);
-    // Rule order is policy (last match wins) in the global block and in the agent blocks.
-    installed == rendered
-        && ["permission", "agent"].iter().all(|key| {
-            match (installed.get(*key), rendered.get(*key)) {
-                (Some(a), Some(b)) => ordered_json_eq(a, b),
-                _ => true,
-            }
-        })
+    differing_managed_opencode_keys(installed, rendered).is_empty()
 }
 
 /// Merge managed keys from `managed` into `installed`, preserving unrelated user-owned fields.
@@ -367,14 +425,15 @@ pub(crate) fn render_expected_opencode_config(
     Some(rendered)
 }
 
-/// Compare installed managed OpenCode keys to rendered workspace template.
-fn installed_config_matches_rendered(
+/// Managed keys of the installed config that differ from the rendered workspace template, or
+/// `None` when the expected config cannot be rendered.
+fn installed_config_diverged_keys(
     template_json: &serde_json::Value,
     installed_json: &serde_json::Value,
     home_dir: &Path,
-) -> Option<bool> {
+) -> Option<Vec<String>> {
     render_expected_opencode_config(template_json, home_dir)
-        .map(|expected| managed_opencode_keys_match(installed_json, &expected))
+        .map(|expected| differing_managed_opencode_keys(installed_json, &expected))
 }
 
 /// Sync status for `get_status` / dashboard (compares the staged output an install would write).
@@ -513,7 +572,37 @@ fn run_generator_check_with_timeout(
     ))
 }
 
-/// Compute OpenCode runtime health for a given workspace root and home directory.
+/// The `@playwright/mcp` version pinned in the `mcp.playwright` command of a config.
+fn playwright_mcp_version_of(config: &serde_json::Value) -> Option<String> {
+    config
+        .get("mcp")?
+        .get("playwright")?
+        .get("command")?
+        .as_array()?
+        .iter()
+        .find_map(|arg| arg.as_str()?.strip_prefix("@playwright/mcp@"))
+        .map(str::to_string)
+}
+
+/// Global `AGENTS.md` against the bundled rules. Informational: it does not change the overall
+/// status, which the install overview already reports per surface.
+fn opencode_rules_status(source: &Path, installed: &Path) -> String {
+    let Ok(source) = std::fs::read(source) else {
+        return "unknown".into();
+    };
+    match std::fs::read(installed) {
+        Ok(installed) if crate::rules_block::installed_matches_source(&installed, &source) => {
+            "synced"
+        }
+        Ok(_) => "diverged",
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => "missing",
+        Err(_) => "unknown",
+    }
+    .into()
+}
+
+/// Compute OpenCode runtime health from the files of a workspace root and home directory, with
+/// no CLI probe (`apply_cli_probes` adds those).
 /// This is a pure function suitable for unit testing with temp dirs.
 pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> OpenCodeRuntimeHealth {
     let template_config_path = workspace_root.join("templates/opencode.json");
@@ -658,6 +747,17 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> OpenCodeRuntime
         None
     };
 
+    let mut config_status = if !installed_exists {
+        "missing"
+    } else if installed_json.is_none() {
+        "invalid"
+    } else {
+        "unknown"
+    }
+    .to_string();
+    let mut config_diverged_keys: Vec<String> = Vec::new();
+    let playwright_mcp_version = installed_json.as_ref().and_then(playwright_mcp_version_of);
+
     // If both configs exist and parse, check validity and compare
     if let (Some(ref t_json), Some(ref i_json)) = (&template_json, &installed_json) {
         checks.push(OpenCodeRuntimeCheck {
@@ -687,21 +787,19 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> OpenCodeRuntime
             detail: default_agent.clone().unwrap_or_else(|| "(not set)".into()),
         });
 
-        // Check model
-        checks.push(OpenCodeRuntimeCheck {
-            id: "model".into(),
-            label: "Model".into(),
-            status: "pass".into(),
-            detail: model.clone().unwrap_or_else(|| "(not set)".into()),
-        });
-
-        // Check small_model
-        checks.push(OpenCodeRuntimeCheck {
-            id: "small_model".into(),
-            label: "Small model".into(),
-            status: "pass".into(),
-            detail: small_model.clone().unwrap_or_else(|| "(not set)".into()),
-        });
+        // The files cannot say whether a model exists: `apply_cli_probes` checks the set ones
+        // against `opencode models`.
+        for (id, label, value) in [
+            ("model", "Model", &model),
+            ("small_model", "Small model", &small_model),
+        ] {
+            checks.push(OpenCodeRuntimeCheck {
+                id: id.into(),
+                label: label.into(),
+                status: if value.is_some() { "unknown" } else { "pass" }.into(),
+                detail: value.clone().unwrap_or_else(|| "(not set)".into()),
+            });
+        }
 
         checks.push(OpenCodeRuntimeCheck {
             id: "autoupdate".into(),
@@ -726,8 +824,18 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> OpenCodeRuntime
         });
 
         // Compare installed config to rendered workspace config (same staging as install script).
-        let configs_match_result = installed_config_matches_rendered(t_json, i_json, home_dir);
+        let diverged_keys = installed_config_diverged_keys(t_json, i_json, home_dir);
+        let configs_match_result = diverged_keys.as_ref().map(|keys| keys.is_empty());
         let configs_match = configs_match_result.unwrap_or(false);
+        if let Some(keys) = diverged_keys {
+            config_status = if keys.is_empty() {
+                "synced"
+            } else {
+                "diverged"
+            }
+            .to_string();
+            config_diverged_keys = keys;
+        }
         checks.push(OpenCodeRuntimeCheck {
             id: "configs_match".into(),
             label: "Managed config keys match bundled workspace".into(),
@@ -743,7 +851,10 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> OpenCodeRuntime
                 "unable to render expected config for comparison (set PLAYWRIGHT_BROWSERS_PATH)"
                     .into()
             } else {
-                "managed keys differ from bundled workspace. Run diff before sync.".into()
+                format!(
+                    "managed keys differ from bundled workspace ({}). Run diff before sync.",
+                    config_diverged_keys.join(", ")
+                )
             },
         });
         if !configs_match {
@@ -992,6 +1103,11 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> OpenCodeRuntime
         );
     }
 
+    let rules_status = opencode_rules_status(
+        &workspace_root.join("templates/sync/opencode-rules.md"),
+        &home_dir.join(".config/opencode/AGENTS.md"),
+    );
+
     // Bundled agents check
     let bundled_agents = list_bundled_agents(&agents_source_dir);
     let bundled_agent_count = bundled_agents.len();
@@ -1150,6 +1266,11 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> OpenCodeRuntime
         extra_installed_agent_count,
         agent_mismatches,
         warnings,
+        cli: None,
+        config_status,
+        config_diverged_keys,
+        rules_status,
+        playwright_mcp_version,
         template_tui_path: template_tui_path_str,
         installed_tui_path: installed_tui_path_str,
         tui_status,
@@ -1175,7 +1296,172 @@ pub fn get_opencode_runtime_health() -> Result<OpenCodeRuntimeHealth, String> {
 
     // If workspace root doesn't exist or isn't valid, still compute health
     // so the UI can show missing/invalid status
-    Ok(compute_health(&workspace_root, &home))
+    let mut health = compute_health(&workspace_root, &home);
+    apply_cli_probes(
+        &mut health,
+        resolve_opencode_executable().as_deref(),
+        ProbeLimits::PRODUCTION,
+    );
+    Ok(health)
+}
+
+/// How long each CLI probe may take before it counts as unanswered.
+#[derive(Clone, Copy)]
+pub(crate) struct ProbeLimits {
+    version: Duration,
+    agent: Duration,
+    models: Duration,
+}
+
+impl ProbeLimits {
+    const PRODUCTION: Self = Self {
+        version: opencode_cli::VERSION_TIMEOUT,
+        agent: opencode_cli::AGENT_TIMEOUT,
+        models: OPENCODE_MODELS_TIMEOUT,
+    };
+}
+
+/// Why a probe could not run: its checks stay `unknown` and this is their detail.
+const UNVERIFIED_NO_CLI: &str = "opencode CLI not found";
+const UNVERIFIED_NO_RESPONSE: &str = "opencode CLI did not respond";
+
+fn set_check(
+    checks: &mut Vec<OpenCodeRuntimeCheck>,
+    id: &str,
+    label: &str,
+    status: &str,
+    detail: String,
+) {
+    let check = OpenCodeRuntimeCheck {
+        id: id.into(),
+        label: label.into(),
+        status: status.into(),
+        detail,
+    };
+    match checks.iter_mut().find(|existing| existing.id == id) {
+        Some(existing) => *existing = check,
+        None => checks.push(check),
+    }
+}
+
+/// Add what only the `opencode` CLI can tell to a health computed from files: its version, whether
+/// the default agent resolves, and whether the configured models exist.
+///
+/// Each call is bounded and parse-only (`opencode_cli`), and nothing of the raw output is kept. A
+/// CLI that is missing, times out or fails leaves the dependent checks `unknown`: it never fails
+/// the health or changes its status. A model that is not listed, a default agent that does not
+/// resolve and an unsupported major version are warnings.
+pub(crate) fn apply_cli_probes(
+    health: &mut OpenCodeRuntimeHealth,
+    program: Option<&Path>,
+    limits: ProbeLimits,
+) {
+    let program = program.and_then(Path::to_str);
+    let report = opencode_cli::inspect(program, limits.version);
+    health.warnings.extend(report.warning);
+    set_check(
+        &mut health.checks,
+        "cli",
+        "OpenCode CLI",
+        match report.health.status.as_str() {
+            "supported" => "pass",
+            "unsupported" => "warn",
+            _ => "unknown",
+        },
+        report.health.detail.clone(),
+    );
+    health.cli = Some(report.health);
+
+    // Without a CLI that answers there is nothing to ask.
+    let unreachable = match (program, report.responsive) {
+        (None, _) => Some(UNVERIFIED_NO_CLI),
+        (Some(_), false) => Some(UNVERIFIED_NO_RESPONSE),
+        (Some(_), true) => None,
+    };
+
+    if let Some(agent) = health.default_agent.clone() {
+        // `debug agent` is checked on 1.x only: that is the version whose output AW has seen.
+        let outcome = match (program, unreachable, &report.version) {
+            (_, Some(reason), _) => Err(reason.to_string()),
+            (Some(program), None, Some(version)) if version.major == 1 => {
+                match opencode_cli::probe_agent(program, &agent, limits.agent) {
+                    AgentProbe::Resolves => Ok(true),
+                    AgentProbe::Unresolved => Ok(false),
+                    AgentProbe::TimedOut => Err(format!(
+                        "opencode debug agent timed out after {}s",
+                        limits.agent.as_secs()
+                    )),
+                    AgentProbe::NotRun => Err("opencode debug agent could not run".to_string()),
+                }
+            }
+            _ => Err("only checked on OpenCode 1.x".to_string()),
+        };
+        let (status, detail) = match outcome {
+            Ok(true) => ("pass", format!("{agent} resolves")),
+            Ok(false) => {
+                health.warnings.push(format!(
+                    "OpenCode cannot resolve default agent {agent}: opencode debug agent failed. \
+                     Check the agent files in ~/.config/opencode/agents for a frontmatter error, \
+                     or run Install/Update."
+                ));
+                ("fail", format!("{agent} does not resolve"))
+            }
+            Err(reason) => ("unknown", format!("{agent} (not verified: {reason})")),
+        };
+        set_check(
+            &mut health.checks,
+            "default_agent_resolves",
+            "Default agent resolves",
+            status,
+            detail,
+        );
+    }
+
+    let configured = [
+        ("model", health.model.clone()),
+        ("small_model", health.small_model.clone()),
+    ];
+    if configured.iter().all(|(_, value)| value.is_none()) {
+        return;
+    }
+    let models: Result<Vec<String>, String> = match (program, unreachable) {
+        (_, Some(reason)) => Err(reason.to_string()),
+        (Some(program), None) => {
+            let listed =
+                run_models_listing(program, program, report.version.as_ref(), limits.models);
+            match listed {
+                Ok(result) if result.warning.is_none() => Ok(result.models),
+                Ok(_) => Err("opencode models gave no usable list".to_string()),
+                Err(_) => Err("opencode models did not complete".to_string()),
+            }
+        }
+        (None, None) => Err(UNVERIFIED_NO_CLI.to_string()),
+    };
+    for (id, value) in configured {
+        let Some(value) = value else { continue };
+        let label = if id == "model" {
+            "Model"
+        } else {
+            "Small model"
+        };
+        let (status, detail) = match &models {
+            Ok(listed) if listed.contains(&value) => ("pass", value.clone()),
+            Ok(_) => {
+                let note = if id == "small_model" {
+                    "; OpenCode does not pick another small model"
+                } else {
+                    ""
+                };
+                health.warnings.push(format!(
+                    "{id} {value} is not listed by opencode models (provider not signed in, or \
+                     the model was removed){note}."
+                ));
+                ("warn", format!("{value} is not listed by opencode models"))
+            }
+            Err(reason) => ("unknown", format!("{value} (not verified: {reason})")),
+        };
+        set_check(&mut health.checks, id, label, status, detail);
+    }
 }
 
 /// Run the bundled generator's --write against the given workspace root.
@@ -1234,30 +1520,39 @@ fn run_generator_write_with_script(
 
 // ── OpenCode executable resolution ──
 
+/// Where `opencode` lives when a GUI launch has no shell `PATH`: Homebrew, and the official
+/// installer's `~/.opencode/bin`.
+fn opencode_fallback_candidates(home: Option<&Path>) -> Vec<PathBuf> {
+    let mut candidates = vec![
+        PathBuf::from("/opt/homebrew/bin/opencode"),
+        PathBuf::from("/usr/local/bin/opencode"),
+    ];
+    if let Some(home) = home {
+        candidates.push(home.join(".opencode/bin/opencode"));
+    }
+    candidates
+}
+
 /// Resolve the absolute path to the `opencode` CLI.
 ///
 /// Resolution order:
 /// 1. Normal PATH lookup via `executable_resolver::resolve_executable`.
-/// 2. Common macOS Homebrew paths: `/opt/homebrew/bin/opencode` and `/usr/local/bin/opencode`.
+/// 2. The fallback locations of `opencode_fallback_candidates`.
 ///
 /// Returns `None` if no executable is found.
-fn resolve_opencode_executable() -> Option<std::path::PathBuf> {
-    // 1. Try PATH lookup
+fn resolve_opencode_executable_in(path_env: &str, fallbacks: &[PathBuf]) -> Option<PathBuf> {
+    crate::executable_resolver::resolve_executable("opencode", path_env, None).or_else(|| {
+        fallbacks
+            .iter()
+            .find(|candidate| crate::executable_resolver::is_executable_file(candidate, None))
+            .cloned()
+    })
+}
+
+fn resolve_opencode_executable() -> Option<PathBuf> {
     let path_env = std::env::var("PATH").unwrap_or_default();
-    if let Some(path) = crate::executable_resolver::resolve_executable("opencode", &path_env, None)
-    {
-        return Some(path);
-    }
-
-    // 2. Try common Homebrew paths (macOS GUI often lacks these in PATH)
-    for candidate in &["/opt/homebrew/bin/opencode", "/usr/local/bin/opencode"] {
-        let p = std::path::Path::new(candidate);
-        if crate::executable_resolver::is_executable_file(p, None) {
-            return Some(p.to_path_buf());
-        }
-    }
-
-    None
+    let home = crate::agent_targets::home_dir().ok();
+    resolve_opencode_executable_in(&path_env, &opencode_fallback_candidates(home.as_deref()))
 }
 
 // ── OpenCode model selection ──
@@ -1333,7 +1628,7 @@ pub struct OpenCodeModelSelection {
 }
 
 const DEFAULT_MODEL: &str = "opencode-go/glm-5.2";
-const DEFAULT_SMALL_MODEL: &str = "opencode-go/deepseek-v4-flash";
+const DEFAULT_SMALL_MODEL: &str = "opencode-go/deepseek-v4.1-flash";
 
 /// App-level model selection override stored outside workspace templates.
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
@@ -1418,7 +1713,8 @@ const OPENCODE_MODELS_TIMEOUT: Duration = Duration::from_secs(30);
 /// A model catalog is a few hundred short lines; cap far above that.
 const OPENCODE_MODELS_STDOUT_CAP: usize = 4 * 1024 * 1024;
 
-/// List available OpenCode models by running `opencode models --pure`.
+/// List available OpenCode models by running `opencode models --pure` (`--standalone` on
+/// OpenCode 2, which has no `--pure` and would otherwise use a background service).
 /// Returns a sorted, deduplicated list of `provider/model` strings.
 // `async` keeps the (network-bound) subprocess off the main thread.
 #[tauri::command(async)]
@@ -1431,19 +1727,41 @@ fn list_models_with_executable(
     timeout: Duration,
 ) -> Result<ListAvailableModelsResult, String> {
     let opencode_path = opencode_path.ok_or_else(|| {
-        "opencode CLI not found on PATH. If installed via Homebrew, ensure /opt/homebrew/bin \
-         is on the GUI PATH or reinstall via the bundled installer."
-            .to_string()
+        format!(
+            "opencode CLI not found on PATH, /opt/homebrew/bin, /usr/local/bin or ~/.opencode/bin; \
+             install OpenCode 1.x with {}",
+            opencode_cli::INSTALL_COMMANDS
+        )
     })?;
     let program = opencode_path
         .to_str()
         .ok_or_else(|| "opencode CLI path is not valid UTF-8".to_string())?;
-    let cwd = std::env::current_dir().unwrap_or_else(|_| std::env::temp_dir());
+    let version_timeout = timeout.min(opencode_cli::VERSION_TIMEOUT);
+    let version = match opencode_cli::probe_version(program, version_timeout) {
+        VersionProbe::Found(version) => Some(version),
+        VersionProbe::Unreadable => None,
+        VersionProbe::TimedOut => {
+            return Err(format!(
+                "opencode --version timed out after {} seconds",
+                version_timeout.as_secs()
+            ));
+        }
+    };
+    run_models_listing(program, program, version.as_ref(), timeout)
+}
 
+/// `opencode models` with the arguments of `version`, from a neutral working directory.
+/// `shown` names the executable in error text.
+fn run_models_listing(
+    program: &str,
+    shown: &str,
+    version: Option<&CliVersion>,
+    timeout: Duration,
+) -> Result<ListAvailableModelsResult, String> {
     let result = run_cmd_bounded(
         program,
-        &["models", "--pure"],
-        &cwd,
+        opencode_cli::models_args(version),
+        &opencode_cli::neutral_cwd(),
         BoundedCmdOptions {
             timeout: Some(timeout),
             stdout_cap: OPENCODE_MODELS_STDOUT_CAP,
@@ -1461,7 +1779,7 @@ fn list_models_with_executable(
         let detail = result.stderr.trim();
         return Err(format!(
             "failed to run opencode models ({}): {}",
-            opencode_path.display(),
+            shown,
             if detail.is_empty() {
                 "terminated without an exit status"
             } else {
@@ -1673,7 +1991,7 @@ mod tests {
         write_file(
             &ws,
             "templates/opencode.base.json",
-            r#"{"default_agent":"architect","model":"opencode-go/glm-5.2","small_model":"opencode-go/deepseek-v4-flash"}"#,
+            r#"{"default_agent":"architect","model":"opencode-go/glm-5.2","small_model":"opencode-go/deepseek-v4.1-flash"}"#,
         );
         write_file(
             &ws,
@@ -1711,7 +2029,7 @@ mod tests {
         assert_eq!(health.model, Some("opencode-go/glm-5.2".into()));
         assert_eq!(
             health.small_model,
-            Some("opencode-go/deepseek-v4-flash".into())
+            Some("opencode-go/deepseek-v4.1-flash".into())
         );
         assert_eq!(health.bundled_agent_count, 2);
         assert_eq!(health.installed_bundled_agent_count, 2);
@@ -3218,6 +3536,44 @@ mod tests {
     }
 
     #[test]
+    fn test_fallback_model_constants_match_the_bundled_base_template() {
+        let base: serde_json::Value =
+            serde_json::from_str(&bundled_template("opencode.base.json")).expect("base template");
+        assert_eq!(base["model"], DEFAULT_MODEL);
+        assert_eq!(base["small_model"], DEFAULT_SMALL_MODEL);
+    }
+
+    #[test]
+    fn test_lsp_is_a_managed_key_that_installs_and_is_compared() {
+        let template: serde_json::Value =
+            serde_json::from_str(&bundled_template("opencode.json")).expect("template");
+        assert_eq!(
+            template["lsp"], true,
+            "the bundled config enables built-in LSP"
+        );
+        assert_eq!(
+            extract_managed_opencode_config(&template)["lsp"],
+            true,
+            "lsp is part of the managed projection"
+        );
+
+        // A user's own `lsp: false` is reset on install, other user keys survive.
+        let installed: serde_json::Value =
+            serde_json::from_str(r#"{"lsp":false,"provider":{"mine":{}}}"#).expect("installed");
+        let merged =
+            merge_managed_opencode_config(&installed, &extract_managed_opencode_config(&template));
+        assert_eq!(merged["lsp"], true);
+        assert_eq!(merged["provider"], installed["provider"]);
+
+        // Health sees a config that predates the key, or turns it off, as diverged.
+        assert!(managed_opencode_keys_match(&merged, &template));
+        assert!(!managed_opencode_keys_match(&installed, &template));
+        let mut without = merged.clone();
+        without.as_object_mut().expect("object").remove("lsp");
+        assert!(!managed_opencode_keys_match(&without, &template));
+    }
+
+    #[test]
     fn test_bundled_template_manages_exactly_the_listed_agent_blocks() {
         let template: serde_json::Value =
             serde_json::from_str(&bundled_template("opencode.json")).expect("template");
@@ -3855,5 +4211,448 @@ mod tests {
         assert_eq!(parsed["schema_version"].as_u64(), Some(1));
 
         cleanup(&dir);
+    }
+
+    // ── Config, rules and Playwright facts ──
+
+    fn health_of_installed(
+        name: &str,
+        edit: impl FnOnce(&mut serde_json::Value),
+    ) -> OpenCodeRuntimeHealth {
+        let (ws, home) = setup_synced_workspace(name);
+        let installed_path = home.join(".config/opencode/opencode.json");
+        let mut installed: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&installed_path).expect("installed"))
+                .expect("parse installed");
+        edit(&mut installed);
+        fs::write(&installed_path, installed.to_string()).expect("write installed");
+        let health = compute_health(&ws, &home);
+        cleanup(&ws);
+        cleanup(&home);
+        health
+    }
+
+    #[test]
+    fn test_config_row_is_synced_without_diverged_keys() {
+        let health = health_of_installed("cfg-synced", |_| {});
+        assert_eq!(health.config_status, "synced");
+        assert!(health.config_diverged_keys.is_empty());
+    }
+
+    #[test]
+    fn test_config_row_names_the_diverged_managed_keys() {
+        let health = health_of_installed("cfg-diverged", |installed| {
+            installed["model"] = "other/model".into();
+            installed["lsp"] = false.into();
+            installed["provider"] = serde_json::json!({"mine": {}});
+        });
+        assert_eq!(health.config_status, "diverged");
+        // Managed keys only: the user's own `provider` block is not a difference.
+        assert_eq!(health.config_diverged_keys, ["model", "lsp"]);
+        let detail = &health
+            .checks
+            .iter()
+            .find(|c| c.id == "configs_match")
+            .expect("configs_match check")
+            .detail;
+        assert!(detail.contains("model, lsp"), "{detail}");
+        assert_eq!(health.status, "diverged");
+    }
+
+    #[test]
+    fn test_config_row_reports_missing_and_invalid_installed_files() {
+        let (ws, home) = setup_synced_workspace("cfg-missing");
+        let installed_path = home.join(".config/opencode/opencode.json");
+        fs::write(&installed_path, "{ not json").expect("break installed");
+        let invalid = compute_health(&ws, &home);
+        fs::remove_file(&installed_path).expect("remove installed");
+        let missing = compute_health(&ws, &home);
+        cleanup(&ws);
+        cleanup(&home);
+
+        assert_eq!(invalid.config_status, "invalid");
+        assert_eq!(missing.config_status, "missing");
+        assert!(invalid.config_diverged_keys.is_empty() && missing.config_diverged_keys.is_empty());
+    }
+
+    #[test]
+    fn test_differing_keys_cover_mcp_agent_and_permission_order() {
+        let rendered: serde_json::Value = serde_json::from_str(
+            r#"{"model":"a/b","permission":{"*":"ask","src/**":"allow","**/.env":"deny"},
+                "mcp":{"playwright":{"command":["npx","@playwright/mcp@0.0.48"]}},
+                "agent":{"plan":{"permission":{"edit":{"*":"deny"}}}}}"#,
+        )
+        .expect("rendered");
+        assert!(differing_managed_opencode_keys(&rendered, &rendered).is_empty());
+
+        let installed: serde_json::Value = serde_json::from_str(
+            r#"{"model":"a/b","permission":{"*":"ask","**/.env":"deny","src/**":"allow"},
+                "mcp":{"playwright":{"command":["npx","@playwright/mcp@0.0.30"]},"mine":{}},
+                "agent":{"plan":{"permission":{"edit":"allow"}},"mine":{}}}"#,
+        )
+        .expect("installed");
+        assert_eq!(
+            differing_managed_opencode_keys(&installed, &rendered),
+            ["permission", "mcp.playwright", "agent.plan"]
+        );
+        // Matching is the same question.
+        assert!(!managed_opencode_keys_match(&installed, &rendered));
+    }
+
+    #[test]
+    fn test_rules_row_compares_global_agents_md_with_the_bundled_rules() {
+        let (ws, home) = setup_synced_workspace("rules");
+        let health = |ws: &Path, home: &Path| compute_health(ws, home).rules_status;
+
+        assert_eq!(
+            health(&ws, &home),
+            "unknown",
+            "no rules template in the workspace"
+        );
+        write_file(&ws, "templates/sync/opencode-rules.md", "# rules\n");
+        assert_eq!(health(&ws, &home), "missing");
+        write_file(&home, ".config/opencode/AGENTS.md", "# rules\n");
+        assert_eq!(health(&ws, &home), "synced");
+        write_file(&home, ".config/opencode/AGENTS.md", "# edited\n");
+        assert_eq!(health(&ws, &home), "diverged");
+        // Rules never decide the overall status; the install overview reports them per surface.
+        assert_eq!(compute_health(&ws, &home).status, "synced");
+
+        cleanup(&ws);
+        cleanup(&home);
+    }
+
+    #[test]
+    fn test_playwright_pin_is_read_from_the_installed_command() {
+        let config: serde_json::Value = serde_json::from_str(
+            r#"{"mcp":{"playwright":{"command":["npx","-y","@playwright/mcp@0.0.48","--config","c.json"]}}}"#,
+        )
+        .expect("config");
+        assert_eq!(
+            playwright_mcp_version_of(&config).as_deref(),
+            Some("0.0.48")
+        );
+        for without in [
+            r#"{}"#,
+            r#"{"mcp":{"other":{}}}"#,
+            r#"{"mcp":{"playwright":{"command":["npx","playwright"]}}}"#,
+        ] {
+            let config: serde_json::Value = serde_json::from_str(without).expect("config");
+            assert_eq!(playwright_mcp_version_of(&config), None, "{without}");
+        }
+    }
+
+    // ── CLI path ──
+
+    #[test]
+    fn test_fallback_candidates_include_the_official_installer_dir() {
+        let home = Path::new("/home/someone");
+        let candidates = opencode_fallback_candidates(Some(home));
+        assert!(candidates.contains(&PathBuf::from("/opt/homebrew/bin/opencode")));
+        assert!(candidates.contains(&PathBuf::from("/usr/local/bin/opencode")));
+        assert!(candidates.contains(&home.join(".opencode/bin/opencode")));
+        assert!(!opencode_fallback_candidates(None)
+            .iter()
+            .any(|p| p.ends_with(".opencode/bin/opencode")));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_resolve_finds_the_official_installer_binary_without_path() {
+        let home = temp_root("installer-home");
+        let stub = write_stub_opencode(&home.join(".opencode/bin"), "echo 1.19.3");
+        let found = resolve_opencode_executable_in("", &[home.join(".opencode/bin/opencode")]);
+        cleanup(&home);
+        assert_eq!(found, Some(stub));
+
+        let nothing = resolve_opencode_executable_in("", &[PathBuf::from("/nonexistent/opencode")]);
+        assert_eq!(nothing, None);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_resolve_prefers_path_over_fallbacks() {
+        let on_path = temp_root("path-first");
+        let fallback = temp_root("path-first-fallback");
+        let wanted = write_stub_opencode(&on_path, "echo 1.19.3");
+        let other = write_stub_opencode(&fallback, "echo 1.19.3");
+        let found = resolve_opencode_executable_in(&on_path.to_string_lossy(), &[other]);
+        cleanup(&on_path);
+        cleanup(&fallback);
+        assert_eq!(found, Some(wanted));
+    }
+
+    #[test]
+    fn test_missing_cli_error_names_the_install_options() {
+        let msg = list_models_with_executable(None, Duration::from_secs(1))
+            .expect_err("missing opencode CLI must be an error");
+        for needle in ["opencode-ai", "anomalyco/tap/opencode", "~/.opencode/bin"] {
+            assert!(msg.contains(needle), "{msg}");
+        }
+    }
+
+    // ── CLI probes against a stub `opencode` ──
+
+    /// A stub that answers `--version`, `debug agent <name> --pure` (exit status only) and
+    /// `models`, and records the arguments of the `models` call in `models-args.txt`.
+    #[cfg(unix)]
+    fn health_stub(dir: &Path, version: &str, agent_exit: i32, models: &[&str]) -> PathBuf {
+        let listed: String = models.iter().map(|m| format!("'{m}' ")).collect();
+        write_stub_opencode(
+            dir,
+            &format!(
+                r#"case "$1" in
+  --version) echo {version}; exit 0 ;;
+  debug) exit {agent_exit} ;;
+  models) echo "$@" > "$(dirname "$0")/models-args.txt"; printf '%s\n' {listed}; exit 0 ;;
+esac
+exit 64"#
+            ),
+        )
+    }
+
+    #[cfg(unix)]
+    const GOOD_MODELS: [&str; 3] = [
+        "opencode-go/glm-5.2",
+        "opencode-go/deepseek-v4.1-flash",
+        "other/model",
+    ];
+
+    #[cfg(unix)]
+    const LIMITS: ProbeLimits = ProbeLimits {
+        version: Duration::from_secs(10),
+        agent: Duration::from_secs(10),
+        models: Duration::from_secs(10),
+    };
+
+    #[cfg(unix)]
+    fn check_of<'a>(health: &'a OpenCodeRuntimeHealth, id: &str) -> &'a OpenCodeRuntimeCheck {
+        health
+            .checks
+            .iter()
+            .find(|c| c.id == id)
+            .unwrap_or_else(|| panic!("check {id}"))
+    }
+
+    /// A synced health, probed with `program`; returns the health before and after the probes.
+    #[cfg(unix)]
+    fn probe_synced(
+        name: &str,
+        program: Option<&Path>,
+        limits: ProbeLimits,
+    ) -> (OpenCodeRuntimeHealth, OpenCodeRuntimeHealth) {
+        let (ws, home) = setup_synced_workspace(name);
+        let before = compute_health(&ws, &home);
+        let mut after = before.clone();
+        apply_cli_probes(&mut after, program, limits);
+        cleanup(&ws);
+        cleanup(&home);
+        (before, after)
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_unprobed_models_are_unknown_not_passing() {
+        let (before, _) = probe_synced("unprobed", None, LIMITS);
+        assert_eq!(check_of(&before, "model").status, "unknown");
+        assert_eq!(check_of(&before, "small_model").status, "unknown");
+        assert!(before.cli.is_none());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_probes_confirm_listed_models_and_a_resolving_agent() {
+        let dir = temp_root("probe-ok");
+        let stub = health_stub(&dir, "1.19.3", 0, &GOOD_MODELS);
+        let (before, after) = probe_synced("probe-ok", Some(&stub), LIMITS);
+        let args = fs::read_to_string(dir.join("models-args.txt")).expect("models called");
+        cleanup(&dir);
+
+        let cli = after.cli.as_ref().expect("cli probed");
+        assert_eq!(
+            (cli.status.as_str(), cli.version.as_deref()),
+            ("supported", Some("1.19.3"))
+        );
+        for id in ["model", "small_model", "default_agent_resolves", "cli"] {
+            assert_eq!(check_of(&after, id).status, "pass", "{id}");
+        }
+        assert!(after.warnings.is_empty(), "{:?}", after.warnings);
+        assert_eq!(
+            after.status, before.status,
+            "probes never change the status"
+        );
+        assert_eq!(args.trim(), "models --pure");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_a_model_missing_from_the_listing_warns_without_failing_health() {
+        let dir = temp_root("probe-missing-model");
+        let stub = health_stub(&dir, "1.19.3", 0, &["opencode-go/glm-5.2", "other/model"]);
+        let (before, after) = probe_synced("probe-missing-model", Some(&stub), LIMITS);
+        cleanup(&dir);
+
+        assert_eq!(check_of(&after, "model").status, "pass");
+        let small = check_of(&after, "small_model");
+        assert_eq!(small.status, "warn");
+        assert!(
+            small.detail.contains("opencode-go/deepseek-v4.1-flash"),
+            "{}",
+            small.detail
+        );
+        assert_eq!(after.warnings.len(), 1, "{:?}", after.warnings);
+        let warning = &after.warnings[0];
+        assert!(
+            warning.contains("small_model opencode-go/deepseek-v4.1-flash"),
+            "{warning}"
+        );
+        assert!(
+            warning.contains("does not pick another small model"),
+            "{warning}"
+        );
+        assert_eq!(after.status, before.status);
+
+        // The main model is reported too, without the small-model note.
+        let dir = temp_root("probe-missing-main");
+        let stub = health_stub(&dir, "1.19.3", 0, &["opencode-go/deepseek-v4.1-flash"]);
+        let (_, after) = probe_synced("probe-missing-main", Some(&stub), LIMITS);
+        cleanup(&dir);
+        assert_eq!(check_of(&after, "model").status, "warn");
+        assert!(after.warnings[0].starts_with("model opencode-go/glm-5.2 is not listed"));
+        assert!(!after.warnings[0].contains("small model"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_a_default_agent_that_does_not_resolve_warns() {
+        let dir = temp_root("probe-bad-agent");
+        let stub = health_stub(&dir, "1.19.3", 1, &GOOD_MODELS);
+        let (before, after) = probe_synced("probe-bad-agent", Some(&stub), LIMITS);
+        cleanup(&dir);
+
+        assert_eq!(check_of(&after, "default_agent_resolves").status, "fail");
+        assert_eq!(after.warnings.len(), 1, "{:?}", after.warnings);
+        assert!(after.warnings[0].contains("cannot resolve default agent architect"));
+        assert_eq!(after.status, before.status);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_a_missing_cli_leaves_the_probes_unknown_and_health_untouched() {
+        let (before, after) = probe_synced("probe-no-cli", None, LIMITS);
+
+        let cli = after.cli.as_ref().expect("cli probed");
+        assert_eq!(cli.status, "missing");
+        assert!(
+            cli.detail.contains("opencode-ai") && cli.detail.contains("anomalyco/tap/opencode")
+        );
+        for id in ["model", "small_model", "default_agent_resolves"] {
+            assert_eq!(check_of(&after, id).status, "unknown", "{id}");
+        }
+        assert!(after.warnings.is_empty(), "{:?}", after.warnings);
+        assert_eq!(after.status, before.status);
+        assert_eq!(after.next_action, before.next_action);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_a_hung_cli_is_unknown_and_bounded() {
+        let dir = temp_root("probe-hang");
+        // `exec` so the killed process is the sleeper itself (no orphan holding the pipe).
+        let stub = write_stub_opencode(&dir, "exec sleep 30");
+        let limits = ProbeLimits {
+            version: Duration::from_millis(300),
+            ..LIMITS
+        };
+        let started = std::time::Instant::now();
+        let (before, after) = probe_synced("probe-hang", Some(&stub), limits);
+        cleanup(&dir);
+
+        assert!(
+            started.elapsed() < Duration::from_secs(10),
+            "the timeout bounds the wait"
+        );
+        assert_eq!(
+            after.cli.as_ref().map(|c| c.status.as_str()),
+            Some("unknown")
+        );
+        for id in ["model", "small_model", "default_agent_resolves"] {
+            assert_eq!(check_of(&after, id).status, "unknown", "{id}");
+        }
+        assert!(after.warnings.is_empty());
+        assert_eq!(after.status, before.status);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_a_model_listing_that_fails_or_times_out_is_unknown() {
+        let dir = temp_root("probe-models-fail");
+        let stub = write_stub_opencode(
+            &dir,
+            r#"case "$1" in --version) echo 1.19.3 ;; debug) exit 0 ;; *) echo opencode-go/glm-5.2; exit 3 ;; esac"#,
+        );
+        let (_, failed) = probe_synced("probe-models-fail", Some(&stub), LIMITS);
+        cleanup(&dir);
+        assert_eq!(check_of(&failed, "model").status, "unknown");
+        assert_eq!(check_of(&failed, "default_agent_resolves").status, "pass");
+        assert!(failed.warnings.is_empty(), "{:?}", failed.warnings);
+
+        let dir = temp_root("probe-models-hang");
+        let stub = write_stub_opencode(
+            &dir,
+            r#"case "$1" in --version) echo 1.19.3 ;; debug) exit 0 ;; *) exec sleep 30 ;; esac"#,
+        );
+        let limits = ProbeLimits {
+            models: Duration::from_millis(300),
+            ..LIMITS
+        };
+        let started = std::time::Instant::now();
+        let (_, hung) = probe_synced("probe-models-hang", Some(&stub), limits);
+        cleanup(&dir);
+        assert!(started.elapsed() < Duration::from_secs(10));
+        assert_eq!(check_of(&hung, "model").status, "unknown");
+        assert_eq!(check_of(&hung, "small_model").status, "unknown");
+        assert!(hung.warnings.is_empty(), "{:?}", hung.warnings);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_a_2x_cli_warns_lists_standalone_and_skips_the_agent_probe() {
+        let dir = temp_root("probe-v2");
+        let stub = health_stub(&dir, "2.0.32", 1, &GOOD_MODELS);
+        let (before, after) = probe_synced("probe-v2", Some(&stub), LIMITS);
+        let args = fs::read_to_string(dir.join("models-args.txt")).expect("models called");
+        cleanup(&dir);
+
+        let cli = after.cli.as_ref().expect("cli probed");
+        assert_eq!((cli.status.as_str(), cli.major), ("unsupported", Some(2)));
+        assert_eq!(after.warnings.len(), 1, "{:?}", after.warnings);
+        for needle in ["2.0.32", "supports OpenCode 1.x", "tui.json", "in memory"] {
+            assert!(after.warnings[0].contains(needle), "{}", after.warnings[0]);
+        }
+        assert_eq!(args.trim(), "models --standalone");
+        // The agent probe is only trusted on 1.x; a failing exit there must not raise an alarm.
+        assert_eq!(check_of(&after, "default_agent_resolves").status, "unknown");
+        assert_eq!(check_of(&after, "model").status, "pass");
+        assert_eq!(after.status, before.status);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_models_are_listed_with_the_arguments_of_the_installed_major() {
+        for (version, expected) in [
+            ("1.19.3", "models --pure"),
+            ("2.0.32", "models --standalone"),
+            ("dev-build", "models --pure"),
+        ] {
+            let dir = temp_root("models-args");
+            let stub = health_stub(&dir, version, 0, &GOOD_MODELS);
+            let listed = list_models_with_executable(Some(stub), Duration::from_secs(10));
+            let args = fs::read_to_string(dir.join("models-args.txt")).expect("models called");
+            cleanup(&dir);
+
+            assert_eq!(listed.expect("listing").models.len(), 3, "{version}");
+            assert_eq!(args.trim(), expected, "{version}");
+        }
     }
 }

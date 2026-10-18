@@ -76,6 +76,8 @@ Still honored from repository config: filter drivers (`filter.<name>.clean` and 
 
 The app runs its `python3` merge and generator helpers from the bundled, read-only copy, never from the editable runtime workspace, with fixed arguments. It never uses `sh -c` or a shell plugin (`check-shell-spawn.py` enforces this in release-check).
 
+The OpenCode runtime pane and model list also run the installed `opencode` CLI: `--version`, `debug agent <default_agent> --pure` and `models` (`--pure`, or `--standalone` on OpenCode 2.x). The binary comes from `PATH`, the Homebrew directories or `~/.opencode/bin`, never from the workspace. Arguments are fixed, except the default agent name, which must start with a letter or digit and is passed as one argument. Each call has a timeout and an output cap and runs from the system temp folder. Only the exit status, a version number and `provider/model` ids are kept; raw output is not stored or logged.
+
 ## What the app does NOT access
 
 - `.env` files or arbitrary secret environment values. The app reads documented operational variables (workspace, backup, Codex home, skill roots, Playwright, XDG, `HOME`, `PATH`); their values must not be printed or persisted as user content.

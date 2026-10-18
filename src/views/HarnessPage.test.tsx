@@ -371,7 +371,7 @@ describe("HarnessPage", () => {
 });
 
 describe("OpenCodeView model override", () => {
-  const OPENCODE_HEALTH = { status: "synced", tui_status: "synced", agent_mismatches: [], warnings: [], bundled_agent_count: 3, installed_bundled_agent_count: 3, default_agent: "build", autoupdate: "true", summary: "ok", next_action: "" } as unknown as OpenCodeRuntimeHealth;
+  const OPENCODE_HEALTH = { status: "synced", tui_status: "synced", agent_mismatches: [], warnings: [], cli: null, config_status: "synced", config_diverged_keys: [], rules_status: "synced", playwright_mcp_version: null, bundled_agent_count: 3, installed_bundled_agent_count: 3, default_agent: "build", autoupdate: "true", summary: "ok", next_action: "" } as unknown as OpenCodeRuntimeHealth;
 
   function backend(saveResult = "Saved model selection") {
     let selection = { model: "anthropic/claude-sonnet-4-5", small_model: "anthropic/claude-haiku-4-5" };

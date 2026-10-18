@@ -136,6 +136,8 @@ pub fn extend_path_with_tool_dirs() {
     ];
     if let Ok(home) = crate::cursor_profile_paths::resolve_user_home() {
         fallbacks.push(home.join(".local/bin"));
+        // The official OpenCode installer puts its binary here.
+        fallbacks.push(home.join(".opencode/bin"));
     }
     if let Some(updated) = append_missing_path_dirs(&current, &fallbacks) {
         std::env::set_var("PATH", updated);

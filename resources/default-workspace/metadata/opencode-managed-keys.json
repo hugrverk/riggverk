@@ -8,6 +8,7 @@
     "model",
     "small_model",
     "default_agent",
+    "lsp",
     "compaction",
     "watcher",
     "permission"

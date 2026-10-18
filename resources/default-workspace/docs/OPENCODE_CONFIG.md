@@ -1,5 +1,25 @@
 # OpenCode Config
 
+## Supported OpenCode version
+
+Agent Workspace manages the **OpenCode 1.x** config format (`opencode.json`, `tui.json`, `agents/*.md`) and is verified against OpenCode 1.19.3. Install 1.x with npm (`npm i -g opencode-ai`) or the Homebrew tap (`brew install anomalyco/tap/opencode`). Homebrew core's `opencode` formula installs **2.x**, so check `opencode --version` after installing.
+
+OpenCode 2.x is detected, not supported. It migrates the 1.x config in memory and does not read `tui.json`. The OpenCode runtime pane shows the detected version in its `cli` row and warns on 2.x. A 2.x-native config is a separate future project; until then Agent Workspace keeps writing the 1.x keys. On 2.x the model list is read with `opencode models --standalone` (2.x has no `--pure`, and without `--standalone` it would use a background service); on 1.x it is `opencode models --pure`.
+
+The CLI is looked up on `PATH`, then in `/opt/homebrew/bin`, `/usr/local/bin` and `~/.opencode/bin` (the official installer's directory), because an app started from Finder has a short `PATH`.
+
+## Runtime health probes
+
+The OpenCode runtime pane compares files, and it also asks the installed CLI three things that files cannot show. Each probe has a timeout and an output cap, runs from a neutral working directory (the system temp folder, so no project config is picked up), and keeps only an exit status or a version number. Raw CLI output is never stored or logged.
+
+| Probe | Result |
+|-------|--------|
+| `opencode --version` (10 s) | The `cli` row, and the 1.x or 2.x code path below |
+| `opencode debug agent <default_agent> --pure` (20 s, 1.x only) | Exit 0 means the default agent parses and resolves. A non-zero exit warns, usually for a frontmatter error in an agent file that OpenCode otherwise skips silently |
+| `opencode models --pure` (30 s; `--standalone` on 2.x) | `model` and `small_model` must be listed. A missing one warns. OpenCode does not pick another small model when `small_model` is set but unknown. A model only appears while its provider is signed in |
+
+A missing CLI, a timeout or a failing probe leaves those checks `unknown`. It never fails the health or changes its status. The rows of the pane: `cli` (version, or "not found" with the install options), `default agent`, `autoupdate`, `rules` (global `AGENTS.md` against the bundled rules), `agents` (installed count, then the files that differ or are missing), `config` (synced or diverged, with the names of the managed keys that differ), `mcp playwright` (the pinned version) and `tui`.
+
 ## Source template
 
 The runtime OpenCode configuration is `templates/opencode.json`. This is a **generated snapshot** — do not edit it directly. The app installs from its bundled copy of these templates; edits to the workspace copy change what the Library shows, not what OpenCode receives.
@@ -29,6 +49,7 @@ The template defines:
 - Model selection via `model` and `small_model`
 - Default primary agent via `default_agent`
 - Playwright MCP through on-demand `npx` with a pinned package version, user-local MCP config, and shared browser cache (not `@latest`)
+- `lsp: true` (built-in language servers, see "Language servers (LSP)"); `formatter` is omitted, so formatters stay off
 - Permission model (which operations are allowed, denied, or require asking)
 - File-scope read/edit deny rules for secrets and credentials
 - Watcher ignore patterns
@@ -74,7 +95,9 @@ OpenCode agent definitions live at `agents/*.md` in the workspace. Six bundled a
 - `agents/scribe.md` — Documentation writer
 - `agents/verifier.md` — Non-destructive verification runner
 
-`templates/opencode.json` defines global `model`, `small_model`, and `default_agent`. Agents are model-agnostic by default — model selection is centralized in `templates/opencode.json`. Per-agent model pinning is intentionally avoided unless a future runtime constraint requires it.
+`architect` is the primary agent. `inspector` and `verifier` are subagents you can run directly: type `@inspector` or `@verifier` in the prompt. `repo-scout`, `sentinel` and `scribe` are `hidden: true`, which removes them from `@` autocomplete; the architect still delegates to them. Hiding only affects the menu, not what the model may delegate to.
+
+`templates/opencode.json` defines global `model`, `small_model`, and `default_agent`. The bundled `small_model` is `opencode-go/deepseek-v4.1-flash` (the earlier `deepseek-v4-flash` is no longer listed by `opencode models opencode-go`). Agents are model-agnostic by default — model selection is centralized in `templates/opencode.json`. Per-agent model pinning is intentionally avoided unless a future runtime constraint requires it.
 
 ## Permission model
 
@@ -132,13 +155,25 @@ The bundled agents (`architect` and the five subagents) keep self-contained perm
 
 A bare `external_directory: ask` would cancel OpenCode's built-in allowance for skill folders, so reading a skill's supporting files outside the worktree would prompt every time. The template keeps `"*": "ask"` and restates the allowance for the folders OpenCode loads skills from: `~/.claude/skills/*`, `~/.config/opencode/skills/*` and the `skills` folder under `~/.agents`. Because `*.md` edits are allowed, editing a file in those folders from another worktree still asks. OpenCode's tool-output folder is re-added by OpenCode itself. OpenCode's own temp folder (`<os temp dir>/opencode`) is not restated: its path differs per platform and cannot be written as a stable pattern, so reading there prompts.
 
+## Language servers (LSP)
+
+The template sets `lsp: true`, which enables OpenCode's built-in language servers. A server starts when OpenCode opens a file with a matching extension, and its diagnostics reach the agent after edits. The `lsp` permission (allow) lets the agent query it. Formatters stay off.
+
+Download behaviour in OpenCode 1.19.3: some built-in servers install themselves on first use when their tool is not already available, from npm, GitHub releases or `go install`. Its docs list bash, astro, clangd, kotlin-ls, lua-ls, php intelephense, svelte, terraform, tinymist, vue and yaml-ls as auto-installing; the others (for example gopls, rust-analyzer, pyright, typescript) need their tool on `PATH` or in the project. OpenCode's own docs caution that language servers can use significant memory and slow agent loops, and that running lint or typecheck commands is often the better feedback in some projects.
+
+Opt-outs:
+
+- Stop automatic downloads: set `OPENCODE_DISABLE_LSP_DOWNLOAD=true` in the environment OpenCode starts in. Servers that are already installed still run.
+- Turn LSP off for one project: add `"lsp": false` to that project's `opencode.json`. Project config overrides the global file (checked with `opencode debug config` on 1.19.3). To switch off a single server instead, use an object: `"lsp": {"typescript": {"disabled": true}}`.
+- `lsp` is a managed key, so editing it in `~/.config/opencode/opencode.json` is reset on the next install. To change the default for everyone, edit `templates/opencode.base.json` in the app source repository.
+
 ## TUI config
 
 `templates/tui.json` controls TUI-only preferences such as theme, diff layout, mouse, scroll behavior, and leader timeout. It installs to `~/.config/opencode/tui.json` with the OpenCode config target.
 
 ## Managed-key merge
 
-Install does **not** overwrite the entire installed `opencode.json`. It merges only the keys listed in `metadata/opencode-managed-keys.json` (model, permissions, the `permission` block of the built-in `plan` and `explore` agents, Playwright MCP, compaction, watcher, and related settings). User `provider` blocks, non-Playwright MCP servers and other `agent` entries are preserved. Managed keys are reset to the bundled values on every update, so keep your own settings in unmanaged keys.
+Install does **not** overwrite the entire installed `opencode.json`. It merges only the keys listed in `metadata/opencode-managed-keys.json` (model, `lsp`, permissions, the `permission` block of the built-in `plan` and `explore` agents, Playwright MCP, compaction, watcher, and related settings). User `provider` blocks, non-Playwright MCP servers and other `agent` entries are preserved. Managed keys are reset to the bundled values on every update, so keep your own settings in unmanaged keys.
 
 Legacy `~/.config/opencode/agents/scout.md` files from the pre-rename Agent Workspace scout are removed on agent sync when frontmatter is `name: scout`.
 
@@ -152,7 +187,7 @@ Both JSON files are validated before and after the write. Existing files that di
 
 ## App-level model override
 
-The OpenCode tab has a model override in its runtime pane (`e` edit, `s` save, `R` reload the model list). A saved selection is stored in an app-level override file:
+The OpenCode tab has a model override in its runtime pane (`e` edit, `s` save, `R` reload the model list, read with the arguments of the installed OpenCode major). A saved selection is stored in an app-level override file:
 
 | Platform | Override file |
 |----------|---------------|

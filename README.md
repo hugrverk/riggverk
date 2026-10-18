@@ -77,7 +77,7 @@ An edited block or a pre-existing file without markers is a conflict: Install le
 
 Shared semantic bodies live under `agent-specs/`; `scripts/generate-agent-adapters.py` composes the harness-native adapters:
 
-- OpenCode: six Markdown agents under `agents/` (`architect` is the primary agent; plus repo-scout, inspector, sentinel, scribe, verifier).
+- OpenCode: six Markdown agents under `agents/` (`architect` is the primary agent; plus repo-scout, inspector, sentinel, scribe, verifier). `inspector` and `verifier` can be run directly with `@`; the other subagents are hidden from `@` and reached through delegation.
 - Claude Code: five subagents under `templates/claude/agents/` (repo-scout, inspector, sentinel, scribe, verifier).
 - Codex: TOML agents under `templates/codex/agents/` (four).
 - Cursor: six agents under `templates/cursor/agents/` (repo-scout, inspector, security-reviewer, verifier, browser-qa, release-checker).
@@ -86,7 +86,7 @@ Generated adapters must stay current with their sources; repository checks fail 
 
 ## Harness ownership
 
-- **OpenCode**: composed rules, native agents, skills, managed config keys, `tui.json`, and the named Playwright MCP entry. User provider blocks, unrelated MCP entries, and unknown keys are preserved.
+- **OpenCode**: composed rules, native agents, skills, managed config keys (including `lsp: true` for the built-in language servers), `tui.json`, and the named Playwright MCP entry. User provider blocks, unrelated MCP entries, and unknown keys are preserved. The supported runtime is **OpenCode 1.x** (npm `opencode-ai` or `anomalyco/tap/opencode`); Homebrew core's `opencode` installs 2.x, which is detected and flagged but not supported, and the app keeps writing the 1.x config format. Details and the LSP opt-outs are in `docs/OPENCODE_CONFIG.md`.
 - **Codex**: rules, TOML agents, skills, and allowlisted config defaults in `$CODEX_HOME/config.toml` (default `~/.codex/config.toml`). `approval_policy`, `approvals_reviewer`, `sandbox_mode`, and `apps._default.*` follow the template. `model` and `model_reasoning_effort` are create-only: written (`gpt-6.1-sol`, `xhigh`) only when the file has no value, then yours. The `codex_config` target is off by default. A non-empty `AGENTS.override.md` makes Codex ignore `AGENTS.md`; Codex health warns about it. Legacy app-shaped profile selectors and tables are removed during migration only. Copies under the old `~/.agents/skills` location are detected for migration to `$CODEX_HOME/skills`; diverged copies stay conflicts.
 - **Claude Code**: rules, subagents, and skills. Claude settings, authentication, trust state, caches, and user-scoped MCP credentials stay Claude-managed and are not read or written.
 - **Cursor**: six global agents, skills, and the named Playwright MCP entry in `~/.cursor/mcp.json`, via native Rust operations. User Rules and Auto Review stay manual. Project `.cursor/*`, project agents, project MCP, `.cursorignore`, and `AGENTS.md` are never written.
@@ -96,7 +96,7 @@ Generated adapters must stay current with their sources; repository checks fail 
 Tabs in order (press `1`-`7`; disabled harnesses are hidden and the rest renumber): workspace, codex, opencode, cursor, claude, library, settings. `?` lists every key and command; `:` opens the command line.
 
 - Workspace - harness list with install state, surfaces, installed-state matrix, uninstall with preview, session-scoped **Recover previous uninstall**, backups folder, output.
-- Codex, OpenCode, Cursor, Claude - target toggles (Space, autosaved), surfaces, runtime health, install review. OpenCode adds the model override.
+- Codex, OpenCode, Cursor, Claude - target toggles (Space, autosaved), surfaces, runtime health, install review. OpenCode health also asks the installed CLI (version, whether the default agent resolves, whether the configured models are listed; bounded, parse-only, never logged), and the page adds the model override.
 - Library - an items list and one document pane (rendered, or its source while editing) for docs, rules, skills, runtime agents, and configs. Saves write the runtime workspace only (`:w`, `:q`).
 - Settings - harnesses, appearance, text size, motion, landing page, colors, workspace.
 

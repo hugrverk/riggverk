@@ -71,7 +71,7 @@ BUILTIN_AGENT_KEYS = {"permission", "from_base", "bash_profile"}
 BASE_KEY_ORDER = [
     "$schema", "share", "autoupdate", "snapshot",
     "model", "small_model", "default_agent",
-    "provider", "mcp", "compaction", "watcher",
+    "provider", "mcp", "lsp", "compaction", "watcher",
 ]
 
 

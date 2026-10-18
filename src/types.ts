@@ -264,6 +264,15 @@ export interface OpenCodeAgentMismatch {
   detail: string;
 }
 
+/** The installed `opencode` CLI, from `opencode --version`. */
+export interface OpenCodeCliHealth {
+  /** `supported` (1.x), `unsupported` (another major), `unknown` (found, no readable version) or `missing`. */
+  status: string;
+  version: string | null;
+  major: number | null;
+  detail: string;
+}
+
 export interface OpenCodeRuntimeHealth {
   status: string;
   template_config_path: string;
@@ -279,6 +288,16 @@ export interface OpenCodeRuntimeHealth {
   extra_installed_agent_count: number;
   agent_mismatches: OpenCodeAgentMismatch[];
   warnings: string[];
+  /** Null until the CLI has been probed. */
+  cli: OpenCodeCliHealth | null;
+  /** `opencode.json` against the bundled render: synced, diverged, missing, invalid or unknown. */
+  config_status: string;
+  /** Managed keys that differ: top-level names, `mcp.<server>` and `agent.<name>`. */
+  config_diverged_keys: string[];
+  /** Global `AGENTS.md` against the bundled rules: synced, diverged, missing or unknown. */
+  rules_status: string;
+  /** The `@playwright/mcp` version pinned in the installed config. */
+  playwright_mcp_version: string | null;
   // TUI config
   template_tui_path: string;
   installed_tui_path: string;

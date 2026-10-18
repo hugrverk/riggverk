@@ -4,7 +4,6 @@ description: Use automatically after implementation to run relevant non-destruct
 mode: subagent
 temperature: 0.1
 steps: 50
-hidden: true
 permission:
   "*": ask
   external_directory:

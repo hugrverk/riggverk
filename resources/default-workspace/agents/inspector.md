@@ -4,7 +4,6 @@ description: Use automatically after implementation or before commit to review c
 mode: subagent
 temperature: 0.1
 steps: 40
-hidden: true
 permission:
   "*": ask
   external_directory:
