@@ -4,7 +4,7 @@ Global Cursor setup for agents, managed skills, and Playwright MCP. Auto Review,
 
 ## Primary workflow
 
-Use the Agent Workspace **Cursor** page. Setup runs through native Rust operations on all supported desktop platforms:
+Use the Riggverk **Cursor** page. Setup runs through native Rust operations on all supported desktop platforms:
 
 - diff setup — preview agents, managed skills, MCP merge, and any pending legacy permission cleanup
 - apply setup — sync managed surfaces with backup-before-write
@@ -20,7 +20,7 @@ The machine-readable contract is `global-profile.json` and `manifest.json` (`set
 | Skills | `~/.claude/skills` or `~/.agents/skills`, both read by Cursor (installed by the app for every enabled harness, not a Cursor-only folder) |
 | MCP | `~/.cursor/mcp.json` (merges the `playwright` server only) |
 
-During apply, if `~/.cursor/permissions.json` still contains the legacy Agent Workspace-owned `playwright:*` mcpAllowlist entry, setup removes that exact entry only. It does not install a replacement permissions template.
+During apply, if `~/.cursor/permissions.json` still contains the legacy Riggverk-owned `playwright:*` mcpAllowlist entry, setup removes that exact entry only. It does not install a replacement permissions template.
 
 Existing target files are backed up before changes.
 
@@ -28,7 +28,7 @@ Existing target files are backed up before changes.
 
 Select **Auto Review** manually in `Cursor Settings > Agents > Run Mode`.
 
-Agent Workspace does not inspect or write undocumented Cursor runtime state and therefore does not claim that Auto Review is active. The Cursor page reports only the files it can verify.
+Riggverk does not inspect or write undocumented Cursor runtime state and therefore does not claim that Auto Review is active. The Cursor page reports only the files it can verify.
 
 ## What it does not write
 

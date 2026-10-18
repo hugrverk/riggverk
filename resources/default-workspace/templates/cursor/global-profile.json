@@ -41,8 +41,8 @@
     "AGENTS.md"
   ],
   "notes": [
-    "Apply via the Agent Workspace Cursor page.",
-    "Select Auto Review manually in Cursor Settings; Agent Workspace does not inspect undocumented Cursor state.",
-    "Legacy permissions and sandbox profiles are no longer managed by Agent Workspace."
+    "Apply via the Riggverk Cursor page.",
+    "Select Auto Review manually in Cursor Settings; Riggverk does not inspect undocumented Cursor state.",
+    "Legacy permissions and sandbox profiles are no longer managed by Riggverk."
   ]
 }

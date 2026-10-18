@@ -133,7 +133,7 @@ fn unsupported_message(version: &CliVersion) -> String {
         "only the 1.x config format is managed"
     };
     format!(
-        "OpenCode {} is installed, but Agent Workspace supports OpenCode 1.x: {detail}. \
+        "OpenCode {} is installed, but Riggverk supports OpenCode 1.x: {detail}. \
          Use 1.x ({INSTALL_COMMANDS}).",
         version.text,
     )

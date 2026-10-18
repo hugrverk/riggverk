@@ -100,7 +100,7 @@ describe("StartView rules file", () => {
 
   it("warns on the Codex row when AGENTS.override.md replaces AGENTS.md", () => {
     const health = {
-      checks: [{ id: "rules_override", label: "AGENTS.override.md replaces AGENTS.md", status: "warn", detail: "the Agent Workspace base is not loaded until it is removed or emptied" }],
+      checks: [{ id: "rules_override", label: "AGENTS.override.md replaces AGENTS.md", status: "warn", detail: "the Riggverk base block is not loaded until it is removed or emptied" }],
     } as unknown as CodexRuntimeHealth;
     renderInFrame(
       <StartView

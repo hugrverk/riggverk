@@ -36,6 +36,8 @@ mod skills_install;
 mod stable_digest;
 
 #[cfg(test)]
+mod identity_contract;
+#[cfg(test)]
 mod managed_reconciliation_contract;
 #[cfg(test)]
 mod opencode_model_override_contract;

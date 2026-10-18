@@ -95,7 +95,7 @@ export function useRulesActions({
         try {
           approved = await confirm({
             title: "Leave as is",
-            message: `Leave ${rulesFileName(harness)} as it is? Agent Workspace stops proposing changes to it and never writes it. Base updates stay available; press m again to hand the file back, or convert it to keep your edits under the base block.`,
+            message: `Leave ${rulesFileName(harness)} as it is? Riggverk stops proposing changes to it and never writes it. Base updates stay available; press m again to hand the file back, or convert it to keep your edits under the base block.`,
             confirmLabel: "leave as is",
           });
         } finally {

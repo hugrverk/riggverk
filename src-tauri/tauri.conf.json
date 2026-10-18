@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Agent Workspace",
+  "productName": "Riggverk",
   "version": "0.1.0",
-  "identifier": "ai.agentworkspace.app",
+  "identifier": "se.hugrverk.riggverk",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:1420",
@@ -13,7 +13,7 @@
   "app": {
     "windows": [
       {
-        "title": "Agent Workspace",
+        "title": "Riggverk",
         "width": 1280,
         "height": 800,
         "resizable": true,

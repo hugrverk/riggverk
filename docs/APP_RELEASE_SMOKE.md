@@ -1,6 +1,6 @@
 # App Release Smoke
 
-Manual smoke checklist for Agent Workspace builds. It complements `scripts/release-check.sh`, which covers syntax, bundled-default checks, source scans, the app build, Cargo checks, apply smokes in temporary `HOME` directories, and the backend runtime smoke. It does not drive the webview, an installed bundle, or the folder picker.
+Manual smoke checklist for Riggverk builds. It complements `scripts/release-check.sh`, which covers syntax, bundled-default checks, source scans, the app build, Cargo checks, apply smokes in temporary `HOME` directories, and the backend runtime smoke. It does not drive the webview, an installed bundle, or the folder picker.
 
 Run this in the real Tauri app (not Vite only: `invoke` does not exist there) with isolated paths:
 
@@ -135,7 +135,7 @@ Use fixture files in the isolated `HOME` (`~/.claude/CLAUDE.md`, `~/.codex/AGENT
 ## 11. Pass / fail report template
 
 ```
-## Agent Workspace App Smoke Report
+## Riggverk App Smoke Report
 
 - Commit: ________
 - Build command: ________

@@ -121,7 +121,7 @@ describe("runtimeRowsFor", () => {
   });
 
   it("shows the unsupported-version warning from the backend like any other warning", () => {
-    const warning = "OpenCode 2.0.32 is installed, but Agent Workspace supports OpenCode 1.x";
+    const warning = "OpenCode 2.0.32 is installed, but Riggverk supports OpenCode 1.x";
     const rows = rowsOf({ warnings: [warning], cli: { status: "unsupported", version: "2.0.32", major: 2, detail: warning } });
     expect(rows.filter(item => item.id?.startsWith("warning-")).map(item => [item.tone, item.value])).toEqual([["warn", warning]]);
   });

@@ -114,7 +114,7 @@ describe("useWorkspacePicker choose", () => {
     });
     expect(message).toEqual({
       ok: false,
-      text: "/Users/dev/not-a-workspace is not an Agent Workspace folder (missing .agent-workspace/workspace.json)",
+      text: "/Users/dev/not-a-workspace is not a Riggverk workspace folder (missing .agent-workspace/workspace.json)",
     });
   });
 
@@ -233,10 +233,10 @@ describe("useWorkspacePicker busy", () => {
 describe("describeRefusedWorkspace", () => {
   it("keeps the detail of an invalid-workspace error and drops the generic wording", () => {
     expect(describeRefusedWorkspace("/x", "invalid workspace path: not a valid workspace (folder not found)")).toBe(
-      "/x is not an Agent Workspace folder (folder not found)",
+      "/x is not a Riggverk workspace folder (folder not found)",
     );
     expect(describeRefusedWorkspace("/x", "invalid workspace path: not a valid workspace")).toBe(
-      "/x is not an Agent Workspace folder",
+      "/x is not a Riggverk workspace folder",
     );
   });
 });

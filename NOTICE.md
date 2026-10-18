@@ -1,6 +1,6 @@
 # Notices
 
-Some bundled Agent Workspace skills are adapted from skill work by Matt Pocock (https://github.com/mattpocock/skills).
+Some bundled Riggverk skills are adapted from skill work by Matt Pocock (https://github.com/mattpocock/skills).
 
 Original author:
 Matt Pocock
@@ -17,7 +17,7 @@ Adapted material and bundled skills it informs:
 - `writing-for-agents` informs `context-budget` (no-op test, sediment, single source of truth, pointer wording).
 - `retro` informs `retro`.
 
-The text of these skills was paraphrased and restructured for Agent Workspace; the ideas and structure credited above come from the original work.
+The text of these skills was paraphrased and restructured for Riggverk; the ideas and structure credited above come from the original work.
 
 License of the original work:
 

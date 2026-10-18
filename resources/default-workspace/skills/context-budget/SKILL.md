@@ -75,5 +75,5 @@ Done when: each recommendation names the file, measured bytes saved, behavior ri
 
 - Do not optimize away critical safety, security, verification, or repository instructions.
 - Do not make broad deletions automatically unless explicitly asked.
-- Do not focus only on one agent; Agent Workspace is agent-agnostic.
+- Do not focus only on one agent; Riggverk is agent-agnostic.
 - Do not claim token savings are exact unless measured with a tokenizer.

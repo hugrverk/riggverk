@@ -13,9 +13,9 @@ Find vulnerabilities that violate a real trust boundary, then give owners the so
 
 Done when: in full audit mode, all Phase 6 artifacts are written and both validators pass, or `run_status: "incomplete"` is recorded with its exact reason and disclosed in the report; in guidance mode, the question is answered with source evidence.
 
-Agent Workspace: this skill is installed as a whole directory, so its companion files, `report-schema.json` and the validators, sit next to this file; resolve every relative link in this file against the directory that holds it. Vendored from cloudflare/security-audit-skill; see `UPSTREAM.md` next to this file. For reviewing a change or a focused security question, prefer `security-review`.
+Riggverk: this skill is installed as a whole directory, so its companion files, `report-schema.json` and the validators, sit next to this file; resolve every relative link in this file against the directory that holds it. Vendored from cloudflare/security-audit-skill; see `UPSTREAM.md` next to this file. For reviewing a change or a focused security question, prefer `security-review`.
 
-## Agent Workspace rules
+## Riggverk rules
 
 These local rules tighten the upstream workflow and win where they differ:
 

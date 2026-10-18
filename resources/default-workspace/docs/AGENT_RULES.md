@@ -14,7 +14,7 @@ Installed rule targets:
 | OpenCode | `~/.config/opencode/AGENTS.md` |
 | Claude Code | `~/.claude/CLAUDE.md` |
 
-Cursor User Rules are version-controlled separately in `templates/cursor/user-rules.md` and copied manually into Cursor Settings. Agent Workspace does not write undocumented Cursor rule state.
+Cursor User Rules are version-controlled separately in `templates/cursor/user-rules.md` and copied manually into Cursor Settings. Riggverk does not write undocumented Cursor rule state.
 
 ## The managed block
 

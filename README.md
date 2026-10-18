@@ -1,8 +1,8 @@
-# Agent Workspace
+# Riggverk
 
-Local Tauri control panel for managing a shared coding-agent workspace across Codex, OpenCode, Claude Code, and Cursor. Keyboard-first terminal-style UI; every write is reviewed before it happens.
+Riggverk is a local agent environment manager: a Tauri control panel for managing a shared coding-agent workspace across Codex, OpenCode, Claude Code, and Cursor. Keyboard-first terminal-style UI; every write is reviewed before it happens.
 
-The repository contains the application and its canonical bundled workspace. Installed workspaces and harness files are downstream user-owned data.
+The repository contains the application and its canonical bundled workspace. Installed workspaces and harness files are downstream user-owned data. The technical identifiers (the `AGENT-WORKSPACE BASE` rules markers, `~/.config/agent-workspace`, the `.agent-workspace/` marker folder, and the `AGENT_WORKSPACE_*` environment variables) keep their historical names on purpose, so existing installs and files stay valid.
 
 ## Repository layout
 
@@ -63,7 +63,7 @@ One optional group level is supported; deeper nesting is invalid. Every harness 
 
 Installed layout is flat and holds the whole skill directory: `<skills-folder>/<skill-name>/SKILL.md` plus the skill's supporting files at their relative paths. Skills are one surface for all harnesses and are installed into the folders the enabled harnesses read: Claude Code `~/.claude/skills`, Codex `~/.agents/skills` (`$CODEX_HOME/skills` with a customised `CODEX_HOME`), and `~/.agents/skills` for OpenCode or Cursor when neither of those is wanted already. The app's copies from older versions in `~/.config/opencode/skills`, `~/.cursor/skills` and `$CODEX_HOME/skills` are removed on update; an edited copy stays.
 
-All skills support all four harnesses. The skills surface is not gated by target toggles. Deprecated Agent Workspace skills are matched against bundled reference snapshots: identical managed copies are removed after backup, diverged and unknown copies are preserved.
+All skills support all four harnesses. The skills surface is not gated by target toggles. Deprecated Riggverk skills are matched against bundled reference snapshots: identical managed copies are removed after backup, diverged and unknown copies are preserved.
 
 ## Rules
 

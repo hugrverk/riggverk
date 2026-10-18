@@ -1,12 +1,12 @@
 [package]
-name = "agent-workspace"
+name = "riggverk"
 version = "0.1.0"
-description = "Local macOS GUI for Agent Workspace"
+description = "Local macOS GUI for Riggverk"
 authors = []
 edition = "2021"
 
 [lib]
-name = "agent_workspace_lib"
+name = "riggverk_lib"
 crate-type = ["lib", "cdylib", "staticlib"]
 
 [build-dependencies]

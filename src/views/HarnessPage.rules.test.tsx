@@ -75,7 +75,7 @@ const OVERRIDE_CHECK = {
   id: "rules_override",
   label: "AGENTS.override.md replaces AGENTS.md",
   status: "warn",
-  detail: "/Users/me/.codex/AGENTS.override.md exists and replaces AGENTS.md; the Agent Workspace base is not loaded until it is removed or emptied",
+  detail: "/Users/me/.codex/AGENTS.override.md exists and replaces AGENTS.md; the Riggverk base block is not loaded until it is removed or emptied",
 };
 
 function rules(overrides: Partial<RulesStatus> = {}): RulesStatus {
@@ -172,7 +172,7 @@ const UPDATE_DIFF: RulesDiffView = {
 };
 
 const RESULT_FILE = [
-  "<!-- BEGIN AGENT-WORKSPACE BASE: managed by Agent Workspace -->",
+  "<!-- BEGIN AGENT-WORKSPACE BASE: managed by Riggverk -->",
   "# Global Agent Rules",
   "<!-- END AGENT-WORKSPACE BASE -->",
   "",
@@ -768,7 +768,7 @@ describe("Codex rules override", () => {
     renderCodex(codexHealth([OVERRIDE_CHECK]));
     const alert = within(screen.getByRole("region", { name: "Codex detail" })).getByRole("alert");
     expect(alert.textContent).toContain("AGENTS.override.md replaces AGENTS.md");
-    expect(alert.textContent).toContain("the Agent Workspace base is not loaded until it is removed or emptied");
+    expect(alert.textContent).toContain("the Riggverk base block is not loaded until it is removed or emptied");
     expect(alert.className).toContain("rules-alert");
   });
 

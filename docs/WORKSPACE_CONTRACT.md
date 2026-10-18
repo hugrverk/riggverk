@@ -2,7 +2,7 @@
 
 ## Scope
 
-A workspace is a user-owned runtime data directory containing docs, skills, templates, agents, metadata, and helper scripts. It is separate from the Agent Workspace source repository.
+A workspace is a user-owned runtime data directory containing docs, skills, templates, agents, metadata, and helper scripts. It is separate from the Riggverk source repository.
 
 The canonical bundled workspace source lives under `resources/default-workspace/`. The installed workspace normally lives at `~/.config/agent-workspace`. The path resolves in this order: `AGENT_WORKSPACE_PATH` (development and tests), a valid custom path saved in Settings, the default.
 
@@ -91,17 +91,17 @@ All 25 current bundled skills target Codex, OpenCode, Claude, and Cursor. Sync-a
 
 ## Skill sources
 
-Canonical skill files under `skills/` are the single source for every harness. Managed setup copies each `SKILL.md` byte for byte into every skills folder it installs into; there are no generated per-harness adapters. Harness-specific text lives at the end of the file under `## Harness notes` (`### Claude Code`, `### Codex`, `### OpenCode`, `### Cursor`, in that order). Claude-only frontmatter keys and Claude's `!` command injection are allowed only together with the Claude Code notes, and `scripts/check-skill-routing.py` enforces the structure in the source repository. That script lives in the source repository's `scripts/`, not in the installed workspace; skills added to a runtime workspace are not discovered for install. A skill without a canonical file is unavailable; production setup has no other source. Destination folders are unchanged. What changed is the unit of ownership: every file of a skill, `SKILL.md` and supporting files alike, is one managed artifact (`SkillFile`: skill root, skill name, relative path), copied byte for byte from the skill's directory in the bundle. There is no artifact for a directory, so Agent Workspace never owns a skill folder as a whole.
+Canonical skill files under `skills/` are the single source for every harness. Managed setup copies each `SKILL.md` byte for byte into every skills folder it installs into; there are no generated per-harness adapters. Harness-specific text lives at the end of the file under `## Harness notes` (`### Claude Code`, `### Codex`, `### OpenCode`, `### Cursor`, in that order). Claude-only frontmatter keys and Claude's `!` command injection are allowed only together with the Claude Code notes, and `scripts/check-skill-routing.py` enforces the structure in the source repository. That script lives in the source repository's `scripts/`, not in the installed workspace; skills added to a runtime workspace are not discovered for install. A skill without a canonical file is unavailable; production setup has no other source. Destination folders are unchanged. What changed is the unit of ownership: every file of a skill, `SKILL.md` and supporting files alike, is one managed artifact (`SkillFile`: skill root, skill name, relative path), copied byte for byte from the skill's directory in the bundle. There is no artifact for a directory, so Riggverk never owns a skill folder as a whole.
 
 Supporting files are the regular files below the skill directory: no symlinks, no dot entries, at most four path components, at most 64 files and 2 MiB per skill, at most 1 MiB per file, and no nested `SKILL.md`. A bundled skill that breaks a bound is a packaging error and installs nothing. File modes are not copied: an executable source installs as an ordinary readable file, and the skills run their scripts through `node <path>`.
 
 ## Skill ownership and cleanup
 
-Installed skill files are user-owned after installation. Agent Workspace may:
+Installed skill files are user-owned after installation. Riggverk may:
 
 - create missing managed copies
 - report synced or diverged copies
-- remove only known deprecated copies that still match an Agent Workspace reference snapshot
+- remove only known deprecated copies that still match a Riggverk reference snapshot
 - update or remove a copy that is byte-for-byte a version the app shipped, even when `managed-state.json` records no or a different hash for it (see Managed ownership below)
 
 Diverged deprecated copies, edited copies, and unknown skills are preserved. This holds per file: an edited supporting file is a conflict by itself and is left as is, while its siblings still update. A file you add inside a skill directory is never touched. Removing a skill (a retired one, or uninstall) removes only the files the app owns, then the directories that became empty, from the file's own directory up to the skill's directory and never the skill root; a directory that still holds one of your files stays. A symlink in a skill's path (a symlinked skills root included), a directory where a file belongs, or a file where a directory belongs is a conflict for the files below it, found while planning rather than failing the apply.
@@ -118,7 +118,7 @@ Installed rule targets:
 - OpenCode: `~/.config/opencode/AGENTS.md`
 - Claude Code: `~/.claude/CLAUDE.md`
 
-Rule targets are merge-managed. Agent Workspace owns only the content between `<!-- BEGIN AGENT-WORKSPACE BASE` and `<!-- END AGENT-WORKSPACE BASE -->`; bytes outside are user-owned and preserved byte-for-byte, including a BOM, CRLF line endings, and a missing final newline. The markers count only as whole lines at column 0 outside fenced code blocks, and a file holds exactly one BEGIN followed by one END. Instructions after the block are the user's refinements and override the base where they conflict (the base states this in its Priority section).
+Rule targets are merge-managed. Riggverk owns only the content between `<!-- BEGIN AGENT-WORKSPACE BASE` and `<!-- END AGENT-WORKSPACE BASE -->`; bytes outside are user-owned and preserved byte-for-byte, including a BOM, CRLF line endings, and a missing final newline. The markers count only as whole lines at column 0 outside fenced code blocks, and a file holds exactly one BEGIN followed by one END. Instructions after the block are the user's refinements and override the base where they conflict (the base states this in its Priority section).
 
 Detection compares the block body, not the whole file. A body digest ignores CRLF versus LF and a missing final newline, and the managed-state record for a rules file is that digest.
 
@@ -163,7 +163,7 @@ Generated outputs must match their source bodies and native metadata. Repository
 
 ### OpenCode
 
-Agent Workspace owns only allowlisted managed keys and the named Playwright MCP entry. Unknown keys, user provider blocks, and other MCP entries are preserved.
+Riggverk owns only allowlisted managed keys and the named Playwright MCP entry. Unknown keys, user provider blocks, and other MCP entries are preserved.
 
 The editable sources are:
 
@@ -174,13 +174,13 @@ The editable sources are:
 
 ### Codex
 
-Agent Workspace manages only allowlisted Codex config defaults in `$CODEX_HOME/config.toml` (default `~/.codex/config.toml`), and only while the `codex_config` target is on (off by default). `approval_policy`, `approvals_reviewer`, `sandbox_mode`, `apps._default.approvals_reviewer`, and `apps._default.default_tools_approval_mode` follow the template. `model` and `model_reasoning_effort` are create-only: written from the template (`gpt-6.1-sol`, `xhigh`) only while the file has no value, then user-owned, never overwritten and never reported as drift. The merge scripts read and write those scalar values only; user personality, MCP entries, unrelated tables, comments, and unsupported structures are preserved or cause a safe refusal with zero mutation.
+Riggverk manages only allowlisted Codex config defaults in `$CODEX_HOME/config.toml` (default `~/.codex/config.toml`), and only while the `codex_config` target is on (off by default). `approval_policy`, `approvals_reviewer`, `sandbox_mode`, `apps._default.approvals_reviewer`, and `apps._default.default_tools_approval_mode` follow the template. `model` and `model_reasoning_effort` are create-only: written from the template (`gpt-6.1-sol`, `xhigh`) only while the file has no value, then user-owned, never overwritten and never reported as drift. The merge scripts read and write those scalar values only; user personality, MCP entries, unrelated tables, comments, and unsupported structures are preserved or cause a safe refusal with zero mutation.
 
-App-shaped legacy top-level profile selectors (`profile = "safe"` / `"workspace-write"`) and legacy `[profiles.safe]` / `[profiles.workspace-write]` tables are removed only during migration when they still carry app-shipped values. Legacy profile handling is migration-only; Agent Workspace does not generally own or rewrite arbitrary Codex profiles. Same-line inline comments on managed scalar assignments are preserved; ambiguous managed lines refuse safely.
+App-shaped legacy top-level profile selectors (`profile = "safe"` / `"workspace-write"`) and legacy `[profiles.safe]` / `[profiles.workspace-write]` tables are removed only during migration when they still carry app-shipped values. Legacy profile handling is migration-only; Riggverk does not generally own or rewrite arbitrary Codex profiles. Same-line inline comments on managed scalar assignments are preserved; ambiguous managed lines refuse safely.
 
 ### Claude Code
 
-Agent Workspace manages Claude rules, native subagents, and skills. Claude settings, authentication, trust state, caches, and user-scoped MCP credentials remain Claude-managed and are not read or written by Agent Workspace.
+Riggverk manages Claude rules, native subagents, and skills. Claude settings, authentication, trust state, caches, and user-scoped MCP credentials remain Claude-managed and are not read or written by Riggverk.
 
 ### Cursor
 
@@ -238,6 +238,6 @@ Workspace installation remains available with every harness disabled. Full unins
 
 ## Security boundaries
 
-The workspace must not contain credentials or private runtime state. Agent Workspace does not inspect `.env` files, private keys, auth stores, OAuth state, shell history, Claude trust state, or unrelated personal files.
+The workspace must not contain credentials or private runtime state. Riggverk does not inspect `.env` files, private keys, auth stores, OAuth state, shell history, Claude trust state, or unrelated personal files.
 
 No frontend-supplied shell strings, `sh -c`, unrestricted paths, or generic filesystem browsing are part of the contract.

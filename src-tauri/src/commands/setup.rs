@@ -170,7 +170,7 @@ fn reconcile_interrupted_setup_transactions(
             // Only artifacts the user changed after the interruption remain.
             // They are preserved on purpose; their edits must not block setup.
             eprintln!(
-                "agent-workspace: interrupted setup {transaction_id} left user-changed artifacts untouched: {}",
+                "riggverk: interrupted setup {transaction_id} left user-changed artifacts untouched: {}",
                 run.preserved.join("; ")
             );
         }

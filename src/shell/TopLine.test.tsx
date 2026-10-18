@@ -113,7 +113,7 @@ describe("TopLine", () => {
     const header = container.querySelector("header.topline")!;
     expect(header.hasAttribute("data-tauri-drag-region")).toBe(true);
     expect(header.querySelector(".brand")).toBeNull();
-    expect(header.textContent).not.toContain("agent-workspace");
+    expect(header.textContent).not.toMatch(/riggverk/i);
     expect(header.querySelector(".right")!.textContent).toBe("main ✓");
     expect(screen.getByRole("navigation", { name: "Main navigation" })).not.toBeNull();
   });
