@@ -215,7 +215,8 @@ pub fn get_effective_skill_loads() -> Result<crate::skill_loads::EffectiveSkillL
     let records = crate::managed_state::read_managed_state(&workspace_root)
         .map(|state| state.artifacts)
         .unwrap_or_default();
-    let proof = crate::skill_loads::OwnershipProof::new(&bundled_root, &records)?;
+    let proof = crate::skill_loads::OwnershipProof::new(&bundled_root, &records)?
+        .with_kept(crate::kept_files::KeptFiles::load(&workspace_root));
     Ok(crate::skill_loads::effective_skill_loads(
         &home,
         &settings.enabled_harness_ids,

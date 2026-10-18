@@ -8,7 +8,9 @@ mod commands;
 mod cursor_profile_ops;
 mod cursor_profile_paths;
 mod executable_resolver;
+mod file_conflicts;
 mod installation_status;
+mod kept_files;
 mod light_harness;
 mod light_mcp;
 mod managed_bootstrap;
@@ -41,6 +43,8 @@ mod stable_digest;
 #[cfg(test)]
 mod app_data_migration_contract;
 #[cfg(test)]
+mod file_conflicts_contract;
+#[cfg(test)]
 mod identity_contract;
 #[cfg(test)]
 mod light_harness_contract;
@@ -69,13 +73,13 @@ use commands::{
     get_workspace_diagnostics, list_agent_metadata, list_available_opencode_models, list_backups,
     list_docs, list_opencode_config_editor_sources, list_skills, open_agent_source,
     open_agent_template, open_backups_folder, open_config_template, open_default_workspace_folder,
-    open_doc, open_opencode_config_source, open_skill, preview_rules_conversion,
+    open_doc, open_opencode_config_source, open_skill, preview_file_diff, preview_rules_conversion,
     preview_rules_diff, preview_setup, preview_uninstall, read_agent_source, read_agent_template,
     read_config_template, read_doc, read_opencode_config_source, read_opencode_model_selection,
     read_skill, reset_active_workspace_path, reset_opencode_model_selection,
     rollback_setup_transaction, save_agent_source, save_agent_template, save_doc,
-    save_opencode_config_source, set_rules_user_managed, try_set_active_workspace_path,
-    update_opencode_model_selection, update_settings,
+    save_opencode_config_source, set_files_kept, set_rules_user_managed,
+    try_set_active_workspace_path, update_opencode_model_selection, update_settings,
 };
 use tauri::Manager;
 
@@ -149,6 +153,8 @@ pub fn run() {
             preview_rules_conversion,
             apply_rules_conversion,
             set_rules_user_managed,
+            preview_file_diff,
+            set_files_kept,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
