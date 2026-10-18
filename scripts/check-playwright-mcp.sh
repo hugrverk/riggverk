@@ -45,6 +45,14 @@ else
   pass 'no --browser=chrome in templates/scripts'
 fi
 
+# The Copilot, Pi and Kilo entries choose the browser with inline flags: the sidecar config belongs to
+# the OpenCode config surface, and a missing file crashes the server at start.
+if [ -d "$repo_root/templates/mcp" ] && search_has_match '(--config|__PLAYWRIGHT_MCP_CONFIG_PATH__|playwright-mcp)' "$repo_root/templates/mcp"; then
+  fail 'templates/mcp entries must not depend on the Playwright MCP sidecar config'
+else
+  pass 'no sidecar dependency in templates/mcp'
+fi
+
 if search_has_match 'PLAYWRIGHT_BROWSERS_PATH=0' "$repo_root/templates" "$repo_root/scripts"; then
   fail 'PLAYWRIGHT_BROWSERS_PATH=0 found in templates/scripts'
 else
