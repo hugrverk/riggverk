@@ -211,9 +211,9 @@ A saved selection is stored in an app-level override file:
 
 | Platform | Override file |
 |----------|---------------|
-| macOS | `~/Library/Application Support/ai.agentworkspace.app/opencode-model-selection.json` |
-| Linux | `${XDG_CONFIG_HOME:-~/.config}/ai.agentworkspace.app/opencode-model-selection.json` |
-| Windows | `%APPDATA%\ai.agentworkspace.app\opencode-model-selection.json` |
+| macOS | `~/Library/Application Support/se.hugrverk.riggverk/opencode-model-selection.json` |
+| Linux | `${XDG_CONFIG_HOME:-~/.config}/se.hugrverk.riggverk/opencode-model-selection.json` |
+| Windows | `%APPDATA%\se.hugrverk.riggverk\opencode-model-selection.json` |
 
 This file is **not** part of the workspace templates. It is an app-preference file stored outside the workspace source tree. It does not affect `templates/opencode.base.json` or `templates/opencode.json`. It holds `schema_version` and, only for the values you chose, `model`, `small_model` and `subagent_model`. A file written by an earlier app version has both `model` and `small_model` and no `subagent_model`: it reads as two explicit overrides (and "inherit" for the subagents) and keeps applying both until you change them back to the bundled default or press `x`. A value that is not `provider/model` is ignored on its own; the others still apply.
 
@@ -235,8 +235,8 @@ Press `x` in the pane, then install again (`u`, `y`). Deleting the file by hand 
 
 | Platform | Command |
 |----------|---------|
-| macOS | `rm "$HOME/Library/Application Support/ai.agentworkspace.app/opencode-model-selection.json"` |
-| Linux | `rm "${XDG_CONFIG_HOME:-$HOME/.config}/ai.agentworkspace.app/opencode-model-selection.json"` |
+| macOS | `rm "$HOME/Library/Application Support/se.hugrverk.riggverk/opencode-model-selection.json"` |
+| Linux | `rm "${XDG_CONFIG_HOME:-$HOME/.config}/se.hugrverk.riggverk/opencode-model-selection.json"` |
 
 The override is safe to delete; the app falls back to workspace template defaults.
 
