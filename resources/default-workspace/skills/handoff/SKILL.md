@@ -5,6 +5,7 @@ category: workflow
 risk: low
 targets: codex, opencode, claude, cursor
 related: diagnose, implementation-plan, release-check
+allowed-tools: Bash(git status *) Bash(git log *) Bash(git diff *) Bash(head *) Bash(tail *)
 ---
 
 # Handoff
@@ -36,3 +37,17 @@ Done when: a fresh agent could execute the next action without reading the sessi
 - Relevant skills
 
 Do not invent verification, hide uncertainty, repeat long source material, or demand exhaustive checks without risk justification.
+
+## Harness notes
+
+### Claude Code
+
+Claude Code runs the commands below when the skill loads; in other harnesses they appear as plain text, so run them yourself.
+
+Repository state captured when this skill loaded:
+
+- Status: !`git status --short 2>/dev/null | head -c 1200`
+- Recent commits: !`git log --oneline -8 2>/dev/null | head -c 800`
+- Diff stat: !`git diff --stat 2>/dev/null | tail -4`
+
+Use this as starting evidence for Verified/Not verified instead of re-deriving it.

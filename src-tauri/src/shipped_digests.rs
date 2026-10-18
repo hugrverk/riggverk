@@ -99,20 +99,40 @@ fn bundle_relative_key(source: &Path, bundled_root: &Path) -> Option<String> {
     Some(parts?.join("/"))
 }
 
+/// Before every harness installed the canonical SKILL.md the app shipped one generated adapter per
+/// harness (`templates/skills/<harness>/<name>/SKILL.md`). The files are gone, so `resolve_source`
+/// cannot name them; their versions stay provable through these keys in the metadata.
+const LEGACY_SKILL_ADAPTER_HARNESSES: [&str; 4] = ["claude", "codex", "opencode", "cursor"];
+
 /// Metadata keys holding the shipped versions of an artifact; empty when the
 /// artifact is not a whole-file copy.
 fn source_keys(artifact: &ArtifactId, bundled_root: &Path) -> Vec<String> {
-    let generic_skill = match artifact {
+    match artifact {
+        // Every harness installs the canonical file, and an installed copy of any older
+        // per-harness adapter is still a version the app shipped.
         ArtifactId::OpenCodeSkill(name)
         | ArtifactId::CodexSkill(name)
         | ArtifactId::ClaudeSkill(name)
         | ArtifactId::CursorSkill(name)
-        | ArtifactId::CodexLegacySkill(name) => Some(format!("skills/{}/SKILL.md", name.as_str())),
+        | ArtifactId::CodexLegacySkill(name) => {
+            let name = name.as_str();
+            std::iter::once(format!("skills/{name}/SKILL.md"))
+                .chain(
+                    LEGACY_SKILL_ADAPTER_HARNESSES
+                        .iter()
+                        .map(|harness| format!("templates/skills/{harness}/{name}/SKILL.md")),
+                )
+                .collect()
+        }
         ArtifactId::OpenCodeAgent(_)
         | ArtifactId::CodexAgent(_)
         | ArtifactId::ClaudeAgent(_)
         | ArtifactId::CursorAgent(_)
-        | ArtifactId::OpenCodePlaywrightMcp => None,
+        | ArtifactId::OpenCodePlaywrightMcp => artifact
+            .resolve_source(bundled_root)
+            .and_then(|source| bundle_relative_key(&source, bundled_root))
+            .into_iter()
+            .collect(),
         ArtifactId::OpenCodeConfig
         | ArtifactId::OpenCodeTui
         | ArtifactId::OpenCodeRules
@@ -120,16 +140,8 @@ fn source_keys(artifact: &ArtifactId, bundled_root: &Path) -> Vec<String> {
         | ArtifactId::CodexRules
         | ArtifactId::ClaudeRules
         | ArtifactId::CursorMcp
-        | ArtifactId::WorkspaceFile(_) => return Vec::new(),
-    };
-    let Some(key) = artifact
-        .resolve_source(bundled_root)
-        .and_then(|source| bundle_relative_key(&source, bundled_root))
-    else {
-        return Vec::new();
-    };
-    // Older installs copied the generic skill straight into the harness.
-    std::iter::once(key).chain(generic_skill).collect()
+        | ArtifactId::WorkspaceFile(_) => Vec::new(),
+    }
 }
 
 /// Whether `installed_digest` (the `hash_file` digest of the installed file) is
@@ -229,7 +241,7 @@ mod tests {
     #[test]
     fn current_sources_are_shipped_versions() {
         let root = bundled();
-        let skill_source = root.join("templates/skills/claude/tdd/SKILL.md");
+        let skill_source = root.join("skills/tdd/SKILL.md");
         let agent_source = root.join("templates/claude/agents/verifier.md");
         for (artifact, source) in [
             (skill("claude", "tdd"), skill_source),
@@ -262,21 +274,46 @@ mod tests {
     }
 
     #[test]
-    fn a_digest_only_counts_for_its_own_source() {
+    fn a_digest_only_counts_for_its_own_skill_or_agent_source() {
         let root = bundled();
         let shipped = digest(b"old tdd skill");
         let _inject = test_override::inject(&test_override::json_for(
-            "templates/skills/claude/tdd/SKILL.md",
+            "skills/tdd/SKILL.md",
             std::slice::from_ref(&shipped),
         ));
         assert!(is_shipped_version(&skill("claude", "tdd"), &root, &shipped));
-        assert!(!is_shipped_version(&skill("codex", "tdd"), &root, &shipped));
         assert!(!is_shipped_version(
             &skill("claude", "diagnose"),
             &root,
             &shipped
         ));
         assert!(!is_shipped_version(&claude_agent("tdd"), &root, &shipped));
+    }
+
+    #[test]
+    fn a_legacy_per_harness_adapter_digest_proves_the_skill_for_every_harness() {
+        let root = bundled();
+        for legacy in ["claude", "codex", "opencode", "cursor"] {
+            let shipped = digest(format!("old {legacy} tdd adapter").as_bytes());
+            let _inject = test_override::inject(&test_override::json_for(
+                &format!("templates/skills/{legacy}/tdd/SKILL.md"),
+                std::slice::from_ref(&shipped),
+            ));
+            for harness in ["claude", "codex", "opencode", "cursor"] {
+                assert!(
+                    is_shipped_version(&skill(harness, "tdd"), &root, &shipped),
+                    "{legacy} adapter must prove the {harness} copy"
+                );
+            }
+            let legacy_codex = ArtifactId::CodexLegacySkill(SkillName::new("tdd").expect("name"));
+            assert!(is_shipped_version(&legacy_codex, &root, &shipped));
+            assert!(!is_shipped_version(
+                &skill("claude", "diagnose"),
+                &root,
+                &shipped
+            ));
+            assert!(!is_shipped_version(&claude_agent("tdd"), &root, &shipped));
+        }
     }
 
     #[test]

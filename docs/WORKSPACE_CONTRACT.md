@@ -27,7 +27,7 @@ Validation is read-only. It does not run workspace scripts, install files, or in
 
 ## Bundled resources
 
-The default workspace currently contains 25 canonical semantic skills, generated harness skill adapters, shared semantic agent bodies, harness-native agent adapters, composed rule targets, config templates, runtime scripts, and operator documentation.
+The default workspace currently contains 25 canonical semantic skills, shared semantic agent bodies, harness-native agent adapters, composed rule targets, config templates, runtime scripts, and operator documentation.
 
 Bundled resources are immutable installation input. The explicit **Install or Update** action (`u`, review, `y`):
 
@@ -83,16 +83,9 @@ Global destinations:
 
 All 25 current bundled skills target Codex, OpenCode, Claude, and Cursor. Sync-all derives expected skills from the same compatibility metadata used by health checks.
 
-## Skill adapters
+## Skill sources
 
-Canonical skill files under `skills/` are the semantic source of truth. `scripts/generate-skill-adapters.py` combines those canonical files with compact harness overlays under `templates/skills/_overlays/` and writes generated adapters to:
-
-```text
-templates/skills/<harness>/<skill>/SKILL.md
-metadata/skill-adapters.json
-```
-
-Managed setup resolves active harness skill artifacts from those generated adapter files. The generators themselves live in the source repository's `scripts/`, not in the installed workspace; skills added to a runtime workspace are not discovered for install. Missing or stale adapters are unavailable/stale and must be regenerated; production setup does not fall back to canonical generic skill files. Destination paths remain unchanged and are still single `SKILL.md` files. No supporting files or skill directories are owned by managed setup.
+Canonical skill files under `skills/` are the single source for every harness. Managed setup copies each `SKILL.md` byte for byte into every harness skill folder; there are no generated per-harness adapters. Harness-specific text lives at the end of the file under `## Harness notes` (`### Claude Code`, `### Codex`, `### OpenCode`, `### Cursor`, in that order). Claude-only frontmatter keys and Claude's `!` command injection are allowed only together with the Claude Code notes, and `scripts/check-skill-routing.py` enforces the structure in the source repository. That script lives in the source repository's `scripts/`, not in the installed workspace; skills added to a runtime workspace are not discovered for install. A skill without a canonical file is unavailable; production setup has no other source. Destination paths remain unchanged and are still single `SKILL.md` files. No supporting files or skill directories are owned by managed setup.
 
 ## Skill ownership and cleanup
 
@@ -179,11 +172,11 @@ App-shaped legacy top-level profile selectors (`profile = "safe"` / `"workspace-
 
 ### Claude Code
 
-Agent Workspace manages Claude rules, native subagents, and generated skill adapters. Claude settings, authentication, trust state, caches, and user-scoped MCP credentials remain Claude-managed and are not read or written by Agent Workspace.
+Agent Workspace manages Claude rules, native subagents, and skills. Claude settings, authentication, trust state, caches, and user-scoped MCP credentials remain Claude-managed and are not read or written by Agent Workspace.
 
 ### Cursor
 
-Cursor global agents, generated skill adapters, and the named Playwright MCP entry are managed by native Rust operations. User Rules and Auto Review remain manual IDE settings. Project `.cursor/*`, project agents, project MCP, `.cursorignore`, and `AGENTS.md` are not written by the global setup flow.
+Cursor global agents, skills, and the named Playwright MCP entry are managed by native Rust operations. User Rules and Auto Review remain manual IDE settings. Project `.cursor/*`, project agents, project MCP, `.cursorignore`, and `AGENTS.md` are not written by the global setup flow.
 
 ## Backups and writes
 

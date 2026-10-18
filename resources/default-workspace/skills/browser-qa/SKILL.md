@@ -66,3 +66,16 @@ Done when: each affected route loaded without unclassified console errors or fai
 - Do not hide console or network failures; classify whether they block the task.
 - Do not require a specific browser MCP or tool; use available local tooling.
 - Do not claim browser smoke completed without reporting dev server lifecycle status.
+
+## Harness notes
+
+### Claude Code
+
+- When the Claude Code Browser pane tools are available, prefer them: `preview_start` (a `.claude/launch.json` entry or a URL) to launch or attach, `navigate` plus `read_page`/`find` for structure, `read_console_messages` and `read_network_requests` for failures, `resize_window` presets for responsive checks, and screenshots as evidence.
+- Attach to an already-running dev server with a url-only launch entry instead of starting a duplicate.
+- Without browser tooling, fall back to available automation (Playwright, curl smoke) and state what could not be exercised.
+
+### Codex
+
+- Prefer Playwright, browser tools, appshots, screenshots, CDP inspection, or computer-use tools according to what is available in the session.
+- Capture concise evidence: route, viewport, interaction, console or network findings, and screenshot path when visual proof matters.

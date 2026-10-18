@@ -520,44 +520,15 @@ mod tests {
     fn skill_digest_uses_skill_md_only() {
         let home = temp("skill-digest-home");
         let ws = temp("skill-digest-ws");
-        write_skill_dir(&ws, "skills/frontend-design", "frontend-design", "opencode");
-        write_skill_adapter(&ws, "opencode", "frontend-design");
+        let skill_md = crate::test_env::write_canonical_skill(&ws, None, "frontend-design", "body");
         fs::write(
             ws.join("skills/frontend-design/user-notes.md"),
             "unknown sibling",
         )
         .unwrap();
-        fs::write(
-            ws.join("templates/skills/opencode/frontend-design/user-notes.md"),
-            "unknown adapter sibling",
-        )
-        .unwrap();
         let artifact = ArtifactId::OpenCodeSkill(SkillName::new("frontend-design").unwrap());
         let digest = artifact_source_digest(&artifact, &ws, &home).unwrap();
-        let expected =
-            hash_file(&ws.join("templates/skills/opencode/frontend-design/SKILL.md")).unwrap();
-        assert_eq!(digest, expected);
-    }
-
-    fn write_skill_dir(ws: &Path, rel: &str, name: &str, targets: &str) {
-        write(
-            &ws.join(rel).join("SKILL.md"),
-            &format!(
-                "---\nname: {name}\ndescription: test skill\ntargets: {targets}\n---\n# {name}\n"
-            ),
-        );
-    }
-
-    fn write_skill_adapter(ws: &Path, harness: &str, name: &str) {
-        write(
-            &ws.join("templates/skills")
-                .join(harness)
-                .join(name)
-                .join("SKILL.md"),
-            &format!(
-                "---\nname: {name}\ndescription: test skill\ntargets: codex, opencode, claude, cursor\n---\n# {name}\n\n## Harness Adapter\n"
-            ),
-        );
+        assert_eq!(digest, hash_file(&skill_md).unwrap());
     }
 
     #[test]

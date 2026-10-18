@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import json
 import re
 from pathlib import Path
 
@@ -57,7 +56,7 @@ def main() -> None:
 
     scripts = section_paths(manifest_text, "Scripts")
     templates = section_paths(manifest_text, "Templates")
-    skill_adapters = section_paths(manifest_text, "Skill adapters")
+    skills = section_paths(manifest_text, "Skills")
     docs = section_paths(manifest_text, "Docs")
     metadata = section_paths(manifest_text, "Metadata")
     refresh = managed_refresh_paths(manifest_text)
@@ -99,44 +98,30 @@ def main() -> None:
         if not adapter_path.is_file() or adapter_path.stat().st_size == 0:
             fail(f"Cursor adapter missing or empty on disk: {rel}")
 
-    generated_skill_adapters = {
-        path.relative_to(ROOT / "resources" / "default-workspace").as_posix()
-        for path in (ROOT / "resources/default-workspace/templates/skills").glob("*/*/SKILL.md")
-    }
-    skill_overlay_sources = {
-        path.relative_to(ROOT / "resources" / "default-workspace").as_posix()
-        for path in (ROOT / "resources/default-workspace/templates/skills/_overlays").rglob("*.md")
-    }
-    # The adapter count is derived from the canonical skills and the generator's
-    # target list instead of being pinned: every skill needs one adapter per target.
-    adapter_metadata = json.loads(
-        (ROOT / "resources/default-workspace/metadata/skill-adapters.json").read_text(encoding="utf-8")
-    )
-    canonical_skills = list((ROOT / "resources/default-workspace/skills").rglob("SKILL.md"))
-    expected_adapters = len(canonical_skills) * len(adapter_metadata.get("targets", []))
-    if not canonical_skills or len(generated_skill_adapters) != expected_adapters:
-        fail(
-            f"expected {expected_adapters} generated skill adapters "
-            f"({len(canonical_skills)} skills x {len(adapter_metadata.get('targets', []))} targets), "
-            f"found {len(generated_skill_adapters)}"
-        )
-    expected_skill_adapter_paths = generated_skill_adapters | skill_overlay_sources
-    missing_skill_adapter_paths = expected_skill_adapter_paths - skill_adapters
-    extra_skill_adapter_paths = skill_adapters - expected_skill_adapter_paths
-    for rel in sorted(missing_skill_adapter_paths):
-        fail(f"Skill adapters section missing: {rel}")
-    for rel in sorted(extra_skill_adapter_paths):
-        fail(f"Skill adapters section has stale path: {rel}")
-    if "metadata/skill-adapters.json" not in metadata:
-        fail("Metadata section missing: metadata/skill-adapters.json")
-    if not (ROOT / "resources/default-workspace/metadata/skill-adapters.json").is_file():
-        fail("skill adapter metadata missing on disk")
-
+    # Every harness installs the canonical SKILL.md, so the Skills section is the whole
+    # skills/ tree (SKILL.md plus supporting files) and nothing else ships for skills.
     workspace_root = ROOT / "resources" / "default-workspace"
+    skill_tree = {
+        path.relative_to(workspace_root).as_posix()
+        for path in (workspace_root / "skills").rglob("*")
+        if path.is_file() and not path.name.startswith(".")
+    }
+    if not any(rel.endswith("/SKILL.md") for rel in skill_tree):
+        fail("no canonical skills found under resources/default-workspace/skills")
+    for rel in sorted(skill_tree - skills):
+        fail(f"Skills section missing: {rel}")
+    for rel in sorted(skills - skill_tree):
+        fail(f"Skills section has stale path: {rel}")
+    retired = [rel for rel in skills | templates | metadata if rel.startswith("templates/skills/") or rel == "metadata/skill-adapters.json"]
+    for rel in sorted(retired):
+        fail(f"per-harness skill adapters are retired; manifest still lists: {rel}")
+    if '"Skill adapters"' in manifest_text:
+        fail("bundled manifest still has a Skill adapters section")
+
     for label, listed in (
         ("Scripts", scripts),
         ("Templates", templates),
-        ("Skill adapters", skill_adapters),
+        ("Skills", skills),
         ("Docs", docs),
         ("Metadata", metadata),
     ):
@@ -152,7 +137,7 @@ def main() -> None:
             fail(f"managed refresh must not overwrite editable source: {rel}")
 
     print(
-        "  bundled manifest: app-run helper scripts + Cursor/skill adapters listed; "
+        "  bundled manifest: app-run helper scripts + Cursor adapters + skills tree listed; "
         "Cursor profile templates refreshable backup-first"
     )
 

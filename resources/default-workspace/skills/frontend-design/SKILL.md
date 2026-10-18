@@ -109,3 +109,10 @@ Before reporting done, confirm the result is recognizable, usable, and intention
 - Do not add dependencies or heavy animation libraries without clear value.
 - Do not claim visual quality without checking the rendered result.
 - Keep maintenance and solo-developer cost visible in tradeoffs.
+
+## Harness notes
+
+### Codex
+
+- When visual direction needs concrete assets or mockups, use available image generation or bitmap references instead of abstract placeholders.
+- Verify responsive UI with browser screenshots or appshots at the relevant viewports, and inspect overlap, text fit, and rendered assets before reporting completion.

@@ -59,7 +59,7 @@ skills/<skill>/SKILL.md
 skills/<group>/<skill>/SKILL.md
 ```
 
-One optional group level is supported; deeper nesting is invalid. Harness adapters are generated from the canonical catalog plus compact overlays (`templates/skills/<harness>/<skill>/SKILL.md`, `metadata/skill-adapters.json`). Run `python3 scripts/generate-skill-adapters.py --write` after changing canonical skills or overlays; never edit generated adapters by hand.
+One optional group level is supported; deeper nesting is invalid. Every harness installs the canonical `SKILL.md` byte for byte; there are no generated per-harness copies. Text meant for one harness sits at the end of the file under `## Harness notes` (`### Claude Code`, `### Codex`, `### OpenCode`, `### Cursor`), and `python3 scripts/check-skill-routing.py` validates the structure.
 
 Installed layout is flat and single-file: `<harness-skill-root>/<skill-name>/SKILL.md`. Global destinations: Codex `$CODEX_HOME/skills` (typically `~/.codex/skills`), OpenCode `~/.config/opencode/skills`, Claude Code `~/.claude/skills`, Cursor `~/.cursor/skills`.
 
@@ -86,10 +86,10 @@ Generated adapters must stay current with their sources; repository checks fail 
 
 ## Harness ownership
 
-- **OpenCode**: composed rules, native agents, skill adapters, managed config keys, `tui.json`, and the named Playwright MCP entry. User provider blocks, unrelated MCP entries, and unknown keys are preserved.
-- **Codex**: rules, TOML agents, skill adapters, and allowlisted config defaults in `$CODEX_HOME/config.toml` (default `~/.codex/config.toml`). `approval_policy`, `approvals_reviewer`, `sandbox_mode`, and `apps._default.*` follow the template. `model` and `model_reasoning_effort` are create-only: written (`gpt-6.1-sol`, `xhigh`) only when the file has no value, then yours. The `codex_config` target is off by default. A non-empty `AGENTS.override.md` makes Codex ignore `AGENTS.md`; Codex health warns about it. Legacy app-shaped profile selectors and tables are removed during migration only. Copies under the old `~/.agents/skills` location are detected for migration to `$CODEX_HOME/skills`; diverged copies stay conflicts.
-- **Claude Code**: rules, subagents, and skill adapters. Claude settings, authentication, trust state, caches, and user-scoped MCP credentials stay Claude-managed and are not read or written.
-- **Cursor**: six global agents, skill adapters, and the named Playwright MCP entry in `~/.cursor/mcp.json`, via native Rust operations. User Rules and Auto Review stay manual. Project `.cursor/*`, project agents, project MCP, `.cursorignore`, and `AGENTS.md` are never written.
+- **OpenCode**: composed rules, native agents, skills, managed config keys, `tui.json`, and the named Playwright MCP entry. User provider blocks, unrelated MCP entries, and unknown keys are preserved.
+- **Codex**: rules, TOML agents, skills, and allowlisted config defaults in `$CODEX_HOME/config.toml` (default `~/.codex/config.toml`). `approval_policy`, `approvals_reviewer`, `sandbox_mode`, and `apps._default.*` follow the template. `model` and `model_reasoning_effort` are create-only: written (`gpt-6.1-sol`, `xhigh`) only when the file has no value, then yours. The `codex_config` target is off by default. A non-empty `AGENTS.override.md` makes Codex ignore `AGENTS.md`; Codex health warns about it. Legacy app-shaped profile selectors and tables are removed during migration only. Copies under the old `~/.agents/skills` location are detected for migration to `$CODEX_HOME/skills`; diverged copies stay conflicts.
+- **Claude Code**: rules, subagents, and skills. Claude settings, authentication, trust state, caches, and user-scoped MCP credentials stay Claude-managed and are not read or written.
+- **Cursor**: six global agents, skills, and the named Playwright MCP entry in `~/.cursor/mcp.json`, via native Rust operations. User Rules and Auto Review stay manual. Project `.cursor/*`, project agents, project MCP, `.cursorignore`, and `AGENTS.md` are never written.
 
 ## Application surfaces
 
@@ -150,7 +150,6 @@ CI runs the release check on Ubuntu and macOS. Windows CI runs frontend and nati
 
 ```bash
 python3 scripts/generate-agent-adapters.py --check
-python3 scripts/generate-skill-adapters.py --check
 python3 scripts/generate-agent-rules.py --check
 python3 scripts/generate-default-opencode-config.py --check
 python3 scripts/check-skill-routing.py

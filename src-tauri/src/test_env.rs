@@ -10,6 +10,29 @@ pub fn process_home() -> PathBuf {
     .expect("user home required for test")
 }
 
+/// Bytes of the canonical SKILL.md that `write_canonical_skill` writes.
+#[cfg(test)]
+pub fn canonical_skill_text(name: &str, body: &str) -> String {
+    format!(
+        "---\nname: {name}\ndescription: test skill\ntargets: codex, opencode, claude, cursor\n---\n# {name}\n\n{body}\n"
+    )
+}
+
+/// Write the canonical SKILL.md of a skill into a fixture workspace: the one file every harness
+/// installs. `group` puts it one directory deeper (`skills/<group>/<name>`).
+#[cfg(test)]
+pub fn write_canonical_skill(ws: &Path, group: Option<&str>, name: &str, body: &str) -> PathBuf {
+    let skills = ws.join("skills");
+    let dir = match group {
+        Some(group) => skills.join(group).join(name),
+        None => skills.join(name),
+    };
+    std::fs::create_dir_all(&dir).expect("create canonical skill dir");
+    let path = dir.join("SKILL.md");
+    std::fs::write(&path, canonical_skill_text(name, body)).expect("write canonical skill");
+    path
+}
+
 #[cfg(test)]
 pub fn set_test_user_dirs(dir: &Path) {
     let dir_str = dir.to_string_lossy();

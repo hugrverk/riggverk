@@ -11,7 +11,7 @@ It writes only ignored build artifacts in the repository and temporary directori
 - `git status --short` and `git diff --check`
 - shell syntax checks
 - README and docs drift (`check-readme-docs-drift.py`), the curated Library docs registry, and the default-workspace copy list
-- generator currency: skill adapters, agent adapters, rule adapters, OpenCode config snapshot, pre-manifest ownership, rules history, shipped digests
+- generator currency: agent adapters, rule adapters, OpenCode config snapshot, pre-manifest ownership, rules history, shipped digests
 - skill catalog and routing checks (`check-skill-routing.py`) and OpenCode permission composition and contract
 - merge-script unit tests, the Codex merge secret-marker guard, and the pre-manifest upgrade smoke
 - forbidden source scans (shell command strings, `eval`, removed skill flows) and managed-installation contract guards, including the single reviewed install owner

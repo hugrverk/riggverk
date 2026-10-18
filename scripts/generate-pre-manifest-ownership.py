@@ -236,9 +236,10 @@ def generate() -> dict[str, object]:
             continue
         digests = history.for_rel(rel)
         # Canonical skill files were the harness install source before
-        # generated skill adapters were introduced. Keep the current canonical
-        # digest approved so pre-adapter installs from the immediately prior
-        # app version can be adopted and updated to adapters.
+        # per-harness skill adapters were introduced, and are again. Keep every
+        # canonical version approved so installs from any app version that
+        # copied the canonical file can be adopted and updated. Per-harness
+        # adapter versions are proven by shipped-digests.json instead.
         if digests:
             artifacts.append(
                 entry(

@@ -1,6 +1,6 @@
 # Skills
 
-The bundled default workspace contains **25 skills**: 25 canonical semantic skill sources. Source layout may be root-level (`skills/<skill>/SKILL.md`) or grouped one level deep (`skills/<group>/<skill>/SKILL.md`). Harness-specific adapters are generated under `templates/skills/<harness>/<skill>/SKILL.md`. Installed harness skills are always flat (`<harness-skill-root>/<name>/SKILL.md`).
+The bundled default workspace contains **25 skills**: 25 canonical semantic skill sources. Source layout may be root-level (`skills/<skill>/SKILL.md`) or grouped one level deep (`skills/<group>/<skill>/SKILL.md`). Every harness installs the same `SKILL.md`, flat (`<harness-skill-root>/<name>/SKILL.md`).
 
 Do not duplicate full `SKILL.md` content here. This file is an index for choosing the right skill.
 
@@ -95,29 +95,23 @@ Each `SKILL.md` frontmatter has `name` and `description` plus these fields:
 - `related` — comma-separated related skill names; the routing check verifies each name exists.
 - `disable-model-invocation` — optional `true` for user-invoked skills (currently `retro`). Claude Code and Cursor then hide the skill from the model; Codex and OpenCode ignore the flag, so such a skill must not be referenced in routing bullets and its description says it is user-invoked.
 
-Adapter overlays may add harness-only frontmatter that is merged into the generated adapter and must not collide with canonical fields: `context`, `agent`, `background`, and `allowed-tools` (for example `release-check` runs in a forked `verifier` context on Claude Code, and `handoff` and `release-check` pre-approve the read-only commands behind their `!` state injection).
+Claude-only frontmatter keys sit directly in the skill's frontmatter: `context`, `agent`, `background`, and `allowed-tools` (for example `release-check` runs in a forked `verifier` context on Claude Code, and `handoff` and `release-check` pre-approve the read-only commands behind their `!` state injection). Codex and OpenCode ignore them. A skill that sets one also carries a `### Claude Code` notes section (see below).
 
-`targets` drives generated adapter output under `templates/skills/<harness>/` and expands the managed skill surface for each harness. Destination paths remain fixed per harness: generated adapters install flat to each harness skill root as `<harness-skill-root>/<name>/SKILL.md`. Other metadata fields are operator guidance only.
+`targets` expands the managed skill surface for each harness. Destination paths remain fixed per harness: the same `SKILL.md` installs flat to each harness skill root as `<harness-skill-root>/<name>/SKILL.md`. Other metadata fields are operator guidance only.
 
 ## Description standard
 
 The `description` is the only selection signal Codex, OpenCode, and Cursor see, so it carries the triggers. Format: one plain line of at most 300 characters, `<what>. Use when <concrete triggers>. Not for <nearest sibling> (<sibling-name>).` The `Not for` clause is optional. Avoid `: ` and ` #` in the text, since the value is written as a plain YAML scalar. Each skill also states a one-line `Done when:` exit criterion in its body. `scripts/check-skill-routing.py` lints these rules.
 
-## Generated Adapters
+## One SKILL.md for every harness
 
-- `skills/**/SKILL.md` — canonical semantic source files.
-- `templates/skills/_overlays/` — compact global and skill-specific harness overlays.
-- `templates/skills/<harness>/<skill>/SKILL.md` — generated adapter files installed by managed setup.
-- `metadata/skill-adapters.json` — generated adapter manifest.
+`skills/**/SKILL.md` is the only source. Managed setup copies it byte for byte into every harness skill folder, so a skill that two harnesses both read is the same file in both places. There are no generated per-harness copies: `templates/skills/` and `metadata/skill-adapters.json` no longer exist.
 
-Generated adapter files are not hand-maintained. In the source repository, run `python3 scripts/generate-skill-adapters.py --write` after changing canonical skills or overlays.
+Text that only one harness should act on goes at the end of the file under `## Harness notes`, one `###` subsection per harness in this fixed order, only for the harnesses that have notes: `### Claude Code`, `### Codex`, `### OpenCode`, `### Cursor`. Every harness reads the whole file, so write each note so it is clearly meant for that harness. Keep notes short; harness-wide guidance lives in `templates/rules/<harness>.md`, not in a skill.
 
-Two harness-specific transforms apply during generation:
+Claude Code runs `!` followed by a backtick-quoted command (and a fence opened with three backticks and `!`) when the skill loads. Other harnesses show that text literally. It is therefore allowed only inside `### Claude Code`, with a one-sentence plain-text preface saying that other harnesses should run the commands themselves (see `handoff` and `release-check`).
 
-- Claude adapters hoist an optional canonical `## When To Use` section into `when_to_use` frontmatter (Claude Code appends it to the description in the skill listing; combined description + when_to_use is capped at 1,536 characters). Prefer folding triggers into the description; use the section only for extra Claude-only triggers.
-- An overlay file may open with a `---` frontmatter block whose `key: value` lines merge into the adapter frontmatter (for example `release-check`'s Claude overlay sets `context: fork`, `agent: verifier`, `background: false`, `allowed-tools`). Collisions with canonical fields fail generation.
-
-Harness-wide guidance lives in `templates/rules/<harness>.md`, not in per-skill overlays. Global overlays under `_overlays/global/` stay at two lines or fewer, and an adapter with no overlay carries no `## Harness Adapter` section. The generator refuses canonical or overlay sources with CRLF line endings or a BOM.
+In the source repository `python3 scripts/check-skill-routing.py` validates every `SKILL.md`: frontmatter and names, the notes structure and order, injection syntax only under `### Claude Code`, Claude-only frontmatter keys only with Claude notes, and LF line endings without a BOM.
 
 ## Agent Metadata
 
@@ -127,6 +121,6 @@ Harness-wide guidance lives in `templates/rules/<harness>.md`, not in per-skill 
 
 ## Installing skills
 
-In the app, press `u` on a harness page and confirm with `y`. The install covers the generated adapters for the whole bundled catalog of that harness, globally, in flat single-file layout. Skills are not gated by target toggles and always come from the app's bundle: a skill you add to the runtime workspace is not installed, and a personal skill belongs directly in the harness skill folder, where unknown skills are preserved.
+In the app, press `u` on a harness page and confirm with `y`. The install covers the shared `SKILL.md` of the whole bundled catalog for that harness, globally, in flat single-file layout. Skills are not gated by target toggles and always come from the app's bundle: a skill you add to the runtime workspace is not installed, and a personal skill belongs directly in the harness skill folder, where unknown skills are preserved.
 
-Some harnesses also scan other harnesses' skill folders (for example OpenCode and Cursor read `~/.claude/skills`). If you install for several harnesses, a skill can be listed more than once there; check the harness's own documentation for precedence.
+Some harnesses also scan other harnesses' skill folders (for example OpenCode and Cursor read `~/.claude/skills`). If you install for several harnesses, a skill can be listed more than once there; every copy is the same file, so precedence does not change what the model reads.

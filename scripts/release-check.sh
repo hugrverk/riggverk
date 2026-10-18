@@ -732,10 +732,6 @@ run_python_unittests scripts/test_opencode_policy_compose.py
 step "bundled OpenCode permission contract"
 python3 scripts/validate_opencode_permissions.py
 
-step "bundled harness skill adapters are current"
-run_python_unittests scripts/test_generate_skill_adapters.py
-python3 scripts/generate-skill-adapters.py --check
-
 step "bundled harness agent adapters are current"
 python3 scripts/generate-agent-adapters.py --check
 # Tests land with the agent-adapter validation changes; run them once present.

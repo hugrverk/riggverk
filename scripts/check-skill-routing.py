@@ -5,15 +5,17 @@ from __future__ import annotations
 
 import json
 import re
-import subprocess
 import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 WS_ROOT = REPO_ROOT / "resources/default-workspace"
 SKILLS_ROOT = WS_ROOT / "skills"
-ADAPTER_ROOT = WS_ROOT / "templates/skills"
-ADAPTER_MANIFEST = WS_ROOT / "metadata/skill-adapters.json"
+# Per-harness skill adapters are retired: every harness installs the canonical SKILL.md.
+RETIRED_ADAPTER_PATHS = (
+    WS_ROOT / "templates/skills",
+    WS_ROOT / "metadata/skill-adapters.json",
+)
 AGENTS_METADATA = WS_ROOT / "metadata/agents.json"
 AGENT_ADAPTERS_MANIFEST = WS_ROOT / "metadata/agent-adapters.json"
 CLAUDE_AGENT_HEADERS = WS_ROOT / "templates/claude/agents"
@@ -48,6 +50,20 @@ EXPECTED_SKILLS = {
 }
 
 ALL_HARNESSES = {"codex", "opencode", "claude", "cursor"}
+
+# Harness-specific text lives in the canonical SKILL.md under `## Harness notes`, one `###`
+# subsection per harness in this fixed order. Every harness installs the same bytes.
+HARNESS_NOTES_HEADING = "## Harness notes"
+HARNESS_NOTES_SECTIONS = ("Claude Code", "Codex", "OpenCode", "Cursor")
+CLAUDE_NOTES_HEADING = "### Claude Code"
+# Frontmatter keys only Claude Code acts on; Codex and OpenCode ignore them.
+CLAUDE_ONLY_KEYS = ("context", "agent", "background", "allowed-tools")
+# Claude Code runs !`command` (and a fence opened with ```!) when a skill loads; any other
+# harness shows the text literally, so it may only appear in the Claude Code notes.
+INJECTION_RE = re.compile(r"!`|^\s*(?:`{3,}|~{3,})!", re.MULTILINE)
+SKILL_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
+FENCE_RE = re.compile(r"^\s*(`{3,}|~{3,})")
+HEADING_RE = re.compile(r"^#{1,6}\s")
 
 # Description standard (docs/SKILLS.md): one plain line, triggers visible to harnesses
 # that never see the body, at most 300 chars. The whole catalog stays under the smallest
@@ -109,7 +125,6 @@ MIGRATION_FIXTURE_ALLOWLIST = {
     WS_ROOT / "metadata/shipped-digests.json",
     # Vendored upstream text (cloudflare/security-audit-skill) uses "triage" in its plain sense.
     WS_ROOT / "skills/security-audit/SKILL.md",
-    *(WS_ROOT / f"templates/skills/{harness}/security-audit/SKILL.md" for harness in ("claude", "codex", "cursor", "opencode")),
 }
 
 DEPRECATED_METADATA_PREFIX = "resources/default-workspace/metadata/deprecated-skills"
@@ -143,8 +158,22 @@ def parse_fields(frontmatter: str) -> dict[str, str]:
     return fields
 
 
+def read_skill_text(path: Path) -> str:
+    """Read a canonical SKILL.md, refusing a BOM or CR line endings.
+
+    Every harness installs the file byte for byte, and shipped digests are over those bytes, so a
+    checkout that rewrites line endings would change what users get.
+    """
+    raw = path.read_bytes()
+    if raw.startswith(b"\xef\xbb\xbf"):
+        fail(f"{rel(path)}: remove the UTF-8 BOM")
+    if b"\r" in raw:
+        fail(f"{rel(path)}: use LF line endings (found CR)")
+    return raw.decode("utf-8")
+
+
 def parse_frontmatter(path: Path) -> dict[str, str]:
-    text = path.read_text(encoding="utf-8")
+    text = read_skill_text(path)
     match = FRONTMATTER_RE.search(text)
     if not match:
         fail(f"{path}: missing YAML frontmatter")
@@ -309,55 +338,110 @@ def validate_agent_metadata(discovered: dict[str, Path]) -> None:
             )
 
 
-def validate_skill_adapters(discovered: dict[str, Path]) -> None:
-    if not ADAPTER_MANIFEST.is_file():
-        fail(f"adapter manifest missing: {ADAPTER_MANIFEST}")
-    try:
-        manifest = json.loads(ADAPTER_MANIFEST.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
-        fail(f"{ADAPTER_MANIFEST}: invalid JSON: {exc}")
-    if manifest.get("version") != 1:
-        fail(f"{ADAPTER_MANIFEST}: unsupported version")
-    if set(manifest.get("targets", [])) != ALL_HARNESSES:
-        fail(f"{ADAPTER_MANIFEST}: targets must be exactly {sorted(ALL_HARNESSES)}")
-    manifest_skills = manifest.get("skills")
-    if not isinstance(manifest_skills, dict):
-        fail(f"{ADAPTER_MANIFEST}: missing skills object")
-    if set(manifest_skills) != set(discovered):
-        missing = set(discovered) - set(manifest_skills)
-        extra = set(manifest_skills) - set(discovered)
-        if missing:
-            fail(f"{ADAPTER_MANIFEST}: missing skills: {sorted(missing)}")
-        if extra:
-            fail(f"{ADAPTER_MANIFEST}: unknown skills: {sorted(extra)}")
+def frontmatter_keys(frontmatter: str) -> list[str]:
+    """Top-level frontmatter keys in file order, duplicates kept."""
+    keys: list[str] = []
+    for line in frontmatter.splitlines():
+        if line[:1] in (" ", "\t"):
+            continue
+        field = FIELD_RE.match(line.strip())
+        if field:
+            keys.append(field.group(1))
+    return keys
 
-    for skill, canonical_path in discovered.items():
-        entry = manifest_skills[skill]
-        if entry.get("canonical") != canonical_path.relative_to(WS_ROOT).as_posix():
-            fail(f"{ADAPTER_MANIFEST}: {skill} canonical path mismatch")
-        if set(entry.get("targets", [])) != ALL_HARNESSES:
-            fail(f"{ADAPTER_MANIFEST}: {skill} targets must be exactly {sorted(ALL_HARNESSES)}")
-        outputs = entry.get("outputs")
-        if not isinstance(outputs, dict) or set(outputs) != ALL_HARNESSES:
-            fail(f"{ADAPTER_MANIFEST}: {skill} outputs must cover {sorted(ALL_HARNESSES)}")
-        for harness in ALL_HARNESSES:
-            expected = ADAPTER_ROOT / harness / skill / "SKILL.md"
-            if not expected.is_file():
-                fail(f"generated {harness} adapter missing for {skill}: {expected}")
-            rel_expected = expected.relative_to(WS_ROOT).as_posix()
-            if outputs.get(harness) != rel_expected:
-                fail(f"{ADAPTER_MANIFEST}: {skill} {harness} output path mismatch")
 
-    result = subprocess.run(
-        [sys.executable, "scripts/generate-skill-adapters.py", "--check"],
-        cwd=REPO_ROOT,
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-    if result.returncode != 0:
-        output = (result.stdout + result.stderr).strip()
-        fail(f"generated skill adapters are stale:\n{output[:4000]}")
+def split_frontmatter(path: Path, text: str) -> tuple[str, list[str]]:
+    """Return the frontmatter text and the body lines; the delimiters must be plain `---` lines."""
+    lines = text.split("\n")
+    if lines[0] != "---":
+        fail(f"{rel(path)}: frontmatter must open with a plain '---' line")
+    for index in range(1, len(lines)):
+        if lines[index].rstrip() == "---":
+            if lines[index] != "---":
+                fail(f"{rel(path)}: frontmatter delimiters must be plain '---' lines")
+            return "\n".join(lines[1:index]), lines[index + 1:]
+    fail(f"{rel(path)}: frontmatter never closes")
+    raise AssertionError("unreachable")
+
+
+def headings(body: list[str]) -> list[tuple[int, str]]:
+    """(line index, heading line) of every Markdown heading outside fenced code blocks."""
+    found: list[tuple[int, str]] = []
+    fence: str | None = None
+    for index, line in enumerate(body):
+        marker = FENCE_RE.match(line)
+        if marker:
+            if fence is None:
+                fence = marker.group(1)[0]
+            elif marker.group(1)[0] == fence:
+                fence = None
+            continue
+        if fence is None and HEADING_RE.match(line):
+            found.append((index, line.rstrip()))
+    return found
+
+
+def validate_harness_notes(path: Path, frontmatter: str, body: list[str]) -> None:
+    """Harness-specific text sits in `## Harness notes` as one `###` subsection per harness."""
+    outline = headings(body)
+    notes = [(i, h) for i, h in outline if h == HARNESS_NOTES_HEADING]
+    if len(notes) > 1:
+        fail(f"{rel(path)}: more than one '{HARNESS_NOTES_HEADING}' section")
+    claude_lines: range = range(0)
+    if notes:
+        start = notes[0][0]
+        if any(h.startswith("## ") and i > start for i, h in outline):
+            fail(f"{rel(path)}: '{HARNESS_NOTES_HEADING}' must be the last '##' section")
+        subsections = [(i, h) for i, h in outline if i > start and not h.startswith("####")]
+        names: list[str] = []
+        for _, heading in subsections:
+            if not heading.startswith("### "):
+                fail(f"{rel(path)}: '{HARNESS_NOTES_HEADING}' allows only '###' harness subsections, found {heading!r}")
+            names.append(heading[4:])
+        unknown = [name for name in names if name not in HARNESS_NOTES_SECTIONS]
+        if unknown or not names:
+            fail(f"{rel(path)}: '{HARNESS_NOTES_HEADING}' subsections must be from {list(HARNESS_NOTES_SECTIONS)}, found {names}")
+        if names != sorted(set(names), key=HARNESS_NOTES_SECTIONS.index):
+            fail(f"{rel(path)}: harness notes must follow the order {list(HARNESS_NOTES_SECTIONS)} without repeats, found {names}")
+        if any(line.strip() for line in body[start + 1 : subsections[0][0]]):
+            fail(f"{rel(path)}: text between '{HARNESS_NOTES_HEADING}' and its first subsection")
+        for position, (index, heading) in enumerate(subsections):
+            if heading == CLAUDE_NOTES_HEADING:
+                end = subsections[position + 1][0] if position + 1 < len(subsections) else len(body)
+                claude_lines = range(index, end)
+    has_claude_notes = bool(claude_lines)
+    claude_keys = sorted(set(frontmatter_keys(frontmatter)) & set(CLAUDE_ONLY_KEYS))
+    if claude_keys and not has_claude_notes:
+        fail(f"{rel(path)}: Claude-only frontmatter {claude_keys} needs a '{CLAUDE_NOTES_HEADING}' notes section")
+    for index, line in enumerate(body):
+        if index not in claude_lines and INJECTION_RE.search(line):
+            fail(
+                f"{rel(path)}:{index + 1}: Claude injection syntax is only allowed under "
+                f"'{HARNESS_NOTES_HEADING}' > '{CLAUDE_NOTES_HEADING}' (other harnesses show it literally)"
+            )
+    if INJECTION_RE.search(frontmatter):
+        fail(f"{rel(path)}: Claude injection syntax is not allowed in the frontmatter")
+
+
+def validate_canonical_skill_files(discovered: dict[str, Path]) -> None:
+    """Every harness installs the canonical SKILL.md byte for byte, so it must be clean as written."""
+    for retired in RETIRED_ADAPTER_PATHS:
+        if retired.exists():
+            fail(f"{rel(retired)} is retired: harnesses install skills/<name>/SKILL.md directly; delete it")
+    for name, path in discovered.items():
+        for candidate in (path, *path.parents):
+            if candidate == SKILLS_ROOT.parent:
+                break
+            if candidate.is_symlink():
+                fail(f"{rel(candidate)}: refusing symlink skill path")
+        if not SKILL_NAME_RE.fullmatch(name):
+            fail(f"{rel(path)}: invalid skill name {name!r}")
+        frontmatter, body = split_frontmatter(path, read_skill_text(path))
+        keys = frontmatter_keys(frontmatter)
+        duplicated = sorted({key for key in keys if keys.count(key) > 1})
+        if duplicated:
+            fail(f"{rel(path)}: duplicate frontmatter keys {duplicated}")
+        validate_harness_notes(path, frontmatter, body)
 
 
 STALE_CLAIMS = [
@@ -489,7 +573,7 @@ def main() -> None:
     validate_skill_metadata(discovered_map)
     validate_related(discovered_map)
     validate_descriptions(discovered_map)
-    validate_skill_adapters(discovered_map)
+    validate_canonical_skill_files(discovered_map)
     validate_routing_sources(discovered)
     validate_user_invoked_routing(discovered_map)
     validate_agent_metadata(discovered_map)

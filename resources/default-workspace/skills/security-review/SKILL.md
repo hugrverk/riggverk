@@ -76,3 +76,9 @@ Done when: every changed trust boundary is listed as checked or not checked, and
 - Do not invent vulnerabilities without evidence.
 - Do not require perfect security for low-risk changes; match depth to blast radius.
 - Do not claim secure unless the reviewed scope and verification are explicit.
+
+## Harness notes
+
+### Claude Code
+
+- If using a subagent, keep it read-only unless the user explicitly asked for fixes.
