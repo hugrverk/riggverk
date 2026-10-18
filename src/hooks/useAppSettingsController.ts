@@ -347,6 +347,11 @@ export function useAppSettingsController({
     setAppSettings(prev => (prev ? { ...prev, landing_view: landingView } : prev));
   }, []);
 
+  /** Records the app version whose "what's new" was handled; autosaved like any other setting. */
+  const setLastSeenVersion = useCallback((version: string) => {
+    setAppSettings(prev => (prev && prev.last_seen_version !== version ? { ...prev, last_seen_version: version } : prev));
+  }, []);
+
   const toggleTarget = useCallback((id: string) => {
     setSettingsMsg(null);
     setAppSettings(prev => {
@@ -453,6 +458,7 @@ export function useAppSettingsController({
     setForegroundColor,
     setMotion,
     setLandingView,
+    setLastSeenVersion,
     toggleTarget,
     toggleHarness,
     clearSettingsMsg,

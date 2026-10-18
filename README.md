@@ -116,6 +116,7 @@ Stored in `settings.json` under the app support dir; autosaved.
 | `app_font_size` | `"medium"` | `"small"`, `"medium"`, `"large"`, `"extra-large"`. |
 | `motion` | `"full"` | `"full"`, `"subtle"`, or `"off"`. `"off"` stops animations and transitions; the OS reduced-motion preference always counts as `"off"`. Older files with `reduce_motion: true` load as `"off"`; the legacy `reduce_motion` flag is still written beside it. |
 | `landing_view` | `"start"` | View shown on start: `"start"`, `"library"`. |
+| `last_seen_version` | unset | App version whose "what's new" was handled. Set by the app, not in Settings: it records the version on a fresh install and after the overlay is closed on the first launch after an update. `:whatsnew` opens the notes at any time. |
 
 Target toggles gate these surfaces: rules, agents, and config per harness, Cursor agents plus MCP (`cursor_setup`), and the rules file of each light harness (`copilot_rules`, `pi_rules`, `kilo_rules`; they only act once their harness is enabled). `codex_config` is the only target off by default because it rewrites the Codex approval and sandbox posture. Settings files from before target gating are migrated once: every default stays on, and any target you had enabled or whose surface is already managed stays on, so nothing already installed is dropped. Later additions to the defaults (the three light rules targets) are added to older files without touching a toggle you switched off. Skills and the workspace bundle are never gated.
 

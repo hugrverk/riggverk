@@ -10,6 +10,7 @@ import {
 } from "react";
 import { useKeymapContext, useKeymapState } from "../keyboard/context";
 import { echoOf, type EchoKey } from "../keyboard/echo";
+import type { WhatsNewRequest } from "../lib/releaseNotes";
 
 export type ShellMode = "NORMAL" | "INSERT" | "COMMAND" | "CONFIRM" | "HELP";
 
@@ -32,6 +33,8 @@ export interface ShellStateValue {
   /** Text the command line opens with (":" opens empty, a caller may prefill "update "). */
   commandLineInitial: string;
   helpOpen: boolean;
+  /** The release notes the "what's new" overlay shows, or null while it is closed. */
+  whatsNew: WhatsNewRequest | null;
   /** Number of confirm/review surfaces currently open (CONFIRM mode while > 0). */
   confirmDepth: number;
   /** Extra status-bar context after the view label ("claude > plan"). */
@@ -50,6 +53,9 @@ export interface ShellStateValue {
   openHelp: () => void;
   closeHelp: () => void;
   toggleHelp: () => void;
+  /** Opens the "what's new" overlay; `request.onClose` runs once when it is closed. */
+  openWhatsNew: (request: WhatsNewRequest) => void;
+  closeWhatsNew: () => void;
   /** Marks a confirm/review surface as open; returns the release function. */
   beginConfirm: () => () => void;
   setStatusContext: (text: string | null) => void;
@@ -67,6 +73,7 @@ const DETACHED_STATE: ShellStateValue = {
   commandLineOpen: false,
   commandLineInitial: "",
   helpOpen: false,
+  whatsNew: null,
   confirmDepth: 0,
   statusContext: null,
   notice: null,
@@ -79,6 +86,8 @@ const DETACHED_STATE: ShellStateValue = {
   openHelp: noop,
   closeHelp: noop,
   toggleHelp: noop,
+  openWhatsNew: noop,
+  closeWhatsNew: noop,
   beginConfirm: () => noop,
   setStatusContext: noop,
   notify: noop,
@@ -91,6 +100,8 @@ export function ShellStateProvider({ children }: { children: ReactNode }) {
   const [commandLineOpen, setCommandLineOpen] = useState(false);
   const [commandLineInitial, setCommandLineInitial] = useState("");
   const [helpOpen, setHelpOpen] = useState(false);
+  const [whatsNew, setWhatsNew] = useState<WhatsNewRequest | null>(null);
+  const whatsNewRef = useRef<WhatsNewRequest | null>(null);
   const [confirmDepth, setConfirmDepth] = useState(0);
   const [statusContext, setStatusContext] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ text: string; tone: NoticeTone | null; id: number } | null>(null);
@@ -139,6 +150,20 @@ export function ShellStateProvider({ children }: { children: ReactNode }) {
     setHelpOpen(open => !open);
   }, []);
 
+  const openWhatsNew = useCallback((request: WhatsNewRequest) => {
+    setCommandLineOpen(false);
+    setHelpOpen(false);
+    whatsNewRef.current = request;
+    setWhatsNew(request);
+  }, []);
+  const closeWhatsNew = useCallback(() => {
+    const request = whatsNewRef.current;
+    if (!request) return;
+    whatsNewRef.current = null;
+    setWhatsNew(null);
+    request.onClose?.();
+  }, []);
+
   const beginConfirm = useCallback(() => {
     setConfirmDepth(depth => depth + 1);
     let released = false;
@@ -166,6 +191,7 @@ export function ShellStateProvider({ children }: { children: ReactNode }) {
       commandLineOpen,
       commandLineInitial,
       helpOpen,
+      whatsNew,
       confirmDepth,
       statusContext,
       notice: notice?.text ?? null,
@@ -178,6 +204,8 @@ export function ShellStateProvider({ children }: { children: ReactNode }) {
       openHelp,
       closeHelp,
       toggleHelp,
+      openWhatsNew,
+      closeWhatsNew,
       beginConfirm,
       setStatusContext,
       notify,
@@ -187,6 +215,7 @@ export function ShellStateProvider({ children }: { children: ReactNode }) {
       commandLineOpen,
       commandLineInitial,
       helpOpen,
+      whatsNew,
       confirmDepth,
       statusContext,
       notice,
@@ -197,6 +226,8 @@ export function ShellStateProvider({ children }: { children: ReactNode }) {
       openHelp,
       closeHelp,
       toggleHelp,
+      openWhatsNew,
+      closeWhatsNew,
       beginConfirm,
       notify,
       replayBoot,
@@ -210,12 +241,12 @@ export function useShellState(): ShellStateValue {
   return useContext(ShellStateContext);
 }
 
-/** Derived mode shown in the status bar: COMMAND > HELP > CONFIRM > INSERT > NORMAL. */
+/** Derived mode shown in the status bar: COMMAND > HELP (also while "what's new" is open) > CONFIRM > INSERT > NORMAL. */
 export function useShellMode(): ShellMode {
-  const { commandLineOpen, helpOpen, confirmDepth } = useShellState();
+  const { commandLineOpen, helpOpen, whatsNew, confirmDepth } = useShellState();
   const { editing } = useKeymapState();
   if (commandLineOpen) return "COMMAND";
-  if (helpOpen) return "HELP";
+  if (helpOpen || whatsNew) return "HELP";
   if (confirmDepth > 0) return "CONFIRM";
   return editing ? "INSERT" : "NORMAL";
 }
