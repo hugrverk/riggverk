@@ -37,7 +37,7 @@ pub use content::{
 pub use cursor_profile::get_cursor_profile_health;
 pub use opencode_runtime::{
     get_opencode_runtime_health, list_available_opencode_models, read_opencode_model_selection,
-    update_opencode_model_selection,
+    reset_opencode_model_selection, update_opencode_model_selection,
 };
 pub use rules::{
     apply_rules_conversion, preview_rules_conversion, preview_rules_diff, set_rules_user_managed,
