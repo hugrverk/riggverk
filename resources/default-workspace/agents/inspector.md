@@ -7,7 +7,11 @@ steps: 40
 hidden: true
 permission:
   "*": ask
-  external_directory: ask
+  external_directory:
+    "*": ask
+    "~/.claude/skills/*": allow
+    "~/.agents/skills/*": allow
+    "~/.config/opencode/skills/*": allow
   doom_loop: ask
   todowrite: allow
   read:
@@ -15,57 +19,109 @@ permission:
     ".env*": deny
     "*.env*": deny
     "**/.env*": deny
+    "*.key": deny
     "**/*.key": deny
+    "*.pem": deny
     "**/*.pem": deny
+    "*.p12": deny
     "**/*.p12": deny
+    "*.pfx": deny
     "**/*.pfx": deny
+    "secrets/**": deny
     "**/secrets/**": deny
+    ".ssh/**": deny
     "**/.ssh/**": deny
+    ".gnupg/**": deny
     "**/.gnupg/**": deny
+    "auth.json": deny
     "**/auth.json": deny
+    "service-account*.json": deny
     "**/service-account*.json": deny
+    "*service-account*.json": deny
     "**/*service-account*.json": deny
+    "credentials*.json": deny
     "**/credentials*.json": deny
+    "*credentials*.json": deny
     "**/*credentials*.json": deny
+    "*token*.json": deny
     "**/*token*.json": deny
+    "*secret*.json": deny
     "**/*secret*.json": deny
+    "firebase-adminsdk*.json": deny
     "**/firebase-adminsdk*.json": deny
+    "google-credentials*.json": deny
     "**/google-credentials*.json": deny
+    "wp-config.php": deny
     "**/wp-config.php": deny
+    ".npmrc": deny
     "**/.npmrc": deny
+    ".netrc": deny
     "**/.netrc": deny
+    ".pypirc": deny
     "**/.pypirc": deny
+    ".aws/**": deny
     "**/.aws/**": deny
+    ".config/gh/**": deny
     "**/.config/gh/**": deny
+    ".docker/config.json": deny
     "**/.docker/config.json": deny
+    "id_rsa": deny
     "**/id_rsa": deny
+    "id_ed25519": deny
     "**/id_ed25519": deny
+    "id_ecdsa": deny
     "**/id_ecdsa": deny
+    "id_dsa": deny
     "**/id_dsa": deny
+    "kubeconfig": deny
     "**/kubeconfig": deny
+    ".kube/**": deny
     "**/.kube/**": deny
+    "terraform.tfvars": deny
     "**/terraform.tfvars": deny
+    "*.tfvars": deny
     "**/*.tfvars": deny
+    "terraform.tfstate*": deny
     "**/terraform.tfstate*": deny
+    "vault.yml": deny
     "**/vault.yml": deny
+    "secrets.yml": deny
     "**/secrets.yml": deny
+    "master.key": deny
     "**/master.key": deny
+    ".pgpass": deny
     "**/.pgpass": deny
+    ".my.cnf": deny
     "**/.my.cnf": deny
+    ".envrc": deny
     "**/.envrc": deny
+    ".bash_history": deny
     "**/.bash_history": deny
+    ".zsh_history": deny
     "**/.zsh_history": deny
+    "*.ppk": deny
     "**/*.ppk": deny
+    "*.jks": deny
     "**/*.jks": deny
+    "Pulumi.*.yaml": deny
     "**/Pulumi.*.yaml": deny
+    "mcp.json": deny
     "**/mcp.json": deny
+    ".claude.json": deny
     "**/.claude.json": deny
+    ".codex/config.toml": deny
     "**/.codex/config.toml": deny
+    ".git-credentials": deny
     "**/.git-credentials": deny
+    ".git/config": deny
     "**/.git/config": deny
+    ".env.example": allow
     "**/.env.example": allow
+    ".env.sample": allow
     "**/.env.sample": allow
+    ".env.template": allow
     "**/.env.template": allow
+    "example.env": allow
     "**/example.env": allow
   glob: allow
   grep: allow
@@ -194,12 +250,15 @@ permission:
     "rm -rf*": deny
     "rm -fr*": deny
     "sudo*": deny
-    "*|bash": deny
-    "*| bash": deny
-    "* | bash": deny
-    "*|sh": deny
-    "*| sh": deny
-    "* | sh": deny
+    "bash": deny
+    "sh": deny
+    "zsh": deny
+    "bash -": deny
+    "sh -": deny
+    "zsh -": deny
+    "bash -s*": deny
+    "sh -s*": deny
+    "zsh -s*": deny
     "cat .env*": deny
     "cat */.env*": deny
     "cat **/.env*": deny

@@ -25,6 +25,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 # adapters); the workspace-shipped generate-opencode-config.py is its standalone twin.
 from opencode_policy_compose import (  # noqa: E402
     build_base_permission,
+    build_builtin_agent_overrides,
     unknown_policy_keys,
 )
 
@@ -79,8 +80,11 @@ def generate_config():
         if key not in config:
             config[key] = value
 
-    # Build and append permission
+    # Build and append permission, then the managed built-in agent overrides
     config["permission"] = build_base_permission(policy)
+    agent = build_builtin_agent_overrides(policy)
+    if agent:
+        config["agent"] = agent
 
     return config
 
