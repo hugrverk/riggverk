@@ -8,13 +8,15 @@ import {
   op,
   overviewOf,
   settingsOf,
+  skillLoadsOf,
   STATUS_DATA,
   surfaceStatus,
 } from "../test/pageFixtures";
-import type { AgentTargetMeta, ApplyProgress, ClaudeRuntimeHealth, CodexRuntimeHealth, OpenCodeModelSelection, OpenCodeRuntimeHealth } from "../types";
+import type { AgentTargetMeta, ApplyProgress, ClaudeRuntimeHealth, CodexRuntimeHealth, EffectiveSkillLoads, OpenCodeModelSelection, OpenCodeRuntimeHealth, SkillCopy } from "../types";
 import { ClaudeView } from "./ClaudeView";
 import { CodexView } from "./CodexView";
 import { CursorView } from "./CursorView";
+import { HarnessPage } from "./HarnessPage";
 import { OpenCodeView } from "./OpenCodeView";
 import type { HarnessViewProps } from "./pageTypes";
 
@@ -79,6 +81,7 @@ function props(overrides: Partial<HarnessViewProps> = {}): HarnessViewProps {
     agentTargets: TARGETS,
     settingsSaveStatus: "saved",
     onToggleTarget: vi.fn(),
+    skillLoads: skillLoadsOf(),
     overview: overviewOf({
       codex: installationStatus("update_available", [surfaceStatus("codex_rules", "update_available"), surfaceStatus("skills", "current")], { update_count: 1 }),
       claude: installationStatus("current", [surfaceStatus("claude_rules", "current")]),
@@ -765,5 +768,107 @@ describe("HarnessPage output strip progress", () => {
   it("hands it null until the backend reports", () => {
     renderCodex({ wsRunning: "update codex", wsProgress: null });
     expect(outputStripProps).toHaveBeenLastCalledWith(expect.objectContaining({ progress: null }));
+  });
+});
+
+describe("HarnessPage skill loads", () => {
+  const CODEX_FOLDERS = [
+    { folder: "agents" as const, path: "~/.agents/skills", exists: true },
+    { folder: "codex_home" as const, path: "~/.codex/skills", exists: false },
+  ];
+
+  function copy(folder: "agents" | "codex_home", name: string): SkillCopy {
+    const path = folder === "agents" ? "~/.agents/skills" : "~/.codex/skills";
+    return { folder, path: `${path}/${name}`, hash: "aaaaaaaaaaaa", owner: "aw", current: true };
+  }
+
+  function codexLoads(twice: string[], once: string[] = []): EffectiveSkillLoads {
+    return {
+      harnesses: [
+        {
+          harness: "codex",
+          folders: CODEX_FOLDERS,
+          skills: [
+            ...twice.map(name => ({ name, copies: [copy("agents", name), copy("codex_home", name)], winner: null, flags: ["plain_mention_ambiguous" as const] })),
+            ...once.map(name => ({ name, copies: [copy("agents", name)], winner: 0, flags: [] })),
+          ],
+        },
+      ],
+      foreign_duplicates: [],
+    };
+  }
+
+  function labels(root: HTMLElement = detail()) {
+    return [...root.querySelectorAll("dt")].map(dt => dt.textContent);
+  }
+
+  function valueOf(label: string, root: HTMLElement = detail()) {
+    return [...root.querySelectorAll("dt")].find(dt => dt.textContent === label)!.nextElementSibling!;
+  }
+
+  it("shows the loads below the skills row of the runtime facts, and keeps the sync row as it was", () => {
+    renderCodex({ skillLoads: skillLoadsOf(codexLoads(["tdd", "diagnose"], ["zoom-out"])) });
+    const rows = labels();
+    expect(rows.indexOf("skill loads")).toBe(rows.indexOf("skills") + 1);
+    expect(facts()).toMatchObject({ skills: "synced · 17/18", "skill loads": "2 names with 2 copies" });
+    const text = detail().textContent!;
+    expect(text).toContain("diagnose · ~/.agents/skills + ~/.codex/skills · plain $name mention is ambiguous");
+    expect(text).toContain("tdd · ~/.agents/skills + ~/.codex/skills");
+  });
+
+  it("says each skill has one copy when none is duplicated, in the ok tone", () => {
+    renderCodex({ skillLoads: skillLoadsOf(codexLoads([], ["tdd", "diagnose"])) });
+    expect(facts()["skill loads"]).toBe("2 skills, 1 copy each");
+    expect(valueOf("skill loads").className).toContain("c-ok");
+  });
+
+  it("adds the number of duplicate names to the skills row label and turns it into a warning", () => {
+    renderCodex({ skillLoads: skillLoadsOf(codexLoads(["tdd", "diagnose"])) });
+    const rows = within(surfaces()).getAllByRole("option");
+    expect(rowText(rows[3]!)).toEqual(["skills", "current · 2 duplicates"]);
+    expect(rows[3]!.querySelector(".meta")!.className).toContain("c-warn");
+    // The other rows are not touched.
+    expect(rowText(rows[2]!)).toEqual(["[x] rules .codex/AGENTS.md", "update"]);
+  });
+
+  it("leaves the skills row alone while nothing is duplicated, loaded or readable", () => {
+    for (const skillLoads of [skillLoadsOf(codexLoads([], ["tdd"])), skillLoadsOf(null), skillLoadsOf(null, "boom")]) {
+      renderCodex({ skillLoads });
+      expect(rowText(within(surfaces()).getAllByRole("option")[3]!)).toEqual(["skills", "current"]);
+      cleanup();
+    }
+  });
+
+  it("says the loads could not be read instead of showing none", () => {
+    renderCodex({ skillLoads: skillLoadsOf(null, "workspace invalid") });
+    expect(facts()["skill loads"]).toBe("not checked: workspace invalid");
+  });
+
+  it("names the folders the harness reads when the cursor is on the skills row", () => {
+    renderCodex({ skillLoads: skillLoadsOf(codexLoads([], ["tdd"])) });
+    act(() => surfaces().focus());
+    expect(facts()).not.toHaveProperty("reads");
+    press("G");
+    expect(facts()).toMatchObject({ reads: "~/.agents/skills, ~/.codex/skills (missing)" });
+  });
+
+  it("shows the loads on the OpenCode page, which has no skills row of its own", () => {
+    const health = { status: "synced", tui_status: "synced", agent_mismatches: [], warnings: [], cli: null, config_status: "synced", config_diverged_keys: [], rules_status: "synced", playwright_mcp_version: null, bundled_agent_count: 3, installed_bundled_agent_count: 3, default_agent: "build", autoupdate: "true", summary: "ok", next_action: "" } as unknown as OpenCodeRuntimeHealth;
+    const skillLoads = skillLoadsOf({
+      harnesses: [{
+        harness: "opencode",
+        folders: [{ folder: "claude", path: "~/.claude/skills", exists: true }, { folder: "agents", path: "~/.agents/skills", exists: true }],
+        skills: [{ name: "tdd", copies: [{ ...copy("agents", "tdd"), folder: "claude", path: "~/.claude/skills/tdd" }, copy("agents", "tdd")], winner: null, flags: ["duplicate_identical"] }],
+      }],
+      foreign_duplicates: [],
+    });
+    renderInFrame(<HarnessPage {...props({ skillLoads })} harness="opencode" runtime={{ harness: "opencode", health }} />);
+    const opencode = screen.getByRole("region", { name: "OpenCode detail" });
+    const rows = labels(opencode);
+    expect(rows).not.toContain("skills");
+    expect(rows.indexOf("skill loads")).toBe(rows.indexOf("agents") + 1);
+    // Identical copies are information: not a warning.
+    expect(facts(opencode)["skill loads"]).toBe("1 skill · 1 with identical copies");
+    expect(valueOf("skill loads", opencode).className).not.toContain("c-warn");
   });
 });

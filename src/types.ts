@@ -158,6 +158,63 @@ export interface InstallationStatus {
   surfaces: SurfaceInstallationStatus[];
 }
 
+// Effective skill loads: which copies of a skill each enabled harness reads (`get_effective_skill_loads`).
+
+/** A skills folder a harness reads; `dot_codex` is the literal `~/.codex/skills`, whatever `CODEX_HOME` says. */
+export type SkillReadFolder = "claude" | "agents" | "codex_home" | "dot_codex" | "open_code" | "cursor";
+
+export type SkillLoadFlag =
+  | "plain_mention_ambiguous"
+  | "winner_nondeterministic"
+  | "duplicate_identical"
+  | "possible_duplicate"
+  | "foreign_copy";
+
+export interface SkillCopy {
+  folder: SkillReadFolder;
+  /** The skill's folder, `~/.claude/skills/tdd`. */
+  path: string;
+  /** First hex digits of the file's SHA-256. */
+  hash: string;
+  /** `aw` is a version of a bundled skill the app wrote; anything else is the user's own. */
+  owner: "aw" | "foreign";
+  /** The file equals the bundled `SKILL.md`. */
+  current: boolean;
+}
+
+export interface SkillLoad {
+  name: string;
+  copies: SkillCopy[];
+  /** Index into `copies` of the copy loaded when there is only one candidate. */
+  winner: number | null;
+  flags: SkillLoadFlag[];
+}
+
+export interface SkillFolderInfo {
+  folder: SkillReadFolder;
+  path: string;
+  exists: boolean;
+  /** Why the folder was not read completely; absent otherwise. */
+  note?: string;
+}
+
+export interface HarnessSkillLoads {
+  harness: InstallAgent;
+  folders: SkillFolderInfo[];
+  skills: SkillLoad[];
+}
+
+export interface ForeignSkillDuplicate {
+  name: string;
+  harnesses: InstallAgent[];
+  copies: SkillCopy[];
+}
+
+export interface EffectiveSkillLoads {
+  harnesses: HarnessSkillLoads[];
+  foreign_duplicates: ForeignSkillDuplicate[];
+}
+
 export interface AgentTargetMeta {
   id: string; label: string; harness: InstallAgent; kind: "rules" | "agents" | "config"; target_rel: string; source_rel: string;
 }

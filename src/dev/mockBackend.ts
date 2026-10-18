@@ -7,7 +7,8 @@
  *   conflict  Claude plan with + ~ − ! rows, Cursor blocked by a conflict; rules files in every state:
  *             Claude edited block (`&rules=legacy|malformed|managed|update|current|absent` picks another state),
  *             Codex base update keeping 14 refinement lines plus the AGENTS.override.md warning,
- *             OpenCode plain file that differs from every shipped base
+ *             OpenCode plain file that differs from every shipped base;
+ *             skills: an older app copy of `tdd` beside the current one for Codex, and two copies of the user's own `my-deploy`
  *   fresh     nothing installed, no backups, no transactions
  *   error     status/diagnostics calls fail (exercises the error line)
  *   empty     valid workspace with no docs, skills or agents
@@ -34,7 +35,9 @@ import type {
   DocSummary,
   DocsHealth,
   DocumentContent,
+  EffectiveSkillLoads,
   GetSettingsResponse,
+  InstallAgent,
   InstallationState,
   InstallationStatus,
   ListAvailableModelsResult,
@@ -51,6 +54,10 @@ import type {
   SetupPlan,
   SetupResult,
   SetupSurfaceId,
+  SkillCopy,
+  SkillLoad,
+  SkillLoadFlag,
+  SkillReadFolder,
   SkillSummary,
   StatusData,
   SurfaceInstallationStatus,
@@ -982,6 +989,108 @@ async function emitProgress(task: string, files: string[], options: { backup?: b
   await report("done", total, null);
 }
 
+/* ---- effective skill loads ---- */
+
+const SKILL_READ_FOLDERS: Record<InstallAgent, SkillReadFolder[]> = {
+  claude: ["claude"],
+  codex: ["agents", "codex_home"],
+  opencode: ["claude", "agents", "open_code"],
+  cursor: ["cursor", "agents", "claude", "dot_codex"],
+};
+
+const SKILL_FOLDER_PATHS: Record<SkillReadFolder, string> = {
+  claude: "~/.claude/skills",
+  agents: "~/.agents/skills",
+  codex_home: "~/.codex/skills",
+  dot_codex: "~/.codex/skills",
+  open_code: "~/.config/opencode/skills",
+  cursor: "~/.cursor/skills",
+};
+
+/** The folders skills are installed into for these harnesses (default Codex home), as the backend picks them. */
+function installedSkillFolders(enabled: readonly InstallAgent[]): SkillReadFolder[] {
+  const on = (harness: InstallAgent) => enabled.includes(harness);
+  return [
+    ...(on("claude") ? ["claude" as const] : []),
+    ...(on("codex") || ((on("opencode") || on("cursor")) && !on("claude")) ? ["agents" as const] : []),
+  ];
+}
+
+/** A 12-digit pseudo hash: equal seeds give equal hashes. */
+function fakeHash(seed: string): string {
+  let h = 5381;
+  for (const ch of seed) h = (h * 33 + ch.charCodeAt(0)) % 0xffffffffffff;
+  return h.toString(16).padStart(12, "0");
+}
+
+type NamedCopy = SkillCopy & { name: string };
+
+/** Copies the conflict scenario adds to the installed ones: an older app copy of `tdd` and two of the user's own skill. */
+function extraSkillCopies(): NamedCopy[] {
+  if (scenario !== "conflict") return [];
+  const own = (folder: SkillReadFolder): NamedCopy => ({
+    name: "my-deploy", folder, path: `${SKILL_FOLDER_PATHS[folder]}/my-deploy`, hash: fakeHash(`my-deploy-${folder}`), owner: "foreign", current: false,
+  });
+  return [
+    { name: "tdd", folder: "codex_home", path: "~/.codex/skills/tdd", hash: fakeHash("tdd-older"), owner: "aw", current: false },
+    own("agents"),
+    own("codex_home"),
+  ];
+}
+
+function skillFlags(harness: InstallAgent, copies: readonly SkillCopy[]): SkillLoadFlag[] {
+  if (copies.length < 2) return [];
+  if (copies.some(copy => copy.owner === "foreign")) return ["foreign_copy"];
+  if (harness === "codex") return ["plain_mention_ambiguous"];
+  if (harness === "cursor") return ["possible_duplicate"];
+  if (harness === "opencode") return [copies.every(copy => copy.hash === copies[0].hash) ? "duplicate_identical" : "winner_nondeterministic"];
+  return [];
+}
+
+function effectiveSkillLoads(): EffectiveSkillLoads {
+  const enabled = settings.enabled_harness_ids;
+  const installed = scenario === "fresh" || scenario === "empty" ? [] : installedSkillFolders(enabled);
+  const names = scenario === "empty" ? [] : skills.map(skill => skill.name);
+  const extras = extraSkillCopies();
+  const harnesses = enabled.map(harness => {
+    const reads = SKILL_READ_FOLDERS[harness];
+    const byName = new Map<string, SkillCopy[]>();
+    // A copy is listed once however many folders lead to it: the literal ~/.codex/skills is Codex's folder too.
+    const seen = new Set<string>();
+    for (const folder of reads) {
+      const found: NamedCopy[] = [
+        ...installed.filter(root => root === folder).flatMap(root => names.map((name): NamedCopy => ({
+          name, folder: root, path: `${SKILL_FOLDER_PATHS[root]}/${name}`, hash: fakeHash(name), owner: "aw", current: true,
+        }))),
+        ...extras.filter(copy => copy.folder === folder || (folder === "dot_codex" && copy.folder === "codex_home")),
+      ];
+      for (const { name, ...copy } of found) {
+        if (seen.has(copy.path)) continue;
+        seen.add(copy.path);
+        byName.set(name, [...(byName.get(name) ?? []), { ...copy, folder }]);
+      }
+    }
+    const loaded: SkillLoad[] = [...byName]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([name, copies]) => ({ name, copies, winner: copies.length === 1 ? 0 : null, flags: skillFlags(harness, copies) }));
+    return {
+      harness,
+      folders: reads.map(folder => ({ folder, path: SKILL_FOLDER_PATHS[folder], exists: installed.includes(folder) || extras.some(copy => copy.folder === folder) })),
+      skills: loaded,
+    };
+  });
+  const foreign = new Map<string, { harnesses: InstallAgent[]; copies: SkillCopy[] }>();
+  for (const { harness, skills: loaded } of harnesses) {
+    for (const skill of loaded.filter(candidate => candidate.flags.includes("foreign_copy"))) {
+      const entry = foreign.get(skill.name) ?? { harnesses: [], copies: [] };
+      entry.harnesses.push(harness);
+      entry.copies.push(...skill.copies.filter(copy => !entry.copies.some(known => known.path === copy.path)));
+      foreign.set(skill.name, entry);
+    }
+  }
+  return { harnesses, foreign_duplicates: [...foreign].map(([name, entry]) => ({ name, ...entry })) };
+}
+
 /* ---- dispatcher ---- */
 
 type Args = Record<string, unknown> | undefined;
@@ -1108,6 +1217,9 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
       return claudeHealth();
     case "list_skills":
       return skills;
+    case "get_effective_skill_loads":
+      await delay(120);
+      return scenario === "error" ? unavailable() : effectiveSkillLoads();
     case "read_skill": {
       const id = arg<string>(args, "id");
       const skill = skills.find(s => s.id === id);

@@ -1,3 +1,4 @@
+import type { EffectiveSkillLoadsState } from "../hooks/useEffectiveSkillLoads";
 import type { InstallationOverview } from "../hooks/useInstallationOverview";
 import type { InstallScreen, RunWorkspaceTask } from "../hooks/useInstallScreen";
 import type { SettingsSaveStatus } from "../lib/settingsDraft";
@@ -44,6 +45,8 @@ export interface PageRulesProps {
 /** Props every harness page (Codex, OpenCode, Cursor, Claude) receives from the app shell. */
 export interface HarnessViewProps extends PageOutputProps, PageInstallProps, PageRulesProps {
   appSettings: AppSettings | null;
+  /** Which skill copies each enabled harness loads: the `skill loads` rows and the skills row's duplicate count. */
+  skillLoads: EffectiveSkillLoadsState;
   agentTargets: AgentTargetMeta[];
   settingsSaveStatus: SettingsSaveStatus;
   onToggleTarget: (id: string) => void;

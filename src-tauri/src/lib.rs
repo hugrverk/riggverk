@@ -29,6 +29,7 @@ mod shell_runtime;
 mod shipped_digests;
 mod skill_discovery;
 mod skill_health;
+mod skill_loads;
 mod skill_roots;
 #[cfg(test)]
 mod skills_install;
@@ -54,7 +55,7 @@ mod test_env;
 use commands::{
     apply_rules_conversion, apply_setup, apply_uninstall, create_doc, get_agent_targets,
     get_backup_details, get_claude_runtime_health, get_codex_runtime_health,
-    get_cursor_profile_health, get_docs_health, get_installation_status,
+    get_cursor_profile_health, get_docs_health, get_effective_skill_loads, get_installation_status,
     get_opencode_runtime_health, get_settings, get_status, get_workspace_diagnostics,
     list_agent_metadata, list_available_opencode_models, list_backups, list_docs,
     list_opencode_config_editor_sources, list_skills, open_agent_source, open_agent_template,
@@ -94,6 +95,7 @@ pub fn run() {
             get_cursor_profile_health,
             list_skills,
             get_installation_status,
+            get_effective_skill_loads,
             open_skill,
             read_skill,
             list_docs,

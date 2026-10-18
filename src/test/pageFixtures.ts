@@ -1,10 +1,12 @@
 import { vi } from "vitest";
+import type { EffectiveSkillLoadsState } from "../hooks/useEffectiveSkillLoads";
 import type { InstallationOverview, OverviewEntry, OverviewId } from "../hooks/useInstallationOverview";
 import { buildInstallReview, type InstallFlow, type InstallFlowRequest } from "../hooks/useInstallFlow";
 import type { InstallScreen } from "../hooks/useInstallScreen";
 import type { AppView } from "../shell/views";
 import type {
   AppSettings,
+  EffectiveSkillLoads,
   InstallationState,
   InstallationStatus,
   PlannedOperation,
@@ -76,6 +78,11 @@ export function overviewOf(statuses: Partial<Record<OverviewId, InstallationStat
     entries[id] = { id, status, loading: false, error: null };
   }
   return { entries, loading: false, refresh: vi.fn(async () => {}) };
+}
+
+/** The skill-load state a page receives: loaded `loads`, or none yet. */
+export function skillLoadsOf(loads: EffectiveSkillLoads | null = null, error: string | null = null): EffectiveSkillLoadsState {
+  return { loads, loading: false, error, refresh: vi.fn(async () => {}) };
 }
 
 export function settingsOf(overrides: Partial<AppSettings> = {}): AppSettings {
