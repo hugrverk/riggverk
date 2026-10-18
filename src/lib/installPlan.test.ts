@@ -40,7 +40,7 @@ const MIXED = review(
   [
     op("claude_rules", "update", { summary: "Update ~/.claude/CLAUDE.md" }),
     op("claude_agents", "update", { details: ["+ create agents/sentinel.md", "~ update agents/verifier.md"] }),
-    op("claude_skills", "update", {
+    op("skills", "update", {
       details: [
         "+ create skills/handoff/SKILL.md",
         "~ update skills/frontend-design/SKILL.md",
@@ -49,13 +49,13 @@ const MIXED = review(
     }),
     op("cursor_mcp", "conflict", { summary: "mcp.json differs", conflict_description: "mcp.json was modified locally since install" }),
   ],
-  ["claude_rules", "claude_agents", "claude_skills", "cursor_mcp"],
+  ["claude_rules", "claude_agents", "skills", "cursor_mcp"],
 );
 
 describe("buildPlanGroups", () => {
   it("groups rows by surface in request order and parses detail lines into + ~ − rows", () => {
     const groups = buildPlanGroups(MIXED);
-    expect(groups.map(group => group.title)).toEqual(["claude rules", "claude agents", "claude skills", "cursor mcp"]);
+    expect(groups.map(group => group.title)).toEqual(["claude rules", "claude agents", "skills", "cursor mcp"]);
     const skills = groups[2]!.rows;
     expect(skills.map(row => [row.kind, row.glyph, row.label, row.file])).toEqual([
       ["create", "add", "create", "skills/handoff/SKILL.md"],
@@ -63,6 +63,29 @@ describe("buildPlanGroups", () => {
       ["remove", "remove", "remove", "skills/zoom-in/SKILL.md"],
     ]);
     expect(skills[2]!.note).toBe("no longer bundled, backed up");
+  });
+
+  it("reads the skills surface's lines per folder, an edited copy that stays being a conflict row", () => {
+    const skills = review(
+      [
+        op("skills", "update", {
+          details: [
+            "+ ~/.agents/skills (25 skills, 46 files)",
+            "- $CODEX_HOME/skills (25 skills, owned copies)",
+            "! ~/.cursor/skills/tdd (edited, kept; Codex reads both copies)",
+          ],
+        }),
+      ],
+      ["skills"],
+    );
+    const group = buildPlanGroups(skills)[0]!;
+    expect(group.title).toBe("skills");
+    expect(group.rows.map(row => [row.kind, row.file, row.note, row.safe, row.conflict])).toEqual([
+      ["create", "~/.agents/skills", "25 skills, 46 files", true, false],
+      ["remove", "$CODEX_HOME/skills", "25 skills, owned copies", true, false],
+      ["conflict", "~/.cursor/skills/tdd", "edited, kept; Codex reads both copies", false, true],
+    ]);
+    expect(describePlanCounts(countPlanRows([group]))).toBe("apply 2 safe changes, skip 1 conflict");
   });
 
   it("shows an operation without detail lines as one row labelled with the surface", () => {
@@ -124,7 +147,7 @@ describe("installRequestFor", () => {
 
   it("never requests a surface whose target toggle is off", () => {
     const request = installRequestFor("codex", settings);
-    expect(request.surfaces).toEqual(["codex_rules", "codex_skills"]);
+    expect(request.surfaces).toEqual(["codex_rules", "skills"]);
     expect(request.surfaces).not.toContain("codex_config");
     expect(request.surfaces).not.toContain("codex_agents");
     expect(request.label).toBe("update codex");
@@ -135,7 +158,7 @@ describe("installRequestFor", () => {
     expect(installRequestFor("workspace", settings).surfaces).toEqual(["workspace_bundle"]);
     const all = installRequestFor("all", settings).surfaces;
     expect(all[0]).toBe("workspace_bundle");
-    expect(all).toContain("claude_skills");
+    expect(all).toContain("skills");
     expect(all).not.toContain("cursor_agents");
     expect(all).not.toContain("codex_config");
   });
@@ -204,7 +227,8 @@ describe("formatApplyOutput", () => {
   });
 
   it("titles a surface without the vendor prefix quirks", () => {
-    expect(surfaceTitle("open_code_skills")).toBe("opencode skills");
+    expect(surfaceTitle("open_code_agents")).toBe("opencode agents");
+    expect(surfaceTitle("skills")).toBe("skills");
     expect(surfaceTitle("workspace_bundle")).toBe("workspace bundle");
   });
 });

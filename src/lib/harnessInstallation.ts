@@ -6,13 +6,20 @@ import {
   type SetupSurfaceId,
 } from "../types";
 
-/** Every surface of a harness, regardless of target toggles. Use `enabledSurfacesForHarness` to install. */
+/**
+ * Every surface of a harness, regardless of target toggles. Use `enabledSurfacesForHarness` to install.
+ * `skills` is listed for every harness but belongs to none: one global surface installs into the folders
+ * all the enabled harnesses read.
+ */
 export const HARNESS_SURFACES: Record<InstallAgent, SetupSurfaceId[]> = {
-  codex: ["codex_config", "codex_agents", "codex_rules", "codex_skills"],
-  opencode: ["open_code_config", "open_code_agents", "open_code_rules", "open_code_skills"],
-  claude: ["claude_rules", "claude_agents", "claude_skills"],
-  cursor: ["cursor_agents", "cursor_skills", "cursor_mcp"],
+  codex: ["codex_config", "codex_agents", "codex_rules", "skills"],
+  opencode: ["open_code_config", "open_code_agents", "open_code_rules", "skills"],
+  claude: ["claude_rules", "claude_agents", "skills"],
+  cursor: ["cursor_agents", "skills", "cursor_mcp"],
 };
+
+/** Surfaces shown on every harness page that belong to no single harness. */
+const SHARED_SURFACES: readonly SetupSurfaceId[] = ["skills"];
 
 export type SetupTargetId =
   | "codex_rules"
@@ -27,7 +34,7 @@ export type SetupTargetId =
 
 /**
  * Surfaces gated by each target toggle. Mirrors `agent_targets::target_surfaces` in the backend.
- * Skills surfaces and `workspace_bundle` are never gated.
+ * `skills` and `workspace_bundle` are never gated.
  */
 export const TARGET_SURFACES: Record<SetupTargetId, readonly SetupSurfaceId[]> = {
   codex_rules: ["codex_rules"],
@@ -68,8 +75,9 @@ export function targetIdForSurface(surface: SetupSurfaceId): SetupTargetId | nul
   return ids.find((id) => TARGET_SURFACES[id].includes(surface)) ?? null;
 }
 
-/** The harness a surface belongs to, or null for `workspace_bundle`. */
+/** The harness a surface belongs to, or null for `skills` and `workspace_bundle`. */
 export function harnessForSurface(surface: SetupSurfaceId): InstallAgent | null {
+  if (SHARED_SURFACES.includes(surface)) return null;
   return INSTALL_AGENTS.find((harness) => HARNESS_SURFACES[harness].includes(surface)) ?? null;
 }
 
@@ -86,12 +94,17 @@ export function isSurfaceEnabled(settings: EnabledSettings, surface: SetupSurfac
   return targetId === null || settings.enabled_target_ids.includes(targetId);
 }
 
+/** Whether the harness page `harness` offers `surface`: a disabled harness offers nothing, `skills` included. */
+function isSurfaceEnabledFor(harness: InstallAgent, settings: EnabledSettings, surface: SetupSurfaceId): boolean {
+  return settings.enabled_harness_ids.includes(harness) && isSurfaceEnabled(settings, surface);
+}
+
 /** Surfaces to preview/apply for a harness: its surfaces minus those whose target is off. */
 export function enabledSurfacesForHarness(
   harness: InstallAgent,
   settings: EnabledSettings,
 ): SetupSurfaceId[] {
-  return HARNESS_SURFACES[harness].filter((surface) => isSurfaceEnabled(settings, surface));
+  return HARNESS_SURFACES[harness].filter((surface) => isSurfaceEnabledFor(harness, settings, surface));
 }
 
 /** Surfaces of a harness that Install skips because a target toggle (or the harness) is off. */
@@ -99,7 +112,7 @@ export function disabledSurfacesForHarness(
   harness: InstallAgent,
   settings: EnabledSettings,
 ): SetupSurfaceId[] {
-  return HARNESS_SURFACES[harness].filter((surface) => !isSurfaceEnabled(settings, surface));
+  return HARNESS_SURFACES[harness].filter((surface) => !isSurfaceEnabledFor(harness, settings, surface));
 }
 
 /** Per-surface on/off state for a harness page; `targetId` names the toggle that gates it (null = never gated). */
@@ -109,7 +122,7 @@ export function harnessSurfaceStates(
 ): { surface: SetupSurfaceId; enabled: boolean; targetId: SetupTargetId | null }[] {
   return HARNESS_SURFACES[harness].map((surface) => ({
     surface,
-    enabled: isSurfaceEnabled(settings, surface),
+    enabled: isSurfaceEnabledFor(harness, settings, surface),
     targetId: targetIdForSurface(surface),
   }));
 }
@@ -130,11 +143,16 @@ export function harnessForView(view: string): InstallAgent | null {
 
 export const WORKSPACE_SURFACES: SetupSurfaceId[] = ["workspace_bundle"];
 
-/** Workspace plus every enabled harness, target-filtered: the surfaces for an "update all" preview. */
+/**
+ * Workspace plus every enabled harness, target-filtered: the surfaces for an "update all" preview.
+ * `skills` is listed by every harness and requested once.
+ */
 export function enabledSetupSurfaces(settings: EnabledSettings): SetupSurfaceId[] {
   return [
-    ...WORKSPACE_SURFACES,
-    ...INSTALL_AGENTS.flatMap((harness) => enabledSurfacesForHarness(harness, settings)),
+    ...new Set([
+      ...WORKSPACE_SURFACES,
+      ...INSTALL_AGENTS.flatMap((harness) => enabledSurfacesForHarness(harness, settings)),
+    ]),
   ];
 }
 

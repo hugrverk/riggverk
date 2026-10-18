@@ -105,7 +105,7 @@ describe("useInstallScreen", () => {
     });
 
     expect(h.options.switchView).toHaveBeenCalledWith("codex");
-    expect(invokeMock).toHaveBeenCalledWith("preview_setup", { surfaces: ["codex_agents", "codex_rules", "codex_skills"] });
+    expect(invokeMock).toHaveBeenCalledWith("preview_setup", { surfaces: ["codex_agents", "codex_rules", "skills"] });
     expect(result.current.flow.status).toBe("review");
     expect(result.current.scope).toBe("codex");
   });
@@ -133,7 +133,7 @@ describe("useInstallScreen", () => {
     expect(h.options.switchView).not.toHaveBeenCalled();
     expect(result.current.scope).toBe("start");
     expect(result.current.isOpenOn("start")).toBe(true);
-    expect(result.current.flow.request).toMatchObject({ label: "update claude", surfaces: ["claude_rules", "claude_agents", "claude_skills"] });
+    expect(result.current.flow.request).toMatchObject({ label: "update claude", surfaces: ["claude_rules", "claude_agents", "skills"] });
   });
 
   it("opens a read-only review for previews", async () => {
@@ -182,7 +182,7 @@ describe("useInstallScreen", () => {
   });
 
   it("applies the reviewed plan through the workspace task runner and reports the run", async () => {
-    mockBackend(planOf([op("claude_rules", "update"), op("claude_skills", "conflict")]));
+    mockBackend(planOf([op("claude_rules", "update"), op("skills", "conflict")]));
     const h = harness("claude");
     const { result } = renderHook(() => useInstallScreen(h.options));
     await act(async () => {
@@ -209,7 +209,7 @@ describe("useInstallScreen", () => {
   });
 
   it("does nothing when the plan has nothing safe to apply", async () => {
-    mockBackend(planOf([op("claude_skills", "conflict")]));
+    mockBackend(planOf([op("skills", "conflict")]));
     const h = harness("claude");
     const { result } = renderHook(() => useInstallScreen(h.options));
     await act(async () => {

@@ -64,7 +64,7 @@ describe("targetMeta", () => {
 
 describe("surfaceRowsFor", () => {
   it("lists surfaces whose target toggle is off as off, without reading them from the status", () => {
-    const claude = entry("claude", status("current", [surface("claude_rules", "current"), surface("claude_agents", "update_available"), surface("claude_skills", "conflict")]));
+    const claude = entry("claude", status("current", [surface("claude_rules", "current"), surface("claude_agents", "update_available"), surface("skills", "conflict")]));
     const rows = surfaceRowsFor("claude", claude, SETTINGS);
     expect(rows.map(row => [row.name, row.state])).toEqual([
       ["rules", "current"],
@@ -72,13 +72,13 @@ describe("surfaceRowsFor", () => {
       ["skills", "conflict"],
     ]);
 
-    const codex = entry("codex", status("current", [surface("codex_rules", "current"), surface("codex_skills", "update_available")]));
+    const codex = entry("codex", status("current", [surface("codex_rules", "current"), surface("skills", "update_available")]));
     const codexRows = surfaceRowsFor("codex", codex, SETTINGS);
     expect(codexRows.map(row => [row.surface, row.state])).toEqual([
       ["codex_config", "off"],
       ["codex_agents", "off"],
       ["codex_rules", "current"],
-      ["codex_skills", "update_available"],
+      ["skills", "update_available"],
     ]);
     expect(codexRows[0]).toMatchObject({ targetId: "codex_config", display: { label: "off", glyph: "none" } });
   });
@@ -109,7 +109,7 @@ describe("harnessRowsFor", () => {
   ];
 
   it("gives every surface a row with the toggle of its target, codex agents included", () => {
-    const codex = entry("codex", status("update_available", [surface("codex_rules", "update_available"), surface("codex_skills", "current")]));
+    const codex = entry("codex", status("update_available", [surface("codex_rules", "update_available"), surface("skills", "current")]));
     const rows = harnessRowsFor("codex", codex, { ...SETTINGS, enabled_target_ids: ["codex_rules", "codex_agents"] }, TARGETS);
     expect(rows.map(row => [row.name, row.targetId, row.targetEnabled, row.state])).toEqual([
       ["config", "codex_config", false, "off"],
@@ -128,7 +128,7 @@ describe("harnessRowsFor", () => {
     const rows = harnessRowsFor("cursor", undefined, { enabled_harness_ids: ["cursor"], enabled_target_ids: ["cursor_setup"] }, TARGETS);
     expect(rows.map(row => [row.surface, row.targetId, row.alsoSurfaces, row.path])).toEqual([
       ["cursor_agents", "cursor_setup", ["cursor_mcp"], ".cursor/agents"],
-      ["cursor_skills", null, [], ""],
+      ["skills", null, [], ""],
       ["cursor_mcp", "cursor_setup", ["cursor_agents"], ""],
     ]);
   });
@@ -145,7 +145,7 @@ describe("matrixModel", () => {
     const overview: InstallationOverview = {
       entries: {
         workspace: entry("workspace", status("current", [surface("workspace_bundle", "current")])),
-        codex: entry("codex", status("update_available", [surface("codex_rules", "update_available"), surface("codex_skills", "current")])),
+        codex: entry("codex", status("update_available", [surface("codex_rules", "update_available"), surface("skills", "current")])),
       },
       loading: false,
       refresh: vi.fn(async () => {}),

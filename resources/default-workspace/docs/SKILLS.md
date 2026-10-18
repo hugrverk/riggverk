@@ -1,6 +1,6 @@
 # Skills
 
-The bundled default workspace contains **25 skills**: 25 canonical semantic skill sources. Source layout may be root-level (`skills/<skill>/SKILL.md`) or grouped one level deep (`skills/<group>/<skill>/SKILL.md`). Every harness installs the same `SKILL.md`, flat (`<harness-skill-root>/<name>/SKILL.md`).
+The bundled default workspace contains **25 skills**: 25 canonical semantic skill sources. Source layout may be root-level (`skills/<skill>/SKILL.md`) or grouped one level deep (`skills/<group>/<skill>/SKILL.md`). The app installs the same `SKILL.md`, flat (`<skills-folder>/<name>/SKILL.md`), into the folders the enabled harnesses read.
 
 Do not duplicate full `SKILL.md` content here. This file is an index for choosing the right skill.
 
@@ -97,7 +97,7 @@ Each `SKILL.md` frontmatter has `name` and `description` plus these fields:
 
 Claude-only frontmatter keys sit directly in the skill's frontmatter: `context`, `agent`, `background`, and `allowed-tools` (for example `release-check` runs in a forked `verifier` context on Claude Code, and `handoff` and `release-check` pre-approve the read-only commands behind their `!` state injection). Codex and OpenCode ignore them. A skill that sets one also carries a `### Claude Code` notes section (see below).
 
-`targets` expands the managed skill surface for each harness. Destination folders remain fixed per harness: the skill installs flat to each harness skill root as `<harness-skill-root>/<name>/`, with its `SKILL.md` and every supporting file in it. Other metadata fields are operator guidance only.
+`targets` is validated metadata and selects nothing: skills folders are shared between harnesses, so every bundled skill is installed into every folder that is wanted, flat as `<skills-folder>/<name>/`, with its `SKILL.md` and every supporting file in it. Other metadata fields are operator guidance only.
 
 ## Description standard
 
@@ -107,13 +107,13 @@ The `description` is the only selection signal Codex, OpenCode, and Cursor see, 
 
 Files next to a `SKILL.md` (references, schemas, templates, scripts) install with the skill, at the same relative paths, so a skill can say "read `HUNTING.md`" or "run `scripts/verify-report.mjs`" and mean the file next to it. `security-audit` carries 19 such files and `kretsverket-status-report` carries `assets/report-template.html` and `scripts/verify-report.mjs`.
 
-Rules for the files in a skill directory in the bundle: regular files only (no symlinks), names of letters, digits, `.`, `_` and `-` that do not start with a dot, at most four path levels, at most 64 files and 2 MiB in total, at most 1 MiB per file, and no `SKILL.md` below the skill's own. Dot files are ignored. A skill that breaks a rule installs nothing until it is fixed. Write paths in a skill relative to its directory; never point a skill at the Agent Workspace folder, since the installed copy lives in the harness skill folder.
+Rules for the files in a skill directory in the bundle: regular files only (no symlinks), names of letters, digits, `.`, `_` and `-` that do not start with a dot, at most four path levels, at most 64 files and 2 MiB in total, at most 1 MiB per file, and no `SKILL.md` below the skill's own. Dot files are ignored. A skill that breaks a rule installs nothing until it is fixed. Write paths in a skill relative to its directory; never point a skill at the Agent Workspace folder, since the installed copy lives in a skills folder.
 
 Each file is owned on its own. An update rewrites only the files that differ, a file you edited is reported as a conflict and kept while its siblings still update, and removing a skill removes the app's files and the directories that become empty, not files you added.
 
 ## One SKILL.md for every harness
 
-`skills/**/SKILL.md` is the only source. Managed setup copies it byte for byte into every harness skill folder, so a skill that two harnesses both read is the same file in both places. There are no generated per-harness copies: `templates/skills/` and `metadata/skill-adapters.json` no longer exist.
+`skills/**/SKILL.md` is the only source. Managed setup copies it byte for byte into every skills folder it installs into, so a skill that two harnesses both read is the same file in both places. There are no generated per-harness copies: `templates/skills/` and `metadata/skill-adapters.json` no longer exist.
 
 Text that only one harness should act on goes at the end of the file under `## Harness notes`, one `###` subsection per harness in this fixed order, only for the harnesses that have notes: `### Claude Code`, `### Codex`, `### OpenCode`, `### Cursor`. Every harness reads the whole file, so write each note so it is clearly meant for that harness. Keep notes short; harness-wide guidance lives in `templates/rules/<harness>.md`, not in a skill.
 
@@ -129,6 +129,17 @@ In the source repository `python3 scripts/check-skill-routing.py` validates ever
 
 ## Installing skills
 
-In the app, press `u` on a harness page and confirm with `y`. The install covers each skill of the whole bundled catalog for that harness, globally, as a flat directory: the shared `SKILL.md` and its supporting files. Skills are not gated by target toggles and always come from the app's bundle: a skill you add to the runtime workspace is not installed, and a personal skill belongs directly in the harness skill folder, where unknown skills are preserved.
+In the app, press `u` on a harness page and confirm with `y`. Skills are one global surface: the update installs the whole bundled catalog (the shared `SKILL.md` and its supporting files, flat) into the folders the enabled harnesses read, and the review lists each folder with its skill and file counts. Skills are not gated by target toggles and always come from the app's bundle: a skill you add to the runtime workspace is not installed, and a personal skill belongs directly in a skills folder, where unknown skills are preserved.
 
-Some harnesses also scan other harnesses' skill folders (for example OpenCode and Cursor read `~/.claude/skills`). If you install for several harnesses, a skill can be listed more than once there; every copy is the same file, so precedence does not change what the model reads.
+### Which folders
+
+| Harness | Reads |
+| --- | --- |
+| Claude Code | `~/.claude/skills` |
+| Codex | `~/.agents/skills`, and `$CODEX_HOME/skills` (deprecated) |
+| OpenCode | `~/.claude/skills`, `~/.agents/skills`, `~/.config/opencode/skills` |
+| Cursor | `~/.cursor/skills`, `~/.agents/skills`, `~/.claude/skills`, `~/.codex/skills` |
+
+The app installs into the fewest folders that every enabled harness reads, so one skill is not listed twice for a harness: `~/.claude/skills` when Claude Code is enabled, `~/.agents/skills` when Codex is enabled, and `~/.agents/skills` for OpenCode or Cursor when neither of those two folders is wanted already. With a customised `CODEX_HOME` (or `CODEX_SKILLS_PATH`) Codex's copy lives in `$CODEX_HOME/skills` instead, and nothing is installed in `~/.agents/skills` for Codex. If OpenCode or Cursor is enabled with Codex but without Claude Code, `~/.claude/skills` is added for them rather than `~/.agents/skills`, so Codex never reads a copy outside its own home.
+
+The folders are worked out again on every preview from the enabled harnesses; switching a harness on or off writes nothing by itself. The next update installs what a harness now needs and removes the app's copies from a folder nobody needs any more, in the same reviewed, backed-up and restorable transaction. A copy you edited stays and is reported, and files you added, your own skills and Codex's `.system` are never touched. Older versions installed a copy per harness: `~/.config/opencode/skills`, `~/.cursor/skills` and `$CODEX_HOME/skills` hold the app's copies until the first update removes them. `CLAUDE_SKILLS_PATH` moves the Claude folder (inside your home folder only).

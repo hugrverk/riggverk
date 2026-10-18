@@ -41,15 +41,16 @@ pub enum SetupSurfaceId {
     ClaudeRules,
     /// Claude native agent files (templates/claude/agents)
     ClaudeAgents,
-    /// Claude skills (.claude/skills)
+    /// Skills, installed into the folders the enabled harnesses read (`skill_roots`). One surface
+    /// for every harness: the same files are shared by the harnesses that read a folder.
+    Skills,
+    /// Retired per-harness skill surfaces. They only exist so manifests and managed records
+    /// written by older versions still parse; they are never planned. See [`Self::canonical`].
     ClaudeSkills,
-    /// OpenCode skills (.config/opencode/skills)
     OpenCodeSkills,
-    /// Codex skills (.agents/skills)
     CodexSkills,
     /// Cursor global agents (~/.cursor/agents — individual files, not whole dir)
     CursorAgents,
-    /// Cursor global skills (~/.cursor/skills — individual skill dirs)
     CursorSkills,
     /// Cursor Playwright MCP state (mcp.json merge)
     CursorMcp,
@@ -68,11 +69,8 @@ impl SetupSurfaceId {
         SetupSurfaceId::CodexRules,
         SetupSurfaceId::ClaudeRules,
         SetupSurfaceId::ClaudeAgents,
-        SetupSurfaceId::ClaudeSkills,
-        SetupSurfaceId::OpenCodeSkills,
-        SetupSurfaceId::CodexSkills,
+        SetupSurfaceId::Skills,
         SetupSurfaceId::CursorAgents,
-        SetupSurfaceId::CursorSkills,
         SetupSurfaceId::CursorMcp,
         SetupSurfaceId::WorkspaceBundle,
     ];
@@ -88,6 +86,7 @@ impl SetupSurfaceId {
             SetupSurfaceId::CodexRules => "Codex Rules",
             SetupSurfaceId::ClaudeRules => "Claude Rules",
             SetupSurfaceId::ClaudeAgents => "Claude Agents",
+            SetupSurfaceId::Skills => "Skills",
             SetupSurfaceId::ClaudeSkills => "Claude Skills",
             SetupSurfaceId::OpenCodeSkills => "OpenCode Skills",
             SetupSurfaceId::CodexSkills => "Codex Skills",
@@ -98,23 +97,44 @@ impl SetupSurfaceId {
         }
     }
 
+    /// Whether this is one of the retired per-harness skill surfaces.
+    pub fn is_retired_skill_surface(self) -> bool {
+        matches!(
+            self,
+            SetupSurfaceId::ClaudeSkills
+                | SetupSurfaceId::OpenCodeSkills
+                | SetupSurfaceId::CodexSkills
+                | SetupSurfaceId::CursorSkills
+        )
+    }
+
+    /// The surface a request for `self` is served by: a retired per-harness skill surface is
+    /// the global `Skills` surface, every other surface is itself.
+    pub fn canonical(self) -> SetupSurfaceId {
+        if self.is_retired_skill_surface() {
+            SetupSurfaceId::Skills
+        } else {
+            self
+        }
+    }
+
+    /// The harness a surface belongs to. `Skills` serves every harness, so it belongs to none.
     pub fn harness(self) -> Option<HarnessId> {
         match self {
             SetupSurfaceId::OpenCodeConfig
             | SetupSurfaceId::OpenCodeAgents
-            | SetupSurfaceId::OpenCodeRules
-            | SetupSurfaceId::OpenCodeSkills => Some(HarnessId::OpenCode),
+            | SetupSurfaceId::OpenCodeRules => Some(HarnessId::OpenCode),
             SetupSurfaceId::CodexConfig
             | SetupSurfaceId::CodexAgents
-            | SetupSurfaceId::CodexRules
-            | SetupSurfaceId::CodexSkills => Some(HarnessId::Codex),
-            SetupSurfaceId::ClaudeRules
-            | SetupSurfaceId::ClaudeAgents
-            | SetupSurfaceId::ClaudeSkills => Some(HarnessId::Claude),
-            SetupSurfaceId::CursorAgents
+            | SetupSurfaceId::CodexRules => Some(HarnessId::Codex),
+            SetupSurfaceId::ClaudeRules | SetupSurfaceId::ClaudeAgents => Some(HarnessId::Claude),
+            SetupSurfaceId::CursorAgents | SetupSurfaceId::CursorMcp => Some(HarnessId::Cursor),
+            SetupSurfaceId::Skills
+            | SetupSurfaceId::ClaudeSkills
+            | SetupSurfaceId::OpenCodeSkills
+            | SetupSurfaceId::CodexSkills
             | SetupSurfaceId::CursorSkills
-            | SetupSurfaceId::CursorMcp => Some(HarnessId::Cursor),
-            SetupSurfaceId::WorkspaceBundle => None,
+            | SetupSurfaceId::WorkspaceBundle => None,
         }
     }
 }
@@ -511,10 +531,10 @@ mod tests {
     #[test]
     fn manual_surfaces_dont_block() {
         let request = SetupRequest {
-            surfaces: vec![SetupSurfaceId::ClaudeSkills],
+            surfaces: vec![SetupSurfaceId::Skills],
             skip_manual: false,
         };
-        let states = vec![manual(SetupSurfaceId::ClaudeSkills)];
+        let states = vec![manual(SetupSurfaceId::Skills)];
         let plan = plan_setup(&request, &states);
         assert!(!plan.is_blocked, "manual steps should not block apply");
         assert!(!plan.has_pending_changes);
@@ -546,7 +566,7 @@ mod tests {
             update(SetupSurfaceId::CodexRules),
             no_change(SetupSurfaceId::ClaudeRules),
             conflict(SetupSurfaceId::CursorAgents),
-            manual(SetupSurfaceId::ClaudeSkills),
+            manual(SetupSurfaceId::Skills),
             unavailable(SetupSurfaceId::CodexAgents),
         ];
         let plan = plan_setup(&request, &states);
@@ -655,6 +675,39 @@ mod tests {
         assert!(!plan.has_pending_changes);
         assert!(!plan.is_blocked);
         assert_eq!(plan.summary, "All surfaces synced");
+    }
+
+    #[test]
+    fn retired_skill_surfaces_still_parse_and_are_served_by_skills() {
+        for (name, surface) in [
+            ("claude_skills", SetupSurfaceId::ClaudeSkills),
+            ("open_code_skills", SetupSurfaceId::OpenCodeSkills),
+            ("codex_skills", SetupSurfaceId::CodexSkills),
+            ("cursor_skills", SetupSurfaceId::CursorSkills),
+        ] {
+            let parsed: SetupSurfaceId =
+                serde_json::from_value(serde_json::Value::String(name.into())).expect("parse");
+            assert_eq!(parsed, surface);
+            assert!(surface.is_retired_skill_surface());
+            assert_eq!(surface.canonical(), SetupSurfaceId::Skills);
+            assert_eq!(surface.harness(), None);
+            assert!(
+                !SetupSurfaceId::ALL.contains(&surface),
+                "{name} is not planned any more"
+            );
+        }
+        assert_eq!(
+            serde_json::to_string(&SetupSurfaceId::Skills).unwrap(),
+            "\"skills\""
+        );
+        assert!(!SetupSurfaceId::Skills.is_retired_skill_surface());
+        assert_eq!(SetupSurfaceId::Skills.canonical(), SetupSurfaceId::Skills);
+        assert_eq!(SetupSurfaceId::Skills.harness(), None);
+        assert_eq!(
+            SetupSurfaceId::CursorMcp.canonical(),
+            SetupSurfaceId::CursorMcp
+        );
+        assert!(SetupSurfaceId::ALL.contains(&SetupSurfaceId::Skills));
     }
 
     #[test]

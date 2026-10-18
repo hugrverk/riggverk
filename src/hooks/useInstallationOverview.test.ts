@@ -67,9 +67,9 @@ describe("useInstallationOverview", () => {
     const { result } = renderHook(() => useInstallationOverview(options({ enabledTargetIds })));
     await waitFor(() => expect(result.current.loading).toBe(false));
     const requested = invokeMock.mock.calls.map(call => (call[1] as { surfaces: string[] }).surfaces);
-    expect(requested).toContainEqual(["codex_rules", "codex_skills"]);
-    expect(requested).toContainEqual(["claude_rules", "claude_skills"]);
-    expect(requested).toContainEqual(["cursor_skills"]);
+    expect(requested).toContainEqual(["codex_rules", "skills"]);
+    expect(requested).toContainEqual(["claude_rules", "skills"]);
+    expect(requested).toContainEqual(["skills"]);
     expect(requested.flat()).not.toContain("codex_config");
     expect(requested.flat()).not.toContain("claude_agents");
     expect(requested.flat()).not.toContain("cursor_mcp");
@@ -93,7 +93,7 @@ describe("useInstallationOverview", () => {
     expect(invokeMock.mock.calls.map(call => (call[1] as { surfaces: string[] }).surfaces)).toContainEqual([
       "codex_agents",
       "codex_rules",
-      "codex_skills",
+      "skills",
     ]);
   });
 

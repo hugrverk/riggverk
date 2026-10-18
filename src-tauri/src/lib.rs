@@ -28,7 +28,9 @@ mod setup_transaction;
 mod shell_runtime;
 mod shipped_digests;
 mod skill_discovery;
+mod skill_health;
 mod skill_roots;
+#[cfg(test)]
 mod skills_install;
 mod stable_digest;
 
@@ -42,6 +44,8 @@ mod rules_block_contract;
 mod shipped_ownership_contract;
 #[cfg(test)]
 mod skill_files_contract;
+#[cfg(test)]
+mod skill_folders_contract;
 #[cfg(test)]
 mod smoke_runtime;
 #[cfg(test)]

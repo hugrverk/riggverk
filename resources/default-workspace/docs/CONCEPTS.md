@@ -20,7 +20,7 @@ So editing a file in the workspace changes what the Library shows, not what Clau
 | Concept | Location | Purpose |
 |---------|----------|---------|
 | Docs | `docs/` | Guides and reference |
-| Skills | `skills/` | Canonical skill sources, installed unchanged into every harness |
+| Skills | `skills/` | Canonical skill sources, installed unchanged into the folders the enabled harnesses read |
 | Templates | `templates/` | Source templates for rules and config |
 | Scripts | `scripts/` | Python helpers the app runs from its bundled copy |
 | Runtime agents | `agents/`, `agent-specs/` | OpenCode agents and shared agent bodies |
@@ -28,7 +28,7 @@ So editing a file in the workspace changes what the Library shows, not what Clau
 
 ## Skills
 
-Reusable agent instruction files. Canonical skills live under `skills/` (25 in the bundle, all for Codex, OpenCode, Claude, and Cursor). The same `SKILL.md` is installed, flat, to each harness's global skills folder; notes meant for one harness sit at the end of the file under `## Harness notes`. Skills follow their harness and are never gated by target toggles. See [SKILLS.md](SKILLS.md).
+Reusable agent instruction files. Canonical skills live under `skills/` (25 in the bundle, all for Codex, OpenCode, Claude, and Cursor). The same `SKILL.md` is installed, flat, into the global skills folders the enabled harnesses read (`~/.claude/skills`, `~/.agents/skills`); notes meant for one harness sit at the end of the file under `## Harness notes`. Skills are one surface for all harnesses and are never gated by target toggles. See [SKILLS.md](SKILLS.md).
 
 ## Rules and the managed block
 
@@ -40,7 +40,7 @@ Config files hold tool settings such as permissions, models, and MCP servers. Th
 
 ## Targets and surfaces
 
-A **surface** is one installable group (for example `claude_rules`, `open_code_config`, `cursor_mcp`, `workspace_bundle`). A **target** is a toggle that gates one or more surfaces: rules, agents, and config per harness, and `cursor_setup`. A target that is off is excluded from preview, apply, and status. Fresh settings enable every target except `codex_config`. Skills and the workspace bundle are never gated. Harness enablement (Settings) is separate: a disabled harness is hidden and cannot be written.
+A **surface** is one installable group (for example `claude_rules`, `open_code_config`, `cursor_mcp`, `skills`, `workspace_bundle`). A **target** is a toggle that gates one or more surfaces: rules, agents, and config per harness, and `cursor_setup`. A target that is off is excluded from preview, apply, and status. Fresh settings enable every target except `codex_config`. Skills and the workspace bundle are never gated. Harness enablement (Settings) is separate: a disabled harness is hidden and cannot be written.
 
 ## Install review and transactions
 

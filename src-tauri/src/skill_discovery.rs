@@ -307,40 +307,6 @@ pub fn discover_skill_catalog(
     Ok(discovered)
 }
 
-/// Return skill names from the catalog that target the given harness.
-///
-/// Fails closed if the catalog is invalid or the harness is unknown.
-pub fn skill_names_for_harness(
-    workspace_root: &Path,
-    harness: &str,
-) -> Result<Vec<String>, String> {
-    if !VALID_SKILL_AGENTS.contains(&harness) {
-        return Err(format!("invalid harness agent: {harness}"));
-    }
-    let catalog = discover_skill_catalog(workspace_root).map_err(|e| e.message().to_string())?;
-    Ok(catalog
-        .iter()
-        .filter(|s| s.targets.iter().any(|t| t == harness))
-        .map(|s| s.name.clone())
-        .collect())
-}
-
-/// Discover the catalog skills that target `harness`, with the same failure rules as
-/// [`skill_names_for_harness`].
-pub fn skills_for_harness(
-    workspace_root: &Path,
-    harness: &str,
-) -> Result<Vec<DiscoveredSkill>, String> {
-    if !VALID_SKILL_AGENTS.contains(&harness) {
-        return Err(format!("invalid harness agent: {harness}"));
-    }
-    let catalog = discover_skill_catalog(workspace_root).map_err(|e| e.message().to_string())?;
-    Ok(catalog
-        .into_iter()
-        .filter(|s| s.targets.iter().any(|t| t == harness))
-        .collect())
-}
-
 /// Most supporting files one skill may carry.
 pub const MAX_SUPPORT_FILES: usize = 64;
 /// Most bytes all supporting files of one skill may add up to.
@@ -600,10 +566,12 @@ mod tests {
             &skill_body("diagnose", "codex, opencode, claude"),
         );
         let catalog = discover_skill_catalog(&root).expect("discover");
-        let names = skill_names_for_harness(&root, "cursor").expect("cursor filter");
         let _ = fs::remove_dir_all(&root);
-        assert!(catalog.iter().any(|s| s.name == "diagnose"));
-        assert!(!names.iter().any(|n| n == "diagnose"));
+        let diagnose = catalog
+            .iter()
+            .find(|s| s.name == "diagnose")
+            .expect("diagnose");
+        assert_eq!(diagnose.targets, vec!["codex", "opencode", "claude"]);
     }
 
     #[test]
@@ -699,16 +667,6 @@ mod tests {
         let err = discover_skill_catalog(&root).unwrap_err();
         let _ = fs::remove_dir_all(&root);
         assert!(matches!(err, SkillDiscoveryError::MissingRoot(_)));
-    }
-
-    #[test]
-    fn harness_filter_returns_matching_names() {
-        let root = temp_root("harness");
-        write_skill(&root, "skills/a", &skill_body("skill-a", ALL_TARGETS));
-        write_skill(&root, "skills/b", &skill_body("skill-b", "codex, opencode"));
-        let names = skill_names_for_harness(&root, "claude").expect("filter");
-        let _ = fs::remove_dir_all(&root);
-        assert_eq!(names, vec!["skill-a"]);
     }
 
     #[test]

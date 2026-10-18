@@ -28,12 +28,7 @@ mod tests {
     use crate::stable_digest;
     use crate::test_env::{guard, guard::EnvRestore, set_test_user_dirs};
 
-    const SKILL_SURFACES: [SetupSurfaceId; 4] = [
-        SetupSurfaceId::ClaudeSkills,
-        SetupSurfaceId::CodexSkills,
-        SetupSurfaceId::OpenCodeSkills,
-        SetupSurfaceId::CursorSkills,
-    ];
+    const SKILL_SURFACES: [SetupSurfaceId; 1] = [SetupSurfaceId::Skills];
 
     fn surface_name(surface: SetupSurfaceId) -> String {
         serde_json::to_value(surface)
@@ -226,7 +221,7 @@ mod tests {
 
     #[test]
     fn security_audit_and_the_status_report_install_all_their_files_byte_identical() {
-        let env = Env::new("claude-dirs", &[SetupSurfaceId::ClaudeSkills]);
+        let env = Env::new("claude-dirs", &[SetupSurfaceId::Skills]);
         let claude = env.root(SkillRoot::Claude);
         let skills = bundled().join("skills");
 
@@ -237,6 +232,11 @@ mod tests {
             "SKILL.md plus 19 supporting files"
         );
         assert_eq!(files_below(&claude.join("security-audit")), security_audit);
+        assert_eq!(
+            files_below(&env.root(SkillRoot::Agents).join("security-audit")),
+            security_audit,
+            "~/.agents/skills holds the same files"
+        );
 
         let report_source = skills.join("kretsverket/kretsverket-status-report");
         let report = files_below(&report_source);
@@ -251,20 +251,20 @@ mod tests {
     }
 
     #[test]
-    fn every_harness_folder_receives_the_whole_security_audit_directory() {
+    fn every_wanted_folder_receives_the_whole_security_audit_directory_and_no_other_does() {
+        // All four harnesses are enabled and Codex has its default home: Claude reads
+        // `~/.claude/skills`, and Codex, OpenCode and Cursor read `~/.agents/skills`.
         let env = Env::new("all-roots", &SKILL_SURFACES);
         let expected = files_below(&bundled().join("skills/security-audit"));
-        for root in [
-            SkillRoot::Claude,
-            SkillRoot::CodexHome,
-            SkillRoot::OpenCode,
-            SkillRoot::Cursor,
-        ] {
+        for root in [SkillRoot::Claude, SkillRoot::Agents] {
             assert_eq!(
                 files_below(&env.root(root).join("security-audit")),
                 expected,
                 "{root:?}"
             );
+        }
+        for root in [SkillRoot::CodexHome, SkillRoot::OpenCode, SkillRoot::Cursor] {
+            assert!(!env.root(root).exists(), "{root:?} receives no copy");
         }
         // Nothing is left to do.
         assert!(env.pending(&SKILL_SURFACES).is_empty());
@@ -274,7 +274,7 @@ mod tests {
     #[test]
     fn a_source_with_an_executable_bit_installs_as_a_readable_file() {
         use std::os::unix::fs::PermissionsExt;
-        let env = Env::new("mode", &[SetupSurfaceId::ClaudeSkills]);
+        let env = Env::new("mode", &[SetupSurfaceId::Skills]);
         let source = bundled().join("skills/security-audit/validate-findings.cjs");
         let source_mode = fs::metadata(&source).expect("source").permissions().mode();
         assert_ne!(
@@ -299,8 +299,8 @@ mod tests {
 
     #[test]
     fn an_update_rewrites_only_the_files_that_differ() {
-        let env = Env::new("update-one", &[SetupSurfaceId::ClaudeSkills]);
-        let surfaces = [SetupSurfaceId::ClaudeSkills];
+        let env = Env::new("update-one", &[SetupSurfaceId::Skills]);
+        let surfaces = [SetupSurfaceId::Skills];
         let hunting = skill_file(SkillRoot::Claude, "security-audit", "HUNTING.md");
         let sibling = skill_file(SkillRoot::Claude, "security-audit", "ATTACK-CLASSES.md");
         let sibling_modified = fs::metadata(env.path(&sibling))
@@ -341,8 +341,8 @@ mod tests {
 
     #[test]
     fn an_edited_supporting_file_conflicts_alone_and_its_siblings_still_update() {
-        let env = Env::new("edit-conflict", &[SetupSurfaceId::ClaudeSkills]);
-        let surfaces = [SetupSurfaceId::ClaudeSkills];
+        let env = Env::new("edit-conflict", &[SetupSurfaceId::Skills]);
+        let surfaces = [SetupSurfaceId::Skills];
         let edited = skill_file(SkillRoot::Claude, "security-audit", "HUNTING.md");
         let outdated = skill_file(SkillRoot::Claude, "security-audit", "ATTACK-CLASSES.md");
 
@@ -378,8 +378,8 @@ mod tests {
 
     #[test]
     fn a_supporting_file_without_a_record_is_owned_only_when_it_is_a_shipped_version() {
-        let env = Env::new("shipped-support", &[SetupSurfaceId::ClaudeSkills]);
-        let surfaces = [SetupSurfaceId::ClaudeSkills];
+        let env = Env::new("shipped-support", &[SetupSurfaceId::Skills]);
+        let surfaces = [SetupSurfaceId::Skills];
         let artifact = skill_file(SkillRoot::Claude, "security-audit", "HUNTING.md");
         let shipped = b"hunting guide the app shipped once\n";
         env.write(&artifact, shipped);
@@ -414,8 +414,8 @@ mod tests {
 
     #[test]
     fn a_retired_skill_is_removed_with_its_empty_directories_but_a_foreign_sibling_stays() {
-        let env = Env::new("retired", &[SetupSurfaceId::ClaudeSkills]);
-        let surfaces = [SetupSurfaceId::ClaudeSkills];
+        let env = Env::new("retired", &[SetupSurfaceId::Skills]);
+        let surfaces = [SetupSurfaceId::Skills];
         let claude = env.root(SkillRoot::Claude);
 
         // Two skills the app installed once and no longer ships.
@@ -468,7 +468,7 @@ mod tests {
 
     #[test]
     fn uninstall_removes_owned_files_and_keeps_foreign_files_and_skills() {
-        let env = Env::new("uninstall", &[SetupSurfaceId::ClaudeSkills]);
+        let env = Env::new("uninstall", &[SetupSurfaceId::Skills]);
         let claude = env.root(SkillRoot::Claude);
         fs::write(claude.join("security-audit/my-notes.md"), "mine").expect("foreign file");
         fs::create_dir_all(claude.join("my-own-skill")).expect("foreign skill");
@@ -555,22 +555,20 @@ mod tests {
                 .find(|operation| operation.artifact == ArtifactId::skill_md(root, skill("tdd")))
                 .map(|operation| operation.kind)
         };
-        for root in [
-            SkillRoot::Claude,
-            SkillRoot::OpenCode,
-            SkillRoot::CodexHome,
-            SkillRoot::Cursor,
-        ] {
+        // The folders the enabled harnesses read keep their copy ...
+        for root in [SkillRoot::Claude, SkillRoot::Agents] {
             assert_eq!(kind_of(root), Some(OperationKind::NoChange), "{root:?}");
         }
-        // The old Codex folder is still cleaned up.
-        assert_eq!(kind_of(SkillRoot::Agents), Some(OperationKind::Remove));
+        // ... and the three older harness folders lose the copy the old records name.
+        for root in [SkillRoot::OpenCode, SkillRoot::CodexHome, SkillRoot::Cursor] {
+            assert_eq!(kind_of(root), Some(OperationKind::Remove), "{root:?}");
+        }
     }
 
     #[test]
     fn a_transaction_manifest_written_with_old_identities_still_rolls_back() {
         let env = Env::new("old-manifest", &[]);
-        let surfaces = [SetupSurfaceId::ClaudeSkills];
+        let surfaces = [SetupSurfaceId::Skills];
         let claude = env.root(SkillRoot::Claude);
         // A skill the app retired: removing it is part of the transaction.
         let retired_md = skill_file(SkillRoot::Claude, "retired-skill", "SKILL.md");
@@ -588,7 +586,8 @@ mod tests {
         assert!(claude.join("tdd/SKILL.md").is_file());
 
         // Rewrite the manifest the way a version before per-file artifacts wrote it: the
-        // SKILL.md of each skill under its per-harness identity.
+        // SKILL.md of each Claude skill under its per-harness identity, naming the retired
+        // per-harness surface.
         let manifest_path = env
             .base
             .join("backups/setup")
@@ -600,9 +599,13 @@ mod tests {
         let mut rewritten = 0;
         for operation in manifest["operations"].as_array_mut().expect("operations") {
             let artifact = &operation["artifact"];
-            if artifact["type"] == "SkillFile" && artifact["name"]["rel"] == "SKILL.md" {
+            if artifact["type"] == "SkillFile"
+                && artifact["name"]["rel"] == "SKILL.md"
+                && artifact["name"]["root"] == "claude"
+            {
                 let name = artifact["name"]["skill"].clone();
                 operation["artifact"] = serde_json::json!({"type": "ClaudeSkill", "name": name});
+                operation["surface"] = serde_json::json!("claude_skills");
                 rewritten += 1;
             }
         }
@@ -631,6 +634,10 @@ mod tests {
             "a created skill is removed with its directory"
         );
         assert!(
+            !env.root(SkillRoot::Agents).join("tdd").exists(),
+            "so is the one created in the other folder"
+        );
+        assert!(
             !claude.join("security-audit").exists(),
             "created supporting files are removed too"
         );
@@ -638,28 +645,26 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn a_symlinked_skills_root_plans_a_conflict_for_every_file() {
+    fn a_symlinked_skills_root_plans_a_conflict_for_every_file_of_that_root_only() {
         let env = Env::new("symlink-root", &[]);
         let elsewhere = env.base.join("elsewhere");
         fs::create_dir_all(&elsewhere).expect("target");
         fs::create_dir_all(env.home.join(".claude")).expect(".claude");
         std::os::unix::fs::symlink(&elsewhere, env.home.join(".claude/skills")).expect("symlink");
 
-        let planned = env.plan(&[SetupSurfaceId::ClaudeSkills]);
-        assert!(planned.len() > 25);
+        let planned = env.plan(&[SetupSurfaceId::Skills]);
+        assert!(planned.len() > 50);
         for operation in &planned {
-            assert_eq!(
-                operation.kind,
-                OperationKind::Conflict,
-                "{:?}",
-                operation.artifact
-            );
+            let ArtifactId::SkillFile(file) = &operation.artifact else {
+                panic!("unexpected artifact {:?}", operation.artifact);
+            };
+            let expected = if file.root == SkillRoot::Claude {
+                OperationKind::Conflict
+            } else {
+                OperationKind::Create
+            };
+            assert_eq!(operation.kind, expected, "{:?}", operation.artifact);
         }
-        // Another harness is not affected.
-        assert!(env
-            .plan(&[SetupSurfaceId::OpenCodeSkills])
-            .iter()
-            .all(|operation| operation.kind == OperationKind::Create));
         // Nothing was written through the link.
         assert!(fs::read_dir(&elsewhere).expect("target").next().is_none());
     }
@@ -674,15 +679,16 @@ mod tests {
         fs::create_dir_all(&claude).expect("skills root");
         std::os::unix::fs::symlink(&elsewhere, claude.join("security-audit")).expect("symlink");
 
-        for operation in env.plan(&[SetupSurfaceId::ClaudeSkills]) {
+        for operation in env.plan(&[SetupSurfaceId::Skills]) {
             let ArtifactId::SkillFile(file) = &operation.artifact else {
                 panic!("unexpected artifact {:?}", operation.artifact);
             };
-            let expected = if file.skill.as_str() == "security-audit" {
-                OperationKind::Conflict
-            } else {
-                OperationKind::Create
-            };
+            let expected =
+                if file.root == SkillRoot::Claude && file.skill.as_str() == "security-audit" {
+                    OperationKind::Conflict
+                } else {
+                    OperationKind::Create
+                };
             assert_eq!(operation.kind, expected, "{:?}", operation.artifact);
         }
     }
@@ -696,7 +702,7 @@ mod tests {
         fs::create_dir_all(claude.join("kretsverket-status-report")).expect("skill dir");
         fs::write(claude.join("kretsverket-status-report/assets"), "a file").expect("file");
 
-        let surfaces = [SetupSurfaceId::ClaudeSkills];
+        let surfaces = [SetupSurfaceId::Skills];
         let hunting = skill_file(SkillRoot::Claude, "security-audit", "HUNTING.md");
         let template = skill_file(
             SkillRoot::Claude,

@@ -12,10 +12,11 @@
     },
     "skills": {
       "source_dir": "skills",
-      "target": "${HOME}/.cursor/skills",
+      "target": "${HOME}/.agents/skills",
       "writable": true,
       "agent": "cursor",
-      "scope": "global"
+      "scope": "global",
+      "note": "Skills are one surface for every harness: the app installs them into the folders the enabled harnesses read (~/.claude/skills, ~/.agents/skills), and Cursor reads both."
     },
     "mcp": {
       "template": "templates/cursor/mcp/playwright.mcp.json",

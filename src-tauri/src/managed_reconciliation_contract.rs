@@ -9,9 +9,6 @@ mod tests {
     use std::path::{Path, PathBuf};
     use std::process::Command;
 
-    use crate::agent_skill_targets::{
-        agent_global_skills_dest, codex_global_skills_dest, codex_legacy_skills_dest,
-    };
     use crate::artifact_registry::{AgentName, ArtifactId, SkillName, WorkspaceRelPath};
     use crate::commands::setup::{
         apply_setup, apply_uninstall, preview_setup, preview_uninstall, rollback_setup_transaction,
@@ -189,6 +186,22 @@ mod tests {
         let _ = fs::remove_dir_all(&base);
     }
 
+    /// The folder an older version installed the skills of `harness` into.
+    fn harness_root(harness: &str) -> SkillRoot {
+        match harness {
+            "opencode" => SkillRoot::OpenCode,
+            "codex" => SkillRoot::CodexHome,
+            "claude" => SkillRoot::Claude,
+            _ => SkillRoot::Cursor,
+        }
+    }
+
+    /// A skills folder under the HOME of the test.
+    fn skills_dir(root: SkillRoot) -> PathBuf {
+        let home = crate::cursor_profile_paths::resolve_user_home().expect("home");
+        root.path(&home).expect("skills folder")
+    }
+
     fn source_skill_count() -> usize {
         discover_skill_catalog(&bundled_workspace_src())
             .expect("source catalog")
@@ -211,7 +224,7 @@ mod tests {
     fn install_source_skills_to_harness(harness: &str, line_endings: HarnessSkillLineEndings) {
         let mut catalog = discover_skill_catalog(&bundled_workspace_src()).expect("catalog");
         catalog.sort_by(|a, b| a.name.cmp(&b.name));
-        let dest_root = agent_global_skills_dest(harness).expect("dest");
+        let dest_root = skills_dir(harness_root(harness));
         fs::create_dir_all(&dest_root).expect("dest root");
         for skill in &catalog {
             let target = dest_root.join(&skill.name);
@@ -225,7 +238,7 @@ mod tests {
     }
 
     fn install_removed_skills_to_harness(_home: &Path, harness: &str) {
-        let dest_root = agent_global_skills_dest(harness).expect("dest");
+        let dest_root = skills_dir(harness_root(harness));
         fs::create_dir_all(&dest_root).expect("dest root");
         for name in REMOVED_SKILL_NAMES {
             write_historical_removed_skill(&dest_root.join(name));
@@ -233,7 +246,7 @@ mod tests {
     }
 
     fn install_codex_legacy_skills(home: &Path) {
-        let legacy = codex_legacy_skills_dest(home);
+        let legacy = SkillRoot::Agents.path(home).expect("legacy root");
         fs::create_dir_all(&legacy).expect("legacy root");
         let mut catalog = discover_skill_catalog(&bundled_workspace_src()).expect("catalog");
         catalog.sort_by(|a, b| a.name.cmp(&b.name));
@@ -245,6 +258,10 @@ mod tests {
         }
         fs::create_dir_all(legacy.join(".system")).expect(".system");
         fs::write(legacy.join(".system/prompt.md"), "keep me").expect(".system file");
+        // Codex's own skills below its home are not the app's either.
+        let codex_system = skills_dir(SkillRoot::CodexHome).join(".system/prompt.md");
+        fs::create_dir_all(codex_system.parent().expect("parent")).expect("codex .system");
+        fs::write(codex_system, "codex own").expect("codex .system file");
         fs::create_dir_all(legacy.join("user-custom-skill")).expect("custom skill dir");
         fs::write(
             legacy.join("user-custom-skill/SKILL.md"),
@@ -339,7 +356,7 @@ mod tests {
             fs::write(cursor_agents.join("user-agent.md"), "keep cursor agent")
                 .expect("cursor unknown");
 
-            let opencode_skills = agent_global_skills_dest("opencode").expect("opencode skills");
+            let opencode_skills = skills_dir(SkillRoot::OpenCode);
             fs::write(
                 opencode_skills
                     .join(REMOVED_SKILL_NAMES[1])
@@ -358,7 +375,9 @@ mod tests {
             )
             .expect("modified runtime skill");
             fs::write(
-                codex_legacy_skills_dest(&resolved_home)
+                SkillRoot::Agents
+                    .path(&resolved_home)
+                    .expect("legacy root")
                     .join(REMOVED_SKILL_NAMES[2])
                     .join("SKILL.md"),
                 "modified legacy Codex skill",
@@ -406,8 +425,9 @@ mod tests {
             }
         }
 
-        fn harness_skill_count(&self, harness: &str) -> usize {
-            let root = agent_global_skills_dest(harness).expect("dest");
+        /// Skill directories in `root`, Codex's own dot directories not counted.
+        fn skill_count(&self, root: SkillRoot) -> usize {
+            let root = root.path(&self.home).expect("dest");
             if !root.is_dir() {
                 return 0;
             }
@@ -431,10 +451,7 @@ mod tests {
     fn reconciliation_surface_ids() -> Vec<SetupSurfaceId> {
         vec![
             SetupSurfaceId::WorkspaceBundle,
-            SetupSurfaceId::OpenCodeSkills,
-            SetupSurfaceId::CodexSkills,
-            SetupSurfaceId::ClaudeSkills,
-            SetupSurfaceId::CursorSkills,
+            SetupSurfaceId::Skills,
             SetupSurfaceId::OpenCodeAgents,
         ]
     }
@@ -669,13 +686,13 @@ mod tests {
         let expected_harness_skills = source_skill_count() + REMOVED_SKILL_NAMES.len();
         for harness in ["opencode", "codex", "claude", "cursor"] {
             assert_eq!(
-                fixture.harness_skill_count(harness),
+                fixture.skill_count(harness_root(harness)),
                 expected_harness_skills,
                 "{harness} should include the complete source and removed skill inventory"
             );
         }
         assert_eq!(
-            fs::read_dir(codex_legacy_skills_dest(&fixture.home))
+            fs::read_dir(SkillRoot::Agents.path(&fixture.home).expect("legacy root"))
                 .expect("legacy Codex")
                 .filter_map(Result::ok)
                 .filter(|entry| {
@@ -783,28 +800,44 @@ mod tests {
             !fixture.ws.join("metadata/deprecated-skills.json").exists(),
             "deprecated metadata json should be removed"
         );
-        for harness in ["cursor", "claude", "codex"] {
-            assert_eq!(
-                fixture.harness_skill_count(harness),
-                25,
-                "{harness} should have 25 skills after reconciliation"
+        // All four harnesses are enabled and Codex has its default home: the skills live in
+        // `~/.claude/skills` and `~/.agents/skills`, and nothing else is left of the app's copies.
+        assert_eq!(
+            fixture.skill_count(SkillRoot::Claude),
+            25,
+            "Claude should have 25 skills after reconciliation"
+        );
+        for removed in REMOVED_SKILL_NAMES {
+            assert!(
+                !skills_dir(SkillRoot::Claude).join(removed).exists(),
+                "Claude should not retain removed skill {removed}"
             );
-            let dest = agent_global_skills_dest(harness).expect("dest");
-            for removed in REMOVED_SKILL_NAMES {
-                assert!(
-                    !dest.join(removed).exists(),
-                    "{harness} should not retain removed skill {removed}"
-                );
-            }
         }
         assert_eq!(
-            fixture.harness_skill_count("opencode"),
-            26,
-            "modified stale OpenCode skill should remain beside 25 current names"
+            fixture.skill_count(SkillRoot::CodexHome),
+            0,
+            "the app's copies in $CODEX_HOME/skills move to ~/.agents/skills"
         );
         assert!(
-            agent_global_skills_dest("opencode")
-                .expect("OpenCode skills")
+            skills_dir(SkillRoot::CodexHome)
+                .join(".system/prompt.md")
+                .is_file(),
+            "Codex's own .system folder is never touched"
+        );
+        assert_eq!(
+            fixture.skill_count(SkillRoot::Cursor),
+            0,
+            "~/.cursor/skills holds no app copy any more"
+        );
+        // The OpenCode folder keeps what is not the app's to remove: a modified stale skill and a
+        // current name whose SKILL.md was replaced by the user's own.
+        assert_eq!(
+            fixture.skill_count(SkillRoot::OpenCode),
+            2,
+            "only the modified stale skill and the same-name custom skill remain"
+        );
+        assert!(
+            skills_dir(SkillRoot::OpenCode)
                 .join(REMOVED_SKILL_NAMES[1])
                 .is_dir(),
             "modified stale OpenCode skill should be preserved"
@@ -818,7 +851,12 @@ mod tests {
             "legacy opencode scout agent should be removed"
         );
 
-        let legacy = codex_legacy_skills_dest(&fixture.home);
+        let legacy = SkillRoot::Agents.path(&fixture.home).expect("agents root");
+        assert_eq!(
+            fixture.skill_count(SkillRoot::Agents),
+            25 + 2,
+            "25 current skills, the modified stale skill and the user's own skill"
+        );
         assert!(
             legacy.join(".system/prompt.md").is_file(),
             "codex legacy .system should be preserved"
@@ -835,8 +873,12 @@ mod tests {
             fixture.ws.join("user-owned.txt").is_file(),
             "unknown runtime file should be preserved"
         );
-        let global = codex_global_skills_dest(&fixture.home);
-        assert!(global.is_dir(), "codex global skills dir should exist");
+        for removed in REMOVED_SKILL_NAMES {
+            assert!(
+                !skills_dir(SkillRoot::CodexHome).join(removed).exists(),
+                "$CODEX_HOME/skills should not retain removed skill {removed}"
+            );
+        }
 
         let managed = read_managed_state(&fixture.ws).expect("managed-state.json");
         assert_eq!(managed.schema_version, MANAGED_STATE_SCHEMA_VERSION);
@@ -844,8 +886,8 @@ mod tests {
             managed_state_path(&fixture.ws).is_file(),
             "managed state should be written"
         );
-        let exact_cursor = ArtifactId::skill_md(
-            SkillRoot::Cursor,
+        let exact_claude = ArtifactId::skill_md(
+            SkillRoot::Claude,
             SkillName::new("accessibility-review").expect("canonical skill"),
         );
         assert!(
@@ -853,7 +895,7 @@ mod tests {
                 .artifacts
                 .iter()
                 .any(|record| record.identity
-                    == crate::managed_state::artifact_identity(&exact_cursor)),
+                    == crate::managed_state::artifact_identity(&exact_claude)),
             "selected exact current artifacts should be adopted"
         );
         let conflicted = ArtifactId::skill_md(
@@ -883,30 +925,38 @@ mod tests {
         let result = apply_surfaces_from_preview(&plan);
         assert!(result.success, "apply failed: {}", result.message);
 
-        let exact_cursor = ArtifactId::skill_md(
-            SkillRoot::Cursor,
-            SkillName::new("accessibility-review").expect("canonical skill"),
-        );
+        let name = SkillName::new("accessibility-review").expect("canonical skill");
+        let exact_claude = ArtifactId::skill_md(SkillRoot::Claude, name.clone());
         let managed = read_managed_state(&fixture.ws).expect("managed-state.json");
         assert!(
             managed
                 .artifacts
                 .iter()
                 .any(|record| record.identity
-                    == crate::managed_state::artifact_identity(&exact_cursor)),
+                    == crate::managed_state::artifact_identity(&exact_claude)),
             "CRLF pre-adapter harness skill should be adopted and upgraded"
         );
-        let source = exact_cursor
+        let source = exact_claude
             .resolve_source(&fixture.ws)
             .expect("skill source");
-        let dest = exact_cursor
+        let dest = exact_claude
             .resolve_dest(&fixture.home, &fixture.ws)
             .expect("skill dest");
         assert_eq!(
             fs::read(dest).expect("installed skill"),
             fs::read(source).expect("source skill"),
-            "installed Cursor skill should be the shared canonical skill"
+            "installed Claude skill should be the shared canonical skill"
         );
+        // The CRLF copies in the folders nobody needs any more were adopted too, and removed.
+        for root in [SkillRoot::Cursor, SkillRoot::CodexHome] {
+            assert!(
+                !ArtifactId::skill_md(root, name.clone())
+                    .resolve_dest(&fixture.home, &fixture.ws)
+                    .expect("skill dest")
+                    .exists(),
+                "{root:?}"
+            );
+        }
 
         fixture.cleanup();
     }
@@ -970,15 +1020,15 @@ mod tests {
         let _guard = guard::lock();
         let _restore = EnvRestore::capture();
         let fixture = OldInstallFixture::build();
-        let dest = agent_global_skills_dest("opencode").expect("dest");
+        let dest = skills_dir(SkillRoot::OpenCode);
         fs::create_dir_all(dest.join(LEGACY_SCOUT_AGENT)).expect("scout skill");
         fs::write(
             dest.join(LEGACY_SCOUT_AGENT).join("SKILL.md"),
             b"user-owned scout skill",
         )
         .expect("scout skill file");
-        let plan = preview_setup(vec![surface_id_string(SetupSurfaceId::OpenCodeSkills)])
-            .expect("preview opencode skills");
+        let plan =
+            preview_setup(vec![surface_id_string(SetupSurfaceId::Skills)]).expect("preview skills");
         let remove_scout = plan
             .operations
             .iter()
@@ -1030,8 +1080,7 @@ mod tests {
             .into_iter()
             .next()
             .expect("skill");
-        let unreadable = agent_global_skills_dest("claude")
-            .expect("claude skills")
+        let unreadable = skills_dir(SkillRoot::Claude)
             .join(&skill.name)
             .join("SKILL.md");
         fs::create_dir_all(unreadable.parent().unwrap()).expect("skill dir");
@@ -1230,9 +1279,7 @@ mod tests {
         assert!(!home.join(".claude/skills/diagnose/SKILL.md").is_file());
         assert!(!home.join(".claude/CLAUDE.md").is_file());
         assert!(!home.join(".codex/AGENTS.md").is_file());
-        assert!(!home
-            .join(".config/opencode/skills/diagnose/SKILL.md")
-            .is_file());
+        assert!(!home.join(".agents/skills/diagnose/SKILL.md").is_file());
 
         // User content survives.
         assert!(custom_skill.is_file(), "custom skill must survive");
@@ -1293,14 +1340,15 @@ mod tests {
         assert!(ws.join("skills/diagnose/SKILL.md").is_file());
         assert!(resolved_home.join(".codex/AGENTS.md").is_file());
         assert!(resolved_home
-            .join(".config/opencode/skills/diagnose/SKILL.md")
+            .join(".agents/skills/diagnose/SKILL.md")
             .is_file());
         assert!(resolved_home
             .join(".claude/skills/diagnose/SKILL.md")
             .is_file());
-        assert!(resolved_home
-            .join(".cursor/skills/diagnose/SKILL.md")
-            .is_file());
+        // Nothing is installed for a harness that reads the folders above.
+        assert!(!resolved_home.join(".config/opencode/skills").exists());
+        assert!(!resolved_home.join(".cursor/skills").exists());
+        assert!(!resolved_home.join(".codex/skills").exists());
         assert!(read_managed_state(&ws).is_some());
 
         // User-owned fixtures before pre-uninstall snapshot.

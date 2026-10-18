@@ -17,7 +17,7 @@ The machine-readable contract is `global-profile.json` and `manifest.json` (`set
 | Surface | Path |
 | --- | --- |
 | Agents | `~/.cursor/agents` |
-| Skills | `~/.cursor/skills` (managed skills installed from the app Skills panel) |
+| Skills | `~/.claude/skills` or `~/.agents/skills`, both read by Cursor (installed by the app for every enabled harness, not a Cursor-only folder) |
 | MCP | `~/.cursor/mcp.json` (merges the `playwright` server only) |
 
 During apply, if `~/.cursor/permissions.json` still contains the legacy Agent Workspace-owned `playwright:*` mcpAllowlist entry, setup removes that exact entry only. It does not install a replacement permissions template.

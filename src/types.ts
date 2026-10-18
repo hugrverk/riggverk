@@ -408,6 +408,12 @@ export interface ClaudeRuntimeHealth {
 
 // Unified managed installation types.
 
+/**
+ * `skills` is one surface for every harness: it installs the skills into the folders the enabled
+ * harnesses read. The per-harness skill surfaces of older versions (`claude_skills`,
+ * `open_code_skills`, `codex_skills`, `cursor_skills`) are gone from the app; the backend still
+ * parses them in old transaction manifests and records.
+ */
 export type SetupSurfaceId =
   | "open_code_config"
   | "open_code_agents"
@@ -417,11 +423,8 @@ export type SetupSurfaceId =
   | "codex_rules"
   | "claude_rules"
   | "claude_agents"
-  | "claude_skills"
-  | "open_code_skills"
-  | "codex_skills"
+  | "skills"
   | "cursor_agents"
-  | "cursor_skills"
   | "cursor_mcp"
   | "workspace_bundle";
 

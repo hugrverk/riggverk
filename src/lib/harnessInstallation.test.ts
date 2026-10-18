@@ -27,22 +27,30 @@ function defaults(overrides: Partial<EnabledSettings> = {}): EnabledSettings {
 }
 
 const ALL_SURFACES: SetupSurfaceId[] = [
-  "workspace_bundle",
-  ...INSTALL_AGENTS.flatMap((harness) => HARNESS_SURFACES[harness]),
+  ...new Set<SetupSurfaceId>(["workspace_bundle", ...INSTALL_AGENTS.flatMap((harness) => HARNESS_SURFACES[harness])]),
 ];
 
 describe("harnessInstallation", () => {
   it("maps each harness to setup surfaces", () => {
-    expect(HARNESS_SURFACES.codex).toContain("codex_skills");
+    expect(HARNESS_SURFACES.codex).toContain("skills");
     expect(HARNESS_SURFACES.opencode).toContain("open_code_rules");
     expect(HARNESS_SURFACES.claude).toContain("claude_agents");
     expect(HARNESS_SURFACES.cursor).toContain("cursor_mcp");
   });
 
+  it("lists the one skills surface on every harness page, and it belongs to none of them", () => {
+    for (const harness of INSTALL_AGENTS) {
+      expect(HARNESS_SURFACES[harness].filter((surface) => surface === "skills")).toHaveLength(1);
+    }
+    expect(harnessForSurface("skills")).toBeNull();
+    expect(harnessForSurface("workspace_bundle")).toBeNull();
+    expect(harnessForSurface("codex_rules")).toBe("codex");
+  });
+
   it("includes remove surfaces when planning updates", () => {
     const plan: SetupPlan = {
       operations: [
-        { surface: "codex_skills", kind: "remove", summary: "stale" },
+        { surface: "skills", kind: "remove", summary: "stale" },
         { surface: "codex_rules", kind: "no_change", summary: "synced" },
       ],
       synced: [],
@@ -52,7 +60,7 @@ describe("harnessInstallation", () => {
       has_pending_changes: true,
       is_blocked: false,
     };
-    expect(surfacesNeedingApply(plan)).toEqual(["codex_skills"]);
+    expect(surfacesNeedingApply(plan)).toEqual(["skills"]);
   });
 });
 
@@ -76,7 +84,7 @@ describe("target to surface mapping", () => {
     expect(new Set(gated).size).toBe(gated.length);
     expect(targetIdForSurface("cursor_mcp")).toBe("cursor_setup");
     expect(targetIdForSurface("open_code_config")).toBe("opencode_config");
-    for (const ungated of ["codex_skills", "open_code_skills", "claude_skills", "cursor_skills", "workspace_bundle"] as const) {
+    for (const ungated of ["skills", "workspace_bundle"] as const) {
       expect(targetIdForSurface(ungated)).toBeNull();
     }
   });
@@ -99,7 +107,7 @@ describe("target to surface mapping", () => {
 
 describe("target-filtered surfaces", () => {
   it("leaves codex_config out of a default Codex install but keeps its other surfaces", () => {
-    expect(enabledSurfacesForHarness("codex", defaults())).toEqual(["codex_agents", "codex_rules", "codex_skills"]);
+    expect(enabledSurfacesForHarness("codex", defaults())).toEqual(["codex_agents", "codex_rules", "skills"]);
     expect(disabledSurfacesForHarness("codex", defaults())).toEqual(["codex_config"]);
   });
 
@@ -111,14 +119,14 @@ describe("target-filtered surfaces", () => {
 
   it("keeps skills surfaces when every target of a harness is off", () => {
     const settings = defaults({ enabled_target_ids: [] });
-    expect(enabledSurfacesForHarness("claude", settings)).toEqual(["claude_skills"]);
-    expect(enabledSurfacesForHarness("opencode", settings)).toEqual(["open_code_skills"]);
-    expect(enabledSurfacesForHarness("cursor", settings)).toEqual(["cursor_skills"]);
+    expect(enabledSurfacesForHarness("claude", settings)).toEqual(["skills"]);
+    expect(enabledSurfacesForHarness("opencode", settings)).toEqual(["skills"]);
+    expect(enabledSurfacesForHarness("cursor", settings)).toEqual(["skills"]);
   });
 
   it("treats the cursor_setup toggle as gating both cursor_agents and cursor_mcp", () => {
     const off = defaults({ enabled_target_ids: DEFAULT_ENABLED_TARGET_IDS.filter((id) => id !== "cursor_setup") });
-    expect(enabledSurfacesForHarness("cursor", off)).toEqual(["cursor_skills"]);
+    expect(enabledSurfacesForHarness("cursor", off)).toEqual(["skills"]);
     expect(disabledSurfacesForHarness("cursor", off)).toEqual(["cursor_agents", "cursor_mcp"]);
   });
 
@@ -126,8 +134,10 @@ describe("target-filtered surfaces", () => {
     const settings = defaults({ enabled_harness_ids: ["opencode", "claude", "cursor"] });
     expect(enabledSurfacesForHarness("codex", settings)).toEqual([]);
     expect(disabledSurfacesForHarness("codex", settings)).toEqual(HARNESS_SURFACES.codex);
-    expect(isSurfaceEnabled(settings, "codex_skills")).toBe(false);
-    expect(isSurfaceEnabled(settings, "claude_skills")).toBe(true);
+    expect(isSurfaceEnabled(settings, "codex_rules")).toBe(false);
+    // The skills surface is global: it is on whichever harnesses are, but a disabled harness's page offers nothing.
+    expect(isSurfaceEnabled(settings, "skills")).toBe(true);
+    expect(harnessSurfaceStates("codex", settings).every((state) => !state.enabled)).toBe(true);
   });
 
   it("enables the workspace bundle independently of any harness or target", () => {
@@ -140,7 +150,10 @@ describe("target-filtered surfaces", () => {
     expect(surfaces[0]).toBe("workspace_bundle");
 
     const claudeOnly = defaults({ enabled_harness_ids: ["claude"] });
-    expect(enabledSetupSurfaces(claudeOnly)).toEqual(["workspace_bundle", "claude_rules", "claude_agents", "claude_skills"]);
+    expect(enabledSetupSurfaces(claudeOnly)).toEqual(["workspace_bundle", "claude_rules", "claude_agents", "skills"]);
+    // Skills are requested once, however many harnesses list them, and not at all when none is enabled.
+    expect(enabledSetupSurfaces(defaults()).filter((surface) => surface === "skills")).toHaveLength(1);
+    expect(enabledSetupSurfaces(defaults({ enabled_harness_ids: [] }))).toEqual(["workspace_bundle"]);
   });
 
   it("reports per-surface state with the gating target for the UI", () => {
@@ -148,7 +161,7 @@ describe("target-filtered surfaces", () => {
       { surface: "codex_config", enabled: false, targetId: "codex_config" },
       { surface: "codex_agents", enabled: true, targetId: "codex_agents" },
       { surface: "codex_rules", enabled: true, targetId: "codex_rules" },
-      { surface: "codex_skills", enabled: true, targetId: null },
+      { surface: "skills", enabled: true, targetId: null },
     ]);
   });
 
@@ -158,8 +171,7 @@ describe("target-filtered surfaces", () => {
     expect(enabledSetupSurfaces(settings)).toEqual([
       "workspace_bundle",
       "claude_rules",
-      "claude_skills",
-      "cursor_skills",
+      "skills",
     ]);
   });
 });

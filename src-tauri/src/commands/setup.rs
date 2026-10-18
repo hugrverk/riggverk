@@ -2087,7 +2087,7 @@ pub fn get_installation_status(
                     .map_err(|_| format!("Unknown surface ID: {s}"))
             })
             .collect::<Result<_, _>>()?;
-        gate_requested_surfaces(parsed, &settings)?
+        gate_requested_surfaces(canonical_surfaces(parsed), &settings)?
     };
     let ws_root = setup_workspace_target_path()?;
     let home = user_home()?;
@@ -2120,6 +2120,17 @@ fn reject_disabled_surfaces(
                 .join(", ")
         ))
     }
+}
+
+/// The surfaces a request names, each once: a retired per-harness skill surface (a client that
+/// still sends one) is the global `Skills` surface, and several of them are one.
+fn canonical_surfaces(requested: Vec<SetupSurfaceId>) -> Vec<SetupSurfaceId> {
+    let mut seen = std::collections::HashSet::new();
+    requested
+        .into_iter()
+        .map(SetupSurfaceId::canonical)
+        .filter(|surface| seen.insert(*surface))
+        .collect()
 }
 
 /// Surfaces an explicit request may act on. Harness-disabled surfaces are
@@ -2155,8 +2166,41 @@ fn plan_surfaces(
         skip_manual: true,
     };
     let mut plan = crate::setup_lifecycle::plan_setup(&request, &states);
+    attach_skill_details(&mut plan, ws_root, home);
     attach_plan_preview(&mut plan, ws_root, home)?;
     Ok(plan)
+}
+
+/// Fills the review lines of the skills surface: what is created, updated and removed in each
+/// folder, and what stays because it was edited. Without them the review shows one opaque row for
+/// a surface that spans several folders.
+fn attach_skill_details(plan: &mut SetupPlan, workspace_root: &Path, home: &Path) {
+    let mentions_skills = plan
+        .operations
+        .iter()
+        .any(|op| matches!(op.surface, SetupSurfaceId::Skills));
+    if !mentions_skills {
+        return;
+    }
+    let skills = [SetupSurfaceId::Skills];
+    let Ok(scope) = setup_transaction::scope_for_surfaces(&skills, home) else {
+        return;
+    };
+    let Ok(planned) =
+        setup_transaction::plan_artifacts_for_surfaces_in(&skills, workspace_root, home, &scope)
+    else {
+        return;
+    };
+    let details = setup_transaction::skill_plan_details(&planned, &scope);
+    for op in plan
+        .operations
+        .iter_mut()
+        .chain(plan.conflicts.iter_mut())
+        .chain(plan.manual_steps.iter_mut())
+        .filter(|op| matches!(op.surface, SetupSurfaceId::Skills))
+    {
+        op.details = details.clone();
+    }
 }
 
 /// Read-only preview: detect real state for requested surfaces.
@@ -2179,12 +2223,15 @@ pub fn preview_setup(surfaces: Vec<String>) -> Result<SetupPlan, String> {
         return Err(format!("Unknown surface ID(s): {}", ids.join(", ")));
     }
 
-    let requested_surface_ids: Vec<SetupSurfaceId> = surfaces
-        .iter()
-        .filter_map(|s| {
-            serde_json::from_value::<SetupSurfaceId>(serde_json::Value::String(s.to_string())).ok()
-        })
-        .collect();
+    let requested_surface_ids: Vec<SetupSurfaceId> = canonical_surfaces(
+        surfaces
+            .iter()
+            .filter_map(|s| {
+                serde_json::from_value::<SetupSurfaceId>(serde_json::Value::String(s.to_string()))
+                    .ok()
+            })
+            .collect(),
+    );
     let settings = crate::settings::load();
     let surface_ids = if requested_surface_ids.is_empty() {
         crate::settings::enabled_setup_surfaces(&settings)
@@ -2224,12 +2271,15 @@ pub fn apply_setup(
     }
 
     // Parse validated IDs
-    let surface_ids: Vec<SetupSurfaceId> = surfaces
-        .iter()
-        .filter_map(|s| {
-            serde_json::from_value::<SetupSurfaceId>(serde_json::Value::String(s.to_string())).ok()
-        })
-        .collect();
+    let surface_ids: Vec<SetupSurfaceId> = canonical_surfaces(
+        surfaces
+            .iter()
+            .filter_map(|s| {
+                serde_json::from_value::<SetupSurfaceId>(serde_json::Value::String(s.to_string()))
+                    .ok()
+            })
+            .collect(),
+    );
 
     if surface_ids.is_empty() {
         return Err("At least one surface ID is required".to_string());
@@ -3052,7 +3102,7 @@ mod tests {
     }
 
     #[test]
-    fn detect_claude_skills_create_when_missing() {
+    fn detect_skills_create_when_missing() {
         let home = std::env::temp_dir().join("aw-detect-cl-skills-create");
         let _ = fs::remove_dir_all(&home);
         fs::create_dir_all(&home).expect("create dir");
@@ -3061,8 +3111,7 @@ mod tests {
         let _ = fs::remove_dir_all(&ws);
         fs::create_dir_all(&ws).expect("create runtime");
 
-        let (_surface, kind, _summary) =
-            detect_surface_state(SetupSurfaceId::ClaudeSkills, &ws, &home);
+        let (_surface, kind, _summary) = detect_surface_state(SetupSurfaceId::Skills, &ws, &home);
         assert_eq!(
             kind,
             OperationKind::Create,
@@ -4262,7 +4311,7 @@ mod tests {
         )
         .unwrap();
 
-        let planned = env.plan(&[SetupSurfaceId::ClaudeSkills]);
+        let planned = env.plan(&[SetupSurfaceId::Skills]);
         let kind_of = |artifact: &ArtifactId| {
             planned
                 .iter()

@@ -67,7 +67,7 @@ mod tests {
     /// Surfaces most tests install. Every apply persists a fsynced manifest per
     /// artifact, so each test installs only the surfaces it needs.
     const FILE_SURFACES: &[SetupSurfaceId] =
-        &[SetupSurfaceId::ClaudeSkills, SetupSurfaceId::ClaudeAgents];
+        &[SetupSurfaceId::Skills, SetupSurfaceId::ClaudeAgents];
 
     /// An installed profile in a temp HOME and workspace.
     struct Installed {
@@ -219,16 +219,10 @@ mod tests {
 
     #[test]
     fn shipped_versions_update_despite_a_stale_record_and_roll_back() {
-        let env = Installed::new(
-            "update",
-            &[
-                SetupSurfaceId::ClaudeSkills,
-                SetupSurfaceId::CodexSkills,
-                SetupSurfaceId::ClaudeAgents,
-            ],
-        );
+        let env = Installed::new("update", FILE_SURFACES);
+        // With every harness enabled the skills are installed in two folders.
         let claude_skill = ArtifactId::skill_md(SkillRoot::Claude, skill("tdd"));
-        let codex_skill = ArtifactId::skill_md(SkillRoot::CodexHome, skill("tdd"));
+        let codex_skill = ArtifactId::skill_md(SkillRoot::Agents, skill("tdd"));
         let agent = ArtifactId::ClaudeAgent(AgentName::new("verifier").expect("agent"));
         let old_skill = b"an older claude tdd skill\n";
         let old_codex = b"an older codex tdd skill\n";
@@ -242,16 +236,12 @@ mod tests {
             env.write(artifact, bytes);
             env.set_record(artifact, Some(stale));
         }
-        let surfaces = [
-            SetupSurfaceId::ClaudeSkills,
-            SetupSurfaceId::CodexSkills,
-            SetupSurfaceId::ClaudeAgents,
-        ];
+        let surfaces = [SetupSurfaceId::Skills, SetupSurfaceId::ClaudeAgents];
 
         // Nothing shipped proves these files, so today's conflict stands.
         let _none = test_override::inject("{ not json");
         assert_eq!(
-            env.planned(SetupSurfaceId::ClaudeSkills, &claude_skill),
+            env.planned(SetupSurfaceId::Skills, &claude_skill),
             OperationKind::Conflict
         );
         drop(_none);
@@ -313,21 +303,15 @@ mod tests {
         let _inject = test_override::inject(&shipped_json(&[(SKILL_SOURCE, shipped)]));
 
         assert_eq!(
-            env.planned(SetupSurfaceId::ClaudeSkills, &artifact),
+            env.planned(SetupSurfaceId::Skills, &artifact),
             OperationKind::Conflict
         );
-        let plan = env.preview(&[SetupSurfaceId::ClaudeSkills]);
+        let plan = env.preview(&[SetupSurfaceId::Skills]);
         assert!(
             !plan.has_pending_changes && !plan.conflicts.is_empty(),
             "{plan:?}"
         );
-        assert!(apply_setup(
-            vec![surface_name(SetupSurfaceId::ClaudeSkills)],
-            true,
-            None,
-            None
-        )
-        .is_err());
+        assert!(apply_setup(vec![surface_name(SetupSurfaceId::Skills)], true, None, None).is_err());
         assert_eq!(env.read(&artifact), edited);
     }
 
@@ -341,15 +325,15 @@ mod tests {
 
         // The real metadata lists no such version: unproven updates stay conflicts.
         assert_eq!(
-            env.planned(SetupSurfaceId::ClaudeSkills, &artifact),
+            env.planned(SetupSurfaceId::Skills, &artifact),
             OperationKind::Conflict
         );
         let _inject = test_override::inject(&shipped_json(&[(SKILL_SOURCE, shipped)]));
         assert_eq!(
-            env.planned(SetupSurfaceId::ClaudeSkills, &artifact),
+            env.planned(SetupSurfaceId::Skills, &artifact),
             OperationKind::Update
         );
-        let applied = apply_from(&env.preview(&[SetupSurfaceId::ClaudeSkills]));
+        let applied = apply_from(&env.preview(&[SetupSurfaceId::Skills]));
         assert!(applied.success, "apply: {}", applied.message);
         let current = fs::read(bundled().join(SKILL_SOURCE)).expect("source");
         assert_eq!(env.read(&artifact), current);
@@ -372,7 +356,7 @@ mod tests {
             state.artifacts.push(ManagedArtifactRecord {
                 identity: artifact_identity(artifact),
                 hash: stable_digest::bytes(b"a stale recorded hash"),
-                surface: Some("claude_skills".into()),
+                surface: Some("skills".into()),
             });
             write_managed_state_atomic(&env.ws, &state).expect("write state");
         }
@@ -380,14 +364,14 @@ mod tests {
         let _inject = test_override::inject(&shipped_json(&[(key.as_str(), shipped)]));
 
         assert_eq!(
-            env.planned(SetupSurfaceId::ClaudeSkills, &retired),
+            env.planned(SetupSurfaceId::Skills, &retired),
             OperationKind::Remove
         );
         assert_eq!(
-            env.planned(SetupSurfaceId::ClaudeSkills, &edited),
+            env.planned(SetupSurfaceId::Skills, &edited),
             OperationKind::Conflict
         );
-        let applied = apply_from(&env.preview(&[SetupSurfaceId::ClaudeSkills]));
+        let applied = apply_from(&env.preview(&[SetupSurfaceId::Skills]));
         assert!(applied.success, "apply: {}", applied.message);
         assert!(
             !env.path(&retired).exists(),
@@ -517,7 +501,7 @@ mod tests {
         for raw in ["", "{ not json", r#"{"schema": 1, "sources": {}}"#] {
             let _inject = test_override::inject(raw);
             assert_eq!(
-                env.planned(SetupSurfaceId::ClaudeSkills, &artifact),
+                env.planned(SetupSurfaceId::Skills, &artifact),
                 OperationKind::Conflict,
                 "{raw:?}"
             );
@@ -533,12 +517,12 @@ mod tests {
         env.set_record(&artifact, Some(b"a stale recorded hash"));
         let _inject = test_override::inject(&shipped_json(&[(SKILL_SOURCE, shipped)]));
 
-        let plan = env.preview(&[SetupSurfaceId::ClaudeSkills]);
+        let plan = env.preview(&[SetupSurfaceId::Skills]);
         assert!(plan.has_pending_changes, "{plan:?}");
         let edited = b"edited between preview and apply\n";
         env.write(&artifact, edited);
         let error = apply_setup(
-            vec![surface_name(SetupSurfaceId::ClaudeSkills)],
+            vec![surface_name(SetupSurfaceId::Skills)],
             true,
             plan.plan_fingerprint,
             plan.preview_token,
@@ -566,7 +550,7 @@ mod tests {
             env.write(&artifact, &old);
             env.set_record(&artifact, Some(b"a stale recorded hash"));
             assert_eq!(
-                env.planned(SetupSurfaceId::ClaudeSkills, &artifact),
+                env.planned(SetupSurfaceId::Skills, &artifact),
                 OperationKind::Update,
                 "{name}"
             );
@@ -589,46 +573,36 @@ mod tests {
         );
 
         let applied =
-            apply_from(&env.preview(&[SetupSurfaceId::ClaudeSkills, SetupSurfaceId::ClaudeAgents]));
+            apply_from(&env.preview(&[SetupSurfaceId::Skills, SetupSurfaceId::ClaudeAgents]));
         assert!(applied.success, "apply: {}", applied.message);
         let current = fs::read(bundled().join(AGENT_SOURCE)).expect("current agent");
         assert_eq!(env.read(&verifier), current);
     }
 
     /// The per-harness adapters the app shipped before every harness installed the canonical
-    /// SKILL.md are still app-owned, with the real embedded metadata and no managed-state at all.
-    /// A hand-edited copy of the same file stays a conflict.
+    /// SKILL.md are still app-owned, with the real embedded metadata and no managed-state at all:
+    /// a folder that is wanted updates them, a folder that is not wanted removes them. A
+    /// hand-edited copy of the same file stays a conflict.
     #[test]
-    fn old_per_harness_variants_update_without_managed_state_and_an_edit_conflicts() {
+    fn old_per_harness_variants_are_owned_without_managed_state_and_an_edit_conflicts() {
         let env = Installed::new("old-variants", FILE_SURFACES);
+        // An install from before the managed state has a runtime workspace and no state.
+        fs::create_dir_all(env.ws.join("skills")).expect("runtime skills");
         std::fs::remove_file(crate::managed_state::managed_state_path(&env.ws))
             .expect("remove managed state");
         assert!(read_managed_state(&env.ws).is_none());
         let name = skill("release-check");
         let current = fs::read(bundled().join("skills/release-check/SKILL.md")).expect("current");
+        // Each harness's old adapter, in the folder it used, and what the folder is now.
         let cases = [
-            (
-                ArtifactId::skill_md(SkillRoot::Claude, name.clone()),
-                SetupSurfaceId::ClaudeSkills,
-                "claude",
-            ),
-            (
-                ArtifactId::skill_md(SkillRoot::CodexHome, name.clone()),
-                SetupSurfaceId::CodexSkills,
-                "codex",
-            ),
-            (
-                ArtifactId::skill_md(SkillRoot::OpenCode, name.clone()),
-                SetupSurfaceId::OpenCodeSkills,
-                "opencode",
-            ),
-            (
-                ArtifactId::skill_md(SkillRoot::Cursor, name),
-                SetupSurfaceId::CursorSkills,
-                "cursor",
-            ),
+            (SkillRoot::Claude, "claude", OperationKind::Update),
+            (SkillRoot::Agents, "codex", OperationKind::Update),
+            (SkillRoot::CodexHome, "codex", OperationKind::Remove),
+            (SkillRoot::OpenCode, "opencode", OperationKind::Remove),
+            (SkillRoot::Cursor, "cursor", OperationKind::Remove),
         ];
-        for (artifact, surface, harness) in &cases {
+        for (root, harness, owned) in &cases {
+            let artifact = ArtifactId::skill_md(*root, name.clone());
             let old = git_show(
                 LAST_PER_HARNESS_ADAPTERS_COMMIT,
                 &format!("templates/skills/{harness}/release-check/SKILL.md"),
@@ -637,72 +611,72 @@ mod tests {
                 old, current,
                 "{harness}: the old adapter differs from the shared file"
             );
-            let dest = env.path(artifact);
+            let dest = env.path(&artifact);
             fs::create_dir_all(dest.parent().expect("parent")).expect("skill dir");
 
             fs::write(&dest, &old).expect("install old variant");
             assert_eq!(
-                env.planned(*surface, artifact),
-                OperationKind::Update,
-                "{harness}: an old per-harness variant is app-owned"
+                env.planned(SetupSurfaceId::Skills, &artifact),
+                *owned,
+                "{root:?}: an old per-harness variant is app-owned"
             );
 
             let mut edited = old.clone();
             edited.extend_from_slice(b"\nmy own note\n");
             fs::write(&dest, &edited).expect("install edited variant");
             assert_eq!(
-                env.planned(*surface, artifact),
+                env.planned(SetupSurfaceId::Skills, &artifact),
                 OperationKind::Conflict,
-                "{harness}: a hand-edited variant is not"
+                "{root:?}: a hand-edited variant is not"
             );
         }
 
-        // An old Claude variant is replaced by the shared file and recorded.
-        let claude = &cases[0].0;
-        let dest = env.path(claude);
-        fs::write(
-            &dest,
-            git_show(
-                LAST_PER_HARNESS_ADAPTERS_COMMIT,
-                "templates/skills/claude/release-check/SKILL.md",
-            ),
-        )
-        .expect("install old variant");
-        let applied = apply_from(&env.preview(&[SetupSurfaceId::ClaudeSkills]));
+        // An old Claude variant is replaced by the shared file and recorded; the owned copies
+        // in the folders that are no longer wanted are removed in the same transaction.
+        for (root, harness, _) in &cases {
+            fs::write(
+                env.path(&ArtifactId::skill_md(*root, name.clone())),
+                git_show(
+                    LAST_PER_HARNESS_ADAPTERS_COMMIT,
+                    &format!("templates/skills/{harness}/release-check/SKILL.md"),
+                ),
+            )
+            .expect("install old variant");
+        }
+        let applied = apply_from(&env.preview(&[SetupSurfaceId::Skills]));
         assert!(applied.success, "apply: {}", applied.message);
-        assert_eq!(env.read(claude), current);
-        assert_eq!(env.record(claude), Some(stable_digest::bytes(&current)));
+        for (root, _, owned) in &cases {
+            let artifact = ArtifactId::skill_md(*root, name.clone());
+            if *owned == OperationKind::Update {
+                assert_eq!(env.read(&artifact), current, "{root:?}");
+                assert_eq!(env.record(&artifact), Some(stable_digest::bytes(&current)));
+            } else {
+                assert!(!env.path(&artifact).exists(), "{root:?} is removed");
+            }
+        }
     }
 
-    /// One shared SKILL.md: every harness folder receives the canonical file byte for byte.
+    /// One shared SKILL.md: every folder receives the canonical file byte for byte, and the
+    /// folders no enabled harness needs receive nothing.
     #[test]
-    fn every_harness_installs_identical_bytes_for_the_same_skill() {
-        let env = Installed::new(
-            "identical-bytes",
-            &[
-                SetupSurfaceId::ClaudeSkills,
-                SetupSurfaceId::CodexSkills,
-                SetupSurfaceId::OpenCodeSkills,
-                SetupSurfaceId::CursorSkills,
-            ],
-        );
-        let names =
-            crate::artifact_registry::discover_skill_names_for_harness(&bundled(), "claude")
-                .expect("bundled skills");
-        assert!(!names.is_empty());
-        for name in names {
+    fn every_folder_installs_identical_bytes_for_the_same_skill() {
+        let env = Installed::new("identical-bytes", &[SetupSurfaceId::Skills]);
+        let skills =
+            crate::artifact_registry::catalog_skill_files(&bundled()).expect("bundled skills");
+        assert!(!skills.is_empty());
+        for skill in skills {
             let canonical = fs::read(crate::skill_discovery::canonical_skill_md(
                 &bundled(),
-                name.as_str(),
+                skill.name.as_str(),
             ))
             .expect("canonical skill");
-            for artifact in [
-                ArtifactId::skill_md(SkillRoot::Claude, name.clone()),
-                ArtifactId::skill_md(SkillRoot::CodexHome, name.clone()),
-                ArtifactId::skill_md(SkillRoot::OpenCode, name.clone()),
-                ArtifactId::skill_md(SkillRoot::Cursor, name.clone()),
-            ] {
+            for root in [SkillRoot::Claude, SkillRoot::Agents] {
+                let artifact = ArtifactId::skill_md(root, skill.name.clone());
                 assert_eq!(env.read(&artifact), canonical, "{artifact:?}");
+            }
+            for root in [SkillRoot::CodexHome, SkillRoot::OpenCode, SkillRoot::Cursor] {
+                let artifact = ArtifactId::skill_md(root, skill.name.clone());
+                assert!(!env.path(&artifact).exists(), "{artifact:?}");
             }
         }
     }

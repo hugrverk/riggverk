@@ -118,11 +118,8 @@ const SURFACE_LABELS: Record<SetupSurfaceId, string> = {
   codex_rules: "Codex rules",
   claude_rules: "Claude rules",
   claude_agents: "Claude agents",
-  claude_skills: "Claude skills",
-  open_code_skills: "OpenCode skills",
-  codex_skills: "Codex skills",
+  skills: "Skills",
   cursor_agents: "Cursor agents",
-  cursor_skills: "Cursor skills",
   cursor_mcp: "Cursor MCP",
   workspace_bundle: "Workspace bundle",
 };
@@ -136,11 +133,8 @@ const SURFACE_PATHS: Record<SetupSurfaceId, string> = {
   codex_rules: "~/.codex/AGENTS.md",
   claude_rules: "~/.claude/CLAUDE.md",
   claude_agents: "~/.claude/agents",
-  claude_skills: "~/.claude/skills",
-  open_code_skills: "~/.config/opencode/skills",
-  codex_skills: "~/.codex/skills",
+  skills: "~/.claude/skills and ~/.agents/skills",
   cursor_agents: "~/.cursor/agents",
-  cursor_skills: "~/.cursor/skills",
   cursor_mcp: "~/.cursor/mcp.json",
   workspace_bundle: "~/.config/agent-workspace",
 };
@@ -159,7 +153,7 @@ function initialSurfaceStates(): Map<SetupSurfaceId, InstallationState> {
       states.set("open_code_rules", "update_available");
       states.set("claude_rules", "update_available");
       states.set("claude_agents", "update_available");
-      states.set("claude_skills", "conflict");
+      states.set("skills", "conflict");
       states.set("cursor_mcp", "conflict");
       break;
     case "empty":
@@ -169,7 +163,7 @@ function initialSurfaceStates(): Map<SetupSurfaceId, InstallationState> {
       states.set("open_code_rules", "update_available");
       states.set("claude_rules", "update_available");
       states.set("claude_agents", "update_available");
-      states.set("claude_skills", "update_available");
+      states.set("skills", "update_available");
       states.set("codex_config", "unavailable");
       break;
   }
@@ -510,12 +504,12 @@ function plannedOperation(surface: SetupSurfaceId): PlannedOperation {
     unavailable: `${SURFACE_LABELS[surface]} is disabled in settings`,
   };
   const details =
-    kind === "update" && surface === "claude_skills"
+    kind === "update" && surface === "skills"
       ? [
-        "+ create skills/handoff/SKILL.md",
-        "~ update skills/frontend-design/SKILL.md",
-        "~ update skills/diagnose/SKILL.md",
-        "− remove skills/zoom-in/SKILL.md (no longer bundled, backed up)",
+        "+ ~/.agents/skills (25 skills, 46 files)",
+        "~ ~/.claude/skills (3 skills, 5 files)",
+        "- $CODEX_HOME/skills (25 skills, owned copies)",
+        "! ~/.cursor/skills/tdd (edited, kept)",
       ]
       : kind === "update" && surface === "claude_agents"
         ? ["+ create agents/sentinel.md", "~ update agents/verifier.md"]
@@ -685,7 +679,7 @@ function codexHealth(): CodexRuntimeHealth {
     skills_expected_count: 18,
     skills_missing_count: fresh ? 18 : 0,
     skills_diverged_count: 0,
-    legacy_skills_path: `${HOME}/.codex/skills-legacy`,
+    legacy_skills_path: `${HOME}/.codex/skills`,
     legacy_skills_migratable_count: 0,
     legacy_skills_conflict_count: 0,
     agents_status: status,
@@ -778,7 +772,7 @@ function claudeHealth(): ClaudeRuntimeHealth {
   return {
     rules_synced: !fresh && surfaceStates.get("claude_rules") === "current",
     agents_synced: !fresh && surfaceStates.get("claude_agents") === "current",
-    skills_synced: !fresh && surfaceStates.get("claude_skills") === "current",
+    skills_synced: !fresh && surfaceStates.get("skills") === "current",
     expected_agent_count: 6,
     installed_agent_count: fresh ? 0 : 5,
     claude_cli_available: true,
@@ -1077,7 +1071,7 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
           }
           rulesSnapshots.delete(id);
         } else {
-          for (const surface of ["claude_rules", "claude_agents", "claude_skills"] as SetupSurfaceId[]) surfaceStates.set(surface, "update_available");
+          for (const surface of ["claude_rules", "claude_agents", "skills"] as SetupSurfaceId[]) surfaceStates.set(surface, "update_available");
         }
         lastTransactionId = null;
       }

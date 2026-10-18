@@ -80,7 +80,7 @@ function props(overrides: Partial<HarnessViewProps> = {}): HarnessViewProps {
     settingsSaveStatus: "saved",
     onToggleTarget: vi.fn(),
     overview: overviewOf({
-      codex: installationStatus("update_available", [surfaceStatus("codex_rules", "update_available"), surfaceStatus("codex_skills", "current")], { update_count: 1 }),
+      codex: installationStatus("update_available", [surfaceStatus("codex_rules", "update_available"), surfaceStatus("skills", "current")], { update_count: 1 }),
       claude: installationStatus("current", [surfaceStatus("claude_rules", "current")]),
     }),
     install: installScreenOf(),

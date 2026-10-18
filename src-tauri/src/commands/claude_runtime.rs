@@ -20,6 +20,8 @@ use crate::agent_targets;
 use crate::commands::status::file_eq;
 use crate::commands::workspace::configured_workspace_path;
 use crate::settings;
+use crate::skill_health::{skill_files_status, SkillFilesStatus};
+use crate::skill_roots::SkillRoot;
 
 /// All managed Claude surface states.
 #[derive(Debug, Clone, Serialize)]
@@ -28,7 +30,7 @@ pub struct ClaudeRuntimeHealth {
     pub rules_synced: bool,
     /// Whether Claude native agents (~/.claude/agents) are synced.
     pub agents_synced: bool,
-    /// Whether Claude skills (~/.claude/skills/ with SKILL.md) are synced.
+    /// Whether every bundled skill is installed in `~/.claude/skills` with all its files, equal to the bundle.
     pub skills_synced: bool,
     /// Number of expected Claude agents (from agent adapters manifest).
     pub expected_agent_count: usize,
@@ -36,7 +38,7 @@ pub struct ClaudeRuntimeHealth {
     pub installed_agent_count: usize,
     /// Number of expected Claude-targeted skills (from canonical metadata).
     pub expected_skill_count: usize,
-    /// Number of installed Claude skill directories found.
+    /// Number of bundled skills with at least one file installed in `~/.claude/skills`.
     pub installed_skill_count: usize,
     /// Claude CLI availability (binary found in PATH).
     pub claude_cli_available: bool,
@@ -148,82 +150,34 @@ fn check_agents_synced(home: &Path, workspace_root: &Path) -> bool {
     found_any
 }
 
-/// Check whether Claude skills are synced using canonical target metadata.
-///
-/// Uses the artifact_registry's skill discovery which parses frontmatter
-/// targets metadata, not substring matching. Supports root-level and
-/// grouped skill layouts. Compares installed SKILL.md content against
-/// source, not just file existence.
-fn check_skills_synced(home: &Path, workspace_root: &Path) -> bool {
-    let installed_skills_dir = home.join(".claude/skills");
-    if !installed_skills_dir.is_dir() {
-        return false;
-    }
-
-    let source_skills_dir = workspace_root.join("skills");
-    if !source_skills_dir.is_dir() {
-        // No skills source — skills are present but we can't verify sync.
-        // Fail closed: return false instead of assuming synced.
-        return false;
-    }
-
-    // Use canonical skill discovery with targets metadata
-    let expected = match crate::artifact_registry::discover_skill_names_for_harness(
-        workspace_root,
-        "claude",
-    ) {
-        Ok(v) => v,
-        Err(_) => return false,
-    };
-
-    if expected.is_empty() {
-        return false;
-    }
-
-    // Compare every expected skill's SKILL.md content
-    expected.iter().all(|skill_name| {
-        let installed_skill_md = installed_skills_dir
-            .join(skill_name.as_str())
-            .join("SKILL.md");
-        if !installed_skill_md.is_file() {
-            return false;
-        }
-        let Some(source_skill_md) = crate::artifact_registry::ArtifactId::skill_md(
-            crate::skill_roots::SkillRoot::Claude,
-            skill_name.clone(),
-        )
-        .resolve_source(workspace_root) else {
-            return false;
-        };
-        source_skill_md.is_file() && file_eq(&installed_skill_md, &source_skill_md)
-    })
+/// Claude reads `~/.claude/skills` only, and skills are installed there from the bundle, so the
+/// installed files are compared with the bundle. `None` when the bundle cannot be read: nothing
+/// is then reported as synced.
+fn claude_skills(bundled_root: Option<&Path>, home: &Path) -> Option<SkillFilesStatus> {
+    skill_files_status(bundled_root?, home, &[SkillRoot::Claude]).ok()
 }
 
-/// Compute Claude runtime health from inspected managed surfaces only.
+/// Compute Claude runtime health from inspected managed surfaces only. `bundled_root` is where
+/// the skills come from; rules and agents are compared with the workspace copy.
 fn compute_health(workspace_root: &Path, home: &Path) -> ClaudeRuntimeHealth {
+    let bundled = crate::setup_roots::bundled_root_for(workspace_root).ok();
+    compute_health_with_bundle(workspace_root, bundled.as_deref(), home)
+}
+
+fn compute_health_with_bundle(
+    workspace_root: &Path,
+    bundled_root: Option<&Path>,
+    home: &Path,
+) -> ClaudeRuntimeHealth {
     let rules_synced = check_rules_synced(home, workspace_root);
     let agents_synced = check_agents_synced(home, workspace_root);
-    let skills_synced = check_skills_synced(home, workspace_root);
+    let skills = claude_skills(bundled_root, home);
+    let skills_synced = skills.is_some_and(|status| status.is_synced());
     let installed_count = installed_agent_count(home);
     let expected_count = expected_agent_count(workspace_root);
 
-    let installed_skills_dir = home.join(".claude/skills");
-    let expected_skill_count =
-        crate::artifact_registry::discover_skill_names_for_harness(workspace_root, "claude")
-            .map(|v| v.len())
-            .unwrap_or(0);
-    let installed_skill_count = if installed_skills_dir.is_dir() {
-        std::fs::read_dir(&installed_skills_dir)
-            .map(|entries| {
-                entries
-                    .filter_map(|e| e.ok())
-                    .filter(|e| e.path().is_dir())
-                    .count()
-            })
-            .unwrap_or(0)
-    } else {
-        0
-    };
+    let expected_skill_count = skills.map_or(0, |status| status.expected);
+    let installed_skill_count = skills.map_or(0, |status| status.installed());
 
     let cli_ok = claude_cli_available();
 
@@ -307,6 +261,11 @@ mod tests {
         fs::write(path, content).expect("write file");
     }
 
+    /// Health with the fixture workspace standing in for the bundle the skills come from.
+    fn health_of(ws: &Path, home: &Path) -> ClaudeRuntimeHealth {
+        compute_health_with_bundle(ws, Some(ws), home)
+    }
+
     fn write_claude_skill(ws: &Path, home: &Path, name: &str) {
         let canonical =
             crate::test_env::write_canonical_skill(ws, Some("test-group"), name, "Canonical");
@@ -320,7 +279,7 @@ mod tests {
     fn health_reports_not_configured_when_claude_dir_missing() {
         let home = temp_dir("no-claude-dir");
         let ws = temp_dir("no-claude-ws");
-        let health = compute_health(&ws, &home);
+        let health = health_of(&ws, &home);
         assert!(!health.rules_synced);
         assert!(!health.agents_synced);
         assert!(!health.skills_synced);
@@ -363,7 +322,7 @@ mod tests {
 
         write_claude_skill(&ws, &home, "claude-skill");
 
-        let health = compute_health(&ws, &home);
+        let health = health_of(&ws, &home);
         assert!(health.rules_synced);
         assert!(health.agents_synced);
         assert!(health.skills_synced);
@@ -382,7 +341,7 @@ mod tests {
         // Add agents dir so it's minimally configured
         write_file(&home.join(".claude/agents/.gitkeep"), "");
 
-        let health = compute_health(&ws, &home);
+        let health = health_of(&ws, &home);
         assert!(!health.rules_synced, "rules should be reported as diverged");
     }
 
@@ -397,12 +356,12 @@ mod tests {
             crate::rules_block::render_new(source)
         );
         write_file(&home.join(".claude/CLAUDE.md"), &with_text);
-        assert!(compute_health(&ws, &home).rules_synced);
+        assert!(health_of(&ws, &home).rules_synced);
 
         // An older base inside the block is out of sync, whatever surrounds it.
         let older = with_text.replace("- one", "- uno");
         write_file(&home.join(".claude/CLAUDE.md"), &older);
-        assert!(!compute_health(&ws, &home).rules_synced);
+        assert!(!health_of(&ws, &home).rules_synced);
     }
 
     #[test]
@@ -413,7 +372,7 @@ mod tests {
         write_file(&ws.join("templates/claude/agents/repo-scout.md"), "# scout");
         // No installed agents dir at all
 
-        let health = compute_health(&ws, &home);
+        let health = health_of(&ws, &home);
         assert!(!health.agents_synced);
         assert_eq!(health.installed_agent_count, 0);
     }
@@ -449,7 +408,7 @@ mod tests {
         write_file(&home.join(".claude/agents/verifier.md"), "# verifier\n");
         write_file(&home.join(".claude/agents/user-custom.md"), "# custom\n");
 
-        let health = compute_health(&ws, &home);
+        let health = health_of(&ws, &home);
         assert!(health.agents_synced, "all source agents should match");
         assert_eq!(
             health.installed_agent_count, 6,
@@ -465,7 +424,7 @@ mod tests {
         write_file(&ws.join("templates/sync/claude-rules.md"), "rules");
         write_file(&home.join(".claude/CLAUDE.md"), "rules");
 
-        let health = compute_health(&ws, &home);
+        let health = health_of(&ws, &home);
         assert!(!health.skills_synced);
     }
 
@@ -485,7 +444,7 @@ mod tests {
             "# gamma",
         );
 
-        let health = compute_health(&ws, &home);
+        let health = health_of(&ws, &home);
         assert_eq!(health.expected_agent_count, 3);
     }
 
@@ -523,7 +482,7 @@ mod tests {
         write_file(&home.join(".claude/agents/scribe.md"), "# scribe\n");
         write_file(&home.join(".claude/agents/verifier.md"), "# verifier\n");
 
-        let health = compute_health(&ws, &home);
+        let health = health_of(&ws, &home);
         assert!(health.summary.contains("rules synced"));
         assert!(health.summary.contains("agents synced"));
         assert!(health.summary.contains("skills synced"));
@@ -546,7 +505,7 @@ mod tests {
             r#"{"authToken":"secret-123"}"#,
         );
 
-        let health = compute_health(&ws, &home);
+        let health = health_of(&ws, &home);
         // These fields are never touched by compute_health
         assert!(!health.rules_synced);
         assert!(!health.agents_synced);
@@ -560,7 +519,7 @@ mod tests {
         let ws = temp_dir("claude-skill-canonical-ws");
         write_claude_skill(&ws, &home, "claude-skill");
 
-        let health = compute_health(&ws, &home);
+        let health = health_of(&ws, &home);
         assert!(health.skills_synced);
         assert_eq!(health.expected_skill_count, 1);
         assert_eq!(health.installed_skill_count, 1);
@@ -576,9 +535,43 @@ mod tests {
             "---\nname: claude-skill\ndescription: test skill\ntargets: claude\n---\n# An older per-harness copy\n",
         );
 
-        let health = compute_health(&ws, &home);
+        let health = health_of(&ws, &home);
         assert!(!health.skills_synced);
         assert_eq!(health.expected_skill_count, 1);
         assert_eq!(health.installed_skill_count, 1);
+    }
+
+    #[test]
+    fn health_compares_skills_with_the_bundle_not_with_the_runtime_workspace_copy() {
+        let home = temp_dir("claude-skill-bundle");
+        let ws = temp_dir("claude-skill-bundle-ws");
+        let bundle = temp_dir("claude-skill-bundle-source");
+        write_claude_skill(&bundle, &home, "claude-skill");
+        // The runtime workspace holds an older copy of the skill than the bundle installs.
+        write_file(
+            &ws.join("skills/claude-skill/SKILL.md"),
+            "---\nname: claude-skill\ndescription: test skill\ntargets: claude\n---\n# older\n",
+        );
+        let against_bundle = compute_health_with_bundle(&ws, Some(&bundle), &home);
+        assert!(against_bundle.skills_synced);
+        let against_runtime = compute_health_with_bundle(&ws, Some(&ws), &home);
+        assert!(!against_runtime.skills_synced);
+        // Without a readable bundle nothing is reported as synced.
+        let without = compute_health_with_bundle(&ws, None, &home);
+        assert!(!without.skills_synced);
+        assert_eq!(without.expected_skill_count, 0);
+    }
+
+    #[test]
+    fn health_counts_a_skill_with_a_missing_supporting_file_as_not_synced() {
+        let home = temp_dir("claude-skill-support");
+        let ws = temp_dir("claude-skill-support-ws");
+        write_claude_skill(&ws, &home, "claude-skill");
+        write_file(&ws.join("skills/test-group/claude-skill/notes.md"), "notes");
+        let incomplete = health_of(&ws, &home);
+        assert!(!incomplete.skills_synced);
+        assert_eq!(incomplete.installed_skill_count, 1);
+        write_file(&home.join(".claude/skills/claude-skill/notes.md"), "notes");
+        assert!(health_of(&ws, &home).skills_synced);
     }
 }

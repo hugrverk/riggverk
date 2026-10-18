@@ -119,6 +119,22 @@ class CheckSkillRoutingTests(unittest.TestCase):
         path.write_bytes(b"\xef\xbb\xbf" + path.read_bytes().replace(b"\r\n", b"\n"))
         self.assert_fails("UTF-8 BOM")
 
+    def test_stale_codex_skills_folder_claim_in_the_rules_fails(self) -> None:
+        self.edit(
+            self.tree / WS / "templates/rules/codex.md",
+            "skills install to `~/.agents/skills`, which Codex reads (`$CODEX_HOME/skills` with a customised `CODEX_HOME`).",
+            "skills install to `$CODEX_HOME/skills` (typically `~/.codex/skills`).",
+        )
+        self.assert_fails("stale skills folder claim")
+
+    def test_codex_rules_must_name_the_agents_skills_folder(self) -> None:
+        self.edit(self.tree / WS / "templates/rules/codex.md", "`~/.agents/skills`", "the skills folder")
+        self.assert_fails("must name ~/.agents/skills")
+
+    def test_stale_skills_folder_claim_in_a_doc_fails(self) -> None:
+        self.append(self.tree / WS / "docs/CODEX_CONFIG.md", "\n- Codex: `$CODEX_HOME/skills` (typically `~/.codex/skills`)\n")
+        self.assert_fails("stale skills folder claim")
+
     def test_leftover_per_harness_adapter_fails(self) -> None:
         adapter = self.tree / WS / "templates/skills/claude/tdd/SKILL.md"
         adapter.parent.mkdir(parents=True)

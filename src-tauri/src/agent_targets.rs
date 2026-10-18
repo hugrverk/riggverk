@@ -377,6 +377,7 @@ mod tests {
     #[test]
     fn skills_and_workspace_surfaces_are_not_target_gated() {
         for surface in [
+            SetupSurfaceId::Skills,
             SetupSurfaceId::ClaudeSkills,
             SetupSurfaceId::OpenCodeSkills,
             SetupSurfaceId::CodexSkills,

@@ -5,8 +5,9 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::status::file_eq;
-use crate::agent_skill_targets::{codex_global_skills_dest, codex_home};
-use crate::artifact_registry::ArtifactId;
+use crate::agent_skill_targets::codex_home;
+use crate::skill_health::{old_skill_copies, skill_files_status};
+use crate::skill_roots::{codex_home_is_custom, SkillRoot};
 
 #[derive(Serialize, Clone, Debug)]
 pub struct CodexRuntimeCheck {
@@ -290,21 +291,27 @@ fn extract_string_field(table: &toml::Value, path: &[&str]) -> Option<String> {
     current.as_str().map(|s| s.to_string())
 }
 
-fn skill_state(source_md: &Path, target_md: &Path) -> &'static str {
-    if !source_md.is_file() {
-        return "invalid";
-    }
-    if !target_md.is_file() {
-        return "missing";
-    }
-    if file_eq(source_md, target_md) {
-        "synced"
+/// The folder skills are installed into for Codex: `~/.agents/skills`, or `$CODEX_HOME/skills`
+/// when `CODEX_HOME` is customised. The other of the two is a folder older versions filled.
+fn codex_skill_roots(home_dir: &Path) -> (SkillRoot, SkillRoot) {
+    if codex_home_is_custom(home_dir) {
+        (SkillRoot::CodexHome, SkillRoot::Agents)
     } else {
-        "diverged"
+        (SkillRoot::Agents, SkillRoot::CodexHome)
     }
 }
 
 pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> CodexRuntimeHealth {
+    let bundled = crate::setup_roots::bundled_root_for(workspace_root).ok();
+    compute_health_with_bundle(workspace_root, bundled.as_deref(), home_dir)
+}
+
+/// `bundled_root` is where the skills come from; the rest is compared with the workspace copy.
+fn compute_health_with_bundle(
+    workspace_root: &Path,
+    bundled_root: Option<&Path>,
+    home_dir: &Path,
+) -> CodexRuntimeHealth {
     let rules_source_path = workspace_root.join("templates/sync/codex-rules.md");
     let codex_dir = codex_home(home_dir);
     let rules_installed_path = codex_dir.join("AGENTS.md");
@@ -312,7 +319,6 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> CodexRuntimeHea
     let agents_target_dir = codex_dir.join("agents");
     let template_config_path = workspace_root.join("templates/codex/config.toml");
     let installed_config_path = codex_dir.join("config.toml");
-    let skills_target_root = codex_global_skills_dest(home_dir);
 
     let rules_source_path_str = rules_source_path.to_string_lossy().into_owned();
     let rules_installed_path_str = rules_installed_path.to_string_lossy().into_owned();
@@ -375,75 +381,44 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> CodexRuntimeHea
         warnings.push(detail);
     }
 
+    let (skills_root, old_skills_root) = codex_skill_roots(home_dir);
+    let skills_target_root = skills_root.path(home_dir).unwrap_or_default();
     let mut skills_synced_count = 0usize;
     let mut skills_missing_count = 0usize;
     let mut skills_diverged_count = 0usize;
     let mut skills_expected_count = 0usize;
     let mut skills_source_invalid = false;
-    let skills_status =
-        match crate::artifact_registry::discover_skill_names_for_harness(workspace_root, "codex") {
-            Ok(skill_names) => {
-                for skill_name in skill_names {
-                    skills_expected_count += 1;
-                    let source_md = ArtifactId::skill_md(
-                        crate::skill_roots::SkillRoot::CodexHome,
-                        skill_name.clone(),
-                    )
-                    .resolve_source(workspace_root);
-                    let target_md = skills_target_root
-                        .join(skill_name.as_str())
-                        .join("SKILL.md");
-                    let Some(source_md) = source_md else {
-                        skills_source_invalid = true;
-                        has_fail = true;
-                        warnings.push(format!(
-                            "missing Codex skill source for {}",
-                            skill_name.as_str()
-                        ));
-                        continue;
-                    };
-                    match skill_state(&source_md, &target_md) {
-                        "synced" => skills_synced_count += 1,
-                        "missing" => {
-                            skills_missing_count += 1;
-                            has_warn = true;
-                        }
-                        "diverged" => {
-                            skills_diverged_count += 1;
-                            has_warn = true;
-                        }
-                        _ => {
-                            skills_source_invalid = true;
-                            has_fail = true;
-                            warnings.push(format!(
-                                "missing Codex skill source for {}",
-                                skill_name.as_str()
-                            ));
-                        }
-                    }
-                }
-                if skills_expected_count == 0 {
-                    has_fail = true;
-                    "missing".into()
-                } else if skills_source_invalid {
-                    "missing".into()
-                } else if skills_missing_count == 0 && skills_diverged_count == 0 {
-                    "synced".into()
-                } else if skills_synced_count == 0 && skills_diverged_count == 0 {
-                    "missing".into()
-                } else {
-                    "diverged".into()
-                }
+    let skills_status = match bundled_root
+        .ok_or_else(|| "the bundled skills are not available".to_string())
+        .and_then(|bundle| skill_files_status(bundle, home_dir, &[skills_root]))
+    {
+        Ok(status) => {
+            skills_expected_count = status.expected;
+            skills_synced_count = status.synced;
+            skills_missing_count = status.missing;
+            skills_diverged_count = status.diverged;
+            if status.missing > 0 || status.diverged > 0 {
+                has_warn = true;
             }
-            Err(detail) => {
+            if status.expected == 0 {
                 has_fail = true;
-                warnings.push(detail);
-                "missing".into()
             }
-        };
+            match status.label() {
+                "synced" => "synced".to_string(),
+                "missing" => "missing".to_string(),
+                _ => "diverged".to_string(),
+            }
+        }
+        Err(detail) => {
+            skills_source_invalid = true;
+            has_fail = true;
+            warnings.push(detail);
+            "missing".into()
+        }
+    };
     checks.push(CodexRuntimeCheck {
         id: "skills".into(),
-        label: "Global skills ($CODEX_HOME/skills)".into(),
+        label: format!("Global skills ({})", skills_root.display()),
         status: if skills_status == "synced" {
             "pass".into()
         } else if skills_status == "missing"
@@ -460,6 +435,35 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> CodexRuntimeHea
             skills_target_root.to_string_lossy()
         ),
     });
+
+    // Copies in the folder older versions installed into: Codex reads that folder too, so a copy
+    // there is a second one of the skill until the next update moves it.
+    let old_skills_path = old_skills_root
+        .path(home_dir)
+        .ok()
+        .filter(|path| *path != skills_target_root);
+    let old_copies = old_skills_path
+        .as_ref()
+        .zip(bundled_root)
+        .and_then(|(_, bundle)| old_skill_copies(bundle, home_dir, old_skills_root).ok())
+        .unwrap_or_default();
+    if let Some(path) = old_skills_path.as_ref().filter(|_| old_copies.owned > 0) {
+        has_warn = true;
+        warnings.push(format!(
+            "{} skill(s) are still installed in {}; the next update moves them to {}",
+            old_copies.owned,
+            path.display(),
+            skills_target_root.display()
+        ));
+    }
+    if let Some(path) = old_skills_path.as_ref().filter(|_| old_copies.edited > 0) {
+        has_warn = true;
+        warnings.push(format!(
+            "{} edited skill(s) in {} are kept; Codex lists them twice until you move or delete them",
+            old_copies.edited,
+            path.display()
+        ));
+    }
 
     let bundled_agents = list_bundled_codex_agents(&agents_source_dir);
     let bundled_agent_count = bundled_agents.len();
@@ -673,9 +677,11 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> CodexRuntimeHea
         skills_expected_count,
         skills_missing_count,
         skills_diverged_count,
-        legacy_skills_path: String::new(),
-        legacy_skills_migratable_count: 0,
-        legacy_skills_conflict_count: 0,
+        legacy_skills_path: old_skills_path
+            .map(|path| path.to_string_lossy().into_owned())
+            .unwrap_or_default(),
+        legacy_skills_migratable_count: old_copies.owned,
+        legacy_skills_conflict_count: old_copies.edited,
         agents_status,
         bundled_agent_count,
         installed_bundled_agent_count: installed_bundled_count,
@@ -763,14 +769,14 @@ apps._default.default_tools_approval_mode = "prompt"
                 crate::rules_block::render_new("# rules\n")
             ),
         );
-        let health = compute_health(&ws, &home);
+        let health = health_of(&ws, &home);
         assert_eq!(health.rules_status, "synced");
 
         write_file(
             &home.join(".codex/AGENTS.md"),
             &crate::rules_block::render_new("# older rules\n"),
         );
-        assert_eq!(compute_health(&ws, &home).rules_status, "diverged");
+        assert_eq!(health_of(&ws, &home).rules_status, "diverged");
         cleanup(&ws);
         cleanup(&home);
     }
@@ -784,21 +790,21 @@ apps._default.default_tools_approval_mode = "prompt"
         let home = temp_root("override-home");
         add_rules(&ws, &home);
 
-        let clean = compute_health(&ws, &home);
+        let clean = health_of(&ws, &home);
         assert!(clean
             .checks
             .iter()
             .all(|check| check.id != "rules_override"));
 
         write_file(&home.join(".codex/AGENTS.override.md"), "\n  \n");
-        let blank = compute_health(&ws, &home);
+        let blank = health_of(&ws, &home);
         assert!(blank
             .checks
             .iter()
             .all(|check| check.id != "rules_override"));
 
         write_file(&home.join(".codex/AGENTS.override.md"), "# my override\n");
-        let health = compute_health(&ws, &home);
+        let health = health_of(&ws, &home);
         let check = health
             .checks
             .iter()
@@ -819,10 +825,16 @@ apps._default.default_tools_approval_mode = "prompt"
         cleanup(&home);
     }
 
+    /// Health with the fixture workspace standing in for the bundle the skills come from.
+    fn health_of(ws: &Path, home: &Path) -> CodexRuntimeHealth {
+        compute_health_with_bundle(ws, Some(ws), home)
+    }
+
+    /// Installs a skill the way an update does: into the folder Codex reads, `~/.agents/skills`.
     fn add_skill(ws: &Path, home: &Path, name: &str) {
         let canonical = crate::test_env::write_canonical_skill(ws, None, name, "canonical");
         write_file(
-            &home.join(format!(".codex/skills/{name}/SKILL.md")),
+            &home.join(format!(".agents/skills/{name}/SKILL.md")),
             &fs::read_to_string(canonical).expect("read canonical skill"),
         );
     }
@@ -845,6 +857,12 @@ apps._default.default_tools_approval_mode = "prompt"
 
     #[test]
     fn test_managed_config_match_preserves_unknown_sections() {
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        unsafe {
+            std::env::remove_var("CODEX_HOME");
+            std::env::remove_var("CODEX_SKILLS_PATH");
+        }
         let ws = temp_root("cfg-preserve");
         let home = temp_root("cfg-preserve-home");
         add_rules(&ws, &home);
@@ -859,7 +877,7 @@ command = "echo"
         add_agent(&ws, &home, "repo_scout.toml", "name = \"repo_scout\"\n");
         add_skill(&ws, &home, "diagnose");
 
-        let health = compute_health(&ws, &home);
+        let health = health_of(&ws, &home);
         cleanup(&ws);
         cleanup(&home);
 
@@ -874,6 +892,12 @@ command = "echo"
 
     #[test]
     fn test_diverged_when_managed_field_differs() {
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        unsafe {
+            std::env::remove_var("CODEX_HOME");
+            std::env::remove_var("CODEX_SKILLS_PATH");
+        }
         let ws = temp_root("cfg-div");
         let home = temp_root("cfg-div-home");
         add_rules(&ws, &home);
@@ -896,7 +920,7 @@ apps._default.default_tools_approval_mode = "prompt"
         add_agent(&ws, &home, "repo_scout.toml", "name = \"repo_scout\"\n");
         add_skill(&ws, &home, "diagnose");
 
-        let health = compute_health(&ws, &home);
+        let health = health_of(&ws, &home);
         cleanup(&ws);
         cleanup(&home);
 
@@ -924,6 +948,12 @@ apps._default.default_tools_approval_mode = "prompt"
 
     #[test]
     fn test_user_model_and_effort_are_preserved_and_not_drift() {
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        unsafe {
+            std::env::remove_var("CODEX_HOME");
+            std::env::remove_var("CODEX_SKILLS_PATH");
+        }
         let ws = temp_root("cfg-user-model");
         let home = temp_root("cfg-user-model-home");
         add_rules(&ws, &home);
@@ -940,7 +970,7 @@ apps._default.default_tools_approval_mode = "prompt"
         add_agent(&ws, &home, "repo_scout.toml", "name = \"repo_scout\"\n");
         add_skill(&ws, &home, "diagnose");
 
-        let health = compute_health(&ws, &home);
+        let health = health_of(&ws, &home);
         cleanup(&ws);
         cleanup(&home);
 
@@ -1043,6 +1073,12 @@ apps._default.default_tools_approval_mode = "prompt"
 
     #[test]
     fn test_diverged_when_legacy_profile_scheme_remains() {
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        unsafe {
+            std::env::remove_var("CODEX_HOME");
+            std::env::remove_var("CODEX_SKILLS_PATH");
+        }
         let ws = temp_root("cfg-legacy");
         let home = temp_root("cfg-legacy-home");
         add_rules(&ws, &home);
@@ -1069,7 +1105,7 @@ sandbox_mode = "workspace-write"
         add_agent(&ws, &home, "repo_scout.toml", "name = \"repo_scout\"\n");
         add_skill(&ws, &home, "diagnose");
 
-        let health = compute_health(&ws, &home);
+        let health = health_of(&ws, &home);
         cleanup(&ws);
         cleanup(&home);
 
@@ -1087,6 +1123,12 @@ sandbox_mode = "workspace-write"
 
     #[test]
     fn test_codex_skills_synced_against_the_canonical_skill() {
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        unsafe {
+            std::env::remove_var("CODEX_HOME");
+            std::env::remove_var("CODEX_SKILLS_PATH");
+        }
         let ws = temp_root("skill-canonical");
         let home = temp_root("skill-canonical-home");
         add_rules(&ws, &home);
@@ -1094,7 +1136,7 @@ sandbox_mode = "workspace-write"
         add_agent(&ws, &home, "repo_scout.toml", "name = \"repo_scout\"\n");
         add_skill(&ws, &home, "diagnose");
 
-        let health = compute_health(&ws, &home);
+        let health = health_of(&ws, &home);
         cleanup(&ws);
         cleanup(&home);
 
@@ -1105,6 +1147,12 @@ sandbox_mode = "workspace-write"
 
     #[test]
     fn test_codex_skills_diverge_when_installed_content_differs_from_the_canonical_skill() {
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        unsafe {
+            std::env::remove_var("CODEX_HOME");
+            std::env::remove_var("CODEX_SKILLS_PATH");
+        }
         let ws = temp_root("skill-diverged");
         let home = temp_root("skill-diverged-home");
         add_rules(&ws, &home);
@@ -1112,16 +1160,120 @@ sandbox_mode = "workspace-write"
         add_agent(&ws, &home, "repo_scout.toml", "name = \"repo_scout\"\n");
         add_skill(&ws, &home, "diagnose");
         write_file(
-            &home.join(".codex/skills/diagnose/SKILL.md"),
+            &home.join(".agents/skills/diagnose/SKILL.md"),
             "---\nname: diagnose\ndescription: test skill\ntargets: codex\n---\n# an older per-harness copy\n",
         );
 
-        let health = compute_health(&ws, &home);
+        let health = health_of(&ws, &home);
         cleanup(&ws);
         cleanup(&home);
 
         assert_eq!(health.skills_status, "diverged");
         assert_eq!(health.skills_synced_count, 0);
         assert_eq!(health.skills_diverged_count, 1);
+    }
+
+    fn healthy_codex_fixture(label: &str) -> (PathBuf, PathBuf) {
+        let ws = temp_root(label);
+        let home = temp_root(&format!("{label}-home"));
+        add_rules(&ws, &home);
+        add_config(&ws, &home, "");
+        add_agent(&ws, &home, "repo_scout.toml", "name = \"repo_scout\"\n");
+        add_skill(&ws, &home, "diagnose");
+        add_skill(&ws, &home, "tdd");
+        (ws, home)
+    }
+
+    #[test]
+    fn codex_skills_are_checked_in_agents_skills_and_old_codex_home_copies_are_reported() {
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        unsafe {
+            std::env::remove_var("CODEX_HOME");
+            std::env::remove_var("CODEX_SKILLS_PATH");
+        }
+        let (ws, home) = healthy_codex_fixture("skill-old-copies");
+
+        let clean = health_of(&ws, &home);
+        assert_eq!(clean.skills_status, "synced");
+        assert_eq!(clean.status, "synced", "{:?}", clean.warnings);
+        let check = clean
+            .checks
+            .iter()
+            .find(|check| check.id == "skills")
+            .unwrap();
+        assert_eq!(check.label, "Global skills (~/.agents/skills)");
+        assert!(check.detail.contains(".agents/skills"), "{}", check.detail);
+        assert_eq!(clean.legacy_skills_migratable_count, 0);
+
+        // An older version's copies: one still what the app shipped, one edited.
+        let canonical = fs::read_to_string(ws.join("skills/diagnose/SKILL.md")).unwrap();
+        write_file(&home.join(".codex/skills/diagnose/SKILL.md"), &canonical);
+        write_file(&home.join(".codex/skills/tdd/SKILL.md"), "my own tdd\n");
+        write_file(
+            &home.join(".codex/skills/.system/imagegen/SKILL.md"),
+            "codex\n",
+        );
+        let with_old = health_of(&ws, &home);
+        assert_eq!(
+            with_old.skills_status, "synced",
+            "the old folder is not the one checked"
+        );
+        assert_eq!(
+            with_old.legacy_skills_path,
+            home.join(".codex/skills").to_string_lossy()
+        );
+        assert_eq!(with_old.legacy_skills_migratable_count, 1);
+        assert_eq!(with_old.legacy_skills_conflict_count, 1);
+        assert_eq!(with_old.status, "diverged");
+        assert!(with_old
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("moves them") && warning.contains(".agents/skills")));
+        assert!(with_old
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("lists them twice")));
+        cleanup(&ws);
+        cleanup(&home);
+    }
+
+    #[test]
+    fn a_custom_codex_home_keeps_its_skills_inside_it_and_reports_agents_skills_as_old() {
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        let ws = temp_root("skill-custom-home");
+        let home = temp_root("skill-custom-home-home");
+        let isolated = home.join("isolated-codex");
+        unsafe {
+            std::env::set_var("CODEX_HOME", &isolated);
+            std::env::remove_var("CODEX_SKILLS_PATH");
+        }
+        write_file(&ws.join("templates/sync/codex-rules.md"), "# rules");
+        write_file(&isolated.join("AGENTS.md"), "# rules");
+        let canonical = crate::test_env::write_canonical_skill(&ws, None, "diagnose", "canonical");
+        let text = fs::read_to_string(canonical).unwrap();
+        write_file(&isolated.join("skills/diagnose/SKILL.md"), &text);
+
+        let health = health_of(&ws, &home);
+        assert_eq!(health.skills_status, "synced");
+        let check = health
+            .checks
+            .iter()
+            .find(|check| check.id == "skills")
+            .unwrap();
+        assert_eq!(check.label, "Global skills ($CODEX_HOME/skills)");
+        assert!(check.detail.contains("isolated-codex"), "{}", check.detail);
+        assert_eq!(
+            health.legacy_skills_path,
+            home.join(".agents/skills").to_string_lossy()
+        );
+
+        // Without a readable bundle nothing is reported as installed.
+        let unreadable = compute_health_with_bundle(&ws, None, &home);
+        assert_eq!(unreadable.skills_status, "missing");
+        assert_eq!(unreadable.skills_expected_count, 0);
+        cleanup(&ws);
+        cleanup(&home);
     }
 }

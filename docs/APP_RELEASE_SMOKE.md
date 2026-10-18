@@ -57,7 +57,7 @@ Tab keys below assume the default order: workspace, codex, opencode, cursor, cla
 - [ ] Turning a target off hides its surface from the plan and the status shows it as `off`
 - [ ] Turning it on adds it back to the next preview
 - [ ] Legacy settings file without `target_defaults_version`: migration keeps targets that were enabled or already managed
-- [ ] Skills surfaces and the workspace bundle are never gated
+- [ ] The skills surface and the workspace bundle are never gated
 
 ## 5. Rules block, Convert, Leave as is
 
@@ -95,8 +95,9 @@ Use fixture files in the isolated `HOME` (`~/.claude/CLAUDE.md`, `~/.codex/AGENT
 - [ ] App-shaped legacy `profile = "safe"` / `"workspace-write"` selectors and `[profiles.*]` tables are removed while still app-shipped
 - [ ] Custom profiles, unrelated keys, MCP entries, personality, comments, and same-line inline comments remain
 - [ ] Ambiguous managed lines refuse safely with zero mutation
-- [ ] With `CODEX_HOME` set, rules, agents, config, and skills land under it
-- [ ] Skills under the old `~/.agents/skills` location migrate; diverged copies stay conflicts
+- [ ] With `CODEX_HOME` set, rules, agents, config, and skills land under it (nothing for Codex in `~/.agents/skills`)
+- [ ] With the default `CODEX_HOME`, skills land in `~/.agents/skills`; the app's older copies in `~/.codex/skills` are removed by one reviewed update (`.system` stays), and an edited copy stays and is reported
+- [ ] Disabling a harness in Settings changes the next preview only; the update removes the app's copies from a folder no enabled harness reads
 
 ## 8. Settings, workspace picker, harness enablement
 

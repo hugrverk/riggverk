@@ -15,6 +15,7 @@ use serde::{Deserialize, Serialize};
 use crate::artifact_registry::{expand_surface, ArtifactId};
 use crate::setup_fingerprint;
 use crate::setup_lifecycle::SetupSurfaceId;
+use crate::skill_roots::SkillScope;
 
 pub const MANAGED_STATE_SCHEMA_VERSION: u32 = 2;
 pub const MANAGED_STATE_REL: &str = ".agent-workspace/managed-state.json";
@@ -323,8 +324,12 @@ fn refresh_records_matching_source(
     }
 }
 
-/// Collect canonical harness artifact IDs for all managed surfaces.
-pub fn canonical_harness_artifacts(workspace_root: &Path) -> Result<Vec<ArtifactId>, String> {
+/// Collect canonical harness artifact IDs for all managed surfaces. The skill files are those of
+/// the roots in `scope`.
+pub fn canonical_harness_artifacts(
+    workspace_root: &Path,
+    scope: &SkillScope,
+) -> Result<Vec<ArtifactId>, String> {
     let surfaces: Vec<SetupSurfaceId> = SetupSurfaceId::ALL
         .iter()
         .filter(|s| !matches!(s, SetupSurfaceId::WorkspaceBundle))
@@ -333,7 +338,7 @@ pub fn canonical_harness_artifacts(workspace_root: &Path) -> Result<Vec<Artifact
     let mut artifacts = Vec::new();
     let mut seen = HashSet::new();
     for surface in surfaces {
-        for artifact in expand_surface(surface, workspace_root)? {
+        for artifact in expand_surface(surface, workspace_root, scope)? {
             if seen.insert(artifact.clone()) {
                 artifacts.push(artifact);
             }
@@ -342,10 +347,15 @@ pub fn canonical_harness_artifacts(workspace_root: &Path) -> Result<Vec<Artifact
     Ok(artifacts)
 }
 
-/// Logical identities for all current canonical artifacts (from bundled sources).
-pub fn canonical_artifact_identities(bundled_root: &Path) -> Result<HashSet<String>, String> {
+/// Logical identities for all current canonical artifacts (from bundled sources). A recorded
+/// artifact that is not among them is stale: that includes a skill file in a root `scope` no
+/// longer wants.
+pub fn canonical_artifact_identities(
+    bundled_root: &Path,
+    scope: &SkillScope,
+) -> Result<HashSet<String>, String> {
     let mut ids = HashSet::new();
-    for artifact in canonical_harness_artifacts(bundled_root)? {
+    for artifact in canonical_harness_artifacts(bundled_root, scope)? {
         ids.insert(artifact_identity(&artifact));
     }
     for rel in canonical_workspace_file_paths() {
@@ -369,7 +379,8 @@ pub fn compute_bundled_version(
     bundled_root: &Path,
 ) -> Result<String, String> {
     let mut input = Vec::new();
-    for artifact in canonical_harness_artifacts(bundled_root)? {
+    // The fingerprint of the bundle must not move with the settings: every root counts.
+    for artifact in canonical_harness_artifacts(bundled_root, &SkillScope::all())? {
         let digest = setup_fingerprint::artifact_source_digest(&artifact, bundled_root, home)?;
         input.extend_from_slice(artifact_identity(&artifact).as_bytes());
         input.push(0);
