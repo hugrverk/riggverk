@@ -44,7 +44,7 @@ Workspace files are designed to be versioned:
 - `.agent-workspace/workspace.json` — workspace marker (required for the folder to be valid)
 - `README.md`
 
-Keep `.agent-workspace/managed-state.json` and `.agent-workspace/rules-preferences.json` out of Git. They record which files this machine's installs the app owns and which rules files you chose to leave as is. Do not delete them: a missing `managed-state.json` turns files that are not exact bundled copies into conflicts. On a new machine the first install creates them.
+Keep `.agent-workspace/managed-state.json`, `.agent-workspace/rules-preferences.json` and `.agent-workspace/kept-files.json` out of Git. They record which files this machine's installs the app owns, which rules files you chose to leave as is and which skill and agent files you keep. Do not delete them: a missing `managed-state.json` turns files that are not exact bundled copies into conflicts. On a new machine the first install creates them.
 
 ## What not to commit
 
@@ -60,6 +60,7 @@ Keep `.agent-workspace/managed-state.json` and `.agent-workspace/rules-preferenc
 # Machine-local app state
 .agent-workspace/managed-state.json
 .agent-workspace/rules-preferences.json
+.agent-workspace/kept-files.json
 
 # Secrets and credentials
 **/secrets*

@@ -74,6 +74,20 @@ Use fixture files in the isolated `HOME` (`~/.claude/CLAUDE.md`, `~/.codex/AGENT
 - [ ] Malformed markers (duplicate, unpaired, reordered) refuse with zero mutation
 - [ ] Non-empty `AGENTS.override.md` next to Codex rules produces a Codex health warning
 
+## 5b. Skill and agent conflicts (diff, keep mine, hand back)
+
+Use the isolated `HOME`; install the skills and agents first, then edit `~/.claude/skills/tdd/SKILL.md` and `~/.claude/agents/verifier.md`.
+
+- [ ] The edited files are conflicts ("edited since Riggverk wrote it"); the Claude page lists `tdd` and `verifier` under "your files in conflict" with their folder and the harnesses that read it; the skills and agents rows say "N conflicts"
+- [ ] `d` on the skills row opens the diff of `tdd` (yours against bundled, `+`/`-` glyphs, read-only, nothing written); `]` and `[` move between units; `n` closes
+- [ ] A file that differs only in line endings says so; a binary file and a file with a private-key block show no text
+- [ ] `m` asks first; after confirming, the unit is "you manage", the surface no longer counts it as a conflict, `u` leaves the file untouched and `.agent-workspace/kept-files.json` names it; no backup is made
+- [ ] After the bundled file changes (a new release), the unit says "bundled update available"; the file is still not written
+- [ ] `m` on a kept unit hands it back at once and the file is a conflict again
+- [ ] A skill directory that is a symlink, or a directory where a file belongs, is a conflict with no `d` or `m`
+- [ ] A retired skill (not bundled) that you edited and kept survives `u` with all its files; uninstall leaves kept files and `kept-files.json`
+- [ ] The workspace page lists the harness with "you manage N" or "N in conflict" and points at the harness page; `:resolve diff tdd` does what `d` does
+
 ## 6. Rollback and uninstall
 
 - [ ] After `y`, the output strip shows the transaction and takes focus; `z` there (or `:rollback`) runs a dry run and a confirm, then restores the backed-up files
@@ -163,6 +177,10 @@ Use fixture files in the isolated `HOME` (`~/.claude/CLAUDE.md`, `~/.codex/AGENT
 
 ### Rules (Convert, Leave as is, diff)
 - [ ] Block create/update, conflict, convert, leave-as-is passed
+- Notes: ________
+
+### Skill and agent conflicts (diff, keep mine, hand back)
+- [ ] Conflict listing, diff, keep, hand back, blocked files passed
 - Notes: ________
 
 ### Rollback and uninstall

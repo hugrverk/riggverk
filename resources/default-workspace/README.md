@@ -16,7 +16,7 @@ Requires Python 3 on `PATH` (config merges and generators).
 - **agents/**, **agent-specs/** - OpenCode agents and the shared agent bodies.
 - **metadata/** - generated manifests and the history of shipped rules bases.
 - **scripts/** - Python helpers (OpenCode config generator, Codex config merges). The app runs its own bundled copies.
-- **.agent-workspace/** - identity marker and ownership records (`workspace.json`, `managed-state.json`, `rules-preferences.json`). Do not delete. They describe this machine's installs, so leave `managed-state.json` and `rules-preferences.json` out of Git.
+- **.agent-workspace/** - identity marker and ownership records (`workspace.json`, `managed-state.json`, `rules-preferences.json`, `kept-files.json`). Do not delete. They describe this machine's installs, so leave `managed-state.json`, `rules-preferences.json` and `kept-files.json` out of Git.
 
 ## Scripts
 
