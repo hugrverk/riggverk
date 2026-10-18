@@ -23,6 +23,70 @@ It does not drive the Tauri webview, install into a real profile, or read `.env`
 
 CI runs this POSIX check on Ubuntu and macOS. Windows CI runs frontend, build, and Rust format, check, Clippy, and tests, which cover native app path logic. The Bash release check is macOS and Linux only (WSL behaves as Linux); use the app on Windows.
 
+## Cutting a release
+
+Releases are local: the flow does not use GitHub Actions. A release is a zip on GitHub Releases, built, ad hoc signed and uploaded from the owner's Mac by two commands.
+
+Versions are CalVer `YYYY.M.N`, which is valid semver: the year, the month without a leading zero, and a counter inside that month that starts at 1 (`2026.10.1`, `2026.10.2`, `2026.11.1`). Tags are `v<version>`. Other tags (`app-v0.1.0`, `v0.1.0-rc.1`) are ignored. The next version is computed from the tags and today's date, so the counter restarts when the month changes.
+
+Needs: a Mac (`codesign`, `ditto`), `python3` 3.11 or newer first on `PATH` (`scripts/release.sh` stops with a message otherwise), `gh` logged in, Rust, and `npm ci` done.
+
+### 1. Prepare
+
+From a clean `main` that equals `origin/main`:
+
+```bash
+./scripts/release.sh prepare --dry-run   # prints the version, the notes draft and every step; changes nothing
+./scripts/release.sh prepare
+```
+
+`prepare` computes the next version and drafts `release-notes/<version>.md`. It bumps the version in `package.json`, `src-tauri/tauri.conf.json` and `src-tauri/Cargo.toml`, refreshes both lock files (`cargo check`, `npm install --package-lock-only`; it stops if they change anything but the app version), regenerates `src/generated/release-notes.json`, runs the full `scripts/release-check.sh`, commits `chore(release): <version>` on `release/v<version>`, pushes it and opens a pull request. If anything fails before the commit it undoes its local changes and returns to `main`. A dry run still runs `git fetch` and read-only `gh` and `git ls-remote` lookups.
+
+The first release has no CalVer tag to start from, so the draft lists every merged pull request. Use `--since REV` (for example `--since app-v0.1.0`) to start later, and trim by hand.
+
+### 2. Edit the notes
+
+The draft is the pull request titles that were merged into `main` since the previous release tag. Merge commits (`Merge pull request #N ...`) and squash commits that end in `(#N)` are read; direct pushes and rebase merges are not, so add those by hand.
+
+- `feat` goes under **New**, `fix` under **Fixes**, every other type and every title without a type under **Other**. The `type(scope):` prefix is removed, the first letter is capitalised, and `(#N)` is kept for the GitHub page. The release pull request itself is skipped.
+- **Other** starts with a comment saying so: delete the section to keep chores, refactors and docs out of the notes.
+- **Install** is the Gatekeeper hint for the GitHub release page only. The app leaves it out. Keep it in every release.
+- Edit freely, then regenerate the data the app bundles and push:
+
+  ```bash
+  python3 scripts/generate-release-notes.py --write
+  git add release-notes src/generated/release-notes.json && git commit -m "docs(release): edit the notes" && git push
+  ```
+
+  `release-check.sh` fails with this command in the message when the bundled file is stale.
+
+The same file is the GitHub release body and the app's "what's new". The app shows the notes since the version a user last saw once, on the first launch after an update (the overlay of `?`: Escape closes it, `j`/`k` scroll), and `:whatsnew` opens all of them at any time. A fresh install records its version and shows nothing. An install that predates `last_seen_version` also counts as fresh once, so the first update that carries the field shows nothing; every one after it does.
+
+### 3. Publish
+
+Merge the pull request, then on `main` (pulled, nothing else merged in between):
+
+```bash
+./scripts/release.sh publish --dry-run
+./scripts/release.sh publish
+```
+
+`publish` checks that the version files agree, that it is newer than the latest release, that `release-notes/<version>.md` exists and the bundled notes match it, that neither the tag nor the GitHub release exists, and that `main` ends with the release pull request (`--allow-newer` skips that last check; use it only when you know the notes cover what was merged since). Then it builds with `npm run tauri build -- --bundles app`, checks the bundle reports the version, ad hoc signs it (`codesign --force --deep --sign -`) and verifies the signature, zips it with `ditto -c -k --keepParent` as `release/Riggverk-v<version>-macOS.zip` (checking that the signature survives the zip), creates the annotated tag `v<version>`, pushes it and runs `gh release create v<version> <zip> --notes-file release-notes/<version>.md`. The zip is the only upload. It prints the release URL. It does not rerun `release-check.sh`; `prepare` did.
+
+The app is not notarized (there is no Apple Developer ID yet). On first launch macOS says it cannot verify the app: open System Settings, Privacy & Security, and choose Open Anyway. The **Install** section of every release says so.
+
+### Rollback
+
+If a publish went wrong, delete the release and its tag, then publish again (the version in `main` is already bumped, so nothing else changes):
+
+```bash
+gh release delete v<version> --cleanup-tag --yes   # the GitHub release and the remote tag
+git tag -d v<version>                              # the local tag
+./scripts/release.sh publish
+```
+
+A failure after the tag was created prints these commands. A typo in the notes of a published release needs no rollback: `gh release edit v<version> --notes-file release-notes/<version>.md`. If the build itself is wrong, fix it in a pull request and publish with `--allow-newer`, or prepare the next version.
+
 ## Backend runtime smoke
 
 ```bash
@@ -62,7 +126,7 @@ The old `Agent Workspace.app` that an earlier build left in `src-tauri/target/re
 
 The workspace stays at `~/.config/agent-workspace`. The bundle is ad-hoc signed and not notarized, so Gatekeeper and any folder-access prompts apply as for any local build.
 
-Name manual zips `Riggverk-v<version>-<channel>-macOS.zip`. Release notes for testers who still have the old app must say: quit `Agent Workspace` first, then install and launch `Riggverk.app` (it moves your settings and backups on first launch), then move the old app to the Trash.
+Releases are built and zipped by `scripts/release.sh publish` (see [Cutting a release](#cutting-a-release)); name any other manual zip `Riggverk-v<version>-<channel>-macOS.zip`. Release notes for testers who still have the old app must say: quit `Agent Workspace` first, then install and launch `Riggverk.app` (it moves your settings and backups on first launch), then move the old app to the Trash.
 
 ## App data move
 

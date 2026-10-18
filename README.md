@@ -39,6 +39,8 @@ Release verification:
 
 Do not claim a release check passed unless it was run and completed successfully. See `docs/RELEASE.md`.
 
+Releases are cut locally: `./scripts/release.sh prepare` (CalVer version, notes draft, release PR) and `./scripts/release.sh publish` (build, ad hoc sign, zip, GitHub release). See `docs/RELEASE.md`.
+
 ## Workspace ownership
 
 1. The source repository.
