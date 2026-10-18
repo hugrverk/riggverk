@@ -82,7 +82,7 @@ Status pane: **backups** (run count and folder), **last tx** (the transaction `z
 
 ## Harness pages
 
-Codex, OpenCode, Cursor, and Claude each have **targets** (what that harness may receive), **surfaces** (installation state per surface), **runtime** (health facts from the installed files), and **output**. `u` and `p` review that harness only.
+Codex, OpenCode, Cursor, and Claude each have **targets** (what that harness may receive), **surfaces** (installation state per surface), **runtime** (health facts from the installed files; OpenCode also asks its CLI for the version, the default agent and the configured models), and **output**. `u` and `p` review that harness only.
 
 Targets are a multi-select list: Space toggles, the change autosaves, and a target that is off is left out of the plan and shown as `off`. Skills are not a target; they follow the harness. Codex rules, agents, and config are separate targets; `codex_config` starts off.
 
