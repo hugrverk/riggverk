@@ -1,5 +1,5 @@
 {
-  "description": "OpenCode config keys managed by Agent Workspace install/health. User provider blocks, non-playwright MCP servers and agent entries other than the listed built-in agents are preserved.",
+  "description": "OpenCode config keys managed by Agent Workspace install/health. User provider blocks, non-playwright MCP servers and agent entries other than the listed ones are preserved. agent_permissions: built-in agents whose agent.<name>.permission block is managed. subagent_model_roles: bundled subagents whose agent.<role>.model is managed while a subagent model override is set, and removed when it is cleared; nothing else under agent.<role> is managed.",
   "top_level": [
     "$schema",
     "share",
@@ -14,5 +14,6 @@
     "permission"
   ],
   "mcp_servers": ["playwright"],
-  "agent_permissions": ["plan", "explore"]
+  "agent_permissions": ["plan", "explore"],
+  "subagent_model_roles": ["repo-scout", "inspector", "sentinel", "verifier", "scribe"]
 }

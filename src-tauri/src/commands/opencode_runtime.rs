@@ -31,6 +31,9 @@ pub struct OpenCodeRuntimeHealth {
     pub default_agent: Option<String>,
     pub model: Option<String>,
     pub small_model: Option<String>,
+    /// The model all five subagent roles are pinned to in the installed config; `None` when they
+    /// inherit the main model (or do not agree).
+    pub subagent_model: Option<String>,
     pub autoupdate: Option<String>,
     pub snapshot: Option<bool>,
     pub bundled_agent_count: usize,
@@ -133,11 +136,63 @@ const MANAGED_MCP_SERVERS: &[&str] = &["playwright"];
 /// rest of `agent.<name>` (model, prompt, ...) and every other agent name stay user-owned.
 const MANAGED_AGENT_PERMISSIONS: &[&str] = &["plan", "explore"];
 
+/// The bundled subagents (`mode: subagent`) whose `agent.<role>.model` the app manages while a
+/// subagent model override is set (`subagent_model_roles` in the metadata file).
+///
+/// The bundled agent files carry no model, so the entry in `opencode.json` is what pins a role
+/// to the override. Only the `model` field is managed: every other key of `agent.<role>` stays
+/// user-owned, and the entries are removed again when the override is cleared. The primary agent
+/// (`architect`) and OpenCode's own agents are not part of this: they use the main model.
+const SUBAGENT_MODEL_ROLES: &[&str] =
+    &["repo-scout", "inspector", "sentinel", "verifier", "scribe"];
+
 fn agent_permission<'a>(
     config: &'a serde_json::Value,
     name: &str,
 ) -> Option<&'a serde_json::Value> {
     config.get("agent")?.get(name)?.get("permission")
+}
+
+fn agent_model<'a>(config: &'a serde_json::Value, name: &str) -> Option<&'a serde_json::Value> {
+    config.get("agent")?.get(name)?.get("model")
+}
+
+/// The model every subagent role is pinned to in `config`, or `None` when a role has none or the
+/// roles disagree.
+fn shared_subagent_model(config: &serde_json::Value) -> Option<String> {
+    let mut models = SUBAGENT_MODEL_ROLES
+        .iter()
+        .map(|role| agent_model(config, role).and_then(serde_json::Value::as_str));
+    let first = models.next()??;
+    models
+        .all(|model| model == Some(first))
+        .then(|| first.to_string())
+}
+
+/// Remove `agent.<role>.model`, and the `agent.<role>` and `agent` objects it leaves empty.
+/// Anything else a user keeps there is untouched.
+fn remove_agent_model(config: &mut serde_json::Map<String, serde_json::Value>, role: &str) {
+    let Some(agent) = config
+        .get_mut("agent")
+        .and_then(serde_json::Value::as_object_mut)
+    else {
+        return;
+    };
+    let Some(entry) = agent
+        .get_mut(role)
+        .and_then(serde_json::Value::as_object_mut)
+    else {
+        return;
+    };
+    if entry.remove("model").is_none() {
+        return;
+    }
+    if entry.is_empty() {
+        agent.remove(role);
+    }
+    if agent.is_empty() {
+        config.remove("agent");
+    }
 }
 
 pub(crate) fn extract_managed_opencode_config(config: &serde_json::Value) -> serde_json::Value {
@@ -163,6 +218,16 @@ pub(crate) fn extract_managed_opencode_config(config: &serde_json::Value) -> ser
                 let mut entry = serde_json::Map::new();
                 entry.insert("permission".to_string(), permission.clone());
                 agent.insert((*name).to_string(), serde_json::Value::Object(entry));
+            }
+        }
+        for role in SUBAGENT_MODEL_ROLES {
+            if let Some(model) = agent_model(config, role) {
+                let entry = agent
+                    .entry((*role).to_string())
+                    .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
+                if let Some(entry) = entry.as_object_mut() {
+                    entry.insert("model".to_string(), model.clone());
+                }
             }
         }
         if !agent.is_empty() {
@@ -195,7 +260,7 @@ fn ordered_json_eq(a: &serde_json::Value, b: &serde_json::Value) -> bool {
 }
 
 /// Names of the managed keys on which `installed` differs from `rendered`: a top-level key,
-/// `mcp.<server>` or `agent.<name>`, in that order.
+/// `mcp.<server>`, `agent.<name>` or `agent.<role>.model`, in that order.
 ///
 /// Rule order is policy (last match wins) in the global `permission` block and in the managed
 /// agent blocks, so a reordered block counts as different there.
@@ -243,6 +308,15 @@ pub(crate) fn differing_managed_opencode_keys(
         );
         if differs(a.as_ref(), b.as_ref(), true) {
             keys.push(format!("agent.{name}"));
+        }
+    }
+    for role in SUBAGENT_MODEL_ROLES {
+        if differs(
+            agent_model(&installed, role),
+            agent_model(&rendered, role),
+            false,
+        ) {
+            keys.push(format!("agent.{role}.model"));
         }
     }
     keys
@@ -296,6 +370,26 @@ pub(crate) fn merge_managed_opencode_config(
             if let Some(entry_obj) = entry.as_object_mut() {
                 entry_obj.insert("permission".to_string(), permission.clone());
             }
+        }
+    }
+    // A role without a model in `managed` loses its managed one: that is how a cleared override
+    // leaves the installed config.
+    for role in SUBAGENT_MODEL_ROLES {
+        let Some(model) = agent_model(managed, role) else {
+            remove_agent_model(target, role);
+            continue;
+        };
+        let agent = target
+            .entry("agent")
+            .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
+        let Some(agent_obj) = agent.as_object_mut() else {
+            continue;
+        };
+        let entry = agent_obj
+            .entry((*role).to_string())
+            .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
+        if let Some(entry_obj) = entry.as_object_mut() {
+            entry_obj.insert("model".to_string(), model.clone());
         }
     }
     merged
@@ -385,10 +479,33 @@ fn transform_playwright_json(
     }
 }
 
+/// Set `agent.<role>.model` of every subagent role to `model`, keeping the other keys of the
+/// template's `agent` block.
+fn pin_subagent_model(config: &mut serde_json::Map<String, serde_json::Value>, model: &str) {
+    let agent = config
+        .entry("agent")
+        .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
+    let Some(agent) = agent.as_object_mut() else {
+        return;
+    };
+    for role in SUBAGENT_MODEL_ROLES {
+        let entry = agent
+            .entry((*role).to_string())
+            .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
+        if let Some(entry) = entry.as_object_mut() {
+            entry.insert(
+                "model".to_string(),
+                serde_json::Value::String(model.to_string()),
+            );
+        }
+    }
+}
+
 /// Render workspace `templates/opencode.json` the way an install renders it before sync.
 ///
 /// Applies Playwright placeholder transformations and overlays the app-level model override
-/// if present so that the installed config comparison reflects any user model selection.
+/// (`model`, `small_model` and the optional subagent model as `agent.<role>.model` entries) if
+/// present so that the installed config comparison reflects any user model selection.
 pub(crate) fn render_expected_opencode_config(
     template_json: &serde_json::Value,
     home_dir: &Path,
@@ -419,6 +536,9 @@ pub(crate) fn render_expected_opencode_config(
                 "small_model".to_string(),
                 serde_json::Value::String(override_selection.small_model),
             );
+            if !override_selection.subagent_model.is_empty() {
+                pin_subagent_model(obj, &override_selection.subagent_model);
+            }
         }
     }
 
@@ -638,6 +758,7 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> OpenCodeRuntime
     let mut default_agent: Option<String> = None;
     let mut model: Option<String> = None;
     let mut small_model: Option<String> = None;
+    let mut subagent_model: Option<String> = None;
     let mut autoupdate: Option<String> = None;
     let mut snapshot: Option<bool> = None;
 
@@ -777,6 +898,7 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> OpenCodeRuntime
         default_agent = extract_string_field(i_json, &["default_agent"]);
         model = extract_string_field(i_json, &["model"]);
         small_model = extract_string_field(i_json, &["small_model"]);
+        subagent_model = shared_subagent_model(i_json);
         autoupdate = extract_string_field(i_json, &["autoupdate"]);
         snapshot = i_json.get("snapshot").and_then(|v| v.as_bool());
         // Check default_agent
@@ -789,15 +911,21 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> OpenCodeRuntime
 
         // The files cannot say whether a model exists: `apply_cli_probes` checks the set ones
         // against `opencode models`.
-        for (id, label, value) in [
-            ("model", "Model", &model),
-            ("small_model", "Small model", &small_model),
+        for (id, label, value, unset) in [
+            ("model", "Model", &model, "(not set)"),
+            ("small_model", "Small model", &small_model, "(not set)"),
+            (
+                "subagent_model",
+                "Subagent model",
+                &subagent_model,
+                "(inherits model)",
+            ),
         ] {
             checks.push(OpenCodeRuntimeCheck {
                 id: id.into(),
                 label: label.into(),
                 status: if value.is_some() { "unknown" } else { "pass" }.into(),
-                detail: value.clone().unwrap_or_else(|| "(not set)".into()),
+                detail: value.clone().unwrap_or_else(|| unset.into()),
             });
         }
 
@@ -1259,6 +1387,7 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> OpenCodeRuntime
         default_agent,
         model,
         small_model,
+        subagent_model,
         autoupdate,
         snapshot,
         bundled_agent_count,
@@ -1420,6 +1549,7 @@ pub(crate) fn apply_cli_probes(
     let configured = [
         ("model", health.model.clone()),
         ("small_model", health.small_model.clone()),
+        ("subagent_model", health.subagent_model.clone()),
     ];
     if configured.iter().all(|(_, value)| value.is_none()) {
         return;
@@ -1439,19 +1569,20 @@ pub(crate) fn apply_cli_probes(
     };
     for (id, value) in configured {
         let Some(value) = value else { continue };
-        let label = if id == "model" {
-            "Model"
-        } else {
-            "Small model"
+        let (label, note) = match id {
+            "small_model" => (
+                "Small model",
+                "; OpenCode does not pick another small model",
+            ),
+            "subagent_model" => (
+                "Subagent model",
+                "; the subagent roles are pinned to it, not to the main model",
+            ),
+            _ => ("Model", ""),
         };
         let (status, detail) = match &models {
             Ok(listed) if listed.contains(&value) => ("pass", value.clone()),
             Ok(_) => {
-                let note = if id == "small_model" {
-                    "; OpenCode does not pick another small model"
-                } else {
-                    ""
-                };
                 health.warnings.push(format!(
                     "{id} {value} is not listed by opencode models (provider not signed in, or \
                      the model was removed){note}."
@@ -1621,21 +1752,49 @@ pub fn parse_opencode_models_output(output: &str) -> Vec<String> {
     models.into_iter().collect()
 }
 
+/// Where a model value comes from: the app-level override file, or the template.
+const SOURCE_OVERRIDE: &str = "override";
+const SOURCE_BUNDLED: &str = "bundled default";
+
 #[derive(serde::Serialize, Clone, Debug)]
 pub struct OpenCodeModelSelection {
     pub model: String,
     pub small_model: String,
+    /// The model the subagent roles run on; empty while they inherit `model`.
+    pub subagent_model: String,
+    /// `override` or `bundled default`, for `model` and `small_model`. The override file always
+    /// holds both, so they share a source.
+    pub source: String,
+    /// `override` while a subagent model is set, `bundled default` while the roles inherit `model`.
+    pub subagent_source: String,
+}
+
+impl OpenCodeModelSelection {
+    fn bundled(model: String, small_model: String) -> Self {
+        Self {
+            model,
+            small_model,
+            subagent_model: String::new(),
+            source: SOURCE_BUNDLED.to_string(),
+            subagent_source: SOURCE_BUNDLED.to_string(),
+        }
+    }
 }
 
 const DEFAULT_MODEL: &str = "opencode-go/glm-5.2";
 const DEFAULT_SMALL_MODEL: &str = "opencode-go/deepseek-v4.1-flash";
 
 /// App-level model selection override stored outside workspace templates.
+///
+/// `subagent_model` is optional and absent unless set, so a file written by an older app version
+/// reads as "subagents inherit the main model", and a newer file still reads in an older one.
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 struct StoredOpenCodeModelSelection {
     schema_version: u32,
     model: String,
     small_model: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    subagent_model: Option<String>,
 }
 
 /// Resolve the app-level model override file path.
@@ -1705,7 +1864,23 @@ fn read_stored_opencode_model_selection_from_path(
     }
     let model = validate_model_id(&stored.model).ok()?;
     let small_model = validate_model_id(&stored.small_model).ok()?;
-    Some(OpenCodeModelSelection { model, small_model })
+    // A malformed subagent model must not discard the main selection: the roles inherit instead.
+    let subagent_model = stored
+        .subagent_model
+        .and_then(|id| validate_model_id(&id).ok())
+        .unwrap_or_default();
+    let subagent_source = if subagent_model.is_empty() {
+        SOURCE_BUNDLED
+    } else {
+        SOURCE_OVERRIDE
+    };
+    Some(OpenCodeModelSelection {
+        model,
+        small_model,
+        subagent_model,
+        source: SOURCE_OVERRIDE.to_string(),
+        subagent_source: subagent_source.to_string(),
+    })
 }
 
 /// `opencode models` may refresh its provider catalog over the network.
@@ -1803,8 +1978,9 @@ fn run_models_listing(
     Ok(ListAvailableModelsResult { models, warning })
 }
 
-/// Read the current model and small_model.
-/// Priority: 1) app-level override file, 2) workspace `templates/opencode.base.json`, 3) hardcoded defaults.
+/// Read the current model, small_model and subagent model, each with its source.
+/// Priority: 1) app-level override file, 2) workspace `templates/opencode.base.json`, 3) hardcoded
+/// defaults. The template has no subagent model: without an override the subagents inherit `model`.
 #[tauri::command]
 pub fn read_opencode_model_selection() -> Result<OpenCodeModelSelection, String> {
     // 1. Check app-level override file first
@@ -1819,19 +1995,19 @@ pub fn read_opencode_model_selection() -> Result<OpenCodeModelSelection, String>
     let workspace_root = match configured_workspace_path(&settings::load()) {
         Some(p) => p,
         None => {
-            return Ok(OpenCodeModelSelection {
-                model: DEFAULT_MODEL.to_string(),
-                small_model: DEFAULT_SMALL_MODEL.to_string(),
-            });
+            return Ok(OpenCodeModelSelection::bundled(
+                DEFAULT_MODEL.to_string(),
+                DEFAULT_SMALL_MODEL.to_string(),
+            ));
         }
     };
     let base_path = workspace_root.join("templates/opencode.base.json");
 
     if !base_path.is_file() {
-        return Ok(OpenCodeModelSelection {
-            model: DEFAULT_MODEL.to_string(),
-            small_model: DEFAULT_SMALL_MODEL.to_string(),
-        });
+        return Ok(OpenCodeModelSelection::bundled(
+            DEFAULT_MODEL.to_string(),
+            DEFAULT_SMALL_MODEL.to_string(),
+        ));
     }
 
     let content = std::fs::read_to_string(&base_path)
@@ -1852,7 +2028,7 @@ pub fn read_opencode_model_selection() -> Result<OpenCodeModelSelection, String>
         .unwrap_or(DEFAULT_SMALL_MODEL)
         .to_string();
 
-    Ok(OpenCodeModelSelection { model, small_model })
+    Ok(OpenCodeModelSelection::bundled(model, small_model))
 }
 
 /// Validate a model ID in `provider/model` format and return it trimmed.
@@ -1884,7 +2060,8 @@ fn validate_model_id(id: &str) -> Result<String, String> {
     Ok(trimmed.to_string())
 }
 
-/// Update `model` and `small_model` in the app-level override file.
+/// Update `model`, `small_model` and the optional subagent model in the app-level override file.
+/// A missing or empty `subagent_model` means the subagent roles inherit `model`.
 ///
 /// Does NOT mutate workspace templates/opencode.base.json or templates/opencode.json.
 /// The override is stored outside the workspace and applied on the next Install/Update.
@@ -1892,12 +2069,17 @@ fn validate_model_id(id: &str) -> Result<String, String> {
 pub fn update_opencode_model_selection(
     model: String,
     small_model: String,
+    subagent_model: Option<String>,
 ) -> Result<String, String> {
     // Writes files an apply may also write: wait for a running mutation instead of interleaving.
     let _mutation = crate::mutation_lock::acquire();
     // Validate inputs; persist the trimmed values.
     let model = validate_model_id(&model)?;
     let small_model = validate_model_id(&small_model)?;
+    let subagent_model = match subagent_model.as_deref().map(str::trim) {
+        None | Some("") => None,
+        Some(id) => Some(validate_model_id(id)?),
+    };
 
     let override_path = opencode_model_selection_path()?;
 
@@ -1911,6 +2093,7 @@ pub fn update_opencode_model_selection(
         schema_version: 1,
         model: model.clone(),
         small_model: small_model.clone(),
+        subagent_model: subagent_model.clone(),
     };
 
     let content =
@@ -1946,10 +2129,34 @@ pub fn update_opencode_model_selection(
         return Err(format!("failed to save model override: {}", e));
     }
 
+    let subagent_note = match &subagent_model {
+        Some(id) => format!(", subagent_model={id}"),
+        None => ", subagents inherit the model".to_string(),
+    };
     Ok(format!(
-        "Model selection saved. Run Install/Update to apply model={}, small_model={}.",
-        model, small_model
+        "Model selection saved. Run Install/Update to apply model={}, small_model={}{}.",
+        model, small_model, subagent_note
     ))
+}
+
+/// Delete the app-level override file, so the next Install/Update applies the bundled defaults
+/// and removes the subagent `agent.<role>.model` entries. Removing an absent file succeeds.
+///
+/// One `remove_file` is the whole reset: there is no state in which only part of the override
+/// is gone. Installed `opencode.json` is not touched until the next Install/Update.
+#[tauri::command(async)]
+pub fn reset_opencode_model_selection() -> Result<String, String> {
+    let _mutation = crate::mutation_lock::acquire();
+    let override_path = opencode_model_selection_path()?;
+    match std::fs::remove_file(&override_path) {
+        Ok(()) => Ok(
+            "Model override removed. Run Install/Update to apply the bundled defaults.".to_string(),
+        ),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            Ok("No model override to remove.".to_string())
+        }
+        Err(error) => Err(format!("failed to remove model override: {error}")),
+    }
 }
 
 #[cfg(test)]
@@ -3533,6 +3740,30 @@ mod tests {
             string_list(&metadata, "agent_permissions"),
             expect(MANAGED_AGENT_PERMISSIONS)
         );
+        assert_eq!(
+            string_list(&metadata, "subagent_model_roles"),
+            expect(SUBAGENT_MODEL_ROLES)
+        );
+    }
+
+    #[test]
+    fn test_subagent_model_roles_are_exactly_the_bundled_subagents() {
+        let agents_dir =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../resources/default-workspace/agents");
+        let mut subagents: Vec<String> = list_bundled_agents(&agents_dir)
+            .into_iter()
+            .filter(|file| {
+                fs::read_to_string(agents_dir.join(file))
+                    .expect("read bundled agent")
+                    .lines()
+                    .any(|line| line.trim() == "mode: subagent")
+            })
+            .map(|file| file.trim_end_matches(".md").to_string())
+            .collect();
+        subagents.sort();
+        let mut roles: Vec<String> = SUBAGENT_MODEL_ROLES.iter().map(|r| r.to_string()).collect();
+        roles.sort();
+        assert_eq!(roles, subagents);
     }
 
     #[test]
@@ -4183,6 +4414,7 @@ mod tests {
             schema_version: 1,
             model: "new-provider/new-model".to_string(),
             small_model: "new-provider/new-small".to_string(),
+            subagent_model: None,
         };
         let content = serde_json::to_string_pretty(&stored).unwrap();
         fs::write(&override_path, &content).unwrap();
@@ -4654,5 +4886,438 @@ exit 64"#
             assert_eq!(listed.expect("listing").models.len(), 3, "{version}");
             assert_eq!(args.trim(), expected, "{version}");
         }
+    }
+
+    // ── Subagent model override ──
+
+    const ROLES: [&str; 5] = ["repo-scout", "inspector", "sentinel", "verifier", "scribe"];
+
+    /// Write the app-level override of an isolated `home`: the main models of
+    /// `setup_synced_workspace` plus an optional subagent model.
+    fn write_override_for_home(home: &Path, subagent: Option<&str>) -> PathBuf {
+        let path = opencode_model_selection_path_for_home(home).expect("override path");
+        fs::create_dir_all(path.parent().expect("parent")).expect("create app support dir");
+        let stored = StoredOpenCodeModelSelection {
+            schema_version: 1,
+            model: "opencode-go/glm-5.2".to_string(),
+            small_model: "opencode-go/deepseek-v4.1-flash".to_string(),
+            subagent_model: subagent.map(str::to_string),
+        };
+        fs::write(&path, serde_json::to_string_pretty(&stored).expect("json")).expect("write");
+        path
+    }
+
+    fn template_with_plan_block() -> serde_json::Value {
+        serde_json::json!({
+            "model": "opencode-go/glm-5.2",
+            "agent": {"plan": {"permission": {"edit": {"*": "deny"}}}},
+        })
+    }
+
+    #[test]
+    fn test_stored_selection_reads_the_optional_subagent_model() {
+        let dir = temp_root("override-subagent");
+        let read = |content: &str| {
+            let path = write_override_file(&dir, "override.json", content);
+            read_stored_opencode_model_selection_from_path(&path).expect("override reads")
+        };
+
+        let with = read(
+            r#"{"schema_version":1,"model":"a/b","small_model":"c/d","subagent_model":" e/f "}"#,
+        );
+        assert_eq!(with.subagent_model, "e/f");
+        assert_eq!(
+            (with.source.as_str(), with.subagent_source.as_str()),
+            ("override", "override")
+        );
+
+        // A file from an app version without the field: the roles inherit the main model.
+        let without = read(r#"{"schema_version":1,"model":"a/b","small_model":"c/d"}"#);
+        assert_eq!(without.subagent_model, "");
+        assert_eq!(
+            (without.source.as_str(), without.subagent_source.as_str()),
+            ("override", "bundled default")
+        );
+
+        // A malformed subagent model does not discard the main selection.
+        let malformed = read(
+            r#"{"schema_version":1,"model":"a/b","small_model":"c/d","subagent_model":"nope"}"#,
+        );
+        assert_eq!(
+            (malformed.model.as_str(), malformed.subagent_model.as_str()),
+            ("a/b", "")
+        );
+        cleanup(&dir);
+    }
+
+    #[test]
+    fn test_override_without_a_subagent_model_renders_no_agent_entries_for_the_roles() {
+        let home = temp_root("render-no-subagent");
+        write_override_for_home(&home, None);
+        let rendered =
+            render_expected_opencode_config(&template_with_plan_block(), &home).expect("render");
+        cleanup(&home);
+        assert_eq!(json_keys(&rendered["agent"]), ["plan"]);
+    }
+
+    #[test]
+    fn test_subagent_override_renders_agent_model_for_exactly_the_five_roles() {
+        let home = temp_root("render-subagent");
+        write_override_for_home(&home, Some("other/cheap"));
+        let rendered =
+            render_expected_opencode_config(&template_with_plan_block(), &home).expect("render");
+        cleanup(&home);
+
+        let agent = rendered["agent"].as_object().expect("agent block");
+        let mut names: Vec<&str> = agent.keys().map(String::as_str).collect();
+        names.sort_unstable();
+        assert_eq!(
+            names,
+            [
+                "inspector",
+                "plan",
+                "repo-scout",
+                "scribe",
+                "sentinel",
+                "verifier"
+            ],
+            "the five roles and the template's own block; never architect"
+        );
+        for role in ROLES {
+            assert_eq!(
+                agent[role],
+                serde_json::json!({"model": "other/cheap"}),
+                "{role}"
+            );
+        }
+        assert_eq!(
+            agent["plan"],
+            template_with_plan_block()["agent"]["plan"],
+            "the template's block is kept"
+        );
+        // The main model is untouched: the roles pin their own.
+        assert_eq!(rendered["model"], "opencode-go/glm-5.2");
+    }
+
+    #[test]
+    fn test_merge_pins_the_roles_and_keeps_every_other_user_agent_key() {
+        let rendered = serde_json::json!({
+            "agent": {
+                "plan": {"permission": {"edit": {"*": "deny"}}},
+                "repo-scout": {"model": "other/cheap"},
+                "inspector": {"model": "other/cheap"},
+                "sentinel": {"model": "other/cheap"},
+                "verifier": {"model": "other/cheap"},
+                "scribe": {"model": "other/cheap"},
+            }
+        });
+        let installed = serde_json::json!({
+            "agent": {
+                "repo-scout": {"model": "mine/old", "description": "mine", "temperature": 0.9},
+                "plan": {"model": "mine/plan", "permission": {"edit": "allow"}},
+                "architect": {"model": "mine/architect"},
+                "review": {"model": "mine/review"},
+            },
+            "provider": {"mine": {}},
+        });
+
+        let merged =
+            merge_managed_opencode_config(&installed, &extract_managed_opencode_config(&rendered));
+
+        for role in ROLES {
+            assert_eq!(merged["agent"][role]["model"], "other/cheap", "{role}");
+        }
+        assert_eq!(merged["agent"]["repo-scout"]["description"], "mine");
+        assert_eq!(merged["agent"]["repo-scout"]["temperature"], 0.9);
+        assert_eq!(merged["agent"]["plan"]["model"], "mine/plan");
+        assert_eq!(
+            merged["agent"]["plan"]["permission"],
+            rendered["agent"]["plan"]["permission"]
+        );
+        assert_eq!(
+            merged["agent"]["architect"],
+            installed["agent"]["architect"]
+        );
+        assert_eq!(merged["agent"]["review"], installed["agent"]["review"]);
+        assert_eq!(merged["provider"], installed["provider"]);
+        assert!(managed_opencode_keys_match(&merged, &rendered));
+    }
+
+    #[test]
+    fn test_clearing_the_override_removes_only_the_managed_model_entries() {
+        let pinned = serde_json::json!({
+            "agent": {
+                "repo-scout": {"model": "other/cheap", "description": "mine"},
+                "inspector": {"model": "other/cheap"},
+                "sentinel": {"model": "other/cheap"},
+                "verifier": {"model": "other/cheap"},
+                "scribe": {"model": "other/cheap"},
+                "architect": {"model": "mine/architect"},
+            }
+        });
+        // Rendered without the override: the template has no role entries.
+        let cleared = serde_json::json!({"model": "opencode-go/glm-5.2"});
+
+        let merged =
+            merge_managed_opencode_config(&pinned, &extract_managed_opencode_config(&cleared));
+
+        assert_eq!(
+            merged["agent"],
+            serde_json::json!({
+                "repo-scout": {"description": "mine"},
+                "architect": {"model": "mine/architect"},
+            }),
+            "managed models go; the user's own keys, and entries left empty, are handled alone"
+        );
+        assert!(managed_opencode_keys_match(&merged, &cleared));
+
+        // With nothing else under `agent`, the block disappears instead of lingering as `{}`.
+        let only_managed = serde_json::json!({"agent": {"inspector": {"model": "other/cheap"}}});
+        let merged = merge_managed_opencode_config(
+            &only_managed,
+            &extract_managed_opencode_config(&cleared),
+        );
+        assert!(merged.get("agent").is_none(), "{merged}");
+
+        // A malformed user `agent` is left alone.
+        let broken = merge_managed_opencode_config(
+            &serde_json::json!({"agent": "oops"}),
+            &extract_managed_opencode_config(&cleared),
+        );
+        assert_eq!(broken["agent"], "oops");
+    }
+
+    #[test]
+    fn test_differing_keys_name_each_role_whose_model_differs() {
+        let rendered = serde_json::json!({
+            "agent": {
+                "repo-scout": {"model": "other/cheap"},
+                "inspector": {"model": "other/cheap"},
+            }
+        });
+        let installed = serde_json::json!({
+            "agent": {
+                "repo-scout": {"model": "other/cheap", "description": "mine"},
+                "inspector": {"model": "mine/other"},
+                "sentinel": {"model": "mine/sentinel"},
+            }
+        });
+        assert_eq!(
+            differing_managed_opencode_keys(&installed, &rendered),
+            ["agent.inspector.model", "agent.sentinel.model"]
+        );
+        assert!(differing_managed_opencode_keys(&rendered, &rendered).is_empty());
+    }
+
+    /// An installed config as an install would leave it for the current override of `home`.
+    fn install_for(ws: &Path, home: &Path) {
+        let template: serde_json::Value = serde_json::from_str(
+            &fs::read_to_string(ws.join("templates/opencode.json")).expect("snapshot"),
+        )
+        .expect("parse snapshot");
+        let installed_path = home.join(".config/opencode/opencode.json");
+        let installed: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&installed_path).expect("installed"))
+                .expect("parse installed");
+        let rendered = render_expected_opencode_config(&template, home).expect("render");
+        let merged =
+            merge_managed_opencode_config(&installed, &extract_managed_opencode_config(&rendered));
+        fs::write(&installed_path, merged.to_string()).expect("write installed");
+    }
+
+    #[test]
+    fn test_health_follows_the_subagent_override_from_drift_to_applied_to_cleared() {
+        let (ws, home) = setup_synced_workspace("subagent-health");
+        let before = compute_health(&ws, &home);
+
+        // Saved, not yet installed: drift on exactly the five role entries.
+        let override_path = write_override_for_home(&home, Some("other/cheap"));
+        let pending = compute_health(&ws, &home);
+
+        install_for(&ws, &home);
+        let applied = compute_health(&ws, &home);
+        let installed: serde_json::Value = serde_json::from_str(
+            &fs::read_to_string(home.join(".config/opencode/opencode.json")).expect("installed"),
+        )
+        .expect("parse");
+
+        // Cleared, not yet installed: the installed entries now differ from the bundled render.
+        fs::remove_file(&override_path).expect("clear override");
+        let clearing = compute_health(&ws, &home);
+        install_for(&ws, &home);
+        let cleared = compute_health(&ws, &home);
+        let reinstalled =
+            fs::read_to_string(home.join(".config/opencode/opencode.json")).expect("reinstalled");
+        cleanup(&ws);
+        cleanup(&home);
+
+        let role_keys: Vec<String> = ROLES.iter().map(|r| format!("agent.{r}.model")).collect();
+        assert_eq!(before.config_status, "synced");
+        assert_eq!(check_status(&before, "subagent_model"), "pass");
+        assert_eq!(before.subagent_model, None);
+
+        assert_eq!(pending.config_status, "diverged");
+        assert_eq!(sorted(&pending.config_diverged_keys), sorted(&role_keys));
+
+        assert_eq!(
+            applied.config_status, "synced",
+            "{:?}",
+            applied.config_diverged_keys
+        );
+        assert_eq!(applied.subagent_model.as_deref(), Some("other/cheap"));
+        assert_eq!(check_status(&applied, "subagent_model"), "unknown");
+        for role in ROLES {
+            assert_eq!(installed["agent"][role]["model"], "other/cheap", "{role}");
+        }
+        assert!(installed["agent"].get("architect").is_none());
+
+        assert_eq!(clearing.config_status, "diverged");
+        assert_eq!(sorted(&clearing.config_diverged_keys), sorted(&role_keys));
+
+        assert_eq!(cleared.config_status, "synced");
+        assert_eq!(cleared.subagent_model, None);
+        assert!(
+            !reinstalled.contains("other/cheap") && !reinstalled.contains("\"agent\""),
+            "{reinstalled}"
+        );
+    }
+
+    fn sorted(keys: &[String]) -> Vec<String> {
+        let mut keys = keys.to_vec();
+        keys.sort();
+        keys
+    }
+
+    fn check_status(health: &OpenCodeRuntimeHealth, id: &str) -> String {
+        health
+            .checks
+            .iter()
+            .find(|check| check.id == id)
+            .unwrap_or_else(|| panic!("check {id}"))
+            .status
+            .clone()
+    }
+
+    #[test]
+    fn test_roles_that_disagree_have_no_shared_subagent_model() {
+        let mut config = serde_json::json!({"agent": {}});
+        for role in ROLES {
+            config["agent"][role] = serde_json::json!({"model": "other/cheap"});
+        }
+        assert_eq!(
+            shared_subagent_model(&config).as_deref(),
+            Some("other/cheap")
+        );
+        config["agent"]["scribe"]["model"] = serde_json::json!("mine/other");
+        assert_eq!(shared_subagent_model(&config), None);
+        config["agent"]["scribe"] = serde_json::json!({});
+        assert_eq!(shared_subagent_model(&config), None);
+        assert_eq!(shared_subagent_model(&serde_json::json!({})), None);
+    }
+
+    #[test]
+    fn test_rollback_merge_restores_and_removes_the_role_models() {
+        // Rollback merges the managed projection of the backup into the current file.
+        let pinned = serde_json::json!({"agent": {"inspector": {"model": "other/cheap"}}});
+        let plain = serde_json::json!({"agent": {"custom": {"model": "mine/custom"}}});
+
+        // The apply pinned the roles, the backup had none: they go again.
+        let current = merge_managed_opencode_config(
+            &plain,
+            &extract_managed_opencode_config(&serde_json::json!({
+                "agent": {"inspector": {"model": "other/cheap"}}
+            })),
+        );
+        let rolled_back =
+            merge_managed_opencode_config(&current, &extract_managed_opencode_config(&plain));
+        assert_eq!(rolled_back["agent"], plain["agent"]);
+
+        // The apply cleared the roles, the backup had them: they come back.
+        let restored =
+            merge_managed_opencode_config(&plain, &extract_managed_opencode_config(&pinned));
+        assert_eq!(restored["agent"]["inspector"]["model"], "other/cheap");
+        assert_eq!(restored["agent"]["custom"], plain["agent"]["custom"]);
+    }
+
+    /// A synced workspace and home whose installed config is pinned to `subagent` (or not).
+    #[cfg(unix)]
+    fn probe_with_subagent(
+        name: &str,
+        subagent: Option<&str>,
+        stub: &Path,
+    ) -> OpenCodeRuntimeHealth {
+        let (ws, home) = setup_synced_workspace(name);
+        if subagent.is_some() {
+            write_override_for_home(&home, subagent);
+            install_for(&ws, &home);
+        }
+        let mut health = compute_health(&ws, &home);
+        apply_cli_probes(&mut health, Some(stub), LIMITS);
+        cleanup(&ws);
+        cleanup(&home);
+        health
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_probes_check_the_subagent_model_against_the_listing() {
+        let dir = temp_root("probe-subagent-ok");
+        let stub = health_stub(
+            &dir,
+            "1.19.3",
+            0,
+            &[
+                "opencode-go/glm-5.2",
+                "opencode-go/deepseek-v4.1-flash",
+                "other/cheap",
+            ],
+        );
+        let listed = probe_with_subagent("probe-subagent-ok", Some("other/cheap"), &stub);
+        cleanup(&dir);
+        assert_eq!(check_status(&listed, "subagent_model"), "pass");
+        assert!(listed.warnings.is_empty(), "{:?}", listed.warnings);
+
+        let dir = temp_root("probe-subagent-missing");
+        let stub = health_stub(&dir, "1.19.3", 0, &GOOD_MODELS);
+        let missing = probe_with_subagent("probe-subagent-missing", Some("other/cheap"), &stub);
+        cleanup(&dir);
+        let check = missing
+            .checks
+            .iter()
+            .find(|c| c.id == "subagent_model")
+            .expect("check");
+        assert_eq!(check.status, "warn");
+        assert!(check.detail.contains("other/cheap"), "{}", check.detail);
+        assert_eq!(missing.warnings.len(), 1, "{:?}", missing.warnings);
+        assert!(
+            missing.warnings[0].starts_with("subagent_model other/cheap is not listed"),
+            "{}",
+            missing.warnings[0]
+        );
+        assert!(
+            missing.warnings[0].contains("subagent roles are pinned to it"),
+            "{}",
+            missing.warnings[0]
+        );
+        // The main models are listed, so only the subagent model is reported.
+        assert_eq!(check_status(&missing, "model"), "pass");
+        assert_eq!(check_status(&missing, "small_model"), "pass");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_probes_do_not_look_for_a_subagent_model_that_is_not_set() {
+        let dir = temp_root("probe-subagent-unset");
+        let stub = health_stub(&dir, "1.19.3", 0, &GOOD_MODELS);
+        let health = probe_with_subagent("probe-subagent-unset", None, &stub);
+        cleanup(&dir);
+        let check = health
+            .checks
+            .iter()
+            .find(|c| c.id == "subagent_model")
+            .expect("check");
+        assert_eq!(check.status, "pass");
+        assert_eq!(check.detail, "(inherits model)");
+        assert!(health.warnings.is_empty(), "{:?}", health.warnings);
     }
 }
