@@ -560,7 +560,8 @@ describe("rules conversion (v, y)", () => {
     const { p } = await openPreview();
     press("Enter");
     expect(invokeMock).not.toHaveBeenCalledWith("apply_rules_conversion", expect.anything());
-    fireEvent.click(statusBar().getByRole("button", { name: /apply/ }));
+    // The review pane's hints reach the status bar once it has focus, which lags a tick on a loaded runner.
+    fireEvent.click(await statusBar().findByRole("button", { name: /apply/ }));
     await waitFor(() => expect(p.onApplied).toHaveBeenCalledTimes(1));
   });
 
