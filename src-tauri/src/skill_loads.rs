@@ -31,6 +31,8 @@ use crate::skill_roots::{readers, ReadFolder, SkillRoot};
 pub const MAX_SKILL_MD_BYTES: u64 = 1024 * 1024;
 /// Subfolders looked at per skills folder; further ones are counted as skipped.
 const MAX_ENTRIES_PER_FOLDER: usize = 1000;
+/// `SKILL.md` bytes read per skills folder; a file that would pass it is counted as skipped.
+const MAX_BYTES_PER_FOLDER: u64 = 32 * 1024 * 1024;
 /// Longest skill name shown; the name comes from a file the user controls.
 const MAX_NAME_CHARS: usize = 80;
 /// Hex digits of the content hash shown for a copy.
@@ -292,6 +294,7 @@ fn scan_folder(path: &Path, home: &Path, home_canonical: &Path) -> FolderScan {
     names.sort();
 
     let mut found = Vec::new();
+    let mut read_bytes = 0u64;
     for dir_name in names {
         let dir = path.join(&dir_name);
         // No SKILL.md (or a dangling link): not a skill folder, nothing to report.
@@ -308,10 +311,15 @@ fn scan_folder(path: &Path, home: &Path, home_canonical: &Path) -> FolderScan {
         if !meta.is_file() {
             continue;
         }
+        if read_bytes.saturating_add(meta.len()) > MAX_BYTES_PER_FOLDER {
+            skipped += 1;
+            continue;
+        }
         let Some(bytes) = read_capped(&canonical) else {
             skipped += 1;
             continue;
         };
+        read_bytes += bytes.len() as u64;
         let text = String::from_utf8_lossy(&bytes);
         let name = frontmatter_name(&text).unwrap_or_else(|| clean_name(&dir_name));
         found.push(Found {
@@ -325,7 +333,7 @@ fn scan_folder(path: &Path, home: &Path, home_canonical: &Path) -> FolderScan {
 
     let note = (skipped > 0).then(|| {
         format!(
-            "{skipped} not read (a link outside your home folder, a SKILL.md over 1 MiB, or too many folders)"
+            "{skipped} not read (a link outside your home folder, a SKILL.md over 1 MiB, or more than the app reads from one folder)"
         )
     });
     FolderScan {
@@ -1052,6 +1060,36 @@ mod tests {
         let loads = fixture.loads(&[C]);
         let note = of(&loads, C).folders[0].note.clone().unwrap_or_default();
         assert!(note.starts_with("3 not read"), "{note}");
+    }
+
+    #[test]
+    fn a_folder_stops_being_read_after_its_byte_budget() {
+        let fixture = Fixture::new("budget");
+        let filler = |name: &str| {
+            let head = format!("---\nname: {name}\n---\n");
+            format!(
+                "{head}{}",
+                "a".repeat(MAX_SKILL_MD_BYTES as usize - head.len())
+            )
+        };
+        let count = (MAX_BYTES_PER_FOLDER / MAX_SKILL_MD_BYTES) as usize;
+        for index in 0..count + 2 {
+            let name = format!("s{index:02}");
+            fixture.skill(".claude/skills", &name, &filler(&name));
+        }
+        let loads = fixture.loads(&[C]);
+        let claude = of(&loads, C);
+        assert_eq!(
+            claude.skills.len(),
+            count,
+            "the files up to the budget are read"
+        );
+        assert!(claude
+            .skills
+            .iter()
+            .all(|skill| skill.name.as_str() < "s32"));
+        let note = claude.folders[0].note.clone().unwrap_or_default();
+        assert!(note.starts_with("2 not read"), "{note}");
     }
 
     #[test]
