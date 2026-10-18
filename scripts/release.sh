@@ -156,6 +156,7 @@ cleanup_prepare() {
     git restore --staged --worktree -- "${prepare_tracked_paths[@]}" || true
     git rm --quiet --cached --ignore-unmatch -- "$notes_file" || true
     rm -f "$notes_file"
+    rmdir release-notes 2>/dev/null || true
     git switch --quiet main && git branch --quiet -D "$branch" || true
   elif [ "$status" -ne 0 ] && [ "$stage" = "committed" ]; then
     printf '\nprepare failed after the commit on %s. Nothing is lost: finish by hand with\n' "$branch" >&2
@@ -322,7 +323,7 @@ cleanup_publish() {
   exit "$status"
 }
 
-app_bundle="src-tauri/target/release/bundle/macos/Riggverk.app"
+app_bundle="${CARGO_TARGET_DIR:-$repo_root/src-tauri/target}/release/bundle/macos/Riggverk.app"
 
 build_app() {
   rm -rf "$app_bundle"

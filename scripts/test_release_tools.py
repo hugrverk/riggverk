@@ -30,6 +30,8 @@ def load_module(name: str, filename: str):
 tools = load_module("release_tools", "release_tools.py")
 generator = load_module("generate_release_notes", "generate-release-notes.py")
 
+# Never the version in the tree, so a bump always changes something (the tree holds the release after prepare).
+FAR_VERSION = "2099.1.1"
 NON_CALVER_TAGS = ["app-v0.1.0", "v0.1.0-alpha", "v0.1.0-rc.1", "v2026.10.1-rc.1", "v2026.010.1", "v2026.13.1", "v2026.10.0"]
 
 
@@ -208,7 +210,7 @@ class VersionBumpTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = self.copy_tree(tmp)
             current = tools.check_versions(root=root)
-            tools.set_version("2026.10.1", root)
+            tools.set_version(FAR_VERSION, root)
             for relative in (tools.PACKAGE_JSON, tools.TAURI_CONF, tools.CARGO_TOML):
                 before = (ROOT / relative).read_text(encoding="utf-8").splitlines()
                 after = (root / relative).read_text(encoding="utf-8").splitlines()
@@ -216,16 +218,16 @@ class VersionBumpTests(unittest.TestCase):
                 self.assertEqual(len(before), len(after), relative)
                 self.assertEqual(len(changed), 1, relative)
                 self.assertIn(current, changed[0][0])
-                self.assertIn("2026.10.1", changed[0][1])
+                self.assertIn(FAR_VERSION, changed[0][1])
             versions = tools.read_versions(root)
-            self.assertEqual(versions[tools.PACKAGE_JSON], "2026.10.1")
-            self.assertEqual(versions[tools.TAURI_CONF], "2026.10.1")
-            self.assertEqual(versions[tools.CARGO_TOML], "2026.10.1")
+            self.assertEqual(versions[tools.PACKAGE_JSON], FAR_VERSION)
+            self.assertEqual(versions[tools.TAURI_CONF], FAR_VERSION)
+            self.assertEqual(versions[tools.CARGO_TOML], FAR_VERSION)
 
     def test_check_versions_flags_files_that_disagree(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = self.copy_tree(tmp)
-            tools.set_version("2026.10.1", root)
+            tools.set_version(FAR_VERSION, root)
             with self.assertRaises(tools.ReleaseError) as raised:
                 tools.check_versions(root=root)
             self.assertIn("differs", str(raised.exception))
