@@ -17,6 +17,12 @@
       "sha256:86141f704cbe5bb637f7156bbbf09a7dc87e69991fa91a8c3ff989a1cf2e3355",
       "sha256:a0b204f0655a509cf3f87e220aeec2ee8605bd3530e59d5de403ddd325ceeeff"
     ],
+    "copilot": [
+      "sha256:4b212fd5af5d9c99350af3ccc96e140fa26077b2f629b37b4901835b2c83cf90"
+    ],
+    "kilo": [
+      "sha256:b47f1d3556497c2c96adf34546fed33bcd182d736592d422743d0133c0d0bae3"
+    ],
     "opencode": [
       "sha256:2500806e179ddc8316b0309c0dbbee6338ba0fa505b5524c1c8fad90f3fcf2c5",
       "sha256:4283ee24752fb67dbcfdfa9bac26f252bc5d9fae2a8c0b5cfedc74a8a71d4bcb",
@@ -25,6 +31,9 @@
       "sha256:ab51e4daa3948cc67cd707af537b72b49c1c7bf40f4bbf663a068fe40d35e0f3",
       "sha256:ac3b6ea8308a64b99798de28436780768032fa325681f290728d93c3eb463de8",
       "sha256:f79890c763d6d48547fd6412d84a6e57c3be12c9ad01ff9f7799a6965c486382"
+    ],
+    "pi": [
+      "sha256:e0a9f760fdf7663aed02e2c36271ea59d150328d9754a58842e0f9e787bef53b"
     ]
   },
   "version": 1
