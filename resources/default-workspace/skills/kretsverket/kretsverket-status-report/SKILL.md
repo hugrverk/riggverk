@@ -15,10 +15,10 @@ Done when: the report is written to `.agent-reports/rapport/` in the Kretsverket
 
 ## Bundled files
 
-Installed harness skills contain only this file. The template and the verifier live in the Agent Workspace folder (default `~/.config/agent-workspace`, see Settings → workspace), or under `resources/default-workspace/` in an agent-workspace checkout:
+The template and the verifier are installed next to this `SKILL.md`; `<skill-dir>` below is the directory that holds it:
 
-- `skills/kretsverket/kretsverket-status-report/assets/report-template.html`: the approved report from 2026-10-13. It carries the design, structure, section ids, motion and no-JS handling. Every fact, number, date and name in it is from 2026-10-13; replace all of them on each use and never reuse one.
-- `skills/kretsverket/kretsverket-status-report/scripts/verify-report.mjs`: the Playwright check (see Verify).
+- `<skill-dir>/assets/report-template.html`: the approved report from 2026-10-13. It carries the design, structure, section ids, motion and no-JS handling. Every fact, number, date and name in it is from 2026-10-13; replace all of them on each use and never reuse one.
+- `<skill-dir>/scripts/verify-report.mjs`: the Playwright check (see Verify).
 
 ## Sources
 
@@ -85,7 +85,7 @@ Swedish, plain and direct, for a reader who is not a developer. Short sentences.
 Copy the verifier next to the report so `playwright` resolves from Kretsverket's `node_modules`, then run it from the Kretsverket root:
 
 ```bash
-cp "<workspace>/skills/kretsverket/kretsverket-status-report/scripts/verify-report.mjs" .agent-reports/rapport/
+cp "<skill-dir>/scripts/verify-report.mjs" .agent-reports/rapport/
 node .agent-reports/rapport/verify-report.mjs .agent-reports/rapport/kretsverket-lagesrapport-<YYYY-MM-DD>.html
 ```
 

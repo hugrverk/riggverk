@@ -23,7 +23,7 @@ Do not duplicate full `SKILL.md` content here. This file is an index for choosin
 | `retro` | User-invoked only (`/retro`): reviewing a named coding session and proposing ranked, evidence-traced improvements to steering files, checks, and tooling. Proposals only. |
 | `release-check` | Running pre-merge or pre-deploy readiness checks, including tests, migrations, env risk, smoke routes, and rollback. |
 | `screenshot-review` | Reviewing supplied UI screenshots before implementation or for responsive/layout critique. |
-| `security-audit` | An explicit full codebase security audit or pen test: Cloudflare's six-phase workflow with independent verification and validated `findings.json`. Vendored (MIT); companion files and validators ship in `skills/security-audit/`. |
+| `security-audit` | An explicit full codebase security audit or pen test: Cloudflare's six-phase workflow with independent verification and validated `findings.json`. Vendored (MIT); companion files and validators install next to its `SKILL.md`. |
 | `security-review` | Reviewing auth, authorization, input, secrets, uploads, API endpoints, payments, shell execution, or sensitive data. |
 | `tdd` | Using a narrow red-green-refactor loop for behavior changes, fixes, regressions, and tests. |
 | `zoom-out` | Explaining unfamiliar code in broader system context before editing. |
@@ -97,11 +97,19 @@ Each `SKILL.md` frontmatter has `name` and `description` plus these fields:
 
 Claude-only frontmatter keys sit directly in the skill's frontmatter: `context`, `agent`, `background`, and `allowed-tools` (for example `release-check` runs in a forked `verifier` context on Claude Code, and `handoff` and `release-check` pre-approve the read-only commands behind their `!` state injection). Codex and OpenCode ignore them. A skill that sets one also carries a `### Claude Code` notes section (see below).
 
-`targets` expands the managed skill surface for each harness. Destination paths remain fixed per harness: the same `SKILL.md` installs flat to each harness skill root as `<harness-skill-root>/<name>/SKILL.md`. Other metadata fields are operator guidance only.
+`targets` expands the managed skill surface for each harness. Destination folders remain fixed per harness: the skill installs flat to each harness skill root as `<harness-skill-root>/<name>/`, with its `SKILL.md` and every supporting file in it. Other metadata fields are operator guidance only.
 
 ## Description standard
 
 The `description` is the only selection signal Codex, OpenCode, and Cursor see, so it carries the triggers. Format: one plain line of at most 300 characters, `<what>. Use when <concrete triggers>. Not for <nearest sibling> (<sibling-name>).` The `Not for` clause is optional. Avoid `: ` and ` #` in the text, since the value is written as a plain YAML scalar. Each skill also states a one-line `Done when:` exit criterion in its body. `scripts/check-skill-routing.py` lints these rules.
+
+## Supporting files
+
+Files next to a `SKILL.md` (references, schemas, templates, scripts) install with the skill, at the same relative paths, so a skill can say "read `HUNTING.md`" or "run `scripts/verify-report.mjs`" and mean the file next to it. `security-audit` carries 19 such files and `kretsverket-status-report` carries `assets/report-template.html` and `scripts/verify-report.mjs`.
+
+Rules for the files in a skill directory in the bundle: regular files only (no symlinks), names of letters, digits, `.`, `_` and `-` that do not start with a dot, at most four path levels, at most 64 files and 2 MiB in total, at most 1 MiB per file, and no `SKILL.md` below the skill's own. Dot files are ignored. A skill that breaks a rule installs nothing until it is fixed. Write paths in a skill relative to its directory; never point a skill at the Agent Workspace folder, since the installed copy lives in the harness skill folder.
+
+Each file is owned on its own. An update rewrites only the files that differ, a file you edited is reported as a conflict and kept while its siblings still update, and removing a skill removes the app's files and the directories that become empty, not files you added.
 
 ## One SKILL.md for every harness
 
@@ -121,6 +129,6 @@ In the source repository `python3 scripts/check-skill-routing.py` validates ever
 
 ## Installing skills
 
-In the app, press `u` on a harness page and confirm with `y`. The install covers the shared `SKILL.md` of the whole bundled catalog for that harness, globally, in flat single-file layout. Skills are not gated by target toggles and always come from the app's bundle: a skill you add to the runtime workspace is not installed, and a personal skill belongs directly in the harness skill folder, where unknown skills are preserved.
+In the app, press `u` on a harness page and confirm with `y`. The install covers each skill of the whole bundled catalog for that harness, globally, as a flat directory: the shared `SKILL.md` and its supporting files. Skills are not gated by target toggles and always come from the app's bundle: a skill you add to the runtime workspace is not installed, and a personal skill belongs directly in the harness skill folder, where unknown skills are preserved.
 
 Some harnesses also scan other harnesses' skill folders (for example OpenCode and Cursor read `~/.claude/skills`). If you install for several harnesses, a skill can be listed more than once there; every copy is the same file, so precedence does not change what the model reads.

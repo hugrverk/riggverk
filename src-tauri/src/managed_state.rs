@@ -74,7 +74,37 @@ pub fn read_managed_state(workspace_root: &Path) -> Option<ManagedState> {
     {
         return None;
     }
-    Some(state)
+    Some(normalize_identities(state))
+}
+
+/// Identity under which a record is looked up today. Older versions recorded the `SKILL.md` of a
+/// skill under a per-harness identity; the same file is now a `SkillFile`. Without this, such a
+/// record would look stale next to the wanted `SkillFile` at the same destination, and the plan
+/// would both update and remove one file.
+fn current_identity(identity: &str) -> String {
+    crate::managed_bootstrap::artifact_from_identity(identity)
+        .ok()
+        .and_then(|artifact| artifact.current_equivalent())
+        .map_or_else(
+            || identity.to_string(),
+            |current| artifact_identity(&current),
+        )
+}
+
+/// Records under legacy identities move to their current identity. When both identities of one
+/// file are present the first record wins.
+fn normalize_identities(mut state: ManagedState) -> ManagedState {
+    let mut seen = HashSet::new();
+    state.artifacts = state
+        .artifacts
+        .into_iter()
+        .map(|mut record| {
+            record.identity = current_identity(&record.identity);
+            record
+        })
+        .filter(|record| seen.insert(record.identity.clone()))
+        .collect();
+    state
 }
 
 /// Atomic write with backup of the previous state file when present.
@@ -389,6 +419,109 @@ mod tests {
         write_managed_state_atomic(&root, &state).unwrap();
         let read = read_managed_state(&root).expect("read back");
         assert_eq!(read, state);
+    }
+
+    fn skill_md(root: crate::skill_roots::SkillRoot, name: &str) -> ArtifactId {
+        ArtifactId::skill_md(
+            root,
+            crate::artifact_registry::SkillName::new(name).unwrap(),
+        )
+    }
+
+    fn record(identity: &str, bytes: &[u8]) -> ManagedArtifactRecord {
+        ManagedArtifactRecord {
+            identity: identity.to_string(),
+            hash: crate::stable_digest::bytes(bytes),
+            surface: Some("claude_skills".into()),
+        }
+    }
+
+    #[test]
+    fn records_under_legacy_skill_identities_are_read_under_the_skill_file_identity() {
+        use crate::skill_roots::SkillRoot;
+        let root = temp_dir("legacy-identities");
+        let cases = [
+            ("ClaudeSkill", SkillRoot::Claude),
+            ("OpenCodeSkill", SkillRoot::OpenCode),
+            ("CodexSkill", SkillRoot::CodexHome),
+            ("CursorSkill", SkillRoot::Cursor),
+            ("CodexLegacySkill", SkillRoot::Agents),
+        ];
+        let mut artifacts: Vec<ManagedArtifactRecord> = cases
+            .iter()
+            .map(|(variant, _)| record(&format!(r#"{{"type":"{variant}","name":"tdd"}}"#), b"tdd"))
+            .collect();
+        artifacts.push(record("workspace:file:README.md", b"readme"));
+        artifacts.push(record(
+            &artifact_identity(&ArtifactId::ClaudeRules),
+            b"rules",
+        ));
+        write_managed_state_atomic(
+            &root,
+            &ManagedState {
+                schema_version: MANAGED_STATE_SCHEMA_VERSION,
+                bundled_version: crate::stable_digest::bytes(b"bundle"),
+                artifacts,
+            },
+        )
+        .unwrap();
+
+        let read = read_managed_state(&root).expect("state");
+        let identities: Vec<&str> = read
+            .artifacts
+            .iter()
+            .map(|record| record.identity.as_str())
+            .collect();
+        for (_, skill_root) in &cases {
+            let current = artifact_identity(&skill_md(*skill_root, "tdd"));
+            assert!(identities.contains(&current.as_str()), "{current}");
+        }
+        assert!(identities.contains(&"workspace:file:README.md"));
+        assert!(identities.contains(&artifact_identity(&ArtifactId::ClaudeRules).as_str()));
+        assert_eq!(read.artifacts.len(), 7);
+        assert!(
+            read.artifacts
+                .iter()
+                .all(|record| !record.identity.contains("Skill\",")),
+            "no legacy identity is left: {identities:?}"
+        );
+        // The hash and surface of the record are untouched.
+        let claude = artifact_identity(&skill_md(SkillRoot::Claude, "tdd"));
+        let kept = read
+            .artifacts
+            .iter()
+            .find(|r| r.identity == claude)
+            .unwrap();
+        assert_eq!(kept.hash, crate::stable_digest::bytes(b"tdd"));
+        assert_eq!(kept.surface.as_deref(), Some("claude_skills"));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn when_a_file_is_recorded_under_both_identities_the_first_record_wins() {
+        use crate::skill_roots::SkillRoot;
+        let root = temp_dir("both-identities");
+        let current = artifact_identity(&skill_md(SkillRoot::Claude, "tdd"));
+        write_managed_state_atomic(
+            &root,
+            &ManagedState {
+                schema_version: MANAGED_STATE_SCHEMA_VERSION,
+                bundled_version: crate::stable_digest::bytes(b"bundle"),
+                artifacts: vec![
+                    record(r#"{"type":"ClaudeSkill","name":"tdd"}"#, b"first"),
+                    record(&current, b"second"),
+                ],
+            },
+        )
+        .unwrap();
+        let read = read_managed_state(&root).expect("state");
+        assert_eq!(read.artifacts.len(), 1);
+        assert_eq!(read.artifacts[0].identity, current);
+        assert_eq!(
+            read.artifacts[0].hash,
+            crate::stable_digest::bytes(b"first")
+        );
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]

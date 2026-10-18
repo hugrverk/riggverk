@@ -325,6 +325,114 @@ pub fn skill_names_for_harness(
         .collect())
 }
 
+/// Discover the catalog skills that target `harness`, with the same failure rules as
+/// [`skill_names_for_harness`].
+pub fn skills_for_harness(
+    workspace_root: &Path,
+    harness: &str,
+) -> Result<Vec<DiscoveredSkill>, String> {
+    if !VALID_SKILL_AGENTS.contains(&harness) {
+        return Err(format!("invalid harness agent: {harness}"));
+    }
+    let catalog = discover_skill_catalog(workspace_root).map_err(|e| e.message().to_string())?;
+    Ok(catalog
+        .into_iter()
+        .filter(|s| s.targets.iter().any(|t| t == harness))
+        .collect())
+}
+
+/// Most supporting files one skill may carry.
+pub const MAX_SUPPORT_FILES: usize = 64;
+/// Most bytes all supporting files of one skill may add up to.
+pub const MAX_SUPPORT_TOTAL_BYTES: u64 = 2 * 1024 * 1024;
+/// Largest single supporting file.
+pub const MAX_SUPPORT_FILE_BYTES: u64 = 1024 * 1024;
+/// Most path components of a supporting file below the skill directory (`assets/a/b/c.txt`).
+pub const MAX_SUPPORT_DEPTH: usize = 4;
+
+/// Supporting files installed beside the `SKILL.md` of the skill in `skill_dir`: the regular
+/// files below it, as `/`-separated paths relative to the directory, sorted.
+///
+/// Dot entries are skipped. A symlink, any other non-regular entry, a nested `SKILL.md`, a name
+/// the installer cannot represent, or a skill over the limits above is an error: a bundled skill
+/// that breaks them is a packaging mistake, and nothing of it is installed.
+pub fn skill_support_files(skill_dir: &Path) -> Result<Vec<String>, String> {
+    let mut files = Vec::new();
+    let mut total_bytes = 0u64;
+    scan_support_dir(skill_dir, "", 1, &mut files, &mut total_bytes)?;
+    files.sort();
+    Ok(files)
+}
+
+fn scan_support_dir(
+    dir: &Path,
+    prefix: &str,
+    depth: usize,
+    files: &mut Vec<String>,
+    total_bytes: &mut u64,
+) -> Result<(), String> {
+    let entries = fs::read_dir(dir).map_err(|e| format!("cannot read {}: {e}", dir.display()))?;
+    for entry in entries {
+        let entry = entry.map_err(|e| format!("read error in {}: {e}", dir.display()))?;
+        let name = entry
+            .file_name()
+            .into_string()
+            .map_err(|_| format!("non-UTF-8 file name in {}", dir.display()))?;
+        if name.starts_with('.') {
+            continue;
+        }
+        let path = entry.path();
+        if depth > MAX_SUPPORT_DEPTH {
+            return Err(format!(
+                "supporting file nested deeper than {MAX_SUPPORT_DEPTH} levels: {}",
+                path.display()
+            ));
+        }
+        let rel = format!("{prefix}{name}");
+        let file_type = entry
+            .file_type()
+            .map_err(|e| format!("file type error for {}: {e}", path.display()))?;
+        if file_type.is_symlink() {
+            return Err(format!("refusing symlink in skill: {}", path.display()));
+        }
+        if file_type.is_dir() {
+            scan_support_dir(&path, &format!("{rel}/"), depth + 1, files, total_bytes)?;
+            continue;
+        }
+        if !file_type.is_file() {
+            return Err(format!(
+                "refusing non-regular file in skill: {}",
+                path.display()
+            ));
+        }
+        if name.eq_ignore_ascii_case("SKILL.md") {
+            if depth == 1 {
+                continue;
+            }
+            return Err(format!("nested SKILL.md in skill: {}", path.display()));
+        }
+        let len = entry
+            .metadata()
+            .map_err(|e| format!("cannot inspect {}: {e}", path.display()))?
+            .len();
+        if len > MAX_SUPPORT_FILE_BYTES {
+            return Err(format!(
+                "supporting file over {MAX_SUPPORT_FILE_BYTES} bytes: {}",
+                path.display()
+            ));
+        }
+        *total_bytes += len;
+        if files.len() >= MAX_SUPPORT_FILES || *total_bytes > MAX_SUPPORT_TOTAL_BYTES {
+            return Err(format!(
+                "skill has more than {MAX_SUPPORT_FILES} supporting files or {MAX_SUPPORT_TOTAL_BYTES} bytes: {}",
+                dir.display()
+            ));
+        }
+        files.push(rel);
+    }
+    Ok(())
+}
+
 /// Path of the canonical `SKILL.md` of the skill called `name`, the one install source every
 /// harness copies byte for byte.
 ///
@@ -337,6 +445,28 @@ pub fn canonical_skill_md(workspace_root: &Path, name: &str) -> PathBuf {
         .and_then(|catalog| catalog.into_iter().find(|skill| skill.name == name))
         .map(|skill| skill.skill_md_path)
         .unwrap_or_else(|| workspace_root.join("skills").join(name).join("SKILL.md"))
+}
+
+/// Directory of the skill called `name`, the install source of its supporting files.
+///
+/// Found with stat calls only (`skills/<name>`, then `skills/<group>/<name>`), because it is
+/// asked for once per supporting file. A name nothing holds resolves to the root-level location,
+/// which callers then find missing.
+pub fn canonical_skill_dir(workspace_root: &Path, name: &str) -> PathBuf {
+    let skills = workspace_root.join("skills");
+    let root_level = skills.join(name);
+    if root_level.join("SKILL.md").is_file() {
+        return root_level;
+    }
+    if let Ok(entries) = fs::read_dir(&skills) {
+        for entry in entries.flatten() {
+            let grouped = entry.path().join(name);
+            if grouped.join("SKILL.md").is_file() {
+                return grouped;
+            }
+        }
+    }
+    root_level
 }
 
 /// Require every skill to declare at least one known harness target.
@@ -587,5 +717,158 @@ mod tests {
         let catalog = discover_skill_catalog(&repo).expect("bundled catalog");
         validate_bundled_catalog_all_targets(&catalog).expect("bundled targets");
         assert_eq!(catalog.len(), 25, "expected 25 bundled skills");
+    }
+
+    // ── Supporting files ──
+
+    fn support_fixture(label: &str) -> PathBuf {
+        let root = temp_root(label);
+        write_skill(&root, "skill", &skill_body("skill", ALL_TARGETS));
+        root.join("skill")
+    }
+
+    fn write_support(dir: &Path, rel: &str, content: &[u8]) {
+        let path = dir.join(rel);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, content).unwrap();
+    }
+
+    fn cleanup(dir: &Path) {
+        let _ = fs::remove_dir_all(dir.parent().unwrap());
+    }
+
+    #[test]
+    fn supporting_files_are_the_nested_regular_files_sorted_without_the_skill_md() {
+        let dir = support_fixture("support-list");
+        write_support(&dir, "HUNTING.md", b"a");
+        write_support(&dir, "assets/report.html", b"b");
+        write_support(&dir, "assets/img/logo.svg", b"c");
+        write_support(&dir, "LICENSE", b"d");
+        fs::create_dir_all(dir.join("empty")).unwrap();
+        let files = skill_support_files(&dir);
+        cleanup(&dir);
+        assert_eq!(
+            files.unwrap(),
+            vec![
+                "HUNTING.md",
+                "LICENSE",
+                "assets/img/logo.svg",
+                "assets/report.html"
+            ]
+        );
+    }
+
+    #[test]
+    fn dot_entries_are_not_supporting_files() {
+        let dir = support_fixture("support-dot");
+        write_support(&dir, ".DS_Store", b"x");
+        write_support(&dir, ".hidden/file.md", b"x");
+        write_support(&dir, "assets/.gitkeep", b"x");
+        write_support(&dir, "assets/page.html", b"x");
+        let files = skill_support_files(&dir);
+        cleanup(&dir);
+        assert_eq!(files.unwrap(), vec!["assets/page.html"]);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_symlink_in_a_skill_is_an_error() {
+        let dir = support_fixture("support-symlink");
+        write_support(&dir, "real.md", b"x");
+        std::os::unix::fs::symlink(dir.join("real.md"), dir.join("link.md")).unwrap();
+        let err = skill_support_files(&dir).unwrap_err();
+        assert!(err.contains("symlink"), "{err}");
+        fs::remove_file(dir.join("link.md")).unwrap();
+        std::os::unix::fs::symlink(&dir, dir.join("loop")).unwrap();
+        let err = skill_support_files(&dir).unwrap_err();
+        cleanup(&dir);
+        assert!(err.contains("symlink"), "{err}");
+    }
+
+    #[test]
+    fn a_nested_skill_md_is_an_error() {
+        let dir = support_fixture("support-nested");
+        write_support(&dir, "inner/SKILL.md", b"x");
+        let err = skill_support_files(&dir).unwrap_err();
+        cleanup(&dir);
+        assert!(err.contains("nested SKILL.md"), "{err}");
+    }
+
+    #[test]
+    fn supporting_files_may_sit_four_levels_deep_and_no_deeper() {
+        let dir = support_fixture("support-depth");
+        write_support(&dir, "a/b/c/d.txt", b"x");
+        fs::create_dir_all(dir.join("e/f/g/h")).unwrap();
+        let files = skill_support_files(&dir);
+        assert_eq!(files.unwrap(), vec!["a/b/c/d.txt"]);
+        write_support(&dir, "a/b/c/d/e.txt", b"x");
+        let err = skill_support_files(&dir).unwrap_err();
+        cleanup(&dir);
+        assert!(err.contains("deeper than"), "{err}");
+    }
+
+    #[test]
+    fn a_skill_is_bounded_in_files_and_bytes() {
+        let dir = support_fixture("support-bounds");
+        for index in 0..MAX_SUPPORT_FILES {
+            write_support(&dir, &format!("f{index}.md"), b"x");
+        }
+        assert_eq!(skill_support_files(&dir).unwrap().len(), MAX_SUPPORT_FILES);
+        write_support(&dir, "one-too-many.md", b"x");
+        let err = skill_support_files(&dir).unwrap_err();
+        assert!(err.contains("supporting files"), "{err}");
+        cleanup(&dir);
+
+        let dir = support_fixture("support-size");
+        write_support(
+            &dir,
+            "big.bin",
+            &vec![b'x'; MAX_SUPPORT_FILE_BYTES as usize],
+        );
+        assert!(
+            skill_support_files(&dir).is_ok(),
+            "exactly the limit is fine"
+        );
+        write_support(
+            &dir,
+            "bigger.bin",
+            &vec![b'x'; MAX_SUPPORT_FILE_BYTES as usize + 1],
+        );
+        let err = skill_support_files(&dir).unwrap_err();
+        assert!(err.contains("over"), "{err}");
+        cleanup(&dir);
+
+        let dir = support_fixture("support-total");
+        for index in 0..3 {
+            write_support(&dir, &format!("part{index}.bin"), &vec![b'x'; 800 * 1024]);
+        }
+        let err = skill_support_files(&dir).unwrap_err();
+        cleanup(&dir);
+        assert!(err.contains("supporting files"), "{err}");
+    }
+
+    #[test]
+    fn bundled_skills_carry_their_supporting_files() {
+        let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../resources/default-workspace");
+        let catalog = discover_skill_catalog(&repo).expect("bundled catalog");
+        let counts: std::collections::BTreeMap<String, usize> = catalog
+            .iter()
+            .map(|skill| {
+                let files = skill_support_files(&skill.source_dir).expect("bundled skill files");
+                (skill.name.clone(), files.len())
+            })
+            .filter(|(_, count)| *count > 0)
+            .collect();
+        assert_eq!(counts.get("security-audit"), Some(&19));
+        assert_eq!(counts.get("kretsverket-status-report"), Some(&2));
+        assert_eq!(counts.len(), 2, "{counts:?}");
+        assert_eq!(
+            canonical_skill_dir(&repo, "kretsverket-status-report"),
+            repo.join("skills/kretsverket/kretsverket-status-report")
+        );
+        assert_eq!(
+            canonical_skill_dir(&repo, "security-audit"),
+            repo.join("skills/security-audit")
+        );
     }
 }
