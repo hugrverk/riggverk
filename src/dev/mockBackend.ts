@@ -80,7 +80,7 @@ const appearance: AppSettings["appearance"] =
 
 const HOME = "/Users/mock";
 const WORKSPACE = `${HOME}/.config/agent-workspace`;
-const BACKUP_ROOT = `${HOME}/Library/Application Support/ai.agentworkspace.app/backups`;
+const BACKUP_ROOT = `${HOME}/Library/Application Support/se.hugrverk.riggverk/backups`;
 const BUNDLE_DIGEST = "a7c3e1";
 const INSTALLED_DIGEST = "91be20";
 

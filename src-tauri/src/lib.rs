@@ -1,6 +1,7 @@
 mod agent_discovery;
 mod agent_skill_targets;
 mod agent_targets;
+mod app_data_migration;
 mod apply_progress;
 mod artifact_registry;
 mod commands;
@@ -35,6 +36,8 @@ mod skill_roots;
 mod skills_install;
 mod stable_digest;
 
+#[cfg(test)]
+mod app_data_migration_contract;
 #[cfg(test)]
 mod identity_contract;
 #[cfg(test)]
@@ -78,6 +81,8 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
+            // First: nothing may read or write the data directory before this.
+            app_data_migration::run_at_startup()?;
             let bundled = app
                 .path()
                 .resolve("default-workspace", tauri::path::BaseDirectory::Resource)

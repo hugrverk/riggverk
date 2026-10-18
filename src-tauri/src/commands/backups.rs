@@ -463,7 +463,7 @@ fn child_run_dirs(dir: &Path) -> Vec<(std::time::SystemTime, String, PathBuf)> {
         .collect()
 }
 
-fn list_backups_from_root(root: &Path) -> Result<Vec<BackupRunSummary>, String> {
+pub(crate) fn list_backups_from_root(root: &Path) -> Result<Vec<BackupRunSummary>, String> {
     if !root.exists() || !root.is_dir() {
         return Ok(Vec::new());
     }

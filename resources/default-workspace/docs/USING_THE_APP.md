@@ -106,7 +106,7 @@ OpenCode also shows the model override for `model`, `small model` and an optiona
 
 ## Backups
 
-Anything Install, uninstall, or a Library save would overwrite or remove is copied first, owner-only. Backup root: `~/Library/Application Support/ai.agentworkspace.app/backups` (macOS), `${XDG_CONFIG_HOME:-~/.config}/ai.agentworkspace.app/backups` (Linux), `%APPDATA%\ai.agentworkspace.app\backups` (Windows), or `AGENT_WORKSPACE_BACKUP_DIR`.
+Anything Install, uninstall, or a Library save would overwrite or remove is copied first, owner-only. Backup root: `~/Library/Application Support/se.hugrverk.riggverk/backups` (macOS), `${XDG_CONFIG_HOME:-~/.config}/se.hugrverk.riggverk/backups` (Linux), `%APPDATA%\se.hugrverk.riggverk\backups` (Windows), or `AGENT_WORKSPACE_BACKUP_DIR`.
 
 ```text
 <backup root>/setup/<transaction id>/manifest.json

@@ -1,10 +1,12 @@
 //! Product identity contract.
 //!
 //! The product is named Riggverk. Technical identifiers that live in users'
-//! files, environments, or data directories keep their historical
-//! `agent-workspace` names on purpose, because renaming them would orphan or
-//! conflict with data that already exists. This module pins both sides so a
-//! later rename cannot move either one by accident.
+//! files and environments keep their historical `agent-workspace` names on
+//! purpose, because renaming them would orphan or conflict with data that
+//! already exists. The app data directory is named like the bundle identifier
+//! and moved there once by `app_data_migration`; the old name is pinned only so
+//! that migration keeps finding it. This module pins all of it so a later
+//! rename cannot move any of it by accident.
 
 #[cfg(test)]
 mod tests {
@@ -12,7 +14,8 @@ mod tests {
 
     use crate::managed_state::MANAGED_STATE_REL;
     use crate::platform_paths::{
-        app_support_dir, default_installed_workspace_path, Platform, PlatformEnv,
+        app_support_dir, default_installed_workspace_path, legacy_app_support_dir, Platform,
+        PlatformEnv, APP_DATA_DIR_NAME, LEGACY_APP_DATA_DIR_NAME,
     };
     use crate::rules_block::{
         assess, body_digest, parse, RulesLayout, RulesPlan, BEGIN_MARKER, BEGIN_PREFIX, END_MARKER,
@@ -26,7 +29,6 @@ mod tests {
         include_str!("../../resources/default-workspace/.agent-workspace/workspace.json");
 
     const IDENTIFIER: &str = "se.hugrverk.riggverk";
-    const APP_DATA_DIR_NAME: &str = "ai.agentworkspace.app";
 
     fn json(text: &str) -> Value {
         serde_json::from_str(text).expect("valid JSON")
@@ -48,13 +50,8 @@ mod tests {
         assert!(INDEX_HTML.contains("<title>Riggverk</title>"));
     }
 
-    // The data directory name is deliberately independent of the bundle
-    // identifier. If this fails after an identifier or product rename, the
-    // rename moved where settings and backups live: that needs its own
-    // migration and must not happen as a side effect.
-    #[test]
-    fn app_data_dir_name_is_independent_of_the_identifier() {
-        let envs = [
+    fn platform_envs() -> [(Platform, PlatformEnv); 4] {
+        [
             (
                 Platform::MacOS,
                 PlatformEnv {
@@ -85,16 +82,46 @@ mod tests {
                     ..PlatformEnv::default()
                 },
             ),
-        ];
-        for (platform, env) in envs {
+        ]
+    }
+
+    fn last_component(path: &std::path::Path) -> String {
+        path.file_name()
+            .and_then(|name| name.to_str())
+            .expect("dir name")
+            .to_string()
+    }
+
+    // The data directory is named like the bundle identifier (the Tauri
+    // `appConfigDir` convention) but through a constant, never read from the
+    // config at runtime. If this fails after an identifier change, the change
+    // would move where settings and backups live: that needs its own
+    // migration (see `app_data_migration`) and must not happen as a side effect.
+    #[test]
+    fn app_data_dir_is_named_like_the_identifier() {
+        assert_eq!(APP_DATA_DIR_NAME, IDENTIFIER);
+        assert_eq!(json(TAURI_CONF)["identifier"], APP_DATA_DIR_NAME);
+        for (platform, env) in platform_envs() {
             let dir = app_support_dir(&env, platform).expect("app support dir");
-            let name = dir
-                .file_name()
-                .and_then(|n| n.to_str())
-                .expect("dir name")
-                .to_string();
-            assert_eq!(name, APP_DATA_DIR_NAME, "{platform:?}");
-            assert_ne!(name, IDENTIFIER, "{platform:?}");
+            assert_eq!(last_component(&dir), IDENTIFIER, "{platform:?}");
+        }
+    }
+
+    // The previous data directory name. Only `app_data_migration` reads it, to
+    // move an existing directory; changing it would strand that data.
+    #[test]
+    fn legacy_app_data_dir_name_stays_pinned() {
+        assert_eq!(LEGACY_APP_DATA_DIR_NAME, "ai.agentworkspace.app");
+        for (platform, env) in platform_envs() {
+            let legacy = legacy_app_support_dir(&env, platform).expect("legacy dir");
+            let current = app_support_dir(&env, platform).expect("current dir");
+            assert_eq!(
+                last_component(&legacy),
+                "ai.agentworkspace.app",
+                "{platform:?}"
+            );
+            assert_eq!(legacy.parent(), current.parent(), "{platform:?}");
+            assert_ne!(legacy, current, "{platform:?}");
         }
     }
 

@@ -61,7 +61,7 @@ Rules files hold the app's base between `BEGIN AGENT-WORKSPACE BASE` and `END AG
 ## Where things are
 
 - Workspace: `~/.config/agent-workspace` (change it in Settings, or `AGENT_WORKSPACE_PATH`).
-- Backups: `~/Library/Application Support/ai.agentworkspace.app/backups` on macOS, `${XDG_CONFIG_HOME:-~/.config}/ai.agentworkspace.app/backups` on Linux, `%APPDATA%\ai.agentworkspace.app\backups` on Windows. `B` on the Workspace page opens the folder.
+- Backups: `~/Library/Application Support/se.hugrverk.riggverk/backups` on macOS, `${XDG_CONFIG_HOME:-~/.config}/se.hugrverk.riggverk/backups` on Linux, `%APPDATA%\se.hugrverk.riggverk\backups` on Windows. `B` on the Workspace page opens the folder.
 - Settings file: `settings.json` in the app support folder, the parent of the default backups folder.
 
 ## Next

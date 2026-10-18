@@ -25,7 +25,7 @@ The app is the installer. It installs natively and runs only its own bundled cop
 - `generate-opencode-config.py` - builds `templates/opencode.json` from `opencode.base.json` and `opencode.policy.json`. `--check` verifies, `--write` regenerates.
 - `merge-codex-config.py`, `ensure-codex-routing-defaults.py` - merge the managed Codex keys and routing defaults into `config.toml` while keeping your own settings.
 
-Backups: `~/Library/Application Support/ai.agentworkspace.app/backups` on macOS, `${XDG_CONFIG_HOME:-~/.config}/ai.agentworkspace.app/backups` on Linux, or `AGENT_WORKSPACE_BACKUP_DIR`. Layout in [docs/USING_THE_APP.md](docs/USING_THE_APP.md#backups).
+Backups: `~/Library/Application Support/se.hugrverk.riggverk/backups` on macOS, `${XDG_CONFIG_HOME:-~/.config}/se.hugrverk.riggverk/backups` on Linux, or `AGENT_WORKSPACE_BACKUP_DIR`. Layout in [docs/USING_THE_APP.md](docs/USING_THE_APP.md#backups).
 
 ## Separation
 

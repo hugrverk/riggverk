@@ -86,26 +86,46 @@ pub fn resolve_user_home(env: &PlatformEnv, platform: Platform) -> Result<PathBu
     Err("user home directory is not set (HOME or USERPROFILE)".into())
 }
 
+/// Name of the per-user app data directory (settings, the OpenCode model
+/// override, and backups). It equals the Tauri bundle identifier, which is the
+/// `appConfigDir` convention, but it is a constant on purpose and never read
+/// from the Tauri config at runtime: a later identifier change must not move
+/// user data as a side effect. `identity_contract` pins the equality; the next
+/// move needs its own migration, like `app_data_migration`.
+pub const APP_DATA_DIR_NAME: &str = "se.hugrverk.riggverk";
+
+/// Name of the app data directory before the Riggverk rename. Only
+/// `app_data_migration` reads it, to move an existing directory to
+/// `APP_DATA_DIR_NAME`. Nothing else may use it.
+pub const LEGACY_APP_DATA_DIR_NAME: &str = "ai.agentworkspace.app";
+
 /// Per-user directory for settings, the OpenCode model override, and backups.
-///
-/// The directory name `ai.agentworkspace.app` is a stable data location. It is
-/// deliberately NOT the Tauri bundle identifier (`se.hugrverk.riggverk`) and
-/// must never be derived from it, from the product name, or from the Cargo
-/// package name: renaming the app must not move or orphan existing user data.
-/// `identity_contract` pins both sides. Moving the directory needs its own
-/// migration.
 pub fn app_support_dir(env: &PlatformEnv, platform: Platform) -> Result<PathBuf, String> {
+    app_data_dir_named(env, platform, APP_DATA_DIR_NAME)
+}
+
+/// The app data directory of builds before the Riggverk rename. Same location
+/// rules as `app_support_dir`, only the last component differs.
+pub fn legacy_app_support_dir(env: &PlatformEnv, platform: Platform) -> Result<PathBuf, String> {
+    app_data_dir_named(env, platform, LEGACY_APP_DATA_DIR_NAME)
+}
+
+fn app_data_dir_named(
+    env: &PlatformEnv,
+    platform: Platform,
+    dir_name: &str,
+) -> Result<PathBuf, String> {
     match platform {
         Platform::MacOS => {
             let home = resolve_user_home(env, platform)?;
-            Ok(home.join("Library/Application Support/ai.agentworkspace.app"))
+            Ok(home.join("Library/Application Support").join(dir_name))
         }
         Platform::Windows => {
             let appdata = env
                 .appdata
                 .as_ref()
                 .ok_or_else(|| "APPDATA is not set".to_string())?;
-            Ok(PathBuf::from(appdata).join("ai.agentworkspace.app"))
+            Ok(PathBuf::from(appdata).join(dir_name))
         }
         Platform::Linux => {
             let config_home = env
@@ -117,7 +137,7 @@ pub fn app_support_dir(env: &PlatformEnv, platform: Platform) -> Result<PathBuf,
                         .map(|h| h.join(".config").to_string_lossy().into_owned())
                 })
                 .ok_or_else(|| "cannot resolve XDG config home".to_string())?;
-            Ok(PathBuf::from(config_home).join("ai.agentworkspace.app"))
+            Ok(PathBuf::from(config_home).join(dir_name))
         }
     }
 }
@@ -322,7 +342,7 @@ mod tests {
         assert_eq!(
             settings_file_path(&env, Platform::Windows).expect("settings"),
             PathBuf::from(r"C:\Users\Example\AppData\Roaming")
-                .join("ai.agentworkspace.app")
+                .join("se.hugrverk.riggverk")
                 .join("settings.json")
         );
     }
@@ -332,7 +352,7 @@ mod tests {
         let env = win_env();
         assert_eq!(
             app_support_dir(&env, Platform::Windows).expect("app support"),
-            PathBuf::from(r"C:\Users\Example\AppData\Roaming").join("ai.agentworkspace.app")
+            PathBuf::from(r"C:\Users\Example\AppData\Roaming").join("se.hugrverk.riggverk")
         );
     }
 
@@ -342,7 +362,7 @@ mod tests {
         assert_eq!(
             backup_root_path(&env, Platform::Windows).expect("backups"),
             PathBuf::from(r"C:\Users\Example\AppData\Roaming")
-                .join("ai.agentworkspace.app")
+                .join("se.hugrverk.riggverk")
                 .join("backups")
         );
     }
@@ -369,7 +389,7 @@ mod tests {
         assert_eq!(
             settings_file_path(&env, Platform::MacOS).expect("settings"),
             PathBuf::from(
-                "/Users/example/Library/Application Support/ai.agentworkspace.app/settings.json"
+                "/Users/example/Library/Application Support/se.hugrverk.riggverk/settings.json"
             )
         );
     }
@@ -379,7 +399,7 @@ mod tests {
         let env = linux_env();
         assert_eq!(
             settings_file_path(&env, Platform::Linux).expect("settings"),
-            PathBuf::from("/home/example/.config/ai.agentworkspace.app/settings.json")
+            PathBuf::from("/home/example/.config/se.hugrverk.riggverk/settings.json")
         );
     }
 
@@ -391,7 +411,7 @@ mod tests {
         };
         assert_eq!(
             settings_file_path(&env, Platform::Linux).expect("settings"),
-            PathBuf::from("/custom/config/ai.agentworkspace.app/settings.json")
+            PathBuf::from("/custom/config/se.hugrverk.riggverk/settings.json")
         );
     }
 
@@ -401,8 +421,53 @@ mod tests {
         assert_eq!(
             backup_root_path(&env, Platform::MacOS).expect("backups"),
             PathBuf::from(
-                "/Users/example/Library/Application Support/ai.agentworkspace.app/backups"
+                "/Users/example/Library/Application Support/se.hugrverk.riggverk/backups"
             )
+        );
+    }
+
+    #[test]
+    fn legacy_app_support_dir_differs_only_in_the_last_component() {
+        let custom_xdg = PlatformEnv {
+            xdg_config_home: Some("/custom/config".into()),
+            ..linux_env()
+        };
+        let cases = [
+            (
+                Platform::MacOS,
+                mac_env(),
+                "/Users/example/Library/Application Support",
+            ),
+            (Platform::Linux, linux_env(), "/home/example/.config"),
+            (Platform::Linux, custom_xdg, "/custom/config"),
+        ];
+        for (platform, env, parent) in cases {
+            assert_eq!(
+                legacy_app_support_dir(&env, platform).expect("legacy"),
+                PathBuf::from(parent).join("ai.agentworkspace.app"),
+                "{platform:?}"
+            );
+            assert_eq!(
+                app_support_dir(&env, platform).expect("current"),
+                PathBuf::from(parent).join("se.hugrverk.riggverk"),
+                "{platform:?}"
+            );
+        }
+        let env = win_env();
+        assert_eq!(
+            legacy_app_support_dir(&env, Platform::Windows).expect("legacy"),
+            PathBuf::from(r"C:\Users\Example\AppData\Roaming").join("ai.agentworkspace.app")
+        );
+        assert_eq!(
+            legacy_app_support_dir(
+                &PlatformEnv {
+                    appdata: None,
+                    ..win_env()
+                },
+                Platform::Windows
+            )
+            .expect_err("missing APPDATA"),
+            "APPDATA is not set"
         );
     }
 
@@ -455,7 +520,7 @@ mod tests {
     #[test]
     fn accepts_normal_backup_and_skill_paths() {
         let home = PathBuf::from("/Users/example");
-        let backup = home.join("Library/Application Support/ai.agentworkspace.app/backups");
+        let backup = home.join("Library/Application Support/se.hugrverk.riggverk/backups");
         let skills = home.join(".cursor/skills");
         assert!(!is_broad_write_root(&backup, &home, Platform::MacOS));
         assert!(!is_broad_write_root(&skills, &home, Platform::MacOS));

@@ -39,11 +39,13 @@ App support and backup roots are platform-resolved:
 
 | Platform | App support dir | Backup root |
 |----------|-----------------|-------------|
-| macOS | `~/Library/Application Support/ai.agentworkspace.app` | `<app support>/backups` |
-| Linux | `${XDG_CONFIG_HOME:-~/.config}/ai.agentworkspace.app` | `<app support>/backups` |
-| Windows | `%APPDATA%\ai.agentworkspace.app` | `<app support>\backups` |
+| macOS | `~/Library/Application Support/se.hugrverk.riggverk` | `<app support>/backups` |
+| Linux | `${XDG_CONFIG_HOME:-~/.config}/se.hugrverk.riggverk` | `<app support>/backups` |
+| Windows | `%APPDATA%\se.hugrverk.riggverk` | `<app support>\backups` |
 
 Backup roots reject `/`, the home directory, and drive roots.
+
+The app support dir is named like the bundle identifier. Builds from before the Riggverk rename used an older name. On first launch, before anything reads or writes app data, the app moves that directory to the current name with a single rename in the same parent folder: nothing is copied or deleted, and contents, modes, and modification times are preserved. The current directory wins when it already exists (the two are never merged), and an old path that is a symlink or not a directory is never followed. A failed move stops startup with both paths named and leaves the old directory where it was. [RELEASE.md](./RELEASE.md#app-data-move) has the details and the manual undo.
 
 ## Backups
 

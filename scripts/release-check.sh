@@ -1010,7 +1010,32 @@ if search_pruned_fixed_has_match 'Agent Workspace' src README.md index.html src-
   printf 'FAIL: old product name "Agent Workspace" found in app sources (use Riggverk)\n' >&2
   exit 1
 fi
-printf '  product name is Riggverk; stable technical identifiers kept\n'
+# The app data directory is named like the bundle identifier. The previous name
+# (see LEGACY_APP_DATA_DIR_NAME in platform_paths.rs) belongs only to the
+# migration code and to the move and undo note in docs/RELEASE.md; docs and
+# shipped resources must show the current directory.
+legacy_dir_scan=(README.md src resources)
+while IFS= read -r doc_path; do
+  legacy_dir_scan+=("$doc_path")
+done < <(find docs -type f ! -path docs/RELEASE.md | sort)
+if search_pruned_fixed_has_match 'ai.agentworkspace.app' "${legacy_dir_scan[@]}"; then
+  printf 'FAIL: previous app data directory name found outside docs/RELEASE.md (use se.hugrverk.riggverk)\n' >&2
+  exit 1
+fi
+# The move must run first in the Tauri setup closure: once anything reads or
+# writes app data first, the first settings save would create the new directory
+# and strand the old data.
+python3 - <<'PY'
+src = open("src-tauri/src/lib.rs").read()
+setup = src.index(".setup(|app| {")
+hook = src.find("app_data_migration::run_at_startup()?;", setup)
+roots = src.find("setup_roots::initialize", setup)
+if hook == -1 or roots == -1 or hook > roots:
+    raise SystemExit(
+        "FAIL: app_data_migration::run_at_startup()? must be the first call in the Tauri setup closure, before setup_roots::initialize"
+    )
+PY
+printf '  product name is Riggverk; stable technical identifiers kept; app data move runs first\n'
 
 step "bundled skill catalog and routing alignment"
 python3 scripts/check-skill-routing.py
