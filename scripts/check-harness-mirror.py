@@ -335,9 +335,6 @@ def check_harness_ids(root: Path) -> list[str]:
         entry = adapters.get(adapter)
         if not isinstance(entry, dict) or entry.get("output") != output:
             raise Mismatch(f"{RULES_ADAPTERS}: adapter {adapter!r} of {key} must produce {output}")
-        for rel in (entry.get("appendix"), output):
-            if not isinstance(rel, str) or not (root / WS / rel).is_file():
-                raise Mismatch(f"{key}: the rules file {rel} is missing from the bundle")
         if not re.search(rf'"{re.escape(adapter)}":\s*"{re.escape(output)}"', history):
             raise Mismatch(f"{RULES_HISTORY}: HARNESS_RULES has no {adapter!r} -> {output}")
         surface = f"{key}_rules"

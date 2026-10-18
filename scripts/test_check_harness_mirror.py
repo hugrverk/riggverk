@@ -9,6 +9,7 @@ silently become a no-op.
 from __future__ import annotations
 
 import importlib.util
+import json
 import shutil
 import subprocess
 import sys
@@ -125,7 +126,7 @@ class CheckHarnessMirrorTests(unittest.TestCase):
         self.assert_fails("HARNESS_LABELS")
 
     def test_surfaces_missing_for_a_harness(self) -> None:
-        self.edit(mirror.TS_INSTALL, '  kilo: ["skills"],\n', "")
+        self.edit(mirror.TS_INSTALL, '  kilo: ["kilo_rules", "skills"],\n', "")
         self.assert_fails("HARNESS_SURFACES")
 
     def test_a_view_missing_for_a_harness(self) -> None:
@@ -139,7 +140,10 @@ class CheckHarnessMirrorTests(unittest.TestCase):
     # The descriptor
 
     def test_a_descriptor_without_a_light_harness(self) -> None:
-        self.edit(mirror.DESCRIPTOR, '    "pi": {\n      "label": "Pi",\n      "cli": { "program": "pi" }\n    },\n', "")
+        path = self.tree / mirror.DESCRIPTOR
+        descriptor = json.loads(path.read_text(encoding="utf-8"))
+        del descriptor["harnesses"]["pi"]
+        path.write_text(json.dumps(descriptor), encoding="utf-8")
         self.assert_fails("light descriptor")
 
     def test_a_descriptor_with_a_harness_twice(self) -> None:
@@ -173,12 +177,50 @@ class CheckHarnessMirrorTests(unittest.TestCase):
         self.assert_fails("ReadFolder::ALL")
 
     def test_a_surface_only_one_side_knows(self) -> None:
-        self.edit(mirror.TS_TYPES, '  | "workspace_bundle";', '  | "workspace_bundle"\n  | "copilot_rules";')
+        self.edit(mirror.TS_TYPES, '  | "workspace_bundle";', '  | "workspace_bundle"\n  | "kilo_mcp";')
         self.assert_fails("SetupSurfaceId")
+
+    def test_a_light_rules_target_the_ui_does_not_list(self) -> None:
+        self.edit(mirror.TS_INSTALL, '  "pi_rules",\n  "kilo_rules",\n];', '  "kilo_rules",\n];')
+        self.assert_fails("TARGET_IDS_REGISTRY_ORDER")
 
     def test_a_target_only_the_backend_knows(self) -> None:
         self.edit(mirror.RUST_TARGETS, 'id: "cursor_setup"', 'id: "cursor_setup_2"')
         self.assert_fails("SetupTargetId")
+
+    # The rules file of each light harness
+
+    def test_a_rules_surface_the_ui_does_not_know(self) -> None:
+        self.edit(mirror.TS_TYPES, '  | "pi_rules"\n  | "kilo_rules";', '  | "kilo_rules";')
+        self.assert_fails("RulesSurfaceId has no pi_rules")
+
+    def test_a_harness_the_rules_view_does_not_map(self) -> None:
+        self.edit(mirror.TS_RULES, '  copilot: "copilot_rules",\n', "")
+        self.assert_fails("RULES_SURFACE")
+
+    def test_a_harness_the_rules_command_does_not_offer(self) -> None:
+        self.edit(mirror.TS_RULES, '"claude", "copilot", "pi", "kilo"]', '"claude", "pi", "kilo"]')
+        self.assert_fails("RULES_HARNESSES has no copilot")
+
+    def test_a_rules_file_name_the_ui_would_get_wrong(self) -> None:
+        self.edit(mirror.TS_RULES, '  copilot: "copilot-instructions.md",\n', "")
+        self.assert_fails("rulesFileName")
+
+    def test_a_harness_page_without_its_rules_surface(self) -> None:
+        self.edit(mirror.TS_INSTALL, '  pi: ["pi_rules", "skills"],', '  pi: ["skills"],')
+        self.assert_fails("HARNESS_SURFACES.pi")
+
+    def test_an_adapter_that_does_not_produce_the_derived_base(self) -> None:
+        self.edit(mirror.RULES_ADAPTERS, '"output": "templates/sync/pi-rules.md"', '"output": "templates/sync/pi.md"')
+        self.assert_fails("adapter 'pi' of pi must produce templates/sync/pi-rules.md")
+
+    def test_a_descriptor_adapter_that_is_not_in_the_adapter_list(self) -> None:
+        self.edit(mirror.DESCRIPTOR, '"adapter": "kilo"', '"adapter": "nokilo"')
+        self.assert_fails("adapter 'nokilo' of kilo")
+
+    def test_a_history_map_that_forgets_a_light_harness(self) -> None:
+        self.edit(mirror.RULES_HISTORY, '    "pi": "templates/sync/pi-rules.md",\n', "")
+        self.assert_fails("HARNESS_RULES has no 'pi'")
 
     # Wiring
 
