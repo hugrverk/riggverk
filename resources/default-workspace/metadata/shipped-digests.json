@@ -154,7 +154,8 @@
       "sha256:c3b4644dc17afa663518be89f6abd4f1a5fd4bfde85ae4a326956bfbbd5819e4",
       "sha256:cb89eb828c89e674a87bc7bbd09447722fa616104a487a17a3fa1d9037821556",
       "sha256:d10a878a0f06cfa756990d8b9a0d90f20fe0c4d4d57a0e207de8c18994ffe2ce",
-      "sha256:e118b5c4fe65997fa850013c4fdf4602b7b685e63fa4ead644e3a70f865608a5"
+      "sha256:e118b5c4fe65997fa850013c4fdf4602b7b685e63fa4ead644e3a70f865608a5",
+      "sha256:f101a890562854bafc7fb8e73628762aa5094e6beada97ecd591949d36dd7612"
     ],
     "skills/current-docs/SKILL.md": [
       "sha256:0f81af64ba50f3f729ea151824b26bd82922e37568a84e155a3a7f9d7c349a6b",
@@ -335,6 +336,7 @@
     ],
     "skills/security-audit/SKILL.md": [
       "sha256:4ef9d998f89ad51893cbc073068371aabca51c20663009901d18639563bb4e86",
+      "sha256:b1f9dda5d67d03d42f46d40859ce3ee2622347c42b44241aa9e603af7fca2282",
       "sha256:bdc6db8aee8a096b7d5cc709bfd4169b862dce68d91ff927b41f296fc4c41c61"
     ],
     "skills/security-audit/SUPPLY-CHAIN-AND-RELEASE.md": [
@@ -343,6 +345,7 @@
     "skills/security-audit/UPSTREAM.md": [
       "sha256:6760bd357684cb45c6ea28a6189170d48fc7510a39b4b0fcd1e7002c8fbb1b52",
       "sha256:67d9179b15cbaf5751c6acbc92f7edd2dfa279708997297bed5c9bd407dd2e91",
+      "sha256:c72c14f5ffa32cc5b382859bc95c722de2ee8fd2fefd2aa6d501a59bd567deac",
       "sha256:ca010d4d9cc5471069e565ccdda4c62845f9512c1c10bebde06f3dff30e0a013"
     ],
     "skills/security-audit/VALIDATION-AND-REPORTING.md": [
