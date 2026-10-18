@@ -125,12 +125,11 @@ Harness enablement is an explicit preference, not tool detection. Re-enabling re
 | Variable | Scope | Effect |
 | --- | --- | --- |
 | `AGENT_WORKSPACE_PATH` | app, dev/test | Overrides the workspace path. Takes precedence over Settings. |
-| `AGENT_WORKSPACE_BACKUP_DIR` | app, scripts | Overrides the backup root. Must not be `/`, the home directory, or a drive root. |
-| `CODEX_HOME` | app, scripts | Codex home for config, rules, agents, and skills (default `~/.codex`). |
+| `AGENT_WORKSPACE_BACKUP_DIR` | app | Overrides the backup root. Must not be `/`, the home directory, or a drive root. |
+| `CODEX_HOME` | app | Codex home for config, rules, agents, and skills (default `~/.codex`). |
 | `CODEX_SKILLS_PATH`, `CLAUDE_SKILLS_PATH`, `OPENCODE_SKILLS_PATH`, `CURSOR_SKILLS_PATH`, `CURSOR_AGENTS_PATH`, `CURSOR_MCP_CONFIG_PATH` | app | Skill, agent, and MCP path overrides for isolation and tests. |
-| `PLAYWRIGHT_MCP_CONFIG_PATH`, `PLAYWRIGHT_BROWSERS_PATH` | app, scripts | Playwright MCP config file and browser cache. Do not set `PLAYWRIGHT_BROWSERS_PATH=0`. |
-| `XDG_CONFIG_HOME` | app, scripts (Linux) | Moves the app support and backup dirs. |
-| `CODEX_CONFIG_PATH`, `CODEX_AGENTS_PATH`, `OPENCODE_AGENTS_PATH`, `CLAUDE_RULES_PATH`, `*_AGENTS_DIR` | scripts only | Target overrides for the CLI scripts; the app ignores them. |
+| `PLAYWRIGHT_MCP_CONFIG_PATH`, `PLAYWRIGHT_BROWSERS_PATH` | app | Playwright MCP config file and browser cache. Do not set `PLAYWRIGHT_BROWSERS_PATH=0`. |
+| `XDG_CONFIG_HOME` | app (Linux) | Moves the app support and backup dirs. |
 
 Overrides are honored in release builds too. Use them with a temporary `HOME` when testing.
 
@@ -147,7 +146,7 @@ See `docs/SECURITY_MODEL.md` for the full boundaries.
 
 ## Verification
 
-CI runs the POSIX installer and release checks on Ubuntu and macOS. Windows CI runs frontend and native Rust app checks; the Bash scripts are not supported there (see `docs/RELEASE.md`).
+CI runs the release check on Ubuntu and macOS. Windows CI runs frontend and native Rust app checks; the Bash release check is not supported there (see `docs/RELEASE.md`).
 
 ```bash
 python3 scripts/generate-agent-adapters.py --check

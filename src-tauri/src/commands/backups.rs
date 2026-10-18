@@ -23,7 +23,7 @@ const ALLOWED_TARGET_IDS: &[&str] = &[
     "claude",
 ];
 
-/// Skill backups written by `install-skills.sh`: `<run>/<agent>-skills/<skill>/SKILL.md`.
+/// Skill backups written by the retired `install-skills.sh` CLI: `<run>/<agent>-skills/<skill>/SKILL.md`.
 /// One level deeper than the other targets, and the backup does not record whether it came
 /// from a global or a project install, so no current file is compared.
 const SKILL_TARGET_IDS: &[&str] = &[
@@ -889,7 +889,7 @@ mod tests {
     fn skill_backups_from_install_skills_are_listed_and_detailed() {
         let root = temp_root("skill-backups");
         let run_dir = root.join("20260501-143000");
-        // Layout written by install-skills.sh: <ts>/<agent>-skills/<name>/SKILL.md.
+        // Layout written by the retired install-skills.sh CLI: <ts>/<agent>-skills/<name>/SKILL.md.
         for (agent, skill) in [
             ("opencode", "diagnose"),
             ("opencode", "tdd"),

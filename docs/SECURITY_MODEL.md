@@ -52,9 +52,9 @@ Existing files that Install, uninstall, or a Library save would overwrite or rem
 |--------|--------------------------------|
 | Install, uninstall, rollback | `setup/<transaction id>/` with `manifest.json`, `artifacts/<artifact id>`, and `managed-state.previous.json` |
 | Library save | `docs/<doc id>-<timestamp>/<file>` |
-| Cursor operations and CLI scripts | `<YYYYMMDD-HHMMSS>/<label>/<file>` |
+| Cursor operations (and the retired CLI scripts) | `<YYYYMMDD-HHMMSS>/<label>/<file>` |
 
-The app creates backup directories 0700 and files 0600 on Unix. CLI scripts use the same layout and your umask. Backups are read locally for validation, comparison, and rollback only and are never transmitted. Rollback restores exact prior state from a persisted transaction: per-artifact `in_flight` is recorded before mutation, interrupted rollbacks reconcile against post-apply and backup digests without overwriting unrelated user edits, and conflicts fail closed. The in-app rollback entry (`z`, `:rollback`) covers the last transaction of the current session.
+The app creates backup directories 0700 and files 0600 on Unix. Backups are read locally for validation, comparison, and rollback only and are never transmitted. Rollback restores exact prior state from a persisted transaction: per-artifact `in_flight` is recorded before mutation, interrupted rollbacks reconcile against post-apply and backup digests without overwriting unrelated user edits, and conflicts fail closed. The in-app rollback entry (`z`, `:rollback`) covers the last transaction of the current session.
 
 Installation mutations are serialized in the trusted Rust backend. Packaged resources and runtime destinations are resolved separately and must never be the same root. Bounded copy and removal helpers require an explicit allowlisted root, reject dangling destination symlinks, and validate parent chains before creating or removing trees. Preview confirmation tokens are opaque, one-time, in-memory, expire after 600 seconds, and must not appear in logs or diagnostics.
 
@@ -75,8 +75,6 @@ Still honored from repository config: filter drivers (`filter.<name>.clean` and 
 ## Scripts
 
 The app runs its `python3` merge and generator helpers from the bundled, read-only copy, never from the editable runtime workspace, with fixed arguments. It never uses `sh -c` or a shell plugin (`check-shell-spawn.py` enforces this in release-check).
-
-The CLI scripts in `scripts/` are for operators and are not called by the app (except the bundled Python helpers). They default to dry-run, require `--apply` to write, back up an existing target and verify the copy before overwriting it, refuse a rules file that holds a managed block, refuse broad backup and agents directories, and take target overrides from `--target` or environment variables. They are macOS and Linux only; Git Bash and MSYS are refused unless `AGENT_WORKSPACE_BACKUP_DIR` is set.
 
 ## What the app does NOT access
 

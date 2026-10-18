@@ -111,7 +111,7 @@ Anything Install, uninstall, or a Library save would overwrite or remove is copi
                                     /artifacts/<artifact id>
                                     /managed-state.previous.json
 <backup root>/docs/<doc id>-<timestamp>/<file>        Library saves
-<backup root>/<YYYYMMDD-HHMMSS>/<label>/<file>        CLI scripts and Cursor operations
+<backup root>/<YYYYMMDD-HHMMSS>/<label>/<file>        Cursor operations (and the retired CLI scripts)
 ```
 
 New files have no backup. Restore by rollback while the transaction is in this session, otherwise by copying a file out of `artifacts/` by hand (the artifact id names the destination).

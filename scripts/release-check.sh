@@ -12,7 +12,6 @@ step() {
 
 scan_tmp=""
 release_tmp_dir=""
-codex_apply_log=""
 cleanup() {
   if [ -n "$scan_tmp" ] && [ -f "$scan_tmp" ]; then
     rm -f "$scan_tmp"
@@ -42,16 +41,6 @@ search_quiet() {
     grep -R -q -F "$@"
   else
     grep -R -q -E "$@"
-  fi
-}
-
-search_fixed_quiet() {
-  local needle="$1"
-  shift
-  if command -v rg >/dev/null 2>&1; then
-    rg -qF -- "$needle" "$@"
-  else
-    grep -R -q -F -- "$needle" "$@"
   fi
 }
 
@@ -131,65 +120,6 @@ search_pruned_ignore_case_has_match() {
   fi
   rm -f "$tmp"
   return 1
-}
-
-string_has_fixed() {
-  local needle="$1"
-  local text="$2"
-  grep -qF -- "$needle" <<<"$text"
-}
-
-assert_json_file() {
-  local path="$1"
-  local label="$2"
-  if [ ! -f "$path" ]; then
-    printf 'FAIL: %s not found: %s\n' "$label" "$path" >&2
-    return 1
-  fi
-  if ! python3 -m json.tool "$path" >/dev/null 2>&1; then
-    printf 'FAIL: %s is not valid JSON: %s\n' "$label" "$path" >&2
-    return 1
-  fi
-}
-
-assert_opencode_playwright_rendered() {
-  local opencode_json="$1"
-  local playwright_config="$2"
-  local browsers_path="$3"
-  local label="${4:-smoke}"
-  local ok=true
-
-  assert_json_file "$playwright_config" "$label playwright-mcp config" || ok=false
-  assert_json_file "$opencode_json" "$label opencode.json" || ok=false
-
-  for needle in '@playwright/mcp@0.0.48' '--config' 'PLAYWRIGHT_BROWSERS_PATH'; do
-    if ! grep -qF -e "$needle" "$opencode_json"; then
-      printf 'FAIL: %s opencode.json missing %s\n' "$label" "$needle" >&2
-      ok=false
-    fi
-  done
-  if ! grep -qF -e "$playwright_config" "$opencode_json"; then
-    printf 'FAIL: %s opencode.json missing playwright config path\n' "$label" >&2
-    ok=false
-  fi
-  if ! grep -qF -e "$browsers_path" "$opencode_json"; then
-    printf 'FAIL: %s opencode.json missing browser cache path\n' "$label" >&2
-    ok=false
-  fi
-  for forbidden in \
-    '__PLAYWRIGHT_MCP_CONFIG_PATH__' \
-    '__PLAYWRIGHT_BROWSERS_PATH__' \
-    '@playwright/mcp@latest' \
-    '--browser=chrome' \
-    'PLAYWRIGHT_BROWSERS_PATH=0' \
-    '/Users/me'; do
-    if grep -qF -e "$forbidden" "$opencode_json"; then
-      printf 'FAIL: %s opencode.json must not contain %s\n' "$label" "$forbidden" >&2
-      ok=false
-    fi
-  done
-
-  $ok
 }
 
 # Run `cargo test <filter>` and fail unless at least one test passed (cargo exits
@@ -307,8 +237,7 @@ python3 scripts/generate-shipped-digests.py --check
 step "release-check syntax"
 bash -n scripts/release-check.sh
 for repo_script in \
-  scripts/check-workspace-script-actions.sh \
-  scripts/check-workspace-script-safety.sh \
+  scripts/check-playwright-mcp.sh \
   scripts/run-ts-check.sh \
   scripts/smoke-tauri-runtime.sh \
   scripts/smoke-pre-manifest-upgrade.sh; do
@@ -357,29 +286,11 @@ step "README and settings docs drift"
 python3 scripts/check-readme-docs-drift.py
 printf '  README/docs drift checks ok\n'
 
-step "bundled default workspace scripts"
-bash -n resources/default-workspace/scripts/bootstrap.sh
-bash -n resources/default-workspace/scripts/lib/platform-paths.sh
-bash -n resources/default-workspace/scripts/test-platform-paths.sh
-bash -n resources/default-workspace/scripts/install-skills.sh
-bash -n resources/default-workspace/scripts/install-agent-rules.sh
-bash -n resources/default-workspace/scripts/install-opencode-config.sh
-bash -n resources/default-workspace/scripts/install-codex-config.sh
-bash -n resources/default-workspace/scripts/install-cursor-workspace.sh
-bash -n resources/default-workspace/scripts/install-runtime-agents.sh
-bash -n resources/default-workspace/scripts/install-codex-agents.sh
-bash -n resources/default-workspace/scripts/check-playwright-mcp.sh
-bash -n resources/default-workspace/scripts/playwright-mcp-lib.sh
-bash resources/default-workspace/scripts/test-platform-paths.sh
-
-step "bundled installer scripts: dry-run default, backup-first, fail-fast"
-bash scripts/check-workspace-script-safety.sh
-
 step "bundled merge script unit tests"
 # These test files are plain scripts with their own runner (not unittest/pytest
 # modules): run them directly and require a non-zero test count.
 merge_tests_home="$(mktemp -d "${TMPDIR:-/tmp}/agent-workspace-merge-tests.XXXXXX")"
-for merge_test in test_merge_codex_config.py test_merge_opencode_config.py; do
+for merge_test in test_merge_codex_config.py; do
   merge_test_log="$merge_tests_home/$merge_test.log"
   if ! HOME="$merge_tests_home" python3 "resources/default-workspace/scripts/$merge_test" >"$merge_test_log" 2>&1; then
     cat "$merge_test_log" >&2
@@ -442,40 +353,6 @@ if "profiles" in config:
 PY
 printf '  Codex config template valid\n'
 release_tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/agent-workspace-release-check.XXXXXX")"
-tmp_home="$(mktemp -d "${release_tmp_dir}/home.XXXXXX")"
-codex_apply_log="${release_tmp_dir}/codex-apply.log"
-
-# --apply on missing config should succeed (creates config from source)
-if ! HOME="$tmp_home" bash resources/default-workspace/scripts/install-codex-config.sh --apply >"$codex_apply_log" 2>&1; then
-  printf 'FAIL: install-codex-config.sh --apply failed for missing config\n' >&2
-  cat "$codex_apply_log" >&2
-  exit 1
-fi
-# Verify generated config parses as TOML
-if ! python3 -c "import tomllib; tomllib.load(open('$tmp_home/.codex/config.toml', 'rb'))" 2>/dev/null; then
-  printf 'FAIL: --apply produced invalid TOML\n' >&2
-  exit 1
-fi
-# Verify managed defaults present and legacy profile scheme absent
-if ! grep -q 'approval_policy = "on-request"' "$tmp_home/.codex/config.toml"; then
-  printf 'FAIL: generated Codex config must set approval_policy\n' >&2
-  exit 1
-fi
-if grep -qE '^profile *=' "$tmp_home/.codex/config.toml"; then
-  printf 'FAIL: generated Codex config must not use the legacy profile selector\n' >&2
-  exit 1
-fi
-# Verify diff output is managed-only (no full config)
-diff_log="${release_tmp_dir}/codex-diff.log"
-HOME="$tmp_home" bash resources/default-workspace/scripts/install-codex-config.sh --diff >"$diff_log" 2>&1 || true
-if grep -qi 'secret\|token\|sk-[A-Za-z0-9]\|Bearer' "$diff_log" 2>/dev/null; then
-  printf 'FAIL: Codex diff output may contain secrets\n' >&2
-  exit 1
-fi
-if ! grep -q 'codex-config managed sections synced\|codex-config synced' resources/default-workspace/scripts/install-codex-config.sh; then
-  printf 'FAIL: install-codex-config.sh --diff must print synced status when unchanged\n' >&2
-  exit 1
-fi
 
 # ── Secret marker tests ──
 secret_home="$(mktemp -d "${release_tmp_dir}/secret-home.XXXXXX")"
@@ -512,7 +389,15 @@ Path('$secret_home/.codex/config.toml').write_text(test_config)
 "
 # Run apply and verify no secret markers in output
 secret_apply_log="${release_tmp_dir}/codex-secret-apply.log"
-HOME="$secret_home" bash resources/default-workspace/scripts/install-codex-config.sh --apply >"$secret_apply_log" 2>&1 || \
+secret_backup_dir="$secret_home/backups"
+mkdir -p "$secret_backup_dir"
+codex_template="resources/default-workspace/templates/codex/config.toml"
+{
+  python3 resources/default-workspace/scripts/merge-codex-config.py --apply \
+    "$secret_home/.codex/config.toml" "$codex_template" --backup-dir "$secret_backup_dir" &&
+  python3 resources/default-workspace/scripts/ensure-codex-routing-defaults.py --apply \
+    "$secret_home/.codex/config.toml" "$codex_template" --backup-dir "$secret_backup_dir"
+} >"$secret_apply_log" 2>&1 || \
   { printf 'FAIL: secret-marker apply failed\n' >&2; cat "$secret_apply_log" >&2; exit 1; }
 for marker in 'sk-test-secret' 'ghp_test_secret' 'test-secret-value-98765'; do
   if grep -qF "$marker" "$secret_apply_log" 2>/dev/null; then
@@ -535,7 +420,7 @@ assert 'profile' not in result, 'legacy top-level profile selector should be rem
 assert result.get('profiles', {}).get('safe', {}).get('model') == 'gpt-4', 'customized legacy profile table should be preserved'
 print('  secret-marker apply: user values preserved and managed defaults applied')
 "
-printf '  Codex config apply and secret-marker guard verified\n'
+printf '  Codex merge and routing scripts: secret-marker guard verified\n'
 
 step "bundled default scripts are real (no placeholder phrases)"
 for pattern in "placeholder" "No files are written" "future app flows"; do
@@ -545,67 +430,8 @@ for pattern in "placeholder" "No files are written" "future app flows"; do
   fi
 done
 
-step "bundled default install-skills.sh help mentions all supported agents"
-for agent in codex opencode claude cursor; do
-  if ! bash resources/default-workspace/scripts/install-skills.sh --help 2>&1 | grep -qF "$agent"; then
-    printf 'FAIL: install-skills.sh --help missing agent: %s\n' "$agent" >&2
-    exit 1
-  fi
-done
-
-step "bundled default install-agent-rules.sh help mentions all supported rule targets"
-for agent in codex opencode claude; do
-  if ! bash resources/default-workspace/scripts/install-agent-rules.sh --help 2>&1 | grep -qF "$agent"; then
-    printf 'FAIL: install-agent-rules.sh --help missing rule target: %s\n' "$agent" >&2
-    exit 1
-  fi
-done
-
-step "bundled default install-skills.sh rejects unsafe skill names"
-neg_home="$(mktemp -d "${release_tmp_dir}/neg-home.XXXXXX")"
-neg_log="${release_tmp_dir}/neg.log"
-# "<name>|<expected message fragment>": the name must be rejected for this reason.
-for case in \
-  "|invalid skill name (empty)" \
-  "../../|path traversal" \
-  "../escape|path traversal" \
-  "a..b|path traversal" \
-  "a/b|path traversal" \
-  "bad name|invalid skill name" \
-  "BAD|invalid skill name" \
-  "-bad|must start with a-z0-9"; do
-  bad="${case%%|*}"
-  expected="${case#*|}"
-  if HOME="$neg_home" bash resources/default-workspace/scripts/install-skills.sh --skill "$bad" --dry-run >"$neg_log" 2>&1; then
-    printf 'FAIL: install-skills.sh accepted unsafe skill name: %s\n' "$bad" >&2
-    exit 1
-  fi
-  if ! grep -qF -- "$expected" "$neg_log"; then
-    printf 'FAIL: install-skills.sh rejected %s for the wrong reason (expected "%s"):\n' "$bad" "$expected" >&2
-    cat "$neg_log" >&2
-    exit 1
-  fi
-done
-
-step "bundled default install-skills.sh no unguarded rm -rf before containment check"
-skill_file="resources/default-workspace/scripts/install-skills.sh"
-if grep -q 'rm -rf.*dest_dir' "$skill_file"; then
-  if ! grep -q 'ensure_contained' "$skill_file"; then
-    printf 'FAIL: install-skills.sh has rm -rf without ensure_contained guard\n' >&2
-    exit 1
-  fi
-fi
-if ! grep -q 'templates/skills' "$skill_file"; then
-  printf 'FAIL: install-skills.sh must install generated harness skill adapters\n' >&2
-  exit 1
-fi
-if grep -q 'cp -R.*SKILLS_DIR' "$skill_file" || grep -q 'cp -R.*src_dir' "$skill_file"; then
-  printf 'FAIL: install-skills.sh must not copy canonical skill directories\n' >&2
-  exit 1
-fi
-
 step "bundled default cursor setup"
-python3 resources/default-workspace/scripts/check-cursor-profile.py
+python3 scripts/check-cursor-profile.py
 run_cargo_filter_tests cursor_profile_ops::
 python3 -m json.tool resources/default-workspace/templates/cursor/manifest.json >/dev/null
 python3 -m json.tool resources/default-workspace/templates/cursor/global-profile.json >/dev/null
@@ -685,23 +511,6 @@ PY
 printf '  Cursor manifest-listed agents/rules and frontmatter verified\n'
 python3 scripts/check-cursor-action-compat.py
 printf '  Cursor backend action/script compatibility verified\n'
-cursor_setup_help="$(bash resources/default-workspace/scripts/install-cursor-workspace.sh --help 2>&1)"
-if ! string_has_fixed '--copy-user-rules' "$cursor_setup_help"; then
-  printf 'FAIL: install-cursor-workspace.sh --help missing --copy-user-rules\n' >&2
-  exit 1
-fi
-if string_has_fixed 'native Rust operations' "$cursor_setup_help"; then
-  : "ok"
-else
-  printf 'FAIL: install-cursor-workspace.sh --help must state global setup uses native Rust operations\n' >&2
-  exit 1
-fi
-if string_has_fixed 'never writes' "$cursor_setup_help"; then
-  : "ok"
-else
-  printf 'FAIL: install-cursor-workspace.sh --help must state it never writes global agents\n' >&2
-  exit 1
-fi
 # Validation handled by check-cursor-profile.py (manifest-driven, covers all agents)
 if ! grep -q 'fn editable_config_targets' src-tauri/src/agent_targets.rs; then
   printf 'FAIL: editable config target allowlist missing\n' >&2
@@ -722,43 +531,6 @@ if grep -q 'EDITABLE_CONFIG_TARGET_IDS.*cursor_setup' src/App.tsx; then
   printf 'FAIL: cursor_setup must not be exposed as an editable config target\n' >&2
   exit 1
 fi
-for forbidden in '--global-agents' '--global-agents-only' 'CURSOR_AGENTS_TARGET' '$HOME/.cursor/agents'; do
-  if search_fixed_quiet "$forbidden" resources/default-workspace/scripts/install-cursor-workspace.sh; then
-    printf 'FAIL: install-cursor-workspace.sh must not contain global agent shell path: %s\n' "$forbidden" >&2
-    exit 1
-  fi
-done
-tmpdir="$(mktemp -d)"
-fake_project="$tmpdir/project"
-mkdir -p "$fake_project/.git"
-if HOME="$tmpdir" bash resources/default-workspace/scripts/install-cursor-workspace.sh --apply --global-agents --quiet >/dev/null 2>&1; then
-  printf 'FAIL: install-cursor-workspace.sh accepted removed --global-agents flag\n' >&2
-  exit 1
-fi
-if [ -d "$tmpdir/.cursor/agents" ]; then
-  printf 'FAIL: install-cursor-workspace.sh must not write ~/.cursor/agents\n' >&2
-  exit 1
-fi
-HOME="$tmpdir" AGENT_WORKSPACE_BACKUP_DIR="$tmpdir/backups" \
-  bash resources/default-workspace/scripts/install-cursor-workspace.sh --apply --project --target "$fake_project" --quiet >/dev/null
-if [ ! -d "$fake_project/.cursor/agents" ] || [ ! -d "$fake_project/.cursor/rules" ]; then
-  printf 'FAIL: Cursor project CLI smoke did not write project agents/rules\n' >&2
-  exit 1
-fi
-rm -rf "$tmpdir"
-broad_home="$(mktemp -d "${release_tmp_dir}/cursor-broad-home.XXXXXX")"
-mkdir -p "$broad_home/.git"
-if HOME="$broad_home" AGENT_WORKSPACE_BACKUP_DIR="$broad_home/backups" \
-  bash resources/default-workspace/scripts/install-cursor-workspace.sh --project --target "$broad_home" >"${release_tmp_dir}/cursor-broad.log" 2>&1; then
-  printf 'FAIL: Cursor project sync accepted broad HOME target\n' >&2
-  exit 1
-fi
-if ! grep -qF 'refusing broad project target' "${release_tmp_dir}/cursor-broad.log"; then
-  printf 'FAIL: Cursor project sync rejected the broad HOME target for the wrong reason:\n' >&2
-  cat "${release_tmp_dir}/cursor-broad.log" >&2
-  exit 1
-fi
-printf '  Cursor setup verified: help, adapters, project install, no shell global agents\n'
 
 step "bundled default cursor user-rules"
 user_rules_file="resources/default-workspace/templates/cursor/user-rules.md"
@@ -806,44 +578,6 @@ if grep -qF 'Do not invoke the `architect` subagent' "$global_rules"; then
   exit 1
 fi
 printf '  global-agent-rules.md avoids Cursor-specific architect-subagent phrase\n'
-
-step "bundled default cursor user-rules show and copy"
-if ! bash resources/default-workspace/scripts/install-cursor-workspace.sh --show-user-rules >/dev/null 2>&1; then
-  printf 'FAIL: install-cursor-workspace.sh --show-user-rules failed\n' >&2
-  exit 1
-fi
-printf '  --show-user-rules works\n'
-# --copy-user-rules runs against a fake pbcopy so the developer's clipboard is
-# never overwritten; the capture proves the right file is piped, and a failing
-# pbcopy must fail the script.
-fake_clip_bin="${release_tmp_dir}/fake-clip-bin"
-mkdir -p "$fake_clip_bin"
-cat >"$fake_clip_bin/pbcopy" <<'PBCOPY'
-#!/bin/sh
-cat > "$PBCOPY_CAPTURE"
-PBCOPY
-chmod +x "$fake_clip_bin/pbcopy"
-clip_capture="${release_tmp_dir}/pbcopy.out"
-if ! PATH="$fake_clip_bin:$PATH" PBCOPY_CAPTURE="$clip_capture" \
-  bash resources/default-workspace/scripts/install-cursor-workspace.sh --copy-user-rules >/dev/null 2>&1; then
-  printf 'FAIL: install-cursor-workspace.sh --copy-user-rules failed\n' >&2
-  exit 1
-fi
-if ! cmp -s "$clip_capture" "$user_rules_file"; then
-  printf 'FAIL: --copy-user-rules did not pipe templates/cursor/user-rules.md to pbcopy\n' >&2
-  exit 1
-fi
-printf '#!/bin/sh\nexit 1\n' >"$fake_clip_bin/pbcopy"
-copy_fail_log="${release_tmp_dir}/copy-fail.log"
-if PATH="$fake_clip_bin:$PATH" bash resources/default-workspace/scripts/install-cursor-workspace.sh --copy-user-rules >"$copy_fail_log" 2>&1; then
-  printf 'FAIL: --copy-user-rules must fail when pbcopy fails\n' >&2
-  exit 1
-fi
-if grep -qF 'copied to clipboard' "$copy_fail_log"; then
-  printf 'FAIL: --copy-user-rules reported success although pbcopy failed\n' >&2
-  exit 1
-fi
-printf '  --copy-user-rules works (fake pbcopy; clipboard untouched)\n'
 
 step "regression: no fake global Cursor User Rules path"
 if search_pruned_ignore_case_has_match '\.cursor/AGENTS\.md|\$HOME/\.cursor/AGENTS\.md|~/.cursor/AGENTS\.md' \
@@ -968,7 +702,26 @@ python3 -m json.tool resources/default-workspace/templates/playwright-mcp.config
 printf '  playwright-mcp.config.json: valid strict JSON\n'
 
 step "bundled default Playwright MCP guardrails"
-bash resources/default-workspace/scripts/check-playwright-mcp.sh
+bash scripts/check-playwright-mcp.sh
+# The guard must really fail on a hardcoded home directory (checked on a copy of the workspace).
+guard_ws="$(mktemp -d "${TMPDIR:-/tmp}/agent-workspace-playwright-guard.XXXXXX")"
+mkdir -p "$guard_ws/scripts" "$guard_ws/resources"
+cp -R resources/default-workspace "$guard_ws/resources/default-workspace"
+cp scripts/check-playwright-mcp.sh "$guard_ws/scripts/check-playwright-mcp.sh"
+printf '{"path": "/Users/someone-else/project"}\n' >"$guard_ws/resources/default-workspace/templates/leaked-home.json"
+if bash "$guard_ws/scripts/check-playwright-mcp.sh" >"$guard_ws/guard.log" 2>&1; then
+  rm -rf "$guard_ws"
+  printf 'FAIL: check-playwright-mcp.sh must flag a hardcoded home directory\n' >&2
+  exit 1
+fi
+if ! grep -qF 'hardcoded' "$guard_ws/guard.log"; then
+  cat "$guard_ws/guard.log" >&2
+  rm -rf "$guard_ws"
+  printf 'FAIL: check-playwright-mcp.sh failed for the wrong reason\n' >&2
+  exit 1
+fi
+rm -rf "$guard_ws"
+printf '  Playwright MCP guard flags a hardcoded home directory\n'
 
 step "bundled default opencode.json snapshot is current"
 python3 scripts/generate-default-opencode-config.py --check
@@ -1190,260 +943,6 @@ for agent in architect.md repo-scout.md inspector.md sentinel.md scribe.md verif
 done
 printf '  bundled agent bash deny coverage verified for expanded secret patterns\n'
 
-step "bundled default install-opencode-config.sh help mentions agents"
-if ! bash resources/default-workspace/scripts/install-opencode-config.sh --help 2>&1 | grep -qF "agents"; then
-  printf 'FAIL: install-opencode-config.sh --help missing agents mention\n' >&2
-  exit 1
-fi
-
-step "bundled default install-opencode-config.sh agents count in help"
-agent_count_help="$(bash resources/default-workspace/scripts/install-opencode-config.sh --help 2>&1 | grep -o '\.md' | wc -l | tr -d ' ' || true)"
-if [ "$agent_count_help" -lt 2 ]; then
-  printf 'FAIL: install-opencode-config.sh --help has insufficient agents references (expected >= 2 .md refs, found %s)\n' "$agent_count_help" >&2
-  exit 1
-fi
-
-step "bundled default install-opencode-config.sh temp apply smoke"
-tmpdir="$(mktemp -d)"
-playwright_config="$tmpdir/playwright-mcp/config.json"
-browsers_path="$tmpdir/ms-playwright"
-OPENCODE_CONFIG_PATH="$tmpdir/opencode.json" \
-OPENCODE_TUI_CONFIG_PATH="$tmpdir/tui.json" \
-OPENCODE_AGENTS_DIR="$tmpdir/agents" \
-AGENT_WORKSPACE_BACKUP_DIR="$tmpdir/backups" \
-PLAYWRIGHT_MCP_CONFIG_PATH="$playwright_config" \
-PLAYWRIGHT_BROWSERS_PATH="$browsers_path" \
-  bash resources/default-workspace/scripts/install-opencode-config.sh --apply >/dev/null
-apply_ok=true
-if [ ! -f "$tmpdir/opencode.json" ]; then
-  printf 'FAIL: install-opencode-config.sh --apply did not write opencode.json\n' >&2
-  apply_ok=false
-fi
-if [ ! -f "$tmpdir/tui.json" ]; then
-  printf 'FAIL: install-opencode-config.sh --apply did not write tui.json\n' >&2
-  apply_ok=false
-fi
-if ! python3 -m json.tool "$tmpdir/tui.json" >/dev/null 2>&1; then
-  printf 'FAIL: smoke tui.json is not valid JSON\n' >&2
-  apply_ok=false
-fi
-for agent in architect.md repo-scout.md inspector.md sentinel.md scribe.md verifier.md; do
-  if [ ! -f "$tmpdir/agents/$agent" ]; then
-    printf 'FAIL: install-opencode-config.sh --apply did not write agents/%s\n' "$agent" >&2
-    apply_ok=false
-  fi
-done
-agent_count="$(find "$tmpdir/agents" -maxdepth 1 -name '*.md' -type f | wc -l | tr -d ' ')"
-if [ "$agent_count" -ne 6 ]; then
-  printf 'FAIL: install-opencode-config.sh --apply wrote %s agents, expected 6\n' "$agent_count" >&2
-  apply_ok=false
-fi
-if ! $apply_ok; then rm -rf "$tmpdir"; exit 1; fi
-if ! grep -q '"default_agent": "architect"' "$tmpdir/opencode.json"; then
-  printf 'FAIL: smoke opencode.json missing default_agent architect\n' >&2
-  apply_ok=false
-fi
-if ! grep -q '"model": "opencode-go/glm-5.2"' "$tmpdir/opencode.json"; then
-  printf 'FAIL: smoke opencode.json missing expected GLM 5.2 model\n' >&2
-  apply_ok=false
-fi
-if ! grep -q '"small_model": "opencode-go/deepseek-v4-flash"' "$tmpdir/opencode.json"; then
-  printf 'FAIL: smoke opencode.json missing expected DeepSeek v4 Flash small_model\n' >&2
-  apply_ok=false
-fi
-# Model-agnostic agents — no model frontmatter expected
-for agent in architect.md repo-scout.md inspector.md sentinel.md scribe.md verifier.md; do
-  if grep -q "^model:" "$tmpdir/agents/$agent"; then
-    printf 'FAIL: smoke %s has model frontmatter (should be model-agnostic)\n' "$agent" >&2
-    apply_ok=false
-  fi
-done
-if ! grep -q 'mode: primary' "$tmpdir/agents/architect.md"; then
-  printf 'FAIL: smoke architect.md missing mode: primary\n' >&2
-  apply_ok=false
-fi
-for subagent in repo-scout.md inspector.md sentinel.md scribe.md verifier.md; do
-  if ! grep -q 'mode: subagent' "$tmpdir/agents/$subagent"; then
-    printf 'FAIL: smoke %s missing mode: subagent\n' "$subagent" >&2
-    apply_ok=false
-  fi
-done
-# TUI config key checks
-if ! grep -qF '"theme": "system"' "$tmpdir/tui.json"; then
-  printf 'FAIL: smoke tui.json missing theme system\n' >&2
-  apply_ok=false
-fi
-if ! grep -qF '"diff_style": "auto"' "$tmpdir/tui.json"; then
-  printf 'FAIL: smoke tui.json missing diff_style auto\n' >&2
-  apply_ok=false
-fi
-if ! grep -qF '"mouse": true' "$tmpdir/tui.json"; then
-  printf 'FAIL: smoke tui.json missing mouse true\n' >&2
-  apply_ok=false
-fi
-if ! grep -qF '"leader_timeout": 2000' "$tmpdir/tui.json"; then
-  printf 'FAIL: smoke tui.json missing leader_timeout 2000\n' >&2
-  apply_ok=false
-fi
-python3 -c "
-import json, sys
-data = json.load(open('$tmpdir/tui.json'))
-if not data.get('scroll_acceleration', {}).get('enabled'):
-    sys.exit('FAIL: smoke tui.json scroll_acceleration.enabled must be true')
-" || { apply_ok=false; }
-if ! assert_opencode_playwright_rendered \
-  "$tmpdir/opencode.json" \
-  "$playwright_config" \
-  "$browsers_path" \
-  "temp apply"; then
-  apply_ok=false
-fi
-rm -rf "$tmpdir"
-if ! $apply_ok; then exit 1; fi
-printf '  install-opencode-config.sh --apply smoke: 1 config + 1 tui + 6 agents written, content checks passed\n'
-
-step "opencode secret-marker apply test"
-op_secret_home="$(mktemp -d "${release_tmp_dir}/op-secret-home.XXXXXX")"
-mkdir -p "$op_secret_home/.config/opencode"
-# Create an opencode.json with secret-like markers
-python3 -c "
-from pathlib import Path
-test_config = '''{
-  \"model\": \"test-model\",
-  \"small_model\": \"test-small\",
-  \"default_agent\": \"architect\",
-  \"provider\": {
-    \"custom-provider\": {
-      \"api_key\": \"test-secret-openkey-12345\",
-      \"models\": {
-        \"gpt-4\": {\"limit\": {\"context\": 100000}}
-      }
-    }
-  },
-  \"mcp\": {
-    \"playwright\": {
-      \"command\": [\"npx\", \"-y\", \"@playwright/mcp@0.0.48\", \"--config\", \"/tmp/test-config.json\"],
-      \"environment\": {\"PLAYWRIGHT_BROWSERS_PATH\": \"/tmp/test-browsers\"}
-    },
-    \"custom-mcp\": {
-      \"command\": [\"custom\"],
-      \"env\": {\"TOKEN\": \"test-secret-token-value-55555\"}
-    }
-  },
-  \"unknown-key\": \"should-preserve\"
-}'''
-Path('$op_secret_home/.config/opencode/opencode.json').write_text(test_config)
-"
-# Set up playwright paths for the opencode script
-op_playwright_config="$op_secret_home/playwright-mcp/config.json"
-op_browsers_path="$op_secret_home/ms-playwright"
-mkdir -p "$(dirname "$op_playwright_config")"
-echo '{}' > "$op_playwright_config"
-op_apply_log="${release_tmp_dir}/op-secret-apply.log"
-OPENCODE_CONFIG_PATH="$op_secret_home/.config/opencode/opencode.json" \
-OPENCODE_TUI_CONFIG_PATH="$op_secret_home/.config/opencode/tui.json" \
-OPENCODE_AGENTS_DIR="$op_secret_home/.config/opencode/agents" \
-AGENT_WORKSPACE_BACKUP_DIR="$op_secret_home/backups" \
-PLAYWRIGHT_MCP_CONFIG_PATH="$op_playwright_config" \
-PLAYWRIGHT_BROWSERS_PATH="$op_browsers_path" \
-  bash resources/default-workspace/scripts/install-opencode-config.sh --apply >"$op_apply_log" 2>&1 || \
-  { printf 'FAIL: opencode secret-marker apply failed\n' >&2; cat "$op_apply_log" >&2; exit 1; }
-for marker in 'test-secret-openkey' 'test-secret-token-value'; do
-  if grep -qF "$marker" "$op_apply_log" 2>/dev/null; then
-    printf 'FAIL: OpenCode apply output leaked secret marker: %s\n' "$marker" >&2
-    exit 1
-  fi
-done
-# Verify user values preserved
-python3 -c "
-import json
-result = json.load(open('$op_secret_home/.config/opencode/opencode.json'))
-provider = result.get('provider', {})
-assert 'custom-provider' in provider, 'user provider should be preserved'
-assert provider['custom-provider']['api_key'] == 'test-secret-openkey-12345', 'provider api_key should survive'
-mcp = result.get('mcp', {})
-assert 'custom-mcp' in mcp, 'custom MCP entry should survive'
-assert mcp['custom-mcp']['env']['TOKEN'] == 'test-secret-token-value-55555', 'custom MCP env should survive'
-assert result.get('unknown-key') == 'should-preserve', 'unknown key should survive'
-print('  secret-marker opencode apply: user values preserved')
-"
-printf '  opencode secret-marker apply test passed\n'
-
-step "bundled default install-opencode-config.sh --agents-only temp apply"
-tmpdir="$(mktemp -d)"
-playwright_config="$tmpdir/playwright-mcp/config.json"
-browsers_path="$tmpdir/ms-playwright"
-OPENCODE_CONFIG_PATH="$tmpdir/opencode.json" \
-OPENCODE_TUI_CONFIG_PATH="$tmpdir/tui.json" \
-OPENCODE_AGENTS_DIR="$tmpdir/agents" \
-AGENT_WORKSPACE_BACKUP_DIR="$tmpdir/backups" \
-PLAYWRIGHT_MCP_CONFIG_PATH="$playwright_config" \
-PLAYWRIGHT_BROWSERS_PATH="$browsers_path" \
-  bash resources/default-workspace/scripts/install-opencode-config.sh --apply --agents-only >/dev/null
-agents_only_ok=true
-for agent in architect.md repo-scout.md inspector.md sentinel.md scribe.md verifier.md; do
-  if [ ! -f "$tmpdir/agents/$agent" ]; then
-    printf 'FAIL: --agents-only did not write agents/%s\n' "$agent" >&2
-    agents_only_ok=false
-  fi
-done
-if [ -f "$tmpdir/opencode.json" ] || [ -f "$tmpdir/tui.json" ]; then
-  printf 'FAIL: --agents-only must not write config or tui files\n' >&2
-  agents_only_ok=false
-fi
-rm -rf "$tmpdir"
-if ! $agents_only_ok; then exit 1; fi
-printf '  install-opencode-config.sh --agents-only: agents written, config/tui untouched\n'
-
-step "bundled default install-opencode-config.sh --config-only temp apply"
-tmpdir="$(mktemp -d)"
-playwright_config="$tmpdir/playwright-mcp/config.json"
-browsers_path="$tmpdir/ms-playwright"
-OPENCODE_CONFIG_PATH="$tmpdir/opencode.json" \
-OPENCODE_TUI_CONFIG_PATH="$tmpdir/tui.json" \
-OPENCODE_AGENTS_DIR="$tmpdir/agents" \
-AGENT_WORKSPACE_BACKUP_DIR="$tmpdir/backups" \
-PLAYWRIGHT_MCP_CONFIG_PATH="$playwright_config" \
-PLAYWRIGHT_BROWSERS_PATH="$browsers_path" \
-  bash resources/default-workspace/scripts/install-opencode-config.sh --apply --config-only >/dev/null
-config_only_ok=true
-if [ ! -f "$tmpdir/opencode.json" ] || [ ! -f "$tmpdir/tui.json" ]; then
-  printf 'FAIL: --config-only did not write opencode.json and tui.json\n' >&2
-  config_only_ok=false
-fi
-if [ -d "$tmpdir/agents" ] && [ "$(find "$tmpdir/agents" -maxdepth 1 -name '*.md' -type f | wc -l | tr -d ' ')" -gt 0 ]; then
-  printf 'FAIL: --config-only must not write agent files\n' >&2
-  config_only_ok=false
-fi
-rm -rf "$tmpdir"
-if ! $config_only_ok; then exit 1; fi
-printf '  install-opencode-config.sh --config-only: config + tui written, agents untouched\n'
-
-step "bundled default install-runtime-agents.sh help mentions supported harnesses"
-for harness in opencode claude; do
-  if ! bash resources/default-workspace/scripts/install-runtime-agents.sh --help 2>&1 | grep -qF "$harness"; then
-    printf 'FAIL: install-runtime-agents.sh --help missing harness: %s\n' "$harness" >&2
-    exit 1
-  fi
-done
-
-step "bundled default install-runtime-agents.sh temp apply (claude)"
-tmpdir="$(mktemp -d)"
-CLAUDE_AGENTS_DIR="$tmpdir/claude/agents" \
-AGENT_WORKSPACE_BACKUP_DIR="$tmpdir/backups" \
-  bash resources/default-workspace/scripts/install-runtime-agents.sh --claude --apply --quiet >/dev/null
-runtime_ok=true
-for agent in repo-scout.md inspector.md sentinel.md scribe.md verifier.md; do
-  dest="$tmpdir/claude/agents/$agent"
-  if [ ! -f "$dest" ]; then
-    printf 'FAIL: install-runtime-agents.sh did not write %s\n' "$dest" >&2
-    runtime_ok=false
-  fi
-done
-rm -rf "$tmpdir"
-if ! $runtime_ok; then exit 1; fi
-printf '  install-runtime-agents.sh: claude agents written (5)\n'
-
 step "harness pages use one managed installation owner"
 for view in ClaudeView CodexView CursorView OpenCodeView; do
   path="src/views/${view}.tsx"
@@ -1468,190 +967,6 @@ if search_has_match 'config \+ agents' src/views src/App.tsx; then
   exit 1
 fi
 printf '  app UI uses config-only / agents-only labels\n'
-
-step "bundled default install-opencode-config.sh unsafe OPENCODE_AGENTS_DIR rejected"
-guard_home="$(mktemp -d "${release_tmp_dir}/guard-home.XXXXXX")"
-guard_log="${release_tmp_dir}/guard.log"
-for guard_dir in "/" "$guard_home" "$guard_home//" "$guard_home/."; do
-  if HOME="$guard_home" \
-    OPENCODE_CONFIG_PATH="$guard_home/oc/opencode.json" \
-    OPENCODE_TUI_CONFIG_PATH="$guard_home/oc/tui.json" \
-    PLAYWRIGHT_MCP_CONFIG_PATH="$guard_home/pw/config.json" \
-    PLAYWRIGHT_BROWSERS_PATH="$guard_home/ms-playwright" \
-    AGENT_WORKSPACE_BACKUP_DIR="$guard_home/backups" \
-    OPENCODE_AGENTS_DIR="$guard_dir" \
-    bash resources/default-workspace/scripts/install-opencode-config.sh --apply >"$guard_log" 2>&1; then
-    printf 'FAIL: install-opencode-config.sh accepted unsafe OPENCODE_AGENTS_DIR=%s\n' "$guard_dir" >&2
-    exit 1
-  fi
-  if ! grep -qF 'refusing unsafe OPENCODE_AGENTS_DIR' "$guard_log"; then
-    printf 'FAIL: install-opencode-config.sh rejected OPENCODE_AGENTS_DIR=%s for the wrong reason:\n' "$guard_dir" >&2
-    cat "$guard_log" >&2
-    exit 1
-  fi
-  if [ -n "$(find "$guard_home" -mindepth 1 -type f 2>/dev/null)" ]; then
-    printf 'FAIL: install-opencode-config.sh wrote files before refusing OPENCODE_AGENTS_DIR=%s\n' "$guard_dir" >&2
-    exit 1
-  fi
-done
-
-step "bundled default install-opencode-config.sh works with space in workspace path"
-tmpdir="$(mktemp -d)"
-space_dir="$tmpdir/Agent Workspace"
-runtime_config="$tmpdir/runtime/opencode.json"
-runtime_tui="$tmpdir/runtime/tui.json"
-runtime_agents="$tmpdir/runtime/agents"
-backup_dir="$tmpdir/runtime/backups"
-runtime_playwright_config="$tmpdir/runtime/playwright-mcp/config.json"
-runtime_browsers_path="$tmpdir/runtime/ms-playwright"
-
-# Copy entire workspace tree to space-containing path so the script
-# itself runs from a path with spaces and computes SCRIPT_DIR / SOURCE_FILE
-# / AGENTS_SOURCE_DIR from that location.
-cp -R resources/default-workspace "$space_dir"
-
-# Run --apply from the copied workspace, targeting separate runtime dirs
-OPENCODE_CONFIG_PATH="$runtime_config" \
-OPENCODE_TUI_CONFIG_PATH="$runtime_tui" \
-OPENCODE_AGENTS_DIR="$runtime_agents" \
-AGENT_WORKSPACE_BACKUP_DIR="$backup_dir" \
-PLAYWRIGHT_MCP_CONFIG_PATH="$runtime_playwright_config" \
-PLAYWRIGHT_BROWSERS_PATH="$runtime_browsers_path" \
-  bash "$space_dir/scripts/install-opencode-config.sh" --apply >/dev/null
-
-apply_ok=true
-if [ ! -f "$runtime_config" ]; then
-  printf 'FAIL: space-in-path apply did not create opencode.json\n' >&2
-  apply_ok=false
-fi
-if [ ! -f "$runtime_tui" ]; then
-  printf 'FAIL: space-in-path apply did not create tui.json\n' >&2
-  apply_ok=false
-fi
-if ! python3 -m json.tool "$runtime_tui" >/dev/null 2>&1; then
-  printf 'FAIL: space-in-path tui.json is not valid JSON\n' >&2
-  apply_ok=false
-fi
-if ! grep -q '"default_agent": "architect"' "$runtime_config"; then
-  printf 'FAIL: space-in-path opencode.json missing default_agent architect\n' >&2
-  apply_ok=false
-fi
-
-for agent in architect.md repo-scout.md inspector.md sentinel.md scribe.md verifier.md; do
-  if [ ! -f "$runtime_agents/$agent" ]; then
-    printf 'FAIL: space-in-path apply did not create agents/%s\n' "$agent" >&2
-    apply_ok=false
-  fi
-done
-
-agent_count="$(find "$runtime_agents" -maxdepth 1 -name '*.md' -type f | wc -l | tr -d ' ')"
-if [ "$agent_count" -ne 6 ]; then
-  printf 'FAIL: space-in-path apply wrote %s agents, expected 6\n' "$agent_count" >&2
-  apply_ok=false
-fi
-
-# TUI config key checks
-if ! grep -qF '"theme": "system"' "$runtime_tui"; then
-  printf 'FAIL: space-in-path tui.json missing theme system\n' >&2
-  apply_ok=false
-fi
-if ! grep -qF '"diff_style": "auto"' "$runtime_tui"; then
-  printf 'FAIL: space-in-path tui.json missing diff_style auto\n' >&2
-  apply_ok=false
-fi
-if ! grep -qF '"mouse": true' "$runtime_tui"; then
-  printf 'FAIL: space-in-path tui.json missing mouse true\n' >&2
-  apply_ok=false
-fi
-if ! grep -qF '"leader_timeout": 2000' "$runtime_tui"; then
-  printf 'FAIL: space-in-path tui.json missing leader_timeout 2000\n' >&2
-  apply_ok=false
-fi
-python3 -c "
-import json, sys
-data = json.load(open('$runtime_tui'))
-if not data.get('scroll_acceleration', {}).get('enabled'):
-    sys.exit('FAIL: space-in-path tui.json scroll_acceleration.enabled must be true')
-" || { apply_ok=false; }
-if ! assert_opencode_playwright_rendered \
-  "$runtime_config" \
-  "$runtime_playwright_config" \
-  "$runtime_browsers_path" \
-  "space-in-path"; then
-  apply_ok=false
-fi
-
-rm -rf "$tmpdir"
-if ! $apply_ok; then exit 1; fi
-printf '  install-opencode-config.sh handles space-in-path correctly: 1 config + 1 tui + 6 agents applied from space-containing workspace\n'
-
-step "backup layout matches app expectations"
-# Run the real installers against diverged targets in a temp HOME, then compare
-# the backup layout they wrote with what backups.rs lists: <timestamp>/<target id>/.
-backup_home="$(mktemp -d "${release_tmp_dir}/backup-layout-home.XXXXXX")"
-backup_root="${release_tmp_dir}/backup-layout-backups"
-mkdir -p "$backup_home/.claude/agents" "$backup_home/.codex/agents" \
-  "$backup_home/.config/opencode/agents" "$backup_home/.config/opencode/skills/diagnose"
-printf 'user skill\n' >"$backup_home/.config/opencode/skills/diagnose/SKILL.md"
-printf 'user rules\n' >"$backup_home/.claude/CLAUDE.md"
-printf 'user rules\n' >"$backup_home/.codex/AGENTS.md"
-printf 'user rules\n' >"$backup_home/.config/opencode/AGENTS.md"
-printf 'user agent\n' >"$backup_home/.claude/agents/inspector.md"
-printf 'user agent\n' >"$backup_home/.config/opencode/agents/architect.md"
-codex_agent_name="$(find resources/default-workspace/templates/codex/agents -name '*.toml' -type f | sort | head -1 | xargs basename)"
-printf 'user agent\n' >"$backup_home/.codex/agents/$codex_agent_name"
-printf '{"model": "user/model"}\n' >"$backup_home/.config/opencode/opencode.json"
-printf '{}\n' >"$backup_home/.config/opencode/tui.json"
-for backup_script in \
-  "install-agent-rules.sh --all --apply --quiet" \
-  "install-runtime-agents.sh --all --apply --quiet" \
-  "install-codex-agents.sh --apply --quiet" \
-  "install-opencode-config.sh --apply --quiet" \
-  "install-skills.sh --agent opencode --skill diagnose --apply --quiet"; do
-  # shellcheck disable=SC2086
-  if ! env -i PATH="$PATH" HOME="$backup_home" TMPDIR="${TMPDIR:-/tmp}" \
-    AGENT_WORKSPACE_BACKUP_DIR="$backup_root" \
-    PLAYWRIGHT_BROWSERS_PATH="$backup_home/ms-playwright" \
-    bash resources/default-workspace/scripts/$backup_script >"${release_tmp_dir}/backup-layout.log" 2>&1; then
-    cat "${release_tmp_dir}/backup-layout.log" >&2
-    printf 'FAIL: %s failed while seeding backups\n' "$backup_script" >&2
-    exit 1
-  fi
-done
-python3 - "$backup_root" src-tauri/src/commands/backups.rs <<'PY'
-import re
-import sys
-from pathlib import Path
-
-backup_root, backups_rs = Path(sys.argv[1]), Path(sys.argv[2])
-source = backups_rs.read_text(encoding="utf-8")
-allowed = set()
-for const_name in ("ALLOWED_TARGET_IDS", "SKILL_TARGET_IDS"):
-    block = re.search(rf"const {const_name}:\s*&\[&str\]\s*=\s*&\[(.*?)\];", source, re.DOTALL)
-    if not block:
-        raise SystemExit(f"FAIL: {const_name} not found in backups.rs")
-    allowed |= set(re.findall(r'"([^"]+)"', block.group(1)))
-produced = set()
-for run_dir in backup_root.iterdir():
-    if not re.fullmatch(r"\d{8}-\d{6}", run_dir.name):
-        raise SystemExit(f"FAIL: backup run directory is not YYYYMMDD-HHMMSS: {run_dir.name}")
-    for target_dir in run_dir.iterdir():
-        produced.add(target_dir.name)
-        if not any(f.is_file() for f in target_dir.rglob("*")):
-            raise SystemExit(f"FAIL: empty backup directory: {target_dir}")
-expected = {
-    "claude-rules", "codex-rules", "opencode-rules",
-    "claude-agents", "opencode-agents", "codex-agents", "opencode-config", "opencode-skills",
-}
-if produced != expected:
-    raise SystemExit(f"FAIL: installers wrote backup targets {sorted(produced)}; expected {sorted(expected)}")
-unknown = produced - allowed
-if unknown:
-    raise SystemExit(
-        f"FAIL: installers write backup targets the app does not list (ALLOWED_TARGET_IDS, SKILL_TARGET_IDS): {sorted(unknown)}"
-    )
-print(f"  backup layout verified: <timestamp>/<id> with ids {sorted(produced)} (all listed by backups.rs)")
-PY
 
 step "tauri app resources config"
 if ! search_quiet "default-workspace" src-tauri/tauri.conf.json; then
@@ -1733,10 +1048,6 @@ scan_forbidden 'npx[[:space:]]+skills' 'npx skills'
 scan_forbidden 'skills@latest' 'skills@latest'
 if ! search_has_match 'codex_home\(home\)\.join\("skills"\)' src-tauri/src/agent_skill_targets.rs; then
   printf 'FAIL: Codex global skills path must use $CODEX_HOME/skills\n' >&2
-  exit 1
-fi
-if ! search_has_match '\.codex}/skills' resources/default-workspace/scripts/install-skills.sh; then
-  printf 'FAIL: install-skills.sh must use $CODEX_HOME/skills for Codex\n' >&2
   exit 1
 fi
 printf '  Codex $CODEX_HOME/skills path guard verified\n'

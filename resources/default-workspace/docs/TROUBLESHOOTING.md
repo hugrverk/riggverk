@@ -21,12 +21,6 @@ A valid workspace contains all of:
 | `templates/codex/config.toml` | file |
 | `templates/cursor/agents/` | directory |
 | `templates/cursor/rules/` (with at least one `*.mdc`) | directory |
-| `scripts/bootstrap.sh` | file |
-| `scripts/install-agent-rules.sh` | file |
-| `scripts/install-opencode-config.sh` | file |
-| `scripts/install-codex-config.sh` | file |
-| `scripts/install-skills.sh` | file |
-| `scripts/install-cursor-workspace.sh` | file |
 
 Run `u` on the Workspace page. Missing files are created; files you changed are kept and listed as conflicts.
 
@@ -93,18 +87,4 @@ Harness installs need the workspace first. Install it on the Workspace page, the
 
 ## Environment overrides
 
-The app honors these in normal use, so check them when paths surprise you: `AGENT_WORKSPACE_PATH`, `AGENT_WORKSPACE_BACKUP_DIR`, `CODEX_HOME` (Codex config, rules, agents, and skills), `CODEX_SKILLS_PATH`, `CLAUDE_SKILLS_PATH`, `OPENCODE_SKILLS_PATH`, `CURSOR_SKILLS_PATH`, `PLAYWRIGHT_MCP_CONFIG_PATH`, `XDG_CONFIG_HOME` (Linux app support). The CLI scripts also read `CODEX_CONFIG_PATH`, `CODEX_AGENTS_PATH`, `OPENCODE_AGENTS_PATH`, `CLAUDE_RULES_PATH`, and the `*_AGENTS_DIR` variables; the app does not.
-
-## CLI scripts on Windows
-
-The Bash scripts support macOS and Linux. On Git Bash or MSYS they refuse to run unless `AGENT_WORKSPACE_BACKUP_DIR` is set, and nothing there is tested. Use the app, which resolves Windows paths natively. They also need Python 3.
-
-## Dry-run the scripts
-
-```bash
-./scripts/install-agent-rules.sh --diff
-./scripts/install-opencode-config.sh --diff
-./scripts/bootstrap.sh --diff
-```
-
-Without `--apply` they write nothing.
+The app honors these in normal use, so check them when paths surprise you: `AGENT_WORKSPACE_PATH`, `AGENT_WORKSPACE_BACKUP_DIR`, `CODEX_HOME` (Codex config, rules, agents, and skills), `CODEX_SKILLS_PATH`, `CLAUDE_SKILLS_PATH`, `OPENCODE_SKILLS_PATH`, `CURSOR_SKILLS_PATH`, `PLAYWRIGHT_MCP_CONFIG_PATH`, `XDG_CONFIG_HOME` (Linux app support).

@@ -107,7 +107,7 @@ The `description` is the only selection signal Codex, OpenCode, and Cursor see, 
 
 - `skills/**/SKILL.md` — canonical semantic source files.
 - `templates/skills/_overlays/` — compact global and skill-specific harness overlays.
-- `templates/skills/<harness>/<skill>/SKILL.md` — generated adapter files installed by managed setup and `scripts/install-skills.sh`.
+- `templates/skills/<harness>/<skill>/SKILL.md` — generated adapter files installed by managed setup.
 - `metadata/skill-adapters.json` — generated adapter manifest.
 
 Generated adapter files are not hand-maintained. In the source repository, run `python3 scripts/generate-skill-adapters.py --write` after changing canonical skills or overlays.
@@ -128,12 +128,5 @@ Harness-wide guidance lives in `templates/rules/<harness>.md`, not in per-skill 
 ## Installing skills
 
 In the app, press `u` on a harness page and confirm with `y`. The install covers the generated adapters for the whole bundled catalog of that harness, globally, in flat single-file layout. Skills are not gated by target toggles and always come from the app's bundle: a skill you add to the runtime workspace is not installed, and a personal skill belongs directly in the harness skill folder, where unknown skills are preserved.
-
-The CLI equivalent installs from this workspace's adapters and is dry-run by default:
-
-```bash
-./scripts/install-skills.sh --dry-run --agent opencode --global
-./scripts/install-skills.sh --apply --agent cursor --global   # backs up a differing SKILL.md first
-```
 
 Some harnesses also scan other harnesses' skill folders (for example OpenCode and Cursor read `~/.claude/skills`). If you install for several harnesses, a skill can be listed more than once there; check the harness's own documentation for precedence.

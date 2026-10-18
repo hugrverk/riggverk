@@ -39,7 +39,7 @@ Workspace files are designed to be versioned:
 - `skills/` — agent skill definitions
 - `templates/` — agent rules and config templates
 - `agents/` — agent prompt definitions
-- `scripts/` — CLI installers and helpers
+- `scripts/` — Python helpers
 - `metadata/` — generated manifests and rules history
 - `.agent-workspace/workspace.json` — workspace marker (required for the folder to be valid)
 - `README.md`

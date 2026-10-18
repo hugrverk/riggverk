@@ -587,7 +587,6 @@ pub fn run_global_profile(
 }
 
 /// Run only the Cursor Playwright MCP merge (native Rust only).
-/// Never delegates to install-cursor-workspace.sh for global setup.
 pub fn run_global_mcp_only(
     workspace_root: &Path,
     paths: &CursorProfilePaths,

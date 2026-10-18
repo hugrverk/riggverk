@@ -28,6 +28,7 @@ trap cleanup EXIT
 REAL_HOME="$(python3 -c 'import os, pwd; print(pwd.getpwuid(os.getuid()).pw_dir)')"
 export SMOKE_HOME="$SMOKE_ROOT/home"
 export HOME="$SMOKE_HOME"
+mkdir -p "$HOME"
 # Keep rustup/cargo on the real toolchain while harness paths use SMOKE_HOME.
 TOOLCHAIN_HOME="$REAL_HOME"
 export RUSTUP_HOME="$TOOLCHAIN_HOME/.rustup"
@@ -55,25 +56,9 @@ for var in \
   fi
 done
 
-PLAYWRIGHT_CONFIG="$SMOKE_ROOT/playwright-mcp/config.json"
-PLAYWRIGHT_BROWSERS="$SMOKE_ROOT/ms-playwright"
-mkdir -p "$(dirname "$PLAYWRIGHT_CONFIG")"
-
-step "apply OpenCode config to temp harness"
-OPENCODE_CONFIG_PATH="$HOME/.config/opencode/opencode.json" \
-OPENCODE_TUI_CONFIG_PATH="$HOME/.config/opencode/tui.json" \
-OPENCODE_AGENTS_DIR="$HOME/.config/opencode/agents" \
-AGENT_WORKSPACE_BACKUP_DIR="$SMOKE_ROOT/backups" \
-PLAYWRIGHT_MCP_CONFIG_PATH="$PLAYWRIGHT_CONFIG" \
-PLAYWRIGHT_BROWSERS_PATH="$PLAYWRIGHT_BROWSERS" \
-  bash "$WORKSPACE/scripts/install-opencode-config.sh" --apply --quiet
-
-step "apply shared runtime agents (opencode, claude)"
-OPENCODE_AGENTS_DIR="$HOME/.config/opencode/agents" \
-CLAUDE_AGENTS_DIR="$HOME/.claude/agents" \
-AGENT_WORKSPACE_BACKUP_DIR="$SMOKE_ROOT/backups" \
-  bash "$WORKSPACE/scripts/install-runtime-agents.sh" \
-  --opencode --claude --apply --quiet
+# The app only writes below the (temp) HOME.
+PLAYWRIGHT_CONFIG="$HOME/.config/playwright-mcp/config.json"
+PLAYWRIGHT_BROWSERS="$HOME/.cache/ms-playwright"
 
 step "rust command-handler smoke (same paths as Tauri IPC)"
 export AGENT_WORKSPACE_SMOKE=1

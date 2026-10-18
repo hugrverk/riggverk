@@ -2,11 +2,11 @@
 
 ## Scope
 
-A workspace is a user-owned runtime data directory containing docs, skills, templates, agents, metadata, and allowlisted scripts. It is separate from the Agent Workspace source repository.
+A workspace is a user-owned runtime data directory containing docs, skills, templates, agents, metadata, and helper scripts. It is separate from the Agent Workspace source repository.
 
 The canonical bundled workspace source lives under `resources/default-workspace/`. The installed workspace normally lives at `~/.config/agent-workspace`. The path resolves in this order: `AGENT_WORKSPACE_PATH` (development and tests), a valid custom path saved in Settings, the default.
 
-Requirements on the machine: Python 3 (Codex, OpenCode, and Cursor merge and generator helpers) and Bash (CLI scripts only). Missing `python3` surfaces as an error when a helper runs.
+Requirements on the machine: Python 3 (Codex and OpenCode merge and generator helpers). Missing `python3` surfaces as an error when a helper runs.
 
 Install reads the bundled copy, never the runtime workspace. The runtime workspace is a user-owned copy that the app displays and the Library edits; editing it does not change what harnesses receive.
 
@@ -22,12 +22,6 @@ A valid workspace contains:
 - `templates/codex/config.toml`
 - `templates/cursor/agents/` (directory)
 - `templates/cursor/rules/` (directory holding at least one `*.mdc` file)
-- `scripts/bootstrap.sh`
-- `scripts/install-agent-rules.sh`
-- `scripts/install-opencode-config.sh`
-- `scripts/install-codex-config.sh`
-- `scripts/install-skills.sh`
-- `scripts/install-cursor-workspace.sh`
 
 Validation is read-only. It does not run workspace scripts, install files, or inspect credential-bearing state. Health checks that need the OpenCode generator run the bundled copy, not a script from the workspace.
 
@@ -98,7 +92,7 @@ templates/skills/<harness>/<skill>/SKILL.md
 metadata/skill-adapters.json
 ```
 
-Managed setup and `scripts/install-skills.sh` resolve active harness skill artifacts from those generated adapter files. The generators themselves live in the source repository's `scripts/`, not in the installed workspace; skills added to a runtime workspace are not discovered for install. Missing or stale adapters are unavailable/stale and must be regenerated; production setup does not fall back to canonical generic skill files. Destination paths remain unchanged and are still single `SKILL.md` files. No supporting files or skill directories are owned by managed setup.
+Managed setup resolves active harness skill artifacts from those generated adapter files. The generators themselves live in the source repository's `scripts/`, not in the installed workspace; skills added to a runtime workspace are not discovered for install. Missing or stale adapters are unavailable/stale and must be regenerated; production setup does not fall back to canonical generic skill files. Destination paths remain unchanged and are still single `SKILL.md` files. No supporting files or skill directories are owned by managed setup.
 
 ## Skill ownership and cleanup
 

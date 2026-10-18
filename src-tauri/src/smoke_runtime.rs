@@ -21,6 +21,24 @@ mod tests {
         PathBuf::from(path.trim())
     }
 
+    /// Preview and apply surfaces through the production setup lifecycle.
+    fn apply_surfaces(ids: &[&str]) {
+        let surfaces: Vec<String> = ids.iter().map(|s| s.to_string()).collect();
+        let plan = preview_setup(surfaces.clone()).expect("preview setup");
+        let apply = apply_setup(
+            surfaces,
+            true,
+            plan.plan_fingerprint.clone(),
+            plan.preview_token.clone(),
+        )
+        .expect("apply setup");
+        assert!(
+            apply.success,
+            "smoke apply failed for {ids:?}: {} failed={:?}",
+            apply.message, apply.failed
+        );
+    }
+
     fn field<'a>(value: &'a Value, key: &str) -> &'a Value {
         value
             .get(key)
@@ -78,6 +96,8 @@ mod tests {
             Some(workspace_canonical.to_string_lossy().as_ref())
         );
 
+        apply_surfaces(&["open_code_config", "open_code_agents", "claude_agents"]);
+
         let status =
             serde_json::to_value(get_status().expect("get_status")).expect("serialize status");
         assert_eq!(
@@ -99,24 +119,7 @@ mod tests {
             field(&opencode, "summary")
         );
 
-        // Apply cursor surfaces through the production setup lifecycle.
-        let cursor_surfaces: Vec<String> = ["cursor_agents", "cursor_skills", "cursor_mcp"]
-            .iter()
-            .map(|s| s.to_string())
-            .collect();
-        let plan = preview_setup(cursor_surfaces.clone()).expect("preview cursor setup");
-        let apply = apply_setup(
-            cursor_surfaces,
-            true,
-            plan.plan_fingerprint.clone(),
-            plan.preview_token.clone(),
-        )
-        .expect("apply cursor setup");
-        assert!(
-            apply.success,
-            "cursor smoke apply failed: {} failed={:?}",
-            apply.message, apply.failed
-        );
+        apply_surfaces(&["cursor_agents", "cursor_skills", "cursor_mcp"]);
 
         let cursor =
             serde_json::to_value(get_cursor_profile_health().expect("get_cursor_profile_health"))

@@ -126,13 +126,6 @@ mod tests {
     }
 
     #[test]
-    fn runtime_agent_installer_is_managed() {
-        let path = "scripts/install-runtime-agents.sh";
-        assert!(all_paths().contains(&path));
-        assert!(cursor_bundle_refresh_paths().contains(&path));
-    }
-
-    #[test]
     fn every_refresh_path_is_in_copy_manifest() {
         let files = all_paths();
         for rel in cursor_bundle_refresh_paths() {

@@ -129,7 +129,6 @@ Use fixture files in the isolated `HOME` (`~/.claude/CLAUDE.md`, `~/.codex/AGENT
 - Workspace marker is `.agent-workspace/workspace.json`; the default workspace path is `~/.config/agent-workspace`
 - Uninstall recovery and the in-app rollback of the last install are session-scoped; they are not rediscovered after a restart even when transaction evidence remains on disk
 - Opening folders uses the macOS `open` command only
-- Bash CLI scripts do not run on Windows (Git Bash and MSYS are refused)
 - Python 3 must be on `PATH` for config merges and generators
 
 ## 11. Pass / fail report template

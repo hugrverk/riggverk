@@ -4367,6 +4367,99 @@ mod tests {
         assert_eq!(fs::read_to_string(backup).unwrap(), "app copy");
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn retired_cli_scripts_are_backed_up_stale_removals_and_empty_lib_dir_is_pruned() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let env = TempSetupEnv::new("stale-cli-scripts");
+        // Installer scripts shipped before the app became the only installer.
+        let stale_script = |rel: &str| {
+            ArtifactId::WorkspaceFile(crate::artifact_registry::WorkspaceRelPath::new(rel).unwrap())
+        };
+        let (untouched, nested, edited) = (
+            stale_script("scripts/install-skills.sh"),
+            stale_script("scripts/lib/platform-paths.sh"),
+            stale_script("scripts/bootstrap.sh"),
+        );
+        let kept = env.ws.join("scripts/generate-opencode-config.py");
+        fs::create_dir_all(kept.parent().unwrap()).unwrap();
+        fs::write(&kept, "kept helper").unwrap();
+        let mut records = Vec::new();
+        for artifact in [&untouched, &nested, &edited] {
+            let dest = artifact.resolve_dest(&env.home, &env.ws).unwrap();
+            fs::create_dir_all(dest.parent().unwrap()).unwrap();
+            fs::write(&dest, "app copy").unwrap();
+            fs::set_permissions(&dest, fs::Permissions::from_mode(0o755)).unwrap();
+            records.push(crate::managed_state::ManagedArtifactRecord {
+                identity: crate::managed_state::artifact_identity(artifact),
+                hash: crate::stable_digest::bytes(b"app copy"),
+                surface: None,
+            });
+        }
+        let edited_dest = edited.resolve_dest(&env.home, &env.ws).unwrap();
+        fs::write(&edited_dest, "my own changes").unwrap();
+        crate::managed_state::write_managed_state_atomic(
+            &env.ws,
+            &crate::managed_state::ManagedState {
+                schema_version: crate::managed_state::MANAGED_STATE_SCHEMA_VERSION,
+                bundled_version: crate::stable_digest::bytes(b"bundle"),
+                artifacts: records,
+            },
+        )
+        .unwrap();
+
+        let planned = env.plan(&[SetupSurfaceId::WorkspaceBundle]);
+        let kind_of = |artifact: &ArtifactId| {
+            planned
+                .iter()
+                .find(|p| &p.artifact == artifact)
+                .map(|p| p.kind)
+        };
+        assert_eq!(kind_of(&untouched), Some(OperationKind::Remove));
+        assert_eq!(kind_of(&nested), Some(OperationKind::Remove));
+        assert_eq!(kind_of(&edited), Some(OperationKind::Conflict));
+
+        let stale: Vec<_> = planned
+            .iter()
+            .filter(|p| [&untouched, &nested, &edited].contains(&&p.artifact))
+            .cloned()
+            .collect();
+        let result = apply_planned_artifacts(&stale, vec![], None, &mut ProgressReporter::silent());
+        assert!(result.success, "{}", result.message);
+        assert!(!untouched.resolve_dest(&env.home, &env.ws).unwrap().exists());
+        assert!(!nested.resolve_dest(&env.home, &env.ws).unwrap().exists());
+        assert!(
+            !env.ws.join("scripts/lib").exists(),
+            "the emptied lib directory is pruned"
+        );
+        assert!(kept.is_file(), "a kept helper and its folder stay");
+        assert_eq!(
+            fs::read_to_string(&edited_dest).unwrap(),
+            "my own changes",
+            "a user-modified retired script must be preserved"
+        );
+        assert_eq!(
+            fs::metadata(&edited_dest).unwrap().permissions().mode() & 0o777,
+            0o755,
+            "a preserved script keeps its executable bit"
+        );
+
+        let manifest = read_manifest(&result.transaction_id);
+        let removed = manifest
+            .operations
+            .iter()
+            .find(|op| op.artifact == nested && op.kind == OperationKind::Remove)
+            .expect("the removal is recorded in the transaction");
+        let backup_rel = removed.backup_rel.as_ref().expect("removal is backed up");
+        let backup = backup_root()
+            .unwrap()
+            .join("setup")
+            .join(&result.transaction_id)
+            .join(backup_rel);
+        assert_eq!(fs::read_to_string(backup).unwrap(), "app copy");
+    }
+
     // ── Target gating ──
 
     fn disable_targets(ids: &[&str]) {

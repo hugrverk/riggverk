@@ -1,13 +1,5 @@
 #[cfg(test)]
 pub(super) const MANAGED_REFRESH_PATHS: &[&str] = &[
-    "scripts/install-agent-rules.sh",
-    "scripts/install-runtime-agents.sh",
-    "scripts/install-opencode-config.sh",
-    "scripts/install-codex-config.sh",
-    "scripts/lib/platform-paths.sh",
-    "scripts/ensure-codex-routing-defaults.py",
-    "scripts/install-cursor-workspace.sh",
-    "scripts/check-cursor-profile.py",
     "templates/cursor/manifest.json",
     "templates/cursor/global-profile.json",
     "templates/cursor/mcp/playwright.mcp.json",
@@ -224,23 +216,9 @@ pub(super) fn categories() -> Vec<(&'static str, &'static [&'static str])> {
         (
             "Scripts",
             &[
-                "scripts/bootstrap.sh",
                 "scripts/generate-opencode-config.py",
-                "scripts/playwright-mcp-lib.sh",
-                "scripts/lib/platform-paths.sh",
-                "scripts/check-playwright-mcp.sh",
-                "scripts/install-skills.sh",
-                "scripts/install-agent-rules.sh",
-                "scripts/install-runtime-agents.sh",
-                "scripts/install-opencode-config.sh",
-                "scripts/merge-opencode-config.py",
-                "scripts/install-codex-config.sh",
-                "scripts/install-codex-agents.sh",
                 "scripts/merge-codex-config.py",
                 "scripts/ensure-codex-routing-defaults.py",
-                "scripts/install-cursor-workspace.sh",
-                "scripts/check-codex-profile.py",
-                "scripts/check-cursor-profile.py",
             ],
         ),
         (

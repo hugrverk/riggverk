@@ -47,30 +47,6 @@ pub(crate) fn workspace_marker_defs() -> &'static [MarkerDef] {
         },
         MarkerDef {
             kind: MarkerKind::File,
-            rel_path: "scripts/bootstrap.sh",
-        },
-        MarkerDef {
-            kind: MarkerKind::File,
-            rel_path: "scripts/install-agent-rules.sh",
-        },
-        MarkerDef {
-            kind: MarkerKind::File,
-            rel_path: "scripts/install-opencode-config.sh",
-        },
-        MarkerDef {
-            kind: MarkerKind::File,
-            rel_path: "scripts/install-codex-config.sh",
-        },
-        MarkerDef {
-            kind: MarkerKind::File,
-            rel_path: "scripts/install-cursor-workspace.sh",
-        },
-        MarkerDef {
-            kind: MarkerKind::File,
-            rel_path: "scripts/install-skills.sh",
-        },
-        MarkerDef {
-            kind: MarkerKind::File,
             rel_path: "templates/global-agent-rules.md",
         },
         MarkerDef {
@@ -591,28 +567,6 @@ mod tests {
     fn setup_valid_workspace(name: &str) -> PathBuf {
         let root = temp_root(name);
         write_file(&root, ".agent-workspace/workspace.json", "{}");
-        write_file(&root, "scripts/bootstrap.sh", "#!/usr/bin/env bash\n");
-        write_file(
-            &root,
-            "scripts/install-agent-rules.sh",
-            "#!/usr/bin/env bash\n",
-        );
-        write_file(
-            &root,
-            "scripts/install-opencode-config.sh",
-            "#!/usr/bin/env bash\n",
-        );
-        write_file(
-            &root,
-            "scripts/install-codex-config.sh",
-            "#!/usr/bin/env bash\n",
-        );
-        write_file(
-            &root,
-            "scripts/install-cursor-workspace.sh",
-            "#!/usr/bin/env bash\n",
-        );
-        write_file(&root, "scripts/install-skills.sh", "#!/usr/bin/env bash\n");
         write_file(&root, "templates/global-agent-rules.md", "# rules\n");
         write_file(&root, "templates/opencode.json", "{}");
         write_file(&root, "templates/codex/config.toml", "profile = \"safe\"\n");
@@ -639,28 +593,6 @@ mod tests {
     fn accepts_valid_workspace_without_app_source() {
         let root = temp_root("no-app-source");
         write_file(&root, ".agent-workspace/workspace.json", "{}");
-        write_file(&root, "scripts/bootstrap.sh", "#!/usr/bin/env bash\n");
-        write_file(
-            &root,
-            "scripts/install-agent-rules.sh",
-            "#!/usr/bin/env bash\n",
-        );
-        write_file(
-            &root,
-            "scripts/install-opencode-config.sh",
-            "#!/usr/bin/env bash\n",
-        );
-        write_file(
-            &root,
-            "scripts/install-codex-config.sh",
-            "#!/usr/bin/env bash\n",
-        );
-        write_file(
-            &root,
-            "scripts/install-cursor-workspace.sh",
-            "#!/usr/bin/env bash\n",
-        );
-        write_file(&root, "scripts/install-skills.sh", "#!/usr/bin/env bash\n");
         write_file(&root, "templates/global-agent-rules.md", "# rules\n");
         write_file(&root, "templates/opencode.json", "{}");
         write_file(&root, "templates/codex/config.toml", "profile = \"safe\"\n");
@@ -685,28 +617,6 @@ mod tests {
     #[test]
     fn rejects_workspace_missing_marker_file() {
         let root = temp_root("missing-marker");
-        write_file(&root, "scripts/bootstrap.sh", "#!/usr/bin/env bash\n");
-        write_file(
-            &root,
-            "scripts/install-agent-rules.sh",
-            "#!/usr/bin/env bash\n",
-        );
-        write_file(
-            &root,
-            "scripts/install-opencode-config.sh",
-            "#!/usr/bin/env bash\n",
-        );
-        write_file(
-            &root,
-            "scripts/install-codex-config.sh",
-            "#!/usr/bin/env bash\n",
-        );
-        write_file(
-            &root,
-            "scripts/install-cursor-workspace.sh",
-            "#!/usr/bin/env bash\n",
-        );
-        write_file(&root, "scripts/install-skills.sh", "#!/usr/bin/env bash\n");
         write_file(&root, "templates/global-agent-rules.md", "# rules\n");
         write_file(&root, "templates/opencode.json", "{}");
         write_file(
@@ -733,8 +643,8 @@ mod tests {
         let scripts = root.join("scripts");
         fs::create_dir_all(&scripts).expect("create fake scripts dir");
         fs::write(
-            scripts.join("install-agent-rules.sh"),
-            "#!/usr/bin/env bash\n",
+            scripts.join("generate-opencode-config.py"),
+            "#!/usr/bin/env python3\n",
         )
         .expect("write fake script");
 
@@ -751,28 +661,6 @@ mod tests {
     fn accepts_workspace_with_ux_cursor_rule() {
         let root = temp_root("ux-cursor-rule");
         write_file(&root, ".agent-workspace/workspace.json", "{}");
-        write_file(&root, "scripts/bootstrap.sh", "#!/usr/bin/env bash\n");
-        write_file(
-            &root,
-            "scripts/install-agent-rules.sh",
-            "#!/usr/bin/env bash\n",
-        );
-        write_file(
-            &root,
-            "scripts/install-opencode-config.sh",
-            "#!/usr/bin/env bash\n",
-        );
-        write_file(
-            &root,
-            "scripts/install-codex-config.sh",
-            "#!/usr/bin/env bash\n",
-        );
-        write_file(
-            &root,
-            "scripts/install-cursor-workspace.sh",
-            "#!/usr/bin/env bash\n",
-        );
-        write_file(&root, "scripts/install-skills.sh", "#!/usr/bin/env bash\n");
         write_file(&root, "templates/global-agent-rules.md", "# rules\n");
         write_file(&root, "templates/opencode.json", "{}");
         write_file(&root, "templates/codex/config.toml", "profile = \"safe\"\n");
@@ -799,28 +687,6 @@ mod tests {
     fn accepts_workspace_without_cursor_readme() {
         let root = temp_root("no-cursor-readme");
         write_file(&root, ".agent-workspace/workspace.json", "{}");
-        write_file(&root, "scripts/bootstrap.sh", "#!/usr/bin/env bash\n");
-        write_file(
-            &root,
-            "scripts/install-agent-rules.sh",
-            "#!/usr/bin/env bash\n",
-        );
-        write_file(
-            &root,
-            "scripts/install-opencode-config.sh",
-            "#!/usr/bin/env bash\n",
-        );
-        write_file(
-            &root,
-            "scripts/install-codex-config.sh",
-            "#!/usr/bin/env bash\n",
-        );
-        write_file(
-            &root,
-            "scripts/install-cursor-workspace.sh",
-            "#!/usr/bin/env bash\n",
-        );
-        write_file(&root, "scripts/install-skills.sh", "#!/usr/bin/env bash\n");
         write_file(&root, "templates/global-agent-rules.md", "# rules\n");
         write_file(&root, "templates/opencode.json", "{}");
         write_file(&root, "templates/codex/config.toml", "profile = \"safe\"\n");
@@ -846,23 +712,6 @@ mod tests {
     fn rejects_workspace_without_cursor_mdc_rule() {
         let root = temp_root("no-cursor-mdc");
         write_file(&root, ".agent-workspace/workspace.json", "{}");
-        write_file(&root, "scripts/bootstrap.sh", "#!/usr/bin/env bash\n");
-        write_file(
-            &root,
-            "scripts/install-agent-rules.sh",
-            "#!/usr/bin/env bash\n",
-        );
-        write_file(
-            &root,
-            "scripts/install-opencode-config.sh",
-            "#!/usr/bin/env bash\n",
-        );
-        write_file(
-            &root,
-            "scripts/install-cursor-workspace.sh",
-            "#!/usr/bin/env bash\n",
-        );
-        write_file(&root, "scripts/install-skills.sh", "#!/usr/bin/env bash\n");
         write_file(&root, "templates/global-agent-rules.md", "# rules\n");
         write_file(&root, "templates/opencode.json", "{}");
         mkdir(&root, "templates/cursor/agents");
@@ -883,23 +732,6 @@ mod tests {
     fn rejects_workspace_missing_cursor_rules_dir() {
         let root = temp_root("no-cursor-rules");
         write_file(&root, ".agent-workspace/workspace.json", "{}");
-        write_file(&root, "scripts/bootstrap.sh", "#!/usr/bin/env bash\n");
-        write_file(
-            &root,
-            "scripts/install-agent-rules.sh",
-            "#!/usr/bin/env bash\n",
-        );
-        write_file(
-            &root,
-            "scripts/install-opencode-config.sh",
-            "#!/usr/bin/env bash\n",
-        );
-        write_file(
-            &root,
-            "scripts/install-cursor-workspace.sh",
-            "#!/usr/bin/env bash\n",
-        );
-        write_file(&root, "scripts/install-skills.sh", "#!/usr/bin/env bash\n");
         write_file(&root, "templates/global-agent-rules.md", "# rules\n");
         write_file(&root, "templates/opencode.json", "{}");
         mkdir(&root, "templates/cursor/agents");
@@ -1121,12 +953,6 @@ mod tests {
             let default = default_installed_workspace_path().expect("default path");
             for rel in [
                 ".agent-workspace/workspace.json",
-                "scripts/bootstrap.sh",
-                "scripts/install-agent-rules.sh",
-                "scripts/install-opencode-config.sh",
-                "scripts/install-codex-config.sh",
-                "scripts/install-cursor-workspace.sh",
-                "scripts/install-skills.sh",
                 "templates/global-agent-rules.md",
                 "templates/opencode.json",
                 "templates/codex/config.toml",
