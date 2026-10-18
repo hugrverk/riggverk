@@ -1,13 +1,14 @@
 # Skills
 
-The bundled default workspace contains **24 skills**: 24 canonical semantic skill sources. Source layout may be root-level (`skills/<skill>/SKILL.md`) or grouped one level deep (`skills/<group>/<skill>/SKILL.md`). Harness-specific adapters are generated under `templates/skills/<harness>/<skill>/SKILL.md`. Installed harness skills are always flat (`<harness-skill-root>/<name>/SKILL.md`).
+The bundled default workspace contains **25 skills**: 25 canonical semantic skill sources. Source layout may be root-level (`skills/<skill>/SKILL.md`) or grouped one level deep (`skills/<group>/<skill>/SKILL.md`). Harness-specific adapters are generated under `templates/skills/<harness>/<skill>/SKILL.md`. Installed harness skills are always flat (`<harness-skill-root>/<name>/SKILL.md`).
 
 Do not duplicate full `SKILL.md` content here. This file is an index for choosing the right skill.
 
-## General Skills (18)
+## General Skills (19)
 
 | Skill | Use When |
 | --- | --- |
+| `adversarial-implementation` | An adversarial, critic-reviewed or two-agent implementation: an implementer agent against a fresh read-only critic (another model family when possible) each round, until no Fatal or Significant finding remains in the smallest diff that does the job. |
 | `accessibility-review` | Reviewing UI for WCAG 2.2 AA risks, semantics, controls, keyboard, focus, labels, contrast, and responsive usability. |
 | `browser-qa` | Verifying frontend changes with live browser checks, route smoke tests, interactions, responsive checks, console/network review, and evidence. |
 | `context-budget` | Reducing duplicated rules, docs, prompts, skills, and token overhead without removing essential safety guidance. |
@@ -50,6 +51,7 @@ Grouped source: `skills/kretsverket/<skill>/SKILL.md`.
 | Pair | Distinct roles |
 | --- | --- |
 | `diagnose` / `tdd` | Diagnose finds root cause; TDD locks behavior with a narrow test once the contract is clear. |
+| `minimal-implementation` / `adversarial-implementation` | Minimal-implementation is one bounded patch by the current agent; adversarial-implementation runs that patch through a separate implementer and a fresh hostile critic per round, only when the user asks for it. |
 | `implementation-plan` / `minimal-implementation` | Plan defines slices; minimal-implementation executes one bounded patch. |
 | `frontend-design` / `screenshot-review` | Screenshot-review diagnoses static images; frontend-design chooses direction and implements. |
 | `frontend-design` / `accessibility-review` | Frontend-design includes baseline a11y during implementation; accessibility-review is a specialist audit. |

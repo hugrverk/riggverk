@@ -2,7 +2,7 @@
 
 Audit of the 21 canonical bundled skills under `resources/default-workspace/skills/`, produced for the skill-catalog audit and SkillOpt evaluation issue. Companion document: `docs/SKILLOPT_INTEGRATION.md`.
 
-> Update: the catalog now has 24 skills; `retro` (user-invoked, `disable-model-invocation: true`), `kretsverket-status-report` and the vendored `security-audit` were added after this audit. The inventory below reflects the audited 21.
+> Update: the catalog now has 25 skills; `retro` (user-invoked, `disable-model-invocation: true`), `kretsverket-status-report`, the vendored `security-audit` and `adversarial-implementation` were added after this audit. The inventory below reflects the audited 21.
 
 **No raw private history was committed.** All local usage evidence in this document is aggregate counts only. No transcripts, prompts, model outputs, session identifiers, or private file paths were copied into this repository or into the audit process output.
 
