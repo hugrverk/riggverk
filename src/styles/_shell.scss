@@ -390,6 +390,9 @@
   overflow: hidden;
 }
 
+/* In the app the native traffic lights sit in the top line's band; type the lines below it, not under the lights. */
+:root[data-tauri] .boot { padding-top: calc(var(--topline-height) + 14px); }
+
 .boot .ln { display: block; min-height: var(--lh); }
 .boot .k { color: var(--text-muted); }
 .boot .tui-caret { vertical-align: -0.15em; }
