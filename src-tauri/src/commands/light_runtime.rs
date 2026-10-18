@@ -372,24 +372,23 @@ fn rules_warnings(
     }
     let label = &harness.label;
     let spec = &harness.rules;
-    if let Ok(dest) = spec.resolve_dest(inputs.home) {
-        let folder = folder_of(&rules.path);
-        let masking = spec.masking_files(&dest);
-        if !masking.is_empty() {
-            warnings.push(format!(
-                "{names} in {folder} replaces {file}, so {label} never reads the managed block. Remove or rename it.",
-                names = names_list(&masking),
-                file = spec.file_label,
-            ));
-        }
-        let peers = spec.peer_context_files(&dest);
-        if !peers.is_empty() && !std::fs::metadata(&dest).is_ok_and(|meta| meta.is_file()) {
-            warnings.push(format!(
-                "{label} reads one context file per folder: {folder} has {names} and no {file}. Riggverk does not create {file} (it would hide yours); add the base to {names} by hand or rename it to {file}.",
-                names = names_list(&peers),
-                file = spec.file_label,
-            ));
-        }
+    let dest = spec.resolve_dest(inputs.home);
+    let folder = folder_of(&rules.path);
+    let masking = spec.masking_files(&dest);
+    if !masking.is_empty() {
+        warnings.push(format!(
+            "{names} in {folder} replaces {file}, so {label} never reads the managed block. Remove or rename it.",
+            names = names_list(&masking),
+            file = spec.file_label,
+        ));
+    }
+    let peers = spec.peer_context_files(&dest);
+    if !peers.is_empty() && !std::fs::metadata(&dest).is_ok_and(|meta| meta.is_file()) {
+        warnings.push(format!(
+            "{label} reads one context file per folder: {folder} has {names} and no {file}. Riggverk does not create {file} (it would hide yours); add the base to {names} by hand or rename it to {file}.",
+            names = names_list(&peers),
+            file = spec.file_label,
+        ));
     }
     if let Some(shadowed) = &spec.shadows {
         warnings.push(format!(

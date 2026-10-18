@@ -136,7 +136,7 @@ mod tests {
         }
 
         fn dest(&self) -> PathBuf {
-            self.rules().resolve_dest(&self.home).expect("rules path")
+            self.rules().resolve_dest(&self.home)
         }
 
         fn write(&self, content: &str) {
@@ -727,28 +727,23 @@ mod tests {
     }
 
     #[test]
-    fn a_relative_xdg_config_home_is_refused_and_only_kilo_follows_the_variable() {
+    fn a_relative_xdg_config_home_is_ignored_and_only_kilo_follows_the_variable() {
+        // Per the XDG Base Directory specification a relative value is invalid: the default
+        // location is used, and no other plan or uninstall is blocked by it.
         let env = Env::new("xdg-relative", HarnessId::Kilo);
         std::env::set_var("XDG_CONFIG_HOME", "relative/config");
         enable_every_harness();
-        assert!(setup_transaction::plan_artifacts_for_surfaces(
-            &[surface_of(HarnessId::Kilo)],
-            &env.ws,
-            &env.home
-        )
-        .is_err());
-        let plan = preview_setup(vec!["kilo_rules".into()]).unwrap();
-        assert!(plan.is_blocked && !plan.has_pending_changes);
-        assert_eq!(plan.operations[0].kind, OperationKind::Unavailable);
-        assert!(apply_setup(vec!["kilo_rules".into()], false, None, None).is_err());
-        assert!(!env.base.join("relative").exists());
+        assert_eq!(env.dest(), env.home.join(".config/kilo/AGENTS.md"));
+        assert_eq!(env.plan().kind, OperationKind::Create);
+        assert!(setup_transaction::plan_artifacts_for_uninstall(&env.ws, &env.home).is_ok());
+        assert!(env.apply().success);
+        assert!(!std::path::Path::new("relative").exists());
         drop(env);
 
         for harness in [HarnessId::Copilot, HarnessId::Pi] {
             let env = Env::new("xdg-other", harness);
             std::env::set_var("XDG_CONFIG_HOME", env.base.join("xdg-config"));
             enable_every_harness();
-            assert_eq!(env.dest(), env.rules().resolve_dest(&env.home).unwrap());
             assert!(env.dest().starts_with(&env.home), "{}", harness.as_str());
             assert!(env.apply().success);
         }
@@ -844,13 +839,13 @@ mod tests {
         let result = apply_setup(wires, false, plan.plan_fingerprint, plan.preview_token).unwrap();
         assert!(result.success, "{}", result.message);
         for harness in LIGHT {
-            let path = rules_of(harness).resolve_dest(&env.home).unwrap();
+            let path = rules_of(harness).resolve_dest(&env.home);
             assert!(path.is_file(), "{}", harness.as_str());
         }
         let rolled = rollback_setup_transaction(result.transaction_id, false).unwrap();
         assert!(rolled.success, "{}", rolled.message);
         for harness in LIGHT {
-            let path = rules_of(harness).resolve_dest(&env.home).unwrap();
+            let path = rules_of(harness).resolve_dest(&env.home);
             assert!(!path.exists(), "{}", harness.as_str());
         }
     }

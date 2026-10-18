@@ -31,7 +31,7 @@
 | Claude agents | `~/.claude/agents/` | |
 | Copilot rules | `~/.copilot/copilot-instructions.md` | Managed block merge. Target `copilot_rules`; the GitHub Copilot harness is off by default. |
 | Pi rules | `~/.pi/agent/AGENTS.md` | Managed block merge. Folders the app creates for it (`~/.pi`, `~/.pi/agent`) are owner-only (0700). Refused with zero mutation while `AGENTS.override.md` is beside it, or when `CLAUDE.md`, `CLAUDE.MD` or `AGENTS.MD` is there and `AGENTS.md` is not (existence checks only; those files are never read). Target `pi_rules`. |
-| Kilo rules | `$XDG_CONFIG_HOME/kilo/AGENTS.md` (default `~/.config/kilo/AGENTS.md`) | Managed block merge. A relative `XDG_CONFIG_HOME` is refused; a folder outside the home directory is the allowlisted root of that one file. Target `kilo_rules`. |
+| Kilo rules | `$XDG_CONFIG_HOME/kilo/AGENTS.md` (default `~/.config/kilo/AGENTS.md`) | Managed block merge. A relative `XDG_CONFIG_HOME` is ignored (the XDG specification calls it invalid) and the default location is used; a folder outside the home directory is the allowlisted root of that one file. Target `kilo_rules`. |
 | Cursor agents | `~/.cursor/agents/` | |
 | Skills (all harnesses) | `~/.claude/skills/`, `~/.agents/skills/`, and `$CODEX_HOME/skills/` with a customised `CODEX_HOME` | Chosen from the enabled harnesses, GitHub Copilot, Pi and Kilo Code included (they add no folder of their own: Copilot and Pi use `~/.agents/skills/`). The app's copies in `~/.config/opencode/skills/`, `~/.cursor/skills/` and `$CODEX_HOME/skills/` from older versions are removed on update. Per-file ownership, backup and rollback; your files and dot directories are never touched. |
 | Cursor MCP | `~/.cursor/mcp.json` | Playwright entry only. |

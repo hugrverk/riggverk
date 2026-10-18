@@ -359,7 +359,7 @@ impl ArtifactId {
             }
             ArtifactId::SkillFile(file) => file.dest(home),
             ArtifactId::WorkspaceFile(rel) => Ok(workspace_root.join(rel.as_str())),
-            ArtifactId::HarnessRules(harness) => light_rules(*harness)?.resolve_dest(home),
+            ArtifactId::HarnessRules(harness) => Ok(light_rules(*harness)?.resolve_dest(home)),
         }
     }
 
@@ -377,7 +377,7 @@ impl ArtifactId {
             ArtifactId::SkillFile(file) if file.root == SkillRoot::CodexHome => {
                 self.codex_allowlist_root(home, workspace_root)
             }
-            ArtifactId::HarnessRules(harness) => light_rules(*harness)?.allowlist_root(home),
+            ArtifactId::HarnessRules(harness) => Ok(light_rules(*harness)?.allowlist_root(home)),
             _ => Ok(home.to_path_buf()),
         }
     }
@@ -1631,8 +1631,12 @@ mod tests {
         );
         assert_eq!(kilo.allowlist_root(&home, &ws).unwrap(), home);
 
+        // A relative value is ignored, like a blank one.
         std::env::set_var("XDG_CONFIG_HOME", "relative/config");
-        assert!(kilo.resolve_dest(&home, &ws).is_err());
+        assert_eq!(
+            kilo.resolve_dest(&home, &ws).unwrap(),
+            home.join(".config/kilo/AGENTS.md")
+        );
         std::env::set_var("XDG_CONFIG_HOME", "  ");
         assert_eq!(
             kilo.resolve_dest(&home, &ws).unwrap(),

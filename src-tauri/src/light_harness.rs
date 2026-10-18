@@ -188,47 +188,37 @@ impl LightHarnessId {
 
 impl LightRules {
     /// The rules file for `home`: below `$XDG_CONFIG_HOME` when the descriptor follows it and the
-    /// variable is set, else below `home`. A relative `$XDG_CONFIG_HOME` is refused: file
-    /// operations would resolve it against the working directory while the allowlist check
-    /// resolves it against home.
-    pub fn resolve_dest(&self, home: &Path) -> Result<PathBuf, String> {
+    /// variable is set to an absolute path, else below `home`. A relative value is ignored, as
+    /// the XDG Base Directory specification says: file operations would resolve it against the
+    /// working directory, where no harness looks for it.
+    pub fn resolve_dest(&self, home: &Path) -> PathBuf {
         let xdg = std::env::var("XDG_CONFIG_HOME").ok();
         self.resolve_dest_with(home, xdg.as_deref())
     }
 
-    fn resolve_dest_with(
-        &self,
-        home: &Path,
-        xdg_config_home: Option<&str>,
-    ) -> Result<PathBuf, String> {
+    fn resolve_dest_with(&self, home: &Path, xdg_config_home: Option<&str>) -> PathBuf {
         if let Some(dir) = self.xdg_dir(xdg_config_home) {
-            if !dir.is_absolute() {
-                return Err("XDG_CONFIG_HOME must be an absolute path".to_string());
-            }
             // `parse` guarantees the default location starts with `.config/`.
             let rest = self
                 .target_rel
                 .strip_prefix(XDG_CONFIG_DEFAULT)
                 .unwrap_or(&self.target_rel);
-            return Ok(join_rel(dir, rest));
+            return join_rel(dir, rest);
         }
-        Ok(join_rel(home.to_path_buf(), &self.target_rel))
+        join_rel(home.to_path_buf(), &self.target_rel)
     }
 
     /// The rules file as people know it: `~/...`, or `$XDG_CONFIG_HOME/...` for a file that lives
     /// outside the home directory.
     pub fn display_path(&self, home: &Path) -> String {
-        if let Ok(dest) = self.resolve_dest(home) {
-            if let Ok(rel) = dest.strip_prefix(home) {
-                return format!("~/{}", rel.to_string_lossy().replace('\\', "/"));
-            }
-            if let Some(rest) = self.target_rel.strip_prefix(XDG_CONFIG_DEFAULT) {
-                if self.xdg_config_home {
-                    return format!("$XDG_CONFIG_HOME/{rest}");
-                }
-            }
+        let dest = self.resolve_dest(home);
+        if let Ok(rel) = dest.strip_prefix(home) {
+            return format!("~/{}", rel.to_string_lossy().replace('\\', "/"));
         }
-        format!("~/{}", self.target_rel)
+        match self.target_rel.strip_prefix(XDG_CONFIG_DEFAULT) {
+            Some(rest) if self.xdg_config_home => format!("$XDG_CONFIG_HOME/{rest}"),
+            _ => format!("~/{}", self.target_rel),
+        }
     }
 
     fn xdg_dir(&self, xdg_config_home: Option<&str>) -> Option<PathBuf> {
@@ -239,28 +229,24 @@ impl LightRules {
             .map(str::trim)
             .filter(|value| !value.is_empty())
             .map(PathBuf::from)
+            .filter(|dir| dir.is_absolute())
     }
 
     /// The folder the file must stay inside when it is written, backed up, restored or removed:
     /// `home`, or `$XDG_CONFIG_HOME` when the file lives there outside `home`.
-    pub fn allowlist_root(&self, home: &Path) -> Result<PathBuf, String> {
+    pub fn allowlist_root(&self, home: &Path) -> PathBuf {
         let xdg = std::env::var("XDG_CONFIG_HOME").ok();
         self.allowlist_root_with(home, xdg.as_deref())
     }
 
-    fn allowlist_root_with(
-        &self,
-        home: &Path,
-        xdg_config_home: Option<&str>,
-    ) -> Result<PathBuf, String> {
-        let dest = self.resolve_dest_with(home, xdg_config_home)?;
+    fn allowlist_root_with(&self, home: &Path, xdg_config_home: Option<&str>) -> PathBuf {
+        let dest = self.resolve_dest_with(home, xdg_config_home);
         if dest.starts_with(home) {
-            return Ok(home.to_path_buf());
+            return home.to_path_buf();
         }
-        Ok(self
-            .xdg_dir(xdg_config_home)
+        self.xdg_dir(xdg_config_home)
             .filter(|dir| dest.starts_with(dir))
-            .unwrap_or_else(|| home.to_path_buf()))
+            .unwrap_or_else(|| home.to_path_buf())
     }
 
     /// The files of `names` that exist next to `dest`. Only regular files count: the harness
@@ -888,48 +874,48 @@ mod tests {
         let kilo = rules_of("kilo");
         for xdg in [None, Some(""), Some("  "), Some("/data/config")] {
             assert_eq!(
-                copilot.resolve_dest_with(home, xdg).unwrap(),
+                copilot.resolve_dest_with(home, xdg),
                 home.join(".copilot").join("copilot-instructions.md")
             );
             assert_eq!(
-                pi.resolve_dest_with(home, xdg).unwrap(),
+                pi.resolve_dest_with(home, xdg),
                 home.join(".pi").join("agent").join("AGENTS.md"),
                 "only Kilo follows XDG_CONFIG_HOME"
             );
         }
-        for xdg in [None, Some(""), Some("  ")] {
+        for xdg in [None, Some(""), Some("  "), Some("./here")] {
             assert_eq!(
-                kilo.resolve_dest_with(home, xdg).unwrap(),
+                kilo.resolve_dest_with(home, xdg),
                 home.join(".config").join("kilo").join("AGENTS.md")
             );
         }
         assert_eq!(
-            kilo.resolve_dest_with(home, Some("/data/config")).unwrap(),
+            kilo.resolve_dest_with(home, Some("/data/config")),
             Path::new("/data/config").join("kilo").join("AGENTS.md")
         );
-        assert!(kilo.resolve_dest_with(home, Some("relative/dir")).is_err());
+        // A relative value is not a path the XDG specification allows: it is ignored.
+        assert_eq!(
+            kilo.resolve_dest_with(home, Some("relative/dir")),
+            home.join(".config").join("kilo").join("AGENTS.md")
+        );
     }
 
     #[test]
     fn the_allowlist_root_is_home_unless_xdg_config_home_holds_the_file_outside_home() {
         let home = Path::new("/home/someone");
         let kilo = rules_of("kilo");
-        assert_eq!(kilo.allowlist_root_with(home, None).unwrap(), home);
+        assert_eq!(kilo.allowlist_root_with(home, None), home);
         assert_eq!(
-            kilo.allowlist_root_with(home, Some("/home/someone/dotfiles"))
-                .unwrap(),
+            kilo.allowlist_root_with(home, Some("/home/someone/dotfiles")),
             home
         );
         assert_eq!(
-            kilo.allowlist_root_with(home, Some("/data/config"))
-                .unwrap(),
+            kilo.allowlist_root_with(home, Some("/data/config")),
             Path::new("/data/config")
         );
-        assert!(kilo.allowlist_root_with(home, Some("rel")).is_err());
+        assert_eq!(kilo.allowlist_root_with(home, Some("rel")), home);
         assert_eq!(
-            rules_of("pi")
-                .allowlist_root_with(home, Some("/data/config"))
-                .unwrap(),
+            rules_of("pi").allowlist_root_with(home, Some("/data/config")),
             home
         );
     }
