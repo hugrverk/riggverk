@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import type {
   AgentTargetMeta,
+  FileDiffView,
   InstallationStatus,
   LightRuntimeHealth,
   RulesConversionPreview,
@@ -115,5 +116,43 @@ describe("mock backend: the light harnesses' Playwright MCP entries", () => {
 
     const kilo = await invoke<LightRuntimeHealth>("get_light_runtime_health", { harness: "kilo" });
     expect(kilo.mcp).toMatchObject({ status: "off", path: "~/.config/kilo/kilo.jsonc" });
+  });
+});
+
+describe("mock backend: skill and agent files in conflict or kept", () => {
+  const statusOf = async (surface: "skills" | "claude_agents") =>
+    (await invoke<InstallationStatus>("get_installation_status", { surfaces: [surface] })).surfaces[0]!;
+
+  it("reports units in conflict first and a kept one with a bundled update waiting", async () => {
+    const skills = await statusOf("skills");
+    expect(skills.files).toMatchObject({ conflicts: 5, kept: 1, kept_updates: 1 });
+    expect(skills.files!.units.map(unit => [unit.key, unit.state])).toEqual([
+      ["skill:claude:tdd", "conflict"],
+      ["skill:agents:security-audit", "conflict"],
+      ["skill:claude:diagnose", "kept"],
+    ]);
+    const agents = await statusOf("claude_agents");
+    expect(agents.files!.units.map(unit => unit.key)).toEqual(["agent:verifier", "agent:sentinel"]);
+  });
+
+  it("diffs a unit, withholding what it must not show, and refuses a unit that is not listed", async () => {
+    const diff = await invoke<FileDiffView>("preview_file_diff", { surface: "skills", unit: "skill:agents:security-audit" });
+    expect(diff.files.map(file => [file.rel, file.kind])).toEqual([
+      ["HUNTING.md", "text"],
+      ["CLIENT-SIDE.md", "identical_text"],
+      ["assets/report.bin", "binary"],
+      ["scripts/deploy.sh", "withheld"],
+    ]);
+    await expect(invoke("preview_file_diff", { surface: "skills", unit: "skill:claude:nope" })).rejects.toThrow("no conflicting or kept files");
+  });
+
+  it("keeps and hands back a unit like the backend does, and the surface follows", async () => {
+    await invoke("set_files_kept", { surface: "claude_agents", units: ["agent:verifier"], kept: true });
+    expect((await statusOf("claude_agents")).files).toMatchObject({ conflicts: 0, kept: 2 });
+    expect((await invoke<InstallationStatus>("get_installation_status", { surfaces: ["claude_agents"] })).counts.kept_count).toBe(2);
+    await invoke("set_files_kept", { surface: "claude_agents", units: ["agent:verifier"], kept: false });
+    expect((await statusOf("claude_agents")).files).toMatchObject({ conflicts: 1, kept: 1 });
+    await expect(invoke("set_files_kept", { surface: "claude_agents", units: ["agent:nope"], kept: true })).rejects.toThrow("no conflicting or kept files");
+    await expect(invoke("set_files_kept", { surface: "claude_agents", units: [], kept: true })).rejects.toThrow("at least one");
   });
 });

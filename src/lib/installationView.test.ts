@@ -53,6 +53,13 @@ describe("targetMeta", () => {
     });
   });
 
+  it("says 'you manage' beside current when the user keeps files, never plain current", () => {
+    expect(targetMeta(entry("claude", status("current", [], { kept_count: 2 })), options)).toEqual({ text: "current · you manage 2", tone: "warn" });
+    expect(targetMeta(entry("claude", status("current", [], { kept_count: 0 })), options)).toEqual({ text: "current", tone: "ok" });
+    // Updates and conflicts keep their own words.
+    expect(targetMeta(entry("claude", status("update_available", [], { update_count: 2, kept_count: 1 })), options).text).toBe("2 to update");
+  });
+
   it("says why there is no state yet", () => {
     expect(targetMeta(undefined, options).text).toBe("…");
     expect(targetMeta(entry("claude", null, { loading: true }), options).text).toBe("…");
@@ -92,6 +99,18 @@ describe("surfaceRowsFor", () => {
     expect(rows[0]).toMatchObject({ state: "user_managed", display: { label: "you manage", tone: "warn" } });
     const matrix = matrixModel({ entries: { claude: entry("claude", status("current", [managed])) } } as unknown as InstallationOverview, ["claude"], SETTINGS);
     expect(matrix[0]!.cells.find(cell => cell.column === "rules")).toMatchObject({ state: "user_managed" });
+  });
+
+  it("shows skill or agent files the user keeps as 'you manage' on a surface that is otherwise current", () => {
+    const files = { conflicts: 0, kept: 2, kept_updates: 1, units: [], more: 0 };
+    const keeps: SurfaceInstallationStatus = { ...surface("skills", "current"), files };
+    const rows = surfaceRowsFor("claude", entry("claude", status("current", [keeps])), SETTINGS);
+    expect(rows.find(row => row.surface === "skills")).toMatchObject({ state: "user_managed", display: { label: "you manage", tone: "warn" } });
+    const matrix = matrixModel({ entries: { claude: entry("claude", status("current", [keeps])) } } as unknown as InstallationOverview, ["claude"], SETTINGS);
+    expect(matrix[0]!.cells.find(cell => cell.column === "skills")).toMatchObject({ state: "user_managed" });
+    // Anything but current keeps its own state: an update or a conflict is not hidden by files the user keeps.
+    const updating: SurfaceInstallationStatus = { ...surface("skills", "update_available"), files };
+    expect(surfaceRowsFor("claude", entry("claude", status("update_available", [updating])), SETTINGS).find(row => row.surface === "skills")!.state).toBe("update_available");
   });
 
   it("marks surfaces as unknown until the status arrives", () => {

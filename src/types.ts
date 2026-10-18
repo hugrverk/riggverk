@@ -76,6 +76,8 @@ export type InstallationState = "not_installed" | "update_available" | "current"
 
 export interface InstallationCounts {
   create_count: number; update_count: number; remove_count: number; conflict_count: number;
+  /** Skill and agent files the user keeps: not conflicts, never written by an update. */
+  kept_count?: number;
 }
 
 export interface SurfaceInstallationStatus {
@@ -85,6 +87,92 @@ export interface SurfaceInstallationStatus {
   detail: string;
   /** Block details; present for the rules surfaces only. */
   rules?: RulesStatus;
+  /** Conflicting and kept files; present for the skills and agent surfaces while there are some. */
+  files?: FilesStatus;
+}
+
+/** The surfaces that hold skill or agent files the user can keep. */
+export type FilesSurfaceId = "skills" | "claude_agents" | "codex_agents" | "open_code_agents" | "cursor_agents";
+
+/** `conflict`: blocks the update. `kept`: the user keeps their version; updates never write it. */
+export type FileUnitState = "conflict" | "kept";
+
+/** `edited`: the app wrote it and it changed. `unproven`: nothing proves the app wrote it. */
+export type FileConflictReason = "edited" | "unproven";
+
+export interface FileUnitFile {
+  /** Path below the skill directory, or the agent file name. */
+  rel: string;
+  state: FileUnitState;
+  reason: FileConflictReason;
+  bundle_changed: boolean;
+}
+
+/** What the user acts on: the conflicting or kept files of one skill in one folder, or one agent file. */
+export interface FileUnit {
+  /** Opaque: `skill:<folder>:<name>` or `agent:<name>`. */
+  key: string;
+  kind: "skill" | "agent";
+  name: string;
+  /** The folder as people know it, `~/.claude/skills`. */
+  folder: string;
+  /** The bundle wants this unit in this folder; false for a retired skill or a folder no harness needs any more. */
+  wanted: boolean;
+  /** `conflict` while any file still blocks, `kept` when the user keeps every one. */
+  state: FileUnitState;
+  reason: FileConflictReason;
+  /** A kept unit: the bundled file changed since it was kept. */
+  bundle_changed: boolean;
+  /** The enabled harnesses that read the folder. */
+  read_by: string[];
+  files: FileUnitFile[];
+  /** Files beyond the 50 listed. */
+  more_files: number;
+}
+
+export interface FilesStatus {
+  conflicts: number;
+  kept: number;
+  /** Kept files whose bundled version changed since they were kept. */
+  kept_updates: number;
+  units: FileUnit[];
+  /** Units beyond the 100 listed. */
+  more: number;
+}
+
+export type FileDiffKind = "text" | "identical_text" | "binary" | "too_large" | "withheld" | "unreadable" | "bundled_missing";
+
+export interface FileDiffSide {
+  bytes: number;
+  /** `sha256:` and twelve hex digits. */
+  digest: string;
+}
+
+export interface FileDiffEntry {
+  rel: string;
+  state: FileUnitState;
+  kind: FileDiffKind;
+  from_label: string;
+  to_label: string;
+  installed: FileDiffSide | null;
+  bundled: FileDiffSide | null;
+  note: string | null;
+  added: number;
+  removed: number;
+  /** The diff text was cut (per file at 64 KB, per unit at 256 KB). */
+  truncated: boolean;
+  /** Unified diff; empty unless `kind` is `text`. */
+  diff: string;
+}
+
+/** Your files of one unit against the bundled ones (`preview_file_diff`): what a replacement would change. */
+export interface FileDiffView {
+  name: string;
+  folder: string;
+  files: FileDiffEntry[];
+  /** Files of the unit beyond the 25 shown. */
+  more_files: number;
+  truncated: boolean;
 }
 
 /** The surfaces that hold a rules file with the managed base block. */
@@ -218,6 +306,8 @@ export interface SkillCopy {
   owner: "aw" | "foreign";
   /** The file equals the bundled `SKILL.md`. */
   current: boolean;
+  /** The copy is the user's own and they chose to keep it. */
+  kept?: boolean;
 }
 
 export interface SkillLoad {

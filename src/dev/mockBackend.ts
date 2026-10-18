@@ -8,7 +8,9 @@
  *             Claude edited block (`&rules=legacy|malformed|managed|update|current|absent` picks another state),
  *             Codex base update keeping 14 refinement lines plus the AGENTS.override.md warning,
  *             OpenCode plain file that differs from every shipped base;
- *             skills: an older app copy of `tdd` beside the current one for Codex, and two copies of the user's own `my-deploy`
+ *             skills: an older app copy of `tdd` beside the current one for Codex, and two copies of the user's own `my-deploy`;
+ *             skill and agent files in conflict (edited `tdd`, two files of `security-audit`, an edited Claude agent `verifier`)
+ *             and kept ones (`diagnose` with a bundled update waiting, the agent `sentinel`)
  *   fresh     nothing installed, no backups, no transactions
  *   error     status/diagnostics calls fail (exercises the error line)
  *   empty     valid workspace with no docs, skills or agents
@@ -38,6 +40,10 @@ import type {
   DocsHealth,
   DocumentContent,
   EffectiveSkillLoads,
+  FileDiffView,
+  FilesStatus,
+  FilesSurfaceId,
+  FileUnit,
   GetSettingsResponse,
   InstallAgent,
   InstallationState,
@@ -479,6 +485,130 @@ function setRulesUserManaged(surface: RulesSurfaceId, userManaged: boolean) {
   surfaceStates.set(surface, userManaged ? "current" : "conflict");
 }
 
+/* ---- skill and agent files in conflict, or kept ---- */
+
+const fileUnits = new Map<FilesSurfaceId, FileUnit[]>();
+
+function mockFile(rel: string, state: FileUnit["state"], reason: FileUnit["reason"], bundleChanged = false): FileUnit["files"][number] {
+  return { rel, state, reason, bundle_changed: bundleChanged };
+}
+
+function seedFileUnits() {
+  if (scenario !== "conflict") return;
+  fileUnits.set("skills", [
+    {
+      key: "skill:claude:tdd", kind: "skill", name: "tdd", folder: "~/.claude/skills", wanted: true, state: "conflict", reason: "edited",
+      bundle_changed: false, read_by: ["Claude", "OpenCode", "Cursor"], files: [mockFile("SKILL.md", "conflict", "edited")], more_files: 0,
+    },
+    {
+      key: "skill:agents:security-audit", kind: "skill", name: "security-audit", folder: "~/.agents/skills", wanted: true, state: "conflict", reason: "edited",
+      bundle_changed: false, read_by: ["Codex", "OpenCode", "Cursor"], more_files: 0,
+      files: [
+        mockFile("HUNTING.md", "conflict", "edited"),
+        mockFile("CLIENT-SIDE.md", "conflict", "unproven"),
+        mockFile("assets/report.bin", "conflict", "unproven"),
+        mockFile("scripts/deploy.sh", "conflict", "unproven"),
+      ],
+    },
+    {
+      key: "skill:claude:diagnose", kind: "skill", name: "diagnose", folder: "~/.claude/skills", wanted: true, state: "kept", reason: "edited",
+      bundle_changed: true, read_by: ["Claude", "OpenCode", "Cursor"], files: [mockFile("SKILL.md", "kept", "edited", true)], more_files: 0,
+    },
+  ]);
+  fileUnits.set("claude_agents", [
+    {
+      key: "agent:verifier", kind: "agent", name: "verifier", folder: "~/.claude/agents", wanted: true, state: "conflict", reason: "edited",
+      bundle_changed: false, read_by: ["Claude"], files: [mockFile("verifier.md", "conflict", "edited")], more_files: 0,
+    },
+    {
+      key: "agent:sentinel", kind: "agent", name: "sentinel", folder: "~/.claude/agents", wanted: true, state: "kept", reason: "unproven",
+      bundle_changed: false, read_by: ["Claude"], files: [mockFile("sentinel.md", "kept", "unproven")], more_files: 0,
+    },
+  ]);
+}
+
+seedFileUnits();
+
+function filesFor(surface: SetupSurfaceId): FilesStatus | undefined {
+  const units = fileUnits.get(surface as FilesSurfaceId) ?? [];
+  if (units.length === 0) return undefined;
+  const files = units.flatMap(unit => unit.files);
+  const sorted = [...units].sort((a, b) => Number(a.state === "kept") - Number(b.state === "kept"));
+  return {
+    conflicts: files.filter(file => file.state === "conflict").length,
+    kept: files.filter(file => file.state === "kept").length,
+    kept_updates: files.filter(file => file.state === "kept" && file.bundle_changed).length,
+    units: sorted,
+    more: 0,
+  };
+}
+
+const DIFF_BODY: Record<string, string> = {
+  "skill:claude:tdd/SKILL.md": ["--- yours", "+++ bundled", "@@ -8,5 +8,5 @@", " ## Loop", " ", "-1. Write one failing test for the behavior you want.", "+1. Write one failing test for one behavior.", " 2. Make it pass with the smallest change.", " 3. Refactor with the tests green.", ""].join("\n"),
+  "skill:agents:security-audit/HUNTING.md": ["--- yours", "+++ bundled", "@@ -1,4 +1,6 @@", " # Hunting", " ", "-Start from the entry points you know.", "+Start from the trust boundaries.", "+Authorization: Bearer ghp_abcdefghijklmnopqrstuvwxyz0123456789", " Keep notes per boundary.", "+Fake session: prose stays readable", ""].join("\n"),
+  "skill:claude:diagnose/SKILL.md": ["--- yours", "+++ bundled", "@@ -20,3 +20,4 @@", " ## Reproduce", " Build a loop that fails on demand.", "+Minimise it before you hypothesise.", ""].join("\n"),
+  "agent:verifier/verifier.md": ["--- yours", "+++ bundled", "@@ -3,4 +3,4 @@", " name: verifier", "-description: Runs the checks.", "+description: Use after implementation to run non-destructive verification.", " tools: Read, Bash", ""].join("\n"),
+  "agent:sentinel/sentinel.md": ["--- yours", "+++ bundled", "@@ -5,3 +5,3 @@", " Review the diff for security-sensitive mistakes.", "-Report findings.", "+Report findings with evidence.", ""].join("\n"),
+};
+
+function mockFileDiff(surface: FilesSurfaceId, key: string): FileDiffView {
+  const unit = (fileUnits.get(surface) ?? []).find(candidate => candidate.key === key);
+  if (!unit) throw new Error("this skill or agent has no conflicting or kept files right now");
+  const files = unit.files.map((file): FileDiffView["files"][number] => {
+    const base = {
+      rel: file.rel, state: file.state, from_label: "yours", to_label: "bundled", installed: null, bundled: null, note: null,
+      added: 0, removed: 0, truncated: false, diff: "",
+    };
+    const side = (bytes: number) => ({ bytes, digest: `sha256:${fakeHash(`${key}${file.rel}${bytes}`)}` });
+    if (file.rel === "CLIENT-SIDE.md") {
+      return { ...base, kind: "identical_text", installed: side(2144), bundled: side(2110), note: "differs only in line endings or trailing bytes" };
+    }
+    if (file.rel === "assets/report.bin") {
+      return { ...base, kind: "binary", installed: side(48210), bundled: side(48190), note: "not text; sizes and digests only" };
+    }
+    if (file.rel === "scripts/deploy.sh") {
+      return { ...base, kind: "withheld", installed: side(912), bundled: side(640), note: "contains key material, not shown" };
+    }
+    const diff = DIFF_BODY[`${key}/${file.rel}`] ?? "";
+    const lines = diff.split("\n");
+    return {
+      ...base,
+      kind: "text",
+      installed: side(3012),
+      bundled: side(2988),
+      added: lines.filter(line => line.startsWith("+") && !line.startsWith("+++")).length,
+      removed: lines.filter(line => line.startsWith("-") && !line.startsWith("---")).length,
+      diff,
+    };
+  });
+  return { name: unit.name, folder: unit.folder, files, more_files: 0, truncated: false };
+}
+
+function setFilesKept(surface: FilesSurfaceId, keys: string[], kept: boolean) {
+  const units = fileUnits.get(surface) ?? [];
+  if (keys.length === 0) throw new Error("name at least one skill or agent");
+  for (const key of keys) {
+    const unit = units.find(candidate => candidate.key === key);
+    if (!unit) {
+      if (kept) throw new Error("this skill or agent has no conflicting or kept files right now");
+      continue;
+    }
+    unit.files = unit.files.map(file =>
+      kept && file.state === "conflict"
+        ? { ...file, state: "kept" as const, bundle_changed: false }
+        : !kept && file.state === "kept"
+          ? { ...file, state: "conflict" as const, bundle_changed: false }
+          : file,
+    );
+    unit.state = unit.files.some(file => file.state === "conflict") ? "conflict" : "kept";
+    unit.bundle_changed = unit.files.some(file => file.bundle_changed);
+  }
+  // The skills surface is only in conflict while a unit still blocks it.
+  if (surface === "skills") {
+    surfaceStates.set("skills", units.some(unit => unit.state === "conflict") ? "conflict" : "current");
+  }
+}
+
 function surfaceDetail(surface: SetupSurfaceId, state: InstallationState): string {
   switch (state) {
     case "current": return `installed · ${BUNDLE_DIGEST}`;
@@ -506,13 +636,17 @@ function installationStatus(surfaces: SetupSurfaceId[]): InstallationStatus {
       state,
       detail: file ? rulesDetail(file, state) : surfaceDetail(surface, state),
       ...(file ? { rules: { ...file } } : {}),
+      ...(filesFor(surface) ? { files: filesFor(surface) } : {}),
     };
   });
-  const counts = { create_count: 0, update_count: 0, remove_count: 0, conflict_count: 0 };
+  const counts = { create_count: 0, update_count: 0, remove_count: 0, conflict_count: 0, kept_count: 0 };
   for (const row of rows) {
     if (row.state === "not_installed") counts.create_count += 1;
     if (row.state === "update_available") counts.update_count += 1;
-    if (row.state === "conflict") counts.conflict_count += 1;
+    // Like the backend: every conflicting file counts, the files the user keeps do not.
+    if (row.files) counts.conflict_count += row.files.conflicts;
+    else if (row.state === "conflict") counts.conflict_count += 1;
+    counts.kept_count += row.files?.kept ?? 0;
   }
   const state = rows.reduce<InstallationState>(
     (worst, row) => (STATE_RANK[row.state] > STATE_RANK[worst] ? row.state : worst),
@@ -1302,6 +1436,13 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
     case "set_rules_user_managed":
       await delay(100);
       setRulesUserManaged(arg<RulesSurfaceId>(args, "surface"), arg<boolean>(args, "userManaged"));
+      return null;
+    case "preview_file_diff":
+      await delay(150);
+      return mockFileDiff(arg<FilesSurfaceId>(args, "surface"), arg<string>(args, "unit"));
+    case "set_files_kept":
+      await delay(100);
+      setFilesKept(arg<FilesSurfaceId>(args, "surface"), arg<string[]>(args, "units"), arg<boolean>(args, "kept"));
       return null;
     case "rollback_setup_transaction": {
       const dryRun = arg<boolean>(args, "dryRun");

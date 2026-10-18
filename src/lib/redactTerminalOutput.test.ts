@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { redactTerminalOutput } from "./redactTerminalOutput";
+import { redactDiffText, redactTerminalOutput } from "./redactTerminalOutput";
 
 // Fake values only; they are shaped like real credentials but are not.
 const FAKE_BASIC = "dXNlcjpwYXNzd29yZA==";
@@ -99,4 +99,46 @@ describe("redactTerminalOutput", () => {
       expect(output).not.toContain("hunter2");
     });
   }
+});
+
+describe("redactDiffText", () => {
+  it("leaves prose that mentions a session or a token alone: no name=value rule", () => {
+    for (const line of ["+session: kept for the whole run", "-token: the bearer of the request", " password=a value the author documents", "+api_key = abcd1234efgh5678"]) {
+      expect(redactDiffText(line)).toBe(line);
+    }
+    // The terminal variant masks the same text.
+    expect(redactTerminalOutput("+session: kept for the whole run")).toContain("[REDACTED]");
+  });
+
+  it("still masks the shapes that are secrets wherever they appear, on diff-prefixed lines", () => {
+    const secrets: Array<[string, string]> = [
+      [`+Authorization: Bearer ${FAKE_GH}`, FAKE_GH],
+      [`-Cookie: sid=abc123def456; theme=dark`, "abc123def456"],
+      [` curl -H 'x' ${FAKE_GH} ${FAKE_OPENAI}`, FAKE_OPENAI],
+      [`+jwt ${FAKE_JWT}`, FAKE_JWT],
+      ["+https://bucket.example/obj?X-Amz-Signature=abcdef0123456789&x=1", "abcdef0123456789"],
+      ["+github_pat_abcdefghijklmnopqrstuvwxyz0123456789", "abcdefghijklmnopqrstuvwxyz0123456789"],
+    ];
+    for (const [line, secret] of secrets) {
+      const output = redactDiffText(line);
+      expect(output, line).not.toContain(secret);
+      expect(output, line).toContain("[REDACTED]");
+    }
+  });
+
+  it("masks a private-key block whose lines carry diff marks", () => {
+    const block = [
+      "+-----BEGIN OPENSSH PRIVATE KEY-----",
+      "+b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW",
+      "+-----END OPENSSH PRIVATE KEY-----",
+    ].join("\n");
+    const output = redactDiffText(`context\n${block}\ncontext`);
+    expect(output).not.toContain("b3BlbnNzaC1rZXktdjE");
+    expect(output).toContain("context");
+  });
+
+  it("returns an empty text as it is and keeps diff marks and plain text", () => {
+    expect(redactDiffText("")).toBe("");
+    expect(redactDiffText("-old line\n+new line\n context")).toBe("-old line\n+new line\n context");
+  });
 });

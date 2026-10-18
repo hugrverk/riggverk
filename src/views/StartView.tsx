@@ -18,6 +18,7 @@ import {
   targetMeta,
   updateActionFor,
 } from "../lib/installationView";
+import { fileConflictModelFor, filesCountsText, filesPageHint, filesSurfacesOf } from "../lib/fileConflicts";
 import { rulesModelFor, rulesOverrideWarning, rulesPageHint, rulesSurfaceOf } from "../lib/rulesView";
 import { DEFAULT_WORKSPACE_PATH } from "../lib/settingsDraft";
 import type { AppView } from "../shell/views";
@@ -173,6 +174,11 @@ export function StartView({
   const rulesModel = selected === "workspace" || !workspaceValid ? null : rulesModelFor(selected, entry?.status);
   const rulesHint = rulesModel ? rulesPageHint(rulesModel, selectedLabel) : null;
   const override = selected === "codex" ? rulesOverrideWarning(codexRuntimeHealth) : null;
+  // Skill and agent files in conflict or kept: told here, resolved on the harness page.
+  const fileHints = (selected === "workspace" || !workspaceValid ? [] : filesSurfacesOf(selected)).flatMap(surface => {
+    const model = fileConflictModelFor(entry?.status, surface);
+    return model ? [{ surface, model }] : [];
+  });
 
   // The state is the detail title's. The backend summary adds something only for an update: the breakdown.
   const changes = entry?.status?.state === "update_available" ? entry.status.summary.replace(/^Update available:\s*/, "") : null;
@@ -189,6 +195,13 @@ export function StartView({
           ...(rulesHint ? [{ label: "", value: rulesHint, tone: "dim" as const, wrap: true, id: "rules-hint" }] : []),
         ]
       : []),
+    ...fileHints.map(({ surface, model }) => ({
+      label: surface === "skills" ? "skills" : "agents",
+      value: `${filesCountsText(model)} · ${filesPageHint(model, selectedLabel)}`,
+      tone: model.conflicts > 0 ? ("fail" as const) : ("warn" as const),
+      wrap: true,
+      id: `files-${surface}`,
+    })),
     // A harness's surfaces, on and off, are the rows right above.
     ...(selected === "workspace" ? [{ label: "path", value: resolvedPath, wrap: true }] : []),
   ];

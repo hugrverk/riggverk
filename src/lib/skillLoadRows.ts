@@ -4,6 +4,7 @@ import type {
   ForeignSkillDuplicate,
   HarnessSkillLoads,
   InstallAgent,
+  SkillCopy,
   SkillLoad,
   SkillLoadFlag,
   SkillReadFolder,
@@ -124,10 +125,19 @@ function flaggedRow(summary: HarnessLoadSummary, skill: SkillLoad): KvItem {
   return { label: "", id: `flagged-${skill.name}`, value: `${skill.name} · ${where} · ${effectOf(flag)}`, tone: "warn", wrap: true };
 }
 
+/** The user's own copies of a name, which the app cannot fix: all of them kept means the app leaves them alone. */
+function foreignEffect(copies: readonly SkillCopy[]): string {
+  const foreign = copies.filter((copy) => copy.owner === "foreign");
+  return foreign.length > 0 && foreign.every((copy) => copy.kept === true)
+    ? "yours (kept), Riggverk leaves it alone"
+    : effectOf("foreign_copy");
+}
+
 function foreignRow(summary: HarnessLoadSummary, duplicate: ForeignSkillDuplicate): KvItem {
   const own = summary.harness.skills.find((skill) => skill.name === duplicate.name);
-  const where = copyFolders(summary.harness, own?.copies ?? duplicate.copies);
-  return { label: "", id: `foreign-${duplicate.name}`, value: `${duplicate.name} · ${effectOf("foreign_copy")} · ${where}`, tone: "warn", wrap: true };
+  const copies = own?.copies ?? duplicate.copies;
+  const where = copyFolders(summary.harness, copies);
+  return { label: "", id: `foreign-${duplicate.name}`, value: `${duplicate.name} · ${foreignEffect(copies)} · ${where}`, tone: "warn", wrap: true };
 }
 
 /**
