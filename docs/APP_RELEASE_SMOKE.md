@@ -11,7 +11,7 @@ export AGENT_WORKSPACE_BACKUP_DIR="$HOME/backups"
 npm run tauri dev        # or open the built bundle from this shell
 ```
 
-Tab keys below assume the default order: workspace, codex, opencode, cursor, claude, library, repo, prompts, settings (`1`-`9`).
+Tab keys below assume the default order: workspace, codex, opencode, cursor, claude, library, settings (`1`-`7`).
 
 ## 1. Preflight
 
@@ -29,7 +29,7 @@ Tab keys below assume the default order: workspace, codex, opencode, cursor, cla
 - [ ] `?` opens the help overlay listing keys and commands; Escape closes it
 - [ ] `:` opens the command line; `:help`, `:codex`, `:theme toggle`, an unknown command (error, no crash)
 - [ ] `Mod+k` opens the command line, `Mod+,` opens Settings, also from inside a text field
-- [ ] `1`-`9` switch tabs; `h` and `l` move between panes; `j`/`k`, `g g`/`G` move in lists; `/` filters a filterable list; Escape clears the filter
+- [ ] `1`-`7` switch tabs; `h` and `l` move between panes; `j`/`k`, `g g`/`G` move in lists; `/` filters a filterable list; Escape clears the filter
 - [ ] Digits and letters typed into a text field are not treated as shortcuts; Escape leaves the field
 - [ ] Focus rings visible when tabbing; status bar hints match the focused pane
 - [ ] An error line is dismissed with Escape
@@ -103,19 +103,19 @@ Use fixture files in the isolated `HOME` (`~/.claude/CLAUDE.md`, `~/.codex/AGENT
 - [ ] Fresh and legacy settings enable Codex, OpenCode, Claude, and Cursor
 - [ ] Appearance (dark, light, system), all four text sizes (`small`, `medium`, `large`, `extra-large`), and theme colors autosave; `r` in the appearance pane resets after a confirm
 - [ ] Motion `full` shows the launch sequence, apply progress (bar, file, spinner, elapsed), the success tick and scanline; `subtle` keeps only the progress indicators; `off` (or the OS reduced-motion preference) stops every animation
-- [ ] Landing page selection (`start`, `repo-dashboard`, `prompts`, `library`) persists and opens after app restart
+- [ ] Landing page selection (`start`, `library`) persists and opens after app restart
 - [ ] Settings: `c` chooses a workspace folder; an invalid folder is refused with a reason; a valid one becomes the active workspace and status reloads; `R` resets to the default path
 - [ ] `AGENT_WORKSPACE_PATH` overrides the chosen path
 - [ ] Generator scripts run from the bundled copy: a modified `scripts/generate-opencode-config.py` in the chosen workspace is not executed
 - [ ] Disable one harness: its tab, page, Workspace row, health calls, and harness-specific Library entries disappear and the tabs renumber
 - [ ] Isolated harness files stay byte-identical after disable; restart preserves the disabled state and target selections
 - [ ] Re-enable restores UI and health without installing
-- [ ] Disable every harness: workspace, repo, prompts, library, and settings stay usable
+- [ ] Disable every harness: workspace, library, and settings stay usable
 - [ ] A stale setup request for a disabled harness fails without mutation
 - [ ] Full uninstall preview still includes proven artifacts of disabled harnesses
 - [ ] All four text sizes usable at the minimum window size
 
-## 9. Library, Prompt Builder, Repo Dashboard
+## 9. Library
 
 - [ ] Library shows the items list and one document pane (rendered by default); `[` `]` (and `<` `>`) switch among docs, rules, skills, agents, configs, brain
 - [ ] `i` or Enter swaps the rendered document for its source (never for read-only items such as skills); `Mod+s` and `:w` save; Escape returns to the rendered view; `h` returns to the list; `:q` asks before discarding edits; `:reset` discards them; `n` creates a doc; `o` opens externally
@@ -123,11 +123,6 @@ Use fixture files in the isolated `HOME` (`~/.claude/CLAUDE.md`, `~/.codex/AGENT
 - [ ] Saving over an existing file creates `docs/<id>-<timestamp>/` in the backup root; a symlinked doc is refused
 - [ ] Library edits do not change what a harness install writes (installs come from the bundle)
 - [ ] Brain Setup copy block works and changes no targets
-- [ ] Prompt Builder: `[` `]` or `<` `>` switch groups, `y` copies the composed prompt, `i` edits context, `/` filters
-- [ ] **Use as context** from an eligible Repo Dashboard item opens Prompt Builder with safe task context
-- [ ] Repo Dashboard on a trusted repository: `<` `>` or `[` `]` switch Overview, Work, Docs; `r` refreshes; `w` folds or expands the warnings strip
-- [ ] A repository with a failing `git fetch` or `gh` shows a warning, not a crash; no credential text appears in the output
-- [ ] A repository with more than 500 local commits loads the complete reachable history
 - [ ] No Tools icon or tool switcher exists
 
 ## 10. Known limitations
@@ -177,8 +172,8 @@ Use fixture files in the isolated `HOME` (`~/.claude/CLAUDE.md`, `~/.codex/AGENT
 - [ ] Appearance, motion levels, landing page, picker, harness enablement passed
 - Notes: ________
 
-### Library, Prompt Builder, Repo Dashboard
-- [ ] Panes, save and backup, prompts, repository warnings passed
+### Library
+- [ ] Panes, save and backup passed
 - Notes: ________
 
 ### Skipped checks and residual risk

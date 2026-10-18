@@ -53,9 +53,7 @@ export function DocItemList({
   const showStaleBanner = workspaceValid && missingCount > 0;
   const items = useMemo(() => orderBySection(filterDocsForSearch(docs, search)), [docs, search]);
 
-  const staleHint = docsHealth?.missing_prompt_template_docs
-    ? "Prompt Templates and other bundled docs are missing from this workspace."
-    : `${missingCount} bundled doc${missingCount === 1 ? " is" : "s are"} missing from this workspace.`;
+  const staleHint = `${missingCount} bundled doc${missingCount === 1 ? " is" : "s are"} missing from this workspace.`;
 
   return (
     <>

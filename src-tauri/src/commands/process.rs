@@ -80,14 +80,11 @@ pub(super) struct BoundedCmdResult {
     pub stderr: String,
     pub exit_code: Option<i32>,
     pub timed_out: bool,
-    pub stdout_truncated: bool,
-    pub stderr_truncated: bool,
 }
 
 #[derive(Default)]
 struct ReadOutput {
     buf: Vec<u8>,
-    truncated: bool,
     error: Option<String>,
 }
 
@@ -109,7 +106,6 @@ fn read_capped_into(mut reader: impl Read, cap: usize, sink: &Mutex<ReadOutput>)
                     out.buf.extend_from_slice(&chunk[..read]);
                 } else {
                     out.buf.extend_from_slice(&chunk[..remaining]);
-                    out.truncated = true;
                     drop(out);
                     while matches!(reader.read(&mut chunk), Ok(n) if n > 0) {}
                     return;
@@ -254,8 +250,6 @@ pub(super) fn run_cmd_bounded(
                 stderr: format_spawn_error(program, &error),
                 exit_code: None,
                 timed_out: false,
-                stdout_truncated: false,
-                stderr_truncated: false,
             };
         }
     };
@@ -287,8 +281,6 @@ pub(super) fn run_cmd_bounded(
         stderr: stderr_text,
         exit_code: status.and_then(|s| s.code()),
         timed_out,
-        stdout_truncated: stdout.truncated,
-        stderr_truncated: stderr.truncated,
     }
 }
 
@@ -380,8 +372,7 @@ mod tests {
             },
         );
         assert!(result.success);
-        assert!(result.stdout_truncated);
-        assert!(result.stdout.len() <= 128);
+        assert_eq!(result.stdout.len(), 128);
     }
 
     #[test]
@@ -412,7 +403,6 @@ mod tests {
         assert!(result.success);
         assert_eq!(result.stderr, "warn");
         assert!(result.stdout.is_empty());
-        assert!(!result.stderr_truncated);
     }
 
     struct FailingReader {

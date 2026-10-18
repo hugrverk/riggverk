@@ -84,24 +84,6 @@ fn curated_doc_registry() -> &'static [DocEntry] {
             rel_path: "docs/TROUBLESHOOTING.md",
         },
         DocEntry {
-            id: "docs/prompt-templates/prompt.md",
-            section: "Prompt Templates",
-            title: "Prompt Template",
-            rel_path: "docs/prompt-templates/prompt.md",
-        },
-        DocEntry {
-            id: "docs/prompt-templates/goal-prompt.md",
-            section: "Prompt Templates",
-            title: "Goal Prompt Template",
-            rel_path: "docs/prompt-templates/goal-prompt.md",
-        },
-        DocEntry {
-            id: "docs/prompt-templates/batch-prompt.md",
-            section: "Prompt Templates",
-            title: "Batch Prompt Template",
-            rel_path: "docs/prompt-templates/batch-prompt.md",
-        },
-        DocEntry {
             id: "templates/cursor/README.md",
             section: "Cursor",
             title: "Cursor Profile Readme",
@@ -142,12 +124,6 @@ pub(crate) const FORBIDDEN_LIBRARY_DOC_REL_PATHS: &[&str] = &[
     "templates/cursor/mcp/playwright.mcp.json",
     "templates/cursor/rules/core-safety.mdc",
     "templates/cursor/agents/verifier.md",
-];
-
-const PROMPT_TEMPLATE_DOC_REL_PATHS: &[&str] = &[
-    "docs/prompt-templates/prompt.md",
-    "docs/prompt-templates/goal-prompt.md",
-    "docs/prompt-templates/batch-prompt.md",
 ];
 
 pub(crate) fn missing_curated_doc_rel_paths(root: &Path) -> Vec<&'static str> {
@@ -317,7 +293,6 @@ pub struct DocSummary {
 #[derive(Serialize)]
 pub struct DocsHealth {
     pub missing_count: usize,
-    pub missing_prompt_template_docs: bool,
     /// Sample of missing curated doc paths (workspace-relative, capped).
     pub missing_sample: Vec<String>,
 }
@@ -336,13 +311,9 @@ pub struct DocumentContent {
 pub fn get_docs_health() -> Result<DocsHealth, String> {
     let root = workspace_root()?;
     let missing = missing_curated_doc_rel_paths(&root);
-    let missing_prompt_template_docs = PROMPT_TEMPLATE_DOC_REL_PATHS
-        .iter()
-        .any(|rel| workspace_install_file_missing(&root.join(rel)));
     let missing_sample: Vec<String> = missing.iter().take(8).map(|s| (*s).to_string()).collect();
     Ok(DocsHealth {
         missing_count: missing.len(),
-        missing_prompt_template_docs,
         missing_sample,
     })
 }
@@ -742,18 +713,6 @@ mod tests {
     }
 
     #[test]
-    fn curated_registry_includes_prompt_template_docs() {
-        let ids: Vec<&str> = curated_doc_registry().iter().map(|e| e.rel_path).collect();
-        for rel in PROMPT_TEMPLATE_DOC_REL_PATHS {
-            assert!(
-                ids.contains(rel),
-                "curated registry must include prompt template doc: {}",
-                rel
-            );
-        }
-    }
-
-    #[test]
     fn curated_registry_excludes_internal_cursor_library_docs() {
         let ids: Vec<&str> = curated_doc_registry().iter().map(|e| e.rel_path).collect();
         for forbidden in FORBIDDEN_LIBRARY_DOC_REL_PATHS {
@@ -779,35 +738,13 @@ mod tests {
     }
 
     #[test]
-    fn missing_curated_docs_detects_absent_prompt_templates() {
-        let root = temp_root("missing-prompt-templates");
-        write_file(&root, "README.md", "# readme\n");
-        write_file(&root, "docs/START_HERE.md", "# start\n");
-
-        let missing = missing_curated_doc_rel_paths(&root);
-        cleanup(&root);
-
-        for rel in PROMPT_TEMPLATE_DOC_REL_PATHS {
-            assert!(
-                missing.contains(rel),
-                "missing curated docs must include absent prompt template: {}",
-                rel
-            );
-        }
-    }
-
-    #[test]
     fn sections_are_assigned_correctly() {
         let root = temp_root("section-check");
         write_file(&root, "README.md", "# readme\n");
         write_file(&root, "docs/START_HERE.md", "# start\n");
         write_file(&root, "docs/GIT_VERSIONING.md", "# git\n");
         write_file(&root, "docs/AGENT_RULES.md", "# rules\n");
-        write_file(
-            &root,
-            "docs/prompt-templates/batch-prompt.md",
-            "# batch prompt\n",
-        );
+        write_file(&root, "templates/cursor/README.md", "# cursor\n");
 
         let docs = existing_curated_docs(&root);
         cleanup(&root);
@@ -821,10 +758,7 @@ mod tests {
         assert_eq!(by_id.get("docs/START_HERE.md"), Some(&"Start"));
         assert_eq!(by_id.get("docs/GIT_VERSIONING.md"), Some(&"Guides"));
         assert_eq!(by_id.get("docs/AGENT_RULES.md"), Some(&"Reference"));
-        assert_eq!(
-            by_id.get("docs/prompt-templates/batch-prompt.md"),
-            Some(&"Prompt Templates")
-        );
+        assert_eq!(by_id.get("templates/cursor/README.md"), Some(&"Cursor"));
     }
 
     #[test]

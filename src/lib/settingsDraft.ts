@@ -47,8 +47,6 @@ export function defaultSettings(): AppSettings {
     foreground_color: null,
     motion: "full",
     landing_view: "start",
-    repo_dashboard_entries: [],
-    active_repo_dashboard_id: null,
   };
 }
 

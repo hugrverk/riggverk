@@ -997,8 +997,6 @@ mod tests {
             motion: "full".into(),
             reduce_motion: false,
             landing_view: "start".into(),
-            repo_dashboard_entries: Vec::new(),
-            active_repo_dashboard_id: None,
             revision: 0,
             target_defaults_version: crate::settings::TARGET_DEFAULTS_VERSION,
         };
@@ -1048,8 +1046,6 @@ mod tests {
             motion: "full".into(),
             reduce_motion: false,
             landing_view: "start".into(),
-            repo_dashboard_entries: Vec::new(),
-            active_repo_dashboard_id: None,
             revision: 0,
             target_defaults_version: crate::settings::TARGET_DEFAULTS_VERSION,
         };
@@ -1087,8 +1083,6 @@ mod tests {
             motion: "full".into(),
             reduce_motion: false,
             landing_view: "start".into(),
-            repo_dashboard_entries: Vec::new(),
-            active_repo_dashboard_id: None,
             revision: 0,
             target_defaults_version: crate::settings::TARGET_DEFAULTS_VERSION,
         };
@@ -1113,8 +1107,6 @@ mod tests {
             motion: "full".into(),
             reduce_motion: false,
             landing_view: "start".into(),
-            repo_dashboard_entries: Vec::new(),
-            active_repo_dashboard_id: None,
             revision: 0,
             target_defaults_version: crate::settings::TARGET_DEFAULTS_VERSION,
         };

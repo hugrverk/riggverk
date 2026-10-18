@@ -262,9 +262,7 @@
   overflow: hidden;
 }
 
-.view-area > section,
-.view-area > .prompt-loops-tool,
-.view-area > .repo-dashboard-tool {
+.view-area > section {
   flex: 1;
   min-height: 0;
   min-width: 0;
@@ -300,9 +298,6 @@
   min-height: 120px;
   color: var(--text-muted);
 }
-
-/* Pane-shaped Suspense fallback (ViewFallback) for lazily loaded tool views. */
-.view-fallback-note { padding: 0 10px; }
 
 /* ---- terminal activity loader (kept, D10) ---- */
 

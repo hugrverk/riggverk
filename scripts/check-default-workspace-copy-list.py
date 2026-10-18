@@ -81,11 +81,6 @@ def main() -> None:
         "templates/opencode.policy.json",
         "templates/playwright-mcp.config.json",
     }
-    required_docs = {
-        "docs/prompt-templates/prompt.md",
-        "docs/prompt-templates/goal-prompt.md",
-        "docs/prompt-templates/batch-prompt.md",
-    }
     required_refresh = {
         "scripts/install-agent-rules.sh",
         "scripts/install-runtime-agents.sh",
@@ -107,8 +102,6 @@ def main() -> None:
         fail(f"Scripts section missing: {rel}")
     for rel in sorted(required_templates - templates):
         fail(f"Templates section missing: {rel}")
-    for rel in sorted(required_docs - docs):
-        fail(f"Docs section missing: {rel}")
     for rel in sorted(required_refresh - refresh):
         fail(f"managed refresh list missing app action script: {rel}")
     for rel in sorted(required_cursor_adapters - templates):

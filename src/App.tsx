@@ -4,7 +4,6 @@ import { version as APP_VERSION } from "../package.json";
 import { LEAVE_DIRTY_MESSAGE } from "./lib/editorGuards";
 import { invokeOpen } from "./lib/invokeOpen";
 import { useConfirm } from "./components/ConfirmDialog";
-import { ViewFallback } from "./components/ViewFallback";
 import { useBackups } from "./lib/useBackups";
 import { useUninstallRecovery } from "./lib/useUninstallRecovery";
 import { useWorkspaceActions } from "./lib/useWorkspaceActions";
@@ -20,28 +19,18 @@ import { useRollbackRequest } from "./hooks/useRollbackRequest";
 import { useLandingView } from "./hooks/useLandingView";
 import { EDITABLE_CONFIG_TARGET_IDS, useLibraryController } from "./hooks/useLibraryController";
 import { useWorkspaceHealthController } from "./hooks/useWorkspaceHealthController";
-import {
-  savedRepoEntriesFromSettings,
-} from "./lib/useSavedRepoEntriesController";
-import {
-  createPromptLoopContextSeed,
-  isPromptContextEligibleWorkItem,
-  type PromptLoopContextSeed,
-} from "./tools/promptLoops/contextHandoff";
 import { CodexView } from "./views/CodexView";
 import { CursorView } from "./views/CursorView";
 import { ClaudeView } from "./views/ClaudeView";
 import { OpenCodeView } from "./views/OpenCodeView";
 import { StartView } from "./views/StartView";
 const LibraryView = lazy(() => import("./views/LibraryView").then(m => ({ default: m.LibraryView })));
-const PromptLoopsTool = lazy(() => import("./tools/promptLoops/PromptLoopsTool").then(m => ({ default: m.PromptLoopsTool })));
-const RepoDashboardTool = lazy(() => import("./tools/repoDashboard/RepoDashboardTool").then(m => ({ default: m.RepoDashboardTool })));
 const SettingsView = lazy(() => import("./views/SettingsView").then(m => ({ default: m.SettingsView })));
 import { harnessForView } from "./lib/harnessInstallation";
 import { filterVisibleMetadataTargets } from "./lib/harnessVisibility";
 import { redactTerminalOutput } from "./lib/redactTerminalOutput";
 import { AppFrame, ShellProviders, useAppCommands, useShellState, type AppView } from "./shell";
-import type { InstallAgent, RepoDashboardWorkItem, SetupResult } from "./types";
+import type { InstallAgent, SetupResult } from "./types";
 
 type View = AppView;
 
@@ -285,7 +274,6 @@ function AppShell() {
     toggleTarget,
     toggleHarness,
     clearSettingsMsg,
-    mutateAppSettings,
     persistActiveWorkspace,
   } = useAppSettingsController({
     setError,
@@ -433,37 +421,6 @@ function AppShell() {
   }, [view, librarySourceType, isLibrarySourceDirty, settingsDirty, settingsSaving, loadLibraryView, loadWorkspaceDiagnostics, loadEnabledHarnessHealth, loadSettings, clearSettingsMsg, enabledHarnessKey]);
 
   useLandingView({ landingView: appSettings?.landing_view, currentView: view, navigate: switchView });
-
-  // Shared state for the Prompt Builder + Repo Dashboard tools.
-  // Lifted to App so context handoff and saved-repo entry identity stay consistent
-  // regardless of which view the user is currently on.
-  const savedRepoView = useMemo(
-    () => savedRepoEntriesFromSettings(appSettings),
-    [appSettings],
-  );
-  const { entries: savedRepos, activeEntryId: savedReposActiveId, loading: savedReposLoading } = savedRepoView;
-  const [promptContextSeed, setPromptContextSeed] = useState<PromptLoopContextSeed | null>(null);
-  const promptContextSeedRef = useRef(0);
-
-  const handlePromptContextSeedConsumed = useCallback((seedId: string) => {
-    setPromptContextSeed(current => (current?.id === seedId ? null : current));
-  }, []);
-
-  const handleUsePromptContext = useCallback(
-    (payload: { item: RepoDashboardWorkItem; repoPath: string }) => {
-      if (!isPromptContextEligibleWorkItem(payload.item)) return;
-      promptContextSeedRef.current += 1;
-      setPromptContextSeed(
-        createPromptLoopContextSeed(payload.item, {
-          repoPath: payload.repoPath,
-          savedEntries: savedRepos,
-          seedNonce: promptContextSeedRef.current,
-        }),
-      );
-      setView("prompts");
-    },
-    [savedRepos],
-  );
 
   // Reload what an install or rollback may have changed on disk.
   const refreshAfterApply = useCallback(async () => {
@@ -893,28 +850,6 @@ function AppShell() {
             workspaceValid={workspaceValid}
             showConfigs={configTargets.length > 0}
           />
-          </Suspense>
-        )}
-
-        {view === "prompts" && (
-          <Suspense fallback={<ViewFallback title="Prompt Builder" />}>
-            <PromptLoopsTool
-              contextSeed={promptContextSeed}
-              onContextSeedConsumed={handlePromptContextSeedConsumed}
-              savedRepos={savedRepos}
-              savedReposLoading={savedReposLoading}
-            />
-          </Suspense>
-        )}
-
-        {view === "repo-dashboard" && (
-          <Suspense fallback={<ViewFallback title="Repo Dashboard" />}>
-            <RepoDashboardTool
-              onUsePromptContext={handleUsePromptContext}
-              savedEntries={savedRepos}
-              activeEntryId={savedReposActiveId}
-              mutateSavedEntries={mutateAppSettings}
-            />
           </Suspense>
         )}
 
