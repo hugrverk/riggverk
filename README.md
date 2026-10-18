@@ -61,7 +61,7 @@ skills/<group>/<skill>/SKILL.md
 
 One optional group level is supported; deeper nesting is invalid. Every harness installs the canonical `SKILL.md` byte for byte; there are no generated per-harness copies. Text meant for one harness sits at the end of the file under `## Harness notes` (`### Claude Code`, `### Codex`, `### OpenCode`, `### Cursor`), and `python3 scripts/check-skill-routing.py` validates the structure.
 
-Installed layout is flat and single-file: `<harness-skill-root>/<skill-name>/SKILL.md`. Global destinations: Codex `$CODEX_HOME/skills` (typically `~/.codex/skills`), OpenCode `~/.config/opencode/skills`, Claude Code `~/.claude/skills`, Cursor `~/.cursor/skills`.
+Installed layout is flat and holds the whole skill directory: `<harness-skill-root>/<skill-name>/SKILL.md` plus the skill's supporting files at their relative paths. Global destinations: Codex `$CODEX_HOME/skills` (typically `~/.codex/skills`), OpenCode `~/.config/opencode/skills`, Claude Code `~/.claude/skills`, Cursor `~/.cursor/skills`.
 
 All skills support all four harnesses. Skills surfaces are not gated by target toggles. Deprecated Agent Workspace skills are matched against bundled reference snapshots: identical managed copies are removed after backup, diverged and unknown copies are preserved.
 
