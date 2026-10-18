@@ -282,10 +282,15 @@ pub(crate) fn mcp_diff_status(workspace_root: &Path, paths: &CursorProfilePaths)
     let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&content) else {
         return "invalid".into();
     };
-    let actual = parsed
-        .get("mcpServers")
-        .and_then(|v| v.get("playwright"))
-        .cloned();
+    // The merge needs an object, and an object or nothing under `mcpServers`.
+    let Some(root) = parsed.as_object() else {
+        return "invalid".into();
+    };
+    let servers = root.get("mcpServers");
+    if servers.is_some_and(|value| !value.is_object()) {
+        return "invalid".into();
+    }
+    let actual = servers.and_then(|value| value.get("playwright")).cloned();
     if actual == Some(expected) {
         "synced".into()
     } else if actual.is_some() {
