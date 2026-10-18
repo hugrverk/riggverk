@@ -281,6 +281,8 @@ export interface AppSettings {
   // Marks which enabled-target defaults the file was written under. The backend always emits it and
   // re-stamps it on every save, so UI-built drafts may omit it.
   target_defaults_version?: number;
+  // App version whose "what's new" was shown. Absent or null: a fresh install (or a file that predates it).
+  last_seen_version?: string | null;
 }
 
 export interface GetSettingsResponse {

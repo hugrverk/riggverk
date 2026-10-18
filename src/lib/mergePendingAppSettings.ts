@@ -23,6 +23,7 @@ export function mergePendingLocalOntoAcknowledged(
     foreground_color: local.foreground_color,
     motion: local.motion,
     landing_view: local.landing_view,
+    last_seen_version: local.last_seen_version ?? acknowledged.last_seen_version,
     revision: acknowledged.revision ?? 0,
   };
 }

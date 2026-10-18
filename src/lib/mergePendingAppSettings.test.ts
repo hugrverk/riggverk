@@ -40,6 +40,15 @@ describe("mergePendingAppSettings", () => {
     expect(rebased.revision).toBe(6);
   });
 
+  it("keeps the recorded last seen version while other edits are pending", () => {
+    const savedSerialized = serializeSettingsForCompare(base);
+    const local: AppSettings = { ...base, appearance: "light", last_seen_version: "2026.10.1" };
+    expect(mergePendingLocalOntoAcknowledged({ ...base, revision: 4 }, local, savedSerialized).last_seen_version).toBe("2026.10.1");
+    const acknowledged: AppSettings = { ...base, revision: 4, last_seen_version: "2026.10.2" };
+    const editedOnly: AppSettings = { ...base, appearance: "light" };
+    expect(mergePendingLocalOntoAcknowledged(acknowledged, editedOnly, savedSerialized).last_seen_version).toBe("2026.10.2");
+  });
+
   it("returns the acknowledged settings when nothing is pending", () => {
     const savedSerialized = serializeSettingsForCompare(base);
     const acknowledged = { ...base, revision: 9, landing_view: "library" };

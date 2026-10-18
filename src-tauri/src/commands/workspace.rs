@@ -765,6 +765,7 @@ mod tests {
             landing_view: "start".into(),
             revision: 0,
             target_defaults_version: crate::settings::TARGET_DEFAULTS_VERSION,
+            last_seen_version: None,
         };
 
         let candidate = configured_workspace_path(&settings).expect("canonical fallback");
@@ -814,6 +815,7 @@ mod tests {
             landing_view: "start".into(),
             revision: 0,
             target_defaults_version: crate::settings::TARGET_DEFAULTS_VERSION,
+            last_seen_version: None,
         };
         let candidate = configured_workspace_path(&settings).expect("candidate");
         assert_eq!(candidate, home.join(".config/agent-workspace"));
@@ -851,6 +853,7 @@ mod tests {
             landing_view: "start".into(),
             revision: 0,
             target_defaults_version: crate::settings::TARGET_DEFAULTS_VERSION,
+            last_seen_version: None,
         };
 
         assert!(scrub_stale_workspace_path(&mut settings));
@@ -875,6 +878,7 @@ mod tests {
             landing_view: "start".into(),
             revision: 0,
             target_defaults_version: crate::settings::TARGET_DEFAULTS_VERSION,
+            last_seen_version: None,
         };
 
         assert!(!scrub_stale_workspace_path(&mut settings));

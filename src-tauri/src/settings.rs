@@ -47,6 +47,10 @@ pub struct AppSettings {
     /// Files without it predate target gating and are migrated on load.
     #[serde(default)]
     pub target_defaults_version: u32,
+    /// App version whose "what's new" the user has seen. Unset on a fresh install and in files that
+    /// predate the field; the app then records its version without showing anything.
+    #[serde(default)]
+    pub last_seen_version: Option<String>,
 }
 
 /// Bump when the default set of enabled targets changes in a way that existing
@@ -77,6 +81,7 @@ impl Default for AppSettings {
             landing_view: default_landing_view(),
             revision: 0,
             target_defaults_version: TARGET_DEFAULTS_VERSION,
+            last_seen_version: None,
         }
     }
 }
@@ -154,6 +159,25 @@ fn normalize_landing_view(value: &str) -> String {
     }
 }
 
+/// Keeps a plain `N.N.N` app version (CalVer and 0.x alike); anything else is dropped, which the app
+/// treats like a fresh install.
+fn normalize_last_seen_version(value: Option<&str>) -> Option<String> {
+    let trimmed = value?.trim();
+    let mut parts = trimmed.split('.');
+    let numeric = |part: Option<&str>| {
+        part.is_some_and(|p| !p.is_empty() && p.len() <= 9 && p.bytes().all(|b| b.is_ascii_digit()))
+    };
+    if numeric(parts.next())
+        && numeric(parts.next())
+        && numeric(parts.next())
+        && parts.next().is_none()
+    {
+        Some(trimmed.to_string())
+    } else {
+        None
+    }
+}
+
 fn validate_hex_color(raw: &str) -> Option<String> {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
@@ -204,6 +228,7 @@ fn normalize(settings: &mut AppSettings) {
         .foreground_color
         .as_deref()
         .and_then(validate_hex_color);
+    settings.last_seen_version = normalize_last_seen_version(settings.last_seen_version.as_deref());
 }
 
 fn normalize_for_save(settings: &mut AppSettings) -> Result<(), String> {
@@ -240,6 +265,7 @@ fn normalize_for_save(settings: &mut AppSettings) -> Result<(), String> {
         .foreground_color
         .as_deref()
         .and_then(validate_hex_color);
+    settings.last_seen_version = normalize_last_seen_version(settings.last_seen_version.as_deref());
 
     // Anything written by this build carries the current target defaults, even
     // when the caller (e.g. the UI) round-tripped an older object without the marker.
@@ -602,6 +628,7 @@ mod tests {
             landing_view: "start".into(),
             revision: 0,
             target_defaults_version: TARGET_DEFAULTS_VERSION,
+            last_seen_version: None,
         }
     }
 
@@ -704,6 +731,7 @@ mod tests {
             landing_view: "start".into(),
             revision: 0,
             target_defaults_version: TARGET_DEFAULTS_VERSION,
+            last_seen_version: None,
         };
 
         normalize(&mut settings);
@@ -1021,6 +1049,7 @@ mod tests {
             landing_view: "start".into(),
             revision: 0,
             target_defaults_version: TARGET_DEFAULTS_VERSION,
+            last_seen_version: None,
         };
         normalize(&mut s);
         assert_eq!(s.accent_color, Some("#ffaa00".into()));
@@ -1042,6 +1071,7 @@ mod tests {
             landing_view: "start".into(),
             revision: 0,
             target_defaults_version: TARGET_DEFAULTS_VERSION,
+            last_seen_version: None,
         };
         normalize(&mut s);
         assert_eq!(s.accent_color, None);
@@ -1722,5 +1752,101 @@ mod tests {
             assert_eq!(saved.target_defaults_version, TARGET_DEFAULTS_VERSION);
             assert_eq!(load().enabled_target_ids, vec!["codex_rules".to_string()]);
         });
+    }
+
+    // ── last_seen_version tests ──
+
+    #[test]
+    fn last_seen_version_is_unset_by_default_and_serializes_as_null() {
+        let settings = AppSettings::default();
+        assert_eq!(settings.last_seen_version, None);
+        let json = serde_json::to_value(&settings).expect("serialize");
+        assert!(json["last_seen_version"].is_null());
+    }
+
+    #[test]
+    fn settings_file_without_last_seen_version_loads_unset() {
+        with_temp_home(|dir| {
+            let mut json = serde_json::to_value(AppSettings::default()).expect("serialize");
+            json.as_object_mut()
+                .expect("settings object")
+                .remove("last_seen_version");
+            write_settings_file(dir, &json.to_string());
+
+            let loaded = get_settings_snapshot().expect("snapshot");
+            assert_eq!(loaded.settings.last_seen_version, None);
+            assert!(loaded.load_warning.is_none());
+            // The rest of the old file is untouched.
+            assert_eq!(loaded.settings.appearance, "dark");
+        });
+    }
+
+    #[test]
+    fn last_seen_version_round_trips_through_save_and_load() {
+        with_temp_home(|dir| {
+            let saved = save(AppSettings {
+                last_seen_version: Some("2026.10.1".into()),
+                ..AppSettings::default()
+            })
+            .expect("save");
+            assert_eq!(saved.last_seen_version.as_deref(), Some("2026.10.1"));
+
+            let on_disk: serde_json::Value = serde_json::from_str(
+                &fs::read_to_string(settings_path_for_home(dir)).expect("read settings"),
+            )
+            .expect("parse settings");
+            assert_eq!(on_disk["last_seen_version"], "2026.10.1");
+            assert_eq!(load().last_seen_version.as_deref(), Some("2026.10.1"));
+            assert_eq!(
+                get_settings_snapshot()
+                    .expect("snapshot")
+                    .settings
+                    .last_seen_version
+                    .as_deref(),
+                Some("2026.10.1")
+            );
+
+            // A later write of other settings keeps it.
+            let mut next = load();
+            next.appearance = "light".into();
+            let kept = save_with_revision_check(next, Some(saved.revision)).expect("save again");
+            assert_eq!(kept.last_seen_version.as_deref(), Some("2026.10.1"));
+        });
+    }
+
+    #[test]
+    fn last_seen_version_keeps_plain_versions_and_drops_anything_else() {
+        for (input, expected) in [
+            ("2026.10.1", Some("2026.10.1")),
+            (" 2027.1.12 ", Some("2027.1.12")),
+            ("0.1.0", Some("0.1.0")),
+            ("", None),
+            ("   ", None),
+            ("2026.10", None),
+            ("2026.10.1.4", None),
+            ("v2026.10.1", None),
+            ("2026.10.1-rc.1", None),
+            ("2026..1", None),
+            ("1.2.x", None),
+            ("1234567890.1.1", None),
+        ] {
+            let mut loaded = settings_with_path(None);
+            loaded.last_seen_version = Some(input.into());
+            normalize(&mut loaded);
+            assert_eq!(
+                loaded.last_seen_version.as_deref(),
+                expected,
+                "load {input:?}"
+            );
+
+            let mut saved = settings_with_path(None);
+            saved.last_seen_version = Some(input.into());
+            normalize_for_save(&mut saved).expect("save normalization");
+            assert_eq!(
+                saved.last_seen_version.as_deref(),
+                expected,
+                "save {input:?}"
+            );
+        }
     }
 }
