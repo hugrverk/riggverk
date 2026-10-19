@@ -1549,15 +1549,10 @@ permission:
     "grep * */*.jks *": deny
     "grep * Pulumi.*.yaml": deny
     "grep * */Pulumi.*.yaml *": deny
-    "grep * mcp.json": deny
     "grep * */mcp.json *": deny
-    "grep * .claude.json": deny
     "grep * */.claude.json *": deny
-    "grep * .codex/config.toml": deny
     "grep * */.codex/config.toml *": deny
-    "grep * .git-credentials": deny
     "grep * */.git-credentials *": deny
-    "grep * .git/config": deny
     "grep * */.git/config *": deny
     "rg * .env*": deny
     "rg * */.env*": deny
@@ -1647,15 +1642,10 @@ permission:
     "rg * */*.jks *": deny
     "rg * Pulumi.*.yaml": deny
     "rg * */Pulumi.*.yaml *": deny
-    "rg * mcp.json": deny
     "rg * */mcp.json *": deny
-    "rg * .claude.json": deny
     "rg * */.claude.json *": deny
-    "rg * .codex/config.toml": deny
     "rg * */.codex/config.toml *": deny
-    "rg * .git-credentials": deny
     "rg * */.git-credentials *": deny
-    "rg * .git/config": deny
     "rg * */.git/config *": deny
     "git grep * .env*": deny
     "git grep * */.env*": deny
@@ -1745,15 +1735,10 @@ permission:
     "git grep * */*.jks *": deny
     "git grep * Pulumi.*.yaml": deny
     "git grep * */Pulumi.*.yaml *": deny
-    "git grep * mcp.json": deny
     "git grep * */mcp.json *": deny
-    "git grep * .claude.json": deny
     "git grep * */.claude.json *": deny
-    "git grep * .codex/config.toml": deny
     "git grep * */.codex/config.toml *": deny
-    "git grep * .git-credentials": deny
     "git grep * */.git-credentials *": deny
-    "git grep * .git/config": deny
     "git grep * */.git/config *": deny
   edit:
     "*": ask

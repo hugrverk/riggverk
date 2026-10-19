@@ -40,6 +40,7 @@ from opencode_policy_compose import (  # noqa: E402
     load_policy,
     permission_to_yaml,
     secret_content_denies,
+    secret_file_names,
     secret_names,
     unknown_policy_keys,
     with_root_forms,
@@ -762,7 +763,15 @@ class TestSecretPathSpellings(unittest.TestCase):
             ("cat ~/.ssh/id_rsa > /tmp/key", "deny", "deny"),
             ("grep -r token ~/.npmrc", "deny", "deny"),
             ("rg -n KEY ./certs/server.pem --no-heading", "deny", "deny"),
+            ("rg -n id_rsa", "deny", "deny"),
             ("cat .git/config", "deny", "deny"),
+            # credential-bearing config: denied to a search as a path, not as a searched-for name
+            ("rg -n KEY ~/.claude.json", "deny", "deny"),
+            ("grep url ./mcp.json", "deny", "deny"),
+            ("git grep -n url -- /srv/repo/.git/config", "deny", "deny"),
+            ("rg -n mcp.json", "ask", "ask"),
+            ('grep -rn ".claude.json" src/', "ask", "ask"),
+            ("git grep mcp.json", "ask", "ask"),
             # names only, or a mention that is not a file operand
             ("ls ~/.ssh", "allow", "deny"),
             ("find . -name .env", "allow", "deny"),
@@ -795,6 +804,22 @@ class TestSecretPathSpellings(unittest.TestCase):
             with self.subTest(pattern=pattern):
                 self.assertEqual(bash.get(pattern), "deny")
         self.assertEqual([key for key in bash if "id_rsa" in key], [])
+        # Read-denied only: a search for the name is not a read of the file.
+        self.assertNotIn("grep * .vault-token", bash)
+        policy["edit"]["deny"].append("**/.vault-token")
+        self.assertEqual(opencode_policy_compose.build_bash_section(policy).get("grep * .vault-token"), "deny")
+
+    def test_a_bare_name_search_is_denied_only_for_the_secret_files(self) -> None:
+        # The names read.deny holds but edit.deny does not are the credential-bearing config.
+        config_names = {pattern.removeprefix("**/") for pattern in CREDENTIAL_CONFIG_READ}
+        self.assertEqual(set(secret_names(self.policy)) - set(secret_file_names(self.policy)), config_names)
+        denies = set(secret_content_denies(self.policy))
+        for command in ("grep *", "rg *", "git grep *"):
+            for name in config_names:
+                with self.subTest(command=command, name=name):
+                    self.assertNotIn(f"{command} {name}", denies)
+                    self.assertIn(f"{command} */{name} *", denies)
+            self.assertIn(f"{command} id_rsa", denies)
 
     def test_a_name_without_a_fixed_end_stays_a_read_deny(self) -> None:
         # `*.env*` would turn every `process.env` mention into a deny.

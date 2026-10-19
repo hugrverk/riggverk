@@ -39,6 +39,7 @@ from opencode_policy_compose import (  # noqa: E402
     compose_role_permission,
     load_policy,
     secret_content_denies,
+    secret_file_names,
     secret_names,
 )
 
@@ -606,11 +607,14 @@ SECRET_SPELLINGS = (
     "bat /home/u/{}",
     "sed -n 1p {}",
     "cat notes.txt ~/{} > out.txt",
-    "grep x {}",
     "grep -r x ~/{}",
     "rg x ./{} --no-heading",
+    "rg x /home/u/{}",
     "git grep x -- src/{}",
 )
+# A search names its files after the pattern. A bare name as the last word is denied only for the
+# secret files themselves (`secret_file_names`), not for credential-bearing config that code names.
+SECRET_NAME_SEARCHES = ("grep x {}", "rg -n x {}")
 # Commands that list or mention secret names without printing a secret file: no secret deny may
 # decide them. `ls` and `find` print names only, like the glob and list tools.
 SECRET_MENTIONS = (
@@ -622,6 +626,13 @@ SECRET_MENTIONS = (
     "grep -r id_rsa docs/",
     'grep -rn "process.env" src/',
     "rg -n process.env src",
+    "rg -n mcp.json",
+    'grep -rn ".claude.json" src/',
+    "grep -rn .claude.json src/",
+    "git grep mcp.json",
+    "git grep -n .git/config",
+    "rg -n .codex/config.toml",
+    "rg .git-credentials",
     "echo id_rsa",
     "cat id_rsa.md",
     "cat src/secrets.ts",
@@ -639,9 +650,11 @@ def secret_sample(name: str) -> str:
 def secret_spelling_errors(name: str, rules: list[Rule], policy: dict) -> list[str]:
     """Printing any secret file of `read.deny` is denied however the command spells its path."""
     action = _bash_evaluator(rules)
+    file_names = set(secret_file_names(policy))
     errors: list[str] = []
     for secret in secret_names(policy):
-        for spelling in SECRET_SPELLINGS:
+        spellings = SECRET_SPELLINGS + (SECRET_NAME_SEARCHES if secret in file_names else ())
+        for spelling in spellings:
             command = spelling.format(secret_sample(secret))
             if action(command) != "deny":
                 errors.append(f"{name}: bash {command!r} must be deny (secret {secret!r}), got {action(command)}")

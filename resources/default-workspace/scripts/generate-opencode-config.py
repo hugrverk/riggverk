@@ -132,20 +132,35 @@ def build_edit_section(policy):
     return result
 
 
-def secret_names(policy):
-    """The secret file names and path tails of `read.deny` (`**/P` becomes `P`), for the bash denies.
+def _names(patterns):
+    """`**/P` becomes `P`; a pattern with a `*` at both ends (`*.env*`) is left out.
 
-    A read pattern with a `*` at both ends (`*.env*`) has no fixed start or end. Inside a command
-    line it would match every mention (`rg process.env src`), so it stays a read deny only.
+    Such a pattern has no fixed start or end. Inside a command line it would match every mention
+    (`rg process.env src`), so it stays a read deny only.
     """
     names = []
-    for pattern in policy.get("read", {}).get("deny", []):
+    for pattern in patterns:
         name = pattern[3:] if pattern.startswith("**/") else pattern
         if name.startswith("*") and name.endswith("*"):
             continue
         if name not in names:
             names.append(name)
     return names
+
+
+def secret_names(policy):
+    """The secret file names and path tails of `read.deny`, for the bash denies."""
+    return _names(policy.get("read", {}).get("deny", []))
+
+
+def secret_file_names(policy):
+    """The names of `secret_names` that `edit.deny` holds too: the secret files themselves.
+
+    The rest is credential-bearing config (`mcp.json`, `.claude.json`, `.git/config`, ...), which is
+    read-denied only and which code often names, so searching for its name stays possible.
+    """
+    edit = set(_names(policy.get("edit", {}).get("deny", [])))
+    return [name for name in secret_names(policy) if name in edit]
 
 
 def secret_content_denies(policy):
@@ -155,22 +170,23 @@ def secret_content_denies(policy):
     included) and a trailing ` *` also matches nothing; `~` is not expanded. For a command C
     and a secret name P from `read.deny`:
 
-    * `C P`: the name right after the command (`cat .env`; `grep -r x .env` for `grep *`);
-    * a file reader (`cat`, `head`, ...): also `C P *`, the name followed by more words, and, when
-      P does not start with `*`, `C * P *` after other words (`head -n 5 .env`) and `C */P *`, a
-      path that ends in `/P` whatever the prefix (`./`, `~/`, `$HOME/`, absolute, nested);
+    * a file reader (`cat`, `head`, ...): `C P` and `C P *`, the name right after the command, and,
+      when P does not start with `*`, `C * P *` after other words (`head -n 5 .env`) and `C */P *`,
+      a path that ends in `/P` whatever the prefix (`./`, `~/`, `$HOME/`, absolute, nested);
     * a command written with a trailing ` *` (`grep *`, `rg *`, `git grep *`): its first operand
-      is the search pattern, so a bare name counts only as the last word (`grep -r id_rsa docs/`
-      keeps asking) and the other spellings need a `/`: `C */P *`.
+      is the search pattern, so P is denied as a path, `C */P *`. A bare P as the last word,
+      `C P`, is denied only for `secret_file_names`; `rg -n mcp.json` and
+      `grep -r id_rsa docs/` keep asking.
 
     The trailing ` *` (more words, or a redirect) is left out when P already ends in `*`.
     """
+    file_names = set(secret_file_names(policy))
     denies = []
     for command in policy.get("bash", {}).get("secret_content_commands", []):
         search = command.endswith(" *")
         for name in secret_names(policy):
             more = "" if name.endswith("*") else " *"
-            forms = [f"{command} {name}"]
+            forms = [f"{command} {name}"] if not search or name in file_names else []
             if search:
                 forms.append(f"{command} */{name}{more}")
             else:
