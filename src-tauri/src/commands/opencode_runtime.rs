@@ -8,6 +8,7 @@ use super::opencode_cli::{self, AgentProbe, CliVersion, OpenCodeCliHealth, Versi
 use super::process::ActionResult;
 use super::process::{run_cmd_bounded, BoundedCmdOptions, BoundedCmdResult};
 use super::status::file_eq;
+use crate::opencode_precedence::{self, ConfigRead, OpenCodeConfigPrecedence};
 
 #[derive(Serialize, Clone, Debug)]
 pub struct OpenCodeRuntimeCheck {
@@ -54,6 +55,9 @@ pub struct OpenCodeRuntimeHealth {
     pub rules_status: String,
     /// The `@playwright/mcp` version pinned in the installed config.
     pub playwright_mcp_version: Option<String>,
+    /// What else decides the config OpenCode runs: a JSONC `opencode.json`, sibling files that
+    /// set managed keys, config env vars and a system managed config. Names only.
+    pub config_precedence: OpenCodeConfigPrecedence,
     // New TUI fields
     pub template_tui_path: String,
     pub installed_tui_path: String,
@@ -241,6 +245,35 @@ pub(crate) fn extract_managed_opencode_config(config: &serde_json::Value) -> ser
         }
     }
     serde_json::Value::Object(managed)
+}
+
+/// Names of the managed keys `config` sets: top-level names, `mcp.<server>`,
+/// `agent.<plan|explore>.permission` and `agent.<role>.model`. `$schema` is left out: it changes
+/// nothing OpenCode runs. Only names, never values.
+pub(crate) fn managed_opencode_key_names(config: &serde_json::Value) -> Vec<String> {
+    let managed = extract_managed_opencode_config(config);
+    let Some(managed) = managed.as_object() else {
+        return Vec::new();
+    };
+    let mut names = Vec::new();
+    for (key, value) in managed {
+        match key.as_str() {
+            "$schema" => {}
+            "mcp" | "agent" => {
+                for (name, entry) in value.as_object().into_iter().flatten() {
+                    if key == "mcp" {
+                        names.push(format!("mcp.{name}"));
+                    } else {
+                        for field in entry.as_object().into_iter().flatten().map(|(f, _)| f) {
+                            names.push(format!("agent.{name}.{field}"));
+                        }
+                    }
+                }
+            }
+            _ => names.push(key.clone()),
+        }
+    }
+    names
 }
 
 /// Structural equality that also requires object keys to appear in the same order.
@@ -597,13 +630,11 @@ pub(crate) fn opencode_config_sync_status(workspace_root: &Path, home_dir: &Path
         Err(_) => return "diverged".into(),
     };
 
-    let installed_json: serde_json::Value = match std::fs::read_to_string(&installed_path) {
-        Ok(content) => match serde_json::from_str(&content) {
-            Ok(v) => v,
-            Err(_) => return "diverged".into(),
-        },
-        Err(_) => return "diverged".into(),
+    // Read as OpenCode reads it (JSONC), so a commented file still gets a real answer.
+    let ConfigRead::Parsed(installed) = opencode_precedence::read_config(&installed_path) else {
+        return "diverged".into();
     };
+    let installed_json = installed.value;
 
     match render_expected_opencode_config(&template_json, home_dir) {
         Some(expected) if managed_opencode_keys_match(&installed_json, &expected) => {
@@ -624,8 +655,8 @@ const GENERATOR_OUTPUT_CAP: usize = 256 * 1024;
 const GENERATOR_SCRIPT_REL: &str = "scripts/generate-opencode-config.py";
 
 /// The generator from the bundled, read-only resource root, or why it is unavailable.
-fn bundled_generator_script(workspace_root: &Path) -> Result<PathBuf, String> {
-    let script = crate::setup_roots::bundled_root_for(workspace_root)?.join(GENERATOR_SCRIPT_REL);
+fn bundled_generator_script() -> Result<PathBuf, String> {
+    let script = crate::setup_roots::bundled_root()?.join(GENERATOR_SCRIPT_REL);
     if script.is_file() {
         Ok(script)
     } else {
@@ -663,8 +694,8 @@ fn run_generator(
 /// Run the bundled generator's --check against the given source root.
 /// Returns `Some(status, detail)` if the generator ran, `None` if it is unavailable
 /// (bundled script missing or `python3` not spawnable).
-fn run_generator_check(workspace_root: &Path, source_root: &Path) -> Option<(String, String)> {
-    let script = bundled_generator_script(workspace_root).ok()?;
+fn run_generator_check(source_root: &Path) -> Option<(String, String)> {
+    let script = bundled_generator_script().ok()?;
     run_generator_check_with_timeout(&script, source_root, GENERATOR_TIMEOUT)
 }
 
@@ -743,15 +774,14 @@ fn opencode_rules_status(source: &Path, installed: &Path) -> String {
 }
 
 /// Compute OpenCode runtime health against the bundled install sources, with
-/// no CLI probe (`apply_cli_probes` adds those).
+/// no CLI probe (`apply_cli_probes` adds those). The workspace folder plays no part.
 /// This is a pure function suitable for unit testing with temp dirs.
-pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> OpenCodeRuntimeHealth {
-    let bundled = crate::setup_roots::bundled_root_for(workspace_root).ok();
-    compute_health_with_bundle(workspace_root, bundled.as_deref(), home_dir)
+pub fn compute_health(home_dir: &Path) -> OpenCodeRuntimeHealth {
+    let bundled = crate::setup_roots::bundled_root().ok();
+    compute_health_with_bundle(bundled.as_deref(), home_dir)
 }
 
 fn compute_health_with_bundle(
-    workspace_root: &Path,
     bundled_root: Option<&Path>,
     home_dir: &Path,
 ) -> OpenCodeRuntimeHealth {
@@ -868,28 +898,33 @@ fn compute_health_with_bundle(
         None
     };
 
-    // Parse installed config if it exists
+    // Parse the installed config as OpenCode does (JSONC), so a file with comments still gets a
+    // real synced/diverged answer. The app does not rewrite such a file; the reason says why.
+    let mut config_precedence = OpenCodeConfigPrecedence::default();
+    let mut installed_not_strict_reason: Option<String> = None;
     let installed_json: Option<serde_json::Value> = if installed_exists {
-        match std::fs::read_to_string(&installed_config_path) {
-            Ok(content) => match serde_json::from_str(&content) {
-                Ok(v) => Some(v),
-                Err(e) => {
-                    checks.push(OpenCodeRuntimeCheck {
-                        id: "installed_config_valid".into(),
-                        label: "Installed config is valid JSON".into(),
-                        status: "fail".into(),
-                        detail: format!("parse error: {}", e),
-                    });
-                    has_fail = true;
-                    None
+        let failure = match opencode_precedence::read_config(&installed_config_path) {
+            ConfigRead::Parsed(parsed) => {
+                if !parsed.is_strict() {
+                    config_precedence.installed_not_strict =
+                        opencode_precedence::not_strict_parts(&parsed);
+                    installed_not_strict_reason =
+                        Some(opencode_precedence::not_strict_reason(&parsed));
                 }
-            },
-            Err(e) => {
+                Ok(parsed.value)
+            }
+            ConfigRead::Invalid => Err(opencode_precedence::INVALID_REASON.to_string()),
+            ConfigRead::Unreadable(e) => Err(format!("read error: {}", e)),
+            ConfigRead::Missing => Err("not found".to_string()),
+        };
+        match failure {
+            Ok(value) => Some(value),
+            Err(detail) => {
                 checks.push(OpenCodeRuntimeCheck {
                     id: "installed_config_valid".into(),
                     label: "Installed config is valid JSON".into(),
                     status: "fail".into(),
-                    detail: format!("read error: {}", e),
+                    detail,
                 });
                 has_fail = true;
                 None
@@ -921,9 +956,20 @@ fn compute_health_with_bundle(
         checks.push(OpenCodeRuntimeCheck {
             id: "installed_config_valid".into(),
             label: "Installed config is valid JSON".into(),
-            status: "pass".into(),
-            detail: "parsed successfully".into(),
+            status: if installed_not_strict_reason.is_some() {
+                "warn"
+            } else {
+                "pass"
+            }
+            .into(),
+            detail: installed_not_strict_reason
+                .clone()
+                .unwrap_or_else(|| "parsed successfully".into()),
         });
+        // Informational: the comparison below still says whether OpenCode runs the team's values.
+        if let Some(reason) = &installed_not_strict_reason {
+            warnings.push(reason.clone());
+        }
 
         // Extract non-sensitive fields from installed config
         default_agent = extract_string_field(i_json, &["default_agent"]);
@@ -1221,7 +1267,7 @@ fn compute_health_with_bundle(
         && snapshot_valid
     {
         // Try running generator --check to verify freshness
-        match bundled_root.and_then(|root| run_generator_check(workspace_root, root)) {
+        match bundled_root.and_then(run_generator_check) {
             Some((status, detail)) => (status, detail),
             None => {
                 generator_unavailable = true;
@@ -1368,6 +1414,26 @@ fn compute_health_with_bundle(
         has_warn = true;
     }
 
+    // OpenCode merges `config.json` and `opencode.jsonc` from the same folder with
+    // `opencode.json`; one that sets managed keys means OpenCode does not run the team's values.
+    let sibling_files = opencode_precedence::sibling_configs(
+        &home_dir.join(".config/opencode"),
+        managed_opencode_key_names,
+    );
+    let only_siblings_diverge = !has_fail && !has_warn && !sibling_files.is_empty();
+    for sibling in &sibling_files {
+        let warning = opencode_precedence::sibling_warning(sibling);
+        checks.push(OpenCodeRuntimeCheck {
+            id: format!("sibling_config:{}", sibling.file),
+            label: format!("{} beside opencode.json", sibling.file),
+            status: "warn".into(),
+            detail: warning.clone(),
+        });
+        warnings.push(warning);
+        has_warn = true;
+    }
+    config_precedence.sibling_files = sibling_files;
+
     // Determine overall status (now includes TUI)
     let status: String = if has_fail {
         "missing".into()
@@ -1385,6 +1451,25 @@ fn compute_health_with_bundle(
         (
             "OpenCode generated config snapshot is stale.".to_string(),
             "Regenerate opencode.json before sync.".to_string(),
+        )
+    } else if only_siblings_diverge {
+        // An install cannot fix this: the app never writes these files.
+        let steps: Vec<String> = config_precedence
+            .sibling_files
+            .iter()
+            .map(|sibling| {
+                if sibling.invalid {
+                    format!("fix {}", sibling.file)
+                } else {
+                    format!("remove the managed keys from {}", sibling.file)
+                }
+            })
+            .collect();
+        let next = steps.join(" and ");
+        (
+            "Another OpenCode config file beside opencode.json changes the team's values."
+                .to_string(),
+            format!("{}{}.", next[..1].to_uppercase(), &next[1..]),
         )
     } else {
         match status.as_str() {
@@ -1428,6 +1513,7 @@ fn compute_health_with_bundle(
         config_diverged_keys,
         rules_status,
         playwright_mcp_version,
+        config_precedence,
         template_tui_path: template_tui_path_str,
         installed_tui_path: installed_tui_path_str,
         tui_status,
@@ -1445,21 +1531,61 @@ fn compute_health_with_bundle(
 #[tauri::command(async)]
 pub fn get_opencode_runtime_health() -> Result<OpenCodeRuntimeHealth, String> {
     use crate::agent_targets;
-    use crate::commands::workspace::configured_workspace_path;
-    use crate::settings;
 
-    let workspace_root = configured_workspace_path(&settings::load()).unwrap_or_default();
     let home = agent_targets::home_dir()?;
 
-    // If workspace root doesn't exist or isn't valid, still compute health
-    // so the UI can show missing/invalid status
-    let mut health = compute_health(&workspace_root, &home);
+    // Compared with the bundle alone, so no workspace folder is needed.
+    let mut health = compute_health(&home);
+    // The app's own environment: the one it was launched with, not the user's shell's.
+    let user = std::env::var("USER").ok().or_else(|| {
+        home.file_name()
+            .map(|name| name.to_string_lossy().into_owned())
+    });
+    apply_config_environment(
+        &mut health,
+        opencode_precedence::config_env_var_names(std::env::vars_os()),
+        opencode_precedence::existing_paths(&opencode_precedence::system_managed_candidates(
+            user.as_deref(),
+        )),
+    );
     apply_cli_probes(
         &mut health,
         resolve_opencode_executable().as_deref(),
         ProbeLimits::PRODUCTION,
     );
     Ok(health)
+}
+
+/// Adds what the process environment and the machine add to OpenCode's config: the names of the
+/// config variables that are set and the system managed config paths that exist. Informational:
+/// the status stays, since the app cannot see what they set (it never reads their values).
+pub(crate) fn apply_config_environment(
+    health: &mut OpenCodeRuntimeHealth,
+    env_vars: Vec<String>,
+    system_managed_paths: Vec<String>,
+) {
+    if !env_vars.is_empty() {
+        let warning = opencode_precedence::env_warning(&env_vars);
+        health.checks.push(OpenCodeRuntimeCheck {
+            id: "config_env".into(),
+            label: "OpenCode config variables in the app's environment".into(),
+            status: "warn".into(),
+            detail: env_vars.join(", "),
+        });
+        health.warnings.push(warning);
+    }
+    if !system_managed_paths.is_empty() {
+        let warning = opencode_precedence::system_managed_warning(&system_managed_paths);
+        health.checks.push(OpenCodeRuntimeCheck {
+            id: "system_managed_config".into(),
+            label: "System managed OpenCode config".into(),
+            status: "warn".into(),
+            detail: system_managed_paths.join(", "),
+        });
+        health.warnings.push(warning);
+    }
+    health.config_precedence.env_vars = env_vars;
+    health.config_precedence.system_managed_paths = system_managed_paths;
 }
 
 /// How long each CLI probe may take before it counts as unanswered.
@@ -1627,7 +1753,10 @@ pub(crate) fn apply_cli_probes(
 /// snapshot that checks as current. The app itself never writes the bundled config sources or snapshot.
 #[cfg(test)]
 pub(crate) fn run_generator_write(workspace_root: &Path) -> Result<ActionResult, String> {
-    match bundled_generator_script(workspace_root) {
+    // Never write into the bundle itself.
+    match crate::setup_roots::bundled_root_for(workspace_root)
+        .and_then(|_| bundled_generator_script())
+    {
         Ok(script) => run_generator_write_with_script(&script, workspace_root),
         Err(error) => Ok(ActionResult::new(
             false,
@@ -2222,7 +2351,7 @@ mod tests {
 
     /// Existing fixtures supply the install bundle explicitly, independently of the runtime root.
     fn compute_health(bundle: &Path, home: &Path) -> OpenCodeRuntimeHealth {
-        super::compute_health_with_bundle(bundle, Some(bundle), home)
+        super::compute_health_with_bundle(Some(bundle), home)
     }
 
     fn temp_root(name: &str) -> PathBuf {
@@ -2322,7 +2451,7 @@ mod tests {
                 &fs::read_to_string(bundle.join("agents").join(name)).unwrap(),
             );
         }
-        assert_eq!(super::compute_health(&ws, &home).status, "synced");
+        assert_eq!(super::compute_health(&home).status, "synced");
 
         write_file(
             &ws,
@@ -2343,7 +2472,7 @@ mod tests {
         write_file(&ws, "templates/sync/opencode-rules.md", "workspace rules");
         write_file(&ws, "agents/architect.md", "workspace agent");
 
-        let health = super::compute_health(&ws, &home);
+        let health = super::compute_health(&home);
         assert_eq!(health.status, "synced", "{:?}", health.checks);
         assert_eq!(health.config_status, "synced");
         assert_eq!(health.tui_status, "synced");
@@ -2370,15 +2499,15 @@ mod tests {
             ".config/opencode/opencode.json",
             r#"{"model":"workspace/main","provider":{"mine":{}}}"#,
         );
-        assert_eq!(super::compute_health(&ws, &home).config_status, "diverged");
+        assert_eq!(super::compute_health(&home).config_status, "diverged");
         install_for(&bundle, &home);
-        assert_eq!(super::compute_health(&ws, &home).config_status, "synced");
+        assert_eq!(super::compute_health(&home).config_status, "synced");
         let installed: serde_json::Value =
             serde_json::from_slice(&fs::read(home.join(".config/opencode/opencode.json")).unwrap())
                 .unwrap();
         assert_eq!(installed["provider"], serde_json::json!({"mine":{}}));
 
-        let unavailable = super::compute_health_with_bundle(&ws, None, &home);
+        let unavailable = super::compute_health_with_bundle(None, &home);
         assert_ne!(unavailable.config_status, "synced");
         assert_eq!(unavailable.bundled_agent_count, 0);
         cleanup(&ws);
@@ -3251,7 +3380,7 @@ mod tests {
         );
 
         let health = compute_health(&ws, &home);
-        let check = super::run_generator_check(&ws, &ws);
+        let check = super::run_generator_check(&ws);
         let write = super::run_generator_write(&ws).expect("bundled generator should run");
         let sentinel_created = sentinel.exists();
         cleanup(&ws);
@@ -4111,6 +4240,261 @@ mod tests {
         };
         assert_eq!(status_of(&in_order).as_deref(), Some("pass"));
         assert_eq!(status_of(&out_of_order).as_deref(), Some("warn"));
+    }
+
+    // ── Config precedence ──
+
+    /// A value that must never reach a message: it stands for a secret in a user's file.
+    const SECRET: &str = "sk-test-PRIVATE-123";
+
+    /// Everything the health says, as the UI receives it.
+    fn health_text(health: &OpenCodeRuntimeHealth) -> String {
+        serde_json::to_string(health).expect("serialize health")
+    }
+
+    /// `config` as JSONC: a comment holding [`SECRET`] on top and a trailing comma at the end.
+    fn commented(config: &serde_json::Value) -> String {
+        let pretty = serde_json::to_string_pretty(config).unwrap();
+        let body = pretty.trim_end().strip_suffix('}').unwrap();
+        format!("// my notes: {SECRET}\n{body},\n}}\n")
+    }
+
+    fn installed(home: &Path) -> serde_json::Value {
+        serde_json::from_str(
+            &fs::read_to_string(home.join(".config/opencode/opencode.json")).unwrap(),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn a_commented_opencode_json_is_compared_as_jsonc_and_the_reason_names_no_text() {
+        let (ws, home) = setup_synced_workspace("jsonc");
+        let strict = installed(&home);
+        write_file(&home, ".config/opencode/opencode.json", &commented(&strict));
+
+        let synced = compute_health(&ws, &home);
+        assert_eq!(synced.config_status, "synced");
+        assert!(synced.config_diverged_keys.is_empty());
+        assert_eq!(
+            synced.status, "synced",
+            "comments alone change nothing OpenCode runs"
+        );
+        assert_eq!(
+            synced.config_precedence.installed_not_strict,
+            ["comments", "trailing commas"]
+        );
+        let check = synced
+            .checks
+            .iter()
+            .find(|check| check.id == "installed_config_valid")
+            .unwrap();
+        assert_eq!(check.status, "warn");
+        assert!(
+            synced.warnings.iter().any(|w| w
+                .starts_with("opencode.json has comments and trailing commas")
+                && w.contains("opencode.jsonc")),
+            "{:?}",
+            synced.warnings
+        );
+
+        let mut changed = strict.clone();
+        changed["model"] = serde_json::json!("mine/private-model");
+        write_file(
+            &home,
+            ".config/opencode/opencode.json",
+            &commented(&changed),
+        );
+        let diverged = compute_health(&ws, &home);
+        assert_eq!(diverged.config_status, "diverged");
+        assert_eq!(diverged.config_diverged_keys, ["model"]);
+        assert_eq!(diverged.status, "diverged");
+
+        write_file(
+            &home,
+            ".config/opencode/opencode.json",
+            &format!("{{\"model\": {SECRET}"),
+        );
+        let invalid = compute_health(&ws, &home);
+        assert_eq!(invalid.config_status, "invalid");
+        assert_eq!(invalid.status, "missing");
+
+        cleanup(&ws);
+        cleanup(&home);
+        for health in [&synced, &diverged, &invalid] {
+            let text = health_text(health);
+            assert!(!text.contains(SECRET), "{text}");
+            // The model id is shown by design (`model`); the file's other text is not.
+            assert!(!text.contains("my notes"), "{text}");
+        }
+    }
+
+    #[test]
+    fn the_dashboard_status_reads_a_commented_opencode_json_as_jsonc() {
+        let ws = temp_root("sync-status-jsonc-ws");
+        let home = temp_root("sync-status-jsonc-home");
+        let rendered = render_expected_opencode_config(
+            &serde_json::from_str(&bundled_template("opencode.json")).expect("parse bundle"),
+            &home,
+        )
+        .expect("render expected");
+        write_file(
+            &home,
+            ".config/opencode/opencode.json",
+            &commented(&rendered),
+        );
+        assert_eq!(super::opencode_config_sync_status(&ws, &home), "synced");
+
+        let mut changed = rendered.clone();
+        changed["model"] = serde_json::json!("mine/private-model");
+        write_file(
+            &home,
+            ".config/opencode/opencode.json",
+            &commented(&changed),
+        );
+        assert_eq!(super::opencode_config_sync_status(&ws, &home), "diverged");
+        cleanup(&ws);
+        cleanup(&home);
+    }
+
+    #[test]
+    fn sibling_config_files_warn_only_when_they_set_managed_keys() {
+        let (ws, home) = setup_synced_workspace("siblings");
+        write_file(
+            &home,
+            ".config/opencode/opencode.jsonc",
+            &format!(
+                "{{\n  \"$schema\": \"https://opencode.ai/config.json\",\n  // mine\n  \"provider\": {{\"p\": {{\"options\": {{\"apiKey\": \"{SECRET}\"}}}}}},\n}}"
+            ),
+        );
+        write_file(
+            &home,
+            ".config/opencode/config.json",
+            r#"{"theme": "dark"}"#,
+        );
+        let quiet = compute_health(&ws, &home);
+        assert_eq!(quiet.status, "synced");
+        assert!(quiet.config_precedence.sibling_files.is_empty());
+        assert!(quiet.warnings.is_empty(), "{:?}", quiet.warnings);
+
+        write_file(
+            &home,
+            ".config/opencode/opencode.jsonc",
+            &format!(
+                "{{\"model\": \"{SECRET}\", \"mcp\": {{\"playwright\": {{}}, \"mine\": {{}}}}, \"agent\": {{\"plan\": {{\"permission\": {{}}, \"prompt\": \"x\"}}, \"inspector\": {{\"model\": \"a/b\"}}, \"custom\": {{\"model\": \"c/d\"}}}},}}"
+            ),
+        );
+        let overridden = compute_health(&ws, &home);
+        assert_eq!(
+            overridden.status, "diverged",
+            "OpenCode does not run the team's values"
+        );
+        assert_eq!(
+            overridden.config_status, "synced",
+            "opencode.json itself is as bundled"
+        );
+        assert_eq!(
+            overridden.config_precedence.sibling_files,
+            [crate::opencode_precedence::SiblingConfig {
+                file: "opencode.jsonc".into(),
+                managed_keys: vec![
+                    "model".into(),
+                    "mcp.playwright".into(),
+                    "agent.plan.permission".into(),
+                    "agent.inspector.model".into(),
+                ],
+                invalid: false,
+            }]
+        );
+        assert!(overridden.warnings.iter().any(|w| w.contains(
+            "opencode.jsonc sets managed keys (model, mcp.playwright, agent.plan.permission, agent.inspector.model)"
+        )));
+        assert_eq!(
+            overridden.next_action,
+            "Remove the managed keys from opencode.jsonc."
+        );
+
+        write_file(
+            &home,
+            ".config/opencode/config.json",
+            r#"{"permission": {"bash": "allow"}}"#,
+        );
+        let both = compute_health(&ws, &home);
+        let files: Vec<_> = both
+            .config_precedence
+            .sibling_files
+            .iter()
+            .map(|sibling| sibling.file.as_str())
+            .collect();
+        assert_eq!(files, ["config.json", "opencode.jsonc"]);
+        assert!(both
+            .warnings
+            .iter()
+            .any(|w| w.starts_with("config.json sets managed keys (permission)")));
+
+        cleanup(&ws);
+        cleanup(&home);
+        for health in [&quiet, &overridden, &both] {
+            let text = health_text(health);
+            assert!(!text.contains(SECRET) && !text.contains("a/b"), "{text}");
+        }
+    }
+
+    #[test]
+    fn config_env_vars_and_system_managed_paths_are_reported_by_name_only() {
+        let (ws, home) = setup_synced_workspace("environment");
+        let system = temp_root("system-managed");
+        let candidates = [
+            system.join("opencode"),
+            system.join("ai.opencode.managed.plist"),
+        ];
+
+        let mut clean = compute_health(&ws, &home);
+        apply_config_environment(
+            &mut clean,
+            crate::opencode_precedence::config_env_var_names(Vec::new()),
+            crate::opencode_precedence::existing_paths(&candidates),
+        );
+        assert!(clean.config_precedence.env_vars.is_empty());
+        assert!(clean.config_precedence.system_managed_paths.is_empty());
+        assert!(clean.warnings.is_empty(), "{:?}", clean.warnings);
+
+        fs::create_dir_all(&candidates[0]).unwrap();
+        write_file(&candidates[0], "opencode.json", SECRET);
+        let vars = [
+            (
+                "OPENCODE_CONFIG_CONTENT",
+                format!("{{\"model\":\"{SECRET}\"}}"),
+            ),
+            ("OPENCODE_PERMISSION", format!("{{\"bash\":\"{SECRET}\"}}")),
+            ("OPENCODE_API_KEY", SECRET.to_string()),
+        ]
+        .map(|(name, value)| (name.into(), value.into()));
+        let mut reported = compute_health(&ws, &home);
+        apply_config_environment(
+            &mut reported,
+            crate::opencode_precedence::config_env_var_names(vars),
+            crate::opencode_precedence::existing_paths(&candidates),
+        );
+        assert_eq!(
+            reported.config_precedence.env_vars,
+            ["OPENCODE_CONFIG_CONTENT", "OPENCODE_PERMISSION"]
+        );
+        assert_eq!(
+            reported.config_precedence.system_managed_paths,
+            [candidates[0].to_string_lossy().into_owned()]
+        );
+        assert_eq!(
+            reported.status, "synced",
+            "the app cannot see what they set"
+        );
+        assert_eq!(reported.warnings.len(), 2, "{:?}", reported.warnings);
+
+        cleanup(&ws);
+        cleanup(&home);
+        cleanup(&system);
+        let text = health_text(&reported);
+        assert!(!text.contains(SECRET), "{text}");
+        assert!(!text.contains("OPENCODE_API_KEY"), "{text}");
     }
 
     // ── Config update / generation tests ──

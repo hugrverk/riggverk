@@ -292,6 +292,8 @@ fn git_status(root: &Path) -> (bool, String, bool, String) {
 #[tauri::command(async)]
 pub fn get_status() -> Result<StatusData, String> {
     let root = workspace_root()?;
+    // Installed files are compared with the app's bundle, the source every install copies from.
+    let bundle = crate::setup_roots::bundled_root()?;
     let home = agent_targets::home_dir()?;
     let targets = agent_targets::targets();
     let config_targets = agent_targets::config_targets();
@@ -309,7 +311,7 @@ pub fn get_status() -> Result<StatusData, String> {
         targets
             .iter()
             .find(|t| t.id == id)
-            .map(|t| sync_label(&home.join(t.target_rel), &root.join(t.source_rel)))
+            .map(|t| sync_label(&home.join(t.target_rel), &bundle.join(t.source_rel)))
             .unwrap_or_else(|| "unknown".into())
     };
 
@@ -345,7 +347,7 @@ pub fn get_status() -> Result<StatusData, String> {
         let status = if t.id == "opencode_config" {
             opencode_config_status(&root, &home)
         } else {
-            sync_label(&home.join(t.target_rel), &root.join(t.source_rel))
+            sync_label(&home.join(t.target_rel), &bundle.join(t.source_rel))
         };
         config_statuses.insert(t.id.to_string(), status);
     }
@@ -360,10 +362,10 @@ pub fn get_status() -> Result<StatusData, String> {
             crate::cursor_profile_paths::resolve_cursor_profile_paths()
                 .ok()
                 .as_ref()
-                .map(|paths| cursor_setup_status(&root, &paths.agents))
+                .map(|paths| cursor_setup_status(&bundle, &paths.agents))
                 .unwrap_or_else(|| "unknown".into())
         } else {
-            shared_runtime_agents_status(&root, &home, t.target_rel)
+            shared_runtime_agents_status(&bundle, &home, t.target_rel)
         };
         agents_statuses.insert(t.id.to_string(), status);
     }

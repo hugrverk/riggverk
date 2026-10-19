@@ -511,6 +511,27 @@ export interface OpenCodeCliHealth {
   detail: string;
 }
 
+/** A global config file beside `opencode.json` that sets managed keys (or cannot be read): OpenCode merges it with `opencode.json`. */
+export interface OpenCodeSiblingConfig {
+  /** `config.json` or `opencode.jsonc`. */
+  file: string;
+  /** The managed keys it sets, by name. */
+  managed_keys: string[];
+  /** Not valid JSONC (or unreadable), so which keys it sets is unknown. */
+  invalid: boolean;
+}
+
+/** What besides the installed `opencode.json` decides the config OpenCode runs. Names only, never values. */
+export interface OpenCodeConfigPrecedence {
+  /** What makes `opencode.json` JSONC instead of strict JSON: `comments`, `trailing commas`, `byte order mark`. */
+  installed_not_strict: string[];
+  sibling_files: OpenCodeSiblingConfig[];
+  /** Config variables set in the app's environment (the one it was launched with). */
+  env_vars: string[];
+  /** System managed config paths that exist. */
+  system_managed_paths: string[];
+}
+
 export interface OpenCodeRuntimeHealth {
   status: string;
   template_config_path: string;
@@ -538,6 +559,7 @@ export interface OpenCodeRuntimeHealth {
   rules_status: string;
   /** The `@playwright/mcp` version pinned in the installed config. */
   playwright_mcp_version: string | null;
+  config_precedence: OpenCodeConfigPrecedence;
   // TUI config
   template_tui_path: string;
   installed_tui_path: string;

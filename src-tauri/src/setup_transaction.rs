@@ -599,6 +599,11 @@ pub fn detect_surface_state(
                                     .then(|| tui_conflict_reason(workspace_root, home))
                                     .flatten()
                             })
+                            .or_else(|| {
+                                (p.artifact == ArtifactId::OpenCodeConfig)
+                                    .then(|| opencode_config_conflict_reason(workspace_root, home))
+                                    .flatten()
+                            })
                     });
                 let manual = planned
                     .iter()
@@ -1465,6 +1470,16 @@ fn tui_conflict_reason(workspace_root: &Path, home: &Path) -> Option<String> {
     }
 }
 
+/// Why `opencode.json` is left alone, for the review, when its text is the reason: it has
+/// comments, trailing commas or a byte order mark (JSONC, which OpenCode reads but the app does
+/// not write), or it is not JSON at all. Only fixed phrases and file names.
+fn opencode_config_conflict_reason(workspace_root: &Path, home: &Path) -> Option<String> {
+    let dest = ArtifactId::OpenCodeConfig
+        .resolve_dest(home, workspace_root)
+        .ok()?;
+    crate::opencode_precedence::conflict_reason(&dest)
+}
+
 fn managed_hash_for(
     identity: &str,
     records: &[crate::managed_state::ManagedArtifactRecord],
@@ -1588,13 +1603,9 @@ pub fn plan_artifacts_for_uninstall(
         if installed == crate::setup_fingerprint::ABSENT_DIGEST {
             continue;
         }
-        let source_root = if matches!(artifact, ArtifactId::WorkspaceFile(_)) {
-            bundled_root.as_path()
-        } else {
-            workspace_root
-        };
+        // The current source is the bundle every install copies from, never the workspace copy.
         let source =
-            crate::setup_fingerprint::artifact_source_digest(&artifact, source_root, home).ok();
+            crate::setup_fingerprint::artifact_source_digest(&artifact, &bundled_root, home).ok();
         let managed_hash = managed_hash_for(&identity, &records);
         let owned = managed_hash.as_deref() == Some(installed.as_str())
             || source.as_deref() == Some(installed.as_str())

@@ -23,7 +23,7 @@ A valid workspace contains:
 - `templates/cursor/agents/` (directory)
 - `templates/cursor/rules/` (directory holding at least one `*.mdc` file)
 
-Validation is read-only. It does not run workspace scripts, install files, or inspect credential-bearing state. Health checks that need the OpenCode generator run the bundled copy, not a script from the workspace.
+Validation is read-only. It does not run workspace scripts, install files, or inspect credential-bearing state. Health checks that need the OpenCode generator run the bundled copy, not a script from the workspace. Runtime health (Claude, Codex, Cursor, OpenCode) and the sync fields of `get_status` compare the installed files with the bundled copy; an edited or missing workspace copy does not change them, and Codex, Cursor, Claude and OpenCode health need no workspace folder at all.
 
 ## Bundled resources
 
@@ -297,7 +297,7 @@ Automatic rollback uses the workspace root validated at transaction start, not t
 
 Full uninstall previews removable, preserved, and merge-managed artifacts before any mutation:
 
-- **Removable** — installed files with proven app ownership (managed-state digest, historical ownership, a version the app shipped, or current bundled source match).
+- **Removable** — installed files with proven app ownership (managed-state digest, historical ownership, a version the app shipped, or a match with the current bundled source; the workspace copy is never the proof).
 - **Preserved** — modified or unknown user files that do not match an app-owned proof.
 - **Merge-managed** — user-owned config files where only allowlisted keys were merged, and rules files that hold the user's own text beside the base block; the file is never deleted wholesale. A rules file that holds nothing but an unedited base block is removable.
 
