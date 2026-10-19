@@ -4,79 +4,41 @@
       "version": "2026.10.1",
       "sections": [
         {
+          "title": "",
+          "items": [
+            "Riggverk replaces Agent Workspace. Quit Agent Workspace, move Agent Workspace.app to the Trash and install Riggverk.app (see Install). Your settings and backups move to Riggverk's folder on the first launch."
+          ]
+        },
+        {
           "title": "New",
           "items": [
-            "Show what differs in the OpenCode runtime rows",
-            "Keep your workspace folder, drop the folder chooser",
-            "Follow XDG_CONFIG_HOME for the OpenCode config folder",
-            "Read bundled docs, skills and templates from the app",
-            "Warn when other config files or env override the team",
-            "Manage only the bundled keys in tui.json",
-            "Edit your refinements below the rules base",
-            "Add one generate command for every generated file",
-            "Edit only your own text; bundled items are read-only",
-            "Take bundled for conflicting skill and agent files",
-            "Keep my version of a conflicting skill or agent file",
-            "Local CalVer release flow with in-app what's new",
-            "Manage the Playwright MCP entry of Copilot, Pi and Kilo",
-            "Manage the rules block of Copilot, Pi and Kilo",
-            "Light-tier shells and skills reach for Copilot, Pi and Kilo",
-            "Move app data to the Riggverk directory",
-            "Show which skill copies each harness loads",
-            "Install skills per read folder",
-            "Subagent model override and model override UX",
-            "Version-aware runtime health, lsp and CLI probes",
-            "Install whole skill directories with per-file artifacts",
-            "Add adversarial-implementation skill",
-            "Vendor Cloudflare's security-audit skill",
-            "Add kretsverket-status-report skill",
-            "Bracket buttons, apply progress and motion levels",
-            "Master-detail pages with an output strip"
+            "Copilot, Pi and Kilo as opt-in harnesses: rules block, skills and the Playwright MCP entry (#40, #41, #42)",
+            "One shared SKILL.md per skill, installed into each folder your harnesses read; see which copy each harness loads (#28, #30, #33, #34)",
+            "Resolve a conflicting skill or agent file: keep your version or take the bundled one (#44, #45)",
+            "Library: bundled items are read-only and come straight from the app; edit your personal docs and your own refinements below the rules base (#49, #52, #57)",
+            "OpenCode: version-aware health with CLI probes and lsp, model/small model/subagent model overrides, runtime rows that show what differs, warnings when other config files or env override the team settings, only the bundled tui.json keys are managed, XDG_CONFIG_HOME is followed (#31, #32, #54, #55, #60, #63)",
+            "What's new after each update",
+            "New skills: adversarial-implementation, security-audit, kretsverket-status-report (#19, #20, #21)",
+            "Master-detail pages, bracket buttons, apply progress and motion levels (#14, #17)"
+          ]
+        },
+        {
+          "title": "Changed",
+          "items": [
+            "Renamed to Riggverk; app data moves on first launch (#37, #39)",
+            "Prompt Builder, Brain Setup and the in-app release check are removed (#26, #27)",
+            "The workspace folder chooser is gone: a saved folder keeps working, and `R` resets to the default after a confirm",
+            "Playwright MCP 0.0.83 runs your installed Google Chrome; tools that web pages register (WebMCP) are off"
           ]
         },
         {
           "title": "Fixes",
           "items": [
-            "Deny secret reads in bash however the path is spelled",
-            "Evaluate compound commands the way OpenCode does",
-            "Compare installs with the bundle, not the workspace copy",
-            "Converge managed config and check health against the bundle",
-            "Keep resolver tests from changing the process PATH",
-            "Type the boot lines below the macOS traffic lights",
-            "Wait for the apply hint in the rules review test",
-            "Add the playwright entry to an existing mcp.json",
-            "Align permission policy with OpenCode 1.19.3",
-            "Delegate to Codex only when it is installed and logged in",
-            "Open the main window centered at 1280x800",
-            "Keep python bytecode out of the dry-run home check",
-            "Attention-to-detail pass on the master-detail UI",
-            "Treat shipped skill and agent versions as app-owned",
-            "Keep the 2x2 pane grid at large text, center traffic lights"
-          ]
-        },
-        {
-          "title": "Other",
-          "items": [
-            "Bump the pinned Playwright MCP server to 0.0.83",
-            "Remove the unused Tauri dialog plugin",
-            "Freeze the list of workspace copies",
-            "Validate the data folder, not bundled copies",
-            "Consolidate release-check and add the maintainer guide",
-            "Derive skill, agent and tab counts from sources",
-            "Fix gate truth and small bugs",
-            "Rename the app to Riggverk",
-            "Install one shared SKILL.md for every harness",
-            "Retire Brain Setup, in-app release check and CLI installer scripts",
-            "Remove Prompt Builder and prompt templates",
-            "Require Python 3.11 for the release check",
-            "Feature/repo dashboard krets doc audit",
-            "Feat/kretsverket tools integration",
-            "Fix/tauri workspace create flow",
-            "Fix/agent target sync polish",
-            "Hotfix/workspace repair opencode generator",
-            "Feature/cursor profile runtime",
-            "Feature/cursor target support",
-            "Bundle Playwright MCP config"
+            "OpenCode permissions match OpenCode 1.19.3: compound commands are checked part by part, and secret files are denied in bash however the path is written (#29, #65, #66)",
+            "The managed OpenCode config converges, and health compares with what Install writes (#51, #56)",
+            "The window opens centered at 1280x800, the boot lines clear the traffic lights, and the pane grid holds at large text (#13, #22, #38)",
+            "Codex delegation only when Codex is installed and logged in",
+            "The Playwright entry is added to an existing mcp.json"
           ]
         }
       ]
