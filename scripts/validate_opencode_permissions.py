@@ -280,6 +280,8 @@ ARCHITECT_BASH_ACTIONS = [
     ("find . -name '*.ts'", "allow"),
     ("npm test", "allow"),
     ("npm run build", "allow"),
+    ("npm run build -- --flag", "allow"),
+    ("npm run build-and-deploy", "ask"),
     ("echo hello", "ask"),
     ("echo x > .env.local", "ask"),
     ("echo x >> notes.txt", "ask"),

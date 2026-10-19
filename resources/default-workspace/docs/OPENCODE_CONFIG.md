@@ -124,6 +124,7 @@ The default template is conservative:
 - Edits are allowed under common source directories (`src/**`, `app/**`, `lib/**`, `tests/**`, `docs/**`, `scripts/**`, WordPress themes, ...) and for `*.md`, `*.ts`, `*.tsx`, `*.js`, `*.jsx`, `*.css` and `*.scss` files anywhere in the worktree. Everything else asks, as do package manifests and lock files, `AGENTS.md`, `opencode.json`, `.opencode/**`, workflows and skill folders outside the worktree. Secret files are denied
 - Destructive commands (`sudo`, `rm -rf`, `git reset --hard`, `git clean -fdx`) are denied globally and in each agent. So is piping into a shell (see "Compound commands"); other interpreters such as `python3` or `node` still ask
 - Cargo verification commands (`cargo fmt`, `cargo check`, `cargo clippy`, `cargo test`) are allow-listed where verification is expected
+- Package-manager `run` scripts and Cargo allow rules use an argument boundary: `npm run build *` allows `npm run build` and `npm run build -- --flag`, while `npm run build-and-deploy` still asks. Deny rules keep their broader patterns
 - `git checkout` and `git pull` are ask-gated because they can change working-tree state at runtime
 - `npm run dev` and other dev server commands are ask-gated in the bundled default starter template
 
