@@ -21,7 +21,7 @@
 | OpenCode model override | `opencode-model-selection.json` in the app support dir | Non-secret model preference. Not backed up. |
 | Backups | `backups/` in the app support dir (or `AGENT_WORKSPACE_BACKUP_DIR`) | Layout below. |
 | OpenCode config | `~/.config/opencode/opencode.json` | Managed-key merge. |
-| OpenCode TUI config | `~/.config/opencode/tui.json` | Whole-file managed copy. |
+| OpenCode TUI config | `~/.config/opencode/tui.json` | Managed-key merge (`tui_top_level` in `metadata/opencode-managed-keys.json`); strict JSON only, a file with comments or invalid JSON is refused unchanged. |
 | Playwright MCP config | `~/.config/playwright-mcp/config.json` (or `PLAYWRIGHT_MCP_CONFIG_PATH`) | Rendered from `templates/playwright-mcp.config.json`. |
 | OpenCode agents | `~/.config/opencode/agents/` | |
 | OpenCode rules | `~/.config/opencode/AGENTS.md` | Managed block merge. |

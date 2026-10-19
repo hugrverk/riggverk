@@ -172,6 +172,12 @@ Opt-outs:
 
 `templates/tui.json` controls TUI-only preferences such as theme, diff layout, mouse, scroll behavior, and leader timeout. It installs to `~/.config/opencode/tui.json` with the OpenCode config target.
 
+`tui.json` is merged like `opencode.json`, not replaced. Riggverk manages only the top-level keys listed under `tui_top_level` in `metadata/opencode-managed-keys.json`; your own keys (`keybinds`, `plugin`, `scroll_speed` and anything else) keep their values and their place in the file through install, update, rollback and uninstall. A missing file is created with the managed keys. A managed key the bundle no longer has is removed. The `tui` row of the runtime pane is `synced` while the managed keys hold the bundled values, whatever else the file holds.
+
+The file is read and written as strict JSON. A `tui.json` with comments, a trailing comma, a byte order mark or invalid JSON is a conflict that is never rewritten; the reason the review gives never contains the file's text. A managed key you change after the app recorded what it wrote is also a conflict that leaves the file as it is; set the key back to let the next install manage it again. A file the app has no record of gets the managed keys on install, after a backup. Uninstall keeps the file.
+
+Older versions owned `tui.json` as a whole file. A file that is still exactly what such a version installed is managed key by key from the next install on, and a file you edited keeps your extra keys.
+
 ## Managed-key merge
 
 Install does **not** overwrite the entire installed `opencode.json`. It merges only the keys listed in `metadata/opencode-managed-keys.json` (model, `lsp`, permissions, the `permission` block of the built-in `plan` and `explore` agents, `agent.<role>.model` of the subagents while a subagent model override is set, Playwright MCP, compaction, watcher, and related settings). User `provider` blocks, non-Playwright MCP servers and other `agent` entries and keys are preserved. Managed keys are reset to the bundled values on every update, so keep your own settings in unmanaged keys.
@@ -184,7 +190,7 @@ Legacy `~/.config/opencode/agents/scout.md` files from the pre-rename scout agen
 
 1. Open the OpenCode tab. The `opencode_config`, `opencode_agents`, and `opencode_rules` targets decide what is installed (Space toggles).
 2. Press `p` to preview or `u` to review, then `y` to apply.
-3. The install merges the managed keys into `~/.config/opencode/opencode.json`, writes `tui.json`, the Playwright MCP config, and `~/.config/opencode/agents/*.md`. Extra agent files already in that directory are not deleted.
+3. The install merges the managed keys into `~/.config/opencode/opencode.json` and `~/.config/opencode/tui.json`, and writes the Playwright MCP config and `~/.config/opencode/agents/*.md`. Extra agent files already in that directory are not deleted.
 
 Both JSON files are validated before and after the write. Existing files that differ are backed up first.
 

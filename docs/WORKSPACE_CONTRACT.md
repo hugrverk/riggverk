@@ -202,6 +202,8 @@ Generated outputs must match their source bodies and native metadata. Repository
 
 Riggverk owns only allowlisted managed keys and the named Playwright MCP entry. Unknown keys, user provider blocks, and other MCP entries are preserved.
 
+`~/.config/opencode/tui.json` is merge-managed the same way: only the top-level keys listed under `tui_top_level` in `metadata/opencode-managed-keys.json` are the app's, and every other key keeps its value and its place. The file is read and written as strict JSON; one with comments, a trailing comma or invalid JSON is a conflict that is never rewritten, and the reason shown never contains its text. A managed-state record or transaction from a version that owned the whole file still proves the file while it is byte for byte what that version wrote; after the next apply the record holds the managed-key digest.
+
 The config sources are:
 
 - `templates/opencode.base.json`

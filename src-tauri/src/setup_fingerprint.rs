@@ -161,6 +161,22 @@ fn harness_mcp_digest_from_path(artifact: &ArtifactId, path: &Path) -> Result<St
     }
 }
 
+/// Digest of the managed keys of a `tui.json`: [`ABSENT_DIGEST`] when there is no file, and a
+/// fixed digest per refusal for a file the app does not edit (nothing of its text goes in, and
+/// such a file is never written).
+fn tui_digest_from_path(path: &Path) -> Result<String, String> {
+    let keys = crate::opencode_tui::managed_keys()?;
+    match crate::opencode_tui::read(path) {
+        Ok(None) => Ok(ABSENT_DIGEST.into()),
+        Ok(Some(config)) => hash_json_value(&serde_json::Value::Object(
+            crate::opencode_tui::managed_projection(&config, keys),
+        )),
+        Err(refusal) => Ok(hash_bytes(
+            format!("unusable-tui-file:{refusal:?}").as_bytes(),
+        )),
+    }
+}
+
 /// Hash canonical source content for an artifact. Missing source is an error.
 pub fn artifact_source_digest(
     artifact: &ArtifactId,
@@ -209,7 +225,11 @@ pub fn artifact_source_digest(
         }
         ArtifactKind::TuiConfig => {
             let source = require_source_path(artifact, workspace_root)?;
-            hash_file(&source)
+            let keys = crate::opencode_tui::managed_keys()?;
+            let template = crate::opencode_tui::bundled(&source)?;
+            hash_json_value(&serde_json::Value::Object(
+                crate::opencode_tui::managed_projection(&template, keys),
+            ))
         }
         ArtifactKind::McpConfig if artifact == &ArtifactId::OpenCodePlaywrightMcp => {
             let source = require_source_path(artifact, workspace_root)?;
@@ -250,13 +270,14 @@ pub fn artifact_installed_managed_digest_from_path(
         return Ok(crate::rules_block::installed_managed_digest(&bytes));
     }
     match artifact_kind(artifact) {
-        ArtifactKind::RulesFile | ArtifactKind::AgentFile | ArtifactKind::TuiConfig => {
+        ArtifactKind::RulesFile | ArtifactKind::AgentFile => {
             if path.is_file() {
                 hash_file(path)
             } else {
                 Ok(ABSENT_DIGEST.into())
             }
         }
+        ArtifactKind::TuiConfig => tui_digest_from_path(path),
         ArtifactKind::SkillFile => {
             if path.is_file() {
                 hash_file(path)

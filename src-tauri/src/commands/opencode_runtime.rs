@@ -1024,36 +1024,24 @@ fn compute_health_with_bundle(
     }
 
     // ── TUI config checks ──
+    // Only the managed keys of tui.json are compared; the user's other keys never make it drift.
+    let template_tui = crate::opencode_tui::managed_keys().and_then(|keys| {
+        crate::opencode_tui::bundled(&template_tui_path).map(|template| (keys, template))
+    });
+    let installed_tui = crate::opencode_tui::read(&installed_tui_path);
     let template_tui_exists = template_tui_path.is_file();
     let installed_tui_exists = installed_tui_path.is_file();
-
-    let template_tui_valid = if template_tui_exists {
-        match std::fs::read_to_string(&template_tui_path) {
-            Ok(content) => serde_json::from_str::<serde_json::Value>(&content).is_ok(),
-            Err(_) => false,
-        }
-    } else {
-        false
-    };
-
-    let installed_tui_valid = if installed_tui_exists {
-        match std::fs::read_to_string(&installed_tui_path) {
-            Ok(content) => serde_json::from_str::<serde_json::Value>(&content).is_ok(),
-            Err(_) => false,
-        }
-    } else {
-        false
-    };
+    let template_tui_valid = template_tui.is_ok();
 
     checks.push(OpenCodeRuntimeCheck {
         id: "template_tui_config_exists".into(),
         label: "Template TUI config exists".into(),
-        status: if template_tui_exists && template_tui_valid {
+        status: if template_tui_valid {
             "pass".into()
         } else {
             "fail".into()
         },
-        detail: if template_tui_exists && template_tui_valid {
+        detail: if template_tui_valid {
             template_tui_path_str.clone()
         } else if template_tui_exists {
             format!("invalid JSON: {}", template_tui_path_str)
@@ -1061,39 +1049,43 @@ fn compute_health_with_bundle(
             format!("not found: {}", template_tui_path_str)
         },
     });
-    if !template_tui_exists || !template_tui_valid {
+    if !template_tui_valid {
         has_fail = true;
     }
 
     checks.push(OpenCodeRuntimeCheck {
         id: "installed_tui_config_exists".into(),
         label: "Installed TUI config exists".into(),
-        status: if installed_tui_exists && installed_tui_valid {
+        status: if matches!(installed_tui, Ok(Some(_))) {
             "pass".into()
         } else {
             "fail".into()
         },
-        detail: if installed_tui_exists && installed_tui_valid {
-            installed_tui_path_str.clone()
-        } else if installed_tui_exists {
-            format!("invalid JSON: {}", installed_tui_path_str)
-        } else {
-            format!("not found: {}", installed_tui_path_str)
+        detail: match &installed_tui {
+            Ok(Some(_)) => installed_tui_path_str.clone(),
+            Ok(None) => format!("not found: {}", installed_tui_path_str),
+            Err(refusal) => format!(
+                "unusable ({}): {}",
+                refusal.message(),
+                installed_tui_path_str
+            ),
         },
     });
-    if !installed_tui_exists || !installed_tui_valid {
+    if !matches!(installed_tui, Ok(Some(_))) {
         has_fail = true;
     }
 
-    let tui_synced = template_tui_exists
-        && installed_tui_exists
-        && template_tui_valid
-        && installed_tui_valid
-        && file_eq(&template_tui_path, &installed_tui_path);
+    let tui_diverged_keys = match (&template_tui, &installed_tui) {
+        (Ok((keys, template)), Ok(Some(installed))) => Some(crate::opencode_tui::differing_keys(
+            installed, template, keys,
+        )),
+        _ => None,
+    };
+    let tui_synced = tui_diverged_keys.as_ref().is_some_and(Vec::is_empty);
 
     checks.push(OpenCodeRuntimeCheck {
         id: "tui_configs_match".into(),
-        label: "Installed TUI matches template".into(),
+        label: "Managed TUI keys match bundled workspace".into(),
         status: if tui_synced {
             "pass".into()
         } else if template_tui_exists && installed_tui_exists {
@@ -1102,9 +1094,14 @@ fn compute_health_with_bundle(
             "fail".into()
         },
         detail: if tui_synced {
-            "exact match".into()
+            "managed keys match bundled workspace (other keys preserved)".into()
+        } else if let Some(keys) = &tui_diverged_keys {
+            format!(
+                "managed keys differ from bundled workspace ({}). Run diff before sync.",
+                keys.join(", ")
+            )
         } else if template_tui_exists && installed_tui_exists {
-            "installed TUI differs from template. Run diff before sync.".into()
+            "unable to compare managed TUI keys".into()
         } else if !template_tui_exists {
             "template TUI config not found".into()
         } else {
@@ -2897,6 +2894,72 @@ mod tests {
             .find(|c| c.id == "installed_tui_config_exists")
             .unwrap();
         assert_eq!(check.status, "fail");
+    }
+
+    fn tui_health(label: &str, installed: &str) -> OpenCodeRuntimeHealth {
+        let ws = temp_root(&format!("tui-{label}-ws"));
+        let home = temp_root(&format!("tui-{label}-home"));
+        write_file(&ws, "templates/opencode.json", r#"{}"#);
+        write_file(
+            &ws,
+            "templates/tui.json",
+            r#"{"$schema":"https://opencode.ai/tui.json","theme":"system","mouse":true}"#,
+        );
+        write_file(&home, ".config/opencode/tui.json", installed);
+        let health = compute_health(&ws, &home);
+        cleanup(&ws);
+        cleanup(&home);
+        health
+    }
+
+    fn tui_check(health: &OpenCodeRuntimeHealth, id: &str) -> OpenCodeRuntimeCheck {
+        health
+            .checks
+            .iter()
+            .find(|c| c.id == id)
+            .cloned()
+            .unwrap_or_else(|| panic!("check {id}"))
+    }
+
+    #[test]
+    fn test_tui_synced_with_user_keys_beside_the_managed_ones() {
+        let health = tui_health(
+            "user-keys",
+            r#"{"keybinds":{"leader":"ctrl+x"},"mouse":true,"plugin":["p"],"theme":"system","scroll_speed":3,"$schema":"https://opencode.ai/tui.json"}"#,
+        );
+        assert_eq!(health.tui_status, "synced");
+        assert_eq!(tui_check(&health, "tui_configs_match").status, "pass");
+    }
+
+    #[test]
+    fn test_tui_diverged_names_the_managed_keys_that_differ() {
+        let health = tui_health(
+            "differs",
+            r#"{"keybinds":{"leader":"ctrl+x"},"theme":"dark","$schema":"https://opencode.ai/tui.json"}"#,
+        );
+        assert_eq!(health.tui_status, "diverged");
+        let check = tui_check(&health, "tui_configs_match");
+        assert_eq!(check.status, "warn");
+        assert!(check.detail.contains("(theme, mouse)"), "{}", check.detail);
+        assert!(!check.detail.contains("keybinds"), "{}", check.detail);
+    }
+
+    #[test]
+    fn test_tui_with_comments_fails_without_showing_the_file() {
+        let health = tui_health(
+            "comments",
+            "{\n  // SECRET-MARKER\n  \"theme\": \"system\"\n}\n",
+        );
+        assert_eq!(health.tui_status, "diverged");
+        let check = tui_check(&health, "installed_tui_config_exists");
+        assert_eq!(check.status, "fail");
+        assert!(
+            check.detail.contains("the file has comments"),
+            "{}",
+            check.detail
+        );
+        let shown = serde_json::to_string(&health).unwrap();
+        assert!(!shown.contains("SECRET-MARKER"));
     }
 
     // ── New tests for generated snapshot ──
