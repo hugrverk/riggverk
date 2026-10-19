@@ -5,7 +5,8 @@ Groups:
   identity       product name Riggverk; legal files; stable technical identifiers and paths
   tauri-conf     bundled workspace resource; main window size; no maximize at startup
   startup-order  the app data move runs first in the Tauri setup closure
-  forbidden      no shell command strings, eval or remote skill installs in scripts and source
+  forbidden      no shell command strings, eval or remote skill installs in scripts and source;
+                 no project-target or page-scoped install actions; rendered OpenCode compares
   require        markers and the Rust regression tests that replaced older source greps
   ui             offline-first UI, dev-only mock backend, design and typography rules
 
@@ -218,6 +219,25 @@ FORBIDDEN = (
         "unpinned skills@latest in scripts and source",
         "npx skills@latest add",
         exclude=SCAN_EXCLUDE,
+    ),
+    # The app installs into the user's global harness folders only, through one reviewed plan.
+    Rule(
+        "project-target-install",
+        "forbid",
+        r"cursorProjectTarget|cursor_diff_project|cursor_sync_project|onCursorDiffProject|onCursorSyncProject"
+        r"|dry-run project|sync project|installScope|installTarget|Project install target|Project scope needs"
+        r"|validate_project_install_target|project scope requires",
+        ("src/", "src-tauri/"),
+        "the app must not expose project-target sync or install actions",
+        "const installTarget = cursorProjectTarget;",
+    ),
+    Rule(
+        "page-scoped-agent-sync",
+        "forbid",
+        r"sync_claude_agents|diff_claude_agents|sync_opencode_agents|diff_opencode_agents",
+        ("src/",),
+        "harness pages must not wire their own agent sync; the reviewed install plan owns it",
+        'invoke("sync_claude_agents")',
     ),
     Rule(
         "opencode-health-raw-compare",

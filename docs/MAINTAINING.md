@@ -152,7 +152,7 @@ The history generators share one walk of every commit reachable from `HEAD` (and
 | managed installation contract | `check-managed-installation-contract.py` | one reviewed install owner, safe filesystem publishing, the preview/apply/rollback command surface, required gates in this script |
 | shell command-string spawns in Rust | `check-shell-spawn.py` | no `sh -c` style process spawning in Rust |
 | source: identity, Tauri config, startup order | `check-source.py` | product name, legal files, stable env vars and markers, install paths, window size, the app data move runs first |
-| source: forbidden patterns and required markers | `check-source.py` | no shell command strings or remote skill installs in scripts and source; Codex skills folders; pinned Rust regression tests that replaced older source checks |
+| source: forbidden patterns and required markers | `check-source.py` | no shell command strings or remote skill installs in scripts and source; no project-target or page-scoped install actions; Codex skills folders; pinned Rust regression tests that replaced older source checks |
 | source: UI | `check-source.py` | offline-first UI (no remote URLs, vendored font), dev-only mock backend, selected-state design rules, typography plumbing |
 | frontend typecheck, tests and build | `npm run typecheck`, `npm test`, `npm run build` | |
 | rust fmt, clippy, tests | `cargo fmt --check`, `cargo clippy -D warnings`, `cargo test` | |
