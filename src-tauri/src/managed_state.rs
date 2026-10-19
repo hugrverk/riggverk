@@ -373,11 +373,9 @@ pub fn canonical_artifact_identities(
     Ok(ids)
 }
 
-/// Collect canonical workspace file relative paths from the bundled manifest.
+/// Collect canonical workspace file relative paths: the marker and the frozen list of copies.
 pub fn canonical_workspace_file_paths() -> Vec<&'static str> {
-    crate::commands::default_workspace_files()
-        .into_iter()
-        .flat_map(|(_, paths)| paths.iter().copied())
+    crate::commands::retired_workspace_files::workspace_copy_paths()
         .filter(|rel| !rel.contains("..") && !rel.is_empty() && !Path::new(rel).is_absolute())
         .collect()
 }

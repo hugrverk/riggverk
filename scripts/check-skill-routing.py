@@ -77,7 +77,6 @@ MIGRATION_FIXTURE_ALLOWLIST = {
     REPO_ROOT / "scripts/check-skill-routing.py",
     REPO_ROOT / "src-tauri/src/managed_reconciliation_contract.rs",
     REPO_ROOT / "src-tauri/src/managed_bootstrap.rs",
-    REPO_ROOT / "src-tauri/src/commands/default_workspace_manifest.rs",
     REPO_ROOT / "src-tauri/src/commands/workspace.rs",
     REPO_ROOT / "src-tauri/src/commands/setup.rs",
     WS_ROOT / "metadata/pre-manifest-ownership.json",

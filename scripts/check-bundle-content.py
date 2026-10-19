@@ -30,12 +30,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import retired_workspace_files as frozen  # noqa: E402
 from guards import Rule, check, walk  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 BUNDLE = "resources/default-workspace"
 W = f"{BUNDLE}/"
-MANIFEST_RS = "src-tauri/src/commands/default_workspace_manifest.rs"
+FROZEN_LIST_RS = frozen.RUST_MODULE
 
 # --- codex -----------------------------------------------------------------------------------
 CODEX_TEMPLATES = (
@@ -100,21 +101,15 @@ DOC_FLOOR = frozenset(
 )
 
 
-def manifest_paths(root: Path) -> set[str]:
-    text = (root / MANIFEST_RS).read_text(encoding="utf-8")
-    start = text.find("fn categories()")
-    if start == -1:
-        return set()
-    entries = re.findall(r'\(\s*"[^"]+",\s*&\[(.*?)\]\s*,?\s*\)', text[start:], re.DOTALL)
-    return {path for block in entries for path in re.findall(r'"([^"]+)"', block)}
-
-
 def nonempty(root: Path, files: list[str]) -> list[str]:
-    if not (root / MANIFEST_RS).is_file():
-        return [f"missing bundle manifest: {MANIFEST_RS}"]
-    listed = manifest_paths(root)
-    if not listed:
-        return [f"{MANIFEST_RS}: categories() lists no files"]
+    try:
+        frozen_list = frozen.load(root)
+    except ValueError as error:
+        return [str(error)]
+    if not frozen_list.files:
+        return [f"{FROZEN_LIST_RS}: RETIRED_WORKSPACE_FILES lists no files"]
+    # A listed path the bundle dropped on purpose is documented in the Rust tests and has no file.
+    listed = set(frozen_list.copy_paths()) - set(frozen_list.retired_from_bundle)
     errors = []
     for rel in sorted(listed | DOC_FLOOR):
         path = root / BUNDLE / rel

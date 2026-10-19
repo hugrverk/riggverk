@@ -11,7 +11,7 @@ It writes only ignored build artifacts in the repository and temporary directori
 - `git status --short` and `git diff --check`, the toolchain, and `bash -n` on every tracked shell script
 - generated files are current (`python3 scripts/generate.py check`): agent adapters, rule adapters, OpenCode config snapshot, bundled what's new, pre-manifest ownership, rules history, shipped digests
 - every `scripts/test_*.py`, including the Codex merge secret-marker test, and the app version check
-- README and docs drift, skill catalog and routing, the bundle manifest and the curated Library docs registry
+- README and docs drift, skill catalog and routing, the frozen workspace copy list and the curated Library docs registry
 - bundle content (`check-bundle-content.py`), the Cursor profile, the bundled merge-script tests, the OpenCode permission contract, harness ids, the managed-installation contract and Rust shell spawns
 - source scans (`check-source.py`): product identity, Tauri config, startup order, forbidden patterns (shell command strings, `eval`, remote skill installs) and UI rules
 - frontend: `npm run typecheck`, `npm test` and `npm run build`

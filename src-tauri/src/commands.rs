@@ -3,12 +3,13 @@ mod claude_runtime;
 mod codex_runtime;
 mod content;
 pub(crate) mod cursor_profile;
+#[cfg(test)]
 mod defaults;
-pub(crate) use defaults::default_workspace_files;
 pub(crate) mod light_runtime;
 mod opencode_cli;
 mod opencode_runtime;
 mod process;
+pub(crate) mod retired_workspace_files;
 pub(crate) mod setup;
 pub(crate) use codex_runtime::{
     extract_managed_codex_config, managed_codex_keys_match, render_codex_config_managed_projection,
