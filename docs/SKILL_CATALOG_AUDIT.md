@@ -1,5 +1,7 @@
 # Skill Catalog Audit
 
+> Historical snapshot: numbers and counts are as of when this was written and are not maintained.
+
 Audit of the 21 canonical bundled skills under `resources/default-workspace/skills/`, produced for the skill-catalog audit and SkillOpt evaluation issue. Companion document: `docs/SKILLOPT_INTEGRATION.md`.
 
 > Update: the catalog now has 25 skills; `retro` (user-invoked, `disable-model-invocation: true`), `kretsverket-status-report`, the vendored `security-audit` and `adversarial-implementation` were added after this audit. The inventory below reflects the audited 21.
@@ -66,7 +68,7 @@ No merge or prune candidates were identified. Every skill has live routing refer
 ## Changes made by this audit
 
 - `resources/default-workspace/skills/prototype/SKILL.md`: frontmatter description sharpened to match the SKILLS.md routing language (triggers on UI variants, state-machine/data-model checks, and interaction experiments). Body unchanged.
-- Generated adapters and `metadata/skill-adapters.json` regenerated via `python3 scripts/generate-skill-adapters.py --write`.
+- Generated adapters and `metadata/skill-adapters.json` were regenerated at the time. That script and its outputs have since been removed; each harness now installs the canonical `SKILL.md` directly.
 
 ## Recommendations (no action taken)
 

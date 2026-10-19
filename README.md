@@ -18,8 +18,8 @@ The installed runtime workspace lives at `~/.config/agent-workspace` unless a cu
 
 Requirements:
 
-- Node.js 22 (CI version; Vite 8 needs 20.19+ or 22.12+) and npm 10+
-- stable Rust toolchain (CI pins 1.97.1)
+- Node.js 22 (the version pinned in `.github/workflows/ci.yml`; Vite 8 needs 20.19+ or 22.12+) and npm 10+
+- stable Rust toolchain (1.97.1 is the version the disabled workflows pin; there is no rust-toolchain file)
 - Python 3.11 or newer (the release check uses `tomllib`) and Bash for the generators, merge scripts, and release check
 
 ```bash
@@ -160,7 +160,7 @@ See `docs/SECURITY_MODEL.md` for the full boundaries.
 
 ## Verification
 
-CI runs the release check on Ubuntu and macOS. Windows CI runs frontend and native Rust app checks; the Bash release check is not supported there (see `docs/RELEASE.md`).
+The local release check is the gate: run `./scripts/release-check.sh` before merging and before a release. GitHub Actions is disabled for this repository (`.github/workflows` is kept, switched off), so nothing runs on push or pull request, and nothing verifies Windows. The Bash release check is macOS and Linux only (see `docs/RELEASE.md`).
 
 ```bash
 python3 scripts/generate-agent-adapters.py --check

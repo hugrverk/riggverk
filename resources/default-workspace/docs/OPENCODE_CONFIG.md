@@ -35,7 +35,7 @@ To regenerate the snapshot after changing a source file:
 python3 scripts/generate-opencode-config.py --write
 ```
 
-To verify the snapshot is current (used by CI/release checks and by the OpenCode runtime pane, which runs the bundled copy of the generator):
+To verify the snapshot is current (used by the release check and by the OpenCode runtime pane, which runs the bundled copy of the generator):
 
 ```
 python3 scripts/generate-opencode-config.py --check

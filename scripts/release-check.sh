@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if ! python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)' 2>/dev/null; then
+  found="$(python3 --version 2>&1)" || found="python3 not found"
+  printf 'FAIL: python3 3.11 or newer is required by scripts/release-check.sh (found: %s); put a newer python3 first on PATH\n' "$found" >&2
+  exit 1
+fi
+
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 # Python helpers under resources/ are shipped in the app bundle; never leave bytecode caches there.
@@ -76,10 +82,7 @@ search_pruned_fixed_has_match() {
   local tmp
   tmp="$(mktemp)"
   if command -v rg >/dev/null 2>&1; then
-    rg -nF -- "$needle" "$@" \
-      -g '!target/**' \
-      -g '!node_modules/**' \
-      -g '!dist/**' \
+    rg -nF -g '!**/target/**' -g '!**/node_modules/**' -g '!**/dist/**' -- "$needle" "$@" \
       >"$tmp" || true
   else
     find "$@" \
