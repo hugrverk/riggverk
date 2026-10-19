@@ -76,10 +76,7 @@ search_pruned_fixed_has_match() {
   local tmp
   tmp="$(mktemp)"
   if command -v rg >/dev/null 2>&1; then
-    rg -nF -- "$needle" "$@" \
-      -g '!target/**' \
-      -g '!node_modules/**' \
-      -g '!dist/**' \
+    rg -nF -g '!**/target/**' -g '!**/node_modules/**' -g '!**/dist/**' -- "$needle" "$@" \
       >"$tmp" || true
   else
     find "$@" \
