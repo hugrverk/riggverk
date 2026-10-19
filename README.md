@@ -50,7 +50,7 @@ Releases are cut locally: `./scripts/release.sh prepare` (CalVer version, notes 
 
 **Install or Update** is the one write workflow. Press `u` on the Workspace page (for the workspace bundle or the harness under the cursor) or on a harness page (that harness). The app computes a plan, shows every create, update, remove, and conflict row, and writes nothing until you press `y`. `p` previews without an apply path; `n` or Escape cancels. A backup and a rollback-capable transaction are recorded before the first write; `z` (or `:rollback`) restores the last transaction after a dry run and a confirm.
 
-Both the runtime workspace and every harness file are installed from the packaged bundle, never from the runtime workspace. Editing a bundled file in the runtime workspace freezes that file from future updates (it becomes a conflict) and does not change what harnesses receive. See `docs/WORKSPACE_CONTRACT.md` for the contract.
+Both the runtime workspace and every harness file are installed from the packaged bundle, never from the runtime workspace. Editing a bundled file in the runtime workspace freezes that file from future updates (it becomes a conflict) and does not change what harnesses receive or what the Library shows. See `docs/WORKSPACE_CONTRACT.md` for the contract.
 
 ## Skills
 
@@ -110,7 +110,7 @@ Tabs in order (press `1`-`9`; disabled harnesses are hidden and the rest renumbe
 
 - Workspace - harness list with install state, surfaces, installed-state matrix, uninstall with preview, session-scoped **Recover previous uninstall**, backups folder, output.
 - Codex, OpenCode, Cursor, Claude, and the light tier (Copilot, Pi, Kilo; rules, skills and MCP rows, runtime health) - target toggles (Space, autosaved), surfaces, runtime health, install review. OpenCode health also asks the installed CLI (version, whether the default agent resolves, whether the configured models are listed; bounded, parse-only, never logged), and the page adds the model override (`model`, `small model` and an optional `subagent model` for the read-only subagents; each row shows its source and whether it is applied, and `x` resets it to the bundled default).
-- Library - an items list and one document pane (rendered, or its source while editing) for docs, rules, skills, runtime agents, and configs. Only your own text is editable (`i`, `:w`, `:q`, `o`): personal docs (`docs/context/`, new ones with `n`) and, under rules, the refinements below the managed block of each enabled harness's rules file. Bundled items are read-only and change with an app update.
+- Library - an items list and one document pane (rendered, or its source while editing) for docs, rules, skills, runtime agents, and configs. Only your own text is editable (`i`, `:w`, `:q`, `o`): personal docs (`docs/context/`, new ones with `n`) and, under rules, the refinements below the managed block of each enabled harness's rules file. Bundled items are read from the app's bundle, are read-only, and change with an app update.
 - Settings - harnesses, appearance, text size, motion, landing page, colors, workspace.
 
 Full uninstall removes proven app-owned files, preserves modified and unknown files, leaves merge-managed configs and rules files in place, and records a rollback-capable transaction. **Recover previous uninstall** exists only for the current app session.

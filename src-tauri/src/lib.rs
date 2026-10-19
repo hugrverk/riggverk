@@ -79,7 +79,7 @@ mod test_env;
 use commands::{
     apply_rules_conversion, apply_setup, apply_take_bundled, apply_uninstall, create_doc,
     get_agent_targets, get_backup_details, get_claude_runtime_health, get_codex_runtime_health,
-    get_cursor_profile_health, get_docs_health, get_effective_skill_loads, get_installation_status,
+    get_cursor_profile_health, get_effective_skill_loads, get_installation_status,
     get_light_runtime_health, get_opencode_runtime_health, get_settings, get_status,
     get_workspace_diagnostics, list_agent_metadata, list_available_opencode_models, list_backups,
     list_docs, list_opencode_config_editor_sources, list_rules_files, list_skills,
@@ -125,7 +125,6 @@ pub fn run() {
             get_effective_skill_loads,
             read_skill,
             list_docs,
-            get_docs_health,
             read_doc,
             save_doc,
             create_doc,

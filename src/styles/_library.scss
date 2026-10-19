@@ -67,18 +67,6 @@
 
 .lib-source:focus-visible { outline-offset: 2px; }
 
-/* "Bundled docs need update" */
-.lib-notice {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  margin: 0 10px 8px;
-  padding: 6px 8px;
-  border: 1px solid var(--border-strong);
-  background: var(--warn-bg);
-}
-
 /* ---- document pane ---- */
 
 /* The Copy path button sits in the pane footer as a small icon. */

@@ -12,7 +12,6 @@ import type {
   AgentMetadataResponse,
   AgentSourceContent,
   ConfigEditorSourceMeta,
-  DocsHealth,
   DocSummary,
   DocumentContent,
   RulesFileContent,
@@ -53,7 +52,6 @@ export function useLibraryController({
   const activeSkillContentIdRef = useRef<string | null>(null);
 
   const [docs, setDocs] = useState<DocSummary[]>([]);
-  const [docsHealth, setDocsHealth] = useState<DocsHealth | null>(null);
   const [activeDoc, setActiveDoc] = useState<DocumentContent | null>(null);
   const activeDocIdRef = useRef<string | null>(null);
   const [docDraft, setDocDraft] = useState("");
@@ -184,12 +182,9 @@ export function useLibraryController({
 
   const loadDocs = useCallback(async (generation = workspaceLoadGenerationRef.current) => {
     try {
-      const listPromise = invoke<DocSummary[]>("list_docs");
-      const healthPromise = invoke<DocsHealth>("get_docs_health").catch(() => null);
-      const [list, health] = await Promise.all([listPromise, healthPromise]);
+      const list = await invoke<DocSummary[]>("list_docs");
       if (!isWorkspaceLoadCurrent(generation)) return;
       setDocs(list);
-      setDocsHealth(health);
       if (list.length === 0) {
         activeDocIdRef.current = null;
         setActiveDoc(null);
@@ -212,7 +207,6 @@ export function useLibraryController({
     } catch (e) {
       if (!isWorkspaceLoadCurrent(generation)) return;
       setDocs([]);
-      setDocsHealth(null);
       setActiveDoc(null);
       if (!isInvalidWorkspaceError(e)) setError(`Docs: ${e}`);
     }
@@ -690,7 +684,6 @@ export function useLibraryController({
     setSkillSearch,
     readSkill,
     docs,
-    docsHealth,
     activeDoc,
     docDraft,
     docDirty,

@@ -6,7 +6,7 @@ use crate::agent_targets;
 use crate::platform_paths::{display_path, Platform};
 
 use super::process::{run_cmd, ActionResult};
-use super::workspace::{path_arg, workspace_install_file_missing, workspace_root};
+use super::workspace::{path_arg, workspace_root};
 
 struct DocEntry {
     id: &'static str,
@@ -126,30 +126,27 @@ pub(crate) const FORBIDDEN_LIBRARY_DOC_REL_PATHS: &[&str] = &[
     "templates/cursor/agents/verifier.md",
 ];
 
-pub(crate) fn missing_curated_doc_rel_paths(root: &Path) -> Vec<&'static str> {
-    curated_doc_registry()
-        .iter()
-        .filter_map(|entry| {
-            if workspace_install_file_missing(&root.join(entry.rel_path)) {
-                Some(entry.rel_path)
-            } else {
-                None
-            }
-        })
-        .collect()
+/// The app's bundled workspace, which the Library reads its docs, rules template, skills, agents and
+/// config sources from. Canonical so the containment checks below compare like with like (the
+/// source-tree bundle is reached through `..`).
+pub(super) fn bundled_library_root() -> Result<PathBuf, String> {
+    crate::setup_roots::bundled_root()?
+        .canonicalize()
+        .map_err(|e| format!("bundled workspace is unavailable: {e}"))
 }
 
-fn existing_curated_docs(root: &Path) -> Vec<(String, String, String, PathBuf)> {
+/// The curated docs present in `bundle_root`, in registry order: id, section, title and the
+/// bundle-relative path.
+fn existing_curated_docs(bundle_root: &Path) -> Vec<(String, String, String, &'static str)> {
     curated_doc_registry()
         .iter()
         .filter_map(|entry| {
-            let full = root.join(entry.rel_path);
-            if full.exists() {
+            if bundle_root.join(entry.rel_path).exists() {
                 Some((
                     entry.id.to_string(),
                     entry.section.to_string(),
                     entry.title.to_string(),
-                    full,
+                    entry.rel_path,
                 ))
             } else {
                 None
@@ -289,7 +286,7 @@ fn read_custom_doc(root: &Path, slug: &str) -> Result<DocumentContent, String> {
     if std::fs::symlink_metadata(&path).is_err() {
         return Err(format!("unknown doc: custom:{}", slug));
     }
-    let content = read_workspace_file(root, &path)?;
+    let content = read_file_under_root(root, &path)?;
     let title = doc_title_from_content_or_slug(&content, slug);
     Ok(DocumentContent {
         id: format!("custom:{}", slug),
@@ -310,13 +307,6 @@ pub struct DocSummary {
     source: String,
 }
 
-#[derive(Serialize)]
-pub struct DocsHealth {
-    pub missing_count: usize,
-    /// Sample of missing curated doc paths (workspace-relative, capped).
-    pub missing_sample: Vec<String>,
-}
-
 #[derive(Serialize, Debug)]
 pub struct DocumentContent {
     pub id: String,
@@ -327,67 +317,65 @@ pub struct DocumentContent {
     pub content: String,
 }
 
-#[tauri::command]
-pub fn get_docs_health() -> Result<DocsHealth, String> {
-    let root = workspace_root()?;
-    let missing = missing_curated_doc_rel_paths(&root);
-    let missing_sample: Vec<String> = missing.iter().take(8).map(|s| (*s).to_string()).collect();
-    Ok(DocsHealth {
-        missing_count: missing.len(),
-        missing_sample,
-    })
-}
-
+/// Bundled docs come from the app's bundle and need no workspace; personal docs come from the data
+/// folder and are listed only while it is a usable workspace.
 #[tauri::command]
 pub fn list_docs() -> Result<Vec<DocSummary>, String> {
-    let root = workspace_root()?;
-    let mut docs = existing_curated_docs(&root);
-    docs.extend(list_custom_docs(&root));
-    Ok(docs
+    let bundle = bundled_library_root()?;
+    let data_folder = workspace_root().ok();
+    Ok(list_docs_from(&bundle, data_folder.as_deref()))
+}
+
+fn list_docs_from(bundle_root: &Path, data_folder: Option<&Path>) -> Vec<DocSummary> {
+    let mut docs: Vec<DocSummary> = existing_curated_docs(bundle_root)
         .into_iter()
-        .map(|(id, section, title, path)| {
-            let source = if id.starts_with("custom:") {
-                "custom"
-            } else {
-                "curated"
-            };
-            DocSummary {
-                id,
-                title,
-                section,
-                path: display_path(&path, Platform::current()),
-                source: source.to_string(),
-            }
+        .map(|(id, section, title, rel_path)| DocSummary {
+            id,
+            title,
+            section,
+            path: rel_path.to_string(),
+            source: "curated".to_string(),
         })
-        .collect())
+        .collect();
+    if let Some(root) = data_folder {
+        docs.extend(
+            list_custom_docs(root)
+                .into_iter()
+                .map(|(id, section, title, path)| DocSummary {
+                    id,
+                    title,
+                    section,
+                    path: display_path(&path, Platform::current()),
+                    source: "custom".to_string(),
+                }),
+        );
+    }
+    docs
 }
 
 #[tauri::command]
 pub fn read_doc(id: String) -> Result<DocumentContent, String> {
-    let root = workspace_root()?;
-    read_doc_at_root(&root, &id)
+    match id.strip_prefix("custom:") {
+        Some(slug) => read_custom_doc(&workspace_root()?, slug),
+        None => read_curated_doc(&bundled_library_root()?, &id),
+    }
 }
 
-fn read_doc_at_root(root: &Path, id: &str) -> Result<DocumentContent, String> {
-    if let Some(slug) = id.strip_prefix("custom:") {
-        return read_custom_doc(root, slug);
-    }
-    let docs = existing_curated_docs(root);
-    let found = docs.iter().find(|(i, _, _, _)| i == id);
-    match found {
-        Some((i, section, title, path)) => {
-            let content = read_workspace_file(root, path)?;
-            Ok(DocumentContent {
-                id: i.clone(),
-                title: title.clone(),
-                section: section.clone(),
-                path: display_path(path, Platform::current()),
-                source: "curated".to_string(),
-                content,
-            })
-        }
-        None => Err(format!("unknown doc: {}", id)),
-    }
+/// A bundled doc, read from `bundle_root`. Its `path` is relative to the bundle.
+fn read_curated_doc(bundle_root: &Path, id: &str) -> Result<DocumentContent, String> {
+    let docs = existing_curated_docs(bundle_root);
+    let Some((id, section, title, rel_path)) = docs.into_iter().find(|(i, _, _, _)| i == id) else {
+        return Err(format!("unknown doc: {}", id));
+    };
+    let content = read_file_under_root(bundle_root, &bundle_root.join(rel_path))?;
+    Ok(DocumentContent {
+        id,
+        title,
+        section,
+        path: rel_path.to_string(),
+        source: "curated".to_string(),
+        content,
+    })
 }
 
 /// `open_doc` hands a personal doc to the OS. A bundled doc is read-only here, so it is not offered.
@@ -501,9 +489,9 @@ pub(crate) fn safe_canonical_target(root: &Path, target_path: &Path) -> Result<P
     Ok(canonical_target)
 }
 
-/// Reads a workspace file after checking containment and that neither the file nor any
-/// parent below the workspace root is a symlink.
-fn read_workspace_file(root: &Path, path: &Path) -> Result<String, String> {
+/// Reads a file of the bundle or of the data folder after checking containment and that neither
+/// the file nor any parent below `root` is a symlink.
+fn read_file_under_root(root: &Path, path: &Path) -> Result<String, String> {
     safe_canonical_target(root, path)?;
     crate::path_safety::reject_symlink_parent_chain(path, root, "workspace file")?;
     std::fs::read_to_string(path).map_err(|e| format!("read error: {}", e))
@@ -1071,7 +1059,7 @@ mod tests {
         fs::create_dir_all(&root).unwrap();
         std::os::unix::fs::symlink(outside_dir.join("secret.md"), root.join("README.md")).unwrap();
 
-        let result = read_doc_at_root(&root, "README.md");
+        let result = read_curated_doc(&root, "README.md");
 
         cleanup(&root);
         cleanup(&outside_dir);
@@ -1086,7 +1074,7 @@ mod tests {
         write_file(&root, "docs/real.md", "# real\n");
         std::os::unix::fs::symlink(root.join("docs/real.md"), root.join("README.md")).unwrap();
 
-        let result = read_doc_at_root(&root, "README.md");
+        let result = read_curated_doc(&root, "README.md");
 
         cleanup(&root);
         let err = result.expect_err("symlinked doc must be refused");
@@ -1105,7 +1093,7 @@ mod tests {
         )
         .unwrap();
 
-        let result = read_doc_at_root(&root, "custom:notes");
+        let result = read_custom_doc(&root, "notes");
 
         cleanup(&root);
         let err = result.expect_err("symlinked custom doc must be refused");
@@ -1199,6 +1187,90 @@ mod tests {
         cleanup(&root);
         assert_eq!(agent.content, "# rules\n");
         assert_eq!(config.content, "{}\n");
+    }
+
+    #[test]
+    fn bundled_docs_are_listed_and_read_from_the_bundle_with_bundle_relative_paths() {
+        let bundle = temp_root("bundle-docs");
+        let data = temp_root("bundle-docs-data");
+        write_file(&bundle, "README.md", "# bundled readme\n");
+        write_file(&bundle, "docs/START_HERE.md", "# bundled start\n");
+        // An edited copy in the data folder is never what a bundled doc shows.
+        write_file(&data, "README.md", "# edited copy\n");
+        write_file(&data, "docs/CONCEPTS.md", "# only in the copy\n");
+        write_file(&data, "docs/context/notes.md", "# Notes\n");
+
+        let listed = list_docs_from(&bundle, Some(&data));
+        let readme = read_curated_doc(&bundle, "README.md");
+        let only_in_copy = read_curated_doc(&bundle, "docs/CONCEPTS.md");
+        let personal_id = read_curated_doc(&bundle, "custom:notes");
+        let data_path = display_path(&data.join("docs/context/notes.md"), Platform::current());
+        cleanup(&bundle);
+        cleanup(&data);
+
+        let rows: Vec<(&str, &str, &str)> = listed
+            .iter()
+            .map(|doc| (doc.id.as_str(), doc.path.as_str(), doc.source.as_str()))
+            .collect();
+        assert_eq!(
+            rows,
+            vec![
+                ("README.md", "README.md", "curated"),
+                ("docs/START_HERE.md", "docs/START_HERE.md", "curated"),
+                ("custom:notes", data_path.as_str(), "custom"),
+            ]
+        );
+        let readme = readme.expect("bundled readme");
+        assert_eq!(readme.content, "# bundled readme\n");
+        assert_eq!(readme.path, "README.md");
+        assert_eq!(readme.source, "curated");
+        assert!(only_in_copy
+            .expect_err("not bundled")
+            .contains("unknown doc"));
+        assert!(personal_id
+            .expect_err("personal id")
+            .contains("unknown doc"));
+    }
+
+    #[test]
+    fn bundled_docs_are_listed_without_a_data_folder() {
+        let bundle = temp_root("bundle-docs-alone");
+        write_file(&bundle, "README.md", "# bundled readme\n");
+
+        let listed = list_docs_from(&bundle, None);
+        cleanup(&bundle);
+
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].id, "README.md");
+        assert_eq!(listed[0].source, "curated");
+    }
+
+    #[test]
+    fn config_sources_and_agent_files_are_read_from_the_bundle_root() {
+        let bundle = temp_root("bundle-sources");
+        write_file(&bundle, "templates/opencode.base.json", "{\"base\":1}\n");
+        write_file(&bundle, "agents/architect.md", "# bundled architect\n");
+        write_file(
+            &bundle,
+            "templates/global-agent-rules.md",
+            "# bundled rules\n",
+        );
+
+        let source = read_opencode_config_source_at_root(&bundle, "base");
+        let agent = resolve_agent_path(&bundle, "architect.md").map(fs::read_to_string);
+        let template = read_agent_template_at_root(&bundle);
+        cleanup(&bundle);
+
+        let source = source.expect("bundled base config");
+        assert_eq!(source.content, "{\"base\":1}\n");
+        assert_eq!(source.path, "templates/opencode.base.json");
+        assert_eq!(
+            agent.expect("agent path").expect("agent text"),
+            "# bundled architect\n"
+        );
+        let template = template.expect("bundled rules");
+        assert_eq!(template.content, "# bundled rules\n");
+        assert_eq!(template.path, "templates/global-agent-rules.md");
     }
 
     #[cfg(unix)]
@@ -1639,13 +1711,13 @@ mod tests {
 
 #[tauri::command]
 pub fn read_agent_template() -> Result<DocumentContent, String> {
-    let root = workspace_root()?;
-    read_agent_template_at_root(&root)
+    read_agent_template_at_root(&bundled_library_root()?)
 }
 
-fn read_agent_template_at_root(root: &Path) -> Result<DocumentContent, String> {
-    let path = root.join("templates/global-agent-rules.md");
-    let content = read_workspace_file(root, &path)?;
+/// The bundled rules base, read from `bundle_root`.
+fn read_agent_template_at_root(bundle_root: &Path) -> Result<DocumentContent, String> {
+    let path = bundle_root.join("templates/global-agent-rules.md");
+    let content = read_file_under_root(bundle_root, &path)?;
     Ok(DocumentContent {
         id: "agent-template".into(),
         title: "Agent Rules".into(),
@@ -1658,17 +1730,20 @@ fn read_agent_template_at_root(root: &Path) -> Result<DocumentContent, String> {
 
 #[tauri::command]
 pub fn read_config_template(target_id: String) -> Result<DocumentContent, String> {
-    let root = workspace_root()?;
-    read_config_template_at_root(&root, &target_id)
+    read_config_template_at_root(&bundled_library_root()?, &target_id)
 }
 
-fn read_config_template_at_root(root: &Path, target_id: &str) -> Result<DocumentContent, String> {
+/// The bundled source of an editable config target, read from `bundle_root`.
+fn read_config_template_at_root(
+    bundle_root: &Path,
+    target_id: &str,
+) -> Result<DocumentContent, String> {
     let target = agent_targets::editable_config_targets()
         .into_iter()
         .find(|t| t.id == target_id)
         .ok_or_else(|| format!("unknown editable config target: {}", target_id))?;
-    let path = root.join(target.source_rel);
-    let content = read_workspace_file(root, &path)?;
+    let path = bundle_root.join(target.source_rel);
+    let content = read_file_under_root(bundle_root, &path)?;
     Ok(DocumentContent {
         id: format!("config-template:{}", target_id),
         title: format!("{}.json", target_id),
@@ -1685,15 +1760,17 @@ fn read_config_template_at_root(root: &Path, target_id: &str) -> Result<Document
 /// This is a narrow special case for activeConfigTargetId == "opencode_config".
 #[tauri::command]
 pub fn read_opencode_config_source(source_type: String) -> Result<DocumentContent, String> {
-    let source = agent_targets::opencode_config_editor_source_by_id(&source_type)
+    read_opencode_config_source_at_root(&bundled_library_root()?, &source_type)
+}
+
+fn read_opencode_config_source_at_root(
+    bundle_root: &Path,
+    source_type: &str,
+) -> Result<DocumentContent, String> {
+    let source = agent_targets::opencode_config_editor_source_by_id(source_type)
         .ok_or_else(|| format!("unknown opencode config source type: {}", source_type))?;
-
-    let root = workspace_root()?;
-    let path = root.join(source.rel_path);
-
-    safe_canonical_target(&root, &path)?;
-
-    let content = std::fs::read_to_string(&path).map_err(|e| format!("read error: {}", e))?;
+    let path = bundle_root.join(source.rel_path);
+    let content = read_file_under_root(bundle_root, &path)?;
 
     Ok(DocumentContent {
         id: format!("opencode_config:{}", source_type),
@@ -1791,7 +1868,7 @@ pub struct AgentSourceContent {
 
 #[tauri::command]
 pub fn read_agent_source(filename: String) -> Result<AgentSourceContent, String> {
-    let root = workspace_root()?;
+    let root = bundled_library_root()?;
     let path = resolve_agent_path(&root, &filename)?;
     let content = std::fs::read_to_string(&path).map_err(|e| format!("read error: {}", e))?;
     Ok(AgentSourceContent {
@@ -1904,7 +1981,7 @@ pub(crate) fn load_agent_metadata(
     (parsed.agents, warnings)
 }
 
-/// Validate default_skills in agent metadata against discovered workspace skills.
+/// Validate default_skills in agent metadata against the skills found under `root`.
 fn validate_agent_default_skills(
     metadata_map: &std::collections::HashMap<String, AgentMetadataEntry>,
     root: &Path,
@@ -1933,7 +2010,7 @@ fn validate_agent_default_skills(
 
 #[tauri::command]
 pub fn list_agent_metadata() -> Result<AgentMetadataListResponse, String> {
-    let root = workspace_root()?;
+    let root = bundled_library_root()?;
     let (metadata_map, mut warnings) = load_agent_metadata(&root);
 
     // Validate default_skills against discovered skills
@@ -2167,25 +2244,10 @@ mod agent_metadata_tests {
         let _ = fs::remove_dir_all(root);
     }
 
-    fn ocs_read_source(root: &Path, source_type: &str) -> Result<DocumentContent, String> {
-        let source = agent_targets::opencode_config_editor_source_by_id(source_type)
-            .ok_or_else(|| format!("unknown opencode config source type: {}", source_type))?;
-        let path = root.join(source.rel_path);
-        let content = std::fs::read_to_string(&path).map_err(|e| format!("read error: {}", e))?;
-        Ok(DocumentContent {
-            id: format!("opencode_config:{}", source_type),
-            title: format!("{} Config", source.label),
-            section: String::new(),
-            path: source.rel_path.to_string(),
-            source: "curated".into(),
-            content,
-        })
-    }
-
     #[test]
     fn opencode_config_editor_source_unknown_type_rejected() {
         let root = temp_root("ocs-unknown");
-        let result = ocs_read_source(&root, "unknown");
+        let result = read_opencode_config_source_at_root(&root, "unknown");
         ocs_cleanup(&root);
         assert!(result.is_err());
         assert!(result
@@ -2201,7 +2263,7 @@ mod agent_metadata_tests {
             "templates/opencode.base.json",
             "{\"model\":\"gpt-4\"}",
         );
-        let result = ocs_read_source(&root, "base");
+        let result = read_opencode_config_source_at_root(&root, "base");
         ocs_cleanup(&root);
         assert!(result.is_ok());
         let doc = result.unwrap();
@@ -2214,7 +2276,7 @@ mod agent_metadata_tests {
     fn opencode_config_editor_source_policy_reads_file() {
         let root = temp_root("ocs-policy-read");
         ocs_write_file(&root, "templates/opencode.policy.json", "{\"read\":{}}");
-        let result = ocs_read_source(&root, "policy");
+        let result = read_opencode_config_source_at_root(&root, "policy");
         ocs_cleanup(&root);
         assert!(result.is_ok());
         let doc = result.unwrap();
@@ -2227,7 +2289,7 @@ mod agent_metadata_tests {
     fn opencode_config_editor_source_snapshot_reads_file() {
         let root = temp_root("ocs-snapshot-read");
         ocs_write_file(&root, "templates/opencode.json", "{\"permission\":{}}");
-        let result = ocs_read_source(&root, "snapshot");
+        let result = read_opencode_config_source_at_root(&root, "snapshot");
         ocs_cleanup(&root);
         assert!(result.is_ok());
         let doc = result.unwrap();
