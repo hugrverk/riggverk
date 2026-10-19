@@ -10,6 +10,8 @@ import type {
   LightRuntimeHealth,
   RulesConversionPreview,
   RulesDiffView,
+  RulesFileContent,
+  RulesFileSummary,
   SetupPlan,
   SetupResult,
   TakeBundledPreview,
@@ -228,5 +230,43 @@ describe("mock backend: the Library edits only personal docs", () => {
     for (const cmd of removed) {
       await expect(invoke(cmd, {})).rejects.toThrow("unhandled command");
     }
+  });
+});
+
+describe("mock backend: the Library edits the refinements below the rules base", () => {
+  it("lists the rules file of each enabled harness, with what the Library may do with it", async () => {
+    const files = await invoke<RulesFileSummary[]>("list_rules_files");
+    expect(files.map(file => [file.surface, file.editable, file.conflict])).toEqual([
+      ["claude_rules", true, "base_block_edited"],
+      ["codex_rules", true, null],
+      ["open_code_rules", false, "legacy_diverged"],
+    ]);
+    expect(files[2]!.reason).toContain("no base block");
+    // Copilot, Pi and Kilo are off until Settings turns them on, so nothing is listed or opened for them.
+    await expect(invoke("read_rules_file", { surface: "pi_rules" })).rejects.toThrow("disabled");
+    await expect(invoke("open_rules_file", { surface: "pi_rules" })).rejects.toThrow("disabled");
+  });
+
+  it("saves refinements only with the revision they were opened with, and refuses a file without a block", async () => {
+    const opened = await invoke<RulesFileContent>("read_rules_file", { surface: "codex_rules" });
+    expect(opened.before).toContain("<!-- END AGENT-WORKSPACE BASE -->");
+    expect(opened.refinements).not.toContain("AGENT-WORKSPACE BASE");
+    await expect(
+      invoke("save_rules_refinements", { surface: "codex_rules", content: "mine\n", expectedRevision: "stale" }),
+    ).rejects.toThrow("changed on disk");
+    expect(
+      await invoke<ActionResult>("save_rules_refinements", { surface: "codex_rules", content: opened.refinements, expectedRevision: opened.revision }),
+    ).toMatchObject({ success: true, stdout: "unchanged" });
+    expect(
+      await invoke<ActionResult>("save_rules_refinements", { surface: "codex_rules", content: "mine\n", expectedRevision: opened.revision }),
+    ).toMatchObject({ success: true, stdout: "saved with backup" });
+    const saved = await invoke<RulesFileContent>("read_rules_file", { surface: "codex_rules" });
+    expect(saved).toMatchObject({ refinements: "mine\n", refinement_lines: 1 });
+    expect(saved.revision).not.toBe(opened.revision);
+
+    await expect(
+      invoke("save_rules_refinements", { surface: "open_code_rules", content: "mine\n", expectedRevision: "any" }),
+    ).rejects.toThrow("no base block");
+    expect(await invoke<ActionResult>("open_rules_file", { surface: "open_code_rules" })).toMatchObject({ success: true });
   });
 });

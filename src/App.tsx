@@ -118,6 +118,18 @@ function AppShell() {
     onResetDoc,
     onCreateDoc,
     agentTemplate,
+    rulesFiles,
+    activeRulesSurface,
+    activeRulesFile,
+    rulesDraft,
+    rulesDirty,
+    rulesSaving,
+    rulesSaveResult,
+    selectRulesFile,
+    openRulesFile,
+    onChangeRulesDraft,
+    onSaveRules,
+    onResetRules,
     librarySourceType,
     setGuardedLibrarySourceType,
     isLibrarySourceDirty,
@@ -763,6 +775,18 @@ function AppShell() {
             // Rules
             agentTemplate={agentTemplate}
             agentTargets={agentTargets}
+            rulesFiles={rulesFiles}
+            activeRulesSurface={activeRulesSurface}
+            activeRulesFile={activeRulesFile}
+            onSelectRulesFile={selectRulesFile}
+            onOpenRulesFile={openRulesFile}
+            rulesDraft={rulesDraft}
+            rulesDirty={rulesDirty}
+            rulesSaving={rulesSaving}
+            rulesSaveResult={rulesSaveResult}
+            onChangeRulesDraft={onChangeRulesDraft}
+            onSaveRules={onSaveRules}
+            onResetRules={onResetRules}
             // Skills
             skills={visibleSkills}
             activeSkillId={activeSkillId && visibleSkillIds.has(activeSkillId) ? activeSkillId : null}

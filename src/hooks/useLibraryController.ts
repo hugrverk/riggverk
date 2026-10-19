@@ -15,8 +15,14 @@ import type {
   DocsHealth,
   DocSummary,
   DocumentContent,
+  RulesFileContent,
+  RulesFileSummary,
+  RulesSurfaceId,
   SkillSummary,
 } from "../types";
+
+/** What the backend says when the user's text in a rules file changed after it was opened. */
+const RULES_CHANGED_ON_DISK = "changed on disk";
 
 const EDITABLE_CONFIG_TARGET_IDS = new Set(["opencode_config"]);
 
@@ -61,8 +67,22 @@ export function useLibraryController({
   const [createDocError, setCreateDocError] = useState<string | null>(null);
   const [createDocCreating, setCreateDocCreating] = useState(false);
 
-  // Rules, agents and configs are bundled with the app and read-only in the Library: loaded, never drafted.
+  // The bundled rules base, agents and configs are read-only in the Library: loaded, never drafted.
   const [agentTemplate, setAgentTemplate] = useState<DocumentContent | null>(null);
+
+  // The user's rules files: only the refinements below the managed block are drafted and saved.
+  const [rulesFiles, setRulesFiles] = useState<RulesFileSummary[]>([]);
+  /** The open rules file; null while the bundled base row is open. */
+  const [activeRulesSurface, setActiveRulesSurface] = useState<RulesSurfaceId | null>(null);
+  const activeRulesSurfaceRef = useRef<RulesSurfaceId | null>(null);
+  const [activeRulesFile, setActiveRulesFile] = useState<RulesFileContent | null>(null);
+  const [rulesDraft, setRulesDraft] = useState("");
+  const [rulesDirty, setRulesDirty] = useState(false);
+  const rulesDirtyRef = useRef(false);
+  rulesDirtyRef.current = rulesDirty;
+  const [rulesSaving, setRulesSaving] = useState(false);
+  const [rulesSaveResult, setRulesSaveResult] = useState<ActionResult | null>(null);
+  const rulesSaveOpRef = useRef(createSaveOperationTracker());
 
   const [librarySourceType, setLibrarySourceType] = useState<LibrarySourceType>("docs");
 
@@ -100,10 +120,10 @@ export function useLibraryController({
   }, [activeConfigSourceType]);
 
   const isLibrarySourceDirty = useCallback((sourceType: LibrarySourceType): boolean => {
-    return isLibrarySourceTypeDirty(sourceType, docDirty);
-  }, [docDirty]);
+    return isLibrarySourceTypeDirty(sourceType, docDirty, rulesDirty);
+  }, [docDirty, rulesDirty]);
 
-  const libraryDirty = docDirty;
+  const libraryDirty = docDirty || rulesDirty;
 
   const setGuardedLibrarySourceType = useCallback(async (type: LibrarySourceType) => {
     if (type === librarySourceType) return;
@@ -250,26 +270,79 @@ export function useLibraryController({
     }
   }, [isWorkspaceLoadCurrent, setError, workspaceLoadGenerationRef]);
 
+  /** Shows one rules file: its refinements become the draft, with nothing unsaved. */
+  const applyRulesFile = useCallback((file: RulesFileContent) => {
+    setActiveRulesFile(file);
+    setRulesDraft(file.refinements);
+    setRulesDirty(false);
+    // The list row follows what the file holds now (its refinement count, its state), never its text.
+    const { layout, conflict, malformed, refinement_lines, editable, reason } = file;
+    setRulesFiles(list =>
+      list.map(row =>
+        row.surface === file.surface ? { ...row, layout, conflict, malformed, refinement_lines, editable, reason } : row,
+      ),
+    );
+  }, []);
+
+  const clearActiveRulesFile = useCallback(() => {
+    rulesSaveOpRef.current.invalidate();
+    activeRulesSurfaceRef.current = null;
+    setActiveRulesSurface(null);
+    setActiveRulesFile(null);
+    setRulesDraft("");
+    setRulesDirty(false);
+    setRulesSaveResult(null);
+  }, []);
+
+  const loadRulesFiles = useCallback(async (generation = workspaceLoadGenerationRef.current) => {
+    try {
+      const list = await invoke<RulesFileSummary[]>("list_rules_files");
+      if (!isWorkspaceLoadCurrent(generation)) return;
+      setRulesFiles(list);
+      const surface = activeRulesSurfaceRef.current;
+      if (surface === null) return;
+      // Its harness or rules target was switched off: back to the bundled base.
+      if (!list.some(file => file.surface === surface)) {
+        clearActiveRulesFile();
+        return;
+      }
+      // Unsaved refinements keep the revision they were opened with, so a save still notices an outside change.
+      if (rulesDirtyRef.current) return;
+      const file = await invoke<RulesFileContent>("read_rules_file", { surface });
+      if (!isWorkspaceLoadCurrent(generation)) return;
+      if (activeRulesSurfaceRef.current !== surface || rulesDirtyRef.current) return;
+      applyRulesFile(file);
+    } catch (e) {
+      if (!isWorkspaceLoadCurrent(generation)) return;
+      setRulesFiles([]);
+      if (!isInvalidWorkspaceError(e)) setError(`Rules files: ${e}`);
+    }
+  }, [applyRulesFile, clearActiveRulesFile, isInvalidWorkspaceError, isWorkspaceLoadCurrent, setError, workspaceLoadGenerationRef]);
+
   const loadWorkspaceLibraryResources = useCallback(async (generation = workspaceLoadGenerationRef.current) => {
     await Promise.all([
       loadSkills(generation).catch(() => {}),
       loadDocs(generation).catch(() => {}),
       loadAgentSources(generation).catch(() => {}),
       loadAgentTemplate(generation),
+      loadRulesFiles(generation),
     ]);
     setLibraryReloadEpoch(epoch => epoch + 1);
-  }, [loadAgentSources, loadAgentTemplate, loadDocs, loadSkills, workspaceLoadGenerationRef]);
+  }, [loadAgentSources, loadAgentTemplate, loadDocs, loadRulesFiles, loadSkills, workspaceLoadGenerationRef]);
 
   const loadLibraryView = useCallback(() => {
     void loadDocs();
     void loadSkills();
     void loadAgentSources();
     void loadAgentTemplate();
+    void loadRulesFiles();
     void fetchStatus();
-  }, [fetchStatus, loadAgentSources, loadAgentTemplate, loadDocs, loadSkills]);
+  }, [fetchStatus, loadAgentSources, loadAgentTemplate, loadDocs, loadRulesFiles, loadSkills]);
 
   const resetLibraryState = useCallback(() => {
     docSaveOpRef.current.invalidate();
+    clearActiveRulesFile();
+    setRulesFiles([]);
     setSkills([]);
     setSkillsLoaded(false);
     activeSkillIdRef.current = null;
@@ -292,7 +365,107 @@ export function useLibraryController({
     setConfigTemplateContent(null);
     setConfigEditorSources([]);
     setConfigEditorSourceContent(null);
-  }, []);
+  }, [clearActiveRulesFile]);
+
+  /** Opens a rules file (or, with null, the bundled base row); asks first when it would drop unsaved refinements. */
+  const selectRulesFile = useCallback(async (surface: RulesSurfaceId | null) => {
+    const current = activeRulesSurfaceRef.current;
+    if (surface === current && rulesDirty) return;
+    if (surface !== current && rulesDirty) {
+      const ok = await confirm(LEAVE_DIRTY_MESSAGE);
+      if (!ok) return;
+    }
+    clearActiveRulesFile();
+    if (surface === null) return;
+    activeRulesSurfaceRef.current = surface;
+    setActiveRulesSurface(surface);
+    const generation = workspaceLoadGenerationRef.current;
+    try {
+      const file = await invoke<RulesFileContent>("read_rules_file", { surface });
+      if (!isWorkspaceLoadCurrent(generation)) return;
+      if (activeRulesSurfaceRef.current !== surface) return;
+      applyRulesFile(file);
+    } catch (e) {
+      if (!isWorkspaceLoadCurrent(generation)) return;
+      if (activeRulesSurfaceRef.current !== surface) return;
+      setError(`Read rules file: ${e}`);
+    }
+  }, [applyRulesFile, clearActiveRulesFile, confirm, isWorkspaceLoadCurrent, rulesDirty, setError, workspaceLoadGenerationRef]);
+
+  const openRulesFile = useCallback(
+    (surface: RulesSurfaceId) => invokeOpen("open_rules_file", { surface }, "Open rules file", setError),
+    [setError],
+  );
+
+  const onChangeRulesDraft = useCallback((value: string) => {
+    setRulesDraft(value);
+    setRulesDirty(value !== (activeRulesFile?.refinements ?? ""));
+  }, [activeRulesFile]);
+
+  const onResetRules = useCallback(() => {
+    if (!activeRulesFile) return;
+    setRulesDraft(activeRulesFile.refinements);
+    setRulesDirty(false);
+    setRulesSaveResult(null);
+  }, [activeRulesFile]);
+
+  const onSaveRules = useCallback(async () => {
+    // Only the refinements of a file the backend called editable are sent; it checks everything again.
+    const file = activeRulesFile;
+    if (!file || !file.editable || file.revision === null) return;
+    const saveOpId = rulesSaveOpRef.current.capture();
+    const surface = file.surface;
+    const generation = workspaceLoadGenerationRef.current;
+    const isCurrent = () =>
+      rulesSaveOpRef.current.isCurrent(saveOpId) &&
+      isWorkspaceLoadCurrent(generation) &&
+      activeRulesSurfaceRef.current === surface;
+    const failed = (stderr: string): ActionResult => ({
+      success: false,
+      action: "save_rules_refinements",
+      stdout: "",
+      stderr,
+      exit_code: null,
+    });
+    setRulesSaving(true);
+    setRulesSaveResult(null);
+    try {
+      const result = await invoke<ActionResult>("save_rules_refinements", {
+        surface,
+        content: rulesDraft,
+        expectedRevision: file.revision,
+      });
+      if (!isCurrent()) return;
+      setRulesSaveResult(result);
+      if (!result.success) return;
+      if (result.stdout === "unchanged") {
+        setRulesDirty(false);
+        return;
+      }
+      const updated = await invoke<RulesFileContent>("read_rules_file", { surface });
+      if (!isCurrent()) return;
+      applyRulesFile(updated);
+    } catch (e) {
+      if (!isCurrent()) return;
+      const message = String(e);
+      if (!message.includes(RULES_CHANGED_ON_DISK)) {
+        setRulesSaveResult(failed(message));
+        return;
+      }
+      // The file changed elsewhere: show it as it is now and keep the draft, which a second save then writes.
+      try {
+        const updated = await invoke<RulesFileContent>("read_rules_file", { surface });
+        if (!isCurrent()) return;
+        setActiveRulesFile(updated);
+        setRulesSaveResult(failed("changed on disk: reloaded, save again to overwrite"));
+      } catch (reloadError) {
+        if (!isCurrent()) return;
+        setRulesSaveResult(failed(String(reloadError)));
+      }
+    } finally {
+      setRulesSaving(false);
+    }
+  }, [activeRulesFile, applyRulesFile, isWorkspaceLoadCurrent, rulesDraft, workspaceLoadGenerationRef]);
 
   const selectDoc = useCallback(async (id: string) => {
     if (docDirty && id !== activeDoc?.id) {
@@ -540,6 +713,19 @@ export function useLibraryController({
     onResetDoc,
     onCreateDoc,
     agentTemplate,
+    rulesFiles,
+    activeRulesSurface,
+    activeRulesFile,
+    rulesDraft,
+    rulesDirty,
+    rulesSaving,
+    rulesSaveResult,
+    selectRulesFile,
+    openRulesFile,
+    onChangeRulesDraft,
+    onSaveRules,
+    onResetRules,
+    loadRulesFiles,
     librarySourceType,
     setGuardedLibrarySourceType,
     isLibrarySourceDirty,

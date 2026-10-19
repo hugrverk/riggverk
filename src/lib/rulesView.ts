@@ -35,14 +35,14 @@ export function rulesStatusOf(status: InstallationStatus | null | undefined, sur
   return status?.surfaces.find(row => row.surface === surface)?.rules ?? null;
 }
 
-const LAYOUT_TEXT: Record<RulesLayout, string> = {
+export const LAYOUT_TEXT: Record<RulesLayout, string> = {
   absent: "no file yet",
   block: "managed base block",
   legacy: "plain file, no base block",
   malformed: "base block markers malformed",
 };
 
-const CONFLICT_TEXT: Record<RulesConflictReason, string> = {
+export const CONFLICT_TEXT: Record<RulesConflictReason, string> = {
   base_block_edited: "the base block was edited",
   legacy_diverged: "the file differs from every shipped base",
   malformed_markers: "the base block markers are malformed",

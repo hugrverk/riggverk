@@ -21,6 +21,7 @@ pub(crate) use status::file_eq;
 pub(crate) use workspace::configured_workspace_path;
 mod file_conflicts;
 mod rules;
+mod rules_refinements;
 mod settings_commands;
 mod skills;
 mod status;
@@ -47,6 +48,9 @@ pub use opencode_runtime::{
 };
 pub use rules::{
     apply_rules_conversion, preview_rules_conversion, preview_rules_diff, set_rules_user_managed,
+};
+pub use rules_refinements::{
+    list_rules_files, open_rules_file, read_rules_file, save_rules_refinements,
 };
 pub use settings_commands::{get_agent_targets, get_settings, update_settings};
 pub use setup::{

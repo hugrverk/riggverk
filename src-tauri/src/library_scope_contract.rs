@@ -3,8 +3,10 @@
 //! Bundled items (docs, rules template, skills, agents, config sources) are read-only in the app; the
 //! maintainer changes them in the bundle and ships an update. This module pins the command surface the
 //! webview can call, so a new write or open command cannot slip in without editing an allowlist here.
-//! The behaviour behind the two Library writes is pinned next to the code in `commands/content.rs`:
-//! every bundled doc id is refused by `save_doc`, and the personal docs folder is never bundled.
+//! The behaviour behind the Library writes is pinned next to the code: every bundled doc id is refused
+//! by `save_doc` and the personal docs folder is never bundled (`commands/content.rs`), and
+//! `save_rules_refinements` changes only the text after the END line of an enabled harness's rules
+//! file (`commands/rules_refinements.rs`).
 
 #[cfg(test)]
 mod tests {
@@ -15,12 +17,15 @@ mod tests {
     /// Prefixes of commands that only read. Every other command is in one of the lists below.
     const READ_PREFIXES: [&str; 4] = ["get_", "list_", "read_", "preview_"];
 
-    /// Every command that changes a file or a setting. Only `save_doc` and `create_doc` take Library
-    /// text, and they write personal docs (`docs/context/<slug>.md`) only. The others are install,
-    /// conflict, rules-conversion, settings and workspace-choice actions that never take Library text.
-    const WRITE_COMMANDS: [&str; 14] = [
+    /// Every command that changes a file or a setting. Only `save_doc`, `create_doc` and
+    /// `save_rules_refinements` take Library text: the first two write personal docs
+    /// (`docs/context/<slug>.md`) only, the last only the text below the managed block of a rules
+    /// file. The others are install, conflict, rules-conversion, settings and workspace-choice
+    /// actions that never take Library text.
+    const WRITE_COMMANDS: [&str; 15] = [
         "save_doc",
         "create_doc",
+        "save_rules_refinements",
         "apply_setup",
         "apply_uninstall",
         "rollback_setup_transaction",
@@ -35,9 +40,11 @@ mod tests {
         "reset_active_workspace_path",
     ];
 
-    /// Commands that hand a path to the OS. `open_doc` opens personal docs only; the others open folders.
-    const OPEN_COMMANDS: [&str; 3] = [
+    /// Commands that hand a path to the OS. `open_doc` opens personal docs only, `open_rules_file` the
+    /// rules file of an enabled harness; the others open folders.
+    const OPEN_COMMANDS: [&str; 4] = [
         "open_doc",
+        "open_rules_file",
         "open_backups_folder",
         "open_default_workspace_folder",
     ];
@@ -92,7 +99,7 @@ mod tests {
     }
 
     #[test]
-    fn the_only_library_writes_are_personal_doc_writes() {
+    fn the_only_library_writes_are_personal_doc_and_rules_refinement_writes() {
         let library_writes: BTreeSet<&str> = registered_commands()
             .into_iter()
             .filter(|name| {
@@ -101,7 +108,10 @@ mod tests {
                     .any(|p| name.starts_with(p))
             })
             .collect();
-        assert_eq!(library_writes, set(&["save_doc", "create_doc"]));
+        assert_eq!(
+            library_writes,
+            set(&["save_doc", "create_doc", "save_rules_refinements"])
+        );
     }
 
     #[test]

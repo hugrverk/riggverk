@@ -58,6 +58,8 @@ import type {
   RulesConversionPreview,
   RulesDiffMode,
   RulesDiffView,
+  RulesFileContent,
+  RulesFileSummary,
   RulesMalformedReason,
   RulesStatus,
   RulesSurfaceId,
@@ -484,6 +486,90 @@ function setRulesUserManaged(surface: RulesSurfaceId, userManaged: boolean) {
   if (userManaged && !convertible(file)) throw new Error("this file is not a conflict; there is nothing to leave as is");
   rulesFiles.set(surface, { ...file, user_managed: userManaged });
   surfaceStates.set(surface, userManaged ? "current" : "conflict");
+}
+
+/* ---- the Library's view of the rules files: refinements below the managed block ---- */
+
+const DEFAULT_REFINEMENTS = [
+  "",
+  "## My refinements",
+  "",
+  "- Answer in Swedish when I write Swedish.",
+  "- Prefer small, reviewable diffs.",
+  "- Never run destructive git commands without asking first.",
+  "",
+].join("\n");
+
+const rulesRefinements = new Map<RulesSurfaceId, string>();
+const rulesRevisions = new Map<RulesSurfaceId, number>();
+
+/** Like the backend's gate: the harness and its rules target are both on. */
+function rulesSurfaceEnabled(surface: RulesSurfaceId): boolean {
+  const targetId = surface === "open_code_rules" ? "opencode_rules" : surface;
+  const harness = TARGETS.find(target => target.id === targetId)?.harness;
+  return !!harness && settings.enabled_harness_ids.includes(harness) && settings.enabled_target_ids.includes(targetId);
+}
+
+/** Why the backend would refuse to edit the refinements of `file`, or null. */
+function rulesFileRefusal(file: RulesStatus): string | null {
+  if (file.conflict_reason === "masked_by_override") return "an override file in the same folder masks this file";
+  if (file.conflict_reason === "peer_context_file") return "another context file in the same folder would be hidden by a new one";
+  switch (file.layout) {
+    case "absent": return "no file yet: install rules from the harness page first";
+    case "legacy": return "no base block: convert or install first (harness page, v)";
+    case "malformed": return MALFORMED_TEXT[file.malformed_reason ?? "missing_end"];
+    default: return null;
+  }
+}
+
+function enabledRulesFile(surface: RulesSurfaceId): RulesStatus {
+  const file = rulesFiles.get(surface);
+  if (!file) throw new Error(`Unknown surface ID: ${surface}`);
+  if (!rulesSurfaceEnabled(surface)) throw new Error(`${SURFACE_LABELS[surface]} is disabled`);
+  return file;
+}
+
+function rulesFileSummary(surface: RulesSurfaceId): RulesFileSummary {
+  const file = rulesFiles.get(surface)!;
+  const reason = rulesFileRefusal(file);
+  return {
+    surface,
+    label: SURFACE_LABELS[surface],
+    file: SURFACE_PATHS[surface],
+    layout: file.layout,
+    conflict: file.conflict_reason ?? null,
+    malformed: file.malformed_reason ?? null,
+    refinement_lines: file.refinement_lines,
+    editable: reason === null,
+    reason,
+  };
+}
+
+function rulesFileContent(surface: RulesSurfaceId): RulesFileContent {
+  const file = enabledRulesFile(surface);
+  const summary = rulesFileSummary(surface);
+  if (file.layout !== "block") return { ...summary, before: "", refinements: "", revision: null };
+  return {
+    ...summary,
+    before: ["<!-- BEGIN AGENT-WORKSPACE BASE: managed by Riggverk; edits inside are replaced on update; add refinements below END -->", ...RULES_BASE_LINES, "<!-- END AGENT-WORKSPACE BASE -->", ""].join("\n"),
+    refinements: rulesRefinements.get(surface) ?? DEFAULT_REFINEMENTS,
+    revision: `mock-revision-${surface}-${rulesRevisions.get(surface) ?? 0}`,
+  };
+}
+
+/** Like the backend: only the refinements of an editable file, and only while the file still has the opened revision. */
+function saveRulesRefinements(surface: RulesSurfaceId, content: string, expectedRevision: string): ActionResult {
+  const current = rulesFileContent(surface);
+  if (!current.editable) throw new Error(`${current.label}: nothing written: ${current.reason}`);
+  if (current.revision !== expectedRevision) {
+    throw new Error(`${current.label}: nothing written: the file changed on disk since it was opened: reload it`);
+  }
+  if (content === current.refinements) return actionResult("save_rules_refinements", true, "unchanged");
+  rulesRefinements.set(surface, content);
+  rulesRevisions.set(surface, (rulesRevisions.get(surface) ?? 0) + 1);
+  const lines = content.split("\n").filter(line => line.trim() !== "").length;
+  rulesFiles.set(surface, { ...rulesFiles.get(surface)!, refinement_lines: lines });
+  return actionResult("save_rules_refinements", true, "saved with backup");
 }
 
 /* ---- skill and agent files in conflict, or kept ---- */
@@ -1462,7 +1548,12 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
   if (cmd === "open_doc" && !arg<string>(args, "id").startsWith("custom:")) {
     throw new Error(`${arg<string>(args, "id")} is bundled with the app and read-only here`);
   }
-  if (cmd === "open_doc" || cmd === "open_backups_folder" || cmd === "open_default_workspace_folder") {
+  // Like the backend: `open_rules_file` opens the rules file of an enabled harness when there is one.
+  if (cmd === "open_rules_file") {
+    const surface = arg<RulesSurfaceId>(args, "surface");
+    if (enabledRulesFile(surface).layout === "absent") throw new Error("no file yet: install rules from the harness page first");
+  }
+  if (cmd === "open_doc" || cmd === "open_rules_file" || cmd === "open_backups_folder" || cmd === "open_default_workspace_folder") {
     await delay(100);
     return actionResult(cmd, true, "");
   }
@@ -1644,6 +1735,13 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
     }
     case "read_agent_template":
       return agentTemplate;
+    case "list_rules_files":
+      return RULES_SURFACES.filter(rulesSurfaceEnabled).map(rulesFileSummary) satisfies RulesFileSummary[];
+    case "read_rules_file":
+      return rulesFileContent(arg<RulesSurfaceId>(args, "surface"));
+    case "save_rules_refinements":
+      await delay(150);
+      return saveRulesRefinements(arg<RulesSurfaceId>(args, "surface"), arg<string>(args, "content"), arg<string>(args, "expectedRevision"));
     case "read_config_template": {
       const targetId = arg<string>(args, "targetId");
       const target = TARGETS.find(t => t.id === targetId);

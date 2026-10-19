@@ -8,6 +8,8 @@ import type {
   DocsHealth,
   DocSummary,
   DocumentContent,
+  RulesFileContent,
+  RulesFileSummary,
   SkillSummary,
 } from "../types";
 import { renderInFrame } from "../test/renderWithShell";
@@ -46,6 +48,18 @@ function baseProps(overrides: Partial<LibraryViewProps> = {}): LibraryViewProps 
     onCreateDoc: noop,
     agentTemplate: null,
     agentTargets: [],
+    rulesFiles: [],
+    activeRulesSurface: null,
+    activeRulesFile: null,
+    onSelectRulesFile: noop,
+    onOpenRulesFile: noop,
+    rulesDraft: "",
+    rulesDirty: false,
+    rulesSaving: false,
+    rulesSaveResult: null,
+    onChangeRulesDraft: noop,
+    onSaveRules: noop,
+    onResetRules: noop,
     skills: [],
     activeSkillId: null,
     activeSkillContent: null,
@@ -1304,5 +1318,139 @@ describe("LibraryView Rules", () => {
     press(focusList(), "Enter");
     expect(screen.queryByRole("textbox")).toBeNull();
     expect(document.activeElement).toBe(screen.getByRole("group", { name: "Document" }));
+  });
+
+  function rulesFile(overrides: Partial<RulesFileContent> = {}): RulesFileContent {
+    return {
+      surface: "claude_rules",
+      label: "Claude rules",
+      file: "~/.claude/CLAUDE.md",
+      layout: "block",
+      conflict: null,
+      malformed: null,
+      refinement_lines: 2,
+      editable: true,
+      reason: null,
+      before: "# Managed base heading\n\n- base rule\n",
+      refinements: "## My refinements\n- answer in Swedish\n",
+      revision: "sha256:r1",
+      ...overrides,
+    };
+  }
+
+  const LEGACY_REASON = "no base block: convert or install first (harness page, v)";
+  const files: RulesFileSummary[] = [
+    rulesFile(),
+    rulesFile({ surface: "codex_rules", label: "Codex rules", file: "~/.codex/AGENTS.md", layout: "legacy", editable: false, reason: LEGACY_REASON }),
+    rulesFile({ surface: "pi_rules", label: "Pi rules", file: "~/.pi/agent/AGENTS.md", conflict: "masked_by_override", editable: false, reason: "an override file in the same folder masks this file" }),
+    rulesFile({ surface: "copilot_rules", label: "Copilot rules", file: "~/.copilot/copilot-instructions.md", layout: "absent", editable: false, reason: "no file yet: install rules from the harness page first" }),
+  ];
+
+  function openRulesFile(file: RulesFileContent, overrides: Partial<LibraryViewProps> = {}) {
+    return renderLibrary({
+      sourceType: "rules",
+      agentTemplate: makeDoc("tpl", "tpl", "# Rules"),
+      rulesFiles: files,
+      activeRulesSurface: file.surface,
+      activeRulesFile: file,
+      rulesDraft: file.refinements,
+      ...overrides,
+    });
+  }
+
+  it("lists the user's rules files below the bundled base, with what each one allows", () => {
+    vi.useFakeTimers();
+    const onSelectRulesFile = vi.fn();
+    renderLibrary({ sourceType: "rules", agentTemplate: makeDoc("tpl", "tpl", "# Rules"), rulesFiles: files, onSelectRulesFile });
+    const rows = within(listbox()).getAllByRole("option");
+    expect(rows.map(row => [row.querySelector(".nm")!.textContent, row.querySelector(".meta")!.textContent])).toEqual([
+      ["Global Rules", "bundled"],
+      ["Claude rules", "refinements"],
+      ["Codex rules", "no base block"],
+      ["Pi rules", "masked"],
+      ["Copilot rules", "no file"],
+    ]);
+    expect(screen.getByText("bundled base")).not.toBeNull();
+    expect(screen.getByText("your rules files")).not.toBeNull();
+
+    fireEvent.click(screen.getByRole("option", { name: /Claude rules/ }));
+    act(() => {
+      vi.advanceTimersByTime(120);
+    });
+    expect(onSelectRulesFile).toHaveBeenCalledWith("claude_rules");
+  });
+
+  it("lists no rules file while the workspace is not valid", () => {
+    renderLibrary({ sourceType: "rules", rulesFiles: files, workspaceValid: false });
+    expect(within(listbox()).getAllByRole("option").map(option => option.querySelector(".nm")!.textContent)).toEqual(["Global Rules"]);
+  });
+
+  it("edits only the refinements: the managed base is shown read-only above them", () => {
+    const onChangeRulesDraft = vi.fn();
+    const onSaveDoc = vi.fn();
+    const onOpenRulesFile = vi.fn();
+    const file = rulesFile();
+    openRulesFile(file, { onChangeRulesDraft, onSaveDoc, onOpenRulesFile });
+    const pane = screen.getByRole("region", { name: "Document" });
+    expect(pane.querySelector(".pane-title")!.textContent).toBe("Claude rules · ~/.claude/CLAUDE.md");
+    const base = screen.getByRole("region", { name: "managed base · read-only" });
+    expect(within(base).getByText("Managed base heading")).not.toBeNull();
+    expect(within(pane.querySelector<HTMLElement>(".pane-foot")!).getByText("below the managed block only")).not.toBeNull();
+
+    const editor = editDocument("Edit refinements");
+    expect(editor.value).toBe(file.refinements);
+    expect(editor.value).not.toContain("Managed base heading");
+    fireEvent.change(editor, { target: { value: "## Mine\n" } });
+    expect(onChangeRulesDraft).toHaveBeenCalledWith("## Mine\n");
+
+    press(editor, "Escape");
+    press(focusList(), "o");
+    expect(onOpenRulesFile).toHaveBeenCalledWith("claude_rules");
+    expect(onSaveDoc).not.toHaveBeenCalled();
+  });
+
+  it("saves the refinements through the rules handler, with Mod+s and :w", () => {
+    const onSaveRules = vi.fn();
+    const onSaveDoc = vi.fn();
+    const file = rulesFile();
+    openRulesFile(file, { rulesDraft: "## Changed\n", rulesDirty: true, onSaveRules, onSaveDoc });
+    pressSave();
+    expect(onSaveRules).toHaveBeenCalledTimes(1);
+    focusList();
+    runCommand("w");
+    expect(onSaveRules).toHaveBeenCalledTimes(2);
+    expect(onSaveDoc).not.toHaveBeenCalled();
+  });
+
+  it("shows why a rules file is not editable, offers no edit or save, and still opens an existing file", () => {
+    const onSaveRules = vi.fn();
+    const onOpenRulesFile = vi.fn();
+    const legacy = { ...files[1]!, before: "", refinements: "", revision: null } as RulesFileContent;
+    const { update } = openRulesFile(legacy, { onSaveRules, onOpenRulesFile });
+    const footer = screen.getByRole("region", { name: "Document" }).querySelector<HTMLElement>(".pane-foot")!;
+    expect(within(footer).getByText(LEGACY_REASON)).not.toBeNull();
+    expect(screen.queryByRole("region", { name: "managed base · read-only" })).toBeNull();
+    focusPane("Document");
+    const edit = statusHint("↵ edit");
+    expect(edit.getAttribute("aria-disabled")).toBe("true");
+    expect(edit.getAttribute("title")).toBe(LEGACY_REASON);
+    press(document.activeElement!, "i");
+    expect(screen.queryByLabelText("Edit refinements")).toBeNull();
+    pressSave();
+    focusList();
+    runCommand("w");
+    expect(screen.getByRole("alert").textContent).toContain(LEGACY_REASON);
+    expect(onSaveRules).not.toHaveBeenCalled();
+    press(screen.getByRole("combobox", { name: "Command" }), "Escape");
+    press(focusList(), "o");
+    expect(onOpenRulesFile).toHaveBeenCalledWith("codex_rules");
+
+    // No file at all: nothing to open either.
+    const absent = { ...files[3]!, before: "", refinements: "", revision: null } as RulesFileContent;
+    update({ sourceType: "rules", rulesFiles: files, activeRulesSurface: absent.surface, activeRulesFile: absent, onOpenRulesFile });
+    focusPane("Document");
+    const open = statusHint("o open");
+    expect(open.getAttribute("aria-disabled")).toBe("true");
+    expect(open.getAttribute("title")).toBe(absent.reason);
   });
 });

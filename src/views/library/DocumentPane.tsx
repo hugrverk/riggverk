@@ -40,7 +40,10 @@ function formatJson(content: string): string {
   }
 }
 
-/** The working copy rendered (markdown, or pretty-printed JSON for configs) under the item's metadata. */
+/**
+ * The working copy rendered (markdown, or pretty-printed JSON for configs) under the item's metadata, and under
+ * the read-only text that precedes it in the same file when there is one (a rules file's managed block).
+ */
 function DocumentView({ entry }: { entry: LibraryEntry }) {
   const isJson = entry.preview === "json";
   const formatted = useMemo(() => (isJson ? formatJson(entry.draft) : ""), [isJson, entry.draft]);
@@ -50,6 +53,12 @@ function DocumentView({ entry }: { entry: LibraryEntry }) {
         <div className="lib-meta" role="region" aria-label={entry.metaTitle ?? "Metadata"}>
           {entry.metaTitle && <p className="group">{entry.metaTitle}</p>}
           <Kv items={entry.meta} />
+        </div>
+      )}
+      {entry.before && (
+        <div className="lib-before" role="region" aria-label={entry.beforeLabel ?? "Read-only"}>
+          {entry.beforeLabel && <p className="group">{entry.beforeLabel}</p>}
+          <DocContent content={entry.before} />
         </div>
       )}
       {isJson ? (

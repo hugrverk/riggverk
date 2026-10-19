@@ -21,7 +21,7 @@ use crate::rules_diff;
 use crate::setup_lifecycle::SetupSurfaceId;
 use crate::setup_transaction::{self, RulesContext, RulesRewrite};
 
-fn user_home() -> Result<PathBuf, String> {
+pub(super) fn user_home() -> Result<PathBuf, String> {
     crate::platform_paths::resolve_user_home(
         &crate::platform_paths::PlatformEnv::from_process_env(),
         crate::platform_paths::Platform::current(),
@@ -30,10 +30,17 @@ fn user_home() -> Result<PathBuf, String> {
 
 /// The rules surface and artifact a command acts on. The surface must be a
 /// rules surface whose harness and target toggle are enabled.
-fn rules_target(surface: &str) -> Result<(SetupSurfaceId, ArtifactId), String> {
+pub(super) fn rules_target(surface: &str) -> Result<(SetupSurfaceId, ArtifactId), String> {
     let surface_id =
         serde_json::from_value::<SetupSurfaceId>(serde_json::Value::String(surface.to_string()))
             .map_err(|_| format!("Unknown surface ID: {surface}"))?;
+    Ok((surface_id, enabled_rules_artifact(surface_id)?))
+}
+
+/// The rules artifact of `surface_id`, when it is a rules surface whose harness and target
+/// toggle are enabled.
+pub(super) fn enabled_rules_artifact(surface_id: SetupSurfaceId) -> Result<ArtifactId, String> {
+    let not_rules = || format!("{} is not a rules surface", surface_id.label());
     let artifact = match surface_id {
         SetupSurfaceId::ClaudeRules => ArtifactId::ClaudeRules,
         SetupSurfaceId::CodexRules => ArtifactId::CodexRules,
@@ -43,15 +50,15 @@ fn rules_target(surface: &str) -> Result<(SetupSurfaceId, ArtifactId), String> {
                 .harness()
                 .and_then(LightHarnessId::new)
                 .map(ArtifactId::HarnessRules)
-                .ok_or_else(|| format!("{surface} is not a rules surface"))?
+                .ok_or_else(not_rules)?
         }
-        _ => return Err(format!("{surface} is not a rules surface")),
+        _ => return Err(not_rules()),
     };
     let settings = crate::settings::load();
     if !crate::settings::surface_enabled(&settings, surface_id) {
         return Err(format!("{} is disabled", surface_id.label()));
     }
-    Ok((surface_id, artifact))
+    Ok(artifact)
 }
 
 fn file_label(artifact: &ArtifactId) -> &'static str {
