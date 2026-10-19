@@ -163,9 +163,7 @@ See `docs/SECURITY_MODEL.md` for the full boundaries.
 The local release check is the gate: run `./scripts/release-check.sh` before merging and before a release. GitHub Actions is disabled for this repository (`.github/workflows` is kept, switched off), so nothing runs on push or pull request, and nothing verifies Windows. The Bash release check is macOS and Linux only (see `docs/RELEASE.md`).
 
 ```bash
-python3 scripts/generate-agent-adapters.py --check
-python3 scripts/generate-agent-rules.py --check
-python3 scripts/generate-default-opencode-config.py --check
+python3 scripts/generate.py check
 python3 scripts/check-skill-routing.py
 python3 scripts/check-default-workspace-copy-list.py
 python3 scripts/check-readme-docs-drift.py
