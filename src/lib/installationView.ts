@@ -79,10 +79,16 @@ export interface TargetMeta {
   tone: Tone;
 }
 
+/**
+ * Why nothing that needs the workspace folder can run. The folder is unusable only when it is a link, a file, or a
+ * missing `AGENT_WORKSPACE_PATH` folder: a fresh profile without one is fine, its first install creates it.
+ */
+export const WORKSPACE_FOLDER_UNUSABLE = "workspace folder unusable";
+
 /** The right-hand cell of a harness-list row: "current", "current · you manage 2", "2 to update", "1 conflict", "…". */
 export function targetMeta(entry: OverviewEntry | undefined, options: { workspaceValid: boolean; id: OverviewId }): TargetMeta {
   if (!options.workspaceValid) {
-    return options.id === "workspace" ? { text: "setup needed", tone: "warn" } : { text: "needs workspace", tone: "dim" };
+    return options.id === "workspace" ? { text: "folder unusable", tone: "warn" } : { text: "needs workspace folder", tone: "dim" };
   }
   if (!entry || (entry.loading && !entry.status)) return { text: "…", tone: "dim" };
   if (entry.error) return { text: "status failed", tone: "fail" };
@@ -268,7 +274,7 @@ export interface UpdateAction {
 
 /**
  * The `u` action of a target: its label follows the installation state, and the reason it is off is the
- * first of: no workspace (harnesses only), a running task, unsaved target changes, status still loading,
+ * first of: an unusable workspace folder (harnesses only), a running task, unsaved target changes, status still loading,
  * already current, unavailable.
  */
 export function updateActionFor(
@@ -287,7 +293,7 @@ export function updateActionFor(
           ? "update safe files"
           : "update";
   let disabled: string | false = false;
-  if (!context.workspaceValid && id !== "workspace") disabled = "no valid workspace installed";
+  if (!context.workspaceValid && id !== "workspace") disabled = WORKSPACE_FOLDER_UNUSABLE;
   else if (context.busyLabel) disabled = `${context.busyLabel} is running`;
   else if (context.settingsSaving) disabled = "saving target changes";
   else if (context.workspaceValid && entry?.loading && !entry.status) disabled = "checking status…";
@@ -301,7 +307,7 @@ export function previewDisabledFor(
   id: OverviewId,
   context: { workspaceValid: boolean; busyLabel: string | null },
 ): string | false {
-  if (!context.workspaceValid && id !== "workspace") return "no valid workspace installed";
+  if (!context.workspaceValid && id !== "workspace") return WORKSPACE_FOLDER_UNUSABLE;
   if (context.busyLabel) return `${context.busyLabel} is running`;
   return false;
 }

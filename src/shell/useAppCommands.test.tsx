@@ -349,7 +349,7 @@ describe("useAppCommands", () => {
       runLine("update workspace");
       expect(none.openInstall).toHaveBeenCalledWith("workspace");
       runLine("update --all");
-      expect(commandLineError()).toBe("update: no valid workspace installed (run update workspace first)");
+      expect(commandLineError()).toBe("update: workspace folder unusable (the workspace page says why)");
       runLine("update claude");
       expect(none.openInstall).toHaveBeenCalledTimes(1);
 
@@ -463,7 +463,7 @@ describe("useAppCommands", () => {
       const deps = makeDeps({ workspaceValid: false });
       setup(deps);
       runLine("uninstall");
-      expect(commandLineError()).toBe("uninstall: no valid workspace installed");
+      expect(commandLineError()).toBe("uninstall: workspace folder unusable");
       expect(deps.requestUninstallPreview).not.toHaveBeenCalled();
     });
   });

@@ -25,6 +25,7 @@ Tab keys below assume the default order: workspace, codex, opencode, cursor, cla
 
 - [ ] First launch shows `not installed`, no generic error banner, no path chooser on the Workspace page
 - [ ] Workspace page shows `~/.config/agent-workspace` (or the isolated override)
+- [ ] Fresh profile: launching creates no `~/.config/agent-workspace`; harness rows are not gated; `u` on a harness installs it without the workspace and creates the folder owner-only (0700) holding only `.agent-workspace/`
 - [ ] Top line tabs match the order above; Mac traffic lights sit on the same 28px line
 - [ ] `?` opens the help overlay listing keys and commands; Escape closes it
 - [ ] `:` opens the command line; `:help`, `:codex`, `:theme toggle`, an unknown command (error, no crash)
@@ -100,8 +101,8 @@ Use the isolated `HOME`; install the skills and agents first, then edit `~/.clau
 - [ ] The workspace detail pane lists the backup run count and the root path; `B` there opens the folder
 - [ ] **preview uninstall** classifies removable, preserved, and merge-managed artifacts; modified and unknown fixture files stay on disk after uninstall
 - [ ] Merge-managed rules files with user text outside the block are kept; a file with only an unedited block is removable
-- [ ] **uninstall everything** removes proven app-owned files and the workspace becomes invalid
-- [ ] **Recover previous uninstall** stays visible after the workspace becomes invalid or missing
+- [ ] **uninstall everything** removes proven app-owned files; the workspace folder and its `.agent-workspace/` state stay
+- [ ] **Recover previous uninstall** stays visible after the uninstall
 - [ ] **preview recovery** is read-only and reports restore, already restored, and conflict counts
 - [ ] **restore workspace** opens a confirmation; Escape closes it and focus returns to the button; cancel leaves the candidate unchanged; **confirm restore** brings workspace and harness state back and the card disappears
 - [ ] A changed or occupied restore target reports a conflict and restore stays disabled
@@ -129,7 +130,7 @@ Use the isolated `HOME`; install the skills and agents first, then edit `~/.clau
 - [ ] Appearance (dark, light, system), all four text sizes (`small`, `medium`, `large`, `extra-large`), and theme colors autosave; `r` in the appearance pane resets after a confirm
 - [ ] Motion `full` shows the launch sequence, apply progress (bar, file, spinner, elapsed), the success tick and scanline; `subtle` keeps only the progress indicators; `off` (or the OS reduced-motion preference) stops every animation
 - [ ] Landing page selection (`start`, `library`) persists and opens after app restart
-- [ ] Settings: `c` chooses a workspace folder; an invalid folder is refused with a reason; a valid one becomes the active workspace and status reloads; `R` resets to the default path
+- [ ] Settings: `c` chooses a workspace folder; a folder without the app's `.agent-workspace/` state is refused with a reason; one with it becomes the active workspace and status reloads; `R` resets to the default path
 - [ ] `AGENT_WORKSPACE_PATH` overrides the chosen path
 - [ ] Generator scripts run from the bundled copy: a modified `scripts/generate-opencode-config.py` in the chosen workspace is not executed
 - [ ] Disable one harness: its tab, page, Workspace row, health calls, and harness-specific Library entries disappear and the tabs renumber

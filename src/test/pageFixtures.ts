@@ -39,7 +39,7 @@ export const INVALID_DIAGNOSTICS: WorkspaceDiagnostics = {
   ...VALID_DIAGNOSTICS,
   resolved_path: null,
   valid: false,
-  error: "workspace missing",
+  error: "the folder is a symlink",
   bundled_resources_status: "missing",
 };
 

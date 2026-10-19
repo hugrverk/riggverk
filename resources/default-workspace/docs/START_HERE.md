@@ -24,7 +24,7 @@ It does not:
 
 ## First install
 
-1. Start the app and press `1` (Workspace). If it says `setup needed`, the cursor is on `workspace`.
+1. Start the app and press `1` (Workspace). The cursor is on `workspace`, which says `not installed` on a fresh profile.
 2. Press `u`. A plan table lists every file to create. Nothing is written yet.
 3. Press `d` to expand a row, `j` and `k` to move. `n` or Escape cancels.
 4. Press `y` to apply. A backup and a transaction are recorded first; the output pane shows the result.

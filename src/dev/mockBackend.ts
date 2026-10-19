@@ -989,11 +989,11 @@ function diagnostics(): WorkspaceDiagnostics {
     candidate_path: settings.workspace_path ?? WORKSPACE,
     resolved_path: valid ? settings.workspace_path ?? WORKSPACE : null,
     valid,
-    error: valid ? null : "workspace markers missing: metadata/manifest.json",
+    // Like the backend: only the folder itself decides (a link, a file, a missing override folder).
+    error: valid ? null : "the folder is a symlink",
     markers: [
-      { kind: "dir", path: `${WORKSPACE}/skills`, exists: valid },
-      { kind: "dir", path: `${WORKSPACE}/agents`, exists: valid },
-      { kind: "file", path: `${WORKSPACE}/metadata/manifest.json`, exists: valid },
+      { kind: "file", path: ".agent-workspace/workspace.json", exists: valid },
+      { kind: "file", path: ".agent-workspace/managed-state.json", exists: valid },
     ],
     enabled_rule_targets: TARGETS.filter(t => t.kind === "rules" && enabled.has(t.id)).length,
     total_rule_targets: TARGETS.filter(t => t.kind === "rules").length,
@@ -1580,8 +1580,10 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
     }
     case "try_set_active_workspace_path": {
       const path = arg<string>(args, "path");
-      // Like the backend: a folder without the workspace markers is refused and nothing changes.
-      if (path.includes("invalid")) throw new Error("invalid workspace path: not a valid workspace (missing .agent-workspace/workspace.json)");
+      // Like the backend: a folder without the app's `.agent-workspace/` state is refused and nothing changes.
+      if (path.includes("invalid")) {
+        throw new Error("invalid workspace path: not a usable workspace folder (missing .agent-workspace/workspace.json or managed-state.json)");
+      }
       settings = { ...settings, workspace_path: path, revision: (settings.revision ?? 0) + 1 };
       return settings;
     }

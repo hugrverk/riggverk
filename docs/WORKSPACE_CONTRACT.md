@@ -10,18 +10,16 @@ Requirements on the machine: Python 3 (Codex and OpenCode merge and generator he
 
 Install and the Library read the bundled copy, never the runtime workspace. The runtime workspace holds a copy of the bundle that neither of them reads; the only Library text in it is your personal docs (`docs/context/`). Editing the workspace changes neither what harnesses receive nor what the Library shows.
 
-## Required runtime markers
+## Data folder
 
-A valid workspace contains:
+The workspace folder is the app's data folder: its state lives in `.agent-workspace/` (`managed-state.json`, `kept-files.json`, `rules-preferences.json`, and the `workspace.json` marker of a bundle install), personal docs in `docs/context/`. Whether it is usable depends on the folder itself, never on the bundled copies in it:
 
-- `.agent-workspace/workspace.json`
-- `README.md`
-- `skills/` (directory)
-- `templates/global-agent-rules.md`
-- `templates/opencode.json`
-- `templates/codex/config.toml`
-- `templates/cursor/agents/` (directory)
-- `templates/cursor/rules/` (directory holding at least one `*.mdc` file)
+- The default folder (`~/.config/agent-workspace`) is usable when it is absent (a fresh profile) or a real directory. A harness can be installed before the workspace bundle.
+- An `AGENT_WORKSPACE_PATH` folder must be an existing real directory.
+- A custom folder saved in Settings is used while it is a real directory holding `.agent-workspace/workspace.json` or `.agent-workspace/managed-state.json`; otherwise the app falls back to the default folder and clears the saved path. Deleting bundled copies from the folder never invalidates it or clears the path.
+- A symlink or a file in place of the folder makes it unusable: the Workspace page says why, and nothing that needs the folder runs.
+
+Nothing creates the folder at launch. The first write that needs it (an install, a state file, a personal doc) creates it owner-only (0700).
 
 Validation is read-only. It does not run workspace scripts, install files, or inspect credential-bearing state. Health checks that need the OpenCode generator run the bundled copy, not a script from the workspace. Runtime health (Claude, Codex, Cursor, OpenCode) and the sync fields of `get_status` compare the installed files with the bundled copy; an edited or missing workspace copy does not change them, and Codex, Cursor, Claude and OpenCode health need no workspace folder at all.
 
@@ -49,7 +47,7 @@ A file that exists but is not provably app-owned and unmodified is a conflict: I
 
 ### Custom workspace
 
-Settings can point the app at another folder (`c` choose, `R` reset to the default path). A chosen folder is used only when it passes the markers above. `AGENT_WORKSPACE_PATH` overrides it. Install into a custom folder behaves as into the default one, and the generator scripts the app runs still come from the bundled read-only copy.
+Settings can point the app at another folder (`c` choose, `R` reset to the default path). A chosen folder must already hold the app's `.agent-workspace/` state (see Data folder above). `AGENT_WORKSPACE_PATH` overrides it. Install into a custom folder behaves as into the default one, and the generator scripts the app runs still come from the bundled read-only copy.
 
 ## Skill source layout
 
@@ -303,7 +301,7 @@ Full uninstall previews removable, preserved, and merge-managed artifacts before
 
 Uninstall creates a rollback-capable backend transaction with per-file backups. Preview and rollback dry-run perform zero filesystem mutation. Actual rollback restores exact prior app-owned bytes from the transaction backup and refuses occupied or changed targets.
 
-The frontend retains only the most recent install or uninstall transaction ID for the current app session (`z` or `:rollback` restores it after a dry run and a confirm). **Recover previous uninstall** remains visible after uninstall makes the workspace invalid, but recovery state is not persisted in AppSettings, localStorage, or a transaction registry. Closing or restarting the app loses the recovery affordance even though backend transaction evidence may remain on disk. Recovery requires a read-only dry-run before mutation and explicit confirmation to restore.
+The frontend retains only the most recent install or uninstall transaction ID for the current app session (`z` or `:rollback` restores it after a dry run and a confirm). **Recover previous uninstall** remains visible after uninstall (the workspace folder and its `.agent-workspace/` state stay, so the folder stays usable), but recovery state is not persisted in AppSettings, localStorage, or a transaction registry. Closing or restarting the app loses the recovery affordance even though backend transaction evidence may remain on disk. Recovery requires a read-only dry-run before mutation and explicit confirmation to restore.
 
 ## Harness enablement
 
