@@ -4,4 +4,4 @@
 
 [mcp_servers.playwright]
 command = "npx"
-args = ["-y", "@playwright/mcp@0.0.48", "--config", "__PLAYWRIGHT_MCP_CONFIG_PATH__"]
+args = ["-y", "@playwright/mcp@0.0.83", "--config", "__PLAYWRIGHT_MCP_CONFIG_PATH__", "--browser", "chrome", "--isolated", "--no-webmcp"]

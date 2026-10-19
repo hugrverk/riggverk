@@ -5109,6 +5109,104 @@ mod tests {
         assert_eq!(server_names(&after), vec!["playwright"]);
     }
 
+    /// An installed file the way an older app wrote it: the same entry with the previous pin and
+    /// the flags of that time (`--config` only, without the Chrome selection and `--no-webmcp`),
+    /// and the record that app made of it.
+    fn as_the_older_app_wrote_it(env: &TempSetupEnv, artifact: &ArtifactId, path: &Path) {
+        let text = fs::read_to_string(path).expect("installed file");
+        let current: serde_json::Value = serde_json::from_str(&text).expect("installed JSON");
+        let older = crate::commands::cursor_profile::as_the_previous_app_wrote_it(&current);
+        assert_ne!(
+            older, current,
+            "the installed file must pin the current version"
+        );
+        let older_text = serde_json::to_string_pretty(&older).expect("serialize") + "\n";
+        assert!(
+            older_text.contains("@playwright/mcp@0.0.48")
+                && !older_text.contains("--no-webmcp")
+                && !older_text.contains("\"--browser\""),
+            "{older_text}"
+        );
+        fs::write(path, older_text).expect("write the previous pin and flags");
+        let digest = crate::setup_fingerprint::artifact_installed_managed_digest(
+            artifact, &env.ws, &env.home,
+        )
+        .expect("digest of the installed entry");
+        let mut state = crate::managed_state::read_managed_state(&env.ws).expect("managed state");
+        let identity = crate::managed_state::artifact_identity(artifact);
+        let record = state
+            .artifacts
+            .iter_mut()
+            .find(|record| record.identity == identity)
+            .expect("the apply recorded the artifact");
+        record.hash = digest;
+        crate::managed_state::write_managed_state_atomic(&env.ws, &state)
+            .expect("write managed state");
+    }
+
+    #[test]
+    fn a_playwright_pin_from_an_older_app_is_an_update_not_a_conflict() {
+        let env = TempSetupEnv::new("previous-playwright-pin");
+        let pin = crate::commands::cursor_profile::PLAYWRIGHT_MCP_VERSION;
+        for (wire, surface, artifact, rel) in [
+            (
+                "open_code_config",
+                SetupSurfaceId::OpenCodeConfig,
+                ArtifactId::OpenCodeConfig,
+                ".config/opencode/opencode.json",
+            ),
+            (
+                "cursor_mcp",
+                SetupSurfaceId::CursorMcp,
+                ArtifactId::CursorMcp,
+                ".cursor/mcp.json",
+            ),
+        ] {
+            let apply = || {
+                let plan = preview_setup(vec![wire.into()]).expect("preview");
+                assert!(!plan.is_blocked, "{wire}: {:?}", plan.operations);
+                apply_setup(
+                    vec![wire.into()],
+                    true,
+                    plan.plan_fingerprint.clone(),
+                    plan.preview_token.clone(),
+                )
+                .expect("apply")
+            };
+            let result = apply();
+            assert!(result.success, "{wire}: {}", result.message);
+            let path = env.home.join(rel);
+            as_the_older_app_wrote_it(&env, &artifact, &path);
+
+            let planned = env.plan(&[surface]);
+            let kind = planned
+                .iter()
+                .find(|planned| planned.artifact == artifact)
+                .map(|planned| planned.kind);
+            assert_eq!(kind, Some(OperationKind::Update), "{wire}: {planned:?}");
+
+            let result = apply();
+            assert!(result.success, "{wire}: {}", result.message);
+            let installed = fs::read_to_string(&path).unwrap();
+            assert!(
+                installed.contains(&format!("@playwright/mcp@{pin}"))
+                    && !installed.contains("@playwright/mcp@0.0.48"),
+                "{wire}: the pin must be refreshed"
+            );
+            let installed: serde_json::Value =
+                serde_json::from_str(&installed).expect("installed JSON");
+            let lists = crate::commands::cursor_profile::playwright_argument_lists(&installed);
+            assert_eq!(lists.len(), 1, "{wire}: {lists:?}");
+            assert!(
+                lists[0]
+                    .windows(crate::commands::cursor_profile::PLAYWRIGHT_MCP_BROWSER_FLAGS.len())
+                    .any(|window| window
+                        == crate::commands::cursor_profile::PLAYWRIGHT_MCP_BROWSER_FLAGS),
+                "{wire}: the Chrome selection and the WebMCP flag must be added: {lists:?}"
+            );
+        }
+    }
+
     #[test]
     fn cursor_mcp_rollback_restores_the_existing_file_byte_for_byte() {
         let env = TempSetupEnv::new("cursor-mcp-partial-rollback");

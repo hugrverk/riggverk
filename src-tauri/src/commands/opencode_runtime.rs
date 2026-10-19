@@ -114,7 +114,7 @@ fn list_bundled_agents(agents_dir: &Path) -> Vec<String> {
     names
 }
 
-const PLAYWRIGHT_MCP_VERSION_DEFAULT: &str = "0.0.48";
+const PLAYWRIGHT_MCP_VERSION_DEFAULT: &str = super::cursor_profile::PLAYWRIGHT_MCP_VERSION;
 const PLAYWRIGHT_MCP_CONFIG_PLACEHOLDER: &str = "__PLAYWRIGHT_MCP_CONFIG_PATH__";
 const PLAYWRIGHT_BROWSERS_PLACEHOLDER: &str = "__PLAYWRIGHT_BROWSERS_PATH__";
 

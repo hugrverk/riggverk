@@ -203,6 +203,90 @@ pub(crate) fn manifest_recommended_skills(root: &Path) -> Vec<String> {
     super::skills::workspace_skill_names(root).unwrap_or_default()
 }
 
+/// The `@playwright/mcp` version every entry the app writes pins (OpenCode, Cursor and the light
+/// harnesses), and the day npm published it. `scripts/check-bundle-content.py` reads this line:
+/// the bundled templates and docs must name the same version, and it warns once the release is
+/// more than six months old. Bump the version and the date together.
+pub(crate) const PLAYWRIGHT_MCP_VERSION: &str = "0.0.83"; // released 2026-09-28
+
+/// The flags every entry carries after the package, in every harness: the system Google Chrome
+/// (`--browser chrome`, so no Playwright Chromium download), a profile kept in memory, and no
+/// tools registered by a page (`--no-webmcp`; WebMCP is on by default since 0.0.81). The
+/// templates spell them out, rendering substitutes only the version, and the `playwright-pin`
+/// group of `scripts/check-bundle-content.py` requires them in each template.
+#[cfg(test)]
+pub(crate) const PLAYWRIGHT_MCP_BROWSER_FLAGS: [&str; 4] =
+    ["--browser", "chrome", "--isolated", "--no-webmcp"];
+
+/// Every argument list in `value` that holds the pinned package (an entry's `args` or `command`).
+#[cfg(test)]
+pub(crate) fn playwright_argument_lists(value: &serde_json::Value) -> Vec<Vec<String>> {
+    let mut found = Vec::new();
+    match value {
+        serde_json::Value::Array(items) => {
+            let words: Vec<String> = items
+                .iter()
+                .filter_map(|item| item.as_str().map(str::to_string))
+                .collect();
+            if words
+                .iter()
+                .any(|word| word.starts_with("@playwright/mcp@"))
+            {
+                found.push(words);
+            } else {
+                for item in items {
+                    found.extend(playwright_argument_lists(item));
+                }
+            }
+        }
+        serde_json::Value::Object(map) => {
+            for item in map.values() {
+                found.extend(playwright_argument_lists(item));
+            }
+        }
+        _ => {}
+    }
+    found
+}
+
+/// `value` as the previous app wrote its Playwright entries: the 0.0.48 pin and the flags of
+/// that time. The OpenCode and Cursor entries had only `--config`; the light entries had
+/// `--browser chrome --isolated`.
+#[cfg(test)]
+pub(crate) fn as_the_previous_app_wrote_it(value: &serde_json::Value) -> serde_json::Value {
+    match value {
+        serde_json::Value::Array(items)
+            if items.iter().any(|item| {
+                item.as_str()
+                    .is_some_and(|word| word.starts_with("@playwright/mcp@"))
+            }) =>
+        {
+            let has_sidecar = items.iter().any(|item| item == "--config");
+            let mut out: Vec<serde_json::Value> = Vec::new();
+            for item in items {
+                match item.as_str() {
+                    Some(word) if word.starts_with("@playwright/mcp@") => {
+                        out.push("@playwright/mcp@0.0.48".into())
+                    }
+                    Some("--no-webmcp") => {}
+                    Some("--browser" | "chrome" | "--isolated") if has_sidecar => {}
+                    _ => out.push(item.clone()),
+                }
+            }
+            serde_json::Value::Array(out)
+        }
+        serde_json::Value::Array(items) => {
+            serde_json::Value::Array(items.iter().map(as_the_previous_app_wrote_it).collect())
+        }
+        serde_json::Value::Object(map) => serde_json::Value::Object(
+            map.iter()
+                .map(|(key, item)| (key.clone(), as_the_previous_app_wrote_it(item)))
+                .collect(),
+        ),
+        other => other.clone(),
+    }
+}
+
 pub(crate) fn default_playwright_mcp_config_path(home: &Path) -> PathBuf {
     if let Ok(path) = std::env::var("PLAYWRIGHT_MCP_CONFIG_PATH") {
         if !path.is_empty() {
@@ -264,7 +348,7 @@ pub(crate) fn transform_playwright_template_value(
             } else if text == "__PLAYWRIGHT_BROWSERS_PATH__" {
                 serde_json::Value::String(browsers_path.to_string())
             } else if text.starts_with("@playwright/mcp@") {
-                serde_json::Value::String("@playwright/mcp@0.0.48".into())
+                serde_json::Value::String(format!("@playwright/mcp@{PLAYWRIGHT_MCP_VERSION}"))
             } else {
                 serde_json::Value::String(text.clone())
             }
@@ -595,6 +679,82 @@ mod tests {
         assert_eq!(diverged, ("diverged".to_string(), 0, 1));
         assert_eq!(elsewhere, ("missing".to_string(), 0, 1));
         assert_eq!(no_bundle, ("missing".to_string(), 0, 0));
+    }
+
+    fn bundled_json(rel: &str) -> serde_json::Value {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../resources/default-workspace")
+            .join(rel);
+        serde_json::from_str(&std::fs::read_to_string(path).expect("bundled file"))
+            .expect("bundled JSON")
+    }
+
+    #[test]
+    fn every_rendered_playwright_entry_uses_system_chrome_and_turns_webmcp_off() {
+        let home = Path::new("/home/someone");
+        let opencode = super::super::opencode_runtime::render_expected_opencode_config(
+            &bundled_json("templates/opencode.json"),
+            home,
+        )
+        .expect("rendered OpenCode config");
+        let mut rendered = vec![("opencode", opencode)];
+        for (name, rel) in [
+            ("cursor", "templates/cursor/mcp/playwright.mcp.json"),
+            ("copilot", "templates/mcp/copilot.playwright.json"),
+            ("pi", "templates/mcp/pi.playwright.json"),
+            ("kilo", "templates/mcp/kilo.playwright.json"),
+        ] {
+            rendered.push((
+                name,
+                transform_playwright_template_value(&bundled_json(rel), "/cfg.json", "/browsers"),
+            ));
+        }
+        for (name, entry) in rendered {
+            let lists = playwright_argument_lists(&entry);
+            assert_eq!(lists.len(), 1, "{name}: {entry}");
+            let words: Vec<&str> = lists[0].iter().map(String::as_str).collect();
+            assert!(
+                words
+                    .windows(PLAYWRIGHT_MCP_BROWSER_FLAGS.len())
+                    .any(|window| window == PLAYWRIGHT_MCP_BROWSER_FLAGS),
+                "{name}: {words:?}"
+            );
+            assert!(words.contains(&format!("@playwright/mcp@{PLAYWRIGHT_MCP_VERSION}").as_str()));
+            // The system Chrome, never Playwright's own Chromium (that would need a download).
+            assert!(!words.contains(&"chromium"), "{name}: {words:?}");
+        }
+        // The Codex reference snippet is TOML and not rendered; its arguments are the OpenCode ones.
+        let codex = std::fs::read_to_string(
+            Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../resources/default-workspace/templates/codex/mcp/playwright.toml"),
+        )
+        .expect("Codex snippet");
+        let flags = PLAYWRIGHT_MCP_BROWSER_FLAGS
+            .iter()
+            .map(|flag| format!("\"{flag}\""))
+            .collect::<Vec<_>>()
+            .join(", ");
+        assert!(codex.contains(&flags), "{codex}");
+    }
+
+    #[test]
+    fn the_previous_app_wrote_the_old_pin_and_flags() {
+        let entry = serde_json::json!({
+            "opencode": ["npx", "-y", "@playwright/mcp@0.0.83", "--config", "c.json",
+                "--browser", "chrome", "--isolated", "--no-webmcp"],
+            "light": ["npx", "-y", "@playwright/mcp@0.0.83", "--browser", "chrome",
+                "--isolated", "--no-webmcp"],
+            "other": ["npx", "-y", "other@1.0.0", "--no-webmcp"],
+        });
+        assert_eq!(
+            as_the_previous_app_wrote_it(&entry),
+            serde_json::json!({
+                "opencode": ["npx", "-y", "@playwright/mcp@0.0.48", "--config", "c.json"],
+                "light": ["npx", "-y", "@playwright/mcp@0.0.48", "--browser", "chrome",
+                    "--isolated"],
+                "other": ["npx", "-y", "other@1.0.0", "--no-webmcp"],
+            })
+        );
     }
 
     #[test]

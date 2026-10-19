@@ -3,9 +3,11 @@
 
 The app bundles the whole directory as it is on disk, ignored files included, so every check
 here reads the directory on disk rather than the git index. Groups: Codex templates, manifest
-files present, no symlinks, strict JSON, Playwright MCP guardrails, OpenCode and TUI defaults,
-the shared agents, retired OpenCode headers, the private-context boundary and the Cursor user
-rules wording.
+files present, no symlinks, strict JSON, Playwright MCP guardrails, the Playwright MCP pin
+(every bundled template and doc names the version the app writes and every entry passes
+`--browser chrome --isolated --no-webmcp`; an old release only warns),
+OpenCode and TUI defaults, the shared agents, retired OpenCode headers, the private-context
+boundary and the Cursor user rules wording.
 
 Usage: python3 scripts/check-bundle-content.py [--group NAME[,NAME]] [--root PATH]
 """
@@ -26,6 +28,7 @@ import os
 import re
 import tomllib
 from collections.abc import Callable
+from datetime import date
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -157,16 +160,8 @@ PLAYWRIGHT_RULES = (
         "the Playwright MCP package must be pinned, not @latest",
         '"args": ["@playwright/mcp@latest"]',
     ),
-    Rule(
-        "playwright-chrome",
-        "forbid",
-        r"--browser=chrome",
-        SHIPPED_CODE,
-        "Playwright MCP must use the bundled chromium, not --browser=chrome",
-        '"--browser=chrome"',
-    ),
-    # The Copilot, Pi and Kilo entries choose the browser with inline flags: the sidecar config
-    # belongs to the OpenCode config surface, and a missing file crashes the server at start.
+    # The Copilot, Pi and Kilo entries choose the browser with inline flags only: the sidecar
+    # config belongs to the OpenCode config surface, and a missing file crashes the server at start.
     Rule(
         "playwright-sidecar",
         "forbid",
@@ -202,6 +197,127 @@ PLAYWRIGHT_RULES = (
         '"browserName": "chromium"',
     ),
 )
+
+# --- playwright-pin --------------------------------------------------------------------------
+# One version and its npm release day live in a constant of the Rust app (the app writes it into
+# the OpenCode, Cursor and light-harness entries); the bundled templates and docs repeat it and
+# must agree. Every entry also carries the same flags after the package: the system Google Chrome
+# (`--browser chrome`, so no Playwright Chromium download), a profile kept in memory, and no
+# tools registered by a page (`--no-webmcp`; WebMCP is on by default since 0.0.81). A pin older
+# than PIN_MAX_AGE_DAYS only warns, from the recorded day and the local clock, so the check needs
+# no network and never fails offline.
+PIN_SOURCE = "src-tauri/src/commands/cursor_profile.rs"
+PIN_LINE = re.compile(r'PLAYWRIGHT_MCP_VERSION: &str = "([^"]+)";\s*// released (\d{4}-\d{2}-\d{2})')
+PINNED = re.compile(r"@playwright/mcp@(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]*[0-9A-Za-z])?)")
+# Template -> where the argument list of the Playwright entry sits in it.
+PIN_ENTRIES: dict[str, tuple[str, ...]] = {
+    "templates/opencode.base.json": ("mcp", "playwright", "command"),
+    "templates/opencode.json": ("mcp", "playwright", "command"),
+    "templates/cursor/mcp/playwright.mcp.json": ("mcpServers", "playwright", "args"),
+    "templates/codex/mcp/playwright.toml": ("mcp_servers", "playwright", "args"),
+    "templates/mcp/copilot.playwright.json": ("args",),
+    "templates/mcp/pi.playwright.json": ("args",),
+    "templates/mcp/kilo.playwright.json": ("command",),
+}
+PIN_TEMPLATES = tuple(PIN_ENTRIES)
+PIN_OUTSIDE_DOCS = ("README.md", "docs/*.md")
+PIN_MAX_AGE_DAYS = 183  # about six months
+
+
+def read_pin(root: Path) -> tuple[str, date] | str:
+    """The pinned version and its release day, or a message saying why they cannot be read."""
+    try:
+        text = (root / PIN_SOURCE).read_text(encoding="utf-8")
+    except OSError:
+        return f"missing the Playwright MCP pin source: {PIN_SOURCE}"
+    match = PIN_LINE.search(text)
+    if match is None:
+        return f'{PIN_SOURCE}: no `PLAYWRIGHT_MCP_VERSION: &str = "x.y.z"; // released YYYY-MM-DD` line'
+    try:
+        return match.group(1), date.fromisoformat(match.group(2))
+    except ValueError:
+        return f"{PIN_SOURCE}: the release day {match.group(2)} is not a date"
+
+
+def playwright_pin(root: Path, files: list[str]) -> list[str]:
+    pin = read_pin(root)
+    if isinstance(pin, str):
+        return [pin]
+    version = pin[0]
+    outside = sorted(path.relative_to(root).as_posix() for pattern in PIN_OUTSIDE_DOCS for path in root.glob(pattern))
+    errors = []
+    for rel in [*files, *outside]:
+        try:
+            text = (root / rel).read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        for number, line in enumerate(text.splitlines(), 1):
+            errors += [
+                f"{rel}:{number}: names @playwright/mcp@{found}, the app pins {version} ({PIN_SOURCE})"
+                for found in PINNED.findall(line)
+                if found != version
+            ]
+    for rel, location in PIN_ENTRIES.items():
+        path = root / BUNDLE / rel
+        if path.is_file():
+            errors += pin_entry_errors(path, rel, location, version)
+    return errors
+
+
+def entry_arguments(path: Path, location: tuple[str, ...]) -> list[str] | str:
+    """The argument list of the Playwright entry in a template, or a message saying why not."""
+    try:
+        text = path.read_text(encoding="utf-8")
+        node: object = tomllib.loads(text) if path.suffix == ".toml" else json.loads(text)
+    except (OSError, UnicodeDecodeError, ValueError):
+        return "cannot be read as the entry template it is"
+    for key in location:
+        if not isinstance(node, dict) or key not in node:
+            return f"has no {'.'.join(location)} entry"
+        node = node[key]
+    if not isinstance(node, list) or not all(isinstance(word, str) for word in node):
+        return f"{'.'.join(location)} is not a list of strings"
+    return node
+
+
+def pin_entry_errors(path: Path, rel: str, location: tuple[str, ...], version: str) -> list[str]:
+    arguments = entry_arguments(path, location)
+    if isinstance(arguments, str):
+        return [f"{W}{rel}: {arguments}"]
+    errors = []
+    if f"@playwright/mcp@{version}" not in arguments:
+        errors.append(f"{W}{rel}: does not pin @playwright/mcp@{version} ({PIN_SOURCE})")
+    if ("--browser", "chrome") not in list(zip(arguments, arguments[1:])):
+        errors.append(
+            f"{W}{rel}: does not select the system Chrome: pass `--browser chrome` "
+            "(a browser named in a config file or `chromium` makes Playwright use its own Chromium, "
+            "which needs a download)"
+        )
+    if "--isolated" not in arguments:
+        errors.append(f"{W}{rel}: does not pass `--isolated` (the profile stays in memory)")
+    if "--no-webmcp" not in arguments:
+        errors.append(
+            f"{W}{rel}: does not pass `--no-webmcp`: a page could register tools that the model "
+            "would see as webmcp_* tools"
+        )
+    return errors
+
+
+def pin_warnings(root: Path, today: date | None = None) -> list[str]:
+    """A warning when the pinned release is older than PIN_MAX_AGE_DAYS; nothing when unreadable."""
+    pin = read_pin(root)
+    if isinstance(pin, str):
+        return []
+    version, released = pin
+    age = ((today or date.today()) - released).days
+    if age <= PIN_MAX_AGE_DAYS:
+        return []
+    return [
+        f"@playwright/mcp@{version} was released on {released} ({age} days ago, the limit is "
+        f"{PIN_MAX_AGE_DAYS}): bump it to the newest stable release that is at least 14 days old "
+        f"(npm view @playwright/mcp time), in {PIN_SOURCE} and the templates and docs that repeat it"
+    ]
+
 
 # --- opencode-defaults / tui-defaults --------------------------------------------------------
 OPENCODE_LITERALS = {"model": "opencode-go/glm-5.2", "lsp": True, "autoupdate": "notify", "snapshot": True}
@@ -413,6 +529,7 @@ GROUPS: dict[str, tuple[tuple[Rule, ...], Check | None]] = {
     "symlinks": ((), symlinks),
     "json": ((), strict_json),
     "playwright": (PLAYWRIGHT_RULES, None),
+    "playwright-pin": ((), playwright_pin),
     "opencode-defaults": ((), opencode_defaults),
     "tui-defaults": ((), tui_defaults),
     "agents": ((), agents),
@@ -452,9 +569,13 @@ def main(argv: list[str] | None = None) -> int:
     if not (args.root / BUNDLE).is_dir():
         print(f"FAIL: bundled workspace not found: {args.root / BUNDLE}", file=sys.stderr)
         return 1
-    failures = run(args.root.resolve(), groups)
+    root = args.root.resolve()
+    failures = run(root, groups)
     for failure in failures:
         print(f"FAIL {failure}", file=sys.stderr)
+    if "playwright-pin" in groups:
+        for warning in pin_warnings(root):
+            print(f"WARN {warning}", file=sys.stderr)
     if failures:
         return 1
     print(f"  bundle content checks passed: {', '.join(groups)}")

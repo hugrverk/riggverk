@@ -3,10 +3,11 @@
   "command": [
     "npx",
     "-y",
-    "@playwright/mcp@0.0.48",
+    "@playwright/mcp@0.0.83",
     "--browser",
     "chrome",
-    "--isolated"
+    "--isolated",
+    "--no-webmcp"
   ],
   "environment": {
     "PLAYWRIGHT_BROWSERS_PATH": "__PLAYWRIGHT_BROWSERS_PATH__"

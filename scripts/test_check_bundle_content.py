@@ -14,6 +14,7 @@ import shutil
 import sys
 import tempfile
 import unittest
+from datetime import date, timedelta
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -82,6 +83,9 @@ class BundleTests(unittest.TestCase):
         frozen_list = self.tree / bc.FROZEN_LIST_RS
         frozen_list.parent.mkdir(parents=True)
         shutil.copy2(ROOT / bc.FROZEN_LIST_RS, frozen_list)
+        pin_source = self.tree / bc.PIN_SOURCE
+        pin_source.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(ROOT / bc.PIN_SOURCE, pin_source)
 
     def failures(self, group: str) -> list[str]:
         return bc.run(self.tree, [group])
@@ -182,6 +186,119 @@ class BundleTests(unittest.TestCase):
         cache.mkdir()
         (cache / "notes.txt").write_text("PLAYWRIGHT_BROWSERS_PATH=0\n")
         self.assertFails("playwright", "playwright-browsers-path")
+
+    def edit_pin_source(self, old: str, new: str) -> None:
+        path = self.tree / bc.PIN_SOURCE
+        text = path.read_text(encoding="utf-8")
+        self.assertIn(old, text)
+        path.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+    def test_every_template_names_the_pin_of_the_app(self) -> None:
+        version, _ = bc.read_pin(self.tree)
+        for rel in bc.PIN_TEMPLATES:
+            with self.subTest(template=rel):
+                self.assertIn(f"@playwright/mcp@{version}", (self.tree / WS / rel).read_text(encoding="utf-8"))
+
+    def test_a_template_with_another_version_fails(self) -> None:
+        version, _ = bc.read_pin(self.tree)
+        self.edit("templates/mcp/pi.playwright.json", f"@playwright/mcp@{version}", "@playwright/mcp@0.0.1")
+        self.assertFails("playwright-pin", "templates/mcp/pi.playwright.json:5: names @playwright/mcp@0.0.1")
+        self.assertFails("playwright-pin", "templates/mcp/pi.playwright.json: does not pin")
+
+    def test_a_template_without_a_pin_fails(self) -> None:
+        version, _ = bc.read_pin(self.tree)
+        self.edit("templates/cursor/mcp/playwright.mcp.json", f"@playwright/mcp@{version}", "playwright")
+        self.assertFails("playwright-pin", "templates/cursor/mcp/playwright.mcp.json: does not pin")
+
+    def test_every_entry_selects_the_system_chrome_and_turns_webmcp_off(self) -> None:
+        for rel, location in bc.PIN_ENTRIES.items():
+            with self.subTest(template=rel):
+                arguments = bc.entry_arguments(self.tree / WS / rel, location)
+                self.assertIsInstance(arguments, list)
+                self.assertEqual(arguments.count("--no-webmcp"), 1)
+                self.assertEqual(arguments.count("--isolated"), 1)
+                at = arguments.index("--browser")
+                self.assertEqual(arguments[at + 1], "chrome")
+        self.assertEqual(self.failures("playwright-pin"), [])
+
+    def test_an_entry_without_the_chrome_selection_fails(self) -> None:
+        # Naming no browser, or `chromium`, resolves to Playwright's own Chromium on 0.0.83.
+        for rel, location in bc.PIN_ENTRIES.items():
+            for broken in ("chromium", "firefox"):
+                with self.subTest(template=rel, browser=broken):
+                    path = self.tree / WS / rel
+                    original = path.read_text(encoding="utf-8")
+                    path.write_text(original.replace('"chrome"', f'"{broken}"', 1), encoding="utf-8")
+                    self.assertFails("playwright-pin", f"{rel}: does not select the system Chrome")
+                    path.write_text(original, encoding="utf-8")
+                    self.assertEqual(self.failures("playwright-pin"), [])
+
+    def test_an_entry_without_the_browser_flag_fails(self) -> None:
+        for rel in bc.PIN_ENTRIES:
+            with self.subTest(template=rel):
+                path = self.tree / WS / rel
+                original = path.read_text(encoding="utf-8")
+                path.write_text(original.replace("--browser", "--channel", 1), encoding="utf-8")
+                self.assertFails("playwright-pin", f"{rel}: does not select the system Chrome")
+                path.write_text(original, encoding="utf-8")
+
+    def test_an_entry_that_leaves_webmcp_on_fails(self) -> None:
+        for rel in bc.PIN_ENTRIES:
+            with self.subTest(template=rel):
+                path = self.tree / WS / rel
+                original = path.read_text(encoding="utf-8")
+                path.write_text(original.replace("--no-webmcp", "--webmcp", 1), encoding="utf-8")
+                self.assertFails("playwright-pin", f"{rel}: does not pass `--no-webmcp`")
+                path.write_text(original, encoding="utf-8")
+                self.assertEqual(self.failures("playwright-pin"), [])
+
+    def test_an_entry_that_is_not_isolated_fails(self) -> None:
+        for rel in bc.PIN_ENTRIES:
+            with self.subTest(template=rel):
+                path = self.tree / WS / rel
+                original = path.read_text(encoding="utf-8")
+                path.write_text(original.replace("--isolated", "--shared", 1), encoding="utf-8")
+                self.assertFails("playwright-pin", f"{rel}: does not pass `--isolated`")
+                path.write_text(original, encoding="utf-8")
+
+    def test_an_entry_the_check_cannot_find_fails_with_a_reason(self) -> None:
+        self.edit("templates/mcp/pi.playwright.json", '"args"', '"arguments"')
+        self.assertFails("playwright-pin", "templates/mcp/pi.playwright.json: has no args entry")
+        (self.tree / WS / "templates/codex/mcp/playwright.toml").write_text("[mcp_servers.playwright\n", encoding="utf-8")
+        self.assertFails("playwright-pin", "templates/codex/mcp/playwright.toml: cannot be read")
+
+    def test_a_doc_and_the_readme_must_agree_with_the_pin(self) -> None:
+        self.edit("docs/OPENCODE_CONFIG.md", "@playwright/mcp@", "@playwright/mcp@9.9.9 and @playwright/mcp@")
+        (self.tree / "README.md").write_text("Run `npx -y @playwright/mcp@0.0.1 --help`.\n", encoding="utf-8")
+        failures = self.failures("playwright-pin")
+        self.assertTrue(any("docs/OPENCODE_CONFIG.md" in f and "@playwright/mcp@9.9.9" in f for f in failures), failures)
+        self.assertTrue(any(f.startswith("[playwright-pin] README.md:1:") for f in failures), failures)
+
+    def test_a_pin_the_app_does_not_record_fails(self) -> None:
+        self.edit_pin_source("// released", "// shipped")
+        self.assertFails("playwright-pin", "no `PLAYWRIGHT_MCP_VERSION")
+        (self.tree / bc.PIN_SOURCE).unlink()
+        self.assertFails("playwright-pin", "missing the Playwright MCP pin source")
+        self.assertEqual(bc.pin_warnings(self.tree), [])
+
+    def test_a_bump_of_the_app_alone_fails_until_the_templates_follow(self) -> None:
+        version, _ = bc.read_pin(self.tree)
+        self.edit_pin_source(f'"{version}"', '"0.0.999"')
+        self.assertFails("playwright-pin", "the app pins 0.0.999")
+
+    def test_an_old_pin_warns_and_does_not_fail(self) -> None:
+        version, released = bc.read_pin(self.tree)
+        self.edit_pin_source(f"// released {released.isoformat()}", "// released 2020-01-31")
+        self.assertEqual(self.failures("playwright-pin"), [])
+        warnings = bc.pin_warnings(self.tree, today=date(2026, 10, 19))
+        self.assertEqual(len(warnings), 1, warnings)
+        self.assertIn(f"@playwright/mcp@{version} was released on 2020-01-31", warnings[0])
+
+    def test_the_warning_starts_after_the_age_limit(self) -> None:
+        _, released = bc.read_pin(self.tree)
+        limit = released + timedelta(days=bc.PIN_MAX_AGE_DAYS)
+        self.assertEqual(bc.pin_warnings(self.tree, today=limit), [])
+        self.assertEqual(len(bc.pin_warnings(self.tree, today=limit + timedelta(days=1))), 1)
 
     def test_cursor_user_rules_wording(self) -> None:
         self.edit("templates/cursor/user-rules.md", bc.USER_RULES_PHRASES[1], "Use subagents freely")

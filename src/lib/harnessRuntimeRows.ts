@@ -118,7 +118,7 @@ function opencodeOverridesRow({ config_precedence: precedence }: OpenCodeRuntime
 }
 
 /**
- * The pinned `@playwright/mcp` version with a status, like the Copilot, Pi and Kilo pages: `synced · 0.0.48`. The
+ * The pinned `@playwright/mcp` version with a status, like the Copilot, Pi and Kilo pages: `synced · 0.0.83`. The
  * status is the managed `mcp.playwright` entry against the bundled one, so there is none while the file is not compared.
  */
 function opencodePlaywrightRow(health: OpenCodeRuntimeHealth): KvItem {

@@ -1728,6 +1728,41 @@ mod tests {
         }
 
         #[test]
+        fn an_entry_pinning_the_previous_playwright_version_is_updated_not_a_conflict() {
+            each_mcp("old-pin", |env| {
+                // What the app wrote while it pinned 0.0.48 (`--browser chrome --isolated`, no
+                // `--no-webmcp`), recorded when it did.
+                let pin = crate::commands::cursor_profile::PLAYWRIGHT_MCP_VERSION;
+                let old =
+                    crate::commands::cursor_profile::as_the_previous_app_wrote_it(&env.expected());
+                assert_ne!(old, env.expected());
+                assert!(old.to_string().contains("@playwright/mcp@0.0.48"));
+                assert!(!old.to_string().contains("--no-webmcp"));
+                let mut file: Value = serde_json::from_str(&env.user_file()).unwrap();
+                file[env.root_key()]["playwright"] = old.clone();
+                env.put(serde_json::to_string_pretty(&file).unwrap() + "\n");
+                env.record_mcp(&env.entry_digest());
+
+                // The row names the old pin and says an update waits.
+                let health = env.health_mcp();
+                assert_eq!(health.mcp.status, "stale");
+                assert_eq!(health.mcp.playwright_version.as_deref(), Some("0.0.48"));
+
+                let planned = env.plan_mcp();
+                assert_eq!(planned.kind, OperationKind::Update);
+                assert_eq!(planned.mcp, Some(EntryState::Differs));
+
+                let result = env.apply_mcp();
+                assert!(result.success, "{}", result.message);
+                assert_eq!(env.json()[env.root_key()]["playwright"], env.expected());
+                assert_eq!(
+                    env.health_mcp().mcp.playwright_version.as_deref(),
+                    Some(pin)
+                );
+            });
+        }
+
+        #[test]
         fn a_user_who_removed_the_entry_after_the_app_wrote_it_gets_it_back_without_a_conflict() {
             each_mcp("removed", |env| {
                 env.put(env.user_file());
@@ -2179,7 +2214,10 @@ mod tests {
                 let synced = env.health_mcp();
                 assert_eq!(synced.mcp.status, "synced");
                 assert_eq!(synced.mcp.detail, "installed and current");
-                assert_eq!(synced.mcp.playwright_version.as_deref(), Some("0.0.48"));
+                assert_eq!(
+                    synced.mcp.playwright_version.as_deref(),
+                    Some(crate::commands::cursor_profile::PLAYWRIGHT_MCP_VERSION)
+                );
 
                 // The recorded entry of an older version, still the app's: stale, not diverged.
                 let mut file = env.json();
@@ -2297,7 +2335,13 @@ mod tests {
                 let entry =
                     crate::light_mcp::expected_entry(spec_of(harness), &bundled, home).unwrap();
                 let text = entry.to_string();
-                assert!(text.contains("@playwright/mcp@0.0.48"), "{text}");
+                assert!(
+                    text.contains(&format!(
+                        "@playwright/mcp@{}",
+                        crate::commands::cursor_profile::PLAYWRIGHT_MCP_VERSION
+                    )),
+                    "{text}"
+                );
                 assert!(!text.contains("@latest"), "{text}");
                 // The sidecar is owned by the OpenCode config surface, and a missing file
                 // crashes the server: these entries do not depend on it.
@@ -2305,9 +2349,9 @@ mod tests {
                     !text.contains("--config") && !text.contains("playwright-mcp"),
                     "{text}"
                 );
-                // System Chrome in an isolated profile, which is what the sidecar resolves to.
+                // System Chrome in an isolated profile, and no tools registered by a page.
                 assert!(
-                    text.contains(r#""--browser","chrome","--isolated""#),
+                    text.contains(r#""--browser","chrome","--isolated","--no-webmcp""#),
                     "{text}"
                 );
                 assert!(!text.contains("chromium"), "{text}");
@@ -2315,7 +2359,7 @@ mod tests {
                 assert!(!text.contains("__PLAYWRIGHT_"), "{text}");
                 assert_eq!(
                     crate::light_mcp::pinned_version(&entry).as_deref(),
-                    Some("0.0.48")
+                    Some(crate::commands::cursor_profile::PLAYWRIGHT_MCP_VERSION)
                 );
             }
         }
@@ -2347,7 +2391,7 @@ mod tests {
         }
 
         #[test]
-        fn kilos_entry_is_the_opencode_entry_apart_from_the_browser_flags() {
+        fn kilos_entry_is_the_opencode_entry_apart_from_the_sidecar_flag() {
             let kilo = bundled_json("templates/mcp/kilo.playwright.json");
             let opencode = bundled_json("templates/opencode.json");
             let opencode = &opencode["mcp"]["playwright"];
@@ -2359,15 +2403,23 @@ mod tests {
                 assert_eq!(kilo[key], opencode[key], "{key}");
             }
             let mut command: Vec<Value> = opencode["command"].as_array().unwrap().clone();
+            let at = command
+                .iter()
+                .position(|word| word == "--config")
+                .expect("the OpenCode entry points at the sidecar");
             assert_eq!(
-                &command[command.len() - 2..],
-                [json!("--config"), json!("__PLAYWRIGHT_MCP_CONFIG_PATH__")],
-                "the OpenCode entry ends with the sidecar flag"
+                command[at + 1],
+                json!("__PLAYWRIGHT_MCP_CONFIG_PATH__"),
+                "the sidecar flag takes the config path"
             );
-            command.truncate(command.len() - 2);
-            command.extend([json!("--browser"), json!("chrome"), json!("--isolated")]);
+            command.drain(at..at + 2);
+            assert_eq!(
+                &command[command.len() - 4..],
+                crate::commands::cursor_profile::PLAYWRIGHT_MCP_BROWSER_FLAGS.map(Value::from),
+                "the browser flags follow the sidecar flag"
+            );
             assert_eq!(kilo["command"], Value::Array(command.clone()));
-            // Key order and every value too: the entry is the OpenCode one in all but the flags.
+            // Key order and every value too: the entry is the OpenCode one in all but the sidecar.
             let mut expected = opencode.clone();
             expected["command"] = Value::Array(command);
             assert_eq!(kilo.to_string(), expected.to_string());
