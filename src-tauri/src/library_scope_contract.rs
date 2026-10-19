@@ -134,4 +134,229 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn the_docs_health_command_stays_removed() {
+        // The bundle cannot miss a doc, so there is no "docs need update" state to report.
+        assert!(!registered_commands().contains("get_docs_health"));
+        assert!(!LIB_RS.contains("get_docs_health"));
+    }
+}
+
+/// Mirror independence: every Library read of a bundled item comes from the app's bundle. The folder the
+/// app keeps for its own state may still hold copies of bundle files from an older version, edited or not;
+/// no Library read looks at them. Only the personal docs (`docs/context`) come from that folder.
+#[cfg(test)]
+mod mirror_independence {
+    use std::fs;
+    use std::path::{Path, PathBuf};
+
+    use serde::Serialize;
+
+    use crate::commands::{
+        list_agent_metadata, list_docs, list_skills, read_agent_source, read_agent_template,
+        read_config_template, read_doc, read_opencode_config_source, read_skill,
+    };
+    use crate::test_env::{guard, set_test_user_dirs, source_skill_count};
+
+    const EDITED: &str = "EDITED-COPY-THE-LIBRARY-MUST-NOT-SHOW";
+    const AGENT_FILES: [&str; 6] = [
+        "architect.md",
+        "repo-scout.md",
+        "inspector.md",
+        "sentinel.md",
+        "scribe.md",
+        "verifier.md",
+    ];
+
+    fn bundle() -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../resources/default-workspace")
+    }
+
+    /// What one Library read showed: which read, the path it showed, the text it showed.
+    type Shown = (String, String, String);
+
+    /// Everything the Library shows of the bundle, plus the listings that name it.
+    struct Reads {
+        shown: Vec<Shown>,
+        listings: String,
+        personal_ids: Vec<String>,
+    }
+
+    fn json(value: impl Serialize) -> serde_json::Value {
+        serde_json::to_value(value).expect("serializable")
+    }
+
+    /// The `path` and `content` fields every Library read of a bundled item returns.
+    fn shown(what: &str, item: impl Serialize) -> Shown {
+        let item = json(item);
+        let field = |name: &str| item[name].as_str().expect("text field").to_string();
+        (what.to_string(), field("path"), field("content"))
+    }
+
+    fn library_reads() -> Reads {
+        let docs = json(list_docs().expect("the docs list needs no workspace copy"));
+        let docs = docs.as_array().expect("docs array").clone();
+        let (personal, curated): (Vec<_>, Vec<_>) =
+            docs.iter().partition(|doc| doc["source"] == "custom");
+        let mut shown_by_library = Vec::new();
+        for doc in &curated {
+            let id = doc["id"].as_str().expect("doc id");
+            let read = read_doc(id.to_string()).expect("bundled doc");
+            shown_by_library.push(shown(&format!("doc:{id}"), read));
+        }
+        shown_by_library.push(shown(
+            "agent-template",
+            read_agent_template().expect("rules template"),
+        ));
+        shown_by_library.push(shown(
+            "config-template",
+            read_config_template("opencode_config".into()).expect("config template"),
+        ));
+        for source in ["base", "policy", "snapshot"] {
+            let read = read_opencode_config_source(source.into()).expect("opencode source");
+            shown_by_library.push(shown(&format!("opencode-source:{source}"), read));
+        }
+        let metadata = list_agent_metadata().expect("agent list");
+        assert!(
+            metadata.warnings.is_empty(),
+            "the bundle has no agent metadata problem: {:?}",
+            metadata.warnings
+        );
+        assert!(metadata.agents.iter().all(|agent| agent.exists));
+        for filename in AGENT_FILES {
+            let agent = read_agent_source(filename.into()).expect("agent source");
+            shown_by_library.push(shown(&format!("agent:{filename}"), agent));
+        }
+        let skills = list_skills().expect("skills list");
+        assert_eq!(
+            skills.len(),
+            source_skill_count(),
+            "the Library lists every bundled skill"
+        );
+        for skill in &skills {
+            let read = read_skill(skill.id.clone()).expect("bundled skill");
+            shown_by_library.push(shown(&format!("skill:{}", skill.id), read));
+        }
+        let listings = json((&curated, json(&skills), json(&metadata))).to_string();
+        Reads {
+            shown: shown_by_library,
+            listings,
+            personal_ids: personal
+                .iter()
+                .map(|doc| doc["id"].as_str().expect("doc id").to_string())
+                .collect(),
+        }
+    }
+
+    /// Process environment of one test: a private home and workspace path, restored afterwards.
+    struct Folder {
+        base: PathBuf,
+        _restore: guard::EnvRestore,
+        _lock: std::sync::MutexGuard<'static, ()>,
+    }
+
+    impl Folder {
+        fn new() -> Self {
+            let lock = guard::lock();
+            let restore = guard::EnvRestore::capture();
+            let nanos = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos();
+            let base = std::env::temp_dir().join(format!("aw-library-mirror-{nanos}"));
+            fs::create_dir_all(base.join("home")).expect("home");
+            set_test_user_dirs(&base.join("home"));
+            unsafe {
+                std::env::set_var("AGENT_WORKSPACE_BACKUP_DIR", base.join("backups"));
+            }
+            Self {
+                base,
+                _restore: restore,
+                _lock: lock,
+            }
+        }
+
+        /// Points the app at `data` as its workspace folder.
+        fn use_folder(&self, data: &Path) {
+            unsafe {
+                std::env::set_var("AGENT_WORKSPACE_PATH", data);
+            }
+        }
+    }
+
+    impl Drop for Folder {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.base);
+        }
+    }
+
+    /// A copy of every bundle file under `dst`, each one edited to the same marker text.
+    fn write_edited_copy(src: &Path, dst: &Path) {
+        fs::create_dir_all(dst).expect("copy dir");
+        for entry in fs::read_dir(src).expect("read bundle").flatten() {
+            let path = entry.path();
+            let target = dst.join(entry.file_name());
+            if path.is_dir() {
+                write_edited_copy(&path, &target);
+            } else {
+                fs::write(&target, EDITED).expect("edited file");
+            }
+        }
+    }
+
+    fn write_personal_doc(data: &Path) {
+        fs::create_dir_all(data.join("docs/context")).expect("context dir");
+        fs::write(data.join("docs/context/notes.md"), "# Notes\n").expect("personal doc");
+    }
+
+    fn assert_is_the_bundle(reads: &Reads) {
+        let bundle = bundle();
+        assert!(reads.shown.len() > 40, "the Library shows the whole bundle");
+        for (what, path, content) in &reads.shown {
+            assert!(
+                Path::new(path).is_relative(),
+                "{what} shows a path inside the bundle, not {path}"
+            );
+            let bundled = fs::read_to_string(bundle.join(path))
+                .unwrap_or_else(|error| panic!("{what}: {path} is not in the bundle: {error}"));
+            assert_eq!(content, &bundled, "{what} shows the bundle's {path}");
+            assert!(!content.contains(EDITED), "{what} shows an edited copy");
+        }
+    }
+
+    #[test]
+    fn library_reads_of_bundled_items_ignore_the_workspace_copy() {
+        let env = Folder::new();
+
+        // No workspace folder at all: the bundled items are all there, and no personal doc.
+        env.use_folder(&env.base.join("absent"));
+        let alone = library_reads();
+        assert_is_the_bundle(&alone);
+        assert!(alone.personal_ids.is_empty());
+        assert!(read_doc("custom:notes".into()).is_err());
+
+        // A folder with next to nothing of the bundle shows the same bundle.
+        let partial = env.base.join("partial");
+        fs::create_dir_all(partial.join("skills")).expect("partial folder");
+        env.use_folder(&partial);
+        let partial_reads = library_reads();
+        assert_eq!(partial_reads.shown, alone.shown);
+        assert_eq!(partial_reads.listings, alone.listings);
+
+        // A copy of every bundle file, all edited, in a folder that still counts as a workspace: the
+        // Library shows the bundle again, and the personal doc beside it.
+        let edited = env.base.join("edited");
+        write_edited_copy(&bundle(), &edited);
+        fs::create_dir_all(edited.join("skills/only-in-the-copy")).expect("extra skill dir");
+        fs::write(edited.join("skills/only-in-the-copy/SKILL.md"), EDITED).expect("extra skill");
+        write_personal_doc(&edited);
+        env.use_folder(&edited);
+        let edited_reads = library_reads();
+        assert_eq!(edited_reads.shown, alone.shown);
+        assert_eq!(edited_reads.listings, alone.listings);
+        assert_eq!(edited_reads.personal_ids, vec!["custom:notes".to_string()]);
+        let notes = read_doc("custom:notes".into()).expect("personal doc");
+        assert_eq!(notes.content, "# Notes\n");
+    }
 }

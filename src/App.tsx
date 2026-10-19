@@ -95,7 +95,6 @@ function AppShell() {
     setSkillSearch,
     readSkill,
     docs,
-    docsHealth,
     activeDoc,
     docDraft,
     docDirty,
@@ -749,8 +748,6 @@ function AppShell() {
             onSetSourceType={setGuardedLibrarySourceType}
             // Docs
             docs={docs}
-            docsHealth={docsHealth}
-            onGoToWorkspaceRepair={() => void switchView("start")}
             activeDoc={activeDoc}
             onSelectDoc={selectDoc}
             onOpenDoc={openDocEditor}

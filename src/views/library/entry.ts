@@ -13,9 +13,6 @@ export type LibraryPreviewKind = "markdown" | "json";
 /** Why a bundled item cannot be edited (pane footer, disabled hints, `:w`). The maintainer ships changes. */
 export const BUNDLED_READ_ONLY_REASON = "bundled with the app: read-only here";
 
-/** Footer note on a bundled item: the Library shows the workspace copy, which an earlier edit may have changed. */
-export const BUNDLED_COPY_NOTE = "this copy may differ if it was edited earlier";
-
 /** Footer note on an editable rules file: the base block above stays as it is. */
 export const RULES_REFINEMENTS_NOTE = "below the managed block only";
 
@@ -50,7 +47,7 @@ export interface LibraryEntry {
   readOnly: boolean;
   /** Why the item cannot be edited here (pane footer, disabled edit, save and open hints). */
   readOnlyReason: string | null;
-  /** Footer note (on a bundled item: that the copy may differ from the bundled one). */
+  /** Footer note (a rules file: which part is editable). */
   note: string | null;
   preview: LibraryPreviewKind;
   /** Read-only text rendered dimmed above the working copy (the managed block above a rules file's refinements). */
@@ -101,7 +98,7 @@ function docEntry(props: LibraryViewProps): LibraryEntry | null {
     saveMessage: "",
     readOnly: !personal,
     readOnlyReason: personal ? null : BUNDLED_READ_ONLY_REASON,
-    note: personal ? null : BUNDLED_COPY_NOTE,
+    note: null,
     preview: "markdown",
     metaTitle: null,
     meta: [],
@@ -171,7 +168,7 @@ function rulesEntry(props: LibraryViewProps): LibraryEntry | null {
     saveMessage: "",
     readOnly: true,
     readOnlyReason: BUNDLED_READ_ONLY_REASON,
-    note: BUNDLED_COPY_NOTE,
+    note: null,
     preview: "markdown",
     metaTitle: "installs to",
     meta: targets.map(target => ({ id: target.id, label: target.label, value: target.target_rel })),
@@ -209,7 +206,7 @@ function skillEntry(props: LibraryViewProps): LibraryEntry | null {
     saveMessage: "",
     readOnly: true,
     readOnlyReason: BUNDLED_READ_ONLY_REASON,
-    note: BUNDLED_COPY_NOTE,
+    note: null,
     preview: "markdown",
     metaTitle: "metadata",
     meta,
@@ -251,7 +248,7 @@ function agentEntry(props: LibraryViewProps): LibraryEntry | null {
     saveMessage: "",
     readOnly: true,
     readOnlyReason: BUNDLED_READ_ONLY_REASON,
-    note: BUNDLED_COPY_NOTE,
+    note: null,
     preview: "markdown",
     metaTitle: "metadata",
     meta: rows,
@@ -295,7 +292,7 @@ function configEntry(props: LibraryViewProps): LibraryEntry | null {
     saveMessage: "",
     readOnly: true,
     readOnlyReason: BUNDLED_READ_ONLY_REASON,
-    note: BUNDLED_COPY_NOTE,
+    note: null,
     preview: "json",
     metaTitle: isOpenCode ? "bundle" : null,
     meta,
@@ -317,8 +314,7 @@ export function buildEntry(props: LibraryViewProps): LibraryEntry | null {
 }
 
 /** Text shown in the document pane while no item is open. */
-export function emptyStateHint(source: LibrarySourceType, workspaceValid: boolean): string {
-  if (!workspaceValid) return "No valid workspace selected";
+export function emptyStateHint(source: LibrarySourceType): string {
   switch (source) {
     case "docs": return "Select a document to preview";
     case "rules": return "Rules are loading";

@@ -8,7 +8,7 @@ The canonical bundled workspace source lives under `resources/default-workspace/
 
 Requirements on the machine: Python 3 (Codex and OpenCode merge and generator helpers). Missing `python3` surfaces as an error when a helper runs.
 
-Install reads the bundled copy, never the runtime workspace. The runtime workspace is a copy that the app displays; in it the Library edits only your personal docs (`docs/context/`). Editing the workspace does not change what harnesses receive.
+Install and the Library read the bundled copy, never the runtime workspace. The runtime workspace holds a copy of the bundle that neither of them reads; the only Library text in it is your personal docs (`docs/context/`). Editing the workspace changes neither what harnesses receive nor what the Library shows.
 
 ## Required runtime markers
 
@@ -271,7 +271,7 @@ The frontend supplies named actions and bounded identifiers, not shell commands 
 
 The Library edits only your own text: personal docs, `docs/context/<slug>.md` in the runtime workspace (id `custom:<slug>`, created with `n`). The bundle ships nothing in `docs/context/`, so Install, uninstall, and updates never touch these files. Saves are atomic, refuse symlinks (on the file, on `docs/context`, or on a parent) and paths outside that folder, and back up the existing file first (`<backup root>/docs/custom_<slug>-<timestamp>/`). Outside the workspace the Library edits one more layer of your own text: the refinements below the managed block of your rules files (see Library refinement edits under Rules).
 
-Everything else in the Library is bundled with the app and read-only: bundled docs, the rules template, skills, runtime agents, and config sources. They show no editor, save, or open-in-editor action, and the backend refuses a save of a bundled doc. They change in the bundle, with an app update. The Library shows the workspace copy, so a file edited outside the app (or saved by an earlier version) can differ from the bundled one; such a file stays a conflict that Install preserves (see Conflicts). Harness installs never read the workspace copy; they always come from the bundle.
+Everything else in the Library is bundled with the app and read-only: bundled docs, the rules template, skills, runtime agents, and config sources. They show no editor, save, or open-in-editor action, and the backend refuses a save of a bundled doc. They change in the bundle, with an app update. The Library reads them from the app's bundle, not from the workspace copy, so a file edited outside the app (or saved by an earlier version) never changes what it shows, and they are listed and readable even while the workspace is not valid; only personal docs and the rules files need the workspace. A bundled path shows relative to the bundle (`docs/START_HERE.md`). An edited workspace copy stays a conflict that Install preserves (see Conflicts). Harness installs read the bundle too.
 
 ## Managed installation
 

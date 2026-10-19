@@ -14,6 +14,7 @@ import type {
   RulesFileSummary,
   SetupPlan,
   SetupResult,
+  SkillSummary,
   TakeBundledPreview,
   WorkspaceDiagnostics,
 } from "../types";
@@ -207,6 +208,24 @@ describe("mock backend: the Library edits only personal docs", () => {
     expect(docs.filter(doc => doc.source !== "custom").every(doc => doc.source === "curated" && !doc.id.startsWith("custom:"))).toBe(true);
   });
 
+  it("shows a bundled item by its path in the bundle, like the backend, and keeps the workspace for personal docs", async () => {
+    const docs = await invoke<DocSummary[]>("list_docs");
+    for (const doc of docs.filter(doc => doc.source === "curated")) {
+      expect(doc.path).toBe(doc.id);
+      expect(await invoke<DocumentContent>("read_doc", { id: doc.id })).toMatchObject({ path: doc.id, source: "curated" });
+    }
+    expect(docs.find(doc => doc.id === "custom:project-notes")!.path).toMatch(/^\/.*\/docs\/context\/project-notes\.md$/);
+    expect(await invoke<DocumentContent>("read_agent_template")).toMatchObject({ path: "templates/global-agent-rules.md", source: "curated" });
+    expect(await invoke<DocumentContent>("read_opencode_config_source", { sourceType: "base" })).toMatchObject({ path: "templates/opencode.base.json", source: "curated" });
+    const [skill] = await invoke<SkillSummary[]>("list_skills");
+    expect(skill!.path).toMatch(/^skills\/.+\/SKILL\.md$/);
+    expect(await invoke<DocumentContent>("read_skill", { id: skill!.id })).toMatchObject({ path: skill!.path, source: "curated" });
+  });
+
+  it("does not answer the removed docs health command: the bundle cannot miss a doc", async () => {
+    await expect(invoke("get_docs_health", {})).rejects.toThrow("unhandled command");
+  });
+
   it("refuses to save or open a bundled doc, and saves, opens and creates personal docs", async () => {
     await expect(invoke("save_doc", { id: "README.md", content: "edited" })).rejects.toThrow("read-only here");
     await expect(invoke("open_doc", { id: "README.md" })).rejects.toThrow("read-only here");
@@ -268,5 +287,31 @@ describe("mock backend: the Library edits the refinements below the rules base",
       invoke("save_rules_refinements", { surface: "open_code_rules", content: "mine\n", expectedRevision: "any" }),
     ).rejects.toThrow("no base block");
     expect(await invoke<ActionResult>("open_rules_file", { surface: "open_code_rules" })).toMatchObject({ success: true });
+  });
+});
+
+describe("mock backend: the Library without a valid workspace", () => {
+  beforeAll(async () => {
+    vi.resetModules();
+    window.history.replaceState(null, "", "/?mock=error");
+    await import("./mockBackend");
+  });
+
+  it("still lists and reads every bundled source, and has no personal doc", async () => {
+    const diagnostics = await invoke<WorkspaceDiagnostics>("get_workspace_diagnostics");
+    expect(diagnostics.valid).toBe(false);
+    const docs = await invoke<DocSummary[]>("list_docs");
+    expect(docs.length).toBeGreaterThan(0);
+    expect(docs.every(doc => doc.source === "curated")).toBe(true);
+    expect(await invoke<DocumentContent>("read_doc", { id: docs[0]!.id })).toMatchObject({ source: "curated" });
+    expect((await invoke<SkillSummary[]>("list_skills")).length).toBeGreaterThan(0);
+    expect(await invoke<DocumentContent>("read_agent_template")).toMatchObject({ source: "curated" });
+    expect(await invoke<DocumentContent>("read_opencode_config_source", { sourceType: "base" })).toMatchObject({ source: "curated" });
+  });
+
+  it("refuses the personal docs, which live in the workspace folder", async () => {
+    await expect(invoke("read_doc", { id: "custom:project-notes" })).rejects.toThrow("invalid workspace path");
+    await expect(invoke("save_doc", { id: "custom:project-notes", content: "# Notes\n" })).rejects.toThrow("invalid workspace path");
+    await expect(invoke("create_doc", { title: "Mine", slug: "mine", content: null })).rejects.toThrow("invalid workspace path");
   });
 });

@@ -505,7 +505,6 @@ describe("useLibraryController loaders vs. selection", () => {
 
     invoke.mockImplementation((cmd: string, args?: { id?: string }) => {
       if (cmd === "list_docs") return Promise.resolve(summaries);
-      if (cmd === "get_docs_health") return Promise.resolve(null);
       if (cmd === "read_doc" && args?.id === "doc-a") return slowRead.promise;
       if (cmd === "read_doc" && args?.id === "doc-b") return Promise.resolve(docB);
       return Promise.reject(new Error(`unexpected invoke: ${cmd}`));
@@ -525,6 +524,7 @@ describe("useLibraryController loaders vs. selection", () => {
 
     expect(result.current.activeDoc?.id).toBe("doc-b");
     expect(result.current.docDraft).toBe("beta");
+    expect(invoke.mock.calls.map(([cmd]) => cmd)).not.toContain("get_docs_health");
   });
 
   it("keeps the selected skill when a slower skill list load resolves later", async () => {
@@ -644,7 +644,6 @@ describe("useLibraryController workspace switch", () => {
       }
       if (cmd === "list_skills" || cmd === "list_docs" || cmd === "list_rules_files") return Promise.resolve([]);
       if (cmd === "list_agent_metadata") return Promise.resolve({ agents: [] });
-      if (cmd === "get_docs_health") return Promise.resolve(null);
       return Promise.reject(new Error(`unexpected invoke: ${cmd}`));
     });
   }
@@ -686,6 +685,8 @@ const REMOVED_COMMANDS = [
   "open_config_template",
   "open_opencode_config_source",
   "open_skill",
+  // The bundle cannot miss a doc: there is no "docs need update" state to read.
+  "get_docs_health",
 ];
 
 describe("useLibraryController bundled items stay read-only", () => {
@@ -705,7 +706,6 @@ describe("useLibraryController bundled items stay read-only", () => {
     invoke.mockImplementation((cmd: string, args?: { id?: string; filename?: string }) => {
       switch (cmd) {
         case "list_docs": return Promise.resolve([docSummary(bundledDoc), docSummary(docA)]);
-        case "get_docs_health": return Promise.resolve(null);
         case "read_doc": return Promise.resolve(args?.id === docA.id ? docA : bundledDoc);
         case "list_skills": return Promise.resolve([skill]);
         case "read_skill": return Promise.resolve({ ...bundledDoc, id: "s1", content: "skill" });
