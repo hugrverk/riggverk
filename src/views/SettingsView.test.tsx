@@ -519,26 +519,23 @@ describe("SettingsView workspace row", () => {
     return within(pane("App")).getByRole("group", { name: "workspace" });
   }
 
-  it("shows the default workspace and offers choose, but not reset", () => {
+  it("shows the default workspace and offers a reset that has nothing to do", () => {
     renderSettings({
       workspacePath: "/Users/dev/.config/agent-workspace",
-      onChooseWorkspace: vi.fn(async () => null),
       onResetWorkspace: vi.fn(async () => null),
     });
     const row = workspaceRow();
     expect(row.textContent).toContain("/Users/dev/.config/agent-workspace");
     expect(row.textContent).toContain("default");
-    expect(within(row).getByRole("button", { name: /choose…/ }).getAttribute("aria-disabled")).toBeNull();
     const reset = within(row).getByRole("button", { name: /reset to default/ });
     expect(reset.getAttribute("aria-disabled")).toBe("true");
     expect(reset.title).toBe("already the default workspace");
   });
 
-  it("shows a custom folder and offers reset", () => {
+  it("shows a saved custom folder and offers reset", () => {
     renderSettings({
       appSettings: custom,
       workspacePath: "/Users/dev/other-workspace",
-      onChooseWorkspace: vi.fn(async () => null),
       onResetWorkspace: vi.fn(async () => null),
     });
     const row = workspaceRow();
@@ -555,36 +552,31 @@ describe("SettingsView workspace row", () => {
     expect(workspaceRow().textContent).toContain("~/.config/agent-workspace");
   });
 
-  it("chooses from the c key and from the button, through onChooseWorkspace", async () => {
-    const onChooseWorkspace = vi.fn(async () => null);
-    renderSettings({ onChooseWorkspace, onResetWorkspace: vi.fn(async () => null) });
+  it("has no folder chooser: no choose button or hint, and c does nothing", async () => {
+    const onResetWorkspace = vi.fn(async () => null);
+    renderSettings({ appSettings: custom, onResetWorkspace });
 
+    expect(within(workspaceRow()).queryByRole("button", { name: /choose/ })).toBeNull();
+    focus(radios("Theme")[0]!);
+    expect(hints().queryByRole("button", { name: /choose/ })).toBeNull();
     focus(radios("Landing page")[0]!);
     press(document.activeElement!, "c");
-    expect(onChooseWorkspace).toHaveBeenCalledTimes(1);
-    await act(async () => {});
-
-    fireEvent.click(within(workspaceRow()).getByRole("button", { name: /choose…/ }));
-    expect(onChooseWorkspace).toHaveBeenCalledTimes(2);
+    expect(onResetWorkspace).not.toHaveBeenCalled();
+    expect(workspaceRow().querySelector("[role=status]")!.textContent).toBe("");
     await act(async () => {});
   });
 
-  it("reaches choose and reset from the appearance pane, and hints them in the status bar", async () => {
-    const onChooseWorkspace = vi.fn(async () => null);
+  it("reaches reset from the appearance pane, and hints it in the status bar", async () => {
     const onResetWorkspace = vi.fn(async () => null);
-    const { rerenderFrame, props } = renderSettings({ onChooseWorkspace, onResetWorkspace });
+    const { rerenderFrame, props } = renderSettings({ onResetWorkspace });
 
     focus(radios("Theme")[0]!);
-    expect(within(pane("Appearance")).queryByRole("button", { name: /choose folder/ })).toBeNull();
-    expect(hints().getByRole("button", { name: /choose folder/ })).not.toBeNull();
+    expect(within(pane("Appearance")).queryByRole("button", { name: /reset folder/ })).toBeNull();
     expect(hints().getByRole("button", { name: /reset folder/ }).getAttribute("aria-disabled")).toBe("true");
-
-    press(document.activeElement!, "c");
-    expect(onChooseWorkspace).toHaveBeenCalledTimes(1);
-    await act(async () => {});
 
     rerenderFrame(<SettingsView {...props} appSettings={custom} />);
     focus(radios("Theme")[0]!);
+    expect(hints().getByRole("button", { name: /reset folder/ }).getAttribute("aria-disabled")).toBeNull();
     press(document.activeElement!, "R", { shiftKey: true });
     expect(onResetWorkspace).toHaveBeenCalledTimes(1);
     await act(async () => {});
@@ -592,7 +584,7 @@ describe("SettingsView workspace row", () => {
 
   it("resets from the shifted R key and the button only when a custom folder is active", async () => {
     const onResetWorkspace = vi.fn(async () => null);
-    const { rerenderFrame, props } = renderSettings({ onChooseWorkspace: vi.fn(async () => null), onResetWorkspace });
+    const { rerenderFrame, props } = renderSettings({ onResetWorkspace });
 
     focus(radios("Landing page")[0]!);
     press(document.activeElement!, "R", { shiftKey: true });
@@ -610,69 +602,61 @@ describe("SettingsView workspace row", () => {
   });
 
   it("keeps the appearance reset on lower-case r", () => {
-    const { props } = renderSettings({ onChooseWorkspace: vi.fn(async () => null), onResetWorkspace: vi.fn(async () => null) });
+    const { props } = renderSettings({ onResetWorkspace: vi.fn(async () => null) });
     focus(radios("Theme")[0]!);
     press(document.activeElement!, "r");
     expect(props.onReset).toHaveBeenCalledTimes(1);
     expect(props.onResetWorkspace).toHaveBeenCalledTimes(0);
   });
 
-  it("shows what came back, an error for a refused folder and a confirmation for a switch", async () => {
-    const onChooseWorkspace = vi
+  it("shows what came back: a notice for a reset, an error for a refusal, nothing for a declined one", async () => {
+    const onResetWorkspace = vi
       .fn<() => Promise<{ ok: boolean; text: string } | null>>()
-      .mockResolvedValueOnce({ ok: false, text: "/tmp/x is not a Riggverk workspace folder (missing README.md)" })
-      .mockResolvedValueOnce({ ok: true, text: "workspace set to /tmp/y" })
+      .mockResolvedValueOnce({ ok: false, text: "AGENT_WORKSPACE_PATH is set and overrides the saved workspace" })
+      .mockResolvedValueOnce({ ok: true, text: "workspace reset to the default" })
       .mockResolvedValueOnce(null);
-    renderSettings({ onChooseWorkspace });
-    const choose = () => within(workspaceRow()).getByRole("button", { name: /choose…/ });
+    renderSettings({ appSettings: custom, onResetWorkspace });
+    const reset = () => within(workspaceRow()).getByRole("button", { name: /reset to default/ });
     const status = () => within(workspaceRow()).getByRole("status", { name: "Workspace change" });
 
-    fireEvent.click(choose());
-    await vi.waitFor(() => expect(status().textContent).toContain("not a Riggverk workspace folder"));
+    fireEvent.click(reset());
+    await vi.waitFor(() => expect(status().textContent).toContain("AGENT_WORKSPACE_PATH is set"));
     expect(status().querySelector(".c-fail")).not.toBeNull();
 
-    fireEvent.click(choose());
-    await vi.waitFor(() => expect(status().textContent).toContain("workspace set to /tmp/y"));
+    fireEvent.click(reset());
+    await vi.waitFor(() => expect(status().textContent).toContain("workspace reset to the default"));
     expect(status().querySelector(".c-ok")).not.toBeNull();
 
-    // A cancelled picker clears the previous message and shows nothing.
-    fireEvent.click(choose());
+    // A declined confirmation clears the previous message and shows nothing.
+    fireEvent.click(reset());
     await vi.waitFor(() => expect(status().textContent).toBe(""));
   });
 
-  it("disables both actions and says so while a change is running", () => {
-    const onChooseWorkspace = vi.fn(async () => null);
-    renderSettings({
-      appSettings: custom,
-      workspaceBusy: true,
-      onChooseWorkspace,
-      onResetWorkspace: vi.fn(async () => null),
-    });
+  it("disables the action and says so while a reset is running", () => {
+    const onResetWorkspace = vi.fn(async () => null);
+    renderSettings({ appSettings: custom, workspaceBusy: true, onResetWorkspace });
     const row = workspaceRow();
-    for (const name of [/choose…/, /reset to default/]) {
-      const button = within(row).getByRole("button", { name });
-      expect(button.getAttribute("aria-disabled")).toBe("true");
-      fireEvent.click(button);
-    }
-    expect(onChooseWorkspace).not.toHaveBeenCalled();
-    expect(row.textContent).toContain("switching workspace…");
+    const button = within(row).getByRole("button", { name: /reset to default/ });
+    expect(button.getAttribute("aria-disabled")).toBe("true");
+    fireEvent.click(button);
+    expect(row.textContent).toContain("resetting workspace…");
     focus(radios("Landing page")[0]!);
-    press(document.activeElement!, "c");
-    expect(onChooseWorkspace).not.toHaveBeenCalled();
+    press(document.activeElement!, "R", { shiftKey: true });
+    expect(onResetWorkspace).not.toHaveBeenCalled();
   });
 
-  it("reaches the workspace actions with j and k like every other row", () => {
-    renderSettings({ onChooseWorkspace: vi.fn(async () => null), onResetWorkspace: vi.fn(async () => null) });
-    const choose = within(workspaceRow()).getByRole("button", { name: /choose…/ });
+  it("reaches the reset action with j and k like every other row", () => {
+    renderSettings({ appSettings: custom, onResetWorkspace: vi.fn(async () => null) });
+    const reset = within(workspaceRow()).getByRole("button", { name: /reset to default/ });
     focus(radios("Landing page")[0]!);
-    // Landing page, harness checkboxes, then the workspace actions.
+    // Landing page, harness checkboxes, then the workspace action.
     for (let step = 0; step < 8; step += 1) press(document.activeElement!, "j");
-    expect(document.activeElement).toBe(choose);
+    expect(document.activeElement).toBe(reset);
     press(document.activeElement!, "k");
-    expect(document.activeElement).not.toBe(choose);
+    expect(document.activeElement).not.toBe(reset);
   });
 
-  it("offers no workspace actions without handlers", () => {
+  it("offers no workspace actions without a handler", () => {
     renderSettings();
     expect(within(workspaceRow()).queryByRole("button")).toBeNull();
   });

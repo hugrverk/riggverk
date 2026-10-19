@@ -659,7 +659,7 @@ describe("useLibraryController workspace switch", () => {
     });
     await waitFor(() => expect(result.current.configEditorSourceContent?.content).toBe("config of A"));
 
-    // `:workspace choose` accepts workspace B: the reset runs first, the reload follows.
+    // The workspace folder changes to B (a reset to the default folder): the reset runs first, the reload follows.
     backend({ config: "config of B", template: "rules of B" });
     await act(async () => {
       workspaceLoadGenerationRef.current = 1;

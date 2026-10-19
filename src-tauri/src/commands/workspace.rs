@@ -7,7 +7,7 @@ use super::process::{run_cmd, ActionResult};
 use crate::agent_targets;
 use crate::path_utils::{
     default_installed_workspace_path, is_legacy_default_workspace_path,
-    normalize_user_workspace_path, normalize_user_workspace_path_for_save,
+    normalize_user_workspace_path,
 };
 use crate::settings;
 
@@ -336,45 +336,23 @@ pub fn get_workspace_diagnostics() -> Result<WorkspaceDiagnostics, String> {
 }
 
 /// `AGENT_WORKSPACE_PATH` wins over any saved workspace (see `configured_workspace_path`), so a
-/// workspace chosen in the app would silently not take effect while it is set.
+/// reset of the saved workspace would silently not take effect while it is set.
 fn ensure_no_workspace_env_override() -> Result<(), String> {
     let overridden = std::env::var("AGENT_WORKSPACE_PATH")
         .map(|value| !value.trim().is_empty())
         .unwrap_or(false);
     if overridden {
         return Err(
-            "AGENT_WORKSPACE_PATH is set and overrides the workspace chosen in the app; unset it to switch workspaces"
+            "AGENT_WORKSPACE_PATH is set and overrides the saved workspace; unset it to reset the workspace"
                 .to_string(),
         );
     }
     Ok(())
 }
 
-/// Only a folder the app has used (it holds `.agent-workspace/` state) can be chosen; the error
-/// names what is missing, in parentheses, for the folder picker.
-#[tauri::command]
-pub fn try_set_active_workspace_path(path: String) -> Result<settings::AppSettings, String> {
-    let normalized = normalize_user_workspace_path_for_save(&path)?
-        .ok_or_else(|| "workspace path must be absolute or start with ~/".to_string())?;
-    let canonical = validate_data_folder(PathBuf::from(&normalized), DataFolderOrigin::Saved)?;
-    ensure_no_workspace_env_override()?;
-    // The default folder is stored as "no custom workspace", so it reads as the default afterwards.
-    let is_default = default_installed_workspace_path()
-        .ok()
-        .and_then(|default| default.canonicalize().ok())
-        .is_some_and(|default| default == canonical);
-    let canonical_path = canonical.to_string_lossy().into_owned();
-    settings::mutate_settings(|current| {
-        current.workspace_path = if is_default {
-            None
-        } else {
-            Some(canonical_path)
-        };
-        Ok(settings::MutationOutcome::Changed)
-    })
-}
-
-/// Back to the default workspace (`~/.config/agent-workspace`): no custom path saved.
+/// Back to the default workspace (`~/.config/agent-workspace`): no custom path saved. The app no
+/// longer sets a custom folder; this only drops one saved by an earlier version. The ownership
+/// records stay in the old folder.
 #[tauri::command]
 pub fn reset_active_workspace_path() -> Result<settings::AppSettings, String> {
     ensure_no_workspace_env_override()?;
@@ -415,8 +393,7 @@ mod tests {
         configured_workspace_path, default_installed_workspace_path, get_workspace_diagnostics,
         open_default_workspace_folder, persisted_workspace_path_is_valid,
         reset_active_workspace_path, scrub_stale_workspace_path, setup_workspace_target_path,
-        try_set_active_workspace_path, workspace_diagnostics_for_unconfigured, workspace_root,
-        NO_WORKSPACE_SELECTED,
+        workspace_diagnostics_for_unconfigured, workspace_root, NO_WORKSPACE_SELECTED,
     };
     use crate::managed_state::{managed_state_path, read_managed_state};
     use crate::settings::{AppSettings, MutationOutcome};
@@ -664,11 +641,9 @@ mod tests {
                 .iter()
                 .any(|record| record.surface.as_deref() == Some("claude_agents")));
 
-            let saved = try_set_active_workspace_path(custom.to_string_lossy().into_owned())
-                .expect("choose the custom folder")
-                .workspace_path
-                .expect("saved custom path");
-            assert_eq!(saved, canonical_string(&custom));
+            // A custom folder saved by an earlier version: the app can no longer choose one.
+            let saved = canonical_string(&custom);
+            save_workspace_path(&saved);
 
             // Every bundled copy goes, the workspace marker included; the records stay.
             let raw = fs::read(managed_state_path(&custom)).expect("read records");
@@ -911,77 +886,57 @@ mod tests {
     }
 
     #[test]
-    fn try_set_active_workspace_path_rejects_invalid_directory() {
-        let path = std::env::temp_dir()
-            .join("agent-workspace-not-a-valid-root")
-            .to_string_lossy()
-            .into_owned();
-        let result = try_set_active_workspace_path(path);
-        assert!(result.is_err(), "invalid path must not become active");
-    }
-
-    #[test]
-    fn try_set_active_workspace_path_names_what_is_missing() {
-        let empty = temp_root("activate-empty");
-        mkdir(&empty, "");
-        let path = empty.to_string_lossy().into_owned();
-        let error = try_set_active_workspace_path(path).expect_err("empty folder is invalid");
-        cleanup(&empty);
-
-        assert!(error.contains("invalid workspace path"), "{error}");
-        assert!(
-            error.contains("(missing .agent-workspace/workspace.json or managed-state.json)"),
-            "{error}"
-        );
-    }
-
-    #[test]
-    fn try_set_active_workspace_path_persists_a_used_folder_and_reset_clears_it() {
-        with_isolated_settings("activate-persist-home", |_| {
-            let root = setup_used_folder("activate-persist");
-            let saved = try_set_active_workspace_path(root.to_string_lossy().into_owned())
-                .expect("a used folder activates");
-            let canonical = canonical_string(&root);
-            assert_eq!(saved.workspace_path.as_deref(), Some(canonical.as_str()));
+    fn reset_clears_a_saved_custom_folder_and_leaves_its_records() {
+        with_isolated_settings("reset-custom-home", |home| {
+            let custom = home.join("my-workspace");
+            write_file(&custom, ".agent-workspace/managed-state.json", "{}");
+            let saved = canonical_string(&custom);
+            save_workspace_path(&saved);
             assert_eq!(
-                crate::settings::load().workspace_path.as_deref(),
-                Some(canonical.as_str())
+                configured_workspace_path(&crate::settings::load()),
+                Some(PathBuf::from(&saved))
             );
 
             let reset = reset_active_workspace_path().expect("reset");
             assert_eq!(reset.workspace_path, None);
             assert_eq!(crate::settings::load().workspace_path, None);
-            cleanup(&root);
+            assert_eq!(
+                configured_workspace_path(&crate::settings::load()),
+                Some(default_installed_workspace_path().expect("default path"))
+            );
+            assert!(
+                custom.join(".agent-workspace/managed-state.json").is_file(),
+                "the old folder and its records are left alone"
+            );
         });
     }
 
     #[test]
-    fn choosing_the_default_folder_stores_no_custom_path() {
-        with_isolated_settings("activate-default-home", |_| {
-            let default = default_installed_workspace_path().expect("default path");
-            write_file(&default, ".agent-workspace/workspace.json", "{}");
-
-            let saved = try_set_active_workspace_path(default.to_string_lossy().into_owned())
-                .expect("default workspace activates");
-            assert_eq!(saved.workspace_path, None);
+    fn reset_without_a_saved_folder_changes_nothing() {
+        with_isolated_settings("reset-default-home", |_| {
+            let before = crate::settings::load();
+            let reset = reset_active_workspace_path().expect("reset");
+            assert_eq!(reset.workspace_path, None);
+            assert_eq!(reset.revision, before.revision, "nothing was written");
         });
     }
 
     #[test]
-    fn workspace_choice_is_refused_while_the_env_override_is_set() {
-        with_isolated_settings("activate-env-home", |_| {
-            let root = setup_used_folder("activate-env");
+    fn reset_is_refused_while_the_env_override_is_set() {
+        with_isolated_settings("reset-env-home", |home| {
+            let custom = home.join("my-workspace");
+            write_file(&custom, ".agent-workspace/managed-state.json", "{}");
+            let saved = canonical_string(&custom);
+            save_workspace_path(&saved);
             unsafe { std::env::set_var("AGENT_WORKSPACE_PATH", "/somewhere/else") };
 
-            let chosen = try_set_active_workspace_path(root.to_string_lossy().into_owned());
-            let reset = reset_active_workspace_path();
-            cleanup(&root);
-
-            for result in [chosen, reset] {
-                let error = result.expect_err("the env override must be reported");
-                assert!(error.contains("AGENT_WORKSPACE_PATH"), "{error}");
-            }
-            assert_eq!(crate::settings::load().workspace_path, None);
+            let error = reset_active_workspace_path().expect_err("the env override is reported");
+            assert!(error.contains("AGENT_WORKSPACE_PATH"), "{error}");
+            assert_eq!(
+                crate::settings::load().workspace_path.as_deref(),
+                Some(saved.as_str()),
+                "the saved folder is untouched"
+            );
         });
     }
 }
