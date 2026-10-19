@@ -25,6 +25,7 @@ import {
   surfaceShortName,
   targetMeta,
   updateActionFor,
+  WORKSPACE_FOLDER_UNUSABLE,
   type HarnessRowModel,
   type StateDisplay,
 } from "../lib/installationView";
@@ -229,8 +230,8 @@ export function HarnessPage({
   }
 
   const harnessState = targetMeta(entry, { workspaceValid, id: harness });
-  // Without a workspace there is no runtime to judge: the heading says so and no rows follow.
-  const verdict = workspaceValid ? runtimeVerdict(runtime) : { text: "no valid workspace", tone: "dim" as const };
+  // With an unusable workspace folder there is no runtime to judge: the heading says so and no rows follow.
+  const verdict = workspaceValid ? runtimeVerdict(runtime) : { text: WORKSPACE_FOLDER_UNUSABLE, tone: "dim" as const };
   const override = rulesOverrideWarning(runtime.harness === "codex" ? runtime.health : null);
   const conflictDetails = entry?.status?.conflict_details ?? [];
 
@@ -323,7 +324,7 @@ export function HarnessPage({
       >
         {!workspaceValid && (
           <p className="c-warn pane-note" role="status">
-            No valid workspace installed. Install it on the workspace page first.
+            The workspace folder is unusable. The workspace page says why.
           </p>
         )}
         {override && (

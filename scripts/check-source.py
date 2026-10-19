@@ -247,6 +247,16 @@ FORBIDDEN = (
         "OpenCode health must not byte-compare the raw templates/opencode.json",
         "let ok = file_eq(&template_config_path, &installed_config_path);",
     ),
+    # A folder is valid by its own state (`.agent-workspace/`); bundled copies as markers would let a
+    # removed copy invalidate a folder and drop a saved custom path with its ownership records.
+    Rule(
+        "workspace-validity-bundle-markers",
+        "forbid",
+        r'"(templates/[^"]*|skills|README\.md)"',
+        ("src-tauri/src/commands/workspace.rs",),
+        "workspace validity must not use bundled files (templates/, skills, README.md) as markers",
+        'rel_path: "templates/global-agent-rules.md",',
+    ),
     Rule(
         "status-raw-compare",
         "forbid",
@@ -266,10 +276,13 @@ REQUIRED_RUST_TESTS = (
     ("src-tauri/src/agent_targets.rs", "editable_config_targets_exclude_cursor_setup"),
     ("src-tauri/src/agent_targets.rs", "opencode_config_target_syncs_generated_opencode_json"),
     ("src-tauri/src/commands/content.rs", "cursor_setup_is_not_an_editable_config_template"),
-    ("src-tauri/src/commands/workspace.rs", "accepts_workspace_with_ux_cursor_rule"),
-    ("src-tauri/src/commands/workspace.rs", "accepts_workspace_without_cursor_readme"),
-    ("src-tauri/src/commands/workspace.rs", "rejects_workspace_without_cursor_mdc_rule"),
-    ("src-tauri/src/commands/workspace.rs", "rejects_workspace_missing_cursor_rules_dir"),
+    # Workspace validity is the data folder itself, never bundled copies in it.
+    ("src-tauri/src/commands/workspace.rs", "absent_default_data_folder_is_valid"),
+    ("src-tauri/src/commands/workspace.rs", "symlinked_data_folder_is_invalid"),
+    ("src-tauri/src/commands/workspace.rs", "custom_folder_with_only_managed_state_is_valid_and_kept"),
+    ("src-tauri/src/commands/workspace.rs", "custom_folder_stays_configured_when_bundled_copies_are_deleted"),
+    ("src-tauri/src/commands/workspace.rs", "fresh_profile_installs_a_harness_without_a_workspace_copy"),
+    ("src-tauri/src/commands/workspace.rs", "launch_reads_never_create_the_data_folder"),
     ("src-tauri/src/commands/defaults.rs", "bundled_source_contains_every_manifest_file"),
     ("src-tauri/src/cursor_profile_ops.rs", "cursor_backups_are_owner_only"),
     ("src-tauri/src/commands/opencode_runtime.rs", "test_configs_match_pass_when_template_has_playwright_placeholders"),

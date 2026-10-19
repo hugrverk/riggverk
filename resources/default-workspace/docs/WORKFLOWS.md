@@ -61,7 +61,7 @@ Skills you add to the runtime workspace are not installed; harness installs come
 
 ## Move the workspace
 
-Settings -> workspace: `c` chooses another folder (it must pass the workspace markers), `R` resets to `~/.config/agent-workspace`. Install into the new location with `u` on the Workspace page. `AGENT_WORKSPACE_PATH` overrides the setting.
+Settings -> workspace: `c` chooses another folder (it must already hold the app's `.agent-workspace/` state), `R` resets to `~/.config/agent-workspace`. `AGENT_WORKSPACE_PATH` overrides the setting.
 
 ## Version the workspace with Git
 

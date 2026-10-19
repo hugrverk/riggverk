@@ -333,9 +333,9 @@ describe("HarnessPage", () => {
 
   it("explains a missing workspace and offers no update", () => {
     const { props: p } = renderCodex({ workspaceValid: false, overview: overviewOf({}) });
-    expect(detail().textContent).toContain("No valid workspace installed");
+    expect(detail().textContent).toContain("The workspace folder is unusable");
     // The runtime heading carries the verdict; no row restates it under a heading that says something else.
-    expect(detail().textContent).toContain("runtime · no valid workspace");
+    expect(detail().textContent).toContain("runtime · workspace folder unusable");
     expect(facts()).not.toHaveProperty("runtime");
     expect(facts()).not.toHaveProperty("rules");
     act(() => surfaces().focus());

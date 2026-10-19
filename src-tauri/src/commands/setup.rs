@@ -1341,6 +1341,21 @@ fn run_planned_artifacts(
         };
     }
 
+    // A fresh profile has no data folder: the first apply creates it, owner-only, before any
+    // write below it.
+    if let Err(e) = crate::managed_state::ensure_data_folder(&ws_root) {
+        cleanup_preflight_transaction_evidence(&backup_dir);
+        return SetupResult {
+            success: false,
+            transaction_id,
+            applied: vec![],
+            failed: vec![e.clone()],
+            rolled_back: vec![],
+            manual_steps: vec![],
+            message: format!("Cannot create the workspace folder; nothing was changed: {e}"),
+        };
+    }
+
     if let Some(token) = preview_token {
         if let Err(e) = setup_transaction::consume_preview_token(token) {
             cleanup_preflight_transaction_evidence(&backup_dir);

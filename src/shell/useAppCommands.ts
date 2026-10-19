@@ -7,6 +7,7 @@ import {
 } from "../hooks/useInstallationOverview";
 import { HARNESS_NAV_ORDER } from "../lib/harnessInstallation";
 import type { InstallTarget } from "../lib/installPlan";
+import { WORKSPACE_FOLDER_UNUSABLE } from "../lib/installationView";
 import { currentMotion } from "../lib/motion";
 import { BUNDLED_RELEASES } from "../lib/releaseNotes";
 import { workspaceTaskBlockedMessage } from "../lib/workspaceErrors";
@@ -79,7 +80,7 @@ export function useAppCommands(deps: AppCommandDeps): void {
 
   const targets = () => updateTargets(deps.enabledHarnessIds);
   const busyReason = () => (deps.busyLabel ? `${deps.busyLabel} is running` : true);
-  const workspaceReason = () => (deps.workspaceValid ? true : "no valid workspace installed");
+  const workspaceReason = () => (deps.workspaceValid ? true : WORKSPACE_FOLDER_UNUSABLE);
   const guarded = (...checks: Array<() => true | string>) => (): true | string => {
     for (const check of checks) {
       const result = check();
@@ -92,7 +93,7 @@ export function useAppCommands(deps: AppCommandDeps): void {
   const resolveTarget = (parsed: ParsedCommand): InstallTarget =>
     parsed.flags.all ? "all" : (parsed.named.target as InstallTarget);
 
-  // Without a valid workspace only the workspace itself can be installed.
+  // With an unusable workspace folder only the workspace itself can be installed.
   const targetValues = (): OverviewId[] => (deps.workspaceValid ? targets() : ["workspace"]);
   const targetArgs: CommandSpec["args"] = [
     {
@@ -107,7 +108,7 @@ export function useAppCommands(deps: AppCommandDeps): void {
     const name = parsed.cmd.name;
     if (!parsed.named.target && !parsed.flags.all) return `${name}: name a target (${targetValues().join(" | ")}) or pass --all`;
     if (parsed.named.target && parsed.flags.all) return `${name}: use either a target or --all`;
-    if (!deps.workspaceValid && parsed.flags.all) return `${name}: no valid workspace installed (run ${name} workspace first)`;
+    if (!deps.workspaceValid && parsed.flags.all) return `${name}: ${WORKSPACE_FOLDER_UNUSABLE} (the workspace page says why)`;
     return null;
   };
 

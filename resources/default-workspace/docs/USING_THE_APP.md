@@ -137,7 +137,7 @@ Everything else is bundled with the app and read-only here: the pane title says 
 
 Harnesses (which tools appear and may be written), appearance (dark, light, system), text size, motion, landing page (workspace, library), colors, and the workspace folder. Settings autosave; `r` resets appearance after a confirmation.
 
-Workspace: `c` chooses another folder, which must pass the workspace markers; `R` returns to `~/.config/agent-workspace`. `AGENT_WORKSPACE_PATH` overrides both. Generator scripts the app runs always come from its bundled copy, not from the chosen folder.
+Workspace: `c` chooses another folder, which must already hold the app's `.agent-workspace/` state; `R` returns to `~/.config/agent-workspace`. `AGENT_WORKSPACE_PATH` overrides both. Generator scripts the app runs always come from its bundled copy, not from the chosen folder.
 
 Disabling a harness hides it and blocks new writes to it. It does not delete files or forget target choices, and re-enabling does not install.
 

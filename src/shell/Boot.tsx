@@ -6,7 +6,7 @@ import { cx } from "../ui/tone";
 /** What the boot lines can say. Every field is optional; a line whose data is missing is skipped. */
 export interface BootInfo {
   version?: string;
-  /** The workspace folder; null: none is installed, undefined: not loaded yet (the line is skipped). */
+  /** The workspace folder; null: it is unusable, undefined: not loaded yet (the line is skipped). */
   workspace?: string | null;
   /** Git branch of the workspace, when it is a repository. */
   branch?: string | null;
@@ -28,7 +28,7 @@ function bootLine(step: BootStep, info: BootInfo): BootLine | null {
     case "version":
       return { label: "❯ ", value: info.version ? `riggverk ${info.version}` : "riggverk" };
     case "workspace":
-      return info.workspace === undefined ? null : { label: "  workspace  ", value: info.workspace ?? "no workspace" };
+      return info.workspace === undefined ? null : { label: "  workspace  ", value: info.workspace ?? "folder unusable" };
     case "branch":
       return info.branch ? { label: "  branch     ", value: `${info.branch} · ${info.dirty ? "dirty" : "clean"}` } : null;
     case "harnesses":

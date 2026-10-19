@@ -204,6 +204,10 @@ export function StartView({
     })),
     // A harness's surfaces, on and off, are the rows right above.
     ...(selected === "workspace" ? [{ label: "path", value: resolvedPath, wrap: true }] : []),
+    // Why the folder is unusable (a link, a file, a missing override folder); a fresh profile has none yet and is fine.
+    ...(selected === "workspace" && !workspaceValid && workspaceDiagnostics?.error
+      ? [{ label: "why", value: workspaceDiagnostics.error, tone: "warn" as const, wrap: true }]
+      : []),
   ];
 
   const verifyItems: KvItem[] = [

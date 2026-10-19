@@ -335,7 +335,7 @@ describe("LightHarnessView", () => {
 
   it("offers nothing without a valid workspace", () => {
     renderLight("pi", health(), { workspaceValid: false });
-    expect(detail("Pi").textContent).toContain("runtime · no valid workspace");
-    expect(detail("Pi").textContent).toContain("No valid workspace installed");
+    expect(detail("Pi").textContent).toContain("runtime · workspace folder unusable");
+    expect(detail("Pi").textContent).toContain("The workspace folder is unusable");
   });
 });
