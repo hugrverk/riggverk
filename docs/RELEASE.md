@@ -15,13 +15,13 @@ It writes only ignored build artifacts in the repository and temporary directori
 - skill catalog and routing checks (`check-skill-routing.py`) and OpenCode permission composition and contract
 - merge-script unit tests, the Codex merge secret-marker guard, and the pre-manifest upgrade smoke
 - forbidden source scans (shell command strings, `eval`, removed skill flows) and managed-installation contract guards, including the single reviewed install owner
-- frontend gate: `npm test` and `npm run build`
-- Rust gate: `cargo fmt --check`, `cargo check`, `cargo clippy -D warnings`, `cargo test`
+- frontend gate: `npm run typecheck`, `npm test` and `npm run build`
+- Rust gate: `cargo fmt --check`, `cargo clippy -D warnings`, `cargo test`
 - the Tauri runtime smoke (`smoke-tauri-runtime.sh`)
 
 It does not drive the Tauri webview, install into a real profile, or read `.env` files.
 
-CI runs this POSIX check on Ubuntu and macOS. Windows CI runs frontend, build, and Rust format, check, Clippy, and tests, which cover native app path logic. The Bash release check is macOS and Linux only (WSL behaves as Linux); use the app on Windows.
+This local check is the gate: run it before merging and before a release. GitHub Actions is disabled for this repository (`.github/workflows` is kept, switched off), so nothing runs on push or pull request, and nothing verifies Windows. Windows checks exist in `windows-checks.yml` and are disabled. The Bash release check is macOS and Linux only (WSL behaves as Linux); use the app on Windows.
 
 ## Cutting a release
 
