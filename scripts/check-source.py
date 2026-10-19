@@ -76,6 +76,8 @@ IDENTITY = (
         ("src/", "README.md", "index.html", "src-tauri/tauri.conf.json"),
         'old product name "Agent Workspace" in app sources (use Riggverk)',
         "Welcome to Agent Workspace",
+        # Release notes may name the app a release replaces; the app shows them in what's new.
+        exclude=("src/generated/release-notes.json",),
     ),
     # The previous app data directory name belongs only to the migration code (src-tauri) and to
     # the move and undo note in docs/RELEASE.md.

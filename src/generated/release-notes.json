@@ -1,3 +1,47 @@
 {
-  "releases": []
+  "releases": [
+    {
+      "version": "2026.10.1",
+      "sections": [
+        {
+          "title": "",
+          "items": [
+            "Riggverk replaces Agent Workspace. Quit Agent Workspace, move Agent Workspace.app to the Trash and install Riggverk.app (see Install). Your settings and backups move to Riggverk's folder on the first launch."
+          ]
+        },
+        {
+          "title": "New",
+          "items": [
+            "Copilot, Pi and Kilo as opt-in harnesses: rules block, skills and the Playwright MCP entry (#40, #41, #42)",
+            "One shared SKILL.md per skill, installed into each folder your harnesses read; see which copy each harness loads (#28, #30, #33, #34)",
+            "Resolve a conflicting skill or agent file: keep your version or take the bundled one (#44, #45)",
+            "Library: bundled items are read-only and come straight from the app; edit your personal docs and your own refinements below the rules base (#49, #52, #57)",
+            "OpenCode: version-aware health with CLI probes and lsp, model/small model/subagent model overrides, runtime rows that show what differs, warnings when other config files or env override the team settings, only the bundled tui.json keys are managed, XDG_CONFIG_HOME is followed (#31, #32, #54, #55, #60, #63)",
+            "What's new after each update",
+            "New skills: adversarial-implementation, security-audit, kretsverket-status-report (#19, #20, #21)",
+            "Master-detail pages, bracket buttons, apply progress and motion levels (#14, #17)"
+          ]
+        },
+        {
+          "title": "Changed",
+          "items": [
+            "Renamed to Riggverk; app data moves on first launch (#37, #39)",
+            "Prompt Builder, Brain Setup and the in-app release check are removed (#26, #27)",
+            "The workspace folder chooser is gone: a saved folder keeps working, and `R` resets to the default after a confirm",
+            "Playwright MCP 0.0.83 runs your installed Google Chrome; tools that web pages register (WebMCP) are off"
+          ]
+        },
+        {
+          "title": "Fixes",
+          "items": [
+            "OpenCode permissions match OpenCode 1.19.3: compound commands are checked part by part, and secret files are denied in bash however the path is written (#29, #65, #66)",
+            "The managed OpenCode config converges, and health compares with what Install writes (#51, #56)",
+            "The window opens centered at 1280x800, the boot lines clear the traffic lights, and the pane grid holds at large text (#13, #22, #38)",
+            "Codex delegation only when Codex is installed and logged in",
+            "The Playwright entry is added to an existing mcp.json"
+          ]
+        }
+      ]
+    }
+  ]
 }
