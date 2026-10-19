@@ -37,7 +37,7 @@ POLICY_SECTION_KEYS: dict[str, set[str] | None] = {
     "skill": None,
     "read": {"default", "deny", "allow_override"},
     "edit": {"default", "allow", "ask", "deny", "allow_override"},
-    "bash": {"default", "allow", "ask", "deny", "secret_content_commands", "secret_content_patterns"},
+    "bash": {"default", "allow", "ask", "deny", "secret_content_commands"},
     "builtin_agents": None,
     "role_profiles": None,
 }
@@ -107,6 +107,71 @@ def build_edit_section(policy: dict[str, Any]) -> dict[str, str]:
     return result
 
 
+def _names(patterns: list[str]) -> list[str]:
+    """`**/P` becomes `P`; a pattern with a `*` at both ends (`*.env*`) is left out.
+
+    Such a pattern has no fixed start or end. Inside a command line it would match every mention
+    (`rg process.env src`), so it stays a read deny only.
+    """
+    names: list[str] = []
+    for pattern in patterns:
+        name = pattern[3:] if pattern.startswith("**/") else pattern
+        if name.startswith("*") and name.endswith("*"):
+            continue
+        if name not in names:
+            names.append(name)
+    return names
+
+
+def secret_names(policy: dict[str, Any]) -> list[str]:
+    """The secret file names and path tails of `read.deny`, for the bash denies."""
+    return _names(policy.get("read", {}).get("deny", []))
+
+
+def secret_file_names(policy: dict[str, Any]) -> list[str]:
+    """The names of `secret_names` that `edit.deny` holds too: the secret files themselves.
+
+    The rest is credential-bearing config (`mcp.json`, `.claude.json`, `.git/config`, ...), which is
+    read-denied only and which code often names, so searching for its name stays possible.
+    """
+    edit = set(_names(policy.get("edit", {}).get("deny", [])))
+    return [name for name in secret_names(policy) if name in edit]
+
+
+def secret_content_denies(policy: dict[str, Any]) -> list[str]:
+    """Bash denies for printing a secret file with a content command, however its path is spelled.
+
+    OpenCode matches a bash rule against the command text, `*` matches any text (spaces and `/`
+    included) and a trailing ` *` also matches nothing; `~` is not expanded. For a command C
+    and a secret name P from `read.deny`:
+
+    * a file reader (`cat`, `head`, ...): `C P` and `C P *`, the name right after the command, and,
+      when P does not start with `*`, `C * P *` after other words (`head -n 5 .env`) and `C */P *`,
+      a path that ends in `/P` whatever the prefix (`./`, `~/`, `$HOME/`, absolute, nested);
+    * a command written with a trailing ` *` (`grep *`, `rg *`, `git grep *`): its first operand
+      is the search pattern, so P is denied as a path, `C */P *`. A bare P as the last word,
+      `C P`, is denied only for `secret_file_names`; `rg -n mcp.json` and
+      `grep -r id_rsa docs/` keep asking.
+
+    The trailing ` *` (more words, or a redirect) is left out when P already ends in `*`.
+    """
+    file_names = set(secret_file_names(policy))
+    denies: list[str] = []
+    for command in policy.get("bash", {}).get("secret_content_commands", []):
+        search = command.endswith(" *")
+        for name in secret_names(policy):
+            more = "" if name.endswith("*") else " *"
+            forms = [f"{command} {name}"] if not search or name in file_names else []
+            if search:
+                forms.append(f"{command} */{name}{more}")
+            else:
+                forms.append(f"{command} {name}{more}")
+                if not name.startswith("*"):
+                    forms += [f"{command} * {name}{more}", f"{command} */{name}{more}"]
+            denies.extend(forms)
+    return list(dict.fromkeys(denies))
+
+
 def build_bash_section(policy: dict[str, Any]) -> dict[str, str]:
     bash_policy = policy.get("bash", {})
     result: dict[str, str] = {"*": bash_policy.get("default", "ask")}
@@ -116,9 +181,8 @@ def build_bash_section(policy: dict[str, Any]) -> dict[str, str]:
         result[pattern] = "ask"
     for pattern in bash_policy.get("deny", []):
         result[pattern] = "deny"
-    for cmd in bash_policy.get("secret_content_commands", []):
-        for pat in bash_policy.get("secret_content_patterns", []):
-            result[f"{cmd} {pat}"] = "deny"
+    for pattern in secret_content_denies(policy):
+        result[pattern] = "deny"
     return result
 
 

@@ -8,6 +8,7 @@ import functools
 import json
 import os
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -33,7 +34,14 @@ from opencode_permission_eval import (  # noqa: E402
     winning_rule,
     worktree_relative,
 )
-from opencode_policy_compose import compose_opencode_header, compose_role_permission, load_policy  # noqa: E402
+from opencode_policy_compose import (  # noqa: E402
+    compose_opencode_header,
+    compose_role_permission,
+    load_policy,
+    secret_content_denies,
+    secret_file_names,
+    secret_names,
+)
 
 ROLES_DIR = REPO_ROOT / "resources" / "default-workspace" / "templates" / "opencode" / "agents"
 AGENTS_DIR = REPO_ROOT / "resources" / "default-workspace" / "agents"
@@ -51,7 +59,7 @@ def _root_form(pattern: str) -> str:
 
 
 SECRET_READ = ["**/.env*", "**/id_rsa"]
-# Credential-bearing config: read-denied only (edit stays path-relative, see opencode.policy.json).
+# Credential-bearing config: read- and bash-denied, not edit-denied (see opencode.policy.json).
 CREDENTIAL_CONFIG_READ = [
     "**/mcp.json",
     "**/.claude.json",
@@ -346,6 +354,13 @@ ARCHITECT_BASH_ACTIONS = [
     # Reading files through the shell asks; secret files are denied outright.
     ("cat notes.txt", "ask"),
     ("cat .env", "deny"),
+    # ... however the path is spelled; a name that is not a file operand, or a listing, is unaffected.
+    ("cat ~/.ssh/id_rsa", "deny"),
+    ("cat ./id_rsa", "deny"),
+    ("head -n 5 .env", "deny"),
+    ("less ./config/.env.local", "deny"),
+    ('grep -r "id_rsa" docs/', "ask"),
+    ("ls ~/.ssh", "allow"),
     # OpenCode asks once per command node, so a compound command is as strict as its strictest part.
     ("git status && git diff --stat", "allow"),
     ("cd src && git status", "allow"),
@@ -526,6 +541,26 @@ def deny_sample(pattern: str) -> str | None:
     return None
 
 
+def _bash_evaluator(rules: list[Rule]) -> Callable[[str], str]:
+    """The action of one bash call under `rules` (strictest part wins), caching each part."""
+
+    @functools.cache
+    def part_action(part: str) -> str:
+        return evaluate("bash", part, rules).action
+
+    def action(command: str) -> str:
+        # strictest() over the parts, stopping at the first deny: the outer `echo $(...)` part
+        # then costs nothing once the inner command is denied.
+        actions = []
+        for part in shell_command_patterns(command):
+            actions.append(part_action(part))
+            if actions[-1] == "deny":
+                return "deny"
+        return strictest(actions)
+
+    return action
+
+
 def compound_deny_errors(name: str, rules: list[Rule]) -> list[str]:
     """Every bash deny that names a command denies it alone and inside every compound shape.
 
@@ -533,14 +568,7 @@ def compound_deny_errors(name: str, rules: list[Rule]) -> list[str]:
     still matches; an exact deny such as `bash` then falls back to the `*>*` rule, which must not allow.
     """
     errors: list[str] = []
-
-    @functools.cache
-    def part_action(part: str) -> str:
-        return evaluate("bash", part, rules).action
-
-    def action(command: str) -> str:
-        return strictest(part_action(part) for part in shell_command_patterns(command))
-
+    action = _bash_evaluator(rules)
     denies = [rule.pattern for rule in rules if rule.permission == "bash" and rule.action == "deny"]
     for pattern in dict.fromkeys(denies):
         if _SHELL_SYNTAX & set(pattern):
@@ -561,6 +589,88 @@ def compound_deny_errors(name: str, rules: list[Rule]) -> list[str]:
         if action(redirected) not in allowed:
             errors.append(f"{name}: bash {redirected!r} must be {' or '.join(allowed)}, got {action(redirected)}")
     return errors
+
+
+# Ways a bash call can spell the path of a secret file; `{}` is a file name from `read.deny`.
+# OpenCode matches the command text and expands neither `~` nor `$HOME`, so each is its own string.
+SECRET_SPELLINGS = (
+    "cat {}",
+    "cat ./{}",
+    "cat ~/{}",
+    "cat $HOME/{}",
+    "cat /home/u/{}",
+    "cat src/{}",
+    "head -n 5 {}",
+    "tail -f ./{}",
+    "less ~/{}",
+    "more {}",
+    "bat /home/u/{}",
+    "sed -n 1p {}",
+    "cat notes.txt ~/{} > out.txt",
+    "grep -r x ~/{}",
+    "rg x ./{} --no-heading",
+    "rg x /home/u/{}",
+    "git grep x -- src/{}",
+)
+# A search names its files after the pattern. A bare name as the last word is denied only for the
+# secret files themselves (`secret_file_names`), not for credential-bearing config that code names.
+SECRET_NAME_SEARCHES = ("grep x {}", "rg -n x {}")
+# Commands that list or mention secret names without printing a secret file: no secret deny may
+# decide them. `ls` and `find` print names only, like the glob and list tools.
+SECRET_MENTIONS = (
+    "git status",
+    "ls ~/.ssh",
+    "ls -la ~/.aws",
+    "find . -name .env",
+    'grep -r "id_rsa" docs/',
+    "grep -r id_rsa docs/",
+    'grep -rn "process.env" src/',
+    "rg -n process.env src",
+    "rg -n mcp.json",
+    'grep -rn ".claude.json" src/',
+    "grep -rn .claude.json src/",
+    "git grep mcp.json",
+    "git grep -n .git/config",
+    "rg -n .codex/config.toml",
+    "rg .git-credentials",
+    "echo id_rsa",
+    "cat id_rsa.md",
+    "cat src/secrets.ts",
+    "head -n 20 src/config.ts",
+    "npm run build -- --flag",
+    "cargo test --workspace",
+)
+
+
+def secret_sample(name: str) -> str:
+    """A file name that the secret name from `read.deny` matches."""
+    return name.replace("*", "x")
+
+
+def secret_spelling_errors(name: str, rules: list[Rule], policy: dict) -> list[str]:
+    """Printing any secret file of `read.deny` is denied however the command spells its path."""
+    action = _bash_evaluator(rules)
+    file_names = set(secret_file_names(policy))
+    errors: list[str] = []
+    for secret in secret_names(policy):
+        spellings = SECRET_SPELLINGS + (SECRET_NAME_SEARCHES if secret in file_names else ())
+        for spelling in spellings:
+            command = spelling.format(secret_sample(secret))
+            if action(command) != "deny":
+                errors.append(f"{name}: bash {command!r} must be deny (secret {secret!r}), got {action(command)}")
+    return errors
+
+
+def secret_mention_errors(name: str, rules: list[Rule], policy: dict) -> list[str]:
+    """A command that only mentions a secret name gets the action it gets without the secret denies."""
+    secret = set(secret_content_denies(policy))
+    action = _bash_evaluator(rules)
+    baseline = _bash_evaluator([rule for rule in rules if not (rule.permission == "bash" and rule.pattern in secret)])
+    return [
+        f"{name}: bash {command!r} is {action(command)}, but {baseline(command)} without the secret denies"
+        for command in SECRET_MENTIONS
+        if action(command) != baseline(command)
+    ]
 
 
 def compound_deny_targets(config: dict) -> dict[str, list[Rule]]:
@@ -592,15 +702,14 @@ def secret_coverage_errors(role: str, perm: dict, policy: dict) -> list[str]:
                 if read.get(form) != "deny":
                     errors.append(f"{role}: missing read deny {form}")
     bash = _bash_section(perm)
-    for command in policy["bash"]["secret_content_commands"]:
-        for pattern in policy["bash"]["secret_content_patterns"]:
-            if bash.get(f"{command} {pattern}") != "deny":
-                errors.append(f"{role}: missing bash deny {command} {pattern}")
+    for pattern in secret_content_denies(policy):
+        if bash.get(pattern) != "deny":
+            errors.append(f"{role}: missing bash deny {pattern}")
     for name in SECRET_NAME_FLOOR:
         target = _floor_target(name)
         if effective_read_action(perm, target) != "deny":
             errors.append(f"{role}: read {target!r} must be deny (secret floor)")
-        for command in (f"cat {target}", f"grep x {target}"):
+        for command in (f"cat {target}", f"cat ~/{target}", f"grep x {target}"):
             action = effective_bash_action(perm, command)
             if action != "deny":
                 errors.append(f"{role}: bash {command!r} must be deny (secret floor), got {action}")
@@ -921,6 +1030,8 @@ def validate() -> list[str]:
     errors.extend(snapshot_errors(snapshot, policy))
     for name, rules in compound_deny_targets(snapshot).items():
         errors.extend(compound_deny_errors(name, rules))
+        errors.extend(secret_spelling_errors(name, rules, policy))
+        errors.extend(secret_mention_errors(name, rules, policy))
 
     baseline = {role: compose_role_permission(load_role(role)) for role in RESTRICTIVE_ROLES}
     for role, mutation, perm_key, pattern, expected_action in MUTATION_CASES:

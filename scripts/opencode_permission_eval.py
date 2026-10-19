@@ -97,8 +97,15 @@ def ruleset_from_permission(permission: dict[str, Any]) -> list[Rule]:
 
 def evaluate(permission: str, pattern: str, *rulesets: Iterable[Rule]) -> Rule:
     merged = [rule for ruleset in rulesets for rule in ruleset]
+    # wildcard_match inlined: the values are normalized once, not once per rule.
+    windows = _is_windows()
+    permission_value = permission.replace("\\", "/")
+    pattern_value = pattern.replace("\\", "/")
     for rule in reversed(merged):
-        if wildcard_match(permission, rule.permission) and wildcard_match(pattern, rule.pattern):
+        if (
+            _wildcard_regex(rule.permission, windows).fullmatch(permission_value) is not None
+            and _wildcard_regex(rule.pattern, windows).fullmatch(pattern_value) is not None
+        ):
             return rule
     return Rule(permission, "*", "ask")
 
