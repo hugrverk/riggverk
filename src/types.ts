@@ -564,6 +564,8 @@ export interface OpenCodeRuntimeHealth {
   template_tui_path: string;
   installed_tui_path: string;
   tui_status: string;
+  /** Managed `tui.json` keys that differ from the bundled config, by name; empty when it matches or cannot be compared. */
+  tui_diverged_keys: string[];
   // Generated snapshot
   generated_snapshot_base_path: string;
   generated_snapshot_policy_path: string;

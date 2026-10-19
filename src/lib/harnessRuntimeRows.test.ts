@@ -44,6 +44,7 @@ function opencodeHealth(overrides: Partial<OpenCodeRuntimeHealth> = {}): OpenCod
     template_tui_path: "",
     installed_tui_path: "",
     tui_status: "synced",
+    tui_diverged_keys: [],
     generated_snapshot_base_path: "",
     generated_snapshot_policy_path: "",
     generated_snapshot_path: "",
@@ -91,7 +92,7 @@ describe("runtimeRowsFor", () => {
     const rows = runtimeRowsFor({ harness: "opencode", health });
     expect(rows.find(row => row.label === "runtime")).toBeUndefined();
     expect(runtimeVerdict({ harness: "opencode", health })).toEqual({ text: "stale", tone: "warn" });
-    expect(rows.find(row => row.label === "agents")).toMatchObject({ value: "2/3 installed · missing: a.md", tone: "warn" });
+    expect(rows.find(row => row.label === "agents")).toMatchObject({ value: "2/3 · missing: a.md", tone: "warn" });
     expect(rows.find(row => row.label === "autoupdate")).toBeUndefined();
     expect(rows.filter(row => row.id?.startsWith("warning-")).map(row => [row.tone, row.value])).toEqual([["warn", "first warning"], ["warn", "second warning"]]);
     // The backend's sentence reads like the other values: no capital, no full stop.
@@ -173,14 +174,51 @@ describe("runtimeRowsFor", () => {
     expect(labels.indexOf("overrides")).toBe(labels.indexOf("config") + 1);
   });
 
-  it("shows the rules status and the pinned Playwright MCP version", () => {
+  it("shows the rules status like the other harness pages", () => {
     expect(row(rowsOf(), "rules")).toMatchObject({ value: "synced", tone: "ok" });
     expect(row(rowsOf({ rules_status: "diverged" }), "rules")).toMatchObject({ value: "diverged", tone: "warn" });
+    expect(row(rowsOf({ rules_status: "missing" }), "rules")).toMatchObject({ value: "missing", tone: "fail" });
     expect(row(rowsOf({ rules_status: "unknown" }), "rules")).toMatchObject({ value: "unknown", tone: "dim" });
+  });
 
-    expect(row(rowsOf(), "mcp playwright")).toMatchObject({ value: "0.0.48", tone: "ok" });
-    expect(row(rowsOf({ config_status: "diverged", config_diverged_keys: ["mcp.playwright"] }), "mcp playwright")).toMatchObject({ value: "0.0.48", tone: "warn" });
+  it("shows the pinned Playwright MCP version with a status, as the Copilot, Pi and Kilo pages do", () => {
+    expect(row(rowsOf(), "mcp playwright")).toMatchObject({ value: "synced · 0.0.48", tone: "ok" });
+    // Other managed keys differing does not make the Playwright entry differ.
+    expect(row(rowsOf({ config_status: "diverged", config_diverged_keys: ["model"] }), "mcp playwright")).toMatchObject({ value: "synced · 0.0.48", tone: "ok" });
+    expect(row(rowsOf({ config_status: "diverged", config_diverged_keys: ["model", "mcp.playwright"] }), "mcp playwright")).toMatchObject({ value: "diverged · 0.0.48", tone: "warn" });
+    // The entry is gone, or has no pinned version to show.
+    expect(row(rowsOf({ config_status: "diverged", config_diverged_keys: ["mcp.playwright"], playwright_mcp_version: null }), "mcp playwright")).toMatchObject({ value: "diverged", tone: "warn" });
     expect(row(rowsOf({ playwright_mcp_version: null }), "mcp playwright")).toMatchObject({ value: "none", tone: "dim" });
+    // Nothing to compare against: the version alone, with no status.
+    expect(row(rowsOf({ config_status: "unknown" }), "mcp playwright")).toMatchObject({ value: "0.0.48", tone: "dim" });
+  });
+
+  it("names the managed tui.json keys that differ", () => {
+    expect(row(rowsOf(), "tui")).toMatchObject({ value: "synced", tone: "ok", wrap: false });
+    expect(row(rowsOf({ tui_status: "diverged", tui_diverged_keys: ["theme", "mouse"] }), "tui")).toMatchObject({ value: "diverged · theme, mouse", tone: "warn", wrap: true });
+    // A file that cannot be compared (comments, invalid JSON) names no key; the install review gives the reason.
+    expect(row(rowsOf({ tui_status: "diverged", tui_diverged_keys: [] }), "tui")).toMatchObject({ value: "diverged", tone: "warn", wrap: false });
+    expect(row(rowsOf({ tui_status: "missing" }), "tui")).toMatchObject({ value: "missing", tone: "fail" });
+  });
+
+  it("shows names and statuses only, never what a check or a config value says", () => {
+    const secret = "SECRET-MARKER";
+    const rows = rowsOf({
+      model: secret,
+      small_model: secret,
+      subagent_model: secret,
+      template_config_path: secret,
+      installed_config_path: secret,
+      checks: [{ id: "configs_match", label: secret, status: "warn", detail: secret }],
+      generated_snapshot_detail: secret,
+      summary: secret,
+      config_status: "diverged",
+      config_diverged_keys: ["model", "agent.plan"],
+      tui_status: "diverged",
+      tui_diverged_keys: ["theme"],
+    });
+    expect(rows.map(item => item.label)).toEqual(expect.arrayContaining(["config", "tui"]));
+    expect(JSON.stringify(rows)).not.toContain(secret);
   });
 
   it("lists the agent files that are not as bundled, by status, instead of a count", () => {
@@ -196,8 +234,13 @@ describe("runtimeRowsFor", () => {
       }),
       "agents",
     );
-    expect(agents).toMatchObject({ value: "3/6 installed · diverged: architect.md, scribe.md · missing: verifier.md", tone: "warn", wrap: true });
-    expect(row(rowsOf(), "agents")).toMatchObject({ value: "6/6 installed", tone: "ok", wrap: false });
+    expect(agents).toMatchObject({ value: "3/6 · diverged: architect.md, scribe.md · missing: verifier.md", tone: "warn", wrap: true });
+  });
+
+  it("says the agents are synced with the count, like the Codex and Claude pages", () => {
+    expect(row(rowsOf(), "agents")).toMatchObject({ value: "synced · 6/6", tone: "ok" });
+    // The user's own agents are not part of the count and do not change the row.
+    expect(row(rowsOf({ extra_installed_agent_count: 2 }), "agents")).toMatchObject({ value: "synced · 6/6", tone: "ok" });
   });
 
   it("shows the Cursor profile counts against what is expected", () => {
