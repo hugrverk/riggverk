@@ -2,8 +2,7 @@ use serde::Serialize;
 use std::path::Path;
 
 use super::content::DocumentContent;
-use super::process::{run_cmd, ActionResult};
-use super::workspace::{path_arg, setup_workspace_target_path, workspace_root};
+use super::workspace::{setup_workspace_target_path, workspace_root};
 use crate::path_safety::reject_symlink;
 #[cfg(test)]
 use crate::skills_install::discover_workspace_skills;
@@ -223,28 +222,6 @@ pub fn get_effective_skill_loads() -> Result<crate::skill_loads::EffectiveSkillL
         &crate::skill_loads::FolderPaths::resolve(&home),
         &proof,
     ))
-}
-
-#[tauri::command]
-pub fn open_skill(id: String) -> Result<ActionResult, String> {
-    let root = workspace_root()?;
-    let skills = list_skills()?;
-    let found = skills.iter().find(|s| s.id == id);
-    match found {
-        Some(s) => {
-            let path = root.join(&s.path);
-            let path_str = path_arg(&path)?;
-            let (ok, out, err, code) = run_cmd("open", &[&path_str], &root);
-            Ok(ActionResult::new(
-                ok,
-                format!("open_skill:{}", id),
-                out,
-                err,
-                code,
-            ))
-        }
-        None => Err(format!("unknown skill: {}", id)),
-    }
 }
 
 #[tauri::command]

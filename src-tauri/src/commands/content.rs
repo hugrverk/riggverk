@@ -160,6 +160,44 @@ fn existing_curated_docs(root: &Path) -> Vec<(String, String, String, PathBuf)> 
 
 const CUSTOM_DOCS_DIR: &str = "docs/context";
 
+/// Folder of the personal docs, the only Library items the app writes. The bundle ships nothing here.
+fn personal_docs_dir(root: &Path) -> PathBuf {
+    root.join(CUSTOM_DOCS_DIR)
+}
+
+/// The slug of a doc the Library may write, or why it may not: bundled docs are read-only here.
+fn writable_slug(id: &str) -> Result<&str, String> {
+    let Some(slug) = id.strip_prefix("custom:") else {
+        return Err(
+            if curated_doc_registry().iter().any(|entry| entry.id == id) {
+                format!("{id} is bundled with the app and read-only here")
+            } else {
+                format!("unknown doc: {id}")
+            },
+        );
+    };
+    if !is_valid_slug(slug) {
+        return Err(format!("invalid custom doc slug: {}", slug));
+    }
+    Ok(slug)
+}
+
+/// Refuses a personal doc path unless it resolves directly inside the workspace's own `docs/context`:
+/// a link on the file, on that folder or on a parent could otherwise carry a write into bundled files.
+fn require_personal_doc_path(root: &Path, target: &Path) -> Result<(), String> {
+    crate::path_safety::reject_symlink_parent_chain(target, root, "personal doc")?;
+    let canonical_target = safe_canonical_target(root, target)?;
+    let canonical_root = root
+        .canonicalize()
+        .map_err(|e| format!("cannot canonicalize workspace: {}", e))?;
+    if canonical_target.parent() != Some(personal_docs_dir(&canonical_root).as_path()) {
+        return Err(format!(
+            "personal docs must be files directly in {CUSTOM_DOCS_DIR}"
+        ));
+    }
+    Ok(())
+}
+
 fn is_valid_slug(slug: &str) -> bool {
     if slug.is_empty() {
         return false;
@@ -214,7 +252,7 @@ fn custom_doc_rel_path(slug: &str) -> String {
 }
 
 fn list_custom_docs(root: &Path) -> Vec<(String, String, String, PathBuf)> {
-    let context_dir = root.join(CUSTOM_DOCS_DIR);
+    let context_dir = personal_docs_dir(root);
     if !context_dir.is_dir() {
         return vec![];
     }
@@ -240,24 +278,6 @@ fn list_custom_docs(root: &Path) -> Vec<(String, String, String, PathBuf)> {
     }
     docs.sort_by(|a, b| a.2.cmp(&b.2));
     docs
-}
-
-fn resolve_doc_path(root: &Path, id: &str) -> Result<(PathBuf, String), String> {
-    if let Some(slug) = id.strip_prefix("custom:") {
-        if !is_valid_slug(slug) {
-            return Err(format!("invalid custom doc slug: {}", slug));
-        }
-        let rel = custom_doc_rel_path(slug);
-        return Ok((root.join(&rel), id.to_string()));
-    }
-    let entry = curated_doc_registry()
-        .iter()
-        .find(|e| e.id == id)
-        .ok_or_else(|| format!("unknown doc: {}", id))?;
-    if entry.rel_path.contains("..") || Path::new(entry.rel_path).is_absolute() {
-        return Err("invalid registry path".to_string());
-    }
-    Ok((root.join(entry.rel_path), id.to_string()))
 }
 
 fn read_custom_doc(root: &Path, slug: &str) -> Result<DocumentContent, String> {
@@ -370,44 +390,30 @@ fn read_doc_at_root(root: &Path, id: &str) -> Result<DocumentContent, String> {
     }
 }
 
+/// `open_doc` hands a personal doc to the OS. A bundled doc is read-only here, so it is not offered.
 #[tauri::command]
 pub fn open_doc(id: String) -> Result<ActionResult, String> {
     let root = workspace_root()?;
-    if let Some(slug) = id.strip_prefix("custom:") {
-        if !is_valid_slug(slug) {
-            return Err(format!("invalid custom doc slug: {}", slug));
-        }
-        let rel = custom_doc_rel_path(slug);
-        let path = root.join(&rel);
-        if !path.exists() {
-            return Err(format!("unknown doc: custom:{}", slug));
-        }
-        let path_str = path_arg(&path)?;
-        let (ok, out, err, code) = run_cmd("open", &[&path_str], &root);
-        return Ok(ActionResult::new(
-            ok,
-            format!("open_doc:custom:{}", slug),
-            out,
-            err,
-            code,
-        ));
+    let path = personal_doc_open_path(&root, &id)?;
+    let path_str = path_arg(&path)?;
+    let (ok, out, err, code) = run_cmd("open", &[&path_str], &root);
+    Ok(ActionResult::new(
+        ok,
+        format!("open_doc:{}", id),
+        out,
+        err,
+        code,
+    ))
+}
+
+fn personal_doc_open_path(root: &Path, id: &str) -> Result<PathBuf, String> {
+    let slug = writable_slug(id)?;
+    let path = root.join(custom_doc_rel_path(slug));
+    if std::fs::symlink_metadata(&path).is_err() {
+        return Err(format!("unknown doc: custom:{}", slug));
     }
-    let docs = existing_curated_docs(&root);
-    let found = docs.iter().find(|(i, _, _, _)| i == &id);
-    match found {
-        Some((_, _, _, path)) => {
-            let path_str = path_arg(path)?;
-            let (ok, out, err, code) = run_cmd("open", &[&path_str], &root);
-            Ok(ActionResult::new(
-                ok,
-                format!("open_doc:{}", id),
-                out,
-                err,
-                code,
-            ))
-        }
-        None => Err(format!("unknown doc: {}", id)),
-    }
+    require_personal_doc_path(root, &path)?;
+    Ok(path)
 }
 
 const MAX_DOC_SIZE: usize = 512 * 1024;
@@ -515,23 +521,19 @@ fn save_doc_at_root(
     content: &str,
     custom_backup_root: Option<&Path>,
 ) -> Result<ActionResult, String> {
+    let slug = writable_slug(id)?;
     if content.len() > MAX_DOC_SIZE {
         return Err("content exceeds 512 KB limit".to_string());
     }
 
-    let (target_path, resolved_id) = resolve_doc_path(root, id)?;
+    let target_path = root.join(custom_doc_rel_path(slug));
+    require_personal_doc_path(root, &target_path)?;
 
-    safe_canonical_target(root, &target_path)?;
-
-    if id.starts_with("custom:") && !target_path.exists() {
+    if !target_path.exists() {
         return Err(format!(
             "custom doc does not exist: {}. Use create_doc to create new custom docs.",
             id
         ));
-    }
-
-    if !target_path.exists() {
-        return Err(format!("doc does not exist: {}", id));
     }
 
     let existing =
@@ -546,7 +548,7 @@ fn save_doc_at_root(
         ));
     }
 
-    let backup_path = doc_backup_path(&resolved_id, &target_path, custom_backup_root)?;
+    let backup_path = doc_backup_path(id, &target_path, custom_backup_root)?;
     write_doc_backup(&backup_path, &existing)?;
 
     write_workspace_file(root, &target_path, content)?;
@@ -593,7 +595,7 @@ fn create_doc_at_root(
         Err(e) => return Err(format!("cannot inspect doc path: {}", e)),
     }
 
-    safe_canonical_target(root, &target_path)?;
+    require_personal_doc_path(root, &target_path)?;
 
     let trimmed_title = title.trim();
     let initial_content = if let Some(c) = content {
@@ -778,24 +780,35 @@ mod tests {
         );
     }
 
+    /// Every bundled doc is read-only here: the save is refused before any backup or write.
     #[test]
-    fn save_doc_known_id_resolves_and_writes() {
-        let root = temp_root("save-known");
-        let backup_root = temp_root("save-known-backup");
-        write_file(&root, "README.md", "# old\n");
+    fn save_doc_refuses_every_bundled_doc_and_leaves_it_untouched() {
+        let root = temp_root("save-bundled");
+        let backup_root = temp_root("save-bundled-backup");
+        for entry in curated_doc_registry() {
+            write_file(&root, entry.rel_path, "bundled\n");
+        }
 
-        let result = save_doc_at_root(&root, "README.md", "# new\n", Some(&backup_root));
-
-        assert!(result.is_ok(), "save should succeed: {:?}", result);
-        let ar = result.unwrap();
-        assert!(ar.success);
-        assert_eq!(ar.stdout, "saved with backup");
-
-        let saved = std::fs::read_to_string(root.join("README.md")).unwrap();
+        let mut outcomes = Vec::new();
+        for entry in curated_doc_registry() {
+            let result = save_doc_at_root(&root, entry.id, "draft text\n", Some(&backup_root));
+            let bytes = fs::read_to_string(root.join(entry.rel_path)).unwrap();
+            outcomes.push((entry.id, result, bytes));
+        }
+        let backup_made = backup_root.exists();
         cleanup(&root);
         let _ = fs::remove_dir_all(&backup_root);
 
-        assert_eq!(saved, "# new\n");
+        assert_eq!(outcomes.len(), curated_doc_registry().len());
+        for (id, result, bytes) in outcomes {
+            let err = result.expect_err("a bundled doc must not be saved");
+            assert_eq!(
+                err,
+                format!("{id} is bundled with the app and read-only here")
+            );
+            assert_eq!(bytes, "bundled\n", "{id} must stay unchanged");
+        }
+        assert!(!backup_made, "a refused save must not write a backup");
     }
 
     #[cfg(unix)]
@@ -805,9 +818,9 @@ mod tests {
         let mode_of = |path: &Path| fs::metadata(path).unwrap().permissions().mode() & 0o777;
         let root = temp_root("save-private");
         let backup_root = temp_root("save-private-backup");
-        write_file(&root, "README.md", "# old\n");
+        write_file(&root, "docs/context/notes.md", "# old\n");
 
-        save_doc_at_root(&root, "README.md", "# new\n", Some(&backup_root)).expect("save");
+        save_doc_at_root(&root, "custom:notes", "# new\n", Some(&backup_root)).expect("save");
 
         let docs = backup_root.join("docs");
         assert_eq!(mode_of(&docs), 0o700);
@@ -817,7 +830,7 @@ mod tests {
             .collect();
         assert_eq!(backup_dirs.len(), 1);
         assert_eq!(mode_of(&backup_dirs[0]), 0o700);
-        let backup_file = backup_dirs[0].join("README.md");
+        let backup_file = backup_dirs[0].join("notes.md");
         assert_eq!(mode_of(&backup_file), 0o600);
         assert_eq!(fs::read_to_string(&backup_file).unwrap(), "# old\n");
         cleanup(&root);
@@ -837,63 +850,29 @@ mod tests {
         assert!(result.unwrap_err().contains("unknown doc"));
     }
 
+    /// The personal docs folder is never shipped or listed as a bundled doc, so Install, uninstall
+    /// and the bundled registry cannot reach what the user writes there.
     #[test]
-    fn save_doc_unchanged_content_does_not_write() {
-        let root = temp_root("save-unchanged");
-        write_file(&root, "README.md", "# same\n");
-
-        let result = save_doc_at_root(&root, "README.md", "# same\n", None);
-
-        assert!(result.is_ok());
-        let ar = result.unwrap();
-        assert_eq!(ar.stdout, "unchanged");
-        cleanup(&root);
-    }
-
-    #[test]
-    fn save_doc_creates_backup_when_changed() {
-        let root = temp_root("save-backup");
-        let backup_root = temp_root("save-backup-backup");
-        write_file(&root, "README.md", "# original\n");
-
-        let result = save_doc_at_root(&root, "README.md", "# modified\n", Some(&backup_root));
-
-        assert!(result.is_ok());
-        let ar = result.unwrap();
-        assert_eq!(ar.stdout, "saved with backup");
-
-        // Verify backup was created
-        let docs_backup_dir = backup_root.join("docs");
-        let backup_entries: Vec<_> = std::fs::read_dir(&docs_backup_dir)
-            .unwrap()
-            .filter_map(|e| e.ok())
-            .filter(|e| {
-                let name = e.file_name().to_string_lossy().into_owned();
-                name.starts_with("README.md-")
-            })
-            .collect();
-
-        assert!(!backup_entries.is_empty(), "backup should be created");
-        let backup_file = backup_entries[0].path().join("README.md");
-        let backup_content = std::fs::read_to_string(&backup_file).unwrap();
-
-        cleanup(&root);
-        let _ = fs::remove_dir_all(&backup_root);
-
-        assert_eq!(backup_content, "# original\n");
-    }
-
-    #[test]
-    fn save_doc_target_remains_under_workspace() {
-        let root = temp_root("save-under-root");
-        let backup_root = temp_root("save-under-root-backup");
-        write_file(&root, "README.md", "# readme\n");
-
-        let result = save_doc_at_root(&root, "README.md", "# updated\n", Some(&backup_root));
-
-        assert!(result.is_ok());
-        cleanup(&root);
-        let _ = fs::remove_dir_all(&backup_root);
+    fn personal_docs_folder_is_neither_bundled_nor_curated() {
+        let prefix = format!("{CUSTOM_DOCS_DIR}/");
+        for entry in curated_doc_registry() {
+            assert!(!entry.rel_path.starts_with(&prefix), "{}", entry.rel_path);
+        }
+        for (_, paths) in crate::commands::default_workspace_files() {
+            for path in paths {
+                assert!(
+                    !path.starts_with(&prefix),
+                    "bundled file in personal docs: {path}"
+                );
+            }
+        }
+        let bundled = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../resources/default-workspace")
+            .join(CUSTOM_DOCS_DIR);
+        assert!(
+            !bundled.exists(),
+            "the bundle must not ship {CUSTOM_DOCS_DIR}"
+        );
     }
 
     #[test]
@@ -979,17 +958,17 @@ mod tests {
     fn save_doc_replaces_atomically_without_temp_leftovers() {
         let root = temp_root("save-atomic");
         let backup_root = temp_root("save-atomic-backup");
-        write_file(&root, "README.md", "# old\n");
+        write_file(&root, "docs/context/notes.md", "# old\n");
 
-        save_doc_at_root(&root, "README.md", "# new\n", Some(&backup_root)).expect("save");
+        save_doc_at_root(&root, "custom:notes", "# new\n", Some(&backup_root)).expect("save");
 
-        let leftovers: Vec<String> = fs::read_dir(&root)
+        let leftovers: Vec<String> = fs::read_dir(root.join("docs/context"))
             .unwrap()
             .flatten()
             .map(|e| e.file_name().to_string_lossy().into_owned())
             .filter(|name| name.ends_with(".tmp"))
             .collect();
-        let saved = fs::read_to_string(root.join("README.md")).unwrap();
+        let saved = fs::read_to_string(root.join("docs/context/notes.md")).unwrap();
         cleanup(&root);
         let _ = fs::remove_dir_all(&backup_root);
         assert!(leftovers.is_empty(), "{leftovers:?}");
@@ -1002,21 +981,85 @@ mod tests {
         let root = temp_root("save-symlink");
         let backup_root = temp_root("save-symlink-backup");
         write_file(&root, "docs/real.md", "# real\n");
-        std::os::unix::fs::symlink(root.join("docs/real.md"), root.join("README.md")).unwrap();
+        fs::create_dir_all(root.join("docs/context")).unwrap();
+        std::os::unix::fs::symlink(
+            root.join("docs/real.md"),
+            root.join("docs/context/notes.md"),
+        )
+        .unwrap();
 
-        let result = save_doc_at_root(&root, "README.md", "# changed\n", Some(&backup_root));
+        let result = save_doc_at_root(&root, "custom:notes", "# changed\n", Some(&backup_root));
 
         let real = fs::read_to_string(root.join("docs/real.md")).unwrap();
-        let link_still_symlink = fs::symlink_metadata(root.join("README.md"))
+        let link_still_symlink = fs::symlink_metadata(root.join("docs/context/notes.md"))
             .unwrap()
             .file_type()
             .is_symlink();
+        let backup_made = backup_root.exists();
         cleanup(&root);
         let _ = fs::remove_dir_all(&backup_root);
         let err = result.expect_err("symlinked doc must be refused");
         assert!(err.contains("symlink"), "{err}");
         assert_eq!(real, "# real\n");
         assert!(link_still_symlink);
+        assert!(!backup_made, "a refused save must not write a backup");
+    }
+
+    /// A linked `docs/context` folder would carry a personal doc write into a bundled folder.
+    #[cfg(unix)]
+    #[test]
+    fn save_create_and_open_refuse_a_linked_personal_docs_folder() {
+        let root = temp_root("save-linked-folder");
+        let backup_root = temp_root("save-linked-folder-backup");
+        write_file(&root, "skills/notes.md", "# bundled skill file\n");
+        fs::create_dir_all(root.join("docs")).unwrap();
+        std::os::unix::fs::symlink(root.join("skills"), root.join("docs/context")).unwrap();
+
+        let saved = save_doc_at_root(&root, "custom:notes", "# changed\n", Some(&backup_root));
+        let created = create_doc_at_root(&root, "Fresh", "fresh", None);
+        let opened = personal_doc_open_path(&root, "custom:notes");
+
+        let skill = fs::read_to_string(root.join("skills/notes.md")).unwrap();
+        let fresh_written = root.join("skills/fresh.md").exists();
+        let backup_made = backup_root.exists();
+        cleanup(&root);
+        let _ = fs::remove_dir_all(&backup_root);
+        assert!(
+            saved.is_err(),
+            "save through a linked folder must be refused"
+        );
+        assert!(
+            created.is_err(),
+            "create through a linked folder must be refused"
+        );
+        assert!(
+            opened.is_err(),
+            "open through a linked folder must be refused"
+        );
+        assert_eq!(skill, "# bundled skill file\n");
+        assert!(!fresh_written);
+        assert!(!backup_made);
+    }
+
+    #[test]
+    fn open_doc_offers_personal_docs_only() {
+        let root = temp_root("open-doc-scope");
+        write_file(&root, "README.md", "# readme\n");
+        write_file(&root, "docs/context/notes.md", "# notes\n");
+
+        let bundled = personal_doc_open_path(&root, "README.md");
+        let personal = personal_doc_open_path(&root, "custom:notes");
+        let missing = personal_doc_open_path(&root, "custom:missing");
+        cleanup(&root);
+
+        assert_eq!(
+            bundled.expect_err("a bundled doc is not opened"),
+            "README.md is bundled with the app and read-only here"
+        );
+        assert!(personal
+            .expect("personal doc")
+            .ends_with("docs/context/notes.md"));
+        assert!(missing.expect_err("missing doc").contains("unknown doc"));
     }
 
     #[cfg(unix)]
@@ -1491,342 +1534,6 @@ mod tests {
         assert_eq!(by_id.get("custom:no-h1"), Some(&"No H1"));
     }
 
-    // ── config template save tests ──
-
-    #[test]
-    fn config_template_save_valid_json_accepted() {
-        let root = temp_root("cfg-save-valid");
-        write_file(&root, "templates/opencode.json", "{}");
-        let backup_root = temp_root("cfg-save-valid-backup");
-
-        let result = save_doc_at_root_for_config(
-            &root,
-            "opencode_config",
-            "{\"key\":\"value\"}",
-            Some(&backup_root),
-        );
-
-        assert!(result.is_ok());
-        let ar = result.unwrap();
-        assert!(ar.success);
-
-        let saved = std::fs::read_to_string(root.join("templates/opencode.json")).unwrap();
-        cleanup(&root);
-        let _ = std::fs::remove_dir_all(&backup_root);
-        assert_eq!(saved, "{\"key\":\"value\"}");
-    }
-
-    #[test]
-    fn config_template_save_invalid_json_rejected() {
-        let root = temp_root("cfg-save-invalid");
-        write_file(&root, "templates/opencode.json", "{}");
-        let backup_root = temp_root("cfg-save-invalid-backup");
-
-        let result =
-            save_doc_at_root_for_config(&root, "opencode_config", "not json", Some(&backup_root));
-
-        cleanup(&root);
-        let _ = std::fs::remove_dir_all(&backup_root);
-        assert!(result.is_err());
-        assert!(result.unwrap_err().contains("invalid JSON"));
-    }
-
-    #[test]
-    fn config_template_save_unknown_target_rejected() {
-        let root = temp_root("cfg-save-unknown");
-        write_file(&root, "templates/opencode.json", "{}");
-        let backup_root = temp_root("cfg-save-unknown-backup");
-
-        let result =
-            save_doc_at_root_for_config(&root, "nonexistent_config", "{}", Some(&backup_root));
-
-        cleanup(&root);
-        let _ = std::fs::remove_dir_all(&backup_root);
-        assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .contains("unknown editable config target"));
-    }
-
-    #[test]
-    fn config_template_save_unchanged_does_not_write() {
-        let root = temp_root("cfg-save-unchanged");
-        write_file(&root, "templates/opencode.json", "{\"a\":1}");
-        let backup_root = temp_root("cfg-save-unchanged-backup");
-
-        let result =
-            save_doc_at_root_for_config(&root, "opencode_config", "{\"a\":1}", Some(&backup_root));
-
-        assert!(result.is_ok());
-        let ar = result.unwrap();
-        assert_eq!(ar.stdout, "unchanged");
-        cleanup(&root);
-        let _ = std::fs::remove_dir_all(&backup_root);
-    }
-
-    #[test]
-    fn config_template_save_target_remains_under_workspace() {
-        let root = temp_root("cfg-save-under-root");
-        write_file(&root, "templates/opencode.json", "{}");
-        let backup_root = temp_root("cfg-save-under-root-backup");
-
-        let result = save_doc_at_root_for_config(
-            &root,
-            "opencode_config",
-            "{\"ok\":true}",
-            Some(&backup_root),
-        );
-
-        assert!(result.is_ok());
-        cleanup(&root);
-        let _ = std::fs::remove_dir_all(&backup_root);
-    }
-
-    #[test]
-    fn config_template_save_creates_backup_when_changed() {
-        let root = temp_root("cfg-save-backup");
-        let backup_root = temp_root("cfg-save-backup-backup");
-        write_file(&root, "templates/opencode.json", "{\"original\":true}");
-
-        let result = save_doc_at_root_for_config(
-            &root,
-            "opencode_config",
-            "{\"modified\":true}",
-            Some(&backup_root),
-        );
-
-        assert!(result.is_ok());
-        let ar = result.unwrap();
-        assert_eq!(ar.stdout, "saved with backup");
-
-        let docs_backup_dir = backup_root.join("docs");
-        let backup_entries: Vec<_> = std::fs::read_dir(&docs_backup_dir)
-            .unwrap()
-            .filter_map(|e| e.ok())
-            .filter(|e| {
-                let name = e.file_name().to_string_lossy().into_owned();
-                name.starts_with("opencode_config-")
-            })
-            .collect();
-
-        assert!(
-            !backup_entries.is_empty(),
-            "config backup should be created"
-        );
-        let backup_file = backup_entries[0].path().join("opencode.json");
-        let backup_content = std::fs::read_to_string(&backup_file).unwrap();
-
-        cleanup(&root);
-        let _ = fs::remove_dir_all(&backup_root);
-
-        assert_eq!(backup_content, "{\"original\":true}");
-    }
-
-    fn save_doc_at_root_for_config(
-        root: &Path,
-        target_id: &str,
-        content: &str,
-        custom_backup_root: Option<&Path>,
-    ) -> Result<ActionResult, String> {
-        if content.len() > 512 * 1024 {
-            return Err("content exceeds 512 KB limit".to_string());
-        }
-
-        let target = agent_targets::editable_config_targets()
-            .into_iter()
-            .find(|t| t.id == target_id)
-            .ok_or_else(|| format!("unknown editable config target: {}", target_id))?;
-
-        if target.source_rel.contains("..") || Path::new(target.source_rel).is_absolute() {
-            return Err("invalid registry path".to_string());
-        }
-
-        let target_path = root.join(target.source_rel);
-
-        safe_canonical_target(root, &target_path)?;
-
-        if let Some(parent) = target_path.parent() {
-            std::fs::create_dir_all(parent).map_err(|e| format!("create dir error: {}", e))?;
-        }
-
-        if target_id == "opencode_config" {
-            serde_json::from_str::<serde_json::Value>(content)
-                .map_err(|e| format!("invalid JSON: {}", e))?;
-        }
-
-        if target_path.exists() {
-            let existing =
-                std::fs::read_to_string(&target_path).map_err(|e| format!("read error: {}", e))?;
-            if existing == content {
-                return Ok(ActionResult::new(
-                    true,
-                    "save_config_template",
-                    "unchanged".to_string(),
-                    String::new(),
-                    Some(0),
-                ));
-            }
-
-            let backup_path = doc_backup_path(target_id, &target_path, custom_backup_root)?;
-            write_doc_backup(&backup_path, &existing)?;
-
-            std::fs::write(&target_path, content).map_err(|e| format!("write error: {}", e))?;
-
-            return Ok(ActionResult::new(
-                true,
-                "save_config_template",
-                "saved with backup".to_string(),
-                String::new(),
-                Some(0),
-            ));
-        }
-
-        std::fs::write(&target_path, content).map_err(|e| format!("write error: {}", e))?;
-
-        Ok(ActionResult::new(
-            true,
-            "save_config_template",
-            "saved".to_string(),
-            String::new(),
-            Some(0),
-        ))
-    }
-
-    // ── agent template save tests ──
-
-    fn save_agent_template_at_root(
-        root: &Path,
-        content: &str,
-        custom_backup_root: Option<&Path>,
-    ) -> Result<ActionResult, String> {
-        if content.len() > 512 * 1024 {
-            return Err("content exceeds 512 KB limit".to_string());
-        }
-
-        let target_path = root.join("templates/global-agent-rules.md");
-
-        safe_canonical_target(root, &target_path)?;
-
-        if !target_path.exists() {
-            return Err(format!(
-                "template does not exist: {}",
-                "templates/global-agent-rules.md"
-            ));
-        }
-
-        let existing =
-            std::fs::read_to_string(&target_path).map_err(|e| format!("read error: {}", e))?;
-        if existing == content {
-            return Ok(ActionResult::new(
-                true,
-                "save_agent_template",
-                "unchanged".to_string(),
-                String::new(),
-                Some(0),
-            ));
-        }
-
-        let backup_path = doc_backup_path("agent-template", &target_path, custom_backup_root)?;
-        write_doc_backup(&backup_path, &existing)?;
-
-        std::fs::write(&target_path, content).map_err(|e| format!("write error: {}", e))?;
-
-        Ok(ActionResult::new(
-            true,
-            "save_agent_template",
-            "saved with backup".to_string(),
-            String::new(),
-            Some(0),
-        ))
-    }
-
-    #[test]
-    fn agent_template_save_rejects_oversized_content() {
-        let root = temp_root("ag-save-oversized");
-        write_file(&root, "templates/global-agent-rules.md", "# rules\n");
-
-        let big = "x".repeat(512 * 1024 + 1);
-        let result = save_agent_template_at_root(&root, &big, None);
-        cleanup(&root);
-
-        assert!(result.is_err());
-        assert!(result.unwrap_err().contains("exceeds 512 KB"));
-    }
-
-    #[test]
-    fn agent_template_save_unchanged_returns_unchanged() {
-        let root = temp_root("ag-save-unchanged");
-        write_file(&root, "templates/global-agent-rules.md", "# rules\n");
-
-        let result = save_agent_template_at_root(&root, "# rules\n", None);
-        assert!(result.is_ok());
-        let ar = result.unwrap();
-        assert_eq!(ar.stdout, "unchanged");
-        cleanup(&root);
-    }
-
-    #[test]
-    fn agent_template_save_creates_backup_when_changed() {
-        let root = temp_root("ag-save-backup");
-        let backup_root = temp_root("ag-save-backup-backup");
-        write_file(&root, "templates/global-agent-rules.md", "# old rules\n");
-
-        let result = save_agent_template_at_root(&root, "# new rules\n", Some(&backup_root));
-
-        assert!(result.is_ok());
-        let ar = result.unwrap();
-        assert_eq!(ar.stdout, "saved with backup");
-
-        let saved = std::fs::read_to_string(root.join("templates/global-agent-rules.md")).unwrap();
-        assert_eq!(saved, "# new rules\n");
-
-        let docs_backup_dir = backup_root.join("docs");
-        let backup_entries: Vec<_> = std::fs::read_dir(&docs_backup_dir)
-            .unwrap()
-            .filter_map(|e| e.ok())
-            .filter(|e| {
-                let name = e.file_name().to_string_lossy().into_owned();
-                name.starts_with("agent-template-")
-            })
-            .collect();
-
-        assert!(
-            !backup_entries.is_empty(),
-            "agent template backup should be created"
-        );
-        let backup_file = backup_entries[0].path().join("global-agent-rules.md");
-        let backup_content = std::fs::read_to_string(&backup_file).unwrap();
-
-        cleanup(&root);
-        let _ = fs::remove_dir_all(&backup_root);
-
-        assert_eq!(backup_content, "# old rules\n");
-    }
-
-    #[test]
-    fn agent_template_save_missing_template_rejected() {
-        let root = temp_root("ag-save-missing");
-        std::fs::create_dir_all(&root).expect("create root dir");
-
-        let result = save_agent_template_at_root(&root, "# content\n", None);
-        cleanup(&root);
-
-        assert!(result.is_err());
-        assert!(result.unwrap_err().contains("template does not exist"));
-    }
-
-    #[test]
-    fn agent_template_save_target_remains_under_workspace() {
-        let root = temp_root("ag-save-under-root");
-        let backup_root = temp_root("ag-save-under-root-backup");
-        write_file(&root, "templates/global-agent-rules.md", "# rules\n");
-
-        let result = save_agent_template_at_root(&root, "# updated\n", Some(&backup_root));
-        assert!(result.is_ok());
-        cleanup(&root);
-        let _ = fs::remove_dir_all(&backup_root);
-    }
-
     // ── agent source tests ──
 
     #[test]
@@ -1920,45 +1627,6 @@ mod tests {
     }
 
     #[test]
-    fn agent_source_save_unchanged_returns_unchanged() {
-        let root = temp_root("ag-save-unchanged");
-        write_agent_file(&root, "architect.md", "# rules\n");
-
-        let path = resolve_agent_path(&root, "architect.md").unwrap();
-        let existing = std::fs::read_to_string(&path).unwrap();
-        assert_eq!(existing, "# rules\n");
-
-        // simulate save logic
-        if existing == "# rules\n" {
-            // would return unchanged
-        }
-        cleanup(&root);
-    }
-
-    #[test]
-    fn agent_source_save_creates_backup() {
-        let root = temp_root("ag-save-backup");
-        let backup_root = temp_root("ag-save-backup-backup");
-        write_agent_file(&root, "architect.md", "# old\n");
-
-        let path = resolve_agent_path(&root, "architect.md").unwrap();
-        let existing = std::fs::read_to_string(&path).unwrap();
-
-        let backup_path = doc_backup_path("agent-architect.md", &path, Some(&backup_root)).unwrap();
-        std::fs::write(&backup_path, &existing).unwrap();
-        std::fs::write(&path, "# new\n").unwrap();
-
-        let saved = std::fs::read_to_string(root.join("agents/architect.md")).unwrap();
-        let backup_content = std::fs::read_to_string(&backup_path).unwrap();
-
-        cleanup(&root);
-        let _ = std::fs::remove_dir_all(&backup_root);
-
-        assert_eq!(saved, "# new\n");
-        assert_eq!(backup_content, "# old\n");
-    }
-
-    #[test]
     fn agent_source_title_from_filename() {
         assert_eq!(agent_title_from_filename("architect.md"), "Architect");
         assert_eq!(agent_title_from_filename("repo-scout.md"), "Repo Scout");
@@ -1989,61 +1657,6 @@ fn read_agent_template_at_root(root: &Path) -> Result<DocumentContent, String> {
 }
 
 #[tauri::command]
-pub fn open_agent_template() -> Result<ActionResult, String> {
-    let root = workspace_root()?;
-    let path = root.join("templates/global-agent-rules.md");
-    let path_str = path_arg(&path)?;
-    let (ok, out, err, code) = run_cmd("open", &[&path_str], &root);
-    Ok(ActionResult::new(ok, "open_agent_template", out, err, code))
-}
-
-const MAX_AGENT_TEMPLATE_SIZE: usize = 512 * 1024;
-
-#[tauri::command(async)]
-pub fn save_agent_template(content: String) -> Result<ActionResult, String> {
-    // Writes files an apply may also write: wait for a running mutation instead of interleaving.
-    let _mutation = crate::mutation_lock::acquire();
-    if content.len() > MAX_AGENT_TEMPLATE_SIZE {
-        return Err("content exceeds 512 KB limit".to_string());
-    }
-
-    let root = workspace_root()?;
-    let rel_path = "templates/global-agent-rules.md";
-    let target_path = root.join(rel_path);
-
-    safe_canonical_target(&root, &target_path)?;
-
-    if !target_path.exists() {
-        return Err(format!("template does not exist: {}", rel_path));
-    }
-
-    let existing =
-        std::fs::read_to_string(&target_path).map_err(|e| format!("read error: {}", e))?;
-    if existing == content {
-        return Ok(ActionResult::new(
-            true,
-            "save_agent_template",
-            "unchanged".to_string(),
-            String::new(),
-            Some(0),
-        ));
-    }
-
-    let backup_path = doc_backup_path("agent-template", &target_path, None)?;
-    write_doc_backup(&backup_path, &existing)?;
-
-    write_workspace_file(&root, &target_path, &content)?;
-
-    Ok(ActionResult::new(
-        true,
-        "save_agent_template",
-        "saved with backup".to_string(),
-        String::new(),
-        Some(0),
-    ))
-}
-
-#[tauri::command]
 pub fn read_config_template(target_id: String) -> Result<DocumentContent, String> {
     let root = workspace_root()?;
     read_config_template_at_root(&root, &target_id)
@@ -2064,25 +1677,6 @@ fn read_config_template_at_root(root: &Path, target_id: &str) -> Result<Document
         source: "curated".into(),
         content,
     })
-}
-
-#[tauri::command]
-pub fn open_config_template(target_id: String) -> Result<ActionResult, String> {
-    let root = workspace_root()?;
-    let target = agent_targets::editable_config_targets()
-        .into_iter()
-        .find(|t| t.id == target_id)
-        .ok_or_else(|| format!("unknown editable config target: {}", target_id))?;
-    let path = root.join(target.source_rel);
-    let path_str = path_arg(&path)?;
-    let (ok, out, err, code) = run_cmd("open", &[&path_str], &root);
-    Ok(ActionResult::new(
-        ok,
-        format!("open_config_template:{}", target_id),
-        out,
-        err,
-        code,
-    ))
 }
 
 // ── opencode config editor source commands ──
@@ -2116,138 +1710,6 @@ pub fn read_opencode_config_source(source_type: String) -> Result<DocumentConten
 #[tauri::command]
 pub fn list_opencode_config_editor_sources() -> Vec<agent_targets::ConfigEditorSourceMeta> {
     agent_targets::opencode_config_editor_source_meta_list()
-}
-
-/// Open an opencode config editor source file (base, policy, or snapshot) in the system editor.
-/// This is a narrow special case for activeConfigTargetId == "opencode_config".
-#[tauri::command]
-pub fn open_opencode_config_source(source_type: String) -> Result<ActionResult, String> {
-    let source = agent_targets::opencode_config_editor_source_by_id(&source_type)
-        .ok_or_else(|| format!("unknown opencode config source type: {}", source_type))?;
-
-    if source.rel_path.contains("..") || Path::new(source.rel_path).is_absolute() {
-        return Err("invalid registry path".to_string());
-    }
-
-    let root = workspace_root()?;
-    let path = root.join(source.rel_path);
-    safe_canonical_target(&root, &path)?;
-
-    let path_str = path_arg(&path)?;
-    let (ok, out, err, code) = run_cmd("open", &[&path_str], &root);
-    Ok(ActionResult::new(
-        ok,
-        format!("open_opencode_config_source:{}", source_type),
-        out,
-        err,
-        code,
-    ))
-}
-
-const MAX_OPENCODE_CONFIG_SOURCE_SIZE: usize = 512 * 1024;
-
-/// Save an opencode config editor source file.
-/// Only editable types (base, policy) are allowed.
-/// Snapshot is read-only and will be rejected.
-/// This is a narrow special case for activeConfigTargetId == "opencode_config".
-#[tauri::command(async)]
-pub fn save_opencode_config_source(
-    source_type: String,
-    content: String,
-) -> Result<ActionResult, String> {
-    // Writes files an apply may also write: wait for a running mutation instead of interleaving.
-    let _mutation = crate::mutation_lock::acquire();
-    if content.len() > MAX_OPENCODE_CONFIG_SOURCE_SIZE {
-        return Err("content exceeds 512 KB limit".to_string());
-    }
-
-    let source = agent_targets::opencode_config_editor_source_by_id(&source_type)
-        .ok_or_else(|| format!("unknown opencode config source type: {}", source_type))?;
-
-    if !source.editable {
-        return Err(format!(
-            "{} is read-only. Edit Base or Policy instead.",
-            source.label
-        ));
-    }
-
-    if source.rel_path.contains("..") || Path::new(source.rel_path).is_absolute() {
-        return Err("invalid registry path".to_string());
-    }
-
-    let root = workspace_root()?;
-    let target_path = root.join(source.rel_path);
-
-    safe_canonical_target(&root, &target_path)?;
-
-    if let Some(parent) = target_path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| format!("create dir error: {}", e))?;
-    }
-
-    // Validate JSON content
-    serde_json::from_str::<serde_json::Value>(&content)
-        .map_err(|e| format!("invalid JSON: {}", e))?;
-
-    if target_path.exists() {
-        let existing =
-            std::fs::read_to_string(&target_path).map_err(|e| format!("read error: {}", e))?;
-        if existing == content {
-            return Ok(ActionResult::new(
-                true,
-                "save_opencode_config_source",
-                "unchanged".to_string(),
-                String::new(),
-                Some(0),
-            ));
-        }
-
-        let backup_path = doc_backup_path(
-            &format!("opencode_config:{}", source_type),
-            &target_path,
-            None,
-        )?;
-        write_doc_backup(&backup_path, &existing)?;
-
-        write_workspace_file(&root, &target_path, &content)?;
-
-        return Ok(regenerate_opencode_snapshot_result(
-            &root,
-            "saved with backup",
-        ));
-    }
-
-    write_workspace_file(&root, &target_path, &content)?;
-
-    Ok(regenerate_opencode_snapshot_result(&root, "saved"))
-}
-
-/// The generated opencode.json snapshot is composed from the base and policy
-/// sources, so every successful source save must refresh it or installs would
-/// use a stale config.
-fn regenerate_opencode_snapshot_result(root: &Path, saved_note: &str) -> ActionResult {
-    match super::opencode_runtime::run_generator_write(root) {
-        Ok(result) if result.success => ActionResult::new(
-            true,
-            "save_opencode_config_source",
-            format!("{saved_note}; generated snapshot refreshed"),
-            String::new(),
-            Some(0),
-        ),
-        Ok(result) => ActionResult::new(
-            false,
-            "save_opencode_config_source",
-            format!("{saved_note}, but generated snapshot refresh failed"),
-            result.stderr,
-            result.exit_code,
-        ),
-        Err(error) => ActionResult::new(
-            false,
-            "save_opencode_config_source",
-            format!("{saved_note}, but generated snapshot refresh failed"),
-            error,
-            Some(1),
-        ),
-    }
 }
 
 // ── agent source commands ──
@@ -2339,59 +1801,6 @@ pub fn read_agent_source(filename: String) -> Result<AgentSourceContent, String>
         content,
         exists: true,
     })
-}
-
-#[tauri::command]
-pub fn open_agent_source(filename: String) -> Result<ActionResult, String> {
-    let root = workspace_root()?;
-    let path = resolve_agent_path(&root, &filename)?;
-    let path_str = path_arg(&path)?;
-    let (ok, out, err, code) = run_cmd("open", &[&path_str], &root);
-    Ok(ActionResult::new(
-        ok,
-        format!("open_agent_source:{}", filename),
-        out,
-        err,
-        code,
-    ))
-}
-
-const MAX_AGENT_SOURCE_SIZE: usize = 512 * 1024;
-
-#[tauri::command(async)]
-pub fn save_agent_source(filename: String, content: String) -> Result<ActionResult, String> {
-    // Writes files an apply may also write: wait for a running mutation instead of interleaving.
-    let _mutation = crate::mutation_lock::acquire();
-    if content.len() > MAX_AGENT_SOURCE_SIZE {
-        return Err("content exceeds 512 KB limit".to_string());
-    }
-
-    let root = workspace_root()?;
-    let path = resolve_agent_path(&root, &filename)?;
-
-    let existing = std::fs::read_to_string(&path).map_err(|e| format!("read error: {}", e))?;
-    if existing == content {
-        return Ok(ActionResult::new(
-            true,
-            "save_agent_source",
-            "unchanged".to_string(),
-            String::new(),
-            Some(0),
-        ));
-    }
-
-    let backup_path = doc_backup_path(&format!("agent-{}", filename), &path, None)?;
-    write_doc_backup(&backup_path, &existing)?;
-
-    write_workspace_file(&root, &path, &content)?;
-
-    Ok(ActionResult::new(
-        true,
-        "save_agent_source",
-        "saved with backup".to_string(),
-        String::new(),
-        Some(0),
-    ))
 }
 
 // ── agent metadata sidecar ──
@@ -2773,78 +2182,6 @@ mod agent_metadata_tests {
         })
     }
 
-    fn ocs_save_source(
-        root: &Path,
-        source_type: &str,
-        content: &str,
-    ) -> Result<ActionResult, String> {
-        ocs_save_source_with_backup(root, source_type, content, None)
-    }
-
-    fn ocs_save_source_with_backup(
-        root: &Path,
-        source_type: &str,
-        content: &str,
-        custom_backup_root: Option<&Path>,
-    ) -> Result<ActionResult, String> {
-        if content.len() > MAX_OPENCODE_CONFIG_SOURCE_SIZE {
-            return Err("content exceeds 512 KB limit".to_string());
-        }
-        let source = agent_targets::opencode_config_editor_source_by_id(source_type)
-            .ok_or_else(|| format!("unknown opencode config source type: {}", source_type))?;
-        if !source.editable {
-            return Err(format!(
-                "{} is read-only. Edit Base or Policy instead.",
-                source.label
-            ));
-        }
-        if source.rel_path.contains("..") || Path::new(source.rel_path).is_absolute() {
-            return Err("invalid registry path".to_string());
-        }
-        let target_path = root.join(source.rel_path);
-        safe_canonical_target(root, &target_path)?;
-        if let Some(parent) = target_path.parent() {
-            fs::create_dir_all(parent).map_err(|e| format!("create dir error: {}", e))?;
-        }
-        serde_json::from_str::<serde_json::Value>(content)
-            .map_err(|e| format!("invalid JSON: {}", e))?;
-        if target_path.exists() {
-            let existing =
-                fs::read_to_string(&target_path).map_err(|e| format!("read error: {}", e))?;
-            if existing == content {
-                return Ok(ActionResult::new(
-                    true,
-                    "save_opencode_config_source",
-                    "unchanged".to_string(),
-                    String::new(),
-                    Some(0),
-                ));
-            }
-            let backup_path = doc_backup_path(
-                &format!("opencode_config:{}", source_type),
-                &target_path,
-                custom_backup_root,
-            )?;
-            write_doc_backup(&backup_path, &existing)?;
-            fs::write(&target_path, content).map_err(|e| format!("write error: {}", e))?;
-            return Ok(ActionResult::new(
-                true,
-                "save_opencode_config_source",
-                "saved with backup".to_string(),
-                String::new(),
-                Some(0),
-            ));
-        }
-        fs::write(&target_path, content).map_err(|e| format!("write error: {}", e))?;
-        Ok(ActionResult::new(
-            true,
-            "save_opencode_config_source",
-            "saved".to_string(),
-            String::new(),
-            Some(0),
-        ))
-    }
-
     #[test]
     fn opencode_config_editor_source_unknown_type_rejected() {
         let root = temp_root("ocs-unknown");
@@ -2899,118 +2236,10 @@ mod agent_metadata_tests {
     }
 
     #[test]
-    fn opencode_config_editor_save_unknown_type_rejected() {
-        let root = temp_root("ocs-save-unknown");
-        let result = ocs_save_source(&root, "unknown", "{}");
-        ocs_cleanup(&root);
-        assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .contains("unknown opencode config source"));
-    }
-
-    #[test]
-    fn opencode_config_editor_save_snapshot_rejected() {
-        let root = temp_root("ocs-save-snapshot");
-        ocs_write_file(&root, "templates/opencode.json", "{}");
-        let result = ocs_save_source(&root, "snapshot", "{}");
-        ocs_cleanup(&root);
-        assert!(result.is_err());
-        assert!(result.unwrap_err().contains("read-only"));
-    }
-
-    #[test]
-    fn opencode_config_editor_save_base_writes_file() {
-        let root = temp_root("ocs-save-base");
-        let backup_root = temp_root("ocs-save-base-backup");
-        ocs_write_file(&root, "templates/opencode.base.json", "{}");
-        let result =
-            ocs_save_source_with_backup(&root, "base", "{\"model\":\"gpt-4\"}", Some(&backup_root));
-        assert!(result.is_ok());
-        let ar = result.unwrap();
-        assert!(ar.success);
-        let saved = fs::read_to_string(root.join("templates/opencode.base.json")).unwrap();
-        ocs_cleanup(&root);
-        let _ = fs::remove_dir_all(&backup_root);
-        assert_eq!(saved, "{\"model\":\"gpt-4\"}");
-    }
-
-    #[test]
-    fn opencode_config_editor_save_policy_writes_file() {
-        let root = temp_root("ocs-save-policy");
-        let backup_root = temp_root("ocs-save-policy-backup");
-        ocs_write_file(&root, "templates/opencode.policy.json", "{}");
-        let result =
-            ocs_save_source_with_backup(&root, "policy", "{\"read\":{}}", Some(&backup_root));
-        assert!(result.is_ok());
-        let ar = result.unwrap();
-        assert!(ar.success);
-        let saved = fs::read_to_string(root.join("templates/opencode.policy.json")).unwrap();
-        ocs_cleanup(&root);
-        let _ = fs::remove_dir_all(&backup_root);
-        assert_eq!(saved, "{\"read\":{}}");
-    }
-
-    #[test]
-    fn opencode_config_editor_save_base_unchanged_does_not_write() {
-        let root = temp_root("ocs-save-base-unchanged");
-        ocs_write_file(
-            &root,
-            "templates/opencode.base.json",
-            "{\"model\":\"gpt-4\"}",
-        );
-        let result = ocs_save_source(&root, "base", "{\"model\":\"gpt-4\"}");
-        assert!(result.is_ok());
-        let ar = result.unwrap();
-        assert_eq!(ar.stdout, "unchanged");
-        ocs_cleanup(&root);
-    }
-
-    #[test]
-    fn opencode_config_editor_save_invalid_json_rejected() {
-        let root = temp_root("ocs-save-invalid-json");
-        ocs_write_file(&root, "templates/opencode.base.json", "{}");
-        let result = ocs_save_source(&root, "base", "not json");
-        ocs_cleanup(&root);
-        assert!(result.is_err());
-        assert!(result.unwrap_err().contains("invalid JSON"));
-    }
-
-    #[test]
-    fn opencode_config_editor_save_creates_backup_when_changed() {
-        let root = temp_root("ocs-save-backup");
-        let backup_root = temp_root("ocs-save-backup-dir");
-        ocs_write_file(&root, "templates/opencode.base.json", "{\"original\":true}");
-        let result =
-            ocs_save_source_with_backup(&root, "base", "{\"modified\":true}", Some(&backup_root));
-        assert!(result.is_ok());
-        let ar = result.unwrap();
-        assert_eq!(ar.stdout, "saved with backup");
-        let docs_backup_dir = backup_root.join("docs");
-        let backup_entries: Vec<_> = fs::read_dir(&docs_backup_dir)
-            .unwrap()
-            .filter_map(|e| e.ok())
-            .filter(|e| {
-                let name = e.file_name().to_string_lossy().into_owned();
-                name.starts_with("opencode_config_base-")
-            })
-            .collect();
-        assert!(!backup_entries.is_empty(), "backup should be created");
-        let backup_file = backup_entries[0].path().join("opencode.base.json");
-        let backup_content = fs::read_to_string(&backup_file).unwrap();
-        ocs_cleanup(&root);
-        let _ = fs::remove_dir_all(&backup_root);
-        assert_eq!(backup_content, "{\"original\":true}");
-    }
-
-    #[test]
     fn opencode_config_editor_list_sources_returns_all() {
         let sources = agent_targets::opencode_config_editor_source_meta_list();
-        assert_eq!(sources.len(), 3);
-        let base = sources.iter().find(|s| s.id == "base").unwrap();
-        assert!(base.editable);
-        let snapshot = sources.iter().find(|s| s.id == "snapshot").unwrap();
-        assert!(!snapshot.editable);
+        let ids: Vec<&str> = sources.iter().map(|s| s.id.as_str()).collect();
+        assert_eq!(ids, ["base", "policy", "snapshot"]);
     }
 
     #[test]
@@ -3020,70 +2249,5 @@ mod agent_metadata_tests {
         let opencode = targets.iter().find(|t| t.id == "opencode_config").unwrap();
         assert_eq!(opencode.source_rel, "templates/opencode.json");
         assert_eq!(opencode.target_rel, ".config/opencode/opencode.json");
-    }
-
-    // ── open_opencode_config_source tests ──
-
-    fn ocs_open_source_rejects_unknown(source_type: &str) -> Result<(), String> {
-        // Simulate the validation logic of open_opencode_config_source without running `open`
-        let source = agent_targets::opencode_config_editor_source_by_id(source_type)
-            .ok_or_else(|| format!("unknown opencode config source type: {}", source_type))?;
-        if source.rel_path.contains("..") || std::path::Path::new(source.rel_path).is_absolute() {
-            return Err("invalid registry path".to_string());
-        }
-        Ok(())
-    }
-
-    #[test]
-    fn open_opencode_config_source_unknown_type_rejected() {
-        let result = ocs_open_source_rejects_unknown("unknown");
-        assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .contains("unknown opencode config source"));
-    }
-
-    #[test]
-    fn open_opencode_config_source_known_types_accepted() {
-        for id in &["base", "policy", "snapshot"] {
-            let result = ocs_open_source_rejects_unknown(id);
-            assert!(
-                result.is_ok(),
-                "known source type '{}' should be accepted",
-                id
-            );
-        }
-    }
-
-    #[test]
-    fn open_opencode_config_source_rejects_invalid_source_type() {
-        for bad in &["../etc/passwd", "/abs/path", "", "base;rm"] {
-            let result = agent_targets::opencode_config_editor_source_by_id(bad);
-            assert!(
-                result.is_none(),
-                "invalid source type '{}' should not be found",
-                bad
-            );
-        }
-    }
-
-    #[test]
-    fn open_opencode_config_source_paths_are_safe() {
-        // All source rel_paths must be relative and not contain parent references
-        for id in &["base", "policy", "snapshot"] {
-            let source = agent_targets::opencode_config_editor_source_by_id(id).unwrap();
-            assert!(
-                !source.rel_path.starts_with('/'),
-                "rel_path for '{}' must not be absolute: {}",
-                id,
-                source.rel_path
-            );
-            assert!(
-                !source.rel_path.contains(".."),
-                "rel_path for '{}' must not contain ..: {}",
-                id,
-                source.rel_path
-            );
-        }
     }
 }

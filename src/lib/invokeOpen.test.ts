@@ -44,7 +44,7 @@ describe("invokeOpen", () => {
     invoke.mockRejectedValue("path escapes workspace");
     const setError = vi.fn();
 
-    await invokeOpen("open_skill", { id: "x" }, "Open", setError);
+    await invokeOpen("open_doc", { id: "custom:x" }, "Open", setError);
 
     expect(setError).toHaveBeenCalledWith("Open: path escapes workspace");
   });

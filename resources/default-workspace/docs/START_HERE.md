@@ -13,7 +13,7 @@ It does:
 - Install and update the workspace and each harness from its bundled copy, after showing a plan.
 - Keep your own text in rules files, and your own keys in config files.
 - Back up what it overwrites, and roll back the last install.
-- Let you edit workspace docs, rules, agents, and configs in the Library.
+- Show the bundled docs, rules, skills, agents, and configs in the Library (read-only), and let you write your own personal docs there.
 
 It does not:
 

@@ -96,7 +96,7 @@ Use the isolated `HOME`; install the skills and agents first, then edit `~/.clau
 
 - [ ] After `y`, the output strip shows the transaction and takes focus; `z` there (or `:rollback`) runs a dry run and a confirm, then restores the backed-up files
 - [ ] `:rollback` with nothing to roll back says so
-- [ ] Backups exist under `setup/<transaction id>/` with `manifest.json`, `artifacts/`, `managed-state.previous.json` (dirs 0700, files 0600); Library saves under `docs/<id>-<timestamp>/`
+- [ ] Backups exist under `setup/<transaction id>/` with `manifest.json`, `artifacts/`, `managed-state.previous.json` (dirs 0700, files 0600); Library saves of personal docs under `docs/custom_<slug>-<timestamp>/`
 - [ ] The workspace detail pane lists the backup run count and the root path; `B` there opens the folder
 - [ ] **preview uninstall** classifies removable, preserved, and merge-managed artifacts; modified and unknown fixture files stay on disk after uninstall
 - [ ] Merge-managed rules files with user text outside the block are kept; a file with only an unedited block is removable
@@ -143,9 +143,10 @@ Use the isolated `HOME`; install the skills and agents first, then edit `~/.clau
 ## 9. Library
 
 - [ ] Library shows the items list and one document pane (rendered by default); `[` `]` (and `<` `>`) switch among docs, rules, skills, agents, configs
-- [ ] `i` or Enter swaps the rendered document for its source (never for read-only items such as skills); `Mod+s` and `:w` save; Escape returns to the rendered view; `h` returns to the list; `:q` asks before discarding edits; `:reset` discards them; `n` creates a doc; `o` opens externally
-- [ ] Docs: select, preview, edit, dirty state, save, reset, create form, stale bundled-doc warning, Markdown table, fenced code, code copy
-- [ ] Saving over an existing file creates `docs/<id>-<timestamp>/` in the backup root; a symlinked doc is refused
+- [ ] On a personal doc (`docs/context/`, tagged "context"), `i` or Enter swaps the rendered document for its source; `Mod+s` and `:w` save; Escape returns to the rendered view; `h` returns to the list; `:q` asks before discarding edits; `:reset` discards them; `n` creates a doc; `o` opens it externally
+- [ ] Bundled items (bundled docs, the Global Rules row, skills, agents, every config source) show "read-only" in the pane title and "bundled with the app: read-only here" in the footer; the `i`/Enter, `Mod+s` and `o` hints are disabled with that reason; `:w` refuses with it; no textarea ever opens
+- [ ] Docs: select, preview, personal doc edit, dirty state, save, reset, create form, missing bundled-doc banner, Markdown table, fenced code, code copy
+- [ ] Saving a personal doc over its existing file creates `docs/custom_<slug>-<timestamp>/` in the backup root; a symlinked doc or a linked `docs/context` folder is refused
 - [ ] Library edits do not change what a harness install writes (installs come from the bundle)
 - [ ] No Tools icon or tool switcher exists
 
@@ -200,7 +201,7 @@ Use the isolated `HOME`; install the skills and agents first, then edit `~/.clau
 - Notes: ________
 
 ### Library
-- [ ] Panes, save and backup passed
+- [ ] Panes, personal doc save and backup, bundled items read-only passed
 - Notes: ________
 
 ### Skipped checks and residual risk

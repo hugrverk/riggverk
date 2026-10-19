@@ -308,7 +308,6 @@ pub struct ConfigEditorSourceMeta {
     pub id: String,
     pub label: String,
     pub rel_path: String,
-    pub editable: bool,
     pub helper: String,
 }
 
@@ -317,7 +316,6 @@ pub struct ConfigEditorSource {
     pub id: &'static str,
     pub label: &'static str,
     pub rel_path: &'static str,
-    pub editable: bool,
     pub helper: &'static str,
 }
 
@@ -326,22 +324,19 @@ static OPENCODE_CONFIG_EDITOR_SOURCES: &[ConfigEditorSource] = &[
         id: "base",
         label: "Base",
         rel_path: "templates/opencode.base.json",
-        editable: true,
         helper: "Model, provider, watcher, compaction.",
     },
     ConfigEditorSource {
         id: "policy",
         label: "Policy",
         rel_path: "templates/opencode.policy.json",
-        editable: true,
         helper: "Read, edit, bash, and secret-file permission source.",
     },
     ConfigEditorSource {
         id: "snapshot",
         label: "Snapshot",
         rel_path: "templates/opencode.json",
-        editable: false,
-        helper: "Generated runtime config. Edit Base or Policy instead.",
+        helper: "Generated runtime config, composed from Base and Policy.",
     },
 ];
 
@@ -364,7 +359,6 @@ pub fn opencode_config_editor_source_meta_list() -> Vec<ConfigEditorSourceMeta> 
             id: s.id.to_string(),
             label: s.label.to_string(),
             rel_path: s.rel_path.to_string(),
-            editable: s.editable,
             helper: s.helper.to_string(),
         })
         .collect()
@@ -679,15 +673,12 @@ mod tests {
     #[test]
     fn opencode_config_editor_source_metadata_matches_contract() {
         let base = opencode_config_editor_source_by_id("base").expect("base source");
-        assert!(base.editable);
         assert_eq!(base.rel_path, "templates/opencode.base.json");
 
         let policy = opencode_config_editor_source_by_id("policy").expect("policy source");
-        assert!(policy.editable);
         assert_eq!(policy.rel_path, "templates/opencode.policy.json");
 
         let snapshot = opencode_config_editor_source_by_id("snapshot").expect("snapshot source");
-        assert!(!snapshot.editable);
         assert_eq!(snapshot.rel_path, "templates/opencode.json");
         assert!(opencode_config_editor_source_by_id("unknown").is_none());
     }
@@ -697,7 +688,6 @@ mod tests {
         let meta = opencode_config_editor_source_meta_list();
         assert_eq!(meta.len(), 3);
         let snapshot = meta.iter().find(|m| m.id == "snapshot").unwrap();
-        assert!(!snapshot.editable);
         assert_eq!(snapshot.rel_path, "templates/opencode.json");
     }
 
