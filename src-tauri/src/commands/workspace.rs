@@ -201,17 +201,15 @@ pub(crate) fn workspace_install_file_missing(path: &Path) -> bool {
     }
 }
 
-/// Paths from `default_workspace_files()` that are absent under `root`.
+/// Paths of the workspace copy (`workspace_copy_paths()`) that are absent under `root`.
 pub(crate) fn missing_bundled_file_paths(root: &Path) -> Vec<String> {
     let mut missing = Vec::new();
-    for (_label, paths) in super::defaults::default_workspace_files() {
-        for &rel in paths {
-            if rel.contains("..") || rel.is_empty() || Path::new(rel).is_absolute() {
-                continue;
-            }
-            if workspace_install_file_missing(&root.join(rel)) {
-                missing.push(rel.to_string());
-            }
+    for rel in super::retired_workspace_files::workspace_copy_paths() {
+        if rel.contains("..") || rel.is_empty() || Path::new(rel).is_absolute() {
+            continue;
+        }
+        if workspace_install_file_missing(&root.join(rel)) {
+            missing.push(rel.to_string());
         }
     }
     missing

@@ -102,8 +102,8 @@ python3 scripts/check-readme-docs-drift.py
 step "skill catalog and routing"
 python3 scripts/check-skill-routing.py
 
-step "bundle manifest and Library docs registry"
-python3 scripts/check-default-workspace-copy-list.py
+step "workspace copy list and Library docs registry"
+python3 scripts/check-retired-workspace-files.py
 python3 scripts/check-curated-library-docs.py
 
 step "bundle content"

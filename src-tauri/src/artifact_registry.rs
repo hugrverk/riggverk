@@ -732,9 +732,7 @@ pub fn expand_surface(
 }
 
 fn expand_workspace_bundle(workspace_root: &Path) -> Result<Vec<ArtifactId>, String> {
-    let bundled: Vec<&str> = crate::commands::default_workspace_files()
-        .into_iter()
-        .flat_map(|(_, paths)| paths.iter().copied())
+    let bundled: Vec<&str> = crate::commands::retired_workspace_files::workspace_copy_paths()
         .filter(|rel| !rel.contains("..") && !rel.is_empty() && !Path::new(rel).is_absolute())
         .collect();
     let mut artifacts = Vec::new();

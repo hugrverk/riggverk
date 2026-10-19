@@ -312,6 +312,35 @@ class SkillDigestTests(unittest.TestCase):
             self.assertEqual(digests(set()), old)
 
 
+class WorkspaceCopyEntryTests(unittest.TestCase):
+    OLD = ownership.shipped_digest_variants(b"old\n")
+    CURRENT = ownership.shipped_digest_variants(b"current\n")
+
+    def test_a_file_the_bundle_holds_is_updated_without_its_current_version(self) -> None:
+        current = ownership.digest(b"current\n")
+        found = ownership.workspace_copy_entry("docs/a.md", self.OLD | self.CURRENT, current)
+        self.assertEqual(found["identity"], "workspace:file:docs/a.md")
+        self.assertEqual(found["action"], "update")
+        self.assertEqual(found["digests"], sorted((self.OLD | self.CURRENT) - {current}))
+
+    def test_a_file_the_bundle_dropped_is_removed_with_every_shipped_version(self) -> None:
+        found = ownership.workspace_copy_entry("agents/gone.md", self.OLD, None)
+        self.assertEqual(found["action"], "remove")
+        self.assertEqual(found["digests"], sorted(self.OLD))
+
+    def test_a_file_with_nothing_to_approve_has_no_entry(self) -> None:
+        self.assertIsNone(ownership.workspace_copy_entry("docs/a.md", set(), None))
+        only_current = {ownership.digest(b"current\n")}
+        self.assertIsNone(ownership.workspace_copy_entry("docs/a.md", only_current, ownership.digest(b"current\n")))
+
+    def test_the_frozen_list_is_the_marker_and_every_retired_file(self) -> None:
+        paths = ownership.workspace_copy_paths()
+        self.assertEqual(paths, sorted(paths))
+        self.assertEqual(paths[0], ".agent-workspace/workspace.json")
+        self.assertIn("README.md", paths)
+        self.assertEqual(len(paths), len(set(paths)))
+
+
 class RemovedSkillInvariantTests(unittest.TestCase):
     HISTORY = (
         "skills/kept/SKILL.md",

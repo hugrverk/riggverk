@@ -847,13 +847,11 @@ mod tests {
         for entry in curated_doc_registry() {
             assert!(!entry.rel_path.starts_with(&prefix), "{}", entry.rel_path);
         }
-        for (_, paths) in crate::commands::default_workspace_files() {
-            for path in paths {
-                assert!(
-                    !path.starts_with(&prefix),
-                    "bundled file in personal docs: {path}"
-                );
-            }
+        for path in crate::commands::retired_workspace_files::workspace_copy_paths() {
+            assert!(
+                !path.starts_with(&prefix),
+                "bundled file in personal docs: {path}"
+            );
         }
         let bundled = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("../resources/default-workspace")

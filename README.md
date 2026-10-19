@@ -165,7 +165,7 @@ The local release check is the gate: run `./scripts/release-check.sh` before mer
 ```bash
 python3 scripts/generate.py check
 python3 scripts/check-skill-routing.py
-python3 scripts/check-default-workspace-copy-list.py
+python3 scripts/check-retired-workspace-files.py
 python3 scripts/check-readme-docs-drift.py
 npm run typecheck
 npm test
