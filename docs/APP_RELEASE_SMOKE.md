@@ -96,7 +96,7 @@ Use the isolated `HOME`; install the skills and agents first, then edit `~/.clau
 
 - [ ] After `y`, the output strip shows the transaction and takes focus; `z` there (or `:rollback`) runs a dry run and a confirm, then restores the backed-up files
 - [ ] `:rollback` with nothing to roll back says so
-- [ ] Backups exist under `setup/<transaction id>/` with `manifest.json`, `artifacts/`, `managed-state.previous.json` (dirs 0700, files 0600); Library saves of personal docs under `docs/custom_<slug>-<timestamp>/`
+- [ ] Backups exist under `setup/<transaction id>/` with `manifest.json`, `artifacts/`, `managed-state.previous.json` (dirs 0700, files 0600); Library saves of personal docs under `docs/custom_<slug>-<timestamp>/`, of rules refinements under `docs/rules-<surface>-<timestamp>/`
 - [ ] The workspace detail pane lists the backup run count and the root path; `B` there opens the folder
 - [ ] **preview uninstall** classifies removable, preserved, and merge-managed artifacts; modified and unknown fixture files stay on disk after uninstall
 - [ ] Merge-managed rules files with user text outside the block are kept; a file with only an unedited block is removable
@@ -148,6 +148,10 @@ Use the isolated `HOME`; install the skills and agents first, then edit `~/.clau
 - [ ] Docs: select, preview, personal doc edit, dirty state, save, reset, create form, missing bundled-doc banner, Markdown table, fenced code, code copy
 - [ ] Saving a personal doc over its existing file creates `docs/custom_<slug>-<timestamp>/` in the backup root; a symlinked doc or a linked `docs/context` folder is refused
 - [ ] Library edits do not change what a harness install writes (installs come from the bundle)
+- [ ] Rules lists Global Rules under "bundled base" and, under "your rules files", one row per enabled harness; a disabled harness or rules target has no row
+- [ ] With a throwaway `HOME`: on a rules file with a block, the managed base shows dimmed and read-only above the refinements, `i` edits only the refinements, and `Mod+s` saves; a hash of the file up to and including the END line is unchanged, `docs/rules-<surface>-<timestamp>/` holds the previous file, and Install then reports the file current (or a base update) with the refinement count unchanged
+- [ ] A rules file that is absent, has no block, has malformed markers, or is a symlink (or sits in a linked folder) is listed with its reason, read-only; `o` opens an existing one, also through a link
+- [ ] Editing a rules file elsewhere after opening it: the save is refused as changed on disk, the file reloads with the draft kept, and a second save writes it
 - [ ] No Tools icon or tool switcher exists
 
 ## 10. Known limitations
@@ -201,7 +205,7 @@ Use the isolated `HOME`; install the skills and agents first, then edit `~/.clau
 - Notes: ________
 
 ### Library
-- [ ] Panes, personal doc save and backup, bundled items read-only passed
+- [ ] Panes, personal doc save and backup, rules refinements save and backup, bundled items read-only passed
 - Notes: ________
 
 ### Skipped checks and residual risk

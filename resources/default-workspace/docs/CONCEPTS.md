@@ -54,4 +54,4 @@ Selecting a workspace folder is still a trust decision: do not run scripts from 
 
 ## Backups
 
-Before overwriting or removing a file, Install, uninstall, and Library saves copy it to the backup root, owner-only: `<root>/setup/<transaction id>/...` for installs, `<root>/docs/custom_<slug>-<timestamp>/` for Library saves of personal docs. Previews and dry runs write nothing. Layout and locations: [USING_THE_APP.md](USING_THE_APP.md#backups).
+Before overwriting or removing a file, Install, uninstall, and Library saves copy it to the backup root, owner-only: `<root>/setup/<transaction id>/...` for installs, `<root>/docs/custom_<slug>-<timestamp>/` for Library saves of personal docs, `<root>/docs/rules-<surface>-<timestamp>/` for Library saves of rules refinements. Previews and dry runs write nothing. Layout and locations: [USING_THE_APP.md](USING_THE_APP.md#backups).

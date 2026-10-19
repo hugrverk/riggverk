@@ -113,6 +113,7 @@ Anything Install, uninstall, or a Library save would overwrite or remove is copi
                                     /artifacts/<artifact id>
                                     /managed-state.previous.json
 <backup root>/docs/custom_<slug>-<timestamp>/<file>   Library saves (personal docs)
+<backup root>/docs/rules-<surface>-<timestamp>/<file> Library saves (rules refinements)
 <backup root>/<YYYYMMDD-HHMMSS>/<label>/<file>        Cursor operations (and the retired CLI scripts)
 ```
 
@@ -127,6 +128,8 @@ New files have no backup. Restore by rollback while the transaction is in this s
 Panes: **items** and the open **document**, which shows the item rendered (Markdown, or formatted JSON for configs) and turns into its source text while you edit. Sources: Docs, Rules, Skills, Runtime agents, Configs (`[` `]` to switch). Docs are grouped Start, Guides, Reference, Cursor, Configs, and Context.
 
 You edit only your own text: personal docs, in the Context group (`docs/context/<slug>.md` in the workspace). `n` creates one; on it, `i` or Enter edits, Escape returns to the rendered view, `Mod+s` or `:w` saves, `:q` closes and asks before discarding edits, and `o` opens it in your editor. Saves back up the file first and refuse symlinks. Install and updates never touch personal docs.
+
+Rules lists the bundled base (Global Rules, read-only) and, under "your rules files", the rules file of every enabled harness (`~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, ...). In a rules file you edit only your refinements, the text below the managed block: the block itself is shown dimmed and read-only above them, and the editor holds just the refinements. The same keys apply, and `o` opens the whole file in your editor for anything else, such as text above the block. A file with no block yet, malformed markers, or a link in its path is listed with the reason and stays read-only here (the app never writes through a link; `o` still opens it). A save keeps the block and everything above it byte for byte, backs the file up first, and refuses when the file changed on disk since you opened it: the file is reloaded with your draft kept, and saving again writes it. Install keeps your refinements on every base update.
 
 Everything else is bundled with the app and read-only here: the pane title says "read-only", and edit, save and `o` say "bundled with the app: read-only here". Bundled items change with an app update. The Library shows the workspace copy, so a file edited outside the app (or with an earlier version) can differ from the bundled one; such a file stays a conflict that Install leaves alone ([TROUBLESHOOTING.md](TROUBLESHOOTING.md#conflicts)). When bundled docs are missing from the workspace, the Docs list says so and links to the workspace update.
 
