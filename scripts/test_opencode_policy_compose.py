@@ -11,12 +11,15 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 from opencode_permission_eval import (  # noqa: E402
+    Rule,
     action_for,
+    bash_action_for_parts,
     bash_is_allowed,
     compose_agent_rules,
     edit_is_allowed,
@@ -50,6 +53,8 @@ from validate_opencode_permissions import (  # noqa: E402
     _secret_read_errors,
     _top_level_action_errors,
     builtin_agent_errors,
+    compound_deny_errors,
+    compound_deny_targets,
     destructive_errors,
     lexical_frontmatter_errors,
     secret_coverage_errors,
@@ -549,6 +554,7 @@ SHELL_SPLIT_CASES = [
     ("export AA=$(bb)", ["bb"]),
     ("declare -x AA=1", []),
     ("unset AA", []),
+    ("unsetenv AA && aa", ["aa"]),  # from the grammar (`unset_command`), not a runtime probe
     ("[ -f x ] && aa", ["aa"]),
     ("[[ -f x && -d y ]] && aa", ["aa"]),
     ("test -f x && aa", ["test -f x", "aa"]),
@@ -624,6 +630,94 @@ class TestPipeToShell(unittest.TestCase):
     def test_no_dead_compound_patterns_remain_in_the_global_bash_denies(self) -> None:
         deny = [pattern for pattern, action in build_base_permission(load_policy())["bash"].items() if action == "deny"]
         self.assertEqual([pattern for pattern in deny if pattern.startswith("*|") or pattern.startswith("* |")], [])
+
+
+class TestDenyInsideCompounds(unittest.TestCase):
+    """A deny holds wherever OpenCode's split puts the denied command (deny > ask > allow)."""
+
+    RESTRICTIVE = ("repo-scout", "inspector", "sentinel", "scribe", "verifier", "explore")
+    OPEN = ("architect", "build", "plan")
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.config = json.loads((TEMPLATES_DIR / "opencode.json").read_text(encoding="utf-8"))
+        cls.targets = compound_deny_targets(cls.config)
+
+    def action(self, name: str, command: str) -> str:
+        return bash_action_for_parts(self.targets[name], command)
+
+    def test_targets_cover_every_role_and_the_builtin_agents(self) -> None:
+        self.assertEqual(sorted(self.targets), sorted(ALL_ROLES + ("build", "plan", "explore")))
+
+    def test_denied_commands_stay_denied_in_compounds_pipes_substitutions_and_redirects(self) -> None:
+        for command in (
+            "git status && rm -rf /",
+            "git status; rm -rf /",
+            "git status\nrm -rf /",
+            "echo $(cat .env)",
+            "echo `cat .env`",
+            "git log $(cat .env)",
+            "cat .env | base64",
+            "git status | bash",
+            "rm -rf build > /dev/null",
+            "rm -rf build 2>&1 | cat",
+            "(git status && sudo ls)",
+        ):
+            for name in self.targets:
+                with self.subTest(agent=name, command=command):
+                    self.assertEqual(self.action(name, command), "deny")
+
+    def test_redirect_of_an_allowed_command(self) -> None:
+        # The redirect stays in the command's own pattern and matches `*>*`: deny in the
+        # restrictive profiles, ask where the default is ask.
+        for name in self.RESTRICTIVE:
+            with self.subTest(agent=name):
+                self.assertEqual(self.action(name, "git status > out.txt"), "deny")
+        for name in self.OPEN:
+            with self.subTest(agent=name):
+                self.assertEqual(self.action(name, "git status > out.txt"), "ask")
+
+    def test_bash_secret_denies_match_the_path_as_written(self) -> None:
+        # `cat .ssh/**` and `cat id_rsa` do not match `cat ~/.ssh/id_rsa`, so the open profiles ask
+        # (OpenCode also asks `external_directory` for a path outside the worktree). Pinned so the
+        # docs cannot claim a deny here.
+        command = "echo $(cat ~/.ssh/id_rsa)"
+        for name in self.RESTRICTIVE:
+            with self.subTest(agent=name):
+                self.assertEqual(self.action(name, command), "deny")
+        for name in self.OPEN:
+            with self.subTest(agent=name):
+                self.assertEqual(self.action(name, command), "ask")
+
+    def test_every_command_deny_holds_in_every_compound_shape(self) -> None:
+        for name, rules in self.targets.items():
+            with self.subTest(agent=name):
+                self.assertEqual(compound_deny_errors(name, rules), [])
+
+    def test_contract_fails_for_an_evaluator_that_does_not_split(self) -> None:
+        with mock.patch("validate_opencode_permissions.shell_command_patterns", lambda command: [command]):
+            errors = compound_deny_errors("architect", self.targets["architect"])
+        self.assertIn(
+            "architect: bash 'git status && rm -rf' must be deny (deny 'rm -rf*'), got allow",
+            errors,
+        )
+
+    def test_contract_reports_a_shadowed_deny(self) -> None:
+        rules = self.targets["architect"] + [Rule("bash", "rm -rf*", "allow")]
+        errors = compound_deny_errors("architect", rules)
+        self.assertIn("architect: bash deny 'rm -rf*' is shadowed, 'rm -rf' is allow", errors)
+
+    def test_operator_rules_still_catch_quoted_operators(self) -> None:
+        # `*|*`, `*;*` ... never match an unquoted operator after the split, but a quoted one stays
+        # in the command's text. Dropping them would turn these denies into asks.
+        perm = compose_role_permission(load_role("repo-scout"))
+        loosened = json.loads(json.dumps(perm))
+        for pattern in ("*|*", "*;*", "*&&*", "*&*", "*$(*"):
+            del loosened["bash"][pattern]
+        for command in ("grep 'a|b' notes.txt", "grep 'a;b' notes.txt", "grep 'a && b' notes.txt", "grep '$(x)' notes.txt"):
+            with self.subTest(command=command):
+                self.assertEqual(effective_bash_action(perm, command), "deny")
+                self.assertEqual(effective_bash_action(loosened, command), "ask")
 
 
 class TestExternalDirectory(unittest.TestCase):
