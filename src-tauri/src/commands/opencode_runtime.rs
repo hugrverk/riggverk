@@ -169,9 +169,13 @@ fn shared_subagent_model(config: &serde_json::Value) -> Option<String> {
         .then(|| first.to_string())
 }
 
-/// Remove `agent.<role>.model`, and the `agent.<role>` and `agent` objects it leaves empty.
+/// Remove a managed agent field, and the agent entry and object it leaves empty.
 /// Anything else a user keeps there is untouched.
-fn remove_agent_model(config: &mut serde_json::Map<String, serde_json::Value>, role: &str) {
+fn remove_agent_field(
+    config: &mut serde_json::Map<String, serde_json::Value>,
+    role: &str,
+    field: &str,
+) {
     let Some(agent) = config
         .get_mut("agent")
         .and_then(serde_json::Value::as_object_mut)
@@ -184,14 +188,14 @@ fn remove_agent_model(config: &mut serde_json::Map<String, serde_json::Value>, r
     else {
         return;
     };
-    if entry.remove("model").is_none() {
+    if entry.shift_remove(field).is_none() {
         return;
     }
     if entry.is_empty() {
-        agent.remove(role);
+        agent.shift_remove(role);
     }
     if agent.is_empty() {
-        config.remove("agent");
+        config.shift_remove("agent");
     }
 }
 
@@ -329,7 +333,8 @@ pub(crate) fn managed_opencode_keys_match(
     differing_managed_opencode_keys(installed, rendered).is_empty()
 }
 
-/// Merge managed keys from `managed` into `installed`, preserving unrelated user-owned fields.
+/// Align the managed projection with `managed`, removing absent entries and preserving user fields
+/// and their order. The same operation restores the backup projection on rollback.
 pub(crate) fn merge_managed_opencode_config(
     installed: &serde_json::Value,
     managed: &serde_json::Value,
@@ -344,6 +349,8 @@ pub(crate) fn merge_managed_opencode_config(
     for key in MANAGED_TOP_LEVEL_KEYS {
         if let Some(value) = managed_obj.get(*key) {
             target.insert((*key).to_string(), value.clone());
+        } else {
+            target.shift_remove(*key);
         }
     }
     for server in MANAGED_MCP_SERVERS {
@@ -353,6 +360,13 @@ pub(crate) fn merge_managed_opencode_config(
                 .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
             if let Some(mcp_obj) = mcp.as_object_mut() {
                 mcp_obj.insert((*server).to_string(), managed_server.clone());
+            }
+        } else if let Some(mcp) = target
+            .get_mut("mcp")
+            .and_then(serde_json::Value::as_object_mut)
+        {
+            if mcp.shift_remove(*server).is_some() && mcp.is_empty() {
+                target.shift_remove("mcp");
             }
         }
     }
@@ -370,13 +384,15 @@ pub(crate) fn merge_managed_opencode_config(
             if let Some(entry_obj) = entry.as_object_mut() {
                 entry_obj.insert("permission".to_string(), permission.clone());
             }
+        } else {
+            remove_agent_field(target, name, "permission");
         }
     }
     // A role without a model in `managed` loses its managed one: that is how a cleared override
     // leaves the installed config.
     for role in SUBAGENT_MODEL_ROLES {
         let Some(model) = agent_model(managed, role) else {
-            remove_agent_model(target, role);
+            remove_agent_field(target, role, "model");
             continue;
         };
         let agent = target
@@ -3669,6 +3685,72 @@ mod tests {
             "a deny listed after an allow must stay last"
         );
         assert_eq!(json_keys(&permission["read"]), ["*", "**/.env*"]);
+    }
+
+    #[test]
+    fn test_merge_removes_absent_managed_entries_and_preserves_user_order() {
+        let mut installed: serde_json::Value = serde_json::from_str(
+            r#"{"theme":"mine","lsp":true,"mcp":{"first":{},"playwright":{},"middle":{},"last":{}},
+                "permission":{},
+                "agent":{"custom":{},
+                    "plan":{"model":"mine/plan","permission":{"edit":"deny"},"prompt":"mine","description":"keep"},
+                    "explore":{"permission":{"edit":"deny"}},
+                    "inspector":{"description":"mine","model":"old/cheap","prompt":"keep","temperature":0.5},
+                    "sentinel":{"model":"old/cheap"},"other":{"model":"mine/other"},"tail":{}},
+                "model":"old/main","provider":{"z":{},"a":{}},"keybinds":{}}"#,
+        )
+        .unwrap();
+        for key in MANAGED_TOP_LEVEL_KEYS {
+            installed[*key] = serde_json::json!("old");
+        }
+        let managed = serde_json::json!({"model":"new/main"});
+        let merged = merge_managed_opencode_config(&installed, &managed);
+        let reparsed: serde_json::Value =
+            serde_json::from_str(&serde_json::to_string_pretty(&merged).unwrap()).unwrap();
+
+        assert!(managed_opencode_keys_match(&reparsed, &managed));
+        assert_eq!(
+            json_keys(&reparsed),
+            ["theme", "mcp", "agent", "model", "provider", "keybinds"]
+        );
+        assert_eq!(json_keys(&reparsed["mcp"]), ["first", "middle", "last"]);
+        assert_eq!(
+            json_keys(&reparsed["agent"]),
+            ["custom", "plan", "inspector", "other", "tail"]
+        );
+        assert_eq!(
+            json_keys(&reparsed["agent"]["plan"]),
+            ["model", "prompt", "description"]
+        );
+        assert_eq!(
+            json_keys(&reparsed["agent"]["inspector"]),
+            ["description", "prompt", "temperature"]
+        );
+        assert_eq!(json_keys(&reparsed["provider"]), ["z", "a"]);
+        assert_eq!(reparsed["agent"]["plan"]["model"], "mine/plan");
+        assert_eq!(reparsed["agent"]["plan"]["prompt"], "mine");
+        assert_eq!(reparsed["agent"]["plan"]["description"], "keep");
+        assert_eq!(reparsed["agent"]["inspector"]["description"], "mine");
+        assert_eq!(reparsed["agent"]["inspector"]["prompt"], "keep");
+        assert_eq!(reparsed["agent"]["inspector"]["temperature"], 0.5);
+        assert_eq!(reparsed["agent"]["other"]["model"], "mine/other");
+        assert!(ordered_json_eq(
+            &merge_managed_opencode_config(&reparsed, &managed),
+            &reparsed
+        ));
+
+        let only_managed = serde_json::json!({
+            "mcp":{"playwright":{}}, "agent":{"plan":{"permission":{}}}
+        });
+        assert_eq!(
+            merge_managed_opencode_config(&only_managed, &serde_json::json!({})),
+            serde_json::json!({})
+        );
+        let user_empty = serde_json::json!({"mcp":{},"agent":{"plan":{}}});
+        assert!(ordered_json_eq(
+            &merge_managed_opencode_config(&user_empty, &serde_json::json!({})),
+            &user_empty
+        ));
     }
 
     #[test]

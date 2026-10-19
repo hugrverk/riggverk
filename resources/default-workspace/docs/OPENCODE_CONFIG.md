@@ -175,6 +175,8 @@ Opt-outs:
 
 Install does **not** overwrite the entire installed `opencode.json`. It merges only the keys listed in `metadata/opencode-managed-keys.json` (model, `lsp`, permissions, the `permission` block of the built-in `plan` and `explore` agents, `agent.<role>.model` of the subagents while a subagent model override is set, Playwright MCP, compaction, watcher, and related settings). User `provider` blocks, non-Playwright MCP servers and other `agent` entries and keys are preserved. Managed keys are reset to the bundled values on every update, so keep your own settings in unmanaged keys.
 
+A managed key or sub-entry absent from the bundled render is removed from the installed config. Empty MCP and agent containers are removed only when that removal empties them. Unrelated user fields and their order are preserved. Managed-projection rollback applies the same rule against the backup: it restores prior managed values and removes managed entries added by the update, while keeping later user edits.
+
 Legacy `~/.config/opencode/agents/scout.md` files from the pre-rename scout agent are removed on agent sync when frontmatter is `name: scout`.
 
 ## Install workflow

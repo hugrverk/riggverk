@@ -3845,6 +3845,73 @@ mod tests {
         let _ = fs::remove_dir_all(base);
     }
 
+    #[test]
+    fn managed_opencode_rollback_removes_added_entries_and_keeps_user_edits_and_order() {
+        let home = temp("opencode-rollback-home");
+        let ws = home.join("workspace");
+        let backups = temp("opencode-rollback-backups");
+        let backup: serde_json::Value = serde_json::from_str(
+            r#"{"theme":"before","model":"old/main","provider":{"z":{},"a":{}},
+                "mcp":{"first":{},"last":{}},
+                "agent":{"plan":{"model":"mine/plan","prompt":"mine"},
+                    "inspector":{"description":"mine","prompt":"keep"},"custom":{}},"keybinds":{}}"#,
+        ).unwrap();
+        let rendered = serde_json::json!({
+            "model":"new/main", "lsp":true, "permission":{"*":"ask"},
+            "mcp":{"playwright":{"command":["test-mcp"]}},
+            "agent":{"plan":{"permission":{"edit":"deny"}},
+                "explore":{"permission":{"edit":"deny"}},
+                "inspector":{"model":"new/cheap"},"sentinel":{"model":"new/cheap"}}
+        });
+        let mut current = crate::commands::merge_managed_opencode_config(&backup, &rendered);
+        current["theme"] = serde_json::json!("edited after apply");
+        current["agent"]["inspector"]["prompt"] = serde_json::json!("edited after apply");
+        current["user_after_apply"] = serde_json::json!({"keep":true});
+        current["last_user_key"] = serde_json::json!("keep last");
+        let mut expected = backup.clone();
+        expected["theme"] = current["theme"].clone();
+        expected["agent"]["inspector"]["prompt"] = current["agent"]["inspector"]["prompt"].clone();
+        expected["user_after_apply"] = current["user_after_apply"].clone();
+        expected["last_user_key"] = current["last_user_key"].clone();
+        fs::create_dir_all(home.join(".config/opencode")).unwrap();
+        fs::create_dir_all(&ws).unwrap();
+        fs::create_dir_all(backups.join("artifacts")).unwrap();
+        let dest = home.join(".config/opencode/opencode.json");
+        fs::write(&dest, serde_json::to_vec_pretty(&current).unwrap()).unwrap();
+        fs::write(
+            backups.join("artifacts/opencode-config"),
+            serde_json::to_vec(&backup).unwrap(),
+        )
+        .unwrap();
+        let op = ArtifactManifestOperation {
+            artifact: ArtifactId::OpenCodeConfig,
+            surface: SetupSurfaceId::OpenCodeConfig,
+            kind: OperationKind::Update,
+            previous_state: PreviousState::MergeableConfigFile,
+            rollback_action: RollbackAction::RestoreManagedConfigFile,
+            backup_rel: Some("artifacts/opencode-config".into()),
+            ..Default::default()
+        };
+        restore_artifact_from_backup_with_mode(
+            &op,
+            &backups,
+            &home,
+            RollbackRestoreMode::ManagedProjectionMerge,
+            Some(&ws),
+        )
+        .unwrap();
+        let restored: serde_json::Value =
+            serde_json::from_slice(&fs::read(&dest).unwrap()).unwrap();
+        // String comparison checks the order of every retained user object as well as values.
+        assert_eq!(
+            serde_json::to_string(&restored).unwrap(),
+            serde_json::to_string(&expected).unwrap()
+        );
+        for dir in [&home, &backups] {
+            let _ = fs::remove_dir_all(dir);
+        }
+    }
+
     #[cfg(unix)]
     #[test]
     fn managed_codex_rollback_never_runs_workspace_scripts() {
