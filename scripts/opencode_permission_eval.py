@@ -1,20 +1,30 @@
 #!/usr/bin/env python3
 """Mirror OpenCode 1.19.3 permission evaluation.
 
-Three layers are modelled, each checked against the installed OpenCode with
+Source read: anomalyco/opencode tag v1.19.3 (commit e3c4eb242585dcd77be1a867391b7c25fd47ce52),
+which parses shell with tree-sitter-bash 0.25.0 (tag v0.25.0, commit 56b54c61fb48). Three layers
+are modelled, each also checked against the installed OpenCode with
 `opencode debug agent <name> --pure` (see the validator and OPENCODE_CONFIG.md):
 
 * the matcher: `Wildcard.match` plus `findLast` over a flattened ruleset
-  (packages/core/src/util/wildcard.ts, packages/opencode/src/permission/index.ts);
-* the tools: `read`/`edit`/`write` ask with the worktree-relative path, and `bash` asks once per
-  tree-sitter `command` node (packages/opencode/src/tool/shell.ts), so a compound command is
-  evaluated part by part and the strictest result wins;
+  (packages/core/src/util/wildcard.ts, `evaluate` in packages/opencode/src/permission/index.ts);
+* the tools: `read`/`edit`/`write` ask with `path.relative(worktree, file)` (tool/read.ts,
+  tool/edit.ts), and `bash` asks once with one pattern per tree-sitter `command` node
+  (`commands`, `source` and `collect` in packages/opencode/src/tool/shell.ts). `Permission.ask`
+  throws on the first denied pattern and prompts when any pattern is not allowed, so a compound
+  command is evaluated part by part and the strictest result wins (deny, then ask, then allow);
 * the agents: a built-in agent is `defaults + built-in restriction + user config`, and the
   config `agent.<name>.permission` is appended last (packages/opencode/src/agent/agent.ts).
+
+Not modelled: the extra `external_directory` ask that the shell tool adds for file commands
+(`rm`, `cp`, `mv`, `mkdir`, `touch`, `chmod`, `chown`, `cat`, ...) whose path argument lies outside
+the worktree. With this policy that rule asks or allows, so it can turn a modelled allow into
+ask, never into deny.
 """
 
 from __future__ import annotations
 
+import functools
 import os
 import re
 import sys
@@ -35,6 +45,11 @@ def wildcard_match(value: str, pattern: str) -> bool:
     """Match OpenCode Wildcard.match (packages/core/src/util/wildcard.ts)."""
     if value:
         value = value.replace("\\", "/")
+    return _wildcard_regex(pattern, _is_windows()).fullmatch(value) is not None
+
+
+@functools.lru_cache(maxsize=None)
+def _wildcard_regex(pattern: str, windows: bool) -> re.Pattern[str]:
     if pattern:
         pattern = pattern.replace("\\", "/")
     escaped = re.sub(r"[.+^${}()|[\]\\]", r"\\\g<0>", pattern)
@@ -42,8 +57,7 @@ def wildcard_match(value: str, pattern: str) -> bool:
     if escaped.endswith(" .*"):
         escaped = escaped[:-3] + "( .*)?"
     # Upstream compiles with the "s" flag (dot matches newline), plus "i" on win32.
-    flags = re.DOTALL | (re.IGNORECASE if _is_windows() else 0)
-    return re.fullmatch(escaped, value, flags=flags) is not None
+    return re.compile(escaped, re.DOTALL | (re.IGNORECASE if windows else 0))
 
 
 def _is_windows() -> bool:
@@ -93,8 +107,9 @@ def evaluate(permission: str, pattern: str, *rulesets: Iterable[Rule]) -> Rule:
 
 # Commands OpenCode never asks `bash` about (it only checks the paths they touch).
 _CWD_COMMANDS = {"cd", "chdir", "popd", "pushd", "push-location", "set-location"}
-# tree-sitter-bash parses these as declaration/test nodes, not `command` nodes, so they are never matched.
-_DECLARATIONS = {"export", "declare", "typeset", "readonly", "local", "unset", "["}
+# tree-sitter-bash parses these as declaration/unset/test nodes, not `command` nodes, so they are never
+# matched (`declaration_command`, `unset_command` and `test_command` in its grammar.js).
+_DECLARATIONS = {"export", "declare", "typeset", "readonly", "local", "unset", "unsetenv", "["}
 # Words that open or close a compound statement and are not themselves commands.
 _LEADING_KEYWORDS = ("!", "if", "then", "else", "elif", "do", "while", "until", "{")
 _NON_COMMAND_WORDS = {"fi", "done", "esac", "}", "for", "select", "case", ")"} | _DECLARATIONS
@@ -377,16 +392,21 @@ def shell_command_patterns(command: str) -> list[str]:
     """Patterns OpenCode 1.19.3 asks `bash` about for one tool call.
 
     It parses the command with tree-sitter-bash and asks once per `command` node, in any
-    nesting, with the node's own source text. Pipes, `&&`, `||`, `;`, `&`, newlines,
-    subshells and the contents of `$( )`, backticks and `<( )` therefore become separate
-    patterns, while the outer command keeps the substitution text. Verified against 1.19.3
-    with scratchpad probes of 90 shapes (see OPENCODE_CONFIG.md):
+    nesting (`node.descendantsOfType("command")`), with the node's own source text, or the text
+    of its parent when that parent is a `redirected_statement` (`source()` in tool/shell.ts).
+    There is no operator splitting as such: pipes, `&&`, `||`, `;`, `&`, newlines, subshells
+    and the contents of `$( )`, backticks and `<( )` become separate patterns because each holds
+    its own `command` nodes, while the outer command keeps the substitution text. Verified against
+    1.19.3 with scratchpad probes of 90 shapes (see OPENCODE_CONFIG.md):
 
     * a redirect stays in the pattern of the first command of a chain (`a > f && b`), but a
       redirect after a later `|`, `&&` or `||` element is not part of any pattern (`a && b > f`
-      is evaluated as `a`, `b`), so a redirect can hide behind a second allowed command;
+      is evaluated as `a`, `b`), so a redirect can hide behind a second allowed command. In the
+      grammar the body of a `redirected_statement` is any statement, `list` and `pipeline`
+      included, so the redirect wraps the whole chain and no `command` node has it as parent;
     * a command with a heredoc spans through the end of the heredoc body;
-    * `cd`, `export`/`declare`/`readonly`/`local`/`unset` and `[ ... ]`/`[[ ... ]]` are skipped;
+    * `cd` (and the other `CWD` commands), `export`/`declare`/`typeset`/`readonly`/`local`,
+      `unset`/`unsetenv` and `[ ... ]`/`[[ ... ]]` are skipped;
     * variable assignments alone produce no pattern.
 
     This is a scanner for those shapes, not a full bash grammar: `case` arms and heredoc bodies
@@ -398,15 +418,19 @@ def shell_command_patterns(command: str) -> list[str]:
 
 
 
-def bash_action_for_parts(rules: list[Rule], command: str) -> Action:
+def strictest(actions: Iterable[Action]) -> Action:
     """deny if any part is denied, else ask if any part asks, else allow (Permission.ask)."""
-    patterns = shell_command_patterns(command)
-    actions = [evaluate("bash", pattern, rules).action for pattern in patterns]
+    actions = list(actions)
     if "deny" in actions:
         return "deny"
     if any(action != "allow" for action in actions):
         return "ask"
     return "allow"
+
+
+def bash_action_for_parts(rules: list[Rule], command: str) -> Action:
+    """Action for one bash call: the strictest over its command patterns."""
+    return strictest(evaluate("bash", pattern, rules).action for pattern in shell_command_patterns(command))
 
 
 def explain_bash(permission: dict[str, Any], command: str) -> str:

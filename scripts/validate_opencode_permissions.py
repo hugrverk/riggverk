@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import copy
+import functools
 import json
 import os
 import sys
@@ -13,6 +14,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 from opencode_permission_eval import (  # noqa: E402
+    Rule,
     action_for,
     bash_action_for_parts,
     bash_is_allowed,
@@ -21,9 +23,13 @@ from opencode_permission_eval import (  # noqa: E402
     effective_bash_action,
     effective_edit_action,
     effective_read_action,
+    evaluate,
     explain_bash,
     ruleset_from_section,
+    shell_command_patterns,
+    strictest,
     tool_hidden,
+    wildcard_match,
     winning_rule,
     worktree_relative,
 )
@@ -490,6 +496,87 @@ def destructive_errors(role: str, perm: dict) -> list[str]:
     return [f"{role}: missing bash deny {pat}" for pat in DESTRUCTIVE_BASH if bash.get(pat) != "deny"]
 
 
+# Places a denied command can sit in one bash call. OpenCode asks once per tree-sitter `command`
+# node and the first denied node denies the whole call, so a deny must hold in every one of them.
+COMPOUND_SHAPES = (
+    "git status && {}",
+    "git status || {}",
+    "git status; {}",
+    "git status\n{}",
+    "git status & {}",
+    "git status | {}",
+    "{} | cat",
+    "echo $({})",
+    "echo `{}`",
+    "git log $({})",
+    "({})",
+    "{ git status; {}; }",
+    "if git status; then {}; fi",
+)
+# A deny pattern with shell syntax in it (`*|*`, `*>*`, `*$(*` ...) detects syntax, not a command.
+_SHELL_SYNTAX = frozenset("|&;<>`$()\n\r")
+
+
+def deny_sample(pattern: str) -> str | None:
+    """One plain command the bash deny `pattern` matches, or None when there is none."""
+    for filler in ("", " x"):
+        sample = pattern.replace("*", filler).strip()
+        if sample and wildcard_match(sample, pattern) and shell_command_patterns(sample) == [sample]:
+            return sample
+    return None
+
+
+def compound_deny_errors(name: str, rules: list[Rule]) -> list[str]:
+    """Every bash deny that names a command denies it alone and inside every compound shape.
+
+    A redirect stays in its command's text, so after `> out.txt` only a prefix deny (trailing `*`)
+    still matches; an exact deny such as `bash` then falls back to the `*>*` rule, which must not allow.
+    """
+    errors: list[str] = []
+
+    @functools.cache
+    def part_action(part: str) -> str:
+        return evaluate("bash", part, rules).action
+
+    def action(command: str) -> str:
+        return strictest(part_action(part) for part in shell_command_patterns(command))
+
+    denies = [rule.pattern for rule in rules if rule.permission == "bash" and rule.action == "deny"]
+    for pattern in dict.fromkeys(denies):
+        if _SHELL_SYNTAX & set(pattern):
+            continue
+        sample = deny_sample(pattern)
+        if sample is None:
+            errors.append(f"{name}: no plain command matches bash deny {pattern!r}")
+            continue
+        if action(sample) != "deny":
+            errors.append(f"{name}: bash deny {pattern!r} is shadowed, {sample!r} is {action(sample)}")
+            continue
+        for shape in COMPOUND_SHAPES:
+            command = shape.replace("{}", sample)
+            if action(command) != "deny":
+                errors.append(f"{name}: bash {command!r} must be deny (deny {pattern!r}), got {action(command)}")
+        redirected = f"{sample} > out.txt"
+        allowed = ("deny",) if pattern.endswith("*") else ("deny", "ask")
+        if action(redirected) not in allowed:
+            errors.append(f"{name}: bash {redirected!r} must be {' or '.join(allowed)}, got {action(redirected)}")
+    return errors
+
+
+def compound_deny_targets(config: dict) -> dict[str, list[Rule]]:
+    """Bash rulesets OpenCode evaluates: every bundled role, the global block (build, general), plan, explore."""
+    targets = {
+        role: ruleset_from_section("bash", _bash_section(compose_role_permission(load_role(role))))
+        for role in ALL_ROLES
+    }
+    user = config.get("permission", {})
+    agent = config.get("agent", {})
+    targets["build"] = compose_agent_rules("build", user)
+    for name in ("plan", "explore"):
+        targets[name] = compose_agent_rules(name, user, agent.get(name, {}).get("permission"))
+    return targets
+
+
 def _floor_target(name: str) -> str:
     return f"{name}config" if name.endswith("/") else name
 
@@ -832,6 +919,8 @@ def validate() -> list[str]:
     snapshot = json.loads(SNAPSHOT_PATH.read_text(encoding="utf-8"))
     errors.extend(builtin_agent_errors(snapshot))
     errors.extend(snapshot_errors(snapshot, policy))
+    for name, rules in compound_deny_targets(snapshot).items():
+        errors.extend(compound_deny_errors(name, rules))
 
     baseline = {role: compose_role_permission(load_role(role)) for role in RESTRICTIVE_ROLES}
     for role, mutation, perm_key, pattern, expected_action in MUTATION_CASES:
