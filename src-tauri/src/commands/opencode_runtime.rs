@@ -3481,9 +3481,10 @@ mod tests {
     #[cfg(not(unix))]
     fn make_executable(_path: &std::path::Path) {}
 
+    // The search path is passed in, never set on the process: another test that starts a program by
+    // bare name (`python3`, `git`) while PATH is changed cannot find it.
     #[test]
     fn test_resolve_opencode_path_lookup() {
-        let _guard = crate::test_env::guard::lock();
         let dir = temp_root("resolve-path");
         std::fs::create_dir_all(&dir).expect("mkdir");
 
@@ -3492,18 +3493,7 @@ mod tests {
             .expect("write fake opencode");
         make_executable(&fake_path);
 
-        let original_path = std::env::var("PATH").ok();
-        unsafe {
-            std::env::set_var("PATH", dir.to_string_lossy().as_ref());
-        }
-
-        let result = super::resolve_opencode_executable();
-
-        if let Some(p) = original_path {
-            unsafe { std::env::set_var("PATH", &p) };
-        } else {
-            unsafe { std::env::remove_var("PATH") };
-        }
+        let result = super::resolve_opencode_executable_in(&dir.to_string_lossy(), &[]);
 
         assert!(result.is_some(), "should find opencode via PATH");
         assert_eq!(result.unwrap(), fake_path);
@@ -3517,20 +3507,10 @@ mod tests {
         // and no fallback candidate exists on the test machine.
         // On dev machines with Homebrew opencode, the fallback may still find it,
         // which is correct behavior.
-        let _guard = crate::test_env::guard::lock();
-        let original_path = std::env::var("PATH").ok();
-        unsafe {
-            std::env::set_var("PATH", "");
-        }
+        let fallbacks = opencode_fallback_candidates(None);
 
         // Must not panic regardless of outcome
-        let _result = super::resolve_opencode_executable();
-
-        if let Some(p) = original_path {
-            unsafe { std::env::set_var("PATH", &p) };
-        } else {
-            unsafe { std::env::remove_var("PATH") };
-        }
+        let _result = super::resolve_opencode_executable_in("", &fallbacks);
         // No assertion — just ensuring no panic
     }
 

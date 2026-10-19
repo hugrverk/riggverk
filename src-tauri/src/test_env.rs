@@ -176,3 +176,55 @@ pub mod guard {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::path::{Path, PathBuf};
+
+    /// Sources that may change the process `PATH`: `extend_path_with_tool_dirs` runs once at startup
+    /// before any thread exists, and the light-harness fixtures hold `guard::lock()` for their whole
+    /// test and sort far from every test that starts a program by name.
+    const MAY_CHANGE_PATH: [&str; 2] = ["executable_resolver.rs", "light_harness_contract.rs"];
+
+    fn rust_sources(dir: &Path, found: &mut Vec<PathBuf>) {
+        for entry in std::fs::read_dir(dir).expect("read source dir").flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                rust_sources(&path, found);
+            } else if path.extension().is_some_and(|ext| ext == "rs") {
+                found.push(path);
+            }
+        }
+    }
+
+    /// `PATH` is process-wide and `guard::lock()` only holds back tests that take it. Dozens of tests
+    /// start `python3` or `git` by bare name without the lock, so a test that changes `PATH` makes
+    /// them fail with "python3 is not available" whenever a spawn lands inside its window. Inject the
+    /// search path instead (`resolve_opencode_executable_in`, `BoundedCmdOptions::extra_env`).
+    #[test]
+    fn tests_do_not_change_the_process_path() {
+        let src_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        let mut sources = Vec::new();
+        rust_sources(&src_dir, &mut sources);
+        let this_file = Path::new(file!()).file_name().expect("file name");
+        let needles = ["set_var(\"PATH\"", "remove_var(\"PATH\""];
+        let mut offenders = Vec::new();
+        for path in sources {
+            let name = path.file_name().expect("file name");
+            if name == this_file || MAY_CHANGE_PATH.iter().any(|allowed| name == *allowed) {
+                continue;
+            }
+            let text = std::fs::read_to_string(&path).expect("read source");
+            for (index, line) in text.lines().enumerate() {
+                if needles.iter().any(|needle| line.contains(needle)) {
+                    let relative = path.strip_prefix(&src_dir).unwrap_or(&path);
+                    offenders.push(format!("{}:{}", relative.display(), index + 1));
+                }
+            }
+        }
+        assert!(
+            offenders.is_empty(),
+            "a test changes the process PATH, which breaks parallel tests that spawn python3 or git: {offenders:?}"
+        );
+    }
+}
