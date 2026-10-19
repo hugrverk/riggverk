@@ -1,8 +1,8 @@
 use serde::Serialize;
 use std::path::Path;
 
-use super::content::DocumentContent;
-use super::workspace::{setup_workspace_target_path, workspace_root};
+use super::content::{bundled_library_root, DocumentContent};
+use super::workspace::setup_workspace_target_path;
 use crate::path_safety::reject_symlink;
 #[cfg(test)]
 use crate::skills_install::discover_workspace_skills;
@@ -194,10 +194,10 @@ pub(crate) fn discover_skills(root: &Path) -> Result<Vec<SkillSummary>, String> 
     Ok(discovered)
 }
 
+/// The skills bundled with the app, read from the bundle (never from a copy in the workspace).
 #[tauri::command]
 pub fn list_skills() -> Result<Vec<SkillSummary>, String> {
-    let root = workspace_root()?;
-    discover_skills(&root)
+    discover_skills(&bundled_library_root()?)
 }
 
 /// The skill copies each enabled harness loads and the problems among them (see `skill_loads`).
@@ -226,8 +226,8 @@ pub fn get_effective_skill_loads() -> Result<crate::skill_loads::EffectiveSkillL
 
 #[tauri::command]
 pub fn read_skill(id: String) -> Result<DocumentContent, String> {
-    let root = workspace_root()?;
-    let skills = list_skills()?;
+    let root = bundled_library_root()?;
+    let skills = discover_skills(&root)?;
     let found = skills.iter().find(|s| s.id == id);
     match found {
         Some(s) => {

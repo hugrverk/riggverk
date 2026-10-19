@@ -78,7 +78,7 @@ OpenCode agent permissions are composed from `templates/opencode.policy.json` pl
 
 ## Symlinks
 
-Managed writes (Install, uninstall, rollback, backups) reject symlinked targets, symlinked parent chains, and dangling symlinks. Skill discovery rejects symlinked skill roots, groups, and directories. Library reads (documents, rules template, configs) enforce workspace containment and refuse symlinks; Library writes go only to a file directly in the workspace's own `docs/context` and refuse a symlink on the file, the folder, or a parent; the personal doc listing skips symlinks. A Library save of rules refinements refuses a symlinked rules file or a symlinked folder between it and its allowlisted root, and reads the file only when it is a regular file; `o` may open a symlinked rules file, which the OS follows to where it lives.
+Managed writes (Install, uninstall, rollback, backups) reject symlinked targets, symlinked parent chains, and dangling symlinks. Skill discovery rejects symlinked skill roots, groups, and directories. Library reads of bundled items (documents, rules template, skills, agents, configs) come from the app's bundle, never from a copy in the workspace, and enforce containment in the bundle and refuse symlinks. Personal docs are read from the workspace's own `docs/context` under the same checks; Library writes go only to a file directly in it and refuse a symlink on the file, the folder, or a parent; the personal doc listing skips symlinks. A Library save of rules refinements refuses a symlinked rules file or a symlinked folder between it and its allowlisted root, and reads the file only when it is a regular file; `o` may open a symlinked rules file, which the OS follows to where it lives.
 
 ## Git
 

@@ -8,7 +8,6 @@ import type {
   AgentSourceContent,
   AgentTargetMeta,
   ConfigEditorSourceMeta,
-  DocsHealth,
   DocSummary,
   DocumentContent,
   RulesFileContent,
@@ -46,8 +45,6 @@ export interface LibraryViewProps {
 
   // Docs: personal docs are editable, bundled docs read-only.
   docs: DocSummary[];
-  docsHealth: DocsHealth | null;
-  onGoToWorkspaceRepair: () => void;
   activeDoc: DocumentContent | null;
   onSelectDoc: (id: string) => void;
   onOpenDoc: (id: string) => void;
@@ -231,13 +228,10 @@ export function LibraryView(props: LibraryViewProps) {
       list = (
         <DocItemList
           docs={props.docs}
-          docsHealth={props.docsHealth}
-          workspaceValid={workspaceValid}
           activeKey={props.activeDoc?.id ?? null}
           followCursor={followCursor}
           onSelect={props.onSelectDoc}
           onActivate={onActivate}
-          onGoToWorkspaceRepair={props.onGoToWorkspaceRepair}
           search={docSearch}
           onSearchChange={setDocSearch}
           activateHint={entry && !entry.readOnly ? "edit" : "read"}
@@ -341,9 +335,9 @@ export function LibraryView(props: LibraryViewProps) {
       <DocumentPane
         entry={entry}
         emptyHint={
-          sourceType === "configs" && props.activeConfigTargetId === "opencode_config" && workspaceValid
+          sourceType === "configs" && props.activeConfigTargetId === "opencode_config"
             ? "Loading config source…"
-            : emptyStateHint(sourceType, workspaceValid)
+            : emptyStateHint(sourceType)
         }
         editing={editing}
         textareaRef={textareaRef}

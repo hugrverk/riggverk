@@ -12,8 +12,9 @@
  *             skill and agent files in conflict (edited `tdd`, two files of `security-audit`, an edited Claude agent `verifier`)
  *             and kept ones (`diagnose` with a bundled update waiting, the agent `sentinel`)
  *   fresh     nothing installed, no backups, no transactions
- *   error     status/diagnostics calls fail (exercises the error line)
- *   empty     valid workspace with no docs, skills or agents
+ *   error     status/diagnostics calls fail (exercises the error line); the workspace is not valid, so the
+ *             Library still lists the bundled items but no personal doc
+ *   empty     valid workspace with no docs, skills or agents (the empty states of the lists; the real bundle is never empty)
  * `&theme=light|dark|system` sets the persisted appearance. Copilot, Pi and Kilo are off until Settings turns
  * them on; `&light=unserved` leaves Copilot and Pi without a skills folder (an isolated Codex home).
  *
@@ -37,7 +38,6 @@ import type {
   ConfigEditorSourceMeta,
   CursorProfileHealth,
   DocSummary,
-  DocsHealth,
   DocumentContent,
   EffectiveSkillLoads,
   FileDiffView,
@@ -1236,7 +1236,7 @@ const skills: SkillSummary[] = scenario === "empty"
     id,
     name: id,
     description: `Use the ${id} skill for ${category} work; pair with related skills when the slice map is unclear.`,
-    path: `${WORKSPACE}/skills/${id}/SKILL.md`,
+    path: `skills/${id}/SKILL.md`,
     group,
     category,
     risk,
@@ -1275,7 +1275,8 @@ function skillContent(id: string): string {
   ].join("\n");
 }
 
-// Like the backend: bundled docs have their workspace path as id ("curated"), personal docs `custom:<slug>`.
+// Like the backend: bundled docs have their bundle-relative path as id ("curated"), personal docs `custom:<slug>`
+// (read from the workspace folder, which the error scenario does not have).
 const docStore = new Map<string, DocumentContent>();
 if (scenario !== "empty") {
   const docRows: Array<[string, string, string, string]> = [
@@ -1289,7 +1290,7 @@ if (scenario !== "empty") {
     docStore.set(id, {
       id,
       title,
-      path: `${WORKSPACE}/${rel}`,
+      path: rel,
       section,
       source,
       content: `# ${title}\n\nThis is the ${title} document in the mock workspace.\n\n## Section\n\n- First point with \`code\`.\n- Second point.\n\n| Column | Value |\n| --- | --- |\n| rows | ${docStore.size + 3} |\n`,
@@ -1312,7 +1313,7 @@ if (scenario !== "empty") {
     agentStore.set(filename, {
       id: filename,
       title,
-      path: `${WORKSPACE}/agents/${filename}`,
+      path: `agents/${filename}`,
       content: `---\nname: ${title}\ndescription: ${summary}\nmodel: sonnet\n---\n\n# ${title}\n\n${summary}\n\n## Inputs\n\n- Task brief from the caller.\n\n## Output\n\n- Findings with file:line evidence.\n`,
       exists: filename !== "planner.md",
     });
@@ -1342,23 +1343,23 @@ function agentMetadata(): AgentMetadataListResponse {
 
 const agentTemplate: DocumentContent = {
   id: "agent-template",
-  title: "AGENTS.md template",
-  path: `${WORKSPACE}/templates/sync/codex-rules.md`,
-  section: "templates",
-  source: "workspace",
+  title: "Agent Rules",
+  path: "templates/global-agent-rules.md",
+  section: "",
+  source: "curated",
   content: "# Global Agent Rules\n\n## Priority\nRepository reality overrides assumptions. Explicit user instructions override these defaults.\n\n## Communication\nBe direct, dense, technical, and concise.\n\n## Verification\nNever claim done without evidence.\n",
 };
 
 const configSources: ConfigEditorSourceMeta[] = [
-  { id: "base", label: "base", rel_path: "templates/opencode.json", helper: "bundled base config" },
-  { id: "policy", label: "policy", rel_path: "templates/opencode-policy.json", helper: "local overrides" },
-  { id: "snapshot", label: "snapshot", rel_path: "generated/opencode.json", helper: "snapshot written on install" },
+  { id: "base", label: "base", rel_path: "templates/opencode.base.json", helper: "bundled base config" },
+  { id: "policy", label: "policy", rel_path: "templates/opencode.policy.json", helper: "local overrides" },
+  { id: "snapshot", label: "snapshot", rel_path: "templates/opencode.json", helper: "snapshot written on install" },
 ];
 
 const configStore = new Map<string, DocumentContent>([
-  ["base", { id: "base", title: "opencode.json", path: `${WORKSPACE}/templates/opencode.json`, section: "templates", source: "workspace", content: "{\n  \"$schema\": \"https://opencode.ai/config.json\",\n  \"model\": \"anthropic/claude-sonnet-4-5\",\n  \"small_model\": \"anthropic/claude-haiku-4-5\",\n  \"autoupdate\": true\n}\n" }],
-  ["policy", { id: "policy", title: "opencode-policy.json", path: `${WORKSPACE}/templates/opencode-policy.json`, section: "templates", source: "workspace", content: "{\n  \"permission\": { \"bash\": \"ask\", \"edit\": \"allow\" }\n}\n" }],
-  ["snapshot", { id: "snapshot", title: "opencode.json (generated)", path: `${WORKSPACE}/generated/opencode.json`, section: "generated", source: "generated", content: "{\n  \"model\": \"anthropic/claude-sonnet-4-5\",\n  \"permission\": { \"bash\": \"ask\", \"edit\": \"allow\" }\n}\n" }],
+  ["base", { id: "opencode_config:base", title: "base Config", path: "templates/opencode.base.json", section: "", source: "curated", content: "{\n  \"$schema\": \"https://opencode.ai/config.json\",\n  \"model\": \"anthropic/claude-sonnet-4-5\",\n  \"small_model\": \"anthropic/claude-haiku-4-5\",\n  \"autoupdate\": true\n}\n" }],
+  ["policy", { id: "opencode_config:policy", title: "policy Config", path: "templates/opencode.policy.json", section: "", source: "curated", content: "{\n  \"permission\": { \"bash\": \"ask\", \"edit\": \"allow\" }\n}\n" }],
+  ["snapshot", { id: "opencode_config:snapshot", title: "snapshot Config", path: "templates/opencode.json", section: "", source: "curated", content: "{\n  \"model\": \"anthropic/claude-sonnet-4-5\",\n  \"permission\": { \"bash\": \"ask\", \"edit\": \"allow\" }\n}\n" }],
 ]);
 
 const BUNDLED_MODEL_SELECTION: OpenCodeModelSelection = {
@@ -1536,6 +1537,15 @@ function arg<T>(args: Args, key: string): T {
 }
 
 // Callers prefix their own label ("Status error: …"), so the message carries none.
+function workspaceIsValid(): boolean {
+  return scenario !== "error";
+}
+
+/** Like the backend: personal docs live in the workspace folder, so they need a valid one; bundled docs do not. */
+function requireWorkspaceForPersonalDoc(id: string): void {
+  if (id.startsWith("custom:") && !workspaceIsValid()) throw new Error("invalid workspace path: not a valid workspace");
+}
+
 function unavailable(): never {
   throw new Error("workspace invalid (mock error scenario)");
 }
@@ -1698,14 +1708,18 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
       const id = arg<string>(args, "id");
       const skill = skills.find(s => s.id === id);
       if (!skill) throw new Error(`skill ${id} not found`);
-      return { id, title: skill.name, path: skill.path, section: "skills", source: "workspace", content: skillContent(id) } satisfies DocumentContent;
+      return { id, title: skill.name, path: skill.path, section: "workspace", source: "curated", content: skillContent(id) } satisfies DocumentContent;
     }
     case "list_docs":
-      return [...docStore.values()].map(({ id, title, path, section, source }) => ({ id, title, path, section, source })) satisfies DocSummary[];
-    case "get_docs_health":
-      return { missing_count: scenario === "conflict" ? 1 : 0, missing_sample: scenario === "conflict" ? ["docs/RELEASE.md"] : [] } satisfies DocsHealth;
+      // Like the backend: bundled docs show their bundle-relative path and need no workspace; personal docs
+      // show their path in the workspace folder and exist only while it is valid.
+      return [...docStore.values()]
+        .filter(doc => doc.source !== "custom" || workspaceIsValid())
+        .map(({ id, title, path, section, source }) => ({ id, title, path: source === "custom" ? `${WORKSPACE}/${path}` : path, section, source })) satisfies DocSummary[];
     case "read_doc": {
-      const doc = docStore.get(arg<string>(args, "id"));
+      const id = arg<string>(args, "id");
+      requireWorkspaceForPersonalDoc(id);
+      const doc = docStore.get(id);
       if (!doc) throw new Error("doc not found");
       return doc;
     }
@@ -1713,6 +1727,7 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
       const id = arg<string>(args, "id");
       // Like the backend: only personal docs are written.
       if (!id.startsWith("custom:")) throw new Error(`${id} is bundled with the app and read-only here`);
+      requireWorkspaceForPersonalDoc(id);
       const doc = docStore.get(id);
       if (!doc) throw new Error("doc not found");
       docStore.set(doc.id, { ...doc, content: arg<string>(args, "content") });
@@ -1721,6 +1736,7 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
     case "create_doc": {
       const slug = arg<string>(args, "slug");
       const title = arg<string>(args, "title");
+      requireWorkspaceForPersonalDoc(`custom:${slug}`);
       const doc: DocumentContent = { id: `custom:${slug}`, title, path: `docs/context/${slug}.md`, section: "Context", source: "custom", content: `# ${title}\n` };
       if (docStore.has(doc.id)) throw new Error(`doc already exists: ${doc.id}`);
       docStore.set(doc.id, doc);
@@ -1745,7 +1761,7 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
     case "read_config_template": {
       const targetId = arg<string>(args, "targetId");
       const target = TARGETS.find(t => t.id === targetId);
-      return { id: targetId, title: target?.label ?? targetId, path: `${WORKSPACE}/${target?.source_rel ?? targetId}`, section: "templates", source: "workspace", content: configStore.get("base")!.content } satisfies DocumentContent;
+      return { id: `config-template:${targetId}`, title: `${targetId}.json`, path: target?.source_rel ?? targetId, section: "", source: "curated", content: configStore.get("base")!.content } satisfies DocumentContent;
     }
     case "list_opencode_config_editor_sources":
       return configSources;

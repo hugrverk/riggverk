@@ -13,7 +13,7 @@ The app ships a read-only bundled copy of this workspace. Everything the app ins
 - **Install to the workspace**: bundle -> `~/.config/agent-workspace`.
 - **Install to a harness**: bundle -> `~/.claude`, `~/.codex`, `~/.config/opencode`, `~/.cursor`.
 
-The Library shows these files read-only; your own notes go in personal docs (`docs/context/`), which the bundle never ships. Editing a bundled file in the workspace outside the app changes what the Library shows, not what Claude, Codex, OpenCode, or Cursor receive. It also means the app can no longer prove it owns that file, so it becomes a conflict on later updates and is left alone. See [TROUBLESHOOTING.md](TROUBLESHOOTING.md#conflicts).
+The Library shows these files read-only; your own notes go in personal docs (`docs/context/`), which the bundle never ships. The Library reads them from the app's bundle, so editing a bundled file in the workspace outside the app changes neither what the Library shows nor what Claude, Codex, OpenCode, or Cursor receive. It does mean the app can no longer prove it owns that file, so it becomes a conflict on later updates and is left alone. See [TROUBLESHOOTING.md](TROUBLESHOOTING.md#conflicts).
 
 ## Mental model
 
