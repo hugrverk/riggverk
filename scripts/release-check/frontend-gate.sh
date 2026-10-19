@@ -5,5 +5,6 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$repo_root"
 
 printf '\n==> frontend gate\n'
+npm run typecheck
 npm test
 npm run build
