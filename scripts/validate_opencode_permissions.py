@@ -125,7 +125,21 @@ EDIT_ACTIONS = [
     (worktree_relative("/home/u/.config/opencode/skills/evil/SKILL.md", _WORKTREE), "ask"),
     ("deploy.sh", "ask"),
 ]
-DESTRUCTIVE_BASH = ["rm -rf*", "sudo*", "git reset --hard*", "git push --force*"]
+DESTRUCTIVE_BASH = ["rm -rf*", "sudo*", "git reset --hard*", "git clean -fdx*", "git push --force*"]
+# Secret files every role must refuse to read or print, whatever the policy says. The policy's
+# own lists are checked in full as well; this floor stops a policy edit from dropping these.
+SECRET_NAME_FLOOR = (
+    "id_rsa",
+    "id_ed25519",
+    "kubeconfig",
+    ".kube/",
+    "terraform.tfstate",
+    "terraform.tfvars",
+    "master.key",
+    ".pgpass",
+    ".my.cnf",
+    ".envrc",
+)
 
 READONLY_BASH_DENY = [
     "git add .",
@@ -282,6 +296,7 @@ ARCHITECT_BASH_ACTIONS = [
     ("npm run build", "allow"),
     ("npm run build -- --flag", "allow"),
     ("npm run build-and-deploy", "ask"),
+    ("cargo check", "allow"),
     ("echo hello", "ask"),
     ("echo x > .env.local", "ask"),
     ("echo x >> notes.txt", "ask"),
@@ -322,6 +337,8 @@ ARCHITECT_BASH_ACTIONS = [
     ("rm notes.txt", "ask"),
     ("node scripts/build.js", "ask"),
     ("node other.js", "ask"),
+    # Reading files through the shell asks; secret files are denied outright.
+    ("cat notes.txt", "ask"),
     ("cat .env", "deny"),
     # OpenCode asks once per command node, so a compound command is as strict as its strictest part.
     ("git status && git diff --stat", "allow"),
@@ -465,6 +482,60 @@ def _secret_read_errors(role: str, perm: dict) -> list[str]:
         action = effective_read_action(perm, path)
         if action != expected:
             errors.append(f"{role}: read {path!r} must be {expected}, got {action}")
+    return errors
+
+
+def destructive_errors(role: str, perm: dict) -> list[str]:
+    bash = _bash_section(perm)
+    return [f"{role}: missing bash deny {pat}" for pat in DESTRUCTIVE_BASH if bash.get(pat) != "deny"]
+
+
+def _floor_target(name: str) -> str:
+    return f"{name}config" if name.endswith("/") else name
+
+
+def secret_coverage_errors(role: str, perm: dict, policy: dict) -> list[str]:
+    """Every policy secret pattern is read-denied and denied to the content commands; the floor
+    names are denied in effect."""
+    errors: list[str] = []
+    read = perm.get("read", {})
+    if isinstance(read, dict):
+        for pattern in policy["read"]["deny"]:
+            for form in dict.fromkeys((pattern, _root_form(pattern))):
+                if read.get(form) != "deny":
+                    errors.append(f"{role}: missing read deny {form}")
+    bash = _bash_section(perm)
+    for command in policy["bash"]["secret_content_commands"]:
+        for pattern in policy["bash"]["secret_content_patterns"]:
+            if bash.get(f"{command} {pattern}") != "deny":
+                errors.append(f"{role}: missing bash deny {command} {pattern}")
+    for name in SECRET_NAME_FLOOR:
+        target = _floor_target(name)
+        if effective_read_action(perm, target) != "deny":
+            errors.append(f"{role}: read {target!r} must be deny (secret floor)")
+        for command in (f"cat {target}", f"grep x {target}"):
+            action = effective_bash_action(perm, command)
+            if action != "deny":
+                errors.append(f"{role}: bash {command!r} must be deny (secret floor), got {action}")
+    return errors
+
+
+def snapshot_errors(config: dict, policy: dict) -> list[str]:
+    """The global permission block of templates/opencode.json keeps every secret read deny."""
+    errors: list[str] = []
+    user = config.get("permission", {})
+    read = user.get("read", {})
+    if not isinstance(read, dict):
+        return ["opencode.json: permission.read must be a pattern map"]
+    for pattern in policy["read"]["deny"]:
+        for form in dict.fromkeys((pattern, _root_form(pattern))):
+            if read.get(form) != "deny":
+                errors.append(f"opencode.json: missing read deny {form}")
+    for name in SECRET_NAME_FLOOR:
+        if not any(key.startswith(f"**/{name}") and action == "deny" for key, action in read.items()):
+            errors.append(f"opencode.json: missing read deny **/{name}* (secret floor)")
+    if bash_action_for_parts(compose_agent_rules("build", user), "cargo check") != "allow":
+        errors.append("opencode.json: global bash `cargo check` must be allow")
     return errors
 
 
@@ -734,11 +805,8 @@ def validate() -> list[str]:
         perm = compose_role_permission(load_role(role))
         errors.extend(_top_level_action_errors(role, perm))
         errors.extend(_secret_read_errors(role, perm))
-        bash = perm.get("bash", {})
-        if isinstance(bash, dict):
-            for pat in DESTRUCTIVE_BASH:
-                if bash.get(pat) != "deny":
-                    errors.append(f"{role}: missing bash deny {pat}")
+        errors.extend(secret_coverage_errors(role, perm, policy))
+        errors.extend(destructive_errors(role, perm))
         edit = perm.get("edit", {})
         if isinstance(edit, dict):
             for pat in SECRET_READ + [_root_form(pattern) for pattern in SECRET_READ]:
@@ -761,7 +829,9 @@ def validate() -> list[str]:
             )
         )
 
-    errors.extend(builtin_agent_errors(json.loads(SNAPSHOT_PATH.read_text(encoding="utf-8"))))
+    snapshot = json.loads(SNAPSHOT_PATH.read_text(encoding="utf-8"))
+    errors.extend(builtin_agent_errors(snapshot))
+    errors.extend(snapshot_errors(snapshot, policy))
 
     baseline = {role: compose_role_permission(load_role(role)) for role in RESTRICTIVE_ROLES}
     for role, mutation, perm_key, pattern, expected_action in MUTATION_CASES:
