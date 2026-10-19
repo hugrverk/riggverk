@@ -240,12 +240,17 @@ fn resolve_current_target(target_id: &str) -> Result<PathBuf, String> {
         &crate::platform_paths::PlatformEnv::from_process_env(),
         crate::platform_paths::Platform::current(),
     )?;
+    // OpenCode's files are in its config folder, which moves with XDG_CONFIG_HOME.
+    let opencode_dir = crate::platform_paths::opencode_config_dir(&home);
+    match target_id {
+        "opencode-rules" | "opencode" => return Ok(opencode_dir.join("AGENTS.md")),
+        "opencode-config" => return Ok(opencode_dir),
+        "opencode-agents" => return Ok(opencode_dir.join("agents")),
+        _ => {}
+    }
     let rel = match target_id {
         "codex-rules" => ".codex/AGENTS.md",
-        "opencode-rules" => ".config/opencode/AGENTS.md",
         "claude-rules" => ".claude/CLAUDE.md",
-        "opencode-config" => ".config/opencode",
-        "opencode-agents" => ".config/opencode/agents",
         "claude-agents" => ".claude/agents",
         "codex-agents" => ".codex/agents",
         "codex-config" => ".codex",
@@ -256,7 +261,6 @@ fn resolve_current_target(target_id: &str) -> Result<PathBuf, String> {
         "playwright-mcp" => ".config/playwright-mcp/config.json",
         // Legacy backwards-compatible IDs (read-only)
         "codex" => ".codex/AGENTS.md",
-        "opencode" => ".config/opencode/AGENTS.md",
         "claude" => ".claude/CLAUDE.md",
         _ => return Err(format!("unknown backup target id: {}", target_id)),
     };
@@ -781,7 +785,7 @@ mod tests {
 
     #[test]
     fn resolve_current_target_known_ids() {
-        let _guard = crate::test_env::guard::lock();
+        let _env = crate::test_env::guard::default_xdg_config_home();
         let home = crate::test_env::process_home();
         for tid in ALLOWED_TARGET_IDS {
             let result = resolve_current_target(tid);

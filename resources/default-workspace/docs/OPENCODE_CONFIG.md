@@ -8,6 +8,14 @@ OpenCode 2.x is detected, not supported. It migrates the 1.x config in memory an
 
 The CLI is looked up on `PATH`, then in `/opt/homebrew/bin`, `/usr/local/bin` and `~/.opencode/bin` (the official installer's directory), because an app started from Finder has a short `PATH`.
 
+## Config folder
+
+OpenCode reads its global config from `$XDG_CONFIG_HOME/opencode` when `XDG_CONFIG_HOME` is set, else from `~/.config/opencode`, on every OS. Riggverk installs, checks and removes its OpenCode files (`opencode.json`, `tui.json`, `AGENTS.md`, `agents/`) in that same folder, and looks for `config.json` and `opencode.jsonc` there. A relative `XDG_CONFIG_HOME` is ignored, as the XDG specification calls it invalid. A folder outside the home directory is the allowlisted root of these files. The labels say `$XDG_CONFIG_HOME/opencode` while the variable moves the folder; on this page `~/.config/opencode` stands for whichever folder is in effect. Riggverk sees the environment it was launched with, so set the variable where the app starts too (opened from Finder or the Dock it does not see your shell profile).
+
+When `XDG_CONFIG_HOME` changes, the next install writes to the new folder. The files at the old folder stay as they are: the app neither updates nor removes them, uninstall included, so delete them yourself when you no longer need them.
+
+`OPENCODE_CONFIG_DIR` points OpenCode at one more folder, read after the global one. The runtime pane warns while it is set; the app never installs there.
+
 ## Runtime health probes
 
 The OpenCode runtime pane compares files, and it also asks the installed CLI three things that files cannot show. Each probe has a timeout and an output cap, runs from a neutral working directory (the system temp folder, so no project config is picked up), and keeps only an exit status or a version number. Raw CLI output is never stored or logged.
@@ -26,7 +34,7 @@ OpenCode 1.x does not read `opencode.json` alone. In the global folder it merges
 
 - **A commented `opencode.json`.** Health reads it as JSONC, so the `config` row still says synced or diverged. Install writes strict JSON only, so it leaves such a file as is, and the review and a warning say why. To let the app update it again, move your own settings and their comments to `opencode.jsonc` and keep `opencode.json` strict JSON. A trailing comma or a byte order mark alone only needs removing.
 - **`opencode.jsonc` and `config.json` beside it.** When one sets a managed key (a top-level managed key, `mcp.playwright`, `agent.plan.permission`, `agent.explore.permission` or `agent.<role>.model`; `$schema` does not count), the runtime turns diverged, the `overrides` row names the file and the keys, and a warning says what to remove. `opencode.jsonc` wins over the team's values; `config.json` is merged under them, so its permission rules, MCP servers and agent blocks combine with the team's. An install does not fix this: the app never writes these files.
-- **Environment variables.** The pane names `OPENCODE_CONFIG`, `OPENCODE_CONFIG_DIR`, `OPENCODE_CONFIG_CONTENT`, `OPENCODE_PERMISSION`, `OPENCODE_DISABLE_PROJECT_CONFIG` and `OPENCODE_DISABLE_CLAUDE_CODE*` when they are set. The app sees the environment it was launched with, not your shell's: opened from Finder or the Dock it does not see what your shell profile exports, so check your shell yourself.
+- **Environment variables.** The pane names `OPENCODE_CONFIG`, `OPENCODE_CONFIG_DIR`, `OPENCODE_CONFIG_CONTENT`, `OPENCODE_PERMISSION`, `OPENCODE_DISABLE_PROJECT_CONFIG` and `OPENCODE_DISABLE_CLAUDE_CODE*` when they are set, and `OPENCODE_CONFIG_DIR` gets a warning of its own that names the folder the app installs to. The app sees the environment it was launched with, not your shell's: opened from Finder or the Dock it does not see what your shell profile exports, so check your shell yourself.
 - **System managed config.** The pane says when `/Library/Application Support/opencode` or the managed preferences `ai.opencode.managed.plist` (macOS), `/etc/opencode` (Linux) or `%ProgramData%\opencode` (Windows) exists. It overrides your config files, the team's values included. Only the path's existence is checked; nothing there is opened.
 
 Variables, project files and the system managed config do not change the runtime status: the app cannot see what they set.

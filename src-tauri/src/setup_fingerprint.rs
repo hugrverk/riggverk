@@ -479,6 +479,7 @@ mod tests {
 
     #[test]
     fn fingerprint_changes_when_installed_rule_changes() {
+        let _env = crate::test_env::guard::default_xdg_config_home();
         let home = temp("rule-inst-home");
         let ws = temp("rule-inst-ws");
         write(&ws.join("templates/sync/opencode-rules.md"), "same");
@@ -491,6 +492,7 @@ mod tests {
 
     #[test]
     fn fingerprint_changes_when_installed_rule_changes_without_mtime_or_length() {
+        let _env = crate::test_env::guard::default_xdg_config_home();
         let home = temp("rule-stale-home");
         let ws = temp("rule-stale-ws");
         let installed = home.join(".config/opencode/AGENTS.md");
@@ -552,6 +554,7 @@ mod tests {
 
     #[test]
     fn fingerprint_changes_when_opencode_managed_key_changes() {
+        let _env = crate::test_env::guard::default_xdg_config_home();
         let home = temp("oc-managed-home");
         let ws = temp("oc-managed-ws");
         write_opencode_config_fixture(&ws, &home, r#"{"$schema":"x","model":"a"}"#);

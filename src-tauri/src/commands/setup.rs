@@ -3122,6 +3122,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn regular_file_remove_rejects_symlinked_parent() {
+        let _env = crate::test_env::guard::default_xdg_config_home();
         // Remove rejects when the destination's parent chain contains a symlink.
         // Test with a non-workspace artifact (home-based).
         let base = std::env::temp_dir().join(format!(
@@ -3151,6 +3152,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn regular_file_apply_rejects_symlinked_parent() {
+        let _env = crate::test_env::guard::default_xdg_config_home();
         // Apply rejects when the destination's parent chain contains a symlink.
         let base = std::env::temp_dir().join(format!(
             "aw-setup-apply-sym-parent-{}",
@@ -3177,6 +3179,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn regular_file_apply_rejects_dangling_destination_symlink() {
+        let _env = crate::test_env::guard::default_xdg_config_home();
         let base = std::env::temp_dir().join(format!(
             "aw-setup-apply-dangling-dest-{}",
             std::time::SystemTime::now()

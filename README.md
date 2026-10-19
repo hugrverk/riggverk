@@ -73,7 +73,7 @@ All skills support the central harnesses and the light tier. The skills surface 
 
 Rules files are merge-managed. Install writes the shared base (`templates/global-agent-rules.md` plus a harness appendix, composed under `templates/sync/`) between `BEGIN AGENT-WORKSPACE BASE` and `END AGENT-WORKSPACE BASE` markers; everything outside the markers is yours and is kept byte-for-byte. Add refinements below the block; they override the base.
 
-Targets: Codex `$CODEX_HOME/AGENTS.md` (default `~/.codex/AGENTS.md`), OpenCode `~/.config/opencode/AGENTS.md`, Claude Code `~/.claude/CLAUDE.md`, and for the light tier GitHub Copilot `~/.copilot/copilot-instructions.md`, Pi `~/.pi/agent/AGENTS.md` and Kilo Code `$XDG_CONFIG_HOME/kilo/AGENTS.md` (default `~/.config/kilo/AGENTS.md`). Cursor User Rules stay a manual copy of `templates/cursor/user-rules.md`.
+Targets: Codex `$CODEX_HOME/AGENTS.md` (default `~/.codex/AGENTS.md`), OpenCode `$XDG_CONFIG_HOME/opencode/AGENTS.md` (default `~/.config/opencode/AGENTS.md`), Claude Code `~/.claude/CLAUDE.md`, and for the light tier GitHub Copilot `~/.copilot/copilot-instructions.md`, Pi `~/.pi/agent/AGENTS.md` and Kilo Code `$XDG_CONFIG_HOME/kilo/AGENTS.md` (default `~/.config/kilo/AGENTS.md`). Cursor User Rules stay a manual copy of `templates/cursor/user-rules.md`.
 
 An edited block or a pre-existing file without markers is a conflict: Install leaves it alone. Resolve it with a diff, **Convert** (current base becomes the managed block, your changed sections move below it; previewed and backed up), or **Leave as is**. Harness pages expose these as `d` diff, `v` convert, `m` leave as is, and `:rules`. Details and the full plan table are in `docs/WORKSPACE_CONTRACT.md`.
 
