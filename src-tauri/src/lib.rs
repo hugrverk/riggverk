@@ -99,7 +99,6 @@ use tauri::Manager;
 pub fn run() {
     executable_resolver::extend_path_with_tool_dirs();
     tauri::Builder::default()
-        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             // First: nothing may read or write the data directory before this.
             app_data_migration::run_at_startup()?;
