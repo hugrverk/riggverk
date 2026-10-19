@@ -40,6 +40,7 @@ function opencodeHealth(overrides: Partial<OpenCodeRuntimeHealth> = {}): OpenCod
     config_diverged_keys: [],
     rules_status: "synced",
     playwright_mcp_version: "0.0.48",
+    config_precedence: { installed_not_strict: [], sibling_files: [], env_vars: [], system_managed_paths: [] },
     template_tui_path: "",
     installed_tui_path: "",
     tui_status: "synced",
@@ -138,6 +139,38 @@ describe("runtimeRowsFor", () => {
     expect(diverged).toMatchObject({ value: "diverged · model, mcp.playwright", tone: "warn", wrap: true });
     expect(row(rowsOf({ config_status: "missing" }), "config")).toMatchObject({ value: "missing", tone: "fail" });
     expect(row(rowsOf({ config_status: "invalid" }), "config")).toMatchObject({ value: "invalid", tone: "fail" });
+  });
+
+  it("says when opencode.json is JSONC, which the app compares but does not rewrite", () => {
+    const precedence = { installed_not_strict: ["comments", "trailing commas"], sibling_files: [], env_vars: [], system_managed_paths: [] };
+    expect(row(rowsOf({ config_precedence: precedence }), "config")).toMatchObject({ value: "synced · has comments, trailing commas", tone: "ok", wrap: true });
+    const diverged = row(rowsOf({ config_status: "diverged", config_diverged_keys: ["model"], config_precedence: precedence }), "config");
+    expect(diverged).toMatchObject({ value: "diverged · model · has comments, trailing commas", tone: "warn" });
+  });
+
+  it("names what else changes OpenCode's config, and has no row when nothing does", () => {
+    expect(rowsOf().map(item => item.label)).not.toContain("overrides");
+    const overrides = row(
+      rowsOf({
+        config_precedence: {
+          installed_not_strict: [],
+          sibling_files: [
+            { file: "config.json", managed_keys: [], invalid: true },
+            { file: "opencode.jsonc", managed_keys: ["model", "agent.plan.permission"], invalid: false },
+          ],
+          env_vars: ["OPENCODE_CONFIG", "OPENCODE_PERMISSION"],
+          system_managed_paths: ["/Library/Application Support/opencode"],
+        },
+      }),
+      "overrides",
+    );
+    expect(overrides).toMatchObject({
+      value: "config.json: not valid JSONC · opencode.jsonc: model, agent.plan.permission · env: OPENCODE_CONFIG, OPENCODE_PERMISSION · system managed: /Library/Application Support/opencode",
+      tone: "warn",
+      wrap: true,
+    });
+    const labels = rowsOf({ config_precedence: { installed_not_strict: [], sibling_files: [], env_vars: ["OPENCODE_CONFIG"], system_managed_paths: [] } }).map(item => item.label);
+    expect(labels.indexOf("overrides")).toBe(labels.indexOf("config") + 1);
   });
 
   it("shows the rules status and the pinned Playwright MCP version", () => {

@@ -374,7 +374,7 @@ describe("HarnessPage", () => {
 });
 
 describe("OpenCodeView model override", () => {
-  const OPENCODE_HEALTH = { status: "synced", tui_status: "synced", agent_mismatches: [], warnings: [], cli: null, config_status: "synced", config_diverged_keys: [], rules_status: "synced", playwright_mcp_version: null, bundled_agent_count: 3, installed_bundled_agent_count: 3, default_agent: "build", autoupdate: "true", summary: "ok", next_action: "" } as unknown as OpenCodeRuntimeHealth;
+  const OPENCODE_HEALTH = { status: "synced", tui_status: "synced", agent_mismatches: [], warnings: [], cli: null, config_status: "synced", config_diverged_keys: [], config_precedence: { installed_not_strict: [], sibling_files: [], env_vars: [], system_managed_paths: [] }, rules_status: "synced", playwright_mcp_version: null, bundled_agent_count: 3, installed_bundled_agent_count: 3, default_agent: "build", autoupdate: "true", summary: "ok", next_action: "" } as unknown as OpenCodeRuntimeHealth;
   const BUNDLED: OpenCodeModelSelection = {
     model: "anthropic/claude-sonnet-4-5",
     small_model: "anthropic/claude-haiku-4-5",
@@ -853,7 +853,7 @@ describe("HarnessPage skill loads", () => {
   });
 
   it("shows the loads on the OpenCode page, which has no skills row of its own", () => {
-    const health = { status: "synced", tui_status: "synced", agent_mismatches: [], warnings: [], cli: null, config_status: "synced", config_diverged_keys: [], rules_status: "synced", playwright_mcp_version: null, bundled_agent_count: 3, installed_bundled_agent_count: 3, default_agent: "build", autoupdate: "true", summary: "ok", next_action: "" } as unknown as OpenCodeRuntimeHealth;
+    const health = { status: "synced", tui_status: "synced", agent_mismatches: [], warnings: [], cli: null, config_status: "synced", config_diverged_keys: [], config_precedence: { installed_not_strict: [], sibling_files: [], env_vars: [], system_managed_paths: [] }, rules_status: "synced", playwright_mcp_version: null, bundled_agent_count: 3, installed_bundled_agent_count: 3, default_agent: "build", autoupdate: "true", summary: "ok", next_action: "" } as unknown as OpenCodeRuntimeHealth;
     const skillLoads = skillLoadsOf({
       harnesses: [{
         harness: "opencode",

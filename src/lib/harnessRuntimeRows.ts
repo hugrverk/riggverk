@@ -97,11 +97,22 @@ function opencodeAgentsRow(health: OpenCodeRuntimeHealth): KvItem {
   };
 }
 
-/** The status, then the managed keys that differ from the bundled config. */
+/** The status, then the managed keys that differ from the bundled config, then what makes the file JSONC (the app does not rewrite it then). */
 function opencodeConfigRow(health: OpenCodeRuntimeHealth): KvItem {
   const keys = health.config_diverged_keys;
-  const status = runtimeChipLabel(health.config_status).toLowerCase();
-  return { label: "config", value: keys.length > 0 ? `${status} · ${keys.join(", ")}` : status, tone: toneOf(health.config_status), wrap: keys.length > 0 };
+  const notStrict = health.config_precedence.installed_not_strict;
+  const parts = [runtimeChipLabel(health.config_status).toLowerCase(), ...(keys.length > 0 ? [keys.join(", ")] : []), ...(notStrict.length > 0 ? [`has ${notStrict.join(", ")}`] : [])];
+  return { label: "config", value: parts.join(" · "), tone: toneOf(health.config_status), wrap: parts.length > 1 };
+}
+
+/** What else changes the config OpenCode runs, by name only: sibling files and their managed keys, config variables, a system managed config. The warnings say what to do. */
+function opencodeOverridesRow({ config_precedence: precedence }: OpenCodeRuntimeHealth): KvItem[] {
+  const parts = [
+    ...precedence.sibling_files.map(({ file, managed_keys, invalid }) => `${file}: ${invalid ? "not valid JSONC" : managed_keys.join(", ")}`),
+    ...(precedence.env_vars.length > 0 ? [`env: ${precedence.env_vars.join(", ")}`] : []),
+    ...(precedence.system_managed_paths.length > 0 ? [`system managed: ${precedence.system_managed_paths.join(", ")}`] : []),
+  ];
+  return parts.length > 0 ? [{ label: "overrides", value: parts.join(" · "), tone: "warn", wrap: true }] : [];
 }
 
 function opencodeRows(health: OpenCodeRuntimeHealth): KvItem[] {
@@ -113,6 +124,7 @@ function opencodeRows(health: OpenCodeRuntimeHealth): KvItem[] {
     statusRow("rules", health.rules_status),
     opencodeAgentsRow(health),
     opencodeConfigRow(health),
+    ...opencodeOverridesRow(health),
     playwright
       ? { label: "mcp playwright", value: playwright, tone: health.config_diverged_keys.includes("mcp.playwright") ? "warn" as const : "ok" as const }
       : { label: "mcp playwright", value: "none", tone: "dim" as const },

@@ -599,6 +599,11 @@ pub fn detect_surface_state(
                                     .then(|| tui_conflict_reason(workspace_root, home))
                                     .flatten()
                             })
+                            .or_else(|| {
+                                (p.artifact == ArtifactId::OpenCodeConfig)
+                                    .then(|| opencode_config_conflict_reason(workspace_root, home))
+                                    .flatten()
+                            })
                     });
                 let manual = planned
                     .iter()
@@ -1463,6 +1468,16 @@ fn tui_conflict_reason(workspace_root: &Path, home: &Path) -> Option<String> {
         )),
         Assessment::Absent | Assessment::Synced => None,
     }
+}
+
+/// Why `opencode.json` is left alone, for the review, when its text is the reason: it has
+/// comments, trailing commas or a byte order mark (JSONC, which OpenCode reads but the app does
+/// not write), or it is not JSON at all. Only fixed phrases and file names.
+fn opencode_config_conflict_reason(workspace_root: &Path, home: &Path) -> Option<String> {
+    let dest = ArtifactId::OpenCodeConfig
+        .resolve_dest(home, workspace_root)
+        .ok()?;
+    crate::opencode_precedence::conflict_reason(&dest)
 }
 
 fn managed_hash_for(

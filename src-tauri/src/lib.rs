@@ -10,12 +10,14 @@ mod cursor_profile_paths;
 mod executable_resolver;
 mod file_conflicts;
 mod installation_status;
+mod jsonc;
 mod kept_files;
 mod light_harness;
 mod light_mcp;
 mod managed_bootstrap;
 mod managed_state;
 mod mutation_lock;
+mod opencode_precedence;
 mod opencode_tui;
 mod path_safety;
 mod path_utils;
@@ -57,6 +59,8 @@ mod light_harness_contract;
 mod managed_reconciliation_contract;
 #[cfg(test)]
 mod opencode_model_override_contract;
+#[cfg(test)]
+mod opencode_precedence_contract;
 #[cfg(test)]
 mod opencode_tui_contract;
 #[cfg(test)]
