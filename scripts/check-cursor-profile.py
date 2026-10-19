@@ -8,11 +8,23 @@ import re
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1] / "resources" / "default-workspace"
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from guards import iter_files  # noqa: E402
+
+REPO = Path(__file__).resolve().parents[1]
+ROOT = REPO / "resources" / "default-workspace"
 CURSOR = ROOT / "templates" / "cursor"
 MANIFEST = CURSOR / "manifest.json"
 MCP_DIR = CURSOR / "mcp"
 GLOBAL_PROFILE = CURSOR / "global-profile.json"
+REQUIRED_NONEMPTY = (
+    MANIFEST,
+    GLOBAL_PROFILE,
+    MCP_DIR / "README.md",
+    MCP_DIR / "mcp.example.json",
+    MCP_DIR / "playwright.mcp.json",
+)
 
 ALLOWED_AGENT_KEYS = {"name", "description", "model", "readonly", "is_background"}
 OPENCODE_ONLY_KEYS = {"permission", "mode", "temperature", "steps", "hidden"}
@@ -24,6 +36,9 @@ SUSPICIOUS_VALUE = re.compile(
 DOC_ONLY_KEYS = frozenset(
     {"description", "notes", "warnings", "excluded_capabilities", "validation_todo"}
 )
+# Raw-text scan of every file in the MCP examples dir, README included (case-sensitive, so
+# prose such as "basic setup" is not a token).
+RAW_TOKEN = re.compile(r"sk-[A-Za-z0-9_-]{12,}|Bearer\s+\S+|Basic\s+\S+|gh[pousr]_[A-Za-z0-9_]{12,}")
 ENV_PLACEHOLDER = re.compile(r"\$\{env:[A-Z0-9_]+\}")
 PRIVATE_URL = re.compile(r"https?://[^/\s]*(localhost|127\.0\.0\.1|\.local|internal|private|corp)[^/\s]*", re.I)
 FAKE_USER_RULES_PATH = re.compile(
@@ -218,7 +233,17 @@ def validate_mcp(manifest: dict) -> None:
         path = MCP_DIR / name
         if path.suffix == ".json":
             validate_mcp_file(path)
+    for path in sorted(MCP_DIR.rglob("*")):
+        if path.is_file() and RAW_TOKEN.search(path.read_text(encoding="utf-8", errors="replace")):
+            fail(f"{path.relative_to(ROOT)} contains a token-like literal")
     ok("Cursor MCP example valid")
+
+
+def validate_required_assets() -> None:
+    for path in REQUIRED_NONEMPTY:
+        if not path.is_file() or path.stat().st_size == 0:
+            fail(f"Cursor profile asset missing or empty: {path.relative_to(ROOT)}")
+    ok("Cursor profile assets present")
 
 
 def validate_global_profile() -> None:
@@ -243,23 +268,24 @@ def validate_global_profile() -> None:
 
 
 def validate_no_fake_user_rules_path() -> None:
-    for base in [CURSOR, ROOT / "docs", ROOT / "README.md", ROOT / "scripts"]:
-        paths = [base] if base.is_file() else list(base.rglob("*"))
-        for path in paths:
-            if not path.is_file():
-                continue
-            if path == Path(__file__).resolve():
-                continue
-            if path.name.startswith(".env"):
-                continue
-            text = path.read_text(encoding="utf-8", errors="ignore")
-            if FAKE_USER_RULES_PATH.search(text):
-                fail(f"fake global Cursor User Rules path documented in {path.relative_to(ROOT)}")
+    # The whole bundle as it is on disk (it ships as is), plus the app source.
+    paths = list(ROOT.rglob("*")) + [
+        REPO / rel for rel in iter_files(REPO) if rel.startswith(("src/", "src-tauri/"))
+    ]
+    for path in paths:
+        if not path.is_file():
+            continue
+        if path.name.startswith(".env"):
+            continue
+        text = path.read_text(encoding="utf-8", errors="ignore")
+        if FAKE_USER_RULES_PATH.search(text):
+            fail(f"fake global Cursor User Rules path documented in {path.relative_to(REPO)}")
     ok("No fake global Cursor User Rules path documented")
 
 
 def main() -> int:
     manifest = validate_manifest()
+    validate_required_assets()
     validate_agents(manifest)
     validate_rules(manifest)
     validate_mcp(manifest)

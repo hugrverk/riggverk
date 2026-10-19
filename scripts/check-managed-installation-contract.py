@@ -12,10 +12,14 @@ ROOT = Path(__file__).resolve().parents[1]
 TAURI = ROOT / "src-tauri/src"
 FRONTEND = ROOT / "src"
 # Commands scripts/release-check.sh must run. generate.py check covers the history-based
-# ownership proofs (pre-manifest ownership, rules history, shipped digests).
+# ownership proofs (pre-manifest ownership, rules history, shipped digests);
+# scripts/test_release_check_wiring.py checks every other checker is wired.
 REQUIRED_GATES = (
     "python3 scripts/generate.py check",
     "python3 scripts/check-skill-routing.py",
+    "python3 scripts/check-bundle-content.py",
+    "python3 scripts/check-source.py",
+    "python3 scripts/validate_opencode_permissions.py",
     "bash scripts/smoke-pre-manifest-upgrade.sh",
 )
 
@@ -508,6 +512,8 @@ def main() -> None:
     if flow.count('"apply_setup"') != 1:
         fail("useInstallFlow must be the only apply_setup caller in the install flow")
     require(FRONTEND / "hooks/useInstallScreen.ts", "useInstallFlow()")
+    # One preview/apply/rollback command surface.
+    require(TAURI / "lib.rs", "preview_setup", "apply_setup", "rollback_setup_transaction")
     require(FRONTEND / "components/InstallPlanPane.tsx", "conflict")
 
     # One install owner per page: Start and the shared HarnessPage each render one plan pane;
@@ -520,6 +526,7 @@ def main() -> None:
         FRONTEND / "views/OpenCodeView.tsx",
         FRONTEND / "views/CursorView.tsx",
         FRONTEND / "views/ClaudeView.tsx",
+        FRONTEND / "views/LightHarnessView.tsx",
     ):
         if read(path).count("<HarnessPage") != 1:
             fail(f"{path.relative_to(ROOT)} must render exactly one HarnessPage")
@@ -530,6 +537,8 @@ def main() -> None:
     ):
         if re.search(r"\brepair\b|setup lifecycle|transaction fingerprint", read(path), re.I):
             fail(f"{path.relative_to(ROOT)} exposes obsolete installation terminology")
+    if re.search(r"repair|update resources|SetupLifecycle|WorkspaceSkillsVerify", read(FRONTEND / "views/StartView.tsx")):
+        fail("src/views/StartView.tsx retains obsolete installation owners or terminology")
 
     print("managed installation contract checks passed")
 
