@@ -28,7 +28,7 @@ Run `u` on the Workspace page. Missing files are created; files you changed are 
 
 A conflict is a file the app will not overwrite because it cannot prove it owns an unmodified copy. The plan shows `preserved, skipped`; `y` still applies the safe rows. Press `c` in the review to jump between conflicts, `d` for details.
 
-- **Workspace or harness file you edited** (a bundled doc, template, skill, agent): the app treats any edit as yours. To take the bundled version, move or delete your copy and install again. To keep yours, do nothing; it stays frozen against updates.
+- **Workspace or harness file you edited** (a bundled doc, template, skill, agent, edited outside the app or with the Library of an earlier version): the app treats any edit as yours. To take the bundled version, move or delete your copy and install again. To keep yours, do nothing; it stays frozen against updates.
 - **Deleted `.agent-workspace/managed-state.json`**: this is the ownership record. Without it the app cannot prove it owns what it installed, so any file that is not an exact copy of a bundled version becomes a conflict. Restore it from a backup (`setup/<transaction id>/managed-state.previous.json`) or resolve each file as above. It describes this machine's installs; do not copy it to another machine.
 - **Rules file (`CLAUDE.md`, `AGENTS.md`)**: see the next section.
 - **Skill you installed by hand with the same name**: diverged copies are preserved. Rename yours or delete it to take the bundled one.

@@ -1,17 +1,11 @@
 import type { LibrarySourceType } from "../views/LibraryView";
 
-export function isLibrarySourceTypeDirty(
-  sourceType: LibrarySourceType,
-  docDirty: boolean,
-  ruleDirty: boolean,
-  agentDirty: boolean,
-  configDirty: boolean,
-): boolean {
-  switch (sourceType) {
-    case "docs": return docDirty;
-    case "rules": return ruleDirty;
-    case "agents": return agentDirty;
-    case "configs": return configDirty;
-    case "skills": return false;
-  }
+/** Personal docs (`docs/context/<slug>.md`) are the user's own text: the only Library items it edits. */
+export function isPersonalDoc(doc: { source: string }): boolean {
+  return doc.source === "custom";
+}
+
+/** Personal docs are the only Library items with a draft: every other source is read-only. */
+export function isLibrarySourceTypeDirty(sourceType: LibrarySourceType, docDirty: boolean): boolean {
+  return sourceType === "docs" && docDirty;
 }

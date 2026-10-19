@@ -110,7 +110,7 @@ Tabs in order (press `1`-`9`; disabled harnesses are hidden and the rest renumbe
 
 - Workspace - harness list with install state, surfaces, installed-state matrix, uninstall with preview, session-scoped **Recover previous uninstall**, backups folder, output.
 - Codex, OpenCode, Cursor, Claude, and the light tier (Copilot, Pi, Kilo; rules, skills and MCP rows, runtime health) - target toggles (Space, autosaved), surfaces, runtime health, install review. OpenCode health also asks the installed CLI (version, whether the default agent resolves, whether the configured models are listed; bounded, parse-only, never logged), and the page adds the model override (`model`, `small model` and an optional `subagent model` for the read-only subagents; each row shows its source and whether it is applied, and `x` resets it to the bundled default).
-- Library - an items list and one document pane (rendered, or its source while editing) for docs, rules, skills, runtime agents, and configs. Saves write the runtime workspace only (`:w`, `:q`).
+- Library - an items list and one document pane (rendered, or its source while editing) for docs, rules, skills, runtime agents, and configs. Only your personal docs (`docs/context/`) are editable (`n`, `i`, `:w`, `:q`); bundled items are read-only and change with an app update.
 - Settings - harnesses, appearance, text size, motion, landing page, colors, workspace.
 
 Full uninstall removes proven app-owned files, preserves modified and unknown files, leaves merge-managed configs and rules files in place, and records a rollback-capable transaction. **Recover previous uninstall** exists only for the current app session.

@@ -41,7 +41,7 @@ export interface LibraryViewProps {
   sourceType: LibrarySourceType;
   onSetSourceType: (type: LibrarySourceType) => void;
 
-  // Docs
+  // Docs: personal docs are editable, bundled docs read-only.
   docs: DocSummary[];
   docsHealth: DocsHealth | null;
   onGoToWorkspaceRepair: () => void;
@@ -67,18 +67,9 @@ export interface LibraryViewProps {
   onSetCreateDocSlug: (value: string) => void;
   onCreateDoc: () => void;
 
+  // Rules, skills, agents and configs are bundled with the app: read-only here, so they have no draft.
   // Rules
   agentTemplate: DocumentContent | null;
-  onOpenTemplate: () => void;
-  agentTemplateDraft: string;
-  agentTemplateDirty: boolean;
-  agentTemplateSaving: boolean;
-  agentTemplateSaveResult: ActionResult | null;
-  agentTemplateMode: "preview" | "edit";
-  onSetAgentTemplateMode: (mode: "preview" | "edit") => void;
-  onChangeAgentTemplateDraft: (value: string) => void;
-  onSaveAgentTemplate: () => void;
-  onResetAgentTemplate: () => void;
   agentTargets: AgentTargetMeta[];
 
   // Skills
@@ -88,43 +79,21 @@ export interface LibraryViewProps {
   skillSearch: string;
   onSetSkillSearch: (value: string) => void;
   onSelectSkillPreview: (id: string) => void;
-  onOpenSkill: (id: string) => void;
 
   // Agents
   agentSources: AgentMetadataResponse[];
   activeAgentId: string | null;
   activeAgentContent: AgentSourceContent | null;
   onSelectAgent: (id: string) => void;
-  onOpenAgent: (id: string) => void;
-  agentDraft: string;
-  agentDirty: boolean;
-  agentSaving: boolean;
-  agentSaveResult: ActionResult | null;
-  agentMode: "preview" | "edit";
-  onSetAgentMode: (mode: "preview" | "edit") => void;
-  onChangeAgentDraft: (value: string) => void;
-  onSaveAgent: () => void;
-  onResetAgent: () => void;
 
   // Configs
   configTemplateContent: DocumentContent | null;
   activeConfigTargetId: string;
   configTargets: AgentTargetMeta[];
   onSelectConfigTarget: (targetId: string) => void;
-  onOpenConfig: () => void;
-  configDraft: string;
-  configDirty: boolean;
-  configSaving: boolean;
-  configSaveResult: ActionResult | null;
-  configMode: "preview" | "edit";
-  onSetConfigMode: (mode: "preview" | "edit") => void;
-  onChangeConfigDraft: (value: string) => void;
-  onSaveConfig: () => void;
-  onResetConfig: () => void;
   configEditorSources: ConfigEditorSourceMeta[];
   activeConfigSourceType: string;
   onSelectConfigSource: (sourceType: string) => void;
-  configEditorSourceSaveMessage: string;
   configEditorSourceContent: DocumentContent | null;
 
   // Common
@@ -253,6 +222,7 @@ export function LibraryView(props: LibraryViewProps) {
           onGoToWorkspaceRepair={props.onGoToWorkspaceRepair}
           search={docSearch}
           onSearchChange={setDocSearch}
+          activateHint={entry && !entry.readOnly ? "edit" : "read"}
         />
       );
       break;

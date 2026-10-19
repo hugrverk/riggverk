@@ -14,22 +14,32 @@ vi.mock("../components/ConfirmDialog", () => ({
   useConfirm: () => vi.fn(async () => true),
 }));
 
+// Personal docs: the only Library items with a draft and a save.
 const docA: DocumentContent = {
   id: "doc-a",
   title: "Doc A",
-  path: "docs/a.md",
-  section: "docs",
-  source: "workspace",
+  path: "docs/context/a.md",
+  section: "Context",
+  source: "custom",
   content: "alpha",
 };
 
 const docB: DocumentContent = {
   id: "doc-b",
   title: "Doc B",
-  path: "docs/b.md",
-  section: "docs",
-  source: "workspace",
+  path: "docs/context/b.md",
+  section: "Context",
+  source: "custom",
   content: "beta",
+};
+
+const bundledDoc: DocumentContent = {
+  id: "README.md",
+  title: "Workspace README",
+  path: "README.md",
+  section: "Start",
+  source: "curated",
+  content: "bundled",
 };
 
 const agentA: AgentSourceContent = {
@@ -126,57 +136,6 @@ describe("useLibraryController save operation identity", () => {
     expect(result.current.docSaveResult).toBeNull();
   });
 
-  it("does not apply agent A save after selecting agent B", async () => {
-    const { deps } = createDeps();
-    const { result } = renderHook(() => useLibraryController(deps));
-
-    invoke.mockImplementation((cmd: string, args?: { filename?: string }) => {
-      if (cmd === "read_agent_source" && args?.filename === "agent-a.md") return Promise.resolve(agentA);
-      if (cmd === "read_agent_source" && args?.filename === "agent-b.md") return Promise.resolve(agentB);
-      return Promise.reject(new Error(`unexpected invoke: ${cmd}`));
-    });
-
-    await act(async () => {
-      await result.current.selectAgent("agent-a.md");
-    });
-    await act(async () => {
-      result.current.onChangeAgentDraft("agent alpha edited");
-    });
-
-    let resolveSave: (value: ActionResult) => void = () => {};
-    const savePromise = new Promise<ActionResult>(resolve => {
-      resolveSave = resolve;
-    });
-
-    invoke.mockImplementation((cmd: string, args?: { filename?: string }) => {
-      if (cmd === "read_agent_source") {
-        return Promise.resolve(args?.filename === "agent-b.md" ? agentB : agentA);
-      }
-      if (cmd === "save_agent_source") return savePromise;
-      return Promise.reject(new Error(`unexpected invoke: ${cmd}`));
-    });
-
-    let saveHandle: Promise<void>;
-    await act(async () => {
-      saveHandle = result.current.onSaveAgent();
-    });
-
-    await act(async () => {
-      await result.current.selectAgent("agent-b.md");
-    });
-
-    await act(async () => {
-      resolveSave(successResult("save_agent_source"));
-      await saveHandle!;
-    });
-
-    expect(result.current.activeAgentId).toBe("agent-b.md");
-    expect(result.current.agentDraft).toBe("agent beta");
-    expect(result.current.agentDirty).toBe(false);
-    expect(result.current.agentSaving).toBe(false);
-    expect(result.current.agentSaveResult).toBeNull();
-  });
-
   it("clears dirty on unchanged document save when still current", async () => {
     const { deps } = createDeps();
     const { result } = renderHook(() => useLibraryController(deps));
@@ -238,6 +197,24 @@ describe("useLibraryController save operation identity", () => {
     expect(result.current.docSaving).toBe(false);
     expect(result.current.activeDoc).toBeNull();
   });
+
+  it("never sends a bundled doc to save_doc, even with an edited draft", async () => {
+    const { deps } = createDeps();
+    const { result } = renderHook(() => useLibraryController(deps));
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === "read_doc") return Promise.resolve(bundledDoc);
+      return Promise.reject(new Error(`unexpected invoke: ${cmd}`));
+    });
+
+    await act(async () => {
+      await result.current.selectDoc("README.md");
+      result.current.onChangeDocDraft("edited");
+      await result.current.onSaveDoc();
+    });
+
+    expect(invoke.mock.calls.map(([cmd]) => cmd)).toEqual(["read_doc"]);
+    expect(result.current.docSaving).toBe(false);
+  });
 });
 
 function agentMeta(content: AgentSourceContent): AgentMetadataResponse {
@@ -268,7 +245,6 @@ describe("useLibraryController loaders vs. selection", () => {
       }
       if (cmd === "read_agent_source" && args?.filename === "agent-a.md") return slowRead.promise;
       if (cmd === "read_agent_source" && args?.filename === "agent-b.md") return Promise.resolve(agentB);
-      if (cmd === "save_agent_source") return Promise.resolve(successResult("save_agent_source", "unchanged"));
       return Promise.reject(new Error(`unexpected invoke: ${cmd}`));
     });
 
@@ -288,44 +264,7 @@ describe("useLibraryController loaders vs. selection", () => {
 
     expect(result.current.activeAgentId).toBe("agent-b.md");
     expect(result.current.activeAgentContent?.id).toBe("agent-b.md");
-    expect(result.current.agentDraft).toBe("agent beta");
-
-    await act(async () => {
-      await result.current.onSaveAgent();
-    });
-    const saves = invoke.mock.calls.filter(([cmd]) => cmd === "save_agent_source");
-    expect(saves).toEqual([["save_agent_source", { filename: "agent-b.md", content: "agent beta" }]]);
-  });
-
-  it("never saves the previous agent draft under a newly selected id while its content is loading", async () => {
-    const { deps } = createDeps();
-    const { result } = renderHook(() => useLibraryController(deps));
-    const slowRead = deferred<AgentSourceContent>();
-
-    invoke.mockImplementation((cmd: string, args?: { filename?: string }) => {
-      if (cmd === "read_agent_source" && args?.filename === "agent-a.md") return Promise.resolve(agentA);
-      if (cmd === "read_agent_source" && args?.filename === "agent-b.md") return slowRead.promise;
-      if (cmd === "save_agent_source") return Promise.resolve(successResult("save_agent_source", "unchanged"));
-      return Promise.reject(new Error(`unexpected invoke: ${cmd}`));
-    });
-
-    await act(async () => {
-      await result.current.selectAgent("agent-a.md");
-    });
-    let selectHandle: Promise<void>;
-    await act(async () => {
-      selectHandle = result.current.selectAgent("agent-b.md");
-    });
-    await act(async () => {
-      await result.current.onSaveAgent();
-    });
-    expect(invoke.mock.calls.some(([cmd]) => cmd === "save_agent_source")).toBe(false);
-
-    await act(async () => {
-      slowRead.resolve(agentB);
-      await selectHandle!;
-    });
-    expect(result.current.activeAgentContent?.id).toBe("agent-b.md");
+    expect(result.current.activeAgentContent?.content).toBe("agent beta");
   });
 
   it("keeps the selected doc when a slower doc list load resolves later", async () => {
@@ -393,39 +332,12 @@ describe("useLibraryController loaders vs. selection", () => {
   });
 });
 
-describe("useLibraryController agent draft survives reload", () => {
+describe("useLibraryController agent reload", () => {
   beforeEach(() => {
     invoke.mockReset();
   });
 
-  it("keeps an unsaved agent draft when the same agent is reloaded", async () => {
-    const { deps } = createDeps();
-    const { result } = renderHook(() => useLibraryController(deps));
-
-    invoke.mockImplementation((cmd: string, args?: { filename?: string }) => {
-      if (cmd === "list_agent_metadata") return Promise.resolve({ agents: [agentMeta(agentA)], warnings: [] });
-      if (cmd === "read_agent_source" && args?.filename === "agent-a.md") return Promise.resolve({ ...agentA });
-      return Promise.reject(new Error(`unexpected invoke: ${cmd}`));
-    });
-
-    await act(async () => {
-      await result.current.loadAgentSources();
-    });
-    await act(async () => {
-      result.current.onChangeAgentDraft("agent alpha edited");
-    });
-    expect(result.current.agentDirty).toBe(true);
-
-    // Re-clicking the Library tab reloads the agent as a fresh object with identical content.
-    await act(async () => {
-      await result.current.loadAgentSources();
-    });
-
-    expect(result.current.agentDraft).toBe("agent alpha edited");
-    expect(result.current.agentDirty).toBe(true);
-  });
-
-  it("adopts reloaded agent content when the draft is clean", async () => {
+  it("shows the reloaded agent content", async () => {
     const { deps } = createDeps();
     const { result } = renderHook(() => useLibraryController(deps));
     let content = "agent alpha";
@@ -444,8 +356,8 @@ describe("useLibraryController agent draft survives reload", () => {
       await result.current.loadAgentSources();
     });
 
-    expect(result.current.agentDraft).toBe("agent alpha changed on disk");
-    expect(result.current.agentDirty).toBe(false);
+    expect(result.current.activeAgentContent?.content).toBe("agent alpha changed on disk");
+    expect(result.current.libraryDirty).toBe(false);
   });
 });
 
@@ -460,18 +372,12 @@ describe("useLibraryController open actions", () => {
     invoke.mockResolvedValue({ success: false, action: "open_doc", stdout: "", stderr: "no default app", exit_code: 1 });
 
     await act(async () => {
-      await result.current.openDocEditor("doc-a");
-      await result.current.openAgent("agent-a.md");
-      result.current.openSkill("skill-a");
+      await result.current.openDocEditor("custom:doc-a");
     });
 
-    expect(invoke).toHaveBeenCalledWith("open_doc", { id: "doc-a" });
-    expect(invoke).toHaveBeenCalledWith("open_agent_source", { filename: "agent-a.md" });
-    expect(invoke).toHaveBeenCalledWith("open_skill", { id: "skill-a" });
-    await waitFor(() => expect(deps.setError).toHaveBeenCalledTimes(3));
+    expect(invoke).toHaveBeenCalledWith("open_doc", { id: "custom:doc-a" });
+    await waitFor(() => expect(deps.setError).toHaveBeenCalledTimes(1));
     expect(deps.setError).toHaveBeenCalledWith("Open doc: no default app");
-    expect(deps.setError).toHaveBeenCalledWith("Open agent: no default app");
-    expect(deps.setError).toHaveBeenCalledWith("Open: no default app");
   });
 
   it("stays quiet when the opener succeeds", async () => {
@@ -497,7 +403,7 @@ describe("useLibraryController workspace switch", () => {
     title: "OpenCode config",
     path: "config/opencode.json",
     section: "config",
-    source: "workspace",
+    source: "curated",
     content,
   });
 
@@ -506,9 +412,8 @@ describe("useLibraryController workspace switch", () => {
       if (cmd === "list_opencode_config_editor_sources") return Promise.resolve([]);
       if (cmd === "read_opencode_config_source") return Promise.resolve(configSource(workspace.config));
       if (cmd === "read_agent_template") {
-        return Promise.resolve({ ...docA, id: "agent-template", content: workspace.template });
+        return Promise.resolve({ ...docA, id: "agent-template", source: "curated", content: workspace.template });
       }
-      if (cmd === "save_opencode_config_source") return Promise.resolve(successResult("save_opencode_config_source"));
       if (cmd === "list_skills" || cmd === "list_docs") return Promise.resolve([]);
       if (cmd === "list_agent_metadata") return Promise.resolve({ agents: [] });
       if (cmd === "get_docs_health") return Promise.resolve(null);
@@ -516,7 +421,7 @@ describe("useLibraryController workspace switch", () => {
     });
   }
 
-  it("drops workspace A's dirty OpenCode config draft and reloads the sources for workspace B", async () => {
+  it("drops workspace A's OpenCode config source and reloads the sources for workspace B", async () => {
     const { deps, workspaceLoadGenerationRef } = createDeps(0);
     const { result } = renderHook(() => useLibraryController(deps));
     backend({ config: "config of A", template: "rules of A" });
@@ -526,10 +431,6 @@ describe("useLibraryController workspace switch", () => {
       await result.current.setGuardedLibrarySourceType("configs");
     });
     await waitFor(() => expect(result.current.configEditorSourceContent?.content).toBe("config of A"));
-    await act(async () => {
-      result.current.onChangeConfigDraft("dirty draft of A");
-    });
-    expect(result.current.configDirty).toBe(true);
 
     // `:workspace choose` accepts workspace B: the reset runs first, the reload follows.
     backend({ config: "config of B", template: "rules of B" });
@@ -537,22 +438,83 @@ describe("useLibraryController workspace switch", () => {
       workspaceLoadGenerationRef.current = 1;
       result.current.resetLibraryState();
     });
-    expect(result.current.configDraft).toBe("");
-    expect(result.current.configDirty).toBe(false);
     expect(result.current.configEditorSourceContent).toBeNull();
-
-    // A save before B's source has loaded must not write A's draft into B.
-    await act(async () => {
-      await result.current.onSaveConfig();
-    });
-    expect(invoke).not.toHaveBeenCalledWith("save_opencode_config_source", expect.anything());
 
     await act(async () => {
       await result.current.loadWorkspaceLibraryResources(1);
     });
     await waitFor(() => expect(result.current.configEditorSourceContent?.content).toBe("config of B"));
-    expect(result.current.configDraft).toBe("config of B");
-    expect(result.current.configDirty).toBe(false);
     expect(result.current.agentTemplate?.content).toBe("rules of B");
+  });
+});
+
+/** Commands that existed to edit or open bundled items; the backend no longer registers them. */
+const REMOVED_COMMANDS = [
+  "save_agent_template",
+  "save_agent_source",
+  "save_opencode_config_source",
+  "open_agent_template",
+  "open_agent_source",
+  "open_config_template",
+  "open_opencode_config_source",
+  "open_skill",
+];
+
+describe("useLibraryController bundled items stay read-only", () => {
+  beforeEach(() => {
+    invoke.mockReset();
+  });
+
+  it("walks every source and opens every item without invoking a write or a removed command", async () => {
+    const { deps } = createDeps();
+    const { result } = renderHook(() => useLibraryController(deps));
+    const docSummary = (doc: DocumentContent): DocSummary => ({
+      id: doc.id, title: doc.title, path: doc.path, section: doc.section, source: doc.source,
+    });
+    const skill: SkillSummary = {
+      id: "s1", name: "s1", description: "", path: "skills/s1/SKILL.md", group: "g", category: "c", risk: "low", targets: [], related: [],
+    };
+    invoke.mockImplementation((cmd: string, args?: { id?: string; filename?: string }) => {
+      switch (cmd) {
+        case "list_docs": return Promise.resolve([docSummary(bundledDoc), docSummary(docA)]);
+        case "get_docs_health": return Promise.resolve(null);
+        case "read_doc": return Promise.resolve(args?.id === docA.id ? docA : bundledDoc);
+        case "list_skills": return Promise.resolve([skill]);
+        case "read_skill": return Promise.resolve({ ...bundledDoc, id: "s1", content: "skill" });
+        case "list_agent_metadata": return Promise.resolve({ agents: [agentMeta(agentA)], warnings: [] });
+        case "read_agent_source": return Promise.resolve(agentA);
+        case "read_agent_template": return Promise.resolve({ ...bundledDoc, id: "agent-template" });
+        case "list_opencode_config_editor_sources": return Promise.resolve([]);
+        case "read_opencode_config_source": return Promise.resolve({ ...bundledDoc, id: "opencode_config:base" });
+        case "read_config_template": return Promise.resolve({ ...bundledDoc, id: "config-template:codex_config" });
+        default: return Promise.reject(new Error(`unexpected invoke: ${cmd}`));
+      }
+    });
+
+    await act(async () => {
+      result.current.loadLibraryView();
+    });
+    await waitFor(() => expect(result.current.activeAgentContent?.id).toBe("agent-a.md"));
+    for (const type of ["rules", "skills", "agents", "configs", "docs"] as const) {
+      await act(async () => {
+        await result.current.setGuardedLibrarySourceType(type);
+      });
+    }
+    await act(async () => {
+      await result.current.selectDoc("README.md");
+      result.current.onChangeDocDraft("edited bundled doc");
+      await result.current.onSaveDoc();
+      await result.current.readSkill("s1");
+      await result.current.selectAgent("agent-a.md");
+      result.current.setActiveConfigTargetId("opencode_config");
+      await result.current.setGuardedLibrarySourceType("configs");
+      result.current.selectConfigSourceType("policy");
+      result.current.selectConfigTarget("codex_config");
+    });
+    await waitFor(() => expect(result.current.configTemplateContent?.id).toBe("config-template:codex_config"));
+
+    const commands = invoke.mock.calls.map(([cmd]) => cmd as string);
+    for (const removed of REMOVED_COMMANDS) expect(commands).not.toContain(removed);
+    expect(commands.filter(cmd => /^(save|create|write|apply|open)_/.test(cmd))).toEqual([]);
   });
 });

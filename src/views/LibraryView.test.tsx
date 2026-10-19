@@ -45,16 +45,6 @@ function baseProps(overrides: Partial<LibraryViewProps> = {}): LibraryViewProps 
     onSetCreateDocSlug: noop,
     onCreateDoc: noop,
     agentTemplate: null,
-    onOpenTemplate: noop,
-    agentTemplateDraft: "",
-    agentTemplateDirty: false,
-    agentTemplateSaving: false,
-    agentTemplateSaveResult: null,
-    agentTemplateMode: "preview",
-    onSetAgentTemplateMode: noop,
-    onChangeAgentTemplateDraft: noop,
-    onSaveAgentTemplate: noop,
-    onResetAgentTemplate: noop,
     agentTargets: [],
     skills: [],
     activeSkillId: null,
@@ -62,39 +52,17 @@ function baseProps(overrides: Partial<LibraryViewProps> = {}): LibraryViewProps 
     skillSearch: "",
     onSetSkillSearch: noop,
     onSelectSkillPreview: noop,
-    onOpenSkill: noop,
     agentSources: [],
     activeAgentId: null,
     activeAgentContent: null,
     onSelectAgent: noop,
-    onOpenAgent: noop,
-    agentDraft: "",
-    agentDirty: false,
-    agentSaving: false,
-    agentSaveResult: null,
-    agentMode: "preview",
-    onSetAgentMode: noop,
-    onChangeAgentDraft: noop,
-    onSaveAgent: noop,
-    onResetAgent: noop,
     configTemplateContent: null,
     activeConfigTargetId: "",
     configTargets: [],
     onSelectConfigTarget: noop,
-    onOpenConfig: noop,
-    configDraft: "",
-    configDirty: false,
-    configSaving: false,
-    configSaveResult: null,
-    configMode: "preview",
-    onSetConfigMode: noop,
-    onChangeConfigDraft: noop,
-    onSaveConfig: noop,
-    onResetConfig: noop,
     configEditorSources: [],
     activeConfigSourceType: "base",
     onSelectConfigSource: noop,
-    configEditorSourceSaveMessage: "",
     configEditorSourceContent: null,
     workspaceValid: true,
     showConfigs: true,
@@ -102,9 +70,16 @@ function baseProps(overrides: Partial<LibraryViewProps> = {}): LibraryViewProps 
   };
 }
 
-function makeDoc(id: string, title: string, content: string): DocumentContent {
-  return { id, title, path: `docs/${id}.md`, section: "docs", source: "workspace", content };
+/**
+ * An open item. Docs open as personal docs (`custom`, editable) unless a test passes `curated` for a bundled
+ * one; the list rows in `docs` only drive selection. Other sources ignore the doc source.
+ */
+function makeDoc(id: string, title: string, content: string, source = "custom"): DocumentContent {
+  return { id, title, path: `docs/${id}.md`, section: "docs", source, content };
 }
+
+const BUNDLED_REASON = "bundled with the app: read-only here";
+const COPY_NOTE = "this copy may differ if it was edited earlier";
 
 function renderLibrary(overrides: Partial<LibraryViewProps> = {}) {
   const result = renderInFrame(<LibraryView {...baseProps(overrides)} />, { view: "library" });
@@ -195,6 +170,14 @@ function pressSave() {
   press(document.activeElement!, "s", { ctrlKey: true });
 }
 
+/** Mod+s on a bundled item runs nothing: its status-bar hint stays disabled and says why. */
+function expectSaveRefused() {
+  pressSave();
+  const hint = within(screen.getByLabelText("Status bar")).getByRole("button", { name: / save$/ });
+  expect(hint.getAttribute("aria-disabled")).toBe("true");
+  expect(hint.getAttribute("title")).toBe(BUNDLED_REASON);
+}
+
 function runCommand(line: string) {
   press(document.activeElement ?? document.body, ":", { shiftKey: true });
   const input = screen.getByRole("combobox", { name: "Command" });
@@ -203,9 +186,9 @@ function runCommand(line: string) {
 }
 
 const docs: DocSummary[] = [
-  { id: "a", title: "Alpha", section: "Bundled", path: "docs/alpha.md", source: "bundled" },
+  { id: "a", title: "Alpha", section: "Bundled", path: "docs/alpha.md", source: "curated" },
   { id: "b", title: "Beta notes", section: "Context", path: "docs/context/beta.md", source: "custom" },
-  { id: "c", title: "Gamma", section: "Bundled", path: "docs/gamma.md", source: "bundled" },
+  { id: "c", title: "Gamma", section: "Bundled", path: "docs/gamma.md", source: "curated" },
 ];
 
 describe("LibraryView layout", () => {
@@ -252,12 +235,12 @@ describe("LibraryView Configs pane", () => {
     { id: "codex_config", label: "Codex config", harness: "codex", kind: "config", source_rel: "templates/codex.toml", target_rel: "config.toml" },
   ];
   const sources: ConfigEditorSourceMeta[] = [
-    { id: "base", label: "Base", rel_path: "templates/opencode.base.json", editable: true, helper: "bundled base" },
-    { id: "policy", label: "Policy", rel_path: "templates/opencode.policy.json", editable: true, helper: "overrides" },
-    { id: "snapshot", label: "Snapshot", rel_path: "templates/opencode.json", editable: false, helper: "generated" },
+    { id: "base", label: "Base", rel_path: "templates/opencode.base.json", helper: "bundled base" },
+    { id: "policy", label: "Policy", rel_path: "templates/opencode.policy.json", helper: "overrides" },
+    { id: "snapshot", label: "Snapshot", rel_path: "templates/opencode.json", helper: "generated" },
   ];
 
-  it("shows the editor source content for opencode_config", () => {
+  it("shows the editor source content for opencode_config, rendered and read-only", () => {
     const content = makeDoc("base", "base", '{"opencode_marker": true}');
     renderLibrary({
       sourceType: "configs",
@@ -266,16 +249,17 @@ describe("LibraryView Configs pane", () => {
       activeConfigTargetId: "opencode_config",
       configTemplateContent: null,
       configEditorSourceContent: content,
-      configDraft: content.content,
     });
-    // Rendered by default: the source, pretty-printed, and no textarea until the item is edited.
+    // Rendered: the source, pretty-printed, and never a textarea.
     expect(document.querySelector(".configs-code")!.textContent).toContain('"opencode_marker": true');
-    expect(screen.queryByLabelText("Edit config source")).toBeNull();
     expect(screen.queryByText("Select a config target to preview")).toBeNull();
     // The bundle summary is gated on the same active content.
     expect(screen.getByRole("region", { name: "bundle" })).not.toBeNull();
-    expect(editDocument("Edit config source").value).toContain("opencode_marker");
-    expect(document.querySelector(".configs-code")).toBeNull();
+    focusPane("Document");
+    press(document.activeElement!, "i");
+    expect(screen.queryByRole("textbox")).toBeNull();
+    expect(document.querySelector(".configs-code")).not.toBeNull();
+    expect(screen.getByText(BUNDLED_REASON)).not.toBeNull();
   });
 
   it("shows a loading state for opencode_config and then renders content", () => {
@@ -289,7 +273,7 @@ describe("LibraryView Configs pane", () => {
     expect(screen.getByText("Loading config source…")).not.toBeNull();
 
     const loaded = makeDoc("base", "base", '{"loaded_marker": 1}');
-    update({ ...props, configEditorSourceContent: loaded, configDraft: loaded.content });
+    update({ ...props, configEditorSourceContent: loaded });
     expect(document.querySelector(".configs-code")!.textContent).toContain('"loaded_marker": 1');
   });
 
@@ -300,15 +284,14 @@ describe("LibraryView Configs pane", () => {
       configTargets,
       activeConfigTargetId: "codex_config",
       configTemplateContent: template,
-      configDraft: template.content,
     });
     expect(document.querySelector(".configs-code")!.textContent).toContain("template_marker");
-    expect(screen.getByText("template preview")).not.toBeNull();
+    expect(screen.getByText(BUNDLED_REASON)).not.toBeNull();
     // Never a textarea for a read-only item, however it is asked for.
     focusPane("Document");
     press(document.activeElement!, "i");
     press(document.activeElement!, "Enter");
-    expect(screen.queryByLabelText("Edit config source")).toBeNull();
+    expect(screen.queryByRole("textbox")).toBeNull();
     expect(screen.queryByRole("region", { name: "bundle" })).toBeNull();
   });
 
@@ -322,7 +305,7 @@ describe("LibraryView Configs pane", () => {
     expect(screen.getByText("Select a config target to preview")).not.toBeNull();
   });
 
-  it("lists the editor sources of opencode_config, marks the active one and flags the read-only snapshot", () => {
+  it("lists the editor sources of opencode_config and marks the active one", () => {
     const content = makeDoc("policy", "policy", "{}");
     renderLibrary({
       sourceType: "configs",
@@ -331,7 +314,6 @@ describe("LibraryView Configs pane", () => {
       activeConfigTargetId: "opencode_config",
       activeConfigSourceType: "policy",
       configEditorSourceContent: content,
-      configDraft: "{}",
     });
     expect(within(listbox()).getAllByRole("option").map(option => option.querySelector(".nm")!.textContent)).toEqual([
       "OpenCode config",
@@ -340,7 +322,8 @@ describe("LibraryView Configs pane", () => {
       "Snapshot",
     ]);
     expect(selectedNames()).toEqual(["Policy"]);
-    expect(screen.getByText("read-only")).not.toBeNull();
+    // Every source is read-only: the pane says so once, no row needs its own tag.
+    expect(within(listbox()).queryByText("read-only")).toBeNull();
   });
 
   it("opens a source after the cursor rests on it, and never re-selects the active target", () => {
@@ -354,7 +337,6 @@ describe("LibraryView Configs pane", () => {
       configEditorSources: sources,
       activeConfigTargetId: "opencode_config",
       configEditorSourceContent: content,
-      configDraft: "{}",
       onSelectConfigSource,
       onSelectConfigTarget,
     });
@@ -374,54 +356,22 @@ describe("LibraryView Configs pane", () => {
     expect(onSelectConfigSource).toHaveBeenCalledWith("policy");
   });
 
-  it("treats the generated snapshot as read-only: no textarea, no save", () => {
-    const onSaveConfig = vi.fn();
-    const content = makeDoc("snapshot", "snapshot", '{"snap": 1}');
-    renderLibrary({
-      sourceType: "configs",
-      configTargets: [configTargets[0]!],
-      configEditorSources: sources,
-      activeConfigTargetId: "opencode_config",
-      activeConfigSourceType: "snapshot",
-      configEditorSourceContent: content,
-      configDraft: content.content,
-      onSaveConfig,
-    });
-    expect(screen.queryByLabelText("Edit config source")).toBeNull();
-    expect(screen.getByText("generated snapshot: edit Base or Policy instead")).not.toBeNull();
-    pressSave();
-    expect(onSaveConfig).not.toHaveBeenCalled();
-  });
-
-  it("saves the opencode source with Mod+s when it has unsaved edits", () => {
-    const onSaveConfig = vi.fn();
-    const content = makeDoc("base", "base", "{}");
-    renderLibrary({
-      sourceType: "configs",
-      configTargets: [configTargets[0]!],
-      configEditorSources: sources,
-      activeConfigTargetId: "opencode_config",
-      configEditorSourceContent: content,
-      configDraft: '{"x": 1}',
-      configDirty: true,
-      onSaveConfig,
-    });
-    pressSave();
-    expect(onSaveConfig).toHaveBeenCalledTimes(1);
-  });
-
-  it("shows the save message of the opencode source", () => {
-    const content = makeDoc("base", "base", "{}");
-    renderLibrary({
-      sourceType: "configs",
-      configTargets: [configTargets[0]!],
-      configEditorSources: sources,
-      activeConfigTargetId: "opencode_config",
-      configEditorSourceContent: content,
-      configDraft: "{}",
-      configEditorSourceSaveMessage: "saved. Use Workspace → generate to update snapshot.",
-    });
-    expect(screen.getByText(/Use Workspace → generate/)).not.toBeNull();
+  it("treats every opencode source as bundled: no textarea, Mod+s says why", () => {
+    for (const source of sources) {
+      const content = makeDoc(source.id, source.id, '{"snap": 1}');
+      renderLibrary({
+        sourceType: "configs",
+        configTargets: [configTargets[0]!],
+        configEditorSources: sources,
+        activeConfigTargetId: "opencode_config",
+        activeConfigSourceType: source.id,
+        configEditorSourceContent: content,
+      });
+      expect(screen.queryByRole("textbox")).toBeNull();
+      expect(screen.getByText(BUNDLED_REASON)).not.toBeNull();
+      expectSaveRefused();
+      cleanup();
+    }
   });
 });
 
@@ -604,7 +554,7 @@ describe("LibraryView status-bar hints", () => {
     expect(bar.getByRole("button", { name: /save/ })).not.toBeNull();
   });
 
-  it("keeps the edit hint disabled, with the reason, for a read-only item", () => {
+  it("keeps the edit and open hints disabled, with the reason, for a bundled item", () => {
     const skill: SkillSummary = { id: "tdd", name: "tdd", description: "", path: "", group: "g", category: "", risk: "low", targets: [], related: [] };
     renderLibrary({
       sourceType: "skills",
@@ -615,9 +565,12 @@ describe("LibraryView status-bar hints", () => {
     focusPane("Document");
     const hint = statusHint("↵ edit");
     expect(hint.getAttribute("aria-disabled")).toBe("true");
-    expect(hint.getAttribute("title")).toBe("skills are edited as files: open it in your editor");
+    expect(hint.getAttribute("title")).toBe(BUNDLED_REASON);
     fireEvent.click(hint);
     expect(screen.queryByLabelText("Skill source")).toBeNull();
+    const open = statusHint("o open");
+    expect(open.getAttribute("aria-disabled")).toBe("true");
+    expect(open.getAttribute("title")).toBe(BUNDLED_REASON);
   });
 
   it("hides edit and open while nothing is open", () => {
@@ -984,22 +937,23 @@ describe("LibraryView document pane", () => {
     expect(within(footer).getByRole("button", { name: ":reset discard" })).not.toBeNull();
   });
 
-  it("marks skills read-only: rendered only, marker, no edit, no save, open externally", () => {
-    const onOpenSkill = vi.fn();
+  it("marks skills read-only: rendered only, marker, no edit, no save, nothing to open", () => {
     const onSaveDoc = vi.fn();
+    const onOpenDoc = vi.fn();
     const skill: SkillSummary = { id: "tdd", name: "tdd", description: "", path: "", group: "g", category: "", risk: "low", targets: [], related: [] };
     renderLibrary({
       sourceType: "skills",
       skills: [skill],
       activeSkillId: "tdd",
       activeSkillContent: { id: "tdd", title: "tdd", path: "skills/tdd/SKILL.md", section: "skills", source: "workspace", content: "# Tdd" },
-      onOpenSkill,
       onSaveDoc,
+      onOpenDoc,
     });
     const pane = screen.getByRole("region", { name: "Document" });
     expect(within(pane).getByRole("heading", { name: "Tdd" })).not.toBeNull();
     expect(pane.querySelector(".pane-title")!.textContent).toContain("read-only");
-    expect(within(pane).getByText("skills are edited as files: open it in your editor")).not.toBeNull();
+    expect(within(pane).getByText(BUNDLED_REASON)).not.toBeNull();
+    expect(within(pane).getByText(COPY_NOTE)).not.toBeNull();
 
     focusPane("Document");
     press(document.activeElement!, "i");
@@ -1011,7 +965,51 @@ describe("LibraryView document pane", () => {
     pressSave();
     expect(onSaveDoc).not.toHaveBeenCalled();
     press(focusList(), "o");
-    expect(onOpenSkill).toHaveBeenCalledWith("tdd");
+    expect(onOpenDoc).not.toHaveBeenCalled();
+  });
+
+  it("marks a bundled doc read-only with the reason everywhere, and keeps personal docs editable", () => {
+    const onSaveDoc = vi.fn();
+    const onOpenDoc = vi.fn();
+    const bundled = makeDoc("a", "Alpha", "# Bundled heading", "curated");
+    const { update } = renderLibrary({ docs, activeDoc: bundled, docDraft: bundled.content, onSaveDoc, onOpenDoc });
+    const pane = screen.getByRole("region", { name: "Document" });
+    expect(pane.querySelector(".pane-title")!.textContent).toBe("Alpha · docs/a.md · read-only");
+    const footer = pane.querySelector<HTMLElement>(".pane-foot")!;
+    expect(within(footer).getByText(BUNDLED_REASON)).not.toBeNull();
+    expect(within(footer).getByText(COPY_NOTE)).not.toBeNull();
+    expect(within(footer).queryByRole("button", { name: ":reset discard" })).toBeNull();
+    // From the list, Enter reads a bundled doc: it moves into the rendered pane.
+    focusList();
+    expect(statusHint("↵ read")).not.toBeNull();
+
+    focusPane("Document");
+    for (const name of ["↵ edit", "o open"]) {
+      const hint = statusHint(name);
+      expect(hint.getAttribute("aria-disabled")).toBe("true");
+      expect(hint.getAttribute("title")).toBe(BUNDLED_REASON);
+    }
+    press(document.activeElement!, "Enter");
+    press(document.activeElement!, "i");
+    press(focusList(), "o");
+    expect(screen.queryByLabelText("Edit document")).toBeNull();
+    expect(onOpenDoc).not.toHaveBeenCalled();
+    expectSaveRefused();
+    focusList();
+    runCommand("w");
+    expect(screen.getByRole("alert").textContent).toContain(BUNDLED_REASON);
+    expect(onSaveDoc).not.toHaveBeenCalled();
+    press(screen.getByRole("combobox", { name: "Command" }), "Escape");
+
+    // A personal doc in the same list is the user's own text: edit and open are offered.
+    const personal = makeDoc("b", "Beta notes", "# Notes");
+    update({ docs, activeDoc: personal, docDraft: personal.content, onSaveDoc, onOpenDoc });
+    expect(pane.querySelector(".pane-title")!.textContent).not.toContain("read-only");
+    focusList();
+    expect(statusHint("↵ edit")).not.toBeNull();
+    press(focusList(), "o");
+    expect(onOpenDoc).toHaveBeenCalledWith("b");
+    expect(editDocument("Edit document").value).toBe("# Notes");
   });
 
   it("shows agent metadata and notes above the rendered source in the document pane", () => {
@@ -1029,7 +1027,6 @@ describe("LibraryView document pane", () => {
       agentSources: agents,
       activeAgentId: "v.md",
       activeAgentContent: { id: "v.md", title: "verifier", path: "agents/v.md", content: "# Verifier", exists: true },
-      agentDraft: "# Verifier",
     });
     const pane = screen.getByRole("region", { name: "Document" });
     const meta = within(pane).getByRole("region", { name: "metadata" });
@@ -1055,38 +1052,35 @@ describe("LibraryView save", () => {
     expect(onSaveDoc).toHaveBeenCalledTimes(3);
   });
 
-  it("calls the save handler of the active source only", () => {
-    const handlers = {
-      onSaveDoc: vi.fn(),
-      onSaveAgentTemplate: vi.fn(),
-      onSaveAgent: vi.fn(),
-      onSaveConfig: vi.fn(),
-    };
-    const template = makeDoc("tpl", "tpl", "rules");
+  it("saves nothing from the bundled sources: rules and agents refuse Mod+s and :w with the reason", () => {
+    const onSaveDoc = vi.fn();
+    const onOpenDoc = vi.fn();
     const { update } = renderLibrary({
       sourceType: "rules",
-      agentTemplate: template,
-      agentTemplateDraft: "rules!",
-      agentTemplateDirty: true,
-      ...handlers,
+      agentTemplate: makeDoc("tpl", "tpl", "rules"),
+      onSaveDoc,
+      onOpenDoc,
     });
-    pressSave();
-    expect(handlers.onSaveAgentTemplate).toHaveBeenCalledTimes(1);
+    expectSaveRefused();
 
     update({
       sourceType: "agents",
       agentSources: [{ id: "v.md", title: "v", path: "agents/v.md", exists: true, metadata: null }],
       activeAgentId: "v.md",
       activeAgentContent: { id: "v.md", title: "v", path: "agents/v.md", content: "a", exists: true },
-      agentDraft: "b",
-      agentDirty: true,
-      ...handlers,
+      onSaveDoc,
+      onOpenDoc,
     });
-    pressSave();
-    expect(handlers.onSaveAgent).toHaveBeenCalledTimes(1);
-    expect(handlers.onSaveDoc).not.toHaveBeenCalled();
-    expect(handlers.onSaveConfig).not.toHaveBeenCalled();
-    expect(handlers.onSaveAgentTemplate).toHaveBeenCalledTimes(1);
+    expectSaveRefused();
+    focusList();
+    runCommand("w");
+    expect(screen.getByRole("alert").textContent).toContain(BUNDLED_REASON);
+    press(screen.getByRole("combobox", { name: "Command" }), "Escape");
+    press(focusList(), "o");
+    press(focusList(), "i");
+    expect(screen.queryByRole("textbox", { name: /agent/i })).toBeNull();
+    expect(onSaveDoc).not.toHaveBeenCalled();
+    expect(onOpenDoc).not.toHaveBeenCalled();
   });
 
   it("does not save a clean doc and says so in the status bar", () => {
@@ -1112,23 +1106,19 @@ describe("LibraryView save", () => {
     expect(onSaveDoc).toHaveBeenCalledTimes(1);
   });
 
-  it("refuses :w for a read-only item", () => {
-    const onSaveConfig = vi.fn();
+  it("refuses :w for a read-only item with its reason", () => {
     const content = makeDoc("snapshot", "snapshot", "{}");
     renderLibrary({
       sourceType: "configs",
       configTargets: [{ id: "opencode_config", label: "OpenCode config", harness: "opencode", kind: "config", source_rel: "a", target_rel: "b" }],
-      configEditorSources: [{ id: "snapshot", label: "Snapshot", rel_path: "x", editable: false, helper: "" }],
+      configEditorSources: [{ id: "snapshot", label: "Snapshot", rel_path: "x", helper: "" }],
       activeConfigTargetId: "opencode_config",
       activeConfigSourceType: "snapshot",
       configEditorSourceContent: content,
-      configDraft: "{}",
-      onSaveConfig,
     });
     focusList();
     runCommand("w");
-    expect(screen.getByRole("alert").textContent).toContain("read-only item");
-    expect(onSaveConfig).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert").textContent).toContain(BUNDLED_REASON);
   });
 
   it("shows save progress and results in the document footer, and announces a finished save in the status bar", () => {
@@ -1295,21 +1285,24 @@ describe("LibraryView new doc form", () => {
 });
 
 describe("LibraryView Rules", () => {
-  it("lists the rules template with the targets it installs to", () => {
+  it("lists the bundled rules template, read-only, with the targets it installs to", () => {
     const template = makeDoc("tpl", "tpl", "# Rules");
     renderLibrary({
       sourceType: "rules",
       agentTemplate: template,
-      agentTemplateDraft: "# Rules",
       agentTargets: [
         { id: "claude_rules", label: "claude rules", harness: "claude", kind: "rules", source_rel: "a", target_rel: ".claude/CLAUDE.md" },
         { id: "claude_agents", label: "claude agents", harness: "claude", kind: "agents", source_rel: "a", target_rel: ".claude/agents" },
       ],
     });
-    expect(within(listbox()).getByText("Global Rules")).not.toBeNull();
+    expect(within(listbox()).getAllByRole("option").map(option => option.querySelector(".nm")!.textContent)).toEqual(["Global Rules"]);
+    expect(within(listbox()).getByText("bundled")).not.toBeNull();
     const meta = screen.getByRole("region", { name: "installs to" });
     expect(within(meta).getByText(".claude/CLAUDE.md")).not.toBeNull();
     expect(within(meta).queryByText(".claude/agents")).toBeNull();
-    expect(screen.getByText("template only")).not.toBeNull();
+    expect(screen.getByText(BUNDLED_REASON)).not.toBeNull();
+    press(focusList(), "Enter");
+    expect(screen.queryByRole("textbox")).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole("group", { name: "Document" }));
   });
 });
