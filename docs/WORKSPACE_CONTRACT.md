@@ -8,7 +8,7 @@ The canonical bundled workspace source lives under `resources/default-workspace/
 
 Requirements on the machine: Python 3 (Codex and OpenCode merge and generator helpers). Missing `python3` surfaces as an error when a helper runs.
 
-Install reads the bundled copy, never the runtime workspace. The runtime workspace is a user-owned copy that the app displays and the Library edits; editing it does not change what harnesses receive.
+Install reads the bundled copy, never the runtime workspace. The runtime workspace is a copy that the app displays; in it the Library edits only your personal docs (`docs/context/`). Editing the workspace does not change what harnesses receive.
 
 ## Required runtime markers
 
@@ -41,7 +41,7 @@ Bundled resources are immutable installation input. The explicit **Install or Up
 
 ### Conflicts
 
-A file that exists but is not provably app-owned and unmodified is a conflict: Install skips it and reports it as preserved. Editing a bundled workspace file (for example in the Library) therefore freezes that file against future updates. To accept an update, move or delete your copy and run Install again; to keep your version, do nothing. An edited skill or agent file can also be reviewed, kept, or replaced by the bundled version (your file backed up first) from its harness page (see Resolving skill and agent conflicts). Deleting `.agent-workspace/managed-state.json` removes the ownership proof and turns every previously managed file into a conflict, so do not delete it. It describes this machine's installs and should not be copied to another machine or committed. Rules files have their own conflict handling (below).
+A file that exists but is not provably app-owned and unmodified is a conflict: Install skips it and reports it as preserved. Editing a bundled workspace file outside the app therefore freezes that file against future updates (the Library shows bundled files read-only). To accept an update, move or delete your copy and run Install again; to keep your version, do nothing. An edited skill or agent file can also be reviewed, kept, or replaced by the bundled version (your file backed up first) from its harness page (see Resolving skill and agent conflicts). Deleting `.agent-workspace/managed-state.json` removes the ownership proof and turns every previously managed file into a conflict, so do not delete it. It describes this machine's installs and should not be copied to another machine or committed. Rules files have their own conflict handling (below).
 
 ### Target toggles
 
@@ -200,12 +200,12 @@ Generated outputs must match their source bodies and native metadata. Repository
 
 Riggverk owns only allowlisted managed keys and the named Playwright MCP entry. Unknown keys, user provider blocks, and other MCP entries are preserved.
 
-The editable sources are:
+The config sources are:
 
 - `templates/opencode.base.json`
 - `templates/opencode.policy.json`
 
-`templates/opencode.json` is generated and read-only in the Library editor.
+`templates/opencode.json` is generated from them. All three are bundled with the app and read-only in the Library: they change in the bundle, with an app update.
 
 ### Codex
 
@@ -259,13 +259,15 @@ The only call the app makes to these CLIs is `<cli> --version`: bounded to 10 se
 
 ## Backups and writes
 
-Writes use allowlisted targets and explicit arguments. Existing files that Install, uninstall, or a Library save would overwrite or remove are backed up first (new files are not). Install backups live in `<backup root>/setup/<transaction id>/artifacts/<artifact id>` with a `manifest.json` and `managed-state.previous.json`; Library saves in `<backup root>/docs/<doc id>-<timestamp>/`. Config merges use staged files and post-write validation. Backup roots and target roots reject filesystem roots, drive roots, home roots, traversal, and symlink escapes. See [SECURITY_MODEL.md](./SECURITY_MODEL.md) for the full write table and modes.
+Writes use allowlisted targets and explicit arguments. Existing files that Install, uninstall, or a Library save would overwrite or remove are backed up first (new files are not). Install backups live in `<backup root>/setup/<transaction id>/artifacts/<artifact id>` with a `manifest.json` and `managed-state.previous.json`; Library saves of personal docs in `<backup root>/docs/custom_<slug>-<timestamp>/`. Config merges use staged files and post-write validation. Backup roots and target roots reject filesystem roots, drive roots, home roots, traversal, and symlink escapes. See [SECURITY_MODEL.md](./SECURITY_MODEL.md) for the full write table and modes.
 
 The frontend supplies named actions and bounded identifiers, not shell commands or arbitrary destination paths.
 
 ## Library edits
 
-The Library edits the runtime workspace copy only. Saves are atomic, refuse symlinks and paths outside the workspace root, and back up the existing file first (`<backup root>/docs/<doc id>-<timestamp>/`). A saved edit changes what the app displays and what a later bundled update sees as a conflict; it does not change what harness installs write, which always come from the bundle. `templates/opencode.json` is generated and read-only in the Library.
+The Library edits only your own text: personal docs, `docs/context/<slug>.md` in the runtime workspace (id `custom:<slug>`, created with `n`). The bundle ships nothing in `docs/context/`, so Install, uninstall, and updates never touch these files. Saves are atomic, refuse symlinks (on the file, on `docs/context`, or on a parent) and paths outside that folder, and back up the existing file first (`<backup root>/docs/custom_<slug>-<timestamp>/`).
+
+Everything else in the Library is bundled with the app and read-only: bundled docs, the rules template, skills, runtime agents, and config sources. They show no editor, save, or open-in-editor action, and the backend refuses a save of a bundled doc. They change in the bundle, with an app update. The Library shows the workspace copy, so a file edited outside the app (or saved by an earlier version) can differ from the bundled one; such a file stays a conflict that Install preserves (see Conflicts). Harness installs never read the workspace copy; they always come from the bundle.
 
 ## Managed installation
 
