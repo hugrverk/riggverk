@@ -4,7 +4,8 @@
 The app bundles the whole directory as it is on disk, ignored files included, so every check
 here reads the directory on disk rather than the git index. Groups: Codex templates, manifest
 files present, no symlinks, strict JSON, Playwright MCP guardrails, the Playwright MCP pin
-(every bundled template and doc names the version the app writes; an old release only warns),
+(every bundled template and doc names the version the app writes and every entry passes
+`--browser chrome --isolated --no-webmcp`; an old release only warns),
 OpenCode and TUI defaults, the shared agents, retired OpenCode headers, the private-context
 boundary and the Cursor user rules wording.
 
@@ -159,16 +160,8 @@ PLAYWRIGHT_RULES = (
         "the Playwright MCP package must be pinned, not @latest",
         '"args": ["@playwright/mcp@latest"]',
     ),
-    Rule(
-        "playwright-chrome",
-        "forbid",
-        r"--browser=chrome",
-        SHIPPED_CODE,
-        "Playwright MCP must use the bundled chromium, not --browser=chrome",
-        '"--browser=chrome"',
-    ),
-    # The Copilot, Pi and Kilo entries choose the browser with inline flags: the sidecar config
-    # belongs to the OpenCode config surface, and a missing file crashes the server at start.
+    # The Copilot, Pi and Kilo entries choose the browser with inline flags only: the sidecar
+    # config belongs to the OpenCode config surface, and a missing file crashes the server at start.
     Rule(
         "playwright-sidecar",
         "forbid",
@@ -208,20 +201,25 @@ PLAYWRIGHT_RULES = (
 # --- playwright-pin --------------------------------------------------------------------------
 # One version and its npm release day live in a constant of the Rust app (the app writes it into
 # the OpenCode, Cursor and light-harness entries); the bundled templates and docs repeat it and
-# must agree. A pin older than PIN_MAX_AGE_DAYS only warns, from the recorded day and the local
-# clock, so the check needs no network and never fails offline.
+# must agree. Every entry also carries the same flags after the package: the system Google Chrome
+# (`--browser chrome`, so no Playwright Chromium download), a profile kept in memory, and no
+# tools registered by a page (`--no-webmcp`; WebMCP is on by default since 0.0.81). A pin older
+# than PIN_MAX_AGE_DAYS only warns, from the recorded day and the local clock, so the check needs
+# no network and never fails offline.
 PIN_SOURCE = "src-tauri/src/commands/cursor_profile.rs"
 PIN_LINE = re.compile(r'PLAYWRIGHT_MCP_VERSION: &str = "([^"]+)";\s*// released (\d{4}-\d{2}-\d{2})')
 PINNED = re.compile(r"@playwright/mcp@(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]*[0-9A-Za-z])?)")
-PIN_TEMPLATES = (
-    "templates/opencode.base.json",
-    "templates/opencode.json",
-    "templates/cursor/mcp/playwright.mcp.json",
-    "templates/codex/mcp/playwright.toml",
-    "templates/mcp/copilot.playwright.json",
-    "templates/mcp/pi.playwright.json",
-    "templates/mcp/kilo.playwright.json",
-)
+# Template -> where the argument list of the Playwright entry sits in it.
+PIN_ENTRIES: dict[str, tuple[str, ...]] = {
+    "templates/opencode.base.json": ("mcp", "playwright", "command"),
+    "templates/opencode.json": ("mcp", "playwright", "command"),
+    "templates/cursor/mcp/playwright.mcp.json": ("mcpServers", "playwright", "args"),
+    "templates/codex/mcp/playwright.toml": ("mcp_servers", "playwright", "args"),
+    "templates/mcp/copilot.playwright.json": ("args",),
+    "templates/mcp/pi.playwright.json": ("args",),
+    "templates/mcp/kilo.playwright.json": ("command",),
+}
+PIN_TEMPLATES = tuple(PIN_ENTRIES)
 PIN_OUTSIDE_DOCS = ("README.md", "docs/*.md")
 PIN_MAX_AGE_DAYS = 183  # about six months
 
@@ -259,10 +257,49 @@ def playwright_pin(root: Path, files: list[str]) -> list[str]:
                 for found in PINNED.findall(line)
                 if found != version
             ]
-    for rel in PIN_TEMPLATES:
+    for rel, location in PIN_ENTRIES.items():
         path = root / BUNDLE / rel
-        if path.is_file() and f"@playwright/mcp@{version}" not in path.read_text(encoding="utf-8"):
-            errors.append(f"{W}{rel}: does not pin @playwright/mcp@{version} ({PIN_SOURCE})")
+        if path.is_file():
+            errors += pin_entry_errors(path, rel, location, version)
+    return errors
+
+
+def entry_arguments(path: Path, location: tuple[str, ...]) -> list[str] | str:
+    """The argument list of the Playwright entry in a template, or a message saying why not."""
+    try:
+        text = path.read_text(encoding="utf-8")
+        node: object = tomllib.loads(text) if path.suffix == ".toml" else json.loads(text)
+    except (OSError, UnicodeDecodeError, ValueError):
+        return "cannot be read as the entry template it is"
+    for key in location:
+        if not isinstance(node, dict) or key not in node:
+            return f"has no {'.'.join(location)} entry"
+        node = node[key]
+    if not isinstance(node, list) or not all(isinstance(word, str) for word in node):
+        return f"{'.'.join(location)} is not a list of strings"
+    return node
+
+
+def pin_entry_errors(path: Path, rel: str, location: tuple[str, ...], version: str) -> list[str]:
+    arguments = entry_arguments(path, location)
+    if isinstance(arguments, str):
+        return [f"{W}{rel}: {arguments}"]
+    errors = []
+    if f"@playwright/mcp@{version}" not in arguments:
+        errors.append(f"{W}{rel}: does not pin @playwright/mcp@{version} ({PIN_SOURCE})")
+    if ("--browser", "chrome") not in list(zip(arguments, arguments[1:])):
+        errors.append(
+            f"{W}{rel}: does not select the system Chrome: pass `--browser chrome` "
+            "(a browser named in a config file or `chromium` makes Playwright use its own Chromium, "
+            "which needs a download)"
+        )
+    if "--isolated" not in arguments:
+        errors.append(f"{W}{rel}: does not pass `--isolated` (the profile stays in memory)")
+    if "--no-webmcp" not in arguments:
+        errors.append(
+            f"{W}{rel}: does not pass `--no-webmcp`: a page could register tools that the model "
+            "would see as webmcp_* tools"
+        )
     return errors
 
 

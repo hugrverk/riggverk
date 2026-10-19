@@ -5,7 +5,8 @@
     "@playwright/mcp@0.0.83",
     "--browser",
     "chrome",
-    "--isolated"
+    "--isolated",
+    "--no-webmcp"
   ],
   "env": {
     "PLAYWRIGHT_BROWSERS_PATH": "__PLAYWRIGHT_BROWSERS_PATH__"

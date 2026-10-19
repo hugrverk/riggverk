@@ -5109,17 +5109,25 @@ mod tests {
         assert_eq!(server_names(&after), vec!["playwright"]);
     }
 
-    /// An installed file the way an older app wrote it: the same entry with the previous pin,
+    /// An installed file the way an older app wrote it: the same entry with the previous pin and
+    /// the flags of that time (`--config` only, without the Chrome selection and `--no-webmcp`),
     /// and the record that app made of it.
     fn as_the_older_app_wrote_it(env: &TempSetupEnv, artifact: &ArtifactId, path: &Path) {
-        let pin = crate::commands::cursor_profile::PLAYWRIGHT_MCP_VERSION;
         let text = fs::read_to_string(path).expect("installed file");
-        let older = text.replace(&format!("@playwright/mcp@{pin}"), "@playwright/mcp@0.0.48");
+        let current: serde_json::Value = serde_json::from_str(&text).expect("installed JSON");
+        let older = crate::commands::cursor_profile::as_the_previous_app_wrote_it(&current);
         assert_ne!(
-            older, text,
+            older, current,
             "the installed file must pin the current version"
         );
-        fs::write(path, older).expect("write the previous pin");
+        let older_text = serde_json::to_string_pretty(&older).expect("serialize") + "\n";
+        assert!(
+            older_text.contains("@playwright/mcp@0.0.48")
+                && !older_text.contains("--no-webmcp")
+                && !older_text.contains("\"--browser\""),
+            "{older_text}"
+        );
+        fs::write(path, older_text).expect("write the previous pin and flags");
         let digest = crate::setup_fingerprint::artifact_installed_managed_digest(
             artifact, &env.ws, &env.home,
         )
@@ -5184,6 +5192,17 @@ mod tests {
                 installed.contains(&format!("@playwright/mcp@{pin}"))
                     && !installed.contains("@playwright/mcp@0.0.48"),
                 "{wire}: the pin must be refreshed"
+            );
+            let installed: serde_json::Value =
+                serde_json::from_str(&installed).expect("installed JSON");
+            let lists = crate::commands::cursor_profile::playwright_argument_lists(&installed);
+            assert_eq!(lists.len(), 1, "{wire}: {lists:?}");
+            assert!(
+                lists[0]
+                    .windows(crate::commands::cursor_profile::PLAYWRIGHT_MCP_BROWSER_FLAGS.len())
+                    .any(|window| window
+                        == crate::commands::cursor_profile::PLAYWRIGHT_MCP_BROWSER_FLAGS),
+                "{wire}: the Chrome selection and the WebMCP flag must be added: {lists:?}"
             );
         }
     }

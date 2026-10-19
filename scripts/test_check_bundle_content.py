@@ -210,6 +210,63 @@ class BundleTests(unittest.TestCase):
         self.edit("templates/cursor/mcp/playwright.mcp.json", f"@playwright/mcp@{version}", "playwright")
         self.assertFails("playwright-pin", "templates/cursor/mcp/playwright.mcp.json: does not pin")
 
+    def test_every_entry_selects_the_system_chrome_and_turns_webmcp_off(self) -> None:
+        for rel, location in bc.PIN_ENTRIES.items():
+            with self.subTest(template=rel):
+                arguments = bc.entry_arguments(self.tree / WS / rel, location)
+                self.assertIsInstance(arguments, list)
+                self.assertEqual(arguments.count("--no-webmcp"), 1)
+                self.assertEqual(arguments.count("--isolated"), 1)
+                at = arguments.index("--browser")
+                self.assertEqual(arguments[at + 1], "chrome")
+        self.assertEqual(self.failures("playwright-pin"), [])
+
+    def test_an_entry_without_the_chrome_selection_fails(self) -> None:
+        # Naming no browser, or `chromium`, resolves to Playwright's own Chromium on 0.0.83.
+        for rel, location in bc.PIN_ENTRIES.items():
+            for broken in ("chromium", "firefox"):
+                with self.subTest(template=rel, browser=broken):
+                    path = self.tree / WS / rel
+                    original = path.read_text(encoding="utf-8")
+                    path.write_text(original.replace('"chrome"', f'"{broken}"', 1), encoding="utf-8")
+                    self.assertFails("playwright-pin", f"{rel}: does not select the system Chrome")
+                    path.write_text(original, encoding="utf-8")
+                    self.assertEqual(self.failures("playwright-pin"), [])
+
+    def test_an_entry_without_the_browser_flag_fails(self) -> None:
+        for rel in bc.PIN_ENTRIES:
+            with self.subTest(template=rel):
+                path = self.tree / WS / rel
+                original = path.read_text(encoding="utf-8")
+                path.write_text(original.replace("--browser", "--channel", 1), encoding="utf-8")
+                self.assertFails("playwright-pin", f"{rel}: does not select the system Chrome")
+                path.write_text(original, encoding="utf-8")
+
+    def test_an_entry_that_leaves_webmcp_on_fails(self) -> None:
+        for rel in bc.PIN_ENTRIES:
+            with self.subTest(template=rel):
+                path = self.tree / WS / rel
+                original = path.read_text(encoding="utf-8")
+                path.write_text(original.replace("--no-webmcp", "--webmcp", 1), encoding="utf-8")
+                self.assertFails("playwright-pin", f"{rel}: does not pass `--no-webmcp`")
+                path.write_text(original, encoding="utf-8")
+                self.assertEqual(self.failures("playwright-pin"), [])
+
+    def test_an_entry_that_is_not_isolated_fails(self) -> None:
+        for rel in bc.PIN_ENTRIES:
+            with self.subTest(template=rel):
+                path = self.tree / WS / rel
+                original = path.read_text(encoding="utf-8")
+                path.write_text(original.replace("--isolated", "--shared", 1), encoding="utf-8")
+                self.assertFails("playwright-pin", f"{rel}: does not pass `--isolated`")
+                path.write_text(original, encoding="utf-8")
+
+    def test_an_entry_the_check_cannot_find_fails_with_a_reason(self) -> None:
+        self.edit("templates/mcp/pi.playwright.json", '"args"', '"arguments"')
+        self.assertFails("playwright-pin", "templates/mcp/pi.playwright.json: has no args entry")
+        (self.tree / WS / "templates/codex/mcp/playwright.toml").write_text("[mcp_servers.playwright\n", encoding="utf-8")
+        self.assertFails("playwright-pin", "templates/codex/mcp/playwright.toml: cannot be read")
+
     def test_a_doc_and_the_readme_must_agree_with_the_pin(self) -> None:
         self.edit("docs/OPENCODE_CONFIG.md", "@playwright/mcp@", "@playwright/mcp@9.9.9 and @playwright/mcp@")
         (self.tree / "README.md").write_text("Run `npx -y @playwright/mcp@0.0.1 --help`.\n", encoding="utf-8")

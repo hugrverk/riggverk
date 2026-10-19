@@ -79,16 +79,14 @@ Defaults:
 
 - Package: `@playwright/mcp@0.0.83` (`PLAYWRIGHT_MCP_VERSION` overrides it)
 - MCP config: `~/.config/playwright-mcp/config.json` (or `PLAYWRIGHT_MCP_CONFIG_PATH`) from `templates/playwright-mcp.config.json`
-- Browser: `browserName: chromium` and `isolated: true` in the MCP config. On `@playwright/mcp@0.0.83` a browser named in the config file gets no channel, so that configuration resolves to Playwright's own Chromium from the shared cache, not to the system Google Chrome; this was read from the config resolution code of that release, not from a launch. The previous pin, 0.0.48, resolved the same file to the `chrome` channel (the system Google Chrome), so after the update install the matching Chromium once (see below) or the first browser tool call reports a missing executable. Verify with one real launch before relying on it
-- Binaries: shared cache (`~/Library/Caches/ms-playwright` on macOS, `$XDG_CACHE_HOME/ms-playwright` on Linux, `~/AppData/Local/ms-playwright` on Windows; `PLAYWRIGHT_BROWSERS_PATH` overrides)
-
-On macOS, Playwright’s Chromium bundle may still show **Google Chrome for Testing.app** inside the cache. That is expected and is not the same as requiring Chrome Stable/Beta/Dev/Canary.
+- Browser: the entry passes `--browser chrome --isolated --no-webmcp` after `--config`, so the server opens the system Google Chrome in a profile kept in memory, and the tools a page registers through WebMCP stay off. The MCP config holds `browserName: chromium` and `isolated: true`; on the command line the flags win over it. On `@playwright/mcp@0.0.83` a browser named in the config file alone gets no channel and would resolve to Playwright's own Chromium, which needs a download; the flag avoids that. Read from the source of that release, not from a launch
+- Binaries: shared cache (`~/Library/Caches/ms-playwright` on macOS, `$XDG_CACHE_HOME/ms-playwright` on Linux, `~/AppData/Local/ms-playwright` on Windows; `PLAYWRIGHT_BROWSERS_PATH` overrides). The entry uses the installed Google Chrome, so nothing is downloaded into it unless you install a Playwright browser yourself
 
 Do **not** set `PLAYWRIGHT_BROWSERS_PATH=0`. That forces project-local browsers under `node_modules` and defeats the shared-cache default.
 
-The app installs the Playwright MCP config with the OpenCode config target and renders user-specific paths into the OpenCode MCP entry. The Cursor page merges only the `playwright` server into `~/.cursor/mcp.json` (existing servers are preserved; existing files are backed up first). Both entries pass `--config` with that file, and the server fails to start when the file is missing, so with the OpenCode config target off the Cursor entry has no config to read. The GitHub Copilot, Pi and Kilo entries do not depend on it: they pass `--browser chrome --isolated` instead (see `docs/WORKSPACE_CONTRACT.md` in the app repository).
+The app installs the Playwright MCP config with the OpenCode config target and renders user-specific paths into the OpenCode MCP entry. The Cursor page merges only the `playwright` server into `~/.cursor/mcp.json` (existing servers are preserved; existing files are backed up first). Both entries pass `--config` with that file, and the server fails to start when the file is missing, so with the OpenCode config target off the Cursor entry has no config to read. The GitHub Copilot, Pi and Kilo entries do not depend on it: they pass `--browser chrome --isolated --no-webmcp` without it (see `docs/WORKSPACE_CONTRACT.md` in the app repository).
 
-Security note: Playwright MCP provides privileged browser automation tools. Its documented default tool list includes an unsafe code execution tool, and no stable server-side option to disable only that tool is currently documented. Do not use it on private or authenticated sites unless the runtime agent permissions and prompt scope are appropriate. Isolated sessions do not persist logged-in browser state between runs.
+Security note: Playwright MCP provides privileged browser automation tools. Its documented default tool list includes an unsafe code execution tool, and no stable server-side option to disable only that tool is currently documented. Do not use it on private or authenticated sites unless the runtime agent permissions and prompt scope are appropriate. Isolated sessions do not persist logged-in browser state between runs. Tools that a page registers through WebMCP are off (`--no-webmcp`): their names, descriptions and results come from the page, not from Playwright.
 
 Local MCP checks:
 
@@ -97,11 +95,7 @@ npx -y @playwright/mcp@0.0.83 --help
 opencode mcp list
 ```
 
-If browser binaries are missing, install the Chromium that belongs to the pinned release with the MCP package's own command (a separate `playwright install` of another Playwright version can fetch a different revision):
-
-```
-npx -y @playwright/mcp@0.0.83 install-browser chromium
-```
+If the browser tools report that Google Chrome is missing, install Google Chrome. The entry selects the system Chrome (`--browser chrome`); it does not use a Playwright browser download.
 
 ## OpenCode agents
 
