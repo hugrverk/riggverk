@@ -1,6 +1,6 @@
 # App Release Smoke
 
-Manual smoke checklist for Riggverk builds. It complements `scripts/release-check.sh`, which covers syntax, bundled-default checks, source scans, the app build, Cargo checks, apply smokes in temporary `HOME` directories, and the backend runtime smoke. It does not drive the webview, an installed bundle, or the folder picker.
+Manual smoke checklist for Riggverk builds. It complements `scripts/release-check.sh`, which covers syntax, bundled-default checks, source scans, the app build, Cargo checks, apply smokes in temporary `HOME` directories, and the backend runtime smoke. It does not drive the webview or an installed bundle.
 
 Run this in the real Tauri app (not Vite only: `invoke` does not exist there) with isolated paths:
 
@@ -25,6 +25,7 @@ Tab keys below assume the default order: workspace, codex, opencode, cursor, cla
 
 - [ ] First launch shows `not installed`, no generic error banner, no path chooser on the Workspace page
 - [ ] Workspace page shows `~/.config/agent-workspace` (or the isolated override)
+- [ ] Fresh profile: launching creates no `~/.config/agent-workspace`; harness rows are not gated; `u` on a harness installs it without the workspace and creates the folder owner-only (0700) holding only `.agent-workspace/`
 - [ ] Top line tabs match the order above; Mac traffic lights sit on the same 28px line
 - [ ] `?` opens the help overlay listing keys and commands; Escape closes it
 - [ ] `:` opens the command line; `:help`, `:codex`, `:theme toggle`, an unknown command (error, no crash)
@@ -100,8 +101,8 @@ Use the isolated `HOME`; install the skills and agents first, then edit `~/.clau
 - [ ] The workspace detail pane lists the backup run count and the root path; `B` there opens the folder
 - [ ] **preview uninstall** classifies removable, preserved, and merge-managed artifacts; modified and unknown fixture files stay on disk after uninstall
 - [ ] Merge-managed rules files with user text outside the block are kept; a file with only an unedited block is removable
-- [ ] **uninstall everything** removes proven app-owned files and the workspace becomes invalid
-- [ ] **Recover previous uninstall** stays visible after the workspace becomes invalid or missing
+- [ ] **uninstall everything** removes proven app-owned files; the workspace folder and its `.agent-workspace/` state stay
+- [ ] **Recover previous uninstall** stays visible after the uninstall
 - [ ] **preview recovery** is read-only and reports restore, already restored, and conflict counts
 - [ ] **restore workspace** opens a confirmation; Escape closes it and focus returns to the button; cancel leaves the candidate unchanged; **confirm restore** brings workspace and harness state back and the card disappears
 - [ ] A changed or occupied restore target reports a conflict and restore stays disabled
@@ -118,7 +119,7 @@ Use the isolated `HOME`; install the skills and agents first, then edit `~/.clau
 - [ ] With the default `CODEX_HOME`, skills land in `~/.agents/skills`; the app's older copies in `~/.codex/skills` are removed by one reviewed update (`.system` stays), and an edited copy stays and is reported
 - [ ] Disabling a harness in Settings changes the next preview only; the update removes the app's copies from a folder no enabled harness reads
 
-## 8. Settings, workspace picker, harness enablement
+## 8. Settings, workspace folder, harness enablement
 
 - [ ] Fresh and legacy settings enable Codex, OpenCode, Claude, and Cursor; GitHub Copilot, Pi, and Kilo are listed after them and disabled
 - [ ] Enable Copilot, Pi, and Kilo: the Copilot, Pi and Kilo tabs appear after Claude; each page lists a `rules` row (target toggle on), the `skills` surface and an `mcp` row (toggle on for Copilot and Pi, **off** for Kilo), shows the CLI version (or "not on PATH" with its reason; an nvm-only install shows `· nvm`), the rules row, the `mcp playwright` row and the skills row; Kilo's review notes that `~/.claude/CLAUDE.md` stops being read; Install or Update then writes `~/.agents/skills`, the three rules files (`~/.copilot/copilot-instructions.md`, `~/.pi/agent/AGENTS.md` with owner-only folders, `~/.config/kilo/AGENTS.md`) and the Copilot and Pi MCP entries (`~/.copilot/mcp-config.json`, `~/.pi/agent/mcp.json`, both 0600 when new) and nothing else under `~/.copilot`, `~/.pi`, `~/.config/kilo`; with a Pi `AGENTS.override.md` or an `AGENTS.md`-less `CLAUDE.md` in `~/.pi/agent` the Pi rules row is a conflict and nothing is written; `:p` still previews and `:pi` opens the Pi page
@@ -129,9 +130,11 @@ Use the isolated `HOME`; install the skills and agents first, then edit `~/.clau
 - [ ] Appearance (dark, light, system), all four text sizes (`small`, `medium`, `large`, `extra-large`), and theme colors autosave; `r` in the appearance pane resets after a confirm
 - [ ] Motion `full` shows the launch sequence, apply progress (bar, file, spinner, elapsed), the success tick and scanline; `subtle` keeps only the progress indicators; `off` (or the OS reduced-motion preference) stops every animation
 - [ ] Landing page selection (`start`, `library`) persists and opens after app restart
-- [ ] Settings: `c` chooses a workspace folder; an invalid folder is refused with a reason; a valid one becomes the active workspace and status reloads; `R` resets to the default path
-- [ ] `AGENT_WORKSPACE_PATH` overrides the chosen path
-- [ ] Generator scripts run from the bundled copy: a modified `scripts/generate-opencode-config.py` in the chosen workspace is not executed
+- [ ] Settings has no folder chooser: no `choose…` action, no `c` hint, `c` does nothing, and `:workspace choose` is refused
+- [ ] With a custom folder saved by an earlier version (seeded in an isolated profile; it holds `.agent-workspace/`), Settings shows it as `custom folder` and the app keeps using it across a restart
+- [ ] `R` (and `:workspace reset`) on that folder opens a confirm that names the old folder and says its ownership records stay there; `n` or Escape changes nothing; `y` returns to the default path and status reloads; on the default folder `R` is disabled (`already the default workspace`)
+- [ ] `AGENT_WORKSPACE_PATH` overrides the saved path, and `R` is then refused with a reason
+- [ ] Generator scripts run from the bundled copy: a modified `scripts/generate-opencode-config.py` in a saved custom workspace is not executed
 - [ ] Disable one harness: its tab, page, Workspace row, health calls, and harness-specific Library entries disappear and the tabs renumber
 - [ ] Isolated harness files stay byte-identical after disable; restart preserves the disabled state and target selections
 - [ ] Re-enable restores UI and health without installing
@@ -201,8 +204,8 @@ Use the isolated `HOME`; install the skills and agents first, then edit `~/.clau
 - [ ] Managed fields, create-only model, legacy profile cleanup passed
 - Notes: ________
 
-### Settings and workspace picker
-- [ ] Appearance, motion levels, landing page, picker, harness enablement passed
+### Settings and workspace folder
+- [ ] Appearance, motion levels, landing page, workspace folder reset, harness enablement passed
 - Notes: ________
 
 ### Library

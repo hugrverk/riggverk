@@ -3,12 +3,13 @@ mod claude_runtime;
 mod codex_runtime;
 mod content;
 pub(crate) mod cursor_profile;
+#[cfg(test)]
 mod defaults;
-pub(crate) use defaults::default_workspace_files;
 pub(crate) mod light_runtime;
 mod opencode_cli;
 mod opencode_runtime;
 mod process;
+pub(crate) mod retired_workspace_files;
 pub(crate) mod setup;
 pub(crate) use codex_runtime::{
     extract_managed_codex_config, managed_codex_keys_match, render_codex_config_managed_projection,
@@ -61,5 +62,4 @@ pub use skills::{get_effective_skill_loads, list_skills, read_skill};
 pub use status::get_status;
 pub use workspace::{
     get_workspace_diagnostics, open_default_workspace_folder, reset_active_workspace_path,
-    try_set_active_workspace_path,
 };

@@ -139,67 +139,62 @@ describe("useAppCommands", () => {
       expect(deps.setLibrarySource).toHaveBeenCalledWith("skills");
     });
 
-    describe(":workspace choose|reset", () => {
-      const workspaceSwitch = (overrides: Partial<NonNullable<AppCommandDeps["workspaceSwitch"]>> = {}) => ({
-        choose: vi.fn(),
+    describe(":workspace reset", () => {
+      const workspaceReset = (overrides: Partial<NonNullable<AppCommandDeps["workspaceReset"]>> = {}) => ({
         reset: vi.fn(),
         isDefault: false,
         busy: false,
         ...overrides,
       });
 
-      it("choose and reset hand over to the workspace picker, without leaving the page", () => {
-        const switcher = workspaceSwitch();
-        const deps = makeDeps({ workspaceSwitch: switcher });
+      it("reset hands over to the confirmed workspace reset, without leaving the page", () => {
+        const resetter = workspaceReset();
+        const deps = makeDeps({ workspaceReset: resetter });
         setup(deps);
-        runLine("workspace choose");
-        expect(switcher.choose).toHaveBeenCalledTimes(1);
         runLine("ws reset");
-        expect(switcher.reset).toHaveBeenCalledTimes(1);
+        expect(resetter.reset).toHaveBeenCalledTimes(1);
         expect(deps.switchView).not.toHaveBeenCalled();
       });
 
       it("plain :workspace still opens the page", () => {
-        const deps = makeDeps({ workspaceSwitch: workspaceSwitch() });
+        const deps = makeDeps({ workspaceReset: workspaceReset() });
         setup(deps);
         runLine("workspace");
         expect(deps.switchView).toHaveBeenCalledWith("start");
       });
 
-      it("refuses reset when the default is already active, and both while a change runs", () => {
-        const defaults = workspaceSwitch({ isDefault: true });
-        setup(makeDeps({ workspaceSwitch: defaults }));
+      it("refuses reset when the default is already active, and while a change runs", () => {
+        const defaults = workspaceReset({ isDefault: true });
+        setup(makeDeps({ workspaceReset: defaults }));
         runLine("workspace reset");
         expect(commandLineError()).toContain("already the default workspace");
         expect(defaults.reset).not.toHaveBeenCalled();
         cleanup();
 
-        const busy = workspaceSwitch({ busy: true });
-        setup(makeDeps({ workspaceSwitch: busy }));
-        runLine("workspace choose");
+        const busy = workspaceReset({ busy: true });
+        setup(makeDeps({ workspaceReset: busy }));
+        runLine("workspace reset");
         expect(commandLineError()).toContain("already running");
-        expect(busy.choose).not.toHaveBeenCalled();
+        expect(busy.reset).not.toHaveBeenCalled();
       });
 
-      it("refuses both while a workspace task runs, naming the task", () => {
-        const switcher = workspaceSwitch();
-        setup(makeDeps({ workspaceSwitch: switcher, busyLabel: "apply" }));
-        runLine("workspace choose");
-        expect(commandLineError()).toContain("apply is running");
-        expect(switcher.choose).not.toHaveBeenCalled();
-        cleanup();
-
-        setup(makeDeps({ workspaceSwitch: switcher, busyLabel: "apply" }));
+      it("refuses while a workspace task runs, naming the task", () => {
+        const resetter = workspaceReset();
+        setup(makeDeps({ workspaceReset: resetter, busyLabel: "apply" }));
         runLine("workspace reset");
         expect(commandLineError()).toContain("apply is running");
-        expect(switcher.reset).not.toHaveBeenCalled();
+        expect(resetter.reset).not.toHaveBeenCalled();
       });
 
-      it("rejects an unknown action", () => {
-        const deps = makeDeps({ workspaceSwitch: workspaceSwitch() });
+      it("has no choose action any more, and rejects any other action", () => {
+        const resetter = workspaceReset();
+        const deps = makeDeps({ workspaceReset: resetter });
         setup(deps);
+        runLine("workspace choose");
+        expect(commandLineError()).toBeTruthy();
         runLine("workspace nowhere");
         expect(commandLineError()).toBeTruthy();
+        expect(resetter.reset).not.toHaveBeenCalled();
         expect(deps.switchView).not.toHaveBeenCalled();
       });
     });
@@ -349,7 +344,7 @@ describe("useAppCommands", () => {
       runLine("update workspace");
       expect(none.openInstall).toHaveBeenCalledWith("workspace");
       runLine("update --all");
-      expect(commandLineError()).toBe("update: no valid workspace installed (run update workspace first)");
+      expect(commandLineError()).toBe("update: workspace folder unusable (the workspace page says why)");
       runLine("update claude");
       expect(none.openInstall).toHaveBeenCalledTimes(1);
 
@@ -463,7 +458,7 @@ describe("useAppCommands", () => {
       const deps = makeDeps({ workspaceValid: false });
       setup(deps);
       runLine("uninstall");
-      expect(commandLineError()).toBe("uninstall: no valid workspace installed");
+      expect(commandLineError()).toBe("uninstall: workspace folder unusable");
       expect(deps.requestUninstallPreview).not.toHaveBeenCalled();
     });
   });

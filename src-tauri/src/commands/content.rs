@@ -583,8 +583,6 @@ fn create_doc_at_root(
         Err(e) => return Err(format!("cannot inspect doc path: {}", e)),
     }
 
-    require_personal_doc_path(root, &target_path)?;
-
     let trimmed_title = title.trim();
     let initial_content = if let Some(c) = content {
         c
@@ -596,6 +594,9 @@ fn create_doc_at_root(
     if initial_content.len() > MAX_DOC_SIZE {
         return Err("content exceeds 512 KB limit".to_string());
     }
+    // A fresh profile has no data folder yet: the first personal doc creates it, owner-only.
+    crate::managed_state::ensure_data_folder(root)?;
+    require_personal_doc_path(root, &target_path)?;
     write_workspace_file(root, &target_path, &initial_content)?;
 
     Ok(DocumentContent {
@@ -846,13 +847,11 @@ mod tests {
         for entry in curated_doc_registry() {
             assert!(!entry.rel_path.starts_with(&prefix), "{}", entry.rel_path);
         }
-        for (_, paths) in crate::commands::default_workspace_files() {
-            for path in paths {
-                assert!(
-                    !path.starts_with(&prefix),
-                    "bundled file in personal docs: {path}"
-                );
-            }
+        for path in crate::commands::retired_workspace_files::workspace_copy_paths() {
+            assert!(
+                !path.starts_with(&prefix),
+                "bundled file in personal docs: {path}"
+            );
         }
         let bundled = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("../resources/default-workspace")

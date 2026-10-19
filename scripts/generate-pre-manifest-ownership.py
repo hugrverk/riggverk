@@ -28,6 +28,7 @@ if str(Path(__file__).resolve().parent) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import generate_history  # noqa: E402
+import retired_workspace_files  # noqa: E402
 
 # Re-exported: callers that load this script for its history walker keep working.
 from generate_history import git, historical_blobs_by_rel  # noqa: E402,F401
@@ -36,7 +37,6 @@ ROOT = Path(__file__).resolve().parents[1]
 SOURCE_COMMIT = "2d85d94b6f2f1dc06f45f6ec52a22ae97e499588"
 PREFIX = "resources/default-workspace/"
 MANIFEST = ROOT / PREFIX / "metadata/pre-manifest-ownership.json"
-WORKSPACE_MANIFEST = ROOT / "src-tauri/src/commands/default_workspace_manifest.rs"
 BOOTSTRAP = ROOT / "src-tauri/src/managed_bootstrap.rs"
 # Skill files in the bundle history: skills/[<category>/]<name>/SKILL.md and deprecated snapshots.
 HISTORICAL_SKILL_FILES = (
@@ -67,14 +67,9 @@ def rust_string_list(path: Path, start: str, end: str) -> list[str]:
     return re.findall(r'"([^"]+)"', section)
 
 
-def current_workspace_paths() -> list[str]:
-    text = WORKSPACE_MANIFEST.read_text(encoding="utf-8")
-    section = text.split("pub(super) fn categories()", 1)[1]
-    return sorted(
-        value
-        for value in re.findall(r'"([^"]+)"', section)
-        if "/" in value or value.endswith(".md") or value.endswith(".json")
-    )
+def workspace_copy_paths() -> list[str]:
+    """Every file of the workspace copy: the marker and the frozen RETIRED_WORKSPACE_FILES."""
+    return sorted(retired_workspace_files.load(ROOT).copy_paths())
 
 
 def removed_skill_names() -> list[str]:
@@ -156,6 +151,24 @@ def entry(
         "digests": sorted(digests),
         "action": action,
     }
+
+
+def workspace_copy_entry(
+    rel: str, shipped: set[str], current: str | None
+) -> dict[str, object] | None:
+    """Approved digests of one file of the workspace copy; None when no version is known.
+
+    A file the bundle still holds is updated: its current version is the bundle's own and needs
+    no approval. A file the bundle no longer holds is removed: every shipped version is the app's.
+    """
+    digests = set(shipped)
+    action = "remove"
+    if current is not None:
+        digests.discard(current)
+        action = "update"
+    if not digests:
+        return None
+    return entry(f"workspace:file:{rel}", ["workspace-doc"], digests, action)
 
 
 def current_skill_rels() -> dict[str, str]:
@@ -288,23 +301,12 @@ def generate() -> dict[str, object]:
             artifacts.append(entry(identity, [path_class], digests, "update"))
 
     skill_rel_values = set(skill_rels.values())
-    for rel in current_workspace_paths():
+    for rel in workspace_copy_paths():
         if rel in skill_rel_values:
             continue
-        digests = history.for_rel(rel)
-        current = current_digest(rel)
-        if current is None:
-            continue
-        digests.discard(current)
-        if digests:
-            artifacts.append(
-                entry(
-                    f"workspace:file:{rel}",
-                    ["workspace-doc"],
-                    digests,
-                    "update",
-                )
-            )
+        copy = workspace_copy_entry(rel, history.for_rel(rel), current_digest(rel))
+        if copy:
+            artifacts.append(copy)
 
     artifacts.sort(key=lambda value: str(value["identity"]))
     return {

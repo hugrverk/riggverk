@@ -333,9 +333,9 @@ describe("HarnessPage", () => {
 
   it("explains a missing workspace and offers no update", () => {
     const { props: p } = renderCodex({ workspaceValid: false, overview: overviewOf({}) });
-    expect(detail().textContent).toContain("No valid workspace installed");
+    expect(detail().textContent).toContain("The workspace folder is unusable");
     // The runtime heading carries the verdict; no row restates it under a heading that says something else.
-    expect(detail().textContent).toContain("runtime · no valid workspace");
+    expect(detail().textContent).toContain("runtime · workspace folder unusable");
     expect(facts()).not.toHaveProperty("runtime");
     expect(facts()).not.toHaveProperty("rules");
     act(() => surfaces().focus());
@@ -374,7 +374,7 @@ describe("HarnessPage", () => {
 });
 
 describe("OpenCodeView model override", () => {
-  const OPENCODE_HEALTH = { status: "synced", tui_status: "synced", agent_mismatches: [], warnings: [], cli: null, config_status: "synced", config_diverged_keys: [], config_precedence: { installed_not_strict: [], sibling_files: [], env_vars: [], system_managed_paths: [] }, rules_status: "synced", playwright_mcp_version: null, bundled_agent_count: 3, installed_bundled_agent_count: 3, default_agent: "build", autoupdate: "true", summary: "ok", next_action: "" } as unknown as OpenCodeRuntimeHealth;
+  const OPENCODE_HEALTH = { status: "synced", tui_status: "synced", tui_diverged_keys: [], agent_mismatches: [], warnings: [], cli: null, config_status: "synced", config_diverged_keys: [], config_precedence: { installed_not_strict: [], sibling_files: [], env_vars: [], system_managed_paths: [] }, rules_status: "synced", playwright_mcp_version: null, bundled_agent_count: 3, installed_bundled_agent_count: 3, default_agent: "build", autoupdate: "true", summary: "ok", next_action: "" } as unknown as OpenCodeRuntimeHealth;
   const BUNDLED: OpenCodeModelSelection = {
     model: "anthropic/claude-sonnet-4-5",
     small_model: "anthropic/claude-haiku-4-5",
@@ -853,7 +853,7 @@ describe("HarnessPage skill loads", () => {
   });
 
   it("shows the loads on the OpenCode page, which has no skills row of its own", () => {
-    const health = { status: "synced", tui_status: "synced", agent_mismatches: [], warnings: [], cli: null, config_status: "synced", config_diverged_keys: [], config_precedence: { installed_not_strict: [], sibling_files: [], env_vars: [], system_managed_paths: [] }, rules_status: "synced", playwright_mcp_version: null, bundled_agent_count: 3, installed_bundled_agent_count: 3, default_agent: "build", autoupdate: "true", summary: "ok", next_action: "" } as unknown as OpenCodeRuntimeHealth;
+    const health = { status: "synced", tui_status: "synced", tui_diverged_keys: [], agent_mismatches: [], warnings: [], cli: null, config_status: "synced", config_diverged_keys: [], config_precedence: { installed_not_strict: [], sibling_files: [], env_vars: [], system_managed_paths: [] }, rules_status: "synced", playwright_mcp_version: null, bundled_agent_count: 3, installed_bundled_agent_count: 3, default_agent: "build", autoupdate: "true", summary: "ok", next_action: "" } as unknown as OpenCodeRuntimeHealth;
     const skillLoads = skillLoadsOf({
       harnesses: [{
         harness: "opencode",
@@ -870,5 +870,46 @@ describe("HarnessPage skill loads", () => {
     // Identical copies are information: not a warning.
     expect(facts(opencode)["skill loads"]).toBe("1 skill · 1 with identical copies");
     expect(valueOf("skill loads", opencode).className).not.toContain("c-warn");
+  });
+});
+
+describe("OpenCode runtime rows on the page", () => {
+  const OPENCODE_HEALTH = {
+    status: "diverged",
+    agent_mismatches: [{ filename: "architect.md", status: "diverged", detail: "" }, { filename: "verifier.md", status: "missing", detail: "" }],
+    warnings: [],
+    cli: { status: "supported", version: "1.19.3", major: 1, detail: "OpenCode 1.19.3" },
+    config_status: "diverged",
+    config_diverged_keys: ["model", "mcp.playwright"],
+    config_precedence: { installed_not_strict: [], sibling_files: [], env_vars: [], system_managed_paths: [] },
+    rules_status: "synced",
+    playwright_mcp_version: "0.0.47",
+    tui_status: "diverged",
+    tui_diverged_keys: ["theme"],
+    bundled_agent_count: 6,
+    installed_bundled_agent_count: 4,
+    default_agent: "architect",
+    autoupdate: "notify",
+    summary: "diverged",
+    next_action: "Run diff before apply.",
+  } as unknown as OpenCodeRuntimeHealth;
+
+  it("names what differs instead of a bare status", () => {
+    renderInFrame(<HarnessPage {...props()} harness="opencode" runtime={{ harness: "opencode", health: OPENCODE_HEALTH }} />);
+    const opencode = screen.getByRole("region", { name: "OpenCode detail" });
+    expect(opencode.textContent).toContain("runtime · diverged");
+    expect(facts(opencode)).toMatchObject({
+      cli: "1.19.3",
+      rules: "synced",
+      agents: "4/6 · diverged: architect.md · missing: verifier.md",
+      config: "diverged · model, mcp.playwright",
+      "mcp playwright": "diverged · 0.0.47",
+      tui: "diverged · theme",
+      next: "run diff before apply",
+    });
+    const toneOf = (label: string) => [...opencode.querySelectorAll("dt")].find(dt => dt.textContent === label)!.nextElementSibling!.className;
+    expect(toneOf("agents")).toContain("c-warn");
+    expect(toneOf("tui")).toContain("c-warn");
+    expect(toneOf("rules")).toContain("c-ok");
   });
 });

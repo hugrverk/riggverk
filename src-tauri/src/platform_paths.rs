@@ -166,6 +166,53 @@ pub fn default_cursor_profile_root(
     Ok(home.join(".cursor"))
 }
 
+/// `$XDG_CONFIG_HOME` when it names one plain absolute folder: not the file system root and no
+/// `..`. A relative value is ignored, as the XDG Base Directory specification says: file
+/// operations would resolve it against the working directory, where no harness looks for it.
+pub fn xdg_config_home_dir(value: Option<&str>) -> Option<PathBuf> {
+    value
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
+        .filter(|dir| {
+            dir.is_absolute()
+                && dir.parent().is_some()
+                && !dir
+                    .components()
+                    .any(|part| matches!(part, Component::ParentDir))
+        })
+}
+
+/// OpenCode's global config folder for `home` and an `XDG_CONFIG_HOME` value, the way OpenCode
+/// itself finds it on every OS (`xdg-basedir`): `$XDG_CONFIG_HOME/opencode`, else
+/// `<home>/.config/opencode`. Every OpenCode file the app installs, checks or reads lives in it.
+pub fn opencode_config_dir_for(home: &Path, xdg_config_home: Option<&str>) -> PathBuf {
+    match xdg_config_home_dir(xdg_config_home) {
+        Some(dir) => dir.join("opencode"),
+        None => home.join(".config").join("opencode"),
+    }
+}
+
+/// [`opencode_config_dir_for`] with `XDG_CONFIG_HOME` from the app's own environment. The folder
+/// moves when the variable does: what the app wrote to the old folder stays there untouched.
+pub fn opencode_config_dir(home: &Path) -> PathBuf {
+    let xdg = std::env::var("XDG_CONFIG_HOME").ok();
+    opencode_config_dir_for(home, xdg.as_deref())
+}
+
+/// Whether `XDG_CONFIG_HOME` moves the OpenCode config folder away from `~/.config/opencode`.
+/// Labels then name the folder `$XDG_CONFIG_HOME/opencode`: a folder that moves with an
+/// environment variable is named by that, not by today's value.
+pub fn opencode_config_moved_for(home: &Path, xdg_config_home: Option<&str>) -> bool {
+    opencode_config_dir_for(home, xdg_config_home) != home.join(".config").join("opencode")
+}
+
+/// [`opencode_config_moved_for`] with `XDG_CONFIG_HOME` from the app's own environment.
+pub fn opencode_config_moved(home: &Path) -> bool {
+    let xdg = std::env::var("XDG_CONFIG_HOME").ok();
+    opencode_config_moved_for(home, xdg.as_deref())
+}
+
 pub fn normalized_path_key(path: &Path) -> String {
     path.components()
         .map(|component| match component {
@@ -480,6 +527,54 @@ mod tests {
                 .join(".config")
                 .join("agent-workspace")
         );
+    }
+
+    #[test]
+    fn the_opencode_config_folder_follows_an_absolute_xdg_config_home_only() {
+        // Absolute on every OS, so the same cases hold on Windows.
+        let root = std::env::temp_dir().join("aw-opencode-config-dir");
+        let home = root.join("home");
+        let default = home.join(".config").join("opencode");
+        let text = |path: &Path| path.to_string_lossy().into_owned();
+        let parent_dir = text(&home.join("..").join("other"));
+        // Unset, empty, blank, relative, the file system root or a `..` path: the default.
+        for ignored in [
+            None,
+            Some(""),
+            Some("   "),
+            Some("relative/config"),
+            Some("./config"),
+            Some("/"),
+            Some(parent_dir.as_str()),
+        ] {
+            assert_eq!(
+                opencode_config_dir_for(&home, ignored),
+                default,
+                "{ignored:?}"
+            );
+            assert!(!opencode_config_moved_for(&home, ignored), "{ignored:?}");
+            assert_eq!(xdg_config_home_dir(ignored), None, "{ignored:?}");
+        }
+        // An absolute value wins, outside or inside the home folder, trimmed like the app's own
+        // config folder.
+        let outside = root.join("custom");
+        let inside = home.join("dotfiles");
+        for (value, expected) in [
+            (text(&outside), outside.join("opencode")),
+            (format!(" {} ", text(&outside)), outside.join("opencode")),
+            (text(&inside), inside.join("opencode")),
+        ] {
+            assert_eq!(
+                opencode_config_dir_for(&home, Some(&value)),
+                expected,
+                "{value:?}"
+            );
+            assert!(opencode_config_moved_for(&home, Some(&value)), "{value:?}");
+        }
+        // Pointing at the default folder is no move.
+        let dot_config = text(&home.join(".config"));
+        assert_eq!(opencode_config_dir_for(&home, Some(&dot_config)), default);
+        assert!(!opencode_config_moved_for(&home, Some(&dot_config)));
     }
 
     #[test]

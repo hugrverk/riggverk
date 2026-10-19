@@ -1341,6 +1341,21 @@ fn run_planned_artifacts(
         };
     }
 
+    // A fresh profile has no data folder: the first apply creates it, owner-only, before any
+    // write below it.
+    if let Err(e) = crate::managed_state::ensure_data_folder(&ws_root) {
+        cleanup_preflight_transaction_evidence(&backup_dir);
+        return SetupResult {
+            success: false,
+            transaction_id,
+            applied: vec![],
+            failed: vec![e.clone()],
+            rolled_back: vec![],
+            manual_steps: vec![],
+            message: format!("Cannot create the workspace folder; nothing was changed: {e}"),
+        };
+    }
+
     if let Some(token) = preview_token {
         if let Err(e) = setup_transaction::consume_preview_token(token) {
             cleanup_preflight_transaction_evidence(&backup_dir);
@@ -3107,6 +3122,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn regular_file_remove_rejects_symlinked_parent() {
+        let _env = crate::test_env::guard::default_xdg_config_home();
         // Remove rejects when the destination's parent chain contains a symlink.
         // Test with a non-workspace artifact (home-based).
         let base = std::env::temp_dir().join(format!(
@@ -3136,6 +3152,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn regular_file_apply_rejects_symlinked_parent() {
+        let _env = crate::test_env::guard::default_xdg_config_home();
         // Apply rejects when the destination's parent chain contains a symlink.
         let base = std::env::temp_dir().join(format!(
             "aw-setup-apply-sym-parent-{}",
@@ -3162,6 +3179,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn regular_file_apply_rejects_dangling_destination_symlink() {
+        let _env = crate::test_env::guard::default_xdg_config_home();
         let base = std::env::temp_dir().join(format!(
             "aw-setup-apply-dangling-dest-{}",
             std::time::SystemTime::now()

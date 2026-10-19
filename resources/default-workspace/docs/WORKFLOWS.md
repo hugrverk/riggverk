@@ -59,9 +59,9 @@ On the output pane press `z` (or `:rollback`). The app does a dry run, shows wha
 
 Skills you add to the runtime workspace are not installed; harness installs come from the app's bundled catalog. Put a personal skill straight into a skills folder your harness reads (`~/.claude/skills/<name>/SKILL.md` or `~/.agents/skills/<name>/SKILL.md`). Unknown skills there are preserved. To change the bundled catalog, edit the app source repository.
 
-## Move the workspace
+## The workspace folder
 
-Settings -> workspace: `c` chooses another folder (it must pass the workspace markers), `R` resets to `~/.config/agent-workspace`. Install into the new location with `u` on the Workspace page. `AGENT_WORKSPACE_PATH` overrides the setting.
+The app works in `~/.config/agent-workspace`; Settings no longer picks another folder. A custom folder saved by an earlier version stays in use while it holds the app's `.agent-workspace/` state. Settings -> workspace: `R` asks first, then returns to the default folder (the old folder and its ownership records are left as they are, and the app cannot switch back to it). `AGENT_WORKSPACE_PATH` overrides the setting.
 
 ## Version the workspace with Git
 

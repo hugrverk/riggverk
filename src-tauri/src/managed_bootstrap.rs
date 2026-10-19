@@ -283,7 +283,7 @@ pub fn legacy_skill_artifacts(
 
 /// Stale OpenCode agent scout.md when repo-scout is canonical.
 pub fn stale_opencode_scout_agent(workspace_root: &Path, home: &Path) -> Option<ArtifactId> {
-    let dest = home.join(".config/opencode/agents/scout.md");
+    let dest = crate::platform_paths::opencode_config_dir(home).join("agents/scout.md");
     if !dest.is_file() {
         return None;
     }

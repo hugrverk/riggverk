@@ -1,28 +1,17 @@
 # Troubleshooting
 
-## Workspace not installed or invalid
+## Workspace folder unusable
 
-1. Open Workspace (`1`). The row says `setup needed`.
-2. Press `u`, read the plan, press `y`.
-3. Confirm `.agent-workspace/workspace.json` exists under the workspace folder (default `~/.config/agent-workspace`).
-4. A custom folder from Settings or `AGENT_WORKSPACE_PATH` must pass the markers below. `AGENT_WORKSPACE_PATH` wins over Settings. If a saved custom path stops validating, the app falls back to the default path.
+The workspace folder (default `~/.config/agent-workspace`) holds the app's state in `.agent-workspace/` and your personal docs in `docs/context/`. A fresh profile has none yet, and that is fine: the first install or personal doc creates it, and harnesses can be installed before the workspace.
 
-## Missing markers
+1. Open Workspace (`1`). The row says `folder unusable`, and the `why` row says what is wrong.
+2. `the folder is a symlink` or `not a folder`: the app does not write through a link or over a file. Move the link or file away; the app creates a real folder on the next install.
+3. `folder not found` with `AGENT_WORKSPACE_PATH` set: the variable names a folder that does not exist. Create it or unset the variable. It wins over Settings.
+4. A custom folder from Settings is used only while it holds `.agent-workspace/workspace.json` or `.agent-workspace/managed-state.json`. Otherwise the app falls back to the default folder. Deleting bundled files from the folder does not change this.
 
-A valid workspace contains all of:
+## Missing bundled files in the workspace
 
-| Marker | Kind |
-|--------|------|
-| `.agent-workspace/workspace.json` | file |
-| `README.md` | file |
-| `skills/` | directory |
-| `templates/global-agent-rules.md` | file |
-| `templates/opencode.json` | file |
-| `templates/codex/config.toml` | file |
-| `templates/cursor/agents/` | directory |
-| `templates/cursor/rules/` (with at least one `*.mdc`) | directory |
-
-Run `u` on the Workspace page. Missing files are created; files you changed are kept and listed as conflicts.
+Bundled files missing from the workspace folder do not make it unusable. Run `u` on the Workspace page to install them again; files you changed are kept and listed as conflicts.
 
 ## Conflicts
 
@@ -56,7 +45,7 @@ Codex ignores `AGENTS.md` when a non-empty `AGENTS.override.md` exists in the Co
 - **Plan is stale / re-run preview**: an installed file changed after the preview. Press `r` to preview again.
 - **Token expired or already used**: previews expire after ten minutes. Press `r`.
 - **`setup operation already in progress`**: another install or rollback is running. Wait.
-- **`no valid workspace installed`**: install the workspace first.
+- **`workspace folder unusable`**: see "Workspace folder unusable" above.
 - **Update disabled, `already current`**: nothing to do. `p` previews anyway.
 
 Nothing is written when a review fails before apply.
@@ -77,9 +66,9 @@ After a restart, `z` is unavailable: the app does not rediscover transactions. B
 
 Config merges (Codex, OpenCode, Cursor) and generators call `python3`. Install Python 3 and make sure it is on `PATH` for the app. The app appends the Homebrew and user bin directories at startup, but a Python in another location needs to be on the `PATH` the app was started with. Errors name `python3`.
 
-## A harness page says no valid workspace
+## A harness page says the workspace folder is unusable
 
-Harness installs need the workspace first. Install it on the Workspace page, then return.
+Harness installs need a usable workspace folder, not the workspace install. The Workspace page says what is wrong with the folder (see "Workspace folder unusable" above).
 
 ## Settings and targets
 

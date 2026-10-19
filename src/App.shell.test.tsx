@@ -12,10 +12,6 @@ vi.mock("@tauri-apps/api/core", () => ({
   isTauri: () => true,
 }));
 
-vi.mock("@tauri-apps/plugin-dialog", () => ({
-  open: vi.fn(),
-}));
-
 interface Backend {
   settings: AppSettings;
   commandLog: string[];

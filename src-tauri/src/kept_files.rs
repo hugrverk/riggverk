@@ -218,6 +218,7 @@ fn update(
     };
     let raw = serde_json::to_vec_pretty(&document)
         .map_err(|error| format!("serialize kept files: {error}"))?;
+    crate::managed_state::ensure_data_folder(workspace_root)?;
     crate::safe_filesystem::write_regular_file_atomic(
         &path_of(workspace_root),
         &raw,

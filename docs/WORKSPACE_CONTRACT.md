@@ -10,18 +10,16 @@ Requirements on the machine: Python 3 (Codex and OpenCode merge and generator he
 
 Install and the Library read the bundled copy, never the runtime workspace. The runtime workspace holds a copy of the bundle that neither of them reads; the only Library text in it is your personal docs (`docs/context/`). Editing the workspace changes neither what harnesses receive nor what the Library shows.
 
-## Required runtime markers
+## Data folder
 
-A valid workspace contains:
+The workspace folder is the app's data folder: its state lives in `.agent-workspace/` (`managed-state.json`, `kept-files.json`, `rules-preferences.json`, and the `workspace.json` marker of a bundle install), personal docs in `docs/context/`. Whether it is usable depends on the folder itself, never on the bundled copies in it:
 
-- `.agent-workspace/workspace.json`
-- `README.md`
-- `skills/` (directory)
-- `templates/global-agent-rules.md`
-- `templates/opencode.json`
-- `templates/codex/config.toml`
-- `templates/cursor/agents/` (directory)
-- `templates/cursor/rules/` (directory holding at least one `*.mdc` file)
+- The default folder (`~/.config/agent-workspace`) is usable when it is absent (a fresh profile) or a real directory. A harness can be installed before the workspace bundle.
+- An `AGENT_WORKSPACE_PATH` folder must be an existing real directory.
+- A custom folder saved in Settings is used while it is a real directory holding `.agent-workspace/workspace.json` or `.agent-workspace/managed-state.json`; otherwise the app falls back to the default folder and clears the saved path. Deleting bundled copies from the folder never invalidates it or clears the path.
+- A symlink or a file in place of the folder makes it unusable: the Workspace page says why, and nothing that needs the folder runs.
+
+Nothing creates the folder at launch. The first write that needs it (an install, a state file, a personal doc) creates it owner-only (0700).
 
 Validation is read-only. It does not run workspace scripts, install files, or inspect credential-bearing state. Health checks that need the OpenCode generator run the bundled copy, not a script from the workspace. Runtime health (Claude, Codex, Cursor, OpenCode) and the sync fields of `get_status` compare the installed files with the bundled copy; an edited or missing workspace copy does not change them, and Codex, Cursor, Claude and OpenCode health need no workspace folder at all.
 
@@ -49,7 +47,7 @@ A file that exists but is not provably app-owned and unmodified is a conflict: I
 
 ### Custom workspace
 
-Settings can point the app at another folder (`c` choose, `R` reset to the default path). A chosen folder is used only when it passes the markers above. `AGENT_WORKSPACE_PATH` overrides it. Install into a custom folder behaves as into the default one, and the generator scripts the app runs still come from the bundled read-only copy.
+Settings no longer picks a folder (the chooser and `:workspace choose` are gone). A custom folder saved by an earlier version stays in use while it holds the app's `.agent-workspace/` state (see Data folder above). `AGENT_WORKSPACE_PATH` overrides it. `R` in Settings, or `:workspace reset`, asks first and then clears the saved path and returns to the default folder: the old folder is left as it is, its ownership records and personal docs stay there, and the app cannot switch back to it. Install into a custom folder behaves as into the default one, and the generator scripts the app runs still come from the bundled read-only copy.
 
 ## Skill source layout
 
@@ -80,7 +78,7 @@ Skills are one global surface (`skills`) for all harnesses, installed into the f
 
 - Claude Code: `~/.claude/skills`
 - Codex: `~/.agents/skills`, and `$CODEX_HOME/skills` (deprecated; `.system` below it is Codex's own)
-- OpenCode: `~/.claude/skills`, `~/.agents/skills`, `~/.config/opencode/skills`
+- OpenCode: `~/.claude/skills`, `~/.agents/skills`, `$XDG_CONFIG_HOME/opencode/skills` (default `~/.config/opencode/skills`)
 - Cursor: `~/.cursor/skills`, `~/.agents/skills`, `~/.claude/skills`, `~/.codex/skills`
 - GitHub Copilot (the CLI; checked against 1.0.98): `~/.copilot/skills` and `~/.agents/skills`. It does not read `~/.claude/skills`. VS Code's Copilot also reads `~/.claude/skills`, so with both folders installed it lists each skill twice.
 - Pi (checked against 1.3.0): the `skills` folder of its agent dir (`~/.pi/agent/skills`) and `~/.agents/skills`. It does not read `~/.claude/skills`.
@@ -92,7 +90,7 @@ The app installs into the fewest folders every enabled harness reads (`skill_roo
 
 The light harnesses (Copilot, Pi, Kilo) are off by default, also for settings files written before they existed; enabling one adds a tab and, at most, one install folder (`~/.agents/skills`, shared with Codex, OpenCode and Cursor). For every subset of the harnesses and both Codex homes the roots satisfy: each enabled harness reads an installed root unless it is unserved; Codex reads exactly one, and in a customised home only its own; nothing is installed that no enabled harness needs; and no new install folder exists, so the worst-case upgrade transaction is unchanged. A skill name found in several folders a harness reads is resolved by that harness: Copilot lets `~/.copilot/skills` win over `~/.agents/skills` without saying so, Pi lets its agent folder win and reports a collision, and Kilo ranks `~/.claude/skills` below `~/.agents/skills` below `~/.kilo/skills` (the last wins, with a log line). The effective-load view shows which copy each loads. MCP is not managed for the light tier yet; the descriptor `metadata/light-harnesses.json` (embedded in the app, never read from the runtime workspace) holds each one's label, CLI program and rules file (see Rules).
 
-A folder that is no longer wanted (a harness switched off, or the folders older versions filled: `~/.config/opencode/skills`, `~/.cursor/skills`, `$CODEX_HOME/skills`, `~/.agents/skills`) loses the app's own copies through the same reviewed plan: each file is removed only when it is proven app-owned, with a backup, in the same transaction that installs the skills in their new folder (removals come last, so a failure restores the old state). Edited copies stay as conflicts, and files you added, your own skills and every dot directory (`$CODEX_HOME/skills/.system` included) are never touched.
+A folder that is no longer wanted (a harness switched off, or the folders older versions filled: `skills` in OpenCode's config folder, `~/.cursor/skills`, `$CODEX_HOME/skills`, `~/.agents/skills`) loses the app's own copies through the same reviewed plan: each file is removed only when it is proven app-owned, with a backup, in the same transaction that installs the skills in their new folder (removals come last, so a failure restores the old state). Edited copies stay as conflicts, and files you added, your own skills and every dot directory (`$CODEX_HOME/skills/.system` included) are never touched.
 
 All bundled skills target Codex, OpenCode, Claude, and Cursor. Sync-all derives expected skills from the same compatibility metadata used by health checks.
 
@@ -136,7 +134,7 @@ Uninstall never removes a kept file (it is not provably the app's) and never del
 Installed rule targets:
 
 - Codex: `$CODEX_HOME/AGENTS.md` (default `~/.codex/AGENTS.md`)
-- OpenCode: `~/.config/opencode/AGENTS.md`
+- OpenCode: `$XDG_CONFIG_HOME/opencode/AGENTS.md` (default `~/.config/opencode/AGENTS.md`)
 - Claude Code: `~/.claude/CLAUDE.md`
 - GitHub Copilot: `~/.copilot/copilot-instructions.md`
 - Pi: `~/.pi/agent/AGENTS.md`
@@ -202,7 +200,9 @@ Generated outputs must match their source bodies and native metadata. Repository
 
 Riggverk owns only allowlisted managed keys and the named Playwright MCP entry. Unknown keys, user provider blocks, and other MCP entries are preserved.
 
-`~/.config/opencode/tui.json` is merge-managed the same way: only the top-level keys listed under `tui_top_level` in `metadata/opencode-managed-keys.json` are the app's, and every other key keeps its value and its place. The file is read and written as strict JSON; one with comments, a trailing comma or invalid JSON is a conflict that is never rewritten, and the reason shown never contains its text. A managed-state record or transaction from a version that owned the whole file still proves the file while it is byte for byte what that version wrote; after the next apply the record holds the managed-key digest.
+OpenCode's config folder is `$XDG_CONFIG_HOME/opencode`, default `~/.config/opencode`, on every OS (OpenCode resolves it with `xdg-basedir`). One resolver (`platform_paths::opencode_config_dir`) gives it to install, review, health, the sibling-file check, uninstall, backups and the labels. A relative `XDG_CONFIG_HOME` is ignored (the XDG specification calls it invalid), and a folder outside the home directory is the allowlisted root of the OpenCode files. Managed-state records name artifacts, not paths, so they follow the folder in effect: after the variable changes, the files at the old folder are neither updated nor removed, uninstall included, and a file of the user's at the new folder is a conflict like anywhere else. `OPENCODE_CONFIG_DIR` adds a folder OpenCode reads after the global one; runtime health warns while it is set and the app never writes there.
+
+`tui.json` in that folder is merge-managed the same way: only the top-level keys listed under `tui_top_level` in `metadata/opencode-managed-keys.json` are the app's, and every other key keeps its value and its place. The file is read and written as strict JSON; one with comments, a trailing comma or invalid JSON is a conflict that is never rewritten, and the reason shown never contains its text. A managed-state record or transaction from a version that owned the whole file still proves the file while it is byte for byte what that version wrote; after the next apply the record holds the managed-key digest.
 
 The config sources are:
 
@@ -303,7 +303,7 @@ Full uninstall previews removable, preserved, and merge-managed artifacts before
 
 Uninstall creates a rollback-capable backend transaction with per-file backups. Preview and rollback dry-run perform zero filesystem mutation. Actual rollback restores exact prior app-owned bytes from the transaction backup and refuses occupied or changed targets.
 
-The frontend retains only the most recent install or uninstall transaction ID for the current app session (`z` or `:rollback` restores it after a dry run and a confirm). **Recover previous uninstall** remains visible after uninstall makes the workspace invalid, but recovery state is not persisted in AppSettings, localStorage, or a transaction registry. Closing or restarting the app loses the recovery affordance even though backend transaction evidence may remain on disk. Recovery requires a read-only dry-run before mutation and explicit confirmation to restore.
+The frontend retains only the most recent install or uninstall transaction ID for the current app session (`z` or `:rollback` restores it after a dry run and a confirm). **Recover previous uninstall** remains visible after uninstall (the workspace folder and its `.agent-workspace/` state stay, so the folder stays usable), but recovery state is not persisted in AppSettings, localStorage, or a transaction registry. Closing or restarting the app loses the recovery affordance even though backend transaction evidence may remain on disk. Recovery requires a read-only dry-run before mutation and explicit confirmation to restore.
 
 ## Harness enablement
 

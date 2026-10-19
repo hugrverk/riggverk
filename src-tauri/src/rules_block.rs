@@ -1,6 +1,7 @@
 //! Managed base block inside a user-owned rules file.
 //!
-//! `~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, and `~/.config/opencode/AGENTS.md`
+//! `~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, and `~/.config/opencode/AGENTS.md` (or
+//! `$XDG_CONFIG_HOME/opencode/AGENTS.md`)
 //! hold the Riggverk base between two marker lines. Riggverk owns
 //! only the bytes between the markers; everything before BEGIN and after END is
 //! the user's refinement layer and is preserved byte for byte.

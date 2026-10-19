@@ -94,11 +94,11 @@ describe("Boot", () => {
     expect(overlay()).toBeNull();
   });
 
-  it("skips a line it has no data for, and says so for a missing workspace and a dirty branch", () => {
+  it("skips a line it has no data for, and says so for an unusable workspace folder and a dirty branch", () => {
     renderWithShell(<Boot info={{ version: "0.1.0", workspace: null, branch: "dev", dirty: true, backups: 1 }} autoplay />);
     expect(playToEnd().said).toEqual([
       "❯ riggverk 0.1.0",
-      "  workspace  no workspace",
+      "  workspace  folder unusable",
       "  branch     dev · dirty",
       "  backups    1 run",
       "❯ ready",

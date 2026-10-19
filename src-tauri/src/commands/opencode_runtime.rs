@@ -62,6 +62,9 @@ pub struct OpenCodeRuntimeHealth {
     pub template_tui_path: String,
     pub installed_tui_path: String,
     pub tui_status: String,
+    /// Managed `tui.json` keys that differ from the bundled config, by name; empty when it matches
+    /// or cannot be compared (a missing or unusable file).
+    pub tui_diverged_keys: Vec<String>,
     // New generated snapshot fields
     pub generated_snapshot_base_path: String,
     pub generated_snapshot_policy_path: String,
@@ -609,7 +612,7 @@ fn installed_config_diverged_keys(
 
 /// Sync status for `get_status` / dashboard (compares the staged output an install would write).
 pub(crate) fn opencode_config_sync_status(workspace_root: &Path, home_dir: &Path) -> String {
-    let installed_path = home_dir.join(".config/opencode/opencode.json");
+    let installed_path = crate::platform_paths::opencode_config_dir(home_dir).join("opencode.json");
 
     if !installed_path.is_file() {
         return "missing".into();
@@ -785,15 +788,26 @@ fn compute_health_with_bundle(
     bundled_root: Option<&Path>,
     home_dir: &Path,
 ) -> OpenCodeRuntimeHealth {
+    // The folder the install writes to: `XDG_CONFIG_HOME` moves it, as it moves OpenCode's.
+    let config_dir = crate::platform_paths::opencode_config_dir(home_dir);
+    compute_health_in(bundled_root, home_dir, &config_dir)
+}
+
+/// The health of the OpenCode files in `config_dir`, the OpenCode config folder of `home_dir`.
+fn compute_health_in(
+    bundled_root: Option<&Path>,
+    home_dir: &Path,
+    config_dir: &Path,
+) -> OpenCodeRuntimeHealth {
     let source_path = |rel: &str| bundled_root.map(|root| root.join(rel)).unwrap_or_default();
     let template_config_path = source_path("templates/opencode.json");
-    let installed_config_path = home_dir.join(".config/opencode/opencode.json");
+    let installed_config_path = config_dir.join("opencode.json");
     let agents_source_dir = source_path("agents");
-    let agents_target_dir = home_dir.join(".config/opencode/agents");
+    let agents_target_dir = config_dir.join("agents");
 
     // TUI paths
     let template_tui_path = source_path("templates/tui.json");
-    let installed_tui_path = home_dir.join(".config/opencode/tui.json");
+    let installed_tui_path = config_dir.join("tui.json");
 
     // Generated snapshot paths
     let generated_snapshot_base_path = source_path("templates/opencode.base.json");
@@ -1307,7 +1321,7 @@ fn compute_health_with_bundle(
 
     let rules_status = opencode_rules_status(
         &source_path("templates/sync/opencode-rules.md"),
-        &home_dir.join(".config/opencode/AGENTS.md"),
+        &config_dir.join("AGENTS.md"),
     );
 
     // Bundled agents check
@@ -1416,10 +1430,8 @@ fn compute_health_with_bundle(
 
     // OpenCode merges `config.json` and `opencode.jsonc` from the same folder with
     // `opencode.json`; one that sets managed keys means OpenCode does not run the team's values.
-    let sibling_files = opencode_precedence::sibling_configs(
-        &home_dir.join(".config/opencode"),
-        managed_opencode_key_names,
-    );
+    let sibling_files =
+        opencode_precedence::sibling_configs(config_dir, managed_opencode_key_names);
     let only_siblings_diverge = !has_fail && !has_warn && !sibling_files.is_empty();
     for sibling in &sibling_files {
         let warning = opencode_precedence::sibling_warning(sibling);
@@ -1517,6 +1529,7 @@ fn compute_health_with_bundle(
         template_tui_path: template_tui_path_str,
         installed_tui_path: installed_tui_path_str,
         tui_status,
+        tui_diverged_keys: tui_diverged_keys.unwrap_or_default(),
         generated_snapshot_base_path: generated_snapshot_base_path_str,
         generated_snapshot_policy_path: generated_snapshot_policy_path_str,
         generated_snapshot_path: generated_snapshot_path_str,
@@ -1573,6 +1586,18 @@ pub(crate) fn apply_config_environment(
             detail: env_vars.join(", "),
         });
         health.warnings.push(warning);
+    }
+    if env_vars
+        .iter()
+        .any(|name| name == opencode_precedence::CONFIG_DIR_ENV_VAR)
+    {
+        let config_dir = Path::new(&health.installed_config_path)
+            .parent()
+            .map(|dir| dir.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        health
+            .warnings
+            .push(opencode_precedence::config_dir_env_warning(&config_dir));
     }
     if !system_managed_paths.is_empty() {
         let warning = opencode_precedence::system_managed_warning(&system_managed_paths);
@@ -1682,9 +1707,13 @@ pub(crate) fn apply_cli_probes(
         let (status, detail) = match outcome {
             Ok(true) => ("pass", format!("{agent} resolves")),
             Ok(false) => {
+                let agents_dir = Path::new(&health.installed_config_path)
+                    .with_file_name("agents")
+                    .to_string_lossy()
+                    .into_owned();
                 health.warnings.push(format!(
                     "OpenCode cannot resolve default agent {agent}: opencode debug agent failed. \
-                     Check the agent files in ~/.config/opencode/agents for a frontmatter error, \
+                     Check the agent files in {agents_dir} for a frontmatter error, \
                      or run Install/Update."
                 ));
                 ("fail", format!("{agent} does not resolve"))
@@ -2349,9 +2378,10 @@ mod tests {
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    /// Existing fixtures supply the install bundle explicitly, independently of the runtime root.
+    /// Existing fixtures supply the install bundle explicitly, independently of the runtime root,
+    /// and check the default folder below `home`, whatever `XDG_CONFIG_HOME` the test process has.
     fn compute_health(bundle: &Path, home: &Path) -> OpenCodeRuntimeHealth {
-        super::compute_health_with_bundle(Some(bundle), home)
+        super::compute_health_in(Some(bundle), home, &home.join(".config/opencode"))
     }
 
     fn temp_root(name: &str) -> PathBuf {
@@ -2512,6 +2542,113 @@ mod tests {
         assert_eq!(unavailable.bundled_agent_count, 0);
         cleanup(&ws);
         cleanup(&home);
+    }
+
+    #[test]
+    fn test_health_and_precedence_read_the_folder_xdg_config_home_names() {
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        let ws = temp_root("xdg-health-ws");
+        let home = temp_root("xdg-health-home");
+        let xdg = temp_root("xdg-health-config");
+        crate::test_env::set_test_user_dirs(&home);
+        unsafe {
+            std::env::set_var("AGENT_WORKSPACE_PATH", &ws);
+            std::env::set_var("XDG_CONFIG_HOME", &xdg);
+        }
+        let bundle = crate::setup_roots::bundled_root().unwrap();
+        let template: serde_json::Value =
+            serde_json::from_str(&bundled_template("opencode.json")).unwrap();
+        let rendered = render_expected_opencode_config(&template, &home).unwrap();
+        // A synced install in the folder OpenCode reads: `$XDG_CONFIG_HOME/opencode`.
+        write_file(
+            &xdg,
+            "opencode/opencode.json",
+            &serde_json::to_string_pretty(&rendered).unwrap(),
+        );
+        for (source, dest) in [
+            ("templates/tui.json", "opencode/tui.json"),
+            ("templates/sync/opencode-rules.md", "opencode/AGENTS.md"),
+        ] {
+            write_file(
+                &xdg,
+                dest,
+                &fs::read_to_string(bundle.join(source)).unwrap(),
+            );
+        }
+        for name in list_bundled_agents(&bundle.join("agents")) {
+            write_file(
+                &xdg,
+                &format!("opencode/agents/{name}"),
+                &fs::read_to_string(bundle.join("agents").join(name)).unwrap(),
+            );
+        }
+        // Files at `~/.config/opencode`, which OpenCode does not read now, are not looked at.
+        write_file(
+            &home,
+            ".config/opencode/opencode.json",
+            r#"{"model":"old/place"}"#,
+        );
+        write_file(
+            &home,
+            ".config/opencode/config.json",
+            r#"{"model":"old/place"}"#,
+        );
+
+        let health = super::compute_health(&home);
+        assert_eq!(health.status, "synced", "{:?}", health.checks);
+        assert_eq!(
+            (
+                health.config_status.as_str(),
+                health.tui_status.as_str(),
+                health.rules_status.as_str()
+            ),
+            ("synced", "synced", "synced")
+        );
+        assert_eq!(
+            health.installed_bundled_agent_count,
+            health.bundled_agent_count
+        );
+        assert_eq!(
+            PathBuf::from(&health.installed_config_path),
+            xdg.join("opencode/opencode.json")
+        );
+        assert_eq!(
+            PathBuf::from(&health.installed_tui_path),
+            xdg.join("opencode/tui.json")
+        );
+        assert!(health.config_precedence.sibling_files.is_empty());
+        assert_eq!(super::opencode_config_sync_status(&ws, &home), "synced");
+
+        // A sibling beside the installed file is found in the same folder.
+        write_file(&xdg, "opencode/opencode.jsonc", r#"{"model":"mine/other"}"#);
+        let siblings = super::compute_health(&home).config_precedence.sibling_files;
+        assert_eq!(
+            siblings.iter().map(|s| s.file.as_str()).collect::<Vec<_>>(),
+            ["opencode.jsonc"]
+        );
+
+        // Without the variable the default folder is read again.
+        unsafe { std::env::remove_var("XDG_CONFIG_HOME") };
+        let health = super::compute_health(&home);
+        assert_eq!(
+            PathBuf::from(&health.installed_config_path),
+            home.join(".config/opencode/opencode.json")
+        );
+        assert_eq!(health.config_status, "diverged");
+        assert_eq!(
+            health
+                .config_precedence
+                .sibling_files
+                .iter()
+                .map(|s| s.file.as_str())
+                .collect::<Vec<_>>(),
+            ["config.json"]
+        );
+        assert_eq!(super::opencode_config_sync_status(&ws, &home), "diverged");
+        cleanup(&ws);
+        cleanup(&home);
+        cleanup(&xdg);
     }
 
     #[test]
@@ -3057,6 +3194,7 @@ mod tests {
             r#"{"keybinds":{"leader":"ctrl+x"},"mouse":true,"plugin":["p"],"theme":"system","scroll_speed":3,"$schema":"https://opencode.ai/tui.json"}"#,
         );
         assert_eq!(health.tui_status, "synced");
+        assert!(health.tui_diverged_keys.is_empty());
         assert_eq!(tui_check(&health, "tui_configs_match").status, "pass");
     }
 
@@ -3067,6 +3205,8 @@ mod tests {
             r#"{"keybinds":{"leader":"ctrl+x"},"theme":"dark","$schema":"https://opencode.ai/tui.json"}"#,
         );
         assert_eq!(health.tui_status, "diverged");
+        // Names only, in the order the check detail lists them; a user key is not among them.
+        assert_eq!(health.tui_diverged_keys, ["theme", "mouse"]);
         let check = tui_check(&health, "tui_configs_match");
         assert_eq!(check.status, "warn");
         assert!(check.detail.contains("(theme, mouse)"), "{}", check.detail);
@@ -3080,6 +3220,8 @@ mod tests {
             "{\n  // SECRET-MARKER\n  \"theme\": \"system\"\n}\n",
         );
         assert_eq!(health.tui_status, "diverged");
+        // An unusable file cannot be compared, so no key is named and none of its text is kept.
+        assert!(health.tui_diverged_keys.is_empty());
         let check = tui_check(&health, "installed_tui_config_exists");
         assert_eq!(check.status, "fail");
         assert!(
@@ -3399,6 +3541,7 @@ mod tests {
 
     #[test]
     fn test_opencode_config_sync_status_matches_rendered_installed() {
+        let _env = crate::test_env::guard::default_xdg_config_home();
         let ws = temp_root("sync-status-ws");
         let home = temp_root("sync-status-home");
 
@@ -3426,6 +3569,7 @@ mod tests {
 
     #[test]
     fn test_opencode_config_sync_status_diverged_for_unrendered_installed() {
+        let _env = crate::test_env::guard::default_xdg_config_home();
         let ws = temp_root("sync-status-div-ws");
         let home = temp_root("sync-status-div-home");
 
@@ -4330,6 +4474,7 @@ mod tests {
 
     #[test]
     fn the_dashboard_status_reads_a_commented_opencode_json_as_jsonc() {
+        let _env = crate::test_env::guard::default_xdg_config_home();
         let ws = temp_root("sync-status-jsonc-ws");
         let home = temp_root("sync-status-jsonc-home");
         let rendered = render_expected_opencode_config(
@@ -4495,6 +4640,41 @@ mod tests {
         let text = health_text(&reported);
         assert!(!text.contains(SECRET), "{text}");
         assert!(!text.contains("OPENCODE_API_KEY"), "{text}");
+    }
+
+    #[test]
+    fn opencode_config_dir_is_a_warning_that_names_the_folder_the_app_installs_to() {
+        let (ws, home) = setup_synced_workspace("config-dir-env");
+        let elsewhere = temp_root("config-dir-env-target");
+        let vars = [(
+            "OPENCODE_CONFIG_DIR",
+            elsewhere.to_string_lossy().into_owned(),
+        )]
+        .map(|(name, value)| (name.into(), value.into()));
+        let mut health = compute_health(&ws, &home);
+        apply_config_environment(
+            &mut health,
+            crate::opencode_precedence::config_env_var_names(vars),
+            Vec::new(),
+        );
+        assert_eq!(health.config_precedence.env_vars, ["OPENCODE_CONFIG_DIR"]);
+        assert_eq!(health.status, "synced", "a warning only");
+        let folder = home.join(".config/opencode").to_string_lossy().into_owned();
+        assert!(
+            health
+                .warnings
+                .iter()
+                .any(|warning| warning
+                    == &crate::opencode_precedence::config_dir_env_warning(&folder)),
+            "{:?}",
+            health.warnings
+        );
+        // Its value is never shown, and nothing is written there.
+        let text = health_text(&health);
+        assert!(!text.contains(&*elsewhere.to_string_lossy()), "{text}");
+        assert!(!elsewhere.exists());
+        cleanup(&ws);
+        cleanup(&home);
     }
 
     // ── Config update / generation tests ──

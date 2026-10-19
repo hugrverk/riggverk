@@ -53,14 +53,13 @@ interface SettingsViewProps {
   colorResetKey: number;
   /** Absolute path of the active workspace, when known; the row falls back to the saved path or the default. */
   workspacePath?: string | null;
-  /** A workspace choose or reset is already running (picker or confirm open, or reloading). */
+  /** A workspace reset is already running (confirm open, or reloading). */
   workspaceBusy?: boolean;
   /**
-   * Opens the folder picker and switches (validation, confirm for unsaved Library edits and the reload are the
-   * caller's). Resolves with what to show in the row, or null when nothing happened.
+   * Back to the default workspace folder (the confirm and the reload are the caller's). Resolves with what to
+   * show in the row, or null when nothing happened. The app no longer picks a folder: this only drops a
+   * custom one saved by an earlier version.
    */
-  onChooseWorkspace?: () => Promise<SettingsMessage | null>;
-  /** Back to the default workspace; same contract as `onChooseWorkspace`. */
   onResetWorkspace?: () => Promise<SettingsMessage | null>;
 }
 
@@ -91,7 +90,7 @@ const SAVE_STATE: Record<SettingsSaveStatus, { glyph: GlyphName; tone: Tone; lab
 /**
  * `j`/`k` rows: an element marked `data-setting-row` is one setting and its `data-setting-stop` descendant is the
  * control that takes focus (the roving tab stop of a radio group, the hex field of a colour row); a row of
- * plain buttons (the workspace actions) lands on its first button.
+ * plain buttons (the workspace reset) lands on its first button.
  * Moves focus to the next/previous row inside the pane that holds focus.
  */
 function focusSettingRow(from: Element | null, step: 1 | -1): boolean {
@@ -282,7 +281,6 @@ export function SettingsView({
   colorResetKey,
   workspacePath,
   workspaceBusy = false,
-  onChooseWorkspace,
   onResetWorkspace,
 }: SettingsViewProps) {
   const ids = useId();
@@ -342,48 +340,35 @@ export function SettingsView({
     }
   }, [onReset, resetting]);
 
-  // Workspace row: the caller owns the picker, the confirm and the reload; the row shows what came back.
+  // Workspace row: the caller owns the confirm and the reload; the row shows what came back.
   const [workspaceMsg, setWorkspaceMsg] = useState<SettingsMessage | null>(null);
   const workspaceIsDefault = !appSettings || appSettings.workspace_path == null;
-  const workspaceDisabled = (action: "choose" | "reset"): true | string => {
+  const workspaceResetState = (): true | string => {
     if (!appSettings) return "settings are still loading";
     if (workspaceBusy) return "a workspace change is running";
-    if (action === "reset" && workspaceIsDefault) return "already the default workspace";
+    if (workspaceIsDefault) return "already the default workspace";
     return true;
   };
-  const runWorkspace = (action: "choose" | "reset") => {
-    const run = action === "choose" ? onChooseWorkspace : onResetWorkspace;
-    if (!run || workspaceDisabled(action) !== true) return;
+  const runWorkspaceReset = () => {
+    if (!onResetWorkspace || workspaceResetState() !== true) return;
     setWorkspaceMsg(null);
-    void run().then(result => {
+    void onResetWorkspace().then(result => {
       if (result) setWorkspaceMsg(result);
     });
   };
 
-  // `c` and `R` work from both panes (the workspace row is in the app pane, but the appearance pane has the
-  // initial focus) and are hinted in the status bar from both.
-  const workspaceBindings: Binding[] = SETTINGS_PANES.flatMap(paneId => [
-    {
-      id: `settings.workspace.choose.${paneId}`,
-      keys: "c",
-      title: "Choose the workspace folder",
-      hint: "choose folder",
-      scope: "pane" as const,
-      paneId,
-      when: () => (onChooseWorkspace ? workspaceDisabled("choose") : false),
-      run: () => runWorkspace("choose"),
-    },
-    {
-      id: `settings.workspace.reset.${paneId}`,
-      keys: "R",
-      title: "Reset the workspace to the default folder",
-      hint: "reset folder",
-      scope: "pane" as const,
-      paneId,
-      when: () => (onResetWorkspace ? workspaceDisabled("reset") : false),
-      run: () => runWorkspace("reset"),
-    },
-  ]);
+  // `R` works from both panes (the workspace row is in the app pane, but the appearance pane has the initial
+  // focus) and is hinted in the status bar from both.
+  const workspaceBindings: Binding[] = SETTINGS_PANES.map(paneId => ({
+    id: `settings.workspace.reset.${paneId}`,
+    keys: "R",
+    title: "Reset the workspace to the default folder",
+    hint: "reset folder",
+    scope: "pane" as const,
+    paneId,
+    when: () => (onResetWorkspace ? workspaceResetState() : false),
+    run: runWorkspaceReset,
+  }));
 
   const bindings: Binding[] = [
     ...workspaceBindings,
@@ -613,8 +598,7 @@ export function SettingsView({
   });
 
   const shownWorkspacePath = displayPath(workspacePath ?? appSettings.workspace_path ?? DEFAULT_WORKSPACE_PATH);
-  const chooseState = workspaceDisabled("choose");
-  const resetState = workspaceDisabled("reset");
+  const resetState = workspaceResetState();
   const appItems: KvItem[] = [
     {
       ...label("workspace", "workspace"),
@@ -622,31 +606,21 @@ export function SettingsView({
       value: (
         <div role="group" aria-labelledby={labelId("workspace")}>
           <div className="setting-path">{shownWorkspacePath}</div>
-          <div className="setting" data-setting-row={onChooseWorkspace || onResetWorkspace ? "" : undefined}>
+          <div className="setting" data-setting-row={onResetWorkspace ? "" : undefined}>
             <span className="c-dim">{workspaceIsDefault ? "default" : "custom folder"}</span>
-            {onChooseWorkspace && (
-              <ActionKey
-                keys={["c"]}
-                shortcut="c"
-                disabled={chooseState === true ? false : chooseState}
-                onClick={() => runWorkspace("choose")}
-              >
-                choose…
-              </ActionKey>
-            )}
             {onResetWorkspace && (
               <ActionKey
                 keys={["R"]}
                 shortcut="R"
                 disabled={resetState === true ? false : resetState}
-                onClick={() => runWorkspace("reset")}
+                onClick={runWorkspaceReset}
               >
                 reset to default
               </ActionKey>
             )}
           </div>
           <div role="status" aria-label="Workspace change">
-            {workspaceBusy && <span className="c-dim">switching workspace…</span>}
+            {workspaceBusy && <span className="c-dim">resetting workspace…</span>}
             {workspaceMsg && (
               <span className={workspaceMsg.ok ? "c-ok" : "c-fail"}>
                 <Glyph name={workspaceMsg.ok ? "ok" : "fail"} tone={workspaceMsg.ok ? "ok" : "fail"} /> {workspaceMsg.text}

@@ -12,7 +12,7 @@ The repository contains the application and its canonical bundled workspace. Ins
 - `scripts/` - repository checks, generators, contract guards, and release verification.
 - `docs/` - workspace contract, security model, release and smoke checklists.
 
-The installed runtime workspace lives at `~/.config/agent-workspace` unless a custom workspace is chosen in Settings or `AGENT_WORKSPACE_PATH` overrides it.
+The installed runtime workspace lives at `~/.config/agent-workspace` unless a custom folder saved by an earlier version is still in use or `AGENT_WORKSPACE_PATH` overrides it. It is the app's data folder: it is valid by its own `.agent-workspace/` state, never by the bundled copies in it, and the first install or personal doc creates it (nothing does at launch).
 
 ## Development
 
@@ -73,7 +73,7 @@ All skills support the central harnesses and the light tier. The skills surface 
 
 Rules files are merge-managed. Install writes the shared base (`templates/global-agent-rules.md` plus a harness appendix, composed under `templates/sync/`) between `BEGIN AGENT-WORKSPACE BASE` and `END AGENT-WORKSPACE BASE` markers; everything outside the markers is yours and is kept byte-for-byte. Add refinements below the block; they override the base.
 
-Targets: Codex `$CODEX_HOME/AGENTS.md` (default `~/.codex/AGENTS.md`), OpenCode `~/.config/opencode/AGENTS.md`, Claude Code `~/.claude/CLAUDE.md`, and for the light tier GitHub Copilot `~/.copilot/copilot-instructions.md`, Pi `~/.pi/agent/AGENTS.md` and Kilo Code `$XDG_CONFIG_HOME/kilo/AGENTS.md` (default `~/.config/kilo/AGENTS.md`). Cursor User Rules stay a manual copy of `templates/cursor/user-rules.md`.
+Targets: Codex `$CODEX_HOME/AGENTS.md` (default `~/.codex/AGENTS.md`), OpenCode `$XDG_CONFIG_HOME/opencode/AGENTS.md` (default `~/.config/opencode/AGENTS.md`), Claude Code `~/.claude/CLAUDE.md`, and for the light tier GitHub Copilot `~/.copilot/copilot-instructions.md`, Pi `~/.pi/agent/AGENTS.md` and Kilo Code `$XDG_CONFIG_HOME/kilo/AGENTS.md` (default `~/.config/kilo/AGENTS.md`). Cursor User Rules stay a manual copy of `templates/cursor/user-rules.md`.
 
 An edited block or a pre-existing file without markers is a conflict: Install leaves it alone. Resolve it with a diff, **Convert** (current base becomes the managed block, your changed sections move below it; previewed and backed up), or **Leave as is**. Harness pages expose these as `d` diff, `v` convert, `m` leave as is, and `:rules`. Details and the full plan table are in `docs/WORKSPACE_CONTRACT.md`.
 
@@ -123,7 +123,7 @@ Stored in `settings.json` under the app support dir; autosaved.
 | --- | --- | --- |
 | `enabled_harness_ids` | `["codex", "opencode", "claude", "cursor"]` | Positive allowlist for visible and writable harnesses; `"copilot"`, `"pi"` and `"kilo"` can be added and are off by default (also for older files that name the four or lack the field). Disabling hides the harness UI and blocks new managed writes without deleting files or target preferences. |
 | `enabled_target_ids` | `["codex_rules", "opencode_rules", "claude_rules", "opencode_agents", "claude_agents", "codex_agents", "opencode_config", "cursor_setup", "copilot_rules", "copilot_mcp", "pi_rules", "pi_mcp", "kilo_rules"]` | Targets Install is allowed to write. Toggle with Space on harness pages. A target that is off is skipped by preview, apply, and status. |
-| `workspace_path` | unset (`~/.config/agent-workspace`) | Custom workspace folder chosen in Settings (`c` choose, `R` reset to default). It must pass the workspace markers. Generator scripts the app runs always come from the bundled read-only copy, not from this folder. |
+| `workspace_path` | unset (`~/.config/agent-workspace`) | Custom workspace folder saved by an earlier version; Settings no longer picks one. It stays in use while it holds the app's `.agent-workspace/` state (`workspace.json` or `managed-state.json`); bundled copies in it are not needed. `R` in Settings (or `:workspace reset`) asks first, then clears it and returns to the default folder; the old folder and its ownership records are left as they are and the app cannot switch back to it. Generator scripts the app runs always come from the bundled read-only copy, not from this folder. |
 | `appearance` | `"dark"` | `"dark"`, `"light"`, or `"system"`. |
 | `app_font_size` | `"medium"` | `"small"`, `"medium"`, `"large"`, `"extra-large"`. |
 | `motion` | `"full"` | `"full"`, `"subtle"`, or `"off"`. `"off"` stops animations and transitions; the OS reduced-motion preference always counts as `"off"`. Older files with `reduce_motion: true` load as `"off"`; the legacy `reduce_motion` flag is still written beside it. |
@@ -165,7 +165,7 @@ The local release check is the gate: run `./scripts/release-check.sh` before mer
 ```bash
 python3 scripts/generate.py check
 python3 scripts/check-skill-routing.py
-python3 scripts/check-default-workspace-copy-list.py
+python3 scripts/check-retired-workspace-files.py
 python3 scripts/check-readme-docs-drift.py
 npm run typecheck
 npm test

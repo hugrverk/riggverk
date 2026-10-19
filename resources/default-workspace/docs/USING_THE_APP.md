@@ -50,8 +50,7 @@ Keys fire only when no text field has focus; Escape leaves a field. `Mod` is Cmd
 | Settings | `j` `k` | Next or previous setting |
 | | `r` | Reset appearance to defaults |
 | | `s` | Retry a failed save |
-| | `c` | Choose the workspace folder |
-| | `R` | Reset the workspace path to the default |
+| | `R` | Reset the workspace folder to the default (asks first) |
 
 ## Commands
 
@@ -137,7 +136,7 @@ Everything else is bundled with the app and read-only here: the pane title says 
 
 Harnesses (which tools appear and may be written), appearance (dark, light, system), text size, motion, landing page (workspace, library), colors, and the workspace folder. Settings autosave; `r` resets appearance after a confirmation.
 
-Workspace: `c` chooses another folder, which must pass the workspace markers; `R` returns to `~/.config/agent-workspace`. `AGENT_WORKSPACE_PATH` overrides both. Generator scripts the app runs always come from its bundled copy, not from the chosen folder.
+Workspace: Settings no longer picks a folder. A custom folder saved by an earlier version stays in use while it holds the app's `.agent-workspace/` state; `R` (or `:workspace reset`) asks first, then returns to `~/.config/agent-workspace`. The old folder is left as it is, its ownership records stay there, and the app cannot switch back to it. `AGENT_WORKSPACE_PATH` overrides the setting. Generator scripts the app runs always come from its bundled copy, not from the saved folder.
 
 Disabling a harness hides it and blocks new writes to it. It does not delete files or forget target choices, and re-enabling does not install.
 

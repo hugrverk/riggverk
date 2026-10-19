@@ -88,6 +88,7 @@ pub fn set_user_managed(
     preferences.schema_version = SCHEMA_VERSION;
     let raw = serde_json::to_vec_pretty(&preferences)
         .map_err(|e| format!("serialize rules preferences: {e}"))?;
+    crate::managed_state::ensure_data_folder(workspace_root)?;
     crate::safe_filesystem::write_regular_file_atomic(
         &preferences_path(workspace_root),
         &raw,

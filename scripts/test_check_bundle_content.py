@@ -80,9 +80,9 @@ class BundleTests(unittest.TestCase):
         self.addCleanup(self._tmp.cleanup)
         self.tree = Path(self._tmp.name)
         shutil.copytree(ROOT / WS, self.tree / WS, symlinks=True)
-        manifest = self.tree / bc.MANIFEST_RS
-        manifest.parent.mkdir(parents=True)
-        shutil.copy2(ROOT / bc.MANIFEST_RS, manifest)
+        frozen_list = self.tree / bc.FROZEN_LIST_RS
+        frozen_list.parent.mkdir(parents=True)
+        shutil.copy2(ROOT / bc.FROZEN_LIST_RS, frozen_list)
         pin_source = self.tree / bc.PIN_SOURCE
         pin_source.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(ROOT / bc.PIN_SOURCE, pin_source)
@@ -160,7 +160,7 @@ class BundleTests(unittest.TestCase):
         (self.tree / WS / "templates/broken.json").write_text('{"a": NaN}\n')
         self.assertFails("json", "not strict JSON: resources/default-workspace/templates/broken.json")
 
-    def test_empty_manifest_file_and_missing_doc(self) -> None:
+    def test_empty_listed_file_and_missing_doc(self) -> None:
         (self.tree / WS / "README.md").write_text("")
         (self.tree / WS / "docs/START_HERE.md").unlink()
         failures = self.failures("nonempty")

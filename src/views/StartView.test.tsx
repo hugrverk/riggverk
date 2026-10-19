@@ -284,7 +284,23 @@ describe("StartView keys", () => {
     press("j");
     press("u");
     expect(p.install.open).toHaveBeenCalledTimes(1);
-    expect(rowOf(harnessList(), "codex").textContent).toContain("needs workspace");
+    expect(rowOf(harnessList(), "codex").textContent).toContain("needs workspace folder");
+  });
+
+  it("says why the workspace folder is unusable on the workspace row", () => {
+    renderStart({ workspaceDiagnostics: INVALID_DIAGNOSTICS, workspaceValid: false, overview: overviewOf({}) });
+    expect(rowOf(harnessList(), "workspace").textContent).toContain("folder unusable");
+    expect(detail().textContent).toContain("the folder is a symlink");
+  });
+
+  it("lets a harness be installed before the workspace on a fresh profile", () => {
+    // A fresh profile has no workspace folder yet; the backend reports it usable, so nothing is gated.
+    const { props: p } = renderStart({ overview: overviewOf({}) });
+    act(() => harnessList().focus());
+    press("j");
+    expect(rowOf(harnessList(), "codex").textContent).not.toContain("needs workspace folder");
+    press("u");
+    expect(p.install.open).toHaveBeenCalledWith("codex", { scope: "start" });
   });
 
   it("Enter opens a harness page, and on the workspace row moves focus to the detail pane", () => {

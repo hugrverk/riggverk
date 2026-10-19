@@ -144,6 +144,36 @@ pub fn create_private_root_directory_all_no_symlinks(root: &Path) -> Result<(), 
     create_root_directory_all_with(root, true)
 }
 
+/// Create `dir` owner-only (0700 on unix) when it is missing. Missing ancestors get the default
+/// mode and a link on an ancestor is followed, as `fs::create_dir_all` does, so a linked
+/// `~/.config` keeps working; a link or a non-directory at `dir` itself is refused.
+pub fn create_private_leaf_directory(dir: &Path) -> Result<(), String> {
+    let existing = |dir: &Path| match fs::symlink_metadata(dir) {
+        Ok(metadata) if metadata.file_type().is_symlink() => {
+            Err(format!("refusing symlinked directory: {}", dir.display()))
+        }
+        Ok(metadata) if metadata.is_dir() => Ok(true),
+        Ok(_) => Err(format!("not a directory: {}", dir.display())),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(format!("inspect directory {}: {error}", dir.display())),
+    };
+    if existing(dir)? {
+        return Ok(());
+    }
+    if let Some(parent) = dir.parent().filter(|parent| !parent.as_os_str().is_empty()) {
+        fs::create_dir_all(parent)
+            .map_err(|e| format!("create directory {}: {e}", parent.display()))?;
+    }
+    match create_dir(dir, true) {
+        Ok(()) => Ok(()),
+        // Created meanwhile by another writer: fine when it is a real directory.
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+            existing(dir).map(|_| ())
+        }
+        Err(error) => Err(format!("create directory {}: {error}", dir.display())),
+    }
+}
+
 fn create_root_directory_all_with(root: &Path, private: bool) -> Result<(), String> {
     let mut missing: Vec<std::path::PathBuf> = Vec::new();
     let mut current = root.to_path_buf();
@@ -689,6 +719,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn regular_file_backup_rejects_symlinked_parent() {
+        let _env = crate::test_env::guard::default_xdg_config_home();
         // backup_artifact rejects when the ACTUAL resolved dest path
         // has a symlink in its parent chain
         let base = temp("backup-sym-parent");

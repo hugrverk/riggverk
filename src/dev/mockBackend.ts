@@ -989,11 +989,11 @@ function diagnostics(): WorkspaceDiagnostics {
     candidate_path: settings.workspace_path ?? WORKSPACE,
     resolved_path: valid ? settings.workspace_path ?? WORKSPACE : null,
     valid,
-    error: valid ? null : "workspace markers missing: metadata/manifest.json",
+    // Like the backend: only the folder itself decides (a link, a file, a missing override folder).
+    error: valid ? null : "the folder is a symlink",
     markers: [
-      { kind: "dir", path: `${WORKSPACE}/skills`, exists: valid },
-      { kind: "dir", path: `${WORKSPACE}/agents`, exists: valid },
-      { kind: "file", path: `${WORKSPACE}/metadata/manifest.json`, exists: valid },
+      { kind: "file", path: ".agent-workspace/workspace.json", exists: valid },
+      { kind: "file", path: ".agent-workspace/managed-state.json", exists: valid },
     ],
     enabled_rule_targets: TARGETS.filter(t => t.kind === "rules" && enabled.has(t.id)).length,
     total_rule_targets: TARGETS.filter(t => t.kind === "rules").length,
@@ -1080,7 +1080,8 @@ function opencodeHealth(): OpenCodeRuntimeHealth {
     config_precedence: { installed_not_strict: [], sibling_files: [], env_vars: [], system_managed_paths: [] },
     template_tui_path: `${WORKSPACE}/templates/opencode-tui.json`,
     installed_tui_path: `${HOME}/.config/opencode/tui.json`,
-    tui_status: fresh ? "missing" : "synced",
+    tui_status: fresh ? "missing" : update ? "diverged" : "synced",
+    tui_diverged_keys: update ? ["theme", "mouse"] : [],
     generated_snapshot_base_path: `${WORKSPACE}/templates/opencode.json`,
     generated_snapshot_policy_path: `${WORKSPACE}/templates/opencode-policy.json`,
     generated_snapshot_path: `${WORKSPACE}/generated/opencode.json`,
@@ -1552,9 +1553,6 @@ function unavailable(): never {
 }
 
 async function handle(cmd: string, args: Args): Promise<unknown> {
-  // `?pick=<folder>` stands in for the native folder dialog (workspace picker QA); without it the dialog is cancelled.
-  if (cmd === "plugin:dialog|open") return new URLSearchParams(location.search).get("pick");
-  if (cmd.startsWith("plugin:dialog|")) return null;
   // Like the backend: `open_doc` opens personal docs only; bundled items are read-only and never opened.
   if (cmd === "open_doc" && !arg<string>(args, "id").startsWith("custom:")) {
     throw new Error(`${arg<string>(args, "id")} is bundled with the app and read-only here`);
@@ -1576,13 +1574,6 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
       const expected = arg<number>(args, "expectedRevision");
       if (expected !== (settings.revision ?? 0)) throw new Error("settings revision conflict");
       settings = { ...next, revision: (settings.revision ?? 0) + 1 };
-      return settings;
-    }
-    case "try_set_active_workspace_path": {
-      const path = arg<string>(args, "path");
-      // Like the backend: a folder without the workspace markers is refused and nothing changes.
-      if (path.includes("invalid")) throw new Error("invalid workspace path: not a valid workspace (missing .agent-workspace/workspace.json)");
-      settings = { ...settings, workspace_path: path, revision: (settings.revision ?? 0) + 1 };
       return settings;
     }
     case "reset_active_workspace_path":

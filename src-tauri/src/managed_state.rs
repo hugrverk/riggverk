@@ -45,6 +45,13 @@ pub fn managed_state_path(workspace_root: &Path) -> PathBuf {
     workspace_root.join(MANAGED_STATE_REL)
 }
 
+/// Creates the data folder, owner-only, for the first write that needs it (a state file, a
+/// personal doc or an install). A fresh profile has none, and nothing creates it at launch.
+pub fn ensure_data_folder(workspace_root: &Path) -> Result<(), String> {
+    crate::safe_filesystem::create_private_leaf_directory(workspace_root)
+        .map_err(|e| format!("create workspace folder: {e}"))
+}
+
 pub fn artifact_identity(artifact: &ArtifactId) -> String {
     match artifact {
         ArtifactId::WorkspaceFile(rel) => workspace_file_identity(rel.as_str()),
@@ -136,8 +143,10 @@ fn write_raw_atomic(workspace_root: &Path, raw: &[u8]) -> Result<(), String> {
     let path = managed_state_path(workspace_root);
     crate::path_safety::reject_path_escape(&path, workspace_root, "managed-state")?;
     crate::path_safety::reject_symlink_parent_chain(&path, workspace_root, "managed-state")?;
+    ensure_data_folder(workspace_root)?;
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|e| format!("create managed-state parent: {e}"))?;
+        crate::safe_filesystem::create_private_directory_all_no_symlinks(parent, workspace_root)
+            .map_err(|e| format!("create managed-state parent: {e}"))?;
     }
     crate::path_safety::reject_symlink(&path, "managed-state")?;
     crate::path_safety::reject_symlink_parent_chain(&path, workspace_root, "managed-state")?;
@@ -364,11 +373,9 @@ pub fn canonical_artifact_identities(
     Ok(ids)
 }
 
-/// Collect canonical workspace file relative paths from the bundled manifest.
+/// Collect canonical workspace file relative paths: the marker and the frozen list of copies.
 pub fn canonical_workspace_file_paths() -> Vec<&'static str> {
-    crate::commands::default_workspace_files()
-        .into_iter()
-        .flat_map(|(_, paths)| paths.iter().copied())
+    crate::commands::retired_workspace_files::workspace_copy_paths()
         .filter(|rel| !rel.contains("..") && !rel.is_empty() && !Path::new(rel).is_absolute())
         .collect()
 }

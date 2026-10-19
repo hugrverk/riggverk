@@ -7,6 +7,7 @@ import {
 } from "../hooks/useInstallationOverview";
 import { HARNESS_NAV_ORDER } from "../lib/harnessInstallation";
 import type { InstallTarget } from "../lib/installPlan";
+import { WORKSPACE_FOLDER_UNUSABLE } from "../lib/installationView";
 import { currentMotion } from "../lib/motion";
 import { BUNDLED_RELEASES } from "../lib/releaseNotes";
 import { workspaceTaskBlockedMessage } from "../lib/workspaceErrors";
@@ -44,13 +45,12 @@ export interface AppCommandDeps {
   requestRollback: () => void | Promise<void>;
   /** Opens the uninstall preview dialog on the workspace page. */
   requestUninstallPreview: () => void | Promise<void>;
-  /** `:workspace choose|reset`: switch the folder the app works in. Absent: the command only opens the page. */
-  workspaceSwitch?: {
-    choose: () => void | Promise<void>;
+  /** `:workspace reset`: back to the default folder, after a confirm. Absent: the command only opens the page. */
+  workspaceReset?: {
     reset: () => void | Promise<void>;
     /** No custom folder is saved (reset has nothing to do). */
     isDefault: boolean;
-    /** A choose or reset is already running. */
+    /** A reset is already running. */
     busy: boolean;
   };
   setError: (message: string | null) => void;
@@ -79,7 +79,7 @@ export function useAppCommands(deps: AppCommandDeps): void {
 
   const targets = () => updateTargets(deps.enabledHarnessIds);
   const busyReason = () => (deps.busyLabel ? `${deps.busyLabel} is running` : true);
-  const workspaceReason = () => (deps.workspaceValid ? true : "no valid workspace installed");
+  const workspaceReason = () => (deps.workspaceValid ? true : WORKSPACE_FOLDER_UNUSABLE);
   const guarded = (...checks: Array<() => true | string>) => (): true | string => {
     for (const check of checks) {
       const result = check();
@@ -92,7 +92,7 @@ export function useAppCommands(deps: AppCommandDeps): void {
   const resolveTarget = (parsed: ParsedCommand): InstallTarget =>
     parsed.flags.all ? "all" : (parsed.named.target as InstallTarget);
 
-  // Without a valid workspace only the workspace itself can be installed.
+  // With an unusable workspace folder only the workspace itself can be installed.
   const targetValues = (): OverviewId[] => (deps.workspaceValid ? targets() : ["workspace"]);
   const targetArgs: CommandSpec["args"] = [
     {
@@ -107,20 +107,20 @@ export function useAppCommands(deps: AppCommandDeps): void {
     const name = parsed.cmd.name;
     if (!parsed.named.target && !parsed.flags.all) return `${name}: name a target (${targetValues().join(" | ")}) or pass --all`;
     if (parsed.named.target && parsed.flags.all) return `${name}: use either a target or --all`;
-    if (!deps.workspaceValid && parsed.flags.all) return `${name}: no valid workspace installed (run ${name} workspace first)`;
+    if (!deps.workspaceValid && parsed.flags.all) return `${name}: ${WORKSPACE_FOLDER_UNUSABLE} (the workspace page says why)`;
     return null;
   };
 
-  const workspaceActions = ["choose", "reset"];
+  const workspaceActions = ["reset"];
   const viewArgs = (def: (typeof VIEW_DEFS)[number]): CommandSpec["args"] => {
     if (def.id === "library") return [{ name: "source", kind: "enum", values: LIBRARY_SOURCES, optional: true }];
-    if (def.id === "start" && deps.workspaceSwitch) {
+    if (def.id === "start" && deps.workspaceReset) {
       return [{
         name: "action",
         kind: "enum",
         values: workspaceActions,
         optional: true,
-        describe: value => (value === "choose" ? "pick the workspace folder" : "back to the default workspace"),
+        describe: () => "back to the default workspace folder (asks first)",
       }];
     }
     return undefined;
@@ -129,7 +129,7 @@ export function useAppCommands(deps: AppCommandDeps): void {
   const viewCommands = VIEW_DEFS.map((def): CommandSpec => ({
     name: def.command,
     aliases: def.aliases,
-    summary: def.id === "start" && deps.workspaceSwitch ? `open ${def.label}, or choose | reset its folder` : `open ${def.label}`,
+    summary: def.id === "start" && deps.workspaceReset ? `open ${def.label}, or reset its folder` : `open ${def.label}`,
     group: "Views",
     args: viewArgs(def),
     enabled: () =>
@@ -137,16 +137,16 @@ export function useAppCommands(deps: AppCommandDeps): void {
     validate: def.id === "start"
       ? parsed => {
           const action = parsed.named.action;
-          if (!action || !deps.workspaceSwitch) return null;
-          if (deps.workspaceSwitch.busy) return "a workspace change is already running";
+          if (!action || !deps.workspaceReset) return null;
+          if (deps.workspaceReset.busy) return "a workspace change is already running";
           if (deps.busyLabel) return workspaceTaskBlockedMessage(deps.busyLabel);
-          if (action === "reset" && deps.workspaceSwitch.isDefault) return "already the default workspace";
+          if (deps.workspaceReset.isDefault) return "already the default workspace";
           return null;
         }
       : undefined,
     run: parsed => {
-      if (def.id === "start" && parsed.named.action && deps.workspaceSwitch) {
-        void (parsed.named.action === "reset" ? deps.workspaceSwitch.reset() : deps.workspaceSwitch.choose());
+      if (def.id === "start" && parsed.named.action && deps.workspaceReset) {
+        void deps.workspaceReset.reset();
         return;
       }
       void deps.switchView(def.id);

@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::setup_lifecycle::SetupSurfaceId;
 
@@ -183,6 +183,21 @@ pub fn targets() -> Vec<AgentSyncTarget> {
         });
     }
     all
+}
+
+impl AgentSyncTarget {
+    /// The target's path for labels: `target_rel` (below the home folder), except that an
+    /// OpenCode path is `$XDG_CONFIG_HOME/opencode/...` while that variable moves OpenCode's config
+    /// folder (`platform_paths::opencode_config_dir`).
+    pub fn display_rel(&self, home: Option<&Path>) -> String {
+        let moved = home.is_some_and(crate::platform_paths::opencode_config_moved);
+        match self.target_rel.strip_prefix(".config/opencode") {
+            Some(rest) if moved && self.harness == HarnessId::OpenCode => {
+                format!("$XDG_CONFIG_HOME/opencode{rest}")
+            }
+            _ => self.target_rel.to_string(),
+        }
+    }
 }
 
 pub fn rule_targets() -> Vec<AgentSyncTarget> {

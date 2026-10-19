@@ -267,12 +267,14 @@ function configEntry(props: LibraryViewProps): LibraryEntry | null {
   const source = props.configEditorSources.find(candidate => candidate.id === props.activeConfigSourceType);
   const sourcePath = source?.rel_path ?? target?.source_rel ?? "";
   const targetPath = target?.target_rel ?? "";
+  // The backend names OpenCode's folder `$XDG_CONFIG_HOME/opencode` while that variable moves it.
+  const openCodeDir = targetPath.startsWith("$XDG_CONFIG_HOME/") ? "$XDG_CONFIG_HOME/opencode" : "~/.config/opencode";
   const meta: KvItem[] = isOpenCode
     ? [
         { label: "source", value: "templates/opencode.base.json + templates/opencode.policy.json", wrap: true },
-        { label: "snapshot", value: "templates/opencode.json → ~/.config/opencode/opencode.json", wrap: true },
-        { label: "tui", value: "templates/tui.json → ~/.config/opencode/tui.json", wrap: true },
-        { label: "agents", value: "agents/*.md → ~/.config/opencode/agents/*.md", wrap: true },
+        { label: "snapshot", value: `templates/opencode.json → ${openCodeDir}/opencode.json`, wrap: true },
+        { label: "tui", value: `templates/tui.json → ${openCodeDir}/tui.json`, wrap: true },
+        { label: "agents", value: `agents/*.md → ${openCodeDir}/agents/*.md`, wrap: true },
         { label: "bundled", value: props.agentSources.length > 0 ? `${props.agentSources.length} agents` : "agents bundled" },
       ]
     : [];

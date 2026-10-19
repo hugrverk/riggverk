@@ -64,8 +64,8 @@ describe("targetMeta", () => {
     expect(targetMeta(undefined, options).text).toBe("…");
     expect(targetMeta(entry("claude", null, { loading: true }), options).text).toBe("…");
     expect(targetMeta(entry("claude", null, { error: "hash failed" }), options)).toEqual({ text: "status failed", tone: "fail" });
-    expect(targetMeta(undefined, { workspaceValid: false, id: "claude" })).toEqual({ text: "needs workspace", tone: "dim" });
-    expect(targetMeta(undefined, { workspaceValid: false, id: "workspace" })).toEqual({ text: "setup needed", tone: "warn" });
+    expect(targetMeta(undefined, { workspaceValid: false, id: "claude" })).toEqual({ text: "needs workspace folder", tone: "dim" });
+    expect(targetMeta(undefined, { workspaceValid: false, id: "workspace" })).toEqual({ text: "folder unusable", tone: "warn" });
   });
 });
 
@@ -198,14 +198,14 @@ describe("updateActionFor", () => {
     expect(updateActionFor("claude", entry("claude", status("unavailable")), idle).disabled).toMatch(/unavailable/);
     expect(updateActionFor("claude", entry("claude", status("update_available")), { ...idle, busyLabel: "uninstall" }).disabled).toBe("uninstall is running");
     expect(updateActionFor("claude", entry("claude", status("update_available")), { ...idle, settingsSaving: true }).disabled).toBe("saving target changes");
-    expect(updateActionFor("claude", undefined, { ...idle, workspaceValid: false }).disabled).toBe("no valid workspace installed");
+    expect(updateActionFor("claude", undefined, { ...idle, workspaceValid: false }).disabled).toBe("workspace folder unusable");
     expect(updateActionFor("claude", entry("claude", null, { loading: true }), idle).disabled).toBe("checking status…");
   });
 
   it("lets the workspace itself be installed without a valid workspace", () => {
     expect(updateActionFor("workspace", undefined, { ...idle, workspaceValid: false })).toEqual({ label: "install", disabled: false });
     expect(previewDisabledFor("workspace", { workspaceValid: false, busyLabel: null })).toBe(false);
-    expect(previewDisabledFor("claude", { workspaceValid: false, busyLabel: null })).toBe("no valid workspace installed");
+    expect(previewDisabledFor("claude", { workspaceValid: false, busyLabel: null })).toBe("workspace folder unusable");
     expect(previewDisabledFor("claude", { workspaceValid: true, busyLabel: "apply" })).toBe("apply is running");
   });
 });

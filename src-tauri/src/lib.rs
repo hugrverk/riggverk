@@ -64,6 +64,8 @@ mod opencode_precedence_contract;
 #[cfg(test)]
 mod opencode_tui_contract;
 #[cfg(test)]
+mod opencode_xdg_contract;
+#[cfg(test)]
 mod rules_block_contract;
 #[cfg(test)]
 mod shipped_ownership_contract;
@@ -89,8 +91,7 @@ use commands::{
     read_config_template, read_doc, read_opencode_config_source, read_opencode_model_selection,
     read_rules_file, read_skill, reset_active_workspace_path, reset_opencode_model_selection,
     rollback_setup_transaction, save_doc, save_rules_refinements, set_files_kept,
-    set_rules_user_managed, try_set_active_workspace_path, update_opencode_model_selection,
-    update_settings,
+    set_rules_user_managed, update_opencode_model_selection, update_settings,
 };
 use tauri::Manager;
 
@@ -98,7 +99,6 @@ use tauri::Manager;
 pub fn run() {
     executable_resolver::extend_path_with_tool_dirs();
     tauri::Builder::default()
-        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             // First: nothing may read or write the data directory before this.
             app_data_migration::run_at_startup()?;
@@ -114,7 +114,6 @@ pub fn run() {
             get_status,
             get_workspace_diagnostics,
             open_default_workspace_folder,
-            try_set_active_workspace_path,
             reset_active_workspace_path,
             get_claude_runtime_health,
             get_codex_runtime_health,

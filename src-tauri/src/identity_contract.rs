@@ -139,12 +139,14 @@ mod tests {
         );
         assert_eq!(KEPT_FILES_REL, ".agent-workspace/kept-files.json");
 
-        let marker_paths: Vec<&str> = crate::commands::default_workspace_files()
-            .into_iter()
-            .filter(|(label, _)| *label == "Marker")
-            .flat_map(|(_, paths)| paths.iter().copied())
-            .collect();
-        assert_eq!(marker_paths, [".agent-workspace/workspace.json"]);
+        use crate::commands::retired_workspace_files::{
+            workspace_copy_paths, LEGACY_MARKER_REL, RETIRED_WORKSPACE_FILES,
+        };
+        assert_eq!(LEGACY_MARKER_REL, ".agent-workspace/workspace.json");
+        assert_eq!(workspace_copy_paths().next(), Some(LEGACY_MARKER_REL));
+        assert!(RETIRED_WORKSPACE_FILES
+            .iter()
+            .all(|rel| !rel.starts_with(".agent-workspace/")));
 
         // Unread by the app, but the file is digest-tracked: a change would turn
         // every installed marker into a conflict.
