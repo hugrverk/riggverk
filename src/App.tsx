@@ -12,7 +12,7 @@ import { useAppSettingsController } from "./hooks/useAppSettingsController";
 import { useApplyProgress } from "./hooks/useApplyProgress";
 import { useScanOnSuccess } from "./hooks/useScanOnSuccess";
 import { useWhatsNewOnUpgrade } from "./hooks/useWhatsNewOnUpgrade";
-import { useWorkspacePicker } from "./hooks/useWorkspacePicker";
+import { useWorkspaceReset } from "./hooks/useWorkspaceReset";
 import { workspaceTaskBlockedMessage } from "./lib/workspaceErrors";
 import { useEffectiveSkillLoads } from "./hooks/useEffectiveSkillLoads";
 import { useInstallationOverview } from "./hooks/useInstallationOverview";
@@ -257,7 +257,7 @@ function AppShell() {
     toggleTarget,
     toggleHarness,
     clearSettingsMsg,
-    persistActiveWorkspace,
+    resetActiveWorkspace,
   } = useAppSettingsController({
     setError,
     appliedWorkspacePathRef,
@@ -275,18 +275,18 @@ function AppShell() {
   const enabledHarnessKey = enabledHarnessIds.join(",");
   enabledHarnessIdsRef.current = enabledHarnessIds;
 
-  // Settings and `:workspace choose|reset` share one picker. A switch also makes the install overview stale.
+  // Settings (`R`) and `:workspace reset` share one confirmed reset. It also makes the install overview stale.
   const activeWorkspacePath =
     workspaceDiagnostics?.resolved_path ?? workspaceDiagnostics?.candidate_path ?? appSettings?.workspace_path ?? null;
-  const switchWorkspace = useCallback(async (path: string | null) => {
-    const result = await persistActiveWorkspace(path);
+  const resetWorkspace = useCallback(async () => {
+    const result = await resetActiveWorkspace();
     if (result.ok) setOverviewRefreshKey(key => key + 1);
     return result;
-  }, [persistActiveWorkspace]);
-  const workspacePicker = useWorkspacePicker({
+  }, [resetActiveWorkspace]);
+  const workspaceReset = useWorkspaceReset({
     activePath: activeWorkspacePath,
     libraryDirty,
-    switchWorkspace,
+    resetWorkspace,
     blockedReason: wsRunning ? workspaceTaskBlockedMessage(wsRunning) : null,
   });
 
@@ -629,8 +629,8 @@ function AppShell() {
     return text || null;
   }, [wsLog]);
 
-  // The command line has no row to show the outcome in: a switch is a notice, a refusal the error banner.
-  const reportWorkspaceSwitch = (message: { ok: boolean; text: string } | null) => {
+  // The command line has no row to show the outcome in: a reset is a notice, a refusal the error banner.
+  const reportWorkspaceReset = (message: { ok: boolean; text: string } | null) => {
     if (!message) return;
     if (message.ok) notify(message.text, { tone: "ok" });
     else setError(message.text);
@@ -656,11 +656,10 @@ function AppShell() {
     rollbackTransactionId,
     requestRollback,
     requestUninstallPreview,
-    workspaceSwitch: {
+    workspaceReset: {
       isDefault: appSettings?.workspace_path == null,
-      busy: workspacePicker.busy,
-      choose: async () => reportWorkspaceSwitch(await workspacePicker.choose()),
-      reset: async () => reportWorkspaceSwitch(await workspacePicker.reset()),
+      busy: workspaceReset.busy,
+      reset: async () => reportWorkspaceReset(await workspaceReset.reset()),
     },
     setError,
   });
@@ -830,9 +829,8 @@ function AppShell() {
             onReset={resetSettings}
             colorResetKey={colorResetKey}
             workspacePath={activeWorkspacePath}
-            workspaceBusy={workspacePicker.busy}
-            onChooseWorkspace={workspacePicker.choose}
-            onResetWorkspace={workspacePicker.reset}
+            workspaceBusy={workspaceReset.busy}
+            onResetWorkspace={workspaceReset.reset}
           />
           </Suspense>
         )}

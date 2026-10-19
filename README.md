@@ -12,7 +12,7 @@ The repository contains the application and its canonical bundled workspace. Ins
 - `scripts/` - repository checks, generators, contract guards, and release verification.
 - `docs/` - workspace contract, security model, release and smoke checklists.
 
-The installed runtime workspace lives at `~/.config/agent-workspace` unless a custom workspace is chosen in Settings or `AGENT_WORKSPACE_PATH` overrides it. It is the app's data folder: it is valid by its own `.agent-workspace/` state, never by the bundled copies in it, and the first install or personal doc creates it (nothing does at launch).
+The installed runtime workspace lives at `~/.config/agent-workspace` unless a custom folder saved by an earlier version is still in use or `AGENT_WORKSPACE_PATH` overrides it. It is the app's data folder: it is valid by its own `.agent-workspace/` state, never by the bundled copies in it, and the first install or personal doc creates it (nothing does at launch).
 
 ## Development
 
@@ -123,7 +123,7 @@ Stored in `settings.json` under the app support dir; autosaved.
 | --- | --- | --- |
 | `enabled_harness_ids` | `["codex", "opencode", "claude", "cursor"]` | Positive allowlist for visible and writable harnesses; `"copilot"`, `"pi"` and `"kilo"` can be added and are off by default (also for older files that name the four or lack the field). Disabling hides the harness UI and blocks new managed writes without deleting files or target preferences. |
 | `enabled_target_ids` | `["codex_rules", "opencode_rules", "claude_rules", "opencode_agents", "claude_agents", "codex_agents", "opencode_config", "cursor_setup", "copilot_rules", "copilot_mcp", "pi_rules", "pi_mcp", "kilo_rules"]` | Targets Install is allowed to write. Toggle with Space on harness pages. A target that is off is skipped by preview, apply, and status. |
-| `workspace_path` | unset (`~/.config/agent-workspace`) | Custom workspace folder chosen in Settings (`c` choose, `R` reset to default). It must hold the app's `.agent-workspace/` state (`workspace.json` or `managed-state.json`); bundled copies in it are not needed. Generator scripts the app runs always come from the bundled read-only copy, not from this folder. |
+| `workspace_path` | unset (`~/.config/agent-workspace`) | Custom workspace folder saved by an earlier version; Settings no longer picks one. It stays in use while it holds the app's `.agent-workspace/` state (`workspace.json` or `managed-state.json`); bundled copies in it are not needed. `R` in Settings (or `:workspace reset`) asks first, then clears it and returns to the default folder; the old folder and its ownership records are left as they are and the app cannot switch back to it. Generator scripts the app runs always come from the bundled read-only copy, not from this folder. |
 | `appearance` | `"dark"` | `"dark"`, `"light"`, or `"system"`. |
 | `app_font_size` | `"medium"` | `"small"`, `"medium"`, `"large"`, `"extra-large"`. |
 | `motion` | `"full"` | `"full"`, `"subtle"`, or `"off"`. `"off"` stops animations and transitions; the OS reduced-motion preference always counts as `"off"`. Older files with `reduce_motion: true` load as `"off"`; the legacy `reduce_motion` flag is still written beside it. |

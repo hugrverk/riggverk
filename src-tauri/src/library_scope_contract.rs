@@ -20,9 +20,9 @@ mod tests {
     /// Every command that changes a file or a setting. Only `save_doc`, `create_doc` and
     /// `save_rules_refinements` take Library text: the first two write personal docs
     /// (`docs/context/<slug>.md`) only, the last only the text below the managed block of a rules
-    /// file. The others are install, conflict, rules-conversion, settings and workspace-choice
+    /// file. The others are install, conflict, rules-conversion, settings and workspace-reset
     /// actions that never take Library text.
-    const WRITE_COMMANDS: [&str; 15] = [
+    const WRITE_COMMANDS: [&str; 14] = [
         "save_doc",
         "create_doc",
         "save_rules_refinements",
@@ -36,7 +36,6 @@ mod tests {
         "update_settings",
         "update_opencode_model_selection",
         "reset_opencode_model_selection",
-        "try_set_active_workspace_path",
         "reset_active_workspace_path",
     ];
 
@@ -49,8 +48,9 @@ mod tests {
         "open_default_workspace_folder",
     ];
 
-    /// Commands that existed to edit or open bundled items. They were deleted, not disabled.
-    const REMOVED_COMMANDS: [&str; 8] = [
+    /// Commands that existed to edit or open bundled items, or to choose another workspace folder.
+    /// They were deleted, not disabled: the webview cannot call them.
+    const REMOVED_COMMANDS: [&str; 9] = [
         "save_agent_template",
         "save_agent_source",
         "save_opencode_config_source",
@@ -59,6 +59,9 @@ mod tests {
         "open_config_template",
         "open_opencode_config_source",
         "open_skill",
+        // The app keeps the workspace folder it has: a saved custom folder is honored, a new one
+        // cannot be chosen. `reset_active_workspace_path` is the only path setting left.
+        "try_set_active_workspace_path",
     ];
 
     /// The command names registered with `tauri::generate_handler!` in `lib.rs`.
@@ -124,7 +127,7 @@ mod tests {
     }
 
     #[test]
-    fn removed_bundled_item_commands_stay_removed() {
+    fn removed_commands_stay_removed() {
         let registered = registered_commands();
         for name in REMOVED_COMMANDS {
             assert!(!registered.contains(name), "{name} must stay deleted");

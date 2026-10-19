@@ -315,3 +315,20 @@ describe("mock backend: the Library without a valid workspace", () => {
     await expect(invoke("create_doc", { title: "Mine", slug: "mine", content: null })).rejects.toThrow("invalid workspace path");
   });
 });
+
+describe("mock backend: the workspace folder", () => {
+  beforeAll(async () => {
+    vi.resetModules();
+    window.history.replaceState(null, "", "/?mock=conflict");
+    await import("./mockBackend");
+  });
+
+  it("has no folder chooser command, like the backend", async () => {
+    await expect(invoke("try_set_active_workspace_path", { path: "/tmp/other" })).rejects.toThrow("unhandled command");
+  });
+
+  it("still resets to the default folder", async () => {
+    const saved = await invoke<{ workspace_path: string | null }>("reset_active_workspace_path");
+    expect(saved.workspace_path).toBeNull();
+  });
+});

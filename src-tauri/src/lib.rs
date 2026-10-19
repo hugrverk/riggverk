@@ -91,8 +91,7 @@ use commands::{
     read_config_template, read_doc, read_opencode_config_source, read_opencode_model_selection,
     read_rules_file, read_skill, reset_active_workspace_path, reset_opencode_model_selection,
     rollback_setup_transaction, save_doc, save_rules_refinements, set_files_kept,
-    set_rules_user_managed, try_set_active_workspace_path, update_opencode_model_selection,
-    update_settings,
+    set_rules_user_managed, update_opencode_model_selection, update_settings,
 };
 use tauri::Manager;
 
@@ -116,7 +115,6 @@ pub fn run() {
             get_status,
             get_workspace_diagnostics,
             open_default_workspace_folder,
-            try_set_active_workspace_path,
             reset_active_workspace_path,
             get_claude_runtime_health,
             get_codex_runtime_health,

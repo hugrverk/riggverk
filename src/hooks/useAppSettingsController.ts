@@ -26,7 +26,7 @@ function sameList(a: readonly string[], b: readonly string[]) {
   return a.length === b.length && a.every((value, index) => value === b[index]);
 }
 
-/** Outcome of switching the active workspace; `message` is the backend's reason when it was refused. */
+/** Outcome of resetting the workspace folder; `message` is the backend's reason when it was refused. */
 export type WorkspaceSwitchResult = { ok: true } | { ok: false; message: string };
 
 export interface AppSettingsControllerDeps {
@@ -378,12 +378,12 @@ export function useAppSettingsController({
   const workspaceSwitchInFlightRef = useRef(false);
 
   /**
-   * Makes `path` the active workspace (null: back to the default) and reloads everything bound to it, without
-   * a full app reload. The backend validates the folder and persists the choice first; only an accepted
-   * folder resets workspace-bound state, so a rejected one leaves the current workspace untouched.
-   * Resolves with the backend's error text instead of raising it.
+   * Drops the saved custom workspace folder (back to the default) and reloads everything bound to it, without a
+   * full app reload. The backend clears the saved path first; only an accepted reset resets workspace-bound
+   * state, so a refused one leaves the current workspace untouched. Resolves with the backend's error text
+   * instead of raising it. The app no longer sets a custom folder: this is the only workspace path change left.
    */
-  const persistActiveWorkspace = useCallback(async (path: string | null): Promise<WorkspaceSwitchResult> => {
+  const resetActiveWorkspace = useCallback(async (): Promise<WorkspaceSwitchResult> => {
     if (!appSettingsRef.current) return { ok: false, message: "settings are not loaded yet" };
     if (workspaceTaskLabelRef.current) return { ok: false, message: workspaceTaskBlockedMessage(workspaceTaskLabelRef.current) };
     if (workspaceSwitchInFlightRef.current) return { ok: false, message: "a workspace change is already running" };
@@ -391,9 +391,7 @@ export function useAppSettingsController({
     try {
       let saved: AppSettings;
       try {
-        saved = path === null
-          ? await invoke<AppSettings>("reset_active_workspace_path")
-          : await invoke<AppSettings>("try_set_active_workspace_path", { path });
+        saved = await invoke<AppSettings>("reset_active_workspace_path");
       } catch (error) {
         return { ok: false, message: String(error) };
       }
@@ -450,7 +448,7 @@ export function useAppSettingsController({
     applySavedSettings,
     retrySaveSettings,
     resetSettings,
-    persistActiveWorkspace,
+    resetActiveWorkspace,
     setAppearance,
     setAppFontSize,
     setAccentColor,
