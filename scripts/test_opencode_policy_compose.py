@@ -237,6 +237,21 @@ class TestWildcardSemantics(unittest.TestCase):
         self.assertTrue(wildcard_match("git status --porcelain", "git status *"))
         self.assertFalse(wildcard_match("git statusify", "git status *"))
 
+    def test_verification_allows_stop_at_the_command_boundary(self) -> None:
+        permissions = [build_base_permission(load_policy()), compose_role_permission(load_role("architect"))]
+        commands = [
+            f"{manager} run {script}"
+            for manager in ("npm", "pnpm", "yarn", "bun")
+            for script in ("test", "lint", "typecheck", "build", "verify")
+        ] + [f"cargo {command}" for command in ("fmt", "check", "clippy", "test")]
+        commands += [f"ddev exec npm run {script}" for script in ("test", "lint", "build", "verify")]
+        for permission in permissions:
+            for command in commands:
+                with self.subTest(command=command):
+                    self.assertEqual(effective_bash_action(permission, command), "allow")
+                    self.assertEqual(effective_bash_action(permission, command + " -- --flag"), "allow")
+                    self.assertNotEqual(effective_bash_action(permission, command + "-and-deploy"), "allow")
+
     def test_findlast_precedence(self) -> None:
         perm = {
             "bash": {

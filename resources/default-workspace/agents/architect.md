@@ -165,41 +165,41 @@ permission:
     "mkdir -p *": allow
     "touch *": allow
     "npm test*": allow
-    "npm run test*": allow
-    "npm run lint*": allow
-    "npm run typecheck*": allow
-    "npm run build*": allow
-    "npm run verify*": allow
+    "npm run test *": allow
+    "npm run lint *": allow
+    "npm run typecheck *": allow
+    "npm run build *": allow
+    "npm run verify *": allow
     "pnpm test*": allow
-    "pnpm run test*": allow
-    "pnpm run lint*": allow
-    "pnpm run typecheck*": allow
-    "pnpm run build*": allow
-    "pnpm run verify*": allow
+    "pnpm run test *": allow
+    "pnpm run lint *": allow
+    "pnpm run typecheck *": allow
+    "pnpm run build *": allow
+    "pnpm run verify *": allow
     "bun test*": allow
-    "bun run test*": allow
-    "bun run lint*": allow
-    "bun run typecheck*": allow
-    "bun run build*": allow
-    "bun run verify*": allow
+    "bun run test *": allow
+    "bun run lint *": allow
+    "bun run typecheck *": allow
+    "bun run build *": allow
+    "bun run verify *": allow
     "yarn test*": allow
-    "yarn run test*": allow
-    "yarn run lint*": allow
-    "yarn run typecheck*": allow
-    "yarn run build*": allow
-    "yarn run verify*": allow
+    "yarn run test *": allow
+    "yarn run lint *": allow
+    "yarn run typecheck *": allow
+    "yarn run build *": allow
+    "yarn run verify *": allow
     "ddev start*": allow
     "ddev describe*": allow
     "ddev status*": allow
     "ddev exec npm test*": allow
-    "ddev exec npm run test*": allow
-    "ddev exec npm run lint*": allow
-    "ddev exec npm run build*": allow
-    "ddev exec npm run verify*": allow
-    "cargo fmt*": allow
-    "cargo check*": allow
-    "cargo clippy*": allow
-    "cargo test*": allow
+    "ddev exec npm run test *": allow
+    "ddev exec npm run lint *": allow
+    "ddev exec npm run build *": allow
+    "ddev exec npm run verify *": allow
+    "cargo fmt *": allow
+    "cargo check *": allow
+    "cargo clippy *": allow
+    "cargo test *": allow
     "grep *": ask
     "rg *": ask
     "git grep*": ask

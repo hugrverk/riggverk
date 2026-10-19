@@ -892,7 +892,7 @@ if grep -Eq '"cat \*":[[:space:]]*allow|cat \*: allow' resources/default-workspa
   printf 'FAIL: bundled architect.md must not allow broad bash cat *\n' >&2
   exit 1
 fi
-if ! grep -Fq '"cargo check*": "allow"' resources/default-workspace/templates/opencode.json; then
+if ! grep -Fq '"cargo check *": "allow"' resources/default-workspace/templates/opencode.json; then
   printf 'FAIL: bundled opencode.json missing cargo check allow\n' >&2
   exit 1
 fi

@@ -22,7 +22,7 @@ A missing CLI, a timeout or a failing probe leaves those checks `unknown`. It ne
 
 ## Source template
 
-The runtime OpenCode configuration is `templates/opencode.json`. This is a **generated snapshot** — do not edit it directly. The app installs from its bundled copy of these templates, and the Library shows them read-only; edits to the workspace copy made outside the app change what the Library shows, not what OpenCode receives.
+The runtime OpenCode configuration is `templates/opencode.json`. This is a **generated snapshot** — do not edit it directly. The app installs from its bundled copy of these templates, and the Library shows them read-only; edits to the workspace copy made outside the app change what the Library shows, not what OpenCode receives. Runtime health and dashboard config status compare against that same bundled render, including saved model overrides. TUI, rules and agents also use the bundled sources; workspace edits do not cause installed-file drift.
 
 The maintainable source files are:
 
@@ -35,7 +35,7 @@ To regenerate the snapshot after changing a source file:
 python3 scripts/generate-opencode-config.py --write
 ```
 
-To verify the snapshot is current (used by the release check and by the OpenCode runtime pane, which runs the bundled copy of the generator):
+To verify the workspace snapshot is current (the release check does the same for the shipped snapshot; the OpenCode runtime pane checks the bundled sources and snapshot with the bundled copy of the generator):
 
 ```
 python3 scripts/generate-opencode-config.py --check
@@ -124,6 +124,7 @@ The default template is conservative:
 - Edits are allowed under common source directories (`src/**`, `app/**`, `lib/**`, `tests/**`, `docs/**`, `scripts/**`, WordPress themes, ...) and for `*.md`, `*.ts`, `*.tsx`, `*.js`, `*.jsx`, `*.css` and `*.scss` files anywhere in the worktree. Everything else asks, as do package manifests and lock files, `AGENTS.md`, `opencode.json`, `.opencode/**`, workflows and skill folders outside the worktree. Secret files are denied
 - Destructive commands (`sudo`, `rm -rf`, `git reset --hard`, `git clean -fdx`) are denied globally and in each agent. So is piping into a shell (see "Compound commands"); other interpreters such as `python3` or `node` still ask
 - Cargo verification commands (`cargo fmt`, `cargo check`, `cargo clippy`, `cargo test`) are allow-listed where verification is expected
+- Package-manager `run` scripts and Cargo allow rules use an argument boundary: `npm run build *` allows `npm run build` and `npm run build -- --flag`, while `npm run build-and-deploy` still asks. Deny rules keep their broader patterns
 - `git checkout` and `git pull` are ask-gated because they can change working-tree state at runtime
 - `npm run dev` and other dev server commands are ask-gated in the bundled default starter template
 
@@ -175,6 +176,8 @@ Opt-outs:
 
 Install does **not** overwrite the entire installed `opencode.json`. It merges only the keys listed in `metadata/opencode-managed-keys.json` (model, `lsp`, permissions, the `permission` block of the built-in `plan` and `explore` agents, `agent.<role>.model` of the subagents while a subagent model override is set, Playwright MCP, compaction, watcher, and related settings). User `provider` blocks, non-Playwright MCP servers and other `agent` entries and keys are preserved. Managed keys are reset to the bundled values on every update, so keep your own settings in unmanaged keys.
 
+A managed key or sub-entry absent from the bundled render is removed from the installed config. Empty MCP and agent containers are removed only when that removal empties them. Unrelated user fields and their order are preserved. Managed-projection rollback applies the same rule against the backup: it restores prior managed values and removes managed entries added by the update, while keeping later user edits.
+
 Legacy `~/.config/opencode/agents/scout.md` files from the pre-rename scout agent are removed on agent sync when frontmatter is `name: scout`.
 
 ## Install workflow
@@ -198,7 +201,7 @@ Keys in the pane: `e` edit, `s` save, `x` reset to the bundled default, `R` relo
 
 Each value has a line under it:
 
-- `source: override | bundled default`. `override` means the app-level file below holds the value. `bundled default` means the template's value, or for the subagent model "inherit the main model". Each of the three values has its own source: only a value you changed is an override.
+- `source: override | bundled default`. `override` means the app-level file below holds the value. `bundled default` means the bundled `opencode.base.json` value, or for the subagent model "inherit the main model". Workspace template edits do not change these defaults. Each of the three values has its own source: only a value you changed is an override.
 - `state: applied | pending apply (u to update)`. The saved override (or the bundled default) is compared with the installed `opencode.json`: `pending apply` means an install (`u`, then `y`) would still change that value, for the subagent model when any of the role entries differs. The state is left out while runtime health is not loaded.
 - Saving (`s`) stores only the values that differ from the current bundled default. A `model` or `small model` equal to it is left out of the file and keeps following the template, so a later change of the bundled default (a model that is no longer listed, say) reaches you with the next install. Setting a value back to the bundled default and saving drops it from the file again. When nothing is left, the file is deleted instead of being written empty. Saving only a new subagent model therefore leaves `model` and `small model` on the bundled default.
 - `x` deletes the override file in one step and returns all three rows to the bundled default (unsaved edits are dropped too). The installed config keeps its values until the next install, which writes the bundled models and removes the subagent entries. `x` is offered only while an override exists.
@@ -219,7 +222,7 @@ This file is **not** part of the workspace templates. It is an app-preference fi
 
 The override takes effect on the next OpenCode install (`u`, `y`). The installed `~/.config/opencode/opencode.json` receives the `model`, `small_model` and subagent entries the override file holds; every other value comes from the template. Workspace templates are not mutated.
 
-A value the override does not hold is read from the workspace `templates/opencode.base.json` (or the built-in defaults) as the source of truth for model selection.
+A value the override does not hold is read from the bundled `templates/opencode.base.json` (or the built-in defaults) as the source of truth for model selection.
 
 ### Subagent model
 

@@ -303,21 +303,18 @@ fn codex_skill_roots(home_dir: &Path) -> (SkillRoot, SkillRoot) {
 
 pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> CodexRuntimeHealth {
     let bundled = crate::setup_roots::bundled_root_for(workspace_root).ok();
-    compute_health_with_bundle(workspace_root, bundled.as_deref(), home_dir)
+    compute_health_with_bundle(bundled.as_deref(), home_dir)
 }
 
-/// `bundled_root` is where the skills come from; the rest is compared with the workspace copy.
-fn compute_health_with_bundle(
-    workspace_root: &Path,
-    bundled_root: Option<&Path>,
-    home_dir: &Path,
-) -> CodexRuntimeHealth {
-    let rules_source_path = workspace_root.join("templates/sync/codex-rules.md");
+/// All managed files are compared with the bundled sources that install applies.
+fn compute_health_with_bundle(bundled_root: Option<&Path>, home_dir: &Path) -> CodexRuntimeHealth {
+    let source_path = |rel: &str| bundled_root.map(|root| root.join(rel)).unwrap_or_default();
+    let rules_source_path = source_path("templates/sync/codex-rules.md");
     let codex_dir = codex_home(home_dir);
     let rules_installed_path = codex_dir.join("AGENTS.md");
-    let agents_source_dir = workspace_root.join("templates/codex/agents");
+    let agents_source_dir = source_path("templates/codex/agents");
     let agents_target_dir = codex_dir.join("agents");
-    let template_config_path = workspace_root.join("templates/codex/config.toml");
+    let template_config_path = source_path("templates/codex/config.toml");
     let installed_config_path = codex_dir.join("config.toml");
 
     let rules_source_path_str = rules_source_path.to_string_lossy().into_owned();
@@ -825,9 +822,59 @@ apps._default.default_tools_approval_mode = "prompt"
         cleanup(&home);
     }
 
-    /// Health with the fixture workspace standing in for the bundle the skills come from.
+    /// Health with the fixture workspace standing in for the bundled install sources.
     fn health_of(ws: &Path, home: &Path) -> CodexRuntimeHealth {
-        compute_health_with_bundle(ws, Some(ws), home)
+        compute_health_with_bundle(Some(ws), home)
+    }
+
+    #[test]
+    fn health_uses_bundled_config_rules_and_agents_after_workspace_edits() {
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        unsafe {
+            std::env::remove_var("CODEX_HOME");
+            std::env::remove_var("CODEX_SKILLS_PATH");
+        }
+        let bundle = bundled_workspace_root();
+        let home = temp_root("codex-baseline-home");
+        let ws = temp_root("codex-runtime-baseline");
+        for (source, dest) in [
+            ("templates/sync/codex-rules.md", ".codex/AGENTS.md"),
+            ("templates/codex/config.toml", ".codex/config.toml"),
+        ] {
+            write_file(
+                &home.join(dest),
+                &fs::read_to_string(bundle.join(source)).unwrap(),
+            );
+        }
+        for name in list_bundled_codex_agents(&bundle.join("templates/codex/agents")) {
+            write_file(
+                &home.join(".codex/agents").join(&name),
+                &fs::read_to_string(bundle.join("templates/codex/agents").join(name)).unwrap(),
+            );
+        }
+        assert_eq!(compute_health(&ws, &home).config_status, "synced");
+        write_file(&ws.join("templates/sync/codex-rules.md"), "workspace rules");
+        write_file(
+            &ws.join("templates/codex/config.toml"),
+            "approval_policy = \"never\"\n",
+        );
+        write_file(
+            &ws.join("templates/codex/agents/repo_scout.toml"),
+            "name = \"workspace\"\n",
+        );
+
+        let health = compute_health(&ws, &home);
+        assert_eq!(health.config_status, "synced");
+        assert_eq!(health.rules_status, "synced");
+        assert_eq!(health.agents_status, "synced");
+        write_file(
+            &home.join(".codex/config.toml"),
+            "approval_policy = \"never\"\n",
+        );
+        assert_eq!(compute_health(&ws, &home).config_status, "diverged");
+        cleanup(&ws);
+        cleanup(&home);
     }
 
     /// Installs a skill the way an update does: into the folder Codex reads, `~/.agents/skills`.
@@ -1270,7 +1317,7 @@ sandbox_mode = "workspace-write"
         );
 
         // Without a readable bundle nothing is reported as installed.
-        let unreadable = compute_health_with_bundle(&ws, None, &home);
+        let unreadable = compute_health_with_bundle(None, &home);
         assert_eq!(unreadable.skills_status, "missing");
         assert_eq!(unreadable.skills_expected_count, 0);
         cleanup(&ws);
