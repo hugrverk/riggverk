@@ -1553,9 +1553,6 @@ function unavailable(): never {
 }
 
 async function handle(cmd: string, args: Args): Promise<unknown> {
-  // `?pick=<folder>` stands in for the native folder dialog (workspace picker QA); without it the dialog is cancelled.
-  if (cmd === "plugin:dialog|open") return new URLSearchParams(location.search).get("pick");
-  if (cmd.startsWith("plugin:dialog|")) return null;
   // Like the backend: `open_doc` opens personal docs only; bundled items are read-only and never opened.
   if (cmd === "open_doc" && !arg<string>(args, "id").startsWith("custom:")) {
     throw new Error(`${arg<string>(args, "id")} is bundled with the app and read-only here`);
@@ -1577,15 +1574,6 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
       const expected = arg<number>(args, "expectedRevision");
       if (expected !== (settings.revision ?? 0)) throw new Error("settings revision conflict");
       settings = { ...next, revision: (settings.revision ?? 0) + 1 };
-      return settings;
-    }
-    case "try_set_active_workspace_path": {
-      const path = arg<string>(args, "path");
-      // Like the backend: a folder without the app's `.agent-workspace/` state is refused and nothing changes.
-      if (path.includes("invalid")) {
-        throw new Error("invalid workspace path: not a usable workspace folder (missing .agent-workspace/workspace.json or managed-state.json)");
-      }
-      settings = { ...settings, workspace_path: path, revision: (settings.revision ?? 0) + 1 };
       return settings;
     }
     case "reset_active_workspace_path":

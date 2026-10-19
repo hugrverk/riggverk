@@ -400,7 +400,9 @@ describe("useAppSettingsController resetSettings", () => {
   });
 });
 
-describe("useAppSettingsController persistActiveWorkspace", () => {
+describe("useAppSettingsController resetActiveWorkspace", () => {
+  const custom = { ...baseSettings, workspace_path: "/tmp/other", revision: 3 };
+
   beforeEach(() => {
     invoke.mockReset();
     vi.useFakeTimers();
@@ -411,7 +413,7 @@ describe("useAppSettingsController persistActiveWorkspace", () => {
   });
 
   async function loaded(deps = createDeps()) {
-    mockInitialLoad();
+    mockInitialLoad(custom);
     const hook = renderHook(() => useAppSettingsController(deps));
     await act(async () => {
       await hook.result.current.loadSettings();
@@ -419,12 +421,12 @@ describe("useAppSettingsController persistActiveWorkspace", () => {
     return { ...hook, deps };
   }
 
-  it("validates through the backend, then switches the workspace and reloads what is bound to it", async () => {
+  it("drops the saved folder through its own command, then reloads what is bound to the workspace", async () => {
     const { result, deps } = await loaded();
     const order: string[] = [];
     invoke.mockImplementation(async (cmd: string) => {
       order.push(cmd);
-      if (cmd === "try_set_active_workspace_path") return { ...baseSettings, workspace_path: "/tmp/other", revision: 2 };
+      if (cmd === "reset_active_workspace_path") return { ...custom, workspace_path: null, revision: 4 };
       throw new Error(`unexpected invoke: ${cmd}`);
     });
     deps.beginWorkspaceLoadGeneration.mockImplementation(() => {
@@ -434,122 +436,97 @@ describe("useAppSettingsController persistActiveWorkspace", () => {
 
     let outcome: unknown;
     await act(async () => {
-      outcome = await result.current.persistActiveWorkspace("/tmp/other");
+      outcome = await result.current.resetActiveWorkspace();
     });
 
     expect(outcome).toEqual({ ok: true });
-    expect(invoke).toHaveBeenCalledWith("try_set_active_workspace_path", { path: "/tmp/other" });
-    // Workspace-bound state is only reset once the backend accepted the folder.
-    expect(order).toEqual(["try_set_active_workspace_path", "begin generation"]);
+    expect(invoke).toHaveBeenCalledWith("reset_active_workspace_path");
+    // Workspace-bound state is only reset once the backend accepted the reset.
+    expect(order).toEqual(["reset_active_workspace_path", "begin generation"]);
     expect(deps.beginWorkspaceLoadGeneration).toHaveBeenCalledWith(deps.resetWorkspaceBoundState);
     expect(deps.loadWorkspaceDiagnostics).toHaveBeenCalledWith(7);
     expect(deps.loadWorkspaceResources).toHaveBeenCalledWith(7);
-    expect(result.current.appSettings?.workspace_path).toBe("/tmp/other");
-    expect(result.current.appSettings?.revision).toBe(2);
-    expect(deps.appliedWorkspacePathRef.current).toBe("/tmp/other");
+    expect(result.current.appSettings?.workspace_path).toBeNull();
+    expect(result.current.appSettings?.revision).toBe(4);
+    expect(deps.appliedWorkspacePathRef.current).toBeNull();
     expect(result.current.settingsSaveStatus).toBe("saved");
   });
 
-  it("returns the backend's reason for a refused folder and leaves the current workspace untouched", async () => {
+  it("returns the backend's reason for a refusal and leaves the current workspace untouched", async () => {
     const { result, deps } = await loaded();
-    invoke.mockRejectedValue("invalid workspace path: not a valid workspace (missing README.md)");
+    invoke.mockRejectedValue("AGENT_WORKSPACE_PATH is set and overrides the saved workspace; unset it to reset the workspace");
 
     let outcome: unknown;
     await act(async () => {
-      outcome = await result.current.persistActiveWorkspace("/tmp/nope");
+      outcome = await result.current.resetActiveWorkspace();
     });
 
     expect(outcome).toEqual({
       ok: false,
-      message: "invalid workspace path: not a valid workspace (missing README.md)",
+      message: "AGENT_WORKSPACE_PATH is set and overrides the saved workspace; unset it to reset the workspace",
     });
     expect(deps.beginWorkspaceLoadGeneration).not.toHaveBeenCalled();
     expect(deps.resetWorkspaceBoundState).not.toHaveBeenCalled();
     expect(deps.loadWorkspaceResources).not.toHaveBeenCalled();
     expect(deps.setError).not.toHaveBeenCalled();
-    expect(result.current.appSettings?.workspace_path).toBeNull();
+    expect(result.current.appSettings?.workspace_path).toBe("/tmp/other");
   });
 
-  it("resets to the default through its own command", async () => {
-    const custom = { ...baseSettings, workspace_path: "/tmp/other", revision: 3 };
-    mockInitialLoad(custom);
-    const deps = createDeps();
-    const { result } = renderHook(() => useAppSettingsController(deps));
-    await act(async () => {
-      await result.current.loadSettings();
-    });
-    invoke.mockImplementation(async (cmd: string) => {
-      if (cmd === "reset_active_workspace_path") return { ...custom, workspace_path: null, revision: 4 };
-      throw new Error(`unexpected invoke: ${cmd}`);
-    });
-
-    let outcome: unknown;
-    await act(async () => {
-      outcome = await result.current.persistActiveWorkspace(null);
-    });
-
-    expect(outcome).toEqual({ ok: true });
-    expect(invoke).toHaveBeenCalledWith("reset_active_workspace_path");
-    expect(result.current.appSettings?.workspace_path).toBeNull();
-    expect(deps.appliedWorkspacePathRef.current).toBeNull();
-    expect(deps.loadWorkspaceResources).toHaveBeenCalledTimes(1);
-  });
-
-  it("keeps an edit that is still waiting for its autosave on top of the switched settings", async () => {
+  it("keeps an edit that is still waiting for its autosave on top of the reset settings", async () => {
     const { result } = await loaded();
     await act(async () => {
       result.current.setAppFontSize("large");
     });
     invoke.mockImplementation(async (cmd: string, args?: { settings?: AppSettings; expectedRevision?: number }) => {
-      if (cmd === "try_set_active_workspace_path") return { ...baseSettings, workspace_path: "/tmp/other", revision: 2 };
+      if (cmd === "reset_active_workspace_path") return { ...custom, workspace_path: null, revision: 4 };
       if (cmd === "update_settings") return { ...args?.settings, revision: (args?.expectedRevision ?? 0) + 1 };
       throw new Error(`unexpected invoke: ${cmd}`);
     });
 
     await act(async () => {
-      await result.current.persistActiveWorkspace("/tmp/other");
+      await result.current.resetActiveWorkspace();
     });
 
-    // The new workspace path and the pending font size both survive; the autosave then writes both once.
-    expect(result.current.appSettings?.workspace_path).toBe("/tmp/other");
+    // The cleared workspace path and the pending font size both survive; the autosave then writes both once.
+    expect(result.current.appSettings?.workspace_path).toBeNull();
     expect(result.current.appSettings?.app_font_size).toBe("large");
     await act(async () => {
       await vi.advanceTimersByTimeAsync(700);
     });
     const updates = invoke.mock.calls.filter(([cmd]) => cmd === "update_settings");
     expect(updates).toHaveLength(1);
-    expect(updates[0][1].expectedRevision).toBe(2);
-    expect(updates[0][1].settings.workspace_path).toBe("/tmp/other");
+    expect(updates[0][1].expectedRevision).toBe(4);
+    expect(updates[0][1].settings.workspace_path).toBeNull();
     expect(updates[0][1].settings.app_font_size).toBe("large");
   });
 
-  it("refuses a second switch while one is running", async () => {
+  it("refuses a second reset while one is running", async () => {
     const { result } = await loaded();
     let finish: (settings: AppSettings) => void = () => {};
-    invoke.mockImplementation(() => new Promise<AppSettings>(resolveSwitch => {
-      finish = resolveSwitch;
+    invoke.mockImplementation(() => new Promise<AppSettings>(resolveReset => {
+      finish = resolveReset;
     }));
 
     let first: Promise<unknown> = Promise.resolve();
     await act(async () => {
-      first = result.current.persistActiveWorkspace("/tmp/a");
+      first = result.current.resetActiveWorkspace();
       await Promise.resolve();
     });
     let second: unknown;
     await act(async () => {
-      second = await result.current.persistActiveWorkspace("/tmp/b");
+      second = await result.current.resetActiveWorkspace();
     });
     expect(second).toEqual({ ok: false, message: "a workspace change is already running" });
 
     await act(async () => {
-      finish({ ...baseSettings, workspace_path: "/tmp/a", revision: 2 });
+      finish({ ...custom, workspace_path: null, revision: 4 });
       await first;
     });
-    expect(invoke.mock.calls.filter(([cmd]) => cmd === "try_set_active_workspace_path")).toHaveLength(1);
+    expect(invoke.mock.calls.filter(([cmd]) => cmd === "reset_active_workspace_path")).toHaveLength(1);
   });
 
   it("refuses while a workspace task runs, before the backend is asked", async () => {
-    mockInitialLoad();
+    mockInitialLoad(custom);
     const deps = createDeps();
     const { result, rerender } = renderHook(
       (props: { label: string | null }) => useAppSettingsController({ ...deps, workspaceTaskLabel: props.label }),
@@ -563,7 +540,7 @@ describe("useAppSettingsController persistActiveWorkspace", () => {
 
     let outcome: unknown;
     await act(async () => {
-      outcome = await result.current.persistActiveWorkspace("/tmp/other");
+      outcome = await result.current.resetActiveWorkspace();
     });
 
     expect(outcome).toEqual({ ok: false, message: "apply is running; wait for it to finish before switching workspace" });
@@ -576,7 +553,7 @@ describe("useAppSettingsController persistActiveWorkspace", () => {
     const { result } = renderHook(() => useAppSettingsController(deps));
     let outcome: unknown;
     await act(async () => {
-      outcome = await result.current.persistActiveWorkspace("/tmp/other");
+      outcome = await result.current.resetActiveWorkspace();
     });
     expect(outcome).toEqual({ ok: false, message: "settings are not loaded yet" });
     expect(invoke).not.toHaveBeenCalled();

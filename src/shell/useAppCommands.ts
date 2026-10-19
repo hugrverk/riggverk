@@ -45,13 +45,12 @@ export interface AppCommandDeps {
   requestRollback: () => void | Promise<void>;
   /** Opens the uninstall preview dialog on the workspace page. */
   requestUninstallPreview: () => void | Promise<void>;
-  /** `:workspace choose|reset`: switch the folder the app works in. Absent: the command only opens the page. */
-  workspaceSwitch?: {
-    choose: () => void | Promise<void>;
+  /** `:workspace reset`: back to the default folder, after a confirm. Absent: the command only opens the page. */
+  workspaceReset?: {
     reset: () => void | Promise<void>;
     /** No custom folder is saved (reset has nothing to do). */
     isDefault: boolean;
-    /** A choose or reset is already running. */
+    /** A reset is already running. */
     busy: boolean;
   };
   setError: (message: string | null) => void;
@@ -112,16 +111,16 @@ export function useAppCommands(deps: AppCommandDeps): void {
     return null;
   };
 
-  const workspaceActions = ["choose", "reset"];
+  const workspaceActions = ["reset"];
   const viewArgs = (def: (typeof VIEW_DEFS)[number]): CommandSpec["args"] => {
     if (def.id === "library") return [{ name: "source", kind: "enum", values: LIBRARY_SOURCES, optional: true }];
-    if (def.id === "start" && deps.workspaceSwitch) {
+    if (def.id === "start" && deps.workspaceReset) {
       return [{
         name: "action",
         kind: "enum",
         values: workspaceActions,
         optional: true,
-        describe: value => (value === "choose" ? "pick the workspace folder" : "back to the default workspace"),
+        describe: () => "back to the default workspace folder (asks first)",
       }];
     }
     return undefined;
@@ -130,7 +129,7 @@ export function useAppCommands(deps: AppCommandDeps): void {
   const viewCommands = VIEW_DEFS.map((def): CommandSpec => ({
     name: def.command,
     aliases: def.aliases,
-    summary: def.id === "start" && deps.workspaceSwitch ? `open ${def.label}, or choose | reset its folder` : `open ${def.label}`,
+    summary: def.id === "start" && deps.workspaceReset ? `open ${def.label}, or reset its folder` : `open ${def.label}`,
     group: "Views",
     args: viewArgs(def),
     enabled: () =>
@@ -138,16 +137,16 @@ export function useAppCommands(deps: AppCommandDeps): void {
     validate: def.id === "start"
       ? parsed => {
           const action = parsed.named.action;
-          if (!action || !deps.workspaceSwitch) return null;
-          if (deps.workspaceSwitch.busy) return "a workspace change is already running";
+          if (!action || !deps.workspaceReset) return null;
+          if (deps.workspaceReset.busy) return "a workspace change is already running";
           if (deps.busyLabel) return workspaceTaskBlockedMessage(deps.busyLabel);
-          if (action === "reset" && deps.workspaceSwitch.isDefault) return "already the default workspace";
+          if (deps.workspaceReset.isDefault) return "already the default workspace";
           return null;
         }
       : undefined,
     run: parsed => {
-      if (def.id === "start" && parsed.named.action && deps.workspaceSwitch) {
-        void (parsed.named.action === "reset" ? deps.workspaceSwitch.reset() : deps.workspaceSwitch.choose());
+      if (def.id === "start" && parsed.named.action && deps.workspaceReset) {
+        void deps.workspaceReset.reset();
         return;
       }
       void deps.switchView(def.id);

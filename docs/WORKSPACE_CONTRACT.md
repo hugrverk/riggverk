@@ -47,7 +47,7 @@ A file that exists but is not provably app-owned and unmodified is a conflict: I
 
 ### Custom workspace
 
-Settings can point the app at another folder (`c` choose, `R` reset to the default path). A chosen folder must already hold the app's `.agent-workspace/` state (see Data folder above). `AGENT_WORKSPACE_PATH` overrides it. Install into a custom folder behaves as into the default one, and the generator scripts the app runs still come from the bundled read-only copy.
+Settings no longer picks a folder (the chooser and `:workspace choose` are gone). A custom folder saved by an earlier version stays in use while it holds the app's `.agent-workspace/` state (see Data folder above). `AGENT_WORKSPACE_PATH` overrides it. `R` in Settings, or `:workspace reset`, asks first and then clears the saved path and returns to the default folder: the old folder is left as it is, its ownership records and personal docs stay there, and the app cannot switch back to it. Install into a custom folder behaves as into the default one, and the generator scripts the app runs still come from the bundled read-only copy.
 
 ## Skill source layout
 
