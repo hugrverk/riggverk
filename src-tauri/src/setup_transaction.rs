@@ -594,6 +594,11 @@ pub fn detect_surface_state(
                     .find_map(|p| {
                         p.mcp
                             .and_then(|state| state.conflict_reason(mcp_entry_key(&p.artifact)))
+                            .or_else(|| {
+                                (p.artifact == ArtifactId::OpenCodeTui)
+                                    .then(|| tui_conflict_reason(workspace_root, home))
+                                    .flatten()
+                            })
                     });
                 let manual = planned
                     .iter()
@@ -764,7 +769,8 @@ pub fn detect_artifact_state(
 
     match artifact_kind(artifact) {
         ArtifactKind::ConfigFile => detect_config_artifact(artifact, &dest, &source, home),
-        ArtifactKind::TuiConfig | ArtifactKind::RulesFile | ArtifactKind::AgentFile => {
+        ArtifactKind::TuiConfig => detect_tui_artifact(&dest, &source),
+        ArtifactKind::RulesFile | ArtifactKind::AgentFile => {
             if !dest.exists() {
                 (OperationKind::Create, PreviousState::Absent)
             } else if !source.exists() {
@@ -1420,6 +1426,42 @@ fn detect_config_artifact(
         }
     } else {
         (OperationKind::Unavailable, PreviousState::Unavailable)
+    }
+}
+
+/// `tui.json` is merge-managed: only the managed keys are compared, and a file the app does not
+/// edit (comments, invalid JSON, ...) is a conflict that is never written.
+fn detect_tui_artifact(dest: &Path, source: &Path) -> (OperationKind, PreviousState) {
+    use crate::opencode_tui::Assessment;
+    let (Ok(keys), Ok(template)) = (
+        crate::opencode_tui::managed_keys(),
+        crate::opencode_tui::bundled(source),
+    ) else {
+        return (OperationKind::Unavailable, PreviousState::Unavailable);
+    };
+    match crate::opencode_tui::assess(dest, &template, keys) {
+        Assessment::Absent => (OperationKind::Create, PreviousState::Absent),
+        Assessment::Synced => (OperationKind::NoChange, PreviousState::MergeableConfigFile),
+        Assessment::Differs(_) => (OperationKind::Update, PreviousState::MergeableConfigFile),
+        Assessment::Refused(_) => (OperationKind::Conflict, PreviousState::Conflict),
+    }
+}
+
+/// Why `tui.json` is left alone, for the review: the file is not strict JSON, or a managed key
+/// was changed after the app wrote it. Only fixed phrases and managed key names.
+fn tui_conflict_reason(workspace_root: &Path, home: &Path) -> Option<String> {
+    use crate::opencode_tui::Assessment;
+    let artifact = ArtifactId::OpenCodeTui;
+    let dest = artifact.resolve_dest(home, workspace_root).ok()?;
+    let bundled_root = crate::setup_roots::bundled_root_for(workspace_root).ok()?;
+    let template = crate::opencode_tui::bundled(&artifact.resolve_source(&bundled_root)?).ok()?;
+    match crate::opencode_tui::assess(&dest, &template, crate::opencode_tui::managed_keys().ok()?) {
+        Assessment::Refused(refusal) => Some(crate::opencode_tui::refusal_reason(refusal)),
+        Assessment::Differs(keys) => Some(format!(
+            "tui.json: {} changed since the app wrote it; the file is left as is",
+            keys.join(", ")
+        )),
+        Assessment::Absent | Assessment::Synced => None,
     }
 }
 
@@ -2201,11 +2243,26 @@ fn refine_with_managed_hash(
     // exactly a version the app shipped is still the app's to update.
     if installed == expected
         || crate::shipped_digests::is_shipped_version(artifact, bundled_root, &installed)
+        || legacy_whole_file_record_holds(artifact, workspace_root, home, expected)
     {
         (OperationKind::Update, previous)
     } else {
         (OperationKind::Conflict, PreviousState::Conflict)
     }
+}
+
+/// Before `tui.json` was merge-managed its record held the digest of the whole file the app
+/// copied. A file that is still exactly those bytes holds the app's managed keys, so the record
+/// proves them; after the next apply the record holds the managed-key digest.
+fn legacy_whole_file_record_holds(
+    artifact: &ArtifactId,
+    workspace_root: &Path,
+    home: &Path,
+    recorded: &str,
+) -> bool {
+    *artifact == ArtifactId::OpenCodeTui
+        && crate::setup_fingerprint::artifact_installed_full_digest(artifact, workspace_root, home)
+            .is_ok_and(|full| full == recorded)
 }
 
 pub fn rollback_action_for(kind: OperationKind, previous: PreviousState) -> RollbackAction {
@@ -2403,16 +2460,33 @@ pub fn artifact_matches_post_apply_state(
         return Ok(false);
     }
     if let Some(expected_managed) = op.post_apply_digest.as_deref() {
-        let current_managed = crate::setup_fingerprint::artifact_installed_managed_digest(
-            &op.artifact,
-            workspace_root,
-            home,
-        )?;
+        let current_managed = recorded_form_managed_digest(op, workspace_root, home)?;
         if current_managed != expected_managed {
             return Ok(false);
         }
     }
     Ok(true)
+}
+
+/// The managed digest of the installed artifact in the form `op` recorded it. An operation on
+/// `tui.json` from before the file was merge-managed recorded the whole-file digest as its
+/// managed digest (equal to its full digest), so it is compared on the whole file.
+fn recorded_form_managed_digest(
+    op: &ArtifactManifestOperation,
+    workspace_root: &Path,
+    home: &Path,
+) -> Result<String, String> {
+    if op.artifact == ArtifactId::OpenCodeTui
+        && op.post_apply_digest.is_some()
+        && op.post_apply_digest == op.post_apply_full_digest
+    {
+        return crate::setup_fingerprint::artifact_installed_full_digest(
+            &op.artifact,
+            workspace_root,
+            home,
+        );
+    }
+    crate::setup_fingerprint::artifact_installed_managed_digest(&op.artifact, workspace_root, home)
 }
 
 /// Whether the artifact currently holds what this operation would have
@@ -2820,11 +2894,7 @@ pub fn artifact_unchanged_since_apply(
         .post_apply_digest
         .as_deref()
         .ok_or_else(|| "missing post-apply digest".to_string())?;
-    let current_managed = crate::setup_fingerprint::artifact_installed_managed_digest(
-        &op.artifact,
-        workspace_root,
-        home,
-    )?;
+    let current_managed = recorded_form_managed_digest(op, workspace_root, home)?;
     if current_managed != expected_managed {
         return Err(CHANGED_SINCE_APPLY.into());
     }
@@ -3084,6 +3154,14 @@ fn restore_artifact_from_backup_with_mode(
                             allowlist_root,
                         )
                         .map_err(|e| format!("write opencode config: {e}"))?;
+                    } else if op.artifact == ArtifactId::OpenCodeTui {
+                        let rendered = crate::opencode_tui::render_restored(&dest, &backup_path)?;
+                        crate::safe_filesystem::write_regular_file_atomic(
+                            &dest,
+                            rendered.as_bytes(),
+                            allowlist_root,
+                        )
+                        .map_err(|e| format!("write tui.json: {e}"))?;
                     } else if op.artifact == ArtifactId::CodexConfig {
                         let workspace_root = workspace_root.ok_or_else(|| {
                             "workspace root required for codex managed rollback".to_string()
