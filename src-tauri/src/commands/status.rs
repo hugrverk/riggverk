@@ -429,6 +429,17 @@ mod tests {
 
     // ── opencode_config_status tests ──
 
+    fn bundled_opencode_config(home: &std::path::Path) -> String {
+        let bundle = crate::setup_roots::bundled_root().unwrap();
+        let template =
+            serde_json::from_slice(&fs::read(bundle.join("templates/opencode.json")).unwrap())
+                .unwrap();
+        let rendered =
+            super::super::opencode_runtime::render_expected_opencode_config(&template, home)
+                .unwrap();
+        serde_json::to_string_pretty(&rendered).unwrap()
+    }
+
     #[test]
     fn opencode_config_status_synced_when_config_matches() {
         let root = temp_root("opencode-synced");
@@ -437,7 +448,7 @@ mod tests {
         write_file(&root.join("templates/opencode.json"), r#"{"key":"val"}"#);
         write_file(
             &home.join(".config/opencode/opencode.json"),
-            r#"{"key":"val"}"#,
+            &bundled_opencode_config(&home),
         );
 
         let status = opencode_config_status(&root, &home);
@@ -499,8 +510,6 @@ mod tests {
 
     #[test]
     fn opencode_config_status_synced_when_installed_matches_rendered_template() {
-        use super::super::opencode_runtime::render_expected_opencode_config;
-
         let root = temp_root("opencode-rendered-sync");
         let home = temp_root("home-rendered-sync");
 
@@ -509,17 +518,9 @@ mod tests {
             r#"{"mcp":{"playwright":{"environment":{"PLAYWRIGHT_BROWSERS_PATH":"__PLAYWRIGHT_BROWSERS_PATH__"}}}}"#,
         );
 
-        let rendered = render_expected_opencode_config(
-            &serde_json::from_str(
-                r#"{"mcp":{"playwright":{"environment":{"PLAYWRIGHT_BROWSERS_PATH":"__PLAYWRIGHT_BROWSERS_PATH__"}}}}"#,
-            )
-            .expect("parse template"),
-            &home,
-        )
-        .expect("render expected");
         write_file(
             &home.join(".config/opencode/opencode.json"),
-            &serde_json::to_string_pretty(&rendered).expect("serialize installed"),
+            &bundled_opencode_config(&home),
         );
 
         let status = opencode_config_status(&root, &home);

@@ -517,7 +517,7 @@ fn pin_subagent_model(config: &mut serde_json::Map<String, serde_json::Value>, m
     }
 }
 
-/// Render workspace `templates/opencode.json` the way an install renders it before sync.
+/// Render bundled `templates/opencode.json` the way an install renders it before sync.
 ///
 /// Applies Playwright placeholder transformations and overlays the app-level model override
 /// (`model`, `small_model` and the subagent model as `agent.<role>.model` entries, each only if
@@ -561,7 +561,7 @@ pub(crate) fn render_expected_opencode_config(
     Some(rendered)
 }
 
-/// Managed keys of the installed config that differ from the rendered workspace template, or
+/// Managed keys of the installed config that differ from the rendered bundled template, or
 /// `None` when the expected config cannot be rendered.
 fn installed_config_diverged_keys(
     template_json: &serde_json::Value,
@@ -574,12 +574,15 @@ fn installed_config_diverged_keys(
 
 /// Sync status for `get_status` / dashboard (compares the staged output an install would write).
 pub(crate) fn opencode_config_sync_status(workspace_root: &Path, home_dir: &Path) -> String {
-    let template_path = workspace_root.join("templates/opencode.json");
     let installed_path = home_dir.join(".config/opencode/opencode.json");
 
     if !installed_path.is_file() {
         return "missing".into();
     }
+    let Ok(bundle) = crate::setup_roots::bundled_root_for(workspace_root) else {
+        return "diverged".into();
+    };
+    let template_path = bundle.join("templates/opencode.json");
     if !template_path.is_file() {
         return "diverged".into();
     }
@@ -655,12 +658,12 @@ fn run_generator(
     ))
 }
 
-/// Run the bundled generator's --check against the workspace.
+/// Run the bundled generator's --check against the given source root.
 /// Returns `Some(status, detail)` if the generator ran, `None` if it is unavailable
 /// (bundled script missing or `python3` not spawnable).
-fn run_generator_check(workspace_root: &Path) -> Option<(String, String)> {
+fn run_generator_check(workspace_root: &Path, source_root: &Path) -> Option<(String, String)> {
     let script = bundled_generator_script(workspace_root).ok()?;
-    run_generator_check_with_timeout(&script, workspace_root, GENERATOR_TIMEOUT)
+    run_generator_check_with_timeout(&script, source_root, GENERATOR_TIMEOUT)
 }
 
 fn run_generator_check_with_timeout(
@@ -737,23 +740,33 @@ fn opencode_rules_status(source: &Path, installed: &Path) -> String {
     .into()
 }
 
-/// Compute OpenCode runtime health from the files of a workspace root and home directory, with
+/// Compute OpenCode runtime health against the bundled install sources, with
 /// no CLI probe (`apply_cli_probes` adds those).
 /// This is a pure function suitable for unit testing with temp dirs.
 pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> OpenCodeRuntimeHealth {
-    let template_config_path = workspace_root.join("templates/opencode.json");
+    let bundled = crate::setup_roots::bundled_root_for(workspace_root).ok();
+    compute_health_with_bundle(workspace_root, bundled.as_deref(), home_dir)
+}
+
+fn compute_health_with_bundle(
+    workspace_root: &Path,
+    bundled_root: Option<&Path>,
+    home_dir: &Path,
+) -> OpenCodeRuntimeHealth {
+    let source_path = |rel: &str| bundled_root.map(|root| root.join(rel)).unwrap_or_default();
+    let template_config_path = source_path("templates/opencode.json");
     let installed_config_path = home_dir.join(".config/opencode/opencode.json");
-    let agents_source_dir = workspace_root.join("agents");
+    let agents_source_dir = source_path("agents");
     let agents_target_dir = home_dir.join(".config/opencode/agents");
 
     // TUI paths
-    let template_tui_path = workspace_root.join("templates/tui.json");
+    let template_tui_path = source_path("templates/tui.json");
     let installed_tui_path = home_dir.join(".config/opencode/tui.json");
 
     // Generated snapshot paths
-    let generated_snapshot_base_path = workspace_root.join("templates/opencode.base.json");
-    let generated_snapshot_policy_path = workspace_root.join("templates/opencode.policy.json");
-    let generated_snapshot_path = workspace_root.join("templates/opencode.json");
+    let generated_snapshot_base_path = source_path("templates/opencode.base.json");
+    let generated_snapshot_policy_path = source_path("templates/opencode.policy.json");
+    let generated_snapshot_path = source_path("templates/opencode.json");
 
     let template_config_path_str = template_config_path.to_string_lossy().into_owned();
     let installed_config_path_str = installed_config_path.to_string_lossy().into_owned();
@@ -967,7 +980,7 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> OpenCodeRuntime
                 .unwrap_or_else(|| "(not set)".into()),
         });
 
-        // Compare installed config to rendered workspace config (same staging as install script).
+        // Compare against the same bundled render that install applies.
         let diverged_keys = installed_config_diverged_keys(t_json, i_json, home_dir);
         let configs_match_result = diverged_keys.as_ref().map(|keys| keys.is_empty());
         let configs_match = configs_match_result.unwrap_or(false);
@@ -1209,7 +1222,7 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> OpenCodeRuntime
         && snapshot_valid
     {
         // Try running generator --check to verify freshness
-        match run_generator_check(workspace_root) {
+        match bundled_root.and_then(|root| run_generator_check(workspace_root, root)) {
             Some((status, detail)) => (status, detail),
             None => {
                 generator_unavailable = true;
@@ -1248,7 +1261,7 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> OpenCodeRuntime
     }
 
     let rules_status = opencode_rules_status(
-        &workspace_root.join("templates/sync/opencode-rules.md"),
+        &source_path("templates/sync/opencode-rules.md"),
         &home_dir.join(".config/opencode/AGENTS.md"),
     );
 
@@ -2007,17 +2020,11 @@ fn run_models_listing(
     Ok(ListAvailableModelsResult { models, warning })
 }
 
-/// The bundled `model` and `small_model`: the workspace `templates/opencode.base.json`, else the
+/// The bundled `model` and `small_model`: bundled `templates/opencode.base.json`, else the
 /// hardcoded defaults.
 fn bundled_model_defaults() -> Result<(String, String), String> {
-    use crate::commands::workspace::configured_workspace_path;
-    use crate::settings;
-
     let fallback = || (DEFAULT_MODEL.to_string(), DEFAULT_SMALL_MODEL.to_string());
-    let Some(workspace_root) = configured_workspace_path(&settings::load()) else {
-        return Ok(fallback());
-    };
-    let base_path = workspace_root.join("templates/opencode.base.json");
+    let base_path = crate::setup_roots::bundled_root()?.join("templates/opencode.base.json");
     if !base_path.is_file() {
         return Ok(fallback());
     }
@@ -2040,7 +2047,7 @@ fn bundled_model_defaults() -> Result<(String, String), String> {
 }
 
 /// Read the current model, small_model and subagent model, each with its source.
-/// A value comes from the app-level override file when that holds it, else from the workspace
+/// A value comes from the app-level override file when that holds it, else from the bundled
 /// `templates/opencode.base.json`, else from the hardcoded defaults. The template has no subagent
 /// model: without an override the subagents inherit `model`.
 #[tauri::command]
@@ -2213,6 +2220,11 @@ mod tests {
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
 
+    /// Existing fixtures supply the install bundle explicitly, independently of the runtime root.
+    fn compute_health(bundle: &Path, home: &Path) -> OpenCodeRuntimeHealth {
+        super::compute_health_with_bundle(bundle, Some(bundle), home)
+    }
+
     fn temp_root(name: &str) -> PathBuf {
         let nonce = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -2269,6 +2281,108 @@ mod tests {
         write_file(&home, ".config/opencode/agents/repo-scout.md", "# scout");
 
         (ws, home)
+    }
+
+    #[test]
+    fn test_health_and_defaults_follow_the_install_bundle_after_workspace_edits() {
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        let ws = temp_root("bundle-baseline-ws");
+        let home = temp_root("bundle-baseline-home");
+        crate::test_env::set_test_user_dirs(&home);
+        unsafe { std::env::set_var("AGENT_WORKSPACE_PATH", &ws) };
+        let bundle = crate::setup_roots::bundled_root().unwrap();
+        let template: serde_json::Value =
+            serde_json::from_str(&bundled_template("opencode.json")).unwrap();
+        let base: serde_json::Value =
+            serde_json::from_str(&bundled_template("opencode.base.json")).unwrap();
+        let rendered = render_expected_opencode_config(&template, &home).unwrap();
+        write_file(
+            &home,
+            ".config/opencode/opencode.json",
+            &serde_json::to_string_pretty(&rendered).unwrap(),
+        );
+        for (source, dest) in [
+            ("templates/tui.json", ".config/opencode/tui.json"),
+            (
+                "templates/sync/opencode-rules.md",
+                ".config/opencode/AGENTS.md",
+            ),
+        ] {
+            write_file(
+                &home,
+                dest,
+                &fs::read_to_string(bundle.join(source)).unwrap(),
+            );
+        }
+        for name in list_bundled_agents(&bundle.join("agents")) {
+            write_file(
+                &home,
+                &format!(".config/opencode/agents/{name}"),
+                &fs::read_to_string(bundle.join("agents").join(name)).unwrap(),
+            );
+        }
+        assert_eq!(super::compute_health(&ws, &home).status, "synced");
+
+        write_file(
+            &ws,
+            "templates/opencode.json",
+            r#"{"model":"workspace/main"}"#,
+        );
+        write_file(
+            &ws,
+            "templates/opencode.base.json",
+            r#"{"model":"workspace/main","small_model":"workspace/small"}"#,
+        );
+        write_file(
+            &ws,
+            "templates/opencode.policy.json",
+            "invalid workspace policy",
+        );
+        write_file(&ws, "templates/tui.json", r#"{"theme":"workspace"}"#);
+        write_file(&ws, "templates/sync/opencode-rules.md", "workspace rules");
+        write_file(&ws, "agents/architect.md", "workspace agent");
+
+        let health = super::compute_health(&ws, &home);
+        assert_eq!(health.status, "synced", "{:?}", health.checks);
+        assert_eq!(health.config_status, "synced");
+        assert_eq!(health.tui_status, "synced");
+        assert_eq!(health.rules_status, "synced");
+        assert!(health.agent_mismatches.is_empty());
+        assert_eq!(
+            health.installed_bundled_agent_count,
+            health.bundled_agent_count
+        );
+        assert_eq!(health.generated_snapshot_status, "current");
+        assert_eq!(super::opencode_config_sync_status(&ws, &home), "synced");
+        let selection = read_opencode_model_selection().unwrap();
+        assert_eq!(
+            (selection.model, selection.small_model),
+            (
+                base["model"].as_str().unwrap().to_string(),
+                base["small_model"].as_str().unwrap().to_string()
+            )
+        );
+
+        // Installing workspace edits would diverge; the bundled render converges again.
+        write_file(
+            &home,
+            ".config/opencode/opencode.json",
+            r#"{"model":"workspace/main","provider":{"mine":{}}}"#,
+        );
+        assert_eq!(super::compute_health(&ws, &home).config_status, "diverged");
+        install_for(&bundle, &home);
+        assert_eq!(super::compute_health(&ws, &home).config_status, "synced");
+        let installed: serde_json::Value =
+            serde_json::from_slice(&fs::read(home.join(".config/opencode/opencode.json")).unwrap())
+                .unwrap();
+        assert_eq!(installed["provider"], serde_json::json!({"mine":{}}));
+
+        let unavailable = super::compute_health_with_bundle(&ws, None, &home);
+        assert_ne!(unavailable.config_status, "synced");
+        assert_eq!(unavailable.bundled_agent_count, 0);
+        cleanup(&ws);
+        cleanup(&home);
     }
 
     #[test]
@@ -3124,7 +3238,7 @@ mod tests {
         );
 
         let health = compute_health(&ws, &home);
-        let check = super::run_generator_check(&ws);
+        let check = super::run_generator_check(&ws, &ws);
         let write = super::run_generator_write(&ws).expect("bundled generator should run");
         let sentinel_created = sentinel.exists();
         cleanup(&ws);
@@ -3180,10 +3294,7 @@ mod tests {
         );
 
         let rendered = render_expected_opencode_config(
-            &serde_json::from_str(
-                r#"{"mcp":{"playwright":{"environment":{"PLAYWRIGHT_BROWSERS_PATH":"__PLAYWRIGHT_BROWSERS_PATH__"}}}}"#,
-            )
-            .expect("parse template"),
+            &serde_json::from_str(&bundled_template("opencode.json")).expect("parse bundle"),
             &home,
         )
         .expect("render expected");
