@@ -23,6 +23,7 @@ pub fn update_settings(
 
 #[tauri::command]
 pub fn get_agent_targets() -> Result<Vec<agent_targets::AgentTargetMeta>, String> {
+    let home = agent_targets::home_dir().ok();
     Ok(agent_targets::targets()
         .into_iter()
         .map(|t| agent_targets::AgentTargetMeta {
@@ -30,7 +31,7 @@ pub fn get_agent_targets() -> Result<Vec<agent_targets::AgentTargetMeta>, String
             label: t.label.to_string(),
             harness: t.harness,
             kind: t.kind,
-            target_rel: t.target_rel.to_string(),
+            target_rel: t.display_rel(home.as_deref()),
             source_rel: t.source_rel.to_string(),
         })
         .collect())

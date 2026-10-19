@@ -213,6 +213,18 @@ pub fn env_warning(names: &[String]) -> String {
     )
 }
 
+/// The variable that points OpenCode at one more config folder.
+pub const CONFIG_DIR_ENV_VAR: &str = "OPENCODE_CONFIG_DIR";
+
+/// The warning for `OPENCODE_CONFIG_DIR`, beside [`env_warning`]: OpenCode reads that folder too,
+/// and the app installs only to `config_dir`, its global config folder. The variable's value is
+/// never shown.
+pub fn config_dir_env_warning(config_dir: &str) -> String {
+    format!(
+        "{CONFIG_DIR_ENV_VAR} points OpenCode at one more config folder, read after {config_dir} and the project config, so its opencode.json and agents win over the team's. Riggverk installs only to {config_dir} and never writes to the {CONFIG_DIR_ENV_VAR} folder"
+    )
+}
+
 /// Where OpenCode looks for a system managed config on this platform: the system config folder
 /// and, on macOS, the managed preferences of `user` and of the machine.
 pub fn system_managed_candidates(user: Option<&str>) -> Vec<PathBuf> {

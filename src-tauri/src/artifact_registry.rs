@@ -12,6 +12,7 @@ use std::path::{Component, Path, PathBuf};
 
 use crate::agent_skill_targets::codex_home;
 use crate::light_harness::LightHarnessId;
+use crate::platform_paths::opencode_config_dir;
 use crate::setup_lifecycle::SetupSurfaceId;
 use crate::skill_roots::{SkillRoot, SkillScope};
 
@@ -32,7 +33,7 @@ pub enum ArtifactId {
     OpenCodeTui,
     /// Playwright MCP sidecar config for OpenCode (`PLAYWRIGHT_MCP_CONFIG_PATH`)
     OpenCodePlaywrightMcp,
-    /// .config/opencode/AGENTS.md rules file
+    /// AGENTS.md rules file in the OpenCode config folder
     OpenCodeRules,
     /// A managed OpenCode agent file
     OpenCodeAgent(AgentName),
@@ -322,15 +323,15 @@ impl ArtifactId {
     /// Resolve the destination path for this artifact.
     pub fn resolve_dest(&self, home: &Path, workspace_root: &Path) -> Result<PathBuf, String> {
         match self {
-            ArtifactId::OpenCodeConfig => Ok(home.join(".config/opencode/opencode.json")),
-            ArtifactId::OpenCodeTui => Ok(home.join(".config/opencode/tui.json")),
+            ArtifactId::OpenCodeConfig => Ok(opencode_config_dir(home).join("opencode.json")),
+            ArtifactId::OpenCodeTui => Ok(opencode_config_dir(home).join("tui.json")),
             ArtifactId::OpenCodePlaywrightMcp => {
                 Ok(crate::commands::cursor_profile::default_playwright_mcp_config_path(home))
             }
-            ArtifactId::OpenCodeRules => Ok(home.join(".config/opencode/AGENTS.md")),
-            ArtifactId::OpenCodeAgent(name) => {
-                Ok(home.join(".config/opencode/agents").join(name.file_name()))
-            }
+            ArtifactId::OpenCodeRules => Ok(opencode_config_dir(home).join("AGENTS.md")),
+            ArtifactId::OpenCodeAgent(name) => Ok(opencode_config_dir(home)
+                .join("agents")
+                .join(name.file_name())),
             ArtifactId::OpenCodeSkill(name) => {
                 SkillFileRef::skill_md(SkillRoot::OpenCode, name.clone()).dest(home)
             }
@@ -369,9 +370,10 @@ impl ArtifactId {
     }
 
     /// Directory the destination must stay inside when it is written, backed up, restored, or
-    /// removed: the workspace for workspace files, `CODEX_HOME` for Codex artifacts when it lies
+    /// removed: the workspace for workspace files, `CODEX_HOME` for Codex artifacts and the
+    /// OpenCode config folder (`$XDG_CONFIG_HOME/opencode`) for OpenCode artifacts when they lie
     /// outside `home`, and `home` otherwise (which keeps the symlink-chain check from `home` down
-    /// for the default `~/.codex`).
+    /// for the default `~/.codex` and `~/.config/opencode`).
     pub fn allowlist_root(&self, home: &Path, workspace_root: &Path) -> Result<PathBuf, String> {
         match self {
             ArtifactId::WorkspaceFile(_) => Ok(workspace_root.to_path_buf()),
@@ -381,6 +383,14 @@ impl ArtifactId {
             | ArtifactId::CodexSkill(_) => self.codex_allowlist_root(home, workspace_root),
             ArtifactId::SkillFile(file) if file.root == SkillRoot::CodexHome => {
                 self.codex_allowlist_root(home, workspace_root)
+            }
+            ArtifactId::OpenCodeConfig
+            | ArtifactId::OpenCodeTui
+            | ArtifactId::OpenCodeRules
+            | ArtifactId::OpenCodeAgent(_)
+            | ArtifactId::OpenCodeSkill(_) => self.opencode_allowlist_root(home, workspace_root),
+            ArtifactId::SkillFile(file) if file.root == SkillRoot::OpenCode => {
+                self.opencode_allowlist_root(home, workspace_root)
             }
             ArtifactId::HarnessRules(harness) => Ok(light_rules(*harness)?.allowlist_root(home)),
             ArtifactId::HarnessMcp(harness) => Ok(light_mcp(*harness)?.allowlist_root(home)),
@@ -396,6 +406,25 @@ impl ArtifactId {
         let codex_root = absolute_codex_home(home)?;
         Ok(if dest.starts_with(&codex_root) {
             codex_root
+        } else {
+            home.to_path_buf()
+        })
+    }
+
+    /// `home` for a destination below it, else the OpenCode config folder when the destination is
+    /// in it, else `home` (so the containment check refuses the write).
+    fn opencode_allowlist_root(
+        &self,
+        home: &Path,
+        workspace_root: &Path,
+    ) -> Result<PathBuf, String> {
+        let dest = self.resolve_dest(home, workspace_root)?;
+        if dest.starts_with(home) {
+            return Ok(home.to_path_buf());
+        }
+        let config_dir = opencode_config_dir(home);
+        Ok(if dest.starts_with(&config_dir) {
+            config_dir
         } else {
             home.to_path_buf()
         })
@@ -743,7 +772,7 @@ pub fn reject_broad_artifact_root(path: &Path) -> Result<(), String> {
             format!("{home_norm}/.kilo"),
             format!("{home_norm}/.config/kilo"),
         ];
-        // Kilo's config folder moves with XDG_CONFIG_HOME.
+        // Kilo's and OpenCode's config folders move with XDG_CONFIG_HOME.
         if let Some(xdg) = std::env::var("XDG_CONFIG_HOME")
             .ok()
             .map(|value| value.trim().trim_end_matches('/').to_string())
@@ -751,6 +780,7 @@ pub fn reject_broad_artifact_root(path: &Path) -> Result<(), String> {
         {
             broad_roots.push(xdg.clone());
             broad_roots.push(format!("{xdg}/kilo"));
+            broad_roots.push(format!("{xdg}/opencode"));
         }
         for root in &broad_roots {
             if normalized == root.as_str() || normalized == format!("{root}/").as_str() {
@@ -1482,6 +1512,7 @@ mod tests {
 
     #[test]
     fn supporting_files_resolve_beside_the_canonical_skill_md() {
+        let _env = crate::test_env::guard::default_xdg_config_home();
         let ws = temp_dir("support-source");
         let home = temp_dir("support-source-home");
         crate::test_env::write_canonical_skill(&ws, Some("group"), "report", "body");
@@ -1766,5 +1797,93 @@ mod tests {
         assert!(reject_broad_artifact_root(&xdg).is_err());
         assert!(reject_broad_artifact_root(&xdg.join("kilo")).is_err());
         assert!(reject_broad_artifact_root(&xdg.join("kilo/AGENTS.md")).is_ok());
+        assert!(reject_broad_artifact_root(&xdg.join("opencode")).is_err());
+        assert!(reject_broad_artifact_root(&xdg.join("opencode/AGENTS.md")).is_ok());
+    }
+
+    // ── OpenCode config folder ──
+
+    #[test]
+    fn opencode_artifacts_follow_xdg_config_home_and_stay_inside_its_folder() {
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        let base = temp_dir("opencode-xdg");
+        let home = base.join("home");
+        let ws = base.join("ws");
+        fs::create_dir_all(&home).unwrap();
+        crate::test_env::set_test_user_dirs(&home);
+        std::env::remove_var("OPENCODE_SKILLS_PATH");
+        let cases = [
+            (ArtifactId::OpenCodeConfig, "opencode.json"),
+            (ArtifactId::OpenCodeTui, "tui.json"),
+            (ArtifactId::OpenCodeRules, "AGENTS.md"),
+            (
+                ArtifactId::OpenCodeAgent(AgentName::new("repo-scout").unwrap()),
+                "agents/repo-scout.md",
+            ),
+            (
+                ArtifactId::OpenCodeSkill(skill("tdd")),
+                "skills/tdd/SKILL.md",
+            ),
+            (
+                ArtifactId::skill_file(
+                    SkillRoot::OpenCode,
+                    skill("tdd"),
+                    SkillRelPath::new("assets/notes.md").unwrap(),
+                ),
+                "skills/tdd/assets/notes.md",
+            ),
+        ];
+        let check = |folder: &Path, root: &Path| {
+            for (artifact, rel) in &cases {
+                let dest = artifact.resolve_dest(&home, &ws).unwrap();
+                assert_eq!(dest, folder.join(rel), "{artifact:?}");
+                assert_eq!(
+                    artifact.allowlist_root(&home, &ws).unwrap(),
+                    root,
+                    "{artifact:?}"
+                );
+            }
+        };
+
+        // Unset, blank or relative: `~/.config/opencode`, allowlisted from home down.
+        let default = home.join(".config/opencode");
+        std::env::remove_var("XDG_CONFIG_HOME");
+        check(&default, &home);
+        for ignored in ["  ", "relative/config"] {
+            std::env::set_var("XDG_CONFIG_HOME", ignored);
+            check(&default, &home);
+        }
+
+        // Inside home: home stays the allowlisted root.
+        std::env::set_var("XDG_CONFIG_HOME", home.join("dotfiles"));
+        check(&home.join("dotfiles/opencode"), &home);
+
+        // Outside home: the OpenCode folder itself is the root, so a write elsewhere in
+        // XDG_CONFIG_HOME is refused.
+        let xdg = base.join("xdg");
+        fs::create_dir_all(&xdg).unwrap();
+        std::env::set_var("XDG_CONFIG_HOME", &xdg);
+        let folder = xdg.join("opencode");
+        check(&folder, &folder);
+        let root = ArtifactId::OpenCodeRules
+            .allowlist_root(&home, &ws)
+            .unwrap();
+        crate::safe_filesystem::create_directory_all_no_symlinks(&folder, &root).unwrap();
+        crate::safe_filesystem::write_regular_file_atomic(&folder.join("AGENTS.md"), b"x", &root)
+            .expect("inside the folder");
+        for outside in [
+            xdg.join("kilo/AGENTS.md"),
+            xdg.join("AGENTS.md"),
+            home.join(".config/opencode/AGENTS.md"),
+        ] {
+            assert!(
+                crate::safe_filesystem::write_regular_file_atomic(&outside, b"x", &root).is_err(),
+                "{}",
+                outside.display()
+            );
+            assert!(!outside.exists(), "{}", outside.display());
+        }
+        let _ = fs::remove_dir_all(&base);
     }
 }

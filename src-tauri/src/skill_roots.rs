@@ -23,7 +23,8 @@ pub enum SkillRoot {
     /// `$CODEX_HOME/skills` (`CODEX_SKILLS_PATH` when set). Installed into only when `CODEX_HOME`
     /// is customised; otherwise a folder older versions filled and that is cleaned up.
     CodexHome,
-    /// `~/.config/opencode/skills` (`OPENCODE_SKILLS_PATH` when set): older versions only
+    /// `skills` in the OpenCode config folder (`~/.config/opencode`, or
+    /// `$XDG_CONFIG_HOME/opencode`; `OPENCODE_SKILLS_PATH` when set): older versions only
     OpenCode,
     /// The skills folder of the Cursor profile (`CURSOR_SKILLS_PATH` when set): older versions only
     Cursor,
@@ -58,7 +59,18 @@ impl SkillRoot {
             SkillRoot::Claude => "~/.claude/skills",
             SkillRoot::Agents => "~/.agents/skills",
             SkillRoot::CodexHome => "$CODEX_HOME/skills",
-            SkillRoot::OpenCode => "~/.config/opencode/skills",
+            SkillRoot::OpenCode => {
+                let moved = crate::platform_paths::resolve_user_home(
+                    &crate::platform_paths::PlatformEnv::from_process_env(),
+                    crate::platform_paths::Platform::current(),
+                )
+                .is_ok_and(|home| crate::platform_paths::opencode_config_moved(&home));
+                if moved {
+                    "$XDG_CONFIG_HOME/opencode/skills"
+                } else {
+                    "~/.config/opencode/skills"
+                }
+            }
             SkillRoot::Cursor => "~/.cursor/skills",
         }
     }
@@ -80,8 +92,9 @@ impl SkillRoot {
                     ))
                 }
             }
-            SkillRoot::OpenCode => Ok(override_dir("OPENCODE_SKILLS_PATH", home)
-                .unwrap_or_else(|| home.join(".config/opencode/skills"))),
+            SkillRoot::OpenCode => Ok(override_dir("OPENCODE_SKILLS_PATH", home).unwrap_or_else(
+                || crate::platform_paths::opencode_config_dir(home).join("skills"),
+            )),
             SkillRoot::Cursor => match override_dir("CURSOR_SKILLS_PATH", home) {
                 Some(path) => Ok(path),
                 None => Ok(crate::cursor_profile_paths::resolve_cursor_profile_paths()?.skills),

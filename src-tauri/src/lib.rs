@@ -64,6 +64,8 @@ mod opencode_precedence_contract;
 #[cfg(test)]
 mod opencode_tui_contract;
 #[cfg(test)]
+mod opencode_xdg_contract;
+#[cfg(test)]
 mod rules_block_contract;
 #[cfg(test)]
 mod shipped_ownership_contract;

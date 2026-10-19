@@ -28,7 +28,9 @@ trap cleanup EXIT
 REAL_HOME="$(python3 -c 'import os, pwd; print(pwd.getpwuid(os.getuid()).pw_dir)')"
 export SMOKE_HOME="$SMOKE_ROOT/home"
 export HOME="$SMOKE_HOME"
-mkdir -p "$HOME"
+# OpenCode's (and Kilo's) config folder follows XDG_CONFIG_HOME: keep it below the smoke HOME.
+export XDG_CONFIG_HOME="$HOME/.config"
+mkdir -p "$HOME" "$XDG_CONFIG_HOME"
 # Keep rustup/cargo on the real toolchain while harness paths use SMOKE_HOME.
 TOOLCHAIN_HOME="$REAL_HOME"
 export RUSTUP_HOME="$TOOLCHAIN_HOME/.rustup"

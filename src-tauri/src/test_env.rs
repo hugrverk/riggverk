@@ -146,6 +146,27 @@ pub mod guard {
         }
     }
 
+    /// The env lock, with `XDG_CONFIG_HOME` removed until it drops (fields drop in order: the
+    /// environment is restored before the lock is released).
+    pub struct DefaultXdgConfigHome {
+        _restore: EnvRestore,
+        _lock: MutexGuard<'static, ()>,
+    }
+
+    /// For a test that hands a temp home to code that finds OpenCode's config folder
+    /// (`platform_paths::opencode_config_dir`): the folder is then `<home>/.config/opencode`,
+    /// whatever `XDG_CONFIG_HOME` the test process was started with, and nothing reaches a real
+    /// `$XDG_CONFIG_HOME/opencode`.
+    pub fn default_xdg_config_home() -> DefaultXdgConfigHome {
+        let lock = lock();
+        let restore = EnvRestore::capture();
+        unsafe { std::env::remove_var("XDG_CONFIG_HOME") };
+        DefaultXdgConfigHome {
+            _restore: restore,
+            _lock: lock,
+        }
+    }
+
     fn set_optional(key: &str, value: Option<&str>) {
         match value {
             Some(v) => unsafe { std::env::set_var(key, v) },

@@ -459,6 +459,7 @@ mod tests {
 
     #[test]
     fn skill_file_labels_name_the_skill_file_and_its_folder() {
+        let _env = crate::test_env::guard::default_xdg_config_home();
         use crate::artifact_registry::SkillRelPath;
         use crate::skill_roots::SkillRoot;
         let label = |root, rel: &str| {

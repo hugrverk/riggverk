@@ -29,7 +29,7 @@ pub enum SetupSurfaceId {
     OpenCodeConfig,
     /// OpenCode agent files
     OpenCodeAgents,
-    /// OpenCode rules (.config/opencode/AGENTS.md)
+    /// OpenCode rules (AGENTS.md in `~/.config/opencode`, or `$XDG_CONFIG_HOME/opencode`)
     OpenCodeRules,
     /// Codex runtime configuration (config.toml managed sections)
     CodexConfig,

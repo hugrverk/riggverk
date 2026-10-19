@@ -405,32 +405,18 @@ impl LightMcp {
     }
 }
 
-/// An absolute folder that is not the file system root and has no `..` in it: it becomes the
-/// allowlisted root of a file, so it must name one place.
-fn is_plain_absolute_dir(dir: &Path) -> bool {
-    dir.is_absolute()
-        && dir.parent().is_some()
-        && !dir
-            .components()
-            .any(|part| matches!(part, std::path::Component::ParentDir))
-}
-
 fn join_rel(base: PathBuf, rel: &str) -> PathBuf {
     rel.split('/').fold(base, |path, part| path.join(part))
 }
 
 /// `$XDG_CONFIG_HOME` as a plain absolute folder, when a file follows it and the variable is set
-/// to one. A relative value is ignored, as the XDG Base Directory specification says: file
-/// operations would resolve it against the working directory, where no harness looks for it.
+/// to one ([`crate::platform_paths::xdg_config_home_dir`], which OpenCode's folder follows too).
+/// It becomes the allowlisted root of a file, so it must name one place.
 fn xdg_dir(follow_xdg: bool, xdg_config_home: Option<&str>) -> Option<PathBuf> {
     if !follow_xdg {
         return None;
     }
-    xdg_config_home
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(PathBuf::from)
-        .filter(|dir| is_plain_absolute_dir(dir))
+    crate::platform_paths::xdg_config_home_dir(xdg_config_home)
 }
 
 /// `rel` (a path below `home`) for `home`, or below `$XDG_CONFIG_HOME` when `follow_xdg` and the

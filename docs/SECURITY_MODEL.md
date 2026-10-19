@@ -20,11 +20,11 @@
 | App settings | `settings.json` in the app support dir | Autosaved. A corrupt file is renamed aside and defaults load. Not backed up. |
 | OpenCode model override | `opencode-model-selection.json` in the app support dir | Non-secret model preference. Not backed up. |
 | Backups | `backups/` in the app support dir (or `AGENT_WORKSPACE_BACKUP_DIR`) | Layout below. |
-| OpenCode config | `~/.config/opencode/opencode.json` | Managed-key merge. |
-| OpenCode TUI config | `~/.config/opencode/tui.json` | Managed-key merge (`tui_top_level` in `metadata/opencode-managed-keys.json`); strict JSON only, a file with comments or invalid JSON is refused unchanged. |
+| OpenCode config | `opencode.json` in OpenCode's config folder (`$XDG_CONFIG_HOME/opencode`, default `~/.config/opencode`) | Managed-key merge. The folder follows `XDG_CONFIG_HOME` as OpenCode does on every OS; a relative value is ignored, and a folder outside the home directory is the allowlisted root of the OpenCode files. When the variable changes, the files at the old folder are neither updated nor removed. `OPENCODE_CONFIG_DIR` is reported, never written. |
+| OpenCode TUI config | `tui.json` in OpenCode's config folder | Managed-key merge (`tui_top_level` in `metadata/opencode-managed-keys.json`); strict JSON only, a file with comments or invalid JSON is refused unchanged. |
 | Playwright MCP config | `~/.config/playwright-mcp/config.json` (or `PLAYWRIGHT_MCP_CONFIG_PATH`) | Rendered from `templates/playwright-mcp.config.json`. |
-| OpenCode agents | `~/.config/opencode/agents/` | |
-| OpenCode rules | `~/.config/opencode/AGENTS.md` | Managed block merge. |
+| OpenCode agents | `agents/` in OpenCode's config folder | |
+| OpenCode rules | `AGENTS.md` in OpenCode's config folder | Managed block merge. |
 | Codex config | `$CODEX_HOME/config.toml` (default `~/.codex/config.toml`) | Allowlisted keys only; `model` and `model_reasoning_effort` create-only. Target `codex_config`, off by default. |
 | Codex agents | `$CODEX_HOME/agents/` | |
 | Codex rules | `$CODEX_HOME/AGENTS.md` | Managed block merge. |
@@ -37,7 +37,7 @@
 | Pi MCP | `~/.pi/agent/mcp.json` | Entry `mcpServers.playwright` only, same rules. Folders the app creates for it are owner-only (0700). Target `pi_mcp`. |
 | Kilo MCP | `kilo.jsonc` in Kilo's config folder (`$XDG_CONFIG_HOME/kilo`, default `~/.config/kilo`), else an existing `kilo.json` there | Entry `mcp.playwright` only, same rules. Kilo's main config may hold provider keys, so target `kilo_mcp` is **off by default**. The file is parsed as strict JSON although Kilo accepts comments in it. |
 | Cursor agents | `~/.cursor/agents/` | |
-| Skills (all harnesses) | `~/.claude/skills/`, `~/.agents/skills/`, and `$CODEX_HOME/skills/` with a customised `CODEX_HOME` | Chosen from the enabled harnesses, GitHub Copilot, Pi and Kilo Code included (they add no folder of their own: Copilot and Pi use `~/.agents/skills/`). The app's copies in `~/.config/opencode/skills/`, `~/.cursor/skills/` and `$CODEX_HOME/skills/` from older versions are removed on update. Per-file ownership, backup and rollback; your files and dot directories are never touched. |
+| Skills (all harnesses) | `~/.claude/skills/`, `~/.agents/skills/`, and `$CODEX_HOME/skills/` with a customised `CODEX_HOME` | Chosen from the enabled harnesses, GitHub Copilot, Pi and Kilo Code included (they add no folder of their own: Copilot and Pi use `~/.agents/skills/`). The app's copies in `skills/` of OpenCode's config folder, `~/.cursor/skills/` and `$CODEX_HOME/skills/` from older versions are removed on update. Per-file ownership, backup and rollback; your files and dot directories are never touched. |
 | Cursor MCP | `~/.cursor/mcp.json` | Playwright entry only. |
 | Rules files, below the block (Library) | The rules file of an enabled harness (the rules rows above) | Only the bytes after the END line, through the same destination resolver, allowlisted root and symlink checks as Install. Refused with zero mutation for a symlinked file or parent folder, a file without a well-formed block, a Pi masking or peer file, a file over 4 MB or not UTF-8, a refinement line that would read as a marker, and a file whose text outside the block changed since it was opened. Atomic, keeps the file's permission bits, backed up first. |
 
