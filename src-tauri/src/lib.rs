@@ -48,6 +48,8 @@ mod app_data_migration_contract;
 #[cfg(test)]
 mod file_conflicts_contract;
 #[cfg(test)]
+mod health_bundle_contract;
+#[cfg(test)]
 mod identity_contract;
 #[cfg(test)]
 mod library_scope_contract;

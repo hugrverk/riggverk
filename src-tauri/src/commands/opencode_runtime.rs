@@ -655,8 +655,8 @@ const GENERATOR_OUTPUT_CAP: usize = 256 * 1024;
 const GENERATOR_SCRIPT_REL: &str = "scripts/generate-opencode-config.py";
 
 /// The generator from the bundled, read-only resource root, or why it is unavailable.
-fn bundled_generator_script(workspace_root: &Path) -> Result<PathBuf, String> {
-    let script = crate::setup_roots::bundled_root_for(workspace_root)?.join(GENERATOR_SCRIPT_REL);
+fn bundled_generator_script() -> Result<PathBuf, String> {
+    let script = crate::setup_roots::bundled_root()?.join(GENERATOR_SCRIPT_REL);
     if script.is_file() {
         Ok(script)
     } else {
@@ -694,8 +694,8 @@ fn run_generator(
 /// Run the bundled generator's --check against the given source root.
 /// Returns `Some(status, detail)` if the generator ran, `None` if it is unavailable
 /// (bundled script missing or `python3` not spawnable).
-fn run_generator_check(workspace_root: &Path, source_root: &Path) -> Option<(String, String)> {
-    let script = bundled_generator_script(workspace_root).ok()?;
+fn run_generator_check(source_root: &Path) -> Option<(String, String)> {
+    let script = bundled_generator_script().ok()?;
     run_generator_check_with_timeout(&script, source_root, GENERATOR_TIMEOUT)
 }
 
@@ -774,15 +774,14 @@ fn opencode_rules_status(source: &Path, installed: &Path) -> String {
 }
 
 /// Compute OpenCode runtime health against the bundled install sources, with
-/// no CLI probe (`apply_cli_probes` adds those).
+/// no CLI probe (`apply_cli_probes` adds those). The workspace folder plays no part.
 /// This is a pure function suitable for unit testing with temp dirs.
-pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> OpenCodeRuntimeHealth {
-    let bundled = crate::setup_roots::bundled_root_for(workspace_root).ok();
-    compute_health_with_bundle(workspace_root, bundled.as_deref(), home_dir)
+pub fn compute_health(home_dir: &Path) -> OpenCodeRuntimeHealth {
+    let bundled = crate::setup_roots::bundled_root().ok();
+    compute_health_with_bundle(bundled.as_deref(), home_dir)
 }
 
 fn compute_health_with_bundle(
-    workspace_root: &Path,
     bundled_root: Option<&Path>,
     home_dir: &Path,
 ) -> OpenCodeRuntimeHealth {
@@ -1268,7 +1267,7 @@ fn compute_health_with_bundle(
         && snapshot_valid
     {
         // Try running generator --check to verify freshness
-        match bundled_root.and_then(|root| run_generator_check(workspace_root, root)) {
+        match bundled_root.and_then(run_generator_check) {
             Some((status, detail)) => (status, detail),
             None => {
                 generator_unavailable = true;
@@ -1532,15 +1531,11 @@ fn compute_health_with_bundle(
 #[tauri::command(async)]
 pub fn get_opencode_runtime_health() -> Result<OpenCodeRuntimeHealth, String> {
     use crate::agent_targets;
-    use crate::commands::workspace::configured_workspace_path;
-    use crate::settings;
 
-    let workspace_root = configured_workspace_path(&settings::load()).unwrap_or_default();
     let home = agent_targets::home_dir()?;
 
-    // If workspace root doesn't exist or isn't valid, still compute health
-    // so the UI can show missing/invalid status
-    let mut health = compute_health(&workspace_root, &home);
+    // Compared with the bundle alone, so no workspace folder is needed.
+    let mut health = compute_health(&home);
     // The app's own environment: the one it was launched with, not the user's shell's.
     let user = std::env::var("USER").ok().or_else(|| {
         home.file_name()
@@ -1758,7 +1753,10 @@ pub(crate) fn apply_cli_probes(
 /// snapshot that checks as current. The app itself never writes the bundled config sources or snapshot.
 #[cfg(test)]
 pub(crate) fn run_generator_write(workspace_root: &Path) -> Result<ActionResult, String> {
-    match bundled_generator_script(workspace_root) {
+    // Never write into the bundle itself.
+    match crate::setup_roots::bundled_root_for(workspace_root)
+        .and_then(|_| bundled_generator_script())
+    {
         Ok(script) => run_generator_write_with_script(&script, workspace_root),
         Err(error) => Ok(ActionResult::new(
             false,
@@ -2353,7 +2351,7 @@ mod tests {
 
     /// Existing fixtures supply the install bundle explicitly, independently of the runtime root.
     fn compute_health(bundle: &Path, home: &Path) -> OpenCodeRuntimeHealth {
-        super::compute_health_with_bundle(bundle, Some(bundle), home)
+        super::compute_health_with_bundle(Some(bundle), home)
     }
 
     fn temp_root(name: &str) -> PathBuf {
@@ -2453,7 +2451,7 @@ mod tests {
                 &fs::read_to_string(bundle.join("agents").join(name)).unwrap(),
             );
         }
-        assert_eq!(super::compute_health(&ws, &home).status, "synced");
+        assert_eq!(super::compute_health(&home).status, "synced");
 
         write_file(
             &ws,
@@ -2474,7 +2472,7 @@ mod tests {
         write_file(&ws, "templates/sync/opencode-rules.md", "workspace rules");
         write_file(&ws, "agents/architect.md", "workspace agent");
 
-        let health = super::compute_health(&ws, &home);
+        let health = super::compute_health(&home);
         assert_eq!(health.status, "synced", "{:?}", health.checks);
         assert_eq!(health.config_status, "synced");
         assert_eq!(health.tui_status, "synced");
@@ -2501,15 +2499,15 @@ mod tests {
             ".config/opencode/opencode.json",
             r#"{"model":"workspace/main","provider":{"mine":{}}}"#,
         );
-        assert_eq!(super::compute_health(&ws, &home).config_status, "diverged");
+        assert_eq!(super::compute_health(&home).config_status, "diverged");
         install_for(&bundle, &home);
-        assert_eq!(super::compute_health(&ws, &home).config_status, "synced");
+        assert_eq!(super::compute_health(&home).config_status, "synced");
         let installed: serde_json::Value =
             serde_json::from_slice(&fs::read(home.join(".config/opencode/opencode.json")).unwrap())
                 .unwrap();
         assert_eq!(installed["provider"], serde_json::json!({"mine":{}}));
 
-        let unavailable = super::compute_health_with_bundle(&ws, None, &home);
+        let unavailable = super::compute_health_with_bundle(None, &home);
         assert_ne!(unavailable.config_status, "synced");
         assert_eq!(unavailable.bundled_agent_count, 0);
         cleanup(&ws);
@@ -3382,7 +3380,7 @@ mod tests {
         );
 
         let health = compute_health(&ws, &home);
-        let check = super::run_generator_check(&ws, &ws);
+        let check = super::run_generator_check(&ws);
         let write = super::run_generator_write(&ws).expect("bundled generator should run");
         let sentinel_created = sentinel.exists();
         cleanup(&ws);

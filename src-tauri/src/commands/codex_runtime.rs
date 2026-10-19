@@ -301,8 +301,9 @@ fn codex_skill_roots(home_dir: &Path) -> (SkillRoot, SkillRoot) {
     }
 }
 
-pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> CodexRuntimeHealth {
-    let bundled = crate::setup_roots::bundled_root_for(workspace_root).ok();
+/// Health against the app's bundle; the workspace folder plays no part, so none is needed.
+pub fn compute_health(home_dir: &Path) -> CodexRuntimeHealth {
+    let bundled = crate::setup_roots::bundled_root().ok();
     compute_health_with_bundle(bundled.as_deref(), home_dir)
 }
 
@@ -703,9 +704,8 @@ fn compute_health_with_bundle(bundled_root: Option<&Path>, home_dir: &Path) -> C
 
 #[tauri::command]
 pub fn get_codex_runtime_health() -> Result<CodexRuntimeHealth, String> {
-    let workspace_root = super::workspace::workspace_root()?;
     let home_dir = crate::cursor_profile_paths::resolve_user_home()?;
-    Ok(compute_health(&workspace_root, &home_dir))
+    Ok(compute_health(&home_dir))
 }
 
 #[cfg(test)]
@@ -831,13 +831,16 @@ apps._default.default_tools_approval_mode = "prompt"
     fn health_uses_bundled_config_rules_and_agents_after_workspace_edits() {
         let _guard = crate::test_env::guard::lock();
         let _restore = crate::test_env::guard::EnvRestore::capture();
-        unsafe {
-            std::env::remove_var("CODEX_HOME");
-            std::env::remove_var("CODEX_SKILLS_PATH");
-        }
         let bundle = bundled_workspace_root();
         let home = temp_root("codex-baseline-home");
         let ws = temp_root("codex-runtime-baseline");
+        crate::test_env::set_test_user_dirs(&home);
+        unsafe {
+            std::env::remove_var("CODEX_HOME");
+            std::env::remove_var("CODEX_SKILLS_PATH");
+            std::env::set_var("AGENT_WORKSPACE_PATH", &ws);
+        }
+        let health = || get_codex_runtime_health().expect("codex health");
         for (source, dest) in [
             ("templates/sync/codex-rules.md", ".codex/AGENTS.md"),
             ("templates/codex/config.toml", ".codex/config.toml"),
@@ -853,7 +856,9 @@ apps._default.default_tools_approval_mode = "prompt"
                 &fs::read_to_string(bundle.join("templates/codex/agents").join(name)).unwrap(),
             );
         }
-        assert_eq!(compute_health(&ws, &home).config_status, "synced");
+        // No workspace folder at all: health needs only the bundle.
+        cleanup(&ws);
+        assert_eq!(health().config_status, "synced");
         write_file(&ws.join("templates/sync/codex-rules.md"), "workspace rules");
         write_file(
             &ws.join("templates/codex/config.toml"),
@@ -864,15 +869,15 @@ apps._default.default_tools_approval_mode = "prompt"
             "name = \"workspace\"\n",
         );
 
-        let health = compute_health(&ws, &home);
-        assert_eq!(health.config_status, "synced");
-        assert_eq!(health.rules_status, "synced");
-        assert_eq!(health.agents_status, "synced");
+        let edited = health();
+        assert_eq!(edited.config_status, "synced");
+        assert_eq!(edited.rules_status, "synced");
+        assert_eq!(edited.agents_status, "synced");
         write_file(
             &home.join(".codex/config.toml"),
             "approval_policy = \"never\"\n",
         );
-        assert_eq!(compute_health(&ws, &home).config_status, "diverged");
+        assert_eq!(health().config_status, "diverged");
         cleanup(&ws);
         cleanup(&home);
     }
