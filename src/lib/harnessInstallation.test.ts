@@ -208,7 +208,7 @@ describe("the light tier (Copilot, Pi, Kilo)", () => {
     expect([...LIGHT_AGENTS]).toEqual(["copilot", "pi", "kilo"]);
   });
 
-  it("follows Claude in the tab order, so the first five tabs keep their numbers", () => {
+  it("follows Claude in the tab order, preserving the preceding tab numbers", () => {
     expect(HARNESS_NAV_ORDER).toEqual(["codex", "opencode", "cursor", "claude", "copilot", "pi", "kilo"]);
     expect([...HARNESS_NAV_ORDER].sort()).toEqual([...INSTALL_AGENTS].sort());
     expect(HARNESS_LABELS.copilot).toBe("Copilot");

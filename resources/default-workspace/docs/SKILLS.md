@@ -1,10 +1,10 @@
 # Skills
 
-The bundled default workspace contains **25 skills**: 25 canonical semantic skill sources. Source layout may be root-level (`skills/<skill>/SKILL.md`) or grouped one level deep (`skills/<group>/<skill>/SKILL.md`). The app installs the same `SKILL.md`, flat (`<skills-folder>/<name>/SKILL.md`), into the folders the enabled harnesses read.
+The bundled default workspace contains the skills listed below. Source layout may be root-level (`skills/<skill>/SKILL.md`) or grouped one level deep (`skills/<group>/<skill>/SKILL.md`). The app installs the same `SKILL.md`, flat (`<skills-folder>/<name>/SKILL.md`), into the folders the enabled harnesses read.
 
 Do not duplicate full `SKILL.md` content here. This file is an index for choosing the right skill.
 
-## General Skills (19)
+## General Skills
 
 | Skill | Use When |
 | --- | --- |
@@ -28,13 +28,13 @@ Do not duplicate full `SKILL.md` content here. This file is an index for choosin
 | `tdd` | Using a narrow red-green-refactor loop for behavior changes, fixes, regressions, and tests. |
 | `zoom-out` | Explaining unfamiliar code in broader system context before editing. |
 
-## Shared Domain Skill (1)
+## Shared Domain Skill
 
 | Skill | Use When |
 | --- | --- |
 | `wordpress-woocommerce` | Working on WordPress/WooCommerce themes, templates, hooks, filters, plugins, REST/AJAX, checkout/cart/product UI, security, i18n, and frontend integration. |
 
-## Kretsverket Skills (5)
+## Kretsverket Skills
 
 Grouped source: `skills/kretsverket/<skill>/SKILL.md`.
 
@@ -105,7 +105,7 @@ The `description` is the only selection signal Codex, OpenCode, and Cursor see, 
 
 ## Supporting files
 
-Files next to a `SKILL.md` (references, schemas, templates, scripts) install with the skill, at the same relative paths, so a skill can say "read `HUNTING.md`" or "run `scripts/verify-report.mjs`" and mean the file next to it. `security-audit` carries 19 such files and `kretsverket-status-report` carries `assets/report-template.html` and `scripts/verify-report.mjs`.
+Files next to a `SKILL.md` (references, schemas, templates, scripts) install with the skill, at the same relative paths, so a skill can say "read `HUNTING.md`" or "run `scripts/verify-report.mjs`" and mean the file next to it. `security-audit` carries its reference files and `kretsverket-status-report` carries `assets/report-template.html` and `scripts/verify-report.mjs`.
 
 Rules for the files in a skill directory in the bundle: regular files only (no symlinks), names of letters, digits, `.`, `_` and `-` that do not start with a dot, at most four path levels, at most 64 files and 2 MiB in total, at most 1 MiB per file, and no `SKILL.md` below the skill's own. Dot files are ignored. A skill that breaks a rule installs nothing until it is fixed. Write paths in a skill relative to its directory; never point a skill at the workspace folder, since the installed copy lives in a skills folder.
 
@@ -151,7 +151,7 @@ The folders are worked out again on every preview from the enabled harnesses; sw
 
 The folders overlap, and you can add skills of your own anywhere, so each harness page also shows which copies that harness will actually load. Nothing is written for this view: it lists the skills folders the harness reads and opens only the `SKILL.md` of their direct subfolders.
 
-- The runtime facts get a `skill loads` row: `25 skills, 1 copy each` when every name has one copy, `3 names with 2 copies` (a warning) when some have more, then up to five of those names with the folders their copies are in, and `+N more`. The `skills` row of the surfaces list adds the number, for example `current · 3 duplicates`. With the cursor on `skills`, a `reads` row names the folders the harness reads and which of them are missing.
+- The runtime facts get a `skill loads` row: `N skills, 1 copy each` when every name has one copy, `3 names with 2 copies` (a warning) when some have more, then up to five of those names with the folders their copies are in, and `+N more`. The `skills` row of the surfaces list adds the number, for example `current · 3 duplicates`. With the cursor on `skills`, a `reads` row names the folders the harness reads and which of them are missing.
 - What a harness does with one name found twice: Claude Code reads one folder, so there is one copy. Codex lists every copy, and a plain `$name` mention then selects none of them (flagged as ambiguous). OpenCode 1.x keeps one copy per name and which one varies from run to run (flagged when the copies differ; byte-identical copies are shown as information only, not as a warning). Cursor may list every copy; that is not verified for every Cursor version, so it is reported as a possible duplicate. Copilot CLI, Pi and Kilo keep one copy by folder order: Copilot's `~/.copilot/skills` beats `~/.agents/skills` without a message, Pi's agent folder beats `~/.agents/skills` and prints a collision, and Kilo ranks `~/.claude/skills` below `~/.agents/skills` below `~/.kilo/skills`, the last one winning with a log line. When their copies differ, the page says the first folder wins and the others are hidden; byte-identical copies are information only.
 - A copy is the app's when its skill is in the bundle and the file equals the bundled `SKILL.md`, the hash recorded at the last install, or a version the app shipped before. Anything else, a skill of your own or an edited bundled one, is yours. Duplicates that include a copy of yours are listed apart as `yours, AW cannot fix` and never counted among the app's: the app does not touch your copies. An update removes the app's own copies from folders nobody needs, which clears the duplicates it caused.
 - Only personal folders are looked at: project folders (`.claude/skills`, `.agents/skills`, `.codex/skills`, `.cursor/skills` in a repository) and managed policy folders are not. Hidden entries (Codex's `.system`) are skipped. A copy reached through a symlink or by two folders counts once, and a link that leads out of your home folder is not followed. A `SKILL.md` over 1 MiB, folders beyond the first 1000 in one skills folder, and `SKILL.md` text beyond 32 MiB in one skills folder are skipped, and the `reads` row says how many.

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 import sys
 from pathlib import Path
@@ -15,6 +16,24 @@ HARNESS_INSTALLATION = ROOT / "src" / "lib" / "harnessInstallation.ts"
 
 README_PATHS = (APP_README, WORKSPACE_README)
 
+COUNT_CLAIM = re.compile(
+    r"\b(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)"
+    r"[ \t-]+(?:(?:bundled|canonical|semantic|central|native|global|Markdown|TOML|read-only|starter|generic)\s+)*"
+    r"(?:skills?|agents?|subagents?|harnesses)\b(?!\.md\b)",
+    re.IGNORECASE,
+)
+# Fixed behavior examples, rather than sizes of shipped collections. Exempt only the phrase,
+# never the rest of its line, so an example cannot hide an unrelated stale catalog count.
+COUNT_ALLOWLIST = {
+    "docs/WORKSPACE_CONTRACT.md": ("one skill in one folder",),
+    "resources/default-workspace/docs/SKILLS.md": (
+        "two-agent implementation",
+        "two harnesses both read",
+        "one skill is not listed twice",
+        "one skills folder",
+    ),
+}
+
 
 def fail(message: str) -> None:
     print(f"FAIL: {message}", file=sys.stderr)
@@ -25,6 +44,45 @@ def read(path: Path) -> str:
     if not path.is_file():
         fail(f"missing file: {path}")
     return path.read_text(encoding="utf-8")
+
+
+def count_claims(path: str, text: str) -> list[str]:
+    errors = []
+    for number, line in enumerate(text.splitlines(), 1):
+        line = line.replace("**", "").replace("__", "")
+        for allowed in COUNT_ALLOWLIST.get(path, ()):
+            line = line.replace(allowed, "")
+        for match in COUNT_CLAIM.finditer(line):
+            errors.append(f"{path}:{number}: hard-coded collection count: {match.group(0)}")
+    return errors
+
+
+def validate_agent_lists(contract: str) -> None:
+    workspace = ROOT / "resources/default-workspace"
+    agents = json.loads(read(workspace / "metadata/agents.json"))["agents"]
+    adapters = json.loads(read(workspace / "metadata/agent-adapters.json"))["roles"]
+    cursor = json.loads(read(workspace / "templates/cursor/manifest.json"))
+    expected = {"Cursor": {Path(name).stem for name in cursor["agents"]}}
+    for label, harness in (("OpenCode", "opencode"), ("Claude Code", "claude"), ("Codex", "codex")):
+        roles = {Path(name).stem for name, entry in agents.items() if harness in entry["targets"]}
+        adapter_roles = {name for name, entry in adapters.items() if harness in entry["harnesses"]}
+        if roles != adapter_roles:
+            fail(f"{label}: agents.json and agent-adapters.json roles differ")
+        expected[label] = {Path(adapters[name]["harnesses"][harness]["output"]).stem for name in roles}
+
+    section = re.search(r"^## Agents\n(.*?)(?=^## |\Z)", contract, re.MULTILINE | re.DOTALL)
+    if not section:
+        fail("WORKSPACE_CONTRACT.md missing Agents section")
+    rows = re.findall(r"^- (OpenCode|Claude Code|Codex|Cursor): (`.+)$", section.group(1), re.MULTILINE)
+    documented = {label: set(re.findall(r"`([^`]+)`", names)) for label, names in rows}
+    if len(rows) != len(documented) or documented != expected:
+        fail("WORKSPACE_CONTRACT.md Agents lists must match agent metadata and Cursor manifest")
+
+    rules = read(workspace / "docs/AGENT_RULES.md")
+    section = re.search(r"^### Cursor\n(.*?)(?=^#{1,3} |\Z)", rules, re.MULTILINE | re.DOTALL)
+    names = set(re.findall(r"^- ([a-z][a-z0-9-]*)$", section.group(1), re.MULTILINE)) if section else set()
+    if names != expected["Cursor"]:
+        fail("AGENT_RULES.md Cursor list must match Cursor manifest")
 
 
 def contains_positive_claim(text: str, phrase: str) -> bool:
@@ -50,8 +108,17 @@ def main() -> None:
         for banned in ("ux-workspace", "private-context"):
             if banned in text:
                 fail(f"{rel} must not mention deprecated repo boundary: {banned}")
-        if "24 starter skills" in text:
-            fail(f"{rel} must not claim 24 starter skills")
+
+    for path in (
+        *README_PATHS,
+        ROOT / "docs/WORKSPACE_CONTRACT.md",
+        ROOT / "docs/SECURITY_MODEL.md",
+        ROOT / "docs/APP_RELEASE_SMOKE.md",
+        *sorted((ROOT / "resources/default-workspace/docs").glob("*.md")),
+        ROOT / "resources/default-workspace/templates/cursor/README.md",
+    ):
+        if errors := count_claims(path.relative_to(ROOT).as_posix(), read(path)):
+            fail(errors[0])
 
     app_text = read(APP_README)
     settings_text = read(SETTINGS_DEFAULTS)
@@ -111,6 +178,7 @@ def main() -> None:
             fail(f"{rel} must not reference ux-context")
 
     contract = read(ROOT / "docs/WORKSPACE_CONTRACT.md")
+    validate_agent_lists(contract)
     for stale in (
         "read-only summary of bundled default resources in the Workspace tab",
         "read-only workspace creation dry-run plan",

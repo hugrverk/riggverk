@@ -28,7 +28,7 @@ mod tests {
     };
     use crate::skill_roots::SkillRoot;
     use crate::stable_digest;
-    use crate::test_env::{guard, guard::EnvRestore, set_test_user_dirs};
+    use crate::test_env::{guard, guard::EnvRestore, set_test_user_dirs, source_skill_count};
 
     const C: HarnessId = HarnessId::Claude;
     const X: HarnessId = HarnessId::Codex;
@@ -626,7 +626,7 @@ mod tests {
             BTreeSet::from(["tdd/my-notes.md".to_string()]),
             "only the file the app did not write stays, in its own directory"
         );
-        assert!(files_below(&env.root(SkillRoot::Claude)).len() > 25);
+        assert!(files_below(&env.root(SkillRoot::Claude)).len() > source_skill_count());
 
         // Enabling Codex again installs the folder again.
         env.enable(&[C, X]);
@@ -863,7 +863,7 @@ mod tests {
             fs::read(env.dest(SkillRoot::Agents, "tdd", "SKILL.md")).unwrap(),
             b"my own tdd\n"
         );
-        assert!(files_below(&env.root(SkillRoot::Claude)).len() > 25);
+        assert!(files_below(&env.root(SkillRoot::Claude)).len() > source_skill_count());
     }
 
     // ── The folders older versions filled ──
@@ -978,7 +978,7 @@ mod tests {
             });
         };
 
-        // The runtime workspace still holds the 109 files of the per-harness skill adapters and
+        // The runtime workspace still holds the files of the per-harness skill adapters and
         // their manifest, and the files of the first skills bundle.
         let mut retired: Vec<String> = Vec::new();
         for harness in ["claude", "codex", "opencode", "cursor"] {

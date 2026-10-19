@@ -670,11 +670,11 @@ mod tests {
     }
 
     #[test]
-    fn bundled_workspace_has_exactly_25_skills() {
+    fn bundled_workspace_lists_every_skill() {
         let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../resources/default-workspace");
         let catalog = discover_skill_catalog(&repo).expect("bundled catalog");
         validate_bundled_catalog_all_targets(&catalog).expect("bundled targets");
-        assert_eq!(catalog.len(), 25, "expected 25 bundled skills");
+        assert_eq!(catalog.len(), crate::test_env::source_skill_count());
     }
 
     // ── Supporting files ──

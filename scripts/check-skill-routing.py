@@ -19,35 +19,6 @@ RETIRED_ADAPTER_PATHS = (
 AGENTS_METADATA = WS_ROOT / "metadata/agents.json"
 AGENT_ADAPTERS_MANIFEST = WS_ROOT / "metadata/agent-adapters.json"
 CLAUDE_AGENT_HEADERS = WS_ROOT / "templates/claude/agents"
-EXPECTED_COUNT = 25
-
-EXPECTED_SKILLS = {
-    "accessibility-review",
-    "adversarial-implementation",
-    "browser-qa",
-    "context-budget",
-    "current-docs",
-    "database-migrations",
-    "diagnose",
-    "frontend-design",
-    "handoff",
-    "implementation-plan",
-    "kretsverket-editor-change",
-    "kretsverket-electrical-drawing",
-    "kretsverket-file-compatibility",
-    "kretsverket-symbol-system",
-    "kretsverket-status-report",
-    "minimal-implementation",
-    "prototype",
-    "release-check",
-    "retro",
-    "screenshot-review",
-    "security-audit",
-    "security-review",
-    "tdd",
-    "wordpress-woocommerce",
-    "zoom-out",
-}
 
 ALL_HARNESSES = {"codex", "opencode", "claude", "cursor"}
 
@@ -74,21 +45,6 @@ DESCRIPTION_TRIGGER = "Use when"
 DONE_WHEN_RE = re.compile(r"^Done when: \S", re.MULTILINE)
 BLOCK_SCALAR_RE = re.compile(r"^[>|][+-]?\d*$")
 PLAIN_SCALAR_BAD_START = "\"'[]{}>|*&!%@`#"
-
-REMOVED_SKILLS = {
-    "agent-report-review",
-    "caveman",
-    "dependency-evaluation",
-    "grill-me",
-    "grill-with-docs",
-    "improve-codebase-architecture",
-    "nextjs-product-slice",
-    "supabase-rls-review",
-    "to-prd",
-    "triage",
-    "woocommerce-pdp-review",
-    "write-a-skill",
-}
 
 STATIC_ROUTING_SOURCES = [
     WS_ROOT / "docs/SKILLS.md",
@@ -147,6 +103,21 @@ def rel(path: Path) -> str:
         return path.relative_to(REPO_ROOT).as_posix()
     except ValueError:
         return str(path)
+
+
+def removed_skill_names() -> set[str]:
+    source = REPO_ROOT / "src-tauri/src/managed_bootstrap.rs"
+    match = re.search(
+        r"pub const REMOVED_SKILL_NAMES:\s*&\[&str\]\s*=\s*&\[([^\]]*)\];",
+        source.read_text(encoding="utf-8"),
+        re.DOTALL,
+    )
+    if not match:
+        fail(f"{rel(source)}: missing REMOVED_SKILL_NAMES declaration")
+    return set(re.findall(r'"([^"]+)"', match.group(1)))
+
+
+REMOVED_SKILLS = removed_skill_names()
 
 
 def parse_fields(frontmatter: str) -> dict[str, str]:
@@ -462,9 +433,6 @@ STALE_SKILL_FOLDER_CLAIMS = [
 ]
 
 STALE_CLAIMS = [
-    # Count claims
-    ("28 bundled skill", "stale skill count 28"),
-    ("24 generic skill", "stale generic skill count"),
     # Layout claims
     ("flat-only", "stale flat-only source layout claim"),
     ("root-level layout only", "stale flat-only source layout claim"),
@@ -520,8 +488,6 @@ def validate_routing_sources(discovered: set[str]) -> None:
         if not source.is_file():
             fail(f"routing source missing: {source}")
         text = source.read_text(encoding="utf-8")
-        if "28 skill" in text.lower():
-            fail(f"{source}: stale skill count 28")
         if "flat-only" in text.lower() or "root-level layout only" in text.lower():
             fail(f"{source}: stale flat-only source layout claim")
         for claim in STALE_SKILL_FOLDER_CLAIMS:
@@ -533,11 +499,14 @@ def validate_routing_sources(discovered: set[str]) -> None:
             if removed in text:
                 fail(f"{source}: references removed skill {removed}")
         if source.name == "SKILLS.md":
-            if f"{EXPECTED_COUNT} skill" not in text:
-                fail(f"{source}: missing exact count of {EXPECTED_COUNT} skills")
-            for skill in discovered:
-                if f"`{skill}`" not in text:
-                    fail(f"{source}: bundled skill missing from catalog: {skill}")
+            rows = re.findall(r"^\|\s*`([a-z][a-z0-9-]*)`\s*\|", text, re.MULTILINE)
+            catalog = set(rows)
+            if len(rows) != len(catalog):
+                fail(f"{source}: duplicate skill catalog rows")
+            if missing := discovered - catalog:
+                fail(f"{source}: bundled skills missing from catalog: {sorted(missing)}")
+            if extra := catalog - discovered:
+                fail(f"{source}: catalog rows without bundled skills: {sorted(extra)}")
 
 
 SCANNED_SUFFIXES = {".md", ".mdc", ".ts", ".tsx", ".json", ".py", ".sh", ".rs", ".toml", ".yaml", ".yml"}
@@ -565,7 +534,7 @@ def scan_repo_for_removed_skills() -> None:
                 continue
             if rel_posix.startswith(f"{DEPRECATED_METADATA_PREFIX}/"):
                 continue
-            # 2. This checker script itself (documents the set)
+            # 2. This checker script itself (parses the removed names)
             if rel_posix == "scripts/check-skill-routing.py":
                 continue
             if removed in text:
@@ -575,17 +544,6 @@ def scan_repo_for_removed_skills() -> None:
 def main() -> None:
     discovered_map = discover_skills()
     discovered = set(discovered_map.keys())
-
-    if len(discovered) != EXPECTED_COUNT:
-        fail(f"expected {EXPECTED_COUNT} skills, found {len(discovered)}")
-
-    if discovered != EXPECTED_SKILLS:
-        missing = EXPECTED_SKILLS - discovered
-        extra = discovered - EXPECTED_SKILLS
-        if missing:
-            fail(f"missing expected skills: {sorted(missing)}")
-        if extra:
-            fail(f"unexpected extra skills: {sorted(extra)}")
 
     validate_skill_metadata(discovered_map)
     validate_related(discovered_map)
@@ -597,7 +555,7 @@ def main() -> None:
     validate_active_docs()
     scan_repo_for_removed_skills()
 
-    print(f"PASS: {EXPECTED_COUNT} bundled skills and routing sources aligned")
+    print(f"PASS: {len(discovered)} bundled skills and routing sources aligned")
 
 
 if __name__ == "__main__":

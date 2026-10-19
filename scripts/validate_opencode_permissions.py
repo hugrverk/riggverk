@@ -36,7 +36,7 @@ SNAPSHOT_PATH = REPO_ROOT / "resources" / "default-workspace" / "templates" / "o
 MANAGED_KEYS_PATH = REPO_ROOT / "resources" / "default-workspace" / "metadata" / "opencode-managed-keys.json"
 
 READONLY_ROLES = ("repo-scout", "inspector", "sentinel")
-ALL_ROLES = ("architect", "repo-scout", "inspector", "sentinel", "scribe", "verifier")
+ALL_ROLES = tuple(path.name.removesuffix(".role.json") for path in sorted(ROLES_DIR.glob("*.role.json")))
 RESTRICTIVE_ROLES = READONLY_ROLES + ("scribe", "verifier")
 
 def _root_form(pattern: str) -> str:

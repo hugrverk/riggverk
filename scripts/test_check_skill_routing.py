@@ -26,6 +26,9 @@ def build_tree(dest: Path) -> None:
     shutil.copytree(ROOT / WS, dest / WS)
     shutil.copytree(ROOT / "docs", dest / "docs")
     shutil.copy2(ROOT / "README.md", dest / "README.md")
+    bootstrap = Path("src-tauri/src/managed_bootstrap.rs")
+    (dest / bootstrap).parent.mkdir(parents=True)
+    shutil.copy2(ROOT / bootstrap, dest / bootstrap)
 
 
 def run(tree: Path, script: str, *args: str) -> subprocess.CompletedProcess[str]:
@@ -63,6 +66,45 @@ class CheckSkillRoutingTests(unittest.TestCase):
     def test_baseline_passes(self) -> None:
         result = run(self.tree, "check-skill-routing.py")
         self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_catalog_row_is_required_even_if_skill_is_mentioned_elsewhere(self) -> None:
+        catalog = self.tree / WS / "docs/SKILLS.md"
+        self.edit(catalog, "| `tdd` | Using", "| Testing | Using")
+        self.assert_fails("bundled skills missing from catalog: ['tdd']")
+
+    def test_catalog_row_without_skill_fails(self) -> None:
+        self.append(self.tree / WS / "docs/SKILLS.md", "\n| `unknown-skill` | Missing source. |\n")
+        self.assert_fails("catalog rows without bundled skills: ['unknown-skill']")
+
+    def test_duplicate_catalog_row_fails(self) -> None:
+        self.append(self.tree / WS / "docs/SKILLS.md", "\n| `tdd` | Duplicate. |\n")
+        self.assert_fails("duplicate skill catalog rows")
+
+    def test_new_skill_with_catalog_row_needs_no_count_pin(self) -> None:
+        source = self.skill("tdd").read_text(encoding="utf-8")
+        name = "fixture-skill"
+        dest = self.tree / WS / "skills" / name / "SKILL.md"
+        dest.parent.mkdir()
+        dest.write_text(source.replace("name: tdd", f"name: {name}", 1), encoding="utf-8")
+        self.append(self.tree / WS / "docs/SKILLS.md", f"\n| `{name}` | Fixture. |\n")
+        result = run(self.tree, "check-skill-routing.py")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        count = len(list((self.tree / WS / "skills").rglob("SKILL.md")))
+        self.assertIn(f"PASS: {count} bundled skills", result.stdout)
+
+    def test_removed_names_come_from_bootstrap(self) -> None:
+        name = "fixture-" + "retired-skill"
+        self.edit(
+            self.tree / "src-tauri/src/managed_bootstrap.rs",
+            "pub const REMOVED_SKILL_NAMES: &[&str] = &[",
+            f'pub const REMOVED_SKILL_NAMES: &[&str] = &[\n    "{name}",',
+        )
+        self.append(self.tree / WS / "templates/global-agent-rules.md", f"\nUse {name}.\n")
+        self.assert_fails(f"references removed skill {name}")
+
+    def test_missing_removed_names_declaration_fails(self) -> None:
+        self.edit(self.tree / "src-tauri/src/managed_bootstrap.rs", "pub const REMOVED_SKILL_NAMES:", "const OTHER_NAMES:")
+        self.assert_fails("missing REMOVED_SKILL_NAMES declaration")
 
     def append(self, path: Path, text: str) -> None:
         path.write_text(path.read_text(encoding="utf-8") + text, encoding="utf-8")

@@ -6,7 +6,7 @@ Keys fire only when no text field has focus; Escape leaves a field. `Mod` is Cmd
 
 ## Tabs
 
-`1`-`7` open, in order: workspace, codex, opencode, cursor, claude, library, settings. Copilot, Pi, and Kilo are off by default; once enabled in Settings their tabs follow claude, so the first five keep their numbers (with all seven on, Settings has no digit; `Mod+,` and `:settings` still open it). A harness you disable in Settings is hidden and the remaining tabs renumber. The same names work as commands (`:codex`, `:pi`, `:library docs`).
+`1`-`7` open, in order: workspace, codex, opencode, cursor, claude, library, settings. Copilot, Pi, and Kilo are off by default; once enabled in Settings their tabs follow claude, so the tabs before them keep their numbers (with every harness on, Settings has no digit; `Mod+,` and `:settings` still open it). A harness you disable in Settings is hidden and the remaining tabs renumber. The same names work as commands (`:codex`, `:pi`, `:library docs`).
 
 ## Keyboard reference
 
@@ -59,7 +59,7 @@ Keys fire only when no text field has focus; Escape leaves a field. `Mod` is Cmd
 
 | Command | Effect |
 | --- | --- |
-| `:workspace`, `:codex`, `:opencode`, `:cursor`, `:claude`, `:copilot`, `:pi`, `:kilo`, `:library [source]`, `:settings` | Open a tab (aliases `:ws`, `:lib`); the last three harnesses only while enabled |
+| `:workspace`, `:codex`, `:opencode`, `:cursor`, `:claude`, `:copilot`, `:pi`, `:kilo`, `:library [source]`, `:settings` | Open a tab (aliases `:ws`, `:lib`); the light harnesses only while enabled |
 | `:update <target>`, `:update --all` | Open the install review. Targets: `workspace` and the enabled harnesses |
 | `:preview <target>`, `:preview --all` | Same plan with no apply |
 | `:rollback` | Dry run, then confirm, then restore the last transaction |
@@ -86,9 +86,9 @@ Codex, OpenCode, Cursor, and Claude each have **targets** (what that harness may
 
 Targets are a multi-select list: Space toggles, the change autosaves, and a target that is off is left out of the plan and shown as `off`. Skills are not a target: one `skills` surface installs into the folders the enabled harnesses read, so an update on any harness page can also touch a folder another harness reads. Codex rules, agents, and config are separate targets; `codex_config` starts off.
 
-The runtime facts also say which skill copies the harness will load, read from the skills folders it reads and never written: a `skill loads` row (`25 skills, 1 copy each`, or `3 names with 2 copies` as a warning, with up to five of those names and `+N more`), and the `skills` surface row adds `· 3 duplicates` when there are any. With the cursor on `skills`, a `reads` row lists the folders the harness reads. Duplicates that include a skill of your own read `yours, AW cannot fix`. See [SKILLS.md](SKILLS.md#where-skills-load) for what each harness does with a name it finds twice.
+The runtime facts also say which skill copies the harness will load, read from the skills folders it reads and never written: a `skill loads` row (`N skills, 1 copy each`, or `3 names with 2 copies` as a warning, with up to five of those names and `+N more`), and the `skills` surface row adds `· 3 duplicates` when there are any. With the cursor on `skills`, a `reads` row lists the folders the harness reads. Duplicates that include a skill of your own read `yours, AW cannot fix`. See [SKILLS.md](SKILLS.md#where-skills-load) for what each harness does with a name it finds twice.
 
-OpenCode also shows the model override for `model`, `small model` and an optional `subagent model` (the models of the five read-only subagents; unset, they use the main model): `e` edits it, `s` saves it to the app-level override file, and the next OpenCode install writes it into the installed config. Each row says `source: override | bundled default` and `state: applied | pending apply (u to update)`. `x` deletes the override and returns every row to the bundled default; the next install applies that and removes the subagent entries (see [OPENCODE_CONFIG.md](OPENCODE_CONFIG.md)).
+OpenCode also shows the model override for `model`, `small model` and an optional `subagent model` (the models of the read-only subagents; unset, they use the main model): `e` edits it, `s` saves it to the app-level override file, and the next OpenCode install writes it into the installed config. Each row says `source: override | bundled default` and `state: applied | pending apply (u to update)`. `x` deletes the override and returns every row to the bundled default; the next install applies that and removes the subagent entries (see [OPENCODE_CONFIG.md](OPENCODE_CONFIG.md)).
 
 ## Install review
 

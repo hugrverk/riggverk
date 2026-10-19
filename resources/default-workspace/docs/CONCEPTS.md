@@ -28,7 +28,7 @@ So editing a file in the workspace changes what the Library shows, not what Clau
 
 ## Skills
 
-Reusable agent instruction files. Canonical skills live under `skills/` (25 in the bundle, all for Codex, OpenCode, Claude, and Cursor, and shared with the opt-in Copilot, Pi, and Kilo). The same `SKILL.md` is installed, flat, into the global skills folders the enabled harnesses read (`~/.claude/skills`, `~/.agents/skills`); notes meant for one harness sit at the end of the file under `## Harness notes`. Skills are one surface for all harnesses and are never gated by target toggles. See [SKILLS.md](SKILLS.md).
+Reusable agent instruction files. Canonical skills live under `skills/` (for Codex, OpenCode, Claude, and Cursor, and shared with the opt-in Copilot, Pi, and Kilo). The same `SKILL.md` is installed, flat, into the global skills folders the enabled harnesses read (`~/.claude/skills`, `~/.agents/skills`); notes meant for one harness sit at the end of the file under `## Harness notes`. Skills are one surface for all harnesses and are never gated by target toggles. See [SKILLS.md](SKILLS.md).
 
 ## Rules and the managed block
 

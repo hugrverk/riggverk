@@ -157,7 +157,7 @@ describe("StatusBar", () => {
 
   it("reads the tab hint from the number of visible tabs, up to the nine the digit keys reach", () => {
     const tabHint = () => status().querySelector(".hints > span")!.textContent;
-    // Workspace, four harnesses, Library, Settings.
+    // Workspace, the default harnesses, Library, Settings.
     renderInFrame(<View />);
     expect(tabHint()).toBe("1–7 tab");
     cleanup();
@@ -168,11 +168,11 @@ describe("StatusBar", () => {
     renderInFrame(<View />, { enabledHarnessIds: [] });
     expect(tabHint()).toBe("1–3 tab");
     cleanup();
-    // Seven harnesses make ten tabs: Settings loses its digit, so the hint stops at 9.
+    // With every harness on, Settings falls beyond the digit shortcuts, so the hint stops at 9.
     renderInFrame(<View />, { enabledHarnessIds: [...INSTALL_AGENTS] });
     expect(tabHint()).toBe("1–9 tab");
     cleanup();
-    // One light harness on top of the four central ones: eight tabs.
+    // Kilo alongside the central harnesses.
     renderInFrame(<View />, { enabledHarnessIds: [...CENTRAL_AGENTS, "kilo"] });
     expect(tabHint()).toBe("1–8 tab");
   });

@@ -28,7 +28,7 @@ describe("TopLine", () => {
     ]);
   });
 
-  it("appends Copilot, Pi and Kilo after Claude, so the first five tabs keep their numbers", () => {
+  it("appends Copilot, Pi and Kilo after Claude, preserving the preceding tab numbers", () => {
     const { container } = render(
       <TopLine
         view="start"
@@ -38,7 +38,7 @@ describe("TopLine", () => {
         onSwitchView={vi.fn()}
       />,
     );
-    expect(tabLabels(container)).toEqual([
+    const expectedLabels = [
       "Workspace",
       "Codex",
       "OpenCode",
@@ -49,10 +49,11 @@ describe("TopLine", () => {
       "Kilo",
       "Library",
       "Settings",
-    ]);
+    ];
+    expect(tabLabels(container)).toEqual(expectedLabels);
     const numbers = Array.from(container.querySelectorAll("button.tab b")).map(el => el.textContent);
-    expect(numbers.slice(0, 5)).toEqual(["1", "2", "3", "4", "5"]);
-    // With seven harnesses on, Settings is the tenth tab and loses its digit; the others keep theirs.
+    expect(numbers).toEqual(expectedLabels.map((_, index) => String(index + 1)));
+    // With every harness on, Settings falls beyond the digit shortcuts; the others keep theirs.
     expect(screen.getByRole("button", { name: "Kilo" }).getAttribute("aria-keyshortcuts")).toBe("8");
     expect(screen.getByRole("button", { name: "Library" }).getAttribute("aria-keyshortcuts")).toBe("9");
     expect(screen.getByRole("button", { name: "Settings" }).getAttribute("aria-keyshortcuts")).toBeNull();
@@ -65,11 +66,10 @@ describe("TopLine", () => {
   });
 
   it("shows no light tab on its own defaults", () => {
-    const { container } = render(
+    render(
       <TopLine view="start" libraryDirty={false} settingsErrored={false} onSwitchView={vi.fn()} />,
     );
     for (const name of ["Copilot", "Pi", "Kilo"]) expect(screen.queryByRole("button", { name })).toBeNull();
-    expect(container.querySelectorAll("nav.tabs button.tab")).toHaveLength(7);
   });
 
   it("does not render a Tools button", () => {

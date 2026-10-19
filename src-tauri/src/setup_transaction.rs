@@ -28,11 +28,10 @@ pub const ARTIFACT_MANIFEST_SCHEMA_VERSION: u32 = 5;
 /// the count, and a damaged or hand-made manifest must not be able to ask for an unbounded amount.
 /// A plan over the limit fails before the first write, so an upgrade that does not fit is one the
 /// user can never apply: the limit has to cover the largest legitimate first upgrade with room
-/// to spare. That is a profile from before the shared skill files with all four harnesses enabled:
-/// the whole bundle (about 125 workspace files), the 110 retired adapter and manifest files, the
-/// skills in the two folders that are wanted (92 files), the app's older copies in every other
-/// folder (75, and 60 more for skills the app dropped long ago) and the agent, rules and
-/// config files: 516 operations, tested in `skill_folders_contract`.
+/// to spare. That is a profile from before the shared skill files with all central harnesses
+/// enabled: the whole bundle, retired adapters and their manifest, skills in the wanted folders,
+/// the app's older copies in other folders (including removed skills), and agent, rules and
+/// config files, tested in `skill_folders_contract`.
 pub(crate) const MAX_MANIFEST_OPERATIONS: usize = 1024;
 
 /// Error reported when rollback finds user changes made after apply. Callers
@@ -2024,9 +2023,9 @@ fn keep_stale_units_whole(planned: &mut [PlannedArtifact]) {
 /// reads (`+ file (note)`):
 ///
 /// ```text
-/// + ~/.agents/skills (25 skills, 46 files)
-/// ~ ~/.claude/skills (3 skills, 5 files)
-/// - $CODEX_HOME/skills (25 skills, owned copies)
+/// + ~/.agents/skills (N skills, M files)
+/// ~ ~/.claude/skills (N skills, M files)
+/// - $CODEX_HOME/skills (N skills, owned copies)
 /// ! ~/.cursor/skills/tdd (edited, kept)
 /// = ~/.claude/skills/diagnose (you manage; bundled update available)
 /// ```
@@ -3211,10 +3210,12 @@ mod tests {
             .iter()
             .filter(|artifact| matches!(artifact, ArtifactId::SkillFile(file) if file.rel.is_skill_md()))
             .count();
-        assert_eq!(skill_md, 25, "one SKILL.md per bundled skill");
+        let (expected_skills, supporting) =
+            crate::test_env::skill_file_counts(&repo.join("skills"));
+        assert_eq!(skill_md, expected_skills, "one SKILL.md per bundled skill");
         assert_eq!(
             artifacts.len() - skill_md,
-            21,
+            supporting,
             "supporting files of the bundled skills"
         );
     }

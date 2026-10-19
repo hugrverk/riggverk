@@ -24,7 +24,7 @@ mod tests {
     };
     use crate::skill_discovery::discover_skill_catalog;
     use crate::skill_roots::SkillRoot;
-    use crate::test_env::{guard, guard::EnvRestore, set_test_user_dirs};
+    use crate::test_env::{guard, guard::EnvRestore, set_test_user_dirs, skill_file_counts};
 
     fn current_bundled_workspace_src() -> PathBuf {
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../resources/default-workspace")
@@ -203,9 +203,7 @@ mod tests {
     }
 
     fn source_skill_count() -> usize {
-        discover_skill_catalog(&bundled_workspace_src())
-            .expect("source catalog")
-            .len()
+        skill_file_counts(&bundled_workspace_src().join("skills")).0
     }
 
     #[derive(Clone, Copy)]
@@ -646,7 +644,7 @@ mod tests {
             discover_skill_catalog(&workspace)
                 .expect("installed catalog")
                 .len(),
-            25
+            source_skill_count()
         );
         assert!(read_managed_state(&workspace).is_some());
         let current = crate::installation_status::status_for_surfaces(
@@ -671,8 +669,12 @@ mod tests {
             discover_skill_catalog(&fixture.ws)
                 .expect("runtime catalog")
                 .len(),
-            37
+            source_skill_count() + REMOVED_SKILL_NAMES.len()
         );
+        let agent_metadata: serde_json::Value = serde_json::from_slice(
+            &fs::read(bundled_workspace_src().join("metadata/agents.json")).expect("source agents"),
+        )
+        .expect("agent metadata");
         assert_eq!(
             fs::read_dir(fixture.ws.join("agents"))
                 .expect("runtime agents")
@@ -681,7 +683,8 @@ mod tests {
                     entry.path().extension().and_then(|value| value.to_str()) == Some("md")
                 })
                 .count(),
-            7
+            // The bundled agents and the historical scout the fixture seeds.
+            agent_metadata["agents"].as_object().expect("agents").len() + 1
         );
         let expected_harness_skills = source_skill_count() + REMOVED_SKILL_NAMES.len();
         for harness in ["opencode", "codex", "claude", "cursor"] {
@@ -783,7 +786,7 @@ mod tests {
         let catalog = discover_skill_catalog(&fixture.ws).expect("catalog");
         assert_eq!(
             catalog.len(),
-            26,
+            source_skill_count() + 1,
             "modified stale runtime skill is preserved"
         );
         assert!(
@@ -804,8 +807,9 @@ mod tests {
         // `~/.claude/skills` and `~/.agents/skills`, and nothing else is left of the app's copies.
         assert_eq!(
             fixture.skill_count(SkillRoot::Claude),
-            25,
-            "Claude should have 25 skills after reconciliation"
+            source_skill_count(),
+            "Claude should have {} skills after reconciliation",
+            source_skill_count()
         );
         for removed in REMOVED_SKILL_NAMES {
             assert!(
@@ -854,8 +858,9 @@ mod tests {
         let legacy = SkillRoot::Agents.path(&fixture.home).expect("agents root");
         assert_eq!(
             fixture.skill_count(SkillRoot::Agents),
-            25 + 2,
-            "25 current skills, the modified stale skill and the user's own skill"
+            source_skill_count() + 2,
+            "{} current skills, the modified stale skill and the user's own skill",
+            source_skill_count()
         );
         assert!(
             legacy.join(".system/prompt.md").is_file(),
