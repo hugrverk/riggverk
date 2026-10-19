@@ -84,25 +84,27 @@ function opencodeCliRow(cli: OpenCodeCliHealth | null): KvItem[] {
   }
 }
 
-/** `installed/bundled`, then the files that are not as bundled, grouped by their status: "missing: a.md". */
+/** The agent files: `synced · 6/6`, or `installed/bundled` and the files that are not as bundled, grouped by their status: "missing: a.md". */
 function opencodeAgentsRow(health: OpenCodeRuntimeHealth): KvItem {
   const filesByStatus = new Map<string, string[]>();
   for (const { status, filename } of health.agent_mismatches) filesByStatus.set(status, [...(filesByStatus.get(status) ?? []), filename]);
   const groups = [...filesByStatus].map(([status, files]) => `${status}: ${files.join(", ")}`);
-  return {
-    label: "agents",
-    value: [`${health.installed_bundled_agent_count}/${health.bundled_agent_count} installed`, ...groups].join(" · "),
-    tone: groups.length > 0 ? "warn" : "ok",
-    wrap: groups.length > 0,
-  };
+  const count = `${health.installed_bundled_agent_count}/${health.bundled_agent_count}`;
+  return groups.length > 0
+    ? { label: "agents", value: [count, ...groups].join(" · "), tone: "warn", wrap: true }
+    : { label: "agents", value: `synced · ${count}`, tone: "ok" };
 }
 
-/** The status, then the managed keys that differ from the bundled config, then what makes the file JSONC (the app does not rewrite it then). */
+/** A status, then the managed keys that differ from the bundled file (by name), then notes about the file. */
+function statusKeysRow(label: string, status: string, keys: readonly string[], notes: readonly string[] = []): KvItem {
+  const parts = [runtimeChipLabel(status).toLowerCase(), ...(keys.length > 0 ? [keys.join(", ")] : []), ...notes];
+  return { label, value: parts.join(" · "), tone: toneOf(status), wrap: parts.length > 1 };
+}
+
+/** The config status and its differing keys, then what makes the file JSONC (the app does not rewrite it then). */
 function opencodeConfigRow(health: OpenCodeRuntimeHealth): KvItem {
-  const keys = health.config_diverged_keys;
   const notStrict = health.config_precedence.installed_not_strict;
-  const parts = [runtimeChipLabel(health.config_status).toLowerCase(), ...(keys.length > 0 ? [keys.join(", ")] : []), ...(notStrict.length > 0 ? [`has ${notStrict.join(", ")}`] : [])];
-  return { label: "config", value: parts.join(" · "), tone: toneOf(health.config_status), wrap: parts.length > 1 };
+  return statusKeysRow("config", health.config_status, health.config_diverged_keys, notStrict.length > 0 ? [`has ${notStrict.join(", ")}`] : []);
 }
 
 /** What else changes the config OpenCode runs, by name only: sibling files and their managed keys, config variables, a system managed config. The warnings say what to do. */
@@ -115,8 +117,20 @@ function opencodeOverridesRow({ config_precedence: precedence }: OpenCodeRuntime
   return parts.length > 0 ? [{ label: "overrides", value: parts.join(" · "), tone: "warn", wrap: true }] : [];
 }
 
+/**
+ * The pinned `@playwright/mcp` version with a status, like the Copilot, Pi and Kilo pages: `synced · 0.0.48`. The
+ * status is the managed `mcp.playwright` entry against the bundled one, so there is none while the file is not compared.
+ */
+function opencodePlaywrightRow(health: OpenCodeRuntimeHealth): KvItem {
+  const label = "mcp playwright";
+  const version = health.playwright_mcp_version;
+  if (health.config_diverged_keys.includes("mcp.playwright")) return { label, value: version ? `diverged · ${version}` : "diverged", tone: "warn" };
+  if (!version) return { label, value: "none", tone: "dim" };
+  const compared = health.config_status === "synced" || health.config_status === "diverged";
+  return compared ? { label, value: `synced · ${version}`, tone: "ok" } : { label, value: version, tone: "dim" };
+}
+
 function opencodeRows(health: OpenCodeRuntimeHealth): KvItem[] {
-  const playwright = health.playwright_mcp_version;
   return [
     ...opencodeCliRow(health.cli),
     ...textRow("default agent", health.default_agent),
@@ -125,10 +139,8 @@ function opencodeRows(health: OpenCodeRuntimeHealth): KvItem[] {
     opencodeAgentsRow(health),
     opencodeConfigRow(health),
     ...opencodeOverridesRow(health),
-    playwright
-      ? { label: "mcp playwright", value: playwright, tone: health.config_diverged_keys.includes("mcp.playwright") ? "warn" as const : "ok" as const }
-      : { label: "mcp playwright", value: "none", tone: "dim" as const },
-    statusRow("tui", health.tui_status),
+    opencodePlaywrightRow(health),
+    statusKeysRow("tui", health.tui_status, health.tui_diverged_keys),
     ...nextRows(health.status, health.next_action),
     ...warningRows(health.warnings),
   ];

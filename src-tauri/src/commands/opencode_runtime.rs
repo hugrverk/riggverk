@@ -62,6 +62,9 @@ pub struct OpenCodeRuntimeHealth {
     pub template_tui_path: String,
     pub installed_tui_path: String,
     pub tui_status: String,
+    /// Managed `tui.json` keys that differ from the bundled config, by name; empty when it matches
+    /// or cannot be compared (a missing or unusable file).
+    pub tui_diverged_keys: Vec<String>,
     // New generated snapshot fields
     pub generated_snapshot_base_path: String,
     pub generated_snapshot_policy_path: String,
@@ -1526,6 +1529,7 @@ fn compute_health_in(
         template_tui_path: template_tui_path_str,
         installed_tui_path: installed_tui_path_str,
         tui_status,
+        tui_diverged_keys: tui_diverged_keys.unwrap_or_default(),
         generated_snapshot_base_path: generated_snapshot_base_path_str,
         generated_snapshot_policy_path: generated_snapshot_policy_path_str,
         generated_snapshot_path: generated_snapshot_path_str,
@@ -3190,6 +3194,7 @@ mod tests {
             r#"{"keybinds":{"leader":"ctrl+x"},"mouse":true,"plugin":["p"],"theme":"system","scroll_speed":3,"$schema":"https://opencode.ai/tui.json"}"#,
         );
         assert_eq!(health.tui_status, "synced");
+        assert!(health.tui_diverged_keys.is_empty());
         assert_eq!(tui_check(&health, "tui_configs_match").status, "pass");
     }
 
@@ -3200,6 +3205,8 @@ mod tests {
             r#"{"keybinds":{"leader":"ctrl+x"},"theme":"dark","$schema":"https://opencode.ai/tui.json"}"#,
         );
         assert_eq!(health.tui_status, "diverged");
+        // Names only, in the order the check detail lists them; a user key is not among them.
+        assert_eq!(health.tui_diverged_keys, ["theme", "mouse"]);
         let check = tui_check(&health, "tui_configs_match");
         assert_eq!(check.status, "warn");
         assert!(check.detail.contains("(theme, mouse)"), "{}", check.detail);
@@ -3213,6 +3220,8 @@ mod tests {
             "{\n  // SECRET-MARKER\n  \"theme\": \"system\"\n}\n",
         );
         assert_eq!(health.tui_status, "diverged");
+        // An unusable file cannot be compared, so no key is named and none of its text is kept.
+        assert!(health.tui_diverged_keys.is_empty());
         let check = tui_check(&health, "installed_tui_config_exists");
         assert_eq!(check.status, "fail");
         assert!(
