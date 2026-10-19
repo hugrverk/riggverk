@@ -11,6 +11,9 @@ import type {
   DocsHealth,
   DocSummary,
   DocumentContent,
+  RulesFileContent,
+  RulesFileSummary,
+  RulesSurfaceId,
   SkillSummary,
 } from "../types";
 import { AgentItemList } from "./library/AgentItemList";
@@ -19,7 +22,7 @@ import { CreateDocForm } from "./library/CreateDocForm";
 import { DocItemList } from "./library/DocItemList";
 import { DocumentPane } from "./library/DocumentPane";
 import { buildEntry, emptyStateHint } from "./library/entry";
-import { RULES_LIST_KEY, RulesItemList } from "./library/RulesItemList";
+import { RULES_LIST_KEY, rulesFileKey, RulesItemList } from "./library/RulesItemList";
 import { SkillItemList } from "./library/SkillItemList";
 import { SourceSwitcher, type LibrarySourceTab } from "./library/SourceSwitcher";
 import { useLibraryKeys } from "./library/useLibraryKeys";
@@ -67,10 +70,25 @@ export interface LibraryViewProps {
   onSetCreateDocSlug: (value: string) => void;
   onCreateDoc: () => void;
 
-  // Rules, skills, agents and configs are bundled with the app: read-only here, so they have no draft.
-  // Rules
+  // Rules: the bundled base is read-only; in the user's own rules files the refinements below the managed
+  // block are editable.
   agentTemplate: DocumentContent | null;
   agentTargets: AgentTargetMeta[];
+  rulesFiles: RulesFileSummary[];
+  /** The open rules file; null while the bundled base row is open. */
+  activeRulesSurface: RulesSurfaceId | null;
+  activeRulesFile: RulesFileContent | null;
+  onSelectRulesFile: (surface: RulesSurfaceId | null) => void | Promise<void>;
+  onOpenRulesFile: (surface: RulesSurfaceId) => void;
+  rulesDraft: string;
+  rulesDirty: boolean;
+  rulesSaving: boolean;
+  rulesSaveResult: ActionResult | null;
+  onChangeRulesDraft: (value: string) => void;
+  onSaveRules: () => void;
+  onResetRules: () => void;
+
+  // Skills, agents and configs are bundled with the app: read-only here, so they have no draft.
 
   // Skills
   skills: SkillSummary[];
@@ -230,9 +248,18 @@ export function LibraryView(props: LibraryViewProps) {
       list = (
         <RulesItemList
           agentTemplate={props.agentTemplate}
-          activeKey={props.agentTemplate ? RULES_LIST_KEY : null}
+          rulesFiles={workspaceValid ? props.rulesFiles : []}
+          activeKey={
+            props.activeRulesSurface !== null
+              ? rulesFileKey(props.activeRulesSurface)
+              : props.agentTemplate
+                ? RULES_LIST_KEY
+                : null
+          }
           followCursor={followCursor}
+          onSelect={props.onSelectRulesFile}
           onActivate={onActivate}
+          activateHint={entry && !entry.readOnly ? "edit" : "read"}
         />
       );
       break;

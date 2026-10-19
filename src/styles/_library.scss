@@ -137,6 +137,18 @@
   border-bottom: 1px solid var(--border);
 }
 
+/* Read-only text above the editable part of the same file (a rules file's managed block): dimmed, not a control. */
+.lib-before {
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-muted);
+}
+
+.lib-before .markdown-body :is(h1, h2, h3, h4, strong) {
+  color: var(--text-muted);
+}
+
 /* Rendered working copy (DocContent): base rules for the scoped reading surface, then the TUI treatment of
    .markdown-body (mockup "rendered"). The doubled class keeps the TUI rules ahead of the base ones. */
 

@@ -13,8 +13,8 @@ mod tests {
         apply_setup, preview_setup, rollback_setup_transaction, SetupResult,
     };
     use crate::commands::{
-        apply_rules_conversion, preview_rules_conversion, preview_rules_diff,
-        set_rules_user_managed,
+        apply_rules_conversion, preview_rules_conversion, preview_rules_diff, read_rules_file,
+        save_rules_refinements, set_rules_user_managed,
     };
     use crate::installation_status::{status_for_surfaces, InstallationState};
     use crate::managed_state::{
@@ -208,6 +208,45 @@ mod tests {
         assert_eq!(
             env.plan(SetupSurfaceId::ClaudeRules).kind,
             OperationKind::NoChange
+        );
+    }
+
+    #[test]
+    fn library_refinement_edits_are_kept_by_install_like_hand_edits() {
+        let env = Env::new("library-refine");
+        let source = source_of("claude-rules.md");
+        // Installed and current, then an older base recorded so the next Install updates the block.
+        env.write_claude(&format!("{PREFIX}{}{SUFFIX}", block(&source)));
+        let opened = read_rules_file("claude_rules".into()).expect("read");
+        let refined = "\n## Library refinements\n- answer in Swedish\n";
+        let saved = save_rules_refinements(
+            "claude_rules".into(),
+            refined.into(),
+            opened.revision.expect("revision"),
+        )
+        .expect("save");
+        assert_eq!(saved.stdout, "saved with backup");
+        assert_eq!(
+            env.read_claude(),
+            format!("{PREFIX}{}{refined}", block(&source))
+        );
+
+        // A refinement edit is not a conflict: the block is untouched.
+        let planned = env.plan(SetupSurfaceId::ClaudeRules);
+        assert_eq!(planned.kind, OperationKind::NoChange);
+        assert_eq!(planned.rules.unwrap().refinement_lines, 4);
+
+        // A base update replaces the block and keeps the saved refinements byte for byte.
+        env.write_claude(&format!("{PREFIX}{}{refined}", block(OLD_BASE)));
+        env.record(&ArtifactId::ClaudeRules, &body_digest(OLD_BASE));
+        let planned = env.plan(SetupSurfaceId::ClaudeRules);
+        assert_eq!(planned.kind, OperationKind::Update);
+        assert_eq!(planned.rules.unwrap().plan, RulesPlan::UpdateBlock);
+        let result = env.apply("claude_rules");
+        assert!(result.success, "{}", result.message);
+        assert_eq!(
+            env.read_claude(),
+            format!("{PREFIX}{}{refined}", block(&source))
         );
     }
 
