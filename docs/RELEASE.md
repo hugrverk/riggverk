@@ -6,18 +6,17 @@ Run the repository release check from the repository root:
 ./scripts/release-check.sh
 ```
 
-It writes only ignored build artifacts in the repository and temporary directories. Apply smokes run against a temporary `HOME`, workspace, and backup root, so the real home is never touched. Order and contents change often; read the `step` lines in the script. In outline it runs:
+It writes only ignored build artifacts in the repository and temporary directories. Apply smokes run against a temporary `HOME`, workspace, and backup root, so the real home is never touched. Each step names the script that owns its checks; [MAINTAINING.md](./MAINTAINING.md) ("Where guards live") says what each one protects and how to run it alone. In outline it runs:
 
-- `git status --short` and `git diff --check`
-- shell syntax checks
-- README and docs drift (`check-readme-docs-drift.py`), the curated Library docs registry, and the default-workspace copy list
+- `git status --short` and `git diff --check`, the toolchain, and `bash -n` on every tracked shell script
 - generated files are current (`python3 scripts/generate.py check`): agent adapters, rule adapters, OpenCode config snapshot, bundled what's new, pre-manifest ownership, rules history, shipped digests
-- skill catalog and routing checks (`check-skill-routing.py`) and OpenCode permission composition and contract
-- merge-script unit tests, the Codex merge secret-marker guard, and the pre-manifest upgrade smoke
-- forbidden source scans (shell command strings, `eval`, removed skill flows) and managed-installation contract guards, including the single reviewed install owner
-- frontend gate: `npm run typecheck`, `npm test` and `npm run build`
-- Rust gate: `cargo fmt --check`, `cargo clippy -D warnings`, `cargo test`
-- the Tauri runtime smoke (`smoke-tauri-runtime.sh`)
+- every `scripts/test_*.py`, including the Codex merge secret-marker test, and the app version check
+- README and docs drift, skill catalog and routing, the bundle manifest and the curated Library docs registry
+- bundle content (`check-bundle-content.py`), the Cursor profile, the bundled merge-script tests, the OpenCode permission contract, harness ids, the managed-installation contract and Rust shell spawns
+- source scans (`check-source.py`): product identity, Tauri config, startup order, forbidden patterns (shell command strings, `eval`, remote skill installs) and UI rules
+- frontend: `npm run typecheck`, `npm test` and `npm run build`
+- Rust: `cargo fmt --check`, `cargo clippy -D warnings`, `cargo test`
+- the pre-manifest upgrade smoke and the Tauri runtime smoke (`smoke-tauri-runtime.sh`)
 
 It does not drive the Tauri webview, install into a real profile, or read `.env` files.
 
