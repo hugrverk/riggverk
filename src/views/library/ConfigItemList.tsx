@@ -18,7 +18,6 @@ interface ConfigRow {
   name: string;
   meta: string;
   group: string;
-  readOnly: boolean;
 }
 
 interface ConfigItemListProps {
@@ -54,15 +53,13 @@ export function ConfigItemList({
         name: target.label,
         meta: target.source_rel,
         group: "targets",
-        readOnly: false,
       })),
       ...(hasSources
         ? configEditorSources.map((source): ConfigRow => ({
             key: `${SOURCE_PREFIX}${source.id}`,
             name: source.label,
-            meta: source.editable ? "" : "read-only",
+            meta: "",
             group: "sources",
-            readOnly: !source.editable,
           }))
         : []),
     ],
@@ -88,13 +85,14 @@ export function ConfigItemList({
       renderItem={row => (
         <>
           <span className="nm">{row.name}</span>
-          {row.meta && <span className={row.readOnly ? "meta c-warn" : "meta"}>{row.meta}</span>}
+          {row.meta && <span className="meta">{row.meta}</span>}
         </>
       )}
       activeKey={activeTargetId ? configListKey(activeTargetId, activeSourceType, hasSources) : null}
       followCursor={followCursor}
       onSelect={select}
       onActivate={onActivate}
+      activateHint="read"
     />
   );
 }

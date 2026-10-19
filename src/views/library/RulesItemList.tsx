@@ -22,13 +22,14 @@ export function RulesItemList({ agentTemplate, activeKey, followCursor, onActiva
       renderItem={row => (
         <>
           <span className="nm">{row.name}</span>
-          <span className="meta">{agentTemplate ? "template" : "loading"}</span>
+          <span className="meta">{agentTemplate ? "bundled" : "loading"}</span>
         </>
       )}
       activeKey={activeKey}
       followCursor={followCursor}
       onSelect={() => {}}
       onActivate={onActivate}
+      activateHint="read"
     />
   );
 }

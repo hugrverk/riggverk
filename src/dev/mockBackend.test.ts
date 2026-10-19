@@ -1,7 +1,10 @@
 import { invoke } from "@tauri-apps/api/core";
 import { beforeAll, describe, expect, it, vi } from "vitest";
+import type { ActionResult } from "../components/TerminalOutput";
 import type {
   AgentTargetMeta,
+  DocSummary,
+  DocumentContent,
   FileDiffView,
   InstallationStatus,
   LightRuntimeHealth,
@@ -192,5 +195,38 @@ describe("mock backend: skill and agent files in conflict or kept", () => {
       ["agent:verifier", "conflict"],
       ["agent:sentinel", "conflict"],
     ]);
+  });
+});
+
+describe("mock backend: the Library edits only personal docs", () => {
+  it("lists bundled docs and personal docs with the ids and sources the backend gives", async () => {
+    const docs = await invoke<DocSummary[]>("list_docs");
+    expect(docs.filter(doc => doc.source === "custom").map(doc => doc.id)).toEqual(["custom:project-notes"]);
+    expect(docs.filter(doc => doc.source !== "custom").every(doc => doc.source === "curated" && !doc.id.startsWith("custom:"))).toBe(true);
+  });
+
+  it("refuses to save or open a bundled doc, and saves, opens and creates personal docs", async () => {
+    await expect(invoke("save_doc", { id: "README.md", content: "edited" })).rejects.toThrow("read-only here");
+    await expect(invoke("open_doc", { id: "README.md" })).rejects.toThrow("read-only here");
+    expect(await invoke<ActionResult>("save_doc", { id: "custom:project-notes", content: "# Notes\n" })).toMatchObject({ success: true });
+    expect(await invoke<ActionResult>("open_doc", { id: "custom:project-notes" })).toMatchObject({ success: true });
+    const created = await invoke<DocumentContent>("create_doc", { title: "Mine", slug: "mine", content: null });
+    expect(created).toMatchObject({ id: "custom:mine", source: "custom", section: "Context" });
+  });
+
+  it("does not answer the removed commands that edited or opened bundled items", async () => {
+    const removed = [
+      "save_agent_template",
+      "save_agent_source",
+      "save_opencode_config_source",
+      "open_agent_template",
+      "open_agent_source",
+      "open_config_template",
+      "open_opencode_config_source",
+      "open_skill",
+    ];
+    for (const cmd of removed) {
+      await expect(invoke(cmd, {})).rejects.toThrow("unhandled command");
+    }
   });
 });

@@ -1189,21 +1189,23 @@ function skillContent(id: string): string {
   ].join("\n");
 }
 
+// Like the backend: bundled docs have their workspace path as id ("curated"), personal docs `custom:<slug>`.
 const docStore = new Map<string, DocumentContent>();
 if (scenario !== "empty") {
-  const docRows: Array<[string, string, string]> = [
-    ["readme", "README", "root"],
-    ["skills-catalog", "SKILLS", "docs"],
-    ["harness-matrix", "HARNESS_MATRIX", "docs"],
-    ["backlog", "BACKLOG", "docs"],
+  const docRows: Array<[string, string, string, string]> = [
+    ["README.md", "README", "Start", "curated"],
+    ["docs/SKILLS.md", "SKILLS", "Reference", "curated"],
+    ["docs/TROUBLESHOOTING.md", "TROUBLESHOOTING", "Reference", "curated"],
+    ["custom:project-notes", "Project notes", "Context", "custom"],
   ];
-  for (const [id, title, section] of docRows) {
+  for (const [id, title, section, source] of docRows) {
+    const rel = source === "custom" ? `docs/context/${id.slice("custom:".length)}.md` : id;
     docStore.set(id, {
       id,
       title,
-      path: `${WORKSPACE}/${section === "root" ? "" : "docs/"}${title}.md`,
+      path: `${WORKSPACE}/${rel}`,
       section,
-      source: "workspace",
+      source,
       content: `# ${title}\n\nThis is the ${title} document in the mock workspace.\n\n## Section\n\n- First point with \`code\`.\n- Second point.\n\n| Column | Value |\n| --- | --- |\n| rows | ${docStore.size + 3} |\n`,
     });
   }
@@ -1252,7 +1254,7 @@ function agentMetadata(): AgentMetadataListResponse {
   };
 }
 
-let agentTemplate: DocumentContent = {
+const agentTemplate: DocumentContent = {
   id: "agent-template",
   title: "AGENTS.md template",
   path: `${WORKSPACE}/templates/sync/codex-rules.md`,
@@ -1262,9 +1264,9 @@ let agentTemplate: DocumentContent = {
 };
 
 const configSources: ConfigEditorSourceMeta[] = [
-  { id: "base", label: "base", rel_path: "templates/opencode.json", editable: true, helper: "bundled base config" },
-  { id: "policy", label: "policy", rel_path: "templates/opencode-policy.json", editable: true, helper: "local overrides" },
-  { id: "snapshot", label: "snapshot", rel_path: "generated/opencode.json", editable: false, helper: "snapshot written on install" },
+  { id: "base", label: "base", rel_path: "templates/opencode.json", helper: "bundled base config" },
+  { id: "policy", label: "policy", rel_path: "templates/opencode-policy.json", helper: "local overrides" },
+  { id: "snapshot", label: "snapshot", rel_path: "generated/opencode.json", helper: "snapshot written on install" },
 ];
 
 const configStore = new Map<string, DocumentContent>([
@@ -1456,7 +1458,11 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
   // `?pick=<folder>` stands in for the native folder dialog (workspace picker QA); without it the dialog is cancelled.
   if (cmd === "plugin:dialog|open") return new URLSearchParams(location.search).get("pick");
   if (cmd.startsWith("plugin:dialog|")) return null;
-  if (cmd.startsWith("open_")) {
+  // Like the backend: `open_doc` opens personal docs only; bundled items are read-only and never opened.
+  if (cmd === "open_doc" && !arg<string>(args, "id").startsWith("custom:")) {
+    throw new Error(`${arg<string>(args, "id")} is bundled with the app and read-only here`);
+  }
+  if (cmd === "open_doc" || cmd === "open_backups_folder" || cmd === "open_default_workspace_folder") {
     await delay(100);
     return actionResult(cmd, true, "");
   }
@@ -1613,16 +1619,20 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
       return doc;
     }
     case "save_doc": {
-      const doc = docStore.get(arg<string>(args, "id"));
+      const id = arg<string>(args, "id");
+      // Like the backend: only personal docs are written.
+      if (!id.startsWith("custom:")) throw new Error(`${id} is bundled with the app and read-only here`);
+      const doc = docStore.get(id);
       if (!doc) throw new Error("doc not found");
       docStore.set(doc.id, { ...doc, content: arg<string>(args, "content") });
-      return actionResult("save_doc", true, `saved ${doc.path}`);
+      return actionResult("save_doc", true, "saved with backup");
     }
     case "create_doc": {
       const slug = arg<string>(args, "slug");
       const title = arg<string>(args, "title");
-      const doc: DocumentContent = { id: slug, title, path: `${WORKSPACE}/docs/${slug}.md`, section: "docs", source: "workspace", content: `# ${title}\n` };
-      docStore.set(slug, doc);
+      const doc: DocumentContent = { id: `custom:${slug}`, title, path: `docs/context/${slug}.md`, section: "Context", source: "custom", content: `# ${title}\n` };
+      if (docStore.has(doc.id)) throw new Error(`doc already exists: ${doc.id}`);
+      docStore.set(doc.id, doc);
       return doc;
     }
     case "list_agent_metadata":
@@ -1632,17 +1642,8 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
       if (!agent) throw new Error("agent not found");
       return agent;
     }
-    case "save_agent_source": {
-      const agent = agentStore.get(arg<string>(args, "filename"));
-      if (!agent) throw new Error("agent not found");
-      agentStore.set(agent.id, { ...agent, content: arg<string>(args, "content") });
-      return actionResult("save_agent_source", true, `saved ${agent.path}`);
-    }
     case "read_agent_template":
       return agentTemplate;
-    case "save_agent_template":
-      agentTemplate = { ...agentTemplate, content: arg<string>(args, "content") };
-      return actionResult("save_agent_template", true, `saved ${agentTemplate.path}`);
     case "read_config_template": {
       const targetId = arg<string>(args, "targetId");
       const target = TARGETS.find(t => t.id === targetId);
@@ -1654,12 +1655,6 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
       const source = configStore.get(arg<string>(args, "sourceType"));
       if (!source) throw new Error("config source not found");
       return source;
-    }
-    case "save_opencode_config_source": {
-      const source = configStore.get(arg<string>(args, "sourceType"));
-      if (!source) throw new Error("config source not found");
-      configStore.set(source.id, { ...source, content: arg<string>(args, "content") });
-      return actionResult("save_opencode_config_source", true, `saved ${source.path}`);
     }
     case "read_opencode_model_selection":
       return modelSelection;

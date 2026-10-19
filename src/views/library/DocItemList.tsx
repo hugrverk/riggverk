@@ -35,6 +35,8 @@ interface DocItemListProps {
   onGoToWorkspaceRepair: () => void;
   search: string;
   onSearchChange: (query: string) => void;
+  /** Enter hint: "edit" while the open doc is a personal doc, "read" for a bundled one. */
+  activateHint: string;
 }
 
 export function DocItemList({
@@ -48,6 +50,7 @@ export function DocItemList({
   onGoToWorkspaceRepair,
   search,
   onSearchChange,
+  activateHint,
 }: DocItemListProps) {
   const missingCount = docsHealth?.missing_count ?? 0;
   const showStaleBanner = workspaceValid && missingCount > 0;
@@ -86,6 +89,7 @@ export function DocItemList({
           followCursor={followCursor}
           onSelect={onSelect}
           onActivate={onActivate}
+          activateHint={activateHint}
           filter={{
             value: search,
             onChange: onSearchChange,
