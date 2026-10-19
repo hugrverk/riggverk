@@ -2,7 +2,6 @@ use serde::Serialize;
 use std::path::{Path, PathBuf};
 
 use super::status::file_eq;
-use super::workspace::workspace_root;
 use crate::cursor_profile_ops::{legacy_permission_cleanup_status, LegacyPermissionCleanupStatus};
 use crate::cursor_profile_paths::{
     cursor_profile_root_display, resolve_cursor_profile_paths, CursorProfilePaths,
@@ -344,13 +343,12 @@ fn global_mcp_status(
 const CURSOR_SETUP_RUNTIME_KEY: &str = "setup_runtime";
 const CURSOR_SETUP_RUNTIME_NATIVE: &str = "native";
 
+/// Whether the bundled Cursor manifest is one this app installs from. Reported as its own row;
+/// it no longer decides the overall status, since the bundle cannot fall behind the app.
 fn workspace_resources_status(root: &Path, warnings: &mut Vec<String>) -> String {
     let manifest_path = cursor_root(root).join("manifest.json");
     if !manifest_path.is_file() {
-        warnings.push(
-            "Workspace Cursor manifest.json is missing. Run Install or Update on the Cursor page."
-                .into(),
-        );
+        warnings.push("The bundled Cursor manifest.json is missing.".into());
         return "stale".into();
     }
     let manifest_content = match std::fs::read_to_string(&manifest_path) {
@@ -360,7 +358,7 @@ fn workspace_resources_status(root: &Path, warnings: &mut Vec<String>) -> String
     let parsed: serde_json::Value = match serde_json::from_str(&manifest_content) {
         Ok(parsed) => parsed,
         Err(_) => {
-            warnings.push("Installed workspace Cursor manifest.json is invalid.".into());
+            warnings.push("The bundled Cursor manifest.json is invalid.".into());
             return "stale".into();
         }
     };
@@ -369,10 +367,8 @@ fn workspace_resources_status(root: &Path, warnings: &mut Vec<String>) -> String
         .and_then(|v| v.as_str())
         != Some(CURSOR_SETUP_RUNTIME_NATIVE)
     {
-        warnings.push(
-            "Installed workspace Cursor manifest is stale (missing native setup_runtime). Run Install or Update on the Cursor page."
-                .into(),
-        );
+        warnings
+            .push("The bundled Cursor manifest is stale (missing native setup_runtime).".into());
         return "stale".into();
     }
 
@@ -412,9 +408,11 @@ fn manifest_status(root: &Path, warnings: &mut Vec<String>) -> String {
     "valid".into()
 }
 
+/// Installed Cursor files compared with the app's bundle, the source every install copies from;
+/// the workspace folder plays no part.
 #[tauri::command]
 pub fn get_cursor_profile_health() -> Result<CursorProfileHealth, String> {
-    let root = workspace_root()?;
+    let root = crate::setup_roots::bundled_root()?;
     let paths = resolve_cursor_profile_paths()?;
     let profile_root = cursor_profile_root_display(&paths);
     let profile_root_source = "default".to_string();
@@ -432,10 +430,9 @@ pub fn get_cursor_profile_health() -> Result<CursorProfileHealth, String> {
     let (global_agents_status, global_agents_count, expected_global_agents_count) =
         sync_dir_status(&cursor.join("agents"), &paths.agents, "md");
 
-    let bundled = crate::setup_roots::bundled_root_for(&root).ok();
     let (global_skills_status, global_skills_count, expected_global_skills_count) =
         skill_roots_status(
-            bundled.as_deref(),
+            Some(&root),
             &paths.user_home,
             &cursor_skill_roots(&paths.user_home),
         );
@@ -456,34 +453,27 @@ pub fn get_cursor_profile_health() -> Result<CursorProfileHealth, String> {
             | LegacyPermissionCleanupStatus::BlockedInvalidJson
             | LegacyPermissionCleanupStatus::BlockedInvalidAllowlist
     );
-    let status =
-        if workspace_resources_status == "stale" || workspace_resources_status == "missing" {
-            "stale"
-        } else if manifest_status != "valid" {
-            "partial"
-        } else if surfaces.contains(&"unsafe") {
-            "unsafe"
-        } else if legacy_cleanup_pending {
-            "diverged"
-        } else if surfaces.iter().all(|s| *s == "synced") {
-            "synced"
-        } else if surfaces.iter().all(|s| *s == "missing") {
-            "missing"
-        } else if surfaces
-            .iter()
-            .any(|s| *s == "diverged" || *s == "partial" || *s == "invalid")
-        {
-            "diverged"
-        } else {
-            "partial"
-        }
-        .to_string();
+    let status = if manifest_status != "valid" {
+        "partial"
+    } else if surfaces.contains(&"unsafe") {
+        "unsafe"
+    } else if legacy_cleanup_pending {
+        "diverged"
+    } else if surfaces.iter().all(|s| *s == "synced") {
+        "synced"
+    } else if surfaces.iter().all(|s| *s == "missing") {
+        "missing"
+    } else if surfaces
+        .iter()
+        .any(|s| *s == "diverged" || *s == "partial" || *s == "invalid")
+    {
+        "diverged"
+    } else {
+        "partial"
+    }
+    .to_string();
 
     let next_action = match status.as_str() {
-        "stale" => {
-            "Installed Cursor resources are behind the app. Run Install or Update."
-                .into()
-        }
         "synced" => {
             "Cursor setup is synced. Select Auto Review in Cursor Settings > Agents > Run Mode. Riggverk cannot verify the active run mode."
                 .into()
@@ -499,7 +489,7 @@ pub fn get_cursor_profile_health() -> Result<CursorProfileHealth, String> {
             profile_root
         ),
         "diverged" => "Review the managed differences, then run Install or Update.".into(),
-        _ => "Validate the workspace templates, then apply the global profile.".into(),
+        _ => "Review the Cursor setup, then run Install or Update.".into(),
     };
 
     Ok(CursorProfileHealth {

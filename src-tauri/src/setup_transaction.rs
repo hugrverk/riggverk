@@ -1588,13 +1588,9 @@ pub fn plan_artifacts_for_uninstall(
         if installed == crate::setup_fingerprint::ABSENT_DIGEST {
             continue;
         }
-        let source_root = if matches!(artifact, ArtifactId::WorkspaceFile(_)) {
-            bundled_root.as_path()
-        } else {
-            workspace_root
-        };
+        // The current source is the bundle every install copies from, never the workspace copy.
         let source =
-            crate::setup_fingerprint::artifact_source_digest(&artifact, source_root, home).ok();
+            crate::setup_fingerprint::artifact_source_digest(&artifact, &bundled_root, home).ok();
         let managed_hash = managed_hash_for(&identity, &records);
         let owned = managed_hash.as_deref() == Some(installed.as_str())
             || source.as_deref() == Some(installed.as_str())
