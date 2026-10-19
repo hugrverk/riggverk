@@ -2,6 +2,8 @@
 
 Decision record for whether Riggverk should integrate `microsoft/SkillOpt` (including its `skillopt-sleep` mode). Companion document: `docs/SKILL_CATALOG_AUDIT.md`.
 
+> Historical snapshot: numbers and counts are as of when this was written and are not maintained.
+
 ## Decision
 
 **Documentation only. No integration now.** No runtime dependency, no bundled helper script, no scheduler, no transcript harvesting. Re-evaluate only if a concrete, scoreable skill-quality problem appears that manual editing plus `scripts/check-skill-routing.py` cannot address.
@@ -39,7 +41,7 @@ Preconditions: a concrete skill with a scoreable outcome, budget approval, and e
 1. **Isolation**: separate throwaway repo or ignored local directory; `pip install skillopt` in a venv; never imported by app code; no scheduler.
 2. **Environment adapter**: `dataloader.py` over a small synthetic task set derived from repo-public material (e.g. routing decisions: given a task description, which of the 21 skills should fire — labels derivable from `docs/SKILLS.md` and `templates/global-agent-rules.md`); `rollout.py` running Codex CLI or Claude Code CLI with the candidate skill installed in a sandbox home, never the real `~/.codex` / `~/.claude`; a deterministic scorer (exact-match routing accuracy is the cheapest viable first target).
 3. **Validation gate**: held-out task split; accept only strict improvement, per SkillOpt's own discipline.
-4. **Deployment path**: an accepted `best_skill.md` is *never* auto-installed. It becomes a human-reviewed proposal diff against the canonical `resources/default-workspace/skills/<name>/SKILL.md`, followed by the normal pipeline: `python3 scripts/generate-skill-adapters.py --write`, `python3 scripts/check-skill-routing.py`, review, commit.
+4. **Deployment path**: an accepted `best_skill.md` is *never* auto-installed. It becomes a human-reviewed proposal diff against the canonical `resources/default-workspace/skills/<name>/SKILL.md`, followed by the normal pipeline: `python3 scripts/check-skill-routing.py`, `python3 scripts/generate-pre-manifest-ownership.py`, `./scripts/release-check.sh`, review, commit.
 5. **Exit criteria**: if the spike cannot show a validated improvement on the routing scorer within a bounded budget, stop and record the result here.
 
 ## Sources
