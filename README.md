@@ -37,7 +37,7 @@ Release verification:
 ./scripts/release-check.sh
 ```
 
-Do not claim a release check passed unless it was run and completed successfully. See `docs/RELEASE.md`.
+Do not claim a release check passed unless it was run and completed successfully. See `docs/RELEASE.md`. Recipes for changing skills, agents, rules, harnesses and bundled files, and what each gate step guards: [docs/MAINTAINING.md](./docs/MAINTAINING.md).
 
 Releases are cut locally: `./scripts/release.sh prepare` (CalVer version, notes draft, release PR) and `./scripts/release.sh publish` (build, ad hoc sign, zip, GitHub release). See `docs/RELEASE.md`.
 

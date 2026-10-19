@@ -40,6 +40,7 @@ from opencode_policy_compose import (  # noqa: E402
     with_root_forms,
 )
 from validate_opencode_permissions import (  # noqa: E402
+    ALL_ROLES,
     ARCHITECT_BASH_ACTIONS,
     CREDENTIAL_CONFIG_READ,
     READ_ACTIONS,
@@ -49,7 +50,10 @@ from validate_opencode_permissions import (  # noqa: E402
     _secret_read_errors,
     _top_level_action_errors,
     builtin_agent_errors,
+    destructive_errors,
     lexical_frontmatter_errors,
+    secret_coverage_errors,
+    snapshot_errors,
     validate_agent_frontmatter,
 )
 
@@ -816,6 +820,54 @@ class TestMutationRejection(unittest.TestCase):
     def test_restore_git_diff_wildcard_allows_ext_diff(self) -> None:
         action = self._mutated_action("repo-scout", {"git diff *": "allow"}, "git diff --ext-diff")
         self.assertEqual(action, "allow")
+
+    def test_dropping_a_secret_name_from_a_role_is_detected(self) -> None:
+        policy = load_policy()
+        for role in ("architect", "repo-scout"):
+            with self.subTest(role=role):
+                perm = compose_role_permission(load_role(role))
+                self.assertEqual(secret_coverage_errors(role, perm, policy), [])
+                perm["read"].pop("**/kubeconfig")
+                perm["bash"].pop("cat kubeconfig")
+                errors = secret_coverage_errors(role, perm, policy)
+                self.assertIn(f"{role}: missing read deny **/kubeconfig", errors)
+                self.assertIn(f"{role}: missing bash deny cat kubeconfig", errors)
+
+    def test_dropping_a_secret_name_from_the_policy_still_fails_the_floor(self) -> None:
+        policy = json.loads(json.dumps(load_policy()))
+        policy["read"]["deny"].remove("**/kubeconfig")
+        policy["bash"]["secret_content_patterns"].remove("kubeconfig")
+        perm = compose_role_permission(load_role("architect"))
+        for key in ("**/kubeconfig", "kubeconfig"):
+            perm["read"].pop(key)
+        for key in [key for key in perm["bash"] if key.endswith(" kubeconfig")]:
+            perm["bash"].pop(key)
+        errors = secret_coverage_errors("architect", perm, policy)
+        self.assertIn("architect: read 'kubeconfig' must be deny (secret floor)", errors)
+        self.assertIn("architect: bash 'cat kubeconfig' must be deny (secret floor), got ask", errors)
+
+    def test_dropping_the_git_clean_deny_is_detected(self) -> None:
+        for role in ALL_ROLES:
+            with self.subTest(role=role):
+                perm = compose_role_permission(load_role(role))
+                self.assertEqual(destructive_errors(role, perm), [])
+                perm["bash"].pop("git clean -fdx*")
+                self.assertEqual(destructive_errors(role, perm), [f"{role}: missing bash deny git clean -fdx*"])
+
+    def test_snapshot_keeps_secret_read_denies_and_the_cargo_check_allow(self) -> None:
+        policy = load_policy()
+        snapshot = json.loads((TEMPLATES_DIR / "opencode.json").read_text(encoding="utf-8"))
+        self.assertEqual(snapshot_errors(snapshot, policy), [])
+        read = snapshot["permission"]["read"]
+        for key in [key for key in read if "id_ed25519" in key]:
+            read.pop(key)
+        bash = snapshot["permission"]["bash"]
+        for key in [key for key in bash if key.startswith("cargo check")]:
+            bash.pop(key)
+        errors = snapshot_errors(snapshot, policy)
+        self.assertIn("opencode.json: missing read deny **/id_ed25519", errors)
+        self.assertIn("opencode.json: missing read deny **/id_ed25519* (secret floor)", errors)
+        self.assertIn("opencode.json: global bash `cargo check` must be allow", errors)
 
 
 # Output of the emitter before keys were quoted: a bare `*` starts a YAML alias.

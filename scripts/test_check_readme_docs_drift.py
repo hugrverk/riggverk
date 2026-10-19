@@ -125,5 +125,50 @@ class AgentListTests(unittest.TestCase):
                 self.assert_fails("AGENT_RULES.md Cursor list must match")
 
 
+class MaintainingGuideTests(unittest.TestCase):
+    def setUp(self) -> None:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.tree = Path(tmp.name)
+        for rel in ("docs/MAINTAINING.md", "docs/RELEASE.md", "README.md", "scripts/generate.py"):
+            dest = self.tree / rel
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(ROOT / rel, dest)
+        root_patch = patch.object(drift, "ROOT", self.tree)
+        root_patch.start()
+        self.addCleanup(root_patch.stop)
+
+    def edit(self, rel: str, old: str, new: str) -> None:
+        path = self.tree / rel
+        text = path.read_text(encoding="utf-8")
+        self.assertIn(old, text)
+        path.write_text(text.replace(old, new), encoding="utf-8")
+
+    def assert_fails(self, message: str) -> None:
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr), self.assertRaises(SystemExit):
+            drift.validate_maintaining_guide()
+        self.assertIn(message, stderr.getvalue())
+
+    def test_baseline_passes(self) -> None:
+        drift.validate_maintaining_guide()
+
+    def test_every_registry_name_must_be_described(self) -> None:
+        self.edit("docs/MAINTAINING.md", "`shipped-digests`", "shipped digests")
+        self.assert_fails("registry entry `shipped-digests`")
+
+    def test_a_new_generator_must_be_described(self) -> None:
+        self.edit("scripts/generate.py", 'Generator("agent-rules"', 'Generator("brand-new", "x", list),\n    Generator("agent-rules"')
+        self.assert_fails("registry entry `brand-new`")
+
+    def test_readme_and_release_doc_must_link_the_guide(self) -> None:
+        for rel in ("README.md", "docs/RELEASE.md"):
+            with self.subTest(rel=rel):
+                original = (self.tree / rel).read_text(encoding="utf-8")
+                self.edit(rel, "MAINTAINING.md", "OTHER.md")
+                self.assert_fails(f"{rel} must link docs/MAINTAINING.md")
+                (self.tree / rel).write_text(original, encoding="utf-8")
+
+
 if __name__ == "__main__":
     unittest.main()

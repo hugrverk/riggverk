@@ -85,6 +85,22 @@ def validate_agent_lists(contract: str) -> None:
         fail("AGENT_RULES.md Cursor list must match Cursor manifest")
 
 
+def validate_maintaining_guide() -> None:
+    """docs/MAINTAINING.md names the one generate command and every generator it runs."""
+    guide = read(ROOT / "docs/MAINTAINING.md")
+    if "python3 scripts/generate.py write" not in guide:
+        fail("docs/MAINTAINING.md must give the generate command: python3 scripts/generate.py write")
+    names = re.findall(r'Generator\(\s*"([^"]+)"', read(ROOT / "scripts/generate.py"))
+    if not names:
+        fail("scripts/generate.py registry not found")
+    for name in names:
+        if f"`{name}`" not in guide:
+            fail(f"docs/MAINTAINING.md must describe the generate.py registry entry `{name}`")
+    for path in (ROOT / "README.md", ROOT / "docs/RELEASE.md"):
+        if "MAINTAINING.md" not in read(path):
+            fail(f"{path.relative_to(ROOT)} must link docs/MAINTAINING.md")
+
+
 def contains_positive_claim(text: str, phrase: str) -> bool:
     lowered = text.lower()
     needle = phrase.lower()
@@ -114,6 +130,7 @@ def main() -> None:
         ROOT / "docs/WORKSPACE_CONTRACT.md",
         ROOT / "docs/SECURITY_MODEL.md",
         ROOT / "docs/APP_RELEASE_SMOKE.md",
+        ROOT / "docs/MAINTAINING.md",
         *sorted((ROOT / "resources/default-workspace/docs").glob("*.md")),
         ROOT / "resources/default-workspace/templates/cursor/README.md",
     ):
@@ -176,6 +193,8 @@ def main() -> None:
             fail(f"{rel} must not say target toggles require Save in Settings")
         if "ux-context" in text:
             fail(f"{rel} must not reference ux-context")
+
+    validate_maintaining_guide()
 
     contract = read(ROOT / "docs/WORKSPACE_CONTRACT.md")
     validate_agent_lists(contract)
