@@ -5091,6 +5091,85 @@ mod tests {
         assert_eq!(server_names(&after), vec!["playwright"]);
     }
 
+    /// An installed file the way an older app wrote it: the same entry with the previous pin,
+    /// and the record that app made of it.
+    fn as_the_older_app_wrote_it(env: &TempSetupEnv, artifact: &ArtifactId, path: &Path) {
+        let pin = crate::commands::cursor_profile::PLAYWRIGHT_MCP_VERSION;
+        let text = fs::read_to_string(path).expect("installed file");
+        let older = text.replace(&format!("@playwright/mcp@{pin}"), "@playwright/mcp@0.0.48");
+        assert_ne!(
+            older, text,
+            "the installed file must pin the current version"
+        );
+        fs::write(path, older).expect("write the previous pin");
+        let digest = crate::setup_fingerprint::artifact_installed_managed_digest(
+            artifact, &env.ws, &env.home,
+        )
+        .expect("digest of the installed entry");
+        let mut state = crate::managed_state::read_managed_state(&env.ws).expect("managed state");
+        let identity = crate::managed_state::artifact_identity(artifact);
+        let record = state
+            .artifacts
+            .iter_mut()
+            .find(|record| record.identity == identity)
+            .expect("the apply recorded the artifact");
+        record.hash = digest;
+        crate::managed_state::write_managed_state_atomic(&env.ws, &state)
+            .expect("write managed state");
+    }
+
+    #[test]
+    fn a_playwright_pin_from_an_older_app_is_an_update_not_a_conflict() {
+        let env = TempSetupEnv::new("previous-playwright-pin");
+        let pin = crate::commands::cursor_profile::PLAYWRIGHT_MCP_VERSION;
+        for (wire, surface, artifact, rel) in [
+            (
+                "open_code_config",
+                SetupSurfaceId::OpenCodeConfig,
+                ArtifactId::OpenCodeConfig,
+                ".config/opencode/opencode.json",
+            ),
+            (
+                "cursor_mcp",
+                SetupSurfaceId::CursorMcp,
+                ArtifactId::CursorMcp,
+                ".cursor/mcp.json",
+            ),
+        ] {
+            let apply = || {
+                let plan = preview_setup(vec![wire.into()]).expect("preview");
+                assert!(!plan.is_blocked, "{wire}: {:?}", plan.operations);
+                apply_setup(
+                    vec![wire.into()],
+                    true,
+                    plan.plan_fingerprint.clone(),
+                    plan.preview_token.clone(),
+                )
+                .expect("apply")
+            };
+            let result = apply();
+            assert!(result.success, "{wire}: {}", result.message);
+            let path = env.home.join(rel);
+            as_the_older_app_wrote_it(&env, &artifact, &path);
+
+            let planned = env.plan(&[surface]);
+            let kind = planned
+                .iter()
+                .find(|planned| planned.artifact == artifact)
+                .map(|planned| planned.kind);
+            assert_eq!(kind, Some(OperationKind::Update), "{wire}: {planned:?}");
+
+            let result = apply();
+            assert!(result.success, "{wire}: {}", result.message);
+            let installed = fs::read_to_string(&path).unwrap();
+            assert!(
+                installed.contains(&format!("@playwright/mcp@{pin}"))
+                    && !installed.contains("@playwright/mcp@0.0.48"),
+                "{wire}: the pin must be refreshed"
+            );
+        }
+    }
+
     #[test]
     fn cursor_mcp_rollback_restores_the_existing_file_byte_for_byte() {
         let env = TempSetupEnv::new("cursor-mcp-partial-rollback");

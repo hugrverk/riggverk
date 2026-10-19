@@ -50,7 +50,7 @@ function health(overrides: Partial<LightRuntimeHealth> = {}): LightRuntimeHealth
     status: "synced",
     cli: { status: "found", version: "1.3.0", source: "path", detail: "Pi 1.3.0" },
     rules: { status: "synced", path: "~/.pi/agent/AGENTS.md", refinement_lines: 0, user_managed: false, conflict_reason: null, detail: "installed and current" },
-    mcp: { status: "synced", path: "~/.pi/agent/mcp.json", playwright_version: "0.0.48", detail: "installed and current" },
+    mcp: { status: "synced", path: "~/.pi/agent/mcp.json", playwright_version: "0.0.83", detail: "installed and current" },
     skills: { status: "synced", synced: 17, expected: 17, roots: ["~/.agents/skills"] },
     warnings: [],
     next_action: "No runtime action needed.",
@@ -134,7 +134,7 @@ describe("LightHarnessView", () => {
     renderLight("pi", health());
     const pi = detail("Pi");
     expect(pi.textContent).toContain("runtime · synced");
-    expect(facts(pi)).toMatchObject({ cli: "1.3.0", rules: "synced", "mcp playwright": "synced · 0.0.48", skills: "synced · 17/17" });
+    expect(facts(pi)).toMatchObject({ cli: "1.3.0", rules: "synced", "mcp playwright": "synced · 0.0.83", skills: "synced · 17/17" });
     // Nothing to do while synced.
     expect(facts(pi)).not.toHaveProperty("next");
   });

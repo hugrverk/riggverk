@@ -39,7 +39,7 @@ function opencodeHealth(overrides: Partial<OpenCodeRuntimeHealth> = {}): OpenCod
     config_status: "synced",
     config_diverged_keys: [],
     rules_status: "synced",
-    playwright_mcp_version: "0.0.48",
+    playwright_mcp_version: "0.0.83",
     config_precedence: { installed_not_strict: [], sibling_files: [], env_vars: [], system_managed_paths: [] },
     template_tui_path: "",
     installed_tui_path: "",
@@ -178,8 +178,8 @@ describe("runtimeRowsFor", () => {
     expect(row(rowsOf({ rules_status: "diverged" }), "rules")).toMatchObject({ value: "diverged", tone: "warn" });
     expect(row(rowsOf({ rules_status: "unknown" }), "rules")).toMatchObject({ value: "unknown", tone: "dim" });
 
-    expect(row(rowsOf(), "mcp playwright")).toMatchObject({ value: "0.0.48", tone: "ok" });
-    expect(row(rowsOf({ config_status: "diverged", config_diverged_keys: ["mcp.playwright"] }), "mcp playwright")).toMatchObject({ value: "0.0.48", tone: "warn" });
+    expect(row(rowsOf(), "mcp playwright")).toMatchObject({ value: "0.0.83", tone: "ok" });
+    expect(row(rowsOf({ config_status: "diverged", config_diverged_keys: ["mcp.playwright"] }), "mcp playwright")).toMatchObject({ value: "0.0.83", tone: "warn" });
     expect(row(rowsOf({ playwright_mcp_version: null }), "mcp playwright")).toMatchObject({ value: "none", tone: "dim" });
   });
 
@@ -277,7 +277,7 @@ describe("light harness runtime rows", () => {
     status: "synced",
     cli: { status: "found", version: "7.8.12", source: "path", detail: "Kilo 7.8.12" },
     rules: { status: "synced", path: "~/.config/kilo/AGENTS.md", refinement_lines: 0, user_managed: false, conflict_reason: null, detail: "installed and current" },
-    mcp: { status: "synced", path: "~/.config/kilo/kilo.jsonc", playwright_version: "0.0.48", detail: "installed and current" },
+    mcp: { status: "synced", path: "~/.config/kilo/kilo.jsonc", playwright_version: "0.0.83", detail: "installed and current" },
     skills: { status: "synced", synced: 17, expected: 17, roots: ["~/.claude/skills", "~/.agents/skills"] },
     warnings: [],
     next_action: "No runtime action needed.",
@@ -291,7 +291,7 @@ describe("light harness runtime rows", () => {
     expect(labelsOf(rows)).toEqual(["cli", "rules", "mcp playwright", "skills", "skill loads"]);
     expect(rows[0]).toEqual({ label: "cli", value: "7.8.12", tone: "ok" });
     expect(rows[1]).toEqual({ label: "rules", value: "synced", tone: "ok", wrap: false });
-    expect(rows[2]).toEqual({ label: "mcp playwright", value: "synced · 0.0.48", tone: "ok", wrap: false });
+    expect(rows[2]).toEqual({ label: "mcp playwright", value: "synced · 0.0.83", tone: "ok", wrap: false });
     expect(rows[3]).toEqual({ label: "skills", value: "synced · 17/17", tone: "ok" });
   });
 
@@ -304,7 +304,7 @@ describe("light harness runtime rows", () => {
       wrap: true,
     });
     expect(row({ status: "stale", detail: "update available for the playwright entry" })).toMatchObject({
-      value: "stale · 0.0.48 · update available for the playwright entry",
+      value: "stale · 0.0.83 · update available for the playwright entry",
       tone: "warn",
       wrap: true,
     });

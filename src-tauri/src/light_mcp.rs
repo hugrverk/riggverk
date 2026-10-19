@@ -226,7 +226,7 @@ pub fn assess(spec: &LightMcp, path: &Path, expected: &Value) -> EntryState {
     }
 }
 
-/// The Playwright version an entry pins (`@playwright/mcp@0.0.48` in `args` or `command`), for the
+/// The Playwright version an entry pins (`@playwright/mcp@x.y.z` in `args` or `command`), for the
 /// health. Only a version made of letters, digits, dots and dashes is returned.
 pub fn pinned_version(entry: &Value) -> Option<String> {
     ["args", "command"]

@@ -203,6 +203,12 @@ pub(crate) fn manifest_recommended_skills(root: &Path) -> Vec<String> {
     super::skills::workspace_skill_names(root).unwrap_or_default()
 }
 
+/// The `@playwright/mcp` version every entry the app writes pins (OpenCode, Cursor and the light
+/// harnesses), and the day npm published it. `scripts/check-bundle-content.py` reads this line:
+/// the bundled templates and docs must name the same version, and it warns once the release is
+/// more than six months old. Bump the version and the date together.
+pub(crate) const PLAYWRIGHT_MCP_VERSION: &str = "0.0.83"; // released 2026-09-28
+
 pub(crate) fn default_playwright_mcp_config_path(home: &Path) -> PathBuf {
     if let Ok(path) = std::env::var("PLAYWRIGHT_MCP_CONFIG_PATH") {
         if !path.is_empty() {
@@ -264,7 +270,7 @@ pub(crate) fn transform_playwright_template_value(
             } else if text == "__PLAYWRIGHT_BROWSERS_PATH__" {
                 serde_json::Value::String(browsers_path.to_string())
             } else if text.starts_with("@playwright/mcp@") {
-                serde_json::Value::String("@playwright/mcp@0.0.48".into())
+                serde_json::Value::String(format!("@playwright/mcp@{PLAYWRIGHT_MCP_VERSION}"))
             } else {
                 serde_json::Value::String(text.clone())
             }

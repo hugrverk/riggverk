@@ -69,9 +69,9 @@ Playwright MCP is defined in `templates/opencode.base.json` and included in the 
 
 Defaults:
 
-- Package: `@playwright/mcp@0.0.48` (`PLAYWRIGHT_MCP_VERSION` overrides it)
+- Package: `@playwright/mcp@0.0.83` (`PLAYWRIGHT_MCP_VERSION` overrides it)
 - MCP config: `~/.config/playwright-mcp/config.json` (or `PLAYWRIGHT_MCP_CONFIG_PATH`) from `templates/playwright-mcp.config.json`
-- Browser: `browserName: chromium` and `isolated: true` in the MCP config. On `@playwright/mcp@0.0.48` that configuration resolves to the `chrome` channel, that is the system Google Chrome, not Playwright's bundled Chromium (which `--browser chromium` selects); this was read from the resolved configuration, not from a launch. Verify with one real launch before relying on either
+- Browser: `browserName: chromium` and `isolated: true` in the MCP config. On `@playwright/mcp@0.0.83` a browser named in the config file gets no channel, so that configuration resolves to Playwright's own Chromium from the shared cache, not to the system Google Chrome; this was read from the config resolution code of that release, not from a launch. The previous pin, 0.0.48, resolved the same file to the `chrome` channel (the system Google Chrome), so after the update install the matching Chromium once (see below) or the first browser tool call reports a missing executable. Verify with one real launch before relying on it
 - Binaries: shared cache (`~/Library/Caches/ms-playwright` on macOS, `$XDG_CACHE_HOME/ms-playwright` on Linux, `~/AppData/Local/ms-playwright` on Windows; `PLAYWRIGHT_BROWSERS_PATH` overrides)
 
 On macOS, Playwright’s Chromium bundle may still show **Google Chrome for Testing.app** inside the cache. That is expected and is not the same as requiring Chrome Stable/Beta/Dev/Canary.
@@ -85,14 +85,14 @@ Security note: Playwright MCP provides privileged browser automation tools. Its 
 Local MCP checks:
 
 ```
-npx -y @playwright/mcp@0.0.48 --help
+npx -y @playwright/mcp@0.0.83 --help
 opencode mcp list
 ```
 
-If browser binaries are missing, install Chromium with:
+If browser binaries are missing, install the Chromium that belongs to the pinned release with the MCP package's own command (a separate `playwright install` of another Playwright version can fetch a different revision):
 
 ```
-npx -y playwright install chromium
+npx -y @playwright/mcp@0.0.83 install-browser chromium
 ```
 
 ## OpenCode agents

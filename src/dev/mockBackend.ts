@@ -1076,7 +1076,7 @@ function opencodeHealth(): OpenCodeRuntimeHealth {
     config_status: fresh ? "missing" : update ? "diverged" : "synced",
     config_diverged_keys: update ? ["model", "lsp"] : [],
     rules_status: fresh ? "missing" : "synced",
-    playwright_mcp_version: fresh ? null : "0.0.48",
+    playwright_mcp_version: fresh ? null : "0.0.83",
     config_precedence: { installed_not_strict: [], sibling_files: [], env_vars: [], system_managed_paths: [] },
     template_tui_path: `${WORKSPACE}/templates/opencode-tui.json`,
     installed_tui_path: `${HOME}/.config/opencode/tui.json`,
@@ -1180,7 +1180,7 @@ function lightHealth(harness: LightAgent): LightRuntimeHealth {
   const mcp: LightRuntimeHealth["mcp"] = {
     status: mcpStatus,
     path: SURFACE_PATHS[mcpSurface],
-    playwright_version: mcpStatus === "synced" || mcpStatus === "stale" ? "0.0.48" : null,
+    playwright_version: mcpStatus === "synced" || mcpStatus === "stale" ? "0.0.83" : null,
     detail: mcpStatus === "synced" ? "installed and current" : surfaceDetail(mcpSurface, mcpState),
   };
   const mcpWarnings =

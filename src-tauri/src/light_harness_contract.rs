@@ -1728,6 +1728,42 @@ mod tests {
         }
 
         #[test]
+        fn an_entry_pinning_the_previous_playwright_version_is_updated_not_a_conflict() {
+            each_mcp("old-pin", |env| {
+                // What the app wrote while it pinned 0.0.48, recorded when it did.
+                let pin = crate::commands::cursor_profile::PLAYWRIGHT_MCP_VERSION;
+                let old: Value = serde_json::from_str(
+                    &env.expected()
+                        .to_string()
+                        .replace(&format!("@playwright/mcp@{pin}"), "@playwright/mcp@0.0.48"),
+                )
+                .unwrap();
+                assert_ne!(old, env.expected());
+                let mut file: Value = serde_json::from_str(&env.user_file()).unwrap();
+                file[env.root_key()]["playwright"] = old.clone();
+                env.put(serde_json::to_string_pretty(&file).unwrap() + "\n");
+                env.record_mcp(&env.entry_digest());
+
+                // The row names the old pin and says an update waits.
+                let health = env.health_mcp();
+                assert_eq!(health.mcp.status, "stale");
+                assert_eq!(health.mcp.playwright_version.as_deref(), Some("0.0.48"));
+
+                let planned = env.plan_mcp();
+                assert_eq!(planned.kind, OperationKind::Update);
+                assert_eq!(planned.mcp, Some(EntryState::Differs));
+
+                let result = env.apply_mcp();
+                assert!(result.success, "{}", result.message);
+                assert_eq!(env.json()[env.root_key()]["playwright"], env.expected());
+                assert_eq!(
+                    env.health_mcp().mcp.playwright_version.as_deref(),
+                    Some(pin)
+                );
+            });
+        }
+
+        #[test]
         fn a_user_who_removed_the_entry_after_the_app_wrote_it_gets_it_back_without_a_conflict() {
             each_mcp("removed", |env| {
                 env.put(env.user_file());
@@ -2179,7 +2215,10 @@ mod tests {
                 let synced = env.health_mcp();
                 assert_eq!(synced.mcp.status, "synced");
                 assert_eq!(synced.mcp.detail, "installed and current");
-                assert_eq!(synced.mcp.playwright_version.as_deref(), Some("0.0.48"));
+                assert_eq!(
+                    synced.mcp.playwright_version.as_deref(),
+                    Some(crate::commands::cursor_profile::PLAYWRIGHT_MCP_VERSION)
+                );
 
                 // The recorded entry of an older version, still the app's: stale, not diverged.
                 let mut file = env.json();
@@ -2297,7 +2336,13 @@ mod tests {
                 let entry =
                     crate::light_mcp::expected_entry(spec_of(harness), &bundled, home).unwrap();
                 let text = entry.to_string();
-                assert!(text.contains("@playwright/mcp@0.0.48"), "{text}");
+                assert!(
+                    text.contains(&format!(
+                        "@playwright/mcp@{}",
+                        crate::commands::cursor_profile::PLAYWRIGHT_MCP_VERSION
+                    )),
+                    "{text}"
+                );
                 assert!(!text.contains("@latest"), "{text}");
                 // The sidecar is owned by the OpenCode config surface, and a missing file
                 // crashes the server: these entries do not depend on it.
@@ -2315,7 +2360,7 @@ mod tests {
                 assert!(!text.contains("__PLAYWRIGHT_"), "{text}");
                 assert_eq!(
                     crate::light_mcp::pinned_version(&entry).as_deref(),
-                    Some("0.0.48")
+                    Some(crate::commands::cursor_profile::PLAYWRIGHT_MCP_VERSION)
                 );
             }
         }

@@ -4,7 +4,7 @@
       "command": "npx",
       "args": [
         "-y",
-        "@playwright/mcp@0.0.48",
+        "@playwright/mcp@0.0.83",
         "--config",
         "__PLAYWRIGHT_MCP_CONFIG_PATH__"
       ],

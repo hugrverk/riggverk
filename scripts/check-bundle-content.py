@@ -3,9 +3,10 @@
 
 The app bundles the whole directory as it is on disk, ignored files included, so every check
 here reads the directory on disk rather than the git index. Groups: Codex templates, manifest
-files present, no symlinks, strict JSON, Playwright MCP guardrails, OpenCode and TUI defaults,
-the shared agents, retired OpenCode headers, the private-context boundary and the Cursor user
-rules wording.
+files present, no symlinks, strict JSON, Playwright MCP guardrails, the Playwright MCP pin
+(every bundled template and doc names the version the app writes; an old release only warns),
+OpenCode and TUI defaults, the shared agents, retired OpenCode headers, the private-context
+boundary and the Cursor user rules wording.
 
 Usage: python3 scripts/check-bundle-content.py [--group NAME[,NAME]] [--root PATH]
 """
@@ -26,6 +27,7 @@ import os
 import re
 import tomllib
 from collections.abc import Callable
+from datetime import date
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -207,6 +209,83 @@ PLAYWRIGHT_RULES = (
         '"browserName": "chromium"',
     ),
 )
+
+# --- playwright-pin --------------------------------------------------------------------------
+# One version and its npm release day live in a constant of the Rust app (the app writes it into
+# the OpenCode, Cursor and light-harness entries); the bundled templates and docs repeat it and
+# must agree. A pin older than PIN_MAX_AGE_DAYS only warns, from the recorded day and the local
+# clock, so the check needs no network and never fails offline.
+PIN_SOURCE = "src-tauri/src/commands/cursor_profile.rs"
+PIN_LINE = re.compile(r'PLAYWRIGHT_MCP_VERSION: &str = "([^"]+)";\s*// released (\d{4}-\d{2}-\d{2})')
+PINNED = re.compile(r"@playwright/mcp@(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]*[0-9A-Za-z])?)")
+PIN_TEMPLATES = (
+    "templates/opencode.base.json",
+    "templates/opencode.json",
+    "templates/cursor/mcp/playwright.mcp.json",
+    "templates/codex/mcp/playwright.toml",
+    "templates/mcp/copilot.playwright.json",
+    "templates/mcp/pi.playwright.json",
+    "templates/mcp/kilo.playwright.json",
+)
+PIN_OUTSIDE_DOCS = ("README.md", "docs/*.md")
+PIN_MAX_AGE_DAYS = 183  # about six months
+
+
+def read_pin(root: Path) -> tuple[str, date] | str:
+    """The pinned version and its release day, or a message saying why they cannot be read."""
+    try:
+        text = (root / PIN_SOURCE).read_text(encoding="utf-8")
+    except OSError:
+        return f"missing the Playwright MCP pin source: {PIN_SOURCE}"
+    match = PIN_LINE.search(text)
+    if match is None:
+        return f'{PIN_SOURCE}: no `PLAYWRIGHT_MCP_VERSION: &str = "x.y.z"; // released YYYY-MM-DD` line'
+    try:
+        return match.group(1), date.fromisoformat(match.group(2))
+    except ValueError:
+        return f"{PIN_SOURCE}: the release day {match.group(2)} is not a date"
+
+
+def playwright_pin(root: Path, files: list[str]) -> list[str]:
+    pin = read_pin(root)
+    if isinstance(pin, str):
+        return [pin]
+    version = pin[0]
+    outside = sorted(path.relative_to(root).as_posix() for pattern in PIN_OUTSIDE_DOCS for path in root.glob(pattern))
+    errors = []
+    for rel in [*files, *outside]:
+        try:
+            text = (root / rel).read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        for number, line in enumerate(text.splitlines(), 1):
+            errors += [
+                f"{rel}:{number}: names @playwright/mcp@{found}, the app pins {version} ({PIN_SOURCE})"
+                for found in PINNED.findall(line)
+                if found != version
+            ]
+    for rel in PIN_TEMPLATES:
+        path = root / BUNDLE / rel
+        if path.is_file() and f"@playwright/mcp@{version}" not in path.read_text(encoding="utf-8"):
+            errors.append(f"{W}{rel}: does not pin @playwright/mcp@{version} ({PIN_SOURCE})")
+    return errors
+
+
+def pin_warnings(root: Path, today: date | None = None) -> list[str]:
+    """A warning when the pinned release is older than PIN_MAX_AGE_DAYS; nothing when unreadable."""
+    pin = read_pin(root)
+    if isinstance(pin, str):
+        return []
+    version, released = pin
+    age = ((today or date.today()) - released).days
+    if age <= PIN_MAX_AGE_DAYS:
+        return []
+    return [
+        f"@playwright/mcp@{version} was released on {released} ({age} days ago, the limit is "
+        f"{PIN_MAX_AGE_DAYS}): bump it to the newest stable release that is at least 14 days old "
+        f"(npm view @playwright/mcp time), in {PIN_SOURCE} and the templates and docs that repeat it"
+    ]
+
 
 # --- opencode-defaults / tui-defaults --------------------------------------------------------
 OPENCODE_LITERALS = {"model": "opencode-go/glm-5.2", "lsp": True, "autoupdate": "notify", "snapshot": True}
@@ -418,6 +497,7 @@ GROUPS: dict[str, tuple[tuple[Rule, ...], Check | None]] = {
     "symlinks": ((), symlinks),
     "json": ((), strict_json),
     "playwright": (PLAYWRIGHT_RULES, None),
+    "playwright-pin": ((), playwright_pin),
     "opencode-defaults": ((), opencode_defaults),
     "tui-defaults": ((), tui_defaults),
     "agents": ((), agents),
@@ -457,9 +537,13 @@ def main(argv: list[str] | None = None) -> int:
     if not (args.root / BUNDLE).is_dir():
         print(f"FAIL: bundled workspace not found: {args.root / BUNDLE}", file=sys.stderr)
         return 1
-    failures = run(args.root.resolve(), groups)
+    root = args.root.resolve()
+    failures = run(root, groups)
     for failure in failures:
         print(f"FAIL {failure}", file=sys.stderr)
+    if "playwright-pin" in groups:
+        for warning in pin_warnings(root):
+            print(f"WARN {warning}", file=sys.stderr)
     if failures:
         return 1
     print(f"  bundle content checks passed: {', '.join(groups)}")
