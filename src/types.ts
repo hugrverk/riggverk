@@ -249,6 +249,33 @@ export interface RulesStatus {
   user_managed: boolean;
 }
 
+/**
+ * A rules file in the Library (`list_rules_files`): one per enabled rules surface, without its text. Only the
+ * text below the managed block is editable there, and only when `editable`; `reason` says why not.
+ */
+export interface RulesFileSummary {
+  surface: RulesSurfaceId;
+  label: string;
+  /** Where the file lives, as people know it (`~/.claude/CLAUDE.md`). */
+  file: string;
+  layout: RulesLayout;
+  conflict: RulesConflictReason | null;
+  malformed: RulesMalformedReason | null;
+  refinement_lines: number;
+  editable: boolean;
+  reason: string | null;
+}
+
+/** One rules file opened in the Library (`read_rules_file`). Text has LF line endings. */
+export interface RulesFileContent extends RulesFileSummary {
+  /** The read-only text above the refinements: the user's text above BEGIN and the managed block. */
+  before: string;
+  /** The text below the END line: what the editor holds. */
+  refinements: string;
+  /** Digest of the user's text; a save is refused once the file no longer has it. */
+  revision: string | null;
+}
+
 /** `update`: the installed file against the update. `edits`: the closest shipped base against the installed file. */
 export type RulesDiffMode = "update" | "edits";
 

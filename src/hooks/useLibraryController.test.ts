@@ -1,7 +1,15 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ActionResult } from "../components/TerminalOutput";
-import type { AgentMetadataResponse, AgentSourceContent, DocSummary, DocumentContent, SkillSummary } from "../types";
+import type {
+  AgentMetadataResponse,
+  AgentSourceContent,
+  DocSummary,
+  DocumentContent,
+  RulesFileContent,
+  RulesSurfaceId,
+  SkillSummary,
+} from "../types";
 import { useLibraryController } from "./useLibraryController";
 
 const invoke = vi.fn();
@@ -217,6 +225,226 @@ describe("useLibraryController save operation identity", () => {
   });
 });
 
+function rulesFile(surface: RulesSurfaceId, overrides: Partial<RulesFileContent> = {}): RulesFileContent {
+  return {
+    surface,
+    label: surface,
+    file: `~/${surface}.md`,
+    layout: "block",
+    conflict: null,
+    malformed: null,
+    refinement_lines: 1,
+    editable: true,
+    reason: null,
+    before: "base\n",
+    refinements: `${surface} refinements\n`,
+    revision: `rev-${surface}-1`,
+    ...overrides,
+  };
+}
+
+describe("useLibraryController rules refinements", () => {
+  beforeEach(() => {
+    invoke.mockReset();
+  });
+
+  const claude = rulesFile("claude_rules");
+  const codex = rulesFile("codex_rules");
+
+  function reads(files: Record<string, RulesFileContent>) {
+    return (cmd: string, args?: { surface?: string }) => {
+      if (cmd === "read_rules_file" && args?.surface && files[args.surface]) return Promise.resolve(files[args.surface]);
+      return Promise.reject(new Error(`unexpected invoke: ${cmd}`));
+    };
+  }
+
+  it("drafts the refinements of the open file and saves them with the revision it was opened with", async () => {
+    const { deps } = createDeps();
+    const { result } = renderHook(() => useLibraryController(deps));
+    const saved = rulesFile("claude_rules", { refinements: "new\n", revision: "rev-claude_rules-2" });
+    invoke.mockImplementation(reads({ claude_rules: claude }));
+    await act(async () => {
+      await result.current.selectRulesFile("claude_rules");
+    });
+    expect(result.current.rulesDraft).toBe(claude.refinements);
+    expect(result.current.rulesDirty).toBe(false);
+
+    await act(async () => {
+      result.current.onChangeRulesDraft("new\n");
+    });
+    expect(result.current.rulesDirty).toBe(true);
+    expect(result.current.isLibrarySourceDirty("rules")).toBe(true);
+    expect(result.current.libraryDirty).toBe(true);
+
+    invoke.mockImplementation((cmd: string, args?: { surface?: string }) => {
+      if (cmd === "save_rules_refinements") return Promise.resolve(successResult(cmd, "saved with backup"));
+      return reads({ claude_rules: saved })(cmd, args);
+    });
+    await act(async () => {
+      await result.current.onSaveRules();
+    });
+    expect(invoke).toHaveBeenCalledWith("save_rules_refinements", {
+      surface: "claude_rules",
+      content: "new\n",
+      expectedRevision: "rev-claude_rules-1",
+    });
+    expect(result.current.activeRulesFile?.revision).toBe("rev-claude_rules-2");
+    expect(result.current.rulesDraft).toBe("new\n");
+    expect(result.current.rulesDirty).toBe(false);
+    expect(result.current.rulesSaveResult?.stdout).toBe("saved with backup");
+  });
+
+  it("does not apply file A's save after file B was opened", async () => {
+    const { deps } = createDeps();
+    const { result } = renderHook(() => useLibraryController(deps));
+    invoke.mockImplementation(reads({ claude_rules: claude, codex_rules: codex }));
+    await act(async () => {
+      await result.current.selectRulesFile("claude_rules");
+      result.current.onChangeRulesDraft("edited\n");
+    });
+
+    const save = deferred<ActionResult>();
+    invoke.mockImplementation((cmd: string, args?: { surface?: string }) => {
+      if (cmd === "save_rules_refinements") return save.promise;
+      return reads({ claude_rules: claude, codex_rules: codex })(cmd, args);
+    });
+    let saveHandle: Promise<void>;
+    await act(async () => {
+      saveHandle = result.current.onSaveRules();
+    });
+    await act(async () => {
+      await result.current.selectRulesFile("codex_rules");
+    });
+    await act(async () => {
+      save.resolve(successResult("save_rules_refinements", "saved with backup"));
+      await saveHandle!;
+    });
+
+    expect(result.current.activeRulesSurface).toBe("codex_rules");
+    expect(result.current.rulesDraft).toBe(codex.refinements);
+    expect(result.current.rulesDirty).toBe(false);
+    expect(result.current.rulesSaving).toBe(false);
+    expect(result.current.rulesSaveResult).toBeNull();
+  });
+
+  it("drops an in-flight save when the workspace changes", async () => {
+    const { deps, workspaceLoadGenerationRef } = createDeps(0);
+    const { result } = renderHook(() => useLibraryController(deps));
+    invoke.mockImplementation(reads({ claude_rules: claude }));
+    await act(async () => {
+      await result.current.selectRulesFile("claude_rules");
+      result.current.onChangeRulesDraft("edited\n");
+    });
+    const save = deferred<ActionResult>();
+    invoke.mockImplementation((cmd: string, args?: { surface?: string }) =>
+      cmd === "save_rules_refinements" ? save.promise : reads({ claude_rules: claude })(cmd, args),
+    );
+    let saveHandle: Promise<void>;
+    await act(async () => {
+      saveHandle = result.current.onSaveRules();
+      workspaceLoadGenerationRef.current = 1;
+      result.current.resetLibraryState();
+    });
+    await act(async () => {
+      save.resolve(successResult("save_rules_refinements", "saved with backup"));
+      await saveHandle!;
+    });
+    expect(result.current.rulesSaving).toBe(false);
+    expect(result.current.activeRulesSurface).toBeNull();
+    expect(result.current.activeRulesFile).toBeNull();
+    expect(result.current.rulesSaveResult).toBeNull();
+  });
+
+  it("clears dirty on an unchanged save without reading the file again", async () => {
+    const { deps } = createDeps();
+    const { result } = renderHook(() => useLibraryController(deps));
+    invoke.mockImplementation(reads({ claude_rules: claude }));
+    await act(async () => {
+      await result.current.selectRulesFile("claude_rules");
+      result.current.onChangeRulesDraft("edited\n");
+    });
+    invoke.mockClear();
+    invoke.mockImplementation((cmd: string) =>
+      cmd === "save_rules_refinements" ? Promise.resolve(successResult(cmd, "unchanged")) : Promise.reject(new Error(cmd)),
+    );
+    await act(async () => {
+      await result.current.onSaveRules();
+    });
+    expect(result.current.rulesDirty).toBe(false);
+    expect(invoke.mock.calls.map(([cmd]) => cmd)).toEqual(["save_rules_refinements"]);
+  });
+
+  it("keeps the draft and takes the new revision when the file changed on disk", async () => {
+    const { deps } = createDeps();
+    const { result } = renderHook(() => useLibraryController(deps));
+    invoke.mockImplementation(reads({ claude_rules: claude }));
+    await act(async () => {
+      await result.current.selectRulesFile("claude_rules");
+      result.current.onChangeRulesDraft("my draft\n");
+    });
+    const outside = rulesFile("claude_rules", { refinements: "written elsewhere\n", revision: "rev-claude_rules-9" });
+    invoke.mockImplementation((cmd: string, args?: { surface?: string }) => {
+      if (cmd === "save_rules_refinements") {
+        return Promise.reject("Claude rules: nothing written: the file changed on disk since it was opened: reload it");
+      }
+      return reads({ claude_rules: outside })(cmd, args);
+    });
+    await act(async () => {
+      await result.current.onSaveRules();
+    });
+    expect(result.current.rulesDraft).toBe("my draft\n");
+    expect(result.current.rulesDirty).toBe(true);
+    expect(result.current.activeRulesFile?.revision).toBe("rev-claude_rules-9");
+    expect(result.current.rulesSaveResult).toMatchObject({ success: false, stderr: "changed on disk: reloaded, save again to overwrite" });
+
+    // Saving again sends the draft with the revision of the file as it is now.
+    invoke.mockImplementation((cmd: string, args?: { surface?: string }) =>
+      cmd === "save_rules_refinements"
+        ? Promise.resolve(successResult(cmd, "saved with backup"))
+        : reads({ claude_rules: { ...outside, refinements: "my draft\n" } })(cmd, args),
+    );
+    await act(async () => {
+      await result.current.onSaveRules();
+    });
+    expect(invoke).toHaveBeenCalledWith("save_rules_refinements", {
+      surface: "claude_rules",
+      content: "my draft\n",
+      expectedRevision: "rev-claude_rules-9",
+    });
+  });
+
+  it("never sends a file the backend called not editable", async () => {
+    const { deps } = createDeps();
+    const { result } = renderHook(() => useLibraryController(deps));
+    const legacy = rulesFile("codex_rules", { layout: "legacy", editable: false, reason: "no base block", revision: null });
+    invoke.mockImplementation(reads({ codex_rules: legacy }));
+    await act(async () => {
+      await result.current.selectRulesFile("codex_rules");
+      result.current.onChangeRulesDraft("edited\n");
+      await result.current.onSaveRules();
+    });
+    expect(invoke.mock.calls.map(([cmd]) => cmd)).toEqual(["read_rules_file"]);
+  });
+
+  it("returns to the bundled base when the open file's harness is switched off", async () => {
+    const { deps } = createDeps();
+    const { result } = renderHook(() => useLibraryController(deps));
+    invoke.mockImplementation(reads({ claude_rules: claude }));
+    await act(async () => {
+      await result.current.selectRulesFile("claude_rules");
+    });
+    invoke.mockImplementation((cmd: string) =>
+      cmd === "list_rules_files" ? Promise.resolve([rulesFile("codex_rules")]) : Promise.reject(new Error(cmd)),
+    );
+    await act(async () => {
+      await result.current.loadRulesFiles();
+    });
+    expect(result.current.activeRulesSurface).toBeNull();
+    expect(result.current.activeRulesFile).toBeNull();
+    expect(result.current.rulesFiles.map(file => file.surface)).toEqual(["codex_rules"]);
+  });
+});
+
 function agentMeta(content: AgentSourceContent): AgentMetadataResponse {
   return { id: content.id, title: content.title, path: content.path, exists: true, metadata: null };
 }
@@ -414,7 +642,7 @@ describe("useLibraryController workspace switch", () => {
       if (cmd === "read_agent_template") {
         return Promise.resolve({ ...docA, id: "agent-template", source: "curated", content: workspace.template });
       }
-      if (cmd === "list_skills" || cmd === "list_docs") return Promise.resolve([]);
+      if (cmd === "list_skills" || cmd === "list_docs" || cmd === "list_rules_files") return Promise.resolve([]);
       if (cmd === "list_agent_metadata") return Promise.resolve({ agents: [] });
       if (cmd === "get_docs_health") return Promise.resolve(null);
       return Promise.reject(new Error(`unexpected invoke: ${cmd}`));
@@ -487,6 +715,8 @@ describe("useLibraryController bundled items stay read-only", () => {
         case "list_opencode_config_editor_sources": return Promise.resolve([]);
         case "read_opencode_config_source": return Promise.resolve({ ...bundledDoc, id: "opencode_config:base" });
         case "read_config_template": return Promise.resolve({ ...bundledDoc, id: "config-template:codex_config" });
+        case "list_rules_files": return Promise.resolve([rulesFile("claude_rules")]);
+        case "read_rules_file": return Promise.resolve(rulesFile("claude_rules"));
         default: return Promise.reject(new Error(`unexpected invoke: ${cmd}`));
       }
     });
@@ -505,6 +735,9 @@ describe("useLibraryController bundled items stay read-only", () => {
       result.current.onChangeDocDraft("edited bundled doc");
       await result.current.onSaveDoc();
       await result.current.readSkill("s1");
+      // Opening and leaving a rules file without an edit writes nothing.
+      await result.current.selectRulesFile("claude_rules");
+      await result.current.selectRulesFile(null);
       await result.current.selectAgent("agent-a.md");
       result.current.setActiveConfigTargetId("opencode_config");
       await result.current.setGuardedLibrarySourceType("configs");

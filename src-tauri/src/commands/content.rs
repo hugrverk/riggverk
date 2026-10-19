@@ -418,7 +418,7 @@ fn personal_doc_open_path(root: &Path, id: &str) -> Result<PathBuf, String> {
 
 const MAX_DOC_SIZE: usize = 512 * 1024;
 
-fn doc_backup_path(
+pub(super) fn doc_backup_path(
     doc_id: &str,
     target_path: &Path,
     custom_backup_root: Option<&Path>,
@@ -444,7 +444,7 @@ fn doc_backup_path(
 
 /// Writes the pre-save copy of a doc into the directory `doc_backup_path`
 /// created. The file is owner-only (0600 on unix).
-fn write_doc_backup(backup_path: &Path, existing: &str) -> Result<(), String> {
+pub(super) fn write_doc_backup(backup_path: &Path, existing: &str) -> Result<(), String> {
     let backup_dir = backup_path
         .parent()
         .ok_or_else(|| "backup write error: backup path has no parent".to_string())?;

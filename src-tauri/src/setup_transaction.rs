@@ -507,8 +507,10 @@ pub fn reject_symlink_parent_chain(
     crate::path_safety::reject_symlink_parent_chain(path, allowlisted_root, label)
 }
 
-/// Resolve and validate artifact source and destination paths before mutation.
-pub fn validate_artifact_source_dest(
+/// Resolve and validate an artifact's destination before mutation: it must stay inside the
+/// artifact's allowlist root, and neither it nor a folder between it and that root may be a
+/// symlink. Returns the destination and the allowlist root writes must use.
+pub fn validate_artifact_dest(
     artifact: &ArtifactId,
     workspace_root: &Path,
     home: &Path,
@@ -516,12 +518,22 @@ pub fn validate_artifact_source_dest(
     if !workspace_root.is_absolute() {
         return Err("workspace root must be absolute".to_string());
     }
-    let ws_root = workspace_root.to_path_buf();
-    let dest = artifact.resolve_dest(home, &ws_root)?;
-    let dest_root = artifact.allowlist_root(home, &ws_root)?;
+    let dest = artifact.resolve_dest(home, workspace_root)?;
+    let dest_root = artifact.allowlist_root(home, workspace_root)?;
     crate::path_safety::reject_path_escape(&dest, &dest_root, "destination")?;
     reject_symlink_parent_chain(&dest, &dest_root, "destination")?;
     reject_symlink(&dest, "destination")?;
+    Ok((dest, dest_root))
+}
+
+/// Resolve and validate artifact source and destination paths before mutation.
+pub fn validate_artifact_source_dest(
+    artifact: &ArtifactId,
+    workspace_root: &Path,
+    home: &Path,
+) -> Result<(PathBuf, PathBuf), String> {
+    let ws_root = workspace_root.to_path_buf();
+    let (dest, _) = validate_artifact_dest(artifact, &ws_root, home)?;
     let bundled_root = crate::setup_roots::bundled_root_for(&ws_root)?
         .canonicalize()
         .map_err(|e| format!("cannot canonicalize bundled workspace: {e}"))?;

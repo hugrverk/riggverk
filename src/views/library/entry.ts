@@ -4,8 +4,9 @@ import { isPersonalDoc } from "../../lib/libraryDirtyGuards";
 import type { Tone } from "../../ui/tone";
 import type { KvItem } from "../../ui/Kv";
 import type { LibrarySourceType, LibraryViewProps } from "../LibraryView";
+import { CONFLICT_TEXT, LAYOUT_TEXT } from "../../lib/rulesView";
 import { configListKey } from "./ConfigItemList";
-import { RULES_LIST_KEY } from "./RulesItemList";
+import { RULES_LIST_KEY, rulesFileKey } from "./RulesItemList";
 
 export type LibraryPreviewKind = "markdown" | "json";
 
@@ -14,6 +15,12 @@ export const BUNDLED_READ_ONLY_REASON = "bundled with the app: read-only here";
 
 /** Footer note on a bundled item: the Library shows the workspace copy, which an earlier edit may have changed. */
 export const BUNDLED_COPY_NOTE = "this copy may differ if it was edited earlier";
+
+/** Footer note on an editable rules file: the base block above stays as it is. */
+export const RULES_REFINEMENTS_NOTE = "below the managed block only";
+
+/** Label of the read-only text above a rules file's refinements. */
+export const RULES_BEFORE_LABEL = "managed base · read-only";
 
 /**
  * The one item open in the document pane, normalised across sources so the pane does not care whether it is
@@ -46,6 +53,10 @@ export interface LibraryEntry {
   /** Footer note (on a bundled item: that the copy may differ from the bundled one). */
   note: string | null;
   preview: LibraryPreviewKind;
+  /** Read-only text rendered dimmed above the working copy (the managed block above a rules file's refinements). */
+  before?: string | null;
+  /** Accessible name and heading of `before`. */
+  beforeLabel?: string | null;
   metaTitle: string | null;
   meta: KvItem[];
   onChange: (value: string) => void;
@@ -101,7 +112,46 @@ function docEntry(props: LibraryViewProps): LibraryEntry | null {
   };
 }
 
+function rulesFileEntry(props: LibraryViewProps): LibraryEntry | null {
+  const file = props.activeRulesFile;
+  if (!file || file.surface !== props.activeRulesSurface) return null;
+  const meta: KvItem[] = [{ label: "layout", value: LAYOUT_TEXT[file.layout] }];
+  if (file.conflict) meta.push({ label: "conflict", value: CONFLICT_TEXT[file.conflict], tone: "warn", wrap: true });
+  if (file.layout === "block") {
+    meta.push({ label: "refinements", value: `${file.refinement_lines} line${file.refinement_lines === 1 ? "" : "s"}` });
+  }
+  return {
+    source: "rules",
+    id: rulesFileKey(file.surface),
+    listKey: rulesFileKey(file.surface),
+    title: file.label,
+    path: file.file,
+    copyPath: file.file,
+    editorLabel: "Edit refinements",
+    saved: file.refinements,
+    draft: props.rulesDraft,
+    dirty: props.rulesDirty,
+    saving: props.rulesSaving,
+    saveResult: props.rulesSaveResult,
+    saveMessage: "",
+    readOnly: !file.editable,
+    readOnlyReason: file.editable ? null : file.reason ?? "read-only",
+    note: file.editable ? RULES_REFINEMENTS_NOTE : null,
+    preview: "markdown",
+    before: file.before || null,
+    beforeLabel: RULES_BEFORE_LABEL,
+    metaTitle: "rules file",
+    meta,
+    onChange: props.onChangeRulesDraft,
+    onSave: props.onSaveRules,
+    onReset: props.onResetRules,
+    // The user's own file: `o` opens it to edit what the Library does not (the text above the block).
+    onOpen: file.layout === "absent" ? null : () => props.onOpenRulesFile(file.surface),
+  };
+}
+
 function rulesEntry(props: LibraryViewProps): LibraryEntry | null {
+  if (props.activeRulesSurface !== null) return props.workspaceValid ? rulesFileEntry(props) : null;
   const template = props.agentTemplate;
   if (!template) return null;
   const targets = props.agentTargets.filter(target => target.kind === "rules");
@@ -271,7 +321,7 @@ export function emptyStateHint(source: LibrarySourceType, workspaceValid: boolea
   if (!workspaceValid) return "No valid workspace selected";
   switch (source) {
     case "docs": return "Select a document to preview";
-    case "rules": return "Rules template is loading";
+    case "rules": return "Rules are loading";
     case "skills": return "Select a skill to preview";
     case "agents": return "Select an agent to preview";
     case "configs": return "Select a config target to preview";

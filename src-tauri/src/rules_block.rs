@@ -59,6 +59,17 @@ impl MalformedReason {
     }
 }
 
+/// New refinements that would change how the file splits around its block (see
+/// [`RulesFile::render_with_suffix`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SuffixRefused;
+
+impl SuffixRefused {
+    pub fn message(self) -> &'static str {
+        "a line of the refinements reads as a base block marker; indent it or put it in a code fence"
+    }
+}
+
 /// A rules file split around its managed block. Concatenating the parts in
 /// field order reproduces the parsed text exactly.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -86,6 +97,18 @@ impl RulesFile<'_> {
     /// Non-blank lines of user text around the block.
     pub fn refinement_lines(&self) -> usize {
         non_blank_lines(self.prefix) + non_blank_lines(self.suffix)
+    }
+
+    /// Digest of the user-owned bytes only (BOM, prefix, suffix), each part length-prefixed. A base
+    /// update rewrites the block and leaves it unchanged, so it tells whether the user's text
+    /// changed since it was read.
+    pub fn user_revision(&self) -> String {
+        let mut bytes = Vec::with_capacity(self.prefix.len() + self.suffix.len() + 32);
+        for part in [self.bom, self.prefix, self.suffix] {
+            bytes.extend_from_slice(&(part.len() as u64).to_le_bytes());
+            bytes.extend_from_slice(part.as_bytes());
+        }
+        stable_digest::bytes(&bytes)
     }
 
     /// True when nothing but whitespace surrounds the block.
@@ -134,6 +157,46 @@ impl RulesFile<'_> {
         out.push_str(moved);
         out.push_str(self.suffix);
         out
+    }
+
+    /// The file with the text after the END line replaced by `suffix` (the user's refinements, as
+    /// edited with LF line endings). BOM, prefix, BEGIN line, block body, and END line are kept byte
+    /// for byte; the suffix takes the file's line ending, and an END line at the end of the file gets
+    /// one before a non-empty suffix.
+    ///
+    /// Refused when the result would not parse back into the same BOM, prefix, BEGIN line, body,
+    /// and END line: a refinement line the parser reads as a marker (at column 0, outside a code
+    /// fence) would otherwise corrupt the block.
+    pub fn render_with_suffix(&self, suffix: &str) -> Result<String, SuffixRefused> {
+        let eol = self.line_ending();
+        let suffix = with_eol(&suffix.replace("\r\n", "\n"), eol);
+        let mut end = self.end.to_string();
+        if !suffix.is_empty() && !end.ends_with('\n') {
+            end.push_str(eol);
+        }
+        let out = [self.bom, self.prefix, self.begin, self.body, &end, &suffix].concat();
+        let unchanged = matches!(
+            parse(&out),
+            Ok(Some(file)) if file.bom == self.bom
+                && file.prefix == self.prefix
+                && file.begin == self.begin
+                && file.body == self.body
+                && file.end == end
+        );
+        if unchanged {
+            Ok(out)
+        } else {
+            Err(SuffixRefused)
+        }
+    }
+
+    /// The line ending the file uses, read from its BEGIN line.
+    fn line_ending(&self) -> &'static str {
+        if self.begin.ends_with("\r\n") {
+            "\r\n"
+        } else {
+            "\n"
+        }
     }
 
     /// The text of the file, used to prove a parse is lossless.
@@ -522,6 +585,127 @@ mod tests {
         let text = format!("<!-- BEGIN AGENT-WORKSPACE BASE: older prose -->\nold\n{END_MARKER}\n");
         let file = parse(&text).unwrap().unwrap();
         assert_eq!(file.render_with_body("new\n"), block("new\n"));
+    }
+
+    /// The parts a refinement edit must never change.
+    fn fixed_parts<'a>(file: &RulesFile<'a>) -> [&'a str; 4] {
+        [file.bom, file.prefix, file.begin, file.body]
+    }
+
+    #[test]
+    fn render_with_suffix_replaces_only_the_text_after_end() {
+        let text = format!("mine\n{}old refinement\n", block("base\n"));
+        let file = parse(&text).unwrap().unwrap();
+        let updated = file.render_with_suffix("new\n\n- rule\n").unwrap();
+        assert_eq!(updated, format!("mine\n{}new\n\n- rule\n", block("base\n")));
+        let reparsed = parse(&updated).unwrap().unwrap();
+        assert_eq!(fixed_parts(&reparsed), fixed_parts(&file));
+        assert_eq!(reparsed.end, file.end);
+        assert_eq!(reparsed.suffix, "new\n\n- rule\n");
+    }
+
+    #[test]
+    fn render_with_suffix_keeps_bom_and_crlf_and_converts_the_new_text() {
+        let text = format!("\u{feff}top\r\n{BEGIN_MARKER}\r\nbase\r\n{END_MARKER}\r\nold\r\n");
+        let file = parse(&text).unwrap().unwrap();
+        let updated = file.render_with_suffix("one\ntwo\n").unwrap();
+        assert_eq!(
+            updated,
+            format!("\u{feff}top\r\n{BEGIN_MARKER}\r\nbase\r\n{END_MARKER}\r\none\r\ntwo\r\n")
+        );
+        // Text that already has CRLF is not doubled.
+        assert_eq!(file.render_with_suffix("one\r\ntwo\r\n").unwrap(), updated);
+    }
+
+    #[test]
+    fn render_with_suffix_ends_an_end_line_at_the_end_of_the_file() {
+        let text = format!("{BEGIN_MARKER}\nbase\n{END_MARKER}");
+        let file = parse(&text).unwrap().unwrap();
+        assert_eq!(file.render_with_suffix("").unwrap(), text);
+        assert_eq!(
+            file.render_with_suffix("added").unwrap(),
+            format!("{BEGIN_MARKER}\nbase\n{END_MARKER}\nadded")
+        );
+        let crlf = format!("{BEGIN_MARKER}\r\nbase\r\n{END_MARKER}");
+        let file = parse(&crlf).unwrap().unwrap();
+        assert_eq!(
+            file.render_with_suffix("a\n").unwrap(),
+            format!("{BEGIN_MARKER}\r\nbase\r\n{END_MARKER}\r\na\r\n")
+        );
+    }
+
+    #[test]
+    fn render_with_suffix_of_the_same_text_is_byte_identical() {
+        let lf = format!("mine\n{}kept\n\n- a\n", block("base\n"));
+        for text in [
+            lf.clone(),
+            lf.replace('\n', "\r\n"),
+            format!("\u{feff}{lf}"),
+        ] {
+            let file = parse(&text).unwrap().unwrap();
+            let suffix = file.suffix.replace("\r\n", "\n");
+            assert_eq!(file.render_with_suffix(&suffix).unwrap(), text, "{text:?}");
+        }
+        let empty = block("base\n");
+        let file = parse(&empty).unwrap().unwrap();
+        assert_eq!(file.render_with_suffix("").unwrap(), empty);
+    }
+
+    #[test]
+    fn render_with_suffix_refuses_marker_lines_outside_a_fence() {
+        let text = format!("{}mine\n", block("base\n"));
+        let file = parse(&text).unwrap().unwrap();
+        for suffix in [
+            format!("{END_MARKER}\n"),
+            format!("a\n{BEGIN_MARKER}\nb\n"),
+            format!("{BEGIN_MARKER}\nfake\n{END_MARKER}\n"),
+            "<!-- BEGIN AGENT-WORKSPACE BASE: other prose -->\n".to_string(),
+        ] {
+            assert_eq!(
+                file.render_with_suffix(&suffix),
+                Err(SuffixRefused),
+                "{suffix:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn render_with_suffix_allows_marker_lines_inside_a_fence_or_indented() {
+        let text = block("base\n");
+        let file = parse(&text).unwrap().unwrap();
+        let fenced = format!("Example:\n```md\n{BEGIN_MARKER}\n{END_MARKER}\n```\n");
+        let indented = format!("  {END_MARKER}\n");
+        for suffix in [fenced, indented] {
+            let updated = file.render_with_suffix(&suffix).unwrap();
+            let reparsed = parse(&updated).unwrap().unwrap();
+            assert_eq!(fixed_parts(&reparsed), fixed_parts(&file));
+            assert_eq!(reparsed.suffix, suffix);
+        }
+    }
+
+    #[test]
+    fn user_revision_follows_the_user_text_not_the_block() {
+        let text = format!("mine\n{}refined\n", block("base\n"));
+        let file = parse(&text).unwrap().unwrap();
+        let rebased = file.render_with_body("new base\n");
+        let rebased = parse(&rebased).unwrap().unwrap();
+        assert_eq!(rebased.user_revision(), file.user_revision());
+        let edited = file.render_with_suffix("refined more\n").unwrap();
+        assert_ne!(
+            parse(&edited).unwrap().unwrap().user_revision(),
+            file.user_revision()
+        );
+        // Moving text across the block is a change, not the same bytes in another place.
+        let moved = format!("{}mine\nrefined\n", block("base\n"));
+        assert_ne!(
+            parse(&moved).unwrap().unwrap().user_revision(),
+            file.user_revision()
+        );
+        let bom = format!("\u{feff}{text}");
+        assert_ne!(
+            parse(&bom).unwrap().unwrap().user_revision(),
+            file.user_revision()
+        );
     }
 
     #[test]
