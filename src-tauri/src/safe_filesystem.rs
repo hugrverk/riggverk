@@ -719,6 +719,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn regular_file_backup_rejects_symlinked_parent() {
+        let _env = crate::test_env::guard::default_xdg_config_home();
         // backup_artifact rejects when the ACTUAL resolved dest path
         // has a symlink in its parent chain
         let base = temp("backup-sym-parent");

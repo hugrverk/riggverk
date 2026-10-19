@@ -1,9 +1,10 @@
 //! The managed keys of OpenCode's `tui.json`.
 //!
-//! `~/.config/opencode/tui.json` is the user's file. The app manages only the top-level keys
-//! listed under `tui_top_level` in `metadata/opencode-managed-keys.json`: install sets them to the
-//! bundled values (`templates/tui.json`), removes a listed key the bundle no longer has, and keeps
-//! every other key (`keybinds`, `plugin`, `scroll_speed`, ...) with its value and its place in the
+//! `tui.json` in the OpenCode config folder (`~/.config/opencode`, or
+//! `$XDG_CONFIG_HOME/opencode`: `platform_paths::opencode_config_dir`) is the user's file. The app
+//! manages only the top-level keys listed under `tui_top_level` in
+//! `metadata/opencode-managed-keys.json`: install sets them to the bundled values
+//! (`templates/tui.json`), removes a listed key the bundle no longer has, and keeps every other key (`keybinds`, `plugin`, `scroll_speed`, ...) with its value and its place in the
 //! file. A missing file is created with the managed keys.
 //!
 //! The file is read and written as strict JSON with the reader of the light-tier MCP files: a file

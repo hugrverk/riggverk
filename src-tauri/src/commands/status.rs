@@ -444,6 +444,7 @@ mod tests {
 
     #[test]
     fn opencode_config_status_synced_when_config_matches() {
+        let _env = crate::test_env::guard::default_xdg_config_home();
         let root = temp_root("opencode-synced");
         let home = temp_root("home-synced");
 
@@ -475,6 +476,7 @@ mod tests {
 
     #[test]
     fn opencode_config_status_missing_when_config_source_absent() {
+        let _env = crate::test_env::guard::default_xdg_config_home();
         let root = temp_root("opencode-no-source");
         let home = temp_root("home-no-source");
 
@@ -492,6 +494,7 @@ mod tests {
 
     #[test]
     fn opencode_config_status_diverged_when_config_differs() {
+        let _env = crate::test_env::guard::default_xdg_config_home();
         let root = temp_root("opencode-div-cfg");
         let home = temp_root("home-div-cfg");
 
@@ -512,6 +515,7 @@ mod tests {
 
     #[test]
     fn opencode_config_status_synced_when_installed_matches_rendered_template() {
+        let _env = crate::test_env::guard::default_xdg_config_home();
         let root = temp_root("opencode-rendered-sync");
         let home = temp_root("home-rendered-sync");
 
@@ -537,6 +541,7 @@ mod tests {
 
     #[test]
     fn opencode_config_status_diverged_when_installed_is_unrendered_template() {
+        let _env = crate::test_env::guard::default_xdg_config_home();
         let root = temp_root("opencode-rendered-div");
         let home = temp_root("home-rendered-div");
 

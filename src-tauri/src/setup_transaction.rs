@@ -3948,6 +3948,7 @@ mod tests {
 
     #[test]
     fn managed_opencode_rollback_removes_added_entries_and_keeps_user_edits_and_order() {
+        let _env = crate::test_env::guard::default_xdg_config_home();
         let home = temp("opencode-rollback-home");
         let ws = home.join("workspace");
         let backups = temp("opencode-rollback-backups");

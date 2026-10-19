@@ -78,7 +78,7 @@ Skills are one global surface (`skills`) for all harnesses, installed into the f
 
 - Claude Code: `~/.claude/skills`
 - Codex: `~/.agents/skills`, and `$CODEX_HOME/skills` (deprecated; `.system` below it is Codex's own)
-- OpenCode: `~/.claude/skills`, `~/.agents/skills`, `~/.config/opencode/skills`
+- OpenCode: `~/.claude/skills`, `~/.agents/skills`, `$XDG_CONFIG_HOME/opencode/skills` (default `~/.config/opencode/skills`)
 - Cursor: `~/.cursor/skills`, `~/.agents/skills`, `~/.claude/skills`, `~/.codex/skills`
 - GitHub Copilot (the CLI; checked against 1.0.98): `~/.copilot/skills` and `~/.agents/skills`. It does not read `~/.claude/skills`. VS Code's Copilot also reads `~/.claude/skills`, so with both folders installed it lists each skill twice.
 - Pi (checked against 1.3.0): the `skills` folder of its agent dir (`~/.pi/agent/skills`) and `~/.agents/skills`. It does not read `~/.claude/skills`.
@@ -90,7 +90,7 @@ The app installs into the fewest folders every enabled harness reads (`skill_roo
 
 The light harnesses (Copilot, Pi, Kilo) are off by default, also for settings files written before they existed; enabling one adds a tab and, at most, one install folder (`~/.agents/skills`, shared with Codex, OpenCode and Cursor). For every subset of the harnesses and both Codex homes the roots satisfy: each enabled harness reads an installed root unless it is unserved; Codex reads exactly one, and in a customised home only its own; nothing is installed that no enabled harness needs; and no new install folder exists, so the worst-case upgrade transaction is unchanged. A skill name found in several folders a harness reads is resolved by that harness: Copilot lets `~/.copilot/skills` win over `~/.agents/skills` without saying so, Pi lets its agent folder win and reports a collision, and Kilo ranks `~/.claude/skills` below `~/.agents/skills` below `~/.kilo/skills` (the last wins, with a log line). The effective-load view shows which copy each loads. MCP is not managed for the light tier yet; the descriptor `metadata/light-harnesses.json` (embedded in the app, never read from the runtime workspace) holds each one's label, CLI program and rules file (see Rules).
 
-A folder that is no longer wanted (a harness switched off, or the folders older versions filled: `~/.config/opencode/skills`, `~/.cursor/skills`, `$CODEX_HOME/skills`, `~/.agents/skills`) loses the app's own copies through the same reviewed plan: each file is removed only when it is proven app-owned, with a backup, in the same transaction that installs the skills in their new folder (removals come last, so a failure restores the old state). Edited copies stay as conflicts, and files you added, your own skills and every dot directory (`$CODEX_HOME/skills/.system` included) are never touched.
+A folder that is no longer wanted (a harness switched off, or the folders older versions filled: `skills` in OpenCode's config folder, `~/.cursor/skills`, `$CODEX_HOME/skills`, `~/.agents/skills`) loses the app's own copies through the same reviewed plan: each file is removed only when it is proven app-owned, with a backup, in the same transaction that installs the skills in their new folder (removals come last, so a failure restores the old state). Edited copies stay as conflicts, and files you added, your own skills and every dot directory (`$CODEX_HOME/skills/.system` included) are never touched.
 
 All bundled skills target Codex, OpenCode, Claude, and Cursor. Sync-all derives expected skills from the same compatibility metadata used by health checks.
 
@@ -134,7 +134,7 @@ Uninstall never removes a kept file (it is not provably the app's) and never del
 Installed rule targets:
 
 - Codex: `$CODEX_HOME/AGENTS.md` (default `~/.codex/AGENTS.md`)
-- OpenCode: `~/.config/opencode/AGENTS.md`
+- OpenCode: `$XDG_CONFIG_HOME/opencode/AGENTS.md` (default `~/.config/opencode/AGENTS.md`)
 - Claude Code: `~/.claude/CLAUDE.md`
 - GitHub Copilot: `~/.copilot/copilot-instructions.md`
 - Pi: `~/.pi/agent/AGENTS.md`
@@ -200,7 +200,9 @@ Generated outputs must match their source bodies and native metadata. Repository
 
 Riggverk owns only allowlisted managed keys and the named Playwright MCP entry. Unknown keys, user provider blocks, and other MCP entries are preserved.
 
-`~/.config/opencode/tui.json` is merge-managed the same way: only the top-level keys listed under `tui_top_level` in `metadata/opencode-managed-keys.json` are the app's, and every other key keeps its value and its place. The file is read and written as strict JSON; one with comments, a trailing comma or invalid JSON is a conflict that is never rewritten, and the reason shown never contains its text. A managed-state record or transaction from a version that owned the whole file still proves the file while it is byte for byte what that version wrote; after the next apply the record holds the managed-key digest.
+OpenCode's config folder is `$XDG_CONFIG_HOME/opencode`, default `~/.config/opencode`, on every OS (OpenCode resolves it with `xdg-basedir`). One resolver (`platform_paths::opencode_config_dir`) gives it to install, review, health, the sibling-file check, uninstall, backups and the labels. A relative `XDG_CONFIG_HOME` is ignored (the XDG specification calls it invalid), and a folder outside the home directory is the allowlisted root of the OpenCode files. Managed-state records name artifacts, not paths, so they follow the folder in effect: after the variable changes, the files at the old folder are neither updated nor removed, uninstall included, and a file of the user's at the new folder is a conflict like anywhere else. `OPENCODE_CONFIG_DIR` adds a folder OpenCode reads after the global one; runtime health warns while it is set and the app never writes there.
+
+`tui.json` in that folder is merge-managed the same way: only the top-level keys listed under `tui_top_level` in `metadata/opencode-managed-keys.json` are the app's, and every other key keeps its value and its place. The file is read and written as strict JSON; one with comments, a trailing comma or invalid JSON is a conflict that is never rewritten, and the reason shown never contains its text. A managed-state record or transaction from a version that owned the whole file still proves the file while it is byte for byte what that version wrote; after the next apply the record holds the managed-key digest.
 
 The config sources are:
 
