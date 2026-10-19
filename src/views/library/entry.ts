@@ -1,5 +1,6 @@
 import type { ActionResult } from "../../components/TerminalOutput";
 import { displayPath } from "../../lib/displayPath";
+import { isPersonalDoc } from "../../lib/libraryDirtyGuards";
 import type { Tone } from "../../ui/tone";
 import type { KvItem } from "../../ui/Kv";
 import type { LibrarySourceType, LibraryViewProps } from "../LibraryView";
@@ -7,6 +8,12 @@ import { configListKey } from "./ConfigItemList";
 import { RULES_LIST_KEY } from "./RulesItemList";
 
 export type LibraryPreviewKind = "markdown" | "json";
+
+/** Why a bundled item cannot be edited (pane footer, disabled hints, `:w`). The maintainer ships changes. */
+export const BUNDLED_READ_ONLY_REASON = "bundled with the app: read-only here";
+
+/** Footer note on a bundled item: the Library shows the workspace copy, which an earlier edit may have changed. */
+export const BUNDLED_COPY_NOTE = "this copy may differ if it was edited earlier";
 
 /**
  * The one item open in the document pane, normalised across sources so the pane does not care whether it is
@@ -34,9 +41,9 @@ export interface LibraryEntry {
   saveResult: ActionResult | null;
   saveMessage: string;
   readOnly: boolean;
-  /** Why the item cannot be edited here (pane footer, disabled edit hint). */
+  /** Why the item cannot be edited here (pane footer, disabled edit, save and open hints). */
   readOnlyReason: string | null;
-  /** Footer note about what a save touches ("template only"). */
+  /** Footer note (on a bundled item: that the copy may differ from the bundled one). */
   note: string | null;
   preview: LibraryPreviewKind;
   metaTitle: string | null;
@@ -44,7 +51,8 @@ export interface LibraryEntry {
   onChange: (value: string) => void;
   onSave: () => void;
   onReset: () => void;
-  onOpen: () => void;
+  /** Opens the item in the external editor; null for bundled items, which are not handed to an editor. */
+  onOpen: (() => void) | null;
 }
 
 const noop = () => {};
@@ -65,6 +73,7 @@ function listItems(label: string, values: readonly string[]): KvItem[] {
 function docEntry(props: LibraryViewProps): LibraryEntry | null {
   const doc = props.activeDoc;
   if (!doc) return null;
+  const personal = isPersonalDoc(doc);
   return {
     source: "docs",
     id: doc.id,
@@ -79,16 +88,16 @@ function docEntry(props: LibraryViewProps): LibraryEntry | null {
     saving: props.docSaving,
     saveResult: props.docSaveResult,
     saveMessage: "",
-    readOnly: false,
-    readOnlyReason: null,
-    note: null,
+    readOnly: !personal,
+    readOnlyReason: personal ? null : BUNDLED_READ_ONLY_REASON,
+    note: personal ? null : BUNDLED_COPY_NOTE,
     preview: "markdown",
     metaTitle: null,
     meta: [],
     onChange: props.onChangeDocDraft,
     onSave: props.onSaveDoc,
     onReset: props.onResetDoc,
-    onOpen: () => props.onOpenDoc(doc.id),
+    onOpen: personal ? () => props.onOpenDoc(doc.id) : null,
   };
 }
 
@@ -103,23 +112,23 @@ function rulesEntry(props: LibraryViewProps): LibraryEntry | null {
     title: "Global Rules",
     path: displayPath(template.path),
     copyPath: displayPath(template.path),
-    editorLabel: "Edit agent rules template",
+    editorLabel: "Agent rules template",
     saved: template.content,
-    draft: props.agentTemplateDraft,
-    dirty: props.agentTemplateDirty,
-    saving: props.agentTemplateSaving,
-    saveResult: props.agentTemplateSaveResult,
+    draft: template.content,
+    dirty: false,
+    saving: false,
+    saveResult: null,
     saveMessage: "",
-    readOnly: false,
-    readOnlyReason: null,
-    note: "template only",
+    readOnly: true,
+    readOnlyReason: BUNDLED_READ_ONLY_REASON,
+    note: BUNDLED_COPY_NOTE,
     preview: "markdown",
     metaTitle: "installs to",
     meta: targets.map(target => ({ id: target.id, label: target.label, value: target.target_rel })),
-    onChange: props.onChangeAgentTemplateDraft,
-    onSave: props.onSaveAgentTemplate,
-    onReset: props.onResetAgentTemplate,
-    onOpen: props.onOpenTemplate,
+    onChange: noop,
+    onSave: noop,
+    onReset: noop,
+    onOpen: null,
   };
 }
 
@@ -149,15 +158,15 @@ function skillEntry(props: LibraryViewProps): LibraryEntry | null {
     saveResult: null,
     saveMessage: "",
     readOnly: true,
-    readOnlyReason: "skills are edited as files: open it in your editor",
-    note: null,
+    readOnlyReason: BUNDLED_READ_ONLY_REASON,
+    note: BUNDLED_COPY_NOTE,
     preview: "markdown",
     metaTitle: "metadata",
     meta,
     onChange: noop,
     onSave: noop,
     onReset: noop,
-    onOpen: () => props.onOpenSkill(content.id),
+    onOpen: null,
   };
 }
 
@@ -183,23 +192,23 @@ function agentEntry(props: LibraryViewProps): LibraryEntry | null {
     title: content.title,
     path: displayPath(content.path),
     copyPath: displayPath(content.path),
-    editorLabel: "Edit agent source",
+    editorLabel: "Agent source",
     saved: content.content,
-    draft: props.agentDraft,
-    dirty: props.agentDirty,
-    saving: props.agentSaving,
-    saveResult: props.agentSaveResult,
+    draft: content.content,
+    dirty: false,
+    saving: false,
+    saveResult: null,
     saveMessage: "",
-    readOnly: !content.exists,
-    readOnlyReason: content.exists ? null : "not in workspace: nothing to save yet",
-    note: "workspace source",
+    readOnly: true,
+    readOnlyReason: BUNDLED_READ_ONLY_REASON,
+    note: BUNDLED_COPY_NOTE,
     preview: "markdown",
     metaTitle: "metadata",
     meta: rows,
-    onChange: props.onChangeAgentDraft,
-    onSave: props.onSaveAgent,
-    onReset: props.onResetAgent,
-    onOpen: () => props.onOpenAgent(content.id),
+    onChange: noop,
+    onSave: noop,
+    onReset: noop,
+    onOpen: null,
   };
 }
 
@@ -211,14 +220,6 @@ function configEntry(props: LibraryViewProps): LibraryEntry | null {
   const source = props.configEditorSources.find(candidate => candidate.id === props.activeConfigSourceType);
   const sourcePath = source?.rel_path ?? target?.source_rel ?? "";
   const targetPath = target?.target_rel ?? "";
-  // Only opencode_config has a save path; every other target is a template preview.
-  const readOnly = !isOpenCode || (source ? !source.editable : false);
-  let readOnlyReason: string | null = null;
-  if (readOnly) {
-    if (!isOpenCode) readOnlyReason = "template preview";
-    else if (props.activeConfigSourceType === "snapshot") readOnlyReason = "generated snapshot: edit Base or Policy instead";
-    else readOnlyReason = source?.helper || "read-only source";
-  }
   const meta: KvItem[] = isOpenCode
     ? [
         { label: "source", value: "templates/opencode.base.json + templates/opencode.policy.json", wrap: true },
@@ -235,23 +236,23 @@ function configEntry(props: LibraryViewProps): LibraryEntry | null {
     title: target?.label ?? "Config",
     path: [sourcePath, targetPath ? `target: ${targetPath}` : ""].filter(Boolean).join(" · "),
     copyPath: sourcePath || targetPath,
-    editorLabel: "Edit config source",
+    editorLabel: "Config source",
     saved: content.content,
-    draft: readOnly ? content.content : props.configDraft,
-    dirty: props.configDirty,
-    saving: props.configSaving,
-    saveResult: props.configSaveResult,
-    saveMessage: props.configEditorSourceSaveMessage,
-    readOnly,
-    readOnlyReason,
-    note: null,
+    draft: content.content,
+    dirty: false,
+    saving: false,
+    saveResult: null,
+    saveMessage: "",
+    readOnly: true,
+    readOnlyReason: BUNDLED_READ_ONLY_REASON,
+    note: BUNDLED_COPY_NOTE,
     preview: "json",
     metaTitle: isOpenCode ? "bundle" : null,
     meta,
-    onChange: props.onChangeConfigDraft,
-    onSave: props.onSaveConfig,
-    onReset: props.onResetConfig,
-    onOpen: props.onOpenConfig,
+    onChange: noop,
+    onSave: noop,
+    onReset: noop,
+    onOpen: null,
   };
 }
 

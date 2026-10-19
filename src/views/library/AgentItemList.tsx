@@ -61,6 +61,7 @@ export function AgentItemList({
       followCursor={followCursor}
       onSelect={onSelect}
       onActivate={onActivate}
+      activateHint="read"
       filter={{ value: search, onChange: onSearchChange, label: "Filter agents", placeholder: "filter agents" }}
       empty="No agents match"
     />

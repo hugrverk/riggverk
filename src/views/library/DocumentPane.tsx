@@ -116,7 +116,7 @@ export function DocumentPane({ entry, emptyHint, editing, textareaRef, top, onCl
               />
             )}
             {entry.readOnly && entry.readOnlyReason && <span className="c-dim">{entry.readOnlyReason}</span>}
-            {!entry.readOnly && entry.note && <span className="c-dim">{entry.note}</span>}
+            {entry.note && <span className="c-dim">{entry.note}</span>}
             {status && (
               <span className={status.ok ? "c-ok" : "c-fail"} role="status">
                 {status.text}

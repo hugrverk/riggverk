@@ -13,7 +13,7 @@ The app ships a read-only bundled copy of this workspace. Everything the app ins
 - **Install to the workspace**: bundle -> `~/.config/agent-workspace`.
 - **Install to a harness**: bundle -> `~/.claude`, `~/.codex`, `~/.config/opencode`, `~/.cursor`.
 
-So editing a file in the workspace changes what the Library shows, not what Claude, Codex, OpenCode, or Cursor receive. It also means the app can no longer prove it owns that file, so it becomes a conflict on later updates and is left alone. See [TROUBLESHOOTING.md](TROUBLESHOOTING.md#conflicts).
+The Library shows these files read-only; your own notes go in personal docs (`docs/context/`), which the bundle never ships. Editing a bundled file in the workspace outside the app changes what the Library shows, not what Claude, Codex, OpenCode, or Cursor receive. It also means the app can no longer prove it owns that file, so it becomes a conflict on later updates and is left alone. See [TROUBLESHOOTING.md](TROUBLESHOOTING.md#conflicts).
 
 ## Mental model
 
@@ -54,4 +54,4 @@ Selecting a workspace folder is still a trust decision: do not run scripts from 
 
 ## Backups
 
-Before overwriting or removing a file, Install, uninstall, and Library saves copy it to the backup root, owner-only: `<root>/setup/<transaction id>/...` for installs, `<root>/docs/<id>-<timestamp>/` for Library saves. Previews and dry runs write nothing. Layout and locations: [USING_THE_APP.md](USING_THE_APP.md#backups).
+Before overwriting or removing a file, Install, uninstall, and Library saves copy it to the backup root, owner-only: `<root>/setup/<transaction id>/...` for installs, `<root>/docs/custom_<slug>-<timestamp>/` for Library saves of personal docs. Previews and dry runs write nothing. Layout and locations: [USING_THE_APP.md](USING_THE_APP.md#backups).

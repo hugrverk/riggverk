@@ -112,7 +112,7 @@ Anything Install, uninstall, or a Library save would overwrite or remove is copi
 <backup root>/setup/<transaction id>/manifest.json
                                     /artifacts/<artifact id>
                                     /managed-state.previous.json
-<backup root>/docs/<doc id>-<timestamp>/<file>        Library saves
+<backup root>/docs/custom_<slug>-<timestamp>/<file>   Library saves (personal docs)
 <backup root>/<YYYYMMDD-HHMMSS>/<label>/<file>        Cursor operations (and the retired CLI scripts)
 ```
 
@@ -124,9 +124,11 @@ New files have no backup. Restore by rollback while the transaction is in this s
 
 ## Library
 
-Panes: **items** and the open **document**, which shows the item rendered (Markdown, or formatted JSON for configs) and turns into its source text while you edit. Sources: Docs, Rules, Skills, Runtime agents, Configs (`[` `]` to switch). Docs are grouped Start, Guides, Reference, Cursor, Configs, and Context. `i` or Enter edits, Escape returns to the rendered view, `Mod+s` or `:w` saves, `:q` closes and asks before discarding edits.
+Panes: **items** and the open **document**, which shows the item rendered (Markdown, or formatted JSON for configs) and turns into its source text while you edit. Sources: Docs, Rules, Skills, Runtime agents, Configs (`[` `]` to switch). Docs are grouped Start, Guides, Reference, Cursor, Configs, and Context.
 
-The Library edits the runtime workspace copy. Saves back up the file first and refuse symlinks. They do not change what harnesses receive, and an edited bundled file becomes a conflict for later updates ([TROUBLESHOOTING.md](TROUBLESHOOTING.md#conflicts)). A doc that differs from the bundled one shows a stale-doc warning.
+You edit only your own text: personal docs, in the Context group (`docs/context/<slug>.md` in the workspace). `n` creates one; on it, `i` or Enter edits, Escape returns to the rendered view, `Mod+s` or `:w` saves, `:q` closes and asks before discarding edits, and `o` opens it in your editor. Saves back up the file first and refuse symlinks. Install and updates never touch personal docs.
+
+Everything else is bundled with the app and read-only here: the pane title says "read-only", and edit, save and `o` say "bundled with the app: read-only here". Bundled items change with an app update. The Library shows the workspace copy, so a file edited outside the app (or with an earlier version) can differ from the bundled one; such a file stays a conflict that Install leaves alone ([TROUBLESHOOTING.md](TROUBLESHOOTING.md#conflicts)). When bundled docs are missing from the workspace, the Docs list says so and links to the workspace update.
 
 ## Settings
 

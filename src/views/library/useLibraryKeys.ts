@@ -35,7 +35,8 @@ const OPEN_PANES = ["items", "editor"] as const;
 /**
  * Library key layer: `[`/`]` source, `/` filter (hint only: the list owns the key), `i`/Enter edit the open
  * item (rendered view -> textarea), Mod+s and `:w` save, Escape back to the rendered view, `:q` close (asks
- * first when there are unsaved edits), `:reset`, `o` open externally, `n` new doc.
+ * first when there are unsaved edits), `:reset`, `o` open externally, `n` new doc. Edit, save and open are
+ * offered only where the item is the user's own text; on a bundled item their hints say why not.
  * Selection itself lives in the item lists; every guard (dirty confirm, stale loads) stays in the controller.
  */
 export function useLibraryKeys({
@@ -76,7 +77,7 @@ export function useLibraryKeys({
       return;
     }
     if (current.readOnly) {
-      notify("read-only item", { tone: "warn" });
+      notify(current.readOnlyReason ?? "read-only item", { tone: "warn" });
       return;
     }
     if (!current.dirty) {
@@ -159,7 +160,11 @@ export function useLibraryKeys({
       scope: "editor",
       paneId: "editor",
       inEditable: true,
-      when: () => (latest.current === null ? false : latest.current.readOnly ? "read-only" : true),
+      when: () => {
+        const current = latest.current;
+        if (!current) return false;
+        return current.readOnly ? current.readOnlyReason ?? "read-only" : true;
+      },
       run: save,
     },
     {
@@ -182,8 +187,12 @@ export function useLibraryKeys({
       group: "Library",
       scope: "pane",
       paneId,
-      when: () => latest.current !== null,
-      run: () => latest.current?.onOpen(),
+      when: () => {
+        const current = latest.current;
+        if (!current) return false;
+        return current.onOpen ? true : current.readOnlyReason ?? "nothing to open";
+      },
+      run: () => latest.current?.onOpen?.(),
     })),
     {
       id: "library.new-doc",
@@ -206,7 +215,7 @@ export function useLibraryKeys({
       aliases: ["write"],
       summary: "save the open item",
       group: "Library",
-      enabled: () => (latest.current?.readOnly ? "read-only item" : hasItem()),
+      enabled: () => (latest.current?.readOnly ? latest.current.readOnlyReason ?? "read-only item" : hasItem()),
       run: save,
     },
     {

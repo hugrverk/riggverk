@@ -381,7 +381,6 @@ export interface ConfigEditorSourceMeta {
   id: string;
   label: string;
   rel_path: string;
-  editable: boolean;
   helper: string;
 }
 

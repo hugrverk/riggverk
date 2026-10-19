@@ -4,7 +4,9 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use super::opencode_cli::{self, AgentProbe, CliVersion, OpenCodeCliHealth, VersionProbe};
-use super::process::{run_cmd_bounded, ActionResult, BoundedCmdOptions, BoundedCmdResult};
+#[cfg(test)]
+use super::process::ActionResult;
+use super::process::{run_cmd_bounded, BoundedCmdOptions, BoundedCmdResult};
 use super::status::file_eq;
 
 #[derive(Serialize, Clone, Debug)]
@@ -1624,9 +1626,9 @@ pub(crate) fn apply_cli_probes(
     }
 }
 
-/// Run the bundled generator's --write against the given workspace root.
-/// Returns an ActionResult with command output.
-/// This is the testable helper; the Tauri command wraps it.
+/// Run the bundled generator's --write against the given workspace root: test fixtures use it to make a
+/// snapshot that checks as current. The app itself never writes the bundled config sources or snapshot.
+#[cfg(test)]
 pub(crate) fn run_generator_write(workspace_root: &Path) -> Result<ActionResult, String> {
     match bundled_generator_script(workspace_root) {
         Ok(script) => run_generator_write_with_script(&script, workspace_root),
@@ -1640,6 +1642,7 @@ pub(crate) fn run_generator_write(workspace_root: &Path) -> Result<ActionResult,
     }
 }
 
+#[cfg(test)]
 fn run_generator_write_with_script(
     script: &Path,
     workspace_root: &Path,
@@ -3101,7 +3104,7 @@ mod tests {
         assert_eq!(health.tui_status, "synced");
     }
 
-    // ── Tests for run_generator_write ──
+    // ── Generator tests ──
 
     fn write_generator_script(root: &Path, script_rel: &str, content: &str) {
         let script_dir = root.join(script_rel).parent().unwrap().to_path_buf();
@@ -3131,21 +3134,6 @@ mod tests {
         fs::read_to_string(path).expect("read bundled template")
     }
 
-    /// Sources the bundled generator can process, with a snapshot that does not match them yet.
-    fn write_generator_inputs(ws: &Path) {
-        write_file(
-            ws,
-            "templates/opencode.base.json",
-            &bundled_template("opencode.base.json"),
-        );
-        write_file(
-            ws,
-            "templates/opencode.policy.json",
-            &bundled_template("opencode.policy.json"),
-        );
-        write_file(ws, "templates/opencode.json", "{}");
-    }
-
     /// Stand-in generator for the injected-script entry points. It lives outside the workspace, as the
     /// bundled one does, and receives the production arguments: `<script> --root <workspace> <mode>`.
     fn fake_generator(label: &str, body: &str) -> (PathBuf, PathBuf) {
@@ -3161,60 +3149,22 @@ mod tests {
     }
 
     #[test]
-    fn test_generator_write_regenerates_snapshot_in_workspace() {
-        let ws = temp_root("gen-write-real");
-        write_marker_workspace(&ws);
-        write_generator_inputs(&ws);
-
-        let result = super::run_generator_write(&ws).expect("generator should run");
-        let snapshot = fs::read_to_string(ws.join("templates/opencode.json")).expect("snapshot");
-        cleanup(&ws);
-
-        assert!(result.success, "{}", result.stderr);
-        assert_eq!(result.action, "generate_opencode_config_snapshot");
-        assert!(result.stdout.contains("Generated"));
-        assert_eq!(snapshot, bundled_template("opencode.json"));
-    }
-
-    #[test]
-    fn test_generator_write_reports_generator_failure() {
-        let ws = temp_root("gen-write-fail");
-        write_marker_workspace(&ws);
-        write_generator_inputs(&ws);
-        write_file(&ws, "templates/opencode.policy.json", r#"{"bogus":{}}"#);
-
-        let result = super::run_generator_write(&ws).expect("generator should run");
-        let snapshot = fs::read_to_string(ws.join("templates/opencode.json")).expect("snapshot");
-        cleanup(&ws);
-
-        assert!(!result.success);
-        assert!(result.stderr.contains("unknown keys"), "{}", result.stderr);
-        assert_eq!(
-            snapshot, "{}",
-            "a failed generation leaves the snapshot alone"
-        );
-    }
-
-    #[test]
-    fn test_generator_write_runs_with_workspace_as_data_argument() {
-        let ws = temp_root("gen-write-args");
+    fn test_generator_check_runs_with_workspace_as_data_argument() {
+        let ws = temp_root("gen-check-args");
         write_marker_workspace(&ws);
         let (gen_dir, script) = fake_generator(
-            "gen-write-args-script",
-            "assert mode == '--write', mode\nopen(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'cwd.txt'), 'w').write(os.getcwd())\nopen(os.path.join(root, 'templates', '.generated_marker'), 'w').write('ok')\n",
+            "gen-check-args-script",
+            "assert mode == '--check', mode\nassert os.path.isdir(os.path.join(root, 'templates')), root\nopen(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'cwd.txt'), 'w').write(os.getcwd())\n",
         );
 
-        let result =
-            super::run_generator_write_with_script(&script, &ws).expect("generator should run");
+        let result = run_generator_check_with_timeout(&script, &ws, Duration::from_secs(30));
         let cwd = fs::read_to_string(gen_dir.join("scripts/cwd.txt")).expect("recorded cwd");
-        let marker = ws.join("templates/.generated_marker").is_file();
         let recorded_cwd = Path::new(&cwd).canonicalize().expect("cwd");
         let expected_cwd = gen_dir.join("scripts").canonicalize().expect("script dir");
         cleanup(&ws);
         cleanup(&gen_dir);
 
-        assert!(result.success, "{}", result.stderr);
-        assert!(marker, "the workspace is what the generator writes into");
+        assert_eq!(result.expect("generator ran").0, "current");
         assert_eq!(
             recorded_cwd, expected_cwd,
             "the generator runs from its own folder, not from the workspace"
@@ -3253,33 +3203,6 @@ mod tests {
         assert_eq!(health.generated_snapshot_status, "current");
         assert_eq!(check.expect("generator ran").0, "current");
         assert!(write.success, "{}", write.stderr);
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn test_generator_write_refuses_snapshot_symlink_leaving_workspace() {
-        let ws = temp_root("gen-link-ws");
-        let outside = temp_root("gen-link-outside");
-        write_marker_workspace(&ws);
-        write_generator_inputs(&ws);
-        write_file(&outside, "target.json", "keep");
-        fs::remove_file(ws.join("templates/opencode.json")).expect("remove snapshot");
-        std::os::unix::fs::symlink(
-            outside.join("target.json"),
-            ws.join("templates/opencode.json"),
-        )
-        .expect("link snapshot");
-
-        let result = super::run_generator_write(&ws);
-        let untouched = fs::read_to_string(outside.join("target.json")).expect("target");
-        cleanup(&ws);
-        cleanup(&outside);
-
-        assert!(
-            result.is_err(),
-            "write through an escaping symlink must be refused"
-        );
-        assert_eq!(untouched, "keep");
     }
 
     #[test]

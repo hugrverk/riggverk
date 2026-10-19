@@ -11,7 +11,7 @@ It writes only ignored build artifacts in the repository and temporary directori
 - `git status --short` and `git diff --check`
 - shell syntax checks
 - README and docs drift (`check-readme-docs-drift.py`), the curated Library docs registry, and the default-workspace copy list
-- generator currency: agent adapters, rule adapters, OpenCode config snapshot, pre-manifest ownership, rules history, shipped digests
+- generated files are current (`python3 scripts/generate.py check`): agent adapters, rule adapters, OpenCode config snapshot, bundled what's new, pre-manifest ownership, rules history, shipped digests
 - skill catalog and routing checks (`check-skill-routing.py`) and OpenCode permission composition and contract
 - merge-script unit tests, the Codex merge secret-marker guard, and the pre-manifest upgrade smoke
 - forbidden source scans (shell command strings, `eval`, removed skill flows) and managed-installation contract guards, including the single reviewed install owner
@@ -54,11 +54,11 @@ The draft is the pull request titles that were merged into `main` since the prev
 - Edit freely, then regenerate the data the app bundles and push:
 
   ```bash
-  python3 scripts/generate-release-notes.py --write
+  python3 scripts/generate.py write --only release-notes
   git add release-notes src/generated/release-notes.json && git commit -m "docs(release): edit the notes" && git push
   ```
 
-  `release-check.sh` fails with this command in the message when the bundled file is stale.
+  `release-check.sh` fails with `python3 scripts/generate.py write` in the message when the bundled file is stale.
 
 The same file is the GitHub release body and the app's "what's new". The app shows the notes since the version a user last saw once, on the first launch after an update (the overlay of `?`: Escape closes it, `j`/`k` scroll), and `:whatsnew` opens all of them at any time. A fresh install records its version and shows nothing. An install that predates `last_seen_version` also counts as fresh once, so the first update that carries the field shows nothing; every one after it does.
 

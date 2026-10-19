@@ -5,6 +5,13 @@ Approves every digest the app ever shipped for each managed artifact so a
 pre-manifest installation deployed from ANY historical app version is
 recognized as app-owned and can be updated or removed. User-modified content
 never matches a shipped digest and remains a preserved conflict.
+
+A shipped version is one committed in the history of HEAD (and MERGE_HEAD during a merge) or
+the tracked working-tree version, so the output is the same before and after `git commit`.
+
+Usage:
+  python3 scripts/generate-pre-manifest-ownership.py --check
+  python3 scripts/generate-pre-manifest-ownership.py --write
 """
 
 from __future__ import annotations
@@ -13,9 +20,17 @@ import argparse
 import hashlib
 import json
 import re
-import subprocess
 import sys
+from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path
+
+if str(Path(__file__).resolve().parent) not in sys.path:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import generate_history  # noqa: E402
+
+# Re-exported: callers that load this script for its history walker keep working.
+from generate_history import git, historical_blobs_by_rel  # noqa: E402,F401
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE_COMMIT = "2d85d94b6f2f1dc06f45f6ec52a22ae97e499588"
@@ -23,19 +38,14 @@ PREFIX = "resources/default-workspace/"
 MANIFEST = ROOT / PREFIX / "metadata/pre-manifest-ownership.json"
 WORKSPACE_MANIFEST = ROOT / "src-tauri/src/commands/default_workspace_manifest.rs"
 BOOTSTRAP = ROOT / "src-tauri/src/managed_bootstrap.rs"
-
-
-def git(*args: str) -> bytes:
-    result = subprocess.run(
-        ["git", *args],
-        cwd=ROOT,
-        check=False,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-    )
-    if result.returncode:
-        raise RuntimeError(result.stderr.decode("utf-8", errors="replace").strip())
-    return result.stdout
+# Skill files in the bundle history: skills/[<category>/]<name>/SKILL.md and deprecated snapshots.
+HISTORICAL_SKILL_FILES = (
+    re.compile(r"^skills/(?:[a-z0-9-]+/)?([a-z0-9-]+)/SKILL\.md$"),
+    re.compile(r"^metadata/deprecated-skills/([a-z0-9-]+)/SKILL\.md$"),
+)
+# Removed skills that no tagged build shipped, so no installation holds them: sync-agent-rules was
+# added in c0b6e8d and removed a day later in 19b4040 (app-v0.1.0 predates both, v0.1.0-alpha has both).
+NEVER_RELEASED_SKILLS = ("sync-agent-rules",)
 
 
 def digest(raw: bytes) -> str:
@@ -71,53 +81,56 @@ def removed_skill_names() -> list[str]:
     return rust_string_list(BOOTSTRAP, "pub const REMOVED_SKILL_NAMES", "];")
 
 
-def historical_blobs_by_rel() -> dict[str, set[str]]:
-    """Map default-workspace relative path -> all blob shas across HEAD history.
-
-    Matches the bundled workspace at any historical repository location
-    (e.g. apps/ux-workspace-app/resources/default-workspace before the
-    repository was flattened). Tree inspection is intentional: rev-list
-    --objects emits each object once, with a path label that can change when
-    unrelated refs are present.
-    """
-    rel_to_shas: dict[str, set[str]] = {}
-    prefix = PREFIX.encode()
-    for commit in git("rev-list", "HEAD").decode().splitlines():
-        for line in git("ls-tree", "-rz", "-r", "--full-tree", commit).split(b"\0"):
-            if not line:
-                continue
-            meta, _, raw_path = line.partition(b"\t")
-            if not raw_path:
-                continue
-            parts = meta.split()
-            if len(parts) < 3 or parts[1] != b"blob":
-                continue
-            index = raw_path.find(prefix)
-            if index == -1:
-                continue
-            if index != 0 and not raw_path[:index].endswith(b"/"):
-                continue
-            rel = raw_path[index + len(prefix) :].decode(
-                "utf-8", errors="surrogateescape"
-            )
-            if rel:
-                rel_to_shas.setdefault(rel, set()).add(parts[2].decode())
-    return rel_to_shas
+def unregistered_removed_skills(
+    historical_rels: Iterable[str], current: Iterable[str], removed: Iterable[str]
+) -> list[str]:
+    """Skills the bundle history holds that are gone now but missing from REMOVED_SKILL_NAMES."""
+    shipped: set[str] = set()
+    for rel in historical_rels:
+        for pattern in HISTORICAL_SKILL_FILES:
+            match = pattern.match(rel)
+            if match:
+                shipped.add(match.group(1))
+    return sorted(shipped - set(current) - set(removed) - set(NEVER_RELEASED_SKILLS))
 
 
 class HistoricalDigests:
-    def __init__(self) -> None:
-        self._by_rel = historical_blobs_by_rel()
+    """Digest variants of every shipped version of a bundle path.
+
+    Shipped means committed (see generate_history) or the tracked working-tree version; adding the
+    working tree makes every entry the same before and after `git commit`, including the CRLF
+    variant of the current version that the update entries keep.
+    """
+
+    def __init__(
+        self,
+        by_rel: Mapping[str, Iterable[str]] | None = None,
+        tracked: Iterable[str] | None = None,
+        read_blob: Callable[[str], bytes] = generate_history.blob,
+        workspace: Path = ROOT / PREFIX,
+    ) -> None:
+        self._by_rel = historical_blobs_by_rel() if by_rel is None else by_rel
+        if tracked is None:
+            tracked = (path[len(PREFIX) :] for path in generate_history.tracked_files(PREFIX))
+        self._tracked = set(tracked)
+        self._read_blob = read_blob
+        self._workspace = workspace
         self._blob_cache: dict[str, set[str]] = {}
+
+    def rels(self) -> Iterable[str]:
+        return self._by_rel.keys()
 
     def for_rel(self, rel: str) -> set[str]:
         digests: set[str] = set()
-        for sha in sorted(self._by_rel.get(rel, set())):
+        for sha in sorted(self._by_rel.get(rel, ())):
             cached = self._blob_cache.get(sha)
             if cached is None:
-                cached = shipped_digest_variants(git("cat-file", "blob", sha))
+                cached = shipped_digest_variants(self._read_blob(sha))
                 self._blob_cache[sha] = cached
             digests.update(cached)
+        path = self._workspace / rel
+        if rel in self._tracked and path.is_file() and not path.is_symlink():
+            digests |= shipped_digest_variants(path.read_bytes())
         return digests
 
     def shipped_for_rels(self, rels: list[str]) -> set[str]:
@@ -184,6 +197,13 @@ def generate() -> dict[str, object]:
     artifacts: list[dict[str, object]] = []
 
     removed = removed_skill_names()
+    skill_rels = current_skill_rels()
+    unregistered = unregistered_removed_skills(history.rels(), skill_rels, removed)
+    if unregistered:
+        raise RuntimeError(
+            "skills removed from the bundle must be listed in REMOVED_SKILL_NAMES "
+            f"({BOOTSTRAP.relative_to(ROOT)}): {', '.join(unregistered)}"
+        )
     for name in removed:
         digests = history.shipped_for_rels(
             [
@@ -230,7 +250,6 @@ def generate() -> dict[str, object]:
         )
     )
 
-    skill_rels = current_skill_rels()
     for name, rel in sorted(skill_rels.items()):
         if name in removed:
             continue
@@ -301,7 +320,9 @@ def encoded(value: dict[str, object]) -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--check", action="store_true")
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument("--check", action="store_true")
+    group.add_argument("--write", action="store_true")
     args = parser.parse_args()
     try:
         expected = generate()

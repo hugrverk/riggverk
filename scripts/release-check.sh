@@ -224,23 +224,17 @@ else
   printf '  no merge base found; committed changes were not checked\n'
 fi
 
-step "pre-manifest ownership semantic coverage"
-python3 scripts/generate-pre-manifest-ownership.py --check
-
-# Reads past versions of the rules templates from git history, so it needs full history
-# (CI checks out with fetch-depth: 0), like the pre-manifest generator above.
-step "rules history is current"
-python3 scripts/generate-rules-history.py --check
-
-# Same history requirement: the digests of every shipped skill and agent file version.
-step "shipped digests are current"
+# Every generated file: rule and agent adapters, the OpenCode snapshot (and its shipped twin
+# generator), the bundled what's new, and the history-based rules history, shipped digests and
+# pre-manifest ownership. The history generators need the full git history.
+step "generated files are current"
+run_python_unittests scripts/test_generate.py
 run_python_unittests scripts/test_generate_shipped_digests.py
-python3 scripts/generate-shipped-digests.py --check
+python3 scripts/generate.py check
 
-step "release tooling and bundled what's new"
+step "release tooling"
 run_python_unittests scripts/test_release_tools.py
 run_python_unittests scripts/test_release_sh.py
-python3 scripts/generate-release-notes.py --check
 printf '  app version %s agrees across package.json, tauri.conf.json, Cargo.toml and both lock files\n' \
   "$(python3 scripts/release_tools.py check-versions)"
 
@@ -741,17 +735,13 @@ fi
 rm -rf "$guard_ws"
 printf '  Playwright MCP guard flags a hardcoded home directory\n'
 
-step "bundled default opencode.json snapshot is current"
-python3 scripts/generate-default-opencode-config.py --check
-
 step "bundled OpenCode permission composition tests"
 run_python_unittests scripts/test_opencode_policy_compose.py
 
 step "bundled OpenCode permission contract"
 python3 scripts/validate_opencode_permissions.py
 
-step "bundled harness agent adapters are current"
-python3 scripts/generate-agent-adapters.py --check
+step "bundled harness agent adapter sources"
 # Tests land with the agent-adapter validation changes; run them once present.
 if [ -f scripts/test_generate_agent_adapters.py ]; then
   run_python_unittests scripts/test_generate_agent_adapters.py
@@ -766,8 +756,7 @@ if ! ls resources/default-workspace/templates/opencode/agents/*.role.json >/dev/
 fi
 printf '  OpenCode permissions sourced from policy + role overrides\n'
 
-step "bundled harness rule adapters are current"
-python3 scripts/generate-agent-rules.py --check
+step "bundled codex agent toml files parse"
 python3 - <<'PY'
 import tomllib
 from pathlib import Path
@@ -777,13 +766,6 @@ for path in sorted(root.glob("*.toml")):
     tomllib.loads(path.read_text(encoding="utf-8"))
 print(f"  validated {len(list(root.glob('*.toml')))} codex agent toml files")
 PY
-
-step "workspace generator --check from temp workspace copy"
-tmpdir_gen="$(mktemp -d)"
-cp -R resources/default-workspace "$tmpdir_gen/gen-test"
-python3 "$tmpdir_gen/gen-test/scripts/generate-opencode-config.py" --check
-rm -rf "$tmpdir_gen"
-printf '  workspace-relative generator --check passed\n'
 
 step "bundled default opencode.json"
 python3 -m json.tool resources/default-workspace/templates/opencode.json >/dev/null

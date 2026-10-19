@@ -4,11 +4,8 @@ import type { ActionResult } from "../components/TerminalOutput";
 import { LEAVE_DIRTY_MESSAGE } from "../lib/editorGuards";
 import { invokeOpen } from "../lib/invokeOpen";
 import { useConfirm } from "../components/ConfirmDialog";
-import {
-  createSaveOperationTracker,
-  shouldApplyOpenCodeSourceSave,
-} from "../lib/editorSaveOperation";
-import { isLibrarySourceTypeDirty } from "../lib/libraryDirtyGuards";
+import { createSaveOperationTracker } from "../lib/editorSaveOperation";
+import { isLibrarySourceTypeDirty, isPersonalDoc } from "../lib/libraryDirtyGuards";
 import type { LibrarySourceType } from "../views/LibraryView";
 import type {
   AgentMetadataListResponse,
@@ -64,55 +61,26 @@ export function useLibraryController({
   const [createDocError, setCreateDocError] = useState<string | null>(null);
   const [createDocCreating, setCreateDocCreating] = useState(false);
 
+  // Rules, agents and configs are bundled with the app and read-only in the Library: loaded, never drafted.
   const [agentTemplate, setAgentTemplate] = useState<DocumentContent | null>(null);
-  const [agentTemplateDraft, setAgentTemplateDraft] = useState("");
-  const [agentTemplateDirty, setAgentTemplateDirty] = useState(false);
-  const [agentTemplateSaving, setAgentTemplateSaving] = useState(false);
-  const [agentTemplateSaveResult, setAgentTemplateSaveResult] = useState<ActionResult | null>(null);
-  const [agentTemplateMode, setAgentTemplateMode] = useState<"preview" | "edit">("preview");
 
   const [librarySourceType, setLibrarySourceType] = useState<LibrarySourceType>("docs");
 
   const [agentSources, setAgentSources] = useState<AgentMetadataResponse[]>([]);
   const [activeAgentId, setActiveAgentId] = useState<string | null>(null);
   const [activeAgentContent, setActiveAgentContent] = useState<AgentSourceContent | null>(null);
-  const [agentDraft, setAgentDraft] = useState("");
-  const [agentDirty, setAgentDirty] = useState(false);
-  const [agentSaving, setAgentSaving] = useState(false);
-  const [agentSaveResult, setAgentSaveResult] = useState<ActionResult | null>(null);
-  const [agentMode, setAgentMode] = useState<"preview" | "edit">("preview");
   const activeAgentIdRef = useRef<string | null>(null);
-  const agentDraftIdRef = useRef<string | null>(null);
-  const agentDirtyRef = useRef(false);
-  agentDirtyRef.current = agentDirty;
 
   const [configTemplateContent, setConfigTemplateContent] = useState<DocumentContent | null>(null);
   const [activeConfigTargetId, setActiveConfigTargetId] = useState<string>("");
-  const [configDraft, setConfigDraft] = useState("");
-  const [configDirty, setConfigDirty] = useState(false);
-  const [configSaving, setConfigSaving] = useState(false);
-  const [configSaveResult, setConfigSaveResult] = useState<ActionResult | null>(null);
-  const [configMode, setConfigMode] = useState<"preview" | "edit">("preview");
   const [configEditorSources, setConfigEditorSources] = useState<ConfigEditorSourceMeta[]>([]);
   const [activeConfigSourceType, setActiveConfigSourceType] = useState<string>("base");
   const [configEditorSourceContent, setConfigEditorSourceContent] = useState<DocumentContent | null>(null);
-  const [configEditorSourceSaveMessage, setConfigEditorSourceSaveMessage] = useState<string>("");
   const activeConfigSourceTypeRef = useRef(activeConfigSourceType);
   const configSourceLoadSeqRef = useRef(0);
-  const configDraftIdentityRef = useRef<string | null>(null);
   const docSaveOpRef = useRef(createSaveOperationTracker());
-  const agentSaveOpRef = useRef(createSaveOperationTracker());
-  const agentTemplateSaveOpRef = useRef(createSaveOperationTracker());
-  const configSaveOpRef = useRef(createSaveOperationTracker());
   // Bumped when a workspace switch reloads the Library, so the config source effects refetch for the new workspace.
   const [libraryReloadEpoch, setLibraryReloadEpoch] = useState(0);
-
-  const invalidateEditorSaveOperations = useCallback(() => {
-    docSaveOpRef.current.invalidate();
-    agentSaveOpRef.current.invalidate();
-    agentTemplateSaveOpRef.current.invalidate();
-    configSaveOpRef.current.invalidate();
-  }, []);
 
   useEffect(() => {
     if (activeDoc) {
@@ -128,46 +96,14 @@ export function useLibraryController({
   }, [activeDoc?.id]);
 
   useEffect(() => {
-    agentTemplateSaveOpRef.current.invalidate();
-    if (agentTemplate) {
-      setAgentTemplateDraft(agentTemplate.content);
-      setAgentTemplateDirty(false);
-      setAgentTemplateSaveResult(null);
-    } else {
-      setAgentTemplateDraft("");
-      setAgentTemplateDirty(false);
-      setAgentTemplateSaveResult(null);
-      setAgentTemplateMode("preview");
-    }
-  }, [agentTemplate?.id]);
-
-  useEffect(() => {
-    if (activeAgentContent) {
-      // A reload of the same file (e.g. re-clicking the Library tab) must not discard an unsaved draft.
-      const sameFile = agentDraftIdRef.current === activeAgentContent.id;
-      agentDraftIdRef.current = activeAgentContent.id;
-      if (sameFile && agentDirtyRef.current) return;
-      setAgentDraft(activeAgentContent.content);
-      setAgentDirty(false);
-      setAgentSaveResult(null);
-    } else {
-      agentDraftIdRef.current = null;
-      setAgentDraft("");
-      setAgentDirty(false);
-      setAgentSaveResult(null);
-      setAgentMode("preview");
-    }
-  }, [activeAgentContent?.id, activeAgentContent?.content]);
-
-  useEffect(() => {
     activeConfigSourceTypeRef.current = activeConfigSourceType;
   }, [activeConfigSourceType]);
 
   const isLibrarySourceDirty = useCallback((sourceType: LibrarySourceType): boolean => {
-    return isLibrarySourceTypeDirty(sourceType, docDirty, agentTemplateDirty, agentDirty, configDirty);
-  }, [docDirty, agentTemplateDirty, agentDirty, configDirty]);
+    return isLibrarySourceTypeDirty(sourceType, docDirty);
+  }, [docDirty]);
 
-  const libraryDirty = docDirty || agentTemplateDirty || configDirty || agentDirty;
+  const libraryDirty = docDirty;
 
   const setGuardedLibrarySourceType = useCallback(async (type: LibrarySourceType) => {
     if (type === librarySourceType) return;
@@ -333,7 +269,7 @@ export function useLibraryController({
   }, [fetchStatus, loadAgentSources, loadAgentTemplate, loadDocs, loadSkills]);
 
   const resetLibraryState = useCallback(() => {
-    invalidateEditorSaveOperations();
+    docSaveOpRef.current.invalidate();
     setSkills([]);
     setSkillsLoaded(false);
     activeSkillIdRef.current = null;
@@ -351,19 +287,12 @@ export function useLibraryController({
     setActiveAgentContent(null);
     setAgentTemplate(null);
 
-    // The config editor draft belongs to the old workspace: a stale dirty draft must never reach the next one.
+    // A config source load still running belongs to the old workspace.
     configSourceLoadSeqRef.current += 1;
-    configDraftIdentityRef.current = null;
     setConfigTemplateContent(null);
     setConfigEditorSources([]);
     setConfigEditorSourceContent(null);
-    setConfigEditorSourceSaveMessage("");
-    setConfigDraft("");
-    setConfigDirty(false);
-    setConfigSaving(false);
-    setConfigSaveResult(null);
-    setConfigMode("preview");
-  }, [invalidateEditorSaveOperations]);
+  }, []);
 
   const selectDoc = useCallback(async (id: string) => {
     if (docDirty && id !== activeDoc?.id) {
@@ -391,7 +320,8 @@ export function useLibraryController({
   );
 
   const onSaveDoc = useCallback(async () => {
-    if (!activeDoc) return;
+    // Only personal docs are saved; the backend refuses bundled ids too.
+    if (!activeDoc || !isPersonalDoc(activeDoc)) return;
     const saveOpId = docSaveOpRef.current.capture();
     const docId = activeDoc.id;
     const generation = workspaceLoadGenerationRef.current;
@@ -471,63 +401,7 @@ export function useLibraryController({
     }
   }, [createDocSlug, createDocTitle, docDirty, loadDocs, confirm]);
 
-  const onChangeAgentTemplateDraft = useCallback((value: string) => {
-    setAgentTemplateDraft(value);
-    setAgentTemplateDirty(value !== (agentTemplate?.content ?? ""));
-  }, [agentTemplate]);
-
-  const onSaveAgentTemplate = useCallback(async () => {
-    const saveOpId = agentTemplateSaveOpRef.current.capture();
-    const templateId = agentTemplate?.id ?? null;
-    const generation = workspaceLoadGenerationRef.current;
-    setAgentTemplateSaving(true);
-    setAgentTemplateSaveResult(null);
-    try {
-      const result = await invoke<ActionResult>("save_agent_template", { content: agentTemplateDraft });
-      if (!agentTemplateSaveOpRef.current.isCurrent(saveOpId)) return;
-      if (!isWorkspaceLoadCurrent(generation)) return;
-      if ((agentTemplate?.id ?? null) !== templateId) return;
-      setAgentTemplateSaveResult(result);
-      if (result.success) {
-        if (result.stdout !== "unchanged") {
-          const updated = await invoke<DocumentContent>("read_agent_template");
-          if (!agentTemplateSaveOpRef.current.isCurrent(saveOpId)) return;
-          if (!isWorkspaceLoadCurrent(generation)) return;
-          if ((agentTemplate?.id ?? null) !== templateId) return;
-          setAgentTemplate(updated);
-          setAgentTemplateDraft(updated.content);
-        }
-        setAgentTemplateDirty(false);
-      }
-    } catch (e) {
-      if (!agentTemplateSaveOpRef.current.isCurrent(saveOpId)) return;
-      if (!isWorkspaceLoadCurrent(generation)) return;
-      setAgentTemplateSaveResult({
-        success: false,
-        action: "save_agent_template",
-        stdout: "",
-        stderr: String(e),
-        exit_code: null,
-      });
-    } finally {
-      setAgentTemplateSaving(false);
-    }
-  }, [agentTemplate?.id, agentTemplateDraft, isWorkspaceLoadCurrent, workspaceLoadGenerationRef]);
-
-  const onResetAgentTemplate = useCallback(() => {
-    if (agentTemplate) {
-      setAgentTemplateDraft(agentTemplate.content);
-      setAgentTemplateDirty(false);
-      setAgentTemplateSaveResult(null);
-    }
-  }, [agentTemplate]);
-
   const selectAgent = useCallback(async (id: string) => {
-    if (agentDirty && id !== activeAgentId) {
-      const ok = await confirm(LEAVE_DIRTY_MESSAGE);
-      if (!ok) return;
-    }
-    agentSaveOpRef.current.invalidate();
     activeAgentIdRef.current = id;
     setActiveAgentId(id);
     const generation = workspaceLoadGenerationRef.current;
@@ -541,66 +415,7 @@ export function useLibraryController({
       if (activeAgentIdRef.current !== id) return;
       setError(`Read agent: ${e}`);
     }
-  }, [activeAgentId, agentDirty, isWorkspaceLoadCurrent, setError, workspaceLoadGenerationRef, confirm]);
-
-  const openAgent = useCallback(
-    (id: string) => invokeOpen("open_agent_source", { filename: id }, "Open agent", setError),
-    [setError],
-  );
-
-  const onSaveAgent = useCallback(async () => {
-    // The draft belongs to the loaded content, which can lag behind the selected id.
-    if (!activeAgentId || activeAgentContent?.id !== activeAgentId) return;
-    const saveOpId = agentSaveOpRef.current.capture();
-    const agentId = activeAgentContent.id;
-    const generation = workspaceLoadGenerationRef.current;
-    setAgentSaving(true);
-    setAgentSaveResult(null);
-    try {
-      const result = await invoke<ActionResult>("save_agent_source", { filename: agentId, content: agentDraft });
-      if (!agentSaveOpRef.current.isCurrent(saveOpId)) return;
-      if (!isWorkspaceLoadCurrent(generation)) return;
-      if (activeAgentIdRef.current !== agentId) return;
-      setAgentSaveResult(result);
-      if (result.success) {
-        if (result.stdout !== "unchanged") {
-          const updated = await invoke<AgentSourceContent>("read_agent_source", { filename: agentId });
-          if (!agentSaveOpRef.current.isCurrent(saveOpId)) return;
-          if (!isWorkspaceLoadCurrent(generation)) return;
-          if (activeAgentIdRef.current !== agentId) return;
-          setActiveAgentContent(updated);
-          setAgentDraft(updated.content);
-        }
-        setAgentDirty(false);
-      }
-    } catch (e) {
-      if (!agentSaveOpRef.current.isCurrent(saveOpId)) return;
-      if (!isWorkspaceLoadCurrent(generation)) return;
-      if (activeAgentIdRef.current !== agentId) return;
-      setAgentSaveResult({
-        success: false,
-        action: "save_agent_source",
-        stdout: "",
-        stderr: String(e),
-        exit_code: null,
-      });
-    } finally {
-      setAgentSaving(false);
-    }
-  }, [activeAgentId, activeAgentContent?.id, agentDraft, isWorkspaceLoadCurrent, workspaceLoadGenerationRef]);
-
-  const onResetAgent = useCallback(() => {
-    if (activeAgentContent) {
-      setAgentDraft(activeAgentContent.content);
-      setAgentDirty(false);
-      setAgentSaveResult(null);
-    }
-  }, [activeAgentContent]);
-
-  const onChangeAgentDraft = useCallback((value: string) => {
-    setAgentDraft(value);
-    setAgentDirty(value !== (activeAgentContent?.content ?? ""));
-  }, [activeAgentContent]);
+  }, [isWorkspaceLoadCurrent, setError, workspaceLoadGenerationRef]);
 
   const loadConfigTemplate = useCallback(async (targetId: string, generation = workspaceLoadGenerationRef.current) => {
     if (targetId === "opencode_config") return;
@@ -645,140 +460,16 @@ export function useLibraryController({
     }
   }, [activeConfigTargetId, isWorkspaceLoadCurrent, setError, workspaceLoadGenerationRef]);
 
-  const onChangeConfigDraft = useCallback((value: string) => {
-    setConfigDraft(value);
-    const baseline = activeConfigTargetId === "opencode_config"
-      ? (configEditorSourceContent?.content ?? "")
-      : (configTemplateContent?.content ?? "");
-    setConfigDirty(value !== baseline);
-  }, [activeConfigTargetId, configEditorSourceContent, configTemplateContent]);
-
-  const onSaveConfig = useCallback(async () => {
-    if (!activeConfigTargetId) return;
-    const saveOpId = configSaveOpRef.current.capture();
-    const generation = workspaceLoadGenerationRef.current;
-    setConfigSaving(true);
-    setConfigSaveResult(null);
-    setConfigEditorSourceSaveMessage("");
-
-    if (activeConfigTargetId === "opencode_config") {
-      const sourceType = activeConfigSourceType;
-      const draftIdentity = `opencode_config:${sourceType}`;
-      if (configDraftIdentityRef.current !== draftIdentity) {
-        if (configSaveOpRef.current.isCurrent(saveOpId)) {
-          setConfigSaveResult({
-            success: false,
-            action: "save_opencode_config_source",
-            stdout: "",
-            stderr: "config source changed before save",
-            exit_code: null,
-          });
-          setConfigSaving(false);
-        }
-        return;
-      }
-      try {
-        const result = await invoke<ActionResult>("save_opencode_config_source", {
-          sourceType,
-          content: configDraft,
-        });
-        if (!shouldApplyOpenCodeSourceSave(
-          activeConfigTargetId,
-          activeConfigSourceTypeRef.current,
-          configDraftIdentityRef.current,
-          saveOpId,
-          configSaveOpRef.current.isCurrent,
-          sourceType,
-        )) {
-          return;
-        }
-        if (!isWorkspaceLoadCurrent(generation)) return;
-        setConfigSaveResult(result);
-        if (result.success) {
-          if (result.stdout !== "unchanged") {
-            const reloaded = await invoke<DocumentContent>("read_opencode_config_source", { sourceType });
-            if (!shouldApplyOpenCodeSourceSave(
-              activeConfigTargetId,
-              activeConfigSourceTypeRef.current,
-              configDraftIdentityRef.current,
-              saveOpId,
-              configSaveOpRef.current.isCurrent,
-              sourceType,
-            )) {
-              return;
-            }
-            if (!isWorkspaceLoadCurrent(generation)) return;
-            setConfigEditorSourceContent(reloaded);
-            setConfigDraft(reloaded.content);
-            setConfigEditorSourceSaveMessage("saved. Use Workspace → generate to update snapshot.");
-          }
-          setConfigDirty(false);
-        }
-      } catch (e) {
-        if (!configSaveOpRef.current.isCurrent(saveOpId)) return;
-        if (!isWorkspaceLoadCurrent(generation)) return;
-        setConfigSaveResult({
-          success: false,
-          action: "save_opencode_config_source",
-          stdout: "",
-          stderr: String(e),
-          exit_code: null,
-        });
-      } finally {
-        setConfigSaving(false);
-      }
-      return;
-    }
-
-    setConfigSaveResult({
-      success: false,
-      action: "save_config",
-      stdout: "",
-      stderr: "no editable config target selected",
-      exit_code: null,
-    });
-    setConfigSaving(false);
-  }, [activeConfigSourceType, activeConfigTargetId, configDraft, isWorkspaceLoadCurrent, workspaceLoadGenerationRef]);
-
-  const onResetConfig = useCallback(() => {
-    const baseline = activeConfigTargetId === "opencode_config"
-      ? configEditorSourceContent
-      : configTemplateContent;
-    if (baseline) {
-      setConfigDraft(baseline.content);
-      setConfigDirty(false);
-      setConfigSaveResult(null);
-    }
-  }, [activeConfigTargetId, configEditorSourceContent, configTemplateContent]);
-
-  const selectConfigTarget = useCallback(async (targetId: string) => {
-    if (configDirty && targetId !== activeConfigTargetId) {
-      const ok = await confirm(LEAVE_DIRTY_MESSAGE);
-      if (!ok) return;
-    }
-    configSaveOpRef.current.invalidate();
+  const selectConfigTarget = useCallback((targetId: string) => {
     setActiveConfigTargetId(targetId);
     setActiveConfigSourceType("base");
     setConfigEditorSourceContent(null);
-    setConfigEditorSourceSaveMessage("");
-  }, [activeConfigTargetId, configDirty, confirm]);
+  }, []);
 
-  const selectConfigSourceType = useCallback(async (sourceType: string) => {
-    if (configDirty && sourceType !== activeConfigSourceType) {
-      const ok = await confirm(LEAVE_DIRTY_MESSAGE);
-      if (!ok) return;
-    }
-    configSaveOpRef.current.invalidate();
+  const selectConfigSourceType = useCallback((sourceType: string) => {
     setActiveConfigSourceType(sourceType);
     setConfigEditorSourceContent(null);
-    setConfigEditorSourceSaveMessage("");
-    setConfigMode("preview");
-    setConfigSaveResult(null);
-  }, [activeConfigSourceType, configDirty, confirm]);
-
-  const openSkill = useCallback((id: string) => {
-    void invokeOpen("open_skill", { id }, "Open", setError);
-  }, [setError]);
+  }, []);
 
   const readSkill = useCallback(async (id: string) => {
     activeSkillIdRef.current = id;
@@ -802,7 +493,6 @@ export function useLibraryController({
       configSourceLoadSeqRef.current += 1;
       setConfigTemplateContent(null);
       setConfigEditorSourceContent(null);
-      configDraftIdentityRef.current = null;
       if (activeConfigTargetId === "opencode_config") {
         void loadConfigEditorSources();
         setActiveConfigSourceType("base");
@@ -818,35 +508,6 @@ export function useLibraryController({
     }
   }, [activeConfigTargetId, activeConfigSourceType, view, librarySourceType, libraryReloadEpoch, loadConfigEditorSourceContent]);
 
-  useEffect(() => {
-    if (activeConfigTargetId === "opencode_config" && configEditorSourceContent) {
-      const identity = `opencode_config:${activeConfigSourceType}`;
-      configDraftIdentityRef.current = identity;
-      setConfigDraft(configEditorSourceContent.content);
-      setConfigDirty(false);
-      setConfigSaveResult(null);
-      setConfigEditorSourceSaveMessage("");
-      setConfigMode("preview");
-    }
-  }, [configEditorSourceContent?.id, activeConfigTargetId, activeConfigSourceType]);
-
-  useEffect(() => {
-    if (activeConfigTargetId === "opencode_config") return;
-    if (configTemplateContent) {
-      configDraftIdentityRef.current = `template:${activeConfigTargetId}`;
-      setConfigDraft(configTemplateContent.content);
-      setConfigDirty(false);
-      setConfigSaveResult(null);
-      setConfigMode("preview");
-    } else if (activeConfigTargetId) {
-      configDraftIdentityRef.current = null;
-      setConfigDraft("");
-      setConfigDirty(false);
-      setConfigSaveResult(null);
-      setConfigMode("preview");
-    }
-  }, [configTemplateContent?.id, activeConfigTargetId]);
-
   return {
     skills,
     skillsLoaded,
@@ -854,7 +515,6 @@ export function useLibraryController({
     activeSkillContent,
     skillSearch,
     setSkillSearch,
-    openSkill,
     readSkill,
     docs,
     docsHealth,
@@ -880,15 +540,6 @@ export function useLibraryController({
     onResetDoc,
     onCreateDoc,
     agentTemplate,
-    agentTemplateDraft,
-    agentTemplateDirty,
-    agentTemplateSaving,
-    agentTemplateSaveResult,
-    agentTemplateMode,
-    setAgentTemplateMode,
-    onChangeAgentTemplateDraft,
-    onSaveAgentTemplate,
-    onResetAgentTemplate,
     librarySourceType,
     setGuardedLibrarySourceType,
     isLibrarySourceDirty,
@@ -896,33 +547,13 @@ export function useLibraryController({
     agentSources,
     activeAgentId,
     activeAgentContent,
-    agentDraft,
-    agentDirty,
-    agentSaving,
-    agentSaveResult,
-    agentMode,
-    setAgentMode,
     selectAgent,
-    openAgent,
-    onChangeAgentDraft,
-    onSaveAgent,
-    onResetAgent,
     configTemplateContent,
     activeConfigTargetId,
     setActiveConfigTargetId,
-    configDraft,
-    configDirty,
-    configSaving,
-    configSaveResult,
-    configMode,
-    setConfigMode,
     configEditorSources,
     activeConfigSourceType,
     configEditorSourceContent,
-    configEditorSourceSaveMessage,
-    onChangeConfigDraft,
-    onSaveConfig,
-    onResetConfig,
     selectConfigTarget,
     selectConfigSourceType,
     loadSkills,

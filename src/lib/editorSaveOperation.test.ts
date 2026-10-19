@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createSaveOperationTracker, shouldApplyOpenCodeSourceSave } from "./editorSaveOperation";
+import { createSaveOperationTracker } from "./editorSaveOperation";
 
 describe("createSaveOperationTracker", () => {
   it("issues distinct monotonic tokens from capture", () => {
@@ -23,23 +23,5 @@ describe("createSaveOperationTracker", () => {
     tracker.invalidate();
     expect(tracker.isCurrent(saveOpId)).toBe(false);
     expect(tracker.isCurrent(tracker.capture())).toBe(true);
-  });
-});
-
-describe("shouldApplyOpenCodeSourceSave", () => {
-  it("rejects a late config save response for the same source", () => {
-    const tracker = createSaveOperationTracker();
-    const first = tracker.capture();
-    tracker.capture();
-    expect(
-      shouldApplyOpenCodeSourceSave(
-        "opencode_config",
-        "base",
-        "opencode_config:base",
-        first,
-        tracker.isCurrent,
-        "base",
-      ),
-    ).toBe(false);
   });
 });

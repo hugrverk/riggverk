@@ -93,7 +93,6 @@ function AppShell() {
     activeSkillContent,
     skillSearch,
     setSkillSearch,
-    openSkill,
     readSkill,
     docs,
     docsHealth,
@@ -119,15 +118,6 @@ function AppShell() {
     onResetDoc,
     onCreateDoc,
     agentTemplate,
-    agentTemplateDraft,
-    agentTemplateDirty,
-    agentTemplateSaving,
-    agentTemplateSaveResult,
-    agentTemplateMode,
-    setAgentTemplateMode,
-    onChangeAgentTemplateDraft,
-    onSaveAgentTemplate,
-    onResetAgentTemplate,
     librarySourceType,
     setGuardedLibrarySourceType,
     isLibrarySourceDirty,
@@ -135,33 +125,13 @@ function AppShell() {
     agentSources,
     activeAgentId,
     activeAgentContent,
-    agentDraft,
-    agentDirty,
-    agentSaving,
-    agentSaveResult,
-    agentMode,
-    setAgentMode,
     selectAgent,
-    openAgent,
-    onChangeAgentDraft,
-    onSaveAgent,
-    onResetAgent,
     configTemplateContent,
     activeConfigTargetId,
     setActiveConfigTargetId,
-    configDraft,
-    configDirty,
-    configSaving,
-    configSaveResult,
-    configMode,
-    setConfigMode,
     configEditorSources,
     activeConfigSourceType,
     configEditorSourceContent,
-    configEditorSourceSaveMessage,
-    onChangeConfigDraft,
-    onSaveConfig,
-    onResetConfig,
     selectConfigTarget,
     selectConfigSourceType,
     loadDocs,
@@ -792,16 +762,6 @@ function AppShell() {
             onCreateDoc={onCreateDoc}
             // Rules
             agentTemplate={agentTemplate}
-            onOpenTemplate={() => void invokeOpen("open_agent_template", undefined, "Open", setError)}
-            agentTemplateDraft={agentTemplateDraft}
-            agentTemplateDirty={agentTemplateDirty}
-            agentTemplateSaving={agentTemplateSaving}
-            agentTemplateSaveResult={agentTemplateSaveResult}
-            agentTemplateMode={agentTemplateMode}
-            onSetAgentTemplateMode={setAgentTemplateMode}
-            onChangeAgentTemplateDraft={onChangeAgentTemplateDraft}
-            onSaveAgentTemplate={onSaveAgentTemplate}
-            onResetAgentTemplate={onResetAgentTemplate}
             agentTargets={agentTargets}
             // Skills
             skills={visibleSkills}
@@ -810,47 +770,19 @@ function AppShell() {
             skillSearch={skillSearch}
             onSetSkillSearch={setSkillSearch}
             onSelectSkillPreview={readSkill}
-            onOpenSkill={openSkill}
             // Agents
             agentSources={visibleAgentSources}
             activeAgentId={activeAgentId && visibleAgentIds.has(activeAgentId) ? activeAgentId : null}
             activeAgentContent={activeAgentId && visibleAgentIds.has(activeAgentId) ? activeAgentContent : null}
             onSelectAgent={selectAgent}
-            onOpenAgent={openAgent}
-            agentDraft={agentDraft}
-            agentDirty={agentDirty}
-            agentSaving={agentSaving}
-            agentSaveResult={agentSaveResult}
-            agentMode={agentMode}
-            onSetAgentMode={setAgentMode}
-            onChangeAgentDraft={onChangeAgentDraft}
-            onSaveAgent={onSaveAgent}
-            onResetAgent={onResetAgent}
             // Configs
             configTemplateContent={configTemplateContent}
             activeConfigTargetId={activeConfigTargetId}
             configTargets={configTargets}
             onSelectConfigTarget={selectConfigTarget}
-            onOpenConfig={() => {
-              if (activeConfigTargetId === "opencode_config") {
-                void invokeOpen("open_opencode_config_source", { sourceType: activeConfigSourceType }, "Open", setError);
-              } else {
-                void invokeOpen("open_config_template", { targetId: activeConfigTargetId }, "Open", setError);
-              }
-            }}
-            configDraft={configDraft}
-            configDirty={configDirty}
-            configSaving={configSaving}
-            configSaveResult={configSaveResult}
-            configMode={configMode}
-            onSetConfigMode={setConfigMode}
-            onChangeConfigDraft={onChangeConfigDraft}
-            onSaveConfig={onSaveConfig}
-            onResetConfig={onResetConfig}
             configEditorSources={configEditorSources}
             activeConfigSourceType={activeConfigSourceType}
             onSelectConfigSource={selectConfigSourceType}
-            configEditorSourceSaveMessage={configEditorSourceSaveMessage}
             configEditorSourceContent={configEditorSourceContent}
             // Common
             workspaceValid={workspaceValid}

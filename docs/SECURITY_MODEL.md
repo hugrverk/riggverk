@@ -3,7 +3,7 @@
 ## Core principles
 
 - **Writes go only to the allowlisted paths below.** The app may read the complete contents of an allowlisted Codex, OpenCode, Cursor or light-harness MCP, rules, or backup file locally when it must parse, compare, preserve, validate, merge, or restore it. Only documented keys, named entries, or the managed rules block are modified; unrelated user-owned values are preserved or cause a safe refusal with zero mutation.
-- **Writes are explicit.** Install or Update shows an artifact-level plan (create, update, remove, conflict rows) and writes only after the user presses `y`. Uninstall and rollback show a preview or dry run and ask for confirmation. Library saves write only the selected workspace file. Settings are an app preference and autosave. Nothing is written on launch.
+- **Writes are explicit.** Install or Update shows an artifact-level plan (create, update, remove, conflict rows) and writes only after the user presses `y`. Uninstall and rollback show a preview or dry run and ask for confirmation. Library saves write only the selected personal doc (`docs/context/<slug>.md`); bundled items are read-only in the Library. Settings are an app preference and autosave. Nothing is written on launch.
 - **Target toggles gate Install.** A surface whose target toggle or harness is off is excluded from preview, apply, and status; the backend rejects it even if a stale request names it.
 - **No credential use by the app.** The app does not authenticate with, intentionally extract, log, transmit, or expose credential-like values. Allowlisted config files and their backups can contain such values because complete bytes may need to be preserved and restored; that data stays local and is read only for bounded parsing, comparison, merge, and rollback.
 - **No remote control.** The app accepts no remote commands, webhooks, or external IPC. The app makes no network requests. No telemetry, no analytics, no cloud service, no AI model.
@@ -13,7 +13,7 @@
 
 | Surface | Path | Notes |
 |---------|------|-------|
-| Workspace root | `~/.config/agent-workspace` (Settings workspace path or `AGENT_WORKSPACE_PATH` override) | Bundled files via Install; Library saves and created docs (`docs/context/*.md`) via atomic, symlink-refusing writes. Scripts in it are never run by the app. |
+| Workspace root | `~/.config/agent-workspace` (Settings workspace path or `AGENT_WORKSPACE_PATH` override) | Bundled files via Install; Library saves and created docs, personal docs only (`docs/context/*.md`), via atomic, symlink-refusing writes. Scripts in it are never run by the app. |
 | Managed state | `<workspace>/.agent-workspace/managed-state.json` | Schema 2, SHA-256 ownership proof. Prior bytes saved as `managed-state.previous.json` in the transaction backup. |
 | Rules preferences | `<workspace>/.agent-workspace/rules-preferences.json` | "Leave as is" choices, as non-secret identities. |
 | Kept files | `<workspace>/.agent-workspace/kept-files.json` | "Keep mine" choices for skill and agent files: artifact identity, destination and a digest of the bundled file. Written atomically through `safe_filesystem`; no file content. Keeping never writes the skill or agent file; "take bundled" overwrites it only as a backed-up transaction (below). |
@@ -65,7 +65,7 @@ Existing files that Install, uninstall, or a Library save would overwrite or rem
 | Writer | Location under the backup root |
 |--------|--------------------------------|
 | Install, uninstall, rollback | `setup/<transaction id>/` with `manifest.json`, `artifacts/<artifact id>`, and `managed-state.previous.json` |
-| Library save | `docs/<doc id>-<timestamp>/<file>` |
+| Library save (personal doc) | `docs/custom_<slug>-<timestamp>/<file>` |
 | Cursor operations (and the retired CLI scripts) | `<YYYYMMDD-HHMMSS>/<label>/<file>` |
 
 The app creates backup directories 0700 and files 0600 on Unix. Backups are read locally for validation, comparison, and rollback only and are never transmitted. Rollback restores exact prior state from a persisted transaction: per-artifact `in_flight` is recorded before mutation, interrupted rollbacks reconcile against post-apply and backup digests without overwriting unrelated user edits, and conflicts fail closed. The in-app rollback entry (`z`, `:rollback`) covers the last transaction of the current session.
@@ -76,7 +76,7 @@ OpenCode agent permissions are composed from `templates/opencode.policy.json` pl
 
 ## Symlinks
 
-Managed writes (Install, uninstall, rollback, backups) reject symlinked targets, symlinked parent chains, and dangling symlinks. Skill discovery rejects symlinked skill roots, groups, and directories. Library document, rules, and config reads and writes enforce workspace containment and refuse symlinks; the custom doc listing skips them.
+Managed writes (Install, uninstall, rollback, backups) reject symlinked targets, symlinked parent chains, and dangling symlinks. Skill discovery rejects symlinked skill roots, groups, and directories. Library reads (documents, rules template, configs) enforce workspace containment and refuse symlinks; Library writes go only to a file directly in the workspace's own `docs/context` and refuse a symlink on the file, the folder, or a parent; the personal doc listing skips symlinks.
 
 ## Git
 

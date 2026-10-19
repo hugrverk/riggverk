@@ -22,7 +22,7 @@ A missing CLI, a timeout or a failing probe leaves those checks `unknown`. It ne
 
 ## Source template
 
-The runtime OpenCode configuration is `templates/opencode.json`. This is a **generated snapshot** — do not edit it directly. The app installs from its bundled copy of these templates; edits to the workspace copy change what the Library shows, not what OpenCode receives. Runtime health and dashboard config status compare against that same bundled render, including saved model overrides. TUI, rules and agents also use the bundled sources; workspace edits do not cause installed-file drift.
+The runtime OpenCode configuration is `templates/opencode.json`. This is a **generated snapshot** — do not edit it directly. The app installs from its bundled copy of these templates, and the Library shows them read-only; edits to the workspace copy made outside the app change what the Library shows, not what OpenCode receives. Runtime health and dashboard config status compare against that same bundled render, including saved model overrides. TUI, rules and agents also use the bundled sources; workspace edits do not cause installed-file drift.
 
 The maintainable source files are:
 

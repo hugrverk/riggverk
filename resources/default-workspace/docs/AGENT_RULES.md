@@ -128,6 +128,6 @@ Rules and agents installed by the app come from the app's bundle. To change them
 2. Run the relevant generator with `--write`, then with `--check` (`generate-agent-rules.py`, `generate-agent-adapters.py`).
 3. Rebuild the app and install from the harness pages (`u`, review, `y`).
 
-Editing the copies in the installed workspace (including in the Library) changes only that copy. For a personal tweak to a rules file, write it below the managed block instead.
+The Library shows these copies read-only. Editing a copy in the installed workspace outside the app changes only that copy and freezes it against updates. For a personal tweak to a rules file, write it below the managed block instead.
 
 Existing files that Install would overwrite are backed up first. Unknown and unrelated harness files are preserved.
