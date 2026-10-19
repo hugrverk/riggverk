@@ -26,7 +26,9 @@ mod tests {
     use crate::shipped_digests::test_override;
     use crate::skill_roots::SkillRoot;
     use crate::stable_digest;
-    use crate::test_env::{guard, guard::EnvRestore, set_test_user_dirs};
+    use crate::test_env::{
+        guard, guard::EnvRestore, set_test_user_dirs, skill_file_counts, source_skill_count,
+    };
 
     const SKILL_SURFACES: [SetupSurfaceId; 1] = [SetupSurfaceId::Skills];
 
@@ -610,8 +612,9 @@ mod tests {
             }
         }
         assert!(
-            rewritten >= 26,
-            "25 created skills and the retired one: {rewritten}"
+            rewritten > source_skill_count(),
+            "{} created skills and the retired one: {rewritten}",
+            source_skill_count()
         );
         fs::write(&manifest_path, manifest.to_string()).expect("write manifest");
 
@@ -653,7 +656,18 @@ mod tests {
         std::os::unix::fs::symlink(&elsewhere, env.home.join(".claude/skills")).expect("symlink");
 
         let planned = env.plan(&[SetupSurfaceId::Skills]);
-        assert!(planned.len() > 50);
+        let (skills, supporting) = skill_file_counts(
+            &std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("../resources/default-workspace/skills"),
+        );
+        assert_eq!(
+            planned
+                .iter()
+                .filter(|operation| matches!(&operation.artifact, ArtifactId::SkillFile(file) if file.root == SkillRoot::Claude))
+                .count(),
+            skills + supporting,
+            "one conflict for every bundled skill file in the linked folder"
+        );
         for operation in &planned {
             let ArtifactId::SkillFile(file) = &operation.artifact else {
                 panic!("unexpected artifact {:?}", operation.artifact);

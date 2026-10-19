@@ -296,6 +296,7 @@ done
 
 step "README and settings docs drift"
 python3 scripts/check-readme-docs-drift.py
+run_python_unittests scripts/test_check_readme_docs_drift.py
 printf '  README/docs drift checks ok\n'
 
 step "bundled merge script unit tests"

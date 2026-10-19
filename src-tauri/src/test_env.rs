@@ -1,6 +1,40 @@
 #[cfg(test)]
 use std::path::{Path, PathBuf};
 
+/// Independently count canonical sources and supporting files without production discovery.
+#[cfg(test)]
+pub fn skill_file_counts(root: &Path) -> (usize, usize) {
+    let mut counts = (0, 0);
+    for entry in std::fs::read_dir(root).expect("read skills directory") {
+        let entry = entry.expect("skill entry");
+        let name = entry.file_name();
+        if name.to_string_lossy().starts_with('.') {
+            continue;
+        }
+        let kind = entry.file_type().expect("skill file type");
+        if kind.is_dir() {
+            let nested = skill_file_counts(&entry.path());
+            counts.0 += nested.0;
+            counts.1 += nested.1;
+        } else if kind.is_file() {
+            if name == "SKILL.md" {
+                counts.0 += 1;
+            } else {
+                counts.1 += 1;
+            }
+        }
+    }
+    counts
+}
+
+#[cfg(test)]
+pub fn source_skill_count() -> usize {
+    skill_file_counts(
+        &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../resources/default-workspace/skills"),
+    )
+    .0
+}
+
 #[cfg(test)]
 pub fn process_home() -> PathBuf {
     crate::platform_paths::resolve_user_home(

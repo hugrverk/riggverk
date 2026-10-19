@@ -220,32 +220,79 @@ mod tests {
         assert!(err.contains("invalid agent name"));
     }
 
-    #[test]
-    fn bundled_opencode_agent_count() {
+    fn assert_bundled_agents_match_manifest(harness: AgentHarness) -> Vec<DiscoveredAgent> {
         let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../resources/default-workspace");
-        let agents = discover_agents(AgentHarness::OpenCode, &repo).expect("opencode");
-        assert_eq!(agents.len(), 6);
+        let outputs: Vec<String> = if harness == AgentHarness::Cursor {
+            let manifest: serde_json::Value = serde_json::from_slice(
+                &fs::read(repo.join("templates/cursor/manifest.json")).expect("Cursor manifest"),
+            )
+            .expect("parse Cursor manifest");
+            manifest["agents"]
+                .as_array()
+                .expect("Cursor agents")
+                .iter()
+                .map(|value| value.as_str().expect("Cursor agent filename").to_string())
+                .collect()
+        } else {
+            let manifest: serde_json::Value = serde_json::from_slice(
+                &fs::read(repo.join("metadata/agent-adapters.json")).expect("agent adapters"),
+            )
+            .expect("parse agent adapters");
+            let key = match harness {
+                AgentHarness::OpenCode => "opencode",
+                AgentHarness::Claude => "claude",
+                AgentHarness::Codex => "codex",
+                AgentHarness::Cursor => unreachable!(),
+            };
+            manifest["roles"]
+                .as_object()
+                .expect("adapter roles")
+                .values()
+                .filter_map(|role| role["harnesses"].get(key))
+                .map(|adapter| {
+                    adapter["output"]
+                        .as_str()
+                        .expect("adapter output")
+                        .to_string()
+                })
+                .collect()
+        };
+        let mut expected: Vec<String> = outputs
+            .iter()
+            .map(|output| {
+                Path::new(output)
+                    .file_stem()
+                    .expect("agent basename")
+                    .to_str()
+                    .expect("UTF-8 agent basename")
+                    .to_string()
+            })
+            .collect();
+        expected.sort();
+        let agents = discover_agents(harness, &repo).expect("bundled agents");
+        let names: Vec<_> = agents.iter().map(|agent| agent.name.as_str()).collect();
+        assert_eq!(names, expected, "{harness:?} agents match their manifest");
+        agents
     }
 
     #[test]
-    fn bundled_claude_agent_count() {
-        let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../resources/default-workspace");
-        let agents = discover_agents(AgentHarness::Claude, &repo).expect("claude");
-        assert_eq!(agents.len(), 5);
+    fn bundled_opencode_agents_match_manifest() {
+        assert_bundled_agents_match_manifest(AgentHarness::OpenCode);
     }
 
     #[test]
-    fn bundled_cursor_agent_count() {
-        let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../resources/default-workspace");
-        let agents = discover_agents(AgentHarness::Cursor, &repo).expect("cursor");
-        assert_eq!(agents.len(), 6);
+    fn bundled_claude_agents_match_manifest() {
+        assert_bundled_agents_match_manifest(AgentHarness::Claude);
     }
 
     #[test]
-    fn bundled_codex_toml_agent_count() {
-        let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../resources/default-workspace");
-        let agents = discover_agents(AgentHarness::Codex, &repo).expect("codex");
-        assert_eq!(agents.len(), 4);
+    fn bundled_cursor_agents_match_manifest() {
+        assert_bundled_agents_match_manifest(AgentHarness::Cursor);
+    }
+
+    #[test]
+    fn bundled_codex_toml_agents_match_manifest() {
+        let agents = assert_bundled_agents_match_manifest(AgentHarness::Codex);
         for a in &agents {
             assert!(a.source_path.to_string_lossy().ends_with(".toml"));
         }

@@ -665,7 +665,7 @@ describe("SettingsView workspace row", () => {
     renderSettings({ onChooseWorkspace: vi.fn(async () => null), onResetWorkspace: vi.fn(async () => null) });
     const choose = within(workspaceRow()).getByRole("button", { name: /choose…/ });
     focus(radios("Landing page")[0]!);
-    // landing, seven harness checkboxes, then the workspace actions.
+    // Landing page, harness checkboxes, then the workspace actions.
     for (let step = 0; step < 8; step += 1) press(document.activeElement!, "j");
     expect(document.activeElement).toBe(choose);
     press(document.activeElement!, "k");

@@ -669,11 +669,10 @@ mod tests {
         }
     }
 
-    /// All 127 non-empty subsets of the seven harnesses.
+    /// All non-empty subsets of the harnesses.
     fn all_subsets() -> Vec<Vec<HarnessId>> {
         let all = HarnessId::ALL;
-        assert_eq!(all.len(), 7);
-        (1u16..(1 << all.len()))
+        (1usize..(1 << all.len()))
             .map(|mask| {
                 all.iter()
                     .enumerate()
@@ -685,9 +684,9 @@ mod tests {
     }
 
     #[test]
-    fn the_invariants_hold_over_every_subset_of_the_seven_harnesses() {
+    fn the_invariants_hold_over_every_subset_of_the_harnesses() {
         let subsets = all_subsets();
-        assert_eq!(subsets.len(), 127);
+        assert_eq!(subsets.len(), (1 << HarnessId::ALL.len()) - 1);
         for custom in [false, true] {
             for subset in &subsets {
                 let label = format!("{} (custom: {custom})", name(subset));

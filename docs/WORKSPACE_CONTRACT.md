@@ -27,7 +27,7 @@ Validation is read-only. It does not run workspace scripts, install files, or in
 
 ## Bundled resources
 
-The default workspace currently contains 25 canonical semantic skills, shared semantic agent bodies, harness-native agent adapters, composed rule targets, config templates, runtime scripts, and operator documentation.
+The default workspace contains the canonical skills under `skills/`, shared semantic agent bodies, harness-native agent adapters, composed rule targets, config templates, runtime scripts, and operator documentation.
 
 Bundled resources are immutable installation input. The explicit **Install or Update** action (`u`, review, `y`):
 
@@ -90,11 +90,11 @@ Skills are one global surface (`skills`) for all harnesses, installed into the f
 
 The app installs into the fewest folders every enabled harness reads (`skill_roots::install_roots`): `~/.claude/skills` when Claude Code is enabled; `~/.agents/skills` when Codex is enabled; for OpenCode, Cursor or Kilo, `~/.agents/skills` when neither of those two is wanted; and `~/.agents/skills` for Copilot or Pi, which read no other shared folder. With a customised `CODEX_HOME` (or `CODEX_SKILLS_PATH`) Codex's copy is `$CODEX_HOME/skills` instead, and when OpenCode, Cursor or Kilo is enabled with Codex but without Claude Code, `~/.claude/skills` is added for them rather than `~/.agents/skills`, so Codex never reads an installed copy outside its isolated home. That isolation wins over Copilot and Pi: with Codex enabled and a customised home they are unserved (`skill_roots::unserved`), no skills are installed for them, and their health row says so. `CLAUDE_SKILLS_PATH` (inside the home folder) moves the Claude folder. The set is recomputed from the enabled harnesses on every plan, the settings must be readable for the skills surface to be planned at all, and with no harness enabled nothing is planned or removed.
 
-The light harnesses (Copilot, Pi, Kilo) are off by default, also for settings files written before they existed; enabling one adds a tab and, at most, one install folder (`~/.agents/skills`, shared with Codex, OpenCode and Cursor). For every subset of the seven harnesses and both Codex homes the roots satisfy: each enabled harness reads an installed root unless it is unserved; Codex reads exactly one, and in a customised home only its own; nothing is installed that no enabled harness needs; and no new install folder exists, so the worst-case upgrade transaction is unchanged. A skill name found in several folders a harness reads is resolved by that harness: Copilot lets `~/.copilot/skills` win over `~/.agents/skills` without saying so, Pi lets its agent folder win and reports a collision, and Kilo ranks `~/.claude/skills` below `~/.agents/skills` below `~/.kilo/skills` (the last wins, with a log line). The effective-load view shows which copy each loads. MCP is not managed for the light tier yet; the descriptor `metadata/light-harnesses.json` (embedded in the app, never read from the runtime workspace) holds each one's label, CLI program and rules file (see Rules).
+The light harnesses (Copilot, Pi, Kilo) are off by default, also for settings files written before they existed; enabling one adds a tab and, at most, one install folder (`~/.agents/skills`, shared with Codex, OpenCode and Cursor). For every subset of the harnesses and both Codex homes the roots satisfy: each enabled harness reads an installed root unless it is unserved; Codex reads exactly one, and in a customised home only its own; nothing is installed that no enabled harness needs; and no new install folder exists, so the worst-case upgrade transaction is unchanged. A skill name found in several folders a harness reads is resolved by that harness: Copilot lets `~/.copilot/skills` win over `~/.agents/skills` without saying so, Pi lets its agent folder win and reports a collision, and Kilo ranks `~/.claude/skills` below `~/.agents/skills` below `~/.kilo/skills` (the last wins, with a log line). The effective-load view shows which copy each loads. MCP is not managed for the light tier yet; the descriptor `metadata/light-harnesses.json` (embedded in the app, never read from the runtime workspace) holds each one's label, CLI program and rules file (see Rules).
 
 A folder that is no longer wanted (a harness switched off, or the folders older versions filled: `~/.config/opencode/skills`, `~/.cursor/skills`, `$CODEX_HOME/skills`, `~/.agents/skills`) loses the app's own copies through the same reviewed plan: each file is removed only when it is proven app-owned, with a backup, in the same transaction that installs the skills in their new folder (removals come last, so a failure restores the old state). Edited copies stay as conflicts, and files you added, your own skills and every dot directory (`$CODEX_HOME/skills/.system` included) are never touched.
 
-All 25 current bundled skills target Codex, OpenCode, Claude, and Cursor. Sync-all derives expected skills from the same compatibility metadata used by health checks.
+All bundled skills target Codex, OpenCode, Claude, and Cursor. Sync-all derives expected skills from the same compatibility metadata used by health checks.
 
 ## Skill sources
 
@@ -185,9 +185,12 @@ Harness ownership:
 - Codex: TOML agents under `templates/codex/agents/`
 - Cursor: native Markdown agents under `templates/cursor/agents/`
 
-Claude Code receives five native subagents: repo-scout, inspector, sentinel, scribe, and verifier. Claude-specific tool and permission metadata belongs in Claude headers, not shared semantic bodies.
+- OpenCode: `architect`, `repo-scout`, `inspector`, `sentinel`, `scribe`, `verifier`.
+- Claude Code: `repo-scout`, `inspector`, `sentinel`, `scribe`, `verifier`.
+- Codex: `repo_scout`, `inspector`, `security_reviewer`, `verifier`.
+- Cursor: `repo-scout`, `inspector`, `security-reviewer`, `verifier`, `browser-qa`, `release-checker`.
 
-Cursor receives six global agents: repo-scout, inspector, security-reviewer, verifier, browser-qa, and release-checker.
+`architect` is the OpenCode primary agent. Claude-specific tool and permission metadata belongs in Claude headers, not shared semantic bodies.
 
 Generated outputs must match their source bodies and native metadata. Repository checks fail on stale adapters.
 

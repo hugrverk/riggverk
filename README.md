@@ -54,7 +54,7 @@ Both the runtime workspace and every harness file are installed from the package
 
 ## Skills
 
-The bundled semantic catalog contains exactly 25 canonical skills (19 general, 1 WordPress, 5 Kretsverket). `retro` is user-invoked only.
+The bundled catalog is listed in [SKILLS.md](resources/default-workspace/docs/SKILLS.md). `retro` is user-invoked only.
 
 ```text
 skills/<skill>/SKILL.md
@@ -67,7 +67,7 @@ Installed layout is flat and holds the whole skill directory: `<skills-folder>/<
 
 An edited skill or agent file is a conflict Install leaves alone. Resolve it from the harness page: `d` shows the diff against the bundled file, `b` replaces your file by the bundled one after a review (`y` applies, `n` cancels; your file is backed up first and `z` rolls it back), `m` keeps your version (recorded in `.agent-workspace/kept-files.json`; the app never writes the file and says when a bundled update is waiting) or hands it back, `c` marks the next one, and `:resolve diff|bundled|mine|manage` does the same by name.
 
-All skills support all four central harnesses and the light tier. The skills surface is not gated by target toggles. Deprecated Riggverk skills are matched against bundled reference snapshots: identical managed copies are removed after backup, diverged and unknown copies are preserved.
+All skills support the central harnesses and the light tier. The skills surface is not gated by target toggles. Deprecated Riggverk skills are matched against bundled reference snapshots: identical managed copies are removed after backup, diverged and unknown copies are preserved.
 
 ## Rules
 
@@ -87,12 +87,12 @@ Only that entry is written. The file is read and written as strict JSON: your ot
 
 ## Agents
 
-Shared semantic bodies live under `agent-specs/`; `scripts/generate-agent-adapters.py` composes the harness-native adapters:
+Shared semantic bodies live under `agent-specs/`; `scripts/generate-agent-adapters.py` composes the harness-native adapters. See [Agents](docs/WORKSPACE_CONTRACT.md#agents) for the names provided for each harness:
 
-- OpenCode: six Markdown agents under `agents/` (`architect` is the primary agent; plus repo-scout, inspector, sentinel, scribe, verifier). `inspector` and `verifier` can be run directly with `@`; the other subagents are hidden from `@` and reached through delegation.
-- Claude Code: five subagents under `templates/claude/agents/` (repo-scout, inspector, sentinel, scribe, verifier).
-- Codex: TOML agents under `templates/codex/agents/` (four).
-- Cursor: six agents under `templates/cursor/agents/` (repo-scout, inspector, security-reviewer, verifier, browser-qa, release-checker).
+- OpenCode: Markdown agents under `agents/` (`architect` is the primary agent). `inspector` and `verifier` can be run directly with `@`; the other subagents are hidden from `@` and reached through delegation.
+- Claude Code: subagents under `templates/claude/agents/`.
+- Codex: TOML agents under `templates/codex/agents/`.
+- Cursor: agents under `templates/cursor/agents/`.
 
 Generated adapters must stay current with their sources; repository checks fail on drift.
 
@@ -101,15 +101,15 @@ Generated adapters must stay current with their sources; repository checks fail 
 - **OpenCode**: composed rules, native agents, skills, managed config keys (including `lsp: true` for the built-in language servers), `tui.json`, and the named Playwright MCP entry. User provider blocks, unrelated MCP entries, and unknown keys are preserved. The supported runtime is **OpenCode 1.x** (npm `opencode-ai` or `anomalyco/tap/opencode`); Homebrew core's `opencode` installs 2.x, which is detected and flagged but not supported, and the app keeps writing the 1.x config format. Details and the LSP opt-outs are in `docs/OPENCODE_CONFIG.md`.
 - **Codex**: rules, TOML agents, skills, and allowlisted config defaults in `$CODEX_HOME/config.toml` (default `~/.codex/config.toml`). `approval_policy`, `approvals_reviewer`, `sandbox_mode`, and `apps._default.*` follow the template. `model` and `model_reasoning_effort` are create-only: written (`gpt-6.1-sol`, `xhigh`) only when the file has no value, then yours. The `codex_config` target is off by default. A non-empty `AGENTS.override.md` makes Codex ignore `AGENTS.md`; Codex health warns about it. Legacy app-shaped profile selectors and tables are removed during migration only. Skills install to `~/.agents/skills` (`$CODEX_HOME/skills` with a customised `CODEX_HOME`); the app's older copies in `$CODEX_HOME/skills` are removed on update, and diverged copies stay.
 - **Claude Code**: rules, subagents, and skills. Claude settings, authentication, trust state, caches, and user-scoped MCP credentials stay Claude-managed and are not read or written.
-- **Cursor**: six global agents, skills, and the named Playwright MCP entry in `~/.cursor/mcp.json`, via native Rust operations. User Rules and Auto Review stay manual. Project `.cursor/*`, project agents, project MCP, `.cursorignore`, and `AGENTS.md` are never written.
+- **Cursor**: global agents, skills, and the named Playwright MCP entry in `~/.cursor/mcp.json`, via native Rust operations. User Rules and Auto Review stay manual. Project `.cursor/*`, project agents, project MCP, `.cursorignore`, and `AGENTS.md` are never written.
 - **GitHub Copilot, Pi, Kilo Code** (the light tier, off by default): the rules block in the file listed under Rules, the Playwright MCP entry in the file listed under MCP, and skills in the shared folders above. Nothing else in `~/.copilot`, `~/.pi` or `~/.config/kilo` is written. Pi reads one context file per folder: a plan refuses while `AGENTS.override.md` masks the file, or when it would create `AGENTS.md` beside a `CLAUDE.md` (Pi would stop reading that one). Kilo loads one global rules file, so creating its file stops Kilo reading `~/.claude/CLAUDE.md`; the review and the page say so. Their pages show the CLI version, the rules file, the Playwright MCP entry and whether the bundled skills are installed where each one reads. The only call made to these CLIs is `<cli> --version` (bounded, parse-only). None of them is on a Finder-launched app's `PATH` when installed through nvm, so the highest version folder of `~/.nvm/versions/node` that has the CLI is used; a CLI installed anywhere else is reported as not on `PATH`, and the app has to be started from a shell where it runs. Checked against Copilot CLI 1.0.98, Pi 1.3.0 and Kilo 7.8.12. `COPILOT_HOME` and `PI_CODING_AGENT_DIR` are not followed; `XDG_CONFIG_HOME` is, for Kilo.
 
 ## Application surfaces
 
-Tabs in order (press `1`-`9`; disabled harnesses are hidden and the rest renumber): workspace, codex, opencode, cursor, claude, copilot, pi, kilo, library, settings. Copilot, Pi and Kilo appear after Claude once enabled in Settings, so the first five tabs keep their numbers. With all seven harnesses on, Settings has no digit; `Mod+,` and `:settings` still open it. `?` lists every key and command; `:` opens the command line.
+Tabs in order (press `1`-`9`; disabled harnesses are hidden and the rest renumber): workspace, codex, opencode, cursor, claude, copilot, pi, kilo, library, settings. Copilot, Pi and Kilo are inserted after Claude once enabled in Settings, so the tabs before them keep their numbers. With all harnesses on, Settings has no digit; `Mod+,` and `:settings` still open it. `?` lists every key and command; `:` opens the command line.
 
 - Workspace - harness list with install state, surfaces, installed-state matrix, uninstall with preview, session-scoped **Recover previous uninstall**, backups folder, output.
-- Codex, OpenCode, Cursor, Claude, and the light tier (Copilot, Pi, Kilo; rules, skills and MCP rows, runtime health) - target toggles (Space, autosaved), surfaces, runtime health, install review. OpenCode health also asks the installed CLI (version, whether the default agent resolves, whether the configured models are listed; bounded, parse-only, never logged), and the page adds the model override (`model`, `small model` and an optional `subagent model` for the five read-only subagents; each row shows its source and whether it is applied, and `x` resets it to the bundled default).
+- Codex, OpenCode, Cursor, Claude, and the light tier (Copilot, Pi, Kilo; rules, skills and MCP rows, runtime health) - target toggles (Space, autosaved), surfaces, runtime health, install review. OpenCode health also asks the installed CLI (version, whether the default agent resolves, whether the configured models are listed; bounded, parse-only, never logged), and the page adds the model override (`model`, `small model` and an optional `subagent model` for the read-only subagents; each row shows its source and whether it is applied, and `x` resets it to the bundled default).
 - Library - an items list and one document pane (rendered, or its source while editing) for docs, rules, skills, runtime agents, and configs. Saves write the runtime workspace only (`:w`, `:q`).
 - Settings - harnesses, appearance, text size, motion, landing page, colors, workspace.
 

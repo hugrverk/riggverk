@@ -37,7 +37,8 @@ describe("mock backend: the light harnesses' rules files", () => {
     for (const id of LIGHT_RULES) expect(settings.enabled_target_ids).toContain(id);
     expect(settings.enabled_harness_ids).not.toContain("pi");
     const diagnostics = await invoke<WorkspaceDiagnostics>("get_workspace_diagnostics");
-    expect(diagnostics.total_rule_targets).toBe(6);
+    expect(diagnostics.total_rule_targets).toBe(targets.filter(target => target.kind === "rules").length);
+    expect(diagnostics.total_config_targets).toBe(targets.filter(target => target.kind === "config").length);
   });
 
   it("reports an absent, a masked and an outdated rules file in the conflict scenario", async () => {

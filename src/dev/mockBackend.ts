@@ -766,9 +766,9 @@ function plannedOperation(surface: SetupSurfaceId): PlannedOperation {
   const details =
     kind === "update" && surface === "skills"
       ? [
-        "+ ~/.agents/skills (25 skills, 46 files)",
-        "~ ~/.claude/skills (3 skills, 5 files)",
-        "- $CODEX_HOME/skills (25 skills, owned copies)",
+        `+ ~/.agents/skills (${skills.length} skills, ${skills.length} files)`,
+        `~ ~/.claude/skills (${skills.length} skills, ${skills.length} files)`,
+        `- $CODEX_HOME/skills (${skills.length} skills, owned copies)`,
         "! ~/.cursor/skills/tdd (edited, kept)",
       ]
       : kind === "update" && surface === "claude_agents"
@@ -910,9 +910,9 @@ function diagnostics(): WorkspaceDiagnostics {
       { kind: "file", path: `${WORKSPACE}/metadata/manifest.json`, exists: valid },
     ],
     enabled_rule_targets: TARGETS.filter(t => t.kind === "rules" && enabled.has(t.id)).length,
-    total_rule_targets: 6,
+    total_rule_targets: TARGETS.filter(t => t.kind === "rules").length,
     enabled_config_targets: TARGETS.filter(t => t.kind === "config" && enabled.has(t.id)).length,
-    total_config_targets: 2,
+    total_config_targets: TARGETS.filter(t => t.kind === "config").length,
     backup_root: BACKUP_ROOT,
     backup_root_exists: backups.length > 0,
     bundled_resources_status: valid ? "current" : "missing",

@@ -11,7 +11,7 @@ Requires Python 3 on `PATH` (config merges and generators).
 ## What lives here
 
 - **docs/** - guides and reference.
-- **skills/** - canonical skill sources. 25 skills ship with the default workspace, and every harness installs each `SKILL.md` unchanged.
+- **skills/** - canonical skill sources. The skills listed in [docs/SKILLS.md](docs/SKILLS.md) ship with the default workspace, and every harness installs each `SKILL.md` unchanged.
 - **templates/** - source templates for agent rules (`global-agent-rules.md`, composed under `sync/`), OpenCode config, Codex config (`codex/`), and Cursor assets (`cursor/`).
 - **agents/**, **agent-specs/** - OpenCode agents and the shared agent bodies.
 - **metadata/** - generated manifests and the history of shipped rules bases.

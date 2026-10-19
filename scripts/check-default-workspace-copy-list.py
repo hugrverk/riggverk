@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 
@@ -76,14 +77,10 @@ def main() -> None:
         "templates/cursor/global-profile.json",
         "templates/cursor/mcp/playwright.mcp.json",
     }
-    required_cursor_adapters = {
-        "templates/cursor/agents/verifier.md",
-        "templates/cursor/agents/security-reviewer.md",
-        "templates/cursor/agents/release-checker.md",
-        "templates/cursor/agents/browser-qa.md",
-        "templates/cursor/agents/repo-scout.md",
-        "templates/cursor/agents/inspector.md",
-    }
+    cursor = json.loads(
+        (ROOT / "resources/default-workspace/templates/cursor/manifest.json").read_text(encoding="utf-8")
+    )
+    required_cursor_adapters = {f"{cursor['agents_dir']}/{name}" for name in cursor["agents"]}
 
     for rel in sorted(required_scripts - scripts):
         fail(f"Scripts section missing: {rel}")
