@@ -1077,6 +1077,7 @@ function opencodeHealth(): OpenCodeRuntimeHealth {
     config_diverged_keys: update ? ["model", "lsp"] : [],
     rules_status: fresh ? "missing" : "synced",
     playwright_mcp_version: fresh ? null : "0.0.48",
+    config_precedence: { installed_not_strict: [], sibling_files: [], env_vars: [], system_managed_paths: [] },
     template_tui_path: `${WORKSPACE}/templates/opencode-tui.json`,
     installed_tui_path: `${HOME}/.config/opencode/tui.json`,
     tui_status: fresh ? "missing" : "synced",
