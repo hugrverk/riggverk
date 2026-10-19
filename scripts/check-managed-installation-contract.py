@@ -11,6 +11,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 TAURI = ROOT / "src-tauri/src"
 FRONTEND = ROOT / "src"
+# Commands scripts/release-check.sh must run. generate.py check covers the history-based
+# ownership proofs (pre-manifest ownership, rules history, shipped digests).
+REQUIRED_GATES = (
+    "python3 scripts/generate.py check",
+    "python3 scripts/check-skill-routing.py",
+    "bash scripts/smoke-pre-manifest-upgrade.sh",
+)
 
 
 def fail(message: str) -> None:
@@ -450,13 +457,7 @@ def main() -> None:
         fail("historical smoke must not seed from the current bundled workspace")
 
     release = read(ROOT / "scripts/release-check.sh")
-    for command in (
-        "python3 scripts/generate-pre-manifest-ownership.py --check",
-        "python3 scripts/generate-rules-history.py --check",
-        "python3 scripts/generate-shipped-digests.py --check",
-        "python3 scripts/check-skill-routing.py",
-        "bash scripts/smoke-pre-manifest-upgrade.sh",
-    ):
+    for command in REQUIRED_GATES:
         if command not in release:
             fail(f"release-check missing required gate: {command}")
 

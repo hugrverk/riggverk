@@ -34,11 +34,15 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import importlib.util
 import json
 import re
 import sys
 from pathlib import Path
+
+if str(Path(__file__).resolve().parent) not in sys.path:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import generate_history  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 PREFIX = "resources/default-workspace/"
@@ -65,17 +69,6 @@ AGENT_FILES = (
     re.compile(rf"^templates/codex/agents/{AGENT}\.toml$"),
 )
 SINGLE_FILES = ("templates/playwright-mcp.config.json",)
-
-
-def load_ownership_module():
-    """Reuse the repository-history walker of the pre-manifest generator."""
-    path = Path(__file__).with_name("generate-pre-manifest-ownership.py")
-    spec = importlib.util.spec_from_file_location("generate_pre_manifest_ownership", path)
-    if spec is None or spec.loader is None:
-        raise RuntimeError(f"cannot load {path}")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
 
 
 def usable_text(raw: bytes) -> bool:
@@ -107,10 +100,8 @@ def source_key(rel: str) -> str | None:
 
 
 def generate() -> dict[str, object]:
-    ownership = load_ownership_module()
-    if ownership.git("rev-parse", "--is-shallow-repository").strip() == b"true":
-        raise RuntimeError("shallow clone: shipped versions need the full git history")
-    by_rel = ownership.historical_blobs_by_rel()
+    # Refuses a shallow clone: a partial history would silently drop shipped versions.
+    by_rel = generate_history.historical_blobs_by_rel()
     sources: dict[str, set[str]] = {}
     blob_digests: dict[str, str | None] = {}
 
@@ -124,7 +115,7 @@ def generate() -> dict[str, object]:
             continue
         for sha in sorted(shas):
             if sha not in blob_digests:
-                raw = ownership.git("cat-file", "blob", sha)
+                raw = generate_history.blob(sha)
                 blob_digests[sha] = digest(raw) if usable_text(raw) else None
             if blob_digests[sha] is not None:
                 sources.setdefault(key, set()).add(blob_digests[sha])
@@ -132,8 +123,7 @@ def generate() -> dict[str, object]:
     # The current version of each tracked source (edits not yet committed included); untracked
     # files are never shipped, so they are not listed.
     workspace = ROOT / PREFIX
-    tracked = ownership.git("ls-files", "-z", "--", PREFIX).decode().split("\0")
-    for rel_path in sorted(filter(None, tracked)):
+    for rel_path in generate_history.tracked_files(PREFIX):
         path = ROOT / rel_path
         if not path.is_file() or path.is_symlink():
             continue

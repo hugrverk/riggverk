@@ -17,10 +17,14 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import importlib.util
 import json
 import sys
 from pathlib import Path
+
+if str(Path(__file__).resolve().parent) not in sys.path:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import generate_history  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 PREFIX = "resources/default-workspace/"
@@ -37,17 +41,6 @@ INDEX_NAME = "index.json"
 MAX_BYTES = 256 * 1024
 
 
-def load_ownership_module():
-    """Reuse the repository-history walker of the pre-manifest generator."""
-    path = Path(__file__).with_name("generate-pre-manifest-ownership.py")
-    spec = importlib.util.spec_from_file_location("generate_pre_manifest_ownership", path)
-    if spec is None or spec.loader is None:
-        raise RuntimeError(f"cannot load {path}")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
 def usable_text(raw: bytes) -> bool:
     if not raw or len(raw) > MAX_BYTES or b"\0" in raw:
         return False
@@ -60,14 +53,13 @@ def usable_text(raw: bytes) -> bool:
 
 def generate() -> dict[str, bytes]:
     """Map path relative to the history root -> exact file bytes."""
-    ownership = load_ownership_module()
-    by_rel = ownership.historical_blobs_by_rel()
+    by_rel = generate_history.historical_blobs_by_rel()
     outputs: dict[str, bytes] = {}
     index: dict[str, list[str]] = {}
     for harness, rel in sorted(HARNESS_RULES.items()):
         versions: dict[str, bytes] = {}
-        for sha in sorted(by_rel.get(rel, set())):
-            raw = ownership.git("cat-file", "blob", sha)
+        for sha in sorted(by_rel.get(rel, ())):
+            raw = generate_history.blob(sha)
             if usable_text(raw):
                 versions[hashlib.sha256(raw).hexdigest()] = raw
         current = ROOT / PREFIX / rel
