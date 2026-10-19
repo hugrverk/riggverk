@@ -112,6 +112,23 @@ impl Document {
 /// the app does not edit. An empty (or whitespace-only) file counts as `{}`: it holds nothing of
 /// the user's.
 pub fn read(path: &Path, spec: &LightMcp) -> Result<Option<Document>, Refusal> {
+    let Some(bytes) = read_bytes(path)? else {
+        return Ok(None);
+    };
+    parse(&bytes, spec).map(Some)
+}
+
+/// Reads the strict JSON object at `path` under the same rules as an MCP file: `Ok(None)` when
+/// there is no file, a [`Refusal`] for one the app does not edit, `{}` for an empty file. OpenCode's
+/// `tui.json` is read this way too.
+pub fn read_object(path: &Path) -> Result<Option<Map<String, Value>>, Refusal> {
+    let Some(bytes) = read_bytes(path)? else {
+        return Ok(None);
+    };
+    parse_object(&bytes).map(Some)
+}
+
+fn read_bytes(path: &Path) -> Result<Option<Vec<u8>>, Refusal> {
     let meta = match fs::symlink_metadata(path) {
         Ok(meta) => meta,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
@@ -123,11 +140,21 @@ pub fn read(path: &Path, spec: &LightMcp) -> Result<Option<Document>, Refusal> {
     if meta.len() > MAX_MCP_FILE_BYTES {
         return Err(Refusal::TooLarge);
     }
-    let bytes = fs::read(path).map_err(|_| Refusal::Unreadable)?;
-    parse(&bytes, spec).map(Some)
+    fs::read(path).map(Some).map_err(|_| Refusal::Unreadable)
 }
 
 fn parse(bytes: &[u8], spec: &LightMcp) -> Result<Document, Refusal> {
+    let root = parse_object(bytes)?;
+    if root
+        .get(&spec.root_key)
+        .is_some_and(|servers| !servers.is_object())
+    {
+        return Err(Refusal::KeyNotObject);
+    }
+    Ok(Document { root })
+}
+
+fn parse_object(bytes: &[u8]) -> Result<Map<String, Value>, Refusal> {
     if bytes.starts_with(&[0xEF, 0xBB, 0xBF]) {
         return Err(Refusal::ByteOrderMark);
     }
@@ -136,19 +163,13 @@ fn parse(bytes: &[u8], spec: &LightMcp) -> Result<Document, Refusal> {
         .trim_matches(|c| matches!(c, ' ' | '\t' | '\n' | '\r'))
         .is_empty()
     {
-        return Ok(Document { root: Map::new() });
+        return Ok(Map::new());
     }
     let value: Value = serde_json::from_str(text).map_err(|_| classify_syntax_error(text))?;
     let Value::Object(root) = value else {
         return Err(Refusal::RootNotObject);
     };
-    if root
-        .get(&spec.root_key)
-        .is_some_and(|servers| !servers.is_object())
-    {
-        return Err(Refusal::KeyNotObject);
-    }
-    Ok(Document { root })
+    Ok(root)
 }
 
 /// Names what is wrong with text that is not strict JSON, only to say so plainly: comments first,

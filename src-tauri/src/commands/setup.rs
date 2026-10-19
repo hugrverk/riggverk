@@ -924,6 +924,17 @@ fn apply_single_artifact(
         return Ok(());
     }
 
+    // Only the managed keys of tui.json are the app's; a file that is not strict JSON is refused.
+    if artifact == &crate::artifact_registry::ArtifactId::OpenCodeTui {
+        let rendered = crate::opencode_tui::render_install(&source, &dest)?;
+        return crate::safe_filesystem::write_regular_file_atomic(
+            &dest,
+            rendered.as_bytes(),
+            &root,
+        )
+        .map_err(|e| format!("write tui.json {}: {e}", dest.display()));
+    }
+
     if artifact == &crate::artifact_registry::ArtifactId::CodexConfig {
         if dest.is_file() {
             let rendered = crate::commands::render_codex_config_managed_projection(

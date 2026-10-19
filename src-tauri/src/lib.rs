@@ -16,6 +16,7 @@ mod light_mcp;
 mod managed_bootstrap;
 mod managed_state;
 mod mutation_lock;
+mod opencode_tui;
 mod path_safety;
 mod path_utils;
 mod platform_paths;
@@ -54,6 +55,8 @@ mod light_harness_contract;
 mod managed_reconciliation_contract;
 #[cfg(test)]
 mod opencode_model_override_contract;
+#[cfg(test)]
+mod opencode_tui_contract;
 #[cfg(test)]
 mod rules_block_contract;
 #[cfg(test)]
