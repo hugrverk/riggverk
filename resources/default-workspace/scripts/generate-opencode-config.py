@@ -59,7 +59,7 @@ POLICY_SECTION_KEYS = {
     "skill": None,
     "read": {"default", "deny", "allow_override"},
     "edit": {"default", "allow", "ask", "deny", "allow_override"},
-    "bash": {"default", "allow", "ask", "deny", "secret_content_commands", "secret_content_patterns"},
+    "bash": {"default", "allow", "ask", "deny", "secret_content_commands"},
     "builtin_agents": None,
     "role_profiles": None,
 }
@@ -132,6 +132,55 @@ def build_edit_section(policy):
     return result
 
 
+def secret_names(policy):
+    """The secret file names and path tails of `read.deny` (`**/P` becomes `P`), for the bash denies.
+
+    A read pattern with a `*` at both ends (`*.env*`) has no fixed start or end. Inside a command
+    line it would match every mention (`rg process.env src`), so it stays a read deny only.
+    """
+    names = []
+    for pattern in policy.get("read", {}).get("deny", []):
+        name = pattern[3:] if pattern.startswith("**/") else pattern
+        if name.startswith("*") and name.endswith("*"):
+            continue
+        if name not in names:
+            names.append(name)
+    return names
+
+
+def secret_content_denies(policy):
+    """Bash denies for printing a secret file with a content command, however its path is spelled.
+
+    OpenCode matches a bash rule against the command text, `*` matches any text (spaces and `/`
+    included) and a trailing ` *` also matches nothing; `~` is not expanded. For a command C
+    and a secret name P from `read.deny`:
+
+    * `C P`: the name right after the command (`cat .env`; `grep -r x .env` for `grep *`);
+    * a file reader (`cat`, `head`, ...): also `C P *`, the name followed by more words, and, when
+      P does not start with `*`, `C * P *` after other words (`head -n 5 .env`) and `C */P *`, a
+      path that ends in `/P` whatever the prefix (`./`, `~/`, `$HOME/`, absolute, nested);
+    * a command written with a trailing ` *` (`grep *`, `rg *`, `git grep *`): its first operand
+      is the search pattern, so a bare name counts only as the last word (`grep -r id_rsa docs/`
+      keeps asking) and the other spellings need a `/`: `C */P *`.
+
+    The trailing ` *` (more words, or a redirect) is left out when P already ends in `*`.
+    """
+    denies = []
+    for command in policy.get("bash", {}).get("secret_content_commands", []):
+        search = command.endswith(" *")
+        for name in secret_names(policy):
+            more = "" if name.endswith("*") else " *"
+            forms = [f"{command} {name}"]
+            if search:
+                forms.append(f"{command} */{name}{more}")
+            else:
+                forms.append(f"{command} {name}{more}")
+                if not name.startswith("*"):
+                    forms += [f"{command} * {name}{more}", f"{command} */{name}{more}"]
+            denies.extend(forms)
+    return list(dict.fromkeys(denies))
+
+
 def build_bash_section(policy):
     """Build bash permission section from policy data, expanding secret content denies."""
     bash_policy = policy.get("bash", {})
@@ -152,13 +201,9 @@ def build_bash_section(policy):
     for pattern in bash_policy.get("deny", []):
         result[pattern] = "deny"
 
-    # Generated secret content denies: for each command × each pattern
-    commands = bash_policy.get("secret_content_commands", [])
-    patterns = bash_policy.get("secret_content_patterns", [])
-    for cmd in commands:
-        for pat in patterns:
-            key = f"{cmd} {pat}"
-            result[key] = "deny"
+    # Generated secret content denies, derived from the read deny list
+    for pattern in secret_content_denies(policy):
+        result[pattern] = "deny"
 
     return result
 

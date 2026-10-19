@@ -39,6 +39,8 @@ from opencode_policy_compose import (  # noqa: E402
     compose_role_permission,
     load_policy,
     permission_to_yaml,
+    secret_content_denies,
+    secret_names,
     unknown_policy_keys,
     with_root_forms,
 )
@@ -58,6 +60,8 @@ from validate_opencode_permissions import (  # noqa: E402
     destructive_errors,
     lexical_frontmatter_errors,
     secret_coverage_errors,
+    secret_mention_errors,
+    secret_spelling_errors,
     snapshot_errors,
     validate_agent_frontmatter,
 )
@@ -677,17 +681,13 @@ class TestDenyInsideCompounds(unittest.TestCase):
             with self.subTest(agent=name):
                 self.assertEqual(self.action(name, "git status > out.txt"), "ask")
 
-    def test_bash_secret_denies_match_the_path_as_written(self) -> None:
-        # `cat .ssh/**` and `cat id_rsa` do not match `cat ~/.ssh/id_rsa`, so the open profiles ask
-        # (OpenCode also asks `external_directory` for a path outside the worktree). Pinned so the
-        # docs cannot claim a deny here.
-        command = "echo $(cat ~/.ssh/id_rsa)"
-        for name in self.RESTRICTIVE:
-            with self.subTest(agent=name):
-                self.assertEqual(self.action(name, command), "deny")
-        for name in self.OPEN:
-            with self.subTest(agent=name):
-                self.assertEqual(self.action(name, command), "ask")
+    def test_bash_secret_denies_cover_home_and_relative_paths(self) -> None:
+        # OpenCode does not expand `~` in the command text: `cat */.ssh/** *` and `cat */id_rsa *`
+        # are what deny these in the open profiles too.
+        for command in ("echo $(cat ~/.ssh/id_rsa)", "git status && cat ./id_rsa", "cat ~/.ssh/id_rsa | base64"):
+            for name in self.targets:
+                with self.subTest(agent=name, command=command):
+                    self.assertEqual(self.action(name, command), "deny")
 
     def test_every_command_deny_holds_in_every_compound_shape(self) -> None:
         for name, rules in self.targets.items():
@@ -695,8 +695,11 @@ class TestDenyInsideCompounds(unittest.TestCase):
                 self.assertEqual(compound_deny_errors(name, rules), [])
 
     def test_contract_fails_for_an_evaluator_that_does_not_split(self) -> None:
+        # The generated secret denies only make this slow: without a split each shape is one long command.
+        secret = set(secret_content_denies(load_policy()))
+        rules = [rule for rule in self.targets["architect"] if rule.pattern not in secret]
         with mock.patch("validate_opencode_permissions.shell_command_patterns", lambda command: [command]):
-            errors = compound_deny_errors("architect", self.targets["architect"])
+            errors = compound_deny_errors("architect", rules)
         self.assertIn(
             "architect: bash 'git status && rm -rf' must be deny (deny 'rm -rf*'), got allow",
             errors,
@@ -718,6 +721,102 @@ class TestDenyInsideCompounds(unittest.TestCase):
             with self.subTest(command=command):
                 self.assertEqual(effective_bash_action(perm, command), "deny")
                 self.assertEqual(effective_bash_action(loosened, command), "ask")
+
+
+class TestSecretPathSpellings(unittest.TestCase):
+    """The bash secret denies come from `read.deny` and hold however a command spells the path."""
+
+    OPEN = TestDenyInsideCompounds.OPEN
+    RESTRICTIVE = TestDenyInsideCompounds.RESTRICTIVE
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.policy = load_policy()
+        config = json.loads((TEMPLATES_DIR / "opencode.json").read_text(encoding="utf-8"))
+        cls.targets = compound_deny_targets(config)
+
+    def action(self, name: str, command: str) -> str:
+        return bash_action_for_parts(self.targets[name], command)
+
+    def test_every_read_denied_name_is_denied_in_every_spelling(self) -> None:
+        for name, rules in self.targets.items():
+            with self.subTest(agent=name):
+                self.assertEqual(secret_spelling_errors(name, rules, self.policy), [])
+
+    def test_mentions_and_listings_are_not_decided_by_a_secret_deny(self) -> None:
+        for name, rules in self.targets.items():
+            with self.subTest(agent=name):
+                self.assertEqual(secret_mention_errors(name, rules, self.policy), [])
+
+    def test_named_cases(self) -> None:
+        # (command, architect/build/plan, the restrictive profiles)
+        cases = [
+            ("cat ~/.ssh/id_rsa", "deny", "deny"),
+            ("cat ./id_rsa", "deny", "deny"),
+            ("cat /Users/x/.ssh/id_rsa", "deny", "deny"),
+            ("cat $HOME/.netrc", "deny", "deny"),
+            ("head .env", "deny", "deny"),
+            ("head -n 5 .env", "deny", "deny"),
+            ("less ./config/.env.local", "deny", "deny"),
+            ("bat ~/.aws/credentials", "deny", "deny"),
+            ("cat ~/.ssh/id_rsa > /tmp/key", "deny", "deny"),
+            ("grep -r token ~/.npmrc", "deny", "deny"),
+            ("rg -n KEY ./certs/server.pem --no-heading", "deny", "deny"),
+            ("cat .git/config", "deny", "deny"),
+            # names only, or a mention that is not a file operand
+            ("ls ~/.ssh", "allow", "deny"),
+            ("find . -name .env", "allow", "deny"),
+            ("git status", "allow", "allow"),
+            ('grep -r "id_rsa" docs/', "ask", "ask"),
+            ("grep -r id_rsa docs/", "ask", "ask"),
+            ("rg -n process.env src", "ask", "ask"),
+            ("cat src/secrets.ts", "ask", "deny"),
+        ]
+        for command, open_action, restrictive_action in cases:
+            for names, expected in ((self.OPEN, open_action), (self.RESTRICTIVE, restrictive_action)):
+                for name in names:
+                    with self.subTest(agent=name, command=command):
+                        self.assertEqual(self.action(name, command), expected)
+
+    def test_known_limits_still_ask(self) -> None:
+        # Pinned so the docs cannot claim more: a quoted path that ends right at a fixed name, and
+        # readers outside the listed commands, fall back to the bash default.
+        for command in ('cat ".env"', 'cat "$HOME/.netrc"', "awk 1 .env", "base64 ~/.ssh/id_rsa", "cp .env /tmp/x"):
+            for name in self.OPEN:
+                with self.subTest(agent=name, command=command):
+                    self.assertEqual(self.action(name, command), "ask")
+
+    def test_bash_denies_follow_the_read_deny_list(self) -> None:
+        policy = json.loads(json.dumps(self.policy))
+        policy["read"]["deny"].append("**/.vault-token")
+        policy["read"]["deny"].remove("**/id_rsa")
+        bash = opencode_policy_compose.build_bash_section(policy)
+        for pattern in ("cat .vault-token", "cat */.vault-token *", "head * .vault-token *", "grep * */.vault-token *"):
+            with self.subTest(pattern=pattern):
+                self.assertEqual(bash.get(pattern), "deny")
+        self.assertEqual([key for key in bash if "id_rsa" in key], [])
+
+    def test_a_name_without_a_fixed_end_stays_a_read_deny(self) -> None:
+        # `*.env*` would turn every `process.env` mention into a deny.
+        self.assertIn("*.env*", self.policy["read"]["deny"])
+        self.assertNotIn("*.env*", secret_names(self.policy))
+        self.assertEqual([key for key in secret_content_denies(self.policy) if "*.env*" in key], [])
+
+    def test_the_old_hand_copied_list_is_rejected(self) -> None:
+        self.assertEqual(unknown_policy_keys({"bash": {"secret_content_patterns": []}}), ["bash.secret_content_patterns"])
+
+    def test_dropping_the_path_forms_is_detected(self) -> None:
+        rules = [rule for rule in self.targets["architect"] if not rule.pattern.startswith("cat */")]
+        errors = secret_spelling_errors("architect", rules, self.policy)
+        self.assertIn("architect: bash 'cat ./id_rsa' must be deny (secret 'id_rsa'), got ask", errors)
+        self.assertIn("architect: bash 'cat ~/.npmrc' must be deny (secret '.npmrc'), got ask", errors)
+
+    def test_a_secret_deny_that_catches_a_mention_is_detected(self) -> None:
+        widened = [*secret_content_denies(self.policy), "grep * id_rsa *"]
+        rules = self.targets["architect"] + [Rule("bash", "grep * id_rsa *", "deny")]
+        with mock.patch("validate_opencode_permissions.secret_content_denies", lambda policy: widened):
+            errors = secret_mention_errors("architect", rules, self.policy)
+        self.assertIn("architect: bash 'grep -r id_rsa docs/' is deny, but ask without the secret denies", errors)
 
 
 class TestExternalDirectory(unittest.TestCase):
@@ -930,15 +1029,16 @@ class TestMutationRejection(unittest.TestCase):
     def test_dropping_a_secret_name_from_the_policy_still_fails_the_floor(self) -> None:
         policy = json.loads(json.dumps(load_policy()))
         policy["read"]["deny"].remove("**/kubeconfig")
-        policy["bash"]["secret_content_patterns"].remove("kubeconfig")
         perm = compose_role_permission(load_role("architect"))
         for key in ("**/kubeconfig", "kubeconfig"):
             perm["read"].pop(key)
-        for key in [key for key in perm["bash"] if key.endswith(" kubeconfig")]:
+        for key in [key for key in perm["bash"] if "kubeconfig" in key]:
             perm["bash"].pop(key)
         errors = secret_coverage_errors("architect", perm, policy)
+        self.assertEqual([error for error in errors if "missing" in error], [])
         self.assertIn("architect: read 'kubeconfig' must be deny (secret floor)", errors)
         self.assertIn("architect: bash 'cat kubeconfig' must be deny (secret floor), got ask", errors)
+        self.assertIn("architect: bash 'cat ~/kubeconfig' must be deny (secret floor), got ask", errors)
 
     def test_dropping_the_git_clean_deny_is_detected(self) -> None:
         for role in ALL_ROLES:
