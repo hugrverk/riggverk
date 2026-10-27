@@ -28,6 +28,7 @@ check = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(check)
 
 FIRST = '    "README.md",\n'
+RETIRED_HEAD = "const RETIRED_FROM_BUNDLE: &[&str] = &[\n"
 
 
 class ParserTests(unittest.TestCase):
@@ -108,12 +109,18 @@ class CheckTests(unittest.TestCase):
         self.assertFails("not in the bundle and not documented as retired: docs/START_HERE.md")
 
     def test_documented_retirement_of_a_file_the_bundle_still_holds(self) -> None:
-        self.edit_module("RETIRED_FROM_BUNDLE: &[&str] = &[];", 'RETIRED_FROM_BUNDLE: &[&str] = &["README.md"];')
+        self.edit_module(RETIRED_HEAD, RETIRED_HEAD + '        "README.md",\n')
         self.assertFails("documented as retired from the bundle, but the bundle holds it: README.md")
 
     def test_documented_retirement_of_a_file_that_is_not_listed(self) -> None:
-        self.edit_module("RETIRED_FROM_BUNDLE: &[&str] = &[];", 'RETIRED_FROM_BUNDLE: &[&str] = &["nope.md"];')
+        self.edit_module(RETIRED_HEAD, RETIRED_HEAD + '        "nope.md",\n')
         self.assertFails("names a path that is not listed: nope.md")
+
+    def test_tag_only_files_are_listed_and_documented_as_retired(self) -> None:
+        listed = frozen.load(self.tree)
+        self.assertIn("scripts/bootstrap.sh", listed.files)
+        self.assertIn("scripts/bootstrap.sh", listed.retired_from_bundle)
+        self.assertFalse((self.tree / check.BUNDLE / "scripts/bootstrap.sh").exists())
 
     def test_required_helper_asset_missing_from_the_bundle(self) -> None:
         (self.tree / check.BUNDLE / "scripts/merge-codex-config.py").write_text("")

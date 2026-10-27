@@ -1539,6 +1539,49 @@
       "action": "update"
     },
     {
+      "identity": "workspace:file:agents/autopilot.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:380f0714edc670c6d0a5ebb55cd40ce44efedc6248b300e8608e476050c16e6d",
+        "sha256:62a08c4987448d2337f8e9902b374d9d18a62cf8191553e836047e90170191da",
+        "sha256:631a4cc80c70cf1eb7d24edd6b497faa5b22b45de0b2861890bebc98b3d838ac",
+        "sha256:67d4f08c827d9dc3a654b06b9ae0d2e4b2e5c5c9299a0000a8ff2fcd9a5f3a1c",
+        "sha256:89fe7d4cdde430b0a766b9b469c74f88f1a06e172f710fcb01c1e48651116b00",
+        "sha256:ade7a930fba8e7952dd750dce3c7d4968677ba46f2816333a929fd9e5dfdb931",
+        "sha256:f0754454aada42b945cd4ad71a6688396d75b7f147b5adfa1f216e36ba335d17",
+        "sha256:f204b1959bb4b7d3303187dd9bfe5198e68317c4e9d7183a96c7e484008d9d07"
+      ],
+      "action": "remove"
+    },
+    {
+      "identity": "workspace:file:agents/code-reviewer.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:035a61488b7af148b28ab59bc339bcd8c3f43e1196bf8294ce157176bb2f665b",
+        "sha256:0fb9d99adaf7e1369226baf26d9aa9131a6783484a2e540aeb7c9a0629d014ef",
+        "sha256:74a99e23888cf0833afed1d9c9584f1552656bd80b772148dde60d3af41a4af2",
+        "sha256:d69348952a14bb4366b269ae2c607540229e81fb23c4af0c963e599bcbaebe39"
+      ],
+      "action": "remove"
+    },
+    {
+      "identity": "workspace:file:agents/docs-writer.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:0b727a8784c8aacc5f66830eafb1b666f59318547ecd302e39b90afa8758fa1c",
+        "sha256:0dbca51b3df2aa702b804f5758b7de120db48f01b2b80818f125f70cf065101f",
+        "sha256:daad514c52a4696d63d6608be26db846b39c7bdf94a45a8c07c7ccbb2e733f8c",
+        "sha256:f651754388d25b9909f5aceb08353d058073774126558a31772f088123162c6e"
+      ],
+      "action": "remove"
+    },
+    {
       "identity": "workspace:file:agents/inspector.md",
       "path_classes": [
         "workspace-doc"
@@ -1577,6 +1620,19 @@
         "sha256:f4757eaf8b8bdb1e88a6c72e2951bfe79ad4058845b7d8872068f7f321cc2f6b"
       ],
       "action": "update"
+    },
+    {
+      "identity": "workspace:file:agents/qa-verifier.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:013c15ca40825b83fbac6bc13e56112e3fcc9c87832165d5f7aeb5527d484402",
+        "sha256:1b349380850511e57c0ab182b72af72be0566e4bef3989cdc20638c5baffa8fa",
+        "sha256:2bdcdb9800c31fc6ad4e69482e6f34dfb3ec925591281900c3134deac85ef190",
+        "sha256:e01cf5cdb01111bbbab75f51e101948910626c6c907c22b8b5743850041b6f93"
+      ],
+      "action": "remove"
     },
     {
       "identity": "workspace:file:agents/repo-scout.md",
@@ -1645,6 +1701,19 @@
         "sha256:e29e9fd76b8823d06e814c20c5f326d4084d606545ded46ef937fd2c659a2f4c"
       ],
       "action": "update"
+    },
+    {
+      "identity": "workspace:file:agents/security-auditor.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:5e9dc9bedd7209a76f8b859d2fbc27b9f87f9987c947a95dedef33a4f5fb22d0",
+        "sha256:88e85870c08d6da1feeb54c1b141994a8069da5b1a4bd7f0dd1673461e60e1aa",
+        "sha256:95bbb756e58a4f84f67a058f89028f9a21b0703e6ed0aa9f77047a6a718ba743",
+        "sha256:aca09beb4b6a085ec6c2b6390ebf24b0b9f3dbd84a3583a2111ba1e0d3084713"
+      ],
+      "action": "remove"
     },
     {
       "identity": "workspace:file:agents/sentinel.md",
@@ -2455,6 +2524,48 @@
       "action": "update"
     },
     {
+      "identity": "workspace:file:routing/profiles.json",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:1c82f32a3aaf3b0574cba04321d0137a4cb82a95fd3716006e9e2f5616983c9e",
+        "sha256:2e004b1671f50852fd84e8c489ea6f33e0b1ee0ead1cc00047d7d3e4e8c326ae",
+        "sha256:67a8a4584f998570a17f6cf4b002feaff9023f2707bc5531397eb65a633cd6a4",
+        "sha256:6e518ae04f1533eca9dedbda4c088de2b5f29579357e47efa3329469eb26af10",
+        "sha256:9f5350a250184513b523341f5b59357f4a0da2ff5ab3506a9d325cc47be93dbb",
+        "sha256:f37a976b8b146fb129702d929334085c07bf4ec2031c03595d8a8e31342935f8"
+      ],
+      "action": "remove"
+    },
+    {
+      "identity": "workspace:file:scripts/bootstrap.sh",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:04aa9d6ea279e9549bd62554fbdac3d89c86ff73d6f1bafa9e616227fd21e08f",
+        "sha256:21827d9e65cb315aa573dd6cdf2c4c2bb90377a4e874724a4d1e418243f1d8f8",
+        "sha256:23acd7296894483a314ed99bbb1588119e8306ee321f00a580543dc26f46dc1d",
+        "sha256:25a1e01a243ebdee3abb7cdb4ae5a2137063d32c24c48ead4e164b06efbef2ce",
+        "sha256:2c0982da75e3dcde5a9579c97e77bd8e402b9ae69932e9bd81f7009f72fc5304",
+        "sha256:3c716c9bba5e7e4a2d30ec701ef2ea3f6030a436b4f0287243f8a4d39b74188b",
+        "sha256:627676cf985a3837cc505fe0ca1ec698e5d1ba9857635ce72c35429d467e46b2",
+        "sha256:680f5815f8e467efee3e718237045aa60fb14afbf4f193520c546fc188cec4f7",
+        "sha256:7f632acc0451c7d453dde00a7353492a70bdf5ee32f586527ffddcbfeef5c1f7",
+        "sha256:ad3ba719e77a6645a57036ab7299704fc66f318974327506a8f674620487e588",
+        "sha256:b08028b3d5bdc36cc6f7eb82aa998b0f526720b56307af30aacb0e984344b3aa",
+        "sha256:ba627f7b3fb5cd9bc86b03ab8171b199ed360f5a83df76debc2e794e9d519801",
+        "sha256:c8fa2a3a1e47849f3a679f14c12f2e737b87b8851b579dd5c5fe833b871c7b04",
+        "sha256:d1603e75e21d0e543b2a098a945d5f3f3ca1645e3828363ef5e17bc16db4e7c0",
+        "sha256:e1a9a56357c04b6769500a653f32256d3b6f9a9f8c6f4e4a3c144127e4c969bd",
+        "sha256:e3b0520035e64ebe88ed50fd643d4c58fade08e3042c79abbae0bffc864303c7",
+        "sha256:fa14b67172b59c95d4095c40f8d7e86658d7a8fa905bc5fd4f05bbdeae016527",
+        "sha256:fba986c7ae05239b60fde07b5a28628c1a41bfb78215f3161a29a42cd64788db"
+      ],
+      "action": "remove"
+    },
+    {
       "identity": "workspace:file:scripts/ensure-codex-routing-defaults.py",
       "path_classes": [
         "workspace-doc"
@@ -2495,6 +2606,125 @@
         "sha256:e317284d562fdb014b5fc9e7876d8e3e0ee0749927de6aab73c0b7c9e9efb155"
       ],
       "action": "update"
+    },
+    {
+      "identity": "workspace:file:scripts/install-agent-rules.sh",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:0c49feac8735a8a65e0366d9071342ad7afd96f4f7fb6911e5bca535af53b930",
+        "sha256:0e8f1eda0d50b4dcc88575889e5c653827b35812da3ce7101574f8a08861e619",
+        "sha256:1a02d5d28b2d3cd6f79d21b8089374ba747c56422fb3289bb2ae4d995b415a99",
+        "sha256:1ca51cc5d05595e301b7b7264938a45fe687dbb37fa474adbb8a800f45ab3ada",
+        "sha256:2919f9ecdbf61a1d5c0bb4485ac392bcc89bd4e69642b88c59d177beb3ffb737",
+        "sha256:2ad674fea7eb9545cf3a21f087c71110fd44e14f06095337e5c11cc01c6330c4",
+        "sha256:310112f1ba6da45abd773f15aa82174126c37ae744af8c776400d2199659c57b",
+        "sha256:3c3f0e695b21cf2d2bacd4ecd2bbafab94fc4e7a2268fc524b34b9019cd46d40",
+        "sha256:51a9337263e0f28f094eba410e041cea7480ab312df53e23d680a9450e64ceb2",
+        "sha256:6e1111f63aa42c99434d3ae26c81696e4744626b20bee50e446d27650375c72e",
+        "sha256:6e52a37f228929c6690bd6f87c1bc8f1ba175e909da1bf66a7fb84fd8e06c673",
+        "sha256:715e6b0800b190432b4964af6df76c3f0e0b286d223d07c3519841d6f6b323aa",
+        "sha256:72025b583ea5931cd6dbd37477c4a8a141b3685e7cac918a6653b8c2b551e15c",
+        "sha256:721e5501251cb0786ecb0c06a73ab804e276fd9e601cb92eb670de7fda4a7808",
+        "sha256:74cd1420a1dbf8a25eca017dbc4e6cc160fa2c7e9c542a37c23f85416edfac27",
+        "sha256:798b5efa3690a45d364d633aec9eb621748d01fdbe99d63769913eab397609e7",
+        "sha256:7e89049991149f37dab89405c5b41002398d42dcaceb98fca49f8ce612b798ac",
+        "sha256:855a3231d85b1bc7ff6a9437f74fc0fa90fe9ed3b76e6796bcb8beeb6be0fc82",
+        "sha256:9759d925efd85949140a4e8ddbe3869177608b5060603965cceb6f5215cf8194",
+        "sha256:9baea3aae4e3285321512e25ee70f1d5ec77512845b2c02896cf12586b5905bb",
+        "sha256:9d49d694bdc4a709af48f6c8945dab8d033cf3a2a9683cf1e3489c271ed06496",
+        "sha256:b242c29c1c7b60c9299dd4578dfd3f4c58be3967b39692771d634c8caa0999f0",
+        "sha256:c61179c95988110d0cf5479f748dd09518aa7b663f6f32f2df090f66d9f38c08",
+        "sha256:cdf1382a2a761f0d99aeecd5e874cd8ea6e655115da86aaad36c95fb0b91692d",
+        "sha256:e81cc0b29582e3b30862452b290ec6f5f9a57b04d6600752f5109ccaf513b27a",
+        "sha256:ee74454fcfd1bc24951ff7c3fcd0489c5348886ab5a534691a32e4ec034cf22d"
+      ],
+      "action": "remove"
+    },
+    {
+      "identity": "workspace:file:scripts/install-opencode-config.sh",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:00c5ec41c906d6c1e917c6adfeed86d6a5fcbb95ff6f4a8d1b0529ff9a20113c",
+        "sha256:061d303b5a32e55701283109d52f616566d5c2546c12ee47eac189feee7605e9",
+        "sha256:06297bed8c0ff4799003e9b5b63c22ad0b954887d5d1b16438cdec050af9b937",
+        "sha256:117d88e9934c72bdda553fb738f7661a9be80df8899ba3c39dc6418ca5240f5a",
+        "sha256:127ba333236cd6d98591dbc6df01a06efe7f5d514c5895d965a39549e9500b4b",
+        "sha256:14b31a3b8687c6ed5b4b11b032225cfc2672982dd3443f368e06a05dc401d2ec",
+        "sha256:193497c3e27cde9bb274d1d2fbc48b4860fda0b8cdffac94cc7524c73e8f2726",
+        "sha256:1e19b5c2dcfb0d5f538c5a658d0e32791330bcac115f9edb8f30b0f339ad560b",
+        "sha256:277e7289b26afb259373f2c4f37defb3e01687c25391ea71aed06cb0e93c0406",
+        "sha256:337c9f30765405b0f499f513eaae845a5e01d89f23f4d61a4c1ebf360591b84d",
+        "sha256:58fc6870cdcb8c820e6ef0adf91c326a33adad181b0dae167d922f28e31ab465",
+        "sha256:5e280884fdcdc035bd39346e1eb6e3ee2232a896d5089c44a56dfc7e8210f201",
+        "sha256:6bf7d5273dac1ffdf7f866328dd94b8e71bdda409f6371839bd5dc61f9eba806",
+        "sha256:7984eb600b0ef84b143f23a5100a6650ede4f360c598f567a988a2a082966974",
+        "sha256:7bb4a7b2c30e7c2ccd405c7cb1371e01f8970f4bbaecc84a379d67cdc1ba5ff6",
+        "sha256:844495d45f8f6c1329b9fc275ad61bf11f038ad0e73a0ee5220985d580d58003",
+        "sha256:8a6335b8bf8bfa8fe62e93c0d9abc13294e6a8890fb1b1daa95da8c5ad5d3267",
+        "sha256:8b80c37907ad2233326929ae380de9733beb4e8ca3cb04706c46d6ed4d7c0e4d",
+        "sha256:97fcedaf72c26e251ad6e10396b573cc181573e6c2609b5cd2b56e4edf312f16",
+        "sha256:9dfad521aefcc2f0aa8846602fad79d88772c058ac3dc941fc4aef85fa2a83f1",
+        "sha256:aed49a335c76d846ea916eda333d4ebb6a473d0764085090dccc09850c59a496",
+        "sha256:b15c8b2b05178098185cb83a6c0a7fa2078284fbbbcecf98ccb8bc83745698d1",
+        "sha256:b281d89fbb0be8c1c9781f8717b4a063bae1a421ad9fd22f6af7fcb95c7f7dd7",
+        "sha256:b4ed83e380b1624f139189ac90a164eef6f620d9d117d85a45723d0e349b5e26",
+        "sha256:c7060496cd507dca4a824101306a83612d30556cf89b22299cfefa8a1455b32d",
+        "sha256:d22e50147484a96f9216048c23c171f0ccba9e3f804e61b6246aa07ca038372b",
+        "sha256:dae98dc71b82eb62e7d8a7c4af691099952de9e415e969134c42d5a7df3e73a7",
+        "sha256:e3d7b9014988e6dea1e3ae3302f04a7ae8358100c06163884eda19f33d5a78e1",
+        "sha256:eb642d97344dcf85831b9628b91b9805fb49c895c05cb11748b04f67eafe79a8",
+        "sha256:f31bf361f6a61d5d9ed096b061848c7ffc972446a35ab50efd52c8d96ef64a48",
+        "sha256:f4256c5168bd7a57e0249df71daaab2192e2e4f61a5d5c042779f07dfd1b3417",
+        "sha256:fabe449639878bff3e8fb5ad9a6e332fb07350f3120756dca0a56be036e6a336"
+      ],
+      "action": "remove"
+    },
+    {
+      "identity": "workspace:file:scripts/install-skills.sh",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:0f737d8b75ed792fe4fee054eb584c4b848845a7e88430a824155c6f69663b70",
+        "sha256:101d0cb00b80bee1a7fdc9842ad3e4b1957bb5d85c0641edf47e9b778a8c2133",
+        "sha256:1188ab18525561e185a939847807b1390dc0d14a11a6999f3c9a6be646622171",
+        "sha256:1f1d358d9c7210083db845d552f9074c3c5119df2cb021279382667848846da6",
+        "sha256:21e4ada8143355d88eae442a16d55b0e38ad9373b5c45bb37a2bed2838c4c154",
+        "sha256:21ecddc547754c3c3dd2116d218c8e22174ac6269c73353c14cf7dc234dcd71b",
+        "sha256:2a7b854e17e9020e120615999041f49cb8bc2812596f7211a960a1ab137f247b",
+        "sha256:2efe88685f5eb703fd4f5f36ef5b74beabd8966c275bb034b5f1a4f40a3fa0b8",
+        "sha256:2f19f3b9c0c133be4fc5d9ec538b74c5ef6c6da7341b7ba06fa2ef4e220520ab",
+        "sha256:3cf6d7d019364516e444f8b13bac0c761535ddd3561e6ca541501434a56719cd",
+        "sha256:421652de9c2f42e0628e5ee928f840a9bf4566a471597438d4478a5430107ee5",
+        "sha256:585587adadc334b6c6aee474f87bdf9fafcf5aa1ca295c8abe026244bf7b5ff3",
+        "sha256:5e26044bb6433d85f317c915fd9c72fcb954dce22c54050b2ce855405ecf3a09",
+        "sha256:609571a65a369e64aeee3ae1ba5542abdab9b37c059fa0617d914f27628271be",
+        "sha256:6403ec9240ad333527470ffee2545bc1e670c3bfa3e2fe971001205428d23862",
+        "sha256:7941f22c353da7811a86b70c6e56b7c28b46238bb8d473d4f200acf35d4c7491",
+        "sha256:8f90f08d83d454e25395260bce98775d9fbb1d2642d1fad79e23846a3954e9cd",
+        "sha256:98da89f789f9b963ea07367560cda7301fc4dc71e895644ea707c9a5bea2fb28",
+        "sha256:9dd452f30daea2c652627a18870407374fcd5e465d04fc242f1d1a32a23d8274",
+        "sha256:a2ee59a815ee3817825998a1ac7063bf2a0c6a544bac8849caf493a16b31d37a",
+        "sha256:a500750c2af9d4d1c7f3a0d3c004b5628cc85428dcb079ff38ddf4707a25d009",
+        "sha256:a59177b4063e9693dcf07c003a5e828ebf3a747e5924afbc9a9bf8407f2cb4c0",
+        "sha256:ad80a73e5f2dfdc4c86b9b84795dcfca7da95535c99becd991a63d32758e25e0",
+        "sha256:aebbebb9166139b24761c81d81c0d7854b663320f14468346f287fe98c08853e",
+        "sha256:b0fb259090e3db80f8736f4dec6cf707078f6e50ab75b7d1b7278690194154f7",
+        "sha256:ba6583bce45d62c2c5fdaa04c369c78f07ca0314b597ad32af828cd31e79e5f6",
+        "sha256:c031153e0511fb3aa2888554cc65de9e5c3f930451b0f03e35452aac5a8ea405",
+        "sha256:d5f343216274137d3150743d473daecd35cbb9dccc5fd9b4455abb51b90a1b87",
+        "sha256:dedb9f1791187d4b4add6e10ad59bca3d3baea472ad92e05f052680764b843f9",
+        "sha256:e241afb07807ee2d56e3bd7f5a7ca5856ad78203de897c103296ced9fb726e36",
+        "sha256:e97f3e90bf8afdde8e3c9cb6a80f5e527ad14730e8601afe8b702faeacc2e2eb",
+        "sha256:f3dcbd1c65c7585dc82a471ce76ab998e677752338b48ad7d7b6d00eebeb1ce6",
+        "sha256:f9702f52163abf635c8e350c276811c568f4bb28b3607b250a960dac90222d84",
+        "sha256:ffcabf1d7d69ca0c2d0565db68c916f1a7937c4f4ca8801bea7670b3d632f1f4"
+      ],
+      "action": "remove"
     },
     {
       "identity": "workspace:file:scripts/merge-codex-config.py",
@@ -3429,6 +3659,28 @@
         "sha256:834f75b948f356592ae31a1d2158149abfb7d0f8d17f902a13867deefbb0ddf0"
       ],
       "action": "update"
+    },
+    {
+      "identity": "workspace:file:templates/prompts/masterprompt.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:d675e66ca5ed5d341ef6c553dfe43686b8dbd4c20c8772d1719d56c7658e0209",
+        "sha256:e346aef296829be47e42fe2e6308ffe7c7ba8b2732595d65be3d7d168dde1ec0"
+      ],
+      "action": "remove"
+    },
+    {
+      "identity": "workspace:file:templates/prompts/standard-prompt.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:7efb97ef13b515b75b992a968835afc60a5487667a81c441da5b1c1b11f57f65",
+        "sha256:f7b0029a659c31883a5b3cd480913238ffc59bf7381ca4ea548c4de6ebf56801"
+      ],
+      "action": "remove"
     },
     {
       "identity": "workspace:file:templates/rules/claude.md",

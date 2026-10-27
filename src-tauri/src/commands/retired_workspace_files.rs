@@ -3,7 +3,8 @@
 //! The `WorkspaceBundle` surface still installs these files in this release. The list is flat and
 //! sorted, and it is frozen: a bundle file added later is read from the bundle and does not join
 //! the copy, and the tests pin the list by digest, so a change is always a deliberate edit of both.
-//! Frozen from the `default_workspace_files()` output at `e8624ea`.
+//! Frozen from the `default_workspace_files()` output at `e8624ea`, plus the twelve files that
+//! only the early tagged builds shipped (see `RETIRED_FROM_BUNDLE`).
 
 /// Marker of a workspace folder as earlier releases wrote it. It stays canonical: it is the one
 /// workspace file that is not a retired copy.
@@ -20,9 +21,14 @@ pub(crate) const RETIRED_WORKSPACE_FILES: &[&str] = &[
     "agent-specs/sentinel.body.md",
     "agent-specs/verifier.body.md",
     "agents/architect.md",
+    "agents/autopilot.md",
+    "agents/code-reviewer.md",
+    "agents/docs-writer.md",
     "agents/inspector.md",
+    "agents/qa-verifier.md",
     "agents/repo-scout.md",
     "agents/scribe.md",
+    "agents/security-auditor.md",
     "agents/sentinel.md",
     "agents/verifier.md",
     "docs/AGENT_RULES.md",
@@ -41,8 +47,13 @@ pub(crate) const RETIRED_WORKSPACE_FILES: &[&str] = &[
     "metadata/codex-managed-keys.json",
     "metadata/opencode-managed-keys.json",
     "metadata/rules-adapters.json",
+    "routing/profiles.json",
+    "scripts/bootstrap.sh",
     "scripts/ensure-codex-routing-defaults.py",
     "scripts/generate-opencode-config.py",
+    "scripts/install-agent-rules.sh",
+    "scripts/install-opencode-config.sh",
+    "scripts/install-skills.sh",
     "scripts/merge-codex-config.py",
     "skills/accessibility-review/SKILL.md",
     "skills/adversarial-implementation/SKILL.md",
@@ -131,6 +142,8 @@ pub(crate) const RETIRED_WORKSPACE_FILES: &[&str] = &[
     "templates/opencode.json",
     "templates/opencode.policy.json",
     "templates/playwright-mcp.config.json",
+    "templates/prompts/masterprompt.md",
+    "templates/prompts/standard-prompt.md",
     "templates/rules/claude.md",
     "templates/rules/codex.md",
     "templates/rules/copilot.md",
@@ -147,6 +160,27 @@ pub(crate) const RETIRED_WORKSPACE_FILES: &[&str] = &[
     "templates/tui.json",
 ];
 
+/// Listed paths the bundle no longer holds, each a copy that an earlier release shipped and the
+/// bundle dropped since. Add a path here, with a comment naming the release that dropped it,
+/// before the bundle loses it.
+#[cfg(test)]
+pub(crate) const RETIRED_FROM_BUNDLE: &[&str] = &[
+    // Only the early tagged builds (`app-v0.1.0`, `v0.1.0-alpha`, `v0.1.0-rc.1`) shipped these;
+    // the bundle dropped them before the managed state existed.
+    "agents/autopilot.md",
+    "agents/code-reviewer.md",
+    "agents/docs-writer.md",
+    "agents/qa-verifier.md",
+    "agents/security-auditor.md",
+    "routing/profiles.json",
+    "scripts/bootstrap.sh",
+    "scripts/install-agent-rules.sh",
+    "scripts/install-opencode-config.sh",
+    "scripts/install-skills.sh",
+    "templates/prompts/masterprompt.md",
+    "templates/prompts/standard-prompt.md",
+];
+
 /// The marker followed by the frozen list: every path the `WorkspaceBundle` surface installs and
 /// tracks in this release. Together they are sorted, so the order is stable.
 #[cfg(test)]
@@ -159,17 +193,13 @@ mod tests {
     use super::*;
     use std::path::{Path, PathBuf};
 
-    /// `sha256:` digest of `workspace_copy_paths()` joined by newlines, computed from the manifest
-    /// at `e8624ea` with a script, not from this file. Editing the list without this line fails.
+    /// `sha256:` digest of `workspace_copy_paths()` joined by newlines: the manifest at `e8624ea`
+    /// plus the tag-only files of `RETIRED_FROM_BUNDLE`, computed with a script, not from this
+    /// file. Editing the list without this line fails.
     const FROZEN_DIGEST: &str =
-        "sha256:1a5dc49f58bcf815424d8fb3f29b011616170bb57355ddd440eee0a8ef2971d2";
-    /// The marker and the 133 frozen files.
-    const FROZEN_COUNT: usize = 134;
-
-    /// Listed paths the bundle no longer holds, each a copy that an earlier release shipped and the
-    /// bundle dropped since. Add a path here, with a comment naming the release that dropped it,
-    /// before the bundle loses it. None today: the bundle still holds every listed file.
-    const RETIRED_FROM_BUNDLE: &[&str] = &[];
+        "sha256:cbb356a4e4d72bfbe46d642feedb0d2311f0cca0b4f35dcbaf7e50946bef8e9a";
+    /// The marker, the 133 files of the manifest and the 12 tag-only files.
+    const FROZEN_COUNT: usize = 146;
 
     fn bundle_root() -> PathBuf {
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../resources/default-workspace")

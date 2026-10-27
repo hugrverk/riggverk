@@ -107,7 +107,7 @@ def main() -> None:
         raise SystemExit("FAIL: " + "\n      ".join(found))
     listed = frozen.load()
     print(
-        f"  frozen workspace copy list: {len(listed.copy_paths())} files sorted and present in the bundle; "
+        f"  frozen workspace copy list: {len(listed.copy_paths())} files sorted, each in the bundle or documented as retired from it; "
         "app-run helper scripts, templates and Cursor adapters checked in the bundle"
     )
 
