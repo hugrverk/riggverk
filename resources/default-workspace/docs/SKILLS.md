@@ -8,7 +8,7 @@ Do not duplicate full `SKILL.md` content here. This file is an index for choosin
 
 | Skill | Use When |
 | --- | --- |
-| `adversarial-implementation` | An adversarial, critic-reviewed or two-agent implementation: an implementer agent against a fresh read-only critic (another model family when possible) each round, until no Fatal or Significant finding remains in the smallest diff that does the job. |
+| `adversarial-implementation` | User-invoked only (`/adversarial-implementation` in Claude Code and Cursor; ask for it by name elsewhere): an adversarial, critic-reviewed or two-agent implementation. A delegated implementer works against a fresh read-only critic chosen by capability first; only findings whose proof the lead re-runs count, the judging tests are frozen, and a deletion-only round ends the loop. Roles work with no setup and change with one phrase in chat or an `Adversarial roles:` line below END in the rules. |
 | `accessibility-review` | Reviewing UI for WCAG 2.2 AA risks, semantics, controls, keyboard, focus, labels, contrast, and responsive usability. |
 | `browser-qa` | Verifying frontend changes with live browser checks, route smoke tests, interactions, responsive checks, console/network review, and evidence. |
 | `context-budget` | Reducing duplicated rules, docs, prompts, skills, and token overhead without removing essential safety guidance. |
@@ -83,6 +83,7 @@ Grouped source: `skills/kretsverket/<skill>/SKILL.md`.
 - Release readiness: `release-check`.
 - Docs, rules, or prompt consolidation: `context-budget`; add `implementation-plan` for explicit maps.
 - Session retrospective: `retro`, only when the user invokes `/retro` (it is not routed by the rules).
+- Adversarial implementation: `adversarial-implementation`, only when the user asks for it (it is not routed by the rules).
 - Review passes: Claude Code uses the built-in `/code-review` and `/simplify`; other harnesses use the `inspector` agent.
 
 ## Skill Metadata
@@ -93,7 +94,7 @@ Each `SKILL.md` frontmatter has `name` and `description` plus these fields:
 - `risk` — low, medium, or high.
 - `targets` — comma-separated supported tools: codex, opencode, claude, cursor.
 - `related` — comma-separated related skill names; the routing check verifies each name exists.
-- `disable-model-invocation` — optional `true` for user-invoked skills (currently `retro`). Claude Code and Cursor then hide the skill from the model; Codex and OpenCode ignore the flag, so such a skill must not be referenced in routing bullets and its description says it is user-invoked.
+- `disable-model-invocation` — optional `true` for user-invoked skills (currently `retro` and `adversarial-implementation`). Claude Code and Cursor then hide the skill from the model; Codex and OpenCode ignore the flag, so such a skill must not be referenced in routing bullets and its description says it is user-invoked.
 
 Claude-only frontmatter keys sit directly in the skill's frontmatter: `context`, `agent`, `background`, and `allowed-tools` (for example `release-check` runs in a forked `verifier` context on Claude Code, and `handoff` and `release-check` pre-approve the read-only commands behind their `!` state injection). Codex and OpenCode ignore them. A skill that sets one also carries a `### Claude Code` notes section (see below).
 
@@ -105,7 +106,7 @@ The `description` is the only selection signal Codex, OpenCode, and Cursor see, 
 
 ## Supporting files
 
-Files next to a `SKILL.md` (references, schemas, templates, scripts) install with the skill, at the same relative paths, so a skill can say "read `HUNTING.md`" or "run `scripts/verify-report.mjs`" and mean the file next to it. `security-audit` carries its reference files and `kretsverket-status-report` carries `assets/report-template.html` and `scripts/verify-report.mjs`.
+Files next to a `SKILL.md` (references, schemas, templates, scripts) install with the skill, at the same relative paths, so a skill can say "read `HUNTING.md`" or "run `scripts/verify-report.mjs`" and mean the file next to it. `security-audit` carries its reference files, `kretsverket-status-report` carries `assets/report-template.html` and `scripts/verify-report.mjs`, and `adversarial-implementation` carries `adversarial-roles.md` (how roles are chosen) and `critic-recipes.md` (CLI recipes for external critics), which other adversarial skills read from there.
 
 Rules for the files in a skill directory in the bundle: regular files only (no symlinks), names of letters, digits, `.`, `_` and `-` that do not start with a dot, at most four path levels, at most 64 files and 2 MiB in total, at most 1 MiB per file, and no `SKILL.md` below the skill's own. Dot files are ignored. A skill that breaks a rule installs nothing until it is fixed. Write paths in a skill relative to its directory; never point a skill at the workspace folder, since the installed copy lives in a skills folder.
 
