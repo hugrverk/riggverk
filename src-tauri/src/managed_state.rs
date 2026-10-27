@@ -367,17 +367,12 @@ pub fn canonical_artifact_identities(
     for artifact in canonical_harness_artifacts(bundled_root, scope)? {
         ids.insert(artifact_identity(&artifact));
     }
-    for rel in canonical_workspace_file_paths() {
-        ids.insert(workspace_file_identity(rel));
-    }
+    // The marker stays canonical, so its record is never stale and it is never removed. The old
+    // copies of the bundle are not: their records are stale removals.
+    ids.insert(workspace_file_identity(
+        crate::commands::retired_workspace_files::LEGACY_MARKER_REL,
+    ));
     Ok(ids)
-}
-
-/// Collect canonical workspace file relative paths: the marker and the frozen list of copies.
-pub fn canonical_workspace_file_paths() -> Vec<&'static str> {
-    crate::commands::retired_workspace_files::workspace_copy_paths()
-        .filter(|rel| !rel.contains("..") && !rel.is_empty() && !Path::new(rel).is_absolute())
-        .collect()
 }
 
 pub fn compute_bundled_version(
@@ -393,16 +388,6 @@ pub fn compute_bundled_version(
         input.push(0);
         input.extend_from_slice(digest.as_bytes());
         input.push(0xff);
-    }
-    for rel in canonical_workspace_file_paths() {
-        let src = bundled_root.join(rel);
-        if src.is_file() {
-            input.extend_from_slice(rel.as_bytes());
-            input.push(0);
-            let bytes = fs::read(&src).map_err(|e| format!("read bundled {rel}: {e}"))?;
-            input.extend_from_slice(&bytes);
-            input.push(0xff);
-        }
     }
     Ok(crate::stable_digest::bytes(&input))
 }

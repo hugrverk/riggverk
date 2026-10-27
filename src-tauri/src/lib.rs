@@ -77,6 +77,8 @@ mod skill_folders_contract;
 mod smoke_runtime;
 #[cfg(test)]
 mod test_env;
+#[cfg(test)]
+mod workspace_cleanup_contract;
 
 use commands::{
     apply_rules_conversion, apply_setup, apply_take_bundled, apply_uninstall, create_doc,

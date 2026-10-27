@@ -153,6 +153,8 @@ mod tests {
         let env = Env::new("edited-copy");
         env.copy_bundle_into_workspace();
         env.install_everything();
+        // The install removed the old copies; put them back, the way a user might.
+        env.copy_bundle_into_workspace();
         let health_before = health();
         let status_before = json(get_status().expect("status"));
 

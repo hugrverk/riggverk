@@ -99,6 +99,11 @@ export function targetMeta(entry: OverviewEntry | undefined, options: { workspac
   if (conflicts > 0) {
     return { text: safe > 0 ? `${safe} to update · ${plural(conflicts, "conflict")}` : plural(conflicts, "conflict"), tone: "fail" };
   }
+  // The workspace row stands for the data folder: an update only removes old copies of the bundle.
+  if (options.id === "workspace" && status.state === "update_available" && status.counts.remove_count > 0) {
+    const removes = status.counts.remove_count;
+    return { text: `${removes} old ${removes === 1 ? "copy" : "copies"} to remove`, tone: "warn" };
+  }
   switch (status.state) {
     case "current": {
       // Files the user keeps are not conflicts and not current: they have bundled updates the app never applies.
@@ -163,7 +168,8 @@ export function surfaceRowsFor(
     const state: SurfaceDisplayState = row?.rules?.user_managed || keepsFiles ? "user_managed" : (row?.state ?? "unknown");
     return {
       surface,
-      name: surfaceShortName(surface),
+      // The workspace surface installs nothing any more: it removes the old copies of the bundle.
+      name: surface === "workspace_bundle" ? "old copies" : surfaceShortName(surface),
       detail: row?.detail ?? "",
       state,
       display: STATE_DISPLAY[state],

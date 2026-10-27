@@ -629,13 +629,10 @@ mod tests {
         with_isolated_settings("custom-copies-deleted-home", |home| {
             let custom = home.join("my-workspace");
             unsafe { std::env::set_var("AGENT_WORKSPACE_PATH", &custom) };
-            install(&["workspace_bundle", "claude_agents"]);
+            crate::test_env::seed_workspace_copy(&custom);
+            install(&["claude_agents"]);
             unsafe { std::env::remove_var("AGENT_WORKSPACE_PATH") };
             let records = read_managed_state(&custom).expect("records after install");
-            assert!(records
-                .artifacts
-                .iter()
-                .any(|record| record.identity.starts_with("workspace:file:")));
             assert!(records
                 .artifacts
                 .iter()
@@ -669,6 +666,43 @@ mod tests {
             assert_eq!(setup_workspace_target_path().expect("target"), saved_path);
             assert!(get_workspace_diagnostics().expect("diagnostics").valid);
             assert_eq!(read_managed_state(&saved_path), Some(records));
+        });
+    }
+
+    /// The workspace cleanup removes the old copies and keeps what makes a saved custom folder the
+    /// app's: the marker and the ownership records. The folder stays configured.
+    #[test]
+    fn custom_folder_stays_configured_after_the_cleanup() {
+        with_isolated_settings("custom-cleanup-home", |home| {
+            let custom = home.join("my-workspace");
+            crate::test_env::seed_workspace_copy(&custom);
+            write_file(&custom, "docs/context/notes.md", "# Notes\n");
+            let saved = canonical_string(&custom);
+            save_workspace_path(&saved);
+            let saved_path = PathBuf::from(&saved);
+            assert_eq!(setup_workspace_target_path().expect("target"), saved_path);
+
+            install(&["workspace_bundle"]);
+
+            assert_eq!(
+                entries(&custom),
+                [".agent-workspace", "docs"],
+                "only the state folder and the personal docs are left"
+            );
+            assert!(custom.join(".agent-workspace/workspace.json").is_file());
+            assert!(custom.join("docs/context/notes.md").is_file());
+            assert!(read_managed_state(&saved_path).is_some());
+            let response = crate::commands::get_settings().expect("get_settings");
+            assert_eq!(
+                response.settings.workspace_path.as_deref(),
+                Some(saved.as_str())
+            );
+            assert_eq!(
+                configured_workspace_path(&crate::settings::load()),
+                Some(saved_path.clone())
+            );
+            assert_eq!(setup_workspace_target_path().expect("target"), saved_path);
+            assert!(get_workspace_diagnostics().expect("diagnostics").valid);
         });
     }
 

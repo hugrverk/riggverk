@@ -999,6 +999,12 @@ mod tests {
             retired.push(format!("metadata/deprecated-skills/{name}/SKILL.md"));
             retired.push(format!("skills/{name}/SKILL.md"));
         }
+        // And the whole copy of the bundle earlier releases kept there.
+        for rel in crate::commands::retired_workspace_files::RETIRED_WORKSPACE_FILES {
+            if !retired.iter().any(|listed| listed == rel) {
+                retired.push((*rel).to_string());
+            }
+        }
         for rel in &retired {
             let bytes = format!("retired {rel}\n").into_bytes();
             write(&env.ws.join(rel), &bytes);
@@ -1059,10 +1065,10 @@ mod tests {
         );
         let operations = creates + updates + removes;
         println!(
-            "worst case: {operations} operations ({creates} create, {updates} update, {removes} remove); {} retired workspace files, {} removed skill copies, {} bundled workspace files, {} skills with {} files per folder",
+            "worst case: {operations} operations ({creates} create, {updates} update, {removes} remove); {} retired workspace files ({} of them old copies of the bundle), {} removed skill copies, {} skills with {} files per folder",
             worst.retired_workspace_files,
+            crate::commands::retired_workspace_files::RETIRED_WORKSPACE_FILES.len(),
             worst.removed_skill_copies,
-            crate::managed_state::canonical_workspace_file_paths().len(),
             catalog().len(),
             file_count(&catalog()),
         );

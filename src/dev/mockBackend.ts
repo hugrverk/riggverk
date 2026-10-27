@@ -186,6 +186,8 @@ function initialSurfaceStates(): Map<SetupSurfaceId, InstallationState> {
   switch (scenario) {
     case "fresh":
       for (const surface of ALL_SURFACES) states.set(surface, "not_installed");
+      // A fresh profile has no old copies of the bundle to remove.
+      states.set("workspace_bundle", "current");
       break;
     case "conflict":
       states.set("open_code_config", "update_available");
@@ -769,7 +771,13 @@ function applyTakeBundled(surface: FilesSurfaceId, keys: string[], fingerprint: 
   };
 }
 
+/** The mock data folder: the old copies an update removes, and what it leaves alone. */
+const MOCK_OLD_COPIES = 133;
+
 function surfaceDetail(surface: SetupSurfaceId, state: InstallationState): string {
+  if (surface === "workspace_bundle") {
+    return state === "update_available" ? `${MOCK_OLD_COPIES} old copies to remove` : state === "current" ? "none" : "unavailable";
+  }
   switch (state) {
     case "current": return `installed · ${BUNDLE_DIGEST}`;
     case "update_available": return `bundle ${BUNDLE_DIGEST} → installed ${INSTALLED_DIGEST}`;
@@ -797,12 +805,16 @@ function installationStatus(surfaces: SetupSurfaceId[]): InstallationStatus {
       detail: file ? rulesDetail(file, state) : surfaceDetail(surface, state),
       ...(file ? { rules: { ...file } } : {}),
       ...(filesFor(surface) ? { files: filesFor(surface) } : {}),
+      ...(surface === "workspace_bundle"
+        ? { data_folder: { personal_docs: scenario === "fresh" ? 0 : 2, ownership_records: scenario !== "fresh", left_in_place: 0 } }
+        : {}),
     };
   });
   const counts = { create_count: 0, update_count: 0, remove_count: 0, conflict_count: 0, kept_count: 0 };
   for (const row of rows) {
     if (row.state === "not_installed") counts.create_count += 1;
-    if (row.state === "update_available") counts.update_count += 1;
+    if (row.state === "update_available" && row.surface === "workspace_bundle") counts.remove_count += MOCK_OLD_COPIES;
+    else if (row.state === "update_available") counts.update_count += 1;
     // Like the backend: every conflicting file counts, the files the user keeps do not.
     if (row.files) counts.conflict_count += row.files.conflicts;
     else if (row.state === "conflict") counts.conflict_count += 1;

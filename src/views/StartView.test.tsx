@@ -213,6 +213,40 @@ describe("StartView panes", () => {
     expect(verify.textContent).toContain("1710000000000 · rollback available");
   });
 
+  it("tells what the data folder holds and the old copies of the bundle an update removes", () => {
+    const workspace = installationStatus(
+      "update_available",
+      [
+        {
+          ...surfaceStatus("workspace_bundle", "update_available", "133 old copies to remove, 1 left in place"),
+          data_folder: { personal_docs: 3, ownership_records: false, left_in_place: 1 },
+        },
+      ],
+      { remove_count: 133 },
+    );
+    renderStart({ overview: overviewOf({ workspace }) });
+    expect(rowOf(harnessList(), "workspace").textContent).toContain("133 old copies to remove");
+    const pane = detail();
+    expect(pane.querySelector(".pane-title")!.textContent).toBe("workspace · 133 old copies to remove");
+    const surfaces = within(within(pane).getByRole("list", { name: "workspace surfaces" })).getAllByRole("listitem");
+    expect(surfaces.map(row => row.textContent)).toEqual(["old copies 133 old copies to remove, 1 left in placeupdate"]);
+    const status = within(pane).getByLabelText("workspace status").textContent;
+    expect(status).toContain("personal docs3");
+    expect(status).toContain("ownership recordsnone yet");
+    expect(status).toContain("left in place1 · edited old copies the app no longer reads");
+    cleanup();
+
+    // After the cleanup: nothing left in place is not mentioned, the records are there.
+    const current = installationStatus("current", [
+      { ...surfaceStatus("workspace_bundle", "current", "none"), data_folder: { personal_docs: 0, ownership_records: true, left_in_place: 0 } },
+    ]);
+    renderStart({ overview: overviewOf({ workspace: current }) });
+    const after = within(detail()).getByLabelText("workspace status").textContent;
+    expect(after).toContain("personal docs0");
+    expect(after).toContain("ownership recordspresent");
+    expect(after).not.toContain("left in place");
+  });
+
   it("leaves the status group out when the title already says everything", () => {
     renderStart();
     for (let i = 0; i < 3; i++) press("j");

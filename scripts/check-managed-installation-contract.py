@@ -447,9 +447,20 @@ def main() -> None:
         fail("Cursor global MCP setup must publish through safe_filesystem")
     require(
         TAURI / "managed_reconciliation_contract.rs",
-        "fresh_profile_installs_workspace_through_unified_setup",
+        "fresh_profile_installs_no_workspace_copy",
         "pre_manifest_upgrade_reconciles_to_canonical_inventory",
         "pre_manifest_upgrade_rollback_restores_removed_stale_workspace_file",
+        "workspace_cleanup_first_then_harness_preview_still_cleans_up_old_skills",
+    )
+    require(
+        TAURI / "workspace_cleanup_contract.rs",
+        "recorded_copies_are_removed_and_an_edited_one_is_left_in_place",
+        "an_rc1_workspace_without_records_loses_every_unedited_copy_and_keeps_an_edited_one",
+        "the_cleanup_leaves_personal_docs_the_marker_unknown_files_and_git_alone",
+        "a_link_on_a_copy_or_on_its_folder_is_left_in_place",
+        "rollback_restores_every_copy_and_the_records_byte_for_byte",
+        "uninstall_after_the_cleanup_keeps_the_data_folder_its_records_and_personal_docs",
+        "an_old_transaction_that_installed_the_copy_still_dry_runs",
     )
     smoke = require(
         ROOT / "scripts/smoke-pre-manifest-upgrade.sh",

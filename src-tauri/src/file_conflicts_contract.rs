@@ -596,14 +596,16 @@ mod tests {
     }
 
     #[test]
-    fn workspace_files_keep_conflicting_even_when_an_entry_names_them() {
-        let env = Env::new("workspace", &[SetupSurfaceId::WorkspaceBundle]);
+    fn workspace_files_are_never_kept_even_when_an_entry_names_them() {
+        let env = Env::new("workspace", &[]);
+        // An edited old copy of the bundle in the workspace folder: left in place, never kept.
         let readme = ArtifactId::WorkspaceFile(
             crate::artifact_registry::WorkspaceRelPath::new("README.md").expect("rel"),
         );
         env.write(&readme, b"my own readme\n");
         let surfaces = [SetupSurfaceId::WorkspaceBundle];
-        assert_eq!(env.kind(&surfaces, &readme), OperationKind::Conflict);
+        assert_eq!(env.kind(&surfaces, &readme), OperationKind::Manual);
+        assert!(env.planned(&surfaces, &readme).file.is_none());
 
         // An entry for it written by hand changes nothing: only skill and agent files are kept.
         let identity = artifact_identity(&readme);
@@ -618,7 +620,7 @@ mod tests {
         )
         .expect("kept-files.json");
         let planned = env.planned(&surfaces, &readme);
-        assert_eq!(planned.kind, OperationKind::Conflict);
+        assert_eq!(planned.kind, OperationKind::Manual);
         assert!(planned.file.is_none());
         assert!(set_files_kept(
             "workspace_bundle".into(),

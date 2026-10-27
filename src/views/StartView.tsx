@@ -180,6 +180,9 @@ export function StartView({
     return model ? [{ surface, model }] : [];
   });
 
+  // The data folder behind the workspace row: what the app keeps there and what an update leaves alone.
+  const dataFolder =
+    selected === "workspace" ? (entry?.status?.surfaces.find(row => row.surface === "workspace_bundle")?.data_folder ?? null) : null;
   // The state is the detail title's. The backend summary adds something only for an update: the breakdown.
   const changes = entry?.status?.state === "update_available" ? entry.status.summary.replace(/^Update available:\s*/, "") : null;
   const statusItems: KvItem[] = [
@@ -204,6 +207,19 @@ export function StartView({
     })),
     // A harness's surfaces, on and off, are the rows right above.
     ...(selected === "workspace" ? [{ label: "path", value: resolvedPath, wrap: true }] : []),
+    ...(dataFolder
+      ? [
+          { label: "personal docs", value: String(dataFolder.personal_docs), tone: dataFolder.personal_docs > 0 ? undefined : ("dim" as const) },
+          {
+            label: "ownership records",
+            value: dataFolder.ownership_records ? "present" : "none yet",
+            tone: dataFolder.ownership_records ? undefined : ("dim" as const),
+          },
+          ...(dataFolder.left_in_place > 0
+            ? [{ label: "left in place", value: `${dataFolder.left_in_place} · edited old copies the app no longer reads`, tone: "warn" as const, wrap: true }]
+            : []),
+        ]
+      : []),
     // Why the folder is unusable (a link, a file, a missing override folder); a fresh profile has none yet and is fine.
     ...(selected === "workspace" && !workspaceValid && workspaceDiagnostics?.error
       ? [{ label: "why", value: workspaceDiagnostics.error, tone: "warn" as const, wrap: true }]

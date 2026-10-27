@@ -375,7 +375,9 @@ pub fn plan_setup(
                 conflicts.push(op);
             }
             OperationKind::Manual => {
-                let step = if crate::file_conflicts::is_files_surface(*surface) {
+                let step = if *surface == SetupSurfaceId::WorkspaceBundle {
+                    "Old copies of the bundle that were edited by you or are not the app's: left in place; the app no longer reads them.".to_string()
+                } else if crate::file_conflicts::is_files_surface(*surface) {
                     format!(
                         "{} has files you manage, so bundled updates are not applied to them. Review the diff or hand them back from the harness page.",
                         surface.label()

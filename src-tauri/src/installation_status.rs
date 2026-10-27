@@ -53,6 +53,20 @@ pub struct SurfaceInstallationStatus {
     /// Conflicting and kept files for the skills and agent surfaces; absent while there are none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub files: Option<FilesStatus>,
+    /// The data folder, for the workspace surface only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub data_folder: Option<DataFolderStatus>,
+}
+
+/// What the workspace row tells about the data folder. Counts and a flag, never file contents.
+#[derive(Debug, Clone, Serialize)]
+pub struct DataFolderStatus {
+    /// Personal docs in `docs/context/`; the app never removes them.
+    pub personal_docs: usize,
+    /// Whether the ownership records (`.agent-workspace/managed-state.json`) exist yet.
+    pub ownership_records: bool,
+    /// Old copies of the bundle an update leaves in place: edited, or not provably the app's.
+    pub left_in_place: usize,
 }
 
 /// How a rules file relates to the managed base block.
@@ -255,6 +269,18 @@ fn surface_status(
             })
         })
         .unwrap_or(detail);
+    let data_folder = (surface == SetupSurfaceId::WorkspaceBundle).then(|| DataFolderStatus {
+        personal_docs: crate::commands::personal_doc_count(workspace_root),
+        ownership_records: has_trusted_state,
+        left_in_place: own
+            .iter()
+            .filter(|p| p.kind == OperationKind::Manual)
+            .count(),
+    });
+    let detail = match &data_folder {
+        Some(folder) => workspace_detail(detail, state, counts.remove_count, folder.left_in_place),
+        None => detail,
+    };
     let rules = assessment.map(|(a, user_managed)| RulesStatus {
         layout: a.layout,
         refinement_lines: a.refinement_lines,
@@ -272,6 +298,30 @@ fn surface_status(
         detail,
         rules,
         files,
+        data_folder,
+    }
+}
+
+/// The status line of the workspace surface: the old copies of the bundle an update removes and
+/// the ones it leaves in place. The surface wants no file, so "installed and current" says nothing.
+fn workspace_detail(
+    detail: String,
+    state: InstallationState,
+    remove_count: usize,
+    left_in_place: usize,
+) -> String {
+    let left = (left_in_place > 0).then(|| format!("{left_in_place} left in place"));
+    match state {
+        InstallationState::UpdateAvailable => {
+            let copies = if remove_count == 1 { "copy" } else { "copies" };
+            [Some(format!("{remove_count} old {copies} to remove")), left]
+                .into_iter()
+                .flatten()
+                .collect::<Vec<_>>()
+                .join(", ")
+        }
+        InstallationState::Current => left.unwrap_or_else(|| "none".to_string()),
+        _ => detail,
     }
 }
 

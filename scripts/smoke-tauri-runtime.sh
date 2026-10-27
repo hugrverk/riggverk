@@ -39,7 +39,8 @@ export PATH="$CARGO_HOME/bin:$PATH"
 
 WORKSPACE="$SMOKE_ROOT/workspace"
 step "prepare temp workspace"
-cp -R resources/default-workspace "$WORKSPACE"
+# An empty data folder: the app keeps no copy of the bundle there; installs read the bundle.
+mkdir -p "$WORKSPACE"
 export AGENT_WORKSPACE_PATH="$WORKSPACE"
 
 # Guard: refuse if harness env vars point outside smoke HOME
