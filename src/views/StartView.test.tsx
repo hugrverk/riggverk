@@ -102,8 +102,7 @@ function props(overrides: Partial<StartViewProps> = {}): StartViewProps {
     wsRunning: null,
     wsProgress: null,
     status: STATUS_DATA,
-    workspaceValid: true,
-    gitAvailable: true,
+    dataFolderOk: true,
     onClearOutput: vi.fn(),
     ...overrides,
   };
@@ -310,7 +309,7 @@ describe("StartView keys", () => {
   });
 
   it("lets the workspace be installed while it is invalid, but nothing else", () => {
-    const { props: p } = renderStart({ workspaceDiagnostics: INVALID_DIAGNOSTICS, workspaceValid: false, overview: overviewOf({}) });
+    const { props: p } = renderStart({ workspaceDiagnostics: INVALID_DIAGNOSTICS, dataFolderOk: false, overview: overviewOf({}) });
     act(() => harnessList().focus());
     expect(hint(/install/)).toBeTruthy();
     press("u");
@@ -322,7 +321,7 @@ describe("StartView keys", () => {
   });
 
   it("says why the workspace folder is unusable on the workspace row", () => {
-    renderStart({ workspaceDiagnostics: INVALID_DIAGNOSTICS, workspaceValid: false, overview: overviewOf({}) });
+    renderStart({ workspaceDiagnostics: INVALID_DIAGNOSTICS, dataFolderOk: false, overview: overviewOf({}) });
     expect(rowOf(harnessList(), "workspace").textContent).toContain("folder unusable");
     expect(detail().textContent).toContain("the folder is a symlink");
   });
@@ -423,14 +422,14 @@ describe("StartView uninstall recovery", () => {
   });
 
   it("keeps showing recovery after the workspace became valid again", () => {
-    renderStart({ workspaceValid: true, uninstallRecoveryTransactionId: "1710000000000" });
+    renderStart({ dataFolderOk: true, uninstallRecoveryTransactionId: "1710000000000" });
     expect(screen.getByRole("region", { name: /recover previous uninstall/i })).toBeTruthy();
   });
 
   it("shows recovery while the workspace is still gone, which is when it is needed", () => {
     renderStart({
       workspaceDiagnostics: INVALID_DIAGNOSTICS,
-      workspaceValid: false,
+      dataFolderOk: false,
       overview: overviewOf({}),
       uninstallRecoveryTransactionId: "1710000000000",
     });

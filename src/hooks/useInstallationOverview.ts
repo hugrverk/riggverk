@@ -28,7 +28,7 @@ export interface InstallationOverview {
 }
 
 export interface UseInstallationOverviewOptions {
-  workspaceValid: boolean;
+  dataFolderOk: boolean;
   /** A workspace task (apply, uninstall, rollback) is running; the overview re-fetches when it ends. */
   busy: boolean;
   enabledHarnessIds: readonly InstallAgent[];
@@ -53,7 +53,7 @@ export function surfacesForOverview(id: OverviewId, enabledTargetIds?: readonly 
  * the entry; they never reach the global error line.
  */
 export function useInstallationOverview({
-  workspaceValid,
+  dataFolderOk,
   busy,
   enabledHarnessIds,
   enabledTargetIds,
@@ -68,7 +68,7 @@ export function useInstallationOverview({
 
   const refresh = useCallback(async () => {
     const generation = ++generationRef.current;
-    if (!workspaceValid) {
+    if (!dataFolderOk) {
       setEntries({});
       setLoading(false);
       return;
@@ -99,7 +99,7 @@ export function useInstallationOverview({
     if (generation !== generationRef.current) return;
     setEntries(Object.fromEntries(results.map(entry => [entry.id, entry])));
     setLoading(false);
-  }, [workspaceValid, harnessKey, targetKey]);
+  }, [dataFolderOk, harnessKey, targetKey]);
 
   useEffect(() => {
     if (!busy) void refresh();

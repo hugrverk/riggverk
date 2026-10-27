@@ -15,7 +15,7 @@ export function OpenCodeView({ runtimeHealth, onModelUpdated, ...props }: OpenCo
       {...props}
       harness="opencode"
       runtime={{ harness: "opencode", health: runtimeHealth }}
-      runtimeExtra={<OpenCodeModelRows workspaceValid={props.workspaceValid} health={runtimeHealth} onModelUpdated={onModelUpdated} />}
+      runtimeExtra={<OpenCodeModelRows dataFolderOk={props.dataFolderOk} health={runtimeHealth} onModelUpdated={onModelUpdated} />}
     />
   );
 }

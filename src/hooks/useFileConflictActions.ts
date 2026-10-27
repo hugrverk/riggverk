@@ -34,7 +34,7 @@ export interface UseFileConflictActionsOptions {
   models: readonly FileConflictModel[];
   /** The files surface the page's cursor is on, or null. The keys are offered only while it is set. */
   activeSurface: FilesSurfaceId | null;
-  workspaceValid: boolean;
+  dataFolderOk: boolean;
   busyLabel: string | null;
   /** An install review is open on this page. */
   installOpen: boolean;
@@ -82,7 +82,7 @@ export function useFileConflictActions({
   harness,
   models,
   activeSurface,
-  workspaceValid,
+  dataFolderOk,
   busyLabel,
   installOpen,
   rulesOpen,
@@ -103,7 +103,7 @@ export function useFileConflictActions({
       : flow.open
         ? "close the conflict review first"
         : null;
-  const context = { workspaceValid, busyLabel, blockedBy };
+  const context = { dataFolderOk, busyLabel, blockedBy };
   const activeModel = models.find(model => model.surface === activeSurface) ?? null;
   const activeUnit = markedUnit(activeModel, markedKey);
   const gates = fileGates(activeModel, activeUnit, context);

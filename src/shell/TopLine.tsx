@@ -11,7 +11,7 @@ export interface TopLineProps {
   /** Harness pages shown as tabs. Defaults to all four. */
   enabledHarnessIds?: readonly InstallAgent[];
   onSwitchView: (view: AppView) => void | Promise<void>;
-  /** Right-aligned status text (branch, workspace path). */
+  /** Right-aligned status text (for example the backup count). */
   right?: ReactNode;
 }
 

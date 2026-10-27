@@ -7,7 +7,7 @@ import { usePaneId } from "../ui/Pane";
 import type { ListAvailableModelsResult, OpenCodeModelSelection, OpenCodeModelSource, OpenCodeRuntimeHealth } from "../types";
 
 interface OpenCodeModelRowsProps {
-  workspaceValid: boolean;
+  dataFolderOk: boolean;
   /** The installed config against the bundled render: it says whether a saved selection is already installed. */
   health: Pick<OpenCodeRuntimeHealth, "config_status" | "config_diverged_keys"> | null;
   /** The saved selection changed; the owner reloads runtime health and the installation overview. */
@@ -170,7 +170,7 @@ function ModelField({ id, value, onChange, error, disabled, models, listed, empt
  * "leave as is" in the same pane, so the reload does not take it. The values are stored in app settings and
  * applied on the next OpenCode update; workspace templates are not edited.
  */
-export function OpenCodeModelRows({ workspaceValid, health, onModelUpdated }: OpenCodeModelRowsProps) {
+export function OpenCodeModelRows({ dataFolderOk, health, onModelUpdated }: OpenCodeModelRowsProps) {
   const paneId = usePaneId();
   const [available, setAvailable] = useState<ListAvailableModelsResult | null>(null);
   const [selection, setSelection] = useState<OpenCodeModelSelection | null>(null);
@@ -193,7 +193,7 @@ export function OpenCodeModelRows({ workspaceValid, health, onModelUpdated }: Op
   const criticModelId = useId();
 
   const loadSelection = useCallback(async () => {
-    if (!workspaceValid) return;
+    if (!dataFolderOk) return;
     const gen = ++selectionGenRef.current;
     try {
       const sel = await invoke<OpenCodeModelSelection>("read_opencode_model_selection");
@@ -208,10 +208,10 @@ export function OpenCodeModelRows({ workspaceValid, health, onModelUpdated }: Op
       if (gen !== selectionGenRef.current) return;
       setSelection(null);
     }
-  }, [workspaceValid]);
+  }, [dataFolderOk]);
 
   const loadModels = useCallback(async () => {
-    if (!workspaceValid) return;
+    if (!dataFolderOk) return;
     const gen = ++modelsGenRef.current;
     setLoadingModels(true);
     setModelWarning(null);
@@ -227,17 +227,17 @@ export function OpenCodeModelRows({ workspaceValid, health, onModelUpdated }: Op
     } finally {
       if (gen === modelsGenRef.current) setLoadingModels(false);
     }
-  }, [workspaceValid]);
+  }, [dataFolderOk]);
 
   useEffect(() => {
-    if (workspaceValid) {
+    if (dataFolderOk) {
       void loadSelection();
       void loadModels();
     } else {
       setAvailable(null);
       setSelection(null);
     }
-  }, [workspaceValid, loadSelection, loadModels]);
+  }, [dataFolderOk, loadSelection, loadModels]);
 
   const savedSubagent = selection?.subagent_model ?? "";
   const savedCritic = selection?.critic_model ?? "";
@@ -246,7 +246,7 @@ export function OpenCodeModelRows({ workspaceValid, health, onModelUpdated }: Op
   const smallError = draftSmall && !draftSmall.includes("/") ? FORMAT_ERROR : null;
   const subagentError = draftSubagent && !draftSubagent.includes("/") ? FORMAT_ERROR : null;
   const criticError = draftCritic && !draftCritic.includes("/") ? FORMAT_ERROR : null;
-  const canSave = workspaceValid && hasChanges && !modelError && !smallError && !subagentError && !criticError && !saving;
+  const canSave = dataFolderOk && hasChanges && !modelError && !smallError && !subagentError && !criticError && !saving;
   const hasOverride = [selection?.model_source, selection?.small_model_source, selection?.subagent_source, selection?.critic_source].includes("override");
 
   const handleSave = useCallback(async () => {
@@ -271,7 +271,7 @@ export function OpenCodeModelRows({ workspaceValid, health, onModelUpdated }: Op
   }, [canSave, draftModel, draftSmall, draftSubagent, draftCritic, loadSelection, onModelUpdated]);
 
   const handleReset = useCallback(async () => {
-    if (!workspaceValid || !hasOverride || saving) return;
+    if (!dataFolderOk || !hasOverride || saving) return;
     setSaving(true);
     setNotice(null);
     try {
@@ -285,7 +285,7 @@ export function OpenCodeModelRows({ workspaceValid, health, onModelUpdated }: Op
     } finally {
       setSaving(false);
     }
-  }, [workspaceValid, hasOverride, saving, loadSelection, onModelUpdated]);
+  }, [dataFolderOk, hasOverride, saving, loadSelection, onModelUpdated]);
 
   useEffect(() => {
     if (!notice) return;
@@ -319,7 +319,7 @@ export function OpenCodeModelRows({ workspaceValid, health, onModelUpdated }: Op
           group: "OpenCode model",
           scope: "pane",
           paneId,
-          when: () => workspaceValid,
+          when: () => dataFolderOk,
           run: () => firstFieldRef.current?.focus(),
         },
         {
@@ -330,7 +330,7 @@ export function OpenCodeModelRows({ workspaceValid, health, onModelUpdated }: Op
           group: "OpenCode model",
           scope: "pane",
           paneId,
-          when: () => (!workspaceValid ? false : canSave ? true : modelError || smallError || subagentError || criticError || "no unsaved change"),
+          when: () => (!dataFolderOk ? false : canSave ? true : modelError || smallError || subagentError || criticError || "no unsaved change"),
           run: () => void handleSave(),
         },
         {
@@ -341,7 +341,7 @@ export function OpenCodeModelRows({ workspaceValid, health, onModelUpdated }: Op
           group: "OpenCode model",
           scope: "pane",
           paneId,
-          when: () => (!workspaceValid ? false : saving ? "busy" : hasOverride ? true : "no override to reset"),
+          when: () => (!dataFolderOk ? false : saving ? "busy" : hasOverride ? true : "no override to reset"),
           run: () => void handleReset(),
         },
         {
@@ -352,14 +352,14 @@ export function OpenCodeModelRows({ workspaceValid, health, onModelUpdated }: Op
           group: "OpenCode model",
           scope: "pane",
           paneId,
-          when: () => (!workspaceValid ? false : loadingModels || saving ? "busy" : true),
+          when: () => (!dataFolderOk ? false : loadingModels || saving ? "busy" : true),
           run: () => void loadModels(),
         },
       ]
     : [];
   useKeymap(bindings);
 
-  if (!workspaceValid) return null;
+  if (!dataFolderOk) return null;
 
   const modelState = applyState(health, key => key === "model");
   const smallState = applyState(health, key => key === "small_model");

@@ -19,7 +19,7 @@ interface LibraryKeysOptions {
   sourceType: LibrarySourceType;
   /** Source ids in tab order (configs left out while it is hidden). */
   sourceIds: readonly LibrarySourceType[];
-  workspaceValid: boolean;
+  dataFolderOk: boolean;
   onSetSourceType: (type: LibrarySourceType) => void | Promise<void>;
   showCreateDoc: boolean;
   onSetShowCreateDoc: (show: boolean) => void;
@@ -45,7 +45,7 @@ export function useLibraryKeys({
   entry,
   sourceType,
   sourceIds,
-  workspaceValid,
+  dataFolderOk,
   onSetSourceType,
   showCreateDoc,
   onSetShowCreateDoc,
@@ -202,7 +202,7 @@ export function useLibraryKeys({
       group: "Library",
       scope: "pane",
       paneId: "items",
-      when: () => sourceType === "docs" && workspaceValid,
+      when: () => sourceType === "docs" && dataFolderOk,
       run: () => onSetShowCreateDoc(!showCreateDoc),
     },
   ];

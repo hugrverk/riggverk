@@ -53,16 +53,12 @@ function installBackend(overrides: Partial<AppSettings> = {}): Backend {
           resolved_path: backend.settings.workspace_path ?? DEFAULT_WORKSPACE,
           valid: true,
           error: null,
-          markers: [],
           enabled_rule_targets: 0,
           total_rule_targets: 0,
           enabled_config_targets: 0,
           total_config_targets: 0,
           backup_root: "/tmp/backups",
           backup_root_exists: false,
-          bundled_resources_status: "current",
-          missing_bundled_count: 0,
-          missing_bundled_sample: [],
         });
       case "list_agent_metadata":
         return Promise.resolve({ agents: [], warnings: [] });

@@ -82,8 +82,7 @@ export function StartView({
   wsRunning,
   wsProgress,
   status,
-  workspaceValid,
-  gitAvailable,
+  dataFolderOk,
   onClearOutput,
 }: StartViewProps) {
   useFocusOutputOnNewTransaction(rollbackTransactionId);
@@ -95,8 +94,8 @@ export function StartView({
   const resolvedPath =
     workspaceDiagnostics?.resolved_path ?? workspaceDiagnostics?.candidate_path ?? DEFAULT_WORKSPACE_PATH;
 
-  const update = updateActionFor(selected, entry, { workspaceValid, busyLabel: wsRunning, settingsSaving: false });
-  const previewDisabled = previewDisabledFor(selected, { workspaceValid, busyLabel: wsRunning });
+  const update = updateActionFor(selected, entry, { dataFolderOk, busyLabel: wsRunning, settingsSaving: false });
+  const previewDisabled = previewDisabledFor(selected, { dataFolderOk, busyLabel: wsRunning });
   const showPlan = install.isOpenOn("start");
 
   const statusBindings: Binding[] = [
@@ -108,7 +107,7 @@ export function StartView({
       group: "Verify",
       scope: "pane",
       paneId: "detail",
-      when: () => (!workspaceValid ? false : busy ? `${wsRunning} is running` : true),
+      when: () => (!dataFolderOk ? false : busy ? `${wsRunning} is running` : true),
       run: () => onOpenFolder(),
     },
     {
@@ -147,8 +146,7 @@ export function StartView({
       wsLog={wsLog}
       wsLogCompletedAt={wsLogCompletedAt}
       status={status}
-      workspaceValid={workspaceValid}
-      gitAvailable={gitAvailable}
+      dataFolderOk={dataFolderOk}
       onClear={onClearOutput}
       onRefresh={onRefresh}
       rollbackTransactionId={rollbackTransactionId}
@@ -167,15 +165,15 @@ export function StartView({
 
   const selectedLabel = overviewLabel(selected);
   const surfaceRows = surfaceRowsFor(selected, entry, appSettings);
-  const meta = targetMeta(entry, { workspaceValid, id: selected });
+  const meta = targetMeta(entry, { dataFolderOk, id: selected });
   const conflicts = entry?.status?.conflict_details ?? [];
   // The rules file of the harness under the cursor: its state is told here, the actions live on the harness page.
   const rulesSurface = selected === "workspace" ? null : rulesSurfaceOf(selected);
-  const rulesModel = selected === "workspace" || !workspaceValid ? null : rulesModelFor(selected, entry?.status);
+  const rulesModel = selected === "workspace" || !dataFolderOk ? null : rulesModelFor(selected, entry?.status);
   const rulesHint = rulesModel ? rulesPageHint(rulesModel, selectedLabel) : null;
   const override = selected === "codex" ? rulesOverrideWarning(codexRuntimeHealth) : null;
   // Skill and agent files in conflict or kept: told here, resolved on the harness page.
-  const fileHints = (selected === "workspace" || !workspaceValid ? [] : filesSurfacesOf(selected)).flatMap(surface => {
+  const fileHints = (selected === "workspace" || !dataFolderOk ? [] : filesSurfacesOf(selected)).flatMap(surface => {
     const model = fileConflictModelFor(entry?.status, surface);
     return model ? [{ surface, model }] : [];
   });
@@ -221,7 +219,7 @@ export function StartView({
         ]
       : []),
     // Why the folder is unusable (a link, a file, a missing override folder); a fresh profile has none yet and is fine.
-    ...(selected === "workspace" && !workspaceValid && workspaceDiagnostics?.error
+    ...(selected === "workspace" && !dataFolderOk && workspaceDiagnostics?.error
       ? [{ label: "why", value: workspaceDiagnostics.error, tone: "warn" as const, wrap: true }]
       : []),
   ];
@@ -257,7 +255,7 @@ export function StartView({
             else focusPaneById("detail");
           }}
           renderItem={id => {
-            const row = targetMeta(overview.entries[id], { workspaceValid, id });
+            const row = targetMeta(overview.entries[id], { dataFolderOk, id });
             return (
               <>
                 <span className="nm">{overviewLabel(id)}</span>
@@ -316,11 +314,11 @@ export function StartView({
         )}
         <div className="group pane-group">verify</div>
         <Kv items={verifyItems} aria-label="Verification and backups" />
-        {(workspaceValid || uninstallRecoveryTransactionId) && (
+        {(dataFolderOk || uninstallRecoveryTransactionId) && (
           <>
             <div className="group pane-group">lifecycle</div>
             <UninstallCard
-              workspaceValid={workspaceValid}
+              dataFolderOk={dataFolderOk}
               busy={busy}
               onApply={onUninstall}
               previewRequested={uninstallPreviewRequested}

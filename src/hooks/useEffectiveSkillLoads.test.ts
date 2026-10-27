@@ -17,7 +17,7 @@ const LOADS: EffectiveSkillLoads = {
 const HARNESSES: InstallAgent[] = ["codex", "opencode", "cursor", "claude"];
 
 function options(overrides: Partial<UseEffectiveSkillLoadsOptions> = {}): UseEffectiveSkillLoadsOptions {
-  return { workspaceValid: true, busy: false, enabledHarnessIds: HARNESSES, ...overrides };
+  return { dataFolderOk: true, busy: false, enabledHarnessIds: HARNESSES, ...overrides };
 }
 
 beforeEach(() => {
@@ -37,9 +37,9 @@ describe("useEffectiveSkillLoads", () => {
 
   it("reads nothing without a valid workspace or without an enabled harness", async () => {
     const { result, rerender } = renderHook((props: UseEffectiveSkillLoadsOptions) => useEffectiveSkillLoads(props), {
-      initialProps: options({ workspaceValid: false }),
+      initialProps: options({ dataFolderOk: false }),
     });
-    rerender(options({ workspaceValid: false }));
+    rerender(options({ dataFolderOk: false }));
     expect(invokeMock).not.toHaveBeenCalled();
     expect(result.current.loads).toBeNull();
     rerender(options({ enabledHarnessIds: [] }));

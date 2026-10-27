@@ -59,7 +59,7 @@ function modelOf(units: FileUnit[], surface: FileConflictModel["surface"] = "ski
   return fileConflictModelFor(statusWith(surface, filesOf(units)), surface)!;
 }
 
-const CONTEXT = { workspaceValid: true, busyLabel: null, blockedBy: null };
+const CONTEXT = { dataFolderOk: true, busyLabel: null, blockedBy: null };
 
 const CURRENT: StateDisplay = { glyph: "ok", tone: "ok", label: "current" };
 const UPDATE: StateDisplay = { glyph: "partial", tone: "warn", label: "update" };
@@ -218,7 +218,7 @@ describe("fileGates", () => {
   });
 
   it("offers nothing without a unit, a model or a workspace", () => {
-    for (const gates of [fileGates(null, null, CONTEXT), fileGates(two, conflict, { ...CONTEXT, workspaceValid: false })]) {
+    for (const gates of [fileGates(null, null, CONTEXT), fileGates(two, conflict, { ...CONTEXT, dataFolderOk: false })]) {
       expect(Object.values(gates).every(gate => !gate.visible && gate.reason === null)).toBe(true);
     }
   });

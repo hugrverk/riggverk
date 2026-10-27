@@ -23,16 +23,12 @@ export const VALID_DIAGNOSTICS: WorkspaceDiagnostics = {
   resolved_path: "/tmp/workspace",
   valid: true,
   error: null,
-  markers: [],
   enabled_rule_targets: 3,
   total_rule_targets: 3,
   enabled_config_targets: 1,
   total_config_targets: 2,
   backup_root: "/tmp/backups",
   backup_root_exists: true,
-  bundled_resources_status: "current",
-  missing_bundled_count: 0,
-  missing_bundled_sample: [],
 };
 
 export const INVALID_DIAGNOSTICS: WorkspaceDiagnostics = {
@@ -40,15 +36,10 @@ export const INVALID_DIAGNOSTICS: WorkspaceDiagnostics = {
   resolved_path: null,
   valid: false,
   error: "the folder is a symlink",
-  bundled_resources_status: "missing",
 };
 
 export const STATUS_DATA = {
   repo_path: "/tmp/workspace",
-  git_available: true,
-  branch: "main",
-  dirty: false,
-  latest_commit: "abc123",
   enabled_rule_target_ids: ["codex_rules", "claude_rules", "opencode_rules"],
   enabled_config_target_ids: ["opencode_config"],
 } as unknown as StatusData;

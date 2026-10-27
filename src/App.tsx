@@ -564,11 +564,10 @@ function AppShell() {
   );
   const visibleSkillIds = useMemo(() => new Set(visibleSkills.map(skill => skill.id)), [visibleSkills]);
   const visibleAgentIds = useMemo(() => new Set(visibleAgentSources.map(agent => agent.id)), [visibleAgentSources]);
-  const workspaceValid = workspaceDiagnostics?.valid === true;
-  const gitAvailable = status?.git_available === true;
+  const dataFolderOk = workspaceDiagnostics?.valid === true;
 
   const overview = useInstallationOverview({
-    workspaceValid,
+    dataFolderOk,
     busy: wsRunning !== null,
     // The backend filters its status on the saved settings, so follow the acknowledged toggles, not edits
     // still waiting for their autosave.
@@ -578,7 +577,7 @@ function AppShell() {
   });
   // The folders the overview describes, read as the harnesses will load them.
   const skillLoads = useEffectiveSkillLoads({
-    workspaceValid,
+    dataFolderOk,
     busy: wsRunning !== null,
     enabledHarnessIds: savedSelection?.harnessIds ?? [],
     refreshKey: overviewRefreshKey,
@@ -601,8 +600,7 @@ function AppShell() {
     wsRunning,
     wsProgress,
     status,
-    workspaceValid,
-    gitAvailable,
+    dataFolderOk,
     onClearOutput: resetTerminalOutput,
     overview,
     install,
@@ -640,7 +638,7 @@ function AppShell() {
 
   useAppCommands({
     enabledHarnessIds,
-    workspaceValid,
+    dataFolderOk,
     busyLabel: wsRunning,
     overview,
     switchView,
@@ -680,8 +678,6 @@ function AppShell() {
             ? {
                 version: APP_VERSION,
                 workspace: workspaceDiagnostics ? (workspaceDiagnostics.valid ? workspaceDiagnostics.resolved_path : null) : undefined,
-                branch: status?.git_available ? status.branch : null,
-                dirty: status?.dirty,
                 backups: backups.length > 0 ? backups.length : undefined,
               }
             : undefined
@@ -805,7 +801,7 @@ function AppShell() {
             onSelectConfigSource={selectConfigSourceType}
             configEditorSourceContent={configEditorSourceContent}
             // Common
-            workspaceValid={workspaceValid}
+            dataFolderOk={dataFolderOk}
             showConfigs={configTargets.length > 0}
           />
           </Suspense>

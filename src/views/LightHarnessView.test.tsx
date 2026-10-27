@@ -89,8 +89,7 @@ function props(harness: LightAgent, overrides: Partial<HarnessViewProps> = {}): 
     wsRunning: null,
     wsProgress: null,
     status: STATUS_DATA,
-    workspaceValid: true,
-    gitAvailable: true,
+    dataFolderOk: true,
     onClearOutput: vi.fn(),
     ...overrides,
   };
@@ -334,7 +333,7 @@ describe("LightHarnessView", () => {
   });
 
   it("offers nothing without a valid workspace", () => {
-    renderLight("pi", health(), { workspaceValid: false });
+    renderLight("pi", health(), { dataFolderOk: false });
     expect(detail("Pi").textContent).toContain("runtime · workspace folder unusable");
     expect(detail("Pi").textContent).toContain("The workspace folder is unusable");
   });
