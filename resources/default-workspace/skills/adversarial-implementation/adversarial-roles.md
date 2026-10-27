@@ -7,6 +7,7 @@ How every adversarial skill decides who implements and who criticises. It works 
 - **lead**: this session, always. It writes the briefs, runs every proof and the verification, and decides. Not configurable.
 - **implementer**: the agent that changes code, in skills that change code.
 - **critic**: the fresh, read-only agent that attacks the work each round.
+- **adversary**: the critic of `adversarial-test`: a fresh, read-only agent that proposes failing tests each round, which the lead writes into the tree.
 
 Verification is never a role choice: the lead runs it. A `verifier` value anywhere is ignored.
 
@@ -14,7 +15,7 @@ Verification is never a role choice: the lead runs it. A `verifier` value anywhe
 
 For each role on its own, the first source that sets it wins:
 
-1. **Chat.** What the user says in this conversation, in Swedish or English, for this run only. Examples: "critic: claude", "critic=codex/gpt-6.1-sol", "use Codex as the critic", "kritiker: claude", "använd Codex som kritiker", "implementer: opencode", "implementerare: codex".
+1. **Chat.** What the user says in this conversation, in Swedish or English, for this run only. Examples: "critic: claude", "critic=codex/gpt-6.1-sol", "use Codex as the critic", "kritiker: claude", "använd Codex som kritiker", "implementer: opencode", "implementerare: codex", "adversary: codex", "motståndare: claude".
 2. **`roles.json`** in the running skill's own directory (next to its `SKILL.md`), if present. Riggverk does not ship it yet; a later release writes it from a picker. Shape:
 
    ```json
@@ -25,26 +26,26 @@ For each role on its own, the first source that sets it wins:
    }
    ```
 
-   Ignore the whole file, and say so, when it is not valid JSON or `schema_version` is not 1.
+   An `adversary` key takes the same shape. Ignore the whole file, and say so, when it is not valid JSON or `schema_version` is not 1.
 3. **Rules line.** One line in the user's own rules text, below the `<!-- END AGENT-WORKSPACE BASE -->` marker (Riggverk's Library edits that text; Cursor users put it in their User Rules):
 
-   `Adversarial roles: critic=<harness>[/<model>], implementer=<harness>[/<model>]`
+   `Adversarial roles: critic=<harness>[/<model>], adversary=<harness>[/<model>], implementer=<harness>[/<model>]`
 
-   Either part may be left out, for example `Adversarial roles: critic=claude/opus`.
+   Any part may be left out, for example `Adversarial roles: critic=claude/opus`.
 4. **Default**, below.
 
 ## Values
 
-- `<harness>` is `codex`, `claude`, `opencode`, or `lead` (your own harness). A critic on your own harness is always a fresh subagent, never the lead itself.
+- `<harness>` is `codex`, `claude`, `opencode`, or `lead` (your own harness). A critic or adversary on your own harness is always a fresh subagent, never the lead itself.
 - `<model>` is optional and is everything after the first `/`, so an OpenCode `provider/model` fits: `critic=opencode/<provider>/<model>`. Without a model the harness's configured default applies.
 - Validate before use: the harness must be one of the values above, and the model must match `^[A-Za-z0-9][A-Za-z0-9._:/@\[\]-]{0,127}$`. Pass the model as one quoted argument; never build a command string from it. An invalid or unsupported value is ignored, the next source decides, and the start line says so.
 - Supported implementers: your harness's own path (the skill's Harness notes) and, from Claude Code, Codex. Any other implementer value falls back to the default.
-- Offered critics: in-harness subagents, and Codex, Claude Code and OpenCode through `critic-recipes.md`. Cursor criticises only through its own subagents; Copilot, Pi and Kilo are not offered.
+- Offered critics and adversaries: in-harness subagents, and Codex, Claude Code and OpenCode through `critic-recipes.md`. Cursor criticises only through its own subagents; Copilot, Pi and Kilo are not offered.
 
 ## Default
 
 - **Implementer**: your harness's own implementer path from the skill's Harness notes.
-- **Critic**: list the candidates: every external route whose preflight passes (`critic-recipes.md`) and a fresh read-only subagent of your own harness on its strongest model. Drop any candidate clearly weaker than the implementer's model. Among the rest prefer another model family than the implementer's; when you cannot tell which model is stronger, treat them as comparable. If no other-family candidate is left, use the same-harness subagent.
+- **Critic** and **adversary** (each on its own): list the candidates: every external route whose preflight passes (`critic-recipes.md`) and a fresh read-only subagent of your own harness on its strongest model. Drop any candidate clearly weaker than the implementer's model. Among the rest prefer another model family than the implementer's; when you cannot tell which model is stronger, treat them as comparable. If no other-family candidate is left, use the same-harness subagent.
 
 Never ask the user to configure anything before the first run. A failed preflight or route is reported, not fatal.
 
