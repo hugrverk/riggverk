@@ -34,9 +34,11 @@ pub struct OpenCodeRuntimeHealth {
     pub default_agent: Option<String>,
     pub model: Option<String>,
     pub small_model: Option<String>,
-    /// The model all five subagent roles are pinned to in the installed config; `None` when they
-    /// inherit the main model (or do not agree).
+    /// The shared installed subagent model, excluding inspector while a critic override is set;
+    /// `None` when the roles inherit the main model (or do not agree).
     pub subagent_model: Option<String>,
+    /// The installed inspector model; `None` when inspector inherits the main model.
+    pub critic_model: Option<String>,
     pub autoupdate: Option<String>,
     pub snapshot: Option<bool>,
     pub bundled_agent_count: usize,
@@ -154,6 +156,7 @@ const MANAGED_AGENT_PERMISSIONS: &[&str] = &["plan", "explore"];
 /// (`architect`) and OpenCode's own agents are not part of this: they use the main model.
 const SUBAGENT_MODEL_ROLES: &[&str] =
     &["repo-scout", "inspector", "sentinel", "verifier", "scribe"];
+const CRITIC_MODEL_ROLE: &str = "inspector";
 
 fn agent_permission<'a>(
     config: &'a serde_json::Value,
@@ -167,10 +170,11 @@ fn agent_model<'a>(config: &'a serde_json::Value, name: &str) -> Option<&'a serd
 }
 
 /// The model every subagent role is pinned to in `config`, or `None` when a role has none or the
-/// roles disagree.
-fn shared_subagent_model(config: &serde_json::Value) -> Option<String> {
+/// roles disagree. Inspector follows its own model while a critic override is set.
+fn shared_subagent_model(config: &serde_json::Value, critic_is_overridden: bool) -> Option<String> {
     let mut models = SUBAGENT_MODEL_ROLES
         .iter()
+        .filter(|&&role| !critic_is_overridden || role != CRITIC_MODEL_ROLE)
         .map(|role| agent_model(config, role).and_then(serde_json::Value::as_str));
     let first = models.next()??;
     models
@@ -533,16 +537,20 @@ fn transform_playwright_json(
     }
 }
 
-/// Set `agent.<role>.model` of every subagent role to `model`, keeping the other keys of the
+/// Set `agent.<role>.model` of the given roles to `model`, keeping the other keys of the
 /// template's `agent` block.
-fn pin_subagent_model(config: &mut serde_json::Map<String, serde_json::Value>, model: &str) {
+fn pin_agent_models(
+    config: &mut serde_json::Map<String, serde_json::Value>,
+    roles: &[&str],
+    model: &str,
+) {
     let agent = config
         .entry("agent")
         .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
     let Some(agent) = agent.as_object_mut() else {
         return;
     };
-    for role in SUBAGENT_MODEL_ROLES {
+    for role in roles {
         let entry = agent
             .entry((*role).to_string())
             .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
@@ -558,7 +566,7 @@ fn pin_subagent_model(config: &mut serde_json::Map<String, serde_json::Value>, m
 /// Render bundled `templates/opencode.json` the way an install renders it before sync.
 ///
 /// Applies Playwright placeholder transformations and overlays the app-level model override
-/// (`model`, `small_model` and the subagent model as `agent.<role>.model` entries, each only if
+/// (`model`, `small_model`, subagent and critic models as `agent.<role>.model` entries, each only if
 /// the file holds it) so that the installed config comparison reflects any user model selection.
 pub(crate) fn render_expected_opencode_config(
     template_json: &serde_json::Value,
@@ -578,9 +586,7 @@ pub(crate) fn render_expected_opencode_config(
     // resolved user home explicitly, so tests and smoke runs must not read a
     // real app-support override from the process environment by accident.
     // Each value is its own override: one the file does not hold keeps the template's.
-    let model_override = opencode_model_selection_path_for_home(home_dir)
-        .ok()
-        .and_then(|path| read_stored_opencode_model_override_from_path(&path));
+    let model_override = read_stored_opencode_model_override_for_home(home_dir);
     if let (Some(model_override), Some(obj)) = (model_override, rendered.as_object_mut()) {
         if let Some(model) = model_override.model {
             obj.insert("model".to_string(), serde_json::Value::String(model));
@@ -592,7 +598,10 @@ pub(crate) fn render_expected_opencode_config(
             );
         }
         if let Some(subagent_model) = model_override.subagent_model {
-            pin_subagent_model(obj, &subagent_model);
+            pin_agent_models(obj, SUBAGENT_MODEL_ROLES, &subagent_model);
+        }
+        if let Some(critic_model) = model_override.critic_model {
+            pin_agent_models(obj, &[CRITIC_MODEL_ROLE], &critic_model);
         }
     }
 
@@ -834,6 +843,7 @@ fn compute_health_in(
     let mut model: Option<String> = None;
     let mut small_model: Option<String> = None;
     let mut subagent_model: Option<String> = None;
+    let mut critic_model: Option<String> = None;
     let mut autoupdate: Option<String> = None;
     let mut snapshot: Option<bool> = None;
 
@@ -989,7 +999,10 @@ fn compute_health_in(
         default_agent = extract_string_field(i_json, &["default_agent"]);
         model = extract_string_field(i_json, &["model"]);
         small_model = extract_string_field(i_json, &["small_model"]);
-        subagent_model = shared_subagent_model(i_json);
+        let critic_is_overridden = read_stored_opencode_model_override_for_home(home_dir)
+            .is_some_and(|selection| selection.critic_model.is_some());
+        subagent_model = shared_subagent_model(i_json, critic_is_overridden);
+        critic_model = extract_string_field(i_json, &["agent", CRITIC_MODEL_ROLE, "model"]);
         autoupdate = extract_string_field(i_json, &["autoupdate"]);
         snapshot = i_json.get("snapshot").and_then(|v| v.as_bool());
         // Check default_agent
@@ -1010,6 +1023,12 @@ fn compute_health_in(
                 "Subagent model",
                 &subagent_model,
                 "(inherits model)",
+            ),
+            (
+                "critic_model",
+                "Critic model",
+                &critic_model,
+                "(inherits subagent model or main model)",
             ),
         ] {
             checks.push(OpenCodeRuntimeCheck {
@@ -1513,6 +1532,7 @@ fn compute_health_in(
         model,
         small_model,
         subagent_model,
+        critic_model,
         autoupdate,
         snapshot,
         bundled_agent_count,
@@ -1733,6 +1753,7 @@ pub(crate) fn apply_cli_probes(
         ("model", health.model.clone()),
         ("small_model", health.small_model.clone()),
         ("subagent_model", health.subagent_model.clone()),
+        ("critic_model", health.critic_model.clone()),
     ];
     if configured.iter().all(|(_, value)| value.is_none()) {
         return;
@@ -1750,6 +1771,7 @@ pub(crate) fn apply_cli_probes(
         }
         (None, None) => Err(UNVERIFIED_NO_CLI.to_string()),
     };
+    let mut warned_models = BTreeSet::new();
     for (id, value) in configured {
         let Some(value) = value else { continue };
         let (label, note) = match id {
@@ -1761,15 +1783,22 @@ pub(crate) fn apply_cli_probes(
                 "Subagent model",
                 "; the subagent roles are pinned to it, not to the main model",
             ),
+            "critic_model" => (
+                "Critic model",
+                "; inspector is pinned to it, not to the main model",
+            ),
             _ => ("Model", ""),
         };
         let (status, detail) = match &models {
             Ok(listed) if listed.contains(&value) => ("pass", value.clone()),
             Ok(_) => {
-                health.warnings.push(format!(
-                    "{id} {value} is not listed by opencode models (provider not signed in, or \
-                     the model was removed){note}."
-                ));
+                // Inspector can use the same pin as the other subagents: report that model once.
+                if warned_models.insert(value.clone()) {
+                    health.warnings.push(format!(
+                        "{id} {value} is not listed by opencode models (provider not signed in, or \
+                         the model was removed){note}."
+                    ));
+                }
                 ("warn", format!("{value} is not listed by opencode models"))
             }
             Err(reason) => ("unknown", format!("{value} (not verified: {reason})")),
@@ -1949,12 +1978,16 @@ pub struct OpenCodeModelSelection {
     pub small_model: String,
     /// The model the subagent roles run on; empty while they inherit `model`.
     pub subagent_model: String,
+    /// The inspector override; empty while it follows the subagent model or inherits `model`.
+    pub critic_model: String,
     /// `override` while the override file holds `model`, else `bundled default`.
     pub model_source: String,
     /// `override` while the override file holds `small_model`, else `bundled default`.
     pub small_model_source: String,
     /// `override` while a subagent model is set, `bundled default` while the roles inherit `model`.
     pub subagent_source: String,
+    /// `override` while a critic model is set, else `bundled default` (inherit).
+    pub critic_source: String,
 }
 
 const DEFAULT_MODEL: &str = "opencode-go/glm-5.2";
@@ -1968,11 +2001,15 @@ struct ModelOverride {
     model: Option<String>,
     small_model: Option<String>,
     subagent_model: Option<String>,
+    critic_model: Option<String>,
 }
 
 impl ModelOverride {
     fn is_empty(&self) -> bool {
-        self.model.is_none() && self.small_model.is_none() && self.subagent_model.is_none()
+        self.model.is_none()
+            && self.small_model.is_none()
+            && self.subagent_model.is_none()
+            && self.critic_model.is_none()
     }
 
     /// The selection of these values over the bundled `defaults` (`model`, `small_model`).
@@ -1988,9 +2025,11 @@ impl ModelOverride {
             model: self.model.clone().unwrap_or(defaults.0),
             small_model: self.small_model.clone().unwrap_or(defaults.1),
             subagent_model: self.subagent_model.clone().unwrap_or_default(),
+            critic_model: self.critic_model.clone().unwrap_or_default(),
             model_source: source(&self.model).to_string(),
             small_model_source: source(&self.small_model).to_string(),
             subagent_source: source(&self.subagent_model).to_string(),
+            critic_source: source(&self.critic_model).to_string(),
         }
     }
 }
@@ -2009,6 +2048,8 @@ struct StoredOpenCodeModelSelection {
     small_model: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     subagent_model: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    critic_model: Option<String>,
 }
 
 /// Resolve the app-level model override file path.
@@ -2061,6 +2102,11 @@ fn read_stored_opencode_model_override() -> Option<ModelOverride> {
     read_stored_opencode_model_override_from_path(&path)
 }
 
+fn read_stored_opencode_model_override_for_home(home_dir: &Path) -> Option<ModelOverride> {
+    let path = opencode_model_selection_path_for_home(home_dir).ok()?;
+    read_stored_opencode_model_override_from_path(&path)
+}
+
 /// Read the model override from a specific path (testable).
 ///
 /// A value that is empty or not `provider/model` is dropped on its own: it follows the default
@@ -2079,6 +2125,7 @@ fn read_stored_opencode_model_override_from_path(path: &std::path::Path) -> Opti
         model: valid(stored.model),
         small_model: valid(stored.small_model),
         subagent_model: valid(stored.subagent_model),
+        critic_model: valid(stored.critic_model),
     };
     (!model_override.is_empty()).then_some(model_override)
 }
@@ -2204,10 +2251,10 @@ fn bundled_model_defaults() -> Result<(String, String), String> {
     ))
 }
 
-/// Read the current model, small_model and subagent model, each with its source.
+/// Read the current main, small, subagent and critic models, each with its source.
 /// A value comes from the app-level override file when that holds it, else from the bundled
 /// `templates/opencode.base.json`, else from the hardcoded defaults. The template has no subagent
-/// model: without an override the subagents inherit `model`.
+/// or critic model: without an override the subagents inherit `model`.
 #[tauri::command]
 pub fn read_opencode_model_selection() -> Result<OpenCodeModelSelection, String> {
     let model_override = read_stored_opencode_model_override().unwrap_or_default();
@@ -2243,11 +2290,12 @@ fn validate_model_id(id: &str) -> Result<String, String> {
     Ok(trimmed.to_string())
 }
 
-/// Update the app-level override file from the three values the pane shows.
+/// Update the app-level override file from the four values the pane shows.
 ///
 /// Only a value the user changed is stored: a `model` or `small_model` equal to the current bundled
 /// default is left out and keeps following it, and a missing or empty `subagent_model` means the
-/// roles inherit `model`. When nothing is left the file is deleted instead of written empty.
+/// roles inherit `model`. An unset critic follows the subagent model or inherits `model`.
+/// When nothing is left the file is deleted instead of written empty.
 ///
 /// Does NOT mutate workspace templates/opencode.base.json or templates/opencode.json.
 /// The override is stored outside the workspace and applied on the next Install/Update.
@@ -2256,6 +2304,7 @@ pub fn update_opencode_model_selection(
     model: String,
     small_model: String,
     subagent_model: Option<String>,
+    critic_model: Option<String>,
 ) -> Result<String, String> {
     // Writes files an apply may also write: wait for a running mutation instead of interleaving.
     let _mutation = crate::mutation_lock::acquire();
@@ -2266,6 +2315,10 @@ pub fn update_opencode_model_selection(
         None | Some("") => None,
         Some(id) => Some(validate_model_id(id)?),
     };
+    let critic_model = match critic_model.as_deref().map(str::trim) {
+        None | Some("") => None,
+        Some(id) => Some(validate_model_id(id)?),
+    };
 
     let (default_model, default_small_model) = bundled_model_defaults()?;
     let follows_default = model == default_model || small_model == default_small_model;
@@ -2273,6 +2326,7 @@ pub fn update_opencode_model_selection(
         model: (model != default_model).then(|| model.clone()),
         small_model: (small_model != default_small_model).then(|| small_model.clone()),
         subagent_model: subagent_model.clone(),
+        critic_model: critic_model.clone(),
     };
 
     let override_path = opencode_model_selection_path()?;
@@ -2288,6 +2342,7 @@ pub fn update_opencode_model_selection(
             model: model_override.model.clone(),
             small_model: model_override.small_model.clone(),
             subagent_model: model_override.subagent_model.clone(),
+            critic_model: model_override.critic_model.clone(),
         };
         write_model_override_file(&override_path, &stored)?;
     }
@@ -2296,14 +2351,18 @@ pub fn update_opencode_model_selection(
         Some(id) => format!(", subagent_model={id}"),
         None => ", subagents inherit the model".to_string(),
     };
+    let critic_note = match &critic_model {
+        Some(id) => format!(", critic_model={id}"),
+        None => ", inspector follows the subagent model or inherits the model".to_string(),
+    };
     let default_note = if follows_default {
         " A value equal to the bundled default is not stored and keeps following it."
     } else {
         ""
     };
     Ok(format!(
-        "Model selection saved. Run Install/Update to apply model={}, small_model={}{}.{}",
-        model, small_model, subagent_note, default_note
+        "Model selection saved. Run Install/Update to apply model={}, small_model={}{}{}.{}",
+        model, small_model, subagent_note, critic_note, default_note
     ))
 }
 
@@ -5016,6 +5075,7 @@ mod tests {
             model: own(model),
             small_model: own(small),
             subagent_model: own(subagent),
+            critic_model: None,
         }
     }
 
@@ -5122,6 +5182,32 @@ mod tests {
     }
 
     #[test]
+    fn test_stored_critic_model_is_validated_independently() {
+        let valid = read_override_text(
+            "critic-stored",
+            r#"{"schema_version":1,"critic_model":" strong/org/model "}"#,
+        )
+        .expect("critic-only override");
+        assert_eq!(valid.critic_model.as_deref(), Some("strong/org/model"));
+        assert_eq!(
+            valid
+                .selection_over(("def/main".into(), "def/small".into()))
+                .critic_source,
+            "override"
+        );
+        let invalid = read_override_text(
+            "critic-stored-invalid",
+            r#"{"schema_version":1,"subagent_model":"cheap/fast","critic_model":"bad//model"}"#,
+        )
+        .expect("valid subagent survives");
+        assert_eq!(invalid, override_of(None, None, Some("cheap/fast")));
+        assert!(
+            read_override_text("critic-empty", r#"{"schema_version":1,"critic_model":""}"#)
+                .is_none()
+        );
+    }
+
+    #[test]
     fn test_selection_takes_each_value_from_its_own_source() {
         let defaults = || ("def/large".to_string(), "def/small".to_string());
 
@@ -5131,10 +5217,12 @@ mod tests {
             ("def/large", "def/small")
         );
         assert_eq!(none.subagent_model, "");
+        assert_eq!(none.critic_model, "");
         for source in [
             &none.model_source,
             &none.small_model_source,
             &none.subagent_source,
+            &none.critic_source,
         ] {
             assert_eq!(source, "bundled default");
         }
@@ -5259,6 +5347,7 @@ mod tests {
             model: Some("new-provider/new-model".to_string()),
             small_model: Some("new-provider/new-small".to_string()),
             subagent_model: None,
+            critic_model: None,
         };
         let content = serde_json::to_string_pretty(&stored).unwrap();
         fs::write(&override_path, &content).unwrap();
@@ -5738,7 +5827,11 @@ exit 64"#
 
     /// Write the app-level override of an isolated `home`: only a subagent model, as a pane save
     /// that changed nothing else leaves it. The main models keep following the template.
-    fn write_override_for_home(home: &Path, subagent: Option<&str>) -> PathBuf {
+    fn write_override_for_home(
+        home: &Path,
+        subagent: Option<&str>,
+        critic: Option<&str>,
+    ) -> PathBuf {
         let path = opencode_model_selection_path_for_home(home).expect("override path");
         fs::create_dir_all(path.parent().expect("parent")).expect("create app support dir");
         let stored = StoredOpenCodeModelSelection {
@@ -5746,6 +5839,7 @@ exit 64"#
             model: None,
             small_model: None,
             subagent_model: subagent.map(str::to_string),
+            critic_model: critic.map(str::to_string),
         };
         fs::write(&path, serde_json::to_string_pretty(&stored).expect("json")).expect("write");
         path
@@ -5808,7 +5902,7 @@ exit 64"#
     #[test]
     fn test_subagent_override_renders_agent_model_for_exactly_the_five_roles() {
         let home = temp_root("render-subagent");
-        write_override_for_home(&home, Some("other/cheap"));
+        write_override_for_home(&home, Some("other/cheap"), None);
         let rendered =
             render_expected_opencode_config(&template_with_plan_block(), &home).expect("render");
         cleanup(&home);
@@ -5976,7 +6070,7 @@ exit 64"#
         let before = compute_health(&ws, &home);
 
         // Saved, not yet installed: drift on exactly the five role entries.
-        let override_path = write_override_for_home(&home, Some("other/cheap"));
+        let override_path = write_override_for_home(&home, Some("other/cheap"), None);
         let pending = compute_health(&ws, &home);
 
         install_for(&ws, &home);
@@ -6033,6 +6127,54 @@ exit 64"#
         keys
     }
 
+    #[test]
+    fn test_critic_health_tracks_precedence_and_clearing_with_or_without_a_subagent_model() {
+        for subagent in [Some("other/cheap"), None] {
+            let (ws, home) = setup_synced_workspace("critic-health");
+            write_override_for_home(&home, subagent, None);
+            install_for(&ws, &home);
+            write_override_for_home(&home, subagent, Some("strong/critic"));
+            let pending = compute_health(&ws, &home);
+            assert_eq!(pending.config_status, "diverged");
+            assert_eq!(pending.config_diverged_keys, ["agent.inspector.model"]);
+
+            install_for(&ws, &home);
+            let applied = compute_health(&ws, &home);
+            assert_eq!(
+                applied.config_status, "synced",
+                "{:?}",
+                applied.config_diverged_keys
+            );
+            assert_eq!(applied.subagent_model.as_deref(), subagent);
+            assert_eq!(applied.critic_model.as_deref(), Some("strong/critic"));
+            assert_eq!(check_status(&applied, "critic_model"), "unknown");
+
+            // A stale inspector alone must still appear as critic drift.
+            let path = home.join(".config/opencode/opencode.json");
+            let mut stale: serde_json::Value =
+                serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+            stale["agent"]["inspector"]["model"] = serde_json::json!("stale/critic");
+            fs::write(&path, stale.to_string()).unwrap();
+            let drift = compute_health(&ws, &home);
+            assert_eq!(drift.config_diverged_keys, ["agent.inspector.model"]);
+            assert_eq!(drift.subagent_model.as_deref(), subagent);
+            install_for(&ws, &home);
+
+            write_override_for_home(&home, subagent, None);
+            assert_eq!(
+                compute_health(&ws, &home).config_diverged_keys,
+                ["agent.inspector.model"]
+            );
+            install_for(&ws, &home);
+            let cleared = compute_health(&ws, &home);
+            assert_eq!(cleared.config_status, "synced");
+            assert_eq!(cleared.subagent_model.as_deref(), subagent);
+            assert_eq!(cleared.critic_model.as_deref(), subagent);
+            cleanup(&ws);
+            cleanup(&home);
+        }
+    }
+
     fn check_status(health: &OpenCodeRuntimeHealth, id: &str) -> String {
         health
             .checks
@@ -6050,14 +6192,20 @@ exit 64"#
             config["agent"][role] = serde_json::json!({"model": "other/cheap"});
         }
         assert_eq!(
-            shared_subagent_model(&config).as_deref(),
+            shared_subagent_model(&config, false).as_deref(),
+            Some("other/cheap")
+        );
+        config["agent"]["inspector"]["model"] = serde_json::json!("strong/critic");
+        assert_eq!(shared_subagent_model(&config, false), None);
+        assert_eq!(
+            shared_subagent_model(&config, true).as_deref(),
             Some("other/cheap")
         );
         config["agent"]["scribe"]["model"] = serde_json::json!("mine/other");
-        assert_eq!(shared_subagent_model(&config), None);
+        assert_eq!(shared_subagent_model(&config, false), None);
         config["agent"]["scribe"] = serde_json::json!({});
-        assert_eq!(shared_subagent_model(&config), None);
-        assert_eq!(shared_subagent_model(&serde_json::json!({})), None);
+        assert_eq!(shared_subagent_model(&config, false), None);
+        assert_eq!(shared_subagent_model(&serde_json::json!({}), false), None);
     }
 
     #[test]
@@ -6093,7 +6241,7 @@ exit 64"#
     ) -> OpenCodeRuntimeHealth {
         let (ws, home) = setup_synced_workspace(name);
         if subagent.is_some() {
-            write_override_for_home(&home, subagent);
+            write_override_for_home(&home, subagent, None);
             install_for(&ws, &home);
         }
         let mut health = compute_health(&ws, &home);
@@ -6164,5 +6312,36 @@ exit 64"#
         assert_eq!(check.status, "pass");
         assert_eq!(check.detail, "(inherits model)");
         assert!(health.warnings.is_empty(), "{:?}", health.warnings);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_probes_check_the_critic_model_independently() {
+        for listed in [true, false] {
+            let dir = temp_root("probe-critic");
+            let mut models = GOOD_MODELS.to_vec();
+            models.push("other/cheap");
+            if listed {
+                models.push("strong/critic");
+            }
+            let stub = health_stub(&dir, "1.19.3", 0, &models);
+            let (ws, home) = setup_synced_workspace("probe-critic");
+            write_override_for_home(&home, Some("other/cheap"), Some("strong/critic"));
+            install_for(&ws, &home);
+            let mut health = compute_health(&ws, &home);
+            apply_cli_probes(&mut health, Some(&stub), LIMITS);
+            cleanup(&ws);
+            cleanup(&home);
+            cleanup(&dir);
+            assert_eq!(check_status(&health, "subagent_model"), "pass");
+            assert_eq!(
+                check_status(&health, "critic_model"),
+                if listed { "pass" } else { "warn" }
+            );
+            assert_eq!(health.warnings.len(), usize::from(!listed));
+            if !listed {
+                assert!(health.warnings[0].starts_with("critic_model strong/critic is not listed"));
+            }
+        }
     }
 }
