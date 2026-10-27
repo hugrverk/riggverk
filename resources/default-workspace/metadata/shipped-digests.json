@@ -146,6 +146,9 @@
     "skills/adversarial-implementation/critic-recipes.md": [
       "sha256:768113b4c69ac251bc2f79c8ca73f238fd12775865b789a69efca1e24c8b4124"
     ],
+    "skills/adversarial-review/SKILL.md": [
+      "sha256:2d9bdbcf9f6c24c7ff8d2787041c9eaa0be444011fd400f010b08b11ccf96bb7"
+    ],
     "skills/agent-report-review/SKILL.md": [
       "sha256:da9b69ed07462bd62f0e38898af6887d0114bf2801a0ab571bc5656add4ed24f",
       "sha256:f95b371d66f1e2fb72e69be132443433f0298334ebe13f69d5eae81a40919dff",

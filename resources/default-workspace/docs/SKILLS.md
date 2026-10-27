@@ -9,6 +9,7 @@ Do not duplicate full `SKILL.md` content here. This file is an index for choosin
 | Skill | Use When |
 | --- | --- |
 | `adversarial-implementation` | User-invoked only (`/adversarial-implementation` in Claude Code and Cursor; ask for it by name elsewhere): an adversarial, critic-reviewed or two-agent implementation. A delegated implementer works against a fresh read-only critic chosen by capability first; only findings whose proof the lead re-runs count, the judging tests are frozen, and a deletion-only round ends the loop. Roles work with no setup and change with one phrase in chat or an `Adversarial roles:` line below END in the rules. |
+| `adversarial-review` | Only on an explicit request (`/adversarial-review`, or plain language such as "kör en adversarial review" or "granska planen adversariellt"): a fresh read-only critic chosen by capability attacks an existing diff, or a plan in plan mode, and only findings whose proof the lead re-runs are reported, in Fatal, Significant, Minor and Pre-existing buckets. It fixes nothing and offers a re-review of later changes at most once. Roles work as in `adversarial-implementation`. |
 | `accessibility-review` | Reviewing UI for WCAG 2.2 AA risks, semantics, controls, keyboard, focus, labels, contrast, and responsive usability. |
 | `browser-qa` | Verifying frontend changes with live browser checks, route smoke tests, interactions, responsive checks, console/network review, and evidence. |
 | `context-budget` | Reducing duplicated rules, docs, prompts, skills, and token overhead without removing essential safety guidance. |
@@ -52,6 +53,7 @@ Grouped source: `skills/kretsverket/<skill>/SKILL.md`.
 | --- | --- |
 | `diagnose` / `tdd` | Diagnose finds root cause; TDD locks behavior with a narrow test once the contract is clear. |
 | `minimal-implementation` / `adversarial-implementation` | Minimal-implementation is one bounded patch by the current agent; adversarial-implementation runs that patch through a separate implementer and a fresh hostile critic per round, only when the user asks for it. |
+| `adversarial-review` / `/code-review` | `/code-review` (or the `inspector` agent) is the routine review; adversarial-review runs a fresh critic from another route and reports only findings the lead proved, only when the user asks for it. |
 | `implementation-plan` / `minimal-implementation` | Plan defines slices; minimal-implementation executes one bounded patch. |
 | `frontend-design` / `screenshot-review` | Screenshot-review diagnoses static images; frontend-design chooses direction and implements. |
 | `frontend-design` / `accessibility-review` | Frontend-design includes baseline a11y during implementation; accessibility-review is a specialist audit. |
@@ -84,6 +86,7 @@ Grouped source: `skills/kretsverket/<skill>/SKILL.md`.
 - Docs, rules, or prompt consolidation: `context-budget`; add `implementation-plan` for explicit maps.
 - Session retrospective: `retro`, only when the user invokes `/retro` (it is not routed by the rules).
 - Adversarial implementation: `adversarial-implementation`, only when the user asks for it (it is not routed by the rules).
+- Adversarial review of a diff or plan: `adversarial-review`, only when the user explicitly asks for it (it is not routed by the rules).
 - Review passes: Claude Code uses the built-in `/code-review` and `/simplify`; other harnesses use the `inspector` agent.
 
 ## Skill Metadata
