@@ -1,6 +1,31 @@
 {
   "releases": [
     {
+      "version": "2026.10.3",
+      "sections": [
+        {
+          "title": "New",
+          "items": [
+            "Stop keeping a copy of the bundle in your workspace"
+          ]
+        },
+        {
+          "title": "Fixes",
+          "items": [
+            "Clean up files only early test builds shipped",
+            "Keep adversarial skills out of routing bullets",
+            "Scan only git-visible files for removed skill names"
+          ]
+        },
+        {
+          "title": "Other",
+          "items": [
+            "Drop leftovers of the workspace copy"
+          ]
+        }
+      ]
+    },
+    {
       "version": "2026.10.2",
       "sections": [
         {
