@@ -96,6 +96,15 @@ mod tests {
             Some(workspace_canonical.to_string_lossy().as_ref())
         );
 
+        // An empty data folder is valid and the workspace row has nothing to remove.
+        let workspace_plan =
+            preview_setup(vec!["workspace_bundle".to_string()]).expect("preview workspace row");
+        assert!(
+            !workspace_plan.has_pending_changes,
+            "an empty data folder plans nothing: {:?}",
+            workspace_plan.operations
+        );
+
         apply_surfaces(&["open_code_config", "open_code_agents", "claude_agents"]);
 
         let status =

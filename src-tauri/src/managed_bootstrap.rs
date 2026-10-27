@@ -448,6 +448,55 @@ fn surface_record_label(artifact: &ArtifactId) -> Option<String> {
     }
 }
 
+/// Whether the app has touched `workspace_root`: it holds the state folder `.agent-workspace/`,
+/// which every release wrote (the marker, then the ownership records). Historical adoption and the
+/// legacy cleanup run only in such a folder. They used to look for the copy's `skills/` folder,
+/// which the workspace cleanup removes.
+pub fn workspace_folder_touched(workspace_root: &Path) -> bool {
+    fs::symlink_metadata(workspace_root.join(".agent-workspace")).is_ok_and(|meta| meta.is_dir())
+}
+
+/// Whether the app provably wrote this old copy of the bundle in the workspace folder, whose
+/// content digest is `installed`: it equals the managed record, the current bundle file, or a
+/// version an earlier release shipped (the pre-manifest metadata holds every committed version
+/// but the current one, which is the bundle file). `shipped-digests.json` is not consulted: it
+/// does not list workspace files.
+pub fn retired_workspace_copy_owned(
+    artifact: &ArtifactId,
+    bundled_root: &Path,
+    installed: &str,
+    managed_hash: Option<&str>,
+) -> bool {
+    if !matches!(artifact, ArtifactId::WorkspaceFile(_)) || installed == ABSENT_DIGEST {
+        return false;
+    }
+    managed_hash == Some(installed)
+        || current_bundle_digest(artifact, bundled_root).as_deref() == Some(installed)
+        || approved_historical_digest(artifact, "update", installed)
+        || approved_historical_digest(artifact, "remove", installed)
+}
+
+/// Digest of the bundle's own file for a workspace copy, when the bundle still holds it.
+fn current_bundle_digest(artifact: &ArtifactId, bundled_root: &Path) -> Option<String> {
+    let source = artifact.resolve_source(bundled_root)?;
+    if !fs::symlink_metadata(&source).is_ok_and(|meta| meta.is_file()) {
+        return None;
+    }
+    setup_fingerprint::hash_file_path(&source).ok()
+}
+
+/// The old copies of the bundle that exist in `workspace_root`, whatever the managed state says:
+/// installs from before the ownership records have none. A link or a folder in place is a
+/// candidate too, so the review lists it as left in place. Never the marker, the state folder or
+/// the personal docs (the frozen list holds none of them).
+fn retired_workspace_copies(workspace_root: &Path) -> Vec<ArtifactId> {
+    crate::commands::retired_workspace_files::RETIRED_WORKSPACE_FILES
+        .iter()
+        .filter(|rel| fs::symlink_metadata(workspace_root.join(rel)).is_ok())
+        .filter_map(|rel| WorkspaceRelPath::new(*rel).map(ArtifactId::WorkspaceFile))
+        .collect()
+}
+
 /// Collect all stale removal artifact candidates for bootstrap or managed-state reconciliation.
 pub fn collect_stale_removal_artifacts(
     workspace_root: &Path,
@@ -468,7 +517,8 @@ pub fn collect_stale_removal_artifacts(
             }
         }
     }
-    if read_managed_state_missing(workspace_root) && workspace_root.join("skills").is_dir() {
+    stale.extend(retired_workspace_copies(workspace_root));
+    if read_managed_state_missing(workspace_root) && workspace_folder_touched(workspace_root) {
         stale.extend(stale_workspace_artifacts(workspace_root)?);
         if let Ok(items) = legacy_skill_artifacts(workspace_root, home, wanted) {
             stale.extend(items);

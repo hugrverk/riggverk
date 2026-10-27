@@ -418,16 +418,12 @@ mod tests {
 
     #[test]
     fn rules_configs_and_workspace_files_are_never_proven_by_shipped_digests() {
-        let env = Installed::new(
-            "scope",
-            &[
-                SetupSurfaceId::WorkspaceBundle,
-                SetupSurfaceId::ClaudeAgents,
-            ],
-        );
+        let env = Installed::new("scope", &[SetupSurfaceId::ClaudeAgents]);
+        // An old copy of the bundle in the workspace folder, edited.
         let workspace_doc = ArtifactId::WorkspaceFile(
             WorkspaceRelPath::new("docs/USING_THE_APP.md").expect("doc path"),
         );
+        fs::create_dir_all(env.path(&workspace_doc).parent().expect("parent")).expect("dir");
         let edited_doc = b"an older shipped doc\n";
         let edited_rules = b"my own claude rules\n";
         let edited_codex = b"approval_policy = \"never\"\n";
@@ -476,11 +472,14 @@ mod tests {
         let with_digests = plan_of();
 
         assert_eq!(with_digests, baseline);
-        for artifact in [
-            &workspace_doc,
-            &ArtifactId::CodexConfig,
-            &ArtifactId::OpenCodeConfig,
-        ] {
+        assert!(
+            with_digests
+                .iter()
+                .any(|(planned, kind, _)| planned == &workspace_doc
+                    && *kind == OperationKind::Manual),
+            "an edited old workspace copy stays in place: {with_digests:?}"
+        );
+        for artifact in [&ArtifactId::CodexConfig, &ArtifactId::OpenCodeConfig] {
             assert!(
                 with_digests
                     .iter()

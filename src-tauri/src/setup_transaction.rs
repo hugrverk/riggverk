@@ -444,8 +444,9 @@ pub fn workspace_key(workspace_root: &Path) -> Result<String, String> {
 }
 
 /// Expands surfaces to artifacts. A retired per-harness skill surface is the `Skills` surface,
-/// and a surface asked for twice is expanded once. Only `Skills` may expand to nothing (no
-/// harness is enabled); any other empty expansion is an error.
+/// and a surface asked for twice is expanded once. Only `Skills` (no harness is enabled) and
+/// `WorkspaceBundle` (it wants no file: the copy of the bundle is gone) may expand to nothing; any
+/// other empty expansion is an error.
 pub fn expand_surfaces_to_artifacts(
     surfaces: &[SetupSurfaceId],
     _workspace_root: &Path,
@@ -461,7 +462,12 @@ pub fn expand_surfaces_to_artifacts(
             continue;
         }
         let expanded = expand_surface_fail_closed(surface, &bundled_root, scope)?;
-        if expanded.is_empty() && surface != SetupSurfaceId::Skills {
+        if expanded.is_empty()
+            && !matches!(
+                surface,
+                SetupSurfaceId::Skills | SetupSurfaceId::WorkspaceBundle
+            )
+        {
             return Err(format!(
                 "surface {} expanded to zero artifacts",
                 surface.label()
@@ -611,6 +617,14 @@ pub fn detect_surface_state(
                     .count();
                 (planned.iter().map(|p| p.kind).collect(), reason, manual)
             }
+            // The workspace folder holds no old copy of the bundle: nothing to do.
+            Ok(_) if surface == SetupSurfaceId::WorkspaceBundle => {
+                return (
+                    surface,
+                    OperationKind::NoChange,
+                    format!("{}: no old copies to remove", surface.label()),
+                );
+            }
             // No harness is enabled: no skill is wanted anywhere, and nothing is removed.
             Ok(_) if surface.canonical() == SetupSurfaceId::Skills => {
                 return (
@@ -635,6 +649,25 @@ pub fn detect_surface_state(
             }
         };
     let kind = aggregate_operation_kind(&kinds);
+    if surface == SetupSurfaceId::WorkspaceBundle {
+        let count = |wanted: OperationKind| kinds.iter().filter(|kind| **kind == wanted).count();
+        let copies = |n: usize| format!("{n} old cop{}", if n == 1 { "y" } else { "ies" });
+        let summary = match kind {
+            OperationKind::Remove => format!(
+                "{}: {} of the bundle to remove (backed up; z restores them)",
+                surface.label(),
+                copies(count(OperationKind::Remove))
+            ),
+            OperationKind::Manual => format!(
+                "{}: {} of the bundle left in place",
+                surface.label(),
+                copies(count(OperationKind::Manual))
+            ),
+            OperationKind::NoChange => format!("{}: no old copies to remove", surface.label()),
+            _ => format!("{} unavailable", surface.label()),
+        };
+        return (surface, kind, summary);
+    }
     let summary = match kind {
         OperationKind::NoChange => format!("{} synced", surface.label()),
         OperationKind::Create => format!("{} not installed", surface.label()),
@@ -719,11 +752,19 @@ pub fn compute_plan_fingerprint(
             crate::setup_fingerprint::ABSENT_DIGEST.to_string()
         };
         parts.push(format!("source:{source_digest}"));
-        let installed_digest = crate::setup_fingerprint::artifact_installed_managed_digest(
-            artifact,
-            workspace_root,
-            home,
-        )?;
+        // An old workspace copy left in place is never written, and may be a link the digest
+        // refuses to follow. Its kind is fingerprinted: a copy that turns removable changes it.
+        let installed_digest = if planned_kind == Some(OperationKind::Manual)
+            && matches!(artifact, ArtifactId::WorkspaceFile(_))
+        {
+            "left-in-place".to_string()
+        } else {
+            crate::setup_fingerprint::artifact_installed_managed_digest(
+                artifact,
+                workspace_root,
+                home,
+            )?
+        };
         parts.push(format!("installed:{installed_digest}"));
         if let Some(op) = artifact_ops.iter().find(|o| o.artifact == *artifact) {
             parts.push(format!("operation:{:?}", op.kind));
@@ -1497,6 +1538,15 @@ fn detect_stale_artifact_state(
     home: &Path,
     managed_hash: Option<&str>,
 ) -> (OperationKind, PreviousState) {
+    if matches!(artifact, ArtifactId::WorkspaceFile(_)) {
+        return detect_retired_workspace_copy_state(
+            artifact,
+            workspace_root,
+            bundled_root,
+            home,
+            managed_hash,
+        );
+    }
     let dest = match artifact.resolve_dest(home, workspace_root) {
         Ok(p) => p,
         Err(_) => return (OperationKind::Unavailable, PreviousState::Unavailable),
@@ -1528,6 +1578,52 @@ fn detect_stale_artifact_state(
         (OperationKind::Remove, PreviousState::ManagedFile)
     } else {
         (OperationKind::Conflict, PreviousState::Conflict)
+    }
+}
+
+/// A file in the workspace folder that is no longer wanted: an old copy of the bundle, or a file an
+/// older release left there. One the app provably wrote (see
+/// [`crate::managed_bootstrap::retired_workspace_copy_owned`]) is removed. Anything else is left
+/// in place as a manual step, never a conflict: an edited copy, a file nothing proves the app's, a
+/// link on the file or on a folder above it, a folder where the file was. The app no longer reads
+/// any of them, so nothing waits for the user to resolve.
+fn detect_retired_workspace_copy_state(
+    artifact: &ArtifactId,
+    workspace_root: &Path,
+    bundled_root: &Path,
+    home: &Path,
+    managed_hash: Option<&str>,
+) -> (OperationKind, PreviousState) {
+    let left_in_place = (OperationKind::Manual, PreviousState::Conflict);
+    let Ok(dest) = artifact.resolve_dest(home, workspace_root) else {
+        return (OperationKind::Unavailable, PreviousState::Unavailable);
+    };
+    let meta = match fs::symlink_metadata(&dest) {
+        Ok(meta) => meta,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return (OperationKind::NoChange, PreviousState::Absent);
+        }
+        Err(_) => return left_in_place,
+    };
+    if !meta.is_file()
+        || reject_symlink_parent_chain(&dest, workspace_root, "workspace copy").is_err()
+    {
+        return left_in_place;
+    }
+    let Ok(installed) =
+        crate::setup_fingerprint::artifact_installed_managed_digest(artifact, workspace_root, home)
+    else {
+        return left_in_place;
+    };
+    if crate::managed_bootstrap::retired_workspace_copy_owned(
+        artifact,
+        bundled_root,
+        &installed,
+        managed_hash,
+    ) {
+        (OperationKind::Remove, PreviousState::ManagedFile)
+    } else {
+        left_in_place
     }
 }
 
@@ -1684,7 +1780,8 @@ pub fn plan_artifacts_for_uninstall(
                     overwrite: None,
                 });
             }
-            OperationKind::Conflict => preserved.push(artifact),
+            // An edited old copy in the workspace folder stays, like any edited file.
+            OperationKind::Conflict | OperationKind::Manual => preserved.push(artifact),
             _ => {}
         }
     }
@@ -1740,6 +1837,10 @@ fn rules_block_has_user_content(artifact: &ArtifactId, workspace_root: &Path, ho
 /// earlier app version installed but no apply has touched. Artifacts that
 /// already have a record are not inspected again, and one that cannot be
 /// inspected only loses its own adoption.
+///
+/// Only a workspace folder the app has touched is inspected: one holding the state folder
+/// `.agent-workspace/` (every earlier release wrote its marker there). It is not the copy of the
+/// bundle, which the workspace cleanup removes: adoption has to outlive it.
 fn records_with_bootstrap(
     workspace_root: &Path,
     home: &Path,
@@ -1748,7 +1849,7 @@ fn records_with_bootstrap(
     let mut records: Vec<crate::managed_state::ManagedArtifactRecord> = managed
         .map(|state| state.artifacts.clone())
         .unwrap_or_default();
-    if !workspace_root.join("skills").is_dir() {
+    if !crate::managed_bootstrap::workspace_folder_touched(workspace_root) {
         return records;
     }
     let known: HashSet<String> = records.iter().map(|r| r.identity.clone()).collect();
@@ -3350,12 +3451,26 @@ mod tests {
     }
 
     #[test]
-    fn workspace_bundle_expands_from_bundled_repo() {
+    fn workspace_bundle_wants_no_file_and_its_empty_expansion_is_not_an_error() {
         let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../resources/default-workspace");
         let artifacts =
             expand_surface_fail_closed(SetupSurfaceId::WorkspaceBundle, &repo, &SkillScope::all())
                 .unwrap();
-        assert!(!artifacts.is_empty());
+        assert!(artifacts.is_empty(), "{artifacts:?}");
+        let ws = std::env::temp_dir().join(format!(
+            "aw-empty-bundle-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos()
+        ));
+        assert!(expand_surfaces_to_artifacts(
+            &[SetupSurfaceId::WorkspaceBundle],
+            &ws,
+            &SkillScope::all()
+        )
+        .unwrap()
+        .is_empty());
     }
 
     #[test]
@@ -4234,7 +4349,8 @@ mod tests {
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../resources/default-workspace")
     }
 
-    /// Every artifact the bundle can install, skill files in every root included.
+    /// Every artifact the bundle can install, skill files in every root included, and every old
+    /// copy of the bundle a workspace cleanup backs up.
     fn every_bundled_artifact() -> Vec<ArtifactId> {
         let repo = bundled_repo();
         let mut artifacts = Vec::new();
@@ -4242,6 +4358,13 @@ mod tests {
             artifacts
                 .extend(expand_surface_fail_closed(*surface, &repo, &SkillScope::all()).unwrap());
         }
+        artifacts.extend(
+            crate::commands::retired_workspace_files::workspace_copy_paths().map(|rel| {
+                ArtifactId::WorkspaceFile(
+                    crate::artifact_registry::WorkspaceRelPath::new(rel).unwrap(),
+                )
+            }),
+        );
         artifacts
     }
 

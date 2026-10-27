@@ -2,7 +2,7 @@
 
 ## What this is
 
-A directory of docs, skills, templates, and scripts, plus the Riggverk app that installs it. The app puts a runtime copy at `~/.config/agent-workspace`, shows what is installed where, and installs rules, agents, skills, and config into Codex, OpenCode, Cursor, and Claude Code. GitHub Copilot, Pi, and Kilo Code are an opt-in light tier (Settings): the app installs the shared rules block and skills for them and shows their CLI version. Every write is reviewed first.
+A bundle of docs, skills, templates, and scripts inside the Riggverk app, which installs it. The app keeps no copy of the bundle in its data folder, `~/.config/agent-workspace`, which holds only its state and your personal docs. The app shows what is installed where, and installs rules, agents, skills, and config into Codex, OpenCode, Cursor, and Claude Code. GitHub Copilot, Pi, and Kilo Code are an opt-in light tier (Settings): the app installs the shared rules block and skills for them and shows their CLI version. Every write is reviewed first.
 
 Requirements: Python 3 on `PATH` (config merges and generators).
 
@@ -10,7 +10,7 @@ Requirements: Python 3 on `PATH` (config merges and generators).
 
 It does:
 
-- Install and update the workspace and each harness from its bundled copy, after showing a plan.
+- Install and update each harness from the bundle, after showing a plan.
 - Keep your own text in rules files, and your own keys in config files.
 - Back up what it overwrites, and roll back the last install.
 - Show the bundled docs, rules, skills, agents, and configs in the Library (read-only), and let you write your own personal docs and the refinements below the managed block of your rules files there.
@@ -18,19 +18,21 @@ It does:
 It does not:
 
 - Write anything on launch or without a confirmation.
-- Install what you edit in the workspace. Harnesses always receive the bundled version.
+- Install what you edit in the data folder. Harnesses always receive the bundled version.
 - Manage Git, GitHub auth, or Claude, Codex, or Cursor settings, logins, and trust.
 - Encrypt workspace contents or run agents.
 
 ## First install
 
-1. Start the app and press `1` (Workspace). The cursor is on `workspace`, which says `not installed` on a fresh profile.
-2. Press `u`. A plan table lists every file to create. Nothing is written yet.
-3. Press `d` to expand a row, `j` and `k` to move. `n` or Escape cancels.
-4. Press `y` to apply. A backup and a transaction are recorded first; the output pane shows the result.
-5. Press `2`, `3`, `4`, or `5` for Codex, OpenCode, Cursor, or Claude. Check the targets on the left (Space toggles one), then press `u` and `y` to install that harness.
+1. Start the app and press `1` (Workspace). On a fresh profile the `workspace` row says `current`: there is no copy of the bundle to install. The harness rows are what you install.
+2. Press `2`, `3`, `4`, or `5` for Codex, OpenCode, Cursor, or Claude. Check the targets on the left (Space toggles one).
+3. Press `u`. A plan table lists every file to create. Nothing is written yet.
+4. Press `d` to expand a row, `j` and `k` to move. `n` or Escape cancels.
+5. Press `y` to apply. A backup and a transaction are recorded first; the output pane shows the result.
 
-`p` previews without any way to apply. `:update --all` reviews the workspace and every enabled harness in one plan; `:preview --all` only looks.
+`p` previews without any way to apply. `:update --all` reviews every enabled harness in one plan; `:preview --all` only looks.
+
+If the `workspace` row says `N old copies to remove`, an earlier release copied the bundle into your data folder. `u` on that row reviews their removal: only copies the app can prove are its own, backed up, and `z` restores them. Edited files stay and are listed.
 
 Fresh settings enable every target except `codex_config`, which rewrites your Codex approval and sandbox settings. Turn it on from the Codex page when you want it.
 
@@ -60,7 +62,7 @@ Rules files hold the app's base between `BEGIN AGENT-WORKSPACE BASE` and `END AG
 
 ## Where things are
 
-- Workspace: `~/.config/agent-workspace` (change it in Settings, or `AGENT_WORKSPACE_PATH`).
+- Data folder: `~/.config/agent-workspace` (the app's state in `.agent-workspace/`, your personal docs in `docs/context/`; `AGENT_WORKSPACE_PATH` overrides it).
 - Backups: `~/Library/Application Support/se.hugrverk.riggverk/backups` on macOS, `${XDG_CONFIG_HOME:-~/.config}/se.hugrverk.riggverk/backups` on Linux, `%APPDATA%\se.hugrverk.riggverk\backups` on Windows. `B` on the Workspace page opens the folder.
 - Settings file: `settings.json` in the app support folder, the parent of the default backups folder.
 

@@ -467,6 +467,8 @@ mod tests {
 
     #[test]
     fn fingerprint_ignores_runtime_files_that_shadow_bundled_sources() {
+        // Holds the env lock: a test that moves XDG_CONFIG_HOME mid-way changes the digests.
+        let _env = crate::test_env::guard::default_xdg_config_home();
         let home = temp("rule-src-home");
         let ws = temp("rule-src-ws");
         write(&ws.join("templates/sync/opencode-rules.md"), "v1");
@@ -519,6 +521,8 @@ mod tests {
 
     #[test]
     fn fingerprint_unchanged_by_unrelated_opencode_user_key() {
+        // Holds the env lock: a test that moves XDG_CONFIG_HOME mid-way changes the digests.
+        let _env = crate::test_env::guard::default_xdg_config_home();
         let home = temp("oc-user-home");
         let ws = temp("oc-user-ws");
         write_opencode_config_fixture(

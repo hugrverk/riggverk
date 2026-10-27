@@ -692,18 +692,18 @@ fn remove_single_artifact(
     Ok(())
 }
 
+/// Folders of the workspace folder that a removal emptied go too, bottom-up. Never the workspace
+/// folder itself or anything above it, never the state folder or the personal docs folder, and
+/// never a folder that still holds anything.
 fn remove_empty_migration_parents(path: &Path, workspace_root: &Path) -> Result<(), String> {
     let mut current = path.parent();
     while let Some(directory) = current {
-        if directory == workspace_root
-            || !directory.starts_with(workspace_root)
-            || matches!(
-                directory
-                    .strip_prefix(workspace_root)
-                    .ok()
-                    .and_then(|path| path.to_str()),
-                Some("skills") | Some("agents") | Some("metadata")
-            )
+        let Ok(rel) = directory.strip_prefix(workspace_root) else {
+            break;
+        };
+        if rel.as_os_str().is_empty()
+            || rel.starts_with(".agent-workspace")
+            || rel.starts_with(super::content::CUSTOM_DOCS_DIR)
         {
             break;
         }
@@ -2316,6 +2316,7 @@ fn plan_surfaces(
     };
     let mut plan = crate::setup_lifecycle::plan_setup(&request, &states);
     attach_skill_details(&mut plan, ws_root, home);
+    attach_workspace_details(&mut plan, ws_root, home);
     attach_rules_details(&mut plan, home);
     attach_mcp_details(&mut plan, home);
     attach_plan_preview(&mut plan, ws_root, home)?;
@@ -2410,6 +2411,74 @@ fn attach_skill_details(plan: &mut SetupPlan, workspace_root: &Path, home: &Path
     {
         op.details = details.clone();
     }
+}
+
+/// Fills the review lines of the workspace surface: the old copies of the bundle it removes, per
+/// folder of the workspace folder, and each copy it leaves in place. Paths only, never contents.
+fn attach_workspace_details(plan: &mut SetupPlan, workspace_root: &Path, home: &Path) {
+    let surface = SetupSurfaceId::WorkspaceBundle;
+    if !plan
+        .operations
+        .iter()
+        .any(|planned| planned.surface == surface)
+    {
+        return;
+    }
+    let Ok(planned) = setup_transaction::plan_artifacts_for_surfaces_in(
+        &[surface],
+        workspace_root,
+        home,
+        &crate::skill_roots::SkillScope::all(),
+    ) else {
+        return;
+    };
+    let details = workspace_plan_details(&planned);
+    for op in plan
+        .operations
+        .iter_mut()
+        .chain(plan.conflicts.iter_mut())
+        .chain(plan.manual_steps.iter_mut())
+        .filter(|planned| planned.surface == surface)
+    {
+        op.details = details.clone();
+    }
+}
+
+fn workspace_plan_details(planned: &[setup_transaction::PlannedArtifact]) -> Vec<String> {
+    use crate::artifact_registry::ArtifactId;
+    let rel_of = |kind: OperationKind| {
+        planned
+            .iter()
+            .filter(move |op| op.kind == kind)
+            .filter_map(|op| match &op.artifact {
+                ArtifactId::WorkspaceFile(rel) => Some(rel.as_str()),
+                _ => None,
+            })
+    };
+    let mut removed: std::collections::BTreeMap<String, usize> = std::collections::BTreeMap::new();
+    for rel in rel_of(OperationKind::Remove) {
+        let place = match rel.split_once('/') {
+            Some((folder, _)) => format!("{folder}/"),
+            None => rel.to_string(),
+        };
+        *removed.entry(place).or_default() += 1;
+    }
+    let mut lines: Vec<String> = removed
+        .into_iter()
+        .map(|(place, n)| {
+            format!(
+                "- {place} ({n} old cop{}; backed up, z restores them)",
+                if n == 1 { "y" } else { "ies" }
+            )
+        })
+        .collect();
+    let mut left: Vec<&str> = rel_of(OperationKind::Manual).collect();
+    left.sort_unstable();
+    lines.extend(
+        left.into_iter()
+            .map(|rel| format!("= {rel} (edited or not the app's: left in place)")),
+    );
+    lines
 }
 
 /// Read-only preview: detect real state for requested surfaces.
@@ -4700,7 +4769,7 @@ mod tests {
                 .map(|p| p.kind)
         };
         assert_eq!(kind_of(&untouched), Some(OperationKind::Remove));
-        assert_eq!(kind_of(&edited), Some(OperationKind::Conflict));
+        assert_eq!(kind_of(&edited), Some(OperationKind::Manual));
 
         let stale: Vec<_> = planned
             .iter()
@@ -4782,7 +4851,7 @@ mod tests {
         };
         assert_eq!(kind_of(&untouched), Some(OperationKind::Remove));
         assert_eq!(kind_of(&nested), Some(OperationKind::Remove));
-        assert_eq!(kind_of(&edited), Some(OperationKind::Conflict));
+        assert_eq!(kind_of(&edited), Some(OperationKind::Manual));
 
         let stale: Vec<_> = planned
             .iter()

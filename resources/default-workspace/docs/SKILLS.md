@@ -139,7 +139,7 @@ In the source repository `python3 scripts/check-skill-routing.py` validates ever
 
 ## Installing skills
 
-In the app, press `u` on a harness page and confirm with `y`. Skills are one global surface: the update installs the whole bundled catalog (the shared `SKILL.md` and its supporting files, flat) into the folders the enabled harnesses read, and the review lists each folder with its skill and file counts. Skills are not gated by target toggles and always come from the app's bundle: a skill you add to the runtime workspace is not installed, and a personal skill belongs directly in a skills folder, where unknown skills are preserved.
+In the app, press `u` on a harness page and confirm with `y`. Skills are one global surface: the update installs the whole bundled catalog (the shared `SKILL.md` and its supporting files, flat) into the folders the enabled harnesses read, and the review lists each folder with its skill and file counts. Skills are not gated by target toggles and always come from the app's bundle: a skill you add to the workspace folder is not installed, and a personal skill belongs directly in a skills folder, where unknown skills are preserved.
 
 ### Which folders
 

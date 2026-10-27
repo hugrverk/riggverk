@@ -2,7 +2,7 @@
 
 Riggverk is a local agent environment manager: a Tauri control panel for managing a shared coding-agent workspace across Codex, OpenCode, Claude Code, and Cursor, and the shared skills for GitHub Copilot, Pi, and Kilo Code (an opt-in light tier). Keyboard-first terminal-style UI; every write is reviewed before it happens.
 
-The repository contains the application and its canonical bundled workspace. Installed workspaces and harness files are downstream user-owned data. The technical identifiers (the `AGENT-WORKSPACE BASE` rules markers, `~/.config/agent-workspace`, the `.agent-workspace/` marker folder, and the `AGENT_WORKSPACE_*` environment variables) keep their historical names on purpose, so existing installs and files stay valid.
+The repository contains the application and its canonical bundled workspace. Installed workspaces and harness files are downstream user-owned data. The technical identifiers (the `AGENT-WORKSPACE BASE` rules markers, `~/.config/agent-workspace`, the `.agent-workspace/` state folder, and the `AGENT_WORKSPACE_*` environment variables) keep their historical names on purpose, so existing installs and files stay valid.
 
 ## Repository layout
 
@@ -12,7 +12,7 @@ The repository contains the application and its canonical bundled workspace. Ins
 - `scripts/` - repository checks, generators, contract guards, and release verification.
 - `docs/` - workspace contract, security model, release and smoke checklists.
 
-The installed runtime workspace lives at `~/.config/agent-workspace` unless a custom folder saved by an earlier version is still in use or `AGENT_WORKSPACE_PATH` overrides it. It is the app's data folder: it is valid by its own `.agent-workspace/` state, never by the bundled copies in it, and the first install or personal doc creates it (nothing does at launch).
+The workspace folder lives at `~/.config/agent-workspace` unless a custom folder saved by an earlier version is still in use or `AGENT_WORKSPACE_PATH` overrides it. It is the app's data folder and holds no copy of the bundle: only the app's state (`.agent-workspace/`) and your personal docs (`docs/context/`). It is valid by its own state, never by bundle files in it, and the first write that needs it creates it (nothing does at launch).
 
 ## Development
 
@@ -45,12 +45,12 @@ Releases are cut locally: `./scripts/release.sh prepare` (CalVer version, notes 
 
 1. The source repository.
 2. Bundled defaults under `resources/default-workspace/` (packaged read-only with the app).
-3. The installed user-owned runtime workspace.
+3. The user-owned data folder (app state and personal docs; no copy of the bundle).
 4. Harness-native files under each tool's documented home directory.
 
-**Install or Update** is the one write workflow. Press `u` on the Workspace page (for the workspace bundle or the harness under the cursor) or on a harness page (that harness). The app computes a plan, shows every create, update, remove, and conflict row, and writes nothing until you press `y`. `p` previews without an apply path; `n` or Escape cancels. A backup and a rollback-capable transaction are recorded before the first write; `z` (or `:rollback`) restores the last transaction after a dry run and a confirm.
+**Install or Update** is the one write workflow. Press `u` on the Workspace page (for the `workspace` row or the harness under the cursor) or on a harness page (that harness). The app computes a plan, shows every create, update, remove, and conflict row, and writes nothing until you press `y`. `p` previews without an apply path; `n` or Escape cancels. A backup and a rollback-capable transaction are recorded before the first write; `z` (or `:rollback`) restores the last transaction after a dry run and a confirm.
 
-Both the runtime workspace and every harness file are installed from the packaged bundle, never from the runtime workspace. Editing a bundled file in the runtime workspace freezes that file from future updates (it becomes a conflict) and does not change what harnesses receive or what the Library shows. See `docs/WORKSPACE_CONTRACT.md` for the contract.
+Every harness file is installed from the packaged bundle, and the Library and health checks read it too. The app keeps no copy of the bundle in the data folder: the `workspace` row is `current`, or `N old copies to remove` while copies from earlier releases remain. Those are removed only through the reviewed update of that row (`u`, `y`; one transaction with backups; `z` restores them), and only when their bytes prove they are the app's. An edited copy, or any file not provably the app's, is left in place and listed as a manual step, never a conflict. Your notes, `.agent-workspace/` and `docs/context/` are never touched. See `docs/WORKSPACE_CONTRACT.md` for the contract.
 
 ## Skills
 
@@ -123,14 +123,14 @@ Stored in `settings.json` under the app support dir; autosaved.
 | --- | --- | --- |
 | `enabled_harness_ids` | `["codex", "opencode", "claude", "cursor"]` | Positive allowlist for visible and writable harnesses; `"copilot"`, `"pi"` and `"kilo"` can be added and are off by default (also for older files that name the four or lack the field). Disabling hides the harness UI and blocks new managed writes without deleting files or target preferences. |
 | `enabled_target_ids` | `["codex_rules", "opencode_rules", "claude_rules", "opencode_agents", "claude_agents", "codex_agents", "opencode_config", "cursor_setup", "copilot_rules", "copilot_mcp", "pi_rules", "pi_mcp", "kilo_rules"]` | Targets Install is allowed to write. Toggle with Space on harness pages. A target that is off is skipped by preview, apply, and status. |
-| `workspace_path` | unset (`~/.config/agent-workspace`) | Custom workspace folder saved by an earlier version; Settings no longer picks one. It stays in use while it holds the app's `.agent-workspace/` state (`workspace.json` or `managed-state.json`); bundled copies in it are not needed. `R` in Settings (or `:workspace reset`) asks first, then clears it and returns to the default folder; the old folder and its ownership records are left as they are and the app cannot switch back to it. Generator scripts the app runs always come from the bundled read-only copy, not from this folder. |
+| `workspace_path` | unset (`~/.config/agent-workspace`) | Custom workspace folder saved by an earlier version; Settings no longer picks one. It stays in use while it holds the app's `.agent-workspace/` state (`workspace.json` or `managed-state.json`), also after the old copies are removed. `R` in Settings (or `:workspace reset`) asks first, then clears it and returns to the default folder; the old folder and its ownership records are left as they are and the app cannot switch back to it. Generator scripts the app runs always come from the bundled read-only copy, not from this folder. |
 | `appearance` | `"dark"` | `"dark"`, `"light"`, or `"system"`. |
 | `app_font_size` | `"medium"` | `"small"`, `"medium"`, `"large"`, `"extra-large"`. |
 | `motion` | `"full"` | `"full"`, `"subtle"`, or `"off"`. `"off"` stops animations and transitions; the OS reduced-motion preference always counts as `"off"`. Older files with `reduce_motion: true` load as `"off"`; the legacy `reduce_motion` flag is still written beside it. |
 | `landing_view` | `"start"` | View shown on start: `"start"`, `"library"`. |
 | `last_seen_version` | unset | App version whose "what's new" was handled. Set by the app, not in Settings: it records the version on a fresh install and after the overlay is closed on the first launch after an update. `:whatsnew` opens the notes at any time. |
 
-Target toggles gate these surfaces: rules, agents, and config per harness, Cursor agents plus MCP (`cursor_setup`), the rules file (`copilot_rules`, `pi_rules`, `kilo_rules`) and the Playwright MCP entry (`copilot_mcp`, `pi_mcp`, `kilo_mcp`) of each light harness; they only act once their harness is enabled. Two targets are off by default: `codex_config` because it rewrites the Codex approval and sandbox posture, and `kilo_mcp` because Kilo's main config file may hold provider keys. Settings files from before target gating are migrated once: every default stays on, and any target you had enabled or whose surface is already managed stays on, so nothing already installed is dropped. Later additions to the defaults (the light rules targets, then `copilot_mcp` and `pi_mcp`) are added to older files without touching a toggle you switched off. Skills and the workspace bundle are never gated.
+Target toggles gate these surfaces: rules, agents, and config per harness, Cursor agents plus MCP (`cursor_setup`), the rules file (`copilot_rules`, `pi_rules`, `kilo_rules`) and the Playwright MCP entry (`copilot_mcp`, `pi_mcp`, `kilo_mcp`) of each light harness; they only act once their harness is enabled. Two targets are off by default: `codex_config` because it rewrites the Codex approval and sandbox posture, and `kilo_mcp` because Kilo's main config file may hold provider keys. Settings files from before target gating are migrated once: every default stays on, and any target you had enabled or whose surface is already managed stays on, so nothing already installed is dropped. Later additions to the defaults (the light rules targets, then `copilot_mcp` and `pi_mcp`) are added to older files without touching a toggle you switched off. Skills and the `workspace` row are never gated.
 
 Harness enablement is an explicit preference, not tool detection. Re-enabling restores UI, health checks, and target selections but does not install. Full uninstall still covers proven app-owned files of disabled harnesses.
 

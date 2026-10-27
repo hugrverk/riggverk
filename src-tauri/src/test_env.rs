@@ -44,6 +44,21 @@ pub fn process_home() -> PathBuf {
     .expect("user home required for test")
 }
 
+/// The copy of the bundle an earlier release kept in the workspace folder `ws`: the marker and
+/// every file of the frozen list, byte for byte as the bundle has them now. Returns the paths.
+#[cfg(test)]
+pub fn seed_workspace_copy(ws: &Path) -> Vec<&'static str> {
+    let bundle = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../resources/default-workspace");
+    let paths: Vec<&'static str> =
+        crate::commands::retired_workspace_files::workspace_copy_paths().collect();
+    for rel in &paths {
+        let dest = ws.join(rel);
+        std::fs::create_dir_all(dest.parent().expect("parent")).expect("copy folder");
+        std::fs::copy(bundle.join(rel), &dest).expect("copy a bundle file");
+    }
+    paths
+}
+
 /// Bytes of the canonical SKILL.md that `write_canonical_skill` writes.
 #[cfg(test)]
 pub fn canonical_skill_text(name: &str, body: &str) -> String {

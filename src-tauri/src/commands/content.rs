@@ -155,7 +155,7 @@ fn existing_curated_docs(bundle_root: &Path) -> Vec<(String, String, String, &'s
         .collect()
 }
 
-const CUSTOM_DOCS_DIR: &str = "docs/context";
+pub(crate) const CUSTOM_DOCS_DIR: &str = "docs/context";
 
 /// Folder of the personal docs, the only Library items the app writes. The bundle ships nothing here.
 fn personal_docs_dir(root: &Path) -> PathBuf {
@@ -246,6 +246,11 @@ fn doc_title_from_content_or_slug(content: &str, slug: &str) -> String {
 
 fn custom_doc_rel_path(slug: &str) -> String {
     format!("{}/{}.md", CUSTOM_DOCS_DIR, slug)
+}
+
+/// How many personal docs the data folder at `root` holds, as the Library lists them.
+pub(crate) fn personal_doc_count(root: &Path) -> usize {
+    list_custom_docs(root).len()
 }
 
 fn list_custom_docs(root: &Path) -> Vec<(String, String, String, PathBuf)> {

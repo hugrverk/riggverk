@@ -4,7 +4,7 @@
 
 `templates/global-agent-rules.md` is the editable shared rules core. It defines communication, security, bounded implementation, skill routing, verification, git behavior, and reporting.
 
-Harness-specific appendices live under `templates/rules/`. In the app source repository, `scripts/generate-agent-rules.py` composes the installed rule sources under `templates/sync/`; the generators are not shipped in the installed workspace.
+Harness-specific appendices live under `templates/rules/`. In the app source repository, `scripts/generate-agent-rules.py` composes the installed rule sources under `templates/sync/`; the generators do not ship with the app.
 
 Installed rule targets:
 
@@ -128,6 +128,6 @@ Rules and agents installed by the app come from the app's bundle. To change them
 2. Run the relevant generator with `--write`, then with `--check` (`generate-agent-rules.py`, `generate-agent-adapters.py`).
 3. Rebuild the app and install from the harness pages (`u`, review, `y`).
 
-The Library shows these copies read-only. Editing a copy in the installed workspace outside the app changes only that copy and freezes it against updates. For a personal tweak to a rules file, write it below the managed block instead, in your editor or in the Library (Rules, your rules files).
+The Library shows these files read-only, from the app's bundle; the app keeps no copy of them in your workspace folder. For a personal tweak to a rules file, write it below the managed block instead, in your editor or in the Library (Rules, your rules files).
 
 Existing files that Install would overwrite are backed up first. Unknown and unrelated harness files are preserved.

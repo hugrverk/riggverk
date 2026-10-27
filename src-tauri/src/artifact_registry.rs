@@ -723,29 +723,14 @@ pub fn expand_surface(
                 .map(|harness| vec![ArtifactId::HarnessMcp(harness)])
                 .ok_or_else(|| "light MCP surface without a light harness".to_string())
         }
-        SetupSurfaceId::WorkspaceBundle => expand_workspace_bundle(workspace_root),
+        // The app no longer keeps a copy of the bundle in the workspace folder: the surface wants
+        // nothing, and the copies earlier releases left there are stale removals.
+        SetupSurfaceId::WorkspaceBundle => Ok(Vec::new()),
         SetupSurfaceId::ClaudeSkills
         | SetupSurfaceId::OpenCodeSkills
         | SetupSurfaceId::CodexSkills
         | SetupSurfaceId::CursorSkills => Err("retired skill surface".to_string()),
     }
-}
-
-fn expand_workspace_bundle(workspace_root: &Path) -> Result<Vec<ArtifactId>, String> {
-    let bundled: Vec<&str> = crate::commands::retired_workspace_files::workspace_copy_paths()
-        .filter(|rel| !rel.contains("..") && !rel.is_empty() && !Path::new(rel).is_absolute())
-        .collect();
-    let mut artifacts = Vec::new();
-    for rel in bundled {
-        let Some(wrel) = WorkspaceRelPath::new(rel) else {
-            continue;
-        };
-        let src = workspace_root.join(rel);
-        if src.is_file() {
-            artifacts.push(ArtifactId::WorkspaceFile(wrel));
-        }
-    }
-    Ok(artifacts)
 }
 
 /// Check whether a destination path would own a broad harness root.

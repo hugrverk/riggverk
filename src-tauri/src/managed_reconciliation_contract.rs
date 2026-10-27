@@ -136,7 +136,7 @@ mod tests {
     }
 
     #[test]
-    fn old_current_workspace_file_without_managed_state_is_conflict() {
+    fn old_workspace_doc_without_managed_state_is_removed() {
         // Serialize with the other env-mutating fixtures; parallel runs stomp
         // HOME/AGENT_WORKSPACE_PATH mid-flight for guarded tests otherwise.
         let _guard = guard::lock();
@@ -182,7 +182,8 @@ mod tests {
             .iter()
             .find(|op| op.artifact == artifact)
             .expect("workspace file operation");
-        assert_eq!(found.kind, OperationKind::Update);
+        // A version an earlier release shipped proves the copy the app's: it is removed.
+        assert_eq!(found.kind, OperationKind::Remove);
         let _ = fs::remove_dir_all(&base);
     }
 
@@ -611,7 +612,7 @@ mod tests {
     }
 
     #[test]
-    fn fresh_profile_installs_workspace_through_unified_setup() {
+    fn fresh_profile_installs_no_workspace_copy() {
         let _guard = guard::lock();
         let _restore = EnvRestore::capture();
         let base = temp_base("fresh");
@@ -626,6 +627,8 @@ mod tests {
                 base.join("backups").to_string_lossy().as_ref(),
             );
         }
+        // Nothing to install and nothing to remove: the workspace row is current, not "not
+        // installed", and planning it is not an error.
         let status = crate::installation_status::status_for_surfaces(
             &[SetupSurfaceId::WorkspaceBundle],
             &workspace,
@@ -634,34 +637,44 @@ mod tests {
         .expect("fresh status");
         assert_eq!(
             status.state,
-            crate::installation_status::InstallationState::NotInstalled
-        );
-        let plan = preview_setup(vec![surface_id_string(SetupSurfaceId::WorkspaceBundle)])
-            .expect("fresh preview");
-        let result = apply_surfaces_from_preview(&plan);
-        assert!(result.success, "fresh apply: {}", result.message);
-        // The workspace copy is the frozen list; skills added since are read from the bundle.
-        let frozen_skill_count = crate::commands::retired_workspace_files::RETIRED_WORKSPACE_FILES
-            .iter()
-            .filter(|path| path.ends_with("/SKILL.md"))
-            .count();
-        assert_eq!(
-            discover_skill_catalog(&workspace)
-                .expect("installed catalog")
-                .len(),
-            frozen_skill_count
-        );
-        assert!(read_managed_state(&workspace).is_some());
-        let current = crate::installation_status::status_for_surfaces(
-            &[SetupSurfaceId::WorkspaceBundle],
-            &workspace,
-            &home,
-        )
-        .expect("current status");
-        assert_eq!(
-            current.state,
             crate::installation_status::InstallationState::Current
         );
+        let folder = status.surfaces[0]
+            .data_folder
+            .as_ref()
+            .expect("data folder status");
+        assert_eq!(folder.personal_docs, 0);
+        assert!(!folder.ownership_records);
+        assert_eq!(folder.left_in_place, 0);
+        let plan = preview_setup(vec![surface_id_string(SetupSurfaceId::WorkspaceBundle)])
+            .expect("fresh preview");
+        assert!(!plan.has_pending_changes, "{:?}", plan.operations);
+        assert!(!plan.is_blocked, "{:?}", plan.operations);
+        assert!(plan.operations.iter().all(|op| !op.kind.needs_apply()));
+        assert!(!workspace.exists(), "a preview writes nothing");
+
+        // Installing everything copies nothing into the data folder: only the records are there.
+        let result = apply_surfaces_from_preview(&preview_setup(vec![]).expect("preview all"));
+        assert!(result.success, "install: {}", result.message);
+        let names: Vec<String> = fs::read_dir(&workspace)
+            .expect("data folder")
+            .map(|entry| {
+                entry
+                    .expect("entry")
+                    .file_name()
+                    .to_string_lossy()
+                    .into_owned()
+            })
+            .collect();
+        assert_eq!(names, [".agent-workspace"]);
+        let state = read_managed_state(&workspace).expect("records");
+        assert!(state
+            .artifacts
+            .iter()
+            .all(|record| !record.identity.starts_with("workspace:file:")));
+        let again = preview_setup(vec![surface_id_string(SetupSurfaceId::WorkspaceBundle)])
+            .expect("preview after install");
+        assert!(!again.has_pending_changes, "{:?}", again.operations);
         let _ = fs::remove_dir_all(base);
     }
 
@@ -788,12 +801,14 @@ mod tests {
         let result = apply_surfaces_from_preview(&plan);
         assert!(result.success, "apply failed: {}", result.message);
 
-        let catalog = discover_skill_catalog(&fixture.ws).expect("catalog");
-        assert_eq!(
-            catalog.len(),
-            source_skill_count() + 1,
-            "modified stale runtime skill is preserved"
-        );
+        // The old copies of the bundle are gone, the marker stays.
+        for rel in crate::commands::retired_workspace_files::RETIRED_WORKSPACE_FILES {
+            assert!(
+                !fixture.ws.join(rel).exists(),
+                "old copy left behind: {rel}"
+            );
+        }
+        assert!(fixture.ws.join(".agent-workspace/workspace.json").is_file());
         assert!(
             fixture
                 .ws
@@ -947,7 +962,7 @@ mod tests {
             "CRLF pre-adapter harness skill should be adopted and upgraded"
         );
         let source = exact_claude
-            .resolve_source(&fixture.ws)
+            .resolve_source(&current_bundled_workspace_src())
             .expect("skill source");
         let dest = exact_claude
             .resolve_dest(&fixture.home, &fixture.ws)
@@ -1022,6 +1037,47 @@ mod tests {
             "rollback must restore previous managed-state absence"
         );
 
+        fixture.cleanup();
+    }
+
+    /// A cleanup-only update of an install from before the ownership records writes the records
+    /// and empties the copy's `skills/` folder. The harness preview after it must still adopt the
+    /// historical copies and remove the retired ones: adoption is keyed on the state folder, not
+    /// on the copy.
+    #[test]
+    fn workspace_cleanup_first_then_harness_preview_still_cleans_up_old_skills() {
+        let _guard = guard::lock();
+        let _restore = EnvRestore::capture();
+        let fixture = OldInstallFixture::build();
+
+        let cleanup = preview_setup(vec![surface_id_string(SetupSurfaceId::WorkspaceBundle)])
+            .expect("preview workspace cleanup");
+        let applied = apply_surfaces_from_preview(&cleanup);
+        assert!(applied.success, "cleanup: {}", applied.message);
+        assert!(managed_state_path(&fixture.ws).is_file());
+        // An rc.1 copy holds only listed files, so nothing of `skills/` is left after its cleanup;
+        // this fixture copies today's bundle, which has skills the list does not name.
+        fs::remove_dir_all(fixture.ws.join("skills")).expect("drop the rest of skills/");
+
+        let planned = crate::setup_transaction::plan_artifacts_for_surfaces(
+            &[SetupSurfaceId::Skills, SetupSurfaceId::OpenCodeAgents],
+            &fixture.ws,
+            &fixture.home,
+        )
+        .expect("harness plan after the cleanup");
+        let retired = SkillName::new(REMOVED_SKILL_NAMES[3]).expect("retired skill");
+        for root in [SkillRoot::Claude, SkillRoot::Agents, SkillRoot::Cursor] {
+            assert_planned_kind(
+                &planned,
+                ArtifactId::skill_md(root, retired.clone()),
+                OperationKind::Remove,
+            );
+        }
+        assert_planned_kind(
+            &planned,
+            ArtifactId::OpenCodeAgent(AgentName::new(LEGACY_SCOUT_AGENT).expect("scout")),
+            OperationKind::Remove,
+        );
         fixture.cleanup();
     }
 
@@ -1194,9 +1250,9 @@ mod tests {
             assert_planned_kind(
                 &planned,
                 ArtifactId::WorkspaceFile(
-                    WorkspaceRelPath::new(rel).expect("historical update path"),
+                    WorkspaceRelPath::new(rel).expect("historical copy path"),
                 ),
-                OperationKind::Update,
+                OperationKind::Remove,
             );
         }
         let plan = preview_reconciliation();
@@ -1347,7 +1403,10 @@ mod tests {
             !install_result.transaction_id.is_empty(),
             "install transaction id required"
         );
-        assert!(ws.join("skills/diagnose/SKILL.md").is_file());
+        assert!(
+            !ws.join("skills").exists(),
+            "no copy of the bundle in the data folder"
+        );
         assert!(resolved_home.join(".codex/AGENTS.md").is_file());
         assert!(resolved_home
             .join(".agents/skills/diagnose/SKILL.md")

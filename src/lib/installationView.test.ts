@@ -60,6 +60,18 @@ describe("targetMeta", () => {
     expect(targetMeta(entry("claude", status("update_available", [], { update_count: 2, kept_count: 1 })), options).text).toBe("2 to update");
   });
 
+  it("tells the old copies of the bundle the workspace row removes, not an update", () => {
+    const workspace = { workspaceValid: true, id: "workspace" as const };
+    expect(targetMeta(entry("workspace", status("update_available", [], { remove_count: 133 })), workspace)).toEqual({
+      text: "133 old copies to remove",
+      tone: "warn",
+    });
+    expect(targetMeta(entry("workspace", status("update_available", [], { remove_count: 1 })), workspace).text).toBe("1 old copy to remove");
+    expect(targetMeta(entry("workspace", status("current")), workspace)).toEqual({ text: "current", tone: "ok" });
+    // A harness that also has old files to remove keeps its own words.
+    expect(targetMeta(entry("claude", status("update_available", [], { remove_count: 2 })), options).text).toBe("2 to update");
+  });
+
   it("says why there is no state yet", () => {
     expect(targetMeta(undefined, options).text).toBe("…");
     expect(targetMeta(entry("claude", null, { loading: true }), options).text).toBe("…");
@@ -117,6 +129,12 @@ describe("surfaceRowsFor", () => {
     expect(surfaceRowsFor("workspace", undefined, null)).toEqual([
       expect.objectContaining({ surface: "workspace_bundle", state: "unknown" }),
     ]);
+  });
+
+  it("names the workspace surface after the old copies it removes; the matrix column stays bundle", () => {
+    const workspace = entry("workspace", status("current", [surface("workspace_bundle", "current")]));
+    expect(surfaceRowsFor("workspace", workspace, null)[0]).toMatchObject({ name: "old copies", state: "current" });
+    expect(surfaceShortName("workspace_bundle")).toBe("bundle");
   });
 });
 

@@ -2,22 +2,24 @@
 
 ## Workspace folder unusable
 
-The workspace folder (default `~/.config/agent-workspace`) holds the app's state in `.agent-workspace/` and your personal docs in `docs/context/`. A fresh profile has none yet, and that is fine: the first install or personal doc creates it, and harnesses can be installed before the workspace.
+The workspace folder (default `~/.config/agent-workspace`) holds the app's state in `.agent-workspace/` and your personal docs in `docs/context/`. A fresh profile has none yet, and that is fine: the first write that needs it (a state file, a personal doc) creates it, and harnesses install without it.
 
 1. Open Workspace (`1`). The row says `folder unusable`, and the `why` row says what is wrong.
 2. `the folder is a symlink` or `not a folder`: the app does not write through a link or over a file. Move the link or file away; the app creates a real folder on the next install.
 3. `folder not found` with `AGENT_WORKSPACE_PATH` set: the variable names a folder that does not exist. Create it or unset the variable. It wins over Settings.
-4. A custom folder from Settings is used only while it holds `.agent-workspace/workspace.json` or `.agent-workspace/managed-state.json`. Otherwise the app falls back to the default folder. Deleting bundled files from the folder does not change this.
+4. A custom folder from Settings is used only while it holds `.agent-workspace/workspace.json` or `.agent-workspace/managed-state.json`. Otherwise the app falls back to the default folder. Old copies in the folder, or removing them, do not change this.
 
-## Missing bundled files in the workspace
+## Bundled files in the workspace folder
 
-Bundled files missing from the workspace folder do not make it unusable. Run `u` on the Workspace page to install them again; files you changed are kept and listed as conflicts.
+The folder holds no copy of the bundle, so bundled files missing from it are normal and never a problem. The app reads the bundle inside the app.
+
+Copies that earlier releases left there are ignored. The `workspace` row says `N old copies to remove` while they remain; `u` on it reviews their removal (one transaction, backed up, `z` restores them). A file you edited, or one the app cannot prove is its own, is listed as `edited or not the app's: left in place` and is never touched: keep it or delete it yourself. The status pane counts them as `left in place N`. To keep a copy, cancel the review (`n` or Escape), or press `z` afterwards. This is not a conflict and nothing needs resolving.
 
 ## Conflicts
 
 A conflict is a file the app will not overwrite because it cannot prove it owns an unmodified copy. The plan shows `preserved, skipped`; `y` still applies the safe rows. Press `c` in the review to jump between conflicts, `d` for details.
 
-- **Workspace or harness file you edited** (a bundled doc, template, skill, agent, edited outside the app or with the Library of an earlier version): the app treats any edit as yours. To take the bundled version, move or delete your copy and install again. To keep yours, do nothing; it stays frozen against updates.
+- **Harness file you edited** (a skill or agent file, edited outside the app): the app treats any edit as yours. To take the bundled version, move or delete your copy and install again. To keep yours, do nothing; it stays frozen against updates. An edited old copy in the workspace folder is not a conflict (see above).
 - **Deleted `.agent-workspace/managed-state.json`**: this is the ownership record. Without it the app cannot prove it owns what it installed, so any file that is not an exact copy of a bundled version becomes a conflict. Restore it from a backup (`setup/<transaction id>/managed-state.previous.json`) or resolve each file as above. It describes this machine's installs; do not copy it to another machine.
 - **Rules file (`CLAUDE.md`, `AGENTS.md`)**: see the next section.
 - **Skill you installed by hand with the same name**: diverged copies are preserved. Rename yours or delete it to take the bundled one.
@@ -68,7 +70,7 @@ Config merges (Codex, OpenCode, Cursor) and generators call `python3`. Install P
 
 ## A harness page says the workspace folder is unusable
 
-Harness installs need a usable workspace folder, not the workspace install. The Workspace page says what is wrong with the folder (see "Workspace folder unusable" above).
+Harness installs need a usable workspace folder (absent, or a real folder). The Workspace page says what is wrong with the folder (see "Workspace folder unusable" above).
 
 ## Settings and targets
 

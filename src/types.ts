@@ -84,6 +84,18 @@ export interface SurfaceInstallationStatus {
   rules?: RulesStatus;
   /** Conflicting and kept files; present for the skills and agent surfaces while there are some. */
   files?: FilesStatus;
+  /** The data folder; present for the workspace surface only. */
+  data_folder?: DataFolderStatus;
+}
+
+/** What the workspace row tells about the data folder. Counts and a flag, never file contents. */
+export interface DataFolderStatus {
+  /** Personal docs in `docs/context/`; the app never removes them. */
+  personal_docs: number;
+  /** Whether the ownership records (`.agent-workspace/managed-state.json`) exist yet. */
+  ownership_records: boolean;
+  /** Old copies of the bundle an update leaves in place: edited, or not provably the app's. */
+  left_in_place: number;
 }
 
 /** The surfaces that hold skill or agent files the user can keep. */
