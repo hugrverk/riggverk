@@ -249,6 +249,17 @@ class CheckSkillRoutingTests(unittest.TestCase):
         agent.write_text(agent.read_text(encoding="utf-8") + f"\n# see {removed}\n", encoding="utf-8")
         self.assert_fails(f"removed skill {removed}")
 
+    def test_removed_skill_in_git_ignored_file_passes(self) -> None:
+        removed = "grill" + "-me"
+        subprocess.run(["git", "init", "-q"], cwd=self.tree, check=True)
+        (self.tree / ".git/info/exclude").write_text("notes/\n", encoding="utf-8")
+        (self.tree / "notes").mkdir()
+        (self.tree / "notes/old.md").write_text(f"see {removed}\n", encoding="utf-8")
+        result = run(self.tree, "check-skill-routing.py")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        (self.tree / "draft.md").write_text(f"see {removed}\n", encoding="utf-8")
+        self.assert_fails(f"draft.md: references removed skill {removed}")
+
 
 if __name__ == "__main__":
     unittest.main()

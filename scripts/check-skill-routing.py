@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -511,8 +512,22 @@ def validate_routing_sources(discovered: set[str]) -> None:
 SCANNED_SUFFIXES = {".md", ".mdc", ".ts", ".tsx", ".json", ".py", ".sh", ".rs", ".toml", ".yaml", ".yml"}
 
 
+def repo_files() -> list[Path]:
+    """Files git would track: tracked plus untracked ones it does not ignore. Outside a git
+    checkout (the tests' throwaway trees) every file is scanned."""
+    listed = subprocess.run(
+        ["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        check=False,
+    )
+    if listed.returncode != 0:
+        return list(REPO_ROOT.rglob("*"))
+    return [REPO_ROOT / name for name in listed.stdout.decode("utf-8").split("\0") if name]
+
+
 def scan_repo_for_removed_skills() -> None:
-    for path in REPO_ROOT.rglob("*"):
+    for path in repo_files():
         if not path.is_file():
             continue
         if path in MIGRATION_FIXTURE_ALLOWLIST:
