@@ -266,10 +266,17 @@ def rules_files() -> list[Path]:
     return files
 
 
+# Skills that start only when the user asks for them in plain words or by slash command.
+# The model may invoke them, so disable-model-invocation does not mark them; the rules
+# must still never route to them, since each run spends several agents.
+ON_REQUEST_PREFIX = "adversarial-"
+
+
 def validate_user_invoked_routing(discovered: dict[str, Path]) -> None:
-    """Rules must not route to skills the model is not allowed to invoke."""
+    """Rules must not route to skills the model is not allowed to invoke, or to on-request skills."""
     user_invoked = user_invoked_skills(discovered)
-    if not user_invoked:
+    on_request = {name for name in discovered if name.startswith(ON_REQUEST_PREFIX)}
+    if not user_invoked and not on_request:
         return
     for source in rules_files():
         if not source.is_file():
@@ -280,6 +287,8 @@ def validate_user_invoked_routing(discovered: dict[str, Path]) -> None:
             for token in BACKTICK_NAME_RE.findall(line):
                 if token in user_invoked:
                     fail(f"{rel(source)}:{number}: routing bullet names user-invoked skill `{token}` (disable-model-invocation)")
+                elif token in on_request:
+                    fail(f"{rel(source)}:{number}: routing bullet names on-request skill `{token}` ({ON_REQUEST_PREFIX}*)")
 
 
 def parse_claude_header(path: Path) -> dict[str, str]:

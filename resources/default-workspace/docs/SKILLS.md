@@ -103,6 +103,8 @@ Each `SKILL.md` frontmatter has `name` and `description` plus these fields:
 - `related` — comma-separated related skill names; the routing check verifies each name exists.
 - `disable-model-invocation` — optional `true` for user-invoked skills (currently `retro`). Claude Code and Cursor then hide the skill from the model; Codex and OpenCode ignore the flag, so such a skill must not be referenced in routing bullets and its description says it is user-invoked.
 
+The `adversarial-*` skills keep model invocation so plain words can start them, but each run spends several agents, so the routing check also keeps them out of routing bullets.
+
 Claude-only frontmatter keys sit directly in the skill's frontmatter: `context`, `agent`, `background`, and `allowed-tools` (for example `release-check` runs in a forked `verifier` context on Claude Code, and `handoff` and `release-check` pre-approve the read-only commands behind their `!` state injection). Codex and OpenCode ignore them. A skill that sets one also carries a `### Claude Code` notes section (see below).
 
 `targets` is validated metadata and selects nothing: skills folders are shared between harnesses, so every bundled skill is installed into every folder that is wanted, flat as `<skills-folder>/<name>/`, with its `SKILL.md` and every supporting file in it. Other metadata fields are operator guidance only.
