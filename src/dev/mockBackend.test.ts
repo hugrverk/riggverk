@@ -8,6 +8,8 @@ import type {
   FileDiffView,
   InstallationStatus,
   LightRuntimeHealth,
+  OpenCodeModelSelection,
+  OpenCodeRuntimeHealth,
   RulesConversionPreview,
   RulesDiffView,
   RulesFileContent,
@@ -330,5 +332,51 @@ describe("mock backend: the workspace folder", () => {
   it("still resets to the default folder", async () => {
     const saved = await invoke<{ workspace_path: string | null }>("reset_active_workspace_path");
     expect(saved.workspace_path).toBeNull();
+  });
+});
+
+describe("mock backend: OpenCode critic model", () => {
+  beforeAll(async () => {
+    vi.resetModules();
+    window.history.replaceState(null, "", "/?mock=empty");
+    await import("./mockBackend");
+  });
+
+  it("keeps critic and subagent pins separate through save, install, clear and reset", async () => {
+    const defaults = await invoke<OpenCodeModelSelection>("read_opencode_model_selection");
+    const health = () => invoke<OpenCodeRuntimeHealth>("get_opencode_runtime_health");
+    const save = (criticModel: string | null, subagentModel: string | null = "cheap/fast") => invoke("update_opencode_model_selection", {
+      model: defaults.model, smallModel: defaults.small_model, subagentModel, criticModel,
+    });
+    const install = () => invoke<SetupResult>("apply_setup", { surfaces: ["open_code_config"] });
+    await save("  strong/critic  ");
+    expect(await invoke<OpenCodeModelSelection>("read_opencode_model_selection")).toMatchObject({
+      critic_model: "strong/critic", critic_source: "override", subagent_model: "cheap/fast", model_source: "bundled default",
+    });
+    expect((await health()).config_diverged_keys).toHaveLength(5);
+    expect((await install()).success).toBe(true);
+    expect(await health()).toMatchObject({ config_status: "synced", subagent_model: "cheap/fast", critic_model: "strong/critic" });
+
+    await save("other/critic");
+    expect((await health()).config_diverged_keys).toEqual(["agent.inspector.model"]);
+    await save(null);
+    expect((await health()).config_diverged_keys).toEqual(["agent.inspector.model"]);
+    expect((await install()).success).toBe(true);
+    expect(await health()).toMatchObject({ config_status: "synced", subagent_model: "cheap/fast", critic_model: "cheap/fast" });
+
+    await save("strong/critic", null);
+    expect((await install()).success).toBe(true);
+    expect(await health()).toMatchObject({ config_status: "synced", subagent_model: null, critic_model: "strong/critic" });
+    const before = await invoke<OpenCodeModelSelection>("read_opencode_model_selection");
+    for (const bad of ["nope", "bad//model", "bad/mod el", "bad/model/"]) {
+      await expect(save(bad)).rejects.toThrow("provider/model");
+      expect(await invoke("read_opencode_model_selection")).toEqual(before);
+    }
+
+    await invoke("reset_opencode_model_selection");
+    expect((await health()).config_diverged_keys).toEqual(["agent.inspector.model"]);
+    expect((await install()).success).toBe(true);
+    expect(await health()).toMatchObject({ config_status: "synced", subagent_model: null, critic_model: null });
+    expect(await invoke("read_opencode_model_selection")).toEqual(defaults);
   });
 });

@@ -379,15 +379,17 @@ describe("OpenCodeView model override", () => {
     model: "anthropic/claude-sonnet-4-5",
     small_model: "anthropic/claude-haiku-4-5",
     subagent_model: "",
+    critic_model: "",
     model_source: "bundled default",
     small_model_source: "bundled default",
     subagent_source: "bundled default",
+    critic_source: "bundled default",
   };
   const MODELS = ["anthropic/claude-sonnet-4-5", "anthropic/claude-haiku-4-5", "openai/gpt-5"];
 
   function backend({ saveResult = "Saved model selection", initial = BUNDLED, models = MODELS, warning = null }: { saveResult?: string; initial?: OpenCodeModelSelection; models?: string[]; warning?: string | null } = {}) {
     let selection = initial;
-    invokeMock.mockImplementation(async (command: string, args?: { model?: string; smallModel?: string; subagentModel?: string | null }) => {
+    invokeMock.mockImplementation(async (command: string, args?: { model?: string; smallModel?: string; subagentModel?: string | null; criticModel?: string | null }) => {
       switch (command) {
         case "read_opencode_model_selection":
           return selection;
@@ -395,14 +397,17 @@ describe("OpenCodeView model override", () => {
           return { models, warning };
         case "update_opencode_model_selection": {
           const subagent = args!.subagentModel ?? "";
+          const critic = args!.criticModel ?? "";
           // Like the backend: only a value that differs from the bundled default is an override.
           selection = {
             model: args!.model!,
             small_model: args!.smallModel!,
             subagent_model: subagent,
+            critic_model: critic,
             model_source: args!.model === BUNDLED.model ? "bundled default" : "override",
             small_model_source: args!.smallModel === BUNDLED.small_model ? "bundled default" : "override",
             subagent_source: subagent ? "override" : "bundled default",
+            critic_source: critic ? "override" : "bundled default",
           };
           return saveResult;
         }
@@ -423,6 +428,7 @@ describe("OpenCodeView model override", () => {
 
   const model = () => screen.getByLabelText("model") as HTMLSelectElement;
   const subagent = () => screen.getByLabelText("subagent model") as HTMLSelectElement;
+  const critic = () => screen.getByLabelText("critic model") as HTMLSelectElement;
   const paneBody = () => screen.getByRole("region", { name: "OpenCode detail" }).querySelector(".pane-body") as HTMLElement;
   const loaded = () => waitFor(() => expect(model().tagName === "SELECT" && model().value).toBe("anthropic/claude-sonnet-4-5"));
   const sourceLines = () => [...screen.getByRole("region", { name: "Model selection" }).querySelectorAll("dd")].map(dd => dd.textContent!).filter(text => text.startsWith("source:"));
@@ -450,6 +456,7 @@ describe("OpenCodeView model override", () => {
       model: "openai/gpt-5",
       smallModel: "anthropic/claude-haiku-4-5",
       subagentModel: null,
+      criticModel: null,
     }));
     await waitFor(() => expect(onModelUpdated).toHaveBeenCalledTimes(1));
     expect(await within(detailPane).findByText("Saved model selection")).toBeTruthy();
@@ -529,11 +536,12 @@ describe("OpenCodeView model override", () => {
         model: "anthropic/claude-sonnet-4-5",
         smallModel: "anthropic/claude-haiku-4-5",
         subagentModel: "openai/gpt-5",
+        criticModel: null,
       }));
       await waitFor(() => expect(onModelUpdated).toHaveBeenCalledTimes(1));
       await waitFor(() => expect(subagent().value).toBe("openai/gpt-5"));
       // Only what the user changed is an override: the main models keep following the bundled default.
-      expect(sourceLines().map(line => line.split(" · ")[0])).toEqual(["source: bundled default", "source: bundled default", "source: override"]);
+      expect(sourceLines().map(line => line.split(" · ")[0])).toEqual(["source: bundled default", "source: bundled default", "source: override", "source: bundled default"]);
     });
 
     it("can be cleared by choosing inherit and saving", async () => {
@@ -565,13 +573,95 @@ describe("OpenCodeView model override", () => {
     });
   });
 
+  describe("critic model", () => {
+    it("saves a CLI model for inspector while retaining the other model selections", async () => {
+      backend({ initial: { ...BUNDLED, subagent_model: "anthropic/claude-haiku-4-5", subagent_source: "override" } });
+      const { onModelUpdated } = renderOpenCode();
+      await loaded();
+      expect(critic().value).toBe("");
+      expect(critic().options[0].textContent).toBe("inherit subagent or main model");
+      expect(screen.getByText("used by the adversarial skills' critic (inspector)")).toBeTruthy();
+      fireEvent.change(critic(), { target: { value: "openai/gpt-5" } });
+      const body = paneBody();
+      act(() => body.focus());
+      fireEvent.keyDown(body, { key: "s" });
+      await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("update_opencode_model_selection", {
+        model: BUNDLED.model, smallModel: BUNDLED.small_model,
+        subagentModel: "anthropic/claude-haiku-4-5", criticModel: "openai/gpt-5",
+      }));
+      await waitFor(() => expect(onModelUpdated).toHaveBeenCalledTimes(1));
+      expect(sourceLines()[3]).toContain("source: override");
+    });
+
+    it("clears only the critic by saving inherit and tracks inspector through the fallback", async () => {
+      backend({ initial: { ...BUNDLED, subagent_model: "anthropic/claude-haiku-4-5", subagent_source: "override", critic_model: "openai/gpt-5", critic_source: "override" } });
+      renderOpenCode(vi.fn(), diverged("agent.inspector.model"));
+      await waitFor(() => expect(critic().value).toBe("openai/gpt-5"));
+      fireEvent.change(critic(), { target: { value: "" } });
+      // Unsaved drafts do not change which row owns the installed inspector drift.
+      expect(sourceLines()[2]).toContain("state: applied");
+      const body = paneBody();
+      act(() => body.focus());
+      fireEvent.keyDown(body, { key: "s" });
+      await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("update_opencode_model_selection", expect.objectContaining({
+        subagentModel: "anthropic/claude-haiku-4-5", criticModel: null,
+      })));
+      await waitFor(() => expect(sourceLines()[3]).toBe("source: bundled default · state: pending apply (u to update)"));
+      expect(sourceLines()[2]).toBe("source: override · state: pending apply (u to update)");
+    });
+
+    it("offers x when the critic is the only override and resets it", async () => {
+      backend({ initial: { ...BUNDLED, critic_model: "openai/gpt-5", critic_source: "override" } });
+      const { onModelUpdated } = renderOpenCode();
+      await waitFor(() => expect(critic().value).toBe("openai/gpt-5"));
+      const body = paneBody();
+      act(() => body.focus());
+      expect(hint(/reset model/).getAttribute("aria-disabled")).toBeNull();
+      fireEvent.keyDown(body, { key: "x" });
+      await waitFor(() => expect(critic().value).toBe(""));
+      expect(model().value).toBe(BUNDLED.model);
+      expect(subagent().value).toBe("");
+      await waitFor(() => expect(onModelUpdated).toHaveBeenCalledTimes(1));
+      expect(sourceLines()[3]).toContain("source: bundled default");
+    });
+
+    it("validates a custom critic model before saving", async () => {
+      backend();
+      renderOpenCode();
+      await loaded();
+      fireEvent.change(critic(), { target: { value: "__custom__" } });
+      const input = screen.getByLabelText("critic model") as HTMLInputElement;
+      fireEvent.change(input, { target: { value: "no-provider" } });
+      expect(input.getAttribute("aria-invalid")).toBe("true");
+      expect(screen.getByRole("alert").textContent).toBe("Must be provider/model format");
+      const body = paneBody();
+      act(() => body.focus());
+      await waitFor(() => expect(hint(/save model/).getAttribute("title")).toBe("Must be provider/model format"));
+      fireEvent.keyDown(body, { key: "s" });
+      expect(invokeMock.mock.calls.some(([command]) => command === "update_opencode_model_selection")).toBe(false);
+    });
+
+    it.each([
+      { keys: [], subagentState: "applied", criticState: "applied" },
+      { keys: ["agent.inspector.model"], subagentState: "applied", criticState: "pending apply (u to update)" },
+      { keys: ["agent.scribe.model"], subagentState: "pending apply (u to update)", criticState: "applied" },
+    ])("reports separate applied states for $keys", async ({ keys, subagentState, criticState }) => {
+      backend({ initial: { ...BUNDLED, subagent_model: "anthropic/claude-haiku-4-5", subagent_source: "override", critic_model: "openai/gpt-5", critic_source: "override" } });
+      renderOpenCode(vi.fn(), keys.length ? diverged(...keys) : OPENCODE_HEALTH);
+      await waitFor(() => expect(critic().value).toBe("openai/gpt-5"));
+      expect(sourceLines()[2]).toBe(`source: override · state: ${subagentState}`);
+      expect(sourceLines()[3]).toBe(`source: override · state: ${criticState}`);
+    });
+  });
+
   describe("source and state", () => {
     it("shows the bundled default as applied when the installed config matches", async () => {
       backend();
       renderOpenCode();
       await loaded();
-      await waitFor(() => expect(sourceLines()).toHaveLength(3));
+      await waitFor(() => expect(sourceLines()).toHaveLength(4));
       expect(sourceLines()).toEqual([
+        "source: bundled default · state: applied",
         "source: bundled default · state: applied",
         "source: bundled default · state: applied",
         "source: bundled default · state: applied",
@@ -582,7 +672,7 @@ describe("OpenCodeView model override", () => {
       backend({ initial: { ...BUNDLED, model: "openai/gpt-5", model_source: "override" } });
       renderOpenCode(vi.fn(), diverged("model"));
       await waitFor(() => expect(model().value).toBe("openai/gpt-5"));
-      await waitFor(() => expect(sourceLines()).toHaveLength(3));
+      await waitFor(() => expect(sourceLines()).toHaveLength(4));
       const [main, small, sub] = sourceLines();
       expect(main).toBe("source: override · state: pending apply (u to update)");
       // Only the managed keys that differ are pending: the small model and the subagent model are installed.
@@ -595,30 +685,31 @@ describe("OpenCodeView model override", () => {
       backend({ initial: { ...BUNDLED, subagent_model: "openai/gpt-5", subagent_source: "override" } });
       renderOpenCode(vi.fn(), diverged("agent.inspector.model", "agent.scribe.model"));
       await waitFor(() => expect(subagent().value).toBe("openai/gpt-5"));
-      await waitFor(() => expect(sourceLines()).toHaveLength(3));
+      await waitFor(() => expect(sourceLines()).toHaveLength(4));
       expect(sourceLines()).toEqual([
         "source: bundled default · state: applied",
         "source: bundled default · state: applied",
         "source: override · state: pending apply (u to update)",
+        "source: bundled default · state: pending apply (u to update)",
       ]);
     });
 
     it("is pending everywhere while nothing is installed, and says no state while health is unknown", async () => {
       backend();
       renderOpenCode(vi.fn(), { ...OPENCODE_HEALTH, config_status: "missing" } as OpenCodeRuntimeHealth);
-      await waitFor(() => expect(sourceLines()).toHaveLength(3));
+      await waitFor(() => expect(sourceLines()).toHaveLength(4));
       expect(sourceLines().every(line => line.endsWith("state: pending apply (u to update)"))).toBe(true);
       cleanup();
 
       backend();
       renderOpenCode(vi.fn(), null as unknown as OpenCodeRuntimeHealth);
-      await waitFor(() => expect(sourceLines()).toHaveLength(3));
-      expect(sourceLines()).toEqual(["source: bundled default", "source: bundled default", "source: bundled default"]);
+      await waitFor(() => expect(sourceLines()).toHaveLength(4));
+      expect(sourceLines()).toEqual(["source: bundled default", "source: bundled default", "source: bundled default", "source: bundled default"]);
     });
   });
 
   describe("reset", () => {
-    const OVERRIDE: OpenCodeModelSelection = { model: "openai/gpt-5", small_model: "anthropic/claude-haiku-4-5", subagent_model: "anthropic/claude-haiku-4-5", model_source: "override", small_model_source: "bundled default", subagent_source: "override" };
+    const OVERRIDE: OpenCodeModelSelection = { ...BUNDLED, model: "openai/gpt-5", subagent_model: "anthropic/claude-haiku-4-5", critic_model: "openai/gpt-5", model_source: "override", subagent_source: "override", critic_source: "override" };
 
     it("deletes the override with x and returns every row to the bundled default", async () => {
       backend({ initial: OVERRIDE });
@@ -634,9 +725,11 @@ describe("OpenCodeView model override", () => {
       await waitFor(() => expect(onModelUpdated).toHaveBeenCalledTimes(1));
       await waitFor(() => expect(model().value).toBe("anthropic/claude-sonnet-4-5"));
       expect(subagent().value).toBe("");
+      expect(critic().value).toBe("");
       expect(await within(screen.getByRole("region", { name: "OpenCode detail" })).findByText(/Model override removed/)).toBeTruthy();
       await waitFor(() => expect(sourceLines()[0]).toContain("source: bundled default"));
       expect(sourceLines()[2]).toContain("source: bundled default");
+      expect(sourceLines()[3]).toContain("source: bundled default");
     });
 
     it("drops unsaved edits along with the override", async () => {

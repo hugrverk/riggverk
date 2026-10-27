@@ -900,6 +900,10 @@ function applyPlan(surfaces: SetupSurfaceId[]): SetupResult {
     if (state === "not_installed" || state === "update_available") {
       surfaceStates.set(surface, "current");
       applied.push(SURFACE_PATHS[surface]);
+      if (surface === "open_code_config") {
+        installedModelSelection = { ...modelSelection };
+        opencodeTemplateUpdate = false;
+      }
     }
   }
   transactionSeq += 1;
@@ -1050,9 +1054,12 @@ function codexHealth(): CodexRuntimeHealth {
 }
 
 function opencodeHealth(): OpenCodeRuntimeHealth {
-  const fresh = scenario === "fresh";
-  const update = surfaceStates.get("open_code_config") === "update_available";
+  const fresh = surfaceStates.get("open_code_config") === "not_installed";
+  const divergedKeys = [...new Set([...(opencodeTemplateUpdate ? ["model", "lsp"] : []), ...opencodeModelDivergedKeys()])];
+  const update = divergedKeys.length > 0;
   const status = fresh ? "missing" : update ? "stale" : "synced";
+  const installedSubagent = installedModelSelection.subagent_model || null;
+  const installedCritic = installedModelSelection.critic_model || installedSubagent;
   return {
     status,
     template_config_path: `${WORKSPACE}/templates/opencode.json`,
@@ -1062,9 +1069,10 @@ function opencodeHealth(): OpenCodeRuntimeHealth {
       { id: "agents", label: "agents", status: fresh ? "missing" : "ok", detail: fresh ? "0/6" : "6/6" },
     ],
     default_agent: fresh ? null : "claude",
-    model: fresh ? null : "anthropic/claude-sonnet-4-5",
-    small_model: fresh ? null : "anthropic/claude-haiku-4-5",
-    subagent_model: null,
+    model: fresh ? null : installedModelSelection.model,
+    small_model: fresh ? null : installedModelSelection.small_model,
+    subagent_model: fresh || (!modelSelection.critic_model && installedCritic !== installedSubagent) ? null : installedSubagent,
+    critic_model: fresh ? null : installedCritic,
     autoupdate: "true",
     snapshot: true,
     bundled_agent_count: 6,
@@ -1074,7 +1082,7 @@ function opencodeHealth(): OpenCodeRuntimeHealth {
     warnings: [],
     cli: { status: "supported", version: "1.19.3", major: 1, detail: "OpenCode 1.19.3" },
     config_status: fresh ? "missing" : update ? "diverged" : "synced",
-    config_diverged_keys: update ? ["model", "lsp"] : [],
+    config_diverged_keys: divergedKeys,
     rules_status: fresh ? "missing" : "synced",
     playwright_mcp_version: fresh ? null : "0.0.83",
     config_precedence: { installed_not_strict: [], sibling_files: [], env_vars: [], system_managed_paths: [] },
@@ -1368,11 +1376,34 @@ const BUNDLED_MODEL_SELECTION: OpenCodeModelSelection = {
   model: "anthropic/claude-sonnet-4-5",
   small_model: "anthropic/claude-haiku-4-5",
   subagent_model: "",
+  critic_model: "",
   model_source: "bundled default",
   small_model_source: "bundled default",
   subagent_source: "bundled default",
+  critic_source: "bundled default",
 };
 let modelSelection: OpenCodeModelSelection = BUNDLED_MODEL_SELECTION;
+let installedModelSelection: OpenCodeModelSelection = BUNDLED_MODEL_SELECTION;
+let opencodeTemplateUpdate = surfaceStates.get("open_code_config") === "update_available";
+
+function opencodeModelDivergedKeys(): string[] {
+  const keys = (["model", "small_model"] as const).filter(key => modelSelection[key] !== installedModelSelection[key]) as string[];
+  for (const role of ["repo-scout", "inspector", "sentinel", "verifier", "scribe"]) {
+    const expected = (role === "inspector" && modelSelection.critic_model) || modelSelection.subagent_model;
+    const installed = (role === "inspector" && installedModelSelection.critic_model) || installedModelSelection.subagent_model;
+    if (expected !== installed) keys.push(`agent.${role}.model`);
+  }
+  return keys;
+}
+
+function validatedModelId(value: string, optional = false): string {
+  const id = value.trim();
+  if (optional && !id) return "";
+  if (!id.includes("/") || /\s|\p{Cc}/u.test(id) || id.split("/").some(segment => !segment)) {
+    throw new Error("invalid model ID: must be in provider/model format");
+  }
+  return id;
+}
 
 /* ---- actions ---- */
 
@@ -1767,22 +1798,27 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
     case "list_available_opencode_models":
       return { models: ["anthropic/claude-sonnet-4-5", "anthropic/claude-haiku-4-5", "anthropic/claude-opus-4-1", "openai/gpt-5"], warning: scenario === "error" ? "opencode models: provider list unavailable" : null } satisfies ListAvailableModelsResult;
     case "update_opencode_model_selection": {
-      const subagent = arg<string | null>(args, "subagentModel") ?? "";
+      const subagent = validatedModelId(arg<string | null>(args, "subagentModel") ?? "", true);
+      const critic = validatedModelId(arg<string | null>(args, "criticModel") ?? "", true);
       // Like the backend: a value equal to the bundled default is not an override.
-      const model = arg<string>(args, "model");
-      const small = arg<string>(args, "smallModel");
+      const model = validatedModelId(arg<string>(args, "model"));
+      const small = validatedModelId(arg<string>(args, "smallModel"));
       modelSelection = {
         model,
         small_model: small,
         subagent_model: subagent,
+        critic_model: critic,
         model_source: model === BUNDLED_MODEL_SELECTION.model ? "bundled default" : "override",
         small_model_source: small === BUNDLED_MODEL_SELECTION.small_model ? "bundled default" : "override",
         subagent_source: subagent ? "override" : "bundled default",
+        critic_source: critic ? "override" : "bundled default",
       };
+      if (opencodeModelDivergedKeys().length) surfaceStates.set("open_code_config", "update_available");
       return `Model selection saved. Run Install/Update to apply model=${modelSelection.model}.`;
     }
     case "reset_opencode_model_selection":
       modelSelection = BUNDLED_MODEL_SELECTION;
+      if (opencodeModelDivergedKeys().length) surfaceStates.set("open_code_config", "update_available");
       return "Model override removed. Run Install/Update to apply the bundled defaults.";
     default:
       throw new Error(`mock backend: unhandled command "${cmd}"`);
