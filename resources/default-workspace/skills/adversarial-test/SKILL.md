@@ -1,6 +1,6 @@
 ---
 name: adversarial-test
-description: Explicit request only. A fresh adversary writes failing tests tied to the acceptance criteria; the lead qualifies and freezes them, and the implementer fixes production code only or reports BLOCKED. Use when the user asks for adversarial tests or for an adversary to write the tests.
+description: A fresh adversary writes failing tests tied to the acceptance criteria; the lead qualifies and freezes them, and the implementer fixes production code only or reports BLOCKED. Use when the user explicitly asks for adversarial tests ("skriv adversariella tester"), never unasked.
 category: testing
 risk: medium
 targets: codex, opencode, claude, cursor
