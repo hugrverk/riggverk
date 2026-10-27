@@ -1,7 +1,6 @@
 ---
 name: adversarial-implementation
-description: User-invoked only. Runs a delegated implementer against a fresh read-only critic chosen by capability, accepts only findings whose proof the lead re-runs, and ends with a deletion-only round. Use when the user explicitly asks for an adversarial, critic-reviewed or two-agent implementation.
-disable-model-invocation: true
+description: Runs a delegated implementer against a fresh read-only critic chosen by capability, keeps only findings the lead proves, then a deletion-only round. Use when the user explicitly asks for an adversarial or critic-reviewed implementation ("kör adversarial", "låt en kritiker granska"), never unasked.
 category: implementation
 risk: medium
 targets: codex, opencode, claude, cursor

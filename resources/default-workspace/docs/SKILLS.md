@@ -8,7 +8,7 @@ Do not duplicate full `SKILL.md` content here. This file is an index for choosin
 
 | Skill | Use When |
 | --- | --- |
-| `adversarial-implementation` | User-invoked only (`/adversarial-implementation` in Claude Code and Cursor; ask for it by name elsewhere): an adversarial, critic-reviewed or two-agent implementation. A delegated implementer works against a fresh read-only critic chosen by capability first; only findings whose proof the lead re-runs count, the judging tests are frozen, and a deletion-only round ends the loop. Roles work with no setup and change with one phrase in chat or an `Adversarial roles:` line below END in the rules. |
+| `adversarial-implementation` | Only when the user explicitly asks for it, in plain words ("kör adversarial", "låt en kritiker granska") or with `/adversarial-implementation`; it is kept out of the routing rules: an adversarial, critic-reviewed or two-agent implementation. A delegated implementer works against a fresh read-only critic chosen by capability first; only findings whose proof the lead re-runs count, the judging tests are frozen, and a deletion-only round ends the loop. Roles work with no setup and change with one phrase in chat or an `Adversarial roles:` line below END in the rules. |
 | `adversarial-review` | Only on an explicit request (`/adversarial-review`, or plain language such as "kör en adversarial review" or "granska planen adversariellt"): a fresh read-only critic chosen by capability attacks an existing diff, or a plan in plan mode, and only findings whose proof the lead re-runs are reported, in Fatal, Significant, Minor and Pre-existing buckets. It fixes nothing and offers a re-review of later changes at most once. Roles work as in `adversarial-implementation`. |
 | `accessibility-review` | Reviewing UI for WCAG 2.2 AA risks, semantics, controls, keyboard, focus, labels, contrast, and responsive usability. |
 | `browser-qa` | Verifying frontend changes with live browser checks, route smoke tests, interactions, responsive checks, console/network review, and evidence. |
@@ -53,6 +53,7 @@ Grouped source: `skills/kretsverket/<skill>/SKILL.md`.
 | --- | --- |
 | `diagnose` / `tdd` | Diagnose finds root cause; TDD locks behavior with a narrow test once the contract is clear. |
 | `minimal-implementation` / `adversarial-implementation` | Minimal-implementation is one bounded patch by the current agent; adversarial-implementation runs that patch through a separate implementer and a fresh hostile critic per round, only when the user asks for it. |
+| `adversarial-implementation` / `adversarial-review` | Adversarial-implementation writes a change through a critic loop; adversarial-review attacks work that already exists, or a plan, and fixes nothing. "Låt en kritiker granska" about finished work or a plan means adversarial-review. |
 | `adversarial-review` / `/code-review` | `/code-review` (or the `inspector` agent) is the routine review; adversarial-review runs a fresh critic from another route and reports only findings the lead proved, only when the user asks for it. |
 | `implementation-plan` / `minimal-implementation` | Plan defines slices; minimal-implementation executes one bounded patch. |
 | `frontend-design` / `screenshot-review` | Screenshot-review diagnoses static images; frontend-design chooses direction and implements. |
@@ -97,7 +98,7 @@ Each `SKILL.md` frontmatter has `name` and `description` plus these fields:
 - `risk` — low, medium, or high.
 - `targets` — comma-separated supported tools: codex, opencode, claude, cursor.
 - `related` — comma-separated related skill names; the routing check verifies each name exists.
-- `disable-model-invocation` — optional `true` for user-invoked skills (currently `retro` and `adversarial-implementation`). Claude Code and Cursor then hide the skill from the model; Codex and OpenCode ignore the flag, so such a skill must not be referenced in routing bullets and its description says it is user-invoked.
+- `disable-model-invocation` — optional `true` for user-invoked skills (currently `retro`). Claude Code and Cursor then hide the skill from the model; Codex and OpenCode ignore the flag, so such a skill must not be referenced in routing bullets and its description says it is user-invoked.
 
 Claude-only frontmatter keys sit directly in the skill's frontmatter: `context`, `agent`, `background`, and `allowed-tools` (for example `release-check` runs in a forked `verifier` context on Claude Code, and `handoff` and `release-check` pre-approve the read-only commands behind their `!` state injection). Codex and OpenCode ignore them. A skill that sets one also carries a `### Claude Code` notes section (see below).
 
