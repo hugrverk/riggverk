@@ -201,11 +201,15 @@ pub(crate) fn workspace_install_file_missing(path: &Path) -> bool {
     }
 }
 
-/// Paths of the workspace copy (`workspace_copy_paths()`) that are absent under `root`.
+/// Paths of the workspace copy (`workspace_copy_paths()`) that the bundle still holds and that are
+/// absent under `root`. Files only early builds shipped are never expected.
 pub(crate) fn missing_bundled_file_paths(root: &Path) -> Vec<String> {
     let mut missing = Vec::new();
     for rel in super::retired_workspace_files::workspace_copy_paths() {
         if rel.contains("..") || rel.is_empty() || Path::new(rel).is_absolute() {
+            continue;
+        }
+        if super::retired_workspace_files::RETIRED_FROM_BUNDLE.contains(&rel) {
             continue;
         }
         if workspace_install_file_missing(&root.join(rel)) {

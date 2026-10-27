@@ -15,7 +15,9 @@ mod tests {
     use std::sync::MutexGuard;
 
     use crate::artifact_registry::{ArtifactId, WorkspaceRelPath};
-    use crate::commands::retired_workspace_files::{LEGACY_MARKER_REL, RETIRED_WORKSPACE_FILES};
+    use crate::commands::retired_workspace_files::{
+        LEGACY_MARKER_REL, RETIRED_FROM_BUNDLE, RETIRED_WORKSPACE_FILES,
+    };
     use crate::commands::setup::{
         apply_setup, apply_uninstall, preview_setup, preview_uninstall, rollback_setup_transaction,
         SetupResult,
@@ -246,7 +248,7 @@ mod tests {
         .expect("records");
 
         let planned = env.plan();
-        for rel in RETIRED_WORKSPACE_FILES {
+        for rel in copies.iter().filter(|rel| **rel != LEGACY_MARKER_REL) {
             let expected = if *rel == "docs/START_HERE.md" {
                 OperationKind::Manual
             } else {
@@ -259,7 +261,11 @@ mod tests {
             None,
             "the marker stays"
         );
-        assert_eq!(copies.len(), RETIRED_WORKSPACE_FILES.len() + 1);
+        // The copy of today's bundle: the marker and the listed files the bundle still holds.
+        assert_eq!(
+            copies.len(),
+            RETIRED_WORKSPACE_FILES.len() + 1 - RETIRED_FROM_BUNDLE.len()
+        );
         assert!(planned
             .iter()
             .all(|operation| matches!(operation.artifact, ArtifactId::WorkspaceFile(_))));
@@ -308,10 +314,14 @@ mod tests {
         assert!(copies.len() > 20, "{copies:?}");
         let edited = copies[0];
         env.write(edited, b"edited by the user\n");
+        // A file only the early tagged builds shipped is a copy like the rest.
+        let edited_tag_only = "scripts/install-skills.sh";
+        assert!(copies.contains(&edited_tag_only) && copies.contains(&"scripts/bootstrap.sh"));
+        env.write(edited_tag_only, b"#!/bin/sh\necho mine\n");
 
         let planned = env.plan();
         for rel in &copies {
-            let expected = if *rel == edited {
+            let expected = if *rel == edited || *rel == edited_tag_only {
                 OperationKind::Manual
             } else {
                 OperationKind::Remove
@@ -319,20 +329,80 @@ mod tests {
             assert_eq!(kind_of(&planned, rel), Some(expected), "{rel}");
         }
         assert_eq!(kind_of(&planned, LEGACY_MARKER_REL), None);
-        // A file of that build the frozen list does not name is not the cleanup's to remove.
-        assert_eq!(kind_of(&planned, "scripts/bootstrap.sh"), None);
+        assert_eq!(
+            kind_of(&planned, "scripts/bootstrap.sh"),
+            Some(OperationKind::Remove)
+        );
 
         let result = apply(&preview_workspace());
         assert!(result.failed.is_empty(), "{:?}", result.failed);
         for rel in &copies {
-            assert_eq!(env.ws.join(rel).exists(), *rel == edited, "{rel}");
+            assert_eq!(
+                env.ws.join(rel).exists(),
+                *rel == edited || *rel == edited_tag_only,
+                "{rel}"
+            );
         }
         assert_eq!(
             fs::read(env.ws.join(edited)).expect("edited copy"),
             b"edited by the user\n"
         );
+        assert_eq!(
+            fs::read(env.ws.join(edited_tag_only)).expect("edited script"),
+            b"#!/bin/sh\necho mine\n"
+        );
         assert!(env.ws.join(LEGACY_MARKER_REL).is_file());
-        assert!(env.ws.join("scripts/bootstrap.sh").is_file());
+    }
+
+    /// The files only the early tagged builds shipped go with the rest on an rc.1 install: the
+    /// folders they emptied are pruned, and `z` brings every byte back.
+    #[test]
+    fn an_rc1_workspace_loses_its_tag_only_scripts_and_prompts_and_rollback_restores_them() {
+        let env = Env::new("rc1-tag-only");
+        seed_rc1_workspace(&env.ws);
+        let tag_only = [
+            "scripts/bootstrap.sh",
+            "scripts/install-agent-rules.sh",
+            "scripts/install-opencode-config.sh",
+            "scripts/install-skills.sh",
+            "templates/prompts/masterprompt.md",
+            "templates/prompts/standard-prompt.md",
+        ];
+        let before = files_below(&env.ws);
+        for rel in tag_only {
+            assert!(env.ws.join(rel).is_file(), "{rel} is an rc.1 file");
+        }
+
+        let planned = env.plan();
+        for rel in tag_only {
+            assert_eq!(kind_of(&planned, rel), Some(OperationKind::Remove), "{rel}");
+        }
+
+        let result = apply(&preview_workspace());
+        assert!(result.failed.is_empty(), "{:?}", result.failed);
+        for rel in tag_only {
+            assert!(!env.ws.join(rel).exists(), "{rel}");
+        }
+        assert!(
+            !env.ws.join("scripts").exists(),
+            "the emptied scripts folder is pruned"
+        );
+        assert!(!env.ws.join("templates").exists());
+        assert!(env.ws.join(LEGACY_MARKER_REL).is_file());
+
+        let rolled = rollback_setup_transaction(result.transaction_id, false).expect("rollback");
+        assert!(
+            rolled.success,
+            "rollback: {} {:?}",
+            rolled.message, rolled.failed
+        );
+        for rel in tag_only {
+            assert_eq!(
+                fs::read(env.ws.join(rel)).expect(rel),
+                before[&PathBuf::from(rel)],
+                "{rel} is back byte for byte"
+            );
+        }
     }
 
     #[test]

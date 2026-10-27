@@ -160,6 +160,26 @@ pub(crate) const RETIRED_WORKSPACE_FILES: &[&str] = &[
     "templates/tui.json",
 ];
 
+/// Listed paths the bundle no longer holds, each a copy that an earlier release shipped and the
+/// bundle dropped since. Add a path here, with a comment naming the release that dropped it,
+/// before the bundle loses it.
+pub(crate) const RETIRED_FROM_BUNDLE: &[&str] = &[
+    // Only the early tagged builds (`app-v0.1.0`, `v0.1.0-alpha`, `v0.1.0-rc.1`) shipped these;
+    // the bundle dropped them before the managed state existed.
+    "agents/autopilot.md",
+    "agents/code-reviewer.md",
+    "agents/docs-writer.md",
+    "agents/qa-verifier.md",
+    "agents/security-auditor.md",
+    "routing/profiles.json",
+    "scripts/bootstrap.sh",
+    "scripts/install-agent-rules.sh",
+    "scripts/install-opencode-config.sh",
+    "scripts/install-skills.sh",
+    "templates/prompts/masterprompt.md",
+    "templates/prompts/standard-prompt.md",
+];
+
 /// The marker followed by the frozen list: every path the `WorkspaceBundle` surface installs and
 /// tracks in this release. Together they are sorted, so the order is stable.
 pub(crate) fn workspace_copy_paths() -> impl Iterator<Item = &'static str> {
@@ -178,26 +198,6 @@ mod tests {
         "sha256:cbb356a4e4d72bfbe46d642feedb0d2311f0cca0b4f35dcbaf7e50946bef8e9a";
     /// The marker, the 133 files of the manifest and the 12 tag-only files.
     const FROZEN_COUNT: usize = 146;
-
-    /// Listed paths the bundle no longer holds, each a copy that an earlier release shipped and the
-    /// bundle dropped since. Add a path here, with a comment naming the release that dropped it,
-    /// before the bundle loses it.
-    const RETIRED_FROM_BUNDLE: &[&str] = &[
-        // Only the early tagged builds (`app-v0.1.0`, `v0.1.0-alpha`, `v0.1.0-rc.1`) shipped these;
-        // the bundle dropped them before the managed state existed.
-        "agents/autopilot.md",
-        "agents/code-reviewer.md",
-        "agents/docs-writer.md",
-        "agents/qa-verifier.md",
-        "agents/security-auditor.md",
-        "routing/profiles.json",
-        "scripts/bootstrap.sh",
-        "scripts/install-agent-rules.sh",
-        "scripts/install-opencode-config.sh",
-        "scripts/install-skills.sh",
-        "templates/prompts/masterprompt.md",
-        "templates/prompts/standard-prompt.md",
-    ];
 
     fn bundle_root() -> PathBuf {
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../resources/default-workspace")
