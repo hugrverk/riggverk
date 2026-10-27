@@ -640,15 +640,16 @@ mod tests {
             .expect("fresh preview");
         let result = apply_surfaces_from_preview(&plan);
         assert!(result.success, "fresh apply: {}", result.message);
-        // The workspace copy is the frozen list: skills added to the bundle later do not join it.
+        // The workspace copy is the frozen list; skills added since are read from the bundle.
+        let frozen_skill_count = crate::commands::retired_workspace_files::RETIRED_WORKSPACE_FILES
+            .iter()
+            .filter(|path| path.ends_with("/SKILL.md"))
+            .count();
         assert_eq!(
             discover_skill_catalog(&workspace)
                 .expect("installed catalog")
                 .len(),
-            crate::commands::retired_workspace_files::RETIRED_WORKSPACE_FILES
-                .iter()
-                .filter(|path| path.ends_with("/SKILL.md"))
-                .count()
+            frozen_skill_count
         );
         assert!(read_managed_state(&workspace).is_some());
         let current = crate::installation_status::status_for_surfaces(

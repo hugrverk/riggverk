@@ -10,6 +10,7 @@ Do not duplicate full `SKILL.md` content here. This file is an index for choosin
 | --- | --- |
 | `adversarial-implementation` | Only when the user explicitly asks for it, in plain words ("kör adversarial", "låt en kritiker granska") or with `/adversarial-implementation`; it is kept out of the routing rules: an adversarial, critic-reviewed or two-agent implementation. A delegated implementer works against a fresh read-only critic chosen by capability first; only findings whose proof the lead re-runs count, the judging tests are frozen, and a deletion-only round ends the loop. Roles work with no setup and change with one phrase in chat or an `Adversarial roles:` line below END in the rules. |
 | `adversarial-review` | Only on an explicit request (`/adversarial-review`, or plain language such as "kör en adversarial review" or "granska planen adversariellt"): a fresh read-only critic chosen by capability attacks an existing diff, or a plan in plan mode, and only findings whose proof the lead re-runs are reported, in Fatal, Significant, Minor and Pre-existing buckets. It fixes nothing and offers a re-review of later changes at most once. Roles work as in `adversarial-implementation`. |
+| `adversarial-test` | Only when the user explicitly asks for it, in plain words ("skriv adversariella tester", "låt en motståndare skriva tester") or with `/adversarial-test`; it is kept out of the routing rules: a fresh read-only adversary, chosen by capability first, proposes failing tests tied to the acceptance criteria. The lead keeps only tests it ran and saw fail for the stated reason, freezes them, and the implementer changes production code only or reports `BLOCKED`. At most two rounds; only tests that protect a criterion stay. Roles as for `adversarial-implementation`. |
 | `accessibility-review` | Reviewing UI for WCAG 2.2 AA risks, semantics, controls, keyboard, focus, labels, contrast, and responsive usability. |
 | `browser-qa` | Verifying frontend changes with live browser checks, route smoke tests, interactions, responsive checks, console/network review, and evidence. |
 | `context-budget` | Reducing duplicated rules, docs, prompts, skills, and token overhead without removing essential safety guidance. |
@@ -55,6 +56,7 @@ Grouped source: `skills/kretsverket/<skill>/SKILL.md`.
 | `minimal-implementation` / `adversarial-implementation` | Minimal-implementation is one bounded patch by the current agent; adversarial-implementation runs that patch through a separate implementer and a fresh hostile critic per round, only when the user asks for it. |
 | `adversarial-implementation` / `adversarial-review` | Adversarial-implementation writes a change through a critic loop; adversarial-review attacks work that already exists, or a plan, and fixes nothing. "Låt en kritiker granska" about finished work or a plan means adversarial-review. |
 | `adversarial-review` / `/code-review` | `/code-review` (or the `inspector` agent) is the routine review; adversarial-review runs a fresh critic from another route and reports only findings the lead proved, only when the user asks for it. |
+| `tdd` / `adversarial-test` | TDD has the current agent write each test and then the code; adversarial-test has a separate adversary write the tests and a separate implementer fix the code against them frozen, only when the user explicitly asks for it. |
 | `implementation-plan` / `minimal-implementation` | Plan defines slices; minimal-implementation executes one bounded patch. |
 | `frontend-design` / `screenshot-review` | Screenshot-review diagnoses static images; frontend-design chooses direction and implements. |
 | `frontend-design` / `accessibility-review` | Frontend-design includes baseline a11y during implementation; accessibility-review is a specialist audit. |
@@ -88,6 +90,7 @@ Grouped source: `skills/kretsverket/<skill>/SKILL.md`.
 - Session retrospective: `retro`, only when the user invokes `/retro` (it is not routed by the rules).
 - Adversarial implementation: `adversarial-implementation`, only when the user asks for it (it is not routed by the rules).
 - Adversarial review of a diff or plan: `adversarial-review`, only when the user explicitly asks for it (it is not routed by the rules).
+- Adversarial tests: `adversarial-test`, only when the user explicitly asks for adversarial tests (it is not routed by the rules).
 - Review passes: Claude Code uses the built-in `/code-review` and `/simplify`; other harnesses use the `inspector` agent.
 
 ## Skill Metadata
@@ -110,7 +113,7 @@ The `description` is the only selection signal Codex, OpenCode, and Cursor see, 
 
 ## Supporting files
 
-Files next to a `SKILL.md` (references, schemas, templates, scripts) install with the skill, at the same relative paths, so a skill can say "read `HUNTING.md`" or "run `scripts/verify-report.mjs`" and mean the file next to it. `security-audit` carries its reference files, `kretsverket-status-report` carries `assets/report-template.html` and `scripts/verify-report.mjs`, and `adversarial-implementation` carries `adversarial-roles.md` (how roles are chosen) and `critic-recipes.md` (CLI recipes for external critics), which other adversarial skills read from there.
+Files next to a `SKILL.md` (references, schemas, templates, scripts) install with the skill, at the same relative paths, so a skill can say "read `HUNTING.md`" or "run `scripts/verify-report.mjs`" and mean the file next to it. `security-audit` carries its reference files, `kretsverket-status-report` carries `assets/report-template.html` and `scripts/verify-report.mjs`, and `adversarial-implementation` carries `adversarial-roles.md` (how roles are chosen) and `critic-recipes.md` (CLI recipes for external critics), which other adversarial skills such as `adversarial-test` read from there.
 
 Rules for the files in a skill directory in the bundle: regular files only (no symlinks), names of letters, digits, `.`, `_` and `-` that do not start with a dot, at most four path levels, at most 64 files and 2 MiB in total, at most 1 MiB per file, and no `SKILL.md` below the skill's own. Dot files are ignored. A skill that breaks a rule installs nothing until it is fixed. Write paths in a skill relative to its directory; never point a skill at the workspace folder, since the installed copy lives in a skills folder.
 
