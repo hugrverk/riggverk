@@ -2417,7 +2417,11 @@ fn attach_skill_details(plan: &mut SetupPlan, workspace_root: &Path, home: &Path
 /// folder of the workspace folder, and each copy it leaves in place. Paths only, never contents.
 fn attach_workspace_details(plan: &mut SetupPlan, workspace_root: &Path, home: &Path) {
     let surface = SetupSurfaceId::WorkspaceBundle;
-    if !plan.operations.iter().any(|planned| planned.surface == surface) {
+    if !plan
+        .operations
+        .iter()
+        .any(|planned| planned.surface == surface)
+    {
         return;
     }
     let Ok(planned) = setup_transaction::plan_artifacts_for_surfaces_in(
