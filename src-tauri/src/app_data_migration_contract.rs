@@ -325,6 +325,7 @@ fn moves_settings_override_and_backups_exactly() {
             "override-provider/large".to_string(),
             "override-provider/small".to_string(),
             None,
+            None,
         )
         .expect("save override");
         fs::rename(&new, &old).expect("stage legacy dir");

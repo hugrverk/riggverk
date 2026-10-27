@@ -19,6 +19,7 @@ const FORMAT_ERROR = "Must be provider/model format";
 const CUSTOM_CHOICE = "__custom__";
 /** `agent.<role>.model`: the managed entries that carry the subagent model. */
 const SUBAGENT_MODEL_KEY = /^agent\.[^.]+\.model$/;
+const CRITIC_MODEL_KEY = "agent.inspector.model";
 
 type ApplyState = "applied" | "pending";
 
@@ -162,7 +163,7 @@ function ModelField({ id, value, onChange, error, disabled, models, listed, empt
 }
 
 /**
- * The OpenCode model override as editable rows of the detail pane: `model`, `small model` and `subagent model`
+ * The OpenCode model override as editable rows: `model`, `small model`, `subagent model` and `critic model`
  * are selects grouped by provider (a text input while no model list is available or a custom model is typed).
  * Each row says where its value comes from and whether the installed config already has it. `s` saves, `x`
  * resets the override to the bundled default, `R` reloads the list, `e` edits. `m` is the rules file's
@@ -176,6 +177,7 @@ export function OpenCodeModelRows({ workspaceValid, health, onModelUpdated }: Op
   const [draftModel, setDraftModel] = useState("");
   const [draftSmall, setDraftSmall] = useState("");
   const [draftSubagent, setDraftSubagent] = useState("");
+  const [draftCritic, setDraftCritic] = useState("");
   const [loadingModels, setLoadingModels] = useState(false);
   const [saving, setSaving] = useState(false);
   const [modelWarning, setModelWarning] = useState<string | null>(null);
@@ -188,6 +190,7 @@ export function OpenCodeModelRows({ workspaceValid, health, onModelUpdated }: Op
   const modelId = useId();
   const smallModelId = useId();
   const subagentModelId = useId();
+  const criticModelId = useId();
 
   const loadSelection = useCallback(async () => {
     if (!workspaceValid) return;
@@ -199,6 +202,7 @@ export function OpenCodeModelRows({ workspaceValid, health, onModelUpdated }: Op
       setDraftModel(sel.model);
       setDraftSmall(sel.small_model);
       setDraftSubagent(sel.subagent_model ?? "");
+      setDraftCritic(sel.critic_model ?? "");
       setRevision(value => value + 1);
     } catch {
       if (gen !== selectionGenRef.current) return;
@@ -236,12 +240,14 @@ export function OpenCodeModelRows({ workspaceValid, health, onModelUpdated }: Op
   }, [workspaceValid, loadSelection, loadModels]);
 
   const savedSubagent = selection?.subagent_model ?? "";
-  const hasChanges = selection !== null && (draftModel !== selection.model || draftSmall !== selection.small_model || draftSubagent !== savedSubagent);
+  const savedCritic = selection?.critic_model ?? "";
+  const hasChanges = selection !== null && (draftModel !== selection.model || draftSmall !== selection.small_model || draftSubagent !== savedSubagent || draftCritic !== savedCritic);
   const modelError = draftModel && !draftModel.includes("/") ? FORMAT_ERROR : null;
   const smallError = draftSmall && !draftSmall.includes("/") ? FORMAT_ERROR : null;
   const subagentError = draftSubagent && !draftSubagent.includes("/") ? FORMAT_ERROR : null;
-  const canSave = workspaceValid && hasChanges && !modelError && !smallError && !subagentError && !saving;
-  const hasOverride = [selection?.model_source, selection?.small_model_source, selection?.subagent_source].includes("override");
+  const criticError = draftCritic && !draftCritic.includes("/") ? FORMAT_ERROR : null;
+  const canSave = workspaceValid && hasChanges && !modelError && !smallError && !subagentError && !criticError && !saving;
+  const hasOverride = [selection?.model_source, selection?.small_model_source, selection?.subagent_source, selection?.critic_source].includes("override");
 
   const handleSave = useCallback(async () => {
     if (!canSave) return;
@@ -252,6 +258,7 @@ export function OpenCodeModelRows({ workspaceValid, health, onModelUpdated }: Op
         model: draftModel,
         smallModel: draftSmall,
         subagentModel: draftSubagent || null,
+        criticModel: draftCritic || null,
       });
       setNotice({ text: msg, ok: /saved/i.test(msg) });
       await loadSelection();
@@ -261,7 +268,7 @@ export function OpenCodeModelRows({ workspaceValid, health, onModelUpdated }: Op
     } finally {
       setSaving(false);
     }
-  }, [canSave, draftModel, draftSmall, draftSubagent, loadSelection, onModelUpdated]);
+  }, [canSave, draftModel, draftSmall, draftSubagent, draftCritic, loadSelection, onModelUpdated]);
 
   const handleReset = useCallback(async () => {
     if (!workspaceValid || !hasOverride || saving) return;
@@ -290,11 +297,11 @@ export function OpenCodeModelRows({ workspaceValid, health, onModelUpdated }: Op
   const modelOptions = useMemo(() => {
     const set = new Set<string>();
     for (const m of available?.models ?? []) set.add(m);
-    for (const m of [selection?.model, selection?.small_model, selection?.subagent_model, draftModel, draftSmall, draftSubagent]) {
+    for (const m of [selection?.model, selection?.small_model, selection?.subagent_model, selection?.critic_model, draftModel, draftSmall, draftSubagent, draftCritic]) {
       if (m && m.includes("/")) set.add(m);
     }
     return [...set].sort();
-  }, [available, selection, draftModel, draftSmall, draftSubagent]);
+  }, [available, selection, draftModel, draftSmall, draftSubagent, draftCritic]);
 
   // A listing that failed, or exited non-zero, may be partial: it marks nothing unavailable.
   const listed = useMemo(
@@ -323,7 +330,7 @@ export function OpenCodeModelRows({ workspaceValid, health, onModelUpdated }: Op
           group: "OpenCode model",
           scope: "pane",
           paneId,
-          when: () => (!workspaceValid ? false : canSave ? true : modelError || smallError || subagentError || "no unsaved change"),
+          when: () => (!workspaceValid ? false : canSave ? true : modelError || smallError || subagentError || criticError || "no unsaved change"),
           run: () => void handleSave(),
         },
         {
@@ -356,7 +363,8 @@ export function OpenCodeModelRows({ workspaceValid, health, onModelUpdated }: Op
 
   const modelState = applyState(health, key => key === "model");
   const smallState = applyState(health, key => key === "small_model");
-  const subagentState = applyState(health, key => SUBAGENT_MODEL_KEY.test(key));
+  const subagentState = applyState(health, key => SUBAGENT_MODEL_KEY.test(key) && !(savedCritic && key === CRITIC_MODEL_KEY));
+  const criticState = applyState(health, key => key === CRITIC_MODEL_KEY);
   const field = (id: string, value: string, onChange: (value: string) => void, error: string | null, extra: Partial<ModelFieldProps> = {}): KvItem["value"] => (
     <ModelField
       key={`${id}-${revision}`}
@@ -390,6 +398,14 @@ export function OpenCodeModelRows({ workspaceValid, health, onModelUpdated }: Op
     },
     ...errorRow(subagentModelId, subagentError),
     ...sourceRow("subagent", selection?.subagent_source, subagentState),
+    {
+      label: <label htmlFor={criticModelId}>critic model</label>,
+      value: field(criticModelId, draftCritic, setDraftCritic, criticError, { emptyLabel: "inherit subagent or main model", placeholder: "inherit subagent or main model" }),
+      id: "critic",
+    },
+    ...errorRow(criticModelId, criticError),
+    ...sourceRow("critic", selection?.critic_source, criticState),
+    { label: "", value: "used by the adversarial skills' critic (inspector)", tone: "dim", wrap: true, id: "critic-hint" },
   ];
 
   return (
@@ -405,7 +421,7 @@ export function OpenCodeModelRows({ workspaceValid, health, onModelUpdated }: Op
       <p className="c-dim runtime-note">
         Stored in app settings and applied on the next OpenCode update; workspace templates are not edited. Saving stores only the values you
         changed: one equal to the bundled default keeps following it. The subagent model pins repo-scout, inspector, sentinel, verifier and
-        scribe; unset, they use the main model.
+        scribe; unset, they use the main model. The critic model takes precedence for inspector only.
       </p>
     </section>
   );
