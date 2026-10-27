@@ -41,7 +41,7 @@ Variables, project files and the system managed config do not change the runtime
 
 ## Source template
 
-The runtime OpenCode configuration is `templates/opencode.json`. This is a **generated snapshot** — do not edit it directly. The app installs from its bundled copy of these templates, and the Library shows them read-only; edits to the workspace copy made outside the app change what the Library shows, not what OpenCode receives. Runtime health and dashboard config status compare against that same bundled render, including saved model overrides. TUI, rules and agents also use the bundled sources; workspace edits do not cause installed-file drift.
+The runtime OpenCode configuration is `templates/opencode.json`. This is a **generated snapshot** — do not edit it directly. The app installs from its bundled copy of these templates, and the Library shows them read-only; the app keeps no copy of them in your workspace folder. Runtime health and dashboard config status compare against that same bundled render, including saved model overrides. TUI, rules and agents also use the bundled sources.
 
 The maintainable source files are:
 
@@ -54,7 +54,7 @@ To regenerate the snapshot after changing a source file:
 python3 scripts/generate-opencode-config.py --write
 ```
 
-To verify the workspace snapshot is current (the release check does the same for the shipped snapshot; the OpenCode runtime pane checks the bundled sources and snapshot with the bundled copy of the generator):
+In the app source repository, to verify the snapshot is current (the release check does the same for the shipped snapshot; the OpenCode runtime pane checks the bundled sources and snapshot with the bundled copy of the generator):
 
 ```
 python3 scripts/generate-opencode-config.py --check
@@ -123,7 +123,7 @@ Role boundaries:
 - **verifier** — exact non-destructive test/lint/build/cargo commands only; no source edit, git staging/commits, fix modes, snapshot updates, or arbitrary trailing arguments. Project-owned verification scripts are a deliberate trust boundary: they may create disposable build/test artifacts, but the Verifier profile must not receive arbitrary arguments beyond the reviewed exact command forms.
 - **scribe** — documentation paths only (`README.md`, `docs/**`, and related doc files); no source-code edit or mutating bash
 
-In the app source repository, `scripts/validate_opencode_permissions.py` asserts the composed contract and `scripts/generate-agent-adapters.py --check` verifies deterministic generated adapters; neither ships in the installed workspace. The validator evaluates rules the way OpenCode 1.19.3 does (worktree-relative read/edit paths, one bash pattern per command of a compound, built-in agent rulesets); the shell splitting follows OpenCode's source at tag `v1.19.3` (`tool/shell.ts`) and was checked against the installed OpenCode with `opencode debug agent <name> --pure --tool bash`. It also checks that every bash deny naming a command denies that command alone and inside pipes, `&&`, `||`, `;` and `&` chains, newlines, subshells, `$( )` and backticks, for each bundled agent and for OpenCode's `build`, `plan` and `explore`.
+In the app source repository, `scripts/validate_opencode_permissions.py` asserts the composed contract and `scripts/generate-agent-adapters.py --check` verifies deterministic generated adapters; neither ships with the app. The validator evaluates rules the way OpenCode 1.19.3 does (worktree-relative read/edit paths, one bash pattern per command of a compound, built-in agent rulesets); the shell splitting follows OpenCode's source at tag `v1.19.3` (`tool/shell.ts`) and was checked against the installed OpenCode with `opencode debug agent <name> --pure --tool bash`. It also checks that every bash deny naming a command denies that command alone and inside pipes, `&&`, `||`, `;` and `&` chains, newlines, subshells, `$( )` and backticks, for each bundled agent and for OpenCode's `build`, `plan` and `explore`.
 
 The default template is conservative:
 

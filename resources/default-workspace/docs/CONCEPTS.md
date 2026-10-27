@@ -2,20 +2,24 @@
 
 ## Workspace
 
-A user-owned directory of docs, skills, templates, and scripts, identified by `.agent-workspace/workspace.json` and a set of required files (see [TROUBLESHOOTING.md](TROUBLESHOOTING.md#missing-markers)). It is plain text, user-editable, and can be versioned with Git.
+The app's data folder, `~/.config/agent-workspace`. It holds the app's state in `.agent-workspace/` (ownership records and your choices) and your personal docs in `docs/context/`, and it holds no copy of the bundle. It is plain text and its personal docs can be versioned with Git (see [GIT_VERSIONING.md](GIT_VERSIONING.md)).
 
-The app creates it from its bundled copy and never writes it without a confirmed install or an explicit save. It does not run the workspace's scripts.
+The app creates it on the first write that needs it (state, or a personal doc) and never writes it without a confirmed install or an explicit save. It does not run scripts from it.
 
 ## Bundle versus workspace
 
-The app ships a read-only bundled copy of this workspace. Everything the app installs comes from the bundle, never from the runtime workspace:
+The app ships a read-only bundle of docs, skills, templates, and scripts. Everything the app installs, shows, and checks comes from the bundle, never from the data folder:
 
-- **Install to the workspace**: bundle -> `~/.config/agent-workspace`.
 - **Install to a harness**: bundle -> `~/.claude`, `~/.codex`, `~/.config/opencode`, `~/.cursor`.
+- **Library and health checks**: read the bundle inside the app, so every user sees the current text.
 
-The Library shows these files read-only; your own notes go in personal docs (`docs/context/`), which the bundle never ships. The Library reads them from the app's bundle, so editing a bundled file in the workspace outside the app changes neither what the Library shows nor what Claude, Codex, OpenCode, or Cursor receive. It does mean the app can no longer prove it owns that file, so it becomes a conflict on later updates and is left alone. See [TROUBLESHOOTING.md](TROUBLESHOOTING.md#conflicts).
+There is no install to the data folder. Earlier releases copied the bundle there; the app no longer reads or updates those copies and removes them only through the reviewed update of the `workspace` row (`u` on it): a copy goes only when its bytes prove it is the app's, with a backup, and `z` restores it. An edited copy or any other file the app cannot prove is its own stays in place and is listed as a manual step, not a conflict. See [USING_THE_APP.md](USING_THE_APP.md#workspace-page).
+
+The Library shows bundled files read-only; your own notes go in personal docs (`docs/context/`), which the bundle never ships. Editing a file in the data folder outside the app changes neither what the Library shows nor what Claude, Codex, OpenCode, or Cursor receive.
 
 ## Mental model
+
+The first five rows are paths in the bundle; the last two are in your data folder.
 
 | Concept | Location | Purpose |
 |---------|----------|---------|
@@ -24,7 +28,8 @@ The Library shows these files read-only; your own notes go in personal docs (`do
 | Templates | `templates/` | Source templates for rules and config |
 | Scripts | `scripts/` | Python helpers the app runs from its bundled copy |
 | Runtime agents | `agents/`, `agent-specs/` | OpenCode agents and shared agent bodies |
-| Ownership records | `.agent-workspace/` | Identity, managed-state digests, "leave as is" choices |
+| Ownership records | `.agent-workspace/` | Managed-state digests, "leave as is" and "keep mine" choices |
+| Personal docs | `docs/context/` | Your own text, written in the Library |
 
 ## Skills
 
@@ -40,7 +45,7 @@ Config files hold tool settings such as permissions, models, and MCP servers. Th
 
 ## Targets and surfaces
 
-A **surface** is one installable group (for example `claude_rules`, `open_code_config`, `cursor_mcp`, `skills`, `workspace_bundle`). A **target** is a toggle that gates one or more surfaces: rules, agents, and config per harness, and `cursor_setup`. A target that is off is excluded from preview, apply, and status. Fresh settings enable every target except `codex_config` and `kilo_mcp` (the light harnesses' `copilot_rules`, `pi_rules`, `kilo_rules`, `copilot_mcp`, and `pi_mcp` are on, and act once their harness is). Skills and the workspace bundle are never gated. Harness enablement (Settings) is separate: a disabled harness is hidden and cannot be written. Codex, OpenCode, Claude, and Cursor are on by default; Copilot, Pi, and Kilo (a rules file, a Playwright MCP entry, and the shared skills) are off until you turn them on.
+A **surface** is one installable group (for example `claude_rules`, `open_code_config`, `cursor_mcp`, `skills`, `workspace_bundle`). A **target** is a toggle that gates one or more surfaces: rules, agents, and config per harness, and `cursor_setup`. A target that is off is excluded from preview, apply, and status. Fresh settings enable every target except `codex_config` and `kilo_mcp` (the light harnesses' `copilot_rules`, `pi_rules`, `kilo_rules`, `copilot_mcp`, and `pi_mcp` are on, and act once their harness is). Skills and the `workspace` row are never gated. Harness enablement (Settings) is separate: a disabled harness is hidden and cannot be written. Codex, OpenCode, Claude, and Cursor are on by default; Copilot, Pi, and Kilo (a rules file, a Playwright MCP entry, and the shared skills) are off until you turn them on.
 
 ## Install review and transactions
 
@@ -48,9 +53,9 @@ Install is a two-step action. Preview computes a plan and the review shows every
 
 ## Scripts
 
-`scripts/` holds the Python helpers (OpenCode generator, Codex config merges). The app runs only its own bundled copies, never scripts from the workspace. See the [workspace README](../README.md).
+`scripts/` holds the Python helpers (OpenCode generator, Codex config merges). The app runs only its own bundled copies, never scripts from the data folder. See the [bundle README](../README.md).
 
-Selecting a workspace folder is still a trust decision: do not run scripts from a folder you did not create.
+Do not run scripts from a folder you did not create, including an old copy left in your data folder.
 
 ## Backups
 

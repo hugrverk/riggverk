@@ -23,7 +23,7 @@ Tab keys below assume the default order: workspace, codex, opencode, cursor, cla
 
 ## 2. Launch and shell
 
-- [ ] First launch shows `not installed`, no generic error banner, no path chooser on the Workspace page
+- [ ] First launch on a fresh profile shows the `workspace` row as `current` (nothing to remove), no generic error banner, no path chooser on the Workspace page
 - [ ] Workspace page shows `~/.config/agent-workspace` (or the isolated override)
 - [ ] Fresh profile: launching creates no `~/.config/agent-workspace`; harness rows are not gated; `u` on a harness installs it without the workspace and creates the folder owner-only (0700) holding only `.agent-workspace/`
 - [ ] Top line tabs match the order above; Mac traffic lights sit on the same 28px line
@@ -38,13 +38,13 @@ Tab keys below assume the default order: workspace, codex, opencode, cursor, cla
 
 ## 3. Install review
 
-- [ ] Fresh state: Workspace page shows `not installed`; `u` on the workspace row opens the plan table with create rows and a backup/rollback footer
+- [ ] Fresh state: the `workspace` row is `current` and `u` on it is disabled (`already current`); `u` on a harness row opens the plan table with create rows and a backup/rollback footer
 - [ ] `n` (and Escape) cancels; nothing was written (check the isolated workspace dir)
 - [ ] `p` shows the plan with no apply path; `n` closes it
-- [ ] `u` then `y` installs: `.agent-workspace/workspace.json`, `.agent-workspace/managed-state.json`, and the bundled files exist
+- [ ] `u` then `y` on a harness installs it: `.agent-workspace/managed-state.json` exists; no `.agent-workspace/workspace.json` is created and no bundle file (`docs/`, `skills/`, `templates/`, ...) appears in the data folder
 - [ ] The output strip under the panes opens by itself with the result; a second `u` reports `nothing to change`, no mutation
 - [ ] `d` expands a row's details; `c` jumps to the next conflict; `j`/`k` move rows
-- [ ] A modified bundled file in the workspace appears as a conflict row (`preserved, skipped`), `y` applies only the safe rows, and the conflict file is unchanged
+- [ ] A modified installed harness file (for example `~/.claude/skills/tdd/SKILL.md`) appears as a conflict row (`preserved, skipped`), `y` applies only the safe rows, and the conflict file is unchanged
 - [ ] Moving the conflicting file away and installing again updates it
 - [ ] A stale plan (change the installed file between preview and `y`) fails with a re-preview prompt; `r` previews again
 - [ ] `:update codex`, `:update --all`, `:preview opencode` open the same review; `:update` without a target explains itself
@@ -59,7 +59,7 @@ Tab keys below assume the default order: workspace, codex, opencode, cursor, cla
 - [ ] Turning a target off hides its surface from the plan and the status shows it as `off`
 - [ ] Turning it on adds it back to the next preview
 - [ ] Legacy settings file without `target_defaults_version`: migration keeps targets that were enabled or already managed
-- [ ] The skills surface and the workspace bundle are never gated
+- [ ] The skills surface and the `workspace` row are never gated
 
 ## 5. Rules block, Convert, Leave as is
 
@@ -101,12 +101,41 @@ Use the isolated `HOME`; install the skills and agents first, then edit `~/.clau
 - [ ] The workspace detail pane lists the backup run count and the root path; `B` there opens the folder
 - [ ] **preview uninstall** classifies removable, preserved, and merge-managed artifacts; modified and unknown fixture files stay on disk after uninstall
 - [ ] Merge-managed rules files with user text outside the block are kept; a file with only an unedited block is removable
-- [ ] **uninstall everything** removes proven app-owned files; the workspace folder and its `.agent-workspace/` state stay
+- [ ] **uninstall everything** removes proven app-owned files (old workspace copies the app still owns included); the data folder, its `.agent-workspace/` state, `docs/context/` and your own files stay
 - [ ] **Recover previous uninstall** stays visible after the uninstall
 - [ ] **preview recovery** is read-only and reports restore, already restored, and conflict counts
 - [ ] **restore workspace** opens a confirmation; Escape closes it and focus returns to the button; cancel leaves the candidate unchanged; **confirm restore** brings workspace and harness state back and the card disappears
 - [ ] A changed or occupied restore target reports a conflict and restore stays disabled
 - [ ] No console errors during install, rollback, uninstall, and recovery
+
+## 6b. Cleanup of old workspace copies
+
+Run with a temporary `HOME` (never the real one), with `AGENT_WORKSPACE_PATH` unset so the default `$HOME/.config/agent-workspace` is used. The tag `v0.1.0-rc.1` must exist locally. Seed the data folder with what an earlier release installed, from the repository root:
+
+```bash
+export HOME="$(mktemp -d)"
+unset AGENT_WORKSPACE_PATH
+export AGENT_WORKSPACE_BACKUP_DIR="$HOME/backups"
+mkdir -p "$HOME/seed" "$HOME/.config"
+git archive v0.1.0-rc.1 resources/default-workspace | tar -x -C "$HOME/seed"
+mv "$HOME/seed/resources/default-workspace" "$HOME/.config/agent-workspace"
+cd "$HOME/.config/agent-workspace"
+echo "my notes" > notes.txt                          # your own file
+mkdir -p docs/context && echo "mine" > docs/context/mine.md   # a personal doc
+echo "edited" >> README.md                           # an edited copy
+find . -type f -print0 | sort -z | xargs -0 shasum > "$HOME/before.sha"
+cd - >/dev/null
+npm run tauri dev
+```
+
+- [ ] Launch changes nothing: the `workspace` row reads `N old copies to remove`, and the files in the data folder are unchanged (rerun the `find` above, with `-not -path './.agent-workspace/*'`, into `$HOME/launch.sha` and `diff` it against `before.sha`)
+- [ ] `u` on the workspace row opens a review that lists the removals per top-level folder (for example `- skills/ (N old copies; backed up, z restores them)`) and `README.md` as left in place ("edited or not the app's: left in place"), with no conflict rows; `n` cancels and nothing changes
+- [ ] `u` then `y`: the data folder holds only `.agent-workspace/`, `docs/context/mine.md`, `notes.txt` and the edited `README.md`; emptied folders are gone; `.agent-workspace/` and `docs/context/` are untouched; the status pane shows `personal docs 1`, `ownership records present` and `left in place 1`
+- [ ] `z` (dry run, then confirm): every file is back byte for byte (rerun the `find` with `-not -path './.agent-workspace/*'` into `$HOME/after.sha`; it equals `before.sha`) and the previous ownership records are restored; the row reads `N old copies to remove` again
+- [ ] `u` then `y` again: the row reads `current` and `u` is off (`already current`); `p` previews nothing to apply, and the edited `README.md` is still listed as left in place
+- [ ] A symlink in place of a copy, and a copy below a symlinked folder, are listed as left in place and untouched; a folder where a copy was is left in place too
+- [ ] **uninstall everything** on a freshly seeded profile removes the old copies the app still owns and keeps the data folder, `.agent-workspace/`, `docs/context/`, `notes.txt`; **Recover previous uninstall** is reachable
+- [ ] A seeded folder saved as the custom folder (Settings state from an earlier version) stays configured after the cleanup
 
 ## 7. Codex 0.134+ migration
 
@@ -131,7 +160,7 @@ Use the isolated `HOME`; install the skills and agents first, then edit `~/.clau
 - [ ] Motion `full` shows the launch sequence, apply progress (bar, file, spinner, elapsed), the success tick and scanline; `subtle` keeps only the progress indicators; `off` (or the OS reduced-motion preference) stops every animation
 - [ ] Landing page selection (`start`, `library`) persists and opens after app restart
 - [ ] Settings has no folder chooser: no `choose…` action, no `c` hint, `c` does nothing, and `:workspace choose` is refused
-- [ ] With a custom folder saved by an earlier version (seeded in an isolated profile; it holds `.agent-workspace/`), Settings shows it as `custom folder` and the app keeps using it across a restart
+- [ ] With a custom folder saved by an earlier version (seeded in an isolated profile; it holds `.agent-workspace/`), Settings shows it as `custom folder` and the app keeps using it across a restart, also after the old copies in it are removed (see 6b)
 - [ ] `R` (and `:workspace reset`) on that folder opens a confirm that names the old folder and says its ownership records stay there; `n` or Escape changes nothing; `y` returns to the default path and status reloads; on the default folder `R` is disabled (`already the default workspace`)
 - [ ] `AGENT_WORKSPACE_PATH` overrides the saved path, and `R` is then refused with a reason
 - [ ] Generator scripts run from the bundled copy: a modified `scripts/generate-opencode-config.py` in a saved custom workspace is not executed
@@ -151,7 +180,7 @@ Use the isolated `HOME`; install the skills and agents first, then edit `~/.clau
 - [ ] Docs: select, preview, personal doc edit, dirty state, save, reset, create form, Markdown table, fenced code, code copy; bundled docs show their path inside the bundle (`docs/START_HERE.md`), and no "Bundled docs need update" banner exists
 - [ ] Saving a personal doc over its existing file creates `docs/custom_<slug>-<timestamp>/` in the backup root; a symlinked doc or a linked `docs/context` folder is refused
 - [ ] Library edits do not change what a harness install writes (installs come from the bundle)
-- [ ] With a throwaway `HOME`, edit a bundled file's copy in the workspace (for example `docs/START_HERE.md`): the Library still shows the bundled text, and the item's footer has no "may differ" note
+- [ ] With a throwaway `HOME`, put an edited old copy in the data folder (for example `docs/START_HERE.md`): the Library still shows the bundled text, and the item's footer has no "may differ" note
 - [ ] Rules lists Global Rules under "bundled base" and, under "your rules files", one row per enabled harness; a disabled harness or rules target has no row
 - [ ] With a throwaway `HOME`: on a rules file with a block, the managed base shows dimmed and read-only above the refinements, `i` edits only the refinements, and `Mod+s` saves; a hash of the file up to and including the END line is unchanged, `docs/rules-<surface>-<timestamp>/` holds the previous file, and Install then reports the file current (or a base update) with the refinement count unchanged
 - [ ] A rules file that is absent, has no block, has malformed markers, or is a symlink (or sits in a linked folder) is listed with its reason, read-only; `o` opens an existing one, also through a link
@@ -160,7 +189,7 @@ Use the isolated `HOME`; install the skills and agents first, then edit `~/.clau
 
 ## 10. Known limitations
 
-- Workspace marker is `.agent-workspace/workspace.json`; the default workspace path is `~/.config/agent-workspace`
+- The `.agent-workspace/workspace.json` marker is not created for new users and is never removed where an earlier release wrote it; the default workspace path is `~/.config/agent-workspace`
 - Uninstall recovery and the in-app rollback of the last install are session-scoped; they are not rediscovered after a restart even when transaction evidence remains on disk
 - Opening folders uses the macOS `open` command only
 - Python 3 must be on `PATH` for config merges and generators
@@ -198,6 +227,10 @@ Use the isolated `HOME`; install the skills and agents first, then edit `~/.clau
 
 ### Rollback and uninstall
 - [ ] Rollback, backup layout, uninstall preview, recovery passed
+- Notes: ________
+
+### Cleanup of old workspace copies
+- [ ] Seeded rc.1 folder: review per folder, left-in-place file, apply, `z` restore, second preview empty passed
 - Notes: ________
 
 ### Codex migration

@@ -4,9 +4,8 @@ Key reference: [USING_THE_APP.md](USING_THE_APP.md#keyboard-reference). Every in
 
 ## Install everything
 
-1. Workspace tab (`1`), cursor on `workspace`, `u`, `y`.
-2. Each harness tab, `u`, `y`. Or `:update --all` once for the workspace and every enabled harness in one plan.
-3. Check the runtime pane on each harness page.
+1. Each harness tab, `u`, `y`. Or `:update --all` once for every enabled harness in one plan (it also reviews the removal of old workspace copies when there are any).
+2. Check the runtime pane on each harness page.
 
 ## Set up one harness only
 
@@ -18,7 +17,7 @@ Open its tab and press `u`. To hide the others, turn them off in Settings (Harne
 
 ## Choose what Install writes
 
-On a harness page, Space toggles targets (rules, agents, config; Cursor is one `cursor_setup` target). Changes autosave. A target that is off is excluded from preview, apply, and status. Skills and the workspace bundle always install.
+On a harness page, Space toggles targets (rules, agents, config; Cursor is one `cursor_setup` target). Changes autosave. A target that is off is excluded from preview, apply, and status. Skills and the `workspace` row are never gated by targets.
 
 `codex_config` starts off. Turn it on only if you want the app to keep `approval_policy`, `sandbox_mode`, `approvals_reviewer`, and the app default approval keys aligned with the template.
 
@@ -42,7 +41,17 @@ A rules file is a conflict when its block was edited or it existed before the ap
 
 ## Take an update to a file you edited
 
-The app never overwrites a file it does not provably own. To accept the bundled version of a workspace file you changed, move or delete your copy and install again. To keep your version, leave it; it shows as a conflict and is skipped.
+The app never overwrites a file it does not provably own. To accept the bundled version of a harness file you changed, move or delete your copy and install again. To keep your version, leave it; it shows as a conflict and is skipped.
+
+## Remove old workspace copies
+
+Earlier releases copied the bundle into `~/.config/agent-workspace`. The app no longer reads those files.
+
+1. Workspace tab (`1`). The `workspace` row says `N old copies to remove` (a fresh profile says `current`).
+2. `u` on the row. The review lists the removals per folder and each file left in place (edited, or not provably the app's).
+3. `y` removes the copies in one transaction with backups. `n` or Escape keeps everything; `z` afterwards restores every file.
+
+Your own files, `.agent-workspace/` and `docs/context/` are never touched.
 
 ## Undo the last install
 
@@ -57,12 +66,12 @@ On the output pane press `z` (or `:rollback`). The app does a dry run, shows wha
 
 ## Add a skill of your own
 
-Skills you add to the runtime workspace are not installed; harness installs come from the app's bundled catalog. Put a personal skill straight into a skills folder your harness reads (`~/.claude/skills/<name>/SKILL.md` or `~/.agents/skills/<name>/SKILL.md`). Unknown skills there are preserved. To change the bundled catalog, edit the app source repository.
+Skills you add to the workspace folder are not installed; harness installs come from the app's bundled catalog. Put a personal skill straight into a skills folder your harness reads (`~/.claude/skills/<name>/SKILL.md` or `~/.agents/skills/<name>/SKILL.md`). Unknown skills there are preserved. To change the bundled catalog, edit the app source repository.
 
 ## The workspace folder
 
-The app works in `~/.config/agent-workspace`; Settings no longer picks another folder. A custom folder saved by an earlier version stays in use while it holds the app's `.agent-workspace/` state. Settings -> workspace: `R` asks first, then returns to the default folder (the old folder and its ownership records are left as they are, and the app cannot switch back to it). `AGENT_WORKSPACE_PATH` overrides the setting.
+The app keeps its state and your personal docs in `~/.config/agent-workspace`; Settings no longer picks another folder. A custom folder saved by an earlier version stays in use while it holds the app's `.agent-workspace/` state. Settings -> workspace: `R` asks first, then returns to the default folder (the old folder and its ownership records are left as they are, and the app cannot switch back to it). `AGENT_WORKSPACE_PATH` overrides the setting.
 
 ## Version the workspace with Git
 
-See [GIT_VERSIONING.md](GIT_VERSIONING.md). The app does not run Git against the workspace.
+Version only your personal docs (`docs/context/`); see [GIT_VERSIONING.md](GIT_VERSIONING.md). The app does not run Git against the workspace.
