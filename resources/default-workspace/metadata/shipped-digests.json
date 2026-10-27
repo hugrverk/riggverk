@@ -138,7 +138,8 @@
     ],
     "skills/adversarial-implementation/SKILL.md": [
       "sha256:c051d1e0baa36629aed272f394d3ae3a4666adf8454d90d2eb54bc9e9f19b620",
-      "sha256:c237881bf55fd6327ce7bd851d721223f13c8fb15e11afe9ac12671e64d679e0"
+      "sha256:c237881bf55fd6327ce7bd851d721223f13c8fb15e11afe9ac12671e64d679e0",
+      "sha256:c303cb9be1a92f12cb224297bd9d4dff57dd5097cd4a3d777f64322e8c7bdda0"
     ],
     "skills/adversarial-implementation/adversarial-roles.md": [
       "sha256:1aa88f8b4394ab9043674a74afd5d1a7ad5543d61062de54ab9463b84f6c0220"
