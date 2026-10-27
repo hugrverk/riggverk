@@ -226,6 +226,14 @@ class CheckSkillRoutingTests(unittest.TestCase):
         self.edit(self.skill("zoom-out"), "category: architecture", "disable-model-invocation: true\ncategory: architecture")
         self.assert_fails("names user-invoked skill `zoom-out`")
 
+    def test_adversarial_skill_in_routing_bullet_fails(self) -> None:
+        self.edit(
+            self.tree / WS / "templates/global-agent-rules.md",
+            "## Skill routing\n",
+            "## Skill routing\n- Risky changes: `adversarial-review`.\n",
+        )
+        self.assert_fails("names on-request skill `adversarial-review`")
+
     def test_user_invoked_skill_in_composed_sync_rules_fails(self) -> None:
         sync = self.tree / WS / "templates/sync/codex-rules.md"
         sync.write_text(sync.read_text(encoding="utf-8") + "\n- Retrospectives: `retro`.\n", encoding="utf-8")
