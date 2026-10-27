@@ -540,8 +540,10 @@ export interface OpenCodeRuntimeHealth {
   default_agent: string | null;
   model: string | null;
   small_model: string | null;
-  /** The model all five subagent roles are pinned to in the installed config; null when they inherit. */
+  /** The shared installed subagent model, excluding inspector while a critic override is set. */
   subagent_model: string | null;
+  /** The installed inspector model; null when inspector inherits the main model. */
+  critic_model: string | null;
   autoupdate: string | null;
   snapshot: boolean | null;
   bundled_agent_count: number;
@@ -590,11 +592,15 @@ export interface OpenCodeModelSelection {
   small_model: string;
   /** The model the subagent roles run on; empty while they inherit `model`. */
   subagent_model: string;
+  /** The inspector override; empty while it follows the subagent model or inherits `model`. */
+  critic_model: string;
   /** Each value has its own source: only a value the user changed is an override. */
   model_source: OpenCodeModelSource;
   small_model_source: OpenCodeModelSource;
   /** `override` while a subagent model is set, `bundled default` while the roles inherit `model`. */
   subagent_source: OpenCodeModelSource;
+  /** `override` while a critic model is set, else `bundled default` (inherit). */
+  critic_source: OpenCodeModelSource;
 }
 
 export interface CodexRuntimeCheck {

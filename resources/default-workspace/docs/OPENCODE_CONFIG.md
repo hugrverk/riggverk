@@ -24,7 +24,7 @@ The OpenCode runtime pane compares files, and it also asks the installed CLI thr
 |-------|--------|
 | `opencode --version` (10 s) | The `cli` row, and the 1.x or 2.x code path below |
 | `opencode debug agent <default_agent> --pure` (20 s, 1.x only) | Exit 0 means the default agent parses and resolves. A non-zero exit warns, usually for a frontmatter error in an agent file that OpenCode otherwise skips silently |
-| `opencode models --pure` (30 s; `--standalone` on 2.x) | `model`, `small_model` and, when one is installed, the subagent model must be listed. A missing one warns. OpenCode does not pick another small model when `small_model` is set but unknown. A model only appears while its provider is signed in |
+| `opencode models --pure` (30 s; `--standalone` on 2.x) | `model`, `small_model` and, when installed, the subagent and critic models must be listed. A missing one warns. OpenCode does not pick another small model when `small_model` is set but unknown. A model only appears while its provider is signed in |
 
 A missing CLI, a timeout or a failing probe leaves those checks `unknown`. It never fails the health or changes its status. The rows of the pane: `cli` (version, or "not found" with the install options), `default agent`, `autoupdate`, `rules` (global `AGENTS.md` against the bundled rules), `agents` (`synced` with the installed count, or the count and then the files that differ or are missing), `config` (synced or diverged, with the names of the managed keys that differ, and `has comments` when the file is JSONC), `overrides` (only when something below changes the config OpenCode runs), `mcp playwright` (the pinned version, with `synced` or `diverged`) and `tui` (synced or diverged, with the names of the managed keys that differ). Apart from the default agent and `autoupdate`, the rows show names and statuses, never a value from a file.
 
@@ -110,7 +110,7 @@ OpenCode agent definitions live at `agents/*.md` in the workspace. The bundled a
 
 `architect` is the primary agent. `inspector` and `verifier` are subagents you can run directly: type `@inspector` or `@verifier` in the prompt. `repo-scout`, `sentinel` and `scribe` are `hidden: true`, which removes them from `@` autocomplete; the architect still delegates to them. Hiding only affects the menu, not what the model may delegate to.
 
-`templates/opencode.json` defines global `model`, `small_model`, and `default_agent`. The bundled `small_model` is `opencode-go/deepseek-v4.1-flash` (the earlier `deepseek-v4-flash` is no longer listed by `opencode models opencode-go`). Agents are model-agnostic by default — model selection is centralized in `templates/opencode.json`, and the bundled agent files carry no `model`. The one exception is the optional subagent model override (see "App-level model override"): it pins the subagent roles through managed `agent.<role>.model` entries in the installed `opencode.json`, never in the agent files.
+`templates/opencode.json` defines global `model`, `small_model`, and `default_agent`. The bundled `small_model` is `opencode-go/deepseek-v4.1-flash` (the earlier `deepseek-v4-flash` is no longer listed by `opencode models opencode-go`). Agents are model-agnostic by default — model selection is centralized in `templates/opencode.json`, and the bundled agent files carry no `model`. The exceptions are the optional subagent and critic model overrides (see "App-level model override"): they pin roles through managed `agent.<role>.model` entries in the installed `opencode.json`, never in the agent files.
 
 ## Permission model
 
@@ -213,10 +213,12 @@ Both JSON files are validated before and after the write. Existing files that di
 
 ## App-level model override
 
-The OpenCode tab has a model override in its runtime pane. It holds three values:
+The OpenCode tab has a model override in its runtime pane. It holds four values:
 
 - `model` and `small model`: the global `model` and `small_model` of `opencode.json`.
 - `subagent model` (optional): the model the read-only subagent roles run on. Unset (shown as `inherit main model`), the subagents use the main model, as before.
+
+`critic model` (optional, stored as `critic_model`) is used by the adversarial skills' critic (`inspector`). It pins only `agent.inspector.model`, taking precedence over the subagent model; the other roles keep their subagent model. There is no bundled critic default: unset, inspector follows the subagent model or inherits the main model. Clearing it restores that fallback on the next install. It uses the same `provider/model` validation, model list, source/state display and reset as the other rows.
 
 Keys in the pane: `e` edit, `s` save, `x` reset to the bundled default, `R` reload the model list (read with the arguments of the installed OpenCode major).
 
@@ -224,10 +226,10 @@ Keys in the pane: `e` edit, `s` save, `x` reset to the bundled default, `R` relo
 
 Each value has a line under it:
 
-- `source: override | bundled default`. `override` means the app-level file below holds the value. `bundled default` means the bundled `opencode.base.json` value, or for the subagent model "inherit the main model". Workspace template edits do not change these defaults. Each of the three values has its own source: only a value you changed is an override.
-- `state: applied | pending apply (u to update)`. The saved override (or the bundled default) is compared with the installed `opencode.json`: `pending apply` means an install (`u`, then `y`) would still change that value, for the subagent model when any of the role entries differs. The state is left out while runtime health is not loaded.
+- `source: override | bundled default`. `override` means the app-level file below holds the value. `bundled default` means the bundled `opencode.base.json` value, or inheritance for the subagent and critic models. Workspace template edits do not change these defaults. Each value has its own source: only a value you changed is an override.
+- `state: applied | pending apply (u to update)`. The saved override (or the bundled default) is compared with the installed `opencode.json`: `pending apply` means an install (`u`, then `y`) would still change that value. The subagent row checks its role entries, excluding inspector while a critic override is set; the critic row checks inspector. The state is left out while runtime health is not loaded.
 - Saving (`s`) stores only the values that differ from the current bundled default. A `model` or `small model` equal to it is left out of the file and keeps following the template, so a later change of the bundled default (a model that is no longer listed, say) reaches you with the next install. Setting a value back to the bundled default and saving drops it from the file again. When nothing is left, the file is deleted instead of being written empty. Saving only a new subagent model therefore leaves `model` and `small model` on the bundled default.
-- `x` deletes the override file in one step and returns all three rows to the bundled default (unsaved edits are dropped too). The installed config keeps its values until the next install, which writes the bundled models and removes the subagent entries. `x` is offered only while an override exists.
+- `x` deletes the override file in one step and returns all four rows to the bundled default or inheritance (unsaved edits are dropped too). The installed config keeps its values until the next install, which writes the bundled models and removes the managed role models. `x` is offered only while an override exists.
 
 The options of each field are grouped by provider (`<optgroup>`). A value that `opencode models` does not list (a provider that is not signed in, a removed model, a typed custom one) stays selectable but is marked `(not in opencode models)`; nothing is marked while the list is unavailable or incomplete. For a custom provider choose `custom provider/model…`, which turns the field into a text input (Esc returns to the list). The text input is also used while no model list is available.
 
@@ -241,17 +243,17 @@ A saved selection is stored in an app-level override file:
 | Linux | `${XDG_CONFIG_HOME:-~/.config}/se.hugrverk.riggverk/opencode-model-selection.json` |
 | Windows | `%APPDATA%\se.hugrverk.riggverk\opencode-model-selection.json` |
 
-This file is **not** part of the workspace templates. It is an app-preference file stored outside the workspace source tree. It does not affect `templates/opencode.base.json` or `templates/opencode.json`. It holds `schema_version` and, only for the values you chose, `model`, `small_model` and `subagent_model`. A file written by an earlier app version has both `model` and `small_model` and no `subagent_model`: it reads as two explicit overrides (and "inherit" for the subagents) and keeps applying both until you change them back to the bundled default or press `x`. A value that is not `provider/model` is ignored on its own; the others still apply.
+This file is **not** part of the workspace templates. It is an app-preference file stored outside the workspace source tree. It does not affect `templates/opencode.base.json` or `templates/opencode.json`. It holds `schema_version` and, only for the values you chose, `model`, `small_model`, `subagent_model` and `critic_model`. A file written by an earlier app version has both `model` and `small_model` and no `subagent_model`: it reads as two explicit overrides (and "inherit" for the subagents) and keeps applying both until you change them back to the bundled default or press `x`. A missing `critic_model` preserves the earlier inspector behavior. A value that is not `provider/model` is ignored on its own; the others still apply.
 
 The override takes effect on the next OpenCode install (`u`, `y`). The installed `~/.config/opencode/opencode.json` receives the `model`, `small_model` and subagent entries the override file holds; every other value comes from the template. Workspace templates are not mutated.
 
-A value the override does not hold is read from the bundled `templates/opencode.base.json` (or the built-in defaults) as the source of truth for model selection.
+A main or small model the override does not hold is read from the bundled `templates/opencode.base.json` (or the built-in defaults) as the source of truth for model selection.
 
 ### Subagent model
 
-With a subagent model set, the install writes `agent.<role>.model` for exactly `repo-scout`, `inspector`, `sentinel`, `verifier` and `scribe`; the bundled agent files stay as they are. `architect`, OpenCode's own agents and every other `agent.*` entry are not touched. Like the `plan` and `explore` permission entries, these are managed sub-entries: only the `model` field is owned, so a role's other keys (`description`, `temperature`, your own `permission` edits ...) and every other agent survive, and a model you set on the primary or on your own agents is left alone. When the override is cleared (or saved without a subagent model), the next install removes those `model` fields again, and an `agent.<role>` or `agent` object that held nothing else goes with them.
+With a subagent model set, the install writes `agent.<role>.model` for exactly `repo-scout`, `inspector`, `sentinel`, `verifier` and `scribe` (inspector uses the critic override when set); the bundled agent files stay as they are. `architect`, OpenCode's own agents and every other `agent.*` entry are not touched. Like the `plan` and `explore` permission entries, these are managed sub-entries: only the `model` field is owned, so a role's other keys (`description`, `temperature`, your own `permission` edits ...) and every other agent survive, and a model you set on the primary or on your own agents is left alone. When the subagent override is cleared, the next install removes those `model` fields again, except inspector while a critic override remains; an `agent.<role>` or `agent` object that held nothing else goes with them.
 
-The runtime pane's `config` row names a role whose entry differs as `agent.<role>.model`. The model probes also check the subagent model against `opencode models` when one is installed (`subagent_model` check and warning). A model that is not listed leaves the roles pinned to it, so sign in to its provider or pick another model.
+The runtime pane's `config` row names a role whose entry differs as `agent.<role>.model`. The model probes also check the installed subagent and inspector models against `opencode models` (`subagent_model` and `critic_model` checks and warnings). A model that is not listed leaves the roles pinned to it, so sign in to its provider or pick another model.
 
 Checked on OpenCode 1.19.3: a managed `agent.<role>.model` in `opencode.json` is applied to the markdown agents in `~/.config/opencode/agents` (`opencode debug agent <role> --pure` resolves the model from the config entry while the agent's permission ruleset is unchanged), and an agent without an entry resolves no model of its own and uses the session's. The tools a subagent gets can follow its provider: on that version `debug agent sentinel` lists the `websearch` tool under the default `opencode-go` model and not when the role is pinned to an `anthropic` model.
 
