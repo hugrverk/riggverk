@@ -6,16 +6,17 @@
         {
           "title": "New",
           "items": [
-            "Add adversarial-review with a plan mode",
-            "Add adversarial-test with frozen adversary tests",
-            "Evidence-first adversarial critic with easy role choice",
-            "Add a critic model for the adversarial skills"
+            "adversarial-review: a fresh read-only critic finds and verifies issues and reports them without fixing anything; plan mode and a separate list for issues that were already there",
+            "adversarial-test: an adversary writes failing tests that are then frozen, and the implementer may change only production code",
+            "adversarial-implementation v2: the critic is chosen by capability, every finding carries a proof the lead runs, at most three rounds with frozen tests and a final round that may only delete; a start line shows who plays each role and how to change it",
+            "Start the adversarial skills in plain words or with their slash command (#69, #71, #72)",
+            "OpenCode: a critic model row, so the adversarial skills' critic (inspector) can run a stronger model than the other subagents"
           ]
         },
         {
           "title": "Fixes",
           "items": [
-            "Wait for the apply hint in the take-bundled review test"
+            "Critics can no longer reach MCP tools such as Playwright, whether they run in OpenCode, Codex or Claude Code"
           ]
         }
       ]
