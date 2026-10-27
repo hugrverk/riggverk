@@ -150,13 +150,33 @@ fn aggregate_state(
     (state, counts, conflicts)
 }
 
+/// The surfaces the ownership records hold anything for. Identities this version cannot read
+/// count for none.
+fn recorded_surfaces(
+    records: Option<&crate::managed_state::ManagedState>,
+) -> std::collections::HashSet<SetupSurfaceId> {
+    records
+        .into_iter()
+        .flat_map(|state| state.artifacts.iter())
+        .filter_map(|record| {
+            crate::managed_bootstrap::artifact_from_identity(&record.identity).ok()
+        })
+        .map(|artifact| artifact.surface())
+        .collect()
+}
+
 pub fn status_for_surfaces(
     surfaces: &[SetupSurfaceId],
     workspace_root: &Path,
     home: &Path,
 ) -> Result<InstallationStatus, String> {
     let planned = setup_transaction::plan_artifacts_for_surfaces(surfaces, workspace_root, home)?;
-    let has_trusted_state = crate::managed_state::read_managed_state(workspace_root).is_some();
+    let records = crate::managed_state::read_managed_state(workspace_root);
+    let ownership_records = records.is_some();
+    let recorded = recorded_surfaces(records.as_ref());
+    // Records of another harness say nothing about this one: it is "not installed" until the
+    // app has written something of its own.
+    let has_trusted_state = surfaces.iter().any(|s| recorded.contains(s));
     let (state, counts, conflict_details) = aggregate_state(&planned, has_trusted_state);
     let summary = match state {
         InstallationState::NotInstalled => "Not installed".into(),
@@ -184,7 +204,8 @@ pub fn status_for_surfaces(
             surface_status(
                 *surface,
                 &planned,
-                has_trusted_state,
+                recorded.contains(surface),
+                ownership_records,
                 scope.as_ref(),
                 workspace_root,
                 home,
@@ -204,6 +225,7 @@ fn surface_status(
     surface: SetupSurfaceId,
     planned: &[setup_transaction::PlannedArtifact],
     has_trusted_state: bool,
+    ownership_records: bool,
     scope: Option<&crate::skill_roots::SkillScope>,
     workspace_root: &Path,
     home: &Path,
@@ -271,7 +293,7 @@ fn surface_status(
         .unwrap_or(detail);
     let data_folder = (surface == SetupSurfaceId::WorkspaceBundle).then(|| DataFolderStatus {
         personal_docs: crate::commands::personal_doc_count(workspace_root),
-        ownership_records: has_trusted_state,
+        ownership_records,
         left_in_place: own
             .iter()
             .filter(|p| p.kind == OperationKind::Manual)

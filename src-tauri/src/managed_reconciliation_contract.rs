@@ -679,6 +679,54 @@ mod tests {
     }
 
     #[test]
+    fn records_of_one_harness_leave_another_not_installed() {
+        let _guard = guard::lock();
+        let _restore = EnvRestore::capture();
+        let base = temp_base("other-harness");
+        let home = base.join("home");
+        let workspace = base.join("runtime");
+        fs::create_dir_all(&home).expect("home");
+        set_test_user_dirs(&home);
+        unsafe {
+            std::env::set_var("AGENT_WORKSPACE_PATH", workspace.to_string_lossy().as_ref());
+            std::env::set_var(
+                "AGENT_WORKSPACE_BACKUP_DIR",
+                base.join("backups").to_string_lossy().as_ref(),
+            );
+        }
+        let claude = preview_setup(vec![surface_id_string(SetupSurfaceId::ClaudeRules)])
+            .expect("preview claude rules");
+        let result = apply_surfaces_from_preview(&claude);
+        assert!(result.success, "install: {}", result.message);
+        assert!(managed_state_path(&workspace).is_file());
+
+        let state_of = |surface| {
+            crate::installation_status::status_for_surfaces(&[surface], &workspace, &home)
+                .expect("status")
+                .state
+        };
+        assert_eq!(
+            state_of(SetupSurfaceId::ClaudeRules),
+            crate::installation_status::InstallationState::Current
+        );
+        assert_eq!(
+            state_of(SetupSurfaceId::CodexRules),
+            crate::installation_status::InstallationState::NotInstalled
+        );
+        // Once Codex has records, a missing file is an update, not a fresh install.
+        let codex = preview_setup(vec![surface_id_string(SetupSurfaceId::CodexRules)])
+            .expect("preview codex rules");
+        let result = apply_surfaces_from_preview(&codex);
+        assert!(result.success, "install: {}", result.message);
+        fs::remove_file(home.join(".codex/AGENTS.md")).expect("drop codex rules");
+        assert_eq!(
+            state_of(SetupSurfaceId::CodexRules),
+            crate::installation_status::InstallationState::UpdateAvailable
+        );
+        let _ = fs::remove_dir_all(base);
+    }
+
+    #[test]
     fn pre_manifest_fixture_detects_stale_removals_before_apply() {
         let _guard = guard::lock();
         let _restore = EnvRestore::capture();
