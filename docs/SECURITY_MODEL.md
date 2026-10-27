@@ -82,11 +82,7 @@ Managed writes (Install, uninstall, rollback, backups) reject symlinked targets,
 
 ## Git
 
-The status panel runs read-only git in the workspace root: `git rev-parse`, `branch`, `status`, and `log`. Nothing fetches, pushes, or contacts a remote.
-
-Neutralized for every git call: `core.fsmonitor` (forced off), `core.hooksPath` (empty), `GIT_OPTIONAL_LOCKS=0`, `GIT_TERMINAL_PROMPT=0`, a timeout, a process-group kill, and capped output.
-
-Still honored from repository config: filter drivers (`filter.<name>.clean` and `process`, which `git status` runs for modified files that a `.gitattributes` rule selects; no filter-free dirty check gives the same answer) and any other key not listed above. Treat a workspace you did not create as untrusted.
+The app runs no `git` command. It does not read the Git state of the data folder or of any project, and it never fetches, pushes, or contacts a remote. A repository in the data folder is yours to manage.
 
 ## Scripts
 
@@ -106,7 +102,7 @@ The pages of the light harnesses (GitHub Copilot, Pi, Kilo Code) run only `<cli>
 - System keychains, SSH agent state, or GPG state.
 - IDE authentication state, tokens, sessions, or trust databases.
 - Unrelated IDE settings or MCP server payloads outside the allowlisted Playwright entries of Cursor and of the light harnesses (the other servers in those files are parsed with the file and never scanned, shown or logged).
-- Project `.git/` directories, except the read-only git status of the workspace root (see Git).
+- Project `.git/` directories.
 
 ## Process output
 

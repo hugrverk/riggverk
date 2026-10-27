@@ -259,15 +259,6 @@ FORBIDDEN = (
         "workspace validity must not use bundled files (templates/, skills, README.md) as markers",
         'rel_path: "templates/global-agent-rules.md",',
     ),
-    Rule(
-        "status-raw-compare",
-        "forbid",
-        r"(?s)\A(?=.*fn opencode_config_status)(?=.*sync_label\(&config_target, &config_source\))",
-        ("src-tauri/src/commands/status.rs",),
-        "opencode_config_status must not byte-compare the raw templates/opencode.json",
-        "fn opencode_config_status() {\n    sync_label(&config_target, &config_source)\n}\n",
-        whole_file=True,
-    ),
 )
 
 # Rust tests that replaced older release-check source greps. Deleting one would drop that guard
@@ -290,8 +281,6 @@ REQUIRED_RUST_TESTS = (
     ("src-tauri/src/cursor_profile_ops.rs", "cursor_backups_are_owner_only"),
     ("src-tauri/src/commands/opencode_runtime.rs", "test_configs_match_pass_when_template_has_playwright_placeholders"),
     ("src-tauri/src/commands/opencode_runtime.rs", "test_configs_match_warn_when_rendered_expected_differs"),
-    ("src-tauri/src/commands/status.rs", "opencode_config_status_synced_when_installed_matches_rendered_template"),
-    ("src-tauri/src/commands/status.rs", "opencode_config_status_diverged_when_installed_is_unrendered_template"),
 )
 REQUIRE = (
     # Codex reads $CODEX_HOME/skills when CODEX_HOME is customised and ~/.agents/skills by default.
@@ -326,14 +315,6 @@ REQUIRE = (
         ("src-tauri/src/commands/opencode_runtime.rs",),
         "OpenCode health must compare the installed config to the rendered workspace config",
         "let expected = render_expected_opencode_config(&workspace)?;",
-    ),
-    Rule(
-        "status-rendered",
-        "require",
-        r"opencode_config_sync_status|render_expected_opencode_config",
-        ("src-tauri/src/commands/status.rs",),
-        "get_status opencode_config must compare the rendered workspace config",
-        "opencode_config_sync_status(&workspace)",
     ),
 ) + tuple(
     Rule(
