@@ -872,11 +872,11 @@ mod tests {
         let root = temp_root("config-template-known");
         write_file(&root, "templates/opencode.json", "{}");
 
-        let targets = agent_targets::editable_config_targets();
+        let targets = agent_targets::bundled_config_targets();
         let opencode = targets.iter().find(|t| t.id == "opencode_config");
         assert!(
             opencode.is_some(),
-            "opencode_config must be in editable_config_targets"
+            "opencode_config must be in bundled_config_targets"
         );
 
         let path = root.join(opencode.unwrap().source_rel);
@@ -886,17 +886,17 @@ mod tests {
 
     #[test]
     fn config_template_unknown_target_rejected() {
-        let targets = agent_targets::editable_config_targets();
+        let targets = agent_targets::bundled_config_targets();
         let unknown = targets.iter().find(|t| t.id == "nonexistent_config");
         assert!(
             unknown.is_none(),
-            "unknown config target must not be in editable registry"
+            "unknown config target must not be in the bundled config registry"
         );
     }
 
     #[test]
-    fn cursor_setup_is_not_an_editable_config_template() {
-        let targets = agent_targets::editable_config_targets();
+    fn cursor_setup_is_not_a_bundled_config_template() {
+        let targets = agent_targets::bundled_config_targets();
         assert!(
             targets.iter().all(|t| t.id != "cursor_setup"),
             "cursor_setup must stay out of config template editing"
@@ -905,7 +905,7 @@ mod tests {
 
     #[test]
     fn config_sync_target_source_paths_are_safe() {
-        let targets = agent_targets::editable_config_targets();
+        let targets = agent_targets::bundled_config_targets();
         for t in &targets {
             assert!(
                 !t.source_rel.starts_with('/'),
@@ -1737,15 +1737,15 @@ pub fn read_config_template(target_id: String) -> Result<DocumentContent, String
     read_config_template_at_root(&bundled_library_root()?, &target_id)
 }
 
-/// The bundled source of an editable config target, read from `bundle_root`.
+/// The bundled template of a config target, read from `bundle_root` (shown read-only).
 fn read_config_template_at_root(
     bundle_root: &Path,
     target_id: &str,
 ) -> Result<DocumentContent, String> {
-    let target = agent_targets::editable_config_targets()
+    let target = agent_targets::bundled_config_targets()
         .into_iter()
         .find(|t| t.id == target_id)
-        .ok_or_else(|| format!("unknown editable config target: {}", target_id))?;
+        .ok_or_else(|| format!("unknown bundled config target: {}", target_id))?;
     let path = bundle_root.join(target.source_rel);
     let content = read_file_under_root(bundle_root, &path)?;
     Ok(DocumentContent {

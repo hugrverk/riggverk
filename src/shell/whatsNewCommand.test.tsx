@@ -18,7 +18,7 @@ afterEach(() => {
 function deps(): AppCommandDeps {
   return {
     enabledHarnessIds: ["codex", "opencode", "cursor", "claude"],
-    workspaceValid: true,
+    dataFolderOk: true,
     busyLabel: null,
     switchView: vi.fn(),
     appearance: "dark",

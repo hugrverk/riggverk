@@ -23,7 +23,7 @@ import type {
 /** What the backend says when the user's text in a rules file changed after it was opened. */
 const RULES_CHANGED_ON_DISK = "changed on disk";
 
-const EDITABLE_CONFIG_TARGET_IDS = new Set(["opencode_config"]);
+const BUNDLED_CONFIG_TARGET_IDS = new Set(["opencode_config"]);
 
 export interface LibraryControllerDeps {
   setError: (message: string | null) => void;
@@ -745,4 +745,4 @@ export function useLibraryController({
   };
 }
 
-export { EDITABLE_CONFIG_TARGET_IDS };
+export { BUNDLED_CONFIG_TARGET_IDS };

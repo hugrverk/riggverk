@@ -82,7 +82,7 @@ describe("rulesModel", () => {
       reason: "another file in the folder masks this one, so the harness never reads it",
       diffDisabled: false,
     });
-    const gates = rulesGates(m, { workspaceValid: true, busyLabel: null, blockedBy: null });
+    const gates = rulesGates(m, { dataFolderOk: true, busyLabel: null, blockedBy: null });
     expect(gates.diff.visible).toBe(true);
     expect([gates.convert.visible, gates.leave.visible, gates.manage.visible]).toEqual([false, false, false]);
     expect(rulesPageHint(m, "Pi")).toContain("another file in the rules folder");
@@ -97,7 +97,7 @@ describe("rulesModel", () => {
       diffDisabled: "no rules file is installed",
       convertible: false,
     });
-    expect(rulesGates(m, { workspaceValid: true, busyLabel: null, blockedBy: null }).diff.visible).toBe(true);
+    expect(rulesGates(m, { dataFolderOk: true, busyLabel: null, blockedBy: null }).diff.visible).toBe(true);
   });
 
   it("has no diff for a missing file", () => {

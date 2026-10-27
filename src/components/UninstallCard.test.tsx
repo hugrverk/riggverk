@@ -41,13 +41,13 @@ afterEach(() => {
 
 function renderCard(props: Partial<Parameters<typeof UninstallCard>[0]> = {}) {
   const onApply = vi.fn();
-  const utils = render(<UninstallCard workspaceValid busy={false} onApply={onApply} {...props} />);
+  const utils = render(<UninstallCard dataFolderOk busy={false} onApply={onApply} {...props} />);
   return { onApply, ...utils };
 }
 
 describe("UninstallCard", () => {
   it("renders nothing without a valid workspace", () => {
-    const { container } = renderCard({ workspaceValid: false });
+    const { container } = renderCard({ dataFolderOk: false });
     expect(container.firstChild).toBeNull();
   });
 
@@ -74,19 +74,19 @@ describe("UninstallCard", () => {
   it("opens the preview when :uninstall asks for it, once", async () => {
     const handled = vi.fn();
     const { rerender } = renderCard();
-    rerender(<UninstallCard workspaceValid busy={false} onApply={vi.fn()} previewRequested onPreviewRequestHandled={handled} />);
+    rerender(<UninstallCard dataFolderOk busy={false} onApply={vi.fn()} previewRequested onPreviewRequestHandled={handled} />);
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("preview_uninstall"));
     expect(handled).toHaveBeenCalledTimes(1);
     expect(HTMLDialogElement.prototype.showModal).toHaveBeenCalledTimes(1);
 
-    rerender(<UninstallCard workspaceValid busy={false} onApply={vi.fn()} previewRequested={false} onPreviewRequestHandled={handled} />);
+    rerender(<UninstallCard dataFolderOk busy={false} onApply={vi.fn()} previewRequested={false} onPreviewRequestHandled={handled} />);
     expect(invokeMock).toHaveBeenCalledTimes(1);
   });
 
   it("does not open the preview for a request that arrives while a task runs", async () => {
     const handled = vi.fn();
     const { rerender } = renderCard({ busy: true });
-    rerender(<UninstallCard workspaceValid busy onApply={vi.fn()} previewRequested onPreviewRequestHandled={handled} />);
+    rerender(<UninstallCard dataFolderOk busy onApply={vi.fn()} previewRequested onPreviewRequestHandled={handled} />);
     await waitFor(() => expect(handled).toHaveBeenCalledTimes(1));
     expect(invokeMock).not.toHaveBeenCalled();
   });

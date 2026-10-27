@@ -32,7 +32,7 @@ afterEach(() => {
 function makeDeps(overrides: Partial<AppCommandDeps> = {}): AppCommandDeps {
   return {
     enabledHarnessIds: ["codex", "opencode", "cursor", "claude"],
-    workspaceValid: true,
+    dataFolderOk: true,
     busyLabel: null,
     switchView: vi.fn(),
     setLibrarySource: vi.fn(),
@@ -339,7 +339,7 @@ describe("useAppCommands", () => {
     });
 
     it("lets the workspace be installed without a valid workspace, but nothing that needs one", () => {
-      const none = makeDeps({ workspaceValid: false });
+      const none = makeDeps({ dataFolderOk: false });
       setup(none);
       runLine("update workspace");
       expect(none.openInstall).toHaveBeenCalledWith("workspace");
@@ -455,7 +455,7 @@ describe("useAppCommands", () => {
     });
 
     it("uninstall needs a valid workspace", () => {
-      const deps = makeDeps({ workspaceValid: false });
+      const deps = makeDeps({ dataFolderOk: false });
       setup(deps);
       runLine("uninstall");
       expect(commandLineError()).toBe("uninstall: workspace folder unusable");

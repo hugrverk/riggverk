@@ -112,7 +112,7 @@ export interface LibraryViewProps {
   configEditorSourceContent: DocumentContent | null;
 
   // Common
-  workspaceValid: boolean;
+  dataFolderOk: boolean;
   showConfigs: boolean;
 }
 
@@ -137,7 +137,7 @@ function sourceCount(props: LibraryViewProps, type: LibrarySourceType): number |
  * own view/edit state (below), which resets with the open item, so they are not needed.
  */
 export function LibraryView(props: LibraryViewProps) {
-  const { sourceType, onSetSourceType, workspaceValid, showConfigs } = props;
+  const { sourceType, onSetSourceType, dataFolderOk, showConfigs } = props;
   const rootRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [docSearch, setDocSearch] = useState("");
@@ -186,7 +186,7 @@ export function LibraryView(props: LibraryViewProps) {
     entry,
     sourceType,
     sourceIds: sources.map(source => source.id),
-    workspaceValid,
+    dataFolderOk,
     onSetSourceType,
     showCreateDoc: props.showCreateDoc,
     onSetShowCreateDoc: props.onSetShowCreateDoc,
@@ -242,7 +242,7 @@ export function LibraryView(props: LibraryViewProps) {
       list = (
         <RulesItemList
           agentTemplate={props.agentTemplate}
-          rulesFiles={workspaceValid ? props.rulesFiles : []}
+          rulesFiles={dataFolderOk ? props.rulesFiles : []}
           activeKey={
             props.activeRulesSurface !== null
               ? rulesFileKey(props.activeRulesSurface)

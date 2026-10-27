@@ -86,8 +86,8 @@ export interface TargetMeta {
 export const WORKSPACE_FOLDER_UNUSABLE = "workspace folder unusable";
 
 /** The right-hand cell of a harness-list row: "current", "current · you manage 2", "2 to update", "1 conflict", "…". */
-export function targetMeta(entry: OverviewEntry | undefined, options: { workspaceValid: boolean; id: OverviewId }): TargetMeta {
-  if (!options.workspaceValid) {
+export function targetMeta(entry: OverviewEntry | undefined, options: { dataFolderOk: boolean; id: OverviewId }): TargetMeta {
+  if (!options.dataFolderOk) {
     return options.id === "workspace" ? { text: "folder unusable", tone: "warn" } : { text: "needs workspace folder", tone: "dim" };
   }
   if (!entry || (entry.loading && !entry.status)) return { text: "…", tone: "dim" };
@@ -286,12 +286,12 @@ export interface UpdateAction {
 export function updateActionFor(
   id: OverviewId,
   entry: OverviewEntry | undefined,
-  context: { workspaceValid: boolean; busyLabel: string | null; settingsSaving: boolean },
+  context: { dataFolderOk: boolean; busyLabel: string | null; settingsSaving: boolean },
 ): UpdateAction {
   const state = entry?.status?.state;
   const hasConflicts = (entry?.status?.counts.conflict_count ?? 0) > 0;
   const label =
-    state === "not_installed" || (id === "workspace" && !context.workspaceValid)
+    state === "not_installed" || (id === "workspace" && !context.dataFolderOk)
       ? "install"
       : state === "conflict"
         ? "review conflicts"
@@ -299,10 +299,10 @@ export function updateActionFor(
           ? "update safe files"
           : "update";
   let disabled: string | false = false;
-  if (!context.workspaceValid && id !== "workspace") disabled = WORKSPACE_FOLDER_UNUSABLE;
+  if (!context.dataFolderOk && id !== "workspace") disabled = WORKSPACE_FOLDER_UNUSABLE;
   else if (context.busyLabel) disabled = `${context.busyLabel} is running`;
   else if (context.settingsSaving) disabled = "saving target changes";
-  else if (context.workspaceValid && entry?.loading && !entry.status) disabled = "checking status…";
+  else if (context.dataFolderOk && entry?.loading && !entry.status) disabled = "checking status…";
   else if (state === "current") disabled = "already current (p previews anyway)";
   else if (state === "unavailable") disabled = "unavailable on this system";
   return { label, disabled };
@@ -311,9 +311,9 @@ export function updateActionFor(
 /** Why a read-only preview cannot run, or false. */
 export function previewDisabledFor(
   id: OverviewId,
-  context: { workspaceValid: boolean; busyLabel: string | null },
+  context: { dataFolderOk: boolean; busyLabel: string | null },
 ): string | false {
-  if (!context.workspaceValid && id !== "workspace") return WORKSPACE_FOLDER_UNUSABLE;
+  if (!context.dataFolderOk && id !== "workspace") return WORKSPACE_FOLDER_UNUSABLE;
   if (context.busyLabel) return `${context.busyLabel} is running`;
   return false;
 }

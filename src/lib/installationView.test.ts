@@ -40,7 +40,7 @@ const SETTINGS = {
 };
 
 describe("targetMeta", () => {
-  const options = { workspaceValid: true, id: "claude" as const };
+  const options = { dataFolderOk: true, id: "claude" as const };
 
   it("describes the installation state in the list's right-hand cell", () => {
     expect(targetMeta(entry("claude", status("current")), options)).toEqual({ text: "current", tone: "ok" });
@@ -61,7 +61,7 @@ describe("targetMeta", () => {
   });
 
   it("tells the old copies of the bundle the workspace row removes, not an update", () => {
-    const workspace = { workspaceValid: true, id: "workspace" as const };
+    const workspace = { dataFolderOk: true, id: "workspace" as const };
     expect(targetMeta(entry("workspace", status("update_available", [], { remove_count: 133 })), workspace)).toEqual({
       text: "133 old copies to remove",
       tone: "warn",
@@ -76,8 +76,8 @@ describe("targetMeta", () => {
     expect(targetMeta(undefined, options).text).toBe("…");
     expect(targetMeta(entry("claude", null, { loading: true }), options).text).toBe("…");
     expect(targetMeta(entry("claude", null, { error: "hash failed" }), options)).toEqual({ text: "status failed", tone: "fail" });
-    expect(targetMeta(undefined, { workspaceValid: false, id: "claude" })).toEqual({ text: "needs workspace folder", tone: "dim" });
-    expect(targetMeta(undefined, { workspaceValid: false, id: "workspace" })).toEqual({ text: "folder unusable", tone: "warn" });
+    expect(targetMeta(undefined, { dataFolderOk: false, id: "claude" })).toEqual({ text: "needs workspace folder", tone: "dim" });
+    expect(targetMeta(undefined, { dataFolderOk: false, id: "workspace" })).toEqual({ text: "folder unusable", tone: "warn" });
   });
 });
 
@@ -202,7 +202,7 @@ describe("matrixModel", () => {
 });
 
 describe("updateActionFor", () => {
-  const idle = { workspaceValid: true, busyLabel: null, settingsSaving: false };
+  const idle = { dataFolderOk: true, busyLabel: null, settingsSaving: false };
 
   it("labels the key after the state", () => {
     expect(updateActionFor("claude", entry("claude", status("update_available")), idle)).toEqual({ label: "update", disabled: false });
@@ -216,14 +216,14 @@ describe("updateActionFor", () => {
     expect(updateActionFor("claude", entry("claude", status("unavailable")), idle).disabled).toMatch(/unavailable/);
     expect(updateActionFor("claude", entry("claude", status("update_available")), { ...idle, busyLabel: "uninstall" }).disabled).toBe("uninstall is running");
     expect(updateActionFor("claude", entry("claude", status("update_available")), { ...idle, settingsSaving: true }).disabled).toBe("saving target changes");
-    expect(updateActionFor("claude", undefined, { ...idle, workspaceValid: false }).disabled).toBe("workspace folder unusable");
+    expect(updateActionFor("claude", undefined, { ...idle, dataFolderOk: false }).disabled).toBe("workspace folder unusable");
     expect(updateActionFor("claude", entry("claude", null, { loading: true }), idle).disabled).toBe("checking status…");
   });
 
   it("lets the workspace itself be installed without a valid workspace", () => {
-    expect(updateActionFor("workspace", undefined, { ...idle, workspaceValid: false })).toEqual({ label: "install", disabled: false });
-    expect(previewDisabledFor("workspace", { workspaceValid: false, busyLabel: null })).toBe(false);
-    expect(previewDisabledFor("claude", { workspaceValid: false, busyLabel: null })).toBe("workspace folder unusable");
-    expect(previewDisabledFor("claude", { workspaceValid: true, busyLabel: "apply" })).toBe("apply is running");
+    expect(updateActionFor("workspace", undefined, { ...idle, dataFolderOk: false })).toEqual({ label: "install", disabled: false });
+    expect(previewDisabledFor("workspace", { dataFolderOk: false, busyLabel: null })).toBe(false);
+    expect(previewDisabledFor("claude", { dataFolderOk: false, busyLabel: null })).toBe("workspace folder unusable");
+    expect(previewDisabledFor("claude", { dataFolderOk: true, busyLabel: "apply" })).toBe("apply is running");
   });
 });

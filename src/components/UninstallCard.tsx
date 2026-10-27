@@ -6,7 +6,7 @@ import { Kv } from "../ui/Kv";
 import type { UninstallPlanView } from "../types";
 
 interface UninstallCardProps {
-  workspaceValid: boolean;
+  dataFolderOk: boolean;
   busy: boolean;
   onApply: (planFingerprint: string, previewToken: string) => void;
   /** `:uninstall` asks for the preview dialog; the card reports back once it has taken the request. */
@@ -21,7 +21,7 @@ interface UninstallCardProps {
  * transaction after explicit confirmation.
  */
 export function UninstallCard({
-  workspaceValid,
+  dataFolderOk,
   busy,
   onApply,
   previewRequested = false,
@@ -53,7 +53,7 @@ export function UninstallCard({
   useEffect(() => {
     if (!previewRequested) return;
     onPreviewRequestHandled?.();
-    if (workspaceValid && !busy && !loading) void loadPreview();
+    if (dataFolderOk && !busy && !loading) void loadPreview();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [previewRequested]);
 
@@ -64,7 +64,7 @@ export function UninstallCard({
     }
   };
 
-  if (!workspaceValid) return null;
+  if (!dataFolderOk) return null;
 
   const count = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
 

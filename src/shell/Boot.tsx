@@ -8,9 +8,6 @@ export interface BootInfo {
   version?: string;
   /** The workspace folder; null: it is unusable, undefined: not loaded yet (the line is skipped). */
   workspace?: string | null;
-  /** Git branch of the workspace, when it is a repository. */
-  branch?: string | null;
-  dirty?: boolean;
   harnesses?: readonly string[];
   backups?: number;
 }
@@ -20,7 +17,7 @@ interface BootLine {
   value: string;
 }
 
-const STEPS = ["version", "workspace", "branch", "harnesses", "backups", "ready"] as const;
+const STEPS = ["version", "workspace", "harnesses", "backups", "ready"] as const;
 type BootStep = (typeof STEPS)[number];
 
 function bootLine(step: BootStep, info: BootInfo): BootLine | null {
@@ -29,8 +26,6 @@ function bootLine(step: BootStep, info: BootInfo): BootLine | null {
       return { label: "❯ ", value: info.version ? `riggverk ${info.version}` : "riggverk" };
     case "workspace":
       return info.workspace === undefined ? null : { label: "  workspace  ", value: info.workspace ?? "folder unusable" };
-    case "branch":
-      return info.branch ? { label: "  branch     ", value: `${info.branch} · ${info.dirty ? "dirty" : "clean"}` } : null;
     case "harnesses":
       return info.harnesses && info.harnesses.length > 0
         ? { label: "  harnesses  ", value: info.harnesses.join(" · ") }

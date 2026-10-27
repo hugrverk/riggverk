@@ -22,8 +22,7 @@ export interface OutputStripProps {
   wsLog: ActionResult | null;
   wsLogCompletedAt: number | null;
   status: StatusData | null;
-  workspaceValid: boolean;
-  gitAvailable: boolean;
+  dataFolderOk: boolean;
   /** `C`: clear the output. */
   onClear?: () => void;
   /** `r`: refresh status. */
@@ -77,7 +76,7 @@ function scrollLogTo(log: HTMLElement | null, to: "top" | "bottom") {
 }
 
 /**
- * The terminal as a one-line strip under the page's panes: `❯ ready · workspace valid · branch main`, a running
+ * The terminal as a one-line strip under the page's panes: `❯ ready · workspace valid`, a running
  * task with its progress, or the last result with its rollback button. It expands into the full log
  * (`TerminalState`) while a task runs and when a result arrives; `↵` on the line toggles it, `esc` collapses,
  * otherwise the user's toggle wins. Under full motion a result that lands pops its ✓ and fades the border from ok.
@@ -96,8 +95,7 @@ export function OutputStrip({
   wsLog,
   wsLogCompletedAt,
   status,
-  workspaceValid,
-  gitAvailable,
+  dataFolderOk,
   onClear,
   onRefresh,
   rollbackTransactionId,
@@ -311,7 +309,7 @@ export function OutputStrip({
           <span className="outstrip-cmd">ready</span>{" "}
           <span className="c-dim">
             {status
-              ? `· workspace ${workspaceValid ? "valid" : "invalid"}${gitAvailable ? ` · branch ${status.branch}` : ""}`
+              ? `· workspace ${dataFolderOk ? "valid" : "invalid"}`
               : "· waiting for workspace status…"}
           </span>
         </span>

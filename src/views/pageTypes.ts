@@ -13,8 +13,7 @@ export interface PageOutputProps {
   /** What the backend last reported for that task (backup/apply counts, current file), or null. */
   wsProgress: ApplyProgress | null;
   status: StatusData | null;
-  workspaceValid: boolean;
-  gitAvailable: boolean;
+  dataFolderOk: boolean;
   onClearOutput: () => void;
 }
 

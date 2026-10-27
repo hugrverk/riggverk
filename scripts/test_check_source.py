@@ -124,17 +124,17 @@ class SourceTests(unittest.TestCase):
         self.assertIn("docs/MAINTAINING.md:1:", check(self.tree, [rule])[0])
 
     def test_deleting_a_pinned_rust_regression_test_fails(self) -> None:
-        self.copy("src-tauri/src/commands/status.rs")
-        rules = [rule for rule in sg.REQUIRE if rule.files == ("src-tauri/src/commands/status.rs",)]
+        self.copy("src-tauri/src/agent_targets.rs")
+        rules = [rule for rule in sg.REQUIRE if rule.files == ("src-tauri/src/agent_targets.rs",)]
         self.assertEqual(check(self.tree, rules), [])
         self.edit(
-            "src-tauri/src/commands/status.rs",
-            "fn opencode_config_status_synced_when_installed_matches_rendered_template(",
+            "src-tauri/src/agent_targets.rs",
+            "fn bundled_config_targets_exclude_cursor_setup(",
             "fn renamed(",
         )
         failures = check(self.tree, rules)
         self.assertEqual(len(failures), 1)
-        self.assertIn("rust-test-opencode_config_status_synced_when_installed_matches_rendered_template", failures[0])
+        self.assertIn("rust-test-bundled_config_targets_exclude_cursor_setup", failures[0])
 
     def test_mock_backend_imported_outside_main(self) -> None:
         self.copy("src/main.tsx", "src/App.tsx")

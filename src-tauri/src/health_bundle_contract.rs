@@ -13,7 +13,7 @@ mod tests {
     use crate::artifact_registry::{AgentName, ArtifactId};
     use crate::commands::{
         apply_setup, get_claude_runtime_health, get_codex_runtime_health,
-        get_cursor_profile_health, get_status, preview_setup,
+        get_cursor_profile_health, get_installation_status, preview_setup,
     };
     use crate::setup_lifecycle::OperationKind;
     use crate::setup_transaction::plan_artifacts_for_uninstall;
@@ -124,6 +124,18 @@ mod tests {
         serde_json::to_value(value).expect("serialize")
     }
 
+    /// The installation status of the harness agent surfaces.
+    fn installation_status() -> Value {
+        json(
+            get_installation_status(vec![
+                "claude_agents".to_string(),
+                "open_code_agents".to_string(),
+                "cursor_agents".to_string(),
+            ])
+            .expect("installation status"),
+        )
+    }
+
     /// The health commands that need no workspace folder.
     fn health() -> Vec<(&'static str, Value)> {
         vec![
@@ -156,7 +168,7 @@ mod tests {
         // The install removed the old copies; put them back, the way a user might.
         env.copy_bundle_into_workspace();
         let health_before = health();
-        let status_before = json(get_status().expect("status"));
+        let status_before = installation_status();
 
         // The install is current, so a comparison with an edited copy would show.
         let claude = &health_before[0].1;
@@ -165,16 +177,15 @@ mod tests {
         let cursor = &health_before[2].1;
         assert_eq!(cursor["global_agents_status"], "synced", "{cursor}");
         assert_eq!(cursor["workspace_resources_status"], "current", "{cursor}");
-        for id in ["claude_agents", "opencode_agents", "cursor_setup"] {
-            assert_eq!(
-                status_before["agents_statuses"][id], "synced",
-                "{status_before}"
-            );
+        let surfaces = status_before["surfaces"].as_array().expect("surfaces");
+        assert_eq!(surfaces.len(), 3, "{status_before}");
+        for surface in surfaces {
+            assert_eq!(surface["state"], "current", "{status_before}");
         }
 
         env.edit_workspace_copies();
         assert_same(&health_before, &health());
-        assert_eq!(status_before, json(get_status().expect("status")));
+        assert_eq!(status_before, installation_status());
     }
 
     #[test]

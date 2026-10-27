@@ -1,13 +1,5 @@
 export interface StatusData {
-  repo_path: string; git_available: boolean; branch: string; dirty: boolean; latest_commit: string;
-  rules_codex: string; rules_opencode: string;
-  rules_claude: string;
-  opencode_config: string;
-  opencode_agents: string;
-  claude_agents: string;
-  config_statuses: Record<string, string>;
-  agents_statuses: Record<string, string>;
-  host_name: string;
+  repo_path: string;
   enabled_rule_target_ids: string[];
   enabled_config_target_ids: string[];
   enabled_agent_target_ids: string[];
@@ -468,29 +460,17 @@ export interface BackupRunDetails {
   files: BackupFileSummary[];
 }
 
-export interface WorkspaceMarkerStatus {
-  kind: "file" | "dir";
-  path: string;
-  exists: boolean;
-}
-
-export type BundledResourcesStatus = "current" | "missing";
-
 export interface WorkspaceDiagnostics {
   candidate_path: string;
   resolved_path: string | null;
   valid: boolean;
   error: string | null;
-  markers: WorkspaceMarkerStatus[];
   enabled_rule_targets: number;
   total_rule_targets: number;
   enabled_config_targets: number;
   total_config_targets: number;
   backup_root: string;
   backup_root_exists: boolean;
-  bundled_resources_status: BundledResourcesStatus;
-  missing_bundled_count: number;
-  missing_bundled_sample: string[];
 }
 
 export interface ActionResult {

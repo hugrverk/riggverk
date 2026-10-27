@@ -619,44 +619,6 @@ fn installed_config_diverged_keys(
         .map(|expected| differing_managed_opencode_keys(installed_json, &expected))
 }
 
-/// Sync status for `get_status` / dashboard (compares the staged output an install would write).
-pub(crate) fn opencode_config_sync_status(workspace_root: &Path, home_dir: &Path) -> String {
-    let installed_path = crate::platform_paths::opencode_config_dir(home_dir).join("opencode.json");
-
-    if !installed_path.is_file() {
-        return "missing".into();
-    }
-    let Ok(bundle) = crate::setup_roots::bundled_root_for(workspace_root) else {
-        return "diverged".into();
-    };
-    let template_path = bundle.join("templates/opencode.json");
-    if !template_path.is_file() {
-        return "diverged".into();
-    }
-
-    let template_json: serde_json::Value = match std::fs::read_to_string(&template_path) {
-        Ok(content) => match serde_json::from_str(&content) {
-            Ok(v) => v,
-            Err(_) => return "diverged".into(),
-        },
-        Err(_) => return "diverged".into(),
-    };
-
-    // Read as OpenCode reads it (JSONC), so a commented file still gets a real answer.
-    let ConfigRead::Parsed(installed) = opencode_precedence::read_config(&installed_path) else {
-        return "diverged".into();
-    };
-    let installed_json = installed.value;
-
-    match render_expected_opencode_config(&template_json, home_dir) {
-        Some(expected) if managed_opencode_keys_match(&installed_json, &expected) => {
-            "synced".into()
-        }
-        Some(_) => "diverged".into(),
-        None => "diverged".into(),
-    }
-}
-
 /// The config generators are sub-second scripts; anything longer is hung.
 const GENERATOR_TIMEOUT: Duration = Duration::from_secs(30);
 const GENERATOR_OUTPUT_CAP: usize = 256 * 1024;
@@ -1807,15 +1769,15 @@ pub(crate) fn apply_cli_probes(
     }
 }
 
-/// Run the bundled generator's --write against the given workspace root: test fixtures use it to make a
-/// snapshot that checks as current. The app itself never writes the bundled config sources or snapshot.
+/// Run the bundled generator's --write against `source_root`, a temp copy of the bundle's sources
+/// made by the test (never the data folder): fixtures use it to make a snapshot that checks as
+/// current. The app itself never writes the bundled config sources or snapshot.
 #[cfg(test)]
-pub(crate) fn run_generator_write(workspace_root: &Path) -> Result<ActionResult, String> {
+pub(crate) fn run_generator_write(source_root: &Path) -> Result<ActionResult, String> {
     // Never write into the bundle itself.
-    match crate::setup_roots::bundled_root_for(workspace_root)
-        .and_then(|_| bundled_generator_script())
+    match crate::setup_roots::bundled_root_for(source_root).and_then(|_| bundled_generator_script())
     {
-        Ok(script) => run_generator_write_with_script(&script, workspace_root),
+        Ok(script) => run_generator_write_with_script(&script, source_root),
         Err(error) => Ok(ActionResult::new(
             false,
             "generate_opencode_config_snapshot",
@@ -1829,15 +1791,15 @@ pub(crate) fn run_generator_write(workspace_root: &Path) -> Result<ActionResult,
 #[cfg(test)]
 fn run_generator_write_with_script(
     script: &Path,
-    workspace_root: &Path,
+    source_root: &Path,
 ) -> Result<ActionResult, String> {
-    // The generator opens the snapshot for writing: a symlink must not carry the write out of the workspace.
+    // The generator opens the snapshot for writing: a symlink must not carry the write out of the copy.
     super::content::safe_canonical_target(
-        workspace_root,
-        &workspace_root.join("templates/opencode.json"),
+        source_root,
+        &source_root.join("templates/opencode.json"),
     )?;
 
-    let output = run_generator(script, workspace_root, "--write", GENERATOR_TIMEOUT)?;
+    let output = run_generator(script, source_root, "--write", GENERATOR_TIMEOUT)?;
     if output.timed_out {
         return Err(format!(
             "generator timed out after {} seconds",
@@ -2467,7 +2429,9 @@ mod tests {
         write_file(home, ".config/opencode/tui.json", r#"{"theme":"system"}"#);
     }
 
-    fn setup_synced_workspace(name: &str) -> (PathBuf, PathBuf) {
+    /// A temp copy of the bundle's OpenCode sources (not a workspace folder) and a temp home that
+    /// matches its generated snapshot.
+    fn setup_synced_bundle_copy(name: &str) -> (PathBuf, PathBuf) {
         let ws = temp_root(&format!("{name}-ws"));
         let home = temp_root(&format!("{name}-home"));
 
@@ -2572,7 +2536,6 @@ mod tests {
             health.bundled_agent_count
         );
         assert_eq!(health.generated_snapshot_status, "current");
-        assert_eq!(super::opencode_config_sync_status(&ws, &home), "synced");
         let selection = read_opencode_model_selection().unwrap();
         assert_eq!(
             (selection.model, selection.small_model),
@@ -2677,7 +2640,6 @@ mod tests {
             xdg.join("opencode/tui.json")
         );
         assert!(health.config_precedence.sibling_files.is_empty());
-        assert_eq!(super::opencode_config_sync_status(&ws, &home), "synced");
 
         // A sibling beside the installed file is found in the same folder.
         write_file(&xdg, "opencode/opencode.jsonc", r#"{"model":"mine/other"}"#);
@@ -2704,7 +2666,6 @@ mod tests {
                 .collect::<Vec<_>>(),
             ["config.json"]
         );
-        assert_eq!(super::opencode_config_sync_status(&ws, &home), "diverged");
         cleanup(&ws);
         cleanup(&home);
         cleanup(&xdg);
@@ -2712,7 +2673,7 @@ mod tests {
 
     #[test]
     fn test_synced_when_all_match() {
-        let (ws, home) = setup_synced_workspace("synced");
+        let (ws, home) = setup_synced_bundle_copy("synced");
         let health = compute_health(&ws, &home);
         cleanup(&ws);
         cleanup(&home);
@@ -3294,9 +3255,10 @@ mod tests {
 
     // ── New tests for generated snapshot ──
 
-    /// Workspace and home for the generator freshness check. The bundled generator runs against the
-    /// workspace's three snapshot files, so they come from the bundled templates (a matching set).
-    fn setup_generator_check_workspace(name: &str) -> (PathBuf, PathBuf) {
+    /// A temp copy of the bundle's sources and a temp home for the generator freshness check. The
+    /// bundled generator runs against the copy's three snapshot files, so they come from the bundled
+    /// templates (a matching set). The data folder is never involved.
+    fn setup_generator_check_bundle_copy(name: &str) -> (PathBuf, PathBuf) {
         let ws = temp_root(&format!("{name}-ws"));
         let home = temp_root(&format!("{name}-home"));
         for template in [
@@ -3325,7 +3287,7 @@ mod tests {
 
     #[test]
     fn test_generated_snapshot_current_with_check() {
-        let (ws, home) = setup_generator_check_workspace("gen-chk-ok");
+        let (ws, home) = setup_generator_check_bundle_copy("gen-chk-ok");
 
         let health = compute_health(&ws, &home);
         cleanup(&ws);
@@ -3337,7 +3299,7 @@ mod tests {
 
     #[test]
     fn test_generated_snapshot_stale_with_check() {
-        let (ws, home) = setup_generator_check_workspace("gen-chk-fail");
+        let (ws, home) = setup_generator_check_bundle_copy("gen-chk-fail");
         // A source edit the snapshot does not reflect.
         write_file(&ws, "templates/opencode.base.json", r#"{"model":"edited"}"#);
 
@@ -3383,7 +3345,7 @@ mod tests {
 
     #[test]
     fn test_summary_synced() {
-        let (ws, home) = setup_synced_workspace("sum-synced");
+        let (ws, home) = setup_synced_bundle_copy("sum-synced");
         let health = compute_health(&ws, &home);
         cleanup(&ws);
         cleanup(&home);
@@ -3567,7 +3529,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn test_workspace_generator_scripts_are_never_executed() {
-        let (ws, home) = setup_generator_check_workspace("gen-pinned");
+        let (ws, home) = setup_generator_check_bundle_copy("gen-pinned");
         let sentinel = temp_root("gen-pinned-sentinel");
         let malicious = format!(
             "#!/usr/bin/env python3\nimport sys\nopen('{}', 'w').write('executed')\nsys.exit(1)\n",
@@ -3596,56 +3558,6 @@ mod tests {
         assert_eq!(health.generated_snapshot_status, "current");
         assert_eq!(check.expect("generator ran").0, "current");
         assert!(write.success, "{}", write.stderr);
-    }
-
-    #[test]
-    fn test_opencode_config_sync_status_matches_rendered_installed() {
-        let _env = crate::test_env::guard::default_xdg_config_home();
-        let ws = temp_root("sync-status-ws");
-        let home = temp_root("sync-status-home");
-
-        write_file(
-            &ws,
-            "templates/opencode.json",
-            r#"{"mcp":{"playwright":{"environment":{"PLAYWRIGHT_BROWSERS_PATH":"__PLAYWRIGHT_BROWSERS_PATH__"}}}}"#,
-        );
-
-        let rendered = render_expected_opencode_config(
-            &serde_json::from_str(&bundled_template("opencode.json")).expect("parse bundle"),
-            &home,
-        )
-        .expect("render expected");
-        write_file(
-            &home,
-            ".config/opencode/opencode.json",
-            &serde_json::to_string_pretty(&rendered).expect("serialize"),
-        );
-
-        assert_eq!(super::opencode_config_sync_status(&ws, &home), "synced");
-        cleanup(&ws);
-        cleanup(&home);
-    }
-
-    #[test]
-    fn test_opencode_config_sync_status_diverged_for_unrendered_installed() {
-        let _env = crate::test_env::guard::default_xdg_config_home();
-        let ws = temp_root("sync-status-div-ws");
-        let home = temp_root("sync-status-div-home");
-
-        write_file(
-            &ws,
-            "templates/opencode.json",
-            r#"{"mcp":{"playwright":{"environment":{"PLAYWRIGHT_BROWSERS_PATH":"__PLAYWRIGHT_BROWSERS_PATH__"}}}}"#,
-        );
-        write_file(
-            &home,
-            ".config/opencode/opencode.json",
-            r#"{"mcp":{"playwright":{"environment":{"PLAYWRIGHT_BROWSERS_PATH":"__PLAYWRIGHT_BROWSERS_PATH__"}}}}"#,
-        );
-
-        assert_eq!(super::opencode_config_sync_status(&ws, &home), "diverged");
-        cleanup(&ws);
-        cleanup(&home);
     }
 
     // ── OpenCode model selection tests ──
@@ -4422,7 +4334,7 @@ mod tests {
 
     #[test]
     fn test_health_flags_reordered_installed_permission() {
-        let (ws, home) = setup_synced_workspace("perm-order");
+        let (ws, home) = setup_synced_bundle_copy("perm-order");
         let template = r#"{"default_agent":"architect","permission":{"edit":{"*":"ask","src/**":"allow","**/.env*":"deny"}}}"#;
         let reordered = r#"{"default_agent":"architect","permission":{"edit":{"*":"ask","**/.env*":"deny","src/**":"allow"}}}"#;
         write_file(&ws, "templates/opencode.json", template);
@@ -4471,7 +4383,7 @@ mod tests {
 
     #[test]
     fn a_commented_opencode_json_is_compared_as_jsonc_and_the_reason_names_no_text() {
-        let (ws, home) = setup_synced_workspace("jsonc");
+        let (ws, home) = setup_synced_bundle_copy("jsonc");
         let strict = installed(&home);
         write_file(&home, ".config/opencode/opencode.json", &commented(&strict));
 
@@ -4532,37 +4444,8 @@ mod tests {
     }
 
     #[test]
-    fn the_dashboard_status_reads_a_commented_opencode_json_as_jsonc() {
-        let _env = crate::test_env::guard::default_xdg_config_home();
-        let ws = temp_root("sync-status-jsonc-ws");
-        let home = temp_root("sync-status-jsonc-home");
-        let rendered = render_expected_opencode_config(
-            &serde_json::from_str(&bundled_template("opencode.json")).expect("parse bundle"),
-            &home,
-        )
-        .expect("render expected");
-        write_file(
-            &home,
-            ".config/opencode/opencode.json",
-            &commented(&rendered),
-        );
-        assert_eq!(super::opencode_config_sync_status(&ws, &home), "synced");
-
-        let mut changed = rendered.clone();
-        changed["model"] = serde_json::json!("mine/private-model");
-        write_file(
-            &home,
-            ".config/opencode/opencode.json",
-            &commented(&changed),
-        );
-        assert_eq!(super::opencode_config_sync_status(&ws, &home), "diverged");
-        cleanup(&ws);
-        cleanup(&home);
-    }
-
-    #[test]
     fn sibling_config_files_warn_only_when_they_set_managed_keys() {
-        let (ws, home) = setup_synced_workspace("siblings");
+        let (ws, home) = setup_synced_bundle_copy("siblings");
         write_file(
             &home,
             ".config/opencode/opencode.jsonc",
@@ -4645,7 +4528,7 @@ mod tests {
 
     #[test]
     fn config_env_vars_and_system_managed_paths_are_reported_by_name_only() {
-        let (ws, home) = setup_synced_workspace("environment");
+        let (ws, home) = setup_synced_bundle_copy("environment");
         let system = temp_root("system-managed");
         let candidates = [
             system.join("opencode"),
@@ -4703,7 +4586,7 @@ mod tests {
 
     #[test]
     fn opencode_config_dir_is_a_warning_that_names_the_folder_the_app_installs_to() {
-        let (ws, home) = setup_synced_workspace("config-dir-env");
+        let (ws, home) = setup_synced_bundle_copy("config-dir-env");
         let elsewhere = temp_root("config-dir-env-target");
         let vars = [(
             "OPENCODE_CONFIG_DIR",
@@ -5384,7 +5267,7 @@ mod tests {
         name: &str,
         edit: impl FnOnce(&mut serde_json::Value),
     ) -> OpenCodeRuntimeHealth {
-        let (ws, home) = setup_synced_workspace(name);
+        let (ws, home) = setup_synced_bundle_copy(name);
         let installed_path = home.join(".config/opencode/opencode.json");
         let mut installed: serde_json::Value =
             serde_json::from_str(&fs::read_to_string(&installed_path).expect("installed"))
@@ -5426,7 +5309,7 @@ mod tests {
 
     #[test]
     fn test_config_row_reports_missing_and_invalid_installed_files() {
-        let (ws, home) = setup_synced_workspace("cfg-missing");
+        let (ws, home) = setup_synced_bundle_copy("cfg-missing");
         let installed_path = home.join(".config/opencode/opencode.json");
         fs::write(&installed_path, "{ not json").expect("break installed");
         let invalid = compute_health(&ws, &home);
@@ -5466,7 +5349,7 @@ mod tests {
 
     #[test]
     fn test_rules_row_compares_global_agents_md_with_the_bundled_rules() {
-        let (ws, home) = setup_synced_workspace("rules");
+        let (ws, home) = setup_synced_bundle_copy("rules");
         let health = |ws: &Path, home: &Path| compute_health(ws, home).rules_status;
 
         assert_eq!(
@@ -5606,7 +5489,7 @@ exit 64"#
         program: Option<&Path>,
         limits: ProbeLimits,
     ) -> (OpenCodeRuntimeHealth, OpenCodeRuntimeHealth) {
-        let (ws, home) = setup_synced_workspace(name);
+        let (ws, home) = setup_synced_bundle_copy(name);
         let before = compute_health(&ws, &home);
         let mut after = before.clone();
         apply_cli_probes(&mut after, program, limits);
@@ -6066,7 +5949,7 @@ exit 64"#
 
     #[test]
     fn test_health_follows_the_subagent_override_from_drift_to_applied_to_cleared() {
-        let (ws, home) = setup_synced_workspace("subagent-health");
+        let (ws, home) = setup_synced_bundle_copy("subagent-health");
         let before = compute_health(&ws, &home);
 
         // Saved, not yet installed: drift on exactly the five role entries.
@@ -6130,7 +6013,7 @@ exit 64"#
     #[test]
     fn test_critic_health_tracks_precedence_and_clearing_with_or_without_a_subagent_model() {
         for subagent in [Some("other/cheap"), None] {
-            let (ws, home) = setup_synced_workspace("critic-health");
+            let (ws, home) = setup_synced_bundle_copy("critic-health");
             write_override_for_home(&home, subagent, None);
             install_for(&ws, &home);
             write_override_for_home(&home, subagent, Some("strong/critic"));
@@ -6239,7 +6122,7 @@ exit 64"#
         subagent: Option<&str>,
         stub: &Path,
     ) -> OpenCodeRuntimeHealth {
-        let (ws, home) = setup_synced_workspace(name);
+        let (ws, home) = setup_synced_bundle_copy(name);
         if subagent.is_some() {
             write_override_for_home(&home, subagent, None);
             install_for(&ws, &home);
@@ -6325,7 +6208,7 @@ exit 64"#
                 models.push("strong/critic");
             }
             let stub = health_stub(&dir, "1.19.3", 0, &models);
-            let (ws, home) = setup_synced_workspace("probe-critic");
+            let (ws, home) = setup_synced_bundle_copy("probe-critic");
             write_override_for_home(&home, Some("other/cheap"), Some("strong/critic"));
             install_for(&ws, &home);
             let mut health = compute_health(&ws, &home);

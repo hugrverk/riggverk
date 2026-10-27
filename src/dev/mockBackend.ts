@@ -970,27 +970,8 @@ function backupDetails(runId: string): BackupRunDetails {
 
 function statusData(): StatusData {
   const enabled = new Set(settings.enabled_target_ids);
-  const stateFor = (surface: SetupSurfaceId) => surfaceStates.get(surface) ?? "not_installed";
   return {
     repo_path: WORKSPACE,
-    git_available: true,
-    branch: "main",
-    dirty: false,
-    latest_commit: `${BUNDLE_DIGEST} feat(workspace): modernize skills, agents, rules`,
-    rules_codex: stateFor("codex_rules"),
-    rules_opencode: stateFor("open_code_rules"),
-    rules_claude: stateFor("claude_rules"),
-    opencode_config: stateFor("open_code_config"),
-    opencode_agents: stateFor("open_code_agents"),
-    claude_agents: stateFor("claude_agents"),
-    config_statuses: { opencode_config: stateFor("open_code_config"), codex_config: stateFor("codex_config") },
-    agents_statuses: {
-      opencode_agents: stateFor("open_code_agents"),
-      claude_agents: stateFor("claude_agents"),
-      codex_agents: stateFor("codex_agents"),
-      cursor_setup: stateFor("cursor_agents"),
-    },
-    host_name: "mock",
     enabled_rule_target_ids: TARGETS.filter(t => t.kind === "rules" && enabled.has(t.id)).map(t => t.id),
     enabled_config_target_ids: TARGETS.filter(t => t.kind === "config" && enabled.has(t.id)).map(t => t.id),
     enabled_agent_target_ids: TARGETS.filter(t => t.kind === "agents" && enabled.has(t.id)).map(t => t.id),
@@ -1007,19 +988,12 @@ function diagnostics(): WorkspaceDiagnostics {
     valid,
     // Like the backend: only the folder itself decides (a link, a file, a missing override folder).
     error: valid ? null : "the folder is a symlink",
-    markers: [
-      { kind: "file", path: ".agent-workspace/workspace.json", exists: valid },
-      { kind: "file", path: ".agent-workspace/managed-state.json", exists: valid },
-    ],
     enabled_rule_targets: TARGETS.filter(t => t.kind === "rules" && enabled.has(t.id)).length,
     total_rule_targets: TARGETS.filter(t => t.kind === "rules").length,
     enabled_config_targets: TARGETS.filter(t => t.kind === "config" && enabled.has(t.id)).length,
     total_config_targets: TARGETS.filter(t => t.kind === "config").length,
     backup_root: BACKUP_ROOT,
     backup_root_exists: backups.length > 0,
-    bundled_resources_status: valid ? "current" : "missing",
-    missing_bundled_count: valid ? 0 : 12,
-    missing_bundled_sample: valid ? [] : ["skills/diagnose/SKILL.md", "agents/verifier.md"],
   };
 }
 
