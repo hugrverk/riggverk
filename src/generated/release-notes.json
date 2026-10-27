@@ -4,23 +4,18 @@
       "version": "2026.10.3",
       "sections": [
         {
-          "title": "New",
+          "title": "Changes",
           "items": [
-            "Stop keeping a copy of the bundle in your workspace"
+            "Riggverk no longer keeps a copy of its bundle in your workspace folder (`~/.config/agent-workspace`). The Library and health read the bundle inside the app, and the folder now holds only Riggverk's state (`.agent-workspace/`), your personal docs (`docs/context/`) and anything you put there yourself",
+            "Old copies from earlier versions show on the `workspace` row as \"N old copies to remove\". Press `u` to review: every removal is listed per folder and backed up first, and `z` restores them. Nothing is removed at launch (#76, #78)",
+            "Files you edited, and files Riggverk cannot prove it wrote, are left in place and shown as \"left in place\". To keep a copy of everything, cancel the review, or press `z` after applying",
+            "The workspace view no longer shows the data folder's git branch or uncommitted changes; GIT_VERSIONING.md now covers versioning `docs/context/` only"
           ]
         },
         {
           "title": "Fixes",
           "items": [
-            "Clean up files only early test builds shipped",
-            "Keep adversarial skills out of routing bullets",
-            "Scan only git-visible files for removed skill names"
-          ]
-        },
-        {
-          "title": "Other",
-          "items": [
-            "Drop leftovers of the workspace copy"
+            "Files that only early test builds shipped are also cleaned up when they are unchanged"
           ]
         }
       ]
