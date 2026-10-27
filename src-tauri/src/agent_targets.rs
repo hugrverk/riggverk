@@ -222,7 +222,8 @@ pub fn config_targets() -> Vec<AgentSyncTarget> {
         .collect()
 }
 
-pub fn editable_config_targets() -> Vec<AgentSyncTarget> {
+/// Config targets whose bundled template the Library shows read-only.
+pub fn bundled_config_targets() -> Vec<AgentSyncTarget> {
     targets()
         .into_iter()
         .filter(|t| matches!(t.kind, TargetKind::Config))
@@ -665,8 +666,8 @@ mod tests {
     }
 
     #[test]
-    fn editable_config_targets_exclude_cursor_setup() {
-        let ids: Vec<&str> = editable_config_targets().iter().map(|t| t.id).collect();
+    fn bundled_config_targets_exclude_cursor_setup() {
+        let ids: Vec<&str> = bundled_config_targets().iter().map(|t| t.id).collect();
         assert_eq!(ids, &["opencode_config"]);
     }
 

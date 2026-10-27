@@ -220,7 +220,7 @@ describe("LibraryView layout", () => {
     expect(within(group).getByRole("button", { name: /^docs/ }).getAttribute("aria-current")).toBe("true");
   });
 
-  it("hides the configs source while no editable config target is enabled", () => {
+  it("hides the configs source while no bundled config target is enabled", () => {
     renderLibrary({ showConfigs: false });
     const group = screen.getByRole("group", { name: "Library source type" });
     expect(within(group).queryByRole("button", { name: /configs/ })).toBeNull();
