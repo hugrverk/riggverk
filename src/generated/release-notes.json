@@ -1,6 +1,26 @@
 {
   "releases": [
     {
+      "version": "2026.10.2",
+      "sections": [
+        {
+          "title": "New",
+          "items": [
+            "Add adversarial-review with a plan mode",
+            "Add adversarial-test with frozen adversary tests",
+            "Evidence-first adversarial critic with easy role choice",
+            "Add a critic model for the adversarial skills"
+          ]
+        },
+        {
+          "title": "Fixes",
+          "items": [
+            "Wait for the apply hint in the take-bundled review test"
+          ]
+        }
+      ]
+    },
+    {
       "version": "2026.10.1",
       "sections": [
         {
