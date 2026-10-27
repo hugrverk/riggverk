@@ -137,7 +137,15 @@
       "sha256:ebf2a25f4b84b1e6f142c3704671837859000b256def0385e0a6be7bb7146940"
     ],
     "skills/adversarial-implementation/SKILL.md": [
-      "sha256:c051d1e0baa36629aed272f394d3ae3a4666adf8454d90d2eb54bc9e9f19b620"
+      "sha256:c051d1e0baa36629aed272f394d3ae3a4666adf8454d90d2eb54bc9e9f19b620",
+      "sha256:c237881bf55fd6327ce7bd851d721223f13c8fb15e11afe9ac12671e64d679e0",
+      "sha256:c303cb9be1a92f12cb224297bd9d4dff57dd5097cd4a3d777f64322e8c7bdda0"
+    ],
+    "skills/adversarial-implementation/adversarial-roles.md": [
+      "sha256:1aa88f8b4394ab9043674a74afd5d1a7ad5543d61062de54ab9463b84f6c0220"
+    ],
+    "skills/adversarial-implementation/critic-recipes.md": [
+      "sha256:768113b4c69ac251bc2f79c8ca73f238fd12775865b789a69efca1e24c8b4124"
     ],
     "skills/agent-report-review/SKILL.md": [
       "sha256:da9b69ed07462bd62f0e38898af6887d0114bf2801a0ab571bc5656add4ed24f",
