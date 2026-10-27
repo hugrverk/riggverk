@@ -973,7 +973,7 @@ describe("take bundled (b, y)", () => {
     expect(invokeMock).toHaveBeenLastCalledWith("preview_take_bundled", { surface: "skills", units: ["skill:claude:tdd"] });
     expect(statusBar().queryByRole("button", { name: /keep mine/ })).toBeNull();
     expect(statusBar().queryByRole("button", { name: /take bundled/ })).toBeNull();
-    expect(statusBar().queryByRole("button", { name: /apply/ })).not.toBeNull();
+    expect(await statusBar().findByRole("button", { name: /apply/ })).toBeTruthy();
     // [ and ] would open another unit's diff: not in a preview that is about to be applied.
     press("]");
     expect(invokeMock).not.toHaveBeenCalledWith("preview_file_diff", expect.objectContaining({ unit: "skill:agents:security-audit" }));
