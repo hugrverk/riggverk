@@ -152,7 +152,7 @@ export interface FileGates {
 }
 
 export interface FileGateContext {
-  workspaceValid: boolean;
+  dataFolderOk: boolean;
   /** Label of a workspace task in flight, or null. */
   busyLabel: string | null;
   /** A review (install, rules or this one) is open on the page: the actions wait for it to close. */
@@ -162,7 +162,7 @@ export interface FileGateContext {
 /** What `c`, `d`, `b` and `m` (and `:resolve ...`) may do for the marked unit right now. */
 export function fileGates(model: FileConflictModel | null, unit: FileUnit | null, context: FileGateContext): FileGates {
   const hidden: FileGate = { visible: false, reason: null };
-  if (!model || !unit || !context.workspaceValid) return { next: hidden, diff: hidden, bundled: hidden, keep: hidden, manage: hidden };
+  if (!model || !unit || !context.dataFolderOk) return { next: hidden, diff: hidden, bundled: hidden, keep: hidden, manage: hidden };
   const wait = context.blockedBy ?? (context.busyLabel ? `${context.busyLabel} is running` : null);
   const gate = (visible: boolean): FileGate => ({ visible, reason: visible ? wait : null });
   return {

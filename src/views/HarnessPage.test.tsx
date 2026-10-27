@@ -99,8 +99,7 @@ function props(overrides: Partial<HarnessViewProps> = {}): HarnessViewProps {
     wsRunning: null,
     wsProgress: null,
     status: STATUS_DATA,
-    workspaceValid: true,
-    gitAvailable: true,
+    dataFolderOk: true,
     onClearOutput: vi.fn(),
     ...overrides,
   };
@@ -332,7 +331,7 @@ describe("HarnessPage", () => {
   });
 
   it("explains a missing workspace and offers no update", () => {
-    const { props: p } = renderCodex({ workspaceValid: false, overview: overviewOf({}) });
+    const { props: p } = renderCodex({ dataFolderOk: false, overview: overviewOf({}) });
     expect(detail().textContent).toContain("The workspace folder is unusable");
     // The runtime heading carries the verdict; no row restates it under a heading that says something else.
     expect(detail().textContent).toContain("runtime · workspace folder unusable");
@@ -513,7 +512,7 @@ describe("OpenCodeView model override", () => {
 
   it("does not load models without a valid workspace", () => {
     backend();
-    const merged = props({ workspaceValid: false, overview: overviewOf({}) });
+    const merged = props({ dataFolderOk: false, overview: overviewOf({}) });
     renderInFrame(<OpenCodeView {...merged} runtimeHealth={null} onModelUpdated={vi.fn()} />);
     expect(invokeMock).not.toHaveBeenCalled();
     expect(screen.queryByLabelText("model")).toBeNull();

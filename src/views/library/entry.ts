@@ -148,7 +148,7 @@ function rulesFileEntry(props: LibraryViewProps): LibraryEntry | null {
 }
 
 function rulesEntry(props: LibraryViewProps): LibraryEntry | null {
-  if (props.activeRulesSurface !== null) return props.workspaceValid ? rulesFileEntry(props) : null;
+  if (props.activeRulesSurface !== null) return props.dataFolderOk ? rulesFileEntry(props) : null;
   const template = props.agentTemplate;
   if (!template) return null;
   const targets = props.agentTargets.filter(target => target.kind === "rules");

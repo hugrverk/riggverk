@@ -14,7 +14,7 @@ export interface EffectiveSkillLoadsState {
 }
 
 export interface UseEffectiveSkillLoadsOptions {
-  workspaceValid: boolean;
+  dataFolderOk: boolean;
   /** A workspace task (apply, uninstall, rollback) is running; the view is read again when it ends. */
   busy: boolean;
   enabledHarnessIds: readonly InstallAgent[];
@@ -28,7 +28,7 @@ export interface UseEffectiveSkillLoadsOptions {
  * both describe the same folders. Read-only on the backend.
  */
 export function useEffectiveSkillLoads({
-  workspaceValid,
+  dataFolderOk,
   busy,
   enabledHarnessIds,
   refreshKey,
@@ -42,7 +42,7 @@ export function useEffectiveSkillLoads({
 
   const refresh = useCallback(async () => {
     const generation = ++generationRef.current;
-    if (!workspaceValid || harnessKey === "") {
+    if (!dataFolderOk || harnessKey === "") {
       setLoads(null);
       setError(null);
       setLoading(false);
@@ -60,7 +60,7 @@ export function useEffectiveSkillLoads({
       setError(failure instanceof Error ? failure.message : String(failure));
     }
     setLoading(false);
-  }, [workspaceValid, harnessKey]);
+  }, [dataFolderOk, harnessKey]);
 
   useEffect(() => {
     if (!busy) void refresh();

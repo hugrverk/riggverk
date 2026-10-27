@@ -150,88 +150,18 @@ pub(super) fn path_arg(path: &Path) -> Result<String, String> {
     crate::shell_runtime::path_arg_for_native_process(path)
 }
 
-/// The app's state files in the folder (informational: validity does not need them for the
-/// default folder).
-fn state_file_markers(folder: &Path) -> Vec<WorkspaceMarkerStatus> {
-    DATA_FOLDER_STATE_FILES
-        .iter()
-        .map(|rel| WorkspaceMarkerStatus {
-            kind: "file".to_string(),
-            path: rel.to_string(),
-            exists: folder.join(rel).is_file(),
-        })
-        .collect()
-}
-
-#[derive(Serialize)]
-pub struct WorkspaceMarkerStatus {
-    kind: String,
-    path: String,
-    exists: bool,
-}
-
 #[derive(Serialize)]
 pub struct WorkspaceDiagnostics {
     candidate_path: String,
     resolved_path: Option<String>,
     valid: bool,
     error: Option<String>,
-    markers: Vec<WorkspaceMarkerStatus>,
     enabled_rule_targets: usize,
     total_rule_targets: usize,
     enabled_config_targets: usize,
     total_config_targets: usize,
     backup_root: String,
     backup_root_exists: bool,
-    /// `current` when all bundled default files exist; `missing` when any are absent.
-    bundled_resources_status: String,
-    missing_bundled_count: usize,
-    /// Sample of missing bundled paths (workspace-relative, capped).
-    missing_bundled_sample: Vec<String>,
-}
-
-const MISSING_BUNDLED_SAMPLE_CAP: usize = 5;
-
-/// Installed workspace file is absent or zero bytes (treat empty placeholders as missing).
-pub(crate) fn workspace_install_file_missing(path: &Path) -> bool {
-    match fs::metadata(path) {
-        Ok(meta) if meta.is_file() => meta.len() == 0,
-        Ok(_) => false,
-        Err(_) => true,
-    }
-}
-
-/// Paths of the workspace copy (`workspace_copy_paths()`) that are absent under `root`.
-pub(crate) fn missing_bundled_file_paths(root: &Path) -> Vec<String> {
-    let mut missing = Vec::new();
-    for rel in super::retired_workspace_files::workspace_copy_paths() {
-        if rel.contains("..") || rel.is_empty() || Path::new(rel).is_absolute() {
-            continue;
-        }
-        if workspace_install_file_missing(&root.join(rel)) {
-            missing.push(rel.to_string());
-        }
-    }
-    missing
-}
-
-fn bundled_resources_fields(root: &Path) -> (String, usize, Vec<String>) {
-    let missing = missing_bundled_file_paths(root);
-    let status = if missing.is_empty() {
-        "current".to_string()
-    } else {
-        "missing".to_string()
-    };
-    let count = missing.len();
-    let sample: Vec<String> = missing
-        .into_iter()
-        .take(MISSING_BUNDLED_SAMPLE_CAP)
-        .collect();
-    (status, count, sample)
-}
-
-fn empty_bundled_resources_fields() -> (String, usize, Vec<String>) {
-    ("unknown".to_string(), 0, Vec::new())
 }
 
 fn workspace_diagnostics_for_unconfigured(
@@ -256,23 +186,17 @@ fn workspace_diagnostics_for_unconfigured(
         Err(_) => (String::new(), false),
     };
 
-    let (bundled_resources_status, missing_bundled_count, missing_bundled_sample) =
-        empty_bundled_resources_fields();
     WorkspaceDiagnostics {
         candidate_path: String::new(),
         resolved_path: None,
         valid: false,
         error: Some(NO_WORKSPACE_SELECTED.into()),
-        markers: Vec::new(),
         enabled_rule_targets: enabled_rules,
         total_rule_targets: total_rules,
         enabled_config_targets: enabled_configs,
         total_config_targets: total_configs,
         backup_root,
         backup_root_exists,
-        bundled_resources_status,
-        missing_bundled_count,
-        missing_bundled_sample,
     }
 }
 
@@ -289,7 +213,6 @@ pub fn get_workspace_diagnostics() -> Result<WorkspaceDiagnostics, String> {
         Ok(folder) => (true, Some(folder.to_string_lossy().into_owned()), None),
         Err(_) => (false, None, data_folder_problem(&candidate, origin)),
     };
-    let markers = state_file_markers(&candidate);
 
     let enabled = &settings.enabled_target_ids;
     let total_rules = agent_targets::rule_targets().len();
@@ -310,28 +233,18 @@ pub fn get_workspace_diagnostics() -> Result<WorkspaceDiagnostics, String> {
         }
         Err(_) => (String::new(), false),
     };
-    let (bundled_resources_status, missing_bundled_count, missing_bundled_sample) = resolved_path
-        .as_deref()
-        .map(Path::new)
-        .filter(|folder| folder.is_dir())
-        .map(bundled_resources_fields)
-        .unwrap_or_else(empty_bundled_resources_fields);
 
     Ok(WorkspaceDiagnostics {
         candidate_path: candidate_str,
         resolved_path,
         valid,
         error,
-        markers,
         enabled_rule_targets: enabled_rules,
         total_rule_targets: total_rules,
         enabled_config_targets: enabled_configs,
         total_config_targets: total_configs,
         backup_root,
         backup_root_exists,
-        bundled_resources_status,
-        missing_bundled_count,
-        missing_bundled_sample,
     })
 }
 
@@ -858,7 +771,6 @@ mod tests {
 
         assert_eq!(diag.error.as_deref(), Some(NO_WORKSPACE_SELECTED));
         assert!(diag.candidate_path.is_empty());
-        assert!(diag.markers.is_empty());
         assert!(!diag.valid);
     }
 

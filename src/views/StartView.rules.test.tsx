@@ -53,8 +53,7 @@ function props(overrides: Partial<StartViewProps> = {}): StartViewProps {
     wsRunning: null,
     wsProgress: null,
     status: STATUS_DATA,
-    workspaceValid: true,
-    gitAvailable: true,
+    dataFolderOk: true,
     onClearOutput: vi.fn(),
     ...overrides,
   };

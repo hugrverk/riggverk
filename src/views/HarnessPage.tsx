@@ -89,8 +89,7 @@ export function HarnessPage({
   wsRunning,
   wsProgress,
   status,
-  workspaceValid,
-  gitAvailable,
+  dataFolderOk,
   onClearOutput,
 }: HarnessPageProps) {
   const label = HARNESS_LABELS[harness];
@@ -101,20 +100,20 @@ export function HarnessPage({
   const [markedKey, setMarkedKey] = useState<string | null>(null);
   const saving = settingsSaveStatus === "saving" || settingsSaveStatus === "pending";
 
-  const update = updateActionFor(harness, entry, { workspaceValid, busyLabel: wsRunning, settingsSaving: saving });
-  const previewDisabled = previewDisabledFor(harness, { workspaceValid, busyLabel: wsRunning });
+  const update = updateActionFor(harness, entry, { dataFolderOk, busyLabel: wsRunning, settingsSaving: saving });
+  const previewDisabled = previewDisabledFor(harness, { dataFolderOk, busyLabel: wsRunning });
 
   const rows = appSettings ? harnessRowsFor(harness, entry, appSettings, agentTargets) : [];
   const selected = rows.find(row => row.surface === cursor) ?? rows[0] ?? null;
 
   const rulesSurface = rulesSurfaceOf(harness);
-  const rulesModel = workspaceValid ? rulesModelFor(harness, entry?.status) : null;
+  const rulesModel = dataFolderOk ? rulesModelFor(harness, entry?.status) : null;
   const rulesFlow = useRulesFlow({ runWorkspaceTask, refresh: refreshAfterApply, onApplied });
   const installOpen = install.isOpenOn(harness);
   const rules = useRulesActions({
     harness,
     model: rulesModel,
-    workspaceValid,
+    dataFolderOk,
     busyLabel: wsRunning,
     installOpen,
     flow: rulesFlow,
@@ -130,7 +129,7 @@ export function HarnessPage({
 
   // Skill and agent files in conflict, or kept: c, d and m act on them while the cursor is on their row.
   const conflictFlow = useFileConflictFlow({ runWorkspaceTask, refresh: refreshAfterApply, onApplied });
-  const fileModels = workspaceValid
+  const fileModels = dataFolderOk
     ? filesSurfacesOf(harness).flatMap((surface): FileConflictModel[] => {
         const model = fileConflictModelFor(entry?.status, surface);
         return model ? [model] : [];
@@ -141,7 +140,7 @@ export function HarnessPage({
     harness,
     models: fileModels,
     activeSurface: activeModel?.surface ?? null,
-    workspaceValid,
+    dataFolderOk,
     busyLabel: wsRunning,
     installOpen,
     rulesOpen: rulesFlow.open,
@@ -179,8 +178,7 @@ export function HarnessPage({
       wsLog={wsLog}
       wsLogCompletedAt={wsLogCompletedAt}
       status={status}
-      workspaceValid={workspaceValid}
-      gitAvailable={gitAvailable}
+      dataFolderOk={dataFolderOk}
       onClear={onClearOutput}
       onRefresh={onRefresh}
       rollbackTransactionId={rollbackTransactionId}
@@ -229,9 +227,9 @@ export function HarnessPage({
     );
   }
 
-  const harnessState = targetMeta(entry, { workspaceValid, id: harness });
+  const harnessState = targetMeta(entry, { dataFolderOk, id: harness });
   // With an unusable workspace folder there is no runtime to judge: the heading says so and no rows follow.
-  const verdict = workspaceValid ? runtimeVerdict(runtime) : { text: WORKSPACE_FOLDER_UNUSABLE, tone: "dim" as const };
+  const verdict = dataFolderOk ? runtimeVerdict(runtime) : { text: WORKSPACE_FOLDER_UNUSABLE, tone: "dim" as const };
   const override = rulesOverrideWarning(runtime.harness === "codex" ? runtime.health : null);
   const conflictDetails = entry?.status?.conflict_details ?? [];
 
@@ -322,7 +320,7 @@ export function HarnessPage({
           )
         }
       >
-        {!workspaceValid && (
+        {!dataFolderOk && (
           <p className="c-warn pane-note" role="status">
             The workspace folder is unusable. The workspace page says why.
           </p>
@@ -339,8 +337,8 @@ export function HarnessPage({
           {"runtime · "}
           <span className={toneClass(verdict.tone) || undefined}>{verdict.text}</span>
         </div>
-        {workspaceValid && <Kv items={runtimeRowsFor(runtime, skillLoadRows(skillLoads, harness))} />}
-        {workspaceValid && runtimeExtra}
+        {dataFolderOk && <Kv items={runtimeRowsFor(runtime, skillLoadRows(skillLoads, harness))} />}
+        {dataFolderOk && runtimeExtra}
       </Pane>
 
       {outputStrip()}

@@ -235,7 +235,7 @@ export interface RulesGates {
 }
 
 export interface RulesGateContext {
-  workspaceValid: boolean;
+  dataFolderOk: boolean;
   /** Label of a workspace task in flight, or null. */
   busyLabel: string | null;
   /** A review (install or rules) is open on the page: the actions wait for it to close. */
@@ -245,7 +245,7 @@ export interface RulesGateContext {
 /** What `d`, `v` and `m` (and `:rules ...`) may do for `model` right now. */
 export function rulesGates(model: RulesModel | null, context: RulesGateContext): RulesGates {
   const hidden: RulesGate = { visible: false, reason: null };
-  if (!model || !context.workspaceValid) return { diff: hidden, convert: hidden, leave: hidden, manage: hidden };
+  if (!model || !context.dataFolderOk) return { diff: hidden, convert: hidden, leave: hidden, manage: hidden };
   const wait = context.blockedBy ?? (context.busyLabel ? `${context.busyLabel} is running` : null);
   const gate = (visible: boolean, reason: string | null = null): RulesGate => ({ visible, reason: visible ? wait ?? reason : null });
   return {

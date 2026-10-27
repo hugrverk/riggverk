@@ -149,6 +149,7 @@ pub(crate) const RETIRED_WORKSPACE_FILES: &[&str] = &[
 
 /// The marker followed by the frozen list: every path the `WorkspaceBundle` surface installs and
 /// tracks in this release. Together they are sorted, so the order is stable.
+#[cfg(test)]
 pub(crate) fn workspace_copy_paths() -> impl Iterator<Item = &'static str> {
     std::iter::once(LEGACY_MARKER_REL).chain(RETIRED_WORKSPACE_FILES.iter().copied())
 }

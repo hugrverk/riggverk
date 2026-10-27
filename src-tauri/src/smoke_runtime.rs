@@ -5,8 +5,8 @@
 #[cfg(test)]
 mod tests {
     use crate::commands::{
-        apply_setup, get_cursor_profile_health, get_opencode_runtime_health, get_status,
-        get_workspace_diagnostics, preview_setup,
+        apply_setup, get_cursor_profile_health, get_installation_status,
+        get_opencode_runtime_health, get_status, get_workspace_diagnostics, preview_setup,
     };
     use serde_json::Value;
     use std::path::PathBuf;
@@ -113,8 +113,25 @@ mod tests {
             field(&status, "repo_path").as_str(),
             Some(workspace_canonical.to_string_lossy().as_ref())
         );
-        for key in ["opencode_config", "opencode_agents", "claude_agents"] {
-            assert_eq!(field(&status, key).as_str(), Some("synced"), "{key} status");
+        let installed = serde_json::to_value(
+            get_installation_status(vec![
+                "open_code_config".to_string(),
+                "open_code_agents".to_string(),
+                "claude_agents".to_string(),
+            ])
+            .expect("get_installation_status"),
+        )
+        .expect("serialize installation status");
+        for surface in field(&installed, "surfaces")
+            .as_array()
+            .expect("surfaces array")
+        {
+            assert_eq!(
+                field(surface, "state").as_str(),
+                Some("current"),
+                "{} installation status",
+                field(surface, "surface")
+            );
         }
 
         let opencode = serde_json::to_value(

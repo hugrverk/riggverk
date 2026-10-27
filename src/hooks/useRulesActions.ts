@@ -26,7 +26,7 @@ export interface UseRulesActionsOptions {
   harness: InstallAgent;
   /** The rules file's model, or null (no rules surface, its target is off, status not loaded). */
   model: RulesModel | null;
-  workspaceValid: boolean;
+  dataFolderOk: boolean;
   busyLabel: string | null;
   /** An install review is open on this page. */
   installOpen: boolean;
@@ -72,7 +72,7 @@ function unavailable(action: RulesAction, model: RulesModel | null, label: strin
 export function useRulesActions({
   harness,
   model,
-  workspaceValid,
+  dataFolderOk,
   busyLabel,
   installOpen,
   flow,
@@ -86,7 +86,7 @@ export function useRulesActions({
   const label = HARNESS_LABELS[harness];
 
   const blockedBy = installOpen ? "close the install review first" : flow.open ? "close the rules review first" : null;
-  const gates = rulesGates(model, { workspaceValid, busyLabel, blockedBy });
+  const gates = rulesGates(model, { dataFolderOk, busyLabel, blockedBy });
 
   const setManaged = useCallback(
     async (userManaged: boolean) => {

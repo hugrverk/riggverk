@@ -6,8 +6,7 @@ import { Pane } from "../ui/Pane";
 import { OutputStrip, outputTextOf, useFocusOutputOnNewTransaction, type OutputStripProps } from "./OutputStrip";
 
 const STATUS = {
-  branch: "main",
-  git_available: true,
+  repo_path: "/tmp/workspace",
   enabled_rule_target_ids: ["a", "b"],
   enabled_config_target_ids: ["c"],
 } as unknown as StatusData;
@@ -28,8 +27,7 @@ function props(overrides: Partial<OutputStripProps> = {}): OutputStripProps {
     wsLog: null,
     wsLogCompletedAt: null,
     status: STATUS,
-    workspaceValid: true,
-    gitAvailable: true,
+    dataFolderOk: true,
     ...overrides,
   };
 }
@@ -86,7 +84,7 @@ describe("OutputStrip", () => {
   describe("the line", () => {
     it("is one quiet row while idle: ready, the workspace context, no command hints and no caret", () => {
       renderInFrame(<OutputStrip {...props()} />);
-      expect(line().textContent).toBe("❯ready · workspace valid · branch main");
+      expect(line().textContent).toBe("❯ready · workspace valid");
       expect(affordance().textContent).toBe("↵ expand");
       expect(strip().textContent).not.toContain("try:");
       expect(strip().querySelector(".tui-caret")).toBeNull();
@@ -94,12 +92,11 @@ describe("OutputStrip", () => {
       expect(log().hidden).toBe(true);
     });
 
-    it("says what is missing instead of a branch it does not have", () => {
+    it("says what is missing instead of a status it does not have", () => {
       const { rerenderFrame } = renderInFrame(<OutputStrip {...props({ status: null })} />);
       expect(line().textContent).toContain("ready · waiting for workspace status…");
-      rerenderFrame(<OutputStrip {...props({ workspaceValid: false, gitAvailable: false })} />);
+      rerenderFrame(<OutputStrip {...props({ dataFolderOk: false })} />);
       expect(line().textContent).toBe("❯ready · workspace invalid");
-      expect(line().textContent).not.toContain("branch");
     });
 
     it("shows a running task with its label and the loader, and opens by itself", () => {
@@ -299,7 +296,7 @@ describe("OutputStrip", () => {
     it("leaves the toggle alone when nothing new arrived, and when the output is cleared", () => {
       const { rerenderFrame } = renderInFrame(<OutputStrip {...props({ wsLog: APPLY })} />);
       // Same log object, new render (a timer tick, a status refresh): no re-open.
-      rerenderFrame(<OutputStrip {...props({ wsLog: APPLY, workspaceValid: false })} />);
+      rerenderFrame(<OutputStrip {...props({ wsLog: APPLY, dataFolderOk: false })} />);
       expect(line().getAttribute("aria-expanded")).toBe("false");
       rerenderFrame(<OutputStrip {...props({ wsLog: null })} />);
       expect(line().getAttribute("aria-expanded")).toBe("false");

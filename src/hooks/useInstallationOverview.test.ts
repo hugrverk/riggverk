@@ -40,7 +40,7 @@ function backend(statuses: Partial<Record<string, InstallationStatus | Error>>) 
 const HARNESSES: InstallAgent[] = ["codex", "opencode", "cursor", "claude"];
 
 function options(overrides: Partial<UseInstallationOverviewOptions> = {}): UseInstallationOverviewOptions {
-  return { workspaceValid: true, busy: false, enabledHarnessIds: HARNESSES, ...overrides };
+  return { dataFolderOk: true, busy: false, enabledHarnessIds: HARNESSES, ...overrides };
 }
 
 beforeEach(() => {
@@ -112,7 +112,7 @@ describe("useInstallationOverview", () => {
     });
     await waitFor(() => expect(result.current.loading).toBe(false));
     invokeMock.mockClear();
-    rerender(options({ workspaceValid: false }));
+    rerender(options({ dataFolderOk: false }));
     await waitFor(() => expect(result.current.entries).toEqual({}));
     expect(invokeMock).not.toHaveBeenCalled();
   });

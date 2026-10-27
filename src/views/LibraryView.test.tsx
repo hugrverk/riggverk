@@ -75,7 +75,7 @@ function baseProps(overrides: Partial<LibraryViewProps> = {}): LibraryViewProps 
     activeConfigSourceType: "base",
     onSelectConfigSource: noop,
     configEditorSourceContent: null,
-    workspaceValid: true,
+    dataFolderOk: true,
     showConfigs: true,
     ...overrides,
   };
@@ -220,7 +220,7 @@ describe("LibraryView layout", () => {
     expect(within(group).getByRole("button", { name: /^docs/ }).getAttribute("aria-current")).toBe("true");
   });
 
-  it("hides the configs source while no editable config target is enabled", () => {
+  it("hides the configs source while no bundled config target is enabled", () => {
     renderLibrary({ showConfigs: false });
     const group = screen.getByRole("group", { name: "Library source type" });
     expect(within(group).queryByRole("button", { name: /configs/ })).toBeNull();
@@ -424,13 +424,13 @@ describe("LibraryView Docs list", () => {
   });
 
   it("lists the bundled docs whether or not the workspace is valid, with no stale-docs banner or action", () => {
-    const { update } = renderLibrary({ docs, workspaceValid: true });
+    const { update } = renderLibrary({ docs, dataFolderOk: true });
     const names = () => within(listbox()).getAllByRole("option").map(option => option.querySelector(".nm")!.textContent);
     expect(names()).toEqual(["Alpha", "Gamma", "Beta notes"]);
     expect(screen.queryByText("Bundled docs need update")).toBeNull();
     expect(screen.queryByRole("button", { name: "open workspace update" })).toBeNull();
 
-    update({ docs, workspaceValid: false });
+    update({ docs, dataFolderOk: false });
     expect(names()).toEqual(["Alpha", "Gamma", "Beta notes"]);
     expect(screen.queryByText("No valid workspace")).toBeNull();
     expect(screen.queryByText("Bundled docs need update")).toBeNull();
@@ -443,7 +443,7 @@ describe("LibraryView Docs list", () => {
 
   it("opens a bundled doc in a workspace that is not valid", () => {
     const bundled = makeDoc("a", "Alpha", "# Bundled heading", "curated");
-    renderLibrary({ docs, activeDoc: bundled, docDraft: bundled.content, workspaceValid: false });
+    renderLibrary({ docs, activeDoc: bundled, docDraft: bundled.content, dataFolderOk: false });
     expect(screen.getByRole("heading", { name: "Bundled heading" })).not.toBeNull();
     expect(screen.queryByText("No valid workspace selected")).toBeNull();
   });
@@ -1287,7 +1287,7 @@ describe("LibraryView new doc form", () => {
     act(() => listbox().focus());
     const bar = within(screen.getByLabelText("Status bar"));
     expect(bar.getByRole("button", { name: /new doc/ })).not.toBeNull();
-    update({ docs, workspaceValid: false });
+    update({ docs, dataFolderOk: false });
     expect(bar.queryByRole("button", { name: /new doc/ })).toBeNull();
   });
 });
@@ -1300,7 +1300,7 @@ describe("LibraryView bundled sources without a valid workspace", () => {
       skills: [skill],
       activeSkillId: "tdd",
       activeSkillContent: { id: "tdd", title: "tdd", path: "skills/tdd/SKILL.md", section: "workspace", source: "curated", content: "# Bundled skill" },
-      workspaceValid: false,
+      dataFolderOk: false,
     });
     expect(screen.getByRole("heading", { name: "Bundled skill" })).not.toBeNull();
     expect(screen.queryByText("No valid workspace selected")).toBeNull();
@@ -1311,7 +1311,7 @@ describe("LibraryView bundled sources without a valid workspace", () => {
       agentSources: agents,
       activeAgentId: "architect.md",
       activeAgentContent: { id: "architect.md", title: "Architect", path: "agents/architect.md", content: "# Bundled agent", exists: true },
-      workspaceValid: false,
+      dataFolderOk: false,
     });
     expect(screen.getByRole("heading", { name: "Bundled agent" })).not.toBeNull();
 
@@ -1321,17 +1321,17 @@ describe("LibraryView bundled sources without a valid workspace", () => {
       configTargets: [{ id: "opencode_config", label: "OpenCode config", harness: "opencode", kind: "config", source_rel: "templates/opencode.json", target_rel: "opencode.json" }],
       configEditorSources: [{ id: "base", label: "Base", rel_path: "templates/opencode.base.json", helper: "bundled base" }],
       configEditorSourceContent: makeDoc("base", "base", '{"bundled_marker": true}', "curated"),
-      workspaceValid: false,
+      dataFolderOk: false,
     });
     expect(screen.getByText(/bundled_marker/)).not.toBeNull();
   });
 
   it("asks for an item to open, not for a workspace, while nothing is open", () => {
-    const { update } = renderLibrary({ sourceType: "skills", workspaceValid: false });
+    const { update } = renderLibrary({ sourceType: "skills", dataFolderOk: false });
     expect(screen.getByText("Select a skill to preview")).not.toBeNull();
-    update({ sourceType: "agents", workspaceValid: false });
+    update({ sourceType: "agents", dataFolderOk: false });
     expect(screen.getByText("Select an agent to preview")).not.toBeNull();
-    update({ sourceType: "docs", workspaceValid: false });
+    update({ sourceType: "docs", dataFolderOk: false });
     expect(screen.getByText("Select a document to preview")).not.toBeNull();
     expect(screen.queryByText("No valid workspace selected")).toBeNull();
   });
@@ -1420,7 +1420,7 @@ describe("LibraryView Rules", () => {
   });
 
   it("lists no rules file while the workspace is not valid, and still shows the bundled base", () => {
-    renderLibrary({ sourceType: "rules", agentTemplate: makeDoc("tpl", "tpl", "# Bundled rules"), rulesFiles: files, workspaceValid: false });
+    renderLibrary({ sourceType: "rules", agentTemplate: makeDoc("tpl", "tpl", "# Bundled rules"), rulesFiles: files, dataFolderOk: false });
     expect(within(listbox()).getAllByRole("option").map(option => option.querySelector(".nm")!.textContent)).toEqual(["Global Rules"]);
     expect(screen.getByRole("heading", { name: "Bundled rules" })).not.toBeNull();
   });

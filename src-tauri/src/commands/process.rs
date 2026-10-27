@@ -18,11 +18,6 @@ const TERMINATE_GRACE: Duration = Duration::from_secs(1);
 const DEFAULT_DRAIN_GRACE: Duration = Duration::from_secs(2);
 const MAX_POLL_INTERVAL: Duration = Duration::from_millis(50);
 
-#[cfg(unix)]
-const GIT_NULL_HOOKS_PATH: &str = "/dev/null";
-#[cfg(not(unix))]
-const GIT_NULL_HOOKS_PATH: &str = "NUL";
-
 #[derive(Serialize, Debug)]
 pub struct ActionResult {
     pub(crate) success: bool,
@@ -284,35 +279,6 @@ pub(super) fn run_cmd_bounded(
     }
 }
 
-/// `git` for repositories the user trusts, with a few repo-config execution paths turned off:
-/// no fsmonitor or hooks from repo config, no credential prompts, and no optional locks
-/// (`git status` must not take `index.lock` while the user works in the same repository).
-///
-/// This is not a sandbox for untrusted repositories. Still honored from repo config:
-/// filter drivers (`filter.<name>.clean`/`process`, run by `git status` for modified
-/// files), credential helpers, URL rewrites, and any other key not listed above. Transport
-/// hardening (upload-pack, ssh command, protocols) is applied by the fetch caller. See
-/// `docs/SECURITY_MODEL.md`.
-pub(super) fn run_git_bounded(
-    args: &[&str],
-    cwd: &Path,
-    mut options: BoundedCmdOptions,
-) -> BoundedCmdResult {
-    let hooks_path = format!("core.hooksPath={GIT_NULL_HOOKS_PATH}");
-    let mut full_args: Vec<&str> = vec!["-c", "core.fsmonitor=false", "-c", &hooks_path];
-    full_args.extend_from_slice(args);
-    for (key, value) in [("GIT_OPTIONAL_LOCKS", "0"), ("GIT_TERMINAL_PROMPT", "0")] {
-        if !options
-            .extra_env
-            .iter()
-            .any(|(existing, _)| existing == key)
-        {
-            options.extra_env.push((key.to_string(), value.to_string()));
-        }
-    }
-    run_cmd_bounded("git", &full_args, cwd, options)
-}
-
 pub(super) fn run_cmd_with_timeout(
     program: &str,
     args: &[&str],
@@ -504,22 +470,5 @@ mod tests {
         );
         assert!(!ok);
         assert!(stderr.contains("timed out"), "{stderr}");
-    }
-
-    #[test]
-    fn run_git_bounded_overrides_repo_hooks_and_fsmonitor() {
-        let result = run_git_bounded(
-            &["config", "--get-regexp", "^core\\.(hookspath|fsmonitor)$"],
-            Path::new("."),
-            BoundedCmdOptions {
-                timeout: Some(Duration::from_secs(10)),
-                ..BoundedCmdOptions::default()
-            },
-        );
-        assert!(result.success, "{result:?}");
-        assert!(result
-            .stdout
-            .contains(&format!("core.hookspath {GIT_NULL_HOOKS_PATH}")));
-        assert!(result.stdout.contains("core.fsmonitor false"));
     }
 }

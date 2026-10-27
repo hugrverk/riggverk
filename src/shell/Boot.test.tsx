@@ -8,8 +8,6 @@ import { Boot, resetBootLaunch, type BootInfo } from "./Boot";
 const INFO: BootInfo = {
   version: "0.1.0",
   workspace: "/Users/me/agent-workspace",
-  branch: "main",
-  dirty: false,
   harnesses: ["codex", "claude"],
   backups: 3,
 };
@@ -71,7 +69,6 @@ describe("Boot", () => {
     expect(said).toEqual([
       "❯ riggverk 0.1.0",
       "  workspace  /Users/me/agent-workspace",
-      "  branch     main · clean",
       "  harnesses  codex · claude",
       "  backups    3 runs",
       "❯ ready",
@@ -94,12 +91,11 @@ describe("Boot", () => {
     expect(overlay()).toBeNull();
   });
 
-  it("skips a line it has no data for, and says so for an unusable workspace folder and a dirty branch", () => {
-    renderWithShell(<Boot info={{ version: "0.1.0", workspace: null, branch: "dev", dirty: true, backups: 1 }} autoplay />);
+  it("skips a line it has no data for, and says so for an unusable workspace folder", () => {
+    renderWithShell(<Boot info={{ version: "0.1.0", workspace: null, backups: 1 }} autoplay />);
     expect(playToEnd().said).toEqual([
       "❯ riggverk 0.1.0",
       "  workspace  folder unusable",
-      "  branch     dev · dirty",
       "  backups    1 run",
       "❯ ready",
     ]);
@@ -158,7 +154,7 @@ describe("Boot", () => {
 
   it("survives StrictMode's double mount and still plays", () => {
     renderWithShell(<Boot info={INFO} autoplay />, { strict: true });
-    expect(playToEnd().said).toHaveLength(6);
+    expect(playToEnd().said).toHaveLength(5);
     advance(250);
     expect(overlay()).toBeNull();
   });
@@ -174,7 +170,7 @@ describe("Boot", () => {
     advance(2500);
     expect(overlay()).toBeNull();
     rerender(<Boot info={INFO} autoplay run={1} />);
-    expect(playToEnd().said).toHaveLength(6);
+    expect(playToEnd().said).toHaveLength(5);
     advance(250);
     expect(overlay()).toBeNull();
   });
