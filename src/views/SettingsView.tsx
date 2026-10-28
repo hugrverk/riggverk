@@ -5,11 +5,13 @@ import {
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
 } from "react";
 import type { Binding } from "../keyboard/registry";
 import { useKeymap } from "../keyboard/useKeymap";
 import { isSettingsConflictError } from "../lib/appSettingsMutation";
 import { displayPath } from "../lib/displayPath";
+import { HARNESS_LABELS } from "../lib/harnessInstallation";
 import { useSystemReducedMotion } from "../lib/motion";
 import {
   APP_FONT_SIZE_LABELS,
@@ -24,11 +26,9 @@ import {
 } from "../lib/settingsDraft";
 import type { AppSettings } from "../types";
 import { INSTALL_AGENTS, type InstallAgent } from "../types";
-import { ActionKey } from "../ui/ActionKey";
-import { Glyph, type GlyphName } from "../ui/Glyph";
-import { Kv, type KvItem } from "../ui/Kv";
 import { Pane } from "../ui/Pane";
-import { toneClass, type Tone } from "../ui/tone";
+import { TButton } from "../ui/TButton";
+import { cx } from "../ui/tone";
 
 interface SettingsMessage {
   ok: boolean;
@@ -64,32 +64,77 @@ interface SettingsViewProps {
 }
 
 const APPEARANCE_OPTIONS = [
-  { value: "dark", label: "dark" },
-  { value: "light", label: "light" },
-  { value: "system", label: "system" },
+  { value: "dark", label: "Dark" },
+  { value: "light", label: "Light" },
+  { value: "system", label: "System" },
 ] as const satisfies ReadonlyArray<{ value: AppSettings["appearance"]; label: string }>;
 
 const MOTION_OPTIONS = [
-  { value: "full", label: "full" },
-  { value: "subtle", label: "subtle" },
-  { value: "off", label: "off" },
+  { value: "full", label: "Full" },
+  { value: "subtle", label: "Subtle" },
+  { value: "off", label: "Off" },
 ] as const satisfies ReadonlyArray<{ value: AppSettings["motion"]; label: string }>;
 
+/** `start` is the id of the Overview page; the saved landing value ids stay as they are. */
 const LANDING_OPTIONS = [
-  { value: "start", label: "workspace" },
-  { value: "library", label: "library" },
+  { value: "start", label: "Overview" },
+  { value: "library", label: "Library" },
 ] as const;
 
-const SAVE_STATE: Record<SettingsSaveStatus, { glyph: GlyphName; tone: Tone; label: string }> = {
-  saved: { glyph: "ok", tone: "ok", label: "saved" },
-  pending: { glyph: "partial", tone: "warn", label: "pending" },
-  saving: { glyph: "partial", tone: "warn", label: "saving" },
-  error: { glyph: "fail", tone: "fail", label: "error" },
+/** Autosave states: a hollow ring in the state's own hue and always the word, so colour is never alone. */
+type StateTone = "ok" | "busy" | "fail";
+
+const SAVE_STATE: Record<SettingsSaveStatus, { tone: StateTone; label: string }> = {
+  saved: { tone: "ok", label: "saved" },
+  pending: { tone: "busy", label: "pending" },
+  saving: { tone: "busy", label: "saving" },
+  error: { tone: "fail", label: "error" },
 };
+
+/** A hollow ring and a word: the autosave state, a rejected hex value, the outcome of a workspace reset. */
+function StateText({ tone, children }: { tone: StateTone; children: ReactNode }) {
+  return (
+    <span className={cx("sv", `sv-${tone}`)}>
+      <span className="sv-mark" aria-hidden="true" /> {children}
+    </span>
+  );
+}
+
+/** `dl.srows` of label/control rows. Each row is a `div.srow > dt + dd`, so the pairs stay one description list. */
+function SettingRows({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <dl className="srows" aria-label={label}>
+      {children}
+    </dl>
+  );
+}
+
+/** One setting: its label (which also names a control that has no name of its own) and the control. */
+function SettingRow({
+  labelId,
+  label,
+  stacked = false,
+  children,
+}: {
+  labelId: string;
+  label: string;
+  /** Control under the label instead of beside it (a path, a status). */
+  stacked?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <div className={cx("srow", stacked && "srow-stack")}>
+      <dt className="sl">
+        <span id={labelId}>{label}</span>
+      </dt>
+      <dd className="sc">{children}</dd>
+    </div>
+  );
+}
 
 /**
  * `j`/`k` rows: an element marked `data-setting-row` is one setting and its `data-setting-stop` descendant is the
- * control that takes focus (the roving tab stop of a radio group, the hex field of a colour row); a row of
+ * control that takes focus (the roving tab stop of a segmented control, the hex field of a colour row); a row of
  * plain buttons (the workspace reset) lands on its first button.
  * Moves focus to the next/previous row inside the pane that holds focus.
  */
@@ -112,10 +157,11 @@ interface RadioOption<T extends string> {
 }
 
 /**
- * `role=radiogroup` of `role=radio` buttons with a roving tab stop: Tab enters on the checked option (or the
- * first one), arrow keys move and select (wrapping), Space/Enter select through the native button click.
+ * Segmented control: a `role=radiogroup` of `role=radio` buttons with a roving tab stop. Tab enters on the checked
+ * option (or the first one), arrow keys move and select (wrapping), Space/Enter select through the native button
+ * click. The checked segment is filled, bold and ringed, so it does not rest on colour alone.
  */
-function RadioGroup<T extends string>({
+function Segmented<T extends string>({
   options,
   value,
   onSelect,
@@ -148,7 +194,7 @@ function RadioGroup<T extends string>({
   };
 
   return (
-    <div className="setting" role="radiogroup" aria-label={label} aria-labelledby={labelledBy} data-setting-row="">
+    <div className="seg" role="radiogroup" aria-label={label} aria-labelledby={labelledBy} data-setting-row="">
       {options.map((option, index) => {
         const checked = index === checkedIndex;
         const stop = index === stopIndex;
@@ -162,16 +208,13 @@ function RadioGroup<T extends string>({
             role="radio"
             aria-checked={checked}
             tabIndex={stop ? 0 : -1}
-            className="setting-option"
+            className="seg-opt"
             data-setting-stop={stop ? "" : undefined}
             data-pane-primary={stop && primary ? "" : undefined}
             onClick={() => onSelect(option.value)}
             onKeyDown={event => onKeyDown(event, index)}
           >
-            <span className="mark" aria-hidden="true">
-              {checked ? "(•)" : "( )"}
-            </span>
-            <span>{option.label}</span>
+            {option.label}
           </button>
         );
       })}
@@ -221,7 +264,7 @@ function ColorField({
 
   return (
     <>
-      <div className="setting setting-color" data-setting-row="">
+      <div className="setting-color" data-setting-row="">
         <input
           type="color"
           value={pickerHex}
@@ -246,16 +289,16 @@ function ColorField({
         />
         <button
           type="button"
-          className="btn btn-sm"
+          className="tbtn setting-default"
           onClick={onReset}
           aria-label={`Use default ${label.toLowerCase()} color`}
         >
-          default
+          Default
         </button>
       </div>
       {invalid && (
-        <div id={hintId} className="setting-hint c-fail">
-          <Glyph name="conflict" tone="fail" /> enter a valid hex color (e.g. {defaultPicker})
+        <div id={hintId} className="setting-hint">
+          <StateText tone="fail">enter a valid hex color (e.g. {defaultPicker})</StateText>
         </div>
       )}
     </>
@@ -420,7 +463,7 @@ export function SettingsView({
   if (!appSettings) {
     return (
       <section ref={screenRef} className="screen settings-screen" aria-label="Settings">
-        <Pane id="settings-appearance" title="settings" label="Loading settings" scrollable>
+        <Pane id="settings-appearance" title="Settings" label="Loading settings" scrollable className="pane-flat">
           <p className="c-dim setting-note">loading…</p>
         </Pane>
       </section>
@@ -476,223 +519,185 @@ export function SettingsView({
   const conflict = settingsSaveStatus === "error" && !!settingsMsg && isSettingsConflictError(settingsMsg.text);
   const saveLabel = conflict ? "conflict" : save.label;
 
-  const label = (key: string, text: string) => ({ id: key, label: <span id={labelId(key)}>{text}</span> });
-
-  const appearanceItems: KvItem[] = [
-    {
-      ...label("theme", "theme"),
-      value: (
-        <RadioGroup
-          options={APPEARANCE_OPTIONS}
-          value={appSettings.appearance}
-          onSelect={handleSetAppearance}
-          label="Theme"
-          primary
-        />
-      ),
-    },
-    {
-      ...label("size", "text size"),
-      value: (
-        <RadioGroup
-          options={APP_FONT_SIZE_VALUES.map(size => ({ value: size, label: APP_FONT_SIZE_LABELS[size] }))}
-          value={appSettings.app_font_size}
-          onSelect={onSetAppFontSize}
-          label="Global app text size"
-        />
-      ),
-    },
-    {
-      ...label("motion", "motion"),
-      value: (
-        <>
-          <RadioGroup options={MOTION_OPTIONS} value={appSettings.motion} onSelect={onSetMotion} label="Motion" />
-          {systemReducesMotion && (
-            <div className="setting-hint c-dim">the system asks for reduced motion: motion is off until that changes</div>
-          )}
-        </>
-      ),
-    },
-    {
-      ...label("accent", "accent"),
-      value: (
-        <ColorField
-          id="accent"
-          label="Accent"
-          draft={accentDraft}
-          saved={appSettings.accent_color}
-          defaultPicker={themeAccentDefault(appSettings.appearance)}
-          touched={accentTouched}
-          onDraftChange={applyAccent}
-          onReset={() => {
-            setAccentTouched(false);
-            applyAccent("");
-          }}
-          onValidChange={setAccentValid}
-        />
-      ),
-    },
-    {
-      ...label("background", "background"),
-      value: (
-        <ColorField
-          id="background"
-          label="Background"
-          draft={backgroundDraft}
-          saved={appSettings.background_color}
-          defaultPicker={appearanceDefaults.background}
-          touched={backgroundTouched}
-          onDraftChange={applyBackground}
-          onReset={() => {
-            setBackgroundTouched(false);
-            applyBackground("");
-          }}
-          onValidChange={setBackgroundValid}
-        />
-      ),
-    },
-    {
-      ...label("foreground", "foreground"),
-      value: (
-        <ColorField
-          id="foreground"
-          label="Foreground"
-          draft={foregroundDraft}
-          saved={appSettings.foreground_color}
-          defaultPicker={appearanceDefaults.foreground}
-          touched={foregroundTouched}
-          onDraftChange={applyForeground}
-          onReset={() => {
-            setForegroundTouched(false);
-            applyForeground("");
-          }}
-          onValidChange={setForegroundValid}
-        />
-      ),
-    },
-  ];
-
-  const harnessItems: KvItem[] = INSTALL_AGENTS.map(harness => {
-    const enabled = appSettings.enabled_harness_ids.includes(harness);
-    return {
-      ...label(`harness-${harness}`, harness),
-      value: (
-        <div className="setting" data-setting-row="">
-          <button
-            type="button"
-            role="checkbox"
-            aria-checked={enabled}
-            aria-labelledby={labelId(`harness-${harness}`)}
-            className="setting-option"
-            onClick={() => onToggleHarness(harness)}
-            data-setting-stop=""
-          >
-            <span className="mark" aria-hidden="true">
-              {enabled ? "[x]" : "[ ]"}
-            </span>
-            <span>{enabled ? "enabled" : "disabled"}</span>
-          </button>
-        </div>
-      ),
-    };
-  });
-
   const shownWorkspacePath = displayPath(workspacePath ?? appSettings.workspace_path ?? DEFAULT_WORKSPACE_PATH);
   const resetState = workspaceResetState();
-  const appItems: KvItem[] = [
-    {
-      ...label("workspace", "workspace"),
-      wrap: true,
-      value: (
-        <div role="group" aria-labelledby={labelId("workspace")}>
-          <div className="setting-path">{shownWorkspacePath}</div>
-          <div className="setting" data-setting-row={onResetWorkspace ? "" : undefined}>
-            <span className="c-dim">{workspaceIsDefault ? "default" : "custom folder"}</span>
-            {onResetWorkspace && (
-              <ActionKey
-                keys={["R"]}
-                shortcut="R"
-                disabled={resetState === true ? false : resetState}
-                onClick={runWorkspaceReset}
-              >
-                reset to default
-              </ActionKey>
-            )}
-          </div>
-          <div role="status" aria-label="Workspace change">
-            {workspaceBusy && <span className="c-dim">resetting workspace…</span>}
-            {workspaceMsg && (
-              <span className={workspaceMsg.ok ? "c-ok" : "c-fail"}>
-                <Glyph name={workspaceMsg.ok ? "ok" : "fail"} tone={workspaceMsg.ok ? "ok" : "fail"} /> {workspaceMsg.text}
-              </span>
-            )}
-          </div>
-        </div>
-      ),
-    },
-    {
-      ...label("autosave", "autosave"),
-      wrap: true,
-      value: (
-        <div role="status" aria-labelledby={labelId("autosave")}>
-          <span className={toneClass(save.tone)}>
-            <Glyph name={save.glyph} tone={save.tone} /> {saveLabel}
-          </span>
-          {settingsMsg && (
-            <div className={settingsMsg.ok ? "c-dim" : "c-fail"}>{settingsMsg.text}</div>
-          )}
-        </div>
-      ),
-    },
-  ];
 
   return (
     <section ref={screenRef} className="screen settings-screen" aria-label="Settings">
       <Pane
         id="settings-appearance"
-        title="appearance"
+        title="Appearance"
         label="Appearance"
+        className="pane-flat"
         meta={
-          <span className={toneClass(save.tone)}>
-            · <Glyph name={save.glyph} tone={save.tone} /> {saveLabel}
-          </span>
+          <>
+            <span aria-hidden="true">·</span> <StateText tone={save.tone}>{saveLabel}</StateText>
+          </>
         }
         defaultFocus
       >
-        <Kv className="settings-kv" items={appearanceItems} aria-label="Appearance settings" />
+        <SettingRows label="Appearance settings">
+          <SettingRow labelId={labelId("theme")} label="Theme">
+            <Segmented
+              options={APPEARANCE_OPTIONS}
+              value={appSettings.appearance}
+              onSelect={handleSetAppearance}
+              label="Theme"
+              primary
+            />
+          </SettingRow>
+          <SettingRow labelId={labelId("size")} label="Text size">
+            <Segmented
+              options={APP_FONT_SIZE_VALUES.map(size => ({
+                value: size,
+                label: APP_FONT_SIZE_LABELS[size].charAt(0).toUpperCase() + APP_FONT_SIZE_LABELS[size].slice(1),
+              }))}
+              value={appSettings.app_font_size}
+              onSelect={onSetAppFontSize}
+              label="Global app text size"
+            />
+          </SettingRow>
+          <SettingRow labelId={labelId("motion")} label="Motion">
+            <Segmented options={MOTION_OPTIONS} value={appSettings.motion} onSelect={onSetMotion} label="Motion" />
+            {systemReducesMotion && (
+              <div className="setting-hint c-dim">the system asks for reduced motion: motion is off until that changes</div>
+            )}
+          </SettingRow>
+        </SettingRows>
+        <h3 className="sgroup">Colours</h3>
+        <SettingRows label="Colour settings">
+          <SettingRow labelId={labelId("accent")} label="Accent">
+            <ColorField
+              id="accent"
+              label="Accent"
+              draft={accentDraft}
+              saved={appSettings.accent_color}
+              defaultPicker={themeAccentDefault(appSettings.appearance)}
+              touched={accentTouched}
+              onDraftChange={applyAccent}
+              onReset={() => {
+                setAccentTouched(false);
+                applyAccent("");
+              }}
+              onValidChange={setAccentValid}
+            />
+          </SettingRow>
+          <SettingRow labelId={labelId("background")} label="Background">
+            <ColorField
+              id="background"
+              label="Background"
+              draft={backgroundDraft}
+              saved={appSettings.background_color}
+              defaultPicker={appearanceDefaults.background}
+              touched={backgroundTouched}
+              onDraftChange={applyBackground}
+              onReset={() => {
+                setBackgroundTouched(false);
+                applyBackground("");
+              }}
+              onValidChange={setBackgroundValid}
+            />
+          </SettingRow>
+          <SettingRow labelId={labelId("foreground")} label="Foreground">
+            <ColorField
+              id="foreground"
+              label="Foreground"
+              draft={foregroundDraft}
+              saved={appSettings.foreground_color}
+              defaultPicker={appearanceDefaults.foreground}
+              touched={foregroundTouched}
+              onDraftChange={applyForeground}
+              onReset={() => {
+                setForegroundTouched(false);
+                applyForeground("");
+              }}
+              onValidChange={setForegroundValid}
+            />
+          </SettingRow>
+        </SettingRows>
         {contrastDetail && (
-          <p className="setting-note c-warn" role="status">
-            <Glyph name="conflict" tone="warn" /> {contrastDetail}
+          <p className="setting-note setting-warn" role="status">
+            <StateText tone="fail">{contrastDetail}</StateText>
           </p>
         )}
         <p className="setting-note c-dim">Optional hex overrides; empty uses the theme default. Changes save automatically.</p>
       </Pane>
-      <Pane id="settings-app" title="app" label="App">
-        <Kv
-          className="settings-kv"
-          items={[
-            {
-              ...label("landing", "landing page"),
-              value: (
-                <RadioGroup
-                  options={LANDING_OPTIONS}
-                  value={appSettings.landing_view}
-                  onSelect={onSetLandingView}
-                  label="Landing page"
-                  primary
-                />
-              ),
-            },
-          ]}
-          aria-label="Startup settings"
-        />
-        <h3 className="group setting-group">harnesses</h3>
-        <Kv className="settings-kv" items={harnessItems} aria-label="Enabled harnesses" />
-        <p className="setting-note c-dim">
-          Disabling a harness hides its page and blocks new managed writes. Existing files stay on disk.
-        </p>
-        <Kv className="settings-kv setting-status" items={appItems} aria-label="Workspace and autosave" />
-        <p className="setting-note c-dim">Workspace install is on the workspace page; target profiles and sync are on the harness pages.</p>
+      <Pane id="settings-app" title="App" label="App" className="pane-flat">
+        <h3 className="sgroup">Startup</h3>
+        <SettingRows label="Startup settings">
+          <SettingRow labelId={labelId("landing")} label="Landing page">
+            <Segmented
+              options={LANDING_OPTIONS}
+              value={appSettings.landing_view}
+              onSelect={onSetLandingView}
+              label="Landing page"
+              primary
+            />
+          </SettingRow>
+        </SettingRows>
+        <h3 className="sgroup">Agents</h3>
+        <SettingRows label="Enabled agents">
+          {INSTALL_AGENTS.map(harness => {
+            const enabled = appSettings.enabled_harness_ids.includes(harness);
+            return (
+              <SettingRow key={harness} labelId={labelId(`harness-${harness}`)} label={HARNESS_LABELS[harness]}>
+                <div data-setting-row="">
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={enabled}
+                    aria-labelledby={labelId(`harness-${harness}`)}
+                    className="sw"
+                    onClick={() => onToggleHarness(harness)}
+                    data-setting-stop=""
+                  >
+                    <span className="sw-track" aria-hidden="true" />
+                    <span className="sw-state">{enabled ? "On" : "Off"}</span>
+                  </button>
+                </div>
+              </SettingRow>
+            );
+          })}
+        </SettingRows>
+        <p className="setting-note c-dim">Turning an agent off hides its page and stops new writes. Files stay.</p>
+        <h3 className="sgroup">Workspace</h3>
+        <SettingRows label="Workspace and autosave">
+          <SettingRow labelId={labelId("workspace")} label="Workspace" stacked>
+            <div role="group" aria-labelledby={labelId("workspace")}>
+              <div className="setting-path">{shownWorkspacePath}</div>
+              <div className="setting-line" data-setting-row={onResetWorkspace ? "" : undefined}>
+                <span className="c-dim">{workspaceIsDefault ? "default" : "custom folder"}</span>
+                {onResetWorkspace && (
+                  <TButton
+                    keys={["R"]}
+                    shortcut="R"
+                    disabled={resetState === true ? false : resetState}
+                    onClick={runWorkspaceReset}
+                  >
+                    reset to default
+                  </TButton>
+                )}
+              </div>
+              <div role="status" aria-label="Workspace change">
+                {workspaceBusy && <span className="c-dim">resetting workspace…</span>}
+                {workspaceMsg && (
+                  <span className={workspaceMsg.ok ? "c-ok" : "c-fail"}>
+                    <StateText tone={workspaceMsg.ok ? "ok" : "fail"}>{workspaceMsg.text}</StateText>
+                  </span>
+                )}
+              </div>
+            </div>
+          </SettingRow>
+          <SettingRow labelId={labelId("autosave")} label="Autosave" stacked>
+            <div role="status" aria-labelledby={labelId("autosave")}>
+              <StateText tone={save.tone}>{saveLabel}</StateText>
+              {settingsMsg && (
+                <div className={settingsMsg.ok ? "c-dim" : "c-fail"}>{settingsMsg.text}</div>
+              )}
+            </div>
+          </SettingRow>
+        </SettingRows>
+        <p className="setting-note c-dim">Workspace install is on the Overview page; target profiles and sync are on the agent pages.</p>
       </Pane>
     </section>
   );

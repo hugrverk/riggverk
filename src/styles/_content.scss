@@ -1,65 +1,6 @@
-/* ---- new-doc form (Library, docs source) ---- */
-
-.docs-create-form {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  flex-shrink: 0;
-  padding: 0 10px 8px;
-  margin-bottom: 6px;
-  border-bottom: 1px solid var(--border);
-}
-
-.docs-create-label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.docs-create-label span {
-  width: 5ch;
-  flex-shrink: 0;
-  color: var(--text-muted);
-  font-size: var(--fs-sm);
-}
-
-.docs-create-input {
-  flex: 1;
-  min-width: 0;
-  padding: 0 6px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius);
-  background: var(--inset);
-  color: var(--text);
-  line-height: calc(var(--lh) - 2px);
-  outline: none;
-}
-
-.docs-create-input::placeholder { color: var(--text-muted); }
-.docs-create-input:focus { border-color: var(--accent); }
-
-.docs-create-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 2px;
-}
-
-.docs-create-hint {
-  margin-left: auto;
-  color: var(--text-muted);
-  font-size: var(--fs-sm);
-}
-
-.docs-create-error {
-  color: var(--fail);
-  font-size: var(--fs-sm);
-  overflow-wrap: anywhere;
-}
-
 /* ---- markdown ----
    .markdown-body is the generic rendered-markdown surface (SafeMarkdown default). The Library document view adds
-   .lib-docs-markdown (_library.scss) for its TUI treatment. Colours are tokens only. */
+   .lib-docs-markdown (_library.scss) for its reading treatment. Colours are tokens only. */
 
 .markdown-body {
   font-size: var(--fs);
