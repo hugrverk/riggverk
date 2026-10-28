@@ -29,7 +29,7 @@ import {
 
 type EnabledSettings = Pick<AppSettings, "enabled_target_ids" | "enabled_harness_ids">;
 
-/** Backend defaults: the four central harnesses, every target except codex_config. */
+/** Backend defaults: the four central harnesses, every target except codex_config, claude_config and kilo_mcp. */
 function defaults(overrides: Partial<EnabledSettings> = {}): EnabledSettings {
   return {
     enabled_target_ids: [...DEFAULT_ENABLED_TARGET_IDS],
@@ -90,6 +90,7 @@ describe("target to surface mapping", () => {
       opencode_config: ["open_code_config"],
       claude_rules: ["claude_rules"],
       claude_agents: ["claude_agents"],
+      claude_config: ["claude_config"],
       cursor_setup: ["cursor_agents", "cursor_mcp"],
       copilot_rules: ["copilot_rules"],
       copilot_mcp: ["copilot_mcp"],
@@ -119,10 +120,13 @@ describe("target to surface mapping", () => {
     expect(harnessForSurface("workspace_bundle")).toBeNull();
   });
 
-  it("defaults every target on except codex_config and kilo_mcp", () => {
+  it("defaults every target on except codex_config, claude_config and kilo_mcp", () => {
     expect(DEFAULT_ENABLED_TARGET_IDS).not.toContain("codex_config");
+    expect(DEFAULT_ENABLED_TARGET_IDS).not.toContain("claude_config");
     expect(DEFAULT_ENABLED_TARGET_IDS).not.toContain("kilo_mcp");
-    const expected = (Object.keys(TARGET_SURFACES) as SetupTargetId[]).filter((id) => id !== "codex_config" && id !== "kilo_mcp");
+    const expected = (Object.keys(TARGET_SURFACES) as SetupTargetId[]).filter(
+      (id) => id !== "codex_config" && id !== "claude_config" && id !== "kilo_mcp",
+    );
     expect([...DEFAULT_ENABLED_TARGET_IDS].sort()).toEqual(expected.sort());
   });
 });
@@ -137,6 +141,16 @@ describe("target-filtered surfaces", () => {
     const settings = defaults({ enabled_target_ids: [...DEFAULT_ENABLED_TARGET_IDS, "codex_config"] });
     expect(enabledSurfacesForHarness("codex", settings)).toEqual(HARNESS_SURFACES.codex);
     expect(disabledSurfacesForHarness("codex", settings)).toEqual([]);
+  });
+
+  it("leaves claude_config out of a default Claude install and adds it back, in harness order, once enabled", () => {
+    expect(enabledSurfacesForHarness("claude", defaults())).toEqual(["claude_rules", "claude_agents", "skills"]);
+    expect(disabledSurfacesForHarness("claude", defaults())).toEqual(["claude_config"]);
+    const on = defaults({ enabled_target_ids: [...DEFAULT_ENABLED_TARGET_IDS, "claude_config"] });
+    expect(enabledSurfacesForHarness("claude", on)).toEqual(HARNESS_SURFACES.claude);
+    expect(disabledSurfacesForHarness("claude", on)).toEqual([]);
+    expect(targetIdForSurface("claude_config")).toBe("claude_config");
+    expect(harnessForSurface("claude_config")).toBe("claude");
   });
 
   it("keeps skills surfaces when every target of a harness is off", () => {
@@ -169,7 +183,9 @@ describe("target-filtered surfaces", () => {
   it("builds the all-surfaces request from workspace plus enabled harnesses", () => {
     const surfaces = enabledSetupSurfaces(defaults());
     expect(surfaces).toEqual(
-      ALL_SURFACES.filter((surface) => surface !== "codex_config" && !LIGHT_SURFACES.includes(surface)),
+      ALL_SURFACES.filter(
+        (surface) => surface !== "codex_config" && surface !== "claude_config" && !LIGHT_SURFACES.includes(surface),
+      ),
     );
     expect(surfaces[0]).toBe("workspace_bundle");
 

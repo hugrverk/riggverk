@@ -34,7 +34,7 @@ It does not:
 
 If the `workspace` row says `N old copies to remove`, an earlier release copied the bundle into your data folder. `u` on that row reviews their removal: only copies the app can prove are its own, backed up, and `z` restores them. Edited files stay and are listed.
 
-Fresh settings enable every target except `codex_config`, which rewrites your Codex approval and sandbox settings. Turn it on from the Codex page when you want it.
+Fresh settings enable every target except `codex_config`, which rewrites your Codex approval and sandbox settings, and `claude_config`, which sets `attribution.commit` and `attribution.pr` to `""` in `~/.claude/settings.json` to hide Claude Code's `Co-Authored-By` commit line and "Generated with Claude Code" PR line. Turn them on from the Codex and Claude pages when you want them.
 
 ## Essential keys
 

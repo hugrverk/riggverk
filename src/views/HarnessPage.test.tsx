@@ -48,6 +48,7 @@ const TARGETS: AgentTargetMeta[] = [
   { id: "codex_config", label: "codex config", harness: "codex", kind: "config", target_rel: ".codex/config.toml", source_rel: "templates/codex/config.toml" },
   { id: "claude_rules", label: "claude rules", harness: "claude", kind: "rules", target_rel: ".claude/CLAUDE.md", source_rel: "templates/claude-rules.md" },
   { id: "claude_agents", label: "claude agents", harness: "claude", kind: "agents", target_rel: ".claude/agents", source_rel: "templates/claude/agents" },
+  { id: "claude_config", label: "claude config", harness: "claude", kind: "config", target_rel: ".claude/settings.json", source_rel: "" },
 ];
 
 const CODEX_HEALTH = {
@@ -363,6 +364,31 @@ describe("HarnessPage", () => {
     expect(screen.queryByRole("listbox", { name: "Codex surfaces" })).toBeNull();
     fireEvent.keyDown(screen.getByRole("grid", { name: "Install plan" }), { key: "y" });
     expect(install.apply).toHaveBeenCalledTimes(1);
+  });
+
+  it("lists claude_config as an off row with its own toggle and no bundled source", () => {
+    const p = props();
+    renderInFrame(<ClaudeView {...p} runtimeHealth={CLAUDE_HEALTH} />);
+    const list = screen.getByRole("listbox", { name: "Claude surfaces" });
+    expect(within(list).getAllByRole("option").map(rowText)).toEqual([
+      ["[x] rules .claude/CLAUDE.md", "current"],
+      ["[x] agents .claude/agents", "unknown"],
+      ["[ ] config .claude/settings.json", "off"],
+      ["skills", "unknown"],
+    ]);
+    act(() => list.focus());
+    press("j", list);
+    press("j", list);
+    const claude = screen.getByRole("region", { name: "Claude detail" });
+    expect(claude.querySelector(".pane-title")!.textContent).toContain("config · off");
+    // A file Riggverk writes from constants has no source file to name; the off line says what stays.
+    expect(facts(claude)).toMatchObject({
+      file: ".claude/settings.json",
+      target: "claude config · off",
+    });
+    expect(facts(claude)).not.toHaveProperty("source");
+    press(" ", list);
+    expect(p.onToggleTarget).toHaveBeenCalledWith("claude_config");
   });
 
   it("shows the Claude runtime from its sync flags", () => {

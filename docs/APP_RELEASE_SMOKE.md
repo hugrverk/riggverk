@@ -54,8 +54,9 @@ Tab keys below assume the default order: workspace, codex, opencode, cursor, cla
 ## 4. Target toggles
 
 - [ ] Codex page: Space toggles targets, the change autosaves (no Save button)
-- [ ] Fresh settings: every target is on except `codex_config`
+- [ ] Fresh settings: every target is on except `codex_config`, `claude_config` and `kilo_mcp`
 - [ ] With `codex_config` off, a Codex plan has no config rows and `~/.codex/config.toml` is untouched
+- [ ] With `claude_config` off, the Claude page shows `config` as off ("Claude Code keeps its default commit and PR attribution") and `~/.claude/settings.json` is not opened or changed
 - [ ] Turning a target off hides its surface from the plan and the status shows it as `off`
 - [ ] Turning it on adds it back to the next preview
 - [ ] Legacy settings file without `target_defaults_version`: migration keeps targets that were enabled or already managed
@@ -147,6 +148,19 @@ npm run tauri dev
 - [ ] With `CODEX_HOME` set, rules, agents, config, and skills land under it (nothing for Codex in `~/.agents/skills`)
 - [ ] With the default `CODEX_HOME`, skills land in `~/.agents/skills`; the app's older copies in `~/.codex/skills` are removed by one reviewed update (`.system` stays), and an edited copy stays and is reported
 - [ ] Disabling a harness in Settings changes the next preview only; the update removes the app's copies from a folder no enabled harness reads
+
+## 7b. Claude attribution (`claude_config`)
+
+Use a scratch profile or back up `~/.claude/settings.json` first.
+
+- [ ] Claude page, `config` row is off; Space turns it on, and the review of a missing file says `+ ~/.claude/settings.json (new file; hides commit and PR attribution)`
+- [ ] Install writes `attribution.commit` and `attribution.pr` as `""`; a commit made by Claude Code in a scratch repo has no `Co-Authored-By` trailer, and a PR it opens has no "Generated with Claude Code" line
+- [ ] A file with `env`, `hooks` and `permissions` keeps all of them, in order, after Install; the row then reads current ("attribution hidden by Riggverk ...")
+- [ ] `z` after the Install restores the file as it was (or removes it, if the Install created it)
+- [ ] Custom `attribution.commit` text, `"attribution": false`, `includeCoAuthoredBy`, or both keys `""` that Riggverk did not write: the row says "you set attribution yourself" and the file is not changed
+- [ ] A comment, a trailing comma or an unexpected `attribution` type is a conflict with a fixed reason and no file text; nothing is written
+- [ ] With `CLAUDE_CONFIG_DIR` set when the app starts, the row is a conflict ("CLAUDE_CONFIG_DIR is set; Riggverk only edits ~/.claude/settings.json") and nothing is written
+- [ ] Uninstall lists `~/.claude/settings.json` as left in place and does not delete it; Claude health shows nothing from the file
 
 ## 8. Settings, workspace folder, harness enablement
 

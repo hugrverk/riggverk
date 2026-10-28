@@ -88,8 +88,15 @@ describe("surfaceRowsFor", () => {
     expect(rows.map(row => [row.name, row.state])).toEqual([
       ["rules", "current"],
       ["agents", "update_available"],
+      ["config", "off"],
       ["skills", "conflict"],
     ]);
+    // claude_config says what stays as it is while it is off; the other targets just name the toggle.
+    expect(rows[2]).toMatchObject({
+      targetId: "claude_config",
+      detail: "off · Claude Code keeps its default commit and PR attribution",
+    });
+    expect(surfaceRowsFor("codex", undefined, SETTINGS)[0]).toMatchObject({ detail: "target codex_config is off" });
 
     const codex = entry("codex", status("current", [surface("codex_rules", "current"), surface("skills", "update_available")]));
     const codexRows = surfaceRowsFor("codex", codex, SETTINGS);

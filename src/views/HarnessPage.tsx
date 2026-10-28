@@ -359,7 +359,7 @@ function surfaceFacts(row: HarnessRowModel, withDetail: boolean): KvItem[] {
     : null;
   return [
     ...(row.path ? [{ label: "file", value: row.path }] : []),
-    ...(row.path && row.target ? [{ label: "source", value: row.target.source_rel, tone: "dim" as const }] : []),
+    ...(row.path && row.target?.source_rel ? [{ label: "source", value: row.target.source_rel, tone: "dim" as const }] : []),
     ...(toggle ? [{ label: "target", value: toggle }] : []),
     ...(withDetail && row.detail ? [{ label: "detail", value: row.detail, wrap: true }] : []),
   ];
