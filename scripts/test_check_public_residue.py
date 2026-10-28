@@ -20,6 +20,8 @@ _spec.loader.exec_module(guard)
 
 # Built from fragments so this file does not itself hold the names the guard bans.
 A, W = "agent", "workspace"
+# The pragma words too, so this file is not read as holding a pragma.
+ALLOW, BEGIN, END = "residue-" "allow", "residue-" "allow-" "begin", "residue-" "allow-" "end"
 SPELLINGS = (
     f"{A}-{W}",
     f"{A}_{W}",
@@ -79,11 +81,11 @@ class ResidueGuardTests(unittest.TestCase):
 
     def test_a_marked_block_and_a_marked_line_may_name_it(self) -> None:
         text = (
-            "<!-- residue-allow-begin: upgrade notes -->\n"
+            f"<!-- {BEGIN}: upgrade notes -->\n"
             f"The folder `{A}-{W}` moves.\n"
-            "<!-- residue-allow-end -->\n"
+            f"<!-- {END} -->\n"
             f"after the block: {A}-{W}\n"
-            f"seed: {A}-{W}  # residue-allow: seeds the earlier layout\n"
+            f"seed: {A}-{W}  # {ALLOW}: seeds the earlier layout\n"
         )
         found = self.scan({"README.md": text})
         self.assertEqual(len(found), 1, found)
@@ -91,10 +93,42 @@ class ResidueGuardTests(unittest.TestCase):
 
     def test_a_block_does_not_leak_into_the_next_file(self) -> None:
         files = {
-            "a.md": "<!-- residue-allow-begin: x -->\n",
+            "a.md": f"<!-- {BEGIN}: x -->\n",
             "b.md": f"{A}-{W}\n",
         }
-        self.assertEqual(len(self.scan(files)), 1)
+        found = self.scan(files)
+        self.assertEqual(len(found), 2, found)
+        self.assertTrue(any(hit.startswith("b.md:1:") for hit in found), found)
+
+    def test_a_legacy_constant_is_a_whole_identifier(self) -> None:
+        for text in (f"NOT_LEGACY_STATE = '{A}-{W}'", f"LEGACY_ = '{A}-{W}'", f"x = LEGACY_state + '{A}-{W}'"):
+            with self.subTest(text=text):
+                self.assertEqual(len(self.scan({"a.py": text + "\n"})), 1)
+        self.assertEqual(self.scan({"a.py": f"LEGACY_STATE_2 = '{A}-{W}'\n"}), [])
+
+    def test_a_block_without_its_end_fails(self) -> None:
+        found = self.scan({"README.md": f"<!-- {BEGIN}: notes -->\nplain text\n"})
+        self.assertEqual(len(found), 1, found)
+        self.assertIn(f"no {END}", found[0])
+        self.assertTrue(found[0].startswith("README.md:1:"), found)
+
+    def test_a_pragma_inside_a_string_does_nothing(self) -> None:
+        text = (
+            f'BEGIN = "{BEGIN}"\n'
+            f"folder = '{A}-{W}'\n"
+            f'SKIP = "{ALLOW}"\n'
+            f"other = '{A}-{W}'\n"
+        )
+        self.assertEqual(len(self.scan({"tool.py": text})), 2)
+
+    def test_a_pragma_in_each_comment_syntax_counts(self) -> None:
+        files = {
+            "a.sh": f"echo {A}-{W}  # {ALLOW}: seed\n",
+            "b.ts": f"const x = '{A}-{W}'; // {ALLOW}: fixture\n",
+            "c.md": f"<!-- {BEGIN}: x -->\n{A}-{W}\n<!-- {END} -->\n",
+            "d.css": f"/* {BEGIN} */\n.{A}-{W} {{}}\n/* {END} */\n",
+        }
+        self.assertEqual(self.scan(files), [])
 
     def test_the_allowlist_gives_a_reason_for_every_entry(self) -> None:
         for residue in guard.RESIDUES:

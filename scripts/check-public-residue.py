@@ -7,12 +7,14 @@ case (the data folder, the state folder, the rules markers, the environment vari
 and the prose name). It may stay only where an install made under it is read or carried over,
 and where history is recorded:
 
-  - a line that holds a constant named LEGACY_* (the earlier name, used only to read or migrate),
+  - a line that holds a constant named LEGACY_* (a whole identifier: LEGACY_ then capitals, digits
+    or underscores; the earlier name, used only to read or migrate),
   - the previous app id of the app data move (see PREVIOUS_APP_ID),
   - the files and folders in ALLOWED_PATHS, each with its reason,
   - a line carrying `residue-allow`, or the lines between `residue-allow-begin` and
-    `residue-allow-end` (a comment in any syntax): the upgrade notes of the docs and the few
-    fixtures that seed an earlier layout on purpose.
+    `residue-allow-end`, written in a comment (`#`, `//`, `<!--`, `/*`, `*` or `--` before it; the
+    same words inside a string do nothing): the upgrade notes of the docs and the few fixtures
+    that seed an earlier layout on purpose. A begin without its end is a failure.
 
 Adding a residue later (another name that must leave the public tree) is one more entry in
 RESIDUES with its own allowlist. File names are checked too. Files come from git (tracked plus
@@ -57,9 +59,11 @@ class Residue:
     allowed_lines: tuple[tuple[re.Pattern[str], str], ...]
 
 
-PRAGMA = re.compile(r"residue-allow(?!-)")
-BLOCK_BEGIN = re.compile(r"residue-allow-begin")
-BLOCK_END = re.compile(r"residue-allow-end")
+# A pragma counts only in a comment: its words after a comment leader, never inside a string.
+_COMMENT = r"(?:#|//|<!--|/\*|\*|--)\s*"
+PRAGMA = re.compile(_COMMENT + r"residue-allow(?!-)")
+BLOCK_BEGIN = re.compile(_COMMENT + r"residue-allow-begin")
+BLOCK_END = re.compile(_COMMENT + r"residue-allow-end")
 
 RENAMED_AWAY = Residue(
     id="the name from before the Riggverk rename",
@@ -87,7 +91,7 @@ RENAMED_AWAY = Residue(
         ),
     ),
     allowed_lines=(
-        (re.compile(r"LEGACY_"), "(a) a constant named LEGACY_*, used only to read or migrate an earlier install"),
+        (re.compile(r"\bLEGACY_[A-Z0-9_]+\b"), "(a) a constant named LEGACY_*, used only to read or migrate an earlier install"),
         (re.compile(re.escape(_PREVIOUS_APP_ID)), "(e) the previous app id the app data move starts from"),
         (PRAGMA, "a line marked residue-allow"),
     ),
@@ -114,19 +118,22 @@ def scan(root: Path, files: list[str] | None = None) -> list[str]:
             text = texts.text(rel)
             if text is None:
                 continue
-            inside_block = False
+            block_start = 0
             for number, line in enumerate(text.splitlines(), 1):
                 if BLOCK_BEGIN.search(line):
-                    inside_block = True
+                    block_start = block_start or number
                     continue
                 if BLOCK_END.search(line):
-                    inside_block = False
+                    block_start = 0
                     continue
+                inside_block = block_start > 0
                 if inside_block or not residue.pattern.search(line):
                     continue
                 if any(allow.search(line) for allow, _ in residue.allowed_lines):
                     continue
                 found.append(f"{rel}:{number}: {line.strip()[:160]}")
+            if block_start:
+                found.append(f"{rel}:{block_start}: residue-allow-begin has no residue-allow-end")
     return found
 
 
