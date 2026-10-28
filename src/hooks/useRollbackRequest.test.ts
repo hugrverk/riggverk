@@ -68,6 +68,26 @@ describe("useRollbackRequest", () => {
     expect(t.release).toHaveBeenCalledTimes(1);
   });
 
+  it("undoes a named transaction (the Overview's Undo, also after a restart) through the same dry run and confirm", async () => {
+    invokeMock.mockResolvedValue(dryRun());
+    const t = setup(null);
+    await t.request("1792663200000000000");
+    expect(invokeMock).toHaveBeenCalledWith("rollback_setup_transaction", { transactionId: "1792663200000000000", dryRun: true });
+    expect(t.confirm).toHaveBeenCalledTimes(1);
+    expect(t.runRollback).toHaveBeenCalledWith("1792663200000000000");
+    // Declining still writes nothing.
+    t.runRollback.mockClear();
+    const declined = setup(null, false);
+    await declined.request("1792663200000000000");
+    expect(declined.runRollback).not.toHaveBeenCalled();
+  });
+
+  it("does not take a click event for a transaction id", async () => {
+    const t = setup(null);
+    await (t.request as (value: unknown) => Promise<void>)({ type: "click" });
+    expect(invokeMock).not.toHaveBeenCalled();
+  });
+
   it("does not roll back when the confirm is declined", async () => {
     invokeMock.mockResolvedValue(dryRun());
     const t = setup("1710000000000", false);

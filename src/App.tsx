@@ -28,11 +28,12 @@ import { CursorView } from "./views/CursorView";
 import { ClaudeView } from "./views/ClaudeView";
 import { LightHarnessView } from "./views/LightHarnessView";
 import { OpenCodeView } from "./views/OpenCodeView";
-import { StartView } from "./views/StartView";
+import { OverviewView } from "./views/OverviewView";
 const LibraryView = lazy(() => import("./views/LibraryView").then(m => ({ default: m.LibraryView })));
 const SettingsView = lazy(() => import("./views/SettingsView").then(m => ({ default: m.SettingsView })));
 import { harnessForView } from "./lib/harnessInstallation";
 import { filterVisibleMetadataTargets } from "./lib/harnessVisibility";
+import type { HarnessRuntimeHealth } from "./lib/harnessRuntimeRows";
 import { redactTerminalOutput } from "./lib/redactTerminalOutput";
 import { AppFrame, ShellProviders, useAppCommands, useShellState, type AppView } from "./shell";
 import { LIGHT_AGENTS, type InstallAgent, type SetupResult } from "./types";
@@ -602,7 +603,21 @@ function AppShell() {
     [overview, enabledHarnessKey, appSettings, dataFolderOk],
   );
 
-  // What the Start and harness pages share: the output pane, the install review and the rollback path.
+  // What the Overview reads of each enabled agent's runtime: the AGENTS.override.md warning and the runtime sub-lines.
+  const runtimeHealthByHarness = useMemo<Partial<Record<InstallAgent, HarnessRuntimeHealth>>>(
+    () => ({
+      codex: { harness: "codex", health: codexRuntimeHealth },
+      opencode: { harness: "opencode", health: opencodeRuntimeHealth },
+      claude: { harness: "claude", health: claudeRuntimeHealth },
+      cursor: { harness: "cursor", health: cursorProfileHealth },
+      copilot: { harness: "copilot", health: lightRuntimeHealth.copilot ?? null },
+      pi: { harness: "pi", health: lightRuntimeHealth.pi ?? null },
+      kilo: { harness: "kilo", health: lightRuntimeHealth.kilo ?? null },
+    }),
+    [codexRuntimeHealth, opencodeRuntimeHealth, claudeRuntimeHealth, cursorProfileHealth, lightRuntimeHealth],
+  );
+
+  // What the Overview and harness pages share: the output pane, the install review and the rollback path.
   const pageProps = {
     wsLog,
     wsLogCompletedAt,
@@ -703,12 +718,15 @@ function AppShell() {
         }
       >
         {view === "start" && (
-          <StartView
+          <OverviewView
             {...pageProps}
             workspaceDiagnostics={workspaceDiagnostics}
             appSettings={appSettings}
             enabledHarnessIds={enabledHarnessIds}
-            codexRuntimeHealth={codexRuntimeHealth}
+            runtimeHealth={runtimeHealthByHarness}
+            checkedAt={checkedAt}
+            updateAllDisabled={updateAllDisabled}
+            onUndo={transactionId => void requestRollback(transactionId)}
             onNavigate={switchView}
             onUninstall={runWorkspaceUninstall}
             uninstallRecoveryTransactionId={uninstallRecoveryTransactionId}

@@ -136,3 +136,13 @@ export function postureRowsFor(posture: SecurityPosture): { verdict: PostureVerd
   rows.push({ label: "baseline", value: "Library > Docs > Security Baseline", tone: "dim", id: "baseline" });
   return { verdict: verdictOf(posture), rows };
 }
+
+/**
+ * One short phrase per risky finding, in report order: the finding's text up to its first " · " (what is set, not the
+ * caveat). The Overview's "Worth a look" cell shows them; the harness page keeps the full rows.
+ */
+export function riskyFindingPhrases(posture: SecurityPosture): string[] {
+  return posture.findings
+    .filter(finding => finding.level === "risky")
+    .map(finding => COPY[finding.code].text(finding).split(" · ")[0]!);
+}

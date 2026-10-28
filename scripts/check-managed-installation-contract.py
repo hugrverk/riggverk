@@ -527,9 +527,9 @@ def main() -> None:
     require(TAURI / "lib.rs", "preview_setup", "apply_setup", "rollback_setup_transaction")
     require(FRONTEND / "components/InstallPlanPane.tsx", "conflict")
 
-    # One install owner per page: Start and the shared HarnessPage each render one plan pane;
+    # One install owner per page: Overview and the shared HarnessPage each render one plan pane;
     # the harness views are thin configs around HarnessPage.
-    for path in (FRONTEND / "views/StartView.tsx", FRONTEND / "views/HarnessPage.tsx"):
+    for path in (FRONTEND / "views/OverviewView.tsx", FRONTEND / "views/HarnessPage.tsx"):
         if read(path).count("<InstallPlanPane") != 1:
             fail(f"{path.relative_to(ROOT)} must render exactly one InstallPlanPane")
     for path in (
@@ -542,14 +542,14 @@ def main() -> None:
         if read(path).count("<HarnessPage") != 1:
             fail(f"{path.relative_to(ROOT)} must render exactly one HarnessPage")
     for path in (
-        FRONTEND / "views/StartView.tsx",
+        FRONTEND / "views/OverviewView.tsx",
         FRONTEND / "views/HarnessPage.tsx",
         FRONTEND / "components/InstallPlanPane.tsx",
     ):
         if re.search(r"\brepair\b|setup lifecycle|transaction fingerprint", read(path), re.I):
             fail(f"{path.relative_to(ROOT)} exposes obsolete installation terminology")
-    if re.search(r"repair|update resources|SetupLifecycle|WorkspaceSkillsVerify", read(FRONTEND / "views/StartView.tsx")):
-        fail("src/views/StartView.tsx retains obsolete installation owners or terminology")
+    if re.search(r"repair|update resources|SetupLifecycle|WorkspaceSkillsVerify", read(FRONTEND / "views/OverviewView.tsx")):
+        fail("src/views/OverviewView.tsx retains obsolete installation owners or terminology")
 
     print("managed installation contract checks passed")
 

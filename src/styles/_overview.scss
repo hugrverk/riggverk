@@ -1,1 +1,449 @@
-/* Populated by a later slice of the UI rebuild. */
+/* ═══════════════════════════════════════════════════════════════════════════════════
+   Overview page and the state vocabulary it introduces (Grafit 1A "Bläck").
+
+     .state-mark / .state-pill   the marker and the pill of one state (ui/StatePill.tsx); other pages use them too.
+                                 A hollow ring for every state, one filled square for the decision, which is also the
+                                 brightest ink in weight 600 on the raised surface. No state has an amber or ochre hue.
+     .ov                         page + output strip; .ov-page is the page (data-pane-id="page"), scrolls on its own
+     .ov-head                    the verdict (.ov-title) and the count row (.ov-sumrow > .ov-si, non-zero states only)
+     .ov-grid > .ov-cell         joined 1px hairline grid, radius 0; .ov-span2 / .ov-span3 widen a cell
+       .ov-agent                 one agent: .ov-ch (name button + pill), .ov-mini rows, .ov-note
+       .ov-folder                the collapsed workspace-folder cell (.ov-fold button, .ov-fold-body)
+
+   Containers, not media queries, decide the column count: the page is narrower than the window by the sidebar, and the
+   text size scales the cells. The hairlines are borders on the cells (right and bottom) and on the grid (top and left),
+   so a row that is not full leaves no filled-in slot.
+   ═══════════════════════════════════════════════════════════════════════════════════ */
+
+/* ---- state marker and pill (shared) ---- */
+
+.state-mark {
+  display: inline-block;
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px currentColor;
+  color: var(--text-muted);
+  transition:
+    color var(--dur-state) var(--ease),
+    background-color var(--dur-state) var(--ease),
+    box-shadow var(--dur-state) var(--ease),
+    border-radius var(--dur-state) var(--ease);
+}
+
+.state-mark.is-ok { color: var(--ok); }
+.state-mark.is-ready { color: var(--ready); }
+.state-mark.is-yours { color: var(--yours); }
+.state-mark.is-fix { color: var(--fix); }
+.state-mark.is-off { color: var(--off); }
+.state-mark.is-tip { color: var(--text-muted); }
+
+/* The decision: the one filled square, in the brightest ink. */
+.state-mark.is-decide {
+  color: var(--decide);
+  background: currentColor;
+  box-shadow: none;
+  border-radius: 0;
+}
+
+.state-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border-radius: var(--radius);
+  font-family: var(--font-mono);
+  font-size: max(10px, calc(var(--fs) * 0.77));
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  line-height: 1.3;
+  text-transform: uppercase;
+  white-space: nowrap;
+  transition:
+    color var(--dur-state) var(--ease),
+    background-color var(--dur-state) var(--ease);
+}
+
+.state-pill.is-ok { color: var(--ok); background: color-mix(in srgb, var(--ok) 12%, transparent); }
+.state-pill.is-ready { color: var(--ready); background: color-mix(in srgb, var(--ready) 12%, transparent); }
+.state-pill.is-yours { color: var(--yours); background: color-mix(in srgb, var(--yours) 14%, transparent); }
+.state-pill.is-fix { color: var(--fix); background: color-mix(in srgb, var(--fix) 12%, transparent); }
+.state-pill.is-off { color: var(--off); background: color-mix(in srgb, var(--off) 12%, transparent); }
+.state-pill.is-tip { color: var(--text-muted); background: transparent; box-shadow: inset 0 0 0 1px var(--border); }
+.state-pill.is-decide { color: var(--decide); background: var(--decide-bg); font-weight: 600; }
+
+/* ---- page ---- */
+
+.ov {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+
+.ov-page {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 26px 28px 40px;
+  container: ov / inline-size;
+  font-family: var(--font-sans);
+  font-size: var(--fs);
+}
+
+/* The page holds the keys (u, p, r, o, B) but is not a stop in the tab order: the cells are, and each shows its own ring. */
+.ov-page:focus-visible { outline: none; }
+
+.ov-strip {
+  flex: none;
+  padding: 0 10px 10px;
+}
+
+/* ---- header ---- */
+
+.ov-title {
+  max-width: 36ch;
+  font-size: calc(var(--fs) * 1.85);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  color: var(--text-heading);
+  text-wrap: balance;
+}
+
+.ov-sumrow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 18px;
+  margin: 12px 0 20px;
+  list-style: none;
+  font-size: calc(var(--fs) * 0.96);
+  color: var(--text-muted);
+}
+
+.ov-si {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.ov-si b {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.ov-si.is-decide { color: var(--decide); font-weight: 600; }
+.ov-si.ov-meta { margin-left: auto; }
+
+/* A state that gets a value fades in; one that drops to zero is gone at once (it is simply not rendered). */
+[data-motion="full"] .ov-si { animation: ov-in var(--dur-view) var(--ease) both; }
+
+@keyframes ov-in { from { opacity: 0; } }
+
+/* ---- grid ---- */
+
+.ov-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-top: 1px solid var(--border);
+  border-left: 1px solid var(--border);
+}
+
+.ov-cell {
+  position: relative;
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  min-width: 0;
+  padding: 16px 18px;
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-panel);
+  transition:
+    background-color var(--dur-view) var(--ease),
+    box-shadow var(--dur-view) var(--ease);
+}
+
+.ov-span2 { grid-column: span 2; }
+.ov-span3 { grid-column: 1 / -1; }
+
+/* A cell with a decision in it: a bright top edge (a top inset, not the heavy selected-state bars). */
+.ov-agent[data-state="decide"] { box-shadow: inset 0 2px 0 var(--decide); }
+
+.ov-agent:hover { background: var(--bg-raised); }
+.ov-agent:has(.ov-open:focus-visible) { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+
+.ov-lbl {
+  font-family: var(--font-mono);
+  font-size: max(10px, calc(var(--fs) * 0.77));
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.ov-ch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+/* The name is the cell's one button; its ::after stretches over the cell so the whole cell opens the page. */
+.ov-open {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: calc(var(--fs) * 1.08);
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ov-open::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+
+.ov-mini {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: calc(var(--fs) * 0.96);
+}
+
+.ov-mini li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 0;
+  border-top: 1px solid var(--border);
+}
+
+.ov-mini li:first-child { border-top: 0; }
+.ov-mini li > span:first-child { color: var(--text-muted); }
+
+.ov-val {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: calc(var(--fs) * 0.9);
+  color: var(--text);
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.ov-val.is-decide { font-weight: 600; }
+.ov-val.is-off { color: var(--text-muted); }
+
+/* The agent rows of "Worth a look": the whole row is the link. */
+.ov-row-link {
+  display: grid;
+  grid-template-columns: minmax(7ch, max-content) minmax(0, 1fr);
+  align-items: baseline;
+  gap: 8px 12px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ov-row-link .ov-val { text-align: left; }
+.ov-row-link:hover .ov-val { text-decoration: underline; }
+.ov-row-link > span:first-child { color: var(--text-muted); }
+
+.ov-note {
+  display: grid;
+  gap: 2px;
+  font-size: calc(var(--fs) * 0.92);
+  line-height: 1.45;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+/* Codex reads AGENTS.override.md instead of AGENTS.md: the base is silently off. Weight and a top edge, no hue. */
+.ov-alert {
+  padding: 8px 10px;
+  background: var(--bg-raised);
+  box-shadow: inset 0 2px 0 var(--decide);
+  font-size: calc(var(--fs) * 0.92);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.ov-alert b { font-weight: 600; }
+
+/* ---- last update ---- */
+
+.ov-rcpt {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  font-size: calc(var(--fs) * 0.96);
+}
+
+.ov-rcpt > div {
+  display: grid;
+  grid-template-columns: minmax(7ch, 96px) minmax(0, 1fr);
+  gap: 12px;
+}
+
+.ov-rcpt dt { color: var(--text-muted); }
+
+.ov-rcpt dd {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: calc(var(--fs) * 0.9);
+  overflow-wrap: anywhere;
+}
+
+.ov-cell > .tbtn { justify-self: start; margin-top: 4px; }
+
+/* ---- agents that are off ---- */
+
+.ov-more {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--text-muted);
+  font-size: calc(var(--fs) * 0.96);
+}
+
+.ov-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ov-chips span {
+  padding: 2px 9px;
+  border: 1px dashed var(--border);
+  font-family: var(--font-mono);
+  font-size: calc(var(--fs) * 0.85);
+}
+
+/* ---- workspace folder ---- */
+
+.ov-fold {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ov-fold-path {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: calc(var(--fs) * 0.9);
+  color: var(--text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ov-chev {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  margin: 0 4px 3px;
+  border-right: 1.5px solid var(--text-muted);
+  border-bottom: 1.5px solid var(--text-muted);
+  transform: rotate(45deg);
+  transition: transform var(--dur-nav) var(--ease);
+}
+
+.ov-fold[aria-expanded="true"] .ov-chev { transform: translateY(3px) rotate(225deg); }
+
+.ov-fold-body {
+  display: grid;
+  gap: 14px;
+  padding-top: 6px;
+}
+
+.ov-kv {
+  grid-template-columns: minmax(14ch, max-content) minmax(0, 1fr);
+  gap: 6px 14px;
+  padding: 0;
+  font-size: calc(var(--fs) * 0.96);
+}
+
+.ov-kv dd { font-family: var(--font-mono); font-size: calc(var(--fs) * 0.9); }
+
+.ov-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* The uninstall and recovery cards keep their markup; their buttons take the hairline button look. */
+.ov-folder .lifecycle {
+  gap: 8px;
+  padding: 10px 0 0;
+  border-top: 1px solid var(--border);
+}
+
+.ov-folder .lifecycle-actions { gap: 8px; }
+
+.ov-folder .lifecycle .action-key {
+  min-height: calc(var(--lh) + 8px);
+  padding: 0 14px;
+  box-shadow: inset 0 0 0 1px var(--border);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: var(--fs);
+  font-weight: 500;
+}
+
+.ov-folder .lifecycle .action-key:hover:not(:disabled) { background: var(--bg-raised); }
+
+/* ---- fewer columns when the page is narrow, which a larger text size makes happen sooner ---- */
+
+@container ov (max-width: 640px) {
+  .ov-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ov-span3 { grid-column: 1 / -1; }
+  /* The fillers close a row of three; with two columns they would only add empty rows. */
+  .ov-fill { display: none; }
+}
+
+@container ov (max-width: 420px) {
+  .ov-grid { grid-template-columns: minmax(0, 1fr); }
+  .ov-span2 { grid-column: 1 / -1; }
+}
+
+@container ov (max-width: 720px) {
+  [data-app-font-size="large"] .ov-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  [data-app-font-size="large"] .ov-fill { display: none; }
+}
+
+@container ov (max-width: 800px) {
+  [data-app-font-size="extra-large"] .ov-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  [data-app-font-size="extra-large"] .ov-fill { display: none; }
+}
