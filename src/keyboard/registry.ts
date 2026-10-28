@@ -21,12 +21,12 @@ export interface Binding {
   /** Help-overlay section. Defaults to a label derived from `scope`. */
   group?: string;
   /**
-   * Short label. Bindings with a hint render as a clickable ActionKey in the status bar: while the owning
+   * Short label. Bindings with a hint render as a button (`BindingButton`) where their owner offers one: while the owning
    * pane (`paneId`) has focus, or always for global bindings.
    */
   hint?: string;
   scope: Scope;
-  /** Anchors the binding to `section[data-pane-id=...]`: active only while focus is inside that pane, hinted in the status bar. */
+  /** Anchors the binding to `section[data-pane-id=...]`: active only while focus is inside that pane. */
   paneId?: string;
   /** true = enabled, false = inactive (hidden from hints), string = disabled with that reason. */
   when?: () => boolean | string;
@@ -122,7 +122,7 @@ export class KeymapRegistry {
     };
   };
 
-  /** Observes every binding that ran (the shell's key echo); the registry decides nothing from it. */
+  /** Observes every binding that ran; the registry decides nothing from it. */
   onRun = (listener: (run: BindingRun) => void): (() => void) => {
     this.runListeners.add(listener);
     return () => {
@@ -147,7 +147,7 @@ export function isVisibleHint(entry: RegisteredBinding): boolean {
   return active || disabledReason !== null;
 }
 
-/** Bindings hinted in the status bar while the pane has focus: anchored to the pane and carrying a hint. */
+/** Bindings anchored to the pane that carry a hint. */
 export function paneHintEntries(entries: readonly RegisteredBinding[], paneId: string): RegisteredBinding[] {
   return entries.filter(entry => entry.binding.paneId === paneId && entry.binding.hint);
 }

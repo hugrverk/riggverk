@@ -2,7 +2,7 @@ import { useMemo, type ReactNode, type RefObject } from "react";
 import { CopyableBlock } from "../../components/CopyableBlock";
 import { CopyButton } from "../../components/CopyButton";
 import { redactTerminalOutput } from "../../lib/redactTerminalOutput";
-import { ActionKey } from "../../ui/ActionKey";
+import { TButton } from "../../ui/TButton";
 import { Kv } from "../../ui/Kv";
 import { Pane } from "../../ui/Pane";
 import { DocContent } from "./DocContent";
@@ -110,12 +110,12 @@ export function DocumentPane({ entry, emptyHint, editing, textareaRef, top, onCl
       footer={
         entry ? (
           <>
-            {/* `:q` and `:reset` are command-line commands, not key bindings, so the status bar cannot offer them. */}
-            <ActionKey keys={[":q"]} onClick={() => void onClose()}>close</ActionKey>
+            {/* `:q` and `:reset` are command-line commands, not key bindings, so these buttons are their only mouse path. */}
+            <TButton keys={[":q"]} onClick={() => void onClose()}>close</TButton>
             {!entry.readOnly && (
-              <ActionKey keys={[":reset"]} onClick={entry.onReset} disabled={entry.dirty ? false : "no unsaved changes"}>
+              <TButton keys={[":reset"]} onClick={entry.onReset} disabled={entry.dirty ? false : "no unsaved changes"}>
                 discard
-              </ActionKey>
+              </TButton>
             )}
             {entry.copyPath && (
               <CopyButton

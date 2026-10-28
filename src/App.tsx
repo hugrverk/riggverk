@@ -13,7 +13,6 @@ import { useWorkspaceGeneration } from "./lib/useWorkspaceGeneration";
 import { useAppSettingsController } from "./hooks/useAppSettingsController";
 import { useApplyProgress } from "./hooks/useApplyProgress";
 import { useCheckedAt } from "./hooks/useCheckedAt";
-import { useScanOnSuccess } from "./hooks/useScanOnSuccess";
 import { useWhatsNewOnUpgrade } from "./hooks/useWhatsNewOnUpgrade";
 import { useWorkspaceReset } from "./hooks/useWorkspaceReset";
 import { workspaceTaskBlockedMessage } from "./lib/workspaceErrors";
@@ -224,8 +223,6 @@ function AppShell() {
   } = useWorkspaceActions({ setError });
 
   const wsProgress = useApplyProgress(wsRunning);
-  // A successful apply or rollback sweeps one line down the view area (full motion only).
-  useScanOnSuccess(wsRunning, wsLog);
 
   // Keep the backups chip current: on mount and whenever a workspace task (apply, uninstall, rollback) finishes.
   useEffect(() => {
@@ -723,16 +720,6 @@ function AppShell() {
         version={APP_VERSION}
         backupCount={backups.length}
         checkedAt={checkedAt}
-        // The launch sequence waits for the settings (the motion level is final then) and only tells what has loaded.
-        boot={
-          appSettings
-            ? {
-                version: APP_VERSION,
-                workspace: workspaceDiagnostics ? (workspaceDiagnostics.valid ? workspaceDiagnostics.resolved_path : null) : undefined,
-                backups: backups.length > 0 ? backups.length : undefined,
-              }
-            : undefined
-        }
       >
         {view === "start" && (
           <OverviewView

@@ -210,16 +210,16 @@ describe("skillLoadRows", () => {
 });
 
 describe("withSkillProblems", () => {
-  const CURRENT: StateDisplay = { glyph: "ok", tone: "ok", label: "current" };
+  const CURRENT: StateDisplay = { tone: "ok", label: "current" };
 
   it("adds the number of duplicate names and turns an ok state into a warning", () => {
-    expect(withSkillProblems(CURRENT, 2)).toEqual({ glyph: "ok", tone: "warn", label: "current · 2 duplicates" });
+    expect(withSkillProblems(CURRENT, 2)).toEqual({ tone: "warn", label: "current · 2 duplicates" });
     expect(withSkillProblems(CURRENT, 1).label).toBe("current · 1 duplicate");
   });
 
   it("keeps a state that is already worse, and a clean one untouched", () => {
-    const conflict: StateDisplay = { glyph: "fail", tone: "fail", label: "conflict" };
-    expect(withSkillProblems(conflict, 3)).toEqual({ glyph: "fail", tone: "fail", label: "conflict · 3 duplicates" });
+    const conflict: StateDisplay = { tone: "fail", label: "conflict" };
+    expect(withSkillProblems(conflict, 3)).toEqual({ tone: "fail", label: "conflict · 3 duplicates" });
     expect(withSkillProblems(CURRENT, 0)).toBe(CURRENT);
   });
 });

@@ -44,10 +44,24 @@ export function viewDef(view: AppView): ViewDef {
   return VIEW_DEFS.find(def => def.id === view) ?? VIEW_DEFS[0]!;
 }
 
-/** Destinations shown in the sidebar; disabled harnesses are hidden and the destinations after them renumber. */
+/** Destinations shown in the sidebar; disabled harnesses are hidden. */
 export function visibleViews(enabledHarnessIds: readonly InstallAgent[]): ViewDef[] {
   return VIEW_DEFS.filter(def => !def.harness || enabledHarnessIds.includes(def.harness));
 }
 
-/** Digit keys 1-9 switch views; a tenth item and any after it have no digit (`Mod+,` still opens Settings). */
-export const MAX_NUMBERED_TABS = 9;
+/**
+ * The digit key of each destination. The digits are fixed, not positional: they do not move when an agent is turned
+ * off or on, and the most-used destinations always have one. Overview is 1, the four central agents 2-5, then
+ * History 6, Library 7 and Settings 8. The optional agents (Copilot, Pi, Kilo) have none: they open from the sidebar
+ * or with `:copilot`, `:pi`, `:kilo`. The digit of an agent that is turned off does nothing. `Mod+,` also opens Settings.
+ */
+export const VIEW_DIGITS: Readonly<Partial<Record<AppView, string>>> = {
+  start: "1",
+  codex: "2",
+  opencode: "3",
+  cursor: "4",
+  claude: "5",
+  history: "6",
+  library: "7",
+  settings: "8",
+};

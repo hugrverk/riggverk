@@ -398,6 +398,8 @@ kbd {
 .help-overlay .kv dt { white-space: nowrap; }
 .help-overlay .kv dd { white-space: normal; }
 .help-overlay .foot { padding: 6px 10px 0; color: var(--text-muted); font-size: var(--fs-sm); }
+.help-overlay .help-note { margin: 8px 14px 0; color: var(--text-muted); font-size: var(--fs-sm); }
+.help-overlay .help-states dt { white-space: normal; }
 
 /* ---- rolling text (RollingText) ----
    Only while motion is full and a value just changed: the box clips its own slide, so nothing around it moves.

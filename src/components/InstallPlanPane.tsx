@@ -10,8 +10,8 @@ import {
   planRows,
   type PlanCounts,
 } from "../lib/installPlan";
-import { useConfirmMode, useStatusContext } from "../shell/ShellState";
-import { BindingButton } from "../ui/BindingActionKey";
+import { useConfirmMode } from "../shell/ShellState";
+import { BindingButton } from "../ui/BindingButton";
 import { Pane } from "../ui/Pane";
 import { cx } from "../ui/tone";
 import { ReviewFooter } from "./ReviewFooter";
@@ -71,7 +71,6 @@ export function InstallPlanPane({ flow, busyLabel, backupRoot, onApply }: Instal
   const { status, review, error, request } = flow;
   const open = status !== "idle";
   useConfirmMode(open);
-  useStatusContext(open ? "plan" : null);
 
   const tableRef = useRef<HTMLTableElement>(null);
   const tableId = useId();

@@ -5,8 +5,8 @@ import type { Binding } from "../keyboard/registry";
 import { useKeymap } from "../keyboard/useKeymap";
 import { NO_BUNDLED_COPY } from "../lib/fileConflicts";
 import { redactDiffText } from "../lib/redactTerminalOutput";
-import { useConfirmMode, useStatusContext } from "../shell/ShellState";
-import { BindingButton } from "../ui/BindingActionKey";
+import { useConfirmMode } from "../shell/ShellState";
+import { BindingButton } from "../ui/BindingButton";
 import { Kv, type KvItem } from "../ui/Kv";
 import { Pane } from "../ui/Pane";
 import type {
@@ -187,7 +187,6 @@ export function ConflictPane({ flow, units, onMark, onToggleKept, busyLabel, bac
   const { state } = flow;
   const open = state.status !== "idle";
   useConfirmMode(open);
-  useStatusContext(open ? "conflicts" : null);
 
   // Take focus when the review appears, unless the user already moved somewhere deliberate.
   useEffect(() => {

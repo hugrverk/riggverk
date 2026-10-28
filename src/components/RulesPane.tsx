@@ -4,8 +4,8 @@ import { focusDefaultPane, focusPaneById } from "../keyboard/focus";
 import type { Binding } from "../keyboard/registry";
 import { useKeymap } from "../keyboard/useKeymap";
 import { surfaceTitle } from "../lib/installPlan";
-import { useConfirmMode, useStatusContext } from "../shell/ShellState";
-import { BindingButton } from "../ui/BindingActionKey";
+import { useConfirmMode } from "../shell/ShellState";
+import { BindingButton } from "../ui/BindingButton";
 import { Kv, type KvItem } from "../ui/Kv";
 import { Pane } from "../ui/Pane";
 import type { RulesConversionPreview, RulesDiffView } from "../types";
@@ -158,7 +158,6 @@ export function RulesPane({ flow, busyLabel, backupRoot, canConvert, returnPaneI
   const { state } = flow;
   const open = state.status !== "idle";
   useConfirmMode(open);
-  useStatusContext(open ? "rules" : null);
   const [view, setView] = useState<"diff" | "file">("diff");
 
   // A new conversion preview starts on its diff.

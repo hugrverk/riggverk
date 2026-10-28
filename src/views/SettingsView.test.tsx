@@ -65,7 +65,7 @@ function focus(element: HTMLElement) {
 }
 
 function mode(): string {
-  return screen.getByLabelText("Status bar").querySelector(".mode")!.textContent!;
+  return screen.getByLabelText("Shell mode").textContent!;
 }
 
 function radios(group: string): HTMLElement[] {
@@ -78,7 +78,7 @@ function pane(name: string): HTMLElement {
 
 /** Key hints of the focused pane live in the status bar. */
 function hints() {
-  return within(screen.getByLabelText("Status bar"));
+  return within(screen.getByLabelText("Key hints"));
 }
 
 /** Keeps the draft in state so radio selections re-render like they do under App. */
@@ -343,15 +343,6 @@ describe("SettingsView keyboard navigation", () => {
     focus(landing);
     press(landing, "k");
     expect(document.activeElement).toBe(landing);
-  });
-
-  it("h and l move between the two panes and land on their first setting", () => {
-    renderSettings();
-    focus(radios("Theme")[0]!);
-    press(document.activeElement!, "l");
-    expect(document.activeElement).toBe(radios("Landing page")[0]);
-    press(document.activeElement!, "h");
-    expect(document.activeElement).toBe(radios("Theme")[0]);
   });
 
   it("does not steal Enter or Space from the focused radio", () => {

@@ -97,11 +97,11 @@ function cursorRow() {
 
 /** Key hints live in the status bar (the review pane has focus), not in the pane. */
 function bar() {
-  return within(screen.getByLabelText("Status bar"));
+  return within(screen.getByLabelText("Key hints"));
 }
 
 function modeText() {
-  return screen.getByLabelText("Status bar").querySelector(".mode")!.textContent;
+  return screen.getByLabelText("Shell mode").textContent;
 }
 
 beforeEach(() => {

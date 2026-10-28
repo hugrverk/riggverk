@@ -123,15 +123,14 @@ describe("App shell", () => {
     cleanup();
   });
 
-  it("starts on Overview with the status bar in NORMAL mode", async () => {
+  it("starts on Overview", async () => {
     installBackend();
     render(<App />);
     await ready();
     expect(currentTab()).toBe("Overview");
-    expect(screen.getByLabelText("Status bar").querySelector(".mode")!.textContent).toBe("NORMAL");
   });
 
-  it("switches views with the positional number keys through the normal navigation path", async () => {
+  it("switches views with the fixed digit keys through the normal navigation path", async () => {
     installBackend();
     render(<App />);
     await ready();
@@ -147,13 +146,18 @@ describe("App shell", () => {
     await waitFor(() => expect(currentTab()).toBe("Overview"));
   });
 
-  it("renumbers the tabs when a harness is hidden in settings", async () => {
+  it("keeps the digits where they are when a harness is hidden in settings", async () => {
     installBackend({ enabled_harness_ids: ["codex", "claude"] });
     render(<App />);
     await within(nav()).findByRole("button", { name: "Claude" });
     expect(within(nav()).queryByRole("button", { name: "OpenCode" })).toBeNull();
+    // OpenCode's digit does nothing; Claude stays on 5 and Library on 7.
     fireEvent.keyDown(document.body, { key: "3" });
+    expect(currentTab()).toBe("Overview");
+    fireEvent.keyDown(document.body, { key: "5" });
     await waitFor(() => expect(currentTab()).toBe("Claude"));
+    fireEvent.keyDown(document.body, { key: "7" });
+    await waitFor(() => expect(currentTab()).toBe("Library"));
   });
 
   it("hides Copilot, Pi and Kilo by default and asks no health of them", async () => {
@@ -173,7 +177,8 @@ describe("App shell", () => {
     expect(Array.from(nav().querySelectorAll("button.nav:not(.dim)")).map(item => item.getAttribute("aria-label"))).toEqual([
       "Overview", "Codex", "OpenCode", "Cursor", "Claude", "Pi", "History", "Library", "Settings",
     ]);
-    fireEvent.keyDown(document.body, { key: "6" });
+    // Pi has no digit (6 is History); it opens from the sidebar.
+    fireEvent.click(within(nav()).getByRole("button", { name: "Pi" }));
     await waitFor(() => expect(currentTab()).toBe("Pi"));
     const page = await screen.findByRole("region", { name: "Pi" });
     await waitFor(() => expect(within(page).getByRole("region", { name: "Runtime" }).querySelector(".hp-ch b")?.textContent).toBe("synced"));

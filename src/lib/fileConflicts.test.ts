@@ -63,9 +63,9 @@ function modelOf(units: FileUnit[], surface: FileConflictModel["surface"] = "ski
 
 const CONTEXT = { dataFolderOk: true, busyLabel: null, blockedBy: null };
 
-const CURRENT: StateDisplay = { glyph: "ok", tone: "ok", label: "current" };
-const UPDATE: StateDisplay = { glyph: "partial", tone: "warn", label: "update" };
-const CONFLICT: StateDisplay = { glyph: "fail", tone: "fail", label: "conflict" };
+const CURRENT: StateDisplay = { tone: "ok", label: "current" };
+const UPDATE: StateDisplay = { tone: "warn", label: "update" };
+const CONFLICT: StateDisplay = { tone: "fail", label: "conflict" };
 
 describe("which surfaces hold skill and agent files", () => {
   it("is the shared skills surface and the agents surface of the harness, when it has one", () => {
@@ -155,7 +155,7 @@ describe("unitLine", () => {
 describe("withFileConflicts", () => {
   it("adds the count of files in conflict and turns a good state into a bad one", () => {
     const conflicts = modelOf([unit(), unit({ key: "skill:claude:b", name: "b" })]);
-    expect(withFileConflicts(UPDATE, conflicts)).toEqual({ glyph: "fail", tone: "fail", label: "update · 2 conflicts" });
+    expect(withFileConflicts(UPDATE, conflicts)).toEqual({ tone: "fail", label: "update · 2 conflicts" });
     // The backend state "conflict" is replaced by the count, not repeated.
     expect(withFileConflicts(CONFLICT, conflicts).label).toBe("2 conflicts");
     expect(withFileConflicts(CONFLICT, modelOf([unit()])).label).toBe("1 conflict");
@@ -163,9 +163,9 @@ describe("withFileConflicts", () => {
 
   it("tells the files the user keeps beside a state that is otherwise current, as a warning", () => {
     const kept = modelOf([unit({ state: "kept", files: [{ rel: "SKILL.md", state: "kept", reason: "edited", bundle_changed: false }] })]);
-    expect(withFileConflicts(CURRENT, kept)).toEqual({ glyph: "partial", tone: "warn", label: "current · you manage 1" });
+    expect(withFileConflicts(CURRENT, kept)).toEqual({ tone: "warn", label: "current · you manage 1" });
     // The matrix word "you manage" is replaced by the count.
-    expect(withFileConflicts({ glyph: "partial", tone: "warn", label: "you manage" }, kept).label).toBe("you manage 1");
+    expect(withFileConflicts({ tone: "warn", label: "you manage" }, kept).label).toBe("you manage 1");
   });
 
   it("keeps both counts when there are conflicts and kept files", () => {

@@ -127,7 +127,7 @@ function cell(name: string) {
 
 /** A key hint of the focused page: hints live in the status bar, not in the page. */
 function hint(name: RegExp) {
-  return within(screen.getByLabelText("Status bar")).getByRole("button", { name });
+  return within(screen.getByLabelText("Key hints")).getByRole("button", { name });
 }
 
 function press(key: string, init: KeyboardEventInit = {}) {

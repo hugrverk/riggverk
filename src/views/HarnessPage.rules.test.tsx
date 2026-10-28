@@ -283,7 +283,7 @@ function detailPane() {
 }
 
 function statusBar() {
-  return within(screen.getByLabelText("Status bar"));
+  return within(screen.getByLabelText("Key hints"));
 }
 
 /** A key hint of the surfaces pane (or of the pane that has focus). Hints live in the status bar while their pane has focus. */
@@ -297,7 +297,7 @@ function rulesPane() {
 }
 
 function mode() {
-  return document.querySelector(".statusbar .mode")!.textContent;
+  return screen.getByLabelText("Shell mode").textContent;
 }
 
 describe("rules file in the detail pane", () => {

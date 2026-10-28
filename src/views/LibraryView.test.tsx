@@ -140,10 +140,6 @@ function selectedNames(): string[] {
     .map(option => option.querySelector(".nm")!.textContent!);
 }
 
-function statusBarText(): string | null {
-  return document.querySelector(".statusbar .ctx")!.textContent;
-}
-
 /** The transient notice (toast). */
 function noticeText(): string | null {
   return document.querySelector(".toast")!.textContent;
@@ -161,11 +157,11 @@ function focusPane(name: string) {
 
 /** Key hints of the focused pane live in the status bar; look them up outside `act`. */
 function statusHint(name: string) {
-  return within(screen.getByLabelText("Status bar")).getByRole("button", { name });
+  return within(screen.getByLabelText("Key hints")).getByRole("button", { name });
 }
 
 function queryStatusHint(name: string) {
-  return within(screen.getByLabelText("Status bar")).queryByRole("button", { name });
+  return within(screen.getByLabelText("Key hints")).queryByRole("button", { name });
 }
 
 function textarea(label: string) {
@@ -188,7 +184,7 @@ function pressSave() {
 /** Mod+s on a bundled item runs nothing: its status-bar hint stays disabled and says why. */
 function expectSaveRefused() {
   pressSave();
-  const hint = within(screen.getByLabelText("Status bar")).getByRole("button", { name: / save$/ });
+  const hint = within(screen.getByLabelText("Key hints")).getByRole("button", { name: / save$/ });
   expect(hint.getAttribute("aria-disabled")).toBe("true");
   expect(hint.getAttribute("title")).toBe(BUNDLED_REASON);
 }
@@ -229,11 +225,6 @@ describe("LibraryView layout", () => {
     renderLibrary({ showConfigs: false });
     const group = screen.getByRole("group", { name: "Library source type" });
     expect(within(group).queryByRole("button", { name: /configs/ })).toBeNull();
-  });
-
-  it("shows the source as status-bar context", () => {
-    renderLibrary({ sourceType: "skills" });
-    expect(statusBarText()).toBe("library › skills");
   });
 
   it("shows one empty state in the document pane while nothing is open", () => {
@@ -559,9 +550,8 @@ describe("LibraryView status-bar hints", () => {
     focusPane("Document");
     fireEvent.click(statusHint("↵ edit"));
     expect(document.activeElement).toBe(textarea("Edit document"));
-    const bar = within(screen.getByLabelText("Status bar"));
-    expect(bar.getByText("INSERT")).not.toBeNull();
-    expect(bar.getByText("leave field")).not.toBeNull();
+    const bar = within(screen.getByLabelText("Key hints"));
+    expect(screen.getByLabelText("Shell mode").textContent).toBe("INSERT");
     expect(queryStatusHint("↵ edit")).toBeNull();
     expect(bar.getByRole("button", { name: /save/ })).not.toBeNull();
   });
@@ -794,31 +784,30 @@ describe("LibraryView document pane", () => {
     expect(document.activeElement).toBe(textarea("Edit document"));
   });
 
-  it("lands on the document pane in NORMAL mode with l, and h returns to the list", () => {
+  it("lands on the document pane in NORMAL mode when the pane takes focus, and the list keeps its own keys", () => {
     renderLibrary({ docs, activeDoc: doc, docDraft: doc.content });
-    const list = focusList();
-    press(list, "l");
+    focusList();
+    focusPane("Document");
     const body = screen.getByRole("group", { name: "Document" });
     expect(document.activeElement).toBe(body);
     expect(screen.queryByLabelText("Edit document")).toBeNull();
-    // It is the last pane: l stays put instead of typing or wrapping.
-    press(body, "l");
+    // h and l are not pane keys any more: they do nothing on the pane.
+    expect(press(body, "l")).toBe(true);
+    expect(press(body, "h")).toBe(true);
     expect(document.activeElement).toBe(body);
-    press(body, "h");
-    expect(document.activeElement).toBe(listbox());
+    expect(screen.getByLabelText("Shell mode").textContent).toBe("NORMAL");
   });
 
-  it("lands on the pane, not in the textarea, with h and l while the pane is still in edit mode", () => {
+  it("lands on the pane, not in the textarea, when the pane takes focus while it is still in edit mode", () => {
     renderLibrary({ docs, activeDoc: doc, docDraft: doc.content });
     const editor = editDocument("Edit document");
     // Leave through the list without Escape: the item stays in edit mode.
     act(() => listbox().focus());
-    press(listbox(), "l");
+    focusPane("Document");
     const pane = screen.getByRole("region", { name: "Document" });
     expect(document.activeElement).toBe(pane.querySelector(".lib-editor"));
     expect(document.activeElement).not.toBe(editor);
-    press(document.activeElement!, "h");
-    expect(document.activeElement).toBe(listbox());
+    act(() => listbox().focus());
     press(listbox(), "i");
     expect(document.activeElement).toBe(editor);
   });
@@ -944,9 +933,9 @@ describe("LibraryView document pane", () => {
     renderLibrary({ docs, activeDoc: doc, docDraft: doc.content });
     const footer = screen.getByRole("region", { name: "Document" }).querySelector<HTMLElement>(".pane-foot")!;
     expect(within(footer).getByRole("button", { name: "Copy path" })).not.toBeNull();
-    // `:q` and `:reset` are command-line commands: the status bar has no binding to offer, so they stay here.
-    expect(within(footer).getByRole("button", { name: ":q close" })).not.toBeNull();
-    expect(within(footer).getByRole("button", { name: ":reset discard" })).not.toBeNull();
+    // `:q` and `:reset` are command-line commands with no key binding, so these buttons are their only mouse path.
+    expect(within(footer).getByRole("button", { name: "close" })).not.toBeNull();
+    expect(within(footer).getByRole("button", { name: "discard" })).not.toBeNull();
   });
 
   it("marks skills read-only: rendered only, marker, no edit, no save, nothing to open", () => {
@@ -1146,7 +1135,6 @@ describe("LibraryView save", () => {
       docSaveResult: { success: false, action: "save_doc", stdout: "", stderr: "disk full", exit_code: 1 },
     });
     expect(footer.textContent).toContain("disk full");
-    expect(statusBarText()).toBe("library › docs");
 
     update({ docs, activeDoc: doc, docDraft: "# Edited", docDirty: true, docSaving: true });
     update({
@@ -1166,7 +1154,6 @@ describe("LibraryView save", () => {
       docDraft: doc.content,
       docSaveResult: { success: true, action: "save_doc", stdout: "saved docs/a.md", stderr: "", exit_code: 0 },
     });
-    expect(statusBarText()).toBe("library › docs");
   });
 
   it("redacts secrets in save results", () => {
@@ -1290,7 +1277,7 @@ describe("LibraryView new doc form", () => {
   it("only offers new doc for the docs source of a valid workspace", () => {
     const { update } = renderLibrary({ docs });
     act(() => listbox().focus());
-    const bar = within(screen.getByLabelText("Status bar"));
+    const bar = within(screen.getByLabelText("Key hints"));
     expect(bar.getByRole("button", { name: /new doc/ })).not.toBeNull();
     update({ docs, dataFolderOk: false });
     expect(bar.queryByRole("button", { name: /new doc/ })).toBeNull();

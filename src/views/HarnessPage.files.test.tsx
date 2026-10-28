@@ -313,7 +313,7 @@ function fileLines() {
 }
 
 function statusBar() {
-  return within(screen.getByLabelText("Status bar"));
+  return within(screen.getByLabelText("Key hints"));
 }
 
 function hint(name: RegExp) {
@@ -322,7 +322,7 @@ function hint(name: RegExp) {
 }
 
 function mode() {
-  return document.querySelector(".statusbar .mode")!.textContent;
+  return screen.getByLabelText("Shell mode").textContent;
 }
 
 function review() {

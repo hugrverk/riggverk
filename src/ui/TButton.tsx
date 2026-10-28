@@ -26,9 +26,7 @@ export interface TButtonProps {
  * `danger` a hairline button with `--fix` text. The key cap sits inside as a quiet chip; the accessible name is the
  * label (the cap is aria-hidden and `aria-keyshortcuts` carries the key). CSS capitalises the label's first letter,
  * so the name stays what the caller passed. Use it where the answer has to sit next to the question: a review's
- * action bar, a dialog footer, a result's rollback. Everywhere else a key hint is an `ActionKey`.
- *
- * Like `ActionKey`, a click leaves focus where it was (the pane that holds the keys keeps them), and a disabled
+ * action bar, a dialog footer, a result's rollback. A click leaves focus where it was (the pane that holds the keys keeps them), and a disabled
  * button stays focusable with its reason as the tooltip.
  */
 export function TButton({ keys, children, onClick, disabled = false, shortcut, variant, className, expanded, controls, onKeyDown, ref }: TButtonProps) {

@@ -110,7 +110,7 @@ describe("RulesPane", () => {
 
   it("holds apply while another task runs and says why", () => {
     const flow = renderPane({ status: "conversion", surface: "codex_rules", preview: PREVIEW }, { busyLabel: "uninstall" });
-    const apply = within(screen.getByLabelText("Status bar")).getByRole("button", { name: /apply/ });
+    const apply = within(screen.getByLabelText("Key hints")).getByRole("button", { name: /apply/ });
     expect(apply.getAttribute("title")).toBe("uninstall is running");
     press("y");
     expect(flow.apply).not.toHaveBeenCalled();
@@ -141,7 +141,7 @@ describe("RulesPane", () => {
 
   it("shows the CONFIRM mode while it is open", () => {
     renderPane({ status: "diff", surface: "codex_rules", diff: DIFF });
-    expect(document.querySelector(".statusbar .mode")!.textContent).toBe("CONFIRM");
+    expect(screen.getByLabelText("Shell mode").textContent).toBe("CONFIRM");
   });
 
   describe("confirm line buttons", () => {

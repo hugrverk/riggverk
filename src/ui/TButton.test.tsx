@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Binding } from "../keyboard/registry";
 import { renderWithShell } from "../test/renderWithShell";
 import { ApplyButton } from "./ApplyButton";
-import { BindingButton } from "./BindingActionKey";
+import { BindingButton } from "./BindingButton";
 import { TButton } from "./TButton";
 
 afterEach(cleanup);

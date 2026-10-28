@@ -76,23 +76,6 @@ function commandCount(backend: Backend, command: string): number {
   return backend.commandLog.filter(entry => entry === command).length;
 }
 
-/**
- * A key hint of the Overview page. Hints live in the status bar while their pane has focus, so this moves focus
- * (back) into the page when the hint is not showing (a dialog may have taken it). Call it outside `act`: a nested act would not flush the focus change before the query.
- */
-function findStatusHint(name: RegExp): Promise<HTMLElement> {
-  return waitFor(() => {
-    const bar = within(screen.getByLabelText("Status bar"));
-    const shown = bar.queryByRole("button", { name });
-    if (shown) return shown;
-    act(() => {
-      (document.activeElement as HTMLElement | null)?.blur();
-      screen.getByRole("region", { name: "Overview" }).focus();
-    });
-    return bar.getByRole("button", { name });
-  });
-}
-
 describe("App", () => {
   beforeEach(() => {
     invokeMock.mockReset();
@@ -138,9 +121,10 @@ describe("App", () => {
 
     // The Overview page offers the default workspace folder action once diagnostics report a valid workspace.
     await screen.findByRole("region", { name: "Overview" });
-    const openButton = await findStatusHint(/open folder/i);
+    const folder = screen.getByRole("region", { name: "Workspace folder" });
+    fireEvent.click(within(folder).getByRole("button", { name: /Workspace folder/ }));
     await act(async () => {
-      fireEvent.click(openButton);
+      fireEvent.click(within(folder).getByRole("button", { name: /Open folder/i }));
     });
 
     await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("no application knows how to open this"));
@@ -158,8 +142,6 @@ describe("App", () => {
       // The sidebar has a "Workspace" group too, so look inside the Settings page.
       return within(await within(settings).findByRole("group", { name: "Workspace" }));
     }
-
-    const modeLabel = () => screen.getByLabelText("Status bar").querySelector(".mode")!.textContent;
 
     beforeEach(() => {
       // jsdom has no native modal dialog; emulate open/close and the `close` event browsers fire.
@@ -202,7 +184,6 @@ describe("App", () => {
       const dialog = await screen.findByRole("dialog", { name: "Reset workspace folder" });
       expect(dialog.textContent).toContain("Ownership records");
       expect(dialog.textContent).toContain("stay in /tmp/other");
-      expect(modeLabel()).toBe("CONFIRM");
       expect(commandCount(backend, "reset_active_workspace_path")).toBe(0);
       expect(backend.settings.workspace_path).toBe("/tmp/other");
 

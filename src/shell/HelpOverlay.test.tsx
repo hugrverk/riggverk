@@ -55,8 +55,6 @@ describe("HelpOverlay", () => {
     for (const title of [
       "Go to Overview",
       "Go to Settings",
-      "Focus previous pane",
-      "Focus next pane",
       "Command line",
       "Keyboard help",
       "Open settings",
@@ -95,17 +93,25 @@ describe("HelpOverlay", () => {
     expect(Array.from(row("Save").querySelectorAll("kbd")).map(kbd => kbd.textContent)).toEqual(["⌘S"]);
   });
 
-  it("ends with the installed-map glyph legend, drawn from the matrix's own glyphs", () => {
+  it("ends with the legend of the six states, each with its words and a decorative marker", () => {
     renderInFrame(<Registrar bindings={[]} />);
-    const map = within(openHelp()).getByRole("region", { name: "Installed map" });
-    const rows = Array.from(map.querySelectorAll("dt")).map(dt => [dt.textContent, dt.nextElementSibling!.textContent]);
-    expect(rows).toEqual([
-      ["●", "current"],
-      ["◐", "update / not installed"],
-      ["✗", "conflict"],
-      ["·", "off / n/a"],
+    const legend = within(openHelp()).getByRole("region", { name: "States" });
+    const rows = Array.from(legend.querySelectorAll("dt")).map(dt => [dt.textContent, dt.nextElementSibling!.textContent]);
+    expect(rows.map(([label]) => label)).toEqual([
+      "Up to date",
+      "Update ready",
+      "Needs your decision",
+      "Yours",
+      "Fix by hand",
+      "Not managed",
     ]);
-    expect(Array.from(map.querySelectorAll("dt .g")).every(glyph => glyph.getAttribute("aria-hidden") === "true")).toBe(true);
+    expect(rows.every(([, meaning]) => meaning!.length > 0)).toBe(true);
+    expect(Array.from(legend.querySelectorAll("dt .state-mark")).every(mark => mark.getAttribute("aria-hidden") === "true")).toBe(true);
+  });
+
+  it("says that the digits are fixed and that the optional agents have none", () => {
+    renderInFrame(<Registrar bindings={[]} />);
+    expect(openHelp().textContent).toContain("The digits are fixed");
   });
 
   it("lists the registered commands with their aliases", () => {

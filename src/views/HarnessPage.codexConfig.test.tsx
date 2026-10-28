@@ -143,11 +143,11 @@ function press(key: string) {
 
 function hint(name: RegExp) {
   if (!surfaces().contains(document.activeElement)) focusSurfaces();
-  return within(screen.getByLabelText("Status bar")).queryByRole("button", { name });
+  return within(screen.getByLabelText("Key hints")).queryByRole("button", { name });
 }
 
 function mode() {
-  return document.querySelector(".statusbar .mode")!.textContent;
+  return screen.getByLabelText("Shell mode").textContent;
 }
 
 function table() {
@@ -368,7 +368,7 @@ function review() {
 }
 
 function statusBar() {
-  return within(screen.getByLabelText("Status bar"));
+  return within(screen.getByLabelText("Key hints"));
 }
 
 describe("use Riggverk defaults (b, y)", () => {

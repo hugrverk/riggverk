@@ -127,7 +127,7 @@ function press(key: string, target: Element = surfaces()) {
 }
 
 function statusBar() {
-  return within(screen.getByLabelText("Status bar"));
+  return within(screen.getByLabelText("Key hints"));
 }
 
 /** A key hint of the focused pane: hints live in the status bar, not in the panes. */

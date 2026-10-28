@@ -27,25 +27,27 @@ describe("Sidebar", () => {
     expect(screen.getByRole("navigation", { name: "Main navigation" })).not.toBeNull();
   });
 
-  it("numbers the destinations with aria-keyshortcuts and a tooltip, and stops at 9", () => {
+  it("gives every destination its fixed digit as aria-keyshortcuts and tooltip, also with all seven agents on", () => {
     plain({ enabledHarnessIds: ["codex", "opencode", "cursor", "claude", "copilot", "pi", "kilo"] });
-    expect(screen.getByRole("button", { name: "Overview" }).getAttribute("aria-keyshortcuts")).toBe("1");
+    const digit = (name: string) => screen.getByRole("button", { name }).getAttribute("aria-keyshortcuts");
+    expect(["Overview", "Codex", "OpenCode", "Cursor", "Claude", "History", "Library", "Settings"].map(digit)).toEqual([
+      "1", "2", "3", "4", "5", "6", "7", "8",
+    ]);
     expect(screen.getByRole("button", { name: "Overview" }).getAttribute("title")).toBe("Overview (1)");
-    expect(screen.getByRole("button", { name: "Kilo" }).getAttribute("aria-keyshortcuts")).toBe("8");
-    expect(screen.getByRole("button", { name: "History" }).getAttribute("aria-keyshortcuts")).toBe("9");
-    // With every agent on, Library and Settings fall beyond the digit keys.
-    expect(screen.getByRole("button", { name: "Library" }).getAttribute("aria-keyshortcuts")).toBeNull();
-    expect(screen.getByRole("button", { name: "Settings" }).getAttribute("aria-keyshortcuts")).toBeNull();
-    expect(screen.getByRole("button", { name: "Settings" }).getAttribute("title")).toBe("Settings");
+    // The optional agents have no digit.
+    for (const name of ["Copilot", "Pi", "Kilo"]) {
+      expect(digit(name)).toBeNull();
+      expect(screen.getByRole("button", { name }).getAttribute("title")).toBe(name);
+    }
     expect(screen.queryByText(/more agents?$/)).toBeNull();
   });
 
-  it("hides only disabled agents and renumbers the items after them", () => {
+  it("hides only disabled agents and keeps the digits of the others where they are", () => {
     const { container } = plain({ enabledHarnessIds: ["codex", "opencode", "cursor"] });
     expect(screen.queryByRole("button", { name: "Claude" })).toBeNull();
     expect(items(container)).toEqual(["Overview", "Codex", "OpenCode", "Cursor", "History", "Library", "Settings"]);
-    expect(screen.getByRole("button", { name: "History" }).getAttribute("aria-keyshortcuts")).toBe("5");
-    expect(screen.getByRole("button", { name: "Library" }).getAttribute("aria-keyshortcuts")).toBe("6");
+    expect(screen.getByRole("button", { name: "History" }).getAttribute("aria-keyshortcuts")).toBe("6");
+    expect(screen.getByRole("button", { name: "Library" }).getAttribute("aria-keyshortcuts")).toBe("7");
   });
 
   it("with every agent hidden, only Overview, History, Library and Settings remain", () => {

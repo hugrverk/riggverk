@@ -87,7 +87,6 @@ export function keyNames(keys: readonly CodexConfigKey[]): string {
 export function withKeptKeys(display: StateDisplay, model: CodexConfigModel | null): StateDisplay {
   if (!model || model.kept.length === 0) return display;
   return {
-    glyph: display.glyph === "ok" ? "partial" : display.glyph,
     tone: display.tone === "ok" ? "warn" : display.tone,
     label: `${display.label} · you keep ${model.kept.length}`,
   };

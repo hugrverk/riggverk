@@ -220,7 +220,7 @@ describe("PaneList", () => {
         </Pane>,
       );
       act(() => listbox().focus());
-      fireEvent.click(within(screen.getByLabelText("Status bar")).getByRole("button", { name: /filter/ }));
+      fireEvent.click(within(screen.getByLabelText("Key hints")).getByRole("button", { name: /filter/ }));
       expect(document.activeElement).toBe(screen.getByLabelText("Filter harnesses"));
     });
 
@@ -300,7 +300,7 @@ describe("PaneList", () => {
     );
     expect(within(screen.getByRole("region", { name: "harnesses" })).queryByRole("button")).toBeNull();
     act(() => listbox().focus());
-    const hint = within(screen.getByLabelText("Status bar")).getByRole("button", { name: /open/ });
+    const hint = within(screen.getByLabelText("Key hints")).getByRole("button", { name: /open/ });
     expect(hint.textContent).toContain("↵");
     fireEvent.click(hint);
     expect(onActivate).toHaveBeenCalledWith(ROWS[0]);
@@ -314,7 +314,7 @@ describe("PaneList", () => {
       </Pane>,
     );
     act(() => listbox().focus());
-    const bar = within(screen.getByLabelText("Status bar"));
+    const bar = within(screen.getByLabelText("Key hints"));
     const hint = bar.getByRole("button", { name: /toggle target/ });
     expect(hint.textContent).toContain("space");
     fireEvent.click(hint);
