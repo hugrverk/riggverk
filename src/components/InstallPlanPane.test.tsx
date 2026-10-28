@@ -111,7 +111,7 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("InstallPlanPane", () => {
-  it("lists the plan grouped by surface with a glyph and a text label on every row", () => {
+  it("lists the plan grouped by surface with a word and a hollow mark on every row; a conflict is the filled decision mark", () => {
     renderPane(makeFlow());
     expect(Array.from(grid().querySelectorAll("tr.g")).map(row => row.textContent)).toEqual([
       "claude rules",
@@ -119,17 +119,35 @@ describe("InstallPlanPane", () => {
       "skills",
     ]);
     const rows = Array.from(grid().querySelectorAll("tbody tr:not(.g)"));
-    expect(rows.map(row => row.querySelector("td.op")!.textContent!.trim())).toEqual([
-      "~ update",
-      "+ create",
-      "~ update",
-      "! conflict",
+    expect(rows.map(row => row.querySelector("td.op")!.textContent!.trim())).toEqual(["update", "create", "update", "conflict"]);
+    // The mark is decoration; the word next to it carries the meaning.
+    expect(rows.map(row => row.querySelector("td.op .rv-mark")!.className)).toEqual([
+      "rv-mark rv-mark-update",
+      "rv-mark rv-mark-create",
+      "rv-mark rv-mark-update",
+      "rv-mark rv-mark-conflict",
     ]);
-    // The glyph is decoration; the word next to it carries the meaning.
-    for (const row of rows) {
-      expect(row.querySelector("td.op .g")!.getAttribute("aria-hidden")).toBe("true");
-      expect(row.querySelector("td.op")!.textContent!.trim().split(" ")).toHaveLength(2);
-    }
+    for (const row of rows) expect(row.querySelector("td.op .rv-mark")!.getAttribute("aria-hidden")).toBe("true");
+  });
+
+  it("is a review card: titled, with the action bar as its footer", () => {
+    renderPane(makeFlow());
+    const pane = screen.getByRole("region", { name: "Install plan" });
+    expect(pane.classList.contains("pane-card")).toBe(true);
+    expect(pane.querySelector(".pane-title b")!.textContent).toBe("Install plan");
+    const footer = pane.querySelector<HTMLElement>(".pane-foot")!;
+    expect(within(footer).getByRole("button", { name: "apply" })).toBeTruthy();
+    expect(within(footer).getByText("Preview first")).toBeTruthy();
+    expect(within(footer).getByText("Backed up")).toBeTruthy();
+    expect(within(footer).getByText("Undo any time")).toBeTruthy();
+  });
+
+  it("states the consequences only where applying writes", () => {
+    renderPane(makeFlow({ operations: [op("skills", "conflict")] }));
+    expect(screen.queryByText("Undo any time")).toBeNull();
+    cleanup();
+    renderPane(makeFlow({ request: { ...REQUEST, label: "preview claude", readOnly: true } }));
+    expect(screen.queryByText("Undo any time")).toBeNull();
   });
 
   it("puts the counts in the pane title and highlights conflict rows with their description", () => {
@@ -138,9 +156,9 @@ describe("InstallPlanPane", () => {
     expect(title).toContain("plan");
     expect(title).toContain("update claude");
     expect(title).toContain("3 surfaces");
-    expect(title).toContain("+1");
-    expect(title).toContain("~2");
-    expect(title).toContain("!1");
+    expect(title).toContain("1 create");
+    expect(title).toContain("2 update");
+    expect(title).toContain("1 conflict");
     const conflict = grid().querySelector("tr.conf")!;
     expect(conflict.textContent).toContain("~/.claude/skills was modified locally since install");
     expect(conflict.textContent).toContain("preserved, skipped");
@@ -172,11 +190,20 @@ describe("InstallPlanPane", () => {
       expect(flow.cancel).toHaveBeenCalledTimes(1);
     });
 
-    it("keeps Enter from applying, with the keyboard on the grid or on the cancel button", () => {
+    it("keeps Enter from applying, with the keyboard on the grid, on the cancel button or on the apply button itself", () => {
       const { onApply } = renderPane(makeFlow());
       press("Enter");
       fireEvent.keyDown(confirmLine().getByRole("button", { name: "cancel" }), { key: "Enter" });
       expect(onApply).not.toHaveBeenCalled();
+      // A focused button would click on Enter; the apply button cancels that default, so nothing runs.
+      const apply = confirmLine().getByRole("button", { name: "apply" });
+      apply.focus();
+      expect(fireEvent.keyDown(apply, { key: "Enter" })).toBe(false);
+      expect(onApply).not.toHaveBeenCalled();
+      // It is still reachable by mouse, and announces the key it answers to.
+      expect(apply.getAttribute("aria-keyshortcuts")).toBe("Y");
+      fireEvent.click(apply);
+      expect(onApply).toHaveBeenCalledTimes(1);
     });
 
     it("disables apply with the reason the key would give, and still cancels", () => {

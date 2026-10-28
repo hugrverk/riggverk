@@ -127,7 +127,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // The bracket buttons keep the plain accessible names "cancel" / "confirm" (their key caps are aria-hidden);
+  // The buttons keep the plain accessible names "cancel" / "confirm" (their key caps are aria-hidden);
   // aria-keyshortcuts exposes the keys to assistive technology instead.
   return (
     <ConfirmContext.Provider value={{ confirm }}>

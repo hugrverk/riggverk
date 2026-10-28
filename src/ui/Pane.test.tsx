@@ -44,6 +44,19 @@ describe("Pane", () => {
     expect(container.querySelector("[data-pane-id='two'] .pane-foot")!.textContent).toBe("static hint");
   });
 
+  it("carries the review card variant as a class and keeps the same contract markup", () => {
+    renderWithShell(
+      <Pane id="card" title="Install plan" variant="card" footer={<span>bar</span>}>
+        <p>body</p>
+      </Pane>,
+    );
+    const pane = screen.getByRole("region", { name: "Install plan" });
+    expect(pane.classList.contains("pane")).toBe(true);
+    expect(pane.classList.contains("pane-card")).toBe(true);
+    expect(pane.getAttribute("data-pane-id")).toBe("card");
+    expect(pane.querySelector(".pane-foot")!.textContent).toBe("bar");
+  });
+
   it("makes a scrollable body the focus target and marks the default pane", () => {
     renderWithShell(<Panes />);
     const body = screen.getByRole("group", { name: "surfaces" });

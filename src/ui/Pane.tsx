@@ -28,6 +28,11 @@ export interface PaneProps {
    * PaneList or input; panes with a listbox leave this off because the listbox is the primary target.
    */
   scrollable?: boolean;
+  /**
+   * `card`: the Bläck review card: a titled hairline card whose title row sits in the flow (no notch on the border)
+   * and whose footer is the action bar. The default keeps the terminal pane the other views still use.
+   */
+  variant?: "card";
   className?: string;
   bodyClassName?: string;
   children: ReactNode;
@@ -46,6 +51,7 @@ export function Pane({
   footer,
   defaultFocus,
   scrollable,
+  variant,
   className,
   bodyClassName,
   children,
@@ -62,7 +68,7 @@ export function Pane({
   return (
     <PaneContext.Provider value={id}>
       <section
-        className={cx("pane", className)}
+        className={cx("pane", variant && `pane-${variant}`, className)}
         data-pane-id={id}
         data-pane-default={defaultFocus ? "" : undefined}
         data-keyscope="pane"

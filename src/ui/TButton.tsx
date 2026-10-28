@@ -1,4 +1,4 @@
-import type { ReactNode, Ref } from "react";
+import type { KeyboardEventHandler, ReactNode, Ref } from "react";
 import { cx } from "./tone";
 
 export interface TButtonProps {
@@ -10,22 +10,24 @@ export interface TButtonProps {
   disabled?: boolean | string;
   /** aria-keyshortcuts value, when the key is a single step. */
   shortcut?: string;
-  /** `primary`: accent brackets and a bold label. `danger`: the fail colour. Default: a plain button. */
+  /** `primary`: the muted blue fill. `danger`: hairline button with `--fix` text, never a red fill. Default: a hairline button. */
   variant?: "primary" | "danger";
   className?: string;
+  onKeyDown?: KeyboardEventHandler<HTMLButtonElement>;
   ref?: Ref<HTMLButtonElement>;
 }
 
 /**
- * `[ y apply ]`: a real `<button>` whose key cap sits inside and whose brackets are pseudo-elements, so the
- * accessible name is the label (the cap is aria-hidden; `aria-keyshortcuts` carries the key). Use it only where
- * the answer has to sit next to the question: a confirm line, a dialog footer, a result's rollback. Everywhere
- * else a key hint is an `ActionKey`.
+ * A real `<button>` in the Bläck button style: primary is the muted blue fill, the default is a hairline button,
+ * `danger` a hairline button with `--fix` text. The key cap sits inside as a quiet chip; the accessible name is the
+ * label (the cap is aria-hidden and `aria-keyshortcuts` carries the key). CSS capitalises the label's first letter,
+ * so the name stays what the caller passed. Use it where the answer has to sit next to the question: a review's
+ * action bar, a dialog footer, a result's rollback. Everywhere else a key hint is an `ActionKey`.
  *
- * Like `ActionKey`, a click leaves focus where it was (the pane that holds the keys keeps them), a disabled
- * button stays focusable with its reason as the tooltip, and keyboard focus inverts the whole button.
+ * Like `ActionKey`, a click leaves focus where it was (the pane that holds the keys keeps them), and a disabled
+ * button stays focusable with its reason as the tooltip.
  */
-export function TButton({ keys, children, onClick, disabled = false, shortcut, variant, className, ref }: TButtonProps) {
+export function TButton({ keys, children, onClick, disabled = false, shortcut, variant, className, onKeyDown, ref }: TButtonProps) {
   const isDisabled = disabled !== false;
   return (
     <button
@@ -36,6 +38,7 @@ export function TButton({ keys, children, onClick, disabled = false, shortcut, v
       aria-keyshortcuts={shortcut}
       title={typeof disabled === "string" ? disabled : undefined}
       onMouseDown={event => event.preventDefault()}
+      onKeyDown={onKeyDown}
       onClick={() => {
         if (!isDisabled) onClick?.();
       }}
@@ -45,7 +48,7 @@ export function TButton({ keys, children, onClick, disabled = false, shortcut, v
           {token}
         </kbd>
       ))}
-      {children}
+      <span className="tbtn-label">{children}</span>
     </button>
   );
 }
