@@ -1394,24 +1394,47 @@ mod tests {
     ];
 
     #[test]
-    fn default_settings_gate_only_the_codex_config_surface_and_the_light_harnesses() {
+    fn default_settings_gate_only_the_opt_in_config_surfaces_and_the_light_harnesses() {
         use crate::setup_lifecycle::SetupSurfaceId;
-        let mut excluded = vec![SetupSurfaceId::CodexConfig];
+        let mut excluded = vec![SetupSurfaceId::CodexConfig, SetupSurfaceId::ClaudeConfig];
         excluded.extend(LIGHT_SURFACES);
         assert_eq!(
             enabled_setup_surfaces(&AppSettings::default()),
             surfaces_without(&excluded)
         );
-        // With every harness enabled, only Codex config and Kilo's MCP entry (both off by default
-        // as targets) stay out.
+        // With every harness enabled, only the Codex and Claude config surfaces and Kilo's MCP entry
+        // (all off by default as targets) stay out.
         let all = AppSettings {
             enabled_harness_ids: agent_targets::HarnessId::ALL.to_vec(),
             ..AppSettings::default()
         };
         assert_eq!(
             enabled_setup_surfaces(&all),
-            surfaces_without(&[SetupSurfaceId::CodexConfig, SetupSurfaceId::KiloMcp])
+            surfaces_without(&[
+                SetupSurfaceId::CodexConfig,
+                SetupSurfaceId::ClaudeConfig,
+                SetupSurfaceId::KiloMcp
+            ])
         );
+    }
+
+    #[test]
+    fn enabling_claude_config_includes_its_surface_and_an_older_settings_file_keeps_it_off() {
+        use crate::setup_lifecycle::SetupSurfaceId;
+        let mut settings = AppSettings::default();
+        assert!(!enabled_setup_surfaces(&settings).contains(&SetupSurfaceId::ClaudeConfig));
+        settings.enabled_target_ids.push("claude_config".into());
+        assert!(enabled_setup_surfaces(&settings).contains(&SetupSurfaceId::ClaudeConfig));
+        // A file from before the target existed gains no off-by-default target in a migration.
+        let mut older = AppSettings {
+            enabled_target_ids: vec!["claude_rules".into()],
+            target_defaults_version: 1,
+            ..AppSettings::default()
+        };
+        assert!(super::migrate_target_defaults(&mut older));
+        assert!(!older
+            .enabled_target_ids
+            .contains(&"claude_config".to_string()));
     }
 
     #[test]
@@ -1431,6 +1454,7 @@ mod tests {
             .retain(|id| id != "claude_agents" && id != "cursor_setup");
         let mut excluded = vec![
             SetupSurfaceId::CodexConfig,
+            SetupSurfaceId::ClaudeConfig,
             SetupSurfaceId::ClaudeAgents,
             SetupSurfaceId::CursorAgents,
             SetupSurfaceId::CursorMcp,

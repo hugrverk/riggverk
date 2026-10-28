@@ -141,6 +141,7 @@ fn source_keys(artifact: &ArtifactId, bundled_root: &Path) -> Vec<String> {
             .collect(),
         ArtifactId::OpenCodeConfig
         | ArtifactId::OpenCodeTui
+        | ArtifactId::ClaudeSettings
         | ArtifactId::OpenCodeRules
         | ArtifactId::CodexConfig
         | ArtifactId::CodexRules
@@ -494,6 +495,7 @@ mod tests {
             ArtifactId::CodexConfig,
             ArtifactId::OpenCodeConfig,
             ArtifactId::OpenCodeTui,
+            ArtifactId::ClaudeSettings,
             ArtifactId::CursorMcp,
             ArtifactId::WorkspaceFile(
                 WorkspaceRelPath::new("docs/USING_THE_APP.md").expect("rel path"),

@@ -119,6 +119,11 @@ export function targetMeta(entry: OverviewEntry | undefined, options: { dataFold
   }
 }
 
+/** What an off target tells beyond its name, for a target whose default is not obvious from the name. */
+const OFF_DETAIL: Partial<Record<string, string>> = {
+  claude_config: "off · Claude Code keeps its default commit and PR attribution",
+};
+
 /** "claude_rules" -> "rules", "workspace_bundle" -> "bundle". */
 export function surfaceShortName(surface: SetupSurfaceId): string {
   return surface.slice(surface.lastIndexOf("_") + 1);
@@ -157,7 +162,7 @@ export function surfaceRowsFor(
       return {
         surface,
         name: surfaceShortName(surface),
-        detail: targetId ? `target ${targetId} is off` : "off",
+        detail: targetId ? (OFF_DETAIL[targetId] ?? `target ${targetId} is off`) : "off",
         state: "off",
         display: STATE_DISPLAY.off,
         targetId,

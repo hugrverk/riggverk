@@ -154,6 +154,14 @@ pub fn targets() -> Vec<AgentSyncTarget> {
             source_rel: "templates/codex/config.toml",
         },
         AgentSyncTarget {
+            id: "claude_config",
+            label: "claude config",
+            harness: HarnessId::Claude,
+            kind: TargetKind::Config,
+            target_rel: ".claude/settings.json",
+            source_rel: "",
+        },
+        AgentSyncTarget {
             id: "cursor_setup",
             label: "cursor global agents",
             harness: HarnessId::Cursor,
@@ -232,9 +240,10 @@ pub fn bundled_config_targets() -> Vec<AgentSyncTarget> {
 }
 
 /// Targets that stay OFF until the user opts in. `codex_config` rewrites the
-/// user's approval and sandbox posture in `~/.codex/config.toml`. A light harness target is off
-/// when its descriptor says so.
-const DEFAULT_DISABLED_TARGET_IDS: &[&str] = &["codex_config"];
+/// user's approval and sandbox posture in `~/.codex/config.toml`; `claude_config` changes the
+/// attribution keys of `~/.claude/settings.json`. A light harness target is off when its
+/// descriptor says so.
+const DEFAULT_DISABLED_TARGET_IDS: &[&str] = &["codex_config", "claude_config"];
 
 fn default_disabled(target_id: &str) -> bool {
     DEFAULT_DISABLED_TARGET_IDS.contains(&target_id)
@@ -265,6 +274,7 @@ pub fn target_surfaces(target_id: &str) -> &'static [SetupSurfaceId] {
         "opencode_config" => &[SetupSurfaceId::OpenCodeConfig],
         "claude_rules" => &[SetupSurfaceId::ClaudeRules],
         "claude_agents" => &[SetupSurfaceId::ClaudeAgents],
+        "claude_config" => &[SetupSurfaceId::ClaudeConfig],
         "cursor_setup" => &[SetupSurfaceId::CursorAgents, SetupSurfaceId::CursorMcp],
         other => crate::light_harness::rules_for_target(other)
             .map(|harness| std::slice::from_ref(&harness.rules.surface))
@@ -406,11 +416,36 @@ mod tests {
     }
 
     #[test]
-    fn default_enabled_ids_cover_every_target_except_codex_config_and_kilo_mcp() {
+    fn claude_config_is_a_claude_config_target_that_is_off_by_default() {
+        let target = targets()
+            .into_iter()
+            .find(|target| target.id == "claude_config")
+            .expect("claude_config target");
+        assert_eq!(target.harness, HarnessId::Claude);
+        assert!(matches!(target.kind, TargetKind::Config));
+        assert_eq!(target.target_rel, ".claude/settings.json");
+        assert!(!default_enabled_ids().contains(&"claude_config".to_string()));
+        assert_eq!(
+            target_surfaces("claude_config"),
+            [SetupSurfaceId::ClaudeConfig]
+        );
+        assert_eq!(
+            surface_target_id(SetupSurfaceId::ClaudeConfig),
+            Some("claude_config")
+        );
+        assert_eq!(target_harness("claude_config"), Some(HarnessId::Claude));
+        // It has no bundled file, so the Library has no template to show for it.
+        assert!(bundled_config_targets()
+            .iter()
+            .all(|target| target.id != "claude_config"));
+    }
+
+    #[test]
+    fn default_enabled_ids_cover_every_target_except_the_opt_in_ones() {
         let mut expected: Vec<String> = targets()
             .iter()
             .map(|t| t.id.to_string())
-            .filter(|id| id != "codex_config" && id != "kilo_mcp")
+            .filter(|id| id != "codex_config" && id != "claude_config" && id != "kilo_mcp")
             .collect();
         let mut actual = default_enabled_ids();
         expected.sort();
@@ -590,6 +625,7 @@ mod tests {
             "codex_agents",
             "opencode_config",
             "codex_config",
+            "claude_config",
             "cursor_setup",
             "copilot_rules",
             "copilot_mcp",
@@ -600,7 +636,7 @@ mod tests {
         ]
         .into_iter()
         .collect();
-        assert_eq!(ids, expected, "targets() must contain exactly 15 known IDs");
+        assert_eq!(ids, expected, "targets() must contain exactly 16 known IDs");
     }
 
     #[test]
@@ -620,6 +656,7 @@ mod tests {
             "descriptor order, per harness the rules file and then the MCP entry, after cursor_setup"
         );
         assert_eq!(ids[ids.len() - 7], "cursor_setup");
+        assert_eq!(ids[ids.len() - 8], "claude_config");
         let pi = all.iter().find(|t| t.id == "pi_rules").expect("pi_rules");
         assert_eq!(pi.harness, HarnessId::Pi);
         assert!(matches!(pi.kind, TargetKind::Rules));

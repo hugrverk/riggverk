@@ -55,6 +55,8 @@ pub enum ArtifactId {
     ClaudeRules,
     /// A managed Claude agent file
     ClaudeAgent(AgentName),
+    /// `~/.claude/settings.json`: the `attribution.commit` and `attribution.pr` keys only
+    ClaudeSettings,
     /// Legacy identity of the Claude `SKILL.md`; see [`ArtifactId::SkillFile`].
     ClaudeSkill(SkillName),
 
@@ -299,6 +301,8 @@ impl SkillFileRef {
 pub enum ArtifactKind {
     ConfigFile,
     TuiConfig,
+    /// `~/.claude/settings.json`: two leaf values merged into the user's file, no bundled source.
+    ClaudeSettings,
     RulesFile,
     AgentFile,
     SkillFile,
@@ -345,6 +349,7 @@ impl ArtifactId {
             }
             ArtifactId::ClaudeRules => Ok(home.join(".claude/CLAUDE.md")),
             ArtifactId::ClaudeAgent(name) => Ok(home.join(".claude/agents").join(name.file_name())),
+            ArtifactId::ClaudeSettings => Ok(home.join(".claude/settings.json")),
             ArtifactId::ClaudeSkill(name) => {
                 SkillFileRef::skill_md(SkillRoot::Claude, name.clone()).dest(home)
             }
@@ -460,6 +465,8 @@ impl ArtifactId {
                     .join(name.file_name()),
             ),
             ArtifactId::ClaudeSkill(name) => Some(skill_source(workspace_root, name.as_str())),
+            // The managed values are constants of the app (`claude_settings`); no bundled file.
+            ArtifactId::ClaudeSettings => None,
             ArtifactId::CursorAgent(name) => Some(
                 workspace_root
                     .join("templates/cursor/agents")
@@ -550,6 +557,7 @@ impl ArtifactId {
             ArtifactId::CodexAgent(_) => SetupSurfaceId::CodexAgents,
             ArtifactId::ClaudeRules => SetupSurfaceId::ClaudeRules,
             ArtifactId::ClaudeAgent(_) => SetupSurfaceId::ClaudeAgents,
+            ArtifactId::ClaudeSettings => SetupSurfaceId::ClaudeConfig,
             ArtifactId::CursorAgent(_) => SetupSurfaceId::CursorAgents,
             ArtifactId::CursorMcp => SetupSurfaceId::CursorMcp,
             ArtifactId::OpenCodeSkill(_)
@@ -697,6 +705,7 @@ pub fn expand_surface(
         ),
         SetupSurfaceId::CodexRules => Ok(vec![ArtifactId::CodexRules]),
         SetupSurfaceId::ClaudeRules => Ok(vec![ArtifactId::ClaudeRules]),
+        SetupSurfaceId::ClaudeConfig => Ok(vec![ArtifactId::ClaudeSettings]),
         SetupSurfaceId::ClaudeAgents => expand_agent_surface(
             workspace_root,
             crate::agent_discovery::AgentHarness::Claude,

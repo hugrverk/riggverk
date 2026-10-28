@@ -41,6 +41,8 @@ pub enum SetupSurfaceId {
     ClaudeRules,
     /// Claude native agent files (templates/claude/agents)
     ClaudeAgents,
+    /// Claude Code settings (`~/.claude/settings.json`: the attribution keys)
+    ClaudeConfig,
     /// Skills, installed into the folders the enabled harnesses read (`skill_roots`). One surface
     /// for every harness: the same files are shared by the harnesses that read a folder.
     Skills,
@@ -81,6 +83,7 @@ impl SetupSurfaceId {
         SetupSurfaceId::CodexRules,
         SetupSurfaceId::ClaudeRules,
         SetupSurfaceId::ClaudeAgents,
+        SetupSurfaceId::ClaudeConfig,
         SetupSurfaceId::Skills,
         SetupSurfaceId::CursorAgents,
         SetupSurfaceId::CursorMcp,
@@ -104,6 +107,7 @@ impl SetupSurfaceId {
             SetupSurfaceId::CodexRules => "Codex Rules",
             SetupSurfaceId::ClaudeRules => "Claude Rules",
             SetupSurfaceId::ClaudeAgents => "Claude Agents",
+            SetupSurfaceId::ClaudeConfig => "Claude Config",
             SetupSurfaceId::Skills => "Skills",
             SetupSurfaceId::ClaudeSkills => "Claude Skills",
             SetupSurfaceId::OpenCodeSkills => "OpenCode Skills",
@@ -172,7 +176,9 @@ impl SetupSurfaceId {
             SetupSurfaceId::CodexConfig
             | SetupSurfaceId::CodexAgents
             | SetupSurfaceId::CodexRules => Some(HarnessId::Codex),
-            SetupSurfaceId::ClaudeRules | SetupSurfaceId::ClaudeAgents => Some(HarnessId::Claude),
+            SetupSurfaceId::ClaudeRules
+            | SetupSurfaceId::ClaudeAgents
+            | SetupSurfaceId::ClaudeConfig => Some(HarnessId::Claude),
             SetupSurfaceId::CursorAgents | SetupSurfaceId::CursorMcp => Some(HarnessId::Cursor),
             SetupSurfaceId::CopilotRules | SetupSurfaceId::CopilotMcp => Some(HarnessId::Copilot),
             SetupSurfaceId::PiRules | SetupSurfaceId::PiMcp => Some(HarnessId::Pi),

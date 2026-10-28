@@ -291,6 +291,10 @@ fn surface_status(
             })
         })
         .unwrap_or(detail);
+    let detail = own
+        .iter()
+        .find_map(|p| claude_settings_detail(p, workspace_root, home))
+        .unwrap_or(detail);
     let data_folder = (surface == SetupSurfaceId::WorkspaceBundle).then(|| DataFolderStatus {
         personal_docs: crate::commands::personal_doc_count(workspace_root),
         ownership_records,
@@ -384,6 +388,35 @@ fn mcp_detail(
     }
 }
 
+/// Status line for Claude's attribution setting; `None` for every other artifact and for states
+/// the generic line already covers. Fixed phrases only, never text of the file.
+fn claude_settings_detail(
+    planned: &setup_transaction::PlannedArtifact,
+    workspace_root: &Path,
+    home: &Path,
+) -> Option<String> {
+    if planned.artifact != crate::artifact_registry::ArtifactId::ClaudeSettings {
+        return None;
+    }
+    match planned.kind {
+        OperationKind::NoChange => Some(
+            "attribution hidden by Riggverk · a project's .claude/settings.json or managed settings can override it"
+                .to_string(),
+        ),
+        OperationKind::Create | OperationKind::Update => Some(
+            "hides Claude Code's Co-Authored-By commit line and \"Generated with Claude Code\" PR line · sets attribution.commit and attribution.pr to \"\" in ~/.claude/settings.json · other settings stay"
+                .to_string(),
+        ),
+        OperationKind::Manual => {
+            Some("you set attribution yourself; Riggverk leaves it as is".to_string())
+        }
+        OperationKind::Conflict => {
+            setup_transaction::claude_settings_conflict_reason(workspace_root, home)
+        }
+        OperationKind::Unavailable | OperationKind::Remove => None,
+    }
+}
+
 /// Status line for a rules surface. A base update that keeps the user's text
 /// is an update, never a conflict; only edits the app cannot merge are.
 fn rules_detail(
@@ -444,6 +477,7 @@ pub(crate) fn artifact_label(artifact: &crate::artifact_registry::ArtifactId) ->
         ArtifactId::CodexAgent(name) => format!("Codex agent {}", name.as_str()),
         ArtifactId::CodexSkill(name) => format!("Codex skill {}", name.as_str()),
         ArtifactId::ClaudeRules => "Claude rules".into(),
+        ArtifactId::ClaudeSettings => "Claude settings".into(),
         ArtifactId::ClaudeAgent(name) => format!("Claude agent {}", name.as_str()),
         ArtifactId::ClaudeSkill(name) => format!("Claude skill {}", name.as_str()),
         ArtifactId::CursorAgent(name) => format!("Cursor agent {}", name.as_str()),

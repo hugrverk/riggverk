@@ -257,11 +257,15 @@ class CheckHarnessMirrorTests(unittest.TestCase):
         self.assert_fails("TargetKind::Mcp")
 
     def test_a_target_the_ui_starts_on_that_the_descriptor_starts_off(self) -> None:
-        self.edit(mirror.TS_INSTALL, '["codex_config", "kilo_mcp"]', '["codex_config"]')
+        self.edit(mirror.TS_INSTALL, '["codex_config", "claude_config", "kilo_mcp"]', '["codex_config", "claude_config"]')
+        self.assert_fails("DEFAULT_DISABLED_TARGET_IDS")
+
+    def test_claude_config_must_start_off_in_the_ui(self) -> None:
+        self.edit(mirror.TS_INSTALL, '["codex_config", "claude_config", "kilo_mcp"]', '["codex_config", "kilo_mcp"]')
         self.assert_fails("DEFAULT_DISABLED_TARGET_IDS")
 
     def test_a_target_the_ui_starts_off_that_the_descriptor_starts_on(self) -> None:
-        self.edit(mirror.TS_INSTALL, '["codex_config", "kilo_mcp"]', '["codex_config", "kilo_mcp", "pi_mcp"]')
+        self.edit(mirror.TS_INSTALL, '["codex_config", "claude_config", "kilo_mcp"]', '["codex_config", "claude_config", "kilo_mcp", "pi_mcp"]')
         self.assert_fails("DEFAULT_DISABLED_TARGET_IDS")
 
     def test_a_descriptor_default_the_ui_does_not_follow(self) -> None:

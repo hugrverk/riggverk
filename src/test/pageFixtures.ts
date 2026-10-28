@@ -26,7 +26,7 @@ export const VALID_DIAGNOSTICS: WorkspaceDiagnostics = {
   enabled_rule_targets: 3,
   total_rule_targets: 3,
   enabled_config_targets: 1,
-  total_config_targets: 2,
+  total_config_targets: 3,
   backup_root: "/tmp/backups",
   backup_root_exists: true,
 };
