@@ -2392,7 +2392,7 @@ fn attach_mcp_details(plan: &mut SetupPlan, home: &Path) {
 /// The review of Claude's attribution setting names the file and what changes in it.
 fn attach_claude_settings_details(plan: &mut SetupPlan) {
     for op in plan.operations.iter_mut().filter(|op| {
-        op.surface == SetupSurfaceId::ClaudeConfig
+        matches!(op.surface, SetupSurfaceId::ClaudeConfig)
             && matches!(op.kind, OperationKind::Create | OperationKind::Update)
     }) {
         op.details.push(if op.kind == OperationKind::Create {
