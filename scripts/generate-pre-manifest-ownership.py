@@ -7,7 +7,9 @@ recognized as app-owned and can be updated or removed. User-modified content
 never matches a shipped digest and remains a preserved conflict.
 
 A shipped version is one committed in the history of HEAD (and MERGE_HEAD during a merge) or
-the tracked working-tree version, so the output is the same before and after `git commit`.
+the tracked working-tree version, so the output is the same before and after `git commit`. The
+committed file is an append-only baseline: every digest in it stays, so the output survives a
+repository whose history was squashed (the source commit is then only required to be recorded).
 
 Usage:
   python3 scripts/generate-pre-manifest-ownership.py --check
@@ -204,8 +206,30 @@ RULES_RELS = {
 }
 
 
+def load_baseline() -> dict[str, object]:
+    try:
+        value = json.loads(MANIFEST.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
 def generate() -> dict[str, object]:
-    git("cat-file", "-e", f"{SOURCE_COMMIT}^{{commit}}")
+    baseline = load_baseline()
+    kept = {
+        str(value["identity"]): value
+        for value in baseline.get("artifacts", [])
+        if isinstance(value, dict) and "identity" in value
+    }
+
+    def proven(identity: str, digests: set[str]) -> set[str]:
+        return digests or set(kept.get(identity, {}).get("digests", ()))
+
+    try:
+        git("cat-file", "-e", f"{SOURCE_COMMIT}^{{commit}}")
+    except RuntimeError:
+        if baseline.get("source_commit") != SOURCE_COMMIT:
+            raise
     history = HistoricalDigests()
     artifacts: list[dict[str, object]] = []
 
@@ -224,7 +248,7 @@ def generate() -> dict[str, object]:
                 f"metadata/deprecated-skills/{name}/SKILL.md",
             ]
         )
-        if not digests:
+        if not proven(f"removed-skill:{name}", digests):
             raise RuntimeError(f"no historical version found for removed skill {name}")
         artifacts.append(
             entry(
@@ -241,7 +265,7 @@ def generate() -> dict[str, object]:
         )
 
     scout = history.for_rel("agents/scout.md")
-    if not scout:
+    if not proven("legacy-agent:scout", scout):
         raise RuntimeError("no historical version found for agents/scout.md")
     artifacts.append(
         entry(
@@ -252,7 +276,7 @@ def generate() -> dict[str, object]:
         )
     )
     deprecated_meta = history.for_rel("metadata/deprecated-skills.json")
-    if not deprecated_meta:
+    if not proven("legacy-metadata:deprecated-skills", deprecated_meta):
         raise RuntimeError("no historical version found for deprecated-skills.json")
     artifacts.append(
         entry(
@@ -308,7 +332,12 @@ def generate() -> dict[str, object]:
         if copy:
             artifacts.append(copy)
 
-    artifacts.sort(key=lambda value: str(value["identity"]))
+    # Append-only: committed entries stay, and committed digests join the proven ones.
+    merged = {str(value["identity"]): value for value in artifacts}
+    for identity, old in kept.items():
+        value = merged.setdefault(identity, old)
+        value["digests"] = sorted(set(value["digests"]) | set(old.get("digests", ())))
+    artifacts = sorted(merged.values(), key=lambda value: str(value["identity"]))
     return {
         "migration_id": "pre-managed-state-2d85d94",
         "source_commit": SOURCE_COMMIT,
