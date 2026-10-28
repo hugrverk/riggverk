@@ -448,12 +448,12 @@ fn surface_record_label(artifact: &ArtifactId) -> Option<String> {
     }
 }
 
-/// Whether the app has touched `workspace_root`: it holds the state folder `.agent-workspace/`,
-/// which every release wrote (the marker, then the ownership records). Historical adoption and the
-/// legacy cleanup run only in such a folder. They used to look for the copy's `skills/` folder,
-/// which the workspace cleanup removes.
+/// Whether the app has touched `workspace_root`: it holds the state folder (`.riggverk/`, or the
+/// earlier name every release before the rename wrote: the marker, then the ownership records).
+/// Historical adoption and the legacy cleanup run only in such a folder. They used to look for the
+/// copy's `skills/` folder, which the workspace cleanup removes.
 pub fn workspace_folder_touched(workspace_root: &Path) -> bool {
-    fs::symlink_metadata(workspace_root.join(".agent-workspace")).is_ok_and(|meta| meta.is_dir())
+    crate::workspace_layout::holds_state_dir(workspace_root)
 }
 
 /// Whether the app provably wrote this old copy of the bundle in the workspace folder, whose

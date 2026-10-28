@@ -23,7 +23,7 @@ const NEW_NAME: &str = "se.hugrverk.riggverk";
 const BASE_TIME: u64 = 1_600_000_000;
 const TXN_IN_FLIGHT: &str = "1700000000000000001";
 const TXN_DONE: &str = "1700000000000000002";
-const WORKSPACE_KEY: &str = "/home/example/.config/agent-workspace";
+const WORKSPACE_KEY: &str = "/home/example/.config/riggverk";
 
 struct TempDir(PathBuf);
 
@@ -293,8 +293,14 @@ fn with_isolated_home<T>(name: &str, run: impl FnOnce(&Path) -> T) -> T {
     let home = TempDir::new(name);
     crate::test_env::set_test_user_dirs(home.path());
     unsafe {
-        std::env::remove_var("AGENT_WORKSPACE_BACKUP_DIR");
-        std::env::remove_var("AGENT_WORKSPACE_PATH");
+        for name in [
+            crate::env_overrides::BACKUP_DIR_ENV,
+            crate::env_overrides::LEGACY_BACKUP_DIR_ENV,
+            crate::env_overrides::WORKSPACE_PATH_ENV,
+            crate::env_overrides::LEGACY_WORKSPACE_PATH_ENV,
+        ] {
+            std::env::remove_var(name);
+        }
     }
     run(home.path())
 }

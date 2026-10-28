@@ -6,7 +6,7 @@ use crate::agent_targets;
 use crate::platform_paths::{display_path, Platform};
 
 use super::process::{run_cmd, ActionResult};
-use super::workspace::{path_arg, workspace_root};
+use super::workspace::{path_arg, workspace_root, workspace_root_for_write};
 
 struct DocEntry {
     id: &'static str,
@@ -565,7 +565,7 @@ fn save_doc_at_root(
 pub fn save_doc(id: String, content: String) -> Result<ActionResult, String> {
     // Writes files an apply may also write: wait for a running mutation instead of interleaving.
     let _mutation = crate::mutation_lock::acquire();
-    let root = workspace_root()?;
+    let root = workspace_root_for_write()?;
     save_doc_at_root(&root, &id, &content, None)
 }
 
@@ -628,7 +628,7 @@ pub fn create_doc(
 ) -> Result<DocumentContent, String> {
     // Writes files an apply may also write: wait for a running mutation instead of interleaving.
     let _mutation = crate::mutation_lock::acquire();
-    let root = workspace_root()?;
+    let root = workspace_root_for_write()?;
     create_doc_at_root(&root, &title, &slug, content)
 }
 
@@ -645,7 +645,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .expect("system clock before unix epoch")
             .as_nanos();
-        std::env::temp_dir().join(format!("agent-workspace-docs-{name}-{nonce}"))
+        std::env::temp_dir().join(format!("riggverk-docs-{name}-{nonce}"))
     }
 
     fn write_file(root: &Path, rel: &str, content: &str) {
@@ -2061,7 +2061,7 @@ mod agent_metadata_tests {
             .duration_since(UNIX_EPOCH)
             .expect("system clock before unix epoch")
             .as_nanos();
-        std::env::temp_dir().join(format!("agent-workspace-agmeta-{name}-{nonce}"))
+        std::env::temp_dir().join(format!("riggverk-agmeta-{name}-{nonce}"))
     }
 
     fn write_metadata(root: &Path, json: &str) {

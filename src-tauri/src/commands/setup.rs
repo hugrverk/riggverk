@@ -21,7 +21,7 @@ use crate::setup_lifecycle::{
     OperationKind, PlannedOperation, SetupPlan, SetupRequest, SetupSurfaceId,
 };
 
-use super::workspace::setup_workspace_target_path;
+use super::workspace::{setup_workspace_target_path, workspace_target_for_write};
 
 // ── Transaction types ──
 
@@ -130,7 +130,9 @@ fn reconcile_interrupted_setup_transactions(
         // damaged, so they are skipped before any full validation.
         let header = setup_transaction::read_manifest_header(&raw)
             .map_err(|e| format!("read interrupted setup {transaction_id} manifest: {e}"))?;
-        if header.workspace_key.as_deref() != Some(workspace_key.as_str()) {
+        if !header.workspace_key.as_deref().is_some_and(|recorded| {
+            setup_transaction::workspace_keys_match(recorded, &workspace_key)
+        }) {
             continue;
         }
         if header.status == setup_transaction::TransactionStatus::RollbackFailed {
@@ -233,8 +235,9 @@ fn newer_completed_writes(
         let Ok(header) = setup_transaction::read_manifest_header(&raw) else {
             continue;
         };
-        if header.workspace_key.as_deref() != Some(workspace_key)
-            || header.status != setup_transaction::TransactionStatus::Completed
+        if !header.workspace_key.as_deref().is_some_and(|recorded| {
+            setup_transaction::workspace_keys_match(recorded, workspace_key)
+        }) || header.status != setup_transaction::TransactionStatus::Completed
         {
             continue;
         }
@@ -289,8 +292,9 @@ fn newer_completed_transaction(
         let Ok(header) = setup_transaction::read_manifest_header(&raw) else {
             continue;
         };
-        if header.workspace_key.as_deref() == Some(workspace_key)
-            && header.status == setup_transaction::TransactionStatus::Completed
+        if header.workspace_key.as_deref().is_some_and(|recorded| {
+            setup_transaction::workspace_keys_match(recorded, workspace_key)
+        }) && header.status == setup_transaction::TransactionStatus::Completed
             && newest
                 .as_deref()
                 .is_none_or(|current| transaction_id_is_newer(&candidate, current))
@@ -702,7 +706,8 @@ fn remove_empty_migration_parents(path: &Path, workspace_root: &Path) -> Result<
             break;
         };
         if rel.as_os_str().is_empty()
-            || rel.starts_with(".agent-workspace")
+            || rel.starts_with(crate::workspace_layout::STATE_DIR)
+            || rel.starts_with(crate::workspace_layout::LEGACY_STATE_DIR)
             || rel.starts_with(super::content::CUSTOM_DOCS_DIR)
         {
             break;
@@ -1134,7 +1139,7 @@ fn run_planned_artifacts(
         }
     };
 
-    let ws_root = match setup_workspace_target_path() {
+    let ws_root = match workspace_target_for_write() {
         Ok(r) => r,
         Err(e) => {
             return SetupResult {
@@ -1829,7 +1834,7 @@ pub fn rollback_transaction(
             };
         }
     };
-    let ws_root = match setup_workspace_target_path() {
+    let ws_root = match workspace_target_for_write() {
         Ok(r) => r,
         Err(e) => {
             return SetupResult {
@@ -2626,8 +2631,8 @@ pub fn apply_setup(
         ));
     }
 
-    // Use real detection instead of synthetic all-Create states
-    let ws_root = setup_workspace_target_path().map_err(|e| format!("workspace root: {e}"))?;
+    // The first mutation takes the layout migration step before anything is read for the apply.
+    let ws_root = workspace_target_for_write().map_err(|e| format!("workspace root: {e}"))?;
     let home = crate::platform_paths::resolve_user_home(
         &crate::platform_paths::PlatformEnv::from_process_env(),
         crate::platform_paths::Platform::current(),
@@ -2867,7 +2872,7 @@ pub fn apply_uninstall(
     preview_token: Option<String>,
 ) -> Result<SetupResult, String> {
     let _mutation = crate::mutation_lock::acquire();
-    let ws_root = setup_workspace_target_path()?;
+    let ws_root = workspace_target_for_write()?;
     let home = user_home()?;
     let plan = setup_transaction::plan_artifacts_for_uninstall(&ws_root, &home)?;
     if plan.removals.is_empty() {
@@ -3350,7 +3355,7 @@ mod tests {
             // Several missing levels below an existing root, like a fresh
             // install where the app-data dir has never been created.
             std::env::set_var(
-                "AGENT_WORKSPACE_BACKUP_DIR",
+                "RIGGVERK_BACKUP_DIR",
                 home.join("Library/Application Support/se.hugrverk.riggverk/backups")
                     .to_string_lossy()
                     .as_ref(),
@@ -3695,7 +3700,10 @@ mod tests {
         let base = std::env::temp_dir().join(format!("aw-rollback-test-{n}"));
         let _ = fs::remove_dir_all(&base);
         let home = base.join("home");
-        let ws = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../resources/default-workspace");
+        // A workspace folder of its own: the rollback writes state into it, and the bundle is
+        // read-only source.
+        let ws = base.join("workspace");
+        fs::create_dir_all(&ws).unwrap();
         fs::create_dir_all(&home).unwrap();
         set_test_user_dirs(&home);
         let resolved_home = user_home().expect("resolved home for rollback fixture");
@@ -3711,9 +3719,12 @@ mod tests {
         fs::create_dir_all(&backup_root).unwrap();
         let ws_canon = ws.canonicalize().unwrap_or_else(|_| ws.clone());
         unsafe {
-            std::env::set_var("AGENT_WORKSPACE_PATH", ws_canon.to_string_lossy().as_ref());
             std::env::set_var(
-                "AGENT_WORKSPACE_BACKUP_DIR",
+                "RIGGVERK_WORKSPACE_PATH",
+                ws_canon.to_string_lossy().as_ref(),
+            );
+            std::env::set_var(
+                "RIGGVERK_BACKUP_DIR",
                 backup_root.to_string_lossy().as_ref(),
             );
         }
@@ -4211,11 +4222,11 @@ mod tests {
             set_test_user_dirs(&base.join("home"));
             unsafe {
                 std::env::set_var(
-                    "AGENT_WORKSPACE_PATH",
+                    "RIGGVERK_WORKSPACE_PATH",
                     base.join("workspace").to_string_lossy().as_ref(),
                 );
                 std::env::set_var(
-                    "AGENT_WORKSPACE_BACKUP_DIR",
+                    "RIGGVERK_BACKUP_DIR",
                     base.join("backups").to_string_lossy().as_ref(),
                 );
             }

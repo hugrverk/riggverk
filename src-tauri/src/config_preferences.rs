@@ -16,7 +16,8 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-pub const CONFIG_PREFERENCES_REL: &str = ".agent-workspace/config-preferences.json";
+/// File name inside the state folder (see `workspace_layout::state_file`).
+pub const CONFIG_PREFERENCES_FILE: &str = "config-preferences.json";
 const SCHEMA_VERSION: u32 = 1;
 const MAX_FILE_BYTES: u64 = 16 * 1024;
 /// Longest kept value read back; a longer one is not a choice this app wrote.
@@ -60,7 +61,7 @@ enum Stored {
 }
 
 fn path_of(workspace_root: &Path) -> PathBuf {
-    workspace_root.join(CONFIG_PREFERENCES_REL)
+    crate::workspace_layout::state_file(workspace_root, CONFIG_PREFERENCES_FILE)
 }
 
 fn read_stored(workspace_root: &Path) -> Stored {
@@ -195,7 +196,7 @@ mod tests {
     }
 
     fn write_raw(ws: &Path, raw: &str) {
-        fs::create_dir_all(ws.join(".agent-workspace")).unwrap();
+        fs::create_dir_all(ws.join(crate::workspace_layout::STATE_DIR)).unwrap();
         fs::write(path_of(ws), raw).unwrap();
     }
 
@@ -303,7 +304,7 @@ mod tests {
             r#"{"schema_version":1,"codex_config":{"dest":"~/x","kept":{"sandbox_mode":"read-only"}}}"#,
         )
         .unwrap();
-        fs::create_dir_all(ws.join(".agent-workspace")).unwrap();
+        fs::create_dir_all(ws.join(crate::workspace_layout::STATE_DIR)).unwrap();
         std::os::unix::fs::symlink(&real, path_of(&ws)).unwrap();
         assert!(load_codex_config(&ws).is_none());
         let _ = fs::remove_dir_all(&ws);

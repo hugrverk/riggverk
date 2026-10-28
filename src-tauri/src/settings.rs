@@ -698,11 +698,12 @@ mod tests {
     }
 
     #[test]
-    fn loaded_legacy_agent_workspace_default_becomes_none() {
-        let mut settings = settings_with_path(Some("~/Agent Workspace"));
+    fn loaded_first_built_in_default_becomes_none() {
+        let first_default = crate::path_utils::LEGACY_FIRST_DEFAULT_DISPLAY;
+        let mut settings = settings_with_path(Some(first_default));
         normalize(&mut settings);
         assert_eq!(settings.workspace_path, None);
-        assert!(is_legacy_default_workspace_path("~/Agent Workspace"));
+        assert!(is_legacy_default_workspace_path(first_default));
     }
 
     #[test]
@@ -1345,7 +1346,7 @@ mod tests {
                 enabled_target_ids: vec!["codex_rules".into(), "opencode_config".into()],
                 workspace_path: Some(
                     std::env::temp_dir()
-                        .join("agent-workspace-scrub-missing")
+                        .join("riggverk-scrub-missing")
                         .to_string_lossy()
                         .into_owned(),
                 ),
@@ -1586,7 +1587,7 @@ mod tests {
     #[test]
     fn settings_without_marker_migrate_to_current_target_defaults_once() {
         with_temp_home(|dir| {
-            std::env::remove_var("AGENT_WORKSPACE_PATH");
+            std::env::remove_var("RIGGVERK_WORKSPACE_PATH");
             write_settings_file(
                 dir,
                 &legacy_settings_json(&["codex_rules", "opencode_rules", "opencode_config"]),
@@ -1612,7 +1613,7 @@ mod tests {
     fn migration_keeps_targets_whose_surfaces_are_already_managed() {
         use crate::setup_lifecycle::SetupSurfaceId;
         with_temp_home(|dir| {
-            std::env::remove_var("AGENT_WORKSPACE_PATH");
+            std::env::remove_var("RIGGVERK_WORKSPACE_PATH");
             seed_managed_record(Some("codex_config"), "codex-config-record");
             write_settings_file(dir, &legacy_settings_json(&["codex_rules"]));
 
@@ -1627,7 +1628,7 @@ mod tests {
     #[test]
     fn migration_resolves_managed_surface_from_identity_without_surface_field() {
         with_temp_home(|dir| {
-            std::env::remove_var("AGENT_WORKSPACE_PATH");
+            std::env::remove_var("RIGGVERK_WORKSPACE_PATH");
             let identity = crate::managed_state::artifact_identity(
                 &crate::artifact_registry::ArtifactId::CodexConfig,
             );
@@ -1643,7 +1644,7 @@ mod tests {
     #[test]
     fn migration_ignores_managed_skills_and_workspace_records() {
         with_temp_home(|dir| {
-            std::env::remove_var("AGENT_WORKSPACE_PATH");
+            std::env::remove_var("RIGGVERK_WORKSPACE_PATH");
             seed_managed_record(Some("codex_skills"), "codex-skill-record");
             write_settings_file(dir, &legacy_settings_json(&[]));
 
@@ -1657,7 +1658,7 @@ mod tests {
     #[test]
     fn migration_keeps_targets_the_user_enabled() {
         with_temp_home(|dir| {
-            std::env::remove_var("AGENT_WORKSPACE_PATH");
+            std::env::remove_var("RIGGVERK_WORKSPACE_PATH");
             write_settings_file(dir, &legacy_settings_json(&["codex_config"]));
 
             assert!(load()
@@ -1669,7 +1670,7 @@ mod tests {
     #[test]
     fn settings_with_marker_are_not_migrated() {
         with_temp_home(|dir| {
-            std::env::remove_var("AGENT_WORKSPACE_PATH");
+            std::env::remove_var("RIGGVERK_WORKSPACE_PATH");
             seed_managed_record(Some("codex_config"), "codex-config-record");
             let current = AppSettings {
                 enabled_target_ids: vec!["codex_rules".into()],
@@ -1695,7 +1696,7 @@ mod tests {
     #[test]
     fn a_version_1_file_gains_only_the_light_targets_and_keeps_what_the_user_turned_off() {
         with_temp_home(|dir| {
-            std::env::remove_var("AGENT_WORKSPACE_PATH");
+            std::env::remove_var("RIGGVERK_WORKSPACE_PATH");
             // Every version 1 default except `claude_agents` and `opencode_rules`, which the
             // user switched off; `codex_config` was switched on.
             write_settings_file(
@@ -1746,7 +1747,7 @@ mod tests {
     #[test]
     fn a_version_1_file_with_every_target_off_gains_only_the_default_light_targets() {
         with_temp_home(|dir| {
-            std::env::remove_var("AGENT_WORKSPACE_PATH");
+            std::env::remove_var("RIGGVERK_WORKSPACE_PATH");
             write_settings_file(dir, &settings_json_at_version(1, &[]));
             assert_eq!(
                 load().enabled_target_ids,
@@ -1764,7 +1765,7 @@ mod tests {
     #[test]
     fn a_version_2_file_gains_only_the_mcp_targets_and_never_re_enables_what_was_turned_off() {
         with_temp_home(|dir| {
-            std::env::remove_var("AGENT_WORKSPACE_PATH");
+            std::env::remove_var("RIGGVERK_WORKSPACE_PATH");
             // The user switched `copilot_rules`, `claude_agents` and every MCP-less default off,
             // and kept `kilo_rules`.
             write_settings_file(
@@ -1797,7 +1798,7 @@ mod tests {
     fn a_light_harness_stays_off_after_the_migration_so_nothing_is_written() {
         use crate::agent_targets::HarnessId;
         with_temp_home(|dir| {
-            std::env::remove_var("AGENT_WORKSPACE_PATH");
+            std::env::remove_var("RIGGVERK_WORKSPACE_PATH");
             write_settings_file(dir, &settings_json_at_version(1, &["codex_rules"]));
             let settings = load();
             assert!(settings
@@ -1827,7 +1828,7 @@ mod tests {
     #[test]
     fn saving_stamps_the_marker_so_saved_toggles_are_not_re_migrated() {
         with_temp_home(|_| {
-            std::env::remove_var("AGENT_WORKSPACE_PATH");
+            std::env::remove_var("RIGGVERK_WORKSPACE_PATH");
             let round_tripped = AppSettings {
                 enabled_target_ids: vec!["codex_rules".into()],
                 target_defaults_version: 0,

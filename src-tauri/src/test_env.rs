@@ -115,6 +115,10 @@ pub fn set_test_user_dirs(dir: &Path) {
 pub mod guard {
     use std::sync::{Mutex, MutexGuard, OnceLock};
 
+    use crate::env_overrides::{
+        BACKUP_DIR_ENV, LEGACY_BACKUP_DIR_ENV, LEGACY_WORKSPACE_PATH_ENV, WORKSPACE_PATH_ENV,
+    };
+
     pub fn lock() -> MutexGuard<'static, ()> {
         static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
         ENV_LOCK
@@ -132,8 +136,10 @@ pub mod guard {
         local_appdata: Option<String>,
         xdg_config_home: Option<String>,
         xdg_data_home: Option<String>,
-        agent_workspace_backup_dir: Option<String>,
-        agent_workspace_path: Option<String>,
+        legacy_backup_dir: Option<String>,
+        legacy_workspace_path: Option<String>,
+        backup_dir: Option<String>,
+        workspace_path: Option<String>,
         cursor_skills_path: Option<String>,
         codex_skills_path: Option<String>,
         codex_home: Option<String>,
@@ -152,8 +158,10 @@ pub mod guard {
                 local_appdata: std::env::var("LOCALAPPDATA").ok(),
                 xdg_config_home: std::env::var("XDG_CONFIG_HOME").ok(),
                 xdg_data_home: std::env::var("XDG_DATA_HOME").ok(),
-                agent_workspace_backup_dir: std::env::var("AGENT_WORKSPACE_BACKUP_DIR").ok(),
-                agent_workspace_path: std::env::var("AGENT_WORKSPACE_PATH").ok(),
+                legacy_backup_dir: std::env::var(LEGACY_BACKUP_DIR_ENV).ok(),
+                legacy_workspace_path: std::env::var(LEGACY_WORKSPACE_PATH_ENV).ok(),
+                backup_dir: std::env::var(BACKUP_DIR_ENV).ok(),
+                workspace_path: std::env::var(WORKSPACE_PATH_ENV).ok(),
                 cursor_skills_path: std::env::var("CURSOR_SKILLS_PATH").ok(),
                 codex_skills_path: std::env::var("CODEX_SKILLS_PATH").ok(),
                 codex_home: std::env::var("CODEX_HOME").ok(),
@@ -201,11 +209,13 @@ pub mod guard {
             set_optional("LOCALAPPDATA", self.local_appdata.as_deref());
             set_optional("XDG_CONFIG_HOME", self.xdg_config_home.as_deref());
             set_optional("XDG_DATA_HOME", self.xdg_data_home.as_deref());
+            set_optional(LEGACY_BACKUP_DIR_ENV, self.legacy_backup_dir.as_deref());
             set_optional(
-                "AGENT_WORKSPACE_BACKUP_DIR",
-                self.agent_workspace_backup_dir.as_deref(),
+                LEGACY_WORKSPACE_PATH_ENV,
+                self.legacy_workspace_path.as_deref(),
             );
-            set_optional("AGENT_WORKSPACE_PATH", self.agent_workspace_path.as_deref());
+            set_optional(BACKUP_DIR_ENV, self.backup_dir.as_deref());
+            set_optional(WORKSPACE_PATH_ENV, self.workspace_path.as_deref());
             set_optional("CURSOR_SKILLS_PATH", self.cursor_skills_path.as_deref());
             set_optional("CODEX_SKILLS_PATH", self.codex_skills_path.as_deref());
             set_optional("CODEX_HOME", self.codex_home.as_deref());

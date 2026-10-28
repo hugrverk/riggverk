@@ -18,7 +18,10 @@ use crate::setup_lifecycle::SetupSurfaceId;
 use crate::skill_roots::SkillScope;
 
 pub const MANAGED_STATE_SCHEMA_VERSION: u32 = 2;
-pub const MANAGED_STATE_REL: &str = ".agent-workspace/managed-state.json";
+pub const MANAGED_STATE_REL: &str = ".riggverk/managed-state.json";
+/// Where builds before the rename kept the ownership records. Read in place until the first write
+/// moves the state folder (see `workspace_layout`).
+pub(crate) const LEGACY_MANAGED_STATE_REL: &str = ".agent-workspace/managed-state.json";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ManagedArtifactRecord {
@@ -42,7 +45,7 @@ pub struct ManagedState {
 static STATE_TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 pub fn managed_state_path(workspace_root: &Path) -> PathBuf {
-    workspace_root.join(MANAGED_STATE_REL)
+    crate::workspace_layout::state_file(workspace_root, "managed-state.json")
 }
 
 /// Creates the data folder, owner-only, for the first write that needs it (a state file, a
@@ -417,7 +420,7 @@ mod tests {
     #[test]
     fn round_trip_managed_state() {
         let root = temp_dir("round-trip");
-        fs::create_dir_all(root.join(".agent-workspace")).unwrap();
+        fs::create_dir_all(root.join(crate::workspace_layout::STATE_DIR)).unwrap();
         let state = ManagedState {
             schema_version: MANAGED_STATE_SCHEMA_VERSION,
             bundled_version: crate::stable_digest::bytes(b"bundle"),
@@ -538,7 +541,7 @@ mod tests {
     #[test]
     fn schema_one_is_not_trusted() {
         let root = temp_dir("schema-one");
-        fs::create_dir_all(root.join(".agent-workspace")).unwrap();
+        fs::create_dir_all(root.join(crate::workspace_layout::STATE_DIR)).unwrap();
         fs::write(
             managed_state_path(&root),
             r#"{"schema_version":1,"bundled_version":"legacy","artifacts":[]}"#,
@@ -552,7 +555,7 @@ mod tests {
     #[test]
     fn managed_state_symlink_is_not_trusted_or_overwritten() {
         let root = temp_dir("symlink");
-        fs::create_dir_all(root.join(".agent-workspace")).unwrap();
+        fs::create_dir_all(root.join(crate::workspace_layout::STATE_DIR)).unwrap();
         let outside = root.join("outside.json");
         fs::write(&outside, "{}").unwrap();
         std::os::unix::fs::symlink(&outside, managed_state_path(&root)).unwrap();

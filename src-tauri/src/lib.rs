@@ -10,6 +10,7 @@ mod commands;
 mod config_preferences;
 mod cursor_profile_ops;
 mod cursor_profile_paths;
+mod env_overrides;
 mod executable_resolver;
 mod file_conflicts;
 mod installation_status;
@@ -45,6 +46,7 @@ mod skill_roots;
 #[cfg(test)]
 mod skills_install;
 mod stable_digest;
+mod workspace_layout;
 
 #[cfg(test)]
 mod app_data_migration_contract;
@@ -58,6 +60,8 @@ mod file_conflicts_contract;
 mod health_bundle_contract;
 #[cfg(test)]
 mod identity_contract;
+#[cfg(test)]
+mod legacy_layout_contract;
 #[cfg(test)]
 mod library_scope_contract;
 #[cfg(test)]
