@@ -15,7 +15,7 @@ The app keeps no copy of the bundle in the data folder, and Install never writes
 The data folder holds only the app's state, in `.riggverk/` (`managed-state.json` ownership records, `kept-files.json`, `rules-preferences.json`, `config-preferences.json`, and the `workspace.json` marker where an earlier release wrote it: never removed, not created for new users), and your text: personal docs in `docs/context/`. Whether it is usable depends on the folder itself, never on bundle files in it:
 
 - The default folder (`~/.config/riggverk`) is usable when it is absent (a fresh profile) or a real directory. A harness can be installed with no data folder yet.
-- An `RIGGVERK_WORKSPACE_PATH` folder must be an existing real directory.
+- A `RIGGVERK_WORKSPACE_PATH` folder must be an existing real directory.
 - A custom folder saved in Settings (by an earlier version) is used while it is a real directory holding the app's state (`.riggverk/managed-state.json`, or the state folder and marker of an earlier release); otherwise the app falls back to the default folder and clears the saved path. Removing old copies from the folder never invalidates it or clears the path: a saved custom folder that holds `.riggverk/` stays configured after the cleanup.
 - A symlink or a file in place of the folder makes it unusable: the Workspace page says why, and nothing that needs the folder runs.
 

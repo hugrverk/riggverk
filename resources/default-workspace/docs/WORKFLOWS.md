@@ -45,7 +45,7 @@ The app never overwrites a file it does not provably own. To accept the bundled 
 
 ## Remove old workspace copies
 
-Earlier releases copied the bundle into `~/.config/riggverk`. The app no longer reads those files.
+Earlier releases copied the bundle into the data folder. The app no longer reads those files.
 
 1. Workspace tab (`1`). The `workspace` row says `N old copies to remove` (a fresh profile says `current`).
 2. `u` on the row. The review lists the removals per folder and each file left in place (edited, or not provably the app's).
