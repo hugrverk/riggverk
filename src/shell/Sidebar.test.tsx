@@ -14,15 +14,15 @@ function plain(props: Partial<Parameters<typeof Sidebar>[0]> = {}) {
 }
 
 describe("Sidebar", () => {
-  it("lists Overview, the enabled agents, Library and Settings in order, under section labels", () => {
+  it("lists Overview, the enabled agents, History, Library and Settings in order, under section labels", () => {
     const { container } = plain();
-    expect(items(container)).toEqual(["Overview", "Codex", "OpenCode", "Cursor", "Claude", "Library", "Settings"]);
+    expect(items(container)).toEqual(["Overview", "Codex", "OpenCode", "Cursor", "Claude", "History", "Library", "Settings"]);
     expect(Array.from(container.querySelectorAll(".nl")).map(label => label.textContent)).toEqual(["Agents", "Workspace"]);
     expect(within(screen.getByRole("group", { name: "Agents" })).getAllByRole("button").map(b => b.getAttribute("aria-label") ?? b.textContent)).toEqual([
       "Codex", "OpenCode", "Cursor", "Claude", "3 more agents",
     ]);
     expect(within(screen.getByRole("group", { name: "Workspace" })).getAllByRole("button").map(b => b.getAttribute("aria-label"))).toEqual([
-      "Library", "Settings",
+      "History", "Library", "Settings",
     ]);
     expect(screen.getByRole("navigation", { name: "Main navigation" })).not.toBeNull();
   });
@@ -32,8 +32,9 @@ describe("Sidebar", () => {
     expect(screen.getByRole("button", { name: "Overview" }).getAttribute("aria-keyshortcuts")).toBe("1");
     expect(screen.getByRole("button", { name: "Overview" }).getAttribute("title")).toBe("Overview (1)");
     expect(screen.getByRole("button", { name: "Kilo" }).getAttribute("aria-keyshortcuts")).toBe("8");
-    expect(screen.getByRole("button", { name: "Library" }).getAttribute("aria-keyshortcuts")).toBe("9");
-    // With every agent on, Settings falls beyond the digit keys.
+    expect(screen.getByRole("button", { name: "History" }).getAttribute("aria-keyshortcuts")).toBe("9");
+    // With every agent on, Library and Settings fall beyond the digit keys.
+    expect(screen.getByRole("button", { name: "Library" }).getAttribute("aria-keyshortcuts")).toBeNull();
     expect(screen.getByRole("button", { name: "Settings" }).getAttribute("aria-keyshortcuts")).toBeNull();
     expect(screen.getByRole("button", { name: "Settings" }).getAttribute("title")).toBe("Settings");
     expect(screen.queryByText(/more agents?$/)).toBeNull();
@@ -42,13 +43,14 @@ describe("Sidebar", () => {
   it("hides only disabled agents and renumbers the items after them", () => {
     const { container } = plain({ enabledHarnessIds: ["codex", "opencode", "cursor"] });
     expect(screen.queryByRole("button", { name: "Claude" })).toBeNull();
-    expect(items(container)).toEqual(["Overview", "Codex", "OpenCode", "Cursor", "Library", "Settings"]);
-    expect(screen.getByRole("button", { name: "Library" }).getAttribute("aria-keyshortcuts")).toBe("5");
+    expect(items(container)).toEqual(["Overview", "Codex", "OpenCode", "Cursor", "History", "Library", "Settings"]);
+    expect(screen.getByRole("button", { name: "History" }).getAttribute("aria-keyshortcuts")).toBe("5");
+    expect(screen.getByRole("button", { name: "Library" }).getAttribute("aria-keyshortcuts")).toBe("6");
   });
 
-  it("with every agent hidden, only Overview, Library and Settings remain", () => {
+  it("with every agent hidden, only Overview, History, Library and Settings remain", () => {
     const { container } = plain({ enabledHarnessIds: [] });
-    expect(items(container)).toEqual(["Overview", "Library", "Settings"]);
+    expect(items(container)).toEqual(["Overview", "History", "Library", "Settings"]);
     expect(screen.getByRole("button", { name: "7 more agents" })).not.toBeNull();
   });
 

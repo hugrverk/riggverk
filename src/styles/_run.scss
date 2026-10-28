@@ -1,1 +1,127 @@
-/* Populated by a later slice of the UI rebuild. */
+/* ═══════════════════════════════════════════════════════════════════════════════════
+   Run panel and receipts (Grafit 1A "Bläck").
+
+     .run-panel               what a task looks like on the page (components/run/RunPanel.tsx): one hairline line with
+                              the label, a hairline progress bar and the file while it runs, the outcome in words and
+                              its actions (Undo, Details, Dismiss) once it ends; .run-details holds the redacted log
+     .receipt                 Changed / Checked / Left for you / Backup (components/run/Receipt.tsx), shared by the
+                              Overview's Last update cell and the History page
+
+   Radius 0, no hue but the state colours of the pill. The progress bar is a 3px hairline filled with the ready hue.
+   ═══════════════════════════════════════════════════════════════════════════════════ */
+
+.receipt {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  font-size: calc(var(--fs) * 0.96);
+}
+
+.receipt > div {
+  display: grid;
+  grid-template-columns: minmax(7ch, 96px) minmax(0, 1fr);
+  gap: 12px;
+}
+
+.receipt dt { color: var(--text-muted); }
+
+.receipt dd {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: calc(var(--fs) * 0.9);
+  overflow-wrap: anywhere;
+}
+
+/* ---- run panel ---- */
+
+/* Nothing has run: the strip around the panel has no content and takes no room. */
+.ov-strip:empty { display: none; }
+
+.run-panel {
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+  font-family: var(--font-sans);
+  font-size: var(--fs);
+}
+
+.run-panel:focus-visible { outline: none; }
+
+[data-motion="full"] .run-panel { animation: run-in var(--dur-view) var(--ease) both; }
+
+@keyframes run-in { from { opacity: 0; transform: translateY(4px); } }
+
+.run-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  min-width: 0;
+  padding: 10px 14px;
+}
+
+.run-lbl {
+  font-family: var(--font-mono);
+  font-size: max(10px, calc(var(--fs) * 0.77));
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.run-cmd { font-weight: 500; color: var(--text-heading); }
+.run-lbl .run-cmd { letter-spacing: 0; }
+
+.run-when,
+.run-count {
+  font-family: var(--font-mono);
+  font-size: calc(var(--fs) * 0.9);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+.run-file {
+  flex: 1 1 8ch;
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: calc(var(--fs) * 0.9);
+  color: var(--text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.run-bar {
+  flex: none;
+  width: 120px;
+  height: 3px;
+  background: var(--border);
+}
+
+.run-bar > i {
+  display: block;
+  width: var(--p, 0%);
+  height: 100%;
+  background: var(--ready);
+  transition: width var(--dur-view) var(--ease);
+}
+
+.run-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.run-details {
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+  padding: 10px 14px 14px;
+  border-top: 1px solid var(--border);
+}
+
+.run-log {
+  justify-self: stretch;
+  max-height: 40vh;
+  overflow: auto;
+  min-width: 0;
+}

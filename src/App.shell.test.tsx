@@ -137,7 +137,10 @@ describe("App shell", () => {
     await ready();
     fireEvent.keyDown(document.body, { key: "3" });
     await waitFor(() => expect(currentTab()).toBe("OpenCode"));
-    fireEvent.keyDown(document.body, { key: "7" });
+    fireEvent.keyDown(document.body, { key: "6" });
+    await waitFor(() => expect(currentTab()).toBe("History"));
+    await screen.findByRole("region", { name: "History" });
+    fireEvent.keyDown(document.body, { key: "8" });
     await waitFor(() => expect(currentTab()).toBe("Settings"));
     await screen.findByRole("region", { name: "Settings" });
     fireEvent.keyDown(document.body, { key: "1" });
@@ -166,9 +169,9 @@ describe("App shell", () => {
     const backend = installBackend({ enabled_harness_ids: ["codex", "opencode", "claude", "cursor", "pi"] });
     render(<App />);
     await within(nav()).findByRole("button", { name: "Pi" });
-    // Overview, Codex, OpenCode, Cursor, Claude, Pi, Library, Settings (then the dim "2 more agents" row).
+    // Overview, Codex, OpenCode, Cursor, Claude, Pi, History, Library, Settings (then the dim "2 more agents" row).
     expect(Array.from(nav().querySelectorAll("button.nav:not(.dim)")).map(item => item.getAttribute("aria-label"))).toEqual([
-      "Overview", "Codex", "OpenCode", "Cursor", "Claude", "Pi", "Library", "Settings",
+      "Overview", "Codex", "OpenCode", "Cursor", "Claude", "Pi", "History", "Library", "Settings",
     ]);
     fireEvent.keyDown(document.body, { key: "6" });
     await waitFor(() => expect(currentTab()).toBe("Pi"));
@@ -205,6 +208,28 @@ describe("App shell", () => {
     fireEvent.keyDown(input, { key: "Enter" });
     await screen.findByRole("region", { name: "Settings" });
     expect(currentTab()).toBe("Settings");
+  });
+
+  it("opens History via the :history command and asks the backend for the list", async () => {
+    const backend = installBackend();
+    render(<App />);
+    await ready();
+    fireEvent.keyDown(document.body, { key: ":", shiftKey: true });
+    const input = screen.getByRole("combobox", { name: "Command" });
+    fireEvent.change(input, { target: { value: "history" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await screen.findByRole("region", { name: "History" });
+    expect(currentTab()).toBe("History");
+    await waitFor(() => expect(backend.commandLog).toContain("list_setup_history"));
+  });
+
+  it("does nothing on z while this session has no update to undo", async () => {
+    const backend = installBackend();
+    render(<App />);
+    await ready();
+    fireEvent.keyDown(document.body, { key: "z" });
+    await act(async () => {});
+    expect(backend.commandLog).not.toContain("rollback_setup_transaction");
   });
 
   it("refuses a hidden harness command with the reason instead of navigating", async () => {

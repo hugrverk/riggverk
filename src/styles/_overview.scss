@@ -293,28 +293,7 @@
 
 /* ---- last update ---- */
 
-.ov-rcpt {
-  display: grid;
-  gap: 6px;
-  margin: 0;
-  font-size: calc(var(--fs) * 0.96);
-}
-
-.ov-rcpt > div {
-  display: grid;
-  grid-template-columns: minmax(7ch, 96px) minmax(0, 1fr);
-  gap: 12px;
-}
-
-.ov-rcpt dt { color: var(--text-muted); }
-
-.ov-rcpt dd {
-  margin: 0;
-  font-family: var(--font-mono);
-  font-size: calc(var(--fs) * 0.9);
-  overflow-wrap: anywhere;
-}
-
+/* The receipt itself (.receipt) is shared with the History page and styled in _run.scss. */
 .ov-cell > .tbtn { justify-self: start; margin-top: 4px; }
 
 /* ---- agents that are off ---- */

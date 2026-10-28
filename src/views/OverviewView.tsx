@@ -6,7 +6,8 @@ import { OverviewHeader } from "../components/overview/OverviewHeader";
 import { WorkspaceFolderCell } from "../components/overview/WorkspaceFolderCell";
 import { WorthALookCell } from "../components/overview/WorthALookCell";
 import { InstallPlanPane } from "../components/InstallPlanPane";
-import { OutputStrip, useFocusOutputOnNewTransaction } from "../components/OutputStrip";
+import { useFocusOutputOnNewTransaction } from "../components/OutputStrip";
+import { RunPanel } from "../components/run/RunPanel";
 import { useLastUpdate } from "../hooks/useLastUpdate";
 import { usePostureOverview } from "../hooks/usePostureOverview";
 import type { Binding } from "../keyboard/registry";
@@ -59,7 +60,7 @@ function fillerCount(cards: number): number {
  * in the agents' security settings, the agents that are off, and the workspace folder (collapsed, with Uninstall).
  * Cells open the agent's page; nothing here writes. `u` opens the review of every update (Update all), `p` the
  * read-only preview of it, `r` checks again, `o` and `B` open the folders; the review replaces the page while it is
- * open and only `y` there applies it. The output strip stays at the bottom until the run panel replaces it.
+ * open and only `y` there applies it. The run panel sits at the bottom: progress while a task runs, then its outcome with Undo, Details and Dismiss.
  */
 export function OverviewView({
   workspaceDiagnostics,
@@ -88,7 +89,6 @@ export function OverviewView({
   wsLogCompletedAt,
   wsRunning,
   wsProgress,
-  status,
   dataFolderOk,
   onClearOutput,
 }: OverviewViewProps) {
@@ -163,14 +163,12 @@ export function OverviewView({
     { enabled: !showPlan },
   );
 
-  const outputStrip = (
-    <OutputStrip
+  const runPanel = (
+    <RunPanel
       wsRunning={wsRunning}
       progress={wsProgress}
       wsLog={wsLog}
       wsLogCompletedAt={wsLogCompletedAt}
-      status={status}
-      dataFolderOk={dataFolderOk}
       onClear={onClearOutput}
       onRefresh={onRefresh}
       rollbackTransactionId={rollbackTransactionId}
@@ -182,7 +180,7 @@ export function OverviewView({
     return (
       <section className="screen review" aria-label="Workspace install review">
         <InstallPlanPane flow={install.flow} busyLabel={wsRunning} backupRoot={backupRoot} onApply={install.apply} />
-        {outputStrip}
+        {runPanel}
       </section>
     );
   }
@@ -237,7 +235,7 @@ export function OverviewView({
           />
         </div>
       </Page>
-      <div className="ov-strip">{outputStrip}</div>
+      <div className="ov-strip">{runPanel}</div>
     </div>
   );
 }

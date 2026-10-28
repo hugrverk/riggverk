@@ -485,4 +485,23 @@ describe("mock backend: setup history", () => {
     expect(await invoke("list_setup_history", { limit: null })).toHaveLength(3);
     await expect(invoke("list_setup_history", { limit: -1 })).rejects.toThrow("unsigned 32-bit");
   });
+
+  // Last in the file: it undoes the newest run, which the tests above read as the newest completed one.
+  it("undoes a history run only after a real rollback, and hands the offer to the next completed run", async () => {
+    const [newest, , oldest] = await invoke<SetupHistoryEntry[]>("list_setup_history");
+    const dry = await invoke<SetupResult>("rollback_setup_transaction", { transactionId: newest!.transaction_id, dryRun: true });
+    expect(dry).toMatchObject({ success: true, rolled_back: [] });
+    expect(dry.applied).toEqual(newest!.changes.map(change => change.path));
+    expect((await invoke<SetupHistoryEntry[]>("list_setup_history"))[0]).toMatchObject({ status: "applied", undoable: true });
+
+    const done = await invoke<SetupResult>("rollback_setup_transaction", { transactionId: newest!.transaction_id, dryRun: false });
+    expect(done.success).toBe(true);
+    const after = await invoke<SetupHistoryEntry[]>("list_setup_history");
+    expect(after[0]).toMatchObject({ status: "rolled_back", undoable: false, is_newest_completed: false });
+    expect(after[0]!.changes.every(change => change.restored)).toBe(true);
+    expect(after.filter(entry => entry.undoable).map(entry => entry.transaction_id)).toEqual([oldest!.transaction_id]);
+    // A run that is not offered cannot be undone.
+    const refused = await invoke<SetupResult>("rollback_setup_transaction", { transactionId: after[1]!.transaction_id, dryRun: true });
+    expect(refused.success).toBe(false);
+  });
 });
