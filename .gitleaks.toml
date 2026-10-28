@@ -1,0 +1,41 @@
+title = "Riggverk secret scanning"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Synthetic terminal redaction fixtures"
+targetRules = ["generic-api-key", "jwt", "private-key"]
+paths = ['''(^|/)src/lib/redactTerminalOutput\.test\.ts$''']
+
+[[allowlists]]
+description = "Synthetic Output pane fixtures"
+targetRules = ["generic-api-key"]
+paths = ['''(^|/)src/components/OutputStrip\.test\.tsx$''']
+
+[[allowlists]]
+description = "Synthetic Cursor unsafe-literal fixture"
+targetRules = ["generic-api-key"]
+condition = "AND"
+paths = ['''(^|/)src-tauri/src/commands/cursor_profile\.rs$''']
+regexTarget = "secret"
+regexes = ['''^sk-test[A-Za-z0-9_-]{20}$''']
+
+[[allowlists]]
+description = "Synthetic private-key conflict fixture"
+targetRules = ["generic-api-key"]
+condition = "AND"
+paths = ['''(^|/)src-tauri/src/file_conflicts_contract\.rs$''']
+regexTarget = "secret"
+regexes = ['''^SECR[A-Za-z0-9_-]{22}$''']
+
+[[allowlists]]
+description = "Documentation prose about authentication headers"
+targetRules = ["generic-api-key"]
+condition = "AND"
+paths = [
+  '''(^|/)README\.md$''',
+  '''(^|/)(docs|resources/default-workspace/docs)/.*\.md$''',
+]
+regexTarget = "match"
+regexes = ['''(?i)^auth[ \t]+headers\b''']
