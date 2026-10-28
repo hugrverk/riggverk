@@ -64,6 +64,7 @@ import type {
   RulesFileContent,
   RulesFileSummary,
   RulesMalformedReason,
+  PackLibrary,
   RulesStatus,
   RulesSurfaceId,
   SecurityPosture,
@@ -1353,6 +1354,23 @@ const skills: SkillSummary[] = scenario === "empty"
     related: ["implementation-plan", "diagnose"].filter(r => r !== id),
   }));
 
+// Skill packs: one pack that loads, one whose folder is gone while its skill stays installed.
+const packLibrary: PackLibrary = scenario === "empty" || scenario === "fresh"
+  ? { folder: "~/.config/riggverk/packs", packs: [], skills: [], ignored: [] }
+  : {
+    folder: "~/.config/riggverk/packs",
+    packs: [
+      { name: "mine", state: "ok", reason: "", forgettable: false },
+      { name: "old-pack", state: "missing", reason: "the pack folder is gone", forgettable: true },
+    ],
+    skills: [
+      { id: "pack:mine/my-checklist", name: "my-checklist", description: "A checklist kept in the pack.", pack: "mine", state: "active", reason: "", path: "skills/my-checklist/SKILL.md" },
+      { id: "pack:mine/tdd", name: "tdd", description: "A pack skill named like a bundled one.", pack: "mine", state: "shadowed", reason: "the bundle ships a skill with this name; the bundle's version is used", path: "skills/tdd/SKILL.md" },
+      { id: "pack:old-pack/old-skill", name: "old-skill", description: "", pack: "old-pack", state: "missing", reason: "pack missing", path: "" },
+    ],
+    ignored: [],
+  };
+
 function skillContent(id: string): string {
   const title = id.split("-").map(w => w[0].toUpperCase() + w.slice(1)).join(" ");
   return [
@@ -1911,11 +1929,21 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
       return scenario === "error" ? unavailable() : posture(arg<InstallAgent>(args, "harness"));
     case "list_skills":
       return skills;
+    case "list_pack_skills":
+      return packLibrary;
+    case "forget_pack": {
+      const name = arg<string>(args, "name");
+      packLibrary.packs = packLibrary.packs.filter(pack => pack.name !== name);
+      packLibrary.skills = packLibrary.skills.filter(skill => skill.pack !== name);
+      return 1;
+    }
     case "get_effective_skill_loads":
       await delay(120);
       return scenario === "error" ? unavailable() : effectiveSkillLoads();
     case "read_skill": {
       const id = arg<string>(args, "id");
+      const packSkill = packLibrary.skills.find(s => s.id === id);
+      if (packSkill) return { id, title: packSkill.name, path: packSkill.path, section: `pack:${packSkill.pack}`, source: "pack", content: `# ${packSkill.name}\n\n${packSkill.description || packSkill.reason}\n` } satisfies DocumentContent;
       const skill = skills.find(s => s.id === id);
       if (!skill) throw new Error(`skill ${id} not found`);
       return { id, title: skill.name, path: skill.path, section: "workspace", source: "curated", content: skillContent(id) } satisfies DocumentContent;

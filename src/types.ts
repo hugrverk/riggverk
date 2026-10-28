@@ -17,6 +17,8 @@ export interface DocSummary {
 export interface SkillSummary {
   id: string; name: string; description: string; path: string; group: string;
   category: string; risk: string; targets: string[]; related: string[];
+  /** Set on a skill from a pack: its state and why it is not active. */
+  packState?: PackSkillState; packReason?: string;
 }
 
 export interface AgentMetadataEntry {
@@ -230,6 +232,8 @@ export interface TakeBundledUnit {
   /** Files beyond the ones listed; they are replaced too. */
   more_files: number;
   diff: FileDiffView;
+  /** `pack:<name>` when the replacing files come from a skill pack; absent for the bundle. */
+  source?: string;
 }
 
 /** What replacing the files of these units by the bundled ones would do (`preview_take_bundled`), and the proof to apply it. */
@@ -924,6 +928,32 @@ export interface SetupResult {
   rolled_back: string[];
   manual_steps: string[];
   message: string;
+}
+
+/** A pack skill: `active` is in the catalog, `shadowed` loses to a bundled skill of its name, `error` is invalid or ambiguous, `missing` is installed while its pack cannot be read. */
+export type PackSkillState = "active" | "shadowed" | "error" | "missing";
+
+export interface PackSkillEntry {
+  id: string; name: string; description: string; pack: string;
+  state: PackSkillState; reason: string; path: string;
+}
+
+export interface PackEntry {
+  name: string;
+  /** `ok`, `refused`, or `missing` (skills of it are installed, its folder is gone). */
+  state: "ok" | "refused" | "missing";
+  reason: string;
+  /** "Forget pack" applies: its installed skills are held and it provides none. */
+  forgettable: boolean;
+}
+
+export interface PackLibrary {
+  /** Why `pack-skills.json` cannot be used; set, installed pack skills are kept as they are. */
+  record_problem?: string | null;
+  folder: string;
+  packs: PackEntry[];
+  skills: PackSkillEntry[];
+  ignored: { name: string; reason: string }[];
 }
 
 /** Persisted plan facts. A null history receipt means these facts were not recorded. */

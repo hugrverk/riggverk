@@ -11,6 +11,7 @@ use crate::commands::cursor_profile::cursor_root;
 use crate::commands::{
     extract_managed_codex_config, extract_managed_opencode_config, render_expected_opencode_config,
 };
+use crate::skill_sources::SourceRoot;
 pub const ABSENT_DIGEST: &str = crate::stable_digest::ABSENT;
 
 fn hash_bytes(bytes: &[u8]) -> String {
@@ -84,9 +85,12 @@ fn artifact_kind(artifact: &ArtifactId) -> ArtifactKind {
     }
 }
 
-fn require_source_path(artifact: &ArtifactId, workspace_root: &Path) -> Result<PathBuf, String> {
+fn require_source_path<R: SourceRoot + ?Sized>(
+    artifact: &ArtifactId,
+    sources: &R,
+) -> Result<PathBuf, String> {
     artifact
-        .resolve_source(workspace_root)
+        .resolve_source(sources)
         .ok_or_else(|| format!("no canonical source for artifact {:?}", artifact))
 }
 
@@ -204,9 +208,9 @@ pub fn codex_managed_digest(config: &toml::Value) -> String {
 /// installed side, so plans, fingerprints and ownership records agree on what "current" means.
 /// `bundled_root` holds the template; `runtime_root` is the workspace folder that records the
 /// choice. The version of the bundle is not such a place: it stays the plain template's.
-pub fn artifact_effective_source_digest(
+pub fn artifact_effective_source_digest<R: SourceRoot + ?Sized>(
     artifact: &ArtifactId,
-    bundled_root: &Path,
+    bundled_root: &R,
     runtime_root: &Path,
     home: &Path,
 ) -> Result<String, String> {
@@ -235,13 +239,14 @@ pub fn artifact_effective_source_digest(
 }
 
 /// Hash canonical source content for an artifact. Missing source is an error.
-pub fn artifact_source_digest(
+pub fn artifact_source_digest<R: SourceRoot + ?Sized>(
     artifact: &ArtifactId,
-    workspace_root: &Path,
+    sources: &R,
     home: &Path,
 ) -> Result<String, String> {
+    let workspace_root = sources.bundle();
     if artifact.is_rules_block() {
-        let source = require_source_path(artifact, workspace_root)?;
+        let source = require_source_path(artifact, sources)?;
         crate::path_safety::reject_symlink(&source, "rules source")?;
         let bytes = fs::read(&source).map_err(|e| format!("read {}: {e}", source.display()))?;
         return crate::rules_block::source_digest(&bytes);
@@ -250,19 +255,19 @@ pub fn artifact_source_digest(
         ArtifactKind::RulesFile | ArtifactKind::AgentFile
             if matches!(artifact, ArtifactId::WorkspaceFile(_)) =>
         {
-            let source = require_source_path(artifact, workspace_root)?;
+            let source = require_source_path(artifact, sources)?;
             hash_file(&source)
         }
         ArtifactKind::RulesFile | ArtifactKind::AgentFile => {
-            let source = require_source_path(artifact, workspace_root)?;
+            let source = require_source_path(artifact, sources)?;
             hash_file(&source)
         }
         ArtifactKind::SkillFile => {
-            let source = require_source_path(artifact, workspace_root)?;
+            let source = require_source_path(artifact, sources)?;
             hash_file(&source)
         }
         ArtifactKind::ConfigFile if artifact == &ArtifactId::OpenCodeConfig => {
-            let source = require_source_path(artifact, workspace_root)?;
+            let source = require_source_path(artifact, sources)?;
             let template_str =
                 fs::read_to_string(&source).map_err(|e| format!("read opencode source: {e}"))?;
             let template_json: serde_json::Value = serde_json::from_str(&template_str)
@@ -272,7 +277,7 @@ pub fn artifact_source_digest(
             hash_json_value(&extract_managed_opencode_config(&rendered))
         }
         ArtifactKind::ConfigFile if artifact == &ArtifactId::CodexConfig => {
-            let source = require_source_path(artifact, workspace_root)?;
+            let source = require_source_path(artifact, sources)?;
             let source_str =
                 fs::read_to_string(&source).map_err(|e| format!("read codex source: {e}"))?;
             let source_toml: toml::Value = source_str
@@ -281,7 +286,7 @@ pub fn artifact_source_digest(
             Ok(codex_managed_digest(&source_toml))
         }
         ArtifactKind::TuiConfig => {
-            let source = require_source_path(artifact, workspace_root)?;
+            let source = require_source_path(artifact, sources)?;
             let keys = crate::opencode_tui::managed_keys()?;
             let template = crate::opencode_tui::bundled(&source)?;
             hash_json_value(&serde_json::Value::Object(
@@ -293,7 +298,7 @@ pub fn artifact_source_digest(
             crate::claude_settings::managed_values(),
         )),
         ArtifactKind::McpConfig if artifact == &ArtifactId::OpenCodePlaywrightMcp => {
-            let source = require_source_path(artifact, workspace_root)?;
+            let source = require_source_path(artifact, sources)?;
             hash_file(&source)
         }
         ArtifactKind::McpConfig if artifact == &ArtifactId::CursorMcp => {

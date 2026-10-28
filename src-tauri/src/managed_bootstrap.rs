@@ -235,8 +235,8 @@ pub fn legacy_skill_artifacts(
     home: &Path,
     wanted: &SkillScope,
 ) -> Result<Vec<ArtifactId>, String> {
-    let bundled_root = crate::setup_roots::bundled_root_for(workspace_root)?;
-    let current = crate::artifact_registry::catalog_skill_files(&bundled_root)?;
+    let sources = crate::skill_sources::SkillSources::for_workspace(workspace_root)?;
+    let current = crate::artifact_registry::catalog_skill_files(&sources)?;
     let mut artifacts = Vec::new();
     for root in SkillRoot::ALL {
         let Ok(dir) = root.path(home) else {
@@ -478,7 +478,7 @@ pub fn retired_workspace_copy_owned(
 
 /// Digest of the bundle's own file for a workspace copy, when the bundle still holds it.
 fn current_bundle_digest(artifact: &ArtifactId, bundled_root: &Path) -> Option<String> {
-    let source = artifact.resolve_source(bundled_root)?;
+    let source = artifact.resolve_bundle_source(bundled_root)?;
     if !fs::symlink_metadata(&source).is_ok_and(|meta| meta.is_file()) {
         return None;
     }

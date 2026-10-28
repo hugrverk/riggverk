@@ -643,7 +643,7 @@ pub fn take_bundled_files(
     workspace_root: &Path,
     home: &Path,
 ) -> (Vec<TakeBundledFile>, usize) {
-    let bundled_root = crate::setup_roots::bundled_root_for(workspace_root).ok();
+    let bundled_root = crate::skill_sources::SkillSources::for_workspace(workspace_root).ok();
     let files = unit
         .files
         .iter()
@@ -654,7 +654,7 @@ pub fn take_bundled_files(
                 .find(|operation| operation.artifact == file.artifact)?
                 .overwrite
                 .as_ref()?;
-            let bundled = bundled_root.as_deref().and_then(|root| {
+            let bundled = bundled_root.as_ref().and_then(|root| {
                 crate::setup_fingerprint::artifact_source_digest(&file.artifact, root, home).ok()
             });
             let status = file_status(file, &dest_file_name(&file.artifact, home, workspace_root));

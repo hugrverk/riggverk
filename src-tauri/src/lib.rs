@@ -43,6 +43,7 @@ mod skill_discovery;
 mod skill_health;
 mod skill_loads;
 mod skill_roots;
+mod skill_sources;
 #[cfg(test)]
 mod skills_install;
 mod stable_digest;
@@ -85,6 +86,8 @@ mod skill_files_contract;
 #[cfg(test)]
 mod skill_folders_contract;
 #[cfg(test)]
+mod skill_packs_contract;
+#[cfg(test)]
 mod smoke_runtime;
 #[cfg(test)]
 mod test_env;
@@ -107,6 +110,7 @@ use commands::{
     rollback_setup_transaction, save_doc, save_rules_refinements, set_codex_config_kept,
     set_files_kept, set_rules_user_managed, update_opencode_model_selection, update_settings,
 };
+use commands::{forget_pack, list_pack_skills, read_pack_skill};
 use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -181,6 +185,9 @@ pub fn run() {
             preview_take_bundled,
             apply_take_bundled,
             get_security_posture,
+            list_pack_skills,
+            read_pack_skill,
+            forget_pack,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

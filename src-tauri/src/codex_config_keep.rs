@@ -210,7 +210,7 @@ fn read_pair(workspace_root: &Path, home: &Path) -> Result<(toml::Value, toml::V
     }
     let bundled = crate::setup_roots::bundled_root_for(workspace_root)?;
     let source = artifact
-        .resolve_source(&bundled)
+        .resolve_bundle_source(&bundled)
         .ok_or_else(|| "the bundled Codex config is unavailable".to_string())?;
     Ok((
         read_toml(&dest, "installed Codex config.toml")?,

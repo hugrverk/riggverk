@@ -6,6 +6,7 @@ import { invokeOpen } from "../lib/invokeOpen";
 import { useConfirm } from "../components/ConfirmDialog";
 import { createSaveOperationTracker } from "../lib/editorSaveOperation";
 import { isLibrarySourceTypeDirty, isPersonalDoc } from "../lib/libraryDirtyGuards";
+import { packSkillSummaries } from "../lib/packSkills";
 import type { LibrarySourceType } from "../views/LibraryView";
 import type {
   AgentMetadataListResponse,
@@ -14,6 +15,7 @@ import type {
   ConfigEditorSourceMeta,
   DocSummary,
   DocumentContent,
+  PackLibrary,
   RulesFileContent,
   RulesFileSummary,
   RulesSurfaceId,
@@ -45,6 +47,8 @@ export function useLibraryController({
   const confirm = useConfirm();
   const [skills, setSkills] = useState<SkillSummary[]>([]);
   const [skillsLoaded, setSkillsLoaded] = useState(false);
+  const [packLibrary, setPackLibrary] = useState<PackLibrary | null>(null);
+  const [packError, setPackError] = useState<string | null>(null);
   const [activeSkillId, setActiveSkillId] = useState<string | null>(null);
   const [activeSkillContent, setActiveSkillContent] = useState<DocumentContent | null>(null);
   const [skillSearch, setSkillSearch] = useState("");
@@ -135,8 +139,19 @@ export function useLibraryController({
 
   const loadSkills = useCallback(async (generation = workspaceLoadGenerationRef.current) => {
     try {
-      const loaded = await invoke<SkillSummary[]>("list_skills");
+      const bundled = await invoke<SkillSummary[]>("list_skills");
+      // The skills of the user's packs follow the bundled ones. A pack problem never hides the bundle.
+      let packs: PackLibrary | null = null;
+      let packFailure: string | null = null;
+      try {
+        packs = await invoke<PackLibrary>("list_pack_skills");
+      } catch (e) {
+        packFailure = String(e);
+      }
+      const loaded = [...bundled, ...packSkillSummaries(packs)];
       if (!isWorkspaceLoadCurrent(generation)) return;
+      setPackLibrary(packs);
+      setPackError(packFailure);
       setSkills(loaded);
       setSkillsLoaded(true);
       if (loaded.length > 0) {
@@ -638,6 +653,23 @@ export function useLibraryController({
     setConfigEditorSourceContent(null);
   }, []);
 
+  /** Stops holding the installed skills of a pack that is gone; the next Install removes them (with a backup). */
+  const forgetPack = useCallback(async (name: string) => {
+    const ok = await confirm({
+      title: `Forget pack ${name}?`,
+      message: `The skills installed from ${name} are no longer kept. The next Install removes the copies Riggverk installed, with a backup. Your own files in the pack folder are not touched.`,
+      confirmLabel: "Forget pack",
+      destructive: true,
+    });
+    if (!ok) return;
+    try {
+      await invoke<number>("forget_pack", { name });
+      await loadSkills();
+    } catch (e) {
+      setError(`Forget pack: ${e}`);
+    }
+  }, [confirm, loadSkills, setError]);
+
   const readSkill = useCallback(async (id: string) => {
     activeSkillIdRef.current = id;
     setActiveSkillId(id);
@@ -678,6 +710,9 @@ export function useLibraryController({
   return {
     skills,
     skillsLoaded,
+    packLibrary,
+    packError,
+    forgetPack,
     activeSkillId,
     activeSkillContent,
     skillSearch,

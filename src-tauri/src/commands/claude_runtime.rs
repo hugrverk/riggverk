@@ -20,6 +20,7 @@ use crate::agent_targets;
 use crate::commands::status::file_eq;
 use crate::skill_health::{skill_files_status, SkillFilesStatus};
 use crate::skill_roots::SkillRoot;
+use crate::skill_sources::SkillSources;
 
 /// All managed Claude surface states.
 #[derive(Debug, Clone, Serialize)]
@@ -151,23 +152,36 @@ fn check_agents_synced(home: &Path, bundled_root: &Path) -> bool {
 /// Claude reads `~/.claude/skills` only, and skills are installed there from the bundle, so the
 /// installed files are compared with the bundle. `None` when the bundle cannot be read: nothing
 /// is then reported as synced.
-fn claude_skills(bundled_root: Option<&Path>, home: &Path) -> Option<SkillFilesStatus> {
-    skill_files_status(bundled_root?, home, &[SkillRoot::Claude]).ok()
+fn claude_skills(
+    bundled_root: Option<&Path>,
+    workspace_root: Option<&Path>,
+    home: &Path,
+) -> Option<SkillFilesStatus> {
+    skill_files_status(
+        &SkillSources::for_health(bundled_root?, workspace_root),
+        home,
+        &[SkillRoot::Claude],
+    )
+    .ok()
 }
 
 /// Compute Claude runtime health from inspected managed surfaces only. Rules, agents and skills
 /// are installed from the app's bundle, so that is what the installed files are compared with;
 /// the workspace folder plays no part.
-fn compute_health(home: &Path) -> ClaudeRuntimeHealth {
+fn compute_health(home: &Path, workspace_root: Option<&Path>) -> ClaudeRuntimeHealth {
     let bundled = crate::setup_roots::bundled_root().ok();
-    compute_health_with_bundle(bundled.as_deref(), home)
+    compute_health_with_bundle(bundled.as_deref(), workspace_root, home)
 }
 
 /// `None` when the bundle cannot be read: nothing is then reported as synced.
-fn compute_health_with_bundle(bundled_root: Option<&Path>, home: &Path) -> ClaudeRuntimeHealth {
+fn compute_health_with_bundle(
+    bundled_root: Option<&Path>,
+    workspace_root: Option<&Path>,
+    home: &Path,
+) -> ClaudeRuntimeHealth {
     let rules_synced = bundled_root.is_some_and(|root| check_rules_synced(home, root));
     let agents_synced = bundled_root.is_some_and(|root| check_agents_synced(home, root));
-    let skills = claude_skills(bundled_root, home);
+    let skills = claude_skills(bundled_root, workspace_root, home);
     let skills_synced = skills.is_some_and(|status| status.is_synced());
     let installed_count = installed_agent_count(home);
     let expected_count = bundled_root.map_or(0, expected_agent_count);
@@ -231,7 +245,9 @@ fn compute_health_with_bundle(bundled_root: Option<&Path>, home: &Path) -> Claud
 #[tauri::command]
 pub fn get_claude_runtime_health() -> Result<ClaudeRuntimeHealth, String> {
     let home_path = agent_targets::home_dir()?;
-    Ok(compute_health(&home_path))
+    // The data folder only adds the packs' skills to what the install is compared with.
+    let workspace_root = super::workspace::setup_workspace_target_path().ok();
+    Ok(compute_health(&home_path, workspace_root.as_deref()))
 }
 
 #[cfg(test)]
@@ -258,7 +274,7 @@ mod tests {
 
     /// Health with the fixture standing in for the bundle everything is installed from.
     fn health_of(ws: &Path, home: &Path) -> ClaudeRuntimeHealth {
-        compute_health_with_bundle(Some(ws), home)
+        compute_health_with_bundle(Some(ws), None, home)
     }
 
     fn write_claude_skill(ws: &Path, home: &Path, name: &str) {
@@ -547,12 +563,12 @@ mod tests {
             &ws.join("skills/claude-skill/SKILL.md"),
             "---\nname: claude-skill\ndescription: test skill\ntargets: claude\n---\n# older\n",
         );
-        let against_bundle = compute_health_with_bundle(Some(&bundle), &home);
+        let against_bundle = compute_health_with_bundle(Some(&bundle), None, &home);
         assert!(against_bundle.skills_synced);
-        let against_runtime = compute_health_with_bundle(Some(&ws), &home);
+        let against_runtime = compute_health_with_bundle(Some(&ws), None, &home);
         assert!(!against_runtime.skills_synced);
         // Without a readable bundle nothing is reported as synced.
-        let without = compute_health_with_bundle(None, &home);
+        let without = compute_health_with_bundle(None, None, &home);
         assert!(!without.skills_synced);
         assert_eq!(without.expected_skill_count, 0);
     }

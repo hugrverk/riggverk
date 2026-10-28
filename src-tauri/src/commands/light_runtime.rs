@@ -29,6 +29,7 @@ use crate::setup_lifecycle::OperationKind;
 use crate::setup_transaction;
 use crate::skill_health::skill_files_status;
 use crate::skill_roots::{codex_home_is_custom, roots_read_by, unserved, SkillRoot, SkillScope};
+use crate::skill_sources::SkillSources;
 
 /// How many version folders below `~/.nvm/versions/node` are looked at.
 const MAX_NVM_VERSIONS: usize = 256;
@@ -289,6 +290,7 @@ fn display_roots(roots: &[SkillRoot]) -> Vec<String> {
 fn inspect_skills(
     harness: HarnessId,
     bundled_root: Option<&Path>,
+    workspace_root: Option<&Path>,
     home: &Path,
     enabled: Option<&[HarnessId]>,
     codex_custom: bool,
@@ -300,7 +302,13 @@ fn inspect_skills(
     let scope = SkillScope::for_harnesses(&with, codex_custom);
     let roots = roots_read_by(harness, &scope);
     let unserved = unserved(&with, codex_custom).contains(&harness);
-    let status = bundled_root.map(|bundle| skill_files_status(bundle, home, &roots));
+    let status = bundled_root.map(|bundle| {
+        skill_files_status(
+            &SkillSources::for_health(bundle, workspace_root),
+            home,
+            &roots,
+        )
+    });
     match status {
         Some(Ok(status)) => LightSkillsHealth {
             status: if unserved {
@@ -590,6 +598,7 @@ fn compute_health(harness: &LightHarness, inputs: &Inputs) -> LightRuntimeHealth
     let skills = inspect_skills(
         harness.id,
         inputs.bundled_root,
+        inputs.workspace_root,
         inputs.home,
         inputs.enabled,
         inputs.codex_custom,
@@ -996,7 +1005,14 @@ mod tests {
             enabled: Option<&[HarnessId]>,
             custom: bool,
         ) -> LightSkillsHealth {
-            inspect_skills(harness, Some(&self.bundle), &self.home, enabled, custom)
+            inspect_skills(
+                harness,
+                Some(&self.bundle),
+                None,
+                &self.home,
+                enabled,
+                custom,
+            )
         }
     }
 
@@ -1119,11 +1135,12 @@ mod tests {
     #[test]
     fn unreadable_bundled_skills_are_unknown_not_synced() {
         let fixture = Skills::new("skills-unknown");
-        let skills = inspect_skills(HarnessId::Kilo, None, &fixture.home, None, false);
+        let skills = inspect_skills(HarnessId::Kilo, None, None, &fixture.home, None, false);
         assert_eq!(skills.status, "unknown");
         assert_eq!((skills.synced, skills.expected), (0, 0));
         let unserved = inspect_skills(
             HarnessId::Pi,
+            None,
             None,
             &fixture.home,
             Some(&[HarnessId::Codex]),

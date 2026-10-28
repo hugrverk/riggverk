@@ -8,6 +8,7 @@ use super::status::file_eq;
 use crate::agent_skill_targets::codex_home;
 use crate::skill_health::{old_skill_copies, skill_files_status};
 use crate::skill_roots::{codex_home_is_custom, SkillRoot};
+use crate::skill_sources::SkillSources;
 
 #[derive(Serialize, Clone, Debug)]
 pub struct CodexRuntimeCheck {
@@ -455,8 +456,13 @@ fn compute_health_with_bundle(
     let mut skills_source_invalid = false;
     let skills_status = match bundled_root
         .ok_or_else(|| "the bundled skills are not available".to_string())
-        .and_then(|bundle| skill_files_status(bundle, home_dir, &[skills_root]))
-    {
+        .and_then(|bundle| {
+            skill_files_status(
+                &SkillSources::for_health(bundle, workspace_root),
+                home_dir,
+                &[skills_root],
+            )
+        }) {
         Ok(status) => {
             skills_expected_count = status.expected;
             skills_synced_count = status.synced;
@@ -510,7 +516,14 @@ fn compute_health_with_bundle(
     let old_copies = old_skills_path
         .as_ref()
         .zip(bundled_root)
-        .and_then(|(_, bundle)| old_skill_copies(bundle, home_dir, old_skills_root).ok())
+        .and_then(|(_, bundle)| {
+            old_skill_copies(
+                &SkillSources::for_health(bundle, workspace_root),
+                home_dir,
+                old_skills_root,
+            )
+            .ok()
+        })
         .unwrap_or_default();
     if let Some(path) = old_skills_path.as_ref().filter(|_| old_copies.owned > 0) {
         has_warn = true;
