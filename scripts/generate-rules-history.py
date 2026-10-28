@@ -6,7 +6,9 @@ they changed (and to move their edits below the managed block), the app needs
 the exact base the file started from. This writes each distinct historical
 version of templates/sync/<harness>-rules.md, plus the current one, to
 resources/default-workspace/metadata/rules-history/<harness>/<sha256-hex>.md.
-The app verifies that every file hashes to its own name before using it.
+The app verifies that every file hashes to its own name before using it. The committed files are
+an append-only baseline: a base that hashes to its own name is kept even when the git history
+cannot prove it, so the output survives a repository whose history was squashed.
 
 Usage:
   python3 scripts/generate-rules-history.py --check
@@ -18,6 +20,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -38,6 +41,7 @@ HARNESS_RULES = {
     "kilo": "templates/sync/kilo-rules.md",
 }
 INDEX_NAME = "index.json"
+BASE_PATH = re.compile(r"^([a-z0-9-]+)/([0-9a-f]{64})\.md$")
 MAX_BYTES = 256 * 1024
 
 
@@ -56,19 +60,26 @@ def generate() -> dict[str, bytes]:
     by_rel = generate_history.historical_blobs_by_rel()
     outputs: dict[str, bytes] = {}
     index: dict[str, list[str]] = {}
-    for harness, rel in sorted(HARNESS_RULES.items()):
-        versions: dict[str, bytes] = {}
-        for sha in sorted(by_rel.get(rel, ())):
-            raw = generate_history.blob(sha)
-            if usable_text(raw):
-                versions[hashlib.sha256(raw).hexdigest()] = raw
-        current = ROOT / PREFIX / rel
-        if not current.is_file():
-            raise RuntimeError(f"missing current rules source: {rel}")
-        raw = current.read_bytes()
-        if not usable_text(raw):
-            raise RuntimeError(f"current rules source is not usable text: {rel}")
-        versions[hashlib.sha256(raw).hexdigest()] = raw
+    baseline: dict[str, dict[str, bytes]] = {}
+    for path, raw in existing().items():
+        match = BASE_PATH.match(path)
+        if match and hashlib.sha256(raw).hexdigest() == match[2]:
+            baseline.setdefault(match[1], {})[match[2]] = raw
+    for harness in sorted(set(HARNESS_RULES) | set(baseline)):
+        versions = dict(baseline.get(harness, {}))
+        rel = HARNESS_RULES.get(harness)
+        if rel is not None:
+            for sha in sorted(by_rel.get(rel, ())):
+                raw = generate_history.blob(sha)
+                if usable_text(raw):
+                    versions[hashlib.sha256(raw).hexdigest()] = raw
+            current = ROOT / PREFIX / rel
+            if not current.is_file():
+                raise RuntimeError(f"missing current rules source: {rel}")
+            raw = current.read_bytes()
+            if not usable_text(raw):
+                raise RuntimeError(f"current rules source is not usable text: {rel}")
+            versions[hashlib.sha256(raw).hexdigest()] = raw
         index[harness] = [f"sha256:{digest}" for digest in sorted(versions)]
         for digest, raw in versions.items():
             outputs[f"{harness}/{digest}.md"] = raw
