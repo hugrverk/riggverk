@@ -245,11 +245,10 @@ describe("LightHarnessView", () => {
       }),
     });
     const pi = detail("Pi");
-    expect(facts(pi)).toMatchObject({
-      state: "masked by another file: left as is",
-      why: "another file in the folder masks this one, so the harness never reads it",
-    });
-    expect(facts(pi).fix).toContain("remove or rename the other file");
+    expect(facts(pi)).toMatchObject({ why: "another file in the folder masks this one, so the harness never reads it" });
+    // The sentence above the facts says what to do: nothing in the app can sort it out.
+    expect(pi.textContent).toContain("Another file in the folder decides what Pi reads, so Riggverk writes nothing here.");
+    expect(pi.textContent).toContain("Remove or rename that file");
     cleanup();
 
     const peer: RulesStatus = { layout: "absent", refinement_lines: 0, user_managed: false, conflict_reason: "peer_context_file" };
@@ -258,7 +257,7 @@ describe("LightHarnessView", () => {
         pi: installationStatus("conflict", [{ ...surfaceStatus("pi_rules", "conflict", "hidden"), rules: peer }, surfaceStatus("skills", "current")], { conflict_count: 1 }),
       }),
     });
-    expect(facts(detail("Pi")).state).toBe("another context file would be hidden: nothing written");
+    expect(facts(detail("Pi")).why).toBe("the harness reads another context file in the folder, which a new file would hide");
   });
 
   it("says where a CLI was found when only nvm has it, and why it is missing otherwise", () => {

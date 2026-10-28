@@ -63,7 +63,7 @@ function plural(n: number, noun: string): string {
   return `${n} ${noun}${n === 1 ? "" : "s"}`;
 }
 
-function FileSection({ entry, state }: { entry: FileDiffEntry; state: FileUnitState }) {
+function FileSection({ entry, state, layout }: { entry: FileDiffEntry; state: FileUnitState; layout: "unified" | "split" }) {
   const counts = entry.kind === "text" ? ` · +${entry.added} −${entry.removed}` : "";
   const items: KvItem[] = [
     { label: "yours", value: size(entry.installed) },
@@ -84,7 +84,7 @@ function FileSection({ entry, state }: { entry: FileDiffEntry; state: FileUnitSt
           )}
           {/* The backend withholds key blocks; the rest is masked here before it reaches the screen. */}
           {entry.diff === "" && entry.truncated ? null : (
-            <DiffView diff={redactDiffText(entry.diff)} label={`${entry.rel}: yours to bundled`} />
+            <DiffView diff={redactDiffText(entry.diff)} label={`${entry.rel}: yours to bundled`} layout={layout} />
           )}
         </>
       ) : (
@@ -101,12 +101,13 @@ function FileSection({ entry, state }: { entry: FileDiffEntry; state: FileUnitSt
   );
 }
 
-function FileSections({ diff, unit }: { diff: FileDiffView; unit: FileUnit | undefined }) {
+/** The files of one unit's diff, one section each; `split` is the side-by-side Compare of the harness page. */
+export function FileSections({ diff, unit, layout = "unified" }: { diff: FileDiffView; unit: FileUnit | undefined; layout?: "unified" | "split" }) {
   return (
     <>
       {diff.files.map(entry => (
         // The list is read again after keeping or handing back; the diff itself is not, so the state comes from it.
-        <FileSection key={entry.rel} entry={entry} state={unit?.files.find(file => file.rel === entry.rel)?.state ?? entry.state} />
+        <FileSection key={entry.rel} entry={entry} state={unit?.files.find(file => file.rel === entry.rel)?.state ?? entry.state} layout={layout} />
       ))}
       {diff.more_files > 0 && (
         <p className="c-warn pane-note" role="status">

@@ -1,28 +1,22 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { CodexConfigSummary } from "../components/CodexConfigSummary";
+import { CodexDefaultsPane } from "../components/CodexDefaultsPane";
 import { ConflictPane } from "../components/ConflictPane";
-import { FileConflictSummary } from "../components/FileConflictSummary";
-import { CellButton } from "../components/harness/CellButton";
+import { CodexConfigDecision } from "../components/decisions/CodexConfigDecision";
+import { FilesDecision } from "../components/decisions/FilesDecision";
+import { RulesDecision } from "../components/decisions/RulesDecision";
 import { RuntimeCell } from "../components/harness/RuntimeCell";
 import { SurfaceCell } from "../components/harness/SurfaceCell";
 import { InstallPlanPane } from "../components/InstallPlanPane";
 import { OutputStrip, useFocusOutputOnNewTransaction } from "../components/OutputStrip";
 import { RulesPane } from "../components/RulesPane";
-import { RulesSummary } from "../components/RulesSummary";
+import { useCodexDefaultsFlow } from "../hooks/useCodexDefaultsFlow";
 import { useFileConflictActions } from "../hooks/useFileConflictActions";
 import { useCodexConfigActions } from "../hooks/useCodexConfigActions";
 import { useFileConflictFlow } from "../hooks/useFileConflictFlow";
 import { useRulesActions } from "../hooks/useRulesActions";
 import { useRulesFlow } from "../hooks/useRulesFlow";
 import { useKeymap } from "../keyboard/useKeymap";
-import {
-  fileConflictModelFor,
-  fileGates,
-  filesSurfacesOf,
-  markedUnit,
-  nextUnitKey,
-  type FileConflictModel,
-} from "../lib/fileConflicts";
+import { fileConflictModelFor, filesSurfacesOf, type FileConflictModel } from "../lib/fileConflicts";
 import { CODEX_CONFIG_SURFACE, codexConfigGates, codexConfigModelFor } from "../lib/codexConfig";
 import { harnessHomePath, harnessSubline } from "../lib/harnessHeader";
 import { HARNESS_LABELS } from "../lib/harnessInstallation";
@@ -36,7 +30,7 @@ import {
   type HarnessRowModel,
 } from "../lib/installationView";
 import { ROW_LABEL, ROW_ORDER } from "../lib/overviewModel";
-import { rulesGates, rulesModelFor, rulesOverrideWarning, rulesSurfaceOf } from "../lib/rulesView";
+import { rulesFileName, rulesGates, rulesModelFor, rulesOverrideWarning, rulesSurfaceOf } from "../lib/rulesView";
 import { harnessUiItems } from "../lib/shellSummary";
 import { skillLoadProblemCount, skillLoadRows, skillReadsRows, summarizeSkillLoads } from "../lib/skillLoadRows";
 import type { UiItem, UiState } from "../lib/uiState";
@@ -70,10 +64,11 @@ function fillerCount(cells: number): number {
 /**
  * One harness (Claude, Codex, OpenCode, Cursor, Copilot, Pi, Kilo) as a page: the name with one mono line under it, then
  * a hairline grid with a cell per surface (state pill, the switch of the target that gates it, and for a rules file,
- * Codex keys or skill and agent files in conflict their detail and buttons), the runtime facts, the OpenCode model and
- * the safety notes. A cell with a decision in it spans the row and comes first. The update and preview open the install
- * review in place of the page; so do Compare, Merge in updates and Review files (a diff or the preview of a change),
- * and only `y` there applies it.
+ * Codex keys or skill and agent files in conflict their decision: the why line, the buttons, the choices), the runtime
+ * facts, the OpenCode model and the safety notes. A cell with a decision in it spans the row and comes first. Compare
+ * folds out inline under its cell (a read-only side-by-side diff; the page stays and its keys keep working). The update
+ * and preview open the install review in place of the page; so do Merge in updates, Use Riggverk's version and Use
+ * Riggverk defaults (the preview of a change), and only `y` there applies it.
  *
  * Every action is a button and also a page key (u p r, and d v m b c on the active cell: the one focus or the last
  * click is in, by default the first decision). The keys work with focus anywhere in the page (`Page`).
@@ -185,7 +180,7 @@ export function HarnessPage({
     dataFolderOk,
     busyLabel: wsRunning,
     installOpen,
-    rulesOpen: rulesFlow.open,
+    rulesOpen: rulesFlow.reviewing,
     flow: conflictFlow,
     paneIds: ["page"],
     markedKey,
@@ -195,23 +190,31 @@ export function HarnessPage({
       await Promise.all([overview.refresh(), skillLoads.refresh()]);
     },
   });
-  // Another review opening closes the conflict review; the install and rules reviews win.
+  // Another review opening closes the conflict review (and its inline diff); the install and rules reviews win.
   useEffect(() => {
-    if (installOpen || rulesFlow.open) conflictFlow.close();
-  }, [installOpen, rulesFlow.open, conflictFlow.close]);
+    if (installOpen || rulesFlow.reviewing) conflictFlow.close();
+  }, [installOpen, rulesFlow.reviewing, conflictFlow.close]);
 
-  // Codex config: `m` keeps the enforced keys that differ from Riggverk's, or hands the kept ones back.
+  // Codex config: `m` keeps the enforced keys that differ from Riggverk's, or hands the kept ones back; `b` previews
+  // setting them to Riggverk's values (the review, then `y`).
+  const defaultsFlow = useCodexDefaultsFlow({ runWorkspaceTask, refresh: refreshAfterApply, onApplied });
+  useEffect(() => {
+    if (installOpen || rulesFlow.reviewing || conflictFlow.reviewing) defaultsFlow.close();
+  }, [installOpen, rulesFlow.reviewing, conflictFlow.reviewing, defaultsFlow.close]);
   const codexConfig = useCodexConfigActions({
     model: codexConfigModel,
     dataFolderOk,
     busyLabel: wsRunning,
     blockedBy: installOpen
       ? "close the install review first"
-      : rulesFlow.open
+      : rulesFlow.reviewing
         ? "close the rules review first"
-        : conflictFlow.state.status !== "idle"
+        : conflictFlow.reviewing
           ? "close the conflict review first"
-          : null,
+          : defaultsFlow.open
+            ? "close the config review first"
+            : null,
+    defaults: defaultsFlow,
     paneIds: ["page"],
     active: selected?.surface === CODEX_CONFIG_SURFACE,
     // The runtime health reads the choice too: its config row follows.
@@ -230,7 +233,7 @@ export function HarnessPage({
       onPreview: () => void install.open(harness, { readOnly: true }),
       onRefresh: () => void overview.refresh(),
     }),
-    { enabled: !installOpen && !rulesFlow.open && !conflictFlow.open },
+    { enabled: !installOpen && !rulesFlow.reviewing && !conflictFlow.reviewing && !defaultsFlow.open },
   );
 
   const outputStrip = () => (
@@ -257,7 +260,7 @@ export function HarnessPage({
     );
   }
 
-  if (rulesFlow.open) {
+  if (rulesFlow.reviewing) {
     return (
       <section className="screen review" aria-label={`${label} rules review`}>
         <RulesPane
@@ -272,7 +275,7 @@ export function HarnessPage({
   }
 
   const conflictReview = conflictFlow.state;
-  if (conflictReview.status !== "idle") {
+  if (conflictFlow.reviewing && conflictReview.status !== "idle") {
     const reviewed = fileModels.find(model => model.surface === conflictReview.surface);
     return (
       <section className="screen review" aria-label={`${label} conflict review`}>
@@ -284,6 +287,15 @@ export function HarnessPage({
           busyLabel={wsRunning}
           backupRoot={backupRoot}
         />
+        {outputStrip()}
+      </section>
+    );
+  }
+
+  if (defaultsFlow.open) {
+    return (
+      <section className="screen review" aria-label={`${label} config review`}>
+        <CodexDefaultsPane flow={defaultsFlow} busyLabel={wsRunning} backupRoot={backupRoot} />
         {outputStrip()}
       </section>
     );
@@ -306,6 +318,16 @@ export function HarnessPage({
 
   const ruleGates = rulesGates(rulesModel, { dataFolderOk, busyLabel: wsRunning, blockedBy: null });
   const codexGates = codexConfigGates(codexConfigModel, { dataFolderOk, busyLabel: wsRunning, blockedBy: null });
+
+  const isWide = (row: HarnessRowModel) => {
+    const state = stateOf(row)?.state ?? null;
+    if (state === "decide" || state === "fix") return true;
+    const hasDecision =
+      (row.surface === rulesSurface && rulesModel !== null) ||
+      (row.surface === CODEX_CONFIG_SURFACE && codexConfigModel !== null) ||
+      fileModels.some(model => model.surface === row.surface);
+    return hasDecision && (state === "ready" || state === "yours");
+  };
 
   const renderCell = (row: HarnessRowModel) => {
     const ui = stateOf(row);
@@ -331,71 +353,10 @@ export function HarnessPage({
         : []),
     ];
 
-    const unit = markedUnit(fileModel, markedKey);
-    const fileGate = fileGates(fileModel, unit, { dataFolderOk, busyLabel: wsRunning, blockedBy: null });
-    const actions = (
-      <>
-        {isRules && (
-          <>
-            <CellButton gate={ruleGates.diff} keyName="d" active={active} onClick={() => rules.run("diff")}>
-              Compare
-            </CellButton>
-            <CellButton
-              gate={ruleGates.convert}
-              keyName="v"
-              active={active}
-              variant={rulesModel.kind === "conflict" ? "primary" : undefined}
-              onClick={() => rules.run("convert")}
-            >
-              Merge in updates…
-            </CellButton>
-            <CellButton gate={ruleGates.leave} keyName="m" active={active} onClick={() => rules.run("leave")}>
-              Keep mine
-            </CellButton>
-            <CellButton gate={ruleGates.manage} keyName="m" active={active} onClick={() => rules.run("manage")}>
-              Hand back
-            </CellButton>
-          </>
-        )}
-        {isCodexConfig && (
-          <>
-            <CellButton gate={codexGates.keep} keyName="m" active={active} onClick={codexConfig.run}>
-              Keep mine
-            </CellButton>
-            <CellButton gate={codexGates.handBack} keyName="m" active={active} onClick={codexConfig.run}>
-              Hand back
-            </CellButton>
-          </>
-        )}
-        {fileModel && (
-          <>
-            <CellButton gate={fileGate.diff} keyName="d" active={active} onClick={() => files.runOn("diff", fileModel.surface)}>
-              Review files
-            </CellButton>
-            <CellButton gate={fileGate.bundled} keyName="b" active={active} onClick={() => files.runOn("bundled", fileModel.surface)}>
-              Use Riggverk&rsquo;s version…
-            </CellButton>
-            <CellButton gate={fileGate.keep} keyName="m" active={active} onClick={() => files.runOn("mine", fileModel.surface)}>
-              Keep mine
-            </CellButton>
-            <CellButton gate={fileGate.manage} keyName="m" active={active} onClick={() => files.runOn("manage", fileModel.surface)}>
-              Hand back
-            </CellButton>
-            <CellButton
-              gate={fileGate.next}
-              keyName="c"
-              active={active}
-              onClick={() => {
-                const next = nextUnitKey(fileModel, markedKey);
-                if (next) setMarkedKey(next);
-              }}
-            >
-              Next file
-            </CellButton>
-          </>
-        )}
-      </>
-    );
+    const reads = row.surface === "skills" ? <SkillReads reads={skillReadsRows(skillLoads, harness)} /> : null;
+    // A decision (or anything with a Compare fold-out) takes the row, so the diff has room.
+    const wide = isWide(row);
+    const gateContext = { dataFolderOk, busyLabel: wsRunning, blockedBy: null };
 
     return (
       <SurfaceCell
@@ -405,7 +366,7 @@ export function HarnessPage({
         headline={headline}
         state={state}
         note={notes.length > 0 ? notes.join(" · ") : null}
-        wide={state === "decide" || state === "fix"}
+        wide={wide}
         active={active}
         onActivate={() => setActiveSurface(row.surface)}
         toggle={
@@ -418,17 +379,37 @@ export function HarnessPage({
               }
             : null
         }
-        actions={actions}
       >
-        {isRules && <RulesSummary model={rulesModel} error={rules.error} />}
-        {isCodexConfig && <CodexConfigSummary model={codexConfigModel} error={codexConfig.error} />}
-        {fileModel && <FileConflictSummary model={fileModel} markedKey={markedKey} error={files.error} />}
-        {row.surface === "skills" && <SkillReads reads={skillReadsRows(skillLoads, harness)} />}
+        {isRules && (
+          <RulesDecision
+            model={rulesModel}
+            harnessLabel={label}
+            fileName={rulesFileName(harness)}
+            flow={rulesFlow}
+            rules={rules}
+            gates={ruleGates}
+            active={active}
+          />
+        )}
+        {isCodexConfig && <CodexConfigDecision model={codexConfigModel} gates={codexGates} codexConfig={codexConfig} active={active} />}
+        {fileModel && (
+          <FilesDecision
+            model={fileModel}
+            flow={conflictFlow}
+            files={files}
+            markedKey={markedKey}
+            onMark={setMarkedKey}
+            context={gateContext}
+            active={active}
+            aside={reads}
+          />
+        )}
+        {!fileModel && reads}
       </SurfaceCell>
     );
   };
 
-  const wideCells = ordered.filter(row => ["decide", "fix"].includes(stateOf(row)?.state ?? ""));
+  const wideCells = ordered.filter(isWide);
   const singleCells = ordered.filter(row => !wideCells.includes(row));
 
   return (

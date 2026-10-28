@@ -98,22 +98,38 @@ export function unitFilesText(unit: FileUnit): string {
   return total > 1 ? `${first} +${plural(total - 1, "file")}` : first;
 }
 
-/** One line per unit in the detail pane: what, where, and why or since when. */
-export function unitLine(unit: FileUnit): { text: string; tone: Tone } {
+/** What a unit is besides its name: where, which files, and why or since when. */
+export function unitDetail(unit: FileUnit): string {
   const state =
     unit.state === "conflict"
       ? REASON_TEXT[unit.reason]
       : ["you manage", unit.wanted ? (unit.bundle_changed ? "bundled update available" : "bundle unchanged") : "no bundled copy here"].join(" · ");
-  const parts = [
-    unit.name,
+  return [
     unit.folder,
     unitFilesText(unit),
     state,
     ...(unit.state === "conflict" && !unit.wanted ? ["no longer bundled here"] : []),
     ...(unit.kind === "skill" && unit.read_by.length > 0 ? [`read by ${unit.read_by.join(", ")}`] : []),
-  ].filter(Boolean);
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+/** One line per unit: what, where, and why or since when. */
+export function unitLine(unit: FileUnit): { text: string; tone: Tone } {
   const tone: Tone = unit.state === "conflict" ? "fail" : unit.bundle_changed ? "warn" : "dim";
-  return { text: parts.join(" · "), tone };
+  return { text: [unit.name, unitDetail(unit)].filter(Boolean).join(" · "), tone };
+}
+
+/** The sentence above the files of a decision: what Riggverk left alone, or what the user manages. */
+export function filesWhy(model: FileConflictModel): string {
+  const noun = model.surface === "skills" ? "skill" : "agent";
+  const conflicts = model.units.filter(unit => unit.state === "conflict").length;
+  if (conflicts > 0) {
+    return `Riggverk left the ${plural(conflicts, noun)} you edited exactly as ${conflicts === 1 ? "it is" : "they are"}. The rest of the update is not held up.`;
+  }
+  const kept = model.units.filter(unit => unit.state === "kept").length;
+  return `You manage ${plural(kept, noun)}, so Riggverk never writes ${kept === 1 ? "it" : "them"}. Bundled updates stay visible.`;
 }
 
 /** A surface row's label with the files the user has to look at: "update · 2 conflicts", "current · you manage 1". */

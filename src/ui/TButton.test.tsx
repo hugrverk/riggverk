@@ -9,6 +9,25 @@ import { TButton } from "./TButton";
 afterEach(cleanup);
 
 describe("TButton", () => {
+  it("says whether it has a region folded out and which one, only when asked to", () => {
+    const { rerender } = render(<TButton keys={[]}>Compare</TButton>);
+    expect(screen.getByRole("button", { name: "Compare" }).hasAttribute("aria-expanded")).toBe(false);
+    expect(screen.getByRole("button", { name: "Compare" }).hasAttribute("aria-controls")).toBe(false);
+    rerender(
+      <TButton keys={[]} expanded={false} controls="fold-1">
+        Compare
+      </TButton>,
+    );
+    expect(screen.getByRole("button", { name: "Compare" }).getAttribute("aria-expanded")).toBe("false");
+    expect(screen.getByRole("button", { name: "Compare" }).getAttribute("aria-controls")).toBe("fold-1");
+    rerender(
+      <TButton keys={[]} expanded controls="fold-1">
+        Compare
+      </TButton>,
+    );
+    expect(screen.getByRole("button", { name: "Compare" }).getAttribute("aria-expanded")).toBe("true");
+  });
+
   it("is a real button named by its label, with the key as a hidden cap and a shortcut hint", () => {
     render(
       <TButton keys={["y"]} shortcut="Y">

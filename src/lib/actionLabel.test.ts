@@ -7,6 +7,7 @@ describe("actionLabel", () => {
     expect(actionLabel("apply_setup install workspace")).toBe("install workspace");
     expect(actionLabel("apply_rules_conversion claude rules")).toBe("convert claude rules");
     expect(actionLabel("apply_take_bundled tdd")).toBe("take bundled tdd");
+    expect(actionLabel("apply_codex_config_defaults")).toBe("use Riggverk defaults");
     expect(actionLabel("apply_uninstall")).toBe("uninstall");
     expect(actionLabel("rollback_setup_transaction")).toBe("rollback");
   });

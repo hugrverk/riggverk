@@ -8,6 +8,10 @@
        .hp-lbl / .hp-ch        mono label; the bold line with the state pill
        .hp-setting + .switch   "Let Riggverk manage this" with the target switch (ui/Switch.tsx)
        .hp-acts                the buttons of the cell (.tbtn, _review.scss)
+       .hp-fold                Compare folded out under a decision (components/decisions/Fold.tsx), .hp-sbs the diff in it
+       .hp-choices / .hp-choice  the two ways out of a decision as cards; .hp-conseq what is promised
+       .hp-keytable            the Codex managed keys (key / Riggverk / yours)
+       .hp-units               the skill and agent files in conflict, one row each
        .hp-facts               runtime facts, as many columns as fit
        .hp-safety / .hp-notes  "Safety notes · Advice only"
      .state-pill / .state-mark are shared with the Overview (_overview.scss).
@@ -255,6 +259,226 @@
   padding: 0;
 }
 
+/* ---- decisions (components/decisions): why line, choices, Compare fold-out, Codex table ---- */
+
+.hp-error {
+  margin: 0;
+  color: var(--fix);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+/* Compare folds out under its cell. It is mounted when it has something to show and unfolds once, over --dur-fold:
+   the height runs 0fr to 1fr. The subtle and off motion levels (and the OS preference) drop keyframe animation in
+   _tokens.scss, so it simply appears there. */
+@keyframes hp-unfold {
+  from { grid-template-rows: 0fr; opacity: 0; }
+  to { grid-template-rows: 1fr; opacity: 1; }
+}
+
+.hp-fold {
+  display: grid;
+  grid-template-rows: 1fr;
+  animation: hp-unfold var(--dur-fold) var(--ease) both;
+}
+
+.hp-fold-in {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+  min-height: 0;
+  min-width: 0;
+  padding: 12px 2px 2px;
+  overflow: hidden;
+}
+
+.hp-fold-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.hp-fold-error { display: grid; gap: 8px; }
+
+.hp-fold-tools { margin: 0; }
+
+.hp-sbs { display: grid; gap: 8px; min-width: 0; }
+
+.hp-sbs-intro,
+.hp-sbs-note {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: calc(var(--fs) * 0.92);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.hp-sbs-warn { color: var(--text); }
+
+/* The side-by-side diff lives in the cell, not in a review card: no card margins. */
+.hp-fold .diff { margin: 0; }
+
+.hp-fold .pane-group { margin-top: 8px; }
+
+.hp-decision-choices { display: grid; gap: 10px; }
+
+.hp-choices {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.hp-choice {
+  display: grid;
+  gap: 3px;
+  align-content: start;
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 0;
+  background: var(--bg-raised);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color var(--dur-view) var(--ease),
+    background-color var(--dur-view) var(--ease);
+}
+
+.hp-choice:hover:not([aria-disabled="true"]) { border-color: var(--accent); }
+.hp-choice:active:not([aria-disabled="true"]) { background: var(--bg-panel); }
+.hp-choice[aria-disabled="true"] { opacity: 0.55; cursor: default; }
+
+.hp-choice-t {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.hp-choice-t kbd {
+  padding: 0 5px;
+  background: color-mix(in srgb, currentColor 14%, transparent);
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  font-weight: 400;
+  opacity: 0.85;
+}
+
+.hp-choice-s {
+  color: var(--text-muted);
+  font-size: calc(var(--fs) * 0.92);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+/* What is promised whichever card is chosen. */
+.hp-conseq {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: calc(var(--fs) * 0.92);
+}
+
+.hp-conseq > span::before {
+  content: "✓ ";
+  color: var(--ok);
+}
+
+/* The Codex managed keys: key, Riggverk's value, yours. A differing value is weight 600 with the filled square. */
+.hp-keytable {
+  width: 100%;
+  border-collapse: collapse;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  font-size: calc(var(--fs) * 0.96);
+}
+
+.hp-keytable th,
+.hp-keytable td {
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--border);
+  font-weight: 400;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.hp-keytable tbody tr:last-child > * { border-bottom: 0; }
+
+.hp-keytable thead th {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: max(10px, calc(var(--fs) * 0.77));
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.hp-keytable tbody th,
+.hp-keytable td {
+  font-family: var(--font-mono);
+  font-size: calc(var(--fs) * 0.92);
+}
+
+.hp-keytable .is-same { color: var(--text-muted); }
+
+.hp-keytable .is-differs {
+  color: var(--decide);
+  font-weight: 600;
+}
+
+.hp-keytable .is-differs::before {
+  content: "■ ";
+  font-size: 8px;
+  vertical-align: 1px;
+}
+
+.hp-keytable-kept { color: var(--text-muted); font-weight: 400; }
+
+.hp-keytable + .hp-sbs-note { margin-top: 8px; }
+
+/* Files in conflict: one row per skill or agent, with its own buttons. */
+.hp-units {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.hp-unit {
+  display: grid;
+  gap: 8px;
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+}
+
+.hp-unit:first-child { border-top: 0; padding-top: 2px; }
+
+.hp-unit-id {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 12px;
+  min-width: 0;
+}
+
+.hp-unit-id b { font-weight: 600; }
+
+.hp-unit-detail {
+  min-width: 0;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: calc(var(--fs) * 0.9);
+  overflow-wrap: anywhere;
+}
+
+.hp-unit .hp-acts { margin-top: 0; }
+
 /* ---- runtime ---- */
 
 .hp-facts {
@@ -363,6 +587,11 @@
 
 @container hp (max-width: 420px) {
   .hp-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* Two choice cards side by side need room; the side-by-side diff keeps its two columns and wraps long lines. */
+@container hp (max-width: 560px) {
+  .hp-choices { grid-template-columns: minmax(0, 1fr); }
 }
 
 @container hp (max-width: 720px) {

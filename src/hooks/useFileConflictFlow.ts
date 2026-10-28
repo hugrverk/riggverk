@@ -23,6 +23,14 @@ export type FileReviewState =
 
 const IDLE: FileReviewState = { status: "idle" };
 
+/**
+ * The diff is read inline on the page (the Compare fold-out under the files cell): while it loads, while it shows and
+ * when its preview failed. The take-bundled preview and its apply are a review that takes the page's place.
+ */
+export function isInlineFileState(state: FileReviewState): boolean {
+  return state.status === "diff" || ((state.status === "loading" || state.status === "error") && state.what === "diff");
+}
+
 export interface UseFileConflictFlowOptions {
   /** The workspace task runner: action lock, output pane, minimum running time. */
   runWorkspaceTask: RunWorkspaceTask;
@@ -34,8 +42,12 @@ export interface UseFileConflictFlowOptions {
 
 export interface FileConflictFlow {
   state: FileReviewState;
-  /** A review (or its loading or error state) is showing. */
+  /** A review (or its loading or error state) is showing, inline or in place of the page. */
   open: boolean;
+  /** A diff is showing inline under the files cell: the page stays, its keys keep working. */
+  inline: boolean;
+  /** A review has taken the page's place (take bundled and its apply): `open` without the inline diff. */
+  reviewing: boolean;
   /** Computes the diff of one unit. Asking again while one is loading replaces it; a running apply is not interrupted. */
   openDiff: (surface: FilesSurfaceId, unit: string) => Promise<void>;
   /** Computes the take-bundled preview of one unit, the same way. */
@@ -194,5 +206,7 @@ export function useFileConflictFlow({ runWorkspaceTask, refresh, onApplied }: Us
     else await openBundled(current.surface, current.unit);
   }, [openDiff, openBundled]);
 
-  return { state, open: state.status !== "idle", openDiff, openBundled, close, apply, retry };
+  const open = state.status !== "idle";
+  const inline = isInlineFileState(state);
+  return { state, open, inline, reviewing: open && !inline, openDiff, openBundled, close, apply, retry };
 }

@@ -29,6 +29,15 @@ export type RulesReviewState =
 
 const IDLE: RulesReviewState = { status: "idle" };
 
+/**
+ * The diff is read inline on the page (the Compare fold-out under the rules cell): while it loads, while it shows and
+ * when its preview failed. Everything else (the conversion, its apply, a failed conversion) is a review that takes the
+ * page's place.
+ */
+export function isInlineRulesState(state: RulesReviewState): boolean {
+  return state.status === "diff" || ((state.status === "loading" || state.status === "error") && state.what === "diff");
+}
+
 export interface UseRulesFlowOptions {
   /** The workspace task runner: action lock, output pane, minimum running time. */
   runWorkspaceTask: RunWorkspaceTask;
@@ -40,8 +49,12 @@ export interface UseRulesFlowOptions {
 
 export interface RulesFlow {
   state: RulesReviewState;
-  /** A review (or its loading or error state) is showing. */
+  /** A review (or its loading or error state) is showing, inline or in place of the page. */
   open: boolean;
+  /** The diff is showing inline under the rules cell: the page stays, its keys keep working. */
+  inline: boolean;
+  /** A review has taken the page's place (the conversion and its apply): `open` without the inline diff. */
+  reviewing: boolean;
   openDiff: (surface: RulesSurfaceId, mode: RulesDiffMode) => Promise<void>;
   openConversion: (surface: RulesSurfaceId) => Promise<void>;
   /** The diff of the open surface in the other mode. */
@@ -201,5 +214,7 @@ export function useRulesFlow({ runWorkspaceTask, refresh, onApplied }: UseRulesF
     else await openConversion(current.surface);
   }, [openDiff, openConversion]);
 
-  return { state, open: state.status !== "idle", openDiff, openConversion, switchDiffMode, close, apply, retry };
+  const open = state.status !== "idle";
+  const inline = isInlineRulesState(state);
+  return { state, open, inline, reviewing: open && !inline, openDiff, openConversion, switchDiffMode, close, apply, retry };
 }

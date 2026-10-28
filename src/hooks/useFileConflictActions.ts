@@ -38,7 +38,7 @@ export interface UseFileConflictActionsOptions {
   busyLabel: string | null;
   /** An install review is open on this page. */
   installOpen: boolean;
-  /** A rules review is open on this page. */
+  /** A rules review has taken the page's place (the inline rules diff does not count). */
   rulesOpen: boolean;
   flow: FileConflictFlow;
   /** Panes whose focus offers `c`, `d` and `m` as status-bar hints. */
@@ -57,6 +57,10 @@ export interface FileConflictActions {
   toggleKept: (surface: FilesSurfaceId, unit: FileUnit) => void;
   /** `action` on the marked unit of `surface`, as the key would, for a button; the same gates apply. */
   runOn: (action: FileAction, surface: FilesSurfaceId) => void;
+  /** `action` on the unit `unitKey` of `surface` (a button in that unit's row); marks it, the same gates apply. */
+  runOnUnit: (action: FileAction, surface: FilesSurfaceId, unitKey: string) => void;
+  /** Compare on a unit: closes its inline diff when it is showing, else opens it. */
+  toggleDiffOn: (surface: FilesSurfaceId, unitKey: string) => void;
 }
 
 interface Target {
@@ -102,7 +106,7 @@ export function useFileConflictActions({
     ? "close the install review first"
     : rulesOpen
       ? "close the rules review first"
-      : flow.open
+      : flow.reviewing
         ? "close the conflict review first"
         : null;
   const context = { dataFolderOk, busyLabel, blockedBy };
@@ -162,6 +166,33 @@ export function useFileConflictActions({
   const run = (action: FileAction) => {
     if (activeModel) runOn(action, activeModel.surface);
   };
+  const runOnUnit = (action: FileAction, surface: FilesSurfaceId, unitKey: string) => {
+    const model = models.find(candidate => candidate.surface === surface) ?? null;
+    const unit = model?.units.find(candidate => candidate.key === unitKey) ?? null;
+    if (!model || !unit) return;
+    const gate = gateFor(action, fileGates(model, unit, context));
+    if (!gate.visible || gate.reason !== null) return;
+    execute(action, { model, unit });
+  };
+  const diffShowing = (surface: FilesSurfaceId, unitKey: string) =>
+    flow.inline && flow.state.status !== "idle" && flow.state.surface === surface && flow.state.unit === unitKey;
+  const toggleDiffOn = (surface: FilesSurfaceId, unitKey: string) => {
+    if (diffShowing(surface, unitKey)) flow.close();
+    else runOnUnit("diff", surface, unitKey);
+  };
+
+  // `[` and `]` move the open inline diff to the previous or next unit, and the mark with it.
+  const inlineHere = activeModel !== null && flow.inline && flow.state.status !== "idle" && flow.state.surface === activeModel.surface;
+  const canStep = inlineHere && activeModel.units.length > 1 && (flow.state.status === "diff" || flow.state.status === "error") && context.busyLabel === null;
+  const stepDiff = (step: number) => {
+    if (!activeModel || !inlineHere || flow.state.status === "idle") return;
+    const units = activeModel.units;
+    const at = units.findIndex(unit => unit.key === (flow.state.status === "idle" ? null : flow.state.unit));
+    if (at < 0 || units.length < 2) return;
+    const next = units[(at + step + units.length) % units.length]!;
+    onMark(next.key);
+    void flow.openDiff(activeModel.surface, next.key);
+  };
 
   const whenFor = (gate: FileGate) => () => (!gate.visible ? false : gate.reason ?? true);
   const toggle = gates.manage.visible ? gates.manage : gates.keep;
@@ -175,7 +206,9 @@ export function useFileConflictActions({
       scope: "pane",
       paneId,
       when: whenFor(gates.diff),
-      run: () => run("diff"),
+      run: () => {
+        if (activeModel && activeUnit) toggleDiffOn(activeModel.surface, activeUnit.key);
+      },
     },
     {
       id: `${harness}.${paneId}.files-bundled`,
@@ -200,6 +233,28 @@ export function useFileConflictActions({
       run: () => run(gates.manage.visible ? "manage" : "mine"),
     },
     {
+      id: `${harness}.${paneId}.files-diff-previous`,
+      keys: "[",
+      title: "Show the diff of the previous skill or agent",
+      hint: "previous",
+      group: "Conflicts",
+      scope: "pane",
+      paneId,
+      when: () => canStep,
+      run: () => stepDiff(-1),
+    },
+    {
+      id: `${harness}.${paneId}.files-diff-next`,
+      keys: "]",
+      title: "Show the diff of the next skill or agent",
+      hint: "next",
+      group: "Conflicts",
+      scope: "pane",
+      paneId,
+      when: () => canStep,
+      run: () => stepDiff(1),
+    },
+    {
       id: `${harness}.${paneId}.files-next`,
       keys: "c",
       title: "Mark the next conflicting or kept skill or agent",
@@ -215,7 +270,7 @@ export function useFileConflictActions({
       },
     },
   ]);
-  useKeymap(bindings, { enabled: !installOpen && !rulesOpen && !flow.open });
+  useKeymap(bindings, { enabled: !installOpen && !rulesOpen && !flow.reviewing });
 
   // ── :resolve ──
   const unitNames = models.flatMap(model => model.units.map(unit => unit.name));
@@ -268,5 +323,5 @@ export function useFileConflictActions({
   };
   useCommands([resolveCommand]);
 
-  return { error, toggleKept, runOn };
+  return { error, toggleKept, runOn, runOnUnit, toggleDiffOn };
 }

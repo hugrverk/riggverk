@@ -91,6 +91,8 @@ export interface RulesModel {
   tone: Tone;
   /** Why the file is left as is: the conflict, plus the malformed-marker rule that failed. */
   reason: string | null;
+  /** The backend's conflict code, which decides the wording of the decision's why line; null without a conflict. */
+  conflictReason: RulesConflictReason | null;
   /** Row override for the surfaces list; null keeps the generic state display. */
   display: StateDisplay | null;
   /** Conversion and "leave as is" are offered (`base_block_edited`, `legacy_diverged`). */
@@ -125,6 +127,7 @@ export function rulesModel(surface: RulesSurfaceId, state: InstallationState, ru
     layout: LAYOUT_TEXT[rules.layout],
     refinements: refinementText(rules.refinement_lines),
     reason,
+    conflictReason: rules.conflict_reason ?? null,
     convertible,
     user_managed: rules.user_managed,
   };
@@ -254,6 +257,30 @@ export function rulesGates(model: RulesModel | null, context: RulesGateContext):
     leave: gate(model.convertible && !model.user_managed),
     manage: gate(model.user_managed),
   };
+}
+
+/**
+ * The sentence above the buttons of a rules decision: what happened to the file and what the harness reads now.
+ * Plain words, no key names. `harnessLabel` is "Claude Code", `fileName` "CLAUDE.md". Null when there is nothing to say.
+ */
+export function rulesWhy(model: RulesModel, harnessLabel: string, fileName: string): string | null {
+  switch (model.kind) {
+    case "conflict":
+      return model.conflictReason === "base_block_edited"
+        ? `Riggverk left ${fileName} exactly as it is, because its managed block was edited. ${harnessLabel} reads your version and doesn't have the newest Riggverk rules yet.`
+        : `Riggverk left ${fileName} exactly as it is: it matches none of the versions Riggverk ships. ${harnessLabel} reads your version and doesn't have the newest Riggverk rules yet.`;
+    case "managed":
+      return `You manage ${fileName}, so Riggverk never writes it. ${harnessLabel} reads your version; Riggverk's newer rules are waiting if you want them.`;
+    case "update":
+      return `${fileName} can take the newest Riggverk rules. What you added around the block stays where it is.`;
+    case "malformed":
+      return `${fileName} has base block markers Riggverk cannot split, so it never rewrites the file. Fix the markers by hand; Check picks it up.`;
+    case "blocked":
+      return `Another file in the folder decides what ${harnessLabel} reads, so Riggverk writes nothing here. Remove or rename that file, or add the base to it by hand.`;
+    default:
+      // A current file, or none yet: the state pill says it all.
+      return null;
+  }
 }
 
 /** What the workspace page tells about a rules file it cannot act on: where the actions are. */

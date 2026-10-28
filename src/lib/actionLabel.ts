@@ -1,6 +1,7 @@
 /** Whole action ids and the label the strip showed while they ran. */
 const ACTION_LABELS: Record<string, string> = {
   apply_uninstall: "uninstall",
+  apply_codex_config_defaults: "use Riggverk defaults",
   rollback_setup_transaction: "rollback",
 };
 

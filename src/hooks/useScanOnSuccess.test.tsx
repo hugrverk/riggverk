@@ -62,6 +62,9 @@ describe("useScanOnSuccess", () => {
     animationEnd("view-scan");
     rerender({ running: null, log: { ...APPLY, action: "apply_take_bundled tdd" } });
     expect(scanning()).toBe(true);
+    animationEnd("view-scan");
+    rerender({ running: null, log: { ...APPLY, action: "apply_codex_config_defaults" } });
+    expect(scanning()).toBe(true);
   });
 
   it("waits for the task to stop running before it sweeps", () => {

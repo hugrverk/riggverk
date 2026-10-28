@@ -912,7 +912,7 @@ export interface UninstallPlanView {
  * the task's own result.
  */
 export interface ApplyProgress {
-  /** The backend command (`apply_setup`, `apply_uninstall`, `apply_rules_conversion`, `apply_take_bundled`, `rollback_setup_transaction`). */
+  /** The backend command (`apply_setup`, `apply_uninstall`, `apply_rules_conversion`, `apply_take_bundled`, `apply_codex_config_defaults`, `rollback_setup_transaction`). */
   task: string;
   phase: "backup" | "apply" | "done";
   done: number;

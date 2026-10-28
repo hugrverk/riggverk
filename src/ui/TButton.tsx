@@ -13,6 +13,10 @@ export interface TButtonProps {
   /** `primary`: the muted blue fill. `danger`: hairline button with `--fix` text, never a red fill. Default: a hairline button. */
   variant?: "primary" | "danger";
   className?: string;
+  /** The button opens and closes a region (a Compare fold-out): its state. Renders `aria-expanded`. */
+  expanded?: boolean;
+  /** The id of the region `expanded` controls. Renders `aria-controls`. */
+  controls?: string;
   onKeyDown?: KeyboardEventHandler<HTMLButtonElement>;
   ref?: Ref<HTMLButtonElement>;
 }
@@ -27,7 +31,7 @@ export interface TButtonProps {
  * Like `ActionKey`, a click leaves focus where it was (the pane that holds the keys keeps them), and a disabled
  * button stays focusable with its reason as the tooltip.
  */
-export function TButton({ keys, children, onClick, disabled = false, shortcut, variant, className, onKeyDown, ref }: TButtonProps) {
+export function TButton({ keys, children, onClick, disabled = false, shortcut, variant, className, expanded, controls, onKeyDown, ref }: TButtonProps) {
   const isDisabled = disabled !== false;
   return (
     <button
@@ -36,6 +40,8 @@ export function TButton({ keys, children, onClick, disabled = false, shortcut, v
       className={cx("tbtn", variant && `tbtn-${variant}`, className)}
       aria-disabled={isDisabled || undefined}
       aria-keyshortcuts={shortcut}
+      aria-expanded={expanded}
+      aria-controls={controls}
       title={typeof disabled === "string" ? disabled : undefined}
       onMouseDown={event => event.preventDefault()}
       onKeyDown={onKeyDown}

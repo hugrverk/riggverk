@@ -46,6 +46,8 @@ export interface RulesActions {
   /** Why the last "leave as is" change failed, or null. */
   error: string | null;
   run: (action: RulesAction) => void;
+  /** `d`, and the Compare button: close the inline diff when it is showing, else open it. */
+  toggleDiff: () => void;
 }
 
 function unavailable(action: RulesAction, model: RulesModel | null, label: string): string {
@@ -85,7 +87,8 @@ export function useRulesActions({
   const [error, setError] = useState<string | null>(null);
   const label = HARNESS_LABELS[harness];
 
-  const blockedBy = installOpen ? "close the install review first" : flow.open ? "close the rules review first" : null;
+  // The inline diff does not block anything: `d` closes it, `v` and `m` act as before.
+  const blockedBy = installOpen ? "close the install review first" : flow.reviewing ? "close the rules review first" : null;
   const gates = rulesGates(model, { dataFolderOk, busyLabel, blockedBy });
 
   const setManaged = useCallback(
@@ -120,6 +123,12 @@ export function useRulesActions({
     [model, harness, label, confirm, beginConfirm, notify, reload],
   );
 
+  const diffOpen = flow.inline && flow.state.status !== "idle" && flow.state.surface === model?.surface;
+  const toggleDiff = () => {
+    if (diffOpen) flow.close();
+    else run("diff");
+  };
+
   const gateOf = (action: RulesAction): RulesGate => gates[action];
 
   const run = (action: RulesAction) => {
@@ -147,13 +156,24 @@ export function useRulesActions({
     {
       id: `${harness}.${paneId}.rules-diff`,
       keys: "d",
-      title: "Show the rules diff",
+      title: "Compare the rules file with Riggverk's: open or close the diff",
       hint: "diff",
       group: "Rules",
       scope: "pane",
       paneId,
       when: whenFor(gates.diff),
-      run: () => run("diff"),
+      run: toggleDiff,
+    },
+    {
+      id: `${harness}.${paneId}.rules-mode`,
+      keys: "t",
+      title: "Switch the open diff between your edits and the update",
+      hint: "edits or update",
+      group: "Rules",
+      scope: "pane",
+      paneId,
+      when: () => active && diffOpen && flow.state.status === "diff",
+      run: () => void flow.switchDiffMode(),
     },
     {
       id: `${harness}.${paneId}.rules-convert`,
@@ -178,7 +198,7 @@ export function useRulesActions({
       run: () => run(gates.manage.visible ? "manage" : "leave"),
     },
   ]);
-  useKeymap(bindings, { enabled: !installOpen && !flow.open });
+  useKeymap(bindings, { enabled: !installOpen && !flow.reviewing });
 
   const reasonFor = (action: RulesAction): true | string => {
     const gate = gateOf(action);
@@ -214,5 +234,5 @@ export function useRulesActions({
   };
   useCommands([rulesCommand]);
 
-  return { error, run };
+  return { error, run, toggleDiff };
 }
