@@ -66,6 +66,7 @@ import type {
   RulesStatus,
   RulesSurfaceId,
   SecurityPosture,
+  SetupHistoryEntry,
   SetupPlan,
   SetupResult,
   SetupSurfaceId,
@@ -1812,6 +1813,8 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
       return { success: true, transaction_id: lastTransactionId, applied: ["~/.claude/CLAUDE.md", "~/.codex/agents"], failed: [], rolled_back: [], manual_steps: [], message: "uninstalled 2 · preserved 1 · merged 1" } satisfies SetupResult;
     case "list_backups":
       return backups;
+    case "list_setup_history":
+      return setupHistory(arg<number | null>(args, "limit") ?? 20);
     case "get_backup_details":
       return backupDetails(arg<string>(args, "runId"));
     case "get_codex_runtime_health":
@@ -1932,6 +1935,45 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
 }
 
 mockIPC((cmd, args) => handle(cmd, args as Args), { shouldMockEvents: true });
+
+function setupHistory(limit: number): SetupHistoryEntry[] {
+  if (!Number.isInteger(limit) || limit < 0 || limit > 0xffffffff) {
+    throw new Error("limit must be an unsigned 32-bit integer");
+  }
+  if (scenario === "fresh" || scenario === "empty") return [];
+  const entries: SetupHistoryEntry[] = [
+    {
+      transaction_id: "1792663200000000000",
+      created_at: "1792663200000000000", finished_at: "1792663202000000000",
+      status: "applied", surfaces: ["claude_rules", "skills"], harnesses: ["claude"],
+      changes: [
+        { surface: "claude_rules", kind: "update", path: "~/.claude/CLAUDE.md", applied: true, restored: false },
+        { surface: "skills", kind: "create", path: "~/.claude/skills/diagnose/SKILL.md", applied: true, restored: false },
+      ],
+      operation_counts: { create: 1, update: 1, remove: 0 }, backup_files: 1,
+      is_newest_completed: true, undoable: true,
+      receipt: { synced: ["codex_rules", "open_code_config"], left_for_you: [{ surface: "cursor_agents", reason: "conflict" }] },
+    },
+    {
+      transaction_id: "1792576800000000000",
+      created_at: "1792576800000000000", finished_at: "1792576803000000000",
+      status: "rolled_back", surfaces: ["open_code_config"], harnesses: ["opencode"],
+      changes: [{ surface: "open_code_config", kind: "update", path: "~/.config/opencode/opencode.json", applied: true, restored: true }],
+      operation_counts: { create: 0, update: 1, remove: 0 }, backup_files: 1,
+      is_newest_completed: false, undoable: false,
+      receipt: { synced: ["claude_rules"], left_for_you: [{ surface: "cursor_mcp", reason: "manual" }] },
+    },
+    {
+      transaction_id: "1792490400000000000",
+      created_at: "1792490400000000000", finished_at: null,
+      status: "applied", surfaces: ["codex_rules"], harnesses: ["codex"],
+      changes: [{ surface: "codex_rules", kind: "create", path: "~/.codex/AGENTS.md", applied: true, restored: false }],
+      operation_counts: { create: 1, update: 0, remove: 0 }, backup_files: 0,
+      is_newest_completed: false, undoable: false, receipt: null,
+    },
+  ];
+  return entries.slice(0, limit);
+}
 
 // Report as a Tauri host so the shell lays out exactly as in the app (traffic-light reserve).
 (globalThis as { isTauri?: boolean }).isTauri = true;

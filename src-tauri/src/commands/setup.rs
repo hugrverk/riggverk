@@ -262,7 +262,7 @@ fn newer_completed_writes(
 ///
 /// A completed transaction owns the managed state written after it, so older
 /// transactions must not restore their managed-state snapshot over it.
-fn newer_completed_transaction(
+pub(super) fn newer_completed_transaction(
     backup_dir: &Path,
     workspace_key: &str,
 ) -> Result<Option<String>, String> {
@@ -307,7 +307,7 @@ fn newer_completed_transaction(
 }
 
 /// Transaction ids are decimal timestamps; compare them numerically.
-fn transaction_id_is_newer(candidate: &str, base: &str) -> bool {
+pub(super) fn transaction_id_is_newer(candidate: &str, base: &str) -> bool {
     let candidate = candidate.trim_start_matches('0');
     let base = base.trim_start_matches('0');
     (candidate.len(), candidate) > (base.len(), base)
@@ -2272,7 +2272,7 @@ pub fn detect_surface_state(
 }
 
 /// Validate transaction ID format — must be only digits (nanosecond timestamp).
-fn validate_transaction_id_format(id: &str) -> bool {
+pub(super) fn validate_transaction_id_format(id: &str) -> bool {
     if id.is_empty() || id.len() > 64 {
         return false;
     }
