@@ -635,7 +635,7 @@ function AppShell() {
     [codexRuntimeHealth, opencodeRuntimeHealth, claudeRuntimeHealth, cursorProfileHealth, lightRuntimeHealth],
   );
 
-  // What the Overview and harness pages share: the output pane, the install review and the rollback path.
+  // What the Overview and harness pages share: the run panel, the install review and the rollback path.
   const pageProps = {
     wsLog,
     wsLogCompletedAt,

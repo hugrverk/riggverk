@@ -4,7 +4,7 @@ import type { InstallScreen, RunWorkspaceTask } from "../hooks/useInstallScreen"
 import type { SettingsSaveStatus } from "../lib/settingsDraft";
 import type { ActionResult, AgentTargetMeta, ApplyProgress, AppSettings, SetupResult } from "../types";
 
-/** What the output pane of the Start and harness pages needs. */
+/** What the run panel of the Overview and harness pages needs. */
 export interface PageOutputProps {
   wsLog: ActionResult | null;
   wsLogCompletedAt: number | null;
@@ -32,7 +32,7 @@ export interface PageInstallProps {
 
 /** What converting a rules file needs from the app: it runs and reports like an install. */
 export interface PageRulesProps {
-  /** The workspace task runner: action lock, output pane, minimum running time. */
+  /** The workspace task runner: action lock, run panel, minimum running time. */
   runWorkspaceTask: RunWorkspaceTask;
   /** Reload what a conversion may have changed on disk. */
   refreshAfterApply: () => void | Promise<void>;

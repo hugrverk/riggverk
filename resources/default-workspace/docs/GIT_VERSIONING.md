@@ -7,7 +7,7 @@ The app never runs Git in this folder and never shows its Git state. It does not
 ## Set up
 
 ```bash
-# 1. Write a personal doc in the Library (Library tab, n); this creates docs/context/
+# 1. Write a personal doc in the Library (Library, `n`); this creates docs/context/
 # 2. Open a terminal in the data folder
 cd ~/.config/riggverk
 
@@ -62,7 +62,7 @@ Thumbs.db
 
 ## Old copies from earlier releases
 
-Earlier releases copied the bundle into this folder, and you may have committed it. After the reviewed cleanup (the `workspace` row, `u`, then `y`) the removals show in `git status` as deletions; commit them on their own, ideally before you edit anything else. Files the app left in place (edited, or not provably its own) stay yours to keep or delete. A copy you restore by hand that is byte-identical to a shipped version is planned for removal again on the next reviewed update.
+Earlier releases copied the bundle into this folder, and you may have committed it. After the reviewed cleanup (Update all on the Overview, then `y`) the removals show in `git status` as deletions; commit them on their own, ideally before you edit anything else. Files the app left in place (edited, or not provably its own) stay yours to keep or delete. A copy you restore by hand that is byte-identical to a shipped version is planned for removal again on the next reviewed update.
 
 ## When to commit
 

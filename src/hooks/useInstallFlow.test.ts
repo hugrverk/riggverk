@@ -469,7 +469,7 @@ describe("useInstallFlow stale and expired previews", () => {
     expect(hook.result.current.review?.plan.plan_fingerprint).toBe("fp-9");
   });
 
-  it("returns a failed or rolled-back run as an outcome for the output pane", async () => {
+  it("returns a failed or rolled-back run as an outcome for the run panel", async () => {
     const hook = setup();
     await startAndReview(hook);
     const failed = setupResult({

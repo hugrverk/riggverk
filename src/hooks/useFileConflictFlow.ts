@@ -32,7 +32,7 @@ export function isInlineFileState(state: FileReviewState): boolean {
 }
 
 export interface UseFileConflictFlowOptions {
-  /** The workspace task runner: action lock, output pane, minimum running time. */
+  /** The workspace task runner: action lock, run panel, minimum running time. */
   runWorkspaceTask: RunWorkspaceTask;
   /** Reload what a take bundled may have changed on disk. */
   refresh: () => void | Promise<void>;

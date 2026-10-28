@@ -12,7 +12,7 @@ import { useInstallFlow, type InstallFlow, type InstallReview } from "./useInsta
 
 type EnabledSettings = Pick<AppSettings, "enabled_target_ids" | "enabled_harness_ids">;
 
-/** The workspace task runner (`useWorkspaceActions().runWsTask`): action lock, output pane, min-running time. */
+/** The workspace task runner (`useWorkspaceActions().runWsTask`): action lock, run panel, min-running time. */
 export type RunWorkspaceTask = <T>(options: {
   label: string;
   action: string;
@@ -53,13 +53,13 @@ export interface InstallScreen {
    * preview or an apply is running.
    */
   open: (target: InstallTarget, options?: InstallOpenOptions) => Promise<void>;
-  /** Applies the reviewed plan through the workspace task runner so the output pane shows the run. */
+  /** Applies the reviewed plan through the workspace task runner so the run panel shows the run. */
   apply: () => void;
 }
 
 /**
  * The install review as a sub-state of the Start and harness pages: one `useInstallFlow` for the app, the
- * page it belongs to, and the apply wrapper that reports into the output pane. Leaving the page cancels a
+ * page it belongs to, and the apply wrapper that reports into the run panel. Leaving the page cancels a
  * review that has not been applied.
  */
 export function useInstallScreen({

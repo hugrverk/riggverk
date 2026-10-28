@@ -4,7 +4,7 @@
 
 Riggverk manages the **OpenCode 1.x** config format (`opencode.json`, `tui.json`, `agents/*.md`) and is verified against OpenCode 1.19.3. Install 1.x with npm (`npm i -g opencode-ai`) or the Homebrew tap (`brew install anomalyco/tap/opencode`). Homebrew core's `opencode` formula installs **2.x**, so check `opencode --version` after installing.
 
-OpenCode 2.x is detected, not supported. It migrates the 1.x config in memory and does not read `tui.json`. The OpenCode runtime pane shows the detected version in its `cli` row and warns on 2.x. A 2.x-native config is a separate future project; until then Riggverk keeps writing the 1.x keys. On 2.x the model list is read with `opencode models --standalone` (2.x has no `--pure`, and without `--standalone` it would use a background service); on 1.x it is `opencode models --pure`.
+OpenCode 2.x is detected, not supported. It migrates the 1.x config in memory and does not read `tui.json`. The OpenCode Runtime cell shows the detected version in its `cli` row and warns on 2.x. A 2.x-native config is a separate future project; until then Riggverk keeps writing the 1.x keys. On 2.x the model list is read with `opencode models --standalone` (2.x has no `--pure`, and without `--standalone` it would use a background service); on 1.x it is `opencode models --pure`.
 
 The CLI is looked up on `PATH`, then in `/opt/homebrew/bin`, `/usr/local/bin` and `~/.opencode/bin` (the official installer's directory), because an app started from Finder has a short `PATH`.
 
@@ -14,11 +14,11 @@ OpenCode reads its global config from `$XDG_CONFIG_HOME/opencode` when `XDG_CONF
 
 When `XDG_CONFIG_HOME` changes, the next install writes to the new folder. The files at the old folder stay as they are: the app neither updates nor removes them, uninstall included, so delete them yourself when you no longer need them.
 
-`OPENCODE_CONFIG_DIR` points OpenCode at one more folder, read after the global one. The runtime pane warns while it is set; the app never installs there.
+`OPENCODE_CONFIG_DIR` points OpenCode at one more folder, read after the global one. The Runtime cell warns while it is set; the app never installs there.
 
 ## Runtime health probes
 
-The OpenCode runtime pane compares files, and it also asks the installed CLI three things that files cannot show. Each probe has a timeout and an output cap, runs from a neutral working directory (the system temp folder, so no project config is picked up), and keeps only an exit status or a version number. Raw CLI output is never stored or logged.
+The OpenCode Runtime cell compares files, and it also asks the installed CLI three things that files cannot show. Each probe has a timeout and an output cap, runs from a neutral working directory (the system temp folder, so no project config is picked up), and keeps only an exit status or a version number. Raw CLI output is never stored or logged.
 
 | Probe | Result |
 |-------|--------|
@@ -26,16 +26,16 @@ The OpenCode runtime pane compares files, and it also asks the installed CLI thr
 | `opencode debug agent <default_agent> --pure` (20 s, 1.x only) | Exit 0 means the default agent parses and resolves. A non-zero exit warns, usually for a frontmatter error in an agent file that OpenCode otherwise skips silently |
 | `opencode models --pure` (30 s; `--standalone` on 2.x) | `model`, `small_model` and, when installed, the subagent and critic models must be listed. A missing one warns. OpenCode does not pick another small model when `small_model` is set but unknown. A model only appears while its provider is signed in |
 
-A missing CLI, a timeout or a failing probe leaves those checks `unknown`. It never fails the health or changes its status. The rows of the pane: `cli` (version, or "not found" with the install options), `default agent`, `autoupdate`, `rules` (global `AGENTS.md` against the bundled rules), `agents` (`synced` with the installed count, or the count and then the files that differ or are missing), `config` (synced or diverged, with the names of the managed keys that differ, and `has comments` when the file is JSONC), `overrides` (only when something below changes the config OpenCode runs), `mcp playwright` (the pinned version, with `synced` or `diverged`) and `tui` (synced or diverged, with the names of the managed keys that differ). Apart from the default agent and `autoupdate`, the rows show names and statuses, never a value from a file.
+A missing CLI, a timeout or a failing probe leaves those checks `unknown`. It never fails the health or changes its status. The rows of the cell: `cli` (version, or "not found" with the install options), `default agent`, `autoupdate`, `rules` (global `AGENTS.md` against the bundled rules), `agents` (`synced` with the installed count, or the count and then the files that differ or are missing), `config` (synced or diverged, with the names of the managed keys that differ, and `has comments` when the file is JSONC), `overrides` (only when something below changes the config OpenCode runs), `mcp playwright` (the pinned version, with `synced` or `diverged`) and `tui` (synced or diverged, with the names of the managed keys that differ). Apart from the default agent and `autoupdate`, the rows show names and statuses, never a value from a file.
 
 ## Other config OpenCode reads
 
-OpenCode 1.x does not read `opencode.json` alone. In the global folder it merges `config.json`, then `opencode.json`, then `opencode.jsonc` (a later file wins), and all three may have comments and trailing commas. Environment variables, project files and a system managed config come on top (checked against OpenCode 1.19.3). The runtime pane reports what of that it can see, so `synced` means OpenCode runs the team's values. It shows names only, never values: these files and variables can hold provider keys.
+OpenCode 1.x does not read `opencode.json` alone. In the global folder it merges `config.json`, then `opencode.json`, then `opencode.jsonc` (a later file wins), and all three may have comments and trailing commas. Environment variables, project files and a system managed config come on top (checked against OpenCode 1.19.3). The Runtime cell reports what of that it can see, so `synced` means OpenCode runs the team's values. It shows names only, never values: these files and variables can hold provider keys.
 
 - **A commented `opencode.json`.** Health reads it as JSONC, so the `config` row still says synced or diverged. Install writes strict JSON only, so it leaves such a file as is, and the review and a warning say why. To let the app update it again, move your own settings and their comments to `opencode.jsonc` and keep `opencode.json` strict JSON. A trailing comma or a byte order mark alone only needs removing.
 - **`opencode.jsonc` and `config.json` beside it.** When one sets a managed key (a top-level managed key, `mcp.playwright`, `agent.plan.permission`, `agent.explore.permission` or `agent.<role>.model`; `$schema` does not count), the runtime turns diverged, the `overrides` row names the file and the keys, and a warning says what to remove. `opencode.jsonc` wins over the team's values; `config.json` is merged under them, so its permission rules, MCP servers and agent blocks combine with the team's. An install does not fix this: the app never writes these files.
-- **Environment variables.** The pane names `OPENCODE_CONFIG`, `OPENCODE_CONFIG_DIR`, `OPENCODE_CONFIG_CONTENT`, `OPENCODE_PERMISSION`, `OPENCODE_DISABLE_PROJECT_CONFIG` and `OPENCODE_DISABLE_CLAUDE_CODE*` when they are set, and `OPENCODE_CONFIG_DIR` gets a warning of its own that names the folder the app installs to. The app sees the environment it was launched with, not your shell's: opened from Finder or the Dock it does not see what your shell profile exports, so check your shell yourself.
-- **System managed config.** The pane says when `/Library/Application Support/opencode` or the managed preferences `ai.opencode.managed.plist` (macOS), `/etc/opencode` (Linux) or `%ProgramData%\opencode` (Windows) exists. It overrides your config files, the team's values included. Only the path's existence is checked; nothing there is opened.
+- **Environment variables.** The cell names `OPENCODE_CONFIG`, `OPENCODE_CONFIG_DIR`, `OPENCODE_CONFIG_CONTENT`, `OPENCODE_PERMISSION`, `OPENCODE_DISABLE_PROJECT_CONFIG` and `OPENCODE_DISABLE_CLAUDE_CODE*` when they are set, and `OPENCODE_CONFIG_DIR` gets a warning of its own that names the folder the app installs to. The app sees the environment it was launched with, not your shell's: opened from Finder or the Dock it does not see what your shell profile exports, so check your shell yourself.
+- **System managed config.** The cell says when `/Library/Application Support/opencode` or the managed preferences `ai.opencode.managed.plist` (macOS), `/etc/opencode` (Linux) or `%ProgramData%\opencode` (Windows) exists. It overrides your config files, the team's values included. Only the path's existence is checked; nothing there is opened.
 
 Variables, project files and the system managed config do not change the runtime status: the app cannot see what they set.
 
@@ -54,7 +54,7 @@ To regenerate the snapshot after changing a source file:
 python3 scripts/generate-opencode-config.py --write
 ```
 
-In the app source repository, to verify the snapshot is current (the release check does the same for the shipped snapshot; the OpenCode runtime pane checks the bundled sources and snapshot with the bundled copy of the generator):
+In the app source repository, to verify the snapshot is current (the release check does the same for the shipped snapshot; the OpenCode Runtime cell checks the bundled sources and snapshot with the bundled copy of the generator):
 
 ```
 python3 scripts/generate-opencode-config.py --check
@@ -189,7 +189,7 @@ Opt-outs:
 
 `templates/tui.json` controls TUI-only preferences such as theme, diff layout, mouse, scroll behavior, and leader timeout. It installs to `~/.config/opencode/tui.json` with the OpenCode config target.
 
-`tui.json` is merged like `opencode.json`, not replaced. Riggverk manages only the top-level keys listed under `tui_top_level` in `metadata/opencode-managed-keys.json`; your own keys (`keybinds`, `plugin`, `scroll_speed` and anything else) keep their values and their place in the file through install, update, rollback and uninstall. A missing file is created with the managed keys. A managed key the bundle no longer has is removed. The `tui` row of the runtime pane is `synced` while the managed keys hold the bundled values, whatever else the file holds.
+`tui.json` is merged like `opencode.json`, not replaced. Riggverk manages only the top-level keys listed under `tui_top_level` in `metadata/opencode-managed-keys.json`; your own keys (`keybinds`, `plugin`, `scroll_speed` and anything else) keep their values and their place in the file through install, update, rollback and uninstall. A missing file is created with the managed keys. A managed key the bundle no longer has is removed. The `tui` row of the Runtime cell is `synced` while the managed keys hold the bundled values, whatever else the file holds.
 
 The file is read and written as strict JSON. A `tui.json` with comments, a trailing comma, a byte order mark or invalid JSON is a conflict that is never rewritten; the reason the review gives never contains the file's text. A managed key you change after the app recorded what it wrote is also a conflict that leaves the file as it is; set the key back to let the next install manage it again. A file the app has no record of gets the managed keys on install, after a backup. Uninstall keeps the file.
 
@@ -205,7 +205,7 @@ Legacy `~/.config/opencode/agents/scout.md` files from the pre-rename scout agen
 
 ## Install workflow
 
-1. Open the OpenCode tab. The `opencode_config`, `opencode_agents`, and `opencode_rules` targets decide what is installed (Space toggles).
+1. Open the OpenCode page. The `opencode_config`, `opencode_agents`, and `opencode_rules` targets decide what is installed (each has a switch).
 2. Press `p` to preview or `u` to review, then `y` to apply.
 3. The install merges the managed keys into `~/.config/opencode/opencode.json` and `~/.config/opencode/tui.json`, and writes the Playwright MCP config and `~/.config/opencode/agents/*.md`. Extra agent files already in that directory are not deleted.
 
@@ -213,14 +213,14 @@ Both JSON files are validated before and after the write. Existing files that di
 
 ## App-level model override
 
-The OpenCode tab has a model override in its runtime pane. It holds four values:
+The OpenCode page has a model override in its Model cell. It holds four values:
 
 - `model` and `small model`: the global `model` and `small_model` of `opencode.json`.
 - `subagent model` (optional): the model the read-only subagent roles run on. Unset (shown as `inherit main model`), the subagents use the main model, as before.
 
 `critic model` (optional, stored as `critic_model`) is used by the adversarial skills' critic (`inspector`). It pins only `agent.inspector.model`, taking precedence over the subagent model; the other roles keep their subagent model. There is no bundled critic default: unset, inspector follows the subagent model or inherits the main model. Clearing it restores that fallback on the next install. It uses the same `provider/model` validation, model list, source/state display and reset as the other rows.
 
-Keys in the pane: `e` edit, `s` save, `x` reset to the bundled default, `R` reload the model list (read with the arguments of the installed OpenCode major).
+Keys in the cell: `e` edit, `s` save, `x` reset to the bundled default, `R` reload the model list (read with the arguments of the installed OpenCode major).
 
 ### Source, state and reset
 
@@ -253,13 +253,13 @@ A main or small model the override does not hold is read from the bundled `templ
 
 With a subagent model set, the install writes `agent.<role>.model` for exactly `repo-scout`, `inspector`, `sentinel`, `verifier` and `scribe` (inspector uses the critic override when set); the bundled agent files stay as they are. `architect`, OpenCode's own agents and every other `agent.*` entry are not touched. Like the `plan` and `explore` permission entries, these are managed sub-entries: only the `model` field is owned, so a role's other keys (`description`, `temperature`, your own `permission` edits ...) and every other agent survive, and a model you set on the primary or on your own agents is left alone. When the subagent override is cleared, the next install removes those `model` fields again, except inspector while a critic override remains; an `agent.<role>` or `agent` object that held nothing else goes with them.
 
-The runtime pane's `config` row names a role whose entry differs as `agent.<role>.model`. The model probes also check the installed subagent and inspector models against `opencode models` (`subagent_model` and `critic_model` checks and warnings). A model that is not listed leaves the roles pinned to it, so sign in to its provider or pick another model.
+The Runtime cell's `config` row names a role whose entry differs as `agent.<role>.model`. The model probes also check the installed subagent and inspector models against `opencode models` (`subagent_model` and `critic_model` checks and warnings). A model that is not listed leaves the roles pinned to it, so sign in to its provider or pick another model.
 
 Checked on OpenCode 1.19.3: a managed `agent.<role>.model` in `opencode.json` is applied to the markdown agents in `~/.config/opencode/agents` (`opencode debug agent <role> --pure` resolves the model from the config entry while the agent's permission ruleset is unchanged), and an agent without an entry resolves no model of its own and uses the session's. The tools a subagent gets can follow its provider: on that version `debug agent sentinel` lists the `websearch` tool under the default `opencode-go` model and not when the role is pinned to an `anthropic` model.
 
 ### Removing the override
 
-Press `x` in the pane, then install again (`u`, `y`). Deleting the file by hand does the same:
+Press `x` in the Model cell, then install again (`u`, `y`). Deleting the file by hand does the same:
 
 | Platform | Command |
 |----------|---------|

@@ -189,14 +189,14 @@ export function useAppCommands(deps: AppCommandDeps): void {
     },
     {
       name: "clear",
-      summary: "clear the output pane",
+      summary: "clear the last run result",
       group: "App",
       enabled: busyReason,
       run: () => deps.clearOutput(),
     },
     {
       name: "copy",
-      summary: "copy the output to the clipboard",
+      summary: "copy the last run output (redacted) to the clipboard",
       group: "App",
       enabled: () => (deps.outputText ? true : "no output to copy"),
       run: async () => {
