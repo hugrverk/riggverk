@@ -123,11 +123,11 @@ describe("App shell", () => {
     cleanup();
   });
 
-  it("starts on the workspace tab with the status bar in NORMAL mode", async () => {
+  it("starts on Overview with the status bar in NORMAL mode", async () => {
     installBackend();
     render(<App />);
     await ready();
-    expect(currentTab()).toBe("Workspace");
+    expect(currentTab()).toBe("Overview");
     expect(screen.getByLabelText("Status bar").querySelector(".mode")!.textContent).toBe("NORMAL");
   });
 
@@ -141,7 +141,7 @@ describe("App shell", () => {
     await waitFor(() => expect(currentTab()).toBe("Settings"));
     await screen.findByRole("region", { name: "Settings" });
     fireEvent.keyDown(document.body, { key: "1" });
-    await waitFor(() => expect(currentTab()).toBe("Workspace"));
+    await waitFor(() => expect(currentTab()).toBe("Overview"));
   });
 
   it("renumbers the tabs when a harness is hidden in settings", async () => {
@@ -166,9 +166,9 @@ describe("App shell", () => {
     const backend = installBackend({ enabled_harness_ids: ["codex", "opencode", "claude", "cursor", "pi"] });
     render(<App />);
     await within(nav()).findByRole("button", { name: "Pi" });
-    // Workspace, Codex, OpenCode, Cursor, Claude, Pi, Library, Settings.
-    expect(Array.from(nav().querySelectorAll("button.tab")).map(tab => tab.getAttribute("title"))).toEqual([
-      "Workspace", "Codex", "OpenCode", "Cursor", "Claude", "Pi", "Library", "Settings",
+    // Overview, Codex, OpenCode, Cursor, Claude, Pi, Library, Settings (then the dim "2 more agents" row).
+    expect(Array.from(nav().querySelectorAll("button.nav:not(.dim)")).map(item => item.getAttribute("aria-label"))).toEqual([
+      "Overview", "Codex", "OpenCode", "Cursor", "Claude", "Pi", "Library", "Settings",
     ]);
     fireEvent.keyDown(document.body, { key: "6" });
     await waitFor(() => expect(currentTab()).toBe("Pi"));
@@ -197,7 +197,7 @@ describe("App shell", () => {
     fireEvent.keyDown(document.body, { key: ",", ctrlKey: true });
     await screen.findByRole("region", { name: "Settings" });
     fireEvent.keyDown(document.body, { key: "1" });
-    await waitFor(() => expect(currentTab()).toBe("Workspace"));
+    await waitFor(() => expect(currentTab()).toBe("Overview"));
 
     fireEvent.keyDown(document.body, { key: ":", shiftKey: true });
     const input = screen.getByRole("combobox", { name: "Command" });
@@ -216,10 +216,10 @@ describe("App shell", () => {
     fireEvent.change(input, { target: { value: "claude" } });
     fireEvent.keyDown(input, { key: "Enter" });
     expect(screen.getByRole("alert").textContent).toBe("claude: claude is hidden in Settings");
-    expect(currentTab()).toBe("Workspace");
+    expect(currentTab()).toBe("Overview");
   });
 
-  it("does not mark the harness tabs with their installation state", async () => {
+  it("does not mark the agents with their installation state, only with decisions", async () => {
     const backend = installBackend();
     backend.installation = { codex: "update_available", cursor: "conflict" };
     render(<App />);
@@ -227,8 +227,8 @@ describe("App shell", () => {
     await waitFor(() => expect(backend.statusRequests.length).toBeGreaterThanOrEqual(4));
     await act(async () => {});
     for (const name of ["Codex", "OpenCode", "Cursor", "Claude"]) {
-      const tab = within(nav()).getByRole("button", { name });
-      expect(tab.querySelector(".st")).toBeNull();
+      const item = within(nav()).getByRole("button", { name });
+      expect(item.querySelector(".nb, .mark")).toBeNull();
     }
   });
 
@@ -270,7 +270,7 @@ describe("App shell", () => {
     runCommand("update workspace");
     await screen.findByRole("region", { name: "Workspace install review" });
     runCommand("uninstall");
-    expect(screen.getByLabelText("Status bar").textContent).toContain("close the install review first");
+    expect(document.querySelector(".toast")!.textContent).toContain("close the install review first");
 
     fireEvent.keyDown(document.body, { key: "Escape" });
     await waitFor(() => expect(screen.queryByRole("region", { name: "Workspace install review" })).toBeNull());
@@ -279,13 +279,52 @@ describe("App shell", () => {
     expect(backend.commandLog).not.toContain("preview_uninstall");
   });
 
+  describe("top bar", () => {
+    const updateAll = () => screen.getByRole("button", { name: "Update all" });
+
+    it("keeps Update all off, with the reason, while everything is up to date", async () => {
+      installBackend();
+      render(<App />);
+      await ready();
+      await waitFor(() => expect(updateAll().getAttribute("title")).toBe("Everything Riggverk can update is already up to date."));
+      expect(updateAll().getAttribute("aria-disabled")).toBe("true");
+    });
+
+    it("opens the install review of everything on Overview from any page, and writes nothing", async () => {
+      const backend = installBackend();
+      backend.installation = { codex: "update_available" };
+      render(<App />);
+      await ready();
+      await waitFor(() => expect(updateAll().getAttribute("aria-disabled")).toBeNull());
+      fireEvent.keyDown(document.body, { key: "2" });
+      await waitFor(() => expect(currentTab()).toBe("Codex"));
+      fireEvent.click(updateAll());
+      await screen.findByRole("region", { name: "Workspace install review" });
+      expect(currentTab()).toBe("Overview");
+      expect(backend.commandLog).toContain("preview_setup");
+      expect(backend.commandLog).not.toContain("apply_setup");
+    });
+
+    it("Check fetches every installation status again and the foot shows when", async () => {
+      const backend = installBackend();
+      render(<App />);
+      await ready();
+      await waitFor(() => expect(backend.statusRequests.length).toBeGreaterThanOrEqual(5));
+      const before = backend.statusRequests.length;
+      fireEvent.click(screen.getByRole("button", { name: "Check" }));
+      await waitFor(() => expect(backend.statusRequests.length).toBeGreaterThanOrEqual(before + 5));
+      const foot = document.querySelector(".side .foot")!;
+      await waitFor(() => expect(foot.textContent).toMatch(/^0 backupschecked \d{2}:\d{2}$/));
+    });
+  });
+
   it("lets ? open the help overlay and Escape close it", async () => {
     installBackend();
     render(<App />);
     await ready();
     fireEvent.keyDown(document.body, { key: "?", shiftKey: true });
     const help = screen.getByRole("dialog", { name: "Keyboard help" });
-    expect(help.textContent).toContain("Go to Workspace");
+    expect(help.textContent).toContain("Go to Overview");
     fireEvent.keyDown(help, { key: "Escape" });
     expect(screen.queryByRole("dialog", { name: "Keyboard help" })).toBeNull();
     await act(async () => {});

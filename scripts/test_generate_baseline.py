@@ -49,7 +49,9 @@ class SquashedRepoTests(unittest.TestCase):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.repo = Path(tmp.name) / "repo"
-        listed = run_git(ROOT, "ls-files", "-z").split("\0")
+        # The working tree as the generators see it: tracked files plus new, not-ignored ones
+        # (release.sh prepare adds the release notes draft before it commits).
+        listed = run_git(ROOT, "ls-files", "-z", "--cached", "--others", "--exclude-standard").split("\0")
         for rel in filter(None, listed):
             source = ROOT / rel
             if source.is_symlink() or source.is_file():

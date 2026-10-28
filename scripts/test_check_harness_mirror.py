@@ -133,10 +133,6 @@ class CheckHarnessMirrorTests(unittest.TestCase):
         self.edit(mirror.TS_VIEWS, '  | "kilo"\n', "")
         self.assert_fails("AppView")
 
-    def test_a_short_tab_label_missing_for_a_harness(self) -> None:
-        self.edit(mirror.TS_VIEWS, '  kilo: "kilo",\n', "")
-        self.assert_fails("HARNESS_SHORT")
-
     # The descriptor
 
     def test_a_descriptor_without_a_light_harness(self) -> None:

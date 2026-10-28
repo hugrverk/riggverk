@@ -3,7 +3,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Binding } from "../keyboard/registry";
 import { useKeymap } from "../keyboard/useKeymap";
 import { renderInFrame } from "../test/renderWithShell";
-import { CENTRAL_AGENTS, INSTALL_AGENTS } from "../types";
 import { Pane } from "../ui/Pane";
 import { PaneList } from "../ui/PaneList";
 import { useConfirmMode, useStatusContext, useShellState } from "./ShellState";
@@ -68,7 +67,7 @@ describe("StatusBar", () => {
     expect(mode()).toBe("NORMAL");
   });
 
-  it("shows the view and an optional sub-context, and a transient notice over it", () => {
+  it("shows the view and an optional sub-context, and leaves notices to the toast", () => {
     function Notifier() {
       const { notify } = useShellState();
       return <button type="button" onClick={() => notify("copied output")}>notify</button>;
@@ -76,9 +75,9 @@ describe("StatusBar", () => {
     vi.useFakeTimers();
     const { rerenderFrame } = renderInFrame(<View />);
     const ctx = () => status().querySelector(".ctx")!.textContent;
-    expect(ctx()).toBe("workspace");
+    expect(ctx()).toBe("overview");
     rerenderFrame(<View context="claude" />);
-    expect(ctx()).toBe("workspace › claude");
+    expect(ctx()).toBe("overview › claude");
     rerenderFrame(
       <>
         <View context="claude" />
@@ -86,11 +85,9 @@ describe("StatusBar", () => {
       </>,
     );
     fireEvent.click(screen.getByRole("button", { name: "notify" }));
-    expect(ctx()).toBe("copied output");
-    act(() => {
-      vi.advanceTimersByTime(4100);
-    });
-    expect(ctx()).toBe("workspace › claude");
+    expect(ctx()).toBe("overview › claude");
+    expect(document.querySelector(".toast")!.textContent).toBe("copied output");
+    expect(status().querySelector("[role='status']")).toBeNull();
   });
 
   it("shows the pending chord", () => {
@@ -155,26 +152,10 @@ describe("StatusBar", () => {
     expect(within(status()).queryByRole("button", { name: /hidden/ })).toBeNull();
   });
 
-  it("reads the tab hint from the number of visible tabs, up to the nine the digit keys reach", () => {
-    const tabHint = () => status().querySelector(".hints > span")!.textContent;
-    // Workspace, the default harnesses, Library, Settings.
+  it("leaves the digit keys to the sidebar and keeps the pane hint", () => {
     renderInFrame(<View />);
-    expect(tabHint()).toBe("1–7 tab");
-    cleanup();
-    // Workspace, Codex, Cursor, Library, Settings.
-    renderInFrame(<View />, { enabledHarnessIds: ["codex", "cursor"] });
-    expect(tabHint()).toBe("1–5 tab");
-    cleanup();
-    renderInFrame(<View />, { enabledHarnessIds: [] });
-    expect(tabHint()).toBe("1–3 tab");
-    cleanup();
-    // With every harness on, Settings falls beyond the digit shortcuts, so the hint stops at 9.
-    renderInFrame(<View />, { enabledHarnessIds: [...INSTALL_AGENTS] });
-    expect(tabHint()).toBe("1–9 tab");
-    cleanup();
-    // Kilo alongside the central harnesses.
-    renderInFrame(<View />, { enabledHarnessIds: [...CENTRAL_AGENTS, "kilo"] });
-    expect(tabHint()).toBe("1–8 tab");
+    expect(status().querySelector(".hints > span")!.textContent).toBe("hl pane");
+    expect(status().textContent).not.toMatch(/\btab\b/);
   });
 
   it("offers the command-line and help hints in NORMAL mode and row hints while a list has focus", () => {
@@ -239,9 +220,13 @@ describe("StatusBar", () => {
   });
 });
 
-describe("StatusBar key echo", () => {
+describe("key echo state (no longer drawn in the status bar)", () => {
   const update: Binding = { id: "t.update", keys: "u", title: "Update", hint: "update", scope: "pane", paneId: "main", run: () => {} };
-  const echo = () => status().querySelector(".echo");
+  function EchoProbe() {
+    const { echo: current } = useShellState();
+    return current ? <span data-testid="echo">{`${current.keys.join(" ")} ${current.label}`}</span> : null;
+  }
+  const echo = () => screen.queryByTestId("echo");
 
   function focusRows() {
     const list = screen.getByRole("listbox", { name: "rows" });
@@ -249,15 +234,12 @@ describe("StatusBar key echo", () => {
     return list;
   }
 
-  it("shows the key that ran and its hint next to the mode badge, visual only, then clears it", () => {
+  it("records the key that ran and its hint, then clears it", () => {
     vi.useFakeTimers();
-    renderInFrame(<View bindings={[update]} />);
+    renderInFrame(<><View bindings={[update]} /><EchoProbe /></>);
     expect(echo()).toBeNull();
     fireEvent.keyDown(focusRows(), { key: "u" });
     expect(echo()!.textContent).toBe("u update");
-    expect(echo()!.querySelector("kbd")!.textContent).toBe("u");
-    expect(echo()!.getAttribute("aria-hidden")).toBe("true");
-    expect(echo()!.previousElementSibling).toBe(status().querySelector(".mode"));
     act(() => {
       vi.advanceTimersByTime(950);
     });
@@ -267,7 +249,7 @@ describe("StatusBar key echo", () => {
   it("echoes the latest key, restarting the timer", () => {
     vi.useFakeTimers();
     const preview: Binding = { ...update, id: "t.preview", keys: "p", hint: "preview" };
-    renderInFrame(<View bindings={[update, preview]} />);
+    renderInFrame(<><View bindings={[update, preview]} /><EchoProbe /></>);
     const list = focusRows();
     fireEvent.keyDown(list, { key: "u" });
     act(() => {
@@ -287,7 +269,7 @@ describe("StatusBar key echo", () => {
 
   it("echoes a click on a status-bar hint like the key", () => {
     const run = vi.fn();
-    renderInFrame(<View bindings={[{ ...update, run }]} />);
+    renderInFrame(<><View bindings={[{ ...update, run }]} /><EchoProbe /></>);
     focusRows();
     fireEvent.click(within(status()).getByRole("button", { name: /update/ }));
     expect(run).toHaveBeenCalledTimes(1);
@@ -296,12 +278,15 @@ describe("StatusBar key echo", () => {
 
   it("does not echo a click on a disabled hint, or one whose binding declined", () => {
     renderInFrame(
-      <View
-        bindings={[
-          { ...update, id: "t.off", keys: "o", hint: "off", when: () => "not now" },
-          { ...update, id: "t.declines", keys: "d", hint: "declines", run: () => false },
-        ]}
-      />,
+      <>
+        <View
+          bindings={[
+            { ...update, id: "t.off", keys: "o", hint: "off", when: () => "not now" },
+            { ...update, id: "t.declines", keys: "d", hint: "declines", run: () => false },
+          ]}
+        />
+        <EchoProbe />
+      </>,
     );
     focusRows();
     fireEvent.click(within(status()).getByRole("button", { name: /off/ }));
@@ -311,12 +296,15 @@ describe("StatusBar key echo", () => {
 
   it("stays silent for movement keys, for bindings without a hint, and for the overlay openers", () => {
     renderInFrame(
-      <View
-        bindings={[
-          { ...update, id: "t.down", keys: "j", hint: "next" },
-          { ...update, id: "t.plain", keys: "x", hint: undefined },
-        ]}
-      />,
+      <>
+        <View
+          bindings={[
+            { ...update, id: "t.down", keys: "j", hint: "next" },
+            { ...update, id: "t.plain", keys: "x", hint: undefined },
+          ]}
+        />
+        <EchoProbe />
+      </>,
     );
     const list = focusRows();
     fireEvent.keyDown(list, { key: "j" });
@@ -329,7 +317,7 @@ describe("StatusBar key echo", () => {
   });
 
   it("does echo a click on a movement hint, since the click is the deliberate act", () => {
-    renderInFrame(<View bindings={[{ ...update, id: "t.down", keys: "j", hint: "next" }]} />);
+    renderInFrame(<><View bindings={[{ ...update, id: "t.down", keys: "j", hint: "next" }]} /><EchoProbe /></>);
     focusRows();
     fireEvent.click(within(status()).getByRole("button", { name: /next/ }));
     expect(echo()!.textContent).toBe("j next");
@@ -338,7 +326,10 @@ describe("StatusBar key echo", () => {
   it("stays silent while typing in a text field, even for a binding that fires there", () => {
     const save = vi.fn();
     renderInFrame(
-      <View bindings={[{ id: "t.save", keys: "Mod+s", title: "Save", hint: "save", scope: "pane", paneId: "main", inEditable: true, run: save }]} />,
+      <>
+        <View bindings={[{ id: "t.save", keys: "Mod+s", title: "Save", hint: "save", scope: "pane", paneId: "main", inEditable: true, run: save }]} />
+        <EchoProbe />
+      </>,
     );
     const field = screen.getByLabelText("field");
     act(() => field.focus());
@@ -348,94 +339,18 @@ describe("StatusBar key echo", () => {
   });
 
   it("stays silent for auto-repeat", () => {
-    renderInFrame(<View bindings={[{ ...update, repeat: true }]} />);
+    renderInFrame(<><View bindings={[{ ...update, repeat: true }]} /><EchoProbe /></>);
     fireEvent.keyDown(focusRows(), { key: "u", repeat: true });
     expect(echo()).toBeNull();
   });
 
   it("leaves the pending chord display alone", () => {
-    renderInFrame(<View bindings={[{ ...update, id: "t.chord", keys: "x y" }]} />);
+    renderInFrame(<><View bindings={[{ ...update, id: "t.chord", keys: "x y" }]} /><EchoProbe /></>);
     const list = focusRows();
     fireEvent.keyDown(list, { key: "x" });
     expect(status().querySelector(".chord")!.textContent).toBe("x");
     expect(echo()).toBeNull();
     fireEvent.keyDown(list, { key: "y" });
-    expect([...echo()!.querySelectorAll("kbd")].map(kbd => kbd.textContent)).toEqual(["x", "y"]);
-    expect(echo()!.textContent).toContain("update");
-  });
-});
-
-describe("StatusBar notices", () => {
-  function Notifier({ text = "applied", options }: { text?: string; options?: Parameters<ReturnType<typeof useShellState>["notify"]>[1] }) {
-    const { notify } = useShellState();
-    return <button type="button" onClick={() => notify(text, options)}>notify</button>;
-  }
-  const ctx = () => status().querySelector(".ctx")!;
-
-  it.each(["ok", "warn", "fail"] as const)("carries the %s tone, with the text unchanged", tone => {
-    renderInFrame(<Notifier text="nothing to update" options={{ tone }} />);
-    fireEvent.click(screen.getByRole("button", { name: "notify" }));
-    expect(ctx().getAttribute("data-tone")).toBe(tone);
-    expect(ctx().textContent).toBe("nothing to update");
-    expect(ctx().getAttribute("role")).toBe("status");
-  });
-
-  it("is plain without a tone, and the tone goes with the notice", () => {
-    vi.useFakeTimers();
-    renderInFrame(<Notifier options={{ tone: "ok" }} />);
-    fireEvent.click(screen.getByRole("button", { name: "notify" }));
-    expect(ctx().getAttribute("data-tone")).toBe("ok");
-    act(() => {
-      vi.advanceTimersByTime(4100);
-    });
-    expect(ctx().hasAttribute("data-tone")).toBe(false);
-    expect(ctx().textContent).toBe("workspace");
-  });
-
-  it("takes a bare number as the duration, as before", () => {
-    vi.useFakeTimers();
-    renderInFrame(<Notifier options={1000} />);
-    fireEvent.click(screen.getByRole("button", { name: "notify" }));
-    expect(ctx().textContent).toBe("applied");
-    expect(ctx().hasAttribute("data-tone")).toBe(false);
-    act(() => {
-      vi.advanceTimersByTime(1100);
-    });
-    expect(ctx().textContent).toBe("workspace");
-  });
-
-  it("restarts the entrance for a repeat of the same text", () => {
-    renderInFrame(<Notifier />);
-    fireEvent.click(screen.getByRole("button", { name: "notify" }));
-    const first = ctx().querySelector(".notice");
-    fireEvent.click(screen.getByRole("button", { name: "notify" }));
-    expect(ctx().querySelector(".notice")).not.toBe(first);
-  });
-});
-
-describe("StatusBar right text", () => {
-  afterEach(() => {
-    delete document.documentElement.dataset.motion;
-  });
-
-  it("rolls when the text changes under full motion, and not on the first render", () => {
-    document.documentElement.dataset.motion = "full";
-    const { rerenderFrame } = renderInFrame(<View />, { statusRight: "2 backups" });
-    const rt = () => status().querySelector(".rt")!;
-    expect(rt().textContent).toBe("2 backups");
-    expect(rt().querySelector(".roll-old")).toBeNull();
-    rerenderFrame(<View />, { statusRight: "3 backups" });
-    expect(rt().querySelector(".roll-old")!.textContent).toBe("2 backups");
-    expect(rt().querySelector(".roll-new")!.textContent).toBe("3 backups");
-  });
-
-  it("swaps instantly when motion is off, and leaves non-text content alone", () => {
-    document.documentElement.dataset.motion = "off";
-    const { rerenderFrame } = renderInFrame(<View />, { statusRight: "2 backups" });
-    rerenderFrame(<View />, { statusRight: "3 backups" });
-    expect(status().querySelector(".rt .roll-old")).toBeNull();
-    expect(status().querySelector(".rt")!.textContent).toBe("3 backups");
-    rerenderFrame(<View />, { statusRight: <b>custom</b> });
-    expect(status().querySelector(".rt b")!.textContent).toBe("custom");
+    expect(echo()!.textContent).toBe("x y update");
   });
 });

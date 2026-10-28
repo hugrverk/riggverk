@@ -13,7 +13,9 @@ export {
   type ShellStateValue,
 } from "./ShellState";
 export { StatusBar, type StatusBarProps } from "./StatusBar";
-export { TopLine, type TopLineProps } from "./TopLine";
+export { Sidebar, type SidebarProps } from "./Sidebar";
+export { Toast } from "./Toast";
+export { TopBar, type TopBarProps } from "./TopBar";
 export { useAppCommands, type AppCommandDeps } from "./useAppCommands";
 export { VIEW_DEFS, viewDef, visibleViews, type AppView, type ViewDef } from "./views";
 export { WhatsNewOverlay } from "./WhatsNewOverlay";
