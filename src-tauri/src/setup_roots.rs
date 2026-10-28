@@ -13,17 +13,19 @@ pub struct SetupRoots {
 }
 
 impl SetupRoots {
+    /// The roots of one operation. `sources` are the bundle and packs of `runtime_root`, read by
+    /// the caller once for the whole operation.
     pub fn resolve(
         runtime_root: PathBuf,
         home: PathBuf,
         backup_root: PathBuf,
+        sources: crate::skill_sources::SkillSources,
     ) -> Result<Self, String> {
-        let bundled_root = bundled_root()?;
-        if bundled_root == runtime_root {
+        if &*sources == runtime_root.as_path() {
             return Err("bundled and runtime workspace roots must be distinct".to_string());
         }
         Ok(Self {
-            sources: crate::skill_sources::SkillSources::new(bundled_root, &runtime_root),
+            sources,
             runtime_root,
             home,
             backup_root,

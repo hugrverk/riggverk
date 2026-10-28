@@ -8,8 +8,10 @@
 //!
 //! - **Bundle wins.** A pack skill whose name the bundle ships is *shadowed*: listed, never
 //!   installed. Two pack skills of one name are both an *error* (that skill only; the plan goes on).
-//! - **Limits** are the bundle's (no symlinks, 64 files and 2 MiB per skill, four levels). On Unix a
-//!   pack folder that is group- or world-writable is refused as a whole.
+//! - **Limits** are the bundle's (no symlinks, 64 files and 2 MiB per skill, four levels). On Unix
+//!   a pack is refused as a whole when its folder, `skills/` or anything below `skills/` is group-
+//!   or world-writable or not owned by the current user, and no pack is read when `packs/` itself
+//!   is.
 //! - **A missing pack is not a retirement.** After every successful transaction the installed pack
 //!   skills are recorded in `.riggverk/pack-skills.json` (pack to skill names). A recorded name the
 //!   catalog lacks is *held*: planned neither for update nor for removal until the user forgets the
@@ -283,6 +285,8 @@ impl SkillSources {
 
     /// The bundle at `bundled` and the packs in `workspace_root`.
     pub fn new(bundled: PathBuf, workspace_root: &Path) -> Self {
+        #[cfg(test)]
+        reads::count();
         let bundle_catalog = crate::skill_discovery::discover_skill_catalog(&bundled);
         let bundle_names: HashSet<String> = bundle_catalog
             .as_ref()
@@ -389,6 +393,26 @@ impl SkillSources {
     }
 }
 
+/// Counts, per thread, how often the catalog was read, so a test can hold a plan, an apply or a
+/// diff to one read.
+#[cfg(test)]
+pub(crate) mod reads {
+    use std::cell::Cell;
+
+    thread_local! {
+        static COUNT: Cell<usize> = const { Cell::new(0) };
+    }
+
+    pub(super) fn count() {
+        COUNT.with(|count| count.set(count.get() + 1));
+    }
+
+    /// Reads of the catalog on this thread so far.
+    pub(crate) fn total() -> usize {
+        COUNT.with(Cell::get)
+    }
+}
+
 // ── Reading packs ──
 
 /// A skill found in a pack before name conflicts are decided.
@@ -416,7 +440,12 @@ fn scan_packs(
             return (Vec::new(), ignored);
         }
         Ok(meta) if !meta.is_dir() => return (Vec::new(), ignored),
-        Ok(_) => {}
+        Ok(meta) => {
+            if let Err(reason) = check_trusted(&meta, "the packs folder") {
+                ignored.push((PACKS_DIR.to_string(), reason));
+                return (Vec::new(), ignored);
+            }
+        }
     }
     let Ok(entries) = fs::read_dir(&dir) else {
         ignored.push((
@@ -566,17 +595,39 @@ fn report_candidate(
     }
 }
 
-/// Whether a directory is writable by its group or by anyone (Unix); always false elsewhere.
-fn loosely_writable(meta: &fs::Metadata) -> bool {
+/// The effective user id of this process. `std` has no accessor and the crate has no `libc`
+/// dependency, so this declares the one C function it needs; `geteuid` is always linked on Unix.
+#[cfg(unix)]
+fn effective_uid() -> u32 {
+    extern "C" {
+        fn geteuid() -> u32;
+    }
+    // SAFETY: `geteuid` takes no arguments, has no preconditions and cannot fail.
+    unsafe { geteuid() }
+}
+
+/// Why a pack entry cannot be trusted (Unix): writable by its group or by everyone, or owned by
+/// someone else than the current user. Always `Ok` elsewhere. `what` names the entry in the reason.
+fn check_trusted(meta: &fs::Metadata, what: &str) -> Result<(), String> {
     #[cfg(unix)]
     {
-        use std::os::unix::fs::PermissionsExt;
-        meta.permissions().mode() & 0o022 != 0
+        use std::os::unix::fs::{MetadataExt, PermissionsExt};
+        if meta.permissions().mode() & 0o022 != 0 {
+            return Err(format!(
+                "refusing {what}: it is writable by its group or by everyone; run chmod go-w on it"
+            ));
+        }
+        if meta.uid() != effective_uid() {
+            return Err(format!(
+                "refusing {what}: it is not owned by the current user; run chown on it"
+            ));
+        }
+        Ok(())
     }
     #[cfg(not(unix))]
     {
-        let _ = meta;
-        false
+        let _ = (meta, what);
+        Ok(())
     }
 }
 
@@ -586,12 +637,7 @@ fn scan_pack(pack_dir: &Path) -> Result<Vec<Candidate>, String> {
     if meta.file_type().is_symlink() {
         return Err("refusing a symlinked pack".to_string());
     }
-    if loosely_writable(&meta) {
-        return Err(
-            "refusing a pack folder that is writable by its group or by everyone; run chmod go-w on it"
-                .to_string(),
-        );
-    }
+    check_trusted(&meta, "a pack folder")?;
     let skills_dir = pack_dir.join("skills");
     // Only a skills folder that is not there at all means "no skills". One that cannot be looked
     // at, or is no folder, must not read as an empty pack: that would retire everything installed.
@@ -602,7 +648,7 @@ fn scan_pack(pack_dir: &Path) -> Result<Vec<Candidate>, String> {
             return Err("refusing a symlinked skills folder".to_string())
         }
         Ok(meta) if !meta.is_dir() => return Err("skills is not a folder".to_string()),
-        Ok(_) => {}
+        Ok(meta) => check_trusted(&meta, "the skills folder")?,
     }
     let mut seen = 0usize;
     reject_links_below(&skills_dir, 0, &mut seen)?;
@@ -681,8 +727,9 @@ fn sorted_dirs(dir: &Path) -> Result<Vec<(String, PathBuf)>, String> {
     Ok(out)
 }
 
-/// Refuses the pack on a symlink or any other link-like entry below `dir`, and on a tree too big
-/// to read. Dot entries (`.git`) are never read, so they are not walked.
+/// Refuses the pack on a symlink or any other link-like entry below `dir`, on an entry that is
+/// writable by its group or by everyone or not owned by the current user (Unix), and on a tree too
+/// big to read. Dot entries (`.git`) are never read, so they are not walked.
 fn reject_links_below(dir: &Path, depth: usize, seen: &mut usize) -> Result<(), String> {
     if depth > MAX_TREE_DEPTH {
         return Err("pack skills nested too deep".to_string());
@@ -706,6 +753,10 @@ fn reject_links_below(dir: &Path, depth: usize, seen: &mut usize) -> Result<(), 
                 entry.path().display()
             ));
         }
+        let meta = entry
+            .metadata()
+            .map_err(|e| format!("cannot read {}: {e}", entry.path().display()))?;
+        check_trusted(&meta, &entry.path().display().to_string())?;
         if kind.is_dir() {
             reject_links_below(&entry.path(), depth + 1, seen)?;
         }

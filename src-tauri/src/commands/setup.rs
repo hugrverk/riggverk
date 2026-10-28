@@ -872,6 +872,7 @@ fn apply_single_artifact(
     artifact: &crate::artifact_registry::ArtifactId,
     workspace_root: &Path,
     home: &Path,
+    sources: &crate::skill_sources::SkillSources,
     rules_rewrite: Option<&setup_transaction::RulesRewrite>,
     overwrite: Option<&setup_transaction::Overwrite>,
 ) -> Result<(), String> {
@@ -884,8 +885,12 @@ fn apply_single_artifact(
             setup_transaction::validate_artifact_dest(artifact, workspace_root, home)?;
         return apply_claude_settings(&dest, &root);
     }
-    let (source, dest) =
-        setup_transaction::validate_artifact_source_dest(artifact, workspace_root, home)?;
+    let (source, dest) = setup_transaction::validate_artifact_source_dest_with(
+        artifact,
+        workspace_root,
+        home,
+        sources,
+    )?;
     let root = artifact.allowlist_root(home, workspace_root)?;
 
     // A replacement the user asked for writes over their own file: only a skill or agent file, and
@@ -1247,6 +1252,23 @@ fn run_planned_artifacts(
     surfaces.sort_by_key(|s| format!("{s:?}"));
     surfaces.dedup();
 
+    // The bundle and the packs are read once for the whole apply: preflight, every operation and
+    // its validation use these sources.
+    let sources = match crate::skill_sources::SkillSources::for_workspace(&ws_root) {
+        Ok(sources) => sources,
+        Err(e) => {
+            return SetupResult {
+                success: false,
+                transaction_id,
+                applied: vec![],
+                failed: vec![e.clone()],
+                rolled_back: vec![],
+                manual_steps,
+                message: e,
+            };
+        }
+    };
+
     for p in &pending {
         if matches!(p.kind, OperationKind::Remove) {
             continue;
@@ -1254,8 +1276,13 @@ fn run_planned_artifacts(
         let checked = if p.artifact == crate::artifact_registry::ArtifactId::ClaudeSettings {
             setup_transaction::validate_artifact_dest(&p.artifact, &ws_root, &home).map(|_| ())
         } else {
-            setup_transaction::validate_artifact_source_dest(&p.artifact, &ws_root, &home)
-                .map(|_| ())
+            setup_transaction::validate_artifact_source_dest_with(
+                &p.artifact,
+                &ws_root,
+                &home,
+                &sources,
+            )
+            .map(|_| ())
         };
         if let Err(e) = checked {
             return SetupResult {
@@ -1288,6 +1315,7 @@ fn run_planned_artifacts(
         ws_root.clone(),
         home.clone(),
         backup_dir.clone(),
+        sources,
     ) {
         Ok(roots) => roots,
         Err(e) => {
@@ -1553,6 +1581,7 @@ fn run_planned_artifacts(
                 &p.artifact,
                 &ws_root,
                 &home,
+                &roots.sources,
                 p.rules_rewrite.as_ref(),
                 p.overwrite.as_ref(),
             )
@@ -1594,7 +1623,12 @@ fn run_planned_artifacts(
                     }
                 })
         } else {
-            setup_transaction::validate_artifact_after_apply(&p.artifact, &ws_root, &home)
+            setup_transaction::validate_artifact_after_apply_with(
+                &p.artifact,
+                &ws_root,
+                &home,
+                &roots.sources,
+            )
         }
         .and_then(|()| {
             let managed = crate::setup_fingerprint::artifact_installed_managed_digest(
@@ -1763,7 +1797,8 @@ fn run_planned_artifacts(
         &ws_root,
         &home,
         |artifact| {
-            setup_transaction::detect_artifact_state(artifact, &ws_root, &home).0
+            setup_transaction::detect_artifact_state_with(artifact, &ws_root, &home, &roots.sources)
+                .0
                 == OperationKind::NoChange
         },
     ));
@@ -2285,6 +2320,7 @@ pub fn rollback_transaction(
 // ── Real state detection ──
 
 /// Detect surface state via artifact-level aggregation (canonical owner in setup_transaction).
+#[cfg(test)]
 pub fn detect_surface_state(
     surface: SetupSurfaceId,
     workspace_root: &Path,
@@ -2303,19 +2339,45 @@ pub(super) fn validate_transaction_id_format(id: &str) -> bool {
 
 // ── Tauri commands ──
 
+#[cfg(test)]
 fn compute_plan_fingerprint_for_surfaces(
     surfaces: &[SetupSurfaceId],
     workspace_root: &Path,
     home: &Path,
 ) -> Result<String, String> {
-    let planned = setup_transaction::plan_artifacts_for_surfaces(surfaces, workspace_root, home)?;
-    setup_transaction::compute_plan_fingerprint(workspace_root, surfaces, &planned, home)
+    let sources = crate::skill_sources::SkillSources::for_workspace(workspace_root)?;
+    compute_plan_fingerprint_for_surfaces_with(surfaces, workspace_root, home, &sources)
+}
+
+/// The fingerprint of the plan of `surfaces`, planned from `sources`.
+fn compute_plan_fingerprint_for_surfaces_with(
+    surfaces: &[SetupSurfaceId],
+    workspace_root: &Path,
+    home: &Path,
+    sources: &crate::skill_sources::SkillSources,
+) -> Result<String, String> {
+    let scope = setup_transaction::scope_for_surfaces(surfaces, home)?;
+    let planned = setup_transaction::plan_artifacts_for_surfaces_with(
+        surfaces,
+        workspace_root,
+        home,
+        &scope,
+        sources,
+    )?;
+    setup_transaction::compute_plan_fingerprint_with(
+        workspace_root,
+        surfaces,
+        &planned,
+        home,
+        sources,
+    )
 }
 
 fn attach_plan_preview(
     plan: &mut SetupPlan,
     workspace_root: &Path,
     home: &Path,
+    sources: &Result<crate::skill_sources::SkillSources, String>,
 ) -> Result<(), String> {
     let mut pending_surfaces: Vec<SetupSurfaceId> = plan
         .operations
@@ -2330,8 +2392,12 @@ fn attach_plan_preview(
         plan.preview_token = None;
         return Ok(());
     }
-    let fingerprint =
-        compute_plan_fingerprint_for_surfaces(&pending_surfaces, workspace_root, home)?;
+    let fingerprint = compute_plan_fingerprint_for_surfaces_with(
+        &pending_surfaces,
+        workspace_root,
+        home,
+        sources.as_ref().map_err(Clone::clone)?,
+    )?;
     plan.plan_fingerprint = Some(fingerprint.clone());
     plan.preview_token = Some(setup_transaction::issue_preview_token(
         workspace_root,
@@ -2430,22 +2496,43 @@ fn plan_surfaces(
     if surface_ids.is_empty() {
         return Ok(crate::setup_lifecycle::empty_plan());
     }
-    let states: Vec<_> = surface_ids
-        .iter()
-        .map(|s| detect_surface_state(*s, ws_root, home))
-        .collect();
+    // The bundle and the packs are read once for the whole preview.
+    let sources = crate::skill_sources::SkillSources::for_workspace(ws_root);
+    let states = surface_states(&surface_ids, ws_root, home, &sources);
     let request = SetupRequest {
         surfaces: surface_ids,
         skip_manual: true,
     };
     let mut plan = crate::setup_lifecycle::plan_setup(&request, &states);
-    attach_skill_details(&mut plan, ws_root, home);
+    attach_skill_details(&mut plan, ws_root, home, sources.as_ref().ok());
     attach_workspace_details(&mut plan, ws_root, home);
     attach_rules_details(&mut plan, home);
     attach_mcp_details(&mut plan, home);
     attach_claude_settings_details(&mut plan);
-    attach_plan_preview(&mut plan, ws_root, home)?;
+    attach_plan_preview(&mut plan, ws_root, home, &sources)?;
     Ok(plan)
+}
+
+/// The state of each surface, detected from one read of the sources.
+fn surface_states(
+    surface_ids: &[SetupSurfaceId],
+    ws_root: &Path,
+    home: &Path,
+    sources: &Result<crate::skill_sources::SkillSources, String>,
+) -> Vec<(SetupSurfaceId, OperationKind, String)> {
+    surface_ids
+        .iter()
+        .map(|surface| match sources {
+            Ok(sources) => {
+                setup_transaction::detect_surface_state_with(*surface, ws_root, home, sources)
+            }
+            Err(message) => (
+                *surface,
+                OperationKind::Unavailable,
+                format!("{} unavailable: {message}", surface.label()),
+            ),
+        })
+        .collect()
 }
 
 /// The review of an MCP entry names the file it goes into: a new file, or the entry in a file the
@@ -2524,7 +2611,12 @@ fn attach_rules_details(plan: &mut SetupPlan, home: &Path) {
 /// Fills the review lines of the skills surface: what is created, updated and removed in each
 /// folder, and what stays because it was edited. Without them the review shows one opaque row for
 /// a surface that spans several folders.
-fn attach_skill_details(plan: &mut SetupPlan, workspace_root: &Path, home: &Path) {
+fn attach_skill_details(
+    plan: &mut SetupPlan,
+    workspace_root: &Path,
+    home: &Path,
+    sources: Option<&crate::skill_sources::SkillSources>,
+) {
     let mentions_skills = plan
         .operations
         .iter()
@@ -2536,9 +2628,16 @@ fn attach_skill_details(plan: &mut SetupPlan, workspace_root: &Path, home: &Path
     let Ok(scope) = setup_transaction::scope_for_surfaces(&skills, home) else {
         return;
     };
-    let Ok(planned) =
-        setup_transaction::plan_artifacts_for_surfaces_in(&skills, workspace_root, home, &scope)
-    else {
+    let Some(sources) = sources else {
+        return;
+    };
+    let Ok(planned) = setup_transaction::plan_artifacts_for_surfaces_with(
+        &skills,
+        workspace_root,
+        home,
+        &scope,
+        sources,
+    ) else {
         return;
     };
     let details = setup_transaction::skill_plan_details(&planned, &scope);
@@ -2722,10 +2821,8 @@ pub fn apply_setup(
     )
     .map_err(|e| format!("user home: {e}"))?;
 
-    let states: Vec<_> = surface_ids
-        .iter()
-        .map(|s| detect_surface_state(*s, &ws_root, &home))
-        .collect();
+    let sources = crate::skill_sources::SkillSources::for_workspace(&ws_root);
+    let states = surface_states(&surface_ids, &ws_root, &home, &sources);
 
     let expected_fingerprint = plan_fingerprint
         .as_deref()
@@ -2736,7 +2833,12 @@ pub fn apply_setup(
     let token = preview_token
         .as_deref()
         .ok_or_else(|| "Preview token required. Re-run preview before applying.".to_string())?;
-    let current_fingerprint = compute_plan_fingerprint_for_surfaces(&surface_ids, &ws_root, &home)?;
+    let current_fingerprint = compute_plan_fingerprint_for_surfaces_with(
+        &surface_ids,
+        &ws_root,
+        &home,
+        sources.as_ref().map_err(Clone::clone)?,
+    )?;
     if current_fingerprint != expected_fingerprint {
         return Err(
             "Plan fingerprint mismatch: state changed after preview. Re-run preview before applying."
@@ -3017,6 +3119,25 @@ pub fn rollback_setup_transaction(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `apply_single_artifact` with the sources of `workspace_root`, as an apply holds them.
+    fn apply_single_artifact(
+        artifact: &crate::artifact_registry::ArtifactId,
+        workspace_root: &Path,
+        home: &Path,
+        rules_rewrite: Option<&setup_transaction::RulesRewrite>,
+        overwrite: Option<&setup_transaction::Overwrite>,
+    ) -> Result<(), String> {
+        let sources = crate::skill_sources::SkillSources::for_workspace(workspace_root)?;
+        super::apply_single_artifact(
+            artifact,
+            workspace_root,
+            home,
+            &sources,
+            rules_rewrite,
+            overwrite,
+        )
+    }
     use crate::artifact_registry::ArtifactId;
     use crate::test_env::{guard, set_test_user_dirs};
 
@@ -3564,6 +3685,8 @@ mod tests {
 
     #[test]
     fn rollback_nonexistent_transaction() {
+        // The backup folder comes from the environment.
+        let _env = TempSetupEnv::new("rollback-nonexistent");
         let result = rollback_transaction(
             "1234567890123456789",
             false,
@@ -3765,11 +3888,8 @@ mod tests {
 
     #[test]
     fn detect_opencode_config_create_when_missing() {
-        let home = std::env::temp_dir().join("aw-detect-oc-create");
-        let _ = fs::remove_dir_all(&home);
-        fs::create_dir_all(&home).expect("create dir");
-        let ws = std::env::temp_dir().join("aw-detect-oc-create-ws");
-        let _ = fs::remove_dir_all(&ws);
+        let env = TempSetupEnv::new("detect-oc-create");
+        let (ws, home) = (env.ws.clone(), env.home.clone());
         fs::create_dir_all(&ws).expect("create ws");
 
         let (_surface, kind, _summary) =
@@ -3783,12 +3903,8 @@ mod tests {
 
     #[test]
     fn detect_skills_create_when_missing() {
-        let home = std::env::temp_dir().join("aw-detect-cl-skills-create");
-        let _ = fs::remove_dir_all(&home);
-        fs::create_dir_all(&home).expect("create dir");
-
-        let ws = std::env::temp_dir().join("aw-detect-cl-skills-runtime");
-        let _ = fs::remove_dir_all(&ws);
+        let env = TempSetupEnv::new("detect-skills-create");
+        let (ws, home) = (env.ws.clone(), env.home.clone());
         fs::create_dir_all(&ws).expect("create runtime");
 
         let (_surface, kind, _summary) = detect_surface_state(SetupSurfaceId::Skills, &ws, &home);
@@ -3801,13 +3917,11 @@ mod tests {
 
     #[test]
     fn detect_codex_config_conflict_when_invalid_toml() {
-        let home = std::env::temp_dir().join("aw-detect-cx-invalid");
-        let _ = fs::remove_dir_all(&home);
-        fs::create_dir_all(&home).expect("create dir");
+        // CODEX_HOME is part of the environment the detection reads; the helper points it into
+        // the temp home.
+        let env = TempSetupEnv::new("detect-cx-invalid");
+        let (ws, home) = (env.ws.clone(), env.home.clone());
         fs::create_dir_all(home.join(".codex")).expect("create codex dir");
-
-        let ws = std::env::temp_dir().join("aw-detect-cx-invalid-ws");
-        let _ = fs::remove_dir_all(&ws);
         fs::create_dir_all(&ws).expect("create ws");
         fs::create_dir_all(ws.join("templates/codex")).expect("create templates");
 
@@ -3828,13 +3942,11 @@ mod tests {
 
     #[test]
     fn plan_fingerprint_is_stable_for_same_surface_set() {
+        // The fingerprint reads settings and paths from the process environment.
+        let env = TempSetupEnv::new("fingerprint-stable");
         setup_transaction::clear_preview_tokens_for_test();
-        let ws = std::env::temp_dir().join("aw-fingerprint-stable-runtime");
-        let home = std::env::temp_dir().join("aw-fingerprint-stable-home");
-        let _ = fs::remove_dir_all(&ws);
-        let _ = fs::remove_dir_all(&home);
+        let (ws, home) = (env.ws.clone(), env.home.clone());
         fs::create_dir_all(&ws).expect("runtime");
-        fs::create_dir_all(&home).expect("home");
         let surfaces = vec![SetupSurfaceId::OpenCodeRules, SetupSurfaceId::CodexRules];
         let fp1 = compute_plan_fingerprint_for_surfaces(&surfaces, &ws, &home).expect("fp1");
         let fp2 = compute_plan_fingerprint_for_surfaces(&surfaces, &ws, &home).expect("fp2");
@@ -3844,12 +3956,9 @@ mod tests {
 
     #[test]
     fn plan_fingerprint_changes_when_surfaces_differ() {
-        let ws = std::env::temp_dir().join("aw-fingerprint-different-runtime");
-        let home = std::env::temp_dir().join("aw-fingerprint-different-home");
-        let _ = fs::remove_dir_all(&ws);
-        let _ = fs::remove_dir_all(&home);
+        let env = TempSetupEnv::new("fingerprint-different");
+        let (ws, home) = (env.ws.clone(), env.home.clone());
         fs::create_dir_all(&ws).expect("runtime");
-        fs::create_dir_all(&home).expect("home");
         let fp1 =
             compute_plan_fingerprint_for_surfaces(&[SetupSurfaceId::OpenCodeRules], &ws, &home)
                 .expect("fp1");
