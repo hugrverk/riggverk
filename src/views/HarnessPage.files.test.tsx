@@ -803,7 +803,8 @@ describe("take bundled (b, y)", () => {
     expect(pane.querySelector(".pane-title")!.textContent).toContain("+1 −1");
     expect(pane.querySelector(".diff-line.remove .diff-text")!.textContent).toBe("Write the failing test first.");
     expect(pane.querySelector(".q")!.textContent).toBe("replace your tdd with the bundled version? your files are backed up first");
-    expect(pane.querySelector(".bk")!.textContent).toContain("backup → /tmp/backups/<run> · transaction recorded · rollback available");
+    expect(pane.querySelector(".bk")!.textContent).toContain("Backup: /tmp/backups/<run> · transaction recorded");
+    expect(within(pane).getByText("Undo any time")).toBeTruthy();
     // Only the preview was asked for; the page's pair is replaced by the one pane and the output strip.
     expect(invokeMock.mock.calls.map(call => call[0])).toEqual(["preview_take_bundled"]);
     expect(screen.queryByRole("listbox", { name: "Claude surfaces" })).toBeNull();

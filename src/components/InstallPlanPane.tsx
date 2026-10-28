@@ -3,7 +3,6 @@ import type { InstallFlow, InstallFlowErrorKind } from "../hooks/useInstallFlow"
 import { focusDefaultPane, focusPaneById } from "../keyboard/focus";
 import type { Binding } from "../keyboard/registry";
 import { useKeymap } from "../keyboard/useKeymap";
-import { displayPath } from "../lib/displayPath";
 import {
   buildPlanGroups,
   countPlanRows,
@@ -13,9 +12,9 @@ import {
 } from "../lib/installPlan";
 import { useConfirmMode, useStatusContext } from "../shell/ShellState";
 import { BindingButton } from "../ui/BindingActionKey";
-import { Glyph } from "../ui/Glyph";
 import { Pane } from "../ui/Pane";
-import { cx, toneClass } from "../ui/tone";
+import { cx } from "../ui/tone";
+import { ReviewFooter } from "./ReviewFooter";
 import { ActivityLoader } from "./TerminalOutput";
 
 export const INSTALL_PLAN_PANE_ID = "plan";
@@ -38,25 +37,35 @@ const ERROR_HINT: Record<InstallFlowErrorKind, string> = {
   apply_failed: "The backend refused to apply this plan before it ran. Nothing was written.",
 };
 
+/** The title's tally in words: `1 create · 2 update · 1 conflict`. A conflict is the decision, so it is set heavier. */
 function Counts({ counts }: { counts: PlanCounts }) {
+  const parts: Array<{ kind: string; text: string }> = [];
+  if (counts.create > 0) parts.push({ kind: "create", text: `${counts.create} create` });
+  if (counts.update > 0) parts.push({ kind: "update", text: `${counts.update} update` });
+  if (counts.remove > 0) parts.push({ kind: "remove", text: `${counts.remove} remove` });
+  if (counts.conflict > 0) parts.push({ kind: "conflict", text: `${counts.conflict} ${counts.conflict === 1 ? "conflict" : "conflicts"}` });
+  if (counts.unchanged > 0) parts.push({ kind: "unchanged", text: `${counts.unchanged} unchanged` });
   return (
     <>
-      {counts.create > 0 && <span className="c-ok" title={`${counts.create} to create`}>+{counts.create}</span>}
-      {counts.update > 0 && <span className="c-warn" title={`${counts.update} to update`}>{" "}~{counts.update}</span>}
-      {counts.remove > 0 && <span className="c-fail" title={`${counts.remove} to remove`}>{" "}−{counts.remove}</span>}
-      {counts.conflict > 0 && <span className="c-fail" title={`${counts.conflict} conflicts`}>{" "}!{counts.conflict}</span>}
-      {counts.unchanged > 0 && <span className="c-dim" title={`${counts.unchanged} surfaces unchanged`}>{" "}={counts.unchanged}</span>}
+      {parts.map((part, index) => (
+        <Fragment key={part.kind}>
+          {index > 0 && " · "}
+          <span className={`rv-count rv-count-${part.kind}`}>{part.text}</span>
+        </Fragment>
+      ))}
     </>
   );
 }
 
 /**
- * The install review: a sub-state of the Start and harness pages. Lists what apply would write, grouped by
- * surface, with `+ ~ − !` glyphs and a text label on every row, and asks before anything is written.
+ * The install review: a card in place of the page it was opened from. Lists what apply would write, grouped by
+ * surface, with a hollow mark and a word on every row (a conflict, which Install leaves alone, is the one filled
+ * mark: it is the decision), and asks before anything is written.
  *
  * Keys (focus inside the pane): `j`/`k` move, `d` details of the row, `c` next conflict, `y` apply (review
  * only, and only when there is something safe to apply), `n`/Esc cancel, `r` preview again after a stale or
- * expired preview. Enter never applies; the `y apply` hint in the status bar is clickable and does the same as the key.
+ * expired preview. Enter never applies, not on the grid and not on the focused Apply button; the `y apply` hint in
+ * the status bar and the Apply button are clickable and do the same as the key.
  */
 export function InstallPlanPane({ flow, busyLabel, backupRoot, onApply }: InstallPlanPaneProps) {
   const { status, review, error, request } = flow;
@@ -233,33 +242,23 @@ export function InstallPlanPane({ flow, busyLabel, backupRoot, onApply }: Instal
 
   const noteBackup = reviewing && !readOnly && review.canApply;
   const footer = (
-    <>
-      <span className="q" role="status">
-        {question}
-      </span>
-      <span className="tbtn-row">
-        <BindingButton binding={applyAction} variant="primary" />
-        <BindingButton binding={cancelAction} />
-      </span>
-      {noteBackup && (
-        <span className="bk">
-          backup → {backupRoot ? `${displayPath(backupRoot)}/` : ""}&lt;run&gt; · transaction recorded · rollback available
-        </span>
-      )}
-    </>
+    <ReviewFooter question={question} backup={noteBackup && { root: backupRoot }}>
+      <BindingButton binding={applyAction} apply />
+      <BindingButton binding={cancelAction} />
+    </ReviewFooter>
   );
 
   return (
     <Pane
       id={INSTALL_PLAN_PANE_ID}
-      title="plan"
+      title="Install plan"
       label="Install plan"
+      variant="card"
       scrollable={!hasTable}
       defaultFocus
       meta={
         request ? (
           <>
-            {"· "}
             {request.label}
             {reviewing && (
               <>
@@ -268,7 +267,7 @@ export function InstallPlanPane({ flow, busyLabel, backupRoot, onApply }: Instal
               </>
             )}
             {status === "previewing" && " · previewing"}
-            {status === "error" && <span className="c-fail"> · failed</span>}
+            {status === "error" && " · failed"}
           </>
         ) : null
       }
@@ -283,8 +282,9 @@ export function InstallPlanPane({ flow, busyLabel, backupRoot, onApply }: Instal
 
       {status === "error" && error && (
         <div className="plan-state">
-          <p className="c-fail" role="alert">
-            <Glyph name="fail" tone="fail" /> {error.message}
+          <p className="rv-error" role="alert">
+            <span className="rv-mark rv-mark-remove" aria-hidden="true" />
+            {error.message}
           </p>
           <p className="c-dim">{ERROR_HINT[error.kind]}</p>
         </div>
@@ -303,9 +303,9 @@ export function InstallPlanPane({ flow, busyLabel, backupRoot, onApply }: Instal
           <thead>
             <tr>
               <th scope="col"><span className="visually-hidden">cursor</span></th>
-              <th scope="col">op</th>
-              <th scope="col">file</th>
-              <th scope="col">why</th>
+              <th scope="col">Change</th>
+              <th scope="col">File</th>
+              <th scope="col">Why</th>
             </tr>
           </thead>
           <tbody>
@@ -332,11 +332,10 @@ export function InstallPlanPane({ flow, busyLabel, backupRoot, onApply }: Instal
                           setCursor(rows.indexOf(row));
                         }}
                       >
-                        <td className="c-acc">
-                          <span className="g" aria-hidden="true">{isCursor ? "▸" : " "}</span>
-                        </td>
-                        <td className={cx("op", toneClass(row.tone))}>
-                          <Glyph name={row.glyph} /> {row.label}
+                        <td className="cur" />
+                        <td className={cx("op", `op-${row.kind}`)}>
+                          <span className={`rv-mark rv-mark-${row.kind}`} aria-hidden="true" />
+                          {row.label}
                         </td>
                         <td title={row.file}>{row.file}</td>
                         <td className="note" title={row.note}>

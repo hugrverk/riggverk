@@ -35,14 +35,69 @@ export interface DiffViewProps {
   label: string;
   /** Shown when the two sides are equal. */
   empty?: string;
+  /** `unified` (default): one column, `+`/`-` in their own column. `split`: the old text left, the new text right. */
+  layout?: "unified" | "split";
+}
+
+interface SplitSide {
+  kind: "context" | "add" | "remove" | "blank";
+  mark: string;
+  text: string;
+}
+
+type SplitRow = { span: DiffLine } | { left: SplitSide; right: SplitSide };
+
+const BLANK: SplitSide = { kind: "blank", mark: " ", text: "" };
+
+/**
+ * Lays a unified diff out as two columns: context on both sides, each run of removals on the left beside the run of
+ * additions it was replaced by on the right, the shorter side padded with blanks so the rows line up.
+ */
+export function splitRows(lines: readonly DiffLine[]): SplitRow[] {
+  const rows: SplitRow[] = [];
+  let removed: SplitSide[] = [];
+  let added: SplitSide[] = [];
+  const flush = () => {
+    const count = Math.max(removed.length, added.length);
+    for (let index = 0; index < count; index += 1) rows.push({ left: removed[index] ?? BLANK, right: added[index] ?? BLANK });
+    removed = [];
+    added = [];
+  };
+  for (const line of lines) {
+    if (line.kind === "file") continue;
+    if (line.kind === "remove") removed.push({ kind: "remove", mark: "-", text: line.text });
+    else if (line.kind === "add") added.push({ kind: "add", mark: "+", text: line.text });
+    else {
+      flush();
+      if (line.kind === "context") rows.push({ left: { kind: "context", mark: " ", text: line.text }, right: { kind: "context", mark: " ", text: line.text } });
+      else rows.push({ span: line });
+    }
+  }
+  flush();
+  return rows;
+}
+
+function sideLabels(lines: readonly DiffLine[]): [string, string] {
+  const files = lines.filter(line => line.kind === "file").map(line => line.text.replace(/^(---|\+\+\+) /, ""));
+  return [files[0] ?? "before", files[1] ?? "after"];
+}
+
+function SplitCell({ side }: { side: SplitSide }) {
+  return (
+    <div className={cx("diff-line", side.kind)}>
+      <span className="diff-mark">{side.mark}</span>
+      <span className="diff-text">{side.text === "" ? " " : side.text}</span>
+    </div>
+  );
 }
 
 /**
- * Read-only unified diff. Every changed line starts with a `+` or `-` in its own column, so the colour is never the
- * only signal; long lines wrap instead of scrolling sideways.
+ * Read-only diff. Every changed line starts with a `+` or `-` in its own column, so the colour is never the
+ * only signal; long lines wrap instead of scrolling sideways. The `split` layout is the side-by-side Compare view.
  */
-export function DiffView({ diff, label, empty = "no differences" }: DiffViewProps) {
+export function DiffView({ diff, label, empty = "no differences", layout = "unified" }: DiffViewProps) {
   const lines = useMemo(() => parseUnifiedDiff(diff), [diff]);
+  const rows = useMemo(() => (layout === "split" ? splitRows(lines) : []), [layout, lines]);
   if (lines.length === 0) {
     return (
       <p className="c-dim diff-empty" role="status">
@@ -50,12 +105,36 @@ export function DiffView({ diff, label, empty = "no differences" }: DiffViewProp
       </p>
     );
   }
+  if (layout === "split") {
+    const [before, after] = sideLabels(lines);
+    return (
+      <div className="diff diff-split" role="group" aria-label={label}>
+        <div className="diff-head">
+          <span>{before}</span>
+          <span>{after}</span>
+        </div>
+        {rows.map((row, index) =>
+          "span" in row ? (
+            <div key={index} className={cx("diff-line", "diff-span", row.span.kind)}>
+              <span className="diff-mark"> </span>
+              <span className="diff-text">{row.span.text}</span>
+            </div>
+          ) : (
+            <div key={index} className="diff-row">
+              <SplitCell side={row.left} />
+              <SplitCell side={row.right} />
+            </div>
+          ),
+        )}
+      </div>
+    );
+  }
   return (
     <div className="diff" role="group" aria-label={label}>
       {lines.map((line, index) => (
         <div key={index} className={cx("diff-line", line.kind)}>
-          <span className="diff-mark">{line.mark || " "}</span>
-          <span className="diff-text">{line.text === "" ? " " : line.text}</span>
+          <span className="diff-mark">{line.mark || " "}</span>
+          <span className="diff-text">{line.text === "" ? " " : line.text}</span>
         </div>
       ))}
     </div>

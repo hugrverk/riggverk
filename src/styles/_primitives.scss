@@ -25,15 +25,13 @@
      .roll                   RollingText: a changed value slides in (full motion only), see "rolling text" below
    Keys and glyphs
      kbd                     light key cap (outline, no fill); .action-key = <button class="action-key"><kbd>u</kbd> update</button>
-     .tbtn                   bracket button [ y apply ] for a confirm line, dialog footer or rollback; .tbtn-primary, .tbtn-danger, .tbtn-row
+     .tbtn                   button with a key cap for a review's action bar, a dialog footer or rollback (_review.scss)
      .g                      fixed-width glyph cell (▸ ● ◐ ✓ ✗ ❯ + ~ − !), inline-block 1ch, centred; never a <tr>
      .c-ok .c-warn .c-fail .c-acc .c-dim .c-head   semantic text colours
    Tables
      .matrix-grid            surface matrix: display:grid, columns from --matrix-cols (inline style);
                              header cells .h, body cells .cell = <span class="g">●</span><span class="visually-hidden">label</span>
-     .plan                   install plan <table>; tr.g group row, tr.conf conflict row,
-                             tr[aria-selected="true"] cursor row, td.op op column, td.note why column
-     .confirm                y/n line under a plan: .q question, .bk backup/transaction note
+     .plan                   install plan <table> (_review.scss)
    Overlays
      .cmdline-overlay        absolute strip above the status bar; .cmdbox = role=dialog box
        .cmdbox .line         <span class="colon">:</span><input> row; .cmdbox .sug suggestion list
@@ -103,56 +101,7 @@ kbd {
 .action-key[aria-disabled="true"] { cursor: default; opacity: 0.5; }
 .action-key:focus-visible { outline-offset: 2px; }
 
-/* `[ y apply ]` (ui/TButton): a real button, the brackets are pseudo-elements so the label stays its accessible
-   name. Hover turns the brackets accent; keyboard focus inverts the whole button (whiptail) instead of a ring. */
-.tbtn {
-  display: inline-flex;
-  align-items: center;
-  height: var(--lh);
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--text);
-  font-size: var(--fs-sm);
-  line-height: var(--lh);
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.tbtn::before { content: "["; padding-right: 0.5ch; color: var(--text-muted); }
-.tbtn::after { content: "]"; padding-left: 0.5ch; color: var(--text-muted); }
-.tbtn kbd { margin-right: 5px; }
-
-.tbtn:hover:not([aria-disabled="true"]) { color: var(--text-heading); }
-.tbtn:hover:not([aria-disabled="true"])::before,
-.tbtn:hover:not([aria-disabled="true"])::after { color: var(--accent); }
-.tbtn:hover:not([aria-disabled="true"]) kbd { border-color: var(--accent); color: var(--accent); }
-.tbtn:active:not([aria-disabled="true"]) { background: var(--sel); }
-
-.tbtn:focus-visible { outline: none; background: var(--inv-bg); color: var(--inv-fg); }
-.tbtn:focus-visible::before,
-.tbtn:focus-visible::after { color: var(--inv-fg); }
-.tbtn:focus-visible kbd { border-color: var(--inv-fg); color: var(--inv-fg); }
-
-.tbtn-primary { color: var(--text-heading); font-weight: 600; }
-.tbtn-primary::before,
-.tbtn-primary::after { color: var(--accent); }
-
-.tbtn-danger { color: var(--fail); }
-.tbtn-danger::before,
-.tbtn-danger::after { color: var(--fail); }
-.tbtn-danger kbd { border-color: var(--fail); color: var(--fail); }
-/* --fail on --bg is a contrast the palette test already asserts, so the inverse stays readable in both themes. */
-.tbtn-danger:focus-visible { background: var(--fail); color: var(--bg); }
-.tbtn-danger:focus-visible::before,
-.tbtn-danger:focus-visible::after,
-.tbtn-danger:focus-visible kbd { border-color: var(--bg); color: var(--bg); }
-
-.tbtn[aria-disabled="true"] { opacity: 0.5; cursor: default; }
-
-/* Two or three buttons side by side: a confirm line, a dialog footer. */
-.tbtn-row { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0 10px; }
-.tbtn-row:empty { display: none; }
+/* Review buttons (`.tbtn`, `.tbtn-row`), the plan table and the review action bar live in _review.scss. */
 
 /* ---- screen + pane ---- */
 
@@ -332,74 +281,6 @@ kbd {
 .matrix-grid > * { height: var(--lh); line-height: var(--lh); }
 .matrix-grid .h { color: var(--text-muted); font-size: var(--fs-sm); }
 .matrix-grid .cell { text-align: center; }
-
-/* ---- plan table ---- */
-
-.plan {
-  width: calc(100% - 20px);
-  margin: 0 10px;
-  border-collapse: collapse;
-  white-space: nowrap;
-}
-
-.plan th {
-  height: var(--lh);
-  padding: 0 12px 0 0;
-  border-bottom: 1px solid var(--border);
-  color: var(--text-muted);
-  font-weight: 400;
-  text-align: left;
-}
-
-.plan td {
-  height: var(--lh);
-  max-width: 420px;
-  padding: 0 12px 0 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.plan td:first-child, .plan th:first-child { width: 16px; padding: 0; text-align: center; }
-
-/* Group row: lowercase, a blank row above (cell padding, since table rows take no margin) unless it opens the table. */
-.plan tr.g td {
-  height: calc(var(--lh) * 2);
-  padding-top: var(--lh);
-  text-align: left;
-  color: var(--text-muted);
-  font-size: var(--fs-sm);
-}
-
-.plan tbody tr.g:first-child td {
-  height: var(--lh);
-  padding-top: 0;
-}
-
-.plan tr[aria-selected="true"] td { background: var(--sel); }
-.plan .op { font-weight: 600; }
-.plan .note { color: var(--text-muted); }
-.plan tr.conf td { background: var(--warn-bg); }
-
-.confirm {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 18px;
-  align-items: center;
-  padding: 6px 10px;
-  border-top: 1px solid var(--border);
-  background: var(--inset);
-}
-
-.confirm .q { color: var(--text-heading); font-weight: 500; }
-
-.confirm .bk {
-  width: 100%;
-  color: var(--text-muted);
-  font-size: var(--fs-sm);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 
 /* ---- command line ---- */
 

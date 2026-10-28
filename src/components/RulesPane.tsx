@@ -3,15 +3,14 @@ import type { RulesFlow } from "../hooks/useRulesFlow";
 import { focusDefaultPane, focusPaneById } from "../keyboard/focus";
 import type { Binding } from "../keyboard/registry";
 import { useKeymap } from "../keyboard/useKeymap";
-import { displayPath } from "../lib/displayPath";
 import { surfaceTitle } from "../lib/installPlan";
 import { useConfirmMode, useStatusContext } from "../shell/ShellState";
 import { BindingButton } from "../ui/BindingActionKey";
-import { Glyph } from "../ui/Glyph";
 import { Kv, type KvItem } from "../ui/Kv";
 import { Pane } from "../ui/Pane";
 import type { RulesConversionPreview, RulesDiffView } from "../types";
 import { DiffView } from "./DiffView";
+import { ReviewFooter } from "./ReviewFooter";
 import { ActivityLoader } from "./TerminalOutput";
 
 export const RULES_PANE_ID = "rules";
@@ -86,8 +85,9 @@ function ConversionBody({ preview, view }: { preview: RulesConversionPreview; vi
   if (!preview.applicable) {
     return (
       <div className="plan-state">
-        <p className="c-fail" role="alert">
-          <Glyph name="fail" tone="fail" /> nothing to convert: {preview.reason ?? "this file cannot be converted"}
+        <p className="rv-error" role="alert">
+          <span className="rv-mark rv-mark-remove" aria-hidden="true" />
+          nothing to convert: {preview.reason ?? "this file cannot be converted"}
         </p>
         <p className="c-dim">Nothing was written. A file the base block already manages updates through the regular update.</p>
       </div>
@@ -311,39 +311,30 @@ export function RulesPane({ flow, busyLabel, backupRoot, canConvert, returnPaneI
   const meta =
     state.status === "diff" ? (
       <>
-        {`· ${title} · diff · `}
-        <span className="c-ok" title={`${state.diff.added} lines added`}>+{state.diff.added}</span>{" "}
-        <span className="c-fail" title={`${state.diff.removed} lines removed`}>−{state.diff.removed}</span>
+        {`${title} · diff · `}
+        <span className="rv-added" title={`${state.diff.added} lines added`}>+{state.diff.added}</span>{" "}
+        <span className="rv-removed" title={`${state.diff.removed} lines removed`}>−{state.diff.removed}</span>
       </>
     ) : state.status === "conversion" || state.status === "applying" ? (
-      `· ${title} · convert`
+      `${title} · convert`
     ) : surface ? (
-      `· ${title}`
+      title
     ) : null;
 
   return (
     <Pane
       id={RULES_PANE_ID}
-      title="rules"
+      title="Rules review"
       label="Rules review"
+      variant="card"
       scrollable
       defaultFocus
       meta={meta}
       footer={
-        <>
-          <span className="q" role="status">
-            {question}
-          </span>
-          <span className="tbtn-row">
-            <BindingButton binding={applyAction} variant="primary" />
-            <BindingButton binding={closeAction} />
-          </span>
-          {noteBackup && (
-            <span className="bk">
-              backup → {backupRoot ? `${displayPath(backupRoot)}/` : ""}&lt;run&gt; · transaction recorded · rollback available
-            </span>
-          )}
-        </>
+        <ReviewFooter question={question} backup={noteBackup && { root: backupRoot }}>
+          <BindingButton binding={applyAction} apply />
+          <BindingButton binding={closeAction} />
+        </ReviewFooter>
       }
     >
       {state.status === "loading" && (
@@ -356,8 +347,9 @@ export function RulesPane({ flow, busyLabel, backupRoot, canConvert, returnPaneI
       )}
       {state.status === "error" && (
         <div className="plan-state">
-          <p className="c-fail" role="alert">
-            <Glyph name="fail" tone="fail" /> {state.message}
+          <p className="rv-error" role="alert">
+            <span className="rv-mark rv-mark-remove" aria-hidden="true" />
+            {state.message}
           </p>
           <p className="c-dim">{ERROR_HINT[state.what]}</p>
         </div>
