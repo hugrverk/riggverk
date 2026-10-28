@@ -1,7 +1,7 @@
 # Global Agent Rules
 
 ## Priority
-Repository reality overrides assumptions. Explicit user instructions override these defaults. Project-local guidance overrides these defaults unless unsafe. Instructions after the Agent Workspace base block are the user's refinements and override the base where they conflict.
+Repository reality overrides assumptions. Explicit user instructions override these defaults. Project-local guidance overrides these defaults unless unsafe. Instructions after the Riggverk base block are the user's refinements and override the base where they conflict.
 
 ## Communication
 Be direct, dense, technical, and concise. No filler, praise, motivation, or beginner explanations unless requested. Respond in the user's language. Use English for code, comments, identifiers, commits, filenames, docs, and agent prompts. Use Swedish for Swedish user-facing copy. State uncertainty clearly.
@@ -68,7 +68,7 @@ A skill's `## Output` lists content to cover, not a replacement format: keep the
 ## Codex harness
 
 - Custom agents use bundled Codex TOML templates under `~/.codex/agents/`; skills install to `~/.agents/skills`, which Codex reads (`$CODEX_HOME/skills` with a customised `CODEX_HOME`).
-- `~/.codex/config.toml` is manual-review only; never assume Agent Workspace owns the full file.
+- `~/.codex/config.toml` is manual-review only; never assume Riggverk owns the full file.
 - Respect Codex sandbox, approval, and config boundaries; do not bypass documented safety settings.
 - For image generation, design mocks, screenshots, browser automation, CDP, or computer-use work, use the available Codex tools when they directly support the task and keep generated assets in scope.
 - Use background agents or separate worktrees only for separable exploration, review, or implementation slices; keep final judgment and integration in the main thread.

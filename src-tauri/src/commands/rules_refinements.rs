@@ -1,6 +1,6 @@
 //! Library: the user's refinements below the managed base block of their real rules files.
 //!
-//! The Library edits exactly the bytes after the `END AGENT-WORKSPACE BASE` line of the rules file of
+//! The Library edits exactly the bytes after the END base marker line of the rules file of
 //! an enabled harness (`~/.claude/CLAUDE.md`, ...). The BOM, the text above BEGIN, and the block stay
 //! byte for byte, which `RulesFile::render_with_suffix` proves on every save.
 //!
@@ -18,7 +18,7 @@ use serde::Serialize;
 
 use super::process::{run_cmd, ActionResult};
 use super::rules::{enabled_rules_artifact, rules_target, user_home};
-use super::workspace::{path_arg, setup_workspace_target_path};
+use super::workspace::{path_arg, setup_workspace_target_path, workspace_target_for_write};
 use crate::artifact_registry::ArtifactId;
 use crate::rules_block::{self, MalformedReason, RulesConflict, RulesLayout, RulesPlan};
 use crate::setup_lifecycle::SetupSurfaceId;
@@ -399,7 +399,7 @@ pub fn save_rules_refinements(
     // Writes a file an apply may also write: wait for a running mutation instead of interleaving.
     let _mutation = crate::mutation_lock::acquire();
     let (surface_id, artifact) = rules_target(&surface)?;
-    let ws_root = setup_workspace_target_path()?;
+    let ws_root = workspace_target_for_write()?;
     let home = user_home()?;
     let _guard = crate::setup_mutation_guard::try_acquire_setup_mutation_guard()?;
     save_refinements_at(
@@ -463,8 +463,8 @@ mod tests {
             set_test_user_dirs(&base.join("home"));
             let ws = base.join("workspace").canonicalize().unwrap();
             unsafe {
-                std::env::set_var("AGENT_WORKSPACE_PATH", &ws);
-                std::env::set_var("AGENT_WORKSPACE_BACKUP_DIR", base.join("backups"));
+                std::env::set_var("RIGGVERK_WORKSPACE_PATH", &ws);
+                std::env::set_var("RIGGVERK_BACKUP_DIR", base.join("backups"));
                 std::env::remove_var("CODEX_HOME");
             }
             let home = user_home().unwrap();

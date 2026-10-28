@@ -38,8 +38,8 @@ fn a_commented_opencode_json_is_reviewed_with_its_reason_and_never_rewritten() {
     fs::create_dir_all(&base).expect("create base");
     crate::test_env::set_test_user_dirs(&base);
     unsafe {
-        std::env::set_var("AGENT_WORKSPACE_PATH", base.join("workspace"));
-        std::env::set_var("AGENT_WORKSPACE_BACKUP_DIR", base.join("backups"));
+        std::env::set_var("RIGGVERK_WORKSPACE_PATH", base.join("workspace"));
+        std::env::set_var("RIGGVERK_BACKUP_DIR", base.join("backups"));
     }
     let home = crate::agent_targets::home_dir().expect("resolved home");
     let config = home.join(".config/opencode/opencode.json");

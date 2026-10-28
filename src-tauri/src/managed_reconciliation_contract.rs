@@ -1,6 +1,6 @@
 //! Isolated contract tests for pre-manifest upgrade reconciliation.
 //!
-//! Uses temp HOME and AGENT_WORKSPACE_PATH only — never the real profile.
+//! Uses temp HOME and RIGGVERK_WORKSPACE_PATH only — never the real profile.
 
 #[cfg(test)]
 mod tests {
@@ -31,7 +31,7 @@ mod tests {
     }
 
     fn bundled_workspace_src() -> PathBuf {
-        std::env::var_os("AGENT_WORKSPACE_HISTORICAL_FIXTURE_PATH")
+        std::env::var_os("RIGGVERK_HISTORICAL_FIXTURE_PATH")
             .map(PathBuf::from)
             .unwrap_or_else(current_bundled_workspace_src)
     }
@@ -138,7 +138,7 @@ mod tests {
     #[test]
     fn old_workspace_doc_without_managed_state_is_removed() {
         // Serialize with the other env-mutating fixtures; parallel runs stomp
-        // HOME/AGENT_WORKSPACE_PATH mid-flight for guarded tests otherwise.
+        // HOME/RIGGVERK_WORKSPACE_PATH mid-flight for guarded tests otherwise.
         let _guard = guard::lock();
         let _restore = guard::EnvRestore::capture();
         let base = temp_base("historical-conflict");
@@ -161,11 +161,11 @@ mod tests {
         .expect("home");
         unsafe {
             std::env::set_var(
-                "AGENT_WORKSPACE_PATH",
+                "RIGGVERK_WORKSPACE_PATH",
                 ws.canonicalize().unwrap().to_string_lossy().as_ref(),
             );
             std::env::set_var(
-                "AGENT_WORKSPACE_BACKUP_DIR",
+                "RIGGVERK_BACKUP_DIR",
                 base.join("backups").to_string_lossy().as_ref(),
             );
         }
@@ -396,9 +396,12 @@ mod tests {
 
             let ws_canon = ws.canonicalize().unwrap_or_else(|_| ws.clone());
             unsafe {
-                std::env::set_var("AGENT_WORKSPACE_PATH", ws_canon.to_string_lossy().as_ref());
                 std::env::set_var(
-                    "AGENT_WORKSPACE_BACKUP_DIR",
+                    "RIGGVERK_WORKSPACE_PATH",
+                    ws_canon.to_string_lossy().as_ref(),
+                );
+                std::env::set_var(
+                    "RIGGVERK_BACKUP_DIR",
                     base.join("backups").to_string_lossy().as_ref(),
                 );
             }
@@ -621,9 +624,12 @@ mod tests {
         fs::create_dir_all(&home).expect("home");
         set_test_user_dirs(&home);
         unsafe {
-            std::env::set_var("AGENT_WORKSPACE_PATH", workspace.to_string_lossy().as_ref());
             std::env::set_var(
-                "AGENT_WORKSPACE_BACKUP_DIR",
+                "RIGGVERK_WORKSPACE_PATH",
+                workspace.to_string_lossy().as_ref(),
+            );
+            std::env::set_var(
+                "RIGGVERK_BACKUP_DIR",
                 base.join("backups").to_string_lossy().as_ref(),
             );
         }
@@ -666,7 +672,7 @@ mod tests {
                     .into_owned()
             })
             .collect();
-        assert_eq!(names, [".agent-workspace"]);
+        assert_eq!(names, [crate::workspace_layout::STATE_DIR]);
         let state = read_managed_state(&workspace).expect("records");
         assert!(state
             .artifacts
@@ -688,9 +694,12 @@ mod tests {
         fs::create_dir_all(&home).expect("home");
         set_test_user_dirs(&home);
         unsafe {
-            std::env::set_var("AGENT_WORKSPACE_PATH", workspace.to_string_lossy().as_ref());
             std::env::set_var(
-                "AGENT_WORKSPACE_BACKUP_DIR",
+                "RIGGVERK_WORKSPACE_PATH",
+                workspace.to_string_lossy().as_ref(),
+            );
+            std::env::set_var(
+                "RIGGVERK_BACKUP_DIR",
                 base.join("backups").to_string_lossy().as_ref(),
             );
         }
@@ -856,7 +865,7 @@ mod tests {
                 "old copy left behind: {rel}"
             );
         }
-        assert!(fixture.ws.join(".agent-workspace/workspace.json").is_file());
+        assert!(crate::workspace_layout::state_file(&fixture.ws, "workspace.json").is_file());
         assert!(
             fixture
                 .ws
@@ -1172,9 +1181,9 @@ mod tests {
         .expect("home");
         let ws = ws.canonicalize().expect("canonical workspace");
         unsafe {
-            std::env::set_var("AGENT_WORKSPACE_PATH", ws.to_string_lossy().as_ref());
+            std::env::set_var("RIGGVERK_WORKSPACE_PATH", ws.to_string_lossy().as_ref());
             std::env::set_var(
-                "AGENT_WORKSPACE_BACKUP_DIR",
+                "RIGGVERK_BACKUP_DIR",
                 base.join("backups").to_string_lossy().as_ref(),
             );
         }
@@ -1260,9 +1269,9 @@ mod tests {
     #[test]
     #[ignore = "driven by scripts/smoke-pre-manifest-upgrade.sh"]
     fn real_source_commit_pre_manifest_upgrade_smoke() {
-        let fixture_path = std::env::var_os("AGENT_WORKSPACE_HISTORICAL_FIXTURE_PATH")
+        let fixture_path = std::env::var_os("RIGGVERK_HISTORICAL_FIXTURE_PATH")
             .map(PathBuf::from)
-            .expect("AGENT_WORKSPACE_HISTORICAL_FIXTURE_PATH is required");
+            .expect("RIGGVERK_HISTORICAL_FIXTURE_PATH is required");
         assert!(
             fixture_path
                 .join("metadata/deprecated-skills.json")
@@ -1342,9 +1351,12 @@ mod tests {
         fs::create_dir_all(&home).expect("home");
         set_test_user_dirs(&home);
         unsafe {
-            std::env::set_var("AGENT_WORKSPACE_PATH", workspace.to_string_lossy().as_ref());
             std::env::set_var(
-                "AGENT_WORKSPACE_BACKUP_DIR",
+                "RIGGVERK_WORKSPACE_PATH",
+                workspace.to_string_lossy().as_ref(),
+            );
+            std::env::set_var(
+                "RIGGVERK_BACKUP_DIR",
                 base.join("backups").to_string_lossy().as_ref(),
             );
         }
@@ -1432,9 +1444,9 @@ mod tests {
             .canonicalize()
             .unwrap_or_else(|_| workspace.clone());
         unsafe {
-            std::env::set_var("AGENT_WORKSPACE_PATH", ws.to_string_lossy().as_ref());
+            std::env::set_var("RIGGVERK_WORKSPACE_PATH", ws.to_string_lossy().as_ref());
             std::env::set_var(
-                "AGENT_WORKSPACE_BACKUP_DIR",
+                "RIGGVERK_BACKUP_DIR",
                 backup_root.to_string_lossy().as_ref(),
             );
         }
@@ -1782,9 +1794,9 @@ mod tests {
         set_test_user_dirs(&home);
         let ws = ws.canonicalize().expect("workspace");
         unsafe {
-            std::env::set_var("AGENT_WORKSPACE_PATH", ws.to_string_lossy().as_ref());
+            std::env::set_var("RIGGVERK_WORKSPACE_PATH", ws.to_string_lossy().as_ref());
             std::env::set_var(
-                "AGENT_WORKSPACE_BACKUP_DIR",
+                "RIGGVERK_BACKUP_DIR",
                 base.join("backups").to_string_lossy().as_ref(),
             );
         }

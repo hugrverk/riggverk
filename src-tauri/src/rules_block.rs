@@ -6,6 +6,10 @@
 //! only the bytes between the markers; everything before BEGIN and after END is
 //! the user's refinement layer and is preserved byte for byte.
 //!
+//! Blocks written before the rename sit between markers of the earlier spelling
+//! (`LEGACY_BEGIN_PREFIX`, `LEGACY_END_MARKER`). Both spellings are recognised; a rewrite of the
+//! block always writes the current markers, and a BEGIN and END of different spellings do not pair.
+//!
 //! Marker lines count only at column 0 outside fenced code blocks. A file holds
 //! either no markers (legacy whole-file layout) or exactly one BEGIN followed by
 //! exactly one END; anything else is malformed and refused with a typed reason.
@@ -21,12 +25,16 @@ use serde::Serialize;
 
 use crate::stable_digest;
 
-pub const BEGIN_MARKER: &str = "<!-- BEGIN AGENT-WORKSPACE BASE: managed by Riggverk; edits inside are replaced on update; add refinements below END -->";
-pub const END_MARKER: &str = "<!-- END AGENT-WORKSPACE BASE -->";
+pub const BEGIN_MARKER: &str = "<!-- BEGIN RIGGVERK BASE: managed by Riggverk; edits inside are replaced on update; add refinements below END -->";
+pub const END_MARKER: &str = "<!-- END RIGGVERK BASE -->";
 
 /// A BEGIN line is recognized by its stable prefix and closing `-->`, so the
 /// explanatory prose inside the comment can change without orphaning old files.
-pub(crate) const BEGIN_PREFIX: &str = "<!-- BEGIN AGENT-WORKSPACE BASE";
+pub(crate) const BEGIN_PREFIX: &str = "<!-- BEGIN RIGGVERK BASE";
+
+/// The BEGIN prefix and END line of blocks written before the rename. Read, never written.
+pub(crate) const LEGACY_BEGIN_PREFIX: &str = "<!-- BEGIN AGENT-WORKSPACE BASE";
+pub(crate) const LEGACY_END_MARKER: &str = "<!-- END AGENT-WORKSPACE BASE -->";
 const BOM: &str = "\u{feff}";
 
 /// Largest rules file read and rewritten. Real files are a few kilobytes; a
@@ -51,8 +59,8 @@ impl MalformedReason {
         match self {
             Self::NotUtf8 => "file is not valid UTF-8",
             Self::TooLarge => "file is larger than 4 MB",
-            Self::DuplicateBegin => "more than one BEGIN AGENT-WORKSPACE BASE marker",
-            Self::DuplicateEnd => "more than one END AGENT-WORKSPACE BASE marker",
+            Self::DuplicateBegin => "more than one BEGIN base marker",
+            Self::DuplicateEnd => "more than one END base marker",
             Self::MissingEnd => "BEGIN marker has no matching END marker",
             Self::MissingBegin => "END marker has no matching BEGIN marker",
             Self::EndBeforeBegin => "END marker appears before the BEGIN marker",
@@ -132,9 +140,18 @@ impl RulesFile<'_> {
         out.push_str(BEGIN_MARKER);
         out.push_str(eol);
         out.push_str(&with_eol(&canonical_body(source), eol));
-        out.push_str(self.end);
+        out.push_str(&self.current_end());
         out.push_str(self.suffix);
         out
+    }
+
+    /// The END line as a rewrite writes it: the current marker, with the line ending (and any
+    /// trailing blanks) of the line as it is.
+    fn current_end(&self) -> String {
+        match self.end.trim_end() {
+            LEGACY_END_MARKER => format!("{END_MARKER}{}", &self.end[LEGACY_END_MARKER.len()..]),
+            _ => self.end.to_string(),
+        }
     }
 
     /// Like `render_with_body`, with `moved` (text the user's edits were moved
@@ -151,8 +168,9 @@ impl RulesFile<'_> {
         out.push_str(BEGIN_MARKER);
         out.push_str(eol);
         out.push_str(&with_eol(&canonical_body(source), eol));
-        out.push_str(self.end);
-        if !self.end.ends_with('\n') {
+        let end = self.current_end();
+        out.push_str(&end);
+        if !end.ends_with('\n') {
             out.push_str(eol);
         }
         out.push_str(moved);
@@ -230,9 +248,9 @@ pub fn parse_bytes(bytes: &[u8]) -> Result<Option<RulesFile<'_>>, MalformedReaso
 pub fn parse(text: &str) -> Result<Option<RulesFile<'_>>, MalformedReason> {
     let start = if text.starts_with(BOM) { BOM.len() } else { 0 };
     let mut fence: Option<Fence> = None;
-    // (start of line, end of line including its line ending)
-    let mut begins: Vec<(usize, usize)> = Vec::new();
-    let mut ends: Vec<(usize, usize)> = Vec::new();
+    // (start of line, end of line including its line ending, spelling)
+    let mut begins: Vec<(usize, usize, Spelling)> = Vec::new();
+    let mut ends: Vec<(usize, usize, Spelling)> = Vec::new();
     let mut position = start;
     while position < text.len() {
         let rest = &text[position..];
@@ -250,10 +268,10 @@ pub fn parse(text: &str) -> Result<Option<RulesFile<'_>>, MalformedReason> {
             None => {
                 if let Some(open) = Fence::opened_by(content) {
                     fence = Some(open);
-                } else if is_begin_line(content) {
-                    begins.push((position, position + length));
-                } else if is_end_line(content) {
-                    ends.push((position, position + length));
+                } else if let Some(spelling) = begin_spelling(content) {
+                    begins.push((position, position + length, spelling));
+                } else if let Some(spelling) = end_spelling(content) {
+                    ends.push((position, position + length, spelling));
                 }
             }
         }
@@ -266,9 +284,13 @@ pub fn parse(text: &str) -> Result<Option<RulesFile<'_>>, MalformedReason> {
         (_, [_, _, ..]) => Err(MalformedReason::DuplicateEnd),
         ([_], []) => Err(MalformedReason::MissingEnd),
         ([], [_]) => Err(MalformedReason::MissingBegin),
-        ([(begin_start, begin_end)], [(end_start, end_end)]) => {
+        ([(begin_start, begin_end, begin_spelling)], [(end_start, end_end, end_spelling)]) => {
             if end_start < begin_end {
                 return Err(MalformedReason::EndBeforeBegin);
+            }
+            // A BEGIN of one spelling and an END of the other do not pair.
+            if begin_spelling != end_spelling {
+                return Err(MalformedReason::MissingEnd);
             }
             Ok(Some(RulesFile {
                 bom: &text[..start],
@@ -337,12 +359,32 @@ fn non_blank_lines(text: &str) -> usize {
     text.lines().filter(|line| !line.trim().is_empty()).count()
 }
 
-fn is_begin_line(line: &str) -> bool {
-    line.starts_with(BEGIN_PREFIX) && line.trim_end().ends_with("-->")
+/// Which marker spelling a line uses.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Spelling {
+    Current,
+    Legacy,
 }
 
-fn is_end_line(line: &str) -> bool {
-    line.trim_end() == END_MARKER
+fn begin_spelling(line: &str) -> Option<Spelling> {
+    if !line.trim_end().ends_with("-->") {
+        return None;
+    }
+    if line.starts_with(BEGIN_PREFIX) {
+        Some(Spelling::Current)
+    } else if line.starts_with(LEGACY_BEGIN_PREFIX) {
+        Some(Spelling::Legacy)
+    } else {
+        None
+    }
+}
+
+fn end_spelling(line: &str) -> Option<Spelling> {
+    match line.trim_end() {
+        END_MARKER => Some(Spelling::Current),
+        LEGACY_END_MARKER => Some(Spelling::Legacy),
+        _ => None,
+    }
 }
 
 /// An open fenced code block (CommonMark: up to three spaces of indent, then
@@ -583,7 +625,7 @@ mod tests {
 
     #[test]
     fn render_with_body_rewrites_an_old_begin_line() {
-        let text = format!("<!-- BEGIN AGENT-WORKSPACE BASE: older prose -->\nold\n{END_MARKER}\n");
+        let text = format!("{BEGIN_PREFIX}: older prose -->\nold\n{END_MARKER}\n");
         let file = parse(&text).unwrap().unwrap();
         assert_eq!(file.render_with_body("new\n"), block("new\n"));
     }
@@ -660,7 +702,9 @@ mod tests {
             format!("{END_MARKER}\n"),
             format!("a\n{BEGIN_MARKER}\nb\n"),
             format!("{BEGIN_MARKER}\nfake\n{END_MARKER}\n"),
-            "<!-- BEGIN AGENT-WORKSPACE BASE: other prose -->\n".to_string(),
+            format!("{BEGIN_PREFIX}: other prose -->\n"),
+            format!("{LEGACY_BEGIN_PREFIX}: earlier spelling -->\n"),
+            format!("{LEGACY_END_MARKER}\n"),
         ] {
             assert_eq!(
                 file.render_with_suffix(&suffix),

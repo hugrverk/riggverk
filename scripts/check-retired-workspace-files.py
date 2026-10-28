@@ -25,7 +25,7 @@ SRC = "src-tauri/src"
 OLD_NAMES = ("default_workspace_files", "MANAGED_REFRESH_PATHS", "default_workspace_manifest")
 OLD_MANIFEST = "src-tauri/src/commands/default_workspace_manifest.rs"
 # State and user data are never workspace copies, whatever the list says.
-NEVER_LISTED_PREFIXES = (".agent-workspace/", "docs/context/")
+NEVER_LISTED_PREFIXES = (".agent-workspace/", ".riggverk/", "docs/context/")  # residue-allow: the state folder of earlier releases
 
 # Helper assets the app runs or renders from the bundle. They are checked in the bundle itself.
 REQUIRED_SCRIPTS = (

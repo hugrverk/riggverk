@@ -115,6 +115,10 @@ pub fn set_test_user_dirs(dir: &Path) {
 pub mod guard {
     use std::sync::{Mutex, MutexGuard, OnceLock};
 
+    use crate::env_overrides::{
+        BACKUP_DIR_ENV, LEGACY_BACKUP_DIR_ENV, LEGACY_WORKSPACE_PATH_ENV, WORKSPACE_PATH_ENV,
+    };
+
     pub fn lock() -> MutexGuard<'static, ()> {
         static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
         ENV_LOCK
@@ -132,8 +136,10 @@ pub mod guard {
         local_appdata: Option<String>,
         xdg_config_home: Option<String>,
         xdg_data_home: Option<String>,
-        agent_workspace_backup_dir: Option<String>,
-        agent_workspace_path: Option<String>,
+        legacy_backup_dir: Option<String>,
+        legacy_workspace_path: Option<String>,
+        backup_dir: Option<String>,
+        workspace_path: Option<String>,
         cursor_skills_path: Option<String>,
         codex_skills_path: Option<String>,
         codex_home: Option<String>,
@@ -152,8 +158,10 @@ pub mod guard {
                 local_appdata: std::env::var("LOCALAPPDATA").ok(),
                 xdg_config_home: std::env::var("XDG_CONFIG_HOME").ok(),
                 xdg_data_home: std::env::var("XDG_DATA_HOME").ok(),
-                agent_workspace_backup_dir: std::env::var("AGENT_WORKSPACE_BACKUP_DIR").ok(),
-                agent_workspace_path: std::env::var("AGENT_WORKSPACE_PATH").ok(),
+                legacy_backup_dir: std::env::var(LEGACY_BACKUP_DIR_ENV).ok(),
+                legacy_workspace_path: std::env::var(LEGACY_WORKSPACE_PATH_ENV).ok(),
+                backup_dir: std::env::var(BACKUP_DIR_ENV).ok(),
+                workspace_path: std::env::var(WORKSPACE_PATH_ENV).ok(),
                 cursor_skills_path: std::env::var("CURSOR_SKILLS_PATH").ok(),
                 codex_skills_path: std::env::var("CODEX_SKILLS_PATH").ok(),
                 codex_home: std::env::var("CODEX_HOME").ok(),
@@ -161,6 +169,26 @@ pub mod guard {
                 claude_skills_path: std::env::var("CLAUDE_SKILLS_PATH").ok(),
             }
         }
+    }
+
+    /// The four variables that decide where data and backups go, current names and aliases.
+    const DATA_LOCATION_VARS: [&str; 4] = [
+        WORKSPACE_PATH_ENV,
+        LEGACY_WORKSPACE_PATH_ENV,
+        BACKUP_DIR_ENV,
+        LEGACY_BACKUP_DIR_ENV,
+    ];
+
+    /// Removes every variable that can point the app at a data or backup folder, and restores
+    /// them when the returned value drops. A test that holds the env lock calls this first, so a
+    /// variable exported in the shell that runs `cargo test` (an alias included) can never steer
+    /// it into a real folder. Take the lock (`lock()`) before calling it and keep both alive.
+    pub fn isolate_data_location_env() -> EnvRestore {
+        let restore = EnvRestore::capture();
+        for name in DATA_LOCATION_VARS {
+            unsafe { std::env::remove_var(name) };
+        }
+        restore
     }
 
     /// The env lock, with `XDG_CONFIG_HOME` removed until it drops (fields drop in order: the
@@ -201,11 +229,13 @@ pub mod guard {
             set_optional("LOCALAPPDATA", self.local_appdata.as_deref());
             set_optional("XDG_CONFIG_HOME", self.xdg_config_home.as_deref());
             set_optional("XDG_DATA_HOME", self.xdg_data_home.as_deref());
+            set_optional(LEGACY_BACKUP_DIR_ENV, self.legacy_backup_dir.as_deref());
             set_optional(
-                "AGENT_WORKSPACE_BACKUP_DIR",
-                self.agent_workspace_backup_dir.as_deref(),
+                LEGACY_WORKSPACE_PATH_ENV,
+                self.legacy_workspace_path.as_deref(),
             );
-            set_optional("AGENT_WORKSPACE_PATH", self.agent_workspace_path.as_deref());
+            set_optional(BACKUP_DIR_ENV, self.backup_dir.as_deref());
+            set_optional(WORKSPACE_PATH_ENV, self.workspace_path.as_deref());
             set_optional("CURSOR_SKILLS_PATH", self.cursor_skills_path.as_deref());
             set_optional("CODEX_SKILLS_PATH", self.codex_skills_path.as_deref());
             set_optional("CODEX_HOME", self.codex_home.as_deref());
@@ -264,5 +294,35 @@ mod tests {
             offenders.is_empty(),
             "a test changes the process PATH, which breaks parallel tests that spawn python3 or git: {offenders:?}"
         );
+    }
+    /// A variable exported in the shell that runs `cargo test`, an alias included, must not reach
+    /// a test that isolates the data location, and must be back afterwards.
+    #[test]
+    fn the_data_location_helper_ignores_exported_aliases_and_restores_them() {
+        use crate::env_overrides::{
+            backup_dir_override, workspace_path_override, LEGACY_BACKUP_DIR_ENV,
+            LEGACY_WORKSPACE_PATH_ENV,
+        };
+        let _lock = super::guard::lock();
+        let outer = super::guard::EnvRestore::capture();
+        unsafe {
+            std::env::set_var(LEGACY_WORKSPACE_PATH_ENV, "/exported/data");
+            std::env::set_var(LEGACY_BACKUP_DIR_ENV, "/exported/backups");
+        }
+        assert_eq!(workspace_path_override().as_deref(), Some("/exported/data"));
+        {
+            let _isolated = super::guard::isolate_data_location_env();
+            assert_eq!(workspace_path_override(), None);
+            assert_eq!(backup_dir_override(), None);
+        }
+        assert_eq!(
+            std::env::var(LEGACY_WORKSPACE_PATH_ENV).as_deref(),
+            Ok("/exported/data")
+        );
+        assert_eq!(
+            std::env::var(LEGACY_BACKUP_DIR_ENV).as_deref(),
+            Ok("/exported/backups")
+        );
+        drop(outer);
     }
 }

@@ -23,7 +23,7 @@ const NEW_NAME: &str = "se.hugrverk.riggverk";
 const BASE_TIME: u64 = 1_600_000_000;
 const TXN_IN_FLIGHT: &str = "1700000000000000001";
 const TXN_DONE: &str = "1700000000000000002";
-const WORKSPACE_KEY: &str = "/home/example/.config/agent-workspace";
+const WORKSPACE_KEY: &str = "/home/example/.config/riggverk";
 
 struct TempDir(PathBuf);
 
@@ -288,14 +288,10 @@ fn seed_simple(old: &Path) {
 
 fn with_isolated_home<T>(name: &str, run: impl FnOnce(&Path) -> T) -> T {
     let _guard = crate::test_env::guard::lock();
-    let _env = crate::test_env::guard::EnvRestore::capture();
+    let _env = crate::test_env::guard::isolate_data_location_env();
     let _warning = ClearStartupWarning;
     let home = TempDir::new(name);
     crate::test_env::set_test_user_dirs(home.path());
-    unsafe {
-        std::env::remove_var("AGENT_WORKSPACE_BACKUP_DIR");
-        std::env::remove_var("AGENT_WORKSPACE_PATH");
-    }
     run(home.path())
 }
 

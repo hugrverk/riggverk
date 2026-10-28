@@ -45,8 +45,8 @@ mod tests {
             set_test_user_dirs(&base.join("home"));
             let ws = base.join("workspace").canonicalize().expect("workspace");
             unsafe {
-                std::env::set_var("AGENT_WORKSPACE_PATH", &ws);
-                std::env::set_var("AGENT_WORKSPACE_BACKUP_DIR", base.join("backups"));
+                std::env::set_var("RIGGVERK_WORKSPACE_PATH", &ws);
+                std::env::set_var("RIGGVERK_BACKUP_DIR", base.join("backups"));
             }
             let home = crate::platform_paths::resolve_user_home(
                 &crate::platform_paths::PlatformEnv::from_process_env(),
@@ -370,8 +370,11 @@ mod tests {
         crate::commands::set_codex_config_kept(true).expect("keep");
         assert_eq!(env.read(), config_before, "config.toml is never written");
         assert_eq!(env.kind(), OperationKind::NoChange);
-        let prefs = fs::read_to_string(env.ws.join(".agent-workspace/config-preferences.json"))
-            .expect("preferences");
+        let prefs = fs::read_to_string(crate::workspace_layout::state_file(
+            &env.ws,
+            "config-preferences.json",
+        ))
+        .expect("preferences");
         assert!(prefs.contains("auto_review"), "{prefs}");
 
         crate::commands::set_codex_config_kept(false).expect("hand back");

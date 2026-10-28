@@ -67,7 +67,7 @@ pub struct SurfaceInstallationStatus {
 pub struct DataFolderStatus {
     /// Personal docs in `docs/context/`; the app never removes them.
     pub personal_docs: usize,
-    /// Whether the ownership records (`.agent-workspace/managed-state.json`) exist yet.
+    /// Whether the ownership records (`.riggverk/managed-state.json`) exist yet.
     pub ownership_records: bool,
     /// Old copies of the bundle an update leaves in place: edited, or not provably the app's.
     pub left_in_place: usize,

@@ -20,7 +20,8 @@ use serde::{Deserialize, Serialize};
 use crate::artifact_registry::ArtifactId;
 use crate::managed_state::artifact_identity;
 
-pub const KEPT_FILES_REL: &str = ".agent-workspace/kept-files.json";
+/// File name inside the state folder (see `workspace_layout::state_file`).
+pub const KEPT_FILES_FILE: &str = "kept-files.json";
 const SCHEMA_VERSION: u32 = 1;
 const MAX_FILE_BYTES: u64 = 512 * 1024;
 /// Most files one workspace can keep; a bigger file is read as no choices.
@@ -57,7 +58,7 @@ enum Stored {
 }
 
 fn path_of(workspace_root: &Path) -> PathBuf {
-    workspace_root.join(KEPT_FILES_REL)
+    crate::workspace_layout::state_file(workspace_root, KEPT_FILES_FILE)
 }
 
 fn read_stored(workspace_root: &Path) -> Stored {

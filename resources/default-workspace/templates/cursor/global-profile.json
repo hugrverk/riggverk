@@ -29,7 +29,7 @@
     "recommended": "auto-review",
     "managed_by": "cursor-settings",
     "path": "Cursor Settings > Agents > Run Mode",
-    "verifiable_by_agent_workspace": false
+    "verifiable_by_riggverk": false
   },
   "project_writes": false,
   "excluded_targets": [

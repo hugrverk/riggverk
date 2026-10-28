@@ -26,9 +26,9 @@ Cursor User Rules are version-controlled separately in `templates/cursor/user-ru
 Installed rules files are shared with you. The app owns only the base between these marker lines (at column 0, outside code fences, one pair per file):
 
 ```text
-<!-- BEGIN AGENT-WORKSPACE BASE ... -->
+<!-- BEGIN RIGGVERK BASE ... -->
 ...base...
-<!-- END AGENT-WORKSPACE BASE -->
+<!-- END RIGGVERK BASE -->
 ```
 
 Everything before or after the block is yours and is kept byte-for-byte. Put your refinements below the END marker; they override the base where they conflict (the base says so in its Priority section). Do not edit inside the block.

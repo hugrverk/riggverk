@@ -8,7 +8,7 @@ Do not duplicate workflow instructions across all surfaces.
 
 ## Cursor harness
 
-- Use bundled Cursor agents, skills, User Rules, and MCP through native setup; Agent Workspace does not own project rules or Auto Review.
+- Use bundled Cursor agents, skills, User Rules, and MCP through native setup; Riggverk does not own project rules or Auto Review.
 - Manual Auto Review stays user-controlled; do not assume the app can trigger it.
 - Stay scoped to the open workspace and requested files; do not write project `.cursor/rules` unless the user asks.
 
@@ -19,7 +19,7 @@ If you start a dev server, record enough command, PID, session, and port detail 
 Do not claim browser smoke or `browser-qa` completed without reporting server lifecycle status. Kretsverket may use `http://localhost:1420/`; verify before starting a replacement server.
 
 ## Priority
-Repository reality overrides assumptions. Explicit user instructions override these defaults. Project-local guidance overrides these defaults unless unsafe. Instructions after the Agent Workspace base block are the user's refinements and override the base where they conflict.
+Repository reality overrides assumptions. Explicit user instructions override these defaults. Project-local guidance overrides these defaults unless unsafe. Instructions after the Riggverk base block are the user's refinements and override the base where they conflict.
 
 ## Communication
 Be direct, dense, technical, and concise. No filler, praise, motivation, or beginner explanations unless requested. Respond in the user's language. Use English for code, comments, identifiers, commits, filenames, docs, and agent prompts. Use Swedish for Swedish user-facing copy. State uncertainty clearly.

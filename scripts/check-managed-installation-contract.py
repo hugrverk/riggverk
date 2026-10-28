@@ -465,7 +465,7 @@ def main() -> None:
     smoke = require(
         ROOT / "scripts/smoke-pre-manifest-upgrade.sh",
         "git archive",
-        "AGENT_WORKSPACE_HISTORICAL_FIXTURE_PATH",
+        "RIGGVERK_HISTORICAL_FIXTURE_PATH",
         "real_source_commit_pre_manifest_upgrade_smoke",
     )
     if "bundled_workspace_src" in smoke:

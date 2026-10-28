@@ -521,11 +521,11 @@ describe("SettingsView workspace row", () => {
 
   it("shows the default workspace and offers a reset that has nothing to do", () => {
     renderSettings({
-      workspacePath: "/Users/dev/.config/agent-workspace",
+      workspacePath: "/Users/dev/.config/riggverk",
       onResetWorkspace: vi.fn(async () => null),
     });
     const row = workspaceRow();
-    expect(row.textContent).toContain("/Users/dev/.config/agent-workspace");
+    expect(row.textContent).toContain("/Users/dev/.config/riggverk");
     expect(row.textContent).toContain("default");
     const reset = within(row).getByRole("button", { name: /reset to default/ });
     expect(reset.getAttribute("aria-disabled")).toBe("true");
@@ -549,7 +549,7 @@ describe("SettingsView workspace row", () => {
     expect(workspaceRow().textContent).toContain("/Users/dev/other-workspace");
     cleanup();
     renderSettings();
-    expect(workspaceRow().textContent).toContain("~/.config/agent-workspace");
+    expect(workspaceRow().textContent).toContain("~/.config/riggverk");
   });
 
   it("has no folder chooser: no choose button or hint, and c does nothing", async () => {
@@ -612,7 +612,7 @@ describe("SettingsView workspace row", () => {
   it("shows what came back: a notice for a reset, an error for a refusal, nothing for a declined one", async () => {
     const onResetWorkspace = vi
       .fn<() => Promise<{ ok: boolean; text: string } | null>>()
-      .mockResolvedValueOnce({ ok: false, text: "AGENT_WORKSPACE_PATH is set and overrides the saved workspace" })
+      .mockResolvedValueOnce({ ok: false, text: "RIGGVERK_WORKSPACE_PATH is set and overrides the saved workspace" })
       .mockResolvedValueOnce({ ok: true, text: "workspace reset to the default" })
       .mockResolvedValueOnce(null);
     renderSettings({ appSettings: custom, onResetWorkspace });
@@ -620,7 +620,7 @@ describe("SettingsView workspace row", () => {
     const status = () => within(workspaceRow()).getByRole("status", { name: "Workspace change" });
 
     fireEvent.click(reset());
-    await vi.waitFor(() => expect(status().textContent).toContain("AGENT_WORKSPACE_PATH is set"));
+    await vi.waitFor(() => expect(status().textContent).toContain("RIGGVERK_WORKSPACE_PATH is set"));
     expect(status().querySelector(".c-fail")).not.toBeNull();
 
     fireEvent.click(reset());

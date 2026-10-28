@@ -100,7 +100,7 @@ export interface CodexConfigStatus {
 export interface DataFolderStatus {
   /** Personal docs in `docs/context/`; the app never removes them. */
   personal_docs: number;
-  /** Whether the ownership records (`.agent-workspace/managed-state.json`) exist yet. */
+  /** Whether the ownership records (`.riggverk/managed-state.json`) exist yet. */
   ownership_records: boolean;
   /** Old copies of the bundle an update leaves in place: edited, or not provably the app's. */
   left_in_place: number;
@@ -481,6 +481,8 @@ export interface WorkspaceDiagnostics {
   resolved_path: string | null;
   valid: boolean;
   error: string | null;
+  /** Folder moves from an earlier release that were not done, and earlier folders left next to the current ones. */
+  layout_notes?: string[];
   enabled_rule_targets: number;
   total_rule_targets: number;
   enabled_config_targets: number;

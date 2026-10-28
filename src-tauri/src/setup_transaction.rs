@@ -440,7 +440,23 @@ pub fn workspace_key(workspace_root: &Path) -> Result<String, String> {
             workspace_root.display()
         ));
     }
-    Ok(workspace_root.to_string_lossy().into_owned())
+    Ok(
+        crate::workspace_layout::canonical_workspace_path(workspace_root)
+            .to_string_lossy()
+            .into_owned(),
+    )
+}
+
+/// Whether two workspace keys name the same workspace. The earlier default data folder and the
+/// current one are the same workspace: a manifest or token made before the folder was renamed
+/// still matches it.
+pub fn workspace_keys_match(recorded: &str, current: &str) -> bool {
+    let canonical = |key: &str| {
+        crate::workspace_layout::canonical_workspace_path(Path::new(key))
+            .to_string_lossy()
+            .into_owned()
+    };
+    recorded == current || canonical(recorded) == canonical(current)
 }
 
 /// Expands surfaces to artifacts. A retired per-harness skill surface is the `Skills` surface,
@@ -1975,7 +1991,7 @@ fn rules_block_has_user_content(artifact: &ArtifactId, workspace_root: &Path, ho
 /// inspected only loses its own adoption.
 ///
 /// Only a workspace folder the app has touched is inspected: one holding the state folder
-/// `.agent-workspace/` (every earlier release wrote its marker there). It is not the copy of the
+/// `.riggverk/` or its earlier name (every earlier release wrote its marker there). It is not the copy of the
 /// bundle, which the workspace cleanup removes: adoption has to outlive it.
 fn records_with_bootstrap(
     workspace_root: &Path,
@@ -3137,7 +3153,22 @@ pub fn validate_manifest(
         return Err("invalid operation count".into());
     }
     let ws_key = workspace_key(workspace_root)?;
-    if manifest.workspace_key != ws_key {
+    // A manifest keyed by the earlier default folder maps onto the current folder only when that
+    // folder was moved. If an earlier folder exists again next to the current one, the manifest
+    // could mean either, and rolling it back could write into the wrong one.
+    if let Some(earlier) = crate::workspace_layout::legacy_default_workspace_path() {
+        if Path::new(&manifest.workspace_key) == earlier
+            && workspace_root != earlier
+            && fs::symlink_metadata(&earlier).is_ok()
+        {
+            return Err(format!(
+                "manifest was recorded for the earlier workspace folder {}, which still exists next to {}; move or remove it, then roll back",
+                earlier.display(),
+                workspace_root.display()
+            ));
+        }
+    }
+    if !workspace_keys_match(&manifest.workspace_key, &ws_key) {
         return Err("manifest workspace mismatch".into());
     }
     match (

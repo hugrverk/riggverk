@@ -241,7 +241,10 @@ mod tests {
     #[test]
     fn the_list_never_names_state_or_user_files() {
         for rel in RETIRED_WORKSPACE_FILES {
-            assert!(!rel.starts_with(".agent-workspace/"), "{rel}");
+            assert!(
+                !rel.starts_with(crate::workspace_layout::LEGACY_STATE_DIR),
+                "{rel}"
+            );
             assert!(!rel.starts_with("docs/context/"), "{rel}");
         }
         assert_eq!(LEGACY_MARKER_REL, ".agent-workspace/workspace.json");

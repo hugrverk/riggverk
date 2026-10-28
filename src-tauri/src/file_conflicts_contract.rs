@@ -24,7 +24,7 @@ mod tests {
     };
     use crate::file_conflicts::{ConflictReason, DiffKind, UnitState};
     use crate::installation_status::{status_for_surfaces, InstallationState, InstallationStatus};
-    use crate::kept_files::KEPT_FILES_REL;
+    use crate::kept_files::KEPT_FILES_FILE;
     use crate::managed_state::{
         artifact_identity, read_managed_state, write_managed_state_atomic, ManagedArtifactRecord,
         ManagedState, MANAGED_STATE_SCHEMA_VERSION,
@@ -111,9 +111,9 @@ mod tests {
             fs::create_dir_all(&home).expect("home");
             set_test_user_dirs(&home);
             unsafe {
-                std::env::set_var("AGENT_WORKSPACE_PATH", ws.to_string_lossy().as_ref());
+                std::env::set_var("RIGGVERK_WORKSPACE_PATH", ws.to_string_lossy().as_ref());
                 std::env::set_var(
-                    "AGENT_WORKSPACE_BACKUP_DIR",
+                    "RIGGVERK_BACKUP_DIR",
                     base.join("backups").to_string_lossy().as_ref(),
                 );
             }
@@ -253,7 +253,7 @@ mod tests {
         }
 
         fn kept_path(&self) -> PathBuf {
-            self.ws.join(KEPT_FILES_REL)
+            crate::workspace_layout::state_file(&self.ws, KEPT_FILES_FILE)
         }
 
         /// Every file of the backup folder, to see whether an operation made a backup.

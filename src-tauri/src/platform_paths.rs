@@ -150,12 +150,28 @@ pub fn backup_root_path(env: &PlatformEnv, platform: Platform) -> Result<PathBuf
     Ok(app_support_dir(env, platform)?.join("backups"))
 }
 
+/// Name of the default data folder under `~/.config`.
+pub const DEFAULT_WORKSPACE_DIR_NAME: &str = "riggverk";
+
+/// Name of the default data folder before the Riggverk rename. Only the layout migration reads it:
+/// an existing folder of this name is used in place until the first write moves it.
+pub const LEGACY_WORKSPACE_DIR_NAME: &str = "agent-workspace";
+
 pub fn default_installed_workspace_path(
     env: &PlatformEnv,
     platform: Platform,
 ) -> Result<PathBuf, String> {
     let home = resolve_user_home(env, platform)?;
-    Ok(home.join(".config/agent-workspace"))
+    Ok(home.join(".config").join(DEFAULT_WORKSPACE_DIR_NAME))
+}
+
+/// The default data folder of builds before the Riggverk rename (see `workspace_layout`).
+pub fn legacy_default_installed_workspace_path(
+    env: &PlatformEnv,
+    platform: Platform,
+) -> Result<PathBuf, String> {
+    let home = resolve_user_home(env, platform)?;
+    Ok(home.join(".config").join(LEGACY_WORKSPACE_DIR_NAME))
 }
 
 pub fn default_cursor_profile_root(
@@ -525,7 +541,13 @@ mod tests {
             default_installed_workspace_path(&env, Platform::Windows).expect("workspace"),
             PathBuf::from(r"C:\Users\Example")
                 .join(".config")
-                .join("agent-workspace")
+                .join("riggverk")
+        );
+        assert_eq!(
+            legacy_default_installed_workspace_path(&env, Platform::Windows).expect("legacy"),
+            PathBuf::from(r"C:\Users\Example")
+                .join(".config")
+                .join(LEGACY_WORKSPACE_DIR_NAME)
         );
     }
 

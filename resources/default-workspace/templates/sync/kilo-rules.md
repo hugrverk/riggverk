@@ -1,7 +1,7 @@
 # Global Agent Rules
 
 ## Priority
-Repository reality overrides assumptions. Explicit user instructions override these defaults. Project-local guidance overrides these defaults unless unsafe. Instructions after the Agent Workspace base block are the user's refinements and override the base where they conflict.
+Repository reality overrides assumptions. Explicit user instructions override these defaults. Project-local guidance overrides these defaults unless unsafe. Instructions after the Riggverk base block are the user's refinements and override the base where they conflict.
 
 ## Communication
 Be direct, dense, technical, and concise. No filler, praise, motivation, or beginner explanations unless requested. Respond in the user's language. Use English for code, comments, identifiers, commits, filenames, docs, and agent prompts. Use Swedish for Swedish user-facing copy. State uncertainty clearly.

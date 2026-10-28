@@ -10,12 +10,17 @@ use crate::path_utils::{
     normalize_user_workspace_path,
 };
 use crate::settings;
+use crate::workspace_layout;
 
-/// The app's own state in a data folder: the workspace marker and the ownership records. A saved
-/// custom folder is recognised by them. Validity never reads bundled copies, so removing those
-/// copies cannot invalidate a folder or drop a saved one from the settings.
+/// The app's own state in a data folder: the workspace marker and the ownership records, under the
+/// current and the earlier state folder. A saved custom folder is recognised by them. Validity never
+/// reads bundled copies, so removing those copies cannot invalidate a folder or drop a saved one
+/// from the settings.
 pub(crate) const DATA_FOLDER_STATE_FILES: &[&str] = &[
-    ".agent-workspace/workspace.json",
+    super::retired_workspace_files::LEGACY_MARKER_REL,
+    crate::managed_state::LEGACY_MANAGED_STATE_REL,
+    // The marker an earlier release wrote travels with the state folder when it is renamed.
+    ".riggverk/workspace.json",
     crate::managed_state::MANAGED_STATE_REL,
 ];
 
@@ -27,21 +32,19 @@ const INVALID_WORKSPACE_PATH: &str = "invalid workspace path";
 /// Where the data folder path came from; it decides what makes the folder usable.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum DataFolderOrigin {
-    /// `AGENT_WORKSPACE_PATH` (development and tests): an existing folder.
+    /// `RIGGVERK_WORKSPACE_PATH` or its alias (development and tests): an existing folder.
     Env,
     /// A custom folder saved in the settings: an existing folder holding the app's state.
     Saved,
-    /// `~/.config/agent-workspace`: absent on a fresh profile until the first write creates it.
+    /// `~/.config/riggverk`, or the earlier default folder while that is the only one: absent on a
+    /// fresh profile until the first write creates it.
     Default,
 }
 
 /// Env override, a usable saved custom folder, or the default path.
 fn resolve_data_folder(settings: &settings::AppSettings) -> Option<(PathBuf, DataFolderOrigin)> {
-    if let Ok(p) = std::env::var("AGENT_WORKSPACE_PATH") {
-        let trimmed = p.trim();
-        if !trimmed.is_empty() {
-            return Some((PathBuf::from(trimmed), DataFolderOrigin::Env));
-        }
+    if let Some(path) = crate::env_overrides::workspace_path_override() {
+        return Some((PathBuf::from(path), DataFolderOrigin::Env));
     }
     if let Some(ref custom) = settings.workspace_path {
         if !is_legacy_default_workspace_path(custom) {
@@ -52,7 +55,7 @@ fn resolve_data_folder(settings: &settings::AppSettings) -> Option<(PathBuf, Dat
             }
         }
     }
-    default_installed_workspace_path()
+    workspace_layout::default_workspace_to_read()
         .ok()
         .map(|path| (path, DataFolderOrigin::Default))
 }
@@ -69,7 +72,7 @@ fn holds_app_state(folder: &Path) -> bool {
 }
 
 /// Why `path` is not a usable data folder, or `None`. It looks at the folder itself and, for a
-/// saved custom folder, at its `.agent-workspace/` state: never at bundled copies.
+/// saved custom folder, at its state folder: never at bundled copies.
 fn data_folder_problem(path: &Path, origin: DataFolderOrigin) -> Option<String> {
     if !path.is_absolute() {
         return Some("not an absolute path".to_string());
@@ -78,7 +81,7 @@ fn data_folder_problem(path: &Path, origin: DataFolderOrigin) -> Option<String> 
         Ok(meta) if meta.file_type().is_symlink() => Some("the folder is a symlink".to_string()),
         Ok(meta) if !meta.is_dir() => Some("not a folder".to_string()),
         Ok(_) if origin == DataFolderOrigin::Saved && !holds_app_state(path) => {
-            Some("missing .agent-workspace/workspace.json or managed-state.json".to_string())
+            Some("missing the state folder with workspace.json or managed-state.json".to_string())
         }
         Ok(_) => None,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
@@ -108,11 +111,14 @@ pub(super) fn workspace_root() -> Result<PathBuf, String> {
     validate_data_folder(path, origin)
 }
 
-pub(super) fn setup_workspace_target_path() -> Result<PathBuf, String> {
-    let settings = settings::load();
-    let path = match configured_workspace_path(&settings) {
-        Some(path) => path,
-        None => default_installed_workspace_path()?,
+/// Where a setup reads or writes the data folder, and where that came from.
+fn setup_target(settings: &settings::AppSettings) -> Result<(PathBuf, DataFolderOrigin), String> {
+    let (path, origin) = match resolve_data_folder(settings) {
+        Some(resolved) => resolved,
+        None => (
+            default_installed_workspace_path()?,
+            DataFolderOrigin::Default,
+        ),
     };
     if !path.is_absolute() {
         return Err(format!(
@@ -121,7 +127,46 @@ pub(super) fn setup_workspace_target_path() -> Result<PathBuf, String> {
         ));
     }
     crate::path_safety::reject_symlink(&path, "setup workspace target")?;
+    Ok((path, origin))
+}
+
+/// The data folder a setup reads. Reads only: on an install made under the earlier names this is
+/// the earlier folder, in place.
+pub(super) fn setup_workspace_target_path() -> Result<PathBuf, String> {
+    setup_target(&settings::load()).map(|(path, _)| path)
+}
+
+/// The data folder a setup is about to write. Takes the first-mutation step of the layout
+/// migration (see `workspace_layout`): the earlier default folder is renamed to the current name
+/// and the earlier state folder inside it too. Call it right after taking the mutation lock and
+/// before any write. A step that cannot be taken leaves the earlier layout in use and is reported
+/// in the diagnostics.
+pub(super) fn workspace_target_for_write() -> Result<PathBuf, String> {
+    let (mut path, origin) = setup_target(&settings::load())?;
+    // The bundle is read-only. A data folder that is the bundle (or inside it) is never renamed
+    // into; the install refuses it later, as it always did.
+    if is_inside_bundle(&path) {
+        return Ok(path);
+    }
+    if origin == DataFolderOrigin::Default {
+        path = workspace_layout::migrate_default_workspace(&path);
+    }
+    workspace_layout::migrate_state_dir(&path);
     Ok(path)
+}
+
+fn is_inside_bundle(path: &Path) -> bool {
+    let Ok(bundle) = crate::setup_roots::bundled_root() else {
+        return false;
+    };
+    let canonical = |path: &Path| path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+    canonical(path).starts_with(canonical(&bundle))
+}
+
+/// Like [`workspace_root`], for a write: takes the first-mutation step first.
+pub(super) fn workspace_root_for_write() -> Result<PathBuf, String> {
+    workspace_target_for_write()?;
+    workspace_root()
 }
 
 /// Returns true when a saved custom path is a real folder holding the app's state.
@@ -156,6 +201,9 @@ pub struct WorkspaceDiagnostics {
     resolved_path: Option<String>,
     valid: bool,
     error: Option<String>,
+    /// Moves of the earlier layout that were not done, and earlier folders left next to the
+    /// current ones.
+    layout_notes: Vec<String>,
     enabled_rule_targets: usize,
     total_rule_targets: usize,
     enabled_config_targets: usize,
@@ -191,6 +239,7 @@ fn workspace_diagnostics_for_unconfigured(
         resolved_path: None,
         valid: false,
         error: Some(NO_WORKSPACE_SELECTED.into()),
+        layout_notes: workspace_layout::layout_notes(None),
         enabled_rule_targets: enabled_rules,
         total_rule_targets: total_rules,
         enabled_config_targets: enabled_configs,
@@ -236,6 +285,7 @@ pub fn get_workspace_diagnostics() -> Result<WorkspaceDiagnostics, String> {
 
     Ok(WorkspaceDiagnostics {
         candidate_path: candidate_str,
+        layout_notes: workspace_layout::layout_notes(Some(&candidate)),
         resolved_path,
         valid,
         error,
@@ -248,22 +298,19 @@ pub fn get_workspace_diagnostics() -> Result<WorkspaceDiagnostics, String> {
     })
 }
 
-/// `AGENT_WORKSPACE_PATH` wins over any saved workspace (see `configured_workspace_path`), so a
-/// reset of the saved workspace would silently not take effect while it is set.
+/// `RIGGVERK_WORKSPACE_PATH` (or its alias) wins over any saved workspace (see
+/// `configured_workspace_path`), so a reset of the saved workspace would silently not take effect
+/// while it is set.
 fn ensure_no_workspace_env_override() -> Result<(), String> {
-    let overridden = std::env::var("AGENT_WORKSPACE_PATH")
-        .map(|value| !value.trim().is_empty())
-        .unwrap_or(false);
-    if overridden {
-        return Err(
-            "AGENT_WORKSPACE_PATH is set and overrides the saved workspace; unset it to reset the workspace"
-                .to_string(),
-        );
+    if let Some((variable, _)) = crate::env_overrides::workspace_path_override_var() {
+        return Err(format!(
+            "{variable} is set and overrides the saved workspace; unset it to reset the workspace"
+        ));
     }
     Ok(())
 }
 
-/// Back to the default workspace (`~/.config/agent-workspace`): no custom path saved. The app no
+/// Back to the default workspace (`~/.config/riggverk`): no custom path saved. The app no
 /// longer sets a custom folder; this only drops one saved by an earlier version. The ownership
 /// records stay in the old folder.
 #[tauri::command]
@@ -319,7 +366,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .expect("system clock before unix epoch")
             .as_nanos();
-        std::env::temp_dir().join(format!("agent-workspace-{name}-{nonce}"))
+        std::env::temp_dir().join(format!("riggverk-{name}-{nonce}"))
     }
 
     fn mkdir(root: &Path, rel: &str) {
@@ -340,7 +387,11 @@ mod tests {
     /// A folder the app has used: the workspace marker, nothing else.
     fn setup_used_folder(name: &str) -> PathBuf {
         let root = temp_root(name);
-        write_file(&root, ".agent-workspace/workspace.json", "{}");
+        write_file(
+            &root,
+            crate::commands::retired_workspace_files::LEGACY_MARKER_REL,
+            "{}",
+        );
         root
     }
 
@@ -373,17 +424,14 @@ mod tests {
     }
 
     /// Runs `test` with HOME, the settings file and the backups under a temp dir and no
-    /// `AGENT_WORKSPACE_PATH`, so nothing touches the real profile.
+    /// workspace or backup variable (aliases included), so nothing touches the real profile.
     fn with_isolated_settings<F: FnOnce(&Path)>(name: &str, test: F) {
         let _guard = crate::test_env::guard::lock();
-        let _restore = crate::test_env::guard::EnvRestore::capture();
+        let _restore = crate::test_env::guard::isolate_data_location_env();
         let home = temp_root(name);
         fs::create_dir_all(&home).expect("create temp home");
         crate::test_env::set_test_user_dirs(&home);
-        unsafe {
-            std::env::remove_var("AGENT_WORKSPACE_PATH");
-            std::env::set_var("AGENT_WORKSPACE_BACKUP_DIR", home.join("backups"));
-        }
+        unsafe { std::env::set_var("RIGGVERK_BACKUP_DIR", home.join("backups")) };
         test(&home);
         cleanup(&home);
     }
@@ -449,7 +497,7 @@ mod tests {
     fn symlinked_data_folder_is_invalid() {
         with_isolated_settings("symlinked-folder-home", |home| {
             let real = home.join("real-folder");
-            write_file(&real, ".agent-workspace/managed-state.json", "{}");
+            write_file(&real, ".riggverk/managed-state.json", "{}");
             let default = default_installed_workspace_path().expect("default path");
             std::os::unix::fs::symlink(&real, &default).expect("link the default folder");
 
@@ -468,7 +516,7 @@ mod tests {
             assert!(!persisted_workspace_path_is_valid(&link.to_string_lossy()));
             assert!(persisted_workspace_path_is_valid(&real.to_string_lossy()));
 
-            unsafe { std::env::set_var("AGENT_WORKSPACE_PATH", &link) };
+            unsafe { std::env::set_var("RIGGVERK_WORKSPACE_PATH", &link) };
             let error = workspace_root().expect_err("a linked env folder is unusable");
             assert!(error.contains("symlink"), "{error}");
         });
@@ -478,7 +526,7 @@ mod tests {
     fn env_data_folder_must_exist_and_needs_no_bundled_copies() {
         with_isolated_settings("env-folder-home", |home| {
             let folder = home.join("env-folder");
-            unsafe { std::env::set_var("AGENT_WORKSPACE_PATH", &folder) };
+            unsafe { std::env::set_var("RIGGVERK_WORKSPACE_PATH", &folder) };
             let error = workspace_root().expect_err("an env folder that does not exist");
             assert!(error.contains("folder not found"), "{error}");
 
@@ -494,7 +542,7 @@ mod tests {
     fn custom_folder_with_only_managed_state_is_valid_and_kept() {
         with_isolated_settings("state-only-home", |home| {
             let custom = home.join("state-only");
-            write_file(&custom, ".agent-workspace/managed-state.json", "{}");
+            write_file(&custom, ".riggverk/managed-state.json", "{}");
             let saved = canonical_string(&custom);
             save_workspace_path(&saved);
 
@@ -541,10 +589,10 @@ mod tests {
     fn custom_folder_stays_configured_when_bundled_copies_are_deleted() {
         with_isolated_settings("custom-copies-deleted-home", |home| {
             let custom = home.join("my-workspace");
-            unsafe { std::env::set_var("AGENT_WORKSPACE_PATH", &custom) };
+            unsafe { std::env::set_var("RIGGVERK_WORKSPACE_PATH", &custom) };
             crate::test_env::seed_workspace_copy(&custom);
             install(&["claude_agents"]);
-            unsafe { std::env::remove_var("AGENT_WORKSPACE_PATH") };
+            unsafe { std::env::remove_var("RIGGVERK_WORKSPACE_PATH") };
             let records = read_managed_state(&custom).expect("records after install");
             assert!(records
                 .artifacts
@@ -558,9 +606,10 @@ mod tests {
             // Every bundled copy goes, the workspace marker included; the records stay.
             let raw = fs::read(managed_state_path(&custom)).expect("read records");
             fs::remove_dir_all(&custom).expect("delete the copies");
-            fs::create_dir_all(custom.join(".agent-workspace")).expect("state folder");
+            fs::create_dir_all(custom.join(crate::workspace_layout::STATE_DIR))
+                .expect("state folder");
             fs::write(managed_state_path(&custom), &raw).expect("restore records");
-            assert_eq!(entries(&custom), [".agent-workspace"]);
+            assert_eq!(entries(&custom), [".riggverk"]);
 
             let response = crate::commands::get_settings().expect("get_settings");
             assert_eq!(
@@ -599,10 +648,10 @@ mod tests {
 
             assert_eq!(
                 entries(&custom),
-                [".agent-workspace", "docs"],
+                [".riggverk", "docs"],
                 "only the state folder and the personal docs are left"
             );
-            assert!(custom.join(".agent-workspace/workspace.json").is_file());
+            assert!(custom.join(".riggverk/workspace.json").is_file());
             assert!(custom.join("docs/context/notes.md").is_file());
             assert!(read_managed_state(&saved_path).is_some());
             let response = crate::commands::get_settings().expect("get_settings");
@@ -628,7 +677,7 @@ mod tests {
             install(&["claude_agents"]);
 
             assert!(managed_state_path(&default).is_file());
-            assert_eq!(entries(&default), [".agent-workspace"]);
+            assert_eq!(entries(&default), [".riggverk"]);
             #[cfg(unix)]
             assert_eq!(mode(&default), 0o700, "the data folder is owner-only");
             let state = read_managed_state(&default).expect("records");
@@ -695,11 +744,21 @@ mod tests {
     }
 
     #[test]
-    fn workspace_root_prefers_agent_workspace_path_override() {
+    fn the_bundle_is_never_a_data_folder_to_rename_into() {
+        let bundle = crate::setup_roots::bundled_root().expect("bundle");
+        assert!(super::is_inside_bundle(&bundle));
+        assert!(super::is_inside_bundle(&bundle.join("docs")));
+        assert!(!super::is_inside_bundle(
+            &std::env::temp_dir().join("riggverk-not-the-bundle")
+        ));
+    }
+
+    #[test]
+    fn workspace_root_prefers_the_path_override() {
         let _guard = crate::test_env::guard::lock();
         let _restore = crate::test_env::guard::EnvRestore::capture();
         let target = setup_used_folder("root-override");
-        std::env::set_var("AGENT_WORKSPACE_PATH", &target);
+        std::env::set_var("RIGGVERK_WORKSPACE_PATH", &target);
         let resolved = workspace_root().expect("resolve the env folder");
         assert_eq!(resolved, target.canonicalize().expect("canonical target"));
         cleanup(&target);
@@ -707,61 +766,64 @@ mod tests {
 
     #[test]
     fn configured_workspace_path_ignores_legacy_relative_paths() {
-        let _guard = crate::test_env::guard::lock();
-        let home = crate::test_env::process_home();
-        let settings = AppSettings {
-            appearance: "dark".into(),
-            app_font_size: "medium".into(),
-            workspace_path: Some("workspace/local".into()),
-            enabled_target_ids: vec![],
-            enabled_harness_ids: crate::agent_targets::default_enabled_harness_ids(),
-            accent_color: None,
-            background_color: None,
-            foreground_color: None,
-            motion: "full".into(),
-            reduce_motion: false,
-            landing_view: "start".into(),
-            revision: 0,
-            target_defaults_version: crate::settings::TARGET_DEFAULTS_VERSION,
-            last_seen_version: None,
-        };
+        with_isolated_settings("relative-path-home", |_| {
+            let home = crate::test_env::process_home();
+            let settings = AppSettings {
+                appearance: "dark".into(),
+                app_font_size: "medium".into(),
+                workspace_path: Some("workspace/local".into()),
+                enabled_target_ids: vec![],
+                enabled_harness_ids: crate::agent_targets::default_enabled_harness_ids(),
+                accent_color: None,
+                background_color: None,
+                foreground_color: None,
+                motion: "full".into(),
+                reduce_motion: false,
+                landing_view: "start".into(),
+                revision: 0,
+                target_defaults_version: crate::settings::TARGET_DEFAULTS_VERSION,
+                last_seen_version: None,
+            };
 
-        let candidate = configured_workspace_path(&settings).expect("canonical fallback");
-        assert_eq!(candidate, home.join(".config/agent-workspace"));
+            let candidate = configured_workspace_path(&settings).expect("canonical fallback");
+            assert_eq!(candidate, home.join(".config/riggverk"));
+        });
     }
 
     #[test]
     fn default_settings_use_installed_workspace_candidate() {
-        let _guard = crate::test_env::guard::lock();
-        let home = crate::test_env::process_home();
-        let expected = home.join(".config/agent-workspace");
-        let candidate = configured_workspace_path(&AppSettings::default())
-            .expect("canonical default should resolve when HOME is set");
-        assert_eq!(candidate, expected);
+        with_isolated_settings("default-candidate-home", |_| {
+            let home = crate::test_env::process_home();
+            let expected = home.join(".config/riggverk");
+            let candidate = configured_workspace_path(&AppSettings::default())
+                .expect("canonical default should resolve when HOME is set");
+            assert_eq!(candidate, expected);
+        });
     }
 
     #[test]
-    fn legacy_agent_workspace_saved_setting_falls_back_to_canonical_default() {
-        let _guard = crate::test_env::guard::lock();
-        let home = crate::test_env::process_home();
-        let settings = AppSettings {
-            appearance: "dark".into(),
-            app_font_size: "medium".into(),
-            workspace_path: Some("~/Agent Workspace".into()),
-            enabled_target_ids: vec![],
-            enabled_harness_ids: crate::agent_targets::default_enabled_harness_ids(),
-            accent_color: None,
-            background_color: None,
-            foreground_color: None,
-            motion: "full".into(),
-            reduce_motion: false,
-            landing_view: "start".into(),
-            revision: 0,
-            target_defaults_version: crate::settings::TARGET_DEFAULTS_VERSION,
-            last_seen_version: None,
-        };
-        let candidate = configured_workspace_path(&settings).expect("candidate");
-        assert_eq!(candidate, home.join(".config/agent-workspace"));
+    fn first_built_in_default_saved_setting_falls_back_to_canonical_default() {
+        with_isolated_settings("first-default-home", |_| {
+            let home = crate::test_env::process_home();
+            let settings = AppSettings {
+                appearance: "dark".into(),
+                app_font_size: "medium".into(),
+                workspace_path: Some(crate::path_utils::LEGACY_FIRST_DEFAULT_DISPLAY.into()),
+                enabled_target_ids: vec![],
+                enabled_harness_ids: crate::agent_targets::default_enabled_harness_ids(),
+                accent_color: None,
+                background_color: None,
+                foreground_color: None,
+                motion: "full".into(),
+                reduce_motion: false,
+                landing_view: "start".into(),
+                revision: 0,
+                target_defaults_version: crate::settings::TARGET_DEFAULTS_VERSION,
+                last_seen_version: None,
+            };
+            let candidate = configured_workspace_path(&settings).expect("candidate");
+            assert_eq!(candidate, home.join(".config/riggverk"));
+        });
     }
 
     #[test]
@@ -781,7 +843,7 @@ mod tests {
             app_font_size: "medium".into(),
             workspace_path: Some(
                 std::env::temp_dir()
-                    .join("agent-workspace-scrub-missing")
+                    .join("riggverk-scrub-missing")
                     .to_string_lossy()
                     .into_owned(),
             ),
@@ -835,7 +897,7 @@ mod tests {
     fn reset_clears_a_saved_custom_folder_and_leaves_its_records() {
         with_isolated_settings("reset-custom-home", |home| {
             let custom = home.join("my-workspace");
-            write_file(&custom, ".agent-workspace/managed-state.json", "{}");
+            write_file(&custom, ".riggverk/managed-state.json", "{}");
             let saved = canonical_string(&custom);
             save_workspace_path(&saved);
             assert_eq!(
@@ -851,7 +913,7 @@ mod tests {
                 Some(default_installed_workspace_path().expect("default path"))
             );
             assert!(
-                custom.join(".agent-workspace/managed-state.json").is_file(),
+                custom.join(".riggverk/managed-state.json").is_file(),
                 "the old folder and its records are left alone"
             );
         });
@@ -871,13 +933,13 @@ mod tests {
     fn reset_is_refused_while_the_env_override_is_set() {
         with_isolated_settings("reset-env-home", |home| {
             let custom = home.join("my-workspace");
-            write_file(&custom, ".agent-workspace/managed-state.json", "{}");
+            write_file(&custom, ".riggverk/managed-state.json", "{}");
             let saved = canonical_string(&custom);
             save_workspace_path(&saved);
-            unsafe { std::env::set_var("AGENT_WORKSPACE_PATH", "/somewhere/else") };
+            unsafe { std::env::set_var("RIGGVERK_WORKSPACE_PATH", "/somewhere/else") };
 
             let error = reset_active_workspace_path().expect_err("the env override is reported");
-            assert!(error.contains("AGENT_WORKSPACE_PATH"), "{error}");
+            assert!(error.contains("RIGGVERK_WORKSPACE_PATH"), "{error}");
             assert_eq!(
                 crate::settings::load().workspace_path.as_deref(),
                 Some(saved.as_str()),

@@ -27,7 +27,7 @@ For each role on its own, the first source that sets it wins:
    ```
 
    An `adversary` key takes the same shape. Ignore the whole file, and say so, when it is not valid JSON or `schema_version` is not 1.
-3. **Rules line.** One line in the user's own rules text, below the `<!-- END AGENT-WORKSPACE BASE -->` marker (Riggverk's Library edits that text; Cursor users put it in their User Rules):
+3. **Rules line.** One line in the user's own rules text, below the `<!-- END RIGGVERK BASE -->` marker (Riggverk's Library edits that text; Cursor users put it in their User Rules):
 
    `Adversarial roles: critic=<harness>[/<model>], adversary=<harness>[/<model>], implementer=<harness>[/<model>]`
 

@@ -270,8 +270,8 @@ describe("mock backend: the Library edits the refinements below the rules base",
 
   it("saves refinements only with the revision they were opened with, and refuses a file without a block", async () => {
     const opened = await invoke<RulesFileContent>("read_rules_file", { surface: "codex_rules" });
-    expect(opened.before).toContain("<!-- END AGENT-WORKSPACE BASE -->");
-    expect(opened.refinements).not.toContain("AGENT-WORKSPACE BASE");
+    expect(opened.before).toContain("<!-- END RIGGVERK BASE -->");
+    expect(opened.refinements).not.toContain("RIGGVERK BASE");
     await expect(
       invoke("save_rules_refinements", { surface: "codex_rules", content: "mine\n", expectedRevision: "stale" }),
     ).rejects.toThrow("changed on disk");

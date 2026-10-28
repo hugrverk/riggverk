@@ -61,11 +61,8 @@ mod tests {
             let backups = base.join("backups");
             set_test_user_dirs(&home);
             unsafe {
-                std::env::set_var("AGENT_WORKSPACE_PATH", ws.to_string_lossy().as_ref());
-                std::env::set_var(
-                    "AGENT_WORKSPACE_BACKUP_DIR",
-                    backups.to_string_lossy().as_ref(),
-                );
+                std::env::set_var("RIGGVERK_WORKSPACE_PATH", ws.to_string_lossy().as_ref());
+                std::env::set_var("RIGGVERK_BACKUP_DIR", backups.to_string_lossy().as_ref());
             }
             let home = crate::test_env::process_home();
             Self {
@@ -91,6 +88,11 @@ mod tests {
             let path = self.ws.join(rel);
             fs::create_dir_all(path.parent().expect("parent")).expect("folder");
             fs::write(path, bytes).expect("write");
+        }
+
+        /// The retired workspace marker, in whichever state folder holds it now.
+        fn marker(&self) -> PathBuf {
+            crate::workspace_layout::state_file(&self.ws, "workspace.json")
         }
 
         fn names(&self) -> Vec<String> {
@@ -304,7 +306,7 @@ mod tests {
     fn an_rc1_workspace_without_records_loses_every_unedited_copy_and_keeps_an_edited_one() {
         let env = Env::new("rc1");
         let written = seed_rc1_workspace(&env.ws);
-        assert!(env.ws.join(LEGACY_MARKER_REL).is_file());
+        assert!(env.marker().is_file());
         assert!(read_managed_state(&env.ws).is_none(), "rc.1 has no records");
         let copies: Vec<&str> = RETIRED_WORKSPACE_FILES
             .iter()
@@ -351,7 +353,7 @@ mod tests {
             fs::read(env.ws.join(edited_tag_only)).expect("edited script"),
             b"#!/bin/sh\necho mine\n"
         );
-        assert!(env.ws.join(LEGACY_MARKER_REL).is_file());
+        assert!(env.marker().is_file());
     }
 
     /// The files only the early tagged builds shipped go with the rest on an rc.1 install: the
@@ -388,7 +390,7 @@ mod tests {
             "the emptied scripts folder is pruned"
         );
         assert!(!env.ws.join("templates").exists());
-        assert!(env.ws.join(LEGACY_MARKER_REL).is_file());
+        assert!(env.marker().is_file());
 
         let rolled = rollback_setup_transaction(result.transaction_id, false).expect("rollback");
         assert!(
@@ -419,7 +421,7 @@ mod tests {
         for (rel, bytes) in mine {
             env.write(rel, bytes);
         }
-        let marker = fs::read(env.ws.join(LEGACY_MARKER_REL)).expect("marker");
+        let marker = fs::read(env.marker()).expect("marker");
 
         let planned = env.plan();
         for (rel, _) in mine {
@@ -430,10 +432,7 @@ mod tests {
         for (rel, bytes) in mine {
             assert_eq!(fs::read(env.ws.join(rel)).expect(rel), bytes, "{rel}");
         }
-        assert_eq!(
-            fs::read(env.ws.join(LEGACY_MARKER_REL)).expect("marker"),
-            marker
-        );
+        assert_eq!(fs::read(env.marker()).expect("marker"), marker);
         for rel in RETIRED_WORKSPACE_FILES {
             assert!(!env.ws.join(rel).exists(), "{rel}");
         }
@@ -441,8 +440,8 @@ mod tests {
         assert_eq!(
             env.names(),
             [
-                ".agent-workspace",
                 ".git",
+                ".riggverk",
                 "docs",
                 "my-notes.txt",
                 "skills",
@@ -589,7 +588,7 @@ mod tests {
         assert!(result.success, "uninstall: {}", result.message);
 
         assert!(env.ws.is_dir());
-        assert!(env.ws.join(LEGACY_MARKER_REL).is_file());
+        assert!(env.marker().is_file());
         assert!(managed_state_path(&env.ws).is_file());
         assert_eq!(
             fs::read(env.ws.join("docs/context/notes.md")).expect("personal doc"),

@@ -33,7 +33,7 @@ export function appFontSizePx(size: AppSettings["app_font_size"]): string {
 }
 
 /** Canonical installed workspace path (display form; backend owns resolution). */
-export const DEFAULT_WORKSPACE_PATH = "~/.config/agent-workspace";
+export const DEFAULT_WORKSPACE_PATH = "~/.config/riggverk";
 
 export function defaultSettings(): AppSettings {
   return {
