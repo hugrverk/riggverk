@@ -567,7 +567,8 @@ fn run_persisted_rollback(
     let managed_state_restore =
         match newer_completed_transaction(backup_dir, &manifest.workspace_key) {
             Ok(Some(_)) => Ok(()),
-            Ok(None) => restore_previous_managed_state(manifest, backup_dir, workspace_root),
+            Ok(None) => restore_previous_managed_state(manifest, backup_dir, workspace_root)
+                .and_then(|()| crate::skill_sources::restore_record(workspace_root, backup_dir)),
             Err(e) => Err(e),
         };
     if let Err(error) = managed_state_restore {
@@ -978,6 +979,22 @@ fn apply_single_artifact(
     }
 
     if artifact == &crate::artifact_registry::ArtifactId::CodexConfig {
+        // The reset to Riggverk's defaults writes exactly the content its preview rendered, and
+        // only over the file the preview was computed from.
+        if let Some(rewrite) = rules_rewrite {
+            let installed = crate::codex_config_keep::read_config_bounded(&dest)?;
+            if crate::stable_digest::bytes(&installed) != rewrite.expected_installed_digest {
+                return Err(
+                    "the Codex config.toml changed since preview; preview the reset again"
+                        .to_string(),
+                );
+            }
+            return crate::safe_filesystem::write_regular_file_atomic(
+                &dest,
+                rewrite.content.as_bytes(),
+                &root,
+            );
+        }
         if dest.is_file() {
             // The keys the user keeps are rendered from their kept value, never from the template.
             let rendered = crate::commands::render_codex_config_for_apply(
@@ -1327,6 +1344,13 @@ fn run_planned_artifacts(
             (false, None, None)
         };
 
+    // `pack-skills.json` is not an artifact; a rollback puts it back from this copy.
+    if let Err(error) = crate::skill_sources::snapshot_record(&ws_root, &backup_dir) {
+        manual_steps.push(format!(
+            "The list of installed pack skills could not be saved for a rollback: {error}"
+        ));
+    }
+
     let mut manifest_ops: Vec<ArtifactManifestOperation> = Vec::new();
     for (backed_up, p) in pending.iter().enumerate() {
         progress.report(ApplyPhase::Backup, backed_up, Some(pending.len()), || {
@@ -1658,7 +1682,7 @@ fn run_planned_artifacts(
 
     match crate::managed_state::next_state_from_operations(
         previous_managed_state.as_ref(),
-        &roots.bundled_root,
+        &roots.sources,
         &roots.runtime_root,
         &roots.home,
         &manifest.operations,
@@ -1746,6 +1770,14 @@ fn run_planned_artifacts(
     if let Err(error) = crate::kept_files::release(&ws_root, &rewritten) {
         manual_steps.push(format!(
             "The files were applied, but a choice to keep your version of one of them could not be cleared: {error}"
+        ));
+    }
+
+    // Which installed skills came from a pack, so that a pack that later goes missing does not
+    // retire them. The apply is complete; a failure here is a warning, not a rollback.
+    if let Err(error) = crate::skill_sources::record_after_transaction(&ws_root, &roots.sources) {
+        manual_steps.push(format!(
+            "The files were applied, but the list of installed pack skills could not be saved: {error}"
         ));
     }
 

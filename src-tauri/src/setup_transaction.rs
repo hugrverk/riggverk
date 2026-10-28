@@ -18,6 +18,7 @@ use crate::commands::file_eq;
 use crate::file_conflicts::is_kept;
 use crate::setup_lifecycle::{OperationKind, SetupSurfaceId};
 use crate::skill_roots::SkillScope;
+use crate::skill_sources::{SkillSources, SourceRoot};
 
 pub const ARTIFACT_MANIFEST_SCHEMA_VERSION: u32 = 5;
 /// Most operations one transaction manifest may hold; a manifest outside `1..=` this is refused
@@ -266,9 +267,9 @@ pub struct Overwrite {
     pub expected_installed_digest: String,
 }
 
-/// A rules file the user chose to convert: the complete new content, and the
-/// digest of the file it was computed from. Apply refuses to write when the
-/// file changed since.
+/// A file the user chose to rewrite (a rules conversion, or the Codex config reset to Riggverk's
+/// defaults): the complete new content, and the digest of the file it was computed from. Apply
+/// refuses to write when the file changed since.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RulesRewrite {
     pub content: String,
@@ -339,7 +340,7 @@ fn surfaces_match(a: &[SetupSurfaceId], b: &[SetupSurfaceId]) -> bool {
     left == right
 }
 
-fn stable_fingerprint(parts: &[String]) -> Result<String, String> {
+pub(crate) fn stable_fingerprint(parts: &[String]) -> Result<String, String> {
     let encoded =
         serde_json::to_vec(parts).map_err(|e| format!("serialize fingerprint input: {e}"))?;
     Ok(crate::stable_digest::bytes(&encoded)
@@ -496,7 +497,7 @@ pub fn expand_surfaces_to_artifacts(
     _workspace_root: &Path,
     scope: &SkillScope,
 ) -> Result<Vec<ArtifactId>, String> {
-    let bundled_root = crate::setup_roots::bundled_root_for(_workspace_root)?;
+    let sources = SkillSources::for_workspace(_workspace_root)?;
     let mut artifacts: Vec<ArtifactId> = Vec::new();
     let mut seen = HashSet::new();
     let mut seen_surfaces = HashSet::new();
@@ -505,7 +506,7 @@ pub fn expand_surfaces_to_artifacts(
         if !seen_surfaces.insert(surface) {
             continue;
         }
-        let expanded = expand_surface_fail_closed(surface, &bundled_root, scope)?;
+        let expanded = expand_surface_fail_closed(surface, &sources, scope)?;
         if expanded.is_empty()
             && !matches!(
                 surface,
@@ -530,12 +531,12 @@ pub fn expand_surfaces_to_artifacts(
     Ok(artifacts)
 }
 
-pub fn expand_surface_fail_closed(
+pub fn expand_surface_fail_closed<R: SourceRoot + ?Sized>(
     surface: SetupSurfaceId,
-    workspace_root: &Path,
+    sources: &R,
     scope: &SkillScope,
 ) -> Result<Vec<ArtifactId>, String> {
-    crate::artifact_registry::expand_surface(surface, workspace_root, scope)
+    crate::artifact_registry::expand_surface(surface, sources, scope)
 }
 
 fn user_home() -> Result<PathBuf, String> {
@@ -587,11 +588,14 @@ pub fn validate_artifact_source_dest(
     let bundled_root = crate::setup_roots::bundled_root_for(&ws_root)?
         .canonicalize()
         .map_err(|e| format!("cannot canonicalize bundled workspace: {e}"))?;
+    let sources = SkillSources::new(bundled_root, &ws_root);
     let source = artifact
-        .resolve_source(&bundled_root)
+        .resolve_source(&sources)
         .ok_or_else(|| format!("missing source for {artifact:?}"))?;
-    crate::path_safety::reject_path_escape(&source, &bundled_root, "source")?;
-    reject_symlink_parent_chain(&source, &bundled_root, "source")?;
+    // A skill of a pack is read from its pack folder; everything else from the bundle.
+    let source_root = sources.source_root_of(&source);
+    crate::path_safety::reject_path_escape(&source, &source_root, "source")?;
+    reject_symlink_parent_chain(&source, &source_root, "source")?;
     reject_symlink(&source, "source")?;
     Ok((source, dest))
 }
@@ -796,9 +800,9 @@ pub fn compute_plan_fingerprint(
     }
     let mut artifacts: Vec<_> = artifact_ops.iter().map(|a| a.artifact.clone()).collect();
     artifacts.sort_by_key(|a| format!("{a:?}"));
+    let sources = SkillSources::for_workspace(workspace_root)?;
     for artifact in &artifacts {
         parts.push(format!("artifact:{artifact:?}"));
-        let bundled_root = crate::setup_roots::bundled_root_for(workspace_root)?;
         let planned_kind = artifact_ops
             .iter()
             .find(|operation| operation.artifact == *artifact)
@@ -806,13 +810,13 @@ pub fn compute_plan_fingerprint(
         let source_digest = if matches!(planned_kind, Some(OperationKind::Remove)) {
             crate::setup_fingerprint::ABSENT_DIGEST.to_string()
         } else if artifact
-            .resolve_source(&bundled_root)
+            .resolve_source(&sources)
             .is_some_and(|source| source.exists())
         {
             // The Codex config's keys the user keeps are part of what the source side says.
             crate::setup_fingerprint::artifact_effective_source_digest(
                 artifact,
-                &bundled_root,
+                &sources,
                 workspace_root,
                 home,
             )
@@ -859,16 +863,17 @@ pub fn detect_artifact_state(
         Ok(p) => p,
         Err(_) => return (OperationKind::Unavailable, PreviousState::Unavailable),
     };
-    let bundled_root = match crate::setup_roots::bundled_root_for(workspace_root) {
-        Ok(root) => root,
+    let sources = match SkillSources::for_workspace(workspace_root) {
+        Ok(sources) => sources,
         Err(_) => return (OperationKind::Unavailable, PreviousState::Unavailable),
     };
+    let bundled_root = sources.bundle().to_path_buf();
     if artifact == &ArtifactId::ClaudeSettings {
         // No bundled source; and no ownership record here, so values already in the file are
         // never the app's.
         return claude_settings_outcome(&dest, false);
     }
-    let source = match artifact.resolve_source(&bundled_root) {
+    let source = match artifact.resolve_source(&sources) {
         Some(p) => p,
         None => return (OperationKind::Unavailable, PreviousState::Unavailable),
     };
@@ -1061,7 +1066,7 @@ fn harness_mcp_state(
     };
     let spec = harness.mcp()?;
     let dest = artifact.resolve_dest(home, workspace_root).ok()?;
-    let source = artifact.resolve_source(bundled_root)?;
+    let source = artifact.resolve_bundle_source(bundled_root)?;
     reject_symlink(&source, "source").ok()?;
     let expected = crate::light_mcp::expected_entry(spec, bundled_root, home).ok()?;
     // A symlink or anything else that is not a regular file is refused by the read itself.
@@ -1118,7 +1123,7 @@ fn plan_mcp_artifact(
             PreviousState::MergeableConfigFile,
             artifact,
             workspace_root,
-            bundled_root,
+            &crate::skill_sources::BundleOnly(bundled_root),
             home,
             managed_hash,
         ),
@@ -1191,7 +1196,7 @@ fn plan_rules_artifact(
     }
     let dest = artifact.resolve_dest(home, workspace_root).ok()?;
     let bundled_root = crate::setup_roots::bundled_root_for(workspace_root).ok()?;
-    let source = artifact.resolve_source(&bundled_root)?;
+    let source = artifact.resolve_bundle_source(&bundled_root)?;
     if reject_symlink(&dest, "destination").is_err() || reject_symlink(&source, "source").is_err() {
         return None;
     }
@@ -1233,7 +1238,7 @@ pub fn rules_context(
         .ok_or_else(|| "rules source or destination is unavailable".to_string())?;
     let bundled_root = crate::setup_roots::bundled_root_for(workspace_root)?;
     let source = artifact
-        .resolve_source(&bundled_root)
+        .resolve_bundle_source(&bundled_root)
         .ok_or_else(|| "rules source is unavailable".to_string())?;
     let source_text = fs::read_to_string(&source).map_err(|e| format!("read rules source: {e}"))?;
     let dest = artifact.resolve_dest(home, workspace_root)?;
@@ -1599,7 +1604,8 @@ fn tui_conflict_reason(workspace_root: &Path, home: &Path) -> Option<String> {
     let artifact = ArtifactId::OpenCodeTui;
     let dest = artifact.resolve_dest(home, workspace_root).ok()?;
     let bundled_root = crate::setup_roots::bundled_root_for(workspace_root).ok()?;
-    let template = crate::opencode_tui::bundled(&artifact.resolve_source(&bundled_root)?).ok()?;
+    let template =
+        crate::opencode_tui::bundled(&artifact.resolve_bundle_source(&bundled_root)?).ok()?;
     match crate::opencode_tui::assess(&dest, &template, crate::opencode_tui::managed_keys().ok()?) {
         Assessment::Refused(refusal) => Some(crate::opencode_tui::refusal_reason(refusal)),
         Assessment::Differs(keys) => Some(format!(
@@ -1650,8 +1656,12 @@ fn plan_claude_settings(
         };
     };
     let owned = managed_hash.is_some_and(|hash| {
-        crate::setup_fingerprint::artifact_source_digest(artifact, bundled_root, home)
-            .is_ok_and(|expected| expected == hash)
+        crate::setup_fingerprint::artifact_source_digest(
+            artifact,
+            &crate::skill_sources::BundleOnly(bundled_root),
+            home,
+        )
+        .is_ok_and(|expected| expected == hash)
     });
     let (kind, previous_state) = claude_settings_outcome(&dest, owned);
     McpPlan {
@@ -1696,10 +1706,10 @@ fn managed_hash_for(
         .map(|r| r.hash.clone())
 }
 
-fn detect_stale_artifact_state(
+fn detect_stale_artifact_state<R: SourceRoot + ?Sized>(
     artifact: &ArtifactId,
     workspace_root: &Path,
-    bundled_root: &Path,
+    sources: &R,
     home: &Path,
     managed_hash: Option<&str>,
 ) -> (OperationKind, PreviousState) {
@@ -1707,7 +1717,7 @@ fn detect_stale_artifact_state(
         return detect_retired_workspace_copy_state(
             artifact,
             workspace_root,
-            bundled_root,
+            sources.bundle(),
             home,
             managed_hash,
         );
@@ -1735,7 +1745,7 @@ fn detect_stale_artifact_state(
         Err(_) => return (OperationKind::Conflict, PreviousState::Conflict),
     };
     // Byte-for-byte a version the app shipped is as good as a recorded hash.
-    let shipped = crate::shipped_digests::is_shipped_version(artifact, bundled_root, &installed);
+    let shipped = crate::shipped_digests::is_shipped_version(artifact, sources, &installed);
     if managed_hash.is_none() && !shipped {
         return (OperationKind::Conflict, PreviousState::Conflict);
     }
@@ -1813,7 +1823,7 @@ pub fn plan_artifacts_for_uninstall(
 ) -> Result<UninstallArtifactPlan, String> {
     let managed = crate::managed_state::read_managed_state(workspace_root);
     let records = records_with_bootstrap(workspace_root, home, managed.as_ref());
-    let bundled_root = crate::setup_roots::bundled_root_for(workspace_root)?;
+    let sources = SkillSources::for_workspace(workspace_root)?;
 
     // Uninstall sees every root: copies in folders a harness no longer needs are the app's too.
     let scope = SkillScope::all();
@@ -1869,11 +1879,11 @@ pub fn plan_artifacts_for_uninstall(
         }
         // The current source is the bundle every install copies from, never the workspace copy.
         let source =
-            crate::setup_fingerprint::artifact_source_digest(&artifact, &bundled_root, home).ok();
+            crate::setup_fingerprint::artifact_source_digest(&artifact, &sources, home).ok();
         let managed_hash = managed_hash_for(&identity, &records);
         let owned = managed_hash.as_deref() == Some(installed.as_str())
             || source.as_deref() == Some(installed.as_str())
-            || crate::shipped_digests::is_shipped_version(&artifact, &bundled_root, &installed);
+            || crate::shipped_digests::is_shipped_version(&artifact, &sources, &installed);
         if owned {
             let surface = artifact.surface();
             removals.push(PlannedArtifact {
@@ -1898,8 +1908,7 @@ pub fn plan_artifacts_for_uninstall(
 
     // Stale app-owned files from older versions are part of the install too.
     let canonical_identities =
-        crate::managed_state::canonical_artifact_identities(&bundled_root, &scope)
-            .unwrap_or_default();
+        crate::managed_state::canonical_artifact_identities(&sources, &scope).unwrap_or_default();
     let stale = crate::managed_bootstrap::collect_stale_removal_artifacts(
         workspace_root,
         home,
@@ -1927,7 +1936,7 @@ pub fn plan_artifacts_for_uninstall(
         let (kind, previous_state) = detect_stale_artifact_state(
             &artifact,
             workspace_root,
-            &bundled_root,
+            &sources,
             home,
             managed_hash.as_deref(),
         );
@@ -2101,15 +2110,21 @@ pub fn plan_artifacts_for_surfaces_in(
     let managed = crate::managed_state::read_managed_state(workspace_root);
     let records = records_with_bootstrap(workspace_root, home, managed.as_ref());
 
-    let bundled_root = crate::setup_roots::bundled_root_for(workspace_root)?;
-    let canonical_identities =
-        match crate::managed_state::canonical_artifact_identities(&bundled_root, scope) {
+    let sources = SkillSources::for_workspace(workspace_root)?;
+    let mut canonical_identities =
+        match crate::managed_state::canonical_artifact_identities(&sources, scope) {
             Ok(identities) => identities,
             #[cfg(test)]
             Err(_) => std::collections::HashSet::new(),
             #[cfg(not(test))]
             Err(error) => return Err(error),
         };
+    // An installed pack skill whose pack cannot be read is not retired: it is left as it is until
+    // the user forgets the pack.
+    canonical_identities.extend(crate::managed_state::held_skill_identities(
+        &sources.held_names(),
+        &records,
+    ));
 
     let artifacts = expand_surfaces_to_artifacts(surfaces, workspace_root, scope)?;
     let kept = crate::kept_files::KeptFiles::load(workspace_root);
@@ -2124,7 +2139,7 @@ pub fn plan_artifacts_for_surfaces_in(
         let mcp = plan_mcp_artifact(
             &artifact,
             workspace_root,
-            &bundled_root,
+            &sources,
             home,
             managed_hash.as_deref(),
         );
@@ -2151,7 +2166,7 @@ pub fn plan_artifacts_for_surfaces_in(
                     previous_state,
                     &artifact,
                     workspace_root,
-                    &bundled_root,
+                    &sources,
                     home,
                     managed_hash.as_deref(),
                 );
@@ -2162,7 +2177,7 @@ pub fn plan_artifacts_for_surfaces_in(
                 let (kind, previous_state) = if managed_hash.is_none()
                     && matches!(kind, OperationKind::Update)
                     && !matches!(previous_state, PreviousState::MergeableConfigFile)
-                    && !installed_is_shipped_version(&artifact, workspace_root, &bundled_root, home)
+                    && !installed_is_shipped_version(&artifact, workspace_root, &sources, home)
                 {
                     (OperationKind::Conflict, PreviousState::Conflict)
                 } else {
@@ -2173,7 +2188,7 @@ pub fn plan_artifacts_for_surfaces_in(
                     file = file_conflict(
                         &artifact,
                         workspace_root,
-                        &bundled_root,
+                        &sources,
                         home,
                         &kept,
                         managed_hash.as_deref(),
@@ -2246,7 +2261,7 @@ pub fn plan_artifacts_for_surfaces_in(
         let (kind, previous_state) = detect_stale_artifact_state(
             &artifact,
             workspace_root,
-            &bundled_root,
+            &sources,
             home,
             managed_hash.as_deref(),
         );
@@ -2259,7 +2274,7 @@ pub fn plan_artifacts_for_surfaces_in(
                 file_conflict(
                     &artifact,
                     workspace_root,
-                    &bundled_root,
+                    &sources,
                     home,
                     &kept,
                     managed_hash.as_deref(),
@@ -2300,7 +2315,7 @@ pub fn plan_artifacts_for_surfaces_in(
 fn file_conflict(
     artifact: &ArtifactId,
     workspace_root: &Path,
-    bundled_root: &Path,
+    sources: &SkillSources,
     home: &Path,
     kept: &crate::kept_files::KeptFiles,
     managed_hash: Option<&str>,
@@ -2327,7 +2342,7 @@ fn file_conflict(
         kept: entry.map(|entry| KeptState {
             // A file nothing bundles here has no update to wait for.
             bundle_changed: wanted
-                && crate::setup_fingerprint::artifact_source_digest(artifact, bundled_root, home)
+                && crate::setup_fingerprint::artifact_source_digest(artifact, sources, home)
                     .is_ok_and(|current| entry.bundle.as_deref() != Some(current.as_str())),
         }),
         wanted,
@@ -2501,24 +2516,24 @@ pub(crate) fn harness_name(harness: crate::agent_targets::HarnessId) -> &'static
 
 /// Whether the installed copy is byte-for-byte a version the app shipped for
 /// this artifact. An unreadable or absent copy is not.
-fn installed_is_shipped_version(
+fn installed_is_shipped_version<R: SourceRoot + ?Sized>(
     artifact: &ArtifactId,
     workspace_root: &Path,
-    bundled_root: &Path,
+    sources: &R,
     home: &Path,
 ) -> bool {
     crate::setup_fingerprint::artifact_installed_managed_digest(artifact, workspace_root, home)
         .is_ok_and(|installed| {
-            crate::shipped_digests::is_shipped_version(artifact, bundled_root, &installed)
+            crate::shipped_digests::is_shipped_version(artifact, sources, &installed)
         })
 }
 
-fn refine_with_managed_hash(
+fn refine_with_managed_hash<R: SourceRoot + ?Sized>(
     kind: OperationKind,
     previous: PreviousState,
     artifact: &ArtifactId,
     workspace_root: &Path,
-    bundled_root: &Path,
+    sources: &R,
     home: &Path,
     managed_hash: Option<&str>,
 ) -> (OperationKind, PreviousState) {
@@ -2534,9 +2549,9 @@ fn refine_with_managed_hash(
     // A recorded hash that no longer matches may only be stale: a file that is
     // exactly a version the app shipped is still the app's to update.
     if installed == expected
-        || crate::shipped_digests::is_shipped_version(artifact, bundled_root, &installed)
+        || crate::shipped_digests::is_shipped_version(artifact, sources, &installed)
         || legacy_whole_file_record_holds(artifact, workspace_root, home, expected)
-        || codex_record_holds_beside_kept(artifact, workspace_root, bundled_root, home, expected)
+        || codex_record_holds_beside_kept(artifact, workspace_root, sources, home, expected)
     {
         (OperationKind::Update, previous)
     } else {
@@ -2548,10 +2563,10 @@ fn refine_with_managed_hash(
 /// kept any key. With the kept keys put back to the template's values, a file that is still what
 /// the record describes (or a version the app shipped) is the app's to update: the update leaves
 /// the kept keys alone.
-fn codex_record_holds_beside_kept(
+fn codex_record_holds_beside_kept<R: SourceRoot + ?Sized>(
     artifact: &ArtifactId,
     workspace_root: &Path,
-    bundled_root: &Path,
+    sources: &R,
     home: &Path,
     recorded: &str,
 ) -> bool {
@@ -2565,7 +2580,7 @@ fn codex_record_holds_beside_kept(
     };
     let (Ok(dest), Some(source)) = (
         artifact.resolve_dest(home, workspace_root),
-        artifact.resolve_source(bundled_root),
+        artifact.resolve_source(sources),
     ) else {
         return false;
     };
@@ -2579,8 +2594,7 @@ fn codex_record_holds_beside_kept(
     let digest = crate::setup_fingerprint::codex_managed_digest(
         &crate::codex_config_keep::with_kept_reset(&installed, &template, &active),
     );
-    digest == recorded
-        || crate::shipped_digests::is_shipped_version(artifact, bundled_root, &digest)
+    digest == recorded || crate::shipped_digests::is_shipped_version(artifact, sources, &digest)
 }
 
 /// Before `tui.json` was merge-managed its record held the digest of the whole file the app
@@ -2839,7 +2853,7 @@ fn artifact_matches_unrecorded_apply_output(
     if matches!(op.kind, OperationKind::Remove) {
         return Ok(current == crate::setup_fingerprint::ABSENT_DIGEST);
     }
-    let expected = crate::setup_roots::bundled_root_for(workspace_root).and_then(|bundled| {
+    let expected = SkillSources::for_workspace(workspace_root).and_then(|bundled| {
         crate::setup_fingerprint::artifact_effective_source_digest(
             &op.artifact,
             &bundled,

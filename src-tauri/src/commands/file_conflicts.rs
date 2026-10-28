@@ -116,7 +116,7 @@ pub fn set_files_kept(surface: String, units: Vec<String>, kept: bool) -> Result
         home,
         planned,
     } = plan(surface)?;
-    let bundled_root = crate::setup_roots::bundled_root_for(&workspace_root)?;
+    let bundled_root = crate::skill_sources::SkillSources::for_workspace(&workspace_root)?;
     let all = file_conflicts::units(&planned);
 
     let mut keeps: Vec<Keep> = Vec::new();
@@ -150,7 +150,7 @@ pub fn set_files_kept(surface: String, units: Vec<String>, kept: bool) -> Result
 
 fn bundle_digest(
     artifact: &ArtifactId,
-    bundled_root: &std::path::Path,
+    bundled_root: &crate::skill_sources::SkillSources,
     home: &std::path::Path,
 ) -> Option<String> {
     crate::setup_fingerprint::artifact_source_digest(artifact, bundled_root, home).ok()
@@ -171,6 +171,9 @@ pub struct TakeBundledUnit {
     pub more_files: usize,
     /// Your files against the bundled ones: what the replacement changes.
     pub diff: FileDiffView,
+    /// `pack:<name>` when the replacing files come from a skill pack; absent for the bundle.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
 }
 
 /// What replacing the files of these units by the bundled ones would do, and the proof to apply it.
@@ -235,7 +238,19 @@ pub fn preview_take_bundled(
             .ok_or_else(|| UNKNOWN_UNIT.to_string())?;
         let (files, more_files) =
             file_conflicts::take_bundled_files(unit, &operations, &workspace_root, &home);
+        let source = (unit.kind == file_conflicts::UnitKind::Skill)
+            .then(|| {
+                crate::skill_sources::SkillSources::for_workspace(&workspace_root)
+                    .ok()
+                    .and_then(|sources| {
+                        sources
+                            .pack_of(&unit.name)
+                            .map(|pack| format!("pack:{pack}"))
+                    })
+            })
+            .flatten();
         reviewed.push(TakeBundledUnit {
+            source,
             key: unit.key.clone(),
             name: unit.name.clone(),
             folder: file_conflicts::unit_folder(unit, &home, &workspace_root),

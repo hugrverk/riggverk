@@ -1,6 +1,7 @@
 import type { ActionResult } from "../../components/TerminalOutput";
 import { displayPath } from "../../lib/displayPath";
 import { isPersonalDoc } from "../../lib/libraryDirtyGuards";
+import { PACK_STATE_LABEL } from "../../lib/packSkills";
 import type { Tone } from "../../ui/tone";
 import type { KvItem } from "../../ui/Kv";
 import type { LibrarySourceType, LibraryViewProps } from "../LibraryView";
@@ -12,6 +13,9 @@ export type LibraryPreviewKind = "markdown" | "json";
 
 /** Why a bundled item cannot be edited (pane footer, disabled hints, `:w`). The maintainer ships changes. */
 export const BUNDLED_READ_ONLY_REASON = "bundled with the app: read-only here";
+
+/** Why a pack skill cannot be edited here: it is the user's file, in the pack folder. */
+export const PACK_READ_ONLY_REASON = "from a skill pack: read-only here, edit it in the pack folder";
 
 /** Footer note on an editable rules file: the base block above stays as it is. */
 export const RULES_REFINEMENTS_NOTE = "below the managed block only";
@@ -187,6 +191,13 @@ function skillEntry(props: LibraryViewProps): LibraryEntry | null {
   if (skill?.description) meta.push({ label: "description", value: skill.description, wrap: true });
   if (skill?.category) meta.push({ label: "category", value: skill.category });
   if (skill?.risk) meta.push({ label: "risk", value: skill.risk, tone: riskTone(skill.risk) });
+  if (skill?.packState) {
+    meta.push({ label: "pack", value: skill.group });
+    if (skill.packState !== "active") {
+      meta.push({ label: "state", value: PACK_STATE_LABEL[skill.packState], tone: "warn" });
+      if (skill.packReason) meta.push({ label: "why", value: skill.packReason, wrap: true });
+    }
+  }
   if (skill) {
     meta.push(...listItems("targets", skill.targets), ...listItems("related", skill.related));
   }
@@ -205,7 +216,7 @@ function skillEntry(props: LibraryViewProps): LibraryEntry | null {
     saveResult: null,
     saveMessage: "",
     readOnly: true,
-    readOnlyReason: BUNDLED_READ_ONLY_REASON,
+    readOnlyReason: skill?.packState ? PACK_READ_ONLY_REASON : BUNDLED_READ_ONLY_REASON,
     note: null,
     preview: "markdown",
     metaTitle: "metadata",

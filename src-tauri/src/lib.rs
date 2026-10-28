@@ -43,6 +43,7 @@ mod skill_discovery;
 mod skill_health;
 mod skill_loads;
 mod skill_roots;
+mod skill_sources;
 #[cfg(test)]
 mod skills_install;
 mod stable_digest;
@@ -85,6 +86,8 @@ mod skill_files_contract;
 #[cfg(test)]
 mod skill_folders_contract;
 #[cfg(test)]
+mod skill_packs_contract;
+#[cfg(test)]
 mod smoke_runtime;
 #[cfg(test)]
 mod test_env;
@@ -92,20 +95,22 @@ mod test_env;
 mod workspace_cleanup_contract;
 
 use commands::{
-    apply_rules_conversion, apply_setup, apply_take_bundled, apply_uninstall, create_doc,
-    get_agent_targets, get_backup_details, get_claude_runtime_health, get_codex_runtime_health,
-    get_cursor_profile_health, get_effective_skill_loads, get_installation_status,
-    get_light_runtime_health, get_opencode_runtime_health, get_security_posture, get_settings,
-    get_status, get_workspace_diagnostics, list_agent_metadata, list_available_opencode_models,
-    list_backups, list_docs, list_opencode_config_editor_sources, list_rules_files,
-    list_setup_history, list_skills, open_backups_folder, open_default_workspace_folder, open_doc,
-    open_rules_file, preview_file_diff, preview_rules_conversion, preview_rules_diff,
-    preview_setup, preview_take_bundled, preview_uninstall, read_agent_source, read_agent_template,
+    apply_codex_config_defaults, apply_rules_conversion, apply_setup, apply_take_bundled,
+    apply_uninstall, create_doc, get_agent_targets, get_backup_details, get_claude_runtime_health,
+    get_codex_runtime_health, get_cursor_profile_health, get_effective_skill_loads,
+    get_installation_status, get_light_runtime_health, get_opencode_runtime_health,
+    get_security_posture, get_settings, get_status, get_workspace_diagnostics, list_agent_metadata,
+    list_available_opencode_models, list_backups, list_docs, list_opencode_config_editor_sources,
+    list_rules_files, list_setup_history, list_skills, open_backups_folder,
+    open_default_workspace_folder, open_doc, open_rules_file, preview_codex_config_defaults,
+    preview_file_diff, preview_rules_conversion, preview_rules_diff, preview_setup,
+    preview_take_bundled, preview_uninstall, read_agent_source, read_agent_template,
     read_config_template, read_doc, read_opencode_config_source, read_opencode_model_selection,
     read_rules_file, read_skill, reset_active_workspace_path, reset_opencode_model_selection,
     rollback_setup_transaction, save_doc, save_rules_refinements, set_codex_config_kept,
     set_files_kept, set_rules_user_managed, update_opencode_model_selection, update_settings,
 };
+use commands::{forget_pack, list_pack_skills, read_pack_skill};
 use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -173,11 +178,16 @@ pub fn run() {
             apply_rules_conversion,
             set_rules_user_managed,
             set_codex_config_kept,
+            preview_codex_config_defaults,
+            apply_codex_config_defaults,
             preview_file_diff,
             set_files_kept,
             preview_take_bundled,
             apply_take_bundled,
             get_security_posture,
+            list_pack_skills,
+            read_pack_skill,
+            forget_pack,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

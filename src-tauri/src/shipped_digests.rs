@@ -22,6 +22,7 @@ use std::sync::OnceLock;
 use serde::Deserialize;
 
 use crate::artifact_registry::ArtifactId;
+use crate::skill_sources::SourceRoot;
 
 const SCHEMA: u32 = 1;
 
@@ -118,7 +119,7 @@ fn skill_md_keys(name: &str) -> Vec<String> {
 
 /// Metadata keys holding the shipped versions of an artifact; empty when the
 /// artifact is not a whole-file copy.
-fn source_keys(artifact: &ArtifactId, bundled_root: &Path) -> Vec<String> {
+fn source_keys<R: SourceRoot + ?Sized>(artifact: &ArtifactId, bundled_root: &R) -> Vec<String> {
     match artifact {
         // Every harness installs the canonical file, and an installed copy of any older
         // per-harness adapter is still a version the app shipped.
@@ -136,7 +137,7 @@ fn source_keys(artifact: &ArtifactId, bundled_root: &Path) -> Vec<String> {
         | ArtifactId::CursorAgent(_)
         | ArtifactId::OpenCodePlaywrightMcp => artifact
             .resolve_source(bundled_root)
-            .and_then(|source| bundle_relative_key(&source, bundled_root))
+            .and_then(|source| bundle_relative_key(&source, bundled_root.bundle()))
             .into_iter()
             .collect(),
         ArtifactId::OpenCodeConfig
@@ -156,9 +157,9 @@ fn source_keys(artifact: &ArtifactId, bundled_root: &Path) -> Vec<String> {
 /// Whether `installed_digest` (the `hash_file` digest of the installed file) is
 /// byte-for-byte a version the app shipped for `artifact`. False for artifacts
 /// outside the file-copy scope, unknown sources, and unusable metadata.
-pub(crate) fn is_shipped_version(
+pub(crate) fn is_shipped_version<R: SourceRoot + ?Sized>(
     artifact: &ArtifactId,
-    bundled_root: &Path,
+    bundled_root: &R,
     installed_digest: &str,
 ) -> bool {
     let keys = source_keys(artifact, bundled_root);

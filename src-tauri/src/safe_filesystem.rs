@@ -86,19 +86,50 @@ fn create_new_file(path: &Path, _private: bool) -> std::io::Result<fs::File> {
         .open(path)
 }
 
-/// Give the replacement the destination's permission bits, so an atomic write
-/// does not widen a restricted file (a 0600 config) to the default mode.
+/// Give the replacement the permission bits it ends with. The temporary file is always created
+/// owner-only (0600) and holds content only at that mode; here it takes the destination's bits, so
+/// an atomic write does not widen a restricted file (a 0600 config), and a new file that is not
+/// `private` takes the mode a plain create would give it.
 #[cfg(unix)]
-fn preserve_destination_permissions(temp: &Path, destination: &Path) -> Result<(), String> {
+fn preserve_destination_permissions(
+    temp: &Path,
+    destination: &Path,
+    private: bool,
+) -> Result<(), String> {
     match fs::symlink_metadata(destination) {
         Ok(metadata) if metadata.is_file() => fs::set_permissions(temp, metadata.permissions())
             .map_err(|e| format!("preserve permissions on {}: {e}", temp.display())),
-        _ => Ok(()),
+        _ if private => Ok(()),
+        _ => apply_default_new_file_mode(temp),
     }
 }
 
+/// Sets `temp` to the mode (process umask applied) a plain create gives a new file, found by
+/// creating an empty probe file beside it.
+#[cfg(unix)]
+fn apply_default_new_file_mode(temp: &Path) -> Result<(), String> {
+    let mut name = temp.as_os_str().to_os_string();
+    name.push(".mode");
+    let probe = std::path::PathBuf::from(name);
+    let mode = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&probe)
+        .and_then(|file| file.metadata())
+        .map(|metadata| metadata.permissions());
+    let _ = fs::remove_file(&probe);
+    let mode =
+        mode.map_err(|e| format!("probe default permissions beside {}: {e}", temp.display()))?;
+    fs::set_permissions(temp, mode)
+        .map_err(|e| format!("set permissions on {}: {e}", temp.display()))
+}
+
 #[cfg(not(unix))]
-fn preserve_destination_permissions(_temp: &Path, _destination: &Path) -> Result<(), String> {
+fn preserve_destination_permissions(
+    _temp: &Path,
+    _destination: &Path,
+    _private: bool,
+) -> Result<(), String> {
     Ok(())
 }
 
@@ -342,7 +373,8 @@ fn write_regular_file_atomic_with(
     ));
     validate_mutation_path(&temp_path, allowlisted_root, "atomic write temporary file")?;
     let result = (|| {
-        let mut output = create_new_file(&temp_path, private)
+        // Owner-only while it holds content, whatever mode it ends with.
+        let mut output = create_new_file(&temp_path, true)
             .map_err(|e| format!("create temporary file {}: {e}", temp_path.display()))?;
         output
             .write_all(content)
@@ -351,7 +383,7 @@ fn write_regular_file_atomic_with(
             .sync_all()
             .map_err(|e| format!("sync temporary file {}: {e}", temp_path.display()))?;
         validate_mutation_path(path, allowlisted_root, "atomic write destination")?;
-        preserve_destination_permissions(&temp_path, path)?;
+        preserve_destination_permissions(&temp_path, path, private)?;
         validate_mutation_path(&temp_path, allowlisted_root, "atomic write temporary file")?;
         replace_file_atomic(&temp_path, path)
             .map_err(|e| format!("replace destination {}: {e}", path.display()))
@@ -1080,6 +1112,74 @@ mod tests {
             assert_eq!(fs::read(&path).unwrap(), b"two");
             assert_eq!(mode_of(&path), mode, "mode {mode:o} must survive a replace");
         }
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn atomic_write_temporary_file_is_owner_only_and_the_final_mode_is_unchanged() {
+        use std::sync::atomic::AtomicBool;
+        use std::sync::Arc;
+
+        let base = temp("atomic-temp-mode");
+        fs::create_dir_all(&base).unwrap();
+
+        // The creation mode of the temporary file, whatever the umask.
+        let probe = base.join("probe");
+        drop(create_new_file(&probe, true).unwrap());
+        assert_eq!(mode_of(&probe), 0o600);
+
+        // A new file that is not private ends with the mode a plain create gives.
+        let plain = base.join("plain.txt");
+        fs::write(&plain, b"x").unwrap();
+        let plain_mode = mode_of(&plain);
+        let fresh = base.join("fresh.txt");
+        write_regular_file_atomic(&fresh, b"content", &base).unwrap();
+        assert_eq!(mode_of(&fresh), plain_mode);
+        let private = base.join("private.txt");
+        write_private_regular_file_atomic(&private, b"content", &base).unwrap();
+        assert_eq!(mode_of(&private), 0o600);
+        assert!(
+            fs::read_dir(&base).unwrap().all(|entry| !entry
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .ends_with(".mode")),
+            "the probe file is removed"
+        );
+
+        // Replacing a private (0600) file: no temporary file is ever readable by anyone else,
+        // because it is created owner-only before it holds any content.
+        for index in 0..3 {
+            let path = base.join(format!("w{index}.txt"));
+            fs::write(&path, b"old").unwrap();
+            fs::set_permissions(&path, std::os::unix::fs::PermissionsExt::from_mode(0o600))
+                .unwrap();
+        }
+        let done = Arc::new(AtomicBool::new(false));
+        let writer = {
+            let (base, done) = (base.clone(), done.clone());
+            std::thread::spawn(move || {
+                let content = vec![b'a'; 256 * 1024];
+                for index in 0..150 {
+                    let path = base.join(format!("w{}.txt", index % 3));
+                    write_regular_file_atomic(&path, &content, &base).unwrap();
+                }
+                done.store(true, Ordering::SeqCst);
+            })
+        };
+        while !done.load(Ordering::SeqCst) {
+            for entry in fs::read_dir(&base).unwrap().flatten() {
+                let name = entry.file_name().to_string_lossy().into_owned();
+                if name.starts_with(".aw-") && name.ends_with(".tmp") {
+                    if let Ok(metadata) = fs::symlink_metadata(entry.path()) {
+                        use std::os::unix::fs::PermissionsExt;
+                        assert_eq!(metadata.permissions().mode() & 0o077, 0, "{name}");
+                    }
+                }
+            }
+        }
+        writer.join().unwrap();
         let _ = fs::remove_dir_all(&base);
     }
 

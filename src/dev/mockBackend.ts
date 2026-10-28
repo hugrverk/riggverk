@@ -27,6 +27,7 @@ import { mockIPC } from "@tauri-apps/api/mocks";
 import { isLightAgent } from "../lib/harnessInstallation";
 import type {
   ActionResult,
+  CodexConfigDefaultsPreview,
   CodexConfigKey,
   AgentMetadataListResponse,
   AgentSourceContent,
@@ -63,6 +64,7 @@ import type {
   RulesFileContent,
   RulesFileSummary,
   RulesMalformedReason,
+  PackLibrary,
   RulesStatus,
   RulesSurfaceId,
   SecurityPosture,
@@ -814,6 +816,71 @@ function setCodexConfigKept(kept: boolean) {
   }
 }
 
+/** Riggverk's value for each enforced key, as the bundled config sets them. */
+const CODEX_RIGGVERK_VALUES: Record<string, string> = {
+  approval_policy: "on-request",
+  approvals_reviewer: "user",
+  sandbox_mode: "workspace-write",
+  "apps._default.approvals_reviewer": "user",
+  "apps._default.default_tools_approval_mode": "prompt",
+};
+
+/** What Riggverk writes for each kept or differing key. */
+function codexConfigExpected(): CodexConfigKey[] {
+  return [...codexConfigKeys.kept, ...codexConfigKeys.differing].flatMap(item => {
+    const value = CODEX_RIGGVERK_VALUES[item.key];
+    return value === undefined ? [] : [{ key: item.key, value }];
+  });
+}
+
+let codexDefaultsSeq = 0;
+let codexDefaultsOpen: { fingerprint: string; token: string; keys: CodexConfigKey[] } | null = null;
+/** The differing keys a reset replaced, by transaction, so the rollback brings them back. */
+const codexDefaultsSnapshots = new Map<string, CodexConfigKey[]>();
+
+function mockCodexDefaults(): CodexConfigDefaultsPreview {
+  const { differing } = codexConfigKeys;
+  if (differing.length === 0) {
+    throw new Error("no enforced key differs from the bundled config; there is nothing to reset");
+  }
+  codexDefaultsSeq += 1;
+  const keys = differing.map(item => ({ key: item.key, yours: item.value, riggverk: CODEX_RIGGVERK_VALUES[item.key] ?? "" }));
+  const fingerprint = `${fakeHash(`codex-defaults-${keys.map(item => item.key).join(",")}`)}${fakeHash(`seq-${codexDefaultsSeq}`)}`;
+  const token = `tok-codex-defaults-${codexDefaultsSeq}`;
+  codexDefaultsOpen = { fingerprint, token, keys: [...differing] };
+  return {
+    keys,
+    diff: keys.flatMap(item => [`- ${item.key} = ${JSON.stringify(item.yours)}`, `+ ${item.key} = ${JSON.stringify(item.riggverk)}`]).join("\n"),
+    plan_fingerprint: fingerprint,
+    preview_token: token,
+  };
+}
+
+function applyCodexDefaults(fingerprint: string | null, token: string | null): SetupResult {
+  const open = codexDefaultsOpen;
+  if (!open || fingerprint !== open.fingerprint || open.keys.length !== codexConfigKeys.differing.length) {
+    throw new Error("Plan fingerprint mismatch: the config changed after preview. Re-run preview before applying.");
+  }
+  if (token !== open.token) throw new Error("invalid or expired preview token");
+  codexDefaultsOpen = null;
+  transactionSeq += 1;
+  const id = `2026-10-06T08-55-00Z-${(0x9c00 + transactionSeq).toString(16)}`;
+  codexDefaultsSnapshots.set(id, open.keys);
+  codexConfigKeys = { kept: codexConfigKeys.kept, differing: [] };
+  surfaceStates.set("codex_config", "current");
+  lastTransactionId = id;
+  backups.unshift({ id, timestamp: new Date().toISOString(), path: `${BACKUP_ROOT}/${id}`, targets: ["codex_config"], file_count: 1 });
+  return {
+    success: true,
+    transaction_id: id,
+    applied: ["Codex config"],
+    failed: [],
+    rolled_back: [],
+    manual_steps: [],
+    message: `applied 1 · preserved 0 · failed 0 · transaction ${id} recorded`,
+  };
+}
+
 /** The mock data folder: the old copies an update removes, and what it leaves alone. */
 const MOCK_OLD_COPIES = 133;
 
@@ -848,7 +915,7 @@ function installationStatus(surfaces: SetupSurfaceId[]): InstallationStatus {
       detail: file ? rulesDetail(file, state) : ((surface === "codex_config" && codexConfigDetail(state)) || surfaceDetail(surface, state)),
       ...(file ? { rules: { ...file } } : {}),
       ...(surface === "codex_config" && (codexConfigKeys.kept.length > 0 || codexConfigKeys.differing.length > 0)
-        ? { codex_config: { kept: [...codexConfigKeys.kept], differing: [...codexConfigKeys.differing] } }
+        ? { codex_config: { kept: [...codexConfigKeys.kept], differing: [...codexConfigKeys.differing], expected: codexConfigExpected() } }
         : {}),
       ...(filesFor(surface) ? { files: filesFor(surface) } : {}),
       ...(surface === "workspace_bundle"
@@ -1286,6 +1353,23 @@ const skills: SkillSummary[] = scenario === "empty"
     targets: ["codex", "opencode", "claude", "cursor"],
     related: ["implementation-plan", "diagnose"].filter(r => r !== id),
   }));
+
+// Skill packs: one pack that loads, one whose folder is gone while its skill stays installed.
+const packLibrary: PackLibrary = scenario === "empty" || scenario === "fresh"
+  ? { folder: "~/.config/riggverk/packs", packs: [], skills: [], ignored: [] }
+  : {
+    folder: "~/.config/riggverk/packs",
+    packs: [
+      { name: "mine", state: "ok", reason: "", forgettable: false },
+      { name: "old-pack", state: "missing", reason: "the pack folder is gone", forgettable: true },
+    ],
+    skills: [
+      { id: "pack:mine/my-checklist", name: "my-checklist", description: "A checklist kept in the pack.", pack: "mine", state: "active", reason: "", path: "skills/my-checklist/SKILL.md" },
+      { id: "pack:mine/tdd", name: "tdd", description: "A pack skill named like a bundled one.", pack: "mine", state: "shadowed", reason: "the bundle ships a skill with this name; the bundle's version is used", path: "skills/tdd/SKILL.md" },
+      { id: "pack:old-pack/old-skill", name: "old-skill", description: "", pack: "old-pack", state: "missing", reason: "pack missing", path: "" },
+    ],
+    ignored: [],
+  };
 
 function skillContent(id: string): string {
   const title = id.split("-").map(w => w[0].toUpperCase() + w.slice(1)).join(" ");
@@ -1745,6 +1829,12 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
       await delay(100);
       setCodexConfigKept(arg<boolean>(args, "kept"));
       return null;
+    case "preview_codex_config_defaults":
+      await delay(200);
+      return mockCodexDefaults();
+    case "apply_codex_config_defaults":
+      await emitProgress("apply_codex_config_defaults", ["~/.codex/config.toml"]);
+      return applyCodexDefaults(arg<string | null>(args, "planFingerprint"), arg<string | null>(args, "previewToken"));
     case "preview_file_diff":
       await delay(150);
       return mockFileDiff(arg<FilesSurfaceId>(args, "surface"), arg<string>(args, "unit"));
@@ -1775,7 +1865,13 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
       if (!dryRun) {
         const snapshot = rulesSnapshots.get(id);
         const replaced = takeBundledSnapshots.get(id);
-        if (replaced) {
+        const resetKeys = codexDefaultsSnapshots.get(id);
+        if (resetKeys) {
+          // Your values are back, and the choice to keep them is not, like the backend.
+          codexConfigKeys = { kept: codexConfigKeys.kept, differing: resetKeys };
+          surfaceStates.set("codex_config", "conflict");
+          codexDefaultsSnapshots.delete(id);
+        } else if (replaced) {
           // Your files are back; the choice to keep them is not, like the backend.
           const units = fileUnits.get(replaced.surface) ?? [];
           fileUnits.set(replaced.surface, [...units, { ...replaced.unit, state: "conflict", files: replaced.unit.files.map(file => ({ ...file, state: "conflict", bundle_changed: false })) }]);
@@ -1833,11 +1929,21 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
       return scenario === "error" ? unavailable() : posture(arg<InstallAgent>(args, "harness"));
     case "list_skills":
       return skills;
+    case "list_pack_skills":
+      return packLibrary;
+    case "forget_pack": {
+      const name = arg<string>(args, "name");
+      packLibrary.packs = packLibrary.packs.filter(pack => pack.name !== name);
+      packLibrary.skills = packLibrary.skills.filter(skill => skill.pack !== name);
+      return 1;
+    }
     case "get_effective_skill_loads":
       await delay(120);
       return scenario === "error" ? unavailable() : effectiveSkillLoads();
     case "read_skill": {
       const id = arg<string>(args, "id");
+      const packSkill = packLibrary.skills.find(s => s.id === id);
+      if (packSkill) return { id, title: packSkill.name, path: packSkill.path, section: `pack:${packSkill.pack}`, source: "pack", content: `# ${packSkill.name}\n\n${packSkill.description || packSkill.reason}\n` } satisfies DocumentContent;
       const skill = skills.find(s => s.id === id);
       if (!skill) throw new Error(`skill ${id} not found`);
       return { id, title: skill.name, path: skill.path, section: "workspace", source: "curated", content: skillContent(id) } satisfies DocumentContent;

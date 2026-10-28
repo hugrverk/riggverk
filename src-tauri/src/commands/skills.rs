@@ -210,11 +210,11 @@ pub fn get_effective_skill_loads() -> Result<crate::skill_loads::EffectiveSkillL
         .map_err(|error| format!("cannot tell which harnesses are enabled: {error}"))?;
     let workspace_root = setup_workspace_target_path()?;
     let home = crate::agent_targets::home_dir()?;
-    let bundled_root = crate::setup_roots::bundled_root_for(&workspace_root)?;
+    let sources = crate::skill_sources::SkillSources::for_workspace(&workspace_root)?;
     let records = crate::managed_state::read_managed_state(&workspace_root)
         .map(|state| state.artifacts)
         .unwrap_or_default();
-    let proof = crate::skill_loads::OwnershipProof::new(&bundled_root, &records)?
+    let proof = crate::skill_loads::OwnershipProof::new(&sources, &records)?
         .with_kept(crate::kept_files::KeptFiles::load(&workspace_root));
     Ok(crate::skill_loads::effective_skill_loads(
         &home,
@@ -226,6 +226,9 @@ pub fn get_effective_skill_loads() -> Result<crate::skill_loads::EffectiveSkillL
 
 #[tauri::command]
 pub fn read_skill(id: String) -> Result<DocumentContent, String> {
+    if id.starts_with("pack:") {
+        return super::packs::read_pack_skill(id);
+    }
     let root = bundled_library_root()?;
     let skills = discover_skills(&root)?;
     let found = skills.iter().find(|s| s.id == id);
