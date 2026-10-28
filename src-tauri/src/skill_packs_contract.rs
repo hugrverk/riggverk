@@ -1146,6 +1146,39 @@ mod tests {
         assert_eq!(normal.state, PackSkillState::Active);
     }
 
+    #[test]
+    fn the_take_bundled_review_names_the_pack_a_skill_comes_from() {
+        let env = Env::new("take-source");
+        installed_pack(&env);
+        for skill in ["my-checklist", "tdd"] {
+            fs::write(
+                env.root(SkillRoot::Claude).join(skill).join("SKILL.md"),
+                format!("my own {skill}\n"),
+            )
+            .expect("edit the installed copy");
+        }
+
+        let preview = crate::commands::preview_take_bundled(
+            "skills".to_string(),
+            vec![
+                "skill:claude:my-checklist".to_string(),
+                "skill:claude:tdd".to_string(),
+            ],
+        )
+        .expect("preview");
+        let source_of = |name: &str| {
+            preview
+                .units
+                .iter()
+                .find(|unit| unit.name == name)
+                .unwrap_or_else(|| panic!("{name} is reviewed"))
+                .source
+                .clone()
+        };
+        assert_eq!(source_of("my-checklist"), Some("pack:mine".to_string()));
+        assert_eq!(source_of("tdd"), None, "a bundled skill stays bundled");
+    }
+
     impl Env {
         /// Applies when the plan has work; `None` when it has none.
         fn apply_if_needed(&self) -> Option<SetupResult> {

@@ -365,6 +365,11 @@ impl SkillSources {
         self.held.iter().map(|held| held.name.as_str()).collect()
     }
 
+    /// The pack the catalog takes the skill `name` from; `None` for a bundled skill.
+    pub fn pack_of(&self, name: &str) -> Option<&str> {
+        self.find(name)?.pack.as_deref()
+    }
+
     /// Pack skills the catalog holds, by name.
     fn active_pack_skills(&self) -> BTreeMap<&str, &str> {
         self.catalog

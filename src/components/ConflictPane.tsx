@@ -139,8 +139,11 @@ function BundledBody({ reviewed, unit }: { reviewed: TakeBundledUnit; unit: File
   const listed = backups.slice(0, LISTED_BACKUPS);
   const unlisted = backups.length - listed.length + reviewed.more_files;
   const keeps = reviewed.files.some(file => file.state === "kept");
+  // A skill from a skill pack is replaced by the pack's file, not a bundled one.
+  const source = reviewed.source ?? "bundled";
   const items: KvItem[] = [
     { label: "replaces", value: `${takeBundledTitle(reviewed)} · ${reviewed.folder}`, wrap: true },
+    ...(reviewed.source ? [{ label: "source", value: reviewed.source }] : []),
     ...(unit && unit.kind === "skill" && unit.read_by.length > 0 ? [{ label: "read by", value: unit.read_by.join(", ") }] : []),
     {
       label: "backs up",
@@ -159,10 +162,10 @@ function BundledBody({ reviewed, unit }: { reviewed: TakeBundledUnit; unit: File
       <Kv items={items} aria-label="Take bundled summary" />
       {keeps && (
         <p className="c-warn pane-note" role="status">
-          You keep your version now. After taking the bundled one Riggverk manages it again; rolling back restores your file but not that choice.
+          You keep your version now. After taking the {source === "bundled" ? "bundled" : "pack"} one Riggverk manages it again; rolling back restores your file but not that choice.
         </p>
       )}
-      <p className="c-dim pane-note">What the replacement changes: your files (−) against the bundled ones (+).</p>
+      <p className="c-dim pane-note">What the replacement changes: your files (−) against the {source} ones (+).</p>
       <FileSections diff={reviewed.diff} unit={unit} />
     </>
   );

@@ -212,6 +212,8 @@ export interface TakeBundledUnit {
   /** Files beyond the ones listed; they are replaced too. */
   more_files: number;
   diff: FileDiffView;
+  /** `pack:<name>` when the replacing files come from a skill pack; absent for the bundle. */
+  source?: string;
 }
 
 /** What replacing the files of these units by the bundled ones would do (`preview_take_bundled`), and the proof to apply it. */
