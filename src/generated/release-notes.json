@@ -6,8 +6,8 @@
         {
           "title": "Fixes",
           "items": [
-            "Stop OpenCode critic on custom tools without _",
-            "Judge not installed per harness, not per profile"
+            "A harness Riggverk has not installed anything into shows \"not installed\" again, even when Riggverk already manages another harness on the same computer. Before, it showed \"update available\"",
+            "The OpenCode critic in adversarial-implementation stops before the review when it would get any tool beyond reading, such as your own tools in `~/.config/opencode/tools/`, and names them so they can be denied"
           ]
         }
       ]
