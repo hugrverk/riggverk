@@ -8,7 +8,7 @@ import { useConfirmMode } from "../shell/ShellState";
 import { BindingButton } from "../ui/BindingButton";
 import { Kv, type KvItem } from "../ui/Kv";
 import { Pane } from "../ui/Pane";
-import type { RulesConversionPreview, RulesDiffView } from "../types";
+import type { RulesConversionPreview } from "../types";
 import { DiffView } from "./DiffView";
 import { ReviewFooter } from "./ReviewFooter";
 import { ActivityLoader } from "./TerminalOutput";
@@ -21,13 +21,12 @@ export interface RulesPaneProps {
   busyLabel: string | null;
   /** Where backups are written, for the note under the conversion. */
   backupRoot?: string | null;
-  /** Whether `v` (convert) is offered from the diff: the file is a conflict the app can convert. */
-  canConvert: boolean;
   /** The pane that takes the keyboard back when the review closes. Default `surfaces`. */
   returnPaneId?: string;
 }
 
 const ERROR_HINT = {
+  // A diff is read inline under the rules cell, so this review never shows its error; the flow's state type is shared.
   diff: "The diff could not be computed. Nothing was written.",
   conversion: "The conversion preview could not be computed. Nothing was written.",
   apply: "The backend refused this conversion before it ran. Nothing was written; preview again to review the file as it is now.",
@@ -51,34 +50,6 @@ function shortDigest(digest: string | null): string {
 
 function lineCount(text: string): number {
   return text === "" ? 0 : text.replace(/\n$/, "").split("\n").length;
-}
-
-function DiffBody({ diff }: { diff: RulesDiffView }) {
-  const edits = diff.mode === "edits";
-  return (
-    <>
-      <p className="c-dim pane-note">
-        {edits
-          ? "What you changed: the closest shipped base against your file."
-          : "What an update would do: your file against the current base."}
-      </p>
-      {diff.note && (
-        <p className={diff.applicable ? "c-dim pane-note" : "c-warn pane-note"} role="status">
-          {diff.note}
-        </p>
-      )}
-      {diff.truncated && (
-        <p className="c-warn pane-note" role="status">
-          The diff is cut at 64 KB; the rest is not shown.
-        </p>
-      )}
-      <DiffView
-        diff={diff.diff}
-        label={`${diff.from_label} to ${diff.to_label}`}
-        empty={edits ? "no differences from the shipped base" : "no differences: nothing would change"}
-      />
-    </>
-  );
 }
 
 function ConversionBody({ preview, view }: { preview: RulesConversionPreview; view: "diff" | "file" }) {
@@ -146,15 +117,14 @@ function ConversionBody({ preview, view }: { preview: RulesConversionPreview; vi
 }
 
 /**
- * The rules review: a sub-state of the harness page in place of its four panes. It shows a read-only unified diff
- * of the rules file (`d`), or the preview of converting it onto the base block (`v`): the sections that move below
- * the END marker, the exact file apply writes, and the diff. Nothing is written until `y`.
+ * The rules review: a sub-state of the harness page in place of its cells. It shows the preview of converting the file
+ * onto the base block: the sections that move below the END marker, the exact file apply writes, and the diff.
+ * Nothing is written until `y`. (The read-only diff of the file is the Compare fold-out under the rules cell.)
  *
- * Keys (focus inside the pane): `y` apply (conversion preview only), `n`/Esc close, `t` switch the diff between your
- * edits and the update, `v` open the conversion from the diff, `f` switch the conversion between its diff and the
- * resulting file, `r` open the review again after an error, `j`/`k`/`g g`/`G` scroll. Enter never applies.
+ * Keys (focus inside the pane): `y` apply (conversion preview only), `n`/Esc cancel, `f` switch the conversion between
+ * its diff and the resulting file, `r` open the review again after an error, `j`/`k`/`g g`/`G` scroll. Enter never applies.
  */
-export function RulesPane({ flow, busyLabel, backupRoot, canConvert, returnPaneId = "surfaces" }: RulesPaneProps) {
+export function RulesPane({ flow, busyLabel, backupRoot, returnPaneId = "surfaces" }: RulesPaneProps) {
   const { state } = flow;
   const open = state.status !== "idle";
   useConfirmMode(open);
@@ -199,7 +169,6 @@ export function RulesPane({ flow, busyLabel, backupRoot, canConvert, returnPaneI
     return true;
   };
   const closeState = (): boolean | string => (state.status === "applying" ? "applying; it cannot be cancelled" : open);
-  const closeLabel = state.status === "diff" ? "close" : "cancel";
 
   // The confirm line's buttons run these two: the very bindings the keys fire.
   const applyAction: Binding = {
@@ -217,7 +186,7 @@ export function RulesPane({ flow, busyLabel, backupRoot, canConvert, returnPaneI
     id: "rules.close",
     keys: ["n", "Escape"],
     title: "Close the rules review",
-    hint: closeLabel,
+    hint: "cancel",
     group: "Rules review",
     scope: "pane",
     paneId: RULES_PANE_ID,
@@ -228,30 +197,6 @@ export function RulesPane({ flow, busyLabel, backupRoot, canConvert, returnPaneI
   const actions: Binding[] = [
     applyAction,
     closeAction,
-    {
-      id: "rules.mode",
-      keys: "t",
-      title: "Switch the diff between your edits and the update",
-      hint: state.status === "diff" && state.diff.mode === "edits" ? "update diff" : "edits diff",
-      group: "Rules review",
-      scope: "pane",
-      paneId: RULES_PANE_ID,
-      when: () => state.status === "diff",
-      run: () => void flow.switchDiffMode(),
-    },
-    {
-      id: "rules.convert",
-      keys: "v",
-      title: "Preview converting the file onto the base block",
-      hint: "convert",
-      group: "Rules review",
-      scope: "pane",
-      paneId: RULES_PANE_ID,
-      when: () => state.status === "diff" && canConvert && !busyLabel,
-      run: () => {
-        if (surface) void flow.openConversion(surface);
-      },
-    },
     {
       id: "rules.view",
       keys: "f",
@@ -293,7 +238,7 @@ export function RulesPane({ flow, busyLabel, backupRoot, canConvert, returnPaneI
 
   const question =
     state.status === "loading"
-      ? `computing the ${state.what === "diff" ? "diff" : "conversion preview"} for ${title}…`
+      ? `computing the conversion preview for ${title}…`
       : state.status === "applying"
         ? "applying: backing up, then writing…"
         : state.status === "error"
@@ -302,19 +247,11 @@ export function RulesPane({ flow, busyLabel, backupRoot, canConvert, returnPaneI
             ? state.preview.applicable
               ? `convert ${title}: write the file shown?`
               : "nothing to convert"
-            : state.status === "diff"
-              ? "read-only: nothing is written"
-              : "";
+            : "";
   const noteBackup = state.status === "conversion" && state.preview.applicable;
 
   const meta =
-    state.status === "diff" ? (
-      <>
-        {`${title} · diff · `}
-        <span className="rv-added" title={`${state.diff.added} lines added`}>+{state.diff.added}</span>{" "}
-        <span className="rv-removed" title={`${state.diff.removed} lines removed`}>−{state.diff.removed}</span>
-      </>
-    ) : state.status === "conversion" || state.status === "applying" ? (
+    state.status === "conversion" || state.status === "applying" ? (
       `${title} · convert`
     ) : surface ? (
       title
@@ -340,7 +277,7 @@ export function RulesPane({ flow, busyLabel, backupRoot, canConvert, returnPaneI
         <div className="plan-state" role="status">
           <ActivityLoader />
           <span className="c-dim">
-            computing the {state.what === "diff" ? "diff" : "conversion preview"} for {title}…
+            computing the conversion preview for {title}…
           </span>
         </div>
       )}
@@ -353,7 +290,6 @@ export function RulesPane({ flow, busyLabel, backupRoot, canConvert, returnPaneI
           <p className="c-dim">{ERROR_HINT[state.what]}</p>
         </div>
       )}
-      {state.status === "diff" && <DiffBody diff={state.diff} />}
       {(state.status === "conversion" || state.status === "applying") && <ConversionBody preview={state.preview} view={view} />}
     </Pane>
   );

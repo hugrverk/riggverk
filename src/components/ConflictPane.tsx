@@ -3,7 +3,6 @@ import { takeBundledTitle, type FileConflictFlow } from "../hooks/useFileConflic
 import { focusDefaultPane, focusPaneById } from "../keyboard/focus";
 import type { Binding } from "../keyboard/registry";
 import { useKeymap } from "../keyboard/useKeymap";
-import { NO_BUNDLED_COPY } from "../lib/fileConflicts";
 import { redactDiffText } from "../lib/redactTerminalOutput";
 import { useConfirmMode } from "../shell/ShellState";
 import { BindingButton } from "../ui/BindingButton";
@@ -12,7 +11,6 @@ import { Pane } from "../ui/Pane";
 import type {
   FileDiffEntry,
   FileDiffView,
-  FilesSurfaceId,
   FileUnit,
   FileUnitState,
   TakeBundledUnit,
@@ -25,13 +23,9 @@ export const CONFLICT_PANE_ID = "conflicts";
 
 export interface ConflictPaneProps {
   flow: FileConflictFlow;
-  /** The units of the reviewed surface, in list order: `[` and `]` move between them, `m` and `b` act on the open one. */
+  /** The units of the reviewed surface, to name the one under review. */
   units: readonly FileUnit[];
-  /** Marks a unit on the page, so the review and the list agree on which one is current. */
-  onMark: (key: string) => void;
-  /** `m`: keep my version of a unit in conflict, or hand a kept one back. */
-  onToggleKept: (surface: FilesSurfaceId, unit: FileUnit) => void;
-  /** Label of an unrelated workspace task that is running; keeping, handing back and applying wait for it. */
+  /** Label of an unrelated workspace task that is running; applying waits for it. */
   busyLabel: string | null;
   /** Where backups are written, for the note under a take-bundled preview. */
   backupRoot?: string | null;
@@ -40,6 +34,7 @@ export interface ConflictPaneProps {
 }
 
 const ERROR_HINT = {
+  // A diff is read inline under the files cell, so this review never shows its error; the flow's state type is shared.
   diff: "The diff could not be computed. Nothing was written.",
   bundled: "The take-bundled preview could not be computed. Nothing was written.",
   apply: "The backend refused this replacement before it ran. Nothing was written; preview again to review the files as they are now.",
@@ -118,21 +113,6 @@ export function FileSections({ diff, unit, layout = "unified" }: { diff: FileDif
   );
 }
 
-function DiffBody({ diff, unit }: { diff: FileDiffView; unit: FileUnit | undefined }) {
-  return (
-    <>
-      <p className="c-dim pane-note">Your files (−) against the bundled ones (+). Nothing is written.</p>
-      {unit?.state === "kept" && (
-        <p className="c-dim pane-note">
-          You keep your version: updates never write it
-          {unit.wanted ? (unit.bundle_changed ? "; the bundled file changed since you kept it." : "; the bundled file is unchanged since you kept it.") : "."}
-        </p>
-      )}
-      <FileSections diff={diff} unit={unit} />
-    </>
-  );
-}
-
 /** The summary and the diff of a take bundled: which files go, where yours are backed up, what changes. */
 function BundledBody({ reviewed, unit }: { reviewed: TakeBundledUnit; unit: FileUnit | undefined }) {
   const total = reviewed.files.length + reviewed.more_files;
@@ -173,17 +153,15 @@ function BundledBody({ reviewed, unit }: { reviewed: TakeBundledUnit; unit: File
 }
 
 /**
- * The conflict review: a sub-state of the harness page in place of its two panes. It shows a read-only diff of
- * one skill or agent (all its conflicting or kept files) against the bundled files (`d`), or the preview of taking
- * the bundled version (`b`): the files that are replaced, where yours are backed up, and the diff. Nothing is
- * written until `y` on the take-bundled preview, apart from the choice itself: `m` keeps your version, or hands a
- * kept one back, and asks first.
+ * The conflict review: a sub-state of the harness page in place of its cells. It shows the preview of taking the
+ * bundled version of one skill or agent: the files that are replaced, where yours are backed up, and the diff.
+ * Nothing is written until `y`. (The read-only diff and the choice to keep yours are the Compare fold-out and the
+ * buttons of the files cell on the page.)
  *
- * Keys (focus inside the pane): `y` apply (take-bundled preview only), `b` take bundled (from the diff), `m` keep
- * mine / hand back (from the diff), `[` and `]` the previous and next unit, `n`/Esc close, `r` the review again
- * after an error, `j`/`k`/`g g`/`G` scroll. Enter never applies.
+ * Keys (focus inside the pane): `y` apply, `n`/Esc cancel, `r` the review again after an error, `j`/`k`/`g g`/`G`
+ * scroll. Enter never applies.
  */
-export function ConflictPane({ flow, units, onMark, onToggleKept, busyLabel, backupRoot, returnPaneId = "surfaces" }: ConflictPaneProps) {
+export function ConflictPane({ flow, units, busyLabel, backupRoot, returnPaneId = "surfaces" }: ConflictPaneProps) {
   const { state } = flow;
   const open = state.status !== "idle";
   useConfirmMode(open);
@@ -210,21 +188,11 @@ export function ConflictPane({ flow, units, onMark, onToggleKept, busyLabel, bac
     [returnPaneId],
   );
 
-  const surface = state.status === "idle" ? null : state.surface;
   const unitKey = state.status === "idle" ? null : state.unit;
   const unit = units.find(candidate => candidate.key === unitKey);
   const previewed = state.status === "bundled" || state.status === "applying" ? state.preview : null;
   const reviewed = previewed?.units.find(candidate => candidate.key === unitKey) ?? null;
-  const name = state.status === "diff" ? state.diff.name : (reviewed?.name ?? unit?.name ?? "");
-  const index = unit ? units.indexOf(unit) : -1;
-  const taking = previewed !== null;
-
-  const move = (step: number) => {
-    if (!surface || units.length < 2 || index < 0) return;
-    const next = units[(index + step + units.length) % units.length]!;
-    onMark(next.key);
-    void flow.openDiff(surface, next.key);
-  };
+  const name = reviewed?.name ?? unit?.name ?? "";
 
   const applyState = (): boolean | string => {
     if (state.status === "applying") return "applying…";
@@ -233,7 +201,6 @@ export function ConflictPane({ flow, units, onMark, onToggleKept, busyLabel, bac
     return true;
   };
   const closeState = (): boolean | string => (state.status === "applying" ? "applying; it cannot be cancelled" : open);
-  const closeLabel = taking ? "cancel" : "close";
 
   // The confirm line's buttons run these: the very bindings the keys fire.
   const applyAction: Binding = {
@@ -251,68 +218,16 @@ export function ConflictPane({ flow, units, onMark, onToggleKept, busyLabel, bac
     id: "conflicts.close",
     keys: ["n", "Escape"],
     title: "Close the conflict review",
-    hint: closeLabel,
+    hint: "cancel",
     group: "Conflict review",
     scope: "pane",
     paneId: CONFLICT_PANE_ID,
     when: closeState,
     run: () => flow.close(),
   };
-  const bundledAction: Binding = {
-    id: "conflicts.bundled",
-    keys: "b",
-    title: "Preview replacing the skill or agent by the bundled version",
-    hint: "take bundled",
-    group: "Conflict review",
-    scope: "pane",
-    paneId: CONFLICT_PANE_ID,
-    when: () => (state.status !== "diff" || !unit ? false : !unit.wanted ? NO_BUNDLED_COPY : busyLabel ? `${busyLabel} is running` : true),
-    run: () => {
-      if (surface && unit) void flow.openBundled(surface, unit.key);
-    },
-  };
-  const keepAction: Binding = {
-    id: "conflicts.keep",
-    keys: "m",
-    title: unit?.state === "kept" ? "Hand the skill or agent back to the app" : "Keep my version of the skill or agent",
-    hint: unit?.state === "kept" ? "hand back" : "keep mine",
-    group: "Conflict review",
-    scope: "pane",
-    paneId: CONFLICT_PANE_ID,
-    when: () => (state.status !== "diff" || !unit ? false : busyLabel ? `${busyLabel} is running` : true),
-    run: () => {
-      if (surface && unit) onToggleKept(surface, unit);
-    },
-  };
-
-  const moves = state.status === "diff" || state.status === "error";
   const actions: Binding[] = [
     applyAction,
-    bundledAction,
-    keepAction,
     closeAction,
-    {
-      id: "conflicts.previous",
-      keys: "[",
-      title: "Show the previous skill or agent",
-      hint: "previous",
-      group: "Conflict review",
-      scope: "pane",
-      paneId: CONFLICT_PANE_ID,
-      when: () => units.length > 1 && index >= 0 && moves,
-      run: () => move(-1),
-    },
-    {
-      id: "conflicts.next",
-      keys: "]",
-      title: "Show the next skill or agent",
-      hint: "next",
-      group: "Conflict review",
-      scope: "pane",
-      paneId: CONFLICT_PANE_ID,
-      when: () => units.length > 1 && index >= 0 && moves,
-      run: () => move(1),
-    },
     {
       id: "conflicts.retry",
       keys: "r",
@@ -341,28 +256,25 @@ export function ConflictPane({ flow, units, onMark, onToggleKept, busyLabel, bac
   ];
   useKeymap(actions);
 
-  const what = state.status === "loading" ? (state.what === "bundled" ? "the take-bundled preview" : "the diff") : "";
   const question =
     state.status === "loading"
-      ? `computing ${what} for ${name || "the files"}…`
+      ? `computing the take-bundled preview for ${name || "the files"}…`
       : state.status === "applying"
         ? "applying: backing up, then writing…"
         : state.status === "error"
           ? "nothing was written"
           : state.status === "bundled"
             ? `replace your ${reviewed ? takeBundledTitle(reviewed) : name} with the bundled version? your files are backed up first`
-            : state.status === "diff"
-              ? "read-only: nothing is written"
-              : "";
-  const noteBackup = taking;
+            : "";
+  const noteBackup = previewed !== null;
 
   const sums = (files: readonly FileDiffEntry[]) => files.reduce((sum, file) => ({ added: sum.added + file.added, removed: sum.removed + file.removed }), { added: 0, removed: 0 });
-  const diffShown = state.status === "diff" ? state.diff : (reviewed?.diff ?? null);
+  const diffShown = reviewed?.diff ?? null;
   const totals = diffShown ? sums(diffShown.files) : null;
   const meta =
     diffShown && totals ? (
       <>
-        {`${name} · ${diffShown.folder} · ${taking ? "take bundled" : "diff"} · `}
+        {`${name} · ${diffShown.folder} · take bundled · `}
         <span className="rv-added" title={`${totals.added} lines added`}>+{totals.added}</span>{" "}
         <span className="rv-removed" title={`${totals.removed} lines removed`}>−{totals.removed}</span>
       </>
@@ -382,8 +294,6 @@ export function ConflictPane({ flow, units, onMark, onToggleKept, busyLabel, bac
       footer={
         <ReviewFooter question={question} backup={noteBackup && { root: backupRoot }}>
           <BindingButton binding={applyAction} apply />
-          <BindingButton binding={keepAction} />
-          <BindingButton binding={bundledAction} />
           <BindingButton binding={closeAction} />
         </ReviewFooter>
       }
@@ -392,7 +302,7 @@ export function ConflictPane({ flow, units, onMark, onToggleKept, busyLabel, bac
         <div className="plan-state" role="status">
           <ActivityLoader />
           <span className="c-dim">
-            computing {what} for {name || "the files"}…
+            computing the take-bundled preview for {name || "the files"}…
           </span>
         </div>
       )}
@@ -405,7 +315,6 @@ export function ConflictPane({ flow, units, onMark, onToggleKept, busyLabel, bac
           <p className="c-dim">{ERROR_HINT[state.what]}</p>
         </div>
       )}
-      {state.status === "diff" && <DiffBody diff={state.diff} unit={unit} />}
       {reviewed && <BundledBody reviewed={reviewed} unit={unit} />}
     </Pane>
   );

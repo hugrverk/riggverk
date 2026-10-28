@@ -265,7 +265,6 @@ export function HarnessPage({
           flow={rulesFlow}
           busyLabel={wsRunning}
           backupRoot={backupRoot}
-          canConvert={rulesModel?.convertible === true}
         />
         {runPanel()}
       </section>
@@ -280,8 +279,6 @@ export function HarnessPage({
         <ConflictPane
           flow={conflictFlow}
           units={reviewed?.units ?? []}
-          onMark={setMarkedKey}
-          onToggleKept={files.toggleKept}
           busyLabel={wsRunning}
           backupRoot={backupRoot}
         />
