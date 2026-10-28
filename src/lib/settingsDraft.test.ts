@@ -10,6 +10,7 @@ import {
   inverseForeground,
   normalizeAppFontSize,
   themeAccentDefault,
+  themeColorDefaults,
 } from "./settingsDraft";
 
 describe("defaultSettings", () => {
@@ -95,6 +96,18 @@ describe("inverseForeground", () => {
   it("picks the foreground with the higher contrast against the accent", () => {
     expect(inverseForeground("#7fb7ff")).toBe("#111111");
     expect(inverseForeground("#1b6f33")).toBe("#ffffff");
+  });
+});
+
+describe("themeColorDefaults", () => {
+  const tokens = readFileSync(resolve(import.meta.dirname, "../styles/_tokens.scss"), "utf8");
+  const token = (block: RegExp, name: string) => tokens.match(block)![0].match(new RegExp(`${name}:\\s*(#[0-9a-f]{6})`, "i"))![1]!;
+  const dark = /:root\s*\{[^}]*\}/;
+  const light = /\[data-theme="light"\]\s*\{[^}]*\}/;
+
+  it("matches --bg and --text in the token sheet for both themes", () => {
+    expect(themeColorDefaults("dark")).toEqual({ background: token(dark, "--bg"), foreground: token(dark, "--text") });
+    expect(themeColorDefaults("light")).toEqual({ background: token(light, "--bg"), foreground: token(light, "--text") });
   });
 });
 
