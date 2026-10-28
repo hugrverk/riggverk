@@ -751,3 +751,40 @@ describe("useLibraryController bundled items stay read-only", () => {
     expect(commands.filter(cmd => /^(save|create|write|apply|open)_/.test(cmd))).toEqual([]);
   });
 });
+
+describe("useLibraryController leaving with unsaved changes", () => {
+  beforeEach(() => {
+    invoke.mockReset();
+  });
+
+  it("drops the draft and the dirty mark when a confirmed leave discards it, and on a confirmed source switch", async () => {
+    const { deps } = createDeps();
+    const { result } = renderHook(() => useLibraryController(deps));
+    invoke.mockImplementation((cmd: string) => (cmd === "read_doc" ? Promise.resolve(docA) : Promise.reject(new Error(`unexpected invoke: ${cmd}`))));
+
+    await act(async () => {
+      await result.current.selectDoc("doc-a");
+    });
+    await act(async () => {
+      result.current.onChangeDocDraft("alpha edited");
+    });
+    expect(result.current.libraryDirty).toBe(true);
+
+    await act(async () => {
+      result.current.discardDrafts();
+    });
+    expect(result.current.libraryDirty).toBe(false);
+    expect(result.current.docDraft).toBe("alpha");
+
+    // The confirm in this file always says yes: switching away from a dirty source discards its draft too.
+    await act(async () => {
+      result.current.onChangeDocDraft("alpha edited again");
+    });
+    expect(result.current.libraryDirty).toBe(true);
+    await act(async () => {
+      await result.current.setGuardedLibrarySourceType("skills");
+    });
+    expect(result.current.libraryDirty).toBe(false);
+    expect(result.current.docDraft).toBe("alpha");
+  });
+});

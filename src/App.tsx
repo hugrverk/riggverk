@@ -138,6 +138,7 @@ function AppShell() {
     librarySourceType,
     setGuardedLibrarySourceType,
     isLibrarySourceDirty,
+    discardDrafts,
     libraryDirty,
     agentSources,
     activeAgentId,
@@ -383,6 +384,8 @@ function AppShell() {
       if (isLibraryDirty) {
         const ok = await confirm(LEAVE_DIRTY_MESSAGE);
         if (!ok) return;
+        // Leaving means discarding: the sidebar's Library marker goes with the drafts.
+        discardDrafts();
       }
     }
     setView(v);
@@ -401,7 +404,7 @@ function AppShell() {
     }
     else if (v === "library") loadLibraryView();
     else if (v === "settings" && !settingsDirty && !settingsSaving) { loadSettings(); }
-  }, [view, librarySourceType, isLibrarySourceDirty, settingsDirty, settingsSaving, loadLibraryView, loadWorkspaceDiagnostics, loadEnabledHarnessHealth, loadSettings, clearSettingsMsg, enabledHarnessKey]);
+  }, [view, librarySourceType, isLibrarySourceDirty, discardDrafts, settingsDirty, settingsSaving, loadLibraryView, loadWorkspaceDiagnostics, loadEnabledHarnessHealth, loadSettings, clearSettingsMsg, enabledHarnessKey]);
 
   useLandingView({ landingView: appSettings?.landing_view, currentView: view, navigate: switchView });
 

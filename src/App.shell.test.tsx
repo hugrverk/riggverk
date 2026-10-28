@@ -22,6 +22,8 @@ interface Backend {
   holdUpdate: Promise<void> | null;
   /** Harness of every get_light_runtime_health call, in order. */
   lightHealthRequests: string[];
+  /** Personal docs the Library lists. */
+  docs: Array<{ id: string; title: string; content: string }>;
 }
 
 function installBackend(overrides: Partial<AppSettings> = {}): Backend {
@@ -32,6 +34,7 @@ function installBackend(overrides: Partial<AppSettings> = {}): Backend {
     statusRequests: [],
     holdUpdate: null,
     lightHealthRequests: [],
+    docs: [],
   };
   invokeMock.mockImplementation((command: string, args?: { settings?: AppSettings; surfaces?: string[]; harness?: string }) => {
     backend.commandLog.push(command);
@@ -43,9 +46,18 @@ function installBackend(overrides: Partial<AppSettings> = {}): Backend {
           backend.settings = { ...(args?.settings ?? backend.settings), revision: (backend.settings.revision ?? 0) + 1 };
           return backend.settings;
         });
+      case "list_docs":
+        return Promise.resolve(
+          backend.docs.map(doc => ({ id: doc.id, title: doc.title, section: "Personal", path: `docs/context/${doc.id}.md`, source: "custom" })),
+        );
+      case "read_doc": {
+        const doc = backend.docs.find(candidate => candidate.id === (args as { id?: string } | undefined)?.id);
+        return doc
+          ? Promise.resolve({ id: doc.id, title: doc.title, section: "Personal", path: `docs/context/${doc.id}.md`, source: "custom", content: doc.content })
+          : Promise.reject(new Error("no such doc"));
+      }
       case "get_agent_targets":
       case "list_backups":
-      case "list_docs":
       case "list_skills":
         return Promise.resolve([]);
       case "get_workspace_diagnostics":
@@ -196,6 +208,67 @@ describe("App shell", () => {
     await within(nav()).findByRole("button", { name: "Kilo" });
     await waitFor(() => expect(backend.lightHealthRequests).toEqual(["kilo"]));
     await waitFor(() => expect(backend.settings.enabled_harness_ids).toEqual(["codex", "opencode", "claude", "cursor", "kilo"]), { timeout: 3000 });
+  });
+
+  describe("leaving the Library with unsaved changes", () => {
+    const originalShowModal = HTMLDialogElement.prototype.showModal;
+    const originalClose = HTMLDialogElement.prototype.close;
+
+    beforeEach(() => {
+      // jsdom has no native modal dialog; emulate open/close and the `close` event browsers fire.
+      HTMLDialogElement.prototype.showModal = vi.fn(function showModal(this: HTMLDialogElement) {
+        this.setAttribute("open", "");
+      });
+      HTMLDialogElement.prototype.close = vi.fn(function close(this: HTMLDialogElement) {
+        this.removeAttribute("open");
+        this.dispatchEvent(new Event("close"));
+      });
+    });
+
+    afterEach(() => {
+      HTMLDialogElement.prototype.showModal = originalShowModal;
+      HTMLDialogElement.prototype.close = originalClose;
+    });
+
+    async function editNotes() {
+      const backend = installBackend();
+      backend.docs = [{ id: "notes", title: "Notes", content: "# Notes\n" }];
+      render(<App />);
+      await ready();
+      fireEvent.keyDown(document.body, { key: "7" });
+      const pane = await screen.findByRole("region", { name: "Document" });
+      await within(pane).findByRole("heading", { name: "Notes" });
+      act(() => within(pane).getByRole("group", { name: "Document" }).focus());
+      fireEvent.keyDown(document.activeElement!, { key: "i" });
+      fireEvent.change(await screen.findByLabelText("Edit document"), { target: { value: "# Notes\nunsaved" } });
+      await within(nav()).findByRole("button", { name: "Library, unsaved changes" });
+    }
+
+    it("marks the Library while edits are unsaved, keeps them when the leave is declined and drops the mark when it is confirmed", async () => {
+      await editNotes();
+
+      fireEvent.click(within(nav()).getByRole("button", { name: /Overview/ }));
+      let dialog = await screen.findByRole("dialog");
+      expect(within(dialog).getByText("Leave with unsaved changes?")).toBeTruthy();
+      fireEvent.click(within(dialog).getByRole("button", { name: "cancel" }));
+      await act(async () => {});
+      expect(currentTab()).toBe("Library, unsaved changes");
+      expect(within(nav()).getByRole("button", { name: "Library, unsaved changes" })).toBeTruthy();
+
+      fireEvent.click(within(nav()).getByRole("button", { name: /Overview/ }));
+      dialog = await screen.findByRole("dialog");
+      fireEvent.click(within(dialog).getByRole("button", { name: "confirm" }));
+      await waitFor(() => expect(currentTab()).toBe("Overview"));
+      // The edits were discarded with the leave: no marker, and the draft does not come back.
+      expect(within(nav()).queryByRole("button", { name: "Library, unsaved changes" })).toBeNull();
+      expect(within(nav()).getByRole("button", { name: "Library" })).toBeTruthy();
+      fireEvent.keyDown(document.body, { key: "7" });
+      await waitFor(() => expect(currentTab()).toBe("Library"));
+      const pane = await screen.findByRole("region", { name: "Document" });
+      await within(pane).findByRole("heading", { name: "Notes" });
+      expect(screen.queryByDisplayValue("# Notes\nunsaved")).toBeNull();
+      expect(within(nav()).queryByRole("button", { name: "Library, unsaved changes" })).toBeNull();
+    });
   });
 
   it("opens Settings with Mod+, and via the :settings command", async () => {
