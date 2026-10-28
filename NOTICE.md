@@ -48,3 +48,9 @@ SOFTWARE.
 IBM Plex Mono — Copyright 2017 IBM Corp. All rights reserved. Licensed under the SIL Open Font License, Version 1.1 (reserved font name "Plex"); the full licence text is at `src/assets/fonts/ibm-plex-mono/OFL.txt`. The bundled files are the unmodified latin-subset woff2 builds from the Fontsource package `@fontsource/ibm-plex-mono` 5.3.0.
 
 The root LICENSE applies to this repository. This notice preserves attribution for adapted third-party skill material included in the bundled starter workspace and for the bundled font.
+
+## Cloudflare security-audit-skill
+
+The bundled `security-audit` skill is vendored from [cloudflare/security-audit-skill](https://github.com/cloudflare/security-audit-skill) at commit `c1c8a8c1471069fb0e188eeaff69b8e8db6564a8`, as recorded in [UPSTREAM.md](resources/default-workspace/skills/security-audit/UPSTREAM.md).
+
+Path: `resources/default-workspace/skills/security-audit/`. Copyright (c) 2025-2026 Cloudflare, Inc. Licensed under MIT; the full [license](resources/default-workspace/skills/security-audit/LICENSE) accompanies the vendored files. Local adaptations are described in `UPSTREAM.md`.

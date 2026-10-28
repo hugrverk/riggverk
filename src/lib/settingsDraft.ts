@@ -98,13 +98,13 @@ export function themeColorDefaults(appearance: AppSettings["appearance"]): {
 } {
   switch (appearance) {
     case "light":
-      return { background: "#f7f6f2", foreground: "#1a1a1a" };
+      return { background: "#f5f5f7", foreground: "#1d1d1f" };
     case "dark":
-      return { background: "#121314", foreground: "#e4e4e0" };
+      return { background: "#1e1e20", foreground: "#e6e6e8" };
     case "system":
       return window.matchMedia("(prefers-color-scheme: dark)").matches
-        ? { background: "#121314", foreground: "#e4e4e0" }
-        : { background: "#f7f6f2", foreground: "#1a1a1a" };
+        ? { background: "#1e1e20", foreground: "#e6e6e8" }
+        : { background: "#f5f5f7", foreground: "#1d1d1f" };
   }
 }
 
@@ -112,7 +112,7 @@ export function themeColorDefaults(appearance: AppSettings["appearance"]): {
  * Accent when no override is set. Mirrors `--accent` in _tokens.scss (the dark `:root` block and the paper
  * `[data-theme="light"]` block); settingsDraft.test.ts fails when they drift apart.
  */
-const ACCENT_DEFAULTS = { dark: "#7fb7ff", light: "#0b5fa5" } as const;
+const ACCENT_DEFAULTS = { dark: "#7d9cc4", light: "#3f6ea8" } as const;
 
 export function themeAccentDefault(appearance: AppSettings["appearance"]): string {
   if (appearance === "light") return ACCENT_DEFAULTS.light;

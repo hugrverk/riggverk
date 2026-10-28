@@ -50,35 +50,50 @@
    mode badge; applyThemeSettings overrides --inv-fg when a custom accent is set.
    Contrast is asserted by src/styles.palette.test.ts (4.5:1 text, 3:1 strong borders). */
 
+/* Grafit 1A "Bläck": graphite neutrals, one muted blue (--accent/--ready), no warm hues. The
+   decision signal is the brightest ink (--decide) in weight 600 on a raised surface; every other
+   state is a hollow ring in its own hue. --warn and --dirty are transitional aliases kept until
+   the old terminal layout is removed. */
+
 :root {
   color-scheme: dark;
-  --bg: #121314;
-  --bg-panel: color-mix(in srgb, var(--bg) 96.5%, white);
+  --bg: #1e1e20;
+  --bg-panel: color-mix(in srgb, var(--bg) 95.5%, white);
+  --bg-raised: color-mix(in srgb, var(--bg) 91.5%, white);
   --bg-inset: color-mix(in srgb, var(--bg) 67%, black);
   --surface: var(--bg-panel);
   --inset: var(--bg-inset);
-  --border: #3a3c40;
-  --border-strong: #6b6e75;
-  --text: #e4e4e0;
-  --text-muted: #9ea2a6;
-  --text-heading: #f5f5f2;
-  --accent-rgb: 127, 183, 255;
-  --accent: #7fb7ff;
+  --border: #38383b;
+  --border-strong: #7a7a80;
+  --text: #e6e6e8;
+  --text-muted: #9b9ba0;
+  --text-heading: #e6e6e8;
+  --accent-rgb: 125, 156, 196;
+  --accent: #7d9cc4;
   --active-bg: rgba(var(--accent-rgb), 0.10);
   --active-border: rgba(var(--accent-rgb), 0.24);
   --sel: rgba(var(--accent-rgb), 0.16);
   --focus-ring: var(--accent);
   --inv-bg: var(--accent);
   --inv-fg: #0b1220;
-  --ok: #6bd08e;
-  --ok-bg: rgba(107, 208, 142, 0.12);
-  --warn: #e9c05a;
-  --warn-bg: rgba(233, 192, 90, 0.12);
-  --fail: #f0847f;
-  --fail-bg: rgba(240, 132, 127, 0.12);
-  --dirty: var(--warn);
+  --ok: #86b48f;
+  --ok-bg: rgba(134, 180, 143, 0.12);
+  --ready: var(--accent);
+  --yours: #a9aec4;
+  --fail: #cf8e85;
+  --fail-bg: rgba(207, 142, 133, 0.12);
+  --fix: var(--fail);
+  --off: #9b9ba0;
+  --decide: var(--text);
+  --decide-bg: var(--bg-raised);
+  --primary: #4e75a8;
+  --primary-fg: #ffffff;
+  --warn: var(--ready);
+  --warn-bg: rgba(125, 156, 196, 0.12);
+  --dirty: var(--decide);
   --backdrop: rgba(0, 0, 0, 0.55);
   --radius: 0;
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
   --font-ui: var(--font-mono);
   --app-font-size: 13px;
@@ -90,52 +105,63 @@
   --topline-height: 28px;
   --statusbar-height: 24px;
   --traffic-light-reserve: 80px;
+  --dur-view: 0.32s;
+  --dur-nav: 0.4s;
+  --dur-fold: 0.45s;
+  --dur-state: 0.4s;
+  --ease: cubic-bezier(0.25, 0.1, 0.25, 1);
 }
 
 [data-theme="light"] {
   color-scheme: light;
-  --bg: #f7f6f2;
-  --bg-panel: color-mix(in srgb, var(--bg) 25%, white);
-  --bg-inset: color-mix(in srgb, var(--bg) 95.5%, black);
-  --border: #c9c7bd;
-  --border-strong: #807e74;
-  --text: #1a1a1a;
-  --text-muted: #595d5f;
-  --text-heading: #0f0f0f;
-  --accent-rgb: 11, 95, 165;
-  --accent: #0b5fa5;
+  --bg: #f5f5f7;
+  --bg-panel: color-mix(in srgb, var(--bg) 0%, white);
+  --bg-raised: color-mix(in srgb, var(--bg) 40%, white);
+  --bg-inset: color-mix(in srgb, var(--bg) 97%, black);
+  --border: #d9d9de;
+  --border-strong: #85858b;
+  --text: #1d1d1f;
+  --text-muted: #68686d;
+  --text-heading: #1d1d1f;
+  --accent-rgb: 63, 110, 168;
+  --accent: #3f6ea8;
   --sel: rgba(var(--accent-rgb), 0.14);
   --inv-fg: #ffffff;
-  --ok: #1b6f33;
-  --ok-bg: rgba(27, 111, 51, 0.10);
-  --warn: #7a4d00;
-  --warn-bg: rgba(122, 77, 0, 0.12);
-  --fail: #b01e1e;
-  --fail-bg: rgba(176, 30, 30, 0.10);
+  --ok: #2f7a47;
+  --ok-bg: rgba(47, 122, 71, 0.10);
+  --yours: #5a6184;
+  --fail: #b0493e;
+  --fail-bg: rgba(176, 73, 62, 0.10);
+  --off: #6b6b70;
+  --primary: #3f6ea8;
+  --warn-bg: rgba(63, 110, 168, 0.12);
   --backdrop: rgba(30, 30, 28, 0.35);
 }
 
 @media (prefers-color-scheme: light) {
   [data-theme="system"] {
     color-scheme: light;
-    --bg: #f7f6f2;
-    --bg-panel: color-mix(in srgb, var(--bg) 25%, white);
-    --bg-inset: color-mix(in srgb, var(--bg) 95.5%, black);
-    --border: #c9c7bd;
-    --border-strong: #807e74;
-    --text: #1a1a1a;
-    --text-muted: #595d5f;
-    --text-heading: #0f0f0f;
-    --accent-rgb: 11, 95, 165;
-    --accent: #0b5fa5;
+    --bg: #f5f5f7;
+    --bg-panel: color-mix(in srgb, var(--bg) 0%, white);
+    --bg-raised: color-mix(in srgb, var(--bg) 40%, white);
+    --bg-inset: color-mix(in srgb, var(--bg) 97%, black);
+    --border: #d9d9de;
+    --border-strong: #85858b;
+    --text: #1d1d1f;
+    --text-muted: #68686d;
+    --text-heading: #1d1d1f;
+    --accent-rgb: 63, 110, 168;
+    --accent: #3f6ea8;
     --sel: rgba(var(--accent-rgb), 0.14);
     --inv-fg: #ffffff;
-    --ok: #1b6f33;
-    --ok-bg: rgba(27, 111, 51, 0.10);
-    --warn: #7a4d00;
-    --warn-bg: rgba(122, 77, 0, 0.12);
-    --fail: #b01e1e;
-    --fail-bg: rgba(176, 30, 30, 0.10);
+    --ok: #2f7a47;
+    --ok-bg: rgba(47, 122, 71, 0.10);
+    --yours: #5a6184;
+    --fail: #b0493e;
+    --fail-bg: rgba(176, 73, 62, 0.10);
+    --off: #6b6b70;
+    --primary: #3f6ea8;
+    --warn-bg: rgba(63, 110, 168, 0.12);
     --backdrop: rgba(30, 30, 28, 0.35);
   }
 }
@@ -205,4 +231,13 @@ textarea {
   animation-duration: 0.01ms !important;
   animation-iteration-count: 1 !important;
   transition-duration: 0.01ms !important;
+}
+
+/* Subtle motion: no keyframe animation, only short fades of colour and opacity. */
+[data-motion="subtle"] *,
+[data-motion="subtle"] *::before,
+[data-motion="subtle"] *::after {
+  animation: none !important;
+  transition-property: opacity, color, background-color, border-color, box-shadow !important;
+  transition-duration: 0.2s !important;
 }

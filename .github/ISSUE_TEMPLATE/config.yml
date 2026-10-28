@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a vulnerability privately
+    url: https://github.com/hugrverk/riggverk/blob/main/SECURITY.md
+    about: Follow SECURITY.md to use GitHub private vulnerability reporting.
