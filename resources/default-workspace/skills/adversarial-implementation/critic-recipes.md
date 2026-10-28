@@ -61,12 +61,12 @@ Permission rules only, no OS sandbox. The critic is a one-off primary agent defi
 
 Never pass `--agent inspector` or another subagent: `opencode run` warns that it is a subagent and falls back to the default agent, which can write. Never pass `--auto`, `-c` or `-s`.
 
-Preflight: `opencode debug agent riggverk-critic --pure` with the two variables below. It is cheap (no model call) and proves the agent resolves, not the login, so it runs in the same command as the critic:
+Preflight: `opencode debug agent riggverk-critic --pure` with the two variables below. It is cheap (no model call) and proves the agent resolves and has no tool beyond reading, not the login, so it runs in the same command as the critic:
 
 ```sh
 cd "<repo-root>" \
 && export OPENCODE_DISABLE_PROJECT_CONFIG=1 OPENCODE_CONFIG_CONTENT='{"agent":{"riggverk-critic":{"mode":"primary","description":"Read-only critic","permission":{"edit":"deny","bash":"deny","task":"deny","webfetch":"deny","websearch":"deny","skill":"deny","todowrite":"deny","codesearch":"deny","external_directory":"deny","*_*":"deny"}}}}' \
-&& opencode debug agent riggverk-critic --pure >/dev/null 2>&1 \
+&& opencode debug agent riggverk-critic --pure 2>/dev/null | perl -MJSON::PP -0e '$t = decode_json(<STDIN>)->{tools}; @x = grep { $t->{$_} && !/^(invalid|read|glob|grep)$/ } sort keys %$t; die "riggverk-critic also has: @x\n" if @x' \
 && perl -e 'alarm shift; exec @ARGV or die "exec: $!"' 1200 \
   opencode run --pure --agent riggverk-critic [-m '<provider>/<model>'] \
     "Follow the attached brief exactly." -f "$T/brief.md" \
@@ -76,5 +76,6 @@ cd "<repo-root>" \
 - Put the message before `-f`: `-f` takes every following word as a file.
 - `OPENCODE_DISABLE_PROJECT_CONFIG=1` keeps the reviewed repository's own OpenCode config out; `--pure` runs without external plugins. The session is still stored in OpenCode's database.
 - `"*_*":"deny"` removes every MCP tool, since OpenCode names them `<server>_<tool>`; built-in reading tools have no underscore. Do not deny `"*"` and re-allow `read`: agent rules come last, so that would override the user's secret-file read rules.
+- Custom tools in `~/.config/opencode/tools/` (or `tool/`) keep their file name and are not plugins, so neither `--pure` nor `"*_*"` removes them. If the preflight stops with "riggverk-critic also has: …", add `"<name>":"deny"` for each listed tool to the critic's `permission` and run again.
 - An expired login or an unknown model exits 1 within seconds with the error on stderr and nothing in `critic.md`. If stderr says it is "falling back to default agent", treat the round as failed and check the mutation guard.
 - OpenCode reads provider keys from the environment, so do not strip the one your model's provider needs.
