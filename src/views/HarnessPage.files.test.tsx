@@ -281,8 +281,9 @@ function renderClaude(seed: Seed, overrides: Partial<HarnessViewProps> = {}) {
   return { p, ...renderInFrame(<ClaudeView {...p} runtimeHealth={CLAUDE_HEALTH} />) };
 }
 
+/** The page: the keys work with focus anywhere in it, and a click on it takes focus. */
 function surfaces() {
-  return screen.getByRole("listbox", { name: "Claude surfaces" });
+  return screen.getByRole("region", { name: "Claude" });
 }
 
 function press(key: string) {
@@ -294,19 +295,19 @@ function focusSurfaces() {
   act(() => surfaces().focus());
 }
 
-/** A row of the surfaces list by its name: the `[x]` toggle in front of it is not part of the name. */
+/** The cell of a surface by its short name ("skills", "agents", "rules"). */
 function surfaceRow(name: string) {
-  return within(surfaces()).getAllByRole("option").find(row => new RegExp(`^(\\[.\\] )?${name}\\b`).test(row.querySelector(".nm")!.textContent!.trim()))!;
+  return surfaces().querySelector<HTMLElement>(`[data-surface="${name === "skills" ? "skills" : `claude_${name}`}"]`)!;
 }
 
-/** Puts the cursor on a row (a click selects, it does not toggle) and the keyboard on the list. */
+/** Makes a cell the active one (a click does it) and puts the keyboard on the page. */
 function moveTo(name: string) {
   fireEvent.click(surfaceRow(name));
   focusSurfaces();
 }
 
 function detailPane() {
-  return screen.getByRole("region", { name: "Claude detail" });
+  return surfaces();
 }
 
 function fileLines() {
@@ -318,7 +319,7 @@ function statusBar() {
 }
 
 function hint(name: RegExp) {
-  if (!screen.getByRole("region", { name: "Claude surfaces" }).contains(document.activeElement)) focusSurfaces();
+  if (!surfaces().contains(document.activeElement)) focusSurfaces();
   return statusBar().queryByRole("button", { name });
 }
 
@@ -330,7 +331,7 @@ function review() {
   return screen.getByRole("region", { name: "Conflict review" });
 }
 
-describe("skill and agent files in the detail pane", () => {
+describe("skill and agent files in their cells", () => {
   it("lists each skill with where it is, how many files, why, and who reads it, and marks the first", () => {
     renderClaude({ skills: [TDD, AUDIT, DIAGNOSE] });
     moveTo("skills");
@@ -341,8 +342,9 @@ describe("skill and agent files in the detail pane", () => {
     expect(Array.from(fileLines()!.querySelectorAll("dt")).map(dt => dt.textContent)).toEqual(["▸", " ", " "]);
     // The row says how many files need a look, and the old "preserved" list is not repeated for them.
     // Files count, not units: tdd has one file in conflict and security-audit three.
-    expect(surfaceRow("skills").querySelector(".meta")!.textContent).toContain("4 conflicts");
-    expect(surfaceRow("skills").querySelector(".meta")!.textContent).toContain("you manage 1");
+    expect(surfaceRow("skills").getAttribute("data-state")).toBe("decide");
+    expect(surfaceRow("skills").querySelector(".hp-ch b")!.textContent).toBe("4 files you edited");
+    expect(surfaceRow("skills").querySelector(".state-pill")!.textContent).toBe("Needs your decision");
     expect(detailPane().textContent).not.toContain("preserved");
   });
 
@@ -351,27 +353,27 @@ describe("skill and agent files in the detail pane", () => {
     moveTo("agents");
     expect(fileLines()!.textContent).toContain("verifier · ~/.claude/agents · edited since Riggverk wrote it");
     expect(fileLines()!.textContent).toContain("sentinel · ~/.claude/agents · you manage · bundle unchanged");
-    expect(surfaceRow("agents").querySelector(".meta")!.textContent).toContain("1 conflict");
+    expect(surfaceRow("agents").querySelector(".hp-ch b")!.textContent).toBe("1 file you edited");
   });
 
   it("shows a surface that is otherwise current with the files the user keeps as a warning, not as current", () => {
     renderClaude({ skills: [DIAGNOSE] });
-    const meta = surfaceRow("skills").querySelector(".meta")!;
-    expect(meta.textContent).toBe("you manage 1");
-    expect(meta.className).toContain("c-warn");
-    expect(meta.className).not.toContain("c-fail");
+    // Yours: not up to date (a bundled update waits) and not a decision.
+    expect(surfaceRow("skills").getAttribute("data-state")).toBe("yours");
+    expect(surfaceRow("skills").querySelector(".state-pill")!.textContent).toBe("Yours");
+    expect(surfaceRow("skills").querySelector(".hp-ch b")!.textContent).toBe("You manage 1 file; 1 update waiting");
   });
 
   it("shows no files block for a surface without files, or while the status has none", () => {
     renderClaude({});
     moveTo("skills");
     expect(fileLines()).toBeNull();
-    expect(surfaceRow("skills").querySelector(".meta")!.textContent).toBe("current");
+    expect(surfaceRow("skills").querySelector(".state-pill")!.textContent).toBe("Up to date");
   });
 });
 
-describe("keys on the skills and agents rows", () => {
-  it("offers c, d and m only on a skills or agents row with files, and leaves the rules keys to the rules row", () => {
+describe("keys and buttons on the skills and agents cells", () => {
+  it("offers c, d and m only while a skills or agents cell with files is the active one, and leaves the rules keys to the rules cell", () => {
     backend();
     renderClaude({ skills: [TDD, DIAGNOSE], rules: rules({ conflict_reason: "base_block_edited" }) });
     const offered = () => ["next conflict", "diff", "keep mine", "hand back", "convert"].map(name => hint(new RegExp(name)) !== null);
@@ -393,6 +395,41 @@ describe("keys on the skills and agents rows", () => {
     press("m");
     expect(invokeMock).not.toHaveBeenCalled();
     expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("has a button for each action, and each does what its key does", async () => {
+    backend();
+    renderClaude({ skills: [TDD, AUDIT, DIAGNOSE] });
+    const acts = () => within(surfaceRow("skills"));
+    expect(acts().getAllByRole("button").map(button => button.textContent!.replace(/^[a-z](?=[A-Z])/, ""))).toEqual([
+      "Review files",
+      "Use Riggverk’s version…",
+      "Keep mine",
+      "Next file",
+    ]);
+    // Next file marks the next unit; the other buttons act on the marked one.
+    fireEvent.click(acts().getByRole("button", { name: "Next file" }));
+    fireEvent.click(acts().getByRole("button", { name: "Review files" }));
+    await screen.findByRole("group", { name: "SKILL.md: yours to bundled" });
+    expect(invokeMock).toHaveBeenLastCalledWith("preview_file_diff", { surface: "skills", unit: "skill:agents:security-audit" });
+    press("n");
+    fireEvent.click(acts().getByRole("button", { name: "Use Riggverk’s version…" }));
+    await waitFor(() => expect(invokeMock).toHaveBeenLastCalledWith("preview_take_bundled", expect.objectContaining({ surface: "skills", units: ["skill:agents:security-audit"] })));
+    press("n");
+    fireEvent.click(acts().getByRole("button", { name: "Keep mine" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(invokeMock).not.toHaveBeenCalledWith("set_files_kept", expect.anything());
+    fireEvent.click(within(dialog).getByRole("button", { name: "keep mine" }));
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("set_files_kept", { surface: "skills", units: ["skill:agents:security-audit"], kept: true }));
+  });
+
+  it("acts on the cell whose button was clicked, whichever cell is the active one", async () => {
+    backend();
+    renderClaude({ skills: [TDD], agents: [VERIFIER] });
+    // The keys follow the first decision (skills here), but a button of the other cell does its own.
+    fireEvent.click(within(surfaceRow("agents")).getByRole("button", { name: "Review files" }));
+    await screen.findByRole("group", { name: "SKILL.md: yours to bundled" });
+    expect(invokeMock).toHaveBeenLastCalledWith("preview_file_diff", { surface: "claude_agents", unit: "agent:verifier" });
   });
 
   it("offers c only with two units, and hand back instead of keep mine on a kept one", () => {
@@ -526,7 +563,7 @@ describe("conflict diff (d)", () => {
     press("d");
     await screen.findByRole("group", { name: "SKILL.md: yours to bundled" });
     press("n");
-    expect(screen.getByRole("listbox", { name: "Claude surfaces" })).toBeTruthy();
+    expect(surfaces()).toBeTruthy();
     expect(mode()).toBe("NORMAL");
     expect(document.activeElement).toBe(surfaces());
     press("d");
@@ -848,7 +885,7 @@ describe("take bundled (b, y)", () => {
     expect(log.stdout).toContain("applied      tdd · yours backed up");
     expect(log.stdout).toContain("transaction tx-take-1 recorded · rollback available");
     // The review closes and the page's panes come back.
-    expect(await screen.findByRole("listbox", { name: "Claude surfaces" })).toBeTruthy();
+    expect(await screen.findByRole("region", { name: "Claude" })).toBeTruthy();
     await waitFor(() => expect(mode()).toBe("NORMAL"));
   });
 
@@ -865,7 +902,7 @@ describe("take bundled (b, y)", () => {
     await openPreview();
     press("n");
     expect(invokeMock).not.toHaveBeenCalledWith("apply_take_bundled", expect.anything());
-    expect(screen.getByRole("listbox", { name: "Claude surfaces" })).toBeTruthy();
+    expect(surfaces()).toBeTruthy();
     expect(mode()).toBe("NORMAL");
     press("b");
     await screen.findByLabelText("Take bundled summary");
@@ -890,7 +927,7 @@ describe("take bundled (b, y)", () => {
     expect(statusBar().queryByRole("button", { name: /cancel/ })?.getAttribute("title")).toBe("applying; it cannot be cancelled");
     await act(async () => finish(APPLY_RESULT));
     await waitFor(() => expect(p.onApplied).toHaveBeenCalledTimes(1));
-    expect(await screen.findByRole("listbox", { name: "Claude surfaces" })).toBeTruthy();
+    expect(await screen.findByRole("region", { name: "Claude" })).toBeTruthy();
   });
 
   it("keeps a rejected apply (stale fingerprint) in the review, reports it in the output, and previews again on r", async () => {

@@ -100,8 +100,18 @@ function renderLight(harness: LightAgent, runtimeHealth: LightRuntimeHealth | nu
   return { props: merged, ...renderInFrame(<LightHarnessView {...merged} harness={harness} runtimeHealth={runtimeHealth} />) };
 }
 
+/** The page of a harness: the keys work with focus anywhere in it. */
 function detail(label: string) {
-  return screen.getByRole("region", { name: `${label} detail` });
+  return screen.getByRole("region", { name: label });
+}
+
+/** The runtime verdict, the bold line of the runtime cell. */
+function verdictOf(root: HTMLElement): string {
+  return within(root).getByRole("region", { name: "Runtime" }).querySelector(".hp-ch b")!.textContent!;
+}
+
+function cell(root: HTMLElement, surface: string) {
+  return root.querySelector<HTMLElement>(`[data-surface="${surface}"]`)!;
 }
 
 function facts(root: HTMLElement): Record<string, string> {
@@ -111,28 +121,28 @@ function facts(root: HTMLElement): Record<string, string> {
 }
 
 describe("LightHarnessView", () => {
-  it.each(LIGHT_AGENTS)("renders the %s page with a rules row and an MCP row that have a target toggle and a skills row that has none", harness => {
+  it.each(LIGHT_AGENTS)("renders the %s page with a rules cell and an MCP cell that have a target switch and a skills cell that has none", harness => {
     renderLight(harness, null);
     const label = LABELS[harness];
-    const rows = within(screen.getByRole("listbox", { name: `${label} surfaces` })).getAllByRole("option");
-    expect(rows).toHaveLength(3);
-    expect(rows[0]!.textContent).toContain("rules");
-    expect(rows[0]!.textContent).toContain("[x]");
-    expect(rows[0]!.textContent).toContain(LIGHT_TARGETS.find(target => target.id === `${harness}_rules`)!.target_rel);
-    expect(rows[1]!.textContent).toContain("skills");
-    expect(rows[1]!.textContent).not.toContain("[x]");
-    expect(rows[1]!.textContent).not.toContain("[ ]");
-    expect(rows[2]!.textContent).toContain("mcp");
+    const page = screen.getByRole("region", { name: label });
+    const cells = Array.from(page.querySelectorAll<HTMLElement>("[data-surface]"));
+    expect(cells).toHaveLength(3);
+    const rulesTarget = LIGHT_TARGETS.find(target => target.id === `${harness}_rules`)!;
+    const mcpTarget = LIGHT_TARGETS.find(target => target.id === `${harness}_mcp`)!;
+    expect(cells[0]!.querySelector(".hp-lbl")!.textContent).toBe(`Rules · ${rulesTarget.target_rel}`);
+    expect(within(cells[0]!).getByRole("switch").getAttribute("aria-checked")).toBe("true");
+    expect(cells[1]!.querySelector(".hp-lbl")!.textContent).toBe("Skills");
+    expect(within(cells[1]!).queryByRole("switch")).toBeNull();
+    expect(cells[2]!.querySelector(".hp-lbl")!.textContent).toBe(`MCP · ${mcpTarget.target_rel}`);
     // Kilo's MCP entry edits its main config file: its target starts off.
-    expect(rows[2]!.textContent).toContain(harness === "kilo" ? "[ ]" : "[x]");
-    expect(rows[2]!.textContent).toContain(LIGHT_TARGETS.find(target => target.id === `${harness}_mcp`)!.target_rel);
-    expect(screen.getByRole("region", { name: label })).toBeTruthy();
+    expect(within(cells[2]!).getByRole("switch").getAttribute("aria-checked")).toBe(harness === "kilo" ? "false" : "true");
+    expect(within(page).getByRole("heading", { name: label })).toBeTruthy();
   });
 
   it("shows the CLI version, the rules file, the Playwright entry and the skills of a synced harness", () => {
     renderLight("pi", health());
     const pi = detail("Pi");
-    expect(pi.textContent).toContain("runtime · synced");
+    expect(verdictOf(pi)).toBe("synced");
     expect(facts(pi)).toMatchObject({ cli: "1.3.0", rules: "synced", "mcp playwright": "synced · 0.0.83", skills: "synced · 17/17" });
     // Nothing to do while synced.
     expect(facts(pi)).not.toHaveProperty("next");
@@ -146,7 +156,7 @@ describe("LightHarnessView", () => {
       next_action: "Resolve the MCP file conflict on the Copilot page.",
     }));
     const copilot = detail("Copilot");
-    expect(copilot.textContent).toContain("runtime · invalid");
+    expect(verdictOf(copilot)).toBe("invalid");
     expect(facts(copilot)["mcp playwright"]).toBe("invalid · the file has comments; the app edits strict JSON only and writes nothing");
     expect(facts(copilot).next).toBe("resolve the MCP file conflict on the Copilot page");
     cleanup();
@@ -187,17 +197,13 @@ describe("LightHarnessView", () => {
         enabled_target_ids: [...DEFAULT_ENABLED_TARGET_IDS, "kilo_mcp"],
       }),
     });
-    const surfaces = screen.getByRole("listbox", { name: "Kilo surfaces" });
-    surfaces.focus();
-    fireEvent.keyDown(surfaces, { key: "j" });
-    fireEvent.keyDown(surfaces, { key: "j" });
-    const kilo = detail("Kilo");
-    expect(facts(kilo)).toMatchObject({
-      file: ".config/kilo/kilo.jsonc",
-      source: "templates/mcp/kilo.playwright.json",
-      target: "kilo mcp · on",
-      detail: "the file has comments; the app edits strict JSON only and writes nothing",
-    });
+    const mcp = cell(detail("Kilo"), "kilo_mcp");
+    // A file the app does not edit is a thing to fix by hand: the cell says why, in the backend's words.
+    expect(mcp.querySelector(".hp-lbl")!.textContent).toBe("MCP · .config/kilo/kilo.jsonc");
+    expect(mcp.getAttribute("data-state")).toBe("fix");
+    expect(mcp.querySelector(".state-pill")!.textContent).toBe("Fix by hand");
+    expect(mcp.querySelector(".hp-ch b")!.textContent).toBe("the file has comments; the app edits strict JSON only and writes nothing");
+    expect(within(mcp).getByRole("switch", { name: "Let Riggverk manage kilo mcp" }).getAttribute("aria-checked")).toBe("true");
   });
 
   it("puts a stale, conflicting or switched-off rules file into the runtime rows and the verdict", () => {
@@ -208,7 +214,7 @@ describe("LightHarnessView", () => {
       next_action: "Run Install or Update on the Kilo page.",
     }));
     const kilo = detail("Kilo");
-    expect(kilo.textContent).toContain("runtime · stale");
+    expect(verdictOf(kilo)).toBe("stale");
     expect(facts(kilo)).toMatchObject({ rules: "stale · base update available; refinements: 5 lines preserved", next: "run Install or Update on the Kilo page" });
     cleanup();
 
@@ -219,7 +225,7 @@ describe("LightHarnessView", () => {
       next_action: "Resolve the rules file conflict on the Pi page.",
     }));
     const pi = detail("Pi");
-    expect(pi.textContent).toContain("runtime · diverged");
+    expect(verdictOf(pi)).toBe("diverged");
     expect(facts(pi).rules).toContain("masks this file");
     expect(facts(pi).warnings).toContain("AGENTS.override.md");
     cleanup();
@@ -279,7 +285,7 @@ describe("LightHarnessView", () => {
       next_action: "Run Install or Update on the Copilot page.",
     }));
     const copilot = detail("Copilot");
-    expect(copilot.textContent).toContain("runtime · partial");
+    expect(verdictOf(copilot)).toBe("partial");
     expect(facts(copilot)).toMatchObject({ skills: "partial · 10/17", next: "run Install or Update on the Copilot page" });
     cleanup();
 
@@ -290,7 +296,7 @@ describe("LightHarnessView", () => {
       next_action: "Disable Codex or unset CODEX_HOME to install skills for Pi.",
     }));
     const pi = detail("Pi");
-    expect(pi.textContent).toContain("runtime · unserved");
+    expect(verdictOf(pi)).toBe("unserved");
     expect(facts(pi).skills).toBe("unserved · 0/17");
     expect(facts(pi).warnings).toContain("CODEX_HOME");
     expect(facts(pi).next).toContain("unset CODEX_HOME");
@@ -298,10 +304,10 @@ describe("LightHarnessView", () => {
 
   it("says the runtime is not loaded before the health arrives", () => {
     renderLight("kilo", null);
-    expect(detail("Kilo").textContent).toContain("runtime · not loaded");
+    expect(verdictOf(detail("Kilo"))).toBe("not loaded");
   });
 
-  it("names the folders the harness reads when the cursor is on the skills row", () => {
+  it("names the folders the harness reads in the skills cell", () => {
     const skillLoads = skillLoadsOf({
       harnesses: [{
         harness: "kilo",
@@ -315,16 +321,12 @@ describe("LightHarnessView", () => {
       foreign_duplicates: [],
     } satisfies EffectiveSkillLoads);
     renderLight("kilo", health({ harness: "kilo" }), { skillLoads });
-    // The cursor starts on the rules row; the skills row is the second.
-    const surfaces = screen.getByRole("listbox", { name: "Kilo surfaces" });
-    surfaces.focus();
-    fireEvent.keyDown(surfaces, { key: "j" });
-    expect(facts(detail("Kilo")).reads).toBe("~/.kilo/skills (missing), ~/.agents/skills, ~/.claude/skills");
+    expect(facts(cell(detail("Kilo"), "skills")).reads).toBe("~/.kilo/skills (missing), ~/.agents/skills, ~/.claude/skills");
   });
 
   it("opens the install review for this harness with u and a read-only preview with p", () => {
     const { props: shown } = renderLight("pi", health());
-    const surfaces = screen.getByRole("listbox", { name: "Pi surfaces" });
+    const surfaces = screen.getByRole("region", { name: "Pi" });
     surfaces.focus();
     fireEvent.keyDown(surfaces, { key: "u" });
     expect(shown.install.open).toHaveBeenLastCalledWith("pi");
@@ -334,7 +336,7 @@ describe("LightHarnessView", () => {
 
   it("offers nothing without a valid workspace", () => {
     renderLight("pi", health(), { dataFolderOk: false });
-    expect(detail("Pi").textContent).toContain("runtime · workspace folder unusable");
+    expect(verdictOf(detail("Pi"))).toBe("workspace folder unusable");
     expect(detail("Pi").textContent).toContain("The workspace folder is unusable");
   });
 });

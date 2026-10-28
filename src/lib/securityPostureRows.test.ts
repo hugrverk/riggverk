@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { postureOf } from "../test/pageFixtures";
 import type { FindingCode, PostureFinding, PostureLevel, SecurityPosture } from "../types";
-import { postureRowsFor } from "./securityPostureRows";
+import { postureNotesFor, postureRowsFor } from "./securityPostureRows";
 
 const LEVELS: Record<FindingCode, PostureLevel> = {
   claude_bypass_default: "risky",
@@ -134,5 +134,32 @@ describe("postureRowsFor", () => {
     expect(value("opencode_deny_rules", 4)).toContain("4 deny rules under");
     expect(value("opencode_allow_all", 0, "opencode.jsonc")).toContain("allow in opencode.jsonc");
     expect(value("kilo_bash_allow", 0, "kilo.json")).toContain("allow in kilo.json");
+  });
+});
+
+describe("postureNotesFor", () => {
+  it("keeps the verdict and the order of the rows, and gives each level its mark instead of the level word", () => {
+    const posture = postureOf("claude", [
+      finding("claude_sandbox_off", { level: "advice" }),
+      finding("claude_bypass_default", { level: "risky" }),
+      finding("claude_sandbox_on", { level: "enforced" }),
+      finding("claude_config_dir_set", { level: "not_covered" }),
+      finding("config_only", { level: "not_covered" }),
+    ]);
+    const { verdict, notes } = postureNotesFor(posture);
+    expect(verdict).toEqual(postureRowsFor(posture).verdict);
+    expect(notes.map(note => [note.id, note.mark?.text ?? null, note.mark?.kind ?? null])).toEqual([
+      ["claude_bypass_default", "Worth a look", "tip"],
+      ["claude_sandbox_on", "Set", "set"],
+      ["claude_sandbox_off", "Tip", "tip"],
+      ["claude_config_dir_set", null, null],
+      // "not checked" always sits last, before the baseline pointer.
+      ["config_only", null, null],
+      ["baseline", null, null],
+    ]);
+    // Same order as the kv rows, and the text is the phrase without the level word.
+    expect(notes.map(note => note.id)).toEqual(postureRowsFor(posture).rows.map(row => row.id));
+    expect(notes[0]!.text).toBe("starts in bypassPermissions mode: no permission prompts");
+    expect(notes[0]!.label).toBe("bypass mode");
   });
 });

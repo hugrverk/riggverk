@@ -30,7 +30,7 @@ export const STATE_SHORT: Record<UiState, string> = {
   off: "not managed",
 };
 
-const ROW_LABEL: Record<string, string> = {
+export const ROW_LABEL: Record<string, string> = {
   rules: "Rules",
   agents: "Agents",
   skills: "Skills",
@@ -39,7 +39,7 @@ const ROW_LABEL: Record<string, string> = {
 };
 
 /** Rows of an agent card in reading order, whatever order the harness lists its surfaces in. */
-const ROW_ORDER = ["rules", "agents", "skills", "config", "mcp"];
+export const ROW_ORDER = ["rules", "agents", "skills", "config", "mcp"];
 
 export interface CardRow {
   surface: SetupSurfaceId;

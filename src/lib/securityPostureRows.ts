@@ -1,6 +1,7 @@
 import type { KvItem } from "../ui/Kv";
 import type { Tone } from "../ui/tone";
 import type { FindingCode, PostureFinding, PostureLevel, SecurityPosture } from "../types";
+import { postureMark } from "./uiState";
 
 export interface PostureVerdict {
   text: string;
@@ -135,6 +136,33 @@ export function postureRowsFor(posture: SecurityPosture): { verdict: PostureVerd
   });
   rows.push({ label: "baseline", value: "Library > Docs > Security Baseline", tone: "dim", id: "baseline" });
   return { verdict: verdictOf(posture), rows };
+}
+
+export interface PostureNote {
+  id: string;
+  label: string;
+  /** What the finding says, without the level word: the mark carries the level. */
+  text: string;
+  /** "Worth a look", "Tip" or "Set"; null for what is not checked. */
+  mark: { text: string; kind: "tip" | "set" } | null;
+}
+
+/**
+ * The "Safety notes" zone of a harness page: the same verdict and findings as `postureRowsFor`, in the same order, with
+ * the mark each level gets (`postureMark`) instead of the level word. Advice only: nothing here is a state or counted.
+ */
+export function postureNotesFor(posture: SecurityPosture): { verdict: PostureVerdict; notes: PostureNote[] } {
+  const rank = (finding: PostureFinding): number =>
+    finding.code === "config_only" ? LEVEL_ORDER.length : LEVEL_ORDER.indexOf(finding.level);
+  const notes = posture.findings
+    .map((finding, index) => ({ finding, index }))
+    .sort((a, b) => rank(a.finding) - rank(b.finding) || a.index - b.index)
+    .map(({ finding }): PostureNote => {
+      const copy = COPY[finding.code];
+      return { id: finding.code, label: copy.label, text: copy.text(finding), mark: postureMark(finding.level) };
+    });
+  notes.push({ id: "baseline", label: "baseline", text: "Library > Docs > Security Baseline", mark: null });
+  return { verdict: verdictOf(posture), notes };
 }
 
 /**
