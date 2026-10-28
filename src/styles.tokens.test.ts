@@ -87,6 +87,21 @@ describe("heading typography tokens", () => {
   });
 });
 
+describe("motion tokens", () => {
+  it("defines the subtle motion block and the duration tokens", () => {
+    expect(styles).toMatch(/\[data-motion="subtle"\] \*/);
+    expect(styles).toMatch(/\[data-motion="subtle"\][^{]*\{[^}]*animation:\s*none !important/);
+    const root = rootBlockDeclarations();
+    for (const name of ["--dur-view", "--dur-nav", "--dur-fold", "--dur-state", "--ease"]) {
+      expect(root.has(name), name).toBe(true);
+    }
+  });
+
+  it("keeps the prefers-reduced-motion block", () => {
+    expect(styles).toMatch(/@media \(prefers-reduced-motion: reduce\)/);
+  });
+});
+
 describe("applyThemeSettings heading color override", () => {
   it("changes heading color without changing heading font size token", () => {
     applyThemeSettings({ ...defaultSettings(), foreground_color: "#336699" });
