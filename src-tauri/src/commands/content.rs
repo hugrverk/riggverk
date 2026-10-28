@@ -54,6 +54,12 @@ fn curated_doc_registry() -> &'static [DocEntry] {
             rel_path: "docs/WORKFLOWS.md",
         },
         DocEntry {
+            id: "docs/SECURITY_BASELINE.md",
+            section: "Guides",
+            title: "Security Baseline",
+            rel_path: "docs/SECURITY_BASELINE.md",
+        },
+        DocEntry {
             id: "docs/SKILLS.md",
             section: "Reference",
             title: "Skills",

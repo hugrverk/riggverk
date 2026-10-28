@@ -63,6 +63,7 @@ import type {
   RulesMalformedReason,
   RulesStatus,
   RulesSurfaceId,
+  SecurityPosture,
   SetupPlan,
   SetupResult,
   SetupSurfaceId,
@@ -1282,6 +1283,7 @@ if (scenario !== "empty") {
     ["README.md", "README", "Start", "curated"],
     ["docs/SKILLS.md", "SKILLS", "Reference", "curated"],
     ["docs/TROUBLESHOOTING.md", "TROUBLESHOOTING", "Reference", "curated"],
+    ["docs/SECURITY_BASELINE.md", "Security Baseline", "Guides", "curated"],
     ["custom:project-notes", "Project notes", "Context", "custom"],
   ];
   for (const [id, title, section, source] of docRows) {
@@ -1568,6 +1570,72 @@ function requireWorkspaceForPersonalDoc(id: string): void {
   if (id.startsWith("custom:") && !workspaceIsValid()) throw new Error("invalid workspace path: not a valid workspace");
 }
 
+/**
+ * The security posture of a harness. `default`: nothing risky; `conflict`: bypass mode on in Claude, approvals off in
+ * Codex, the sandbox off in Cursor; `fresh`: no config file; `error`: the call fails.
+ */
+function posture(harness: InstallAgent): SecurityPosture {
+  const file = {
+    claude: "~/.claude/settings.json",
+    codex: "~/.codex/config.toml",
+    opencode: "opencode.json",
+    cursor: "~/.cursor/sandbox.json",
+    kilo: "kilo.jsonc",
+    copilot: "",
+    pi: "",
+  }[harness];
+  const state = scenario === "fresh" ? "missing" : "read";
+  const risky = scenario === "conflict";
+  const finding = (code: SecurityPosture["findings"][number]["code"], level: SecurityPosture["findings"][number]["level"], count: number | null = null) => ({
+    code,
+    level,
+    file: null,
+    count,
+  });
+  const configOnly = finding("config_only", "not_covered");
+  switch (harness) {
+    case "claude":
+      return {
+        harness,
+        sources: [{ file, state }],
+        findings: [
+          risky ? finding("claude_bypass_default", "risky") : finding("claude_bypass_available", "advice"),
+          finding("claude_sandbox_off", "advice"),
+          finding("claude_env_read_open", "advice"),
+          configOnly,
+        ],
+      };
+    case "codex":
+      return {
+        harness,
+        sources: [{ file, state }],
+        findings: [
+          finding("codex_sandbox_workspace", "enforced"),
+          risky ? finding("codex_approvals_never", "risky") : finding("codex_approvals_on_request", "enforced"),
+          configOnly,
+        ],
+      };
+    case "opencode":
+      return {
+        harness,
+        sources: [{ file, state }],
+        findings: [finding("opencode_deny_rules", "enforced", 6), configOnly],
+      };
+    case "cursor":
+      return {
+        harness,
+        sources: [{ file, state }],
+        findings: [...(risky ? [finding("cursor_sandbox_off", "risky")] : []), finding("cursor_run_mode", "not_covered"), configOnly],
+      };
+    case "kilo":
+      return { harness, sources: [{ file, state }], findings: [finding("kilo_no_rules", "advice"), configOnly] };
+    case "copilot":
+      return { harness, sources: [], findings: [finding("copilot_not_covered", "not_covered")] };
+    case "pi":
+      return { harness, sources: [], findings: [finding("pi_not_covered", "not_covered")] };
+  }
+}
+
 function unavailable(): never {
   throw new Error("workspace invalid (mock error scenario)");
 }
@@ -1711,6 +1779,9 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
     case "get_light_runtime_health":
       await delay(150);
       return lightHealth(arg<LightAgent>(args, "harness"));
+    case "get_security_posture":
+      await delay(100);
+      return scenario === "error" ? unavailable() : posture(arg<InstallAgent>(args, "harness"));
     case "list_skills":
       return skills;
     case "get_effective_skill_loads":

@@ -95,6 +95,7 @@ DOC_FLOOR = frozenset(
         "USING_THE_APP",
         "GIT_VERSIONING",
         "WORKFLOWS",
+        "SECURITY_BASELINE",
         "SKILLS",
         "AGENT_RULES",
         "OPENCODE_CONFIG",

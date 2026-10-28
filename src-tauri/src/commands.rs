@@ -10,6 +10,7 @@ mod opencode_cli;
 mod opencode_runtime;
 mod process;
 pub(crate) mod retired_workspace_files;
+mod security_posture;
 pub(crate) mod setup;
 pub(crate) use codex_runtime::{
     extract_managed_codex_config, managed_codex_keys_match, render_codex_config_managed_projection,
@@ -54,6 +55,7 @@ pub use rules::{
 pub use rules_refinements::{
     list_rules_files, open_rules_file, read_rules_file, save_rules_refinements,
 };
+pub use security_posture::get_security_posture;
 pub use settings_commands::{get_agent_targets, get_settings, update_settings};
 pub use setup::{
     apply_setup, apply_uninstall, get_installation_status, preview_setup, preview_uninstall,

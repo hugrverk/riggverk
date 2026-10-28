@@ -87,9 +87,9 @@ use commands::{
     apply_rules_conversion, apply_setup, apply_take_bundled, apply_uninstall, create_doc,
     get_agent_targets, get_backup_details, get_claude_runtime_health, get_codex_runtime_health,
     get_cursor_profile_health, get_effective_skill_loads, get_installation_status,
-    get_light_runtime_health, get_opencode_runtime_health, get_settings, get_status,
-    get_workspace_diagnostics, list_agent_metadata, list_available_opencode_models, list_backups,
-    list_docs, list_opencode_config_editor_sources, list_rules_files, list_skills,
+    get_light_runtime_health, get_opencode_runtime_health, get_security_posture, get_settings,
+    get_status, get_workspace_diagnostics, list_agent_metadata, list_available_opencode_models,
+    list_backups, list_docs, list_opencode_config_editor_sources, list_rules_files, list_skills,
     open_backups_folder, open_default_workspace_folder, open_doc, open_rules_file,
     preview_file_diff, preview_rules_conversion, preview_rules_diff, preview_setup,
     preview_take_bundled, preview_uninstall, read_agent_source, read_agent_template,
@@ -167,6 +167,7 @@ pub fn run() {
             set_files_kept,
             preview_take_bundled,
             apply_take_bundled,
+            get_security_posture,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -71,4 +71,5 @@ Rules files hold the app's base between `BEGIN AGENT-WORKSPACE BASE` and `END AG
 - [CONCEPTS.md](CONCEPTS.md) - the mental model
 - [USING_THE_APP.md](USING_THE_APP.md) - every page and key
 - [WORKFLOWS.md](WORKFLOWS.md) - recipes
+- [SECURITY_BASELINE.md](SECURITY_BASELINE.md) - what limits an agent and what is up to you
 - [TROUBLESHOOTING.md](TROUBLESHOOTING.md)

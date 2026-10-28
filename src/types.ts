@@ -727,6 +727,65 @@ export interface LightRuntimeHealth {
   next_action: string;
 }
 
+/** How a posture finding is shown. `enforced` means set in the config file read, never "safe". */
+export type PostureLevel = "risky" | "enforced" | "advice" | "not_covered";
+
+/** What happened to one config file the posture check looks at. */
+export type SourceState = "read" | "missing" | "unreadable" | "not_checked";
+
+/** Every finding the backend can report (`security_posture.rs`); the phrase of each is in `securityPostureRows.ts`. */
+export type FindingCode =
+  | "claude_bypass_disabled"
+  | "claude_bypass_default"
+  | "claude_bypass_available"
+  | "claude_sandbox_on"
+  | "claude_sandbox_off"
+  | "claude_env_read_denied"
+  | "claude_env_read_open"
+  | "claude_config_dir_set"
+  | "codex_no_sandbox"
+  | "codex_sandbox_workspace"
+  | "codex_sandbox_read_only"
+  | "codex_sandbox_unset"
+  | "codex_approvals_never"
+  | "codex_approvals_on_request"
+  | "codex_network_on"
+  | "codex_trusted_projects"
+  | "opencode_allow_all"
+  | "opencode_bash_allow"
+  | "opencode_deny_rules"
+  | "opencode_deny_rules_missing"
+  | "cursor_sandbox_off"
+  | "cursor_network_open"
+  | "cursor_run_mode"
+  | "kilo_allow_all"
+  | "kilo_bash_allow"
+  | "kilo_no_rules"
+  | "copilot_not_covered"
+  | "pi_not_covered"
+  | "config_only";
+
+export interface PostureFinding {
+  code: FindingCode;
+  level: PostureLevel;
+  /** The config file the finding comes from, where it matters (OpenCode, Kilo). */
+  file: string | null;
+  count: number | null;
+}
+
+export interface PostureSource {
+  /** The config file as people know it (`~/.claude/settings.json`). */
+  file: string;
+  state: SourceState;
+}
+
+/** Read-only security posture of one harness (`get_security_posture`): codes, levels and counts, never file text. */
+export interface SecurityPosture {
+  harness: InstallAgent;
+  sources: PostureSource[];
+  findings: PostureFinding[];
+}
+
 // Unified managed installation types.
 
 /**

@@ -91,6 +91,8 @@ Targets are a multi-select list: Space toggles, the change autosaves, and a targ
 
 The runtime facts also say which skill copies the harness will load, read from the skills folders it reads and never written: a `skill loads` row (`N skills, 1 copy each`, or `3 names with 2 copies` as a warning, with up to five of those names and `+N more`), and the `skills` surface row adds `· 3 duplicates` when there are any. With the cursor on `skills`, a `reads` row lists the folders the harness reads. Duplicates that include a skill of your own read `yours, AW cannot fix`. See [SKILLS.md](SKILLS.md#where-skills-load) for what each harness does with a name it finds twice.
 
+Each harness page ends its detail pane with a `security` group: which permission and sandbox keys the harness's global config sets, as risky, enforced, advice only or not covered rows. It reads config only, in memory, and never writes; project config, profiles and command-line flags are not checked. See [SECURITY_BASELINE.md](SECURITY_BASELINE.md).
+
 OpenCode also shows the model override for `model`, `small model` and an optional `subagent model` (the models of the read-only subagents; unset, they use the main model): `e` edits it, `s` saves it to the app-level override file, and the next OpenCode install writes it into the installed config. Each row says `source: override | bundled default` and `state: applied | pending apply (u to update)`. `x` deletes the override and returns every row to the bundled default; the next install applies that and removes the subagent entries (see [OPENCODE_CONFIG.md](OPENCODE_CONFIG.md)).
 
 ## Install review

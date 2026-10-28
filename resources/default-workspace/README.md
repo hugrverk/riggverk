@@ -44,4 +44,5 @@ The bundle is read-only inside the app and is separate from your data folder. No
 - [docs/USING_THE_APP.md](docs/USING_THE_APP.md) - pages, keyboard reference, install review, backups
 - [docs/WORKFLOWS.md](docs/WORKFLOWS.md) - recipes
 - [docs/GIT_VERSIONING.md](docs/GIT_VERSIONING.md) - versioning your personal docs
+- [docs/SECURITY_BASELINE.md](docs/SECURITY_BASELINE.md) - what limits an agent and what is up to you
 - [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) - when something goes wrong

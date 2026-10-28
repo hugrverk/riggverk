@@ -11,6 +11,8 @@ import {
   skillLoadsOf,
   STATUS_DATA,
   surfaceStatus,
+  CLEAN_CODEX,
+  RISKY_CLAUDE,
 } from "../test/pageFixtures";
 import type { AgentTargetMeta, ApplyProgress, ClaudeRuntimeHealth, CodexRuntimeHealth, EffectiveSkillLoads, OpenCodeModelSelection, OpenCodeRuntimeHealth, SkillCopy } from "../types";
 import { ClaudeView } from "./ClaudeView";
@@ -396,6 +398,22 @@ describe("HarnessPage", () => {
     expect(facts(claude)).toMatchObject({ agents: "diverged · 5/6", "claude cli": "available" });
     expect(claude.textContent).not.toContain("Claude CLI available");
   });
+
+  it("shows the security group of the harness, loaded from its own config", async () => {
+    invokeMock.mockImplementation(async (command: string, args?: { harness?: string }) => {
+      if (command === "get_security_posture") return args?.harness === "claude" ? RISKY_CLAUDE : CLEAN_CODEX;
+      return undefined;
+    });
+    renderInFrame(<ClaudeView {...props()} runtimeHealth={CLAUDE_HEALTH} />);
+    const claude = screen.getByRole("region", { name: "Claude detail" });
+    await waitFor(() => expect(claude.textContent).toContain("security · 1 risky"));
+    expect(invokeMock).toHaveBeenCalledWith("get_security_posture", { harness: "claude" });
+    cleanup();
+
+    renderCodex();
+    await waitFor(() => expect(detail().textContent).toContain("security · no risky settings found in ~/.codex/config.toml"));
+    expect(invokeMock).toHaveBeenCalledWith("get_security_posture", { harness: "codex" });
+  });
 });
 
 describe("OpenCodeView model override", () => {
@@ -540,7 +558,8 @@ describe("OpenCodeView model override", () => {
     backend();
     const merged = props({ dataFolderOk: false, overview: overviewOf({}) });
     renderInFrame(<OpenCodeView {...merged} runtimeHealth={null} onModelUpdated={vi.fn()} />);
-    expect(invokeMock).not.toHaveBeenCalled();
+    // The security posture reads the harness's own config, not the workspace; nothing else is loaded.
+    expect(invokeMock.mock.calls.filter(([command]) => command !== "get_security_posture")).toEqual([]);
     expect(screen.queryByLabelText("model")).toBeNull();
   });
 

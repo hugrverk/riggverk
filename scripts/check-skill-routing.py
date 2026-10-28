@@ -70,6 +70,7 @@ ACTIVE_DOC_SOURCES = [
     WS_ROOT / "docs/OPENCODE_CONFIG.md",
     WS_ROOT / "docs/CODEX_CONFIG.md",
     WS_ROOT / "docs/WORKFLOWS.md",
+    WS_ROOT / "docs/SECURITY_BASELINE.md",
     WS_ROOT / "docs/TROUBLESHOOTING.md",
     WS_ROOT / "templates/cursor/README.md",
 ]
