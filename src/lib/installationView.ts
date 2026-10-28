@@ -81,7 +81,7 @@ export interface TargetMeta {
 
 /**
  * Why nothing that needs the workspace folder can run. The folder is unusable only when it is a link, a file, or a
- * missing `AGENT_WORKSPACE_PATH` folder: a fresh profile without one is fine, its first install creates it.
+ * missing `RIGGVERK_WORKSPACE_PATH` folder: a fresh profile without one is fine, its first install creates it.
  */
 export const WORKSPACE_FOLDER_UNUSABLE = "workspace folder unusable";
 

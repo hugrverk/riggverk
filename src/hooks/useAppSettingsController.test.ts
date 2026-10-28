@@ -454,7 +454,7 @@ describe("useAppSettingsController resetActiveWorkspace", () => {
 
   it("returns the backend's reason for a refusal and leaves the current workspace untouched", async () => {
     const { result, deps } = await loaded();
-    invoke.mockRejectedValue("AGENT_WORKSPACE_PATH is set and overrides the saved workspace; unset it to reset the workspace");
+    invoke.mockRejectedValue("RIGGVERK_WORKSPACE_PATH is set and overrides the saved workspace; unset it to reset the workspace");
 
     let outcome: unknown;
     await act(async () => {
@@ -463,7 +463,7 @@ describe("useAppSettingsController resetActiveWorkspace", () => {
 
     expect(outcome).toEqual({
       ok: false,
-      message: "AGENT_WORKSPACE_PATH is set and overrides the saved workspace; unset it to reset the workspace",
+      message: "RIGGVERK_WORKSPACE_PATH is set and overrides the saved workspace; unset it to reset the workspace",
     });
     expect(deps.beginWorkspaceLoadGeneration).not.toHaveBeenCalled();
     expect(deps.resetWorkspaceBoundState).not.toHaveBeenCalled();

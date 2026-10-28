@@ -43,7 +43,7 @@ describe("useWorkspaceReset", () => {
     expect(confirmMock).toHaveBeenCalledTimes(1);
     const config = confirmMock.mock.calls[0]![0];
     expect(config).toMatchObject({ destructive: true, confirmLabel: "reset" });
-    expect(config.message).toContain("~/.config/agent-workspace");
+    expect(config.message).toContain("~/.config/riggverk");
     expect(config.message).toContain("Ownership records");
     expect(config.message).toContain("stay in /Users/dev/other-workspace");
     expect(config.message).not.toContain("unsaved");
@@ -82,12 +82,12 @@ describe("useWorkspaceReset", () => {
   });
 
   it("reports a refused reset as is", async () => {
-    const { result } = setup({ result: { ok: false, message: "AGENT_WORKSPACE_PATH is set and overrides the saved workspace" } });
+    const { result } = setup({ result: { ok: false, message: "RIGGVERK_WORKSPACE_PATH is set and overrides the saved workspace" } });
     let message: Awaited<ReturnType<typeof result.current.reset>> = null;
     await act(async () => {
       message = await result.current.reset();
     });
-    expect(message).toEqual({ ok: false, text: "AGENT_WORKSPACE_PATH is set and overrides the saved workspace" });
+    expect(message).toEqual({ ok: false, text: "RIGGVERK_WORKSPACE_PATH is set and overrides the saved workspace" });
   });
 
   it("refuses without asking while a workspace task runs", async () => {

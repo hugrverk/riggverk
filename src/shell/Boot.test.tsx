@@ -7,7 +7,7 @@ import { Boot, resetBootLaunch, type BootInfo } from "./Boot";
 
 const INFO: BootInfo = {
   version: "0.1.0",
-  workspace: "/Users/me/agent-workspace",
+  workspace: "/Users/me/riggverk",
   harnesses: ["codex", "claude"],
   backups: 3,
 };
@@ -68,7 +68,7 @@ describe("Boot", () => {
     const { said, elapsed } = playToEnd();
     expect(said).toEqual([
       "❯ riggverk 0.1.0",
-      "  workspace  /Users/me/agent-workspace",
+      "  workspace  /Users/me/riggverk",
       "  harnesses  codex · claude",
       "  backups    3 runs",
       "❯ ready",

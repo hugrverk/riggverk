@@ -95,7 +95,7 @@ const appearance: AppSettings["appearance"] =
   themeParam === "light" || themeParam === "dark" || themeParam === "system" ? themeParam : "dark";
 
 const HOME = "/Users/mock";
-const WORKSPACE = `${HOME}/.config/agent-workspace`;
+const WORKSPACE = `${HOME}/.config/riggverk`;
 const BACKUP_ROOT = `${HOME}/Library/Application Support/se.hugrverk.riggverk/backups`;
 const BUNDLE_DIGEST = "a7c3e1";
 const INSTALLED_DIGEST = "91be20";
@@ -183,7 +183,7 @@ const SURFACE_PATHS: Record<SetupSurfaceId, string> = {
   copilot_mcp: "~/.copilot/mcp-config.json",
   pi_mcp: "~/.pi/agent/mcp.json",
   kilo_mcp: "~/.config/kilo/kilo.jsonc",
-  workspace_bundle: "~/.config/agent-workspace",
+  workspace_bundle: "~/.config/riggverk",
 };
 
 const ALL_SURFACES = Object.keys(SURFACE_LABELS) as SetupSurfaceId[];
@@ -243,8 +243,8 @@ function isRulesSurface(surface: SetupSurfaceId): surface is RulesSurfaceId {
 const MALFORMED_TEXT: Record<RulesMalformedReason, string> = {
   not_utf8: "file is not valid UTF-8",
   too_large: "file is larger than 4 MB",
-  duplicate_begin: "more than one BEGIN AGENT-WORKSPACE BASE marker",
-  duplicate_end: "more than one END AGENT-WORKSPACE BASE marker",
+  duplicate_begin: "more than one BEGIN base marker",
+  duplicate_end: "more than one END base marker",
   missing_end: "BEGIN marker has no matching END marker",
   missing_begin: "END marker has no matching BEGIN marker",
   end_before_begin: "END marker appears before the BEGIN marker",
@@ -413,9 +413,9 @@ function conversionResult(file: RulesStatus): string {
     ? ["", "## Communication", "Be direct and concise. Respond in the user's language, and in Swedish for Swedish user-facing copy.", "Prefer short answers; no praise or filler.", "", "## My refinements", "Never run destructive git commands without asking first."]
     : ["", "## Communication", "Be direct and concise. Swedish copy for Swedish user-facing text.", "", "## Local tooling", "Use rtk for inspection-style commands.", "Prefer small diffs."];
   return [
-    "<!-- BEGIN AGENT-WORKSPACE BASE: managed by Riggverk; edits inside are replaced on update; add refinements below END -->",
+    "<!-- BEGIN RIGGVERK BASE: managed by Riggverk; edits inside are replaced on update; add refinements below END -->",
     ...RULES_BASE_LINES,
-    "<!-- END AGENT-WORKSPACE BASE -->",
+    "<!-- END RIGGVERK BASE -->",
     ...refinements,
     "",
   ].join("\n");
@@ -452,13 +452,13 @@ function mockRulesConversion(surface: RulesSurfaceId): RulesConversionPreview {
       "--- installed",
       "+++ after conversion",
       "@@ -1,6 +1,18 @@",
-      "+<!-- BEGIN AGENT-WORKSPACE BASE: managed by Riggverk; edits inside are replaced on update; add refinements below END -->",
+      "+<!-- BEGIN RIGGVERK BASE: managed by Riggverk; edits inside are replaced on update; add refinements below END -->",
       " # Global Agent Rules",
       " ",
       " ## Priority",
       "-Repository reality overrides assumptions.",
       "+Repository reality overrides assumptions. Explicit user instructions override these defaults.",
-      "+<!-- END AGENT-WORKSPACE BASE -->",
+      "+<!-- END RIGGVERK BASE -->",
       "",
     ].join("\n"),
     diff_truncated: false,
@@ -564,7 +564,7 @@ function rulesFileContent(surface: RulesSurfaceId): RulesFileContent {
   if (file.layout !== "block") return { ...summary, before: "", refinements: "", revision: null };
   return {
     ...summary,
-    before: ["<!-- BEGIN AGENT-WORKSPACE BASE: managed by Riggverk; edits inside are replaced on update; add refinements below END -->", ...RULES_BASE_LINES, "<!-- END AGENT-WORKSPACE BASE -->", ""].join("\n"),
+    before: ["<!-- BEGIN RIGGVERK BASE: managed by Riggverk; edits inside are replaced on update; add refinements below END -->", ...RULES_BASE_LINES, "<!-- END RIGGVERK BASE -->", ""].join("\n"),
     refinements: rulesRefinements.get(surface) ?? DEFAULT_REFINEMENTS,
     revision: `mock-revision-${surface}-${rulesRevisions.get(surface) ?? 0}`,
   };
