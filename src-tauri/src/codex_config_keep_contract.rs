@@ -609,6 +609,32 @@ mod tests {
     }
 
     #[test]
+    fn the_reset_fingerprint_is_tagged_and_not_that_of_a_rules_conversion() {
+        let env = Env::new("tagged");
+        env.customize();
+        let plan = crate::codex_config_keep::plan_defaults(&env.ws, &env.home).expect("plan");
+        let fingerprint =
+            crate::codex_config_keep::defaults_fingerprint(&env.ws, &env.home, &plan).unwrap();
+        // The same operation fingerprinted as a conversion is another value.
+        let as_conversion =
+            crate::setup_transaction::conversion_fingerprint(&env.ws, &env.home, &plan.operation)
+                .unwrap();
+        assert_ne!(fingerprint, as_conversion);
+        // Stable for the same plan, different once the file differs.
+        let again = crate::codex_config_keep::plan_defaults(&env.ws, &env.home).unwrap();
+        assert_eq!(
+            fingerprint,
+            crate::codex_config_keep::defaults_fingerprint(&env.ws, &env.home, &again).unwrap()
+        );
+        env.set_top_level("sandbox_mode", "read-only");
+        let changed = crate::codex_config_keep::plan_defaults(&env.ws, &env.home).unwrap();
+        assert_ne!(
+            fingerprint,
+            crate::codex_config_keep::defaults_fingerprint(&env.ws, &env.home, &changed).unwrap()
+        );
+    }
+
+    #[test]
     fn the_proof_is_required_and_checked() {
         let env = Env::new("proof");
         env.customize();

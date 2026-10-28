@@ -509,14 +509,35 @@ pub fn defaults_diff(keys: &[DefaultKey]) -> String {
         .join("\n")
 }
 
-/// Fingerprint of a reset: the regular plan fingerprint, the file it replaces and the exact
-/// content that replaces it. An edit of the config after the preview changes it.
+/// Names this kind of request in its fingerprint, so a fingerprint of a reset can never equal one
+/// of another kind of request, whatever the other parts are made of.
+const DEFAULTS_FINGERPRINT_TAG: &str = "codex-config-defaults";
+
+/// Fingerprint of a reset: a tag naming the request, the regular plan fingerprint, the digest of
+/// the file it replaces and the digest of the exact content that replaces it. An edit of the
+/// config after the preview changes it.
 pub fn defaults_fingerprint(
     workspace_root: &Path,
     home: &Path,
     plan: &DefaultsPlan,
 ) -> Result<String, String> {
-    setup_transaction::conversion_fingerprint(workspace_root, home, &plan.operation)
+    let rewrite = plan
+        .operation
+        .rules_rewrite
+        .as_ref()
+        .ok_or_else(|| "reset without content".to_string())?;
+    let base = setup_transaction::compute_plan_fingerprint(
+        workspace_root,
+        &[plan.operation.surface],
+        std::slice::from_ref(&plan.operation),
+        home,
+    )?;
+    setup_transaction::stable_fingerprint(&[
+        DEFAULTS_FINGERPRINT_TAG.to_string(),
+        base,
+        rewrite.expected_installed_digest.clone(),
+        crate::stable_digest::bytes(rewrite.content.as_bytes()),
+    ])
 }
 
 /// Drops the kept entries of the keys a reset set to Riggverk's value: the choice is over, and a

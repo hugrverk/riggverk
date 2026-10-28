@@ -311,7 +311,7 @@ fn surfaces_match(a: &[SetupSurfaceId], b: &[SetupSurfaceId]) -> bool {
     left == right
 }
 
-fn stable_fingerprint(parts: &[String]) -> Result<String, String> {
+pub(crate) fn stable_fingerprint(parts: &[String]) -> Result<String, String> {
     let encoded =
         serde_json::to_vec(parts).map_err(|e| format!("serialize fingerprint input: {e}"))?;
     Ok(crate::stable_digest::bytes(&encoded)
