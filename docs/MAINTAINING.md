@@ -136,7 +136,7 @@ The code lives in `src-tauri/src/commands/security_posture.rs`, the phrases in `
 | `shipped-digests` | `generate-shipped-digests.py` | yes |
 | `pre-manifest-ownership` | `generate-pre-manifest-ownership.py` | yes |
 
-The history generators share one walk of every commit reachable from `HEAD` (and `MERGE_HEAD`) plus the tracked working tree, so writing before or after `git commit` gives the same files. A new `generate-*.py` must be added to `REGISTRY` in `scripts/generate.py`; `scripts/test_release_check_wiring.py` fails otherwise.
+The history generators share one walk of every commit reachable from `HEAD` (and `MERGE_HEAD`) plus the tracked working tree, so writing before or after `git commit` gives the same files. The outputs of the history generators (`metadata/shipped-digests.json`, `metadata/rules-history/`, `metadata/pre-manifest-ownership.json`) are append-only baselines: `write` emits the committed baseline plus whatever the history and working tree prove, so it never drops an entry, and `check` passes in a repository with squashed or fresh history as long as nothing is missing. Never delete an entry from these files to "clean up"; an install of that version would lose its ownership proof. A new `generate-*.py` must be added to `REGISTRY` in `scripts/generate.py`; `scripts/test_release_check_wiring.py` fails otherwise.
 
 ## Where guards live
 
