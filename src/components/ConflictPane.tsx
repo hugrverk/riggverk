@@ -3,12 +3,10 @@ import { takeBundledTitle, type FileConflictFlow } from "../hooks/useFileConflic
 import { focusDefaultPane, focusPaneById } from "../keyboard/focus";
 import type { Binding } from "../keyboard/registry";
 import { useKeymap } from "../keyboard/useKeymap";
-import { displayPath } from "../lib/displayPath";
 import { NO_BUNDLED_COPY } from "../lib/fileConflicts";
 import { redactDiffText } from "../lib/redactTerminalOutput";
 import { useConfirmMode, useStatusContext } from "../shell/ShellState";
 import { BindingButton } from "../ui/BindingActionKey";
-import { Glyph } from "../ui/Glyph";
 import { Kv, type KvItem } from "../ui/Kv";
 import { Pane } from "../ui/Pane";
 import type {
@@ -20,6 +18,7 @@ import type {
   TakeBundledUnit,
 } from "../types";
 import { DiffView } from "./DiffView";
+import { ReviewFooter } from "./ReviewFooter";
 import { ActivityLoader } from "./TerminalOutput";
 
 export const CONFLICT_PANE_ID = "conflicts";
@@ -74,7 +73,7 @@ function FileSection({ entry, state }: { entry: FileDiffEntry; state: FileUnitSt
     <>
       <div className="group pane-group">
         {entry.rel}
-        <span className={state === "kept" ? "c-warn" : "c-dim"}>{` · ${state === "kept" ? "you manage" : "conflict"}${counts}`}</span>
+        <span className="c-dim">{` · ${state === "kept" ? "you manage" : "conflict"}${counts}`}</span>
       </div>
       {entry.kind === "text" ? (
         <>
@@ -360,39 +359,30 @@ export function ConflictPane({ flow, units, onMark, onToggleKept, busyLabel, bac
   const meta =
     diffShown && totals ? (
       <>
-        {`· ${name} · ${diffShown.folder} · ${taking ? "take bundled" : "diff"} · `}
-        <span className="c-ok" title={`${totals.added} lines added`}>+{totals.added}</span>{" "}
-        <span className="c-fail" title={`${totals.removed} lines removed`}>−{totals.removed}</span>
+        {`${name} · ${diffShown.folder} · ${taking ? "take bundled" : "diff"} · `}
+        <span className="rv-added" title={`${totals.added} lines added`}>+{totals.added}</span>{" "}
+        <span className="rv-removed" title={`${totals.removed} lines removed`}>−{totals.removed}</span>
       </>
     ) : name ? (
-      `· ${name}`
+      name
     ) : null;
 
   return (
     <Pane
       id={CONFLICT_PANE_ID}
-      title="conflicts"
+      title="Conflict review"
       label="Conflict review"
+      variant="card"
       scrollable
       defaultFocus
       meta={meta}
       footer={
-        <>
-          <span className="q" role="status">
-            {question}
-          </span>
-          <span className="tbtn-row">
-            <BindingButton binding={applyAction} variant="primary" />
-            <BindingButton binding={keepAction} variant="primary" />
-            <BindingButton binding={bundledAction} />
-            <BindingButton binding={closeAction} />
-          </span>
-          {noteBackup && (
-            <span className="bk">
-              backup → {backupRoot ? `${displayPath(backupRoot)}/` : ""}&lt;run&gt; · transaction recorded · rollback available
-            </span>
-          )}
-        </>
+        <ReviewFooter question={question} backup={noteBackup && { root: backupRoot }}>
+          <BindingButton binding={applyAction} apply />
+          <BindingButton binding={keepAction} />
+          <BindingButton binding={bundledAction} />
+          <BindingButton binding={closeAction} />
+        </ReviewFooter>
       }
     >
       {state.status === "loading" && (
@@ -405,8 +395,9 @@ export function ConflictPane({ flow, units, onMark, onToggleKept, busyLabel, bac
       )}
       {state.status === "error" && (
         <div className="plan-state">
-          <p className="c-fail" role="alert">
-            <Glyph name="fail" tone="fail" /> {state.message}
+          <p className="rv-error" role="alert">
+            <span className="rv-mark rv-mark-remove" aria-hidden="true" />
+            {state.message}
           </p>
           <p className="c-dim">{ERROR_HINT[state.what]}</p>
         </div>

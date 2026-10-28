@@ -1,6 +1,6 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
-import { DiffView, parseUnifiedDiff } from "./DiffView";
+import { DiffView, parseUnifiedDiff, splitRows } from "./DiffView";
 
 afterEach(cleanup);
 
@@ -47,6 +47,35 @@ describe("DiffView", () => {
     expect(marks.filter(([cls]) => (cls as string).includes("remove")).map(([, mark]) => mark)).toEqual(["-", "-"]);
     expect(group.textContent).toContain("old line");
     expect(group.textContent).toContain("new line");
+  });
+
+  it("lays out two columns for the side-by-side Compare view, with the labels as headers and blanks to line the rows up", () => {
+    const diff = ["--- Riggverk rules", "+++ Your CLAUDE.md", "@@ -1,3 +1,4 @@", " keep", "-old one", "-old two", "+new one", " tail", ""].join("\n");
+    render(<DiffView diff={diff} label="Compare" layout="split" />);
+    const group = screen.getByRole("group", { name: "Compare" });
+    expect(Array.from(group.querySelectorAll(".diff-head span")).map(span => span.textContent)).toEqual(["Riggverk rules", "Your CLAUDE.md"]);
+    const pairs = Array.from(group.querySelectorAll(".diff-row")).map(row =>
+      Array.from(row.querySelectorAll(".diff-line")).map(cell => `${cell.querySelector(".diff-mark")!.textContent}${cell.querySelector(".diff-text")!.textContent}`.trim()),
+    );
+    expect(pairs).toEqual([
+      ["keep", "keep"],
+      ["-old one", "+new one"],
+      ["-old two", ""],
+      ["tail", "tail"],
+    ]);
+    expect(group.querySelector(".diff-span.hunk")!.textContent).toContain("@@ -1,3 +1,4 @@");
+    // The sign is in its own column on each side, so colour is still not the only signal.
+    expect(group.querySelectorAll(".diff-line.remove .diff-mark")).toHaveLength(2);
+    expect(group.querySelectorAll(".diff-line.add .diff-mark")).toHaveLength(1);
+  });
+
+  it("splits additions and removals of unequal runs without losing a line", () => {
+    const rows = splitRows(parseUnifiedDiff("@@ -1 +1 @@\n-a\n+b\n+c\n"));
+    expect(rows).toHaveLength(3);
+    expect(rows.slice(1).map(row => ("left" in row ? [row.left.kind, row.right.kind] : null))).toEqual([
+      ["remove", "add"],
+      ["blank", "add"],
+    ]);
   });
 
   it("is read-only: no inputs or editable content", () => {
