@@ -1,6 +1,19 @@
 {
   "releases": [
     {
+      "version": "2026.10.5",
+      "sections": [
+        {
+          "title": "New",
+          "items": [
+            "Claude Code can stop adding its attribution to your commits and pull requests. Turn on the `config` target on the Claude page, then Install. It sets `attribution.commit` and `attribution.pr` to `\"\"` in `~/.claude/settings.json`, which removes the `Co-Authored-By` commit line and the \"Generated with Claude Code\" PR line. Every other setting in the file stays. If you already chose your own attribution, or the file has comments, Riggverk leaves it alone. The target is off by default, and `z` undoes it",
+            "Each harness page has a `security` group that shows which permission and sandbox settings in that harness's own config are risky, enforced or only advice, such as bypass mode, an open network or a missing sandbox. It only reads named settings, never shows their values, and never says a setup is safe: project config, profiles and command-line flags are not checked",
+            "New guide in Library > Docs > Security Baseline: per harness, what Riggverk enforces and what you have to do yourself, plus how to keep unknown repositories and production credentials away from your agents"
+          ]
+        }
+      ]
+    },
+    {
       "version": "2026.10.4",
       "sections": [
         {
