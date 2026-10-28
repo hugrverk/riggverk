@@ -1049,6 +1049,77 @@ mod tests {
             .any(|s| s.name == "my-checklist" && s.state == "missing"));
     }
 
+    #[test]
+    fn rolling_back_an_uninstall_and_a_later_install_keeps_the_hold_on_a_missing_pack() {
+        let env = Env::new("rollback-uninstall");
+        installed_pack(&env);
+        fs::remove_dir_all(env.packs()).expect("remove packs");
+        let skill_md = env.root(SkillRoot::Claude).join("my-checklist/SKILL.md");
+
+        let plan = preview_uninstall().expect("uninstall preview");
+        let uninstalled =
+            apply_uninstall(plan.plan_fingerprint, plan.preview_token).expect("uninstall");
+        assert!(uninstalled.success, "uninstall: {}", uninstalled.message);
+        assert!(!skill_md.exists());
+        // An Install in between records what is installed then, which is none of the pack.
+        let reinstalled = env.apply();
+        assert!(reinstalled.success, "install: {}", reinstalled.message);
+        assert_eq!(
+            env.recorded_packs()["packs"]["mine"],
+            serde_json::json!(["my-checklist"])
+        );
+
+        let undone =
+            rollback_setup_transaction(reinstalled.transaction_id, false).expect("rollback");
+        assert!(undone.success, "rollback: {}", undone.message);
+        let undone =
+            rollback_setup_transaction(uninstalled.transaction_id, false).expect("rollback");
+        assert!(undone.success, "rollback: {}", undone.message);
+
+        assert!(skill_md.is_file(), "the uninstall is undone");
+        assert_eq!(env.sources().held().len(), 1, "and the skill is held again");
+        no_removals(&env);
+    }
+
+    #[test]
+    fn rolling_back_a_forget_pack_apply_restores_the_record_as_it_was_after_the_choice() {
+        let env = Env::new("rollback-forget");
+        installed_pack(&env);
+        fs::remove_dir_all(env.packs()).expect("remove packs");
+        assert_eq!(
+            crate::commands::forget_pack("mine".to_string()).expect("forget"),
+            1
+        );
+        let after_forget = fs::read(record_path(&env)).expect("record");
+        let skill_md = env.root(SkillRoot::Claude).join("my-checklist/SKILL.md");
+
+        let removed = env.apply();
+        assert!(removed.success, "remove: {}", removed.message);
+        assert!(!skill_md.exists());
+        assert!(
+            read_packs(&env).is_empty(),
+            "the apply that retired the skills dropped the entry"
+        );
+
+        let undone = rollback_setup_transaction(removed.transaction_id, false).expect("rollback");
+        assert!(undone.success, "rollback: {}", undone.message);
+        assert!(skill_md.is_file(), "the copies are back");
+        assert_eq!(fs::read(record_path(&env)).expect("record"), after_forget);
+        // Forgotten is still the user's choice: the next Install retires them again.
+        assert!(env.sources().held().is_empty());
+        assert_eq!(
+            env.kind(&file_of(SkillRoot::Claude, "my-checklist", "SKILL.md")),
+            Some(OperationKind::Remove)
+        );
+    }
+
+    fn read_packs(env: &Env) -> serde_json::Map<String, serde_json::Value> {
+        env.recorded_packs()["packs"]
+            .as_object()
+            .cloned()
+            .unwrap_or_default()
+    }
+
     impl Env {
         /// Applies when the plan has work; `None` when it has none.
         fn apply_if_needed(&self) -> Option<SetupResult> {

@@ -777,6 +777,7 @@ fn compute_held(
     };
     let Recorded {
         packs: recorded,
+        forgotten,
         problem,
     } = read_recorded(workspace_root);
     let in_catalog: HashSet<&str> = catalog.iter().map(|s| s.skill.name.as_str()).collect();
@@ -809,6 +810,10 @@ fn compute_held(
     let installed = installed_skill_names(workspace_root);
     let mut held = Vec::new();
     for (pack, names) in recorded {
+        // A forgotten pack's skills are retired like any other: nothing is held for it.
+        if forgotten.contains(&pack) {
+            continue;
+        }
         for name in names {
             // Only what the app installed can be held; a name never installed, or since removed
             // (uninstall, rollback), has nothing to protect.
@@ -865,26 +870,39 @@ fn compute_held(
 
 // ── pack-skills.json ──
 
+type Packs = BTreeMap<String, BTreeSet<String>>;
+
 #[derive(Debug, Default, Serialize, Deserialize)]
 struct RecordDocument {
     #[serde(default)]
     schema_version: u32,
     #[serde(default)]
-    packs: BTreeMap<String, BTreeSet<String>>,
+    packs: Packs,
+    /// Packs the user forgot: their entries stay until an apply has retired their skills, so a
+    /// rolled-back apply puts the file back as it was after the choice.
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    forgotten: BTreeSet<String>,
 }
 
 enum Stored {
     Absent,
-    Usable(BTreeMap<String, BTreeSet<String>>),
+    Usable(Record),
     /// Valid JSON of another schema version.
     Foreign,
     Unusable,
 }
 
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+struct Record {
+    packs: Packs,
+    forgotten: BTreeSet<String>,
+}
+
 /// What `pack-skills.json` holds. A file that exists and cannot be used is a `problem`, never an
 /// empty record.
 struct Recorded {
-    packs: BTreeMap<String, BTreeSet<String>>,
+    packs: Packs,
+    forgotten: BTreeSet<String>,
     problem: Option<String>,
 }
 
@@ -917,37 +935,42 @@ fn read_stored(workspace_root: &Path) -> Stored {
     if document.schema_version != SCHEMA_VERSION {
         return Stored::Foreign;
     }
-    Stored::Usable(document.packs)
+    Stored::Usable(Record {
+        packs: document.packs,
+        forgotten: document.forgotten,
+    })
 }
 
 const FOREIGN_RECORD: &str = "pack-skills.json was written by another version of Riggverk, so installed pack skills are kept as they are; update the app or move the file away";
 const UNUSABLE_RECORD: &str = "pack-skills.json cannot be read, so installed pack skills are kept as they are; fix or remove the file";
 
 fn read_recorded(workspace_root: &Path) -> Recorded {
-    let (packs, problem) = match read_stored(workspace_root) {
-        Stored::Usable(packs) => (packs, None),
-        Stored::Absent => (BTreeMap::new(), None),
-        Stored::Foreign => (BTreeMap::new(), Some(FOREIGN_RECORD.to_string())),
-        Stored::Unusable => (BTreeMap::new(), Some(UNUSABLE_RECORD.to_string())),
+    let (record, problem) = match read_stored(workspace_root) {
+        Stored::Usable(record) => (record, None),
+        Stored::Absent => (Record::default(), None),
+        Stored::Foreign => (Record::default(), Some(FOREIGN_RECORD.to_string())),
+        Stored::Unusable => (Record::default(), Some(UNUSABLE_RECORD.to_string())),
     };
-    Recorded { packs, problem }
+    Recorded {
+        packs: record.packs,
+        forgotten: record.forgotten,
+        problem,
+    }
 }
 
-fn write_recorded(
-    workspace_root: &Path,
-    packs: BTreeMap<String, BTreeSet<String>>,
-) -> Result<(), String> {
+fn write_record(workspace_root: &Path, after: Record) -> Result<(), String> {
     let before = match read_stored(workspace_root) {
-        Stored::Usable(packs) => packs,
-        Stored::Absent | Stored::Unusable => BTreeMap::new(),
+        Stored::Usable(record) => record,
+        Stored::Absent | Stored::Unusable => Record::default(),
         Stored::Foreign => return Err(FOREIGN_RECORD.to_string()),
     };
-    if before == packs {
+    if before == after {
         return Ok(());
     }
     let document = RecordDocument {
         schema_version: SCHEMA_VERSION,
-        packs,
+        packs: after.packs,
+        forgotten: after.forgotten,
     };
     let raw = serde_json::to_vec_pretty(&document)
         .map_err(|error| format!("serialize pack skills: {error}"))?;
@@ -978,9 +1001,28 @@ fn installed_skill_names(workspace_root: &Path) -> HashSet<String> {
         .unwrap_or_default()
 }
 
-/// Records the installed pack skills after a successful transaction: every active pack skill the
-/// managed state now holds, plus the held ones as they were. A name the catalog dropped from a
-/// pack that is present is not carried over: that skill was retired.
+/// Whether `name` was removed on purpose from `pack`: the pack is present and read, holds skills,
+/// none of them is `name` and none is broken in a way that could hide it.
+fn retired_from_present_pack(packs: &[PackReport], pack: &str, name: &str) -> bool {
+    let Some(report) = packs.iter().find(|report| report.name == pack) else {
+        return false;
+    };
+    report.refused.is_none()
+        && !report.skills.is_empty()
+        && !report
+            .skills
+            .iter()
+            .any(|skill| skill.name == name || skill.folder == name)
+        && !report
+            .skills
+            .iter()
+            .any(|skill| skill.state == PackSkillState::Error)
+}
+
+/// Records the installed pack skills after a successful transaction. The record is merged, not
+/// rebuilt: an entry stays unless its skill was retired from a pack that is present, or its pack
+/// was forgotten. The file is outside the transaction's rollback of files, so an entry that a
+/// later rollback of an uninstall needs must not have been dropped meanwhile.
 pub fn record_after_transaction(
     workspace_root: &Path,
     sources: &SkillSources,
@@ -990,27 +1032,33 @@ pub fn record_after_transaction(
     if sources.record_problem().is_some() {
         return Ok(());
     }
+    let mut record = match read_stored(workspace_root) {
+        Stored::Usable(record) => record,
+        _ => Record::default(),
+    };
+    for pack in std::mem::take(&mut record.forgotten) {
+        record.packs.remove(&pack);
+    }
+    for (pack, names) in record.packs.iter_mut() {
+        names.retain(|name| !retired_from_present_pack(sources.packs(), pack, name));
+    }
     let installed = installed_skill_names(workspace_root);
-    let mut packs: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     for (name, pack) in sources.active_pack_skills() {
         if installed.contains(name) {
-            packs
+            record
+                .packs
                 .entry(pack.to_string())
                 .or_default()
                 .insert(name.to_string());
         }
     }
-    for held in sources.held() {
-        packs
-            .entry(held.pack.clone())
-            .or_default()
-            .insert(held.name.clone());
-    }
-    write_recorded(workspace_root, packs)
+    record.packs.retain(|_, names| !names.is_empty());
+    write_record(workspace_root, record)
 }
 
 /// Forgets a pack: its recorded skills stop being held, so the next Install retires their
-/// app-owned copies with a backup. Refused while the pack still provides skills.
+/// app-owned copies with a backup. Refused while the pack still provides skills. The entry itself
+/// is dropped by that Install (see [`record_after_transaction`]).
 pub fn forget_pack(workspace_root: &Path, pack: &str) -> Result<usize, String> {
     if !valid_pack_name(pack) {
         return Err(format!("not a pack name: {pack:?}"));
@@ -1021,18 +1069,70 @@ pub fn forget_pack(workspace_root: &Path, pack: &str) -> Result<usize, String> {
             "pack {pack} is present and provides skills; remove its folder first"
         ));
     }
-    let Recorded {
-        packs: mut recorded,
-        problem,
-    } = read_recorded(workspace_root);
-    if let Some(problem) = problem {
+    let recorded = read_recorded(workspace_root);
+    if let Some(problem) = recorded.problem {
         return Err(problem);
     }
-    let Some(names) = recorded.remove(pack) else {
+    let Some(names) = recorded.packs.get(pack) else {
         return Err(format!("no installed skills are recorded for pack {pack}"));
     };
-    write_recorded(workspace_root, recorded)?;
-    Ok(names.len())
+    if recorded.forgotten.contains(pack) {
+        return Err(format!("pack {pack} is already forgotten"));
+    }
+    let count = names.len();
+    let mut forgotten = recorded.forgotten;
+    forgotten.insert(pack.to_string());
+    write_record(
+        workspace_root,
+        Record {
+            packs: recorded.packs,
+            forgotten,
+        },
+    )?;
+    Ok(count)
+}
+
+// ── pack-skills.json and rollback ──
+
+const RECORD_BACKUP: &str = "pack-skills.previous.json";
+const RECORD_ABSENT: &str = "pack-skills.previous.absent";
+
+/// Saves `pack-skills.json` into a transaction's backup folder, as it is before the apply (or a
+/// marker that there was none), so a rollback of the transaction puts it back.
+pub fn snapshot_record(workspace_root: &Path, backup_dir: &Path) -> Result<(), String> {
+    let path = record_path(workspace_root);
+    let (name, raw) = match fs::symlink_metadata(&path) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => (RECORD_ABSENT, Vec::new()),
+        Ok(meta) if meta.is_file() && meta.len() <= MAX_FILE_BYTES => (
+            RECORD_BACKUP,
+            fs::read(&path).map_err(|e| format!("read pack skills: {e}"))?,
+        ),
+        // A link, a folder, an oversized file: not ours to restore.
+        _ => return Ok(()),
+    };
+    crate::safe_filesystem::write_regular_file_atomic(&backup_dir.join(name), &raw, backup_dir)
+        .map_err(|e| format!("back up pack skills: {e}"))
+}
+
+/// Puts `pack-skills.json` back as [`snapshot_record`] saved it. A transaction without a snapshot
+/// (made by an earlier version) restores nothing.
+pub fn restore_record(workspace_root: &Path, backup_dir: &Path) -> Result<(), String> {
+    let path = record_path(workspace_root);
+    let saved = backup_dir.join(RECORD_BACKUP);
+    if crate::path_safety::reject_symlink(&saved, "pack skills backup").is_err() {
+        return Err("refusing a symlinked pack skills backup".to_string());
+    }
+    if saved.is_file() {
+        let raw = fs::read(&saved).map_err(|e| format!("read pack skills backup: {e}"))?;
+        crate::managed_state::ensure_data_folder(workspace_root)?;
+        return crate::safe_filesystem::write_regular_file_atomic(&path, &raw, workspace_root)
+            .map_err(|e| format!("restore pack skills: {e}"));
+    }
+    if backup_dir.join(RECORD_ABSENT).is_file() && path.is_file() {
+        crate::safe_filesystem::remove_regular_file_no_symlinks(&path, workspace_root)
+            .map_err(|e| format!("remove pack skills: {e}"))?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]

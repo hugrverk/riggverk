@@ -566,7 +566,8 @@ fn run_persisted_rollback(
     let managed_state_restore =
         match newer_completed_transaction(backup_dir, &manifest.workspace_key) {
             Ok(Some(_)) => Ok(()),
-            Ok(None) => restore_previous_managed_state(manifest, backup_dir, workspace_root),
+            Ok(None) => restore_previous_managed_state(manifest, backup_dir, workspace_root)
+                .and_then(|()| crate::skill_sources::restore_record(workspace_root, backup_dir)),
             Err(e) => Err(e),
         };
     if let Err(error) = managed_state_restore {
@@ -1282,6 +1283,13 @@ fn run_planned_artifacts(
         } else {
             (false, None, None)
         };
+
+    // `pack-skills.json` is not an artifact; a rollback puts it back from this copy.
+    if let Err(error) = crate::skill_sources::snapshot_record(&ws_root, &backup_dir) {
+        manual_steps.push(format!(
+            "The list of installed pack skills could not be saved for a rollback: {error}"
+        ));
+    }
 
     let mut manifest_ops: Vec<ArtifactManifestOperation> = Vec::new();
     for (backed_up, p) in pending.iter().enumerate() {
