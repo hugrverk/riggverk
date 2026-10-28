@@ -327,6 +327,26 @@ describe("StartView keys", () => {
     expect(detail().textContent).toContain("the folder is a symlink");
   });
 
+  it("shows what an earlier release left behind on the workspace row, in plain words", () => {
+    const earlier = "/Users/me/.config/agent-workspace"; // residue-allow: the earlier folder a note names
+    renderStart({
+      workspaceDiagnostics: {
+        ...VALID_DIAGNOSTICS,
+        layout_notes: [
+          `Riggverk kept using ${earlier} because it could not rename it to /Users/me/.config/riggverk (Permission denied).`,
+          `An earlier folder ${earlier} still exists next to /Users/me/.config/riggverk; Riggverk uses /Users/me/.config/riggverk and left the earlier folder untouched.`,
+        ],
+      },
+    });
+    expect(detail().textContent).toContain(`Riggverk kept using ${earlier} because it could not rename it`);
+    expect(detail().textContent).toContain("left the earlier folder untouched");
+  });
+
+  it("shows no layout note when the diagnostics carry none", () => {
+    renderStart({ workspaceDiagnostics: { ...VALID_DIAGNOSTICS, layout_notes: [] } });
+    expect(detail().textContent).not.toContain("earlier folder");
+  });
+
   it("lets a harness be installed before the workspace on a fresh profile", () => {
     // A fresh profile has no workspace folder yet; the backend reports it usable, so nothing is gated.
     const { props: p } = renderStart({ overview: overviewOf({}) });

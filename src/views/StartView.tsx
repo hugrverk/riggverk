@@ -222,6 +222,13 @@ export function StartView({
     ...(selected === "workspace" && !dataFolderOk && workspaceDiagnostics?.error
       ? [{ label: "why", value: workspaceDiagnostics.error, tone: "warn" as const, wrap: true }]
       : []),
+    // A folder move from an earlier release that was not done, or an earlier folder left next to the current one.
+    ...(selected === "workspace" ? (workspaceDiagnostics?.layout_notes ?? []) : []).map(note => ({
+      label: "note",
+      value: note,
+      tone: "warn" as const,
+      wrap: true,
+    })),
   ];
 
   const verifyItems: KvItem[] = [
