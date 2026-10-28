@@ -372,7 +372,7 @@ export function SettingsView({
   const colorsValid = accentValid && backgroundValid && foregroundValid;
   const showRetry = settingsSaveStatus === "error" && !!onRetrySave;
 
-  // The reset asks through the confirm dialog, which puts the status bar in CONFIRM mode itself.
+  // The reset asks through the confirm dialog, which puts the shell in CONFIRM mode itself.
   const runReset = useCallback(async () => {
     if (resetting) return;
     setResetting(true);
@@ -401,7 +401,7 @@ export function SettingsView({
   };
 
   // `R` works from both panes (the workspace row is in the app pane, but the appearance pane has the initial
-  // focus) and is hinted in the status bar from both.
+  // focus) and is offered from both.
   const workspaceBindings: Binding[] = SETTINGS_PANES.map(paneId => ({
     id: `settings.workspace.reset.${paneId}`,
     keys: "R",
@@ -440,7 +440,7 @@ export function SettingsView({
     },
   ];
   // Row movement is active anywhere inside the settings screen, in both panes; the rows are not a listbox, so
-  // the status bar's generic `j k move` hint does not apply and each pane hints the keys itself.
+  // a list's generic `j k move` hint does not apply and each pane hints the keys itself.
   const rowBindings: Binding[] = SETTINGS_PANES.flatMap(paneId =>
     (["next", "prev"] as const).map((direction): Binding => ({
       id: `settings.row.${direction}.${paneId}`,

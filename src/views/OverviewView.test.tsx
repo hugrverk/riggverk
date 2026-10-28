@@ -125,7 +125,7 @@ function cell(name: string) {
   return within(page()).getByRole("button", { name }).closest("article")!;
 }
 
-/** A key hint of the focused page: hints live in the status bar, not in the page. */
+/** A key hint of the focused page: hints live as a key hint, not in the page. */
 function hint(name: RegExp) {
   return within(screen.getByLabelText("Key hints")).getByRole("button", { name });
 }

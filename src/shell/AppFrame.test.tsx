@@ -257,7 +257,7 @@ describe("AppFrame", () => {
   });
 
   describe("toast", () => {
-    it("shows a notice from the shell instead of the status bar", () => {
+    it("shows a notice from the shell instead of the key hints", () => {
       function Notifier() {
         const { notify } = useShellState();
         return <button type="button" onClick={() => notify("Checking every agent again…")}>notify</button>;

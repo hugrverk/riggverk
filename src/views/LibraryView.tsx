@@ -303,7 +303,7 @@ export function LibraryView(props: LibraryViewProps) {
       break;
   }
 
-  // Opening the form from `n` or its status-bar hint puts the cursor in its title field.
+  // Opening the form from `n` or its button puts the cursor in its title field.
   const createForm =
     sourceType === "docs" && props.showCreateDoc ? (
       <CreateDocForm

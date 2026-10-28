@@ -231,7 +231,7 @@ describe("ConfirmDialog", () => {
     expect(dialog.hasAttribute("open")).toBe(false);
   });
 
-  describe("status bar mode", () => {
+  describe("shell mode", () => {
     const mode = () => screen.getByLabelText("Shell mode").textContent;
 
     it("shows CONFIRM while any confirmation is open and NORMAL again once it settles", async () => {

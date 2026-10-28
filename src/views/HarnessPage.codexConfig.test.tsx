@@ -367,7 +367,7 @@ function review() {
   return screen.getByRole("region", { name: "Config review" });
 }
 
-function statusBar() {
+function keyHints() {
   return within(screen.getByLabelText("Key hints"));
 }
 
@@ -501,7 +501,7 @@ describe("use Riggverk defaults (b, y)", () => {
   it("waits for a running task before it applies", async () => {
     const { p, rerenderFrame } = await openPreview();
     rerenderFrame(<CodexView {...p} wsRunning="uninstall" runtimeHealth={health()} />);
-    const apply = statusBar().getByRole("button", { name: /apply/ });
+    const apply = keyHints().getByRole("button", { name: /apply/ });
     expect(apply.getAttribute("title")).toBe("uninstall is running");
     press("y");
     expect(invokeMock).not.toHaveBeenCalledWith("apply_codex_config_defaults", expect.anything());

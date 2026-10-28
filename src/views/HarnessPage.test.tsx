@@ -126,13 +126,13 @@ function press(key: string, target: Element = surfaces()) {
   fireEvent.keyDown(target, { key });
 }
 
-function statusBar() {
+function keyHints() {
   return within(screen.getByLabelText("Key hints"));
 }
 
-/** A key hint of the focused pane: hints live in the status bar, not in the panes. */
+/** A key hint of the focused pane: hints live as a key hint, not in the panes. */
 function hint(name: RegExp) {
-  return statusBar().getByRole("button", { name });
+  return keyHints().getByRole("button", { name });
 }
 
 /** The `dt` -> `dd` pairs of a page, runtime facts included. */
@@ -533,7 +533,7 @@ describe("OpenCodeView model override", () => {
     expect(model().getAttribute("aria-invalid")).toBe("true");
     const detailPane = screen.getByRole("region", { name: "OpenCode" });
     act(() => detailPane.focus());
-    // The status bar follows focus on its own schedule; under a loaded test run it can lag a tick.
+    // The key hints follow focus on its own schedule; under a loaded test run it can lag a tick.
     await waitFor(() => expect(hint(/save model/).getAttribute("title")).toBe("Must be provider/model format"));
     expect(detailPane.textContent).toContain("opencode models: unavailable");
   });

@@ -213,7 +213,7 @@ describe("PaneList", () => {
       );
     }
 
-    it("offers / filter in the status bar for its pane, and the hint focuses the filter", () => {
+    it("offers / filter as a key hint for its pane, and the hint focuses the filter", () => {
       renderInFrame(
         <Pane id="harnesses" title="harnesses">
           <Filtered />
@@ -291,7 +291,7 @@ describe("PaneList", () => {
     expect(message.compareDocumentPosition(listbox()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it("shows an Enter hint in the status bar that activates the cursor row when clicked", () => {
+  it("shows an Enter hint as a key hint that activates the cursor row when clicked", () => {
     const onActivate = vi.fn();
     renderInFrame(
       <Pane id="harnesses" title="harnesses">
@@ -306,7 +306,7 @@ describe("PaneList", () => {
     expect(onActivate).toHaveBeenCalledWith(ROWS[0]);
   });
 
-  it("shows a Space hint in the status bar when the list toggles, and toggles the cursor row when clicked", () => {
+  it("shows a Space hint as a key hint when the list toggles, and toggles the cursor row when clicked", () => {
     const onToggle = vi.fn();
     const { rerenderFrame } = renderInFrame(
       <Pane id="harnesses" title="harnesses">

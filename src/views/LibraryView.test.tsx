@@ -155,7 +155,7 @@ function focusPane(name: string) {
   act(() => screen.getByRole("region", { name }).focus());
 }
 
-/** Key hints of the focused pane live in the status bar; look them up outside `act`. */
+/** Key hints of the focused pane live as a key hint; look them up outside `act`. */
 function statusHint(name: string) {
   return within(screen.getByLabelText("Key hints")).getByRole("button", { name });
 }
@@ -181,7 +181,7 @@ function pressSave() {
   press(document.activeElement!, "s", { ctrlKey: true });
 }
 
-/** Mod+s on a bundled item runs nothing: its status-bar hint stays disabled and says why. */
+/** Mod+s on a bundled item runs nothing: its key hint stays disabled and says why. */
 function expectSaveRefused() {
   pressSave();
   const hint = within(screen.getByLabelText("Key hints")).getByRole("button", { name: / save$/ });
@@ -496,7 +496,7 @@ describe("LibraryView source switching", () => {
   });
 });
 
-describe("LibraryView status-bar hints", () => {
+describe("LibraryView key hints", () => {
   const doc = makeDoc("a", "Alpha", "# A");
 
   it("offers filter, source stepping and open while the items pane has focus, and no pane footer", () => {
@@ -545,7 +545,7 @@ describe("LibraryView status-bar hints", () => {
     expect(queryStatusHint("] next source")).toBeNull();
   });
 
-  it("edits from the status-bar hint, and then offers save but no edit while typing", () => {
+  it("edits from the key hint, and then offers save but no edit while typing", () => {
     renderLibrary({ docs, activeDoc: doc, docDraft: doc.content });
     focusPane("Document");
     fireEvent.click(statusHint("↵ edit"));
@@ -918,7 +918,7 @@ describe("LibraryView document pane", () => {
     expect(within(pane).getByRole("form", { name: "New document" }).nextElementSibling).toBe(textarea("Edit document"));
   });
 
-  it("opens the item externally from the list key and from the status-bar hint of the document pane", () => {
+  it("opens the item externally from the list key and from the key hint of the document pane", () => {
     const onOpenDoc = vi.fn();
     renderLibrary({ docs, activeDoc: doc, docDraft: doc.content, onOpenDoc });
     press(focusList(), "o");

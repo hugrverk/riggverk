@@ -76,7 +76,7 @@ function pane(name: string): HTMLElement {
   return screen.getByRole("region", { name });
 }
 
-/** Key hints of the focused pane live in the status bar. */
+/** Key hints of the focused pane live as a key hint. */
 function hints() {
   return within(screen.getByLabelText("Key hints"));
 }
@@ -302,7 +302,7 @@ describe("SettingsView keyboard navigation", () => {
     expect(document.activeElement).toBe(screen.getByLabelText("Accent hex code"));
   });
 
-  it("hints j and k in the status bar from both panes, clickable, and keeps pane footers free of key hints", () => {
+  it("hints j and k as a key hint from both panes, clickable, and keeps pane footers free of key hints", () => {
     renderSettings();
     focus(radios("Theme")[0]!);
     fireEvent.click(hints().getByRole("button", { name: "j next setting" }));
@@ -557,7 +557,7 @@ describe("SettingsView workspace row", () => {
     await act(async () => {});
   });
 
-  it("reaches reset from the appearance pane, and hints it in the status bar", async () => {
+  it("reaches reset from the appearance pane, and hints it as a key hint", async () => {
     const onResetWorkspace = vi.fn(async () => null);
     const { rerenderFrame, props } = renderSettings({ onResetWorkspace });
 

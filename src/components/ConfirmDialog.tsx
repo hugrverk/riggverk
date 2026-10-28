@@ -46,7 +46,7 @@ export function useConfirm() {
 /**
  * Wraps the app tree and provides the `confirm` function via `useConfirm()`.
  * Renders a single themed `<dialog>` at the root level. Mounted by `ShellProviders` inside the shell
- * state: the status bar shows CONFIRM while the dialog is open, for every caller.
+ * state: the shell mode is CONFIRM while the dialog is open, for every caller.
  */
 export function ConfirmProvider({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);

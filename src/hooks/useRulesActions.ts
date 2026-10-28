@@ -31,7 +31,7 @@ export interface UseRulesActionsOptions {
   /** An install review is open on this page. */
   installOpen: boolean;
   flow: RulesFlow;
-  /** Panes whose focus offers `d`, `v` and `m` as status-bar hints. */
+  /** Panes whose focus offers `d`, `v` and `m` as key hints. */
   paneIds: readonly string[];
   /**
    * Whether the keys apply right now (the page's cursor is on the rules file). When false they are not offered

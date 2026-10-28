@@ -282,14 +282,14 @@ function detailPane() {
   return surfaces();
 }
 
-function statusBar() {
+function keyHints() {
   return within(screen.getByLabelText("Key hints"));
 }
 
-/** A key hint of the surfaces pane (or of the pane that has focus). Hints live in the status bar while their pane has focus. */
+/** A key hint of the surfaces pane (or of the pane that has focus). Hints live as a key hint while their pane has focus. */
 function surfaceHint(name: RegExp) {
   if (!surfaces().contains(document.activeElement)) focusSurfaces();
-  return statusBar().queryByRole("button", { name });
+  return keyHints().queryByRole("button", { name });
 }
 
 function rulesPane() {
@@ -358,7 +358,7 @@ describe("rules file in the detail pane", () => {
     expect(surfaceHint(/leave as is/)).toBeNull();
   });
 
-  it("leaves what to do about the file to the status bar: no instructions under the facts", () => {
+  it("leaves what to do about the file to the key hints: no instructions under the facts", () => {
     renderClaude(rules({ conflict_reason: "base_block_edited", refinement_lines: 2 }));
     expect(detailPane().textContent).not.toMatch(/An update replaces|Update skips this file|Base updates are not applied/);
     expect(detailPane().textContent).not.toContain("Fix the markers");
@@ -372,7 +372,7 @@ describe("rules file in the detail pane", () => {
   it("offers d, v and m only while the rules cell is the active one", () => {
     backend();
     renderClaude(rules({ conflict_reason: "base_block_edited" }));
-    const offered = () => ["diff", "convert", "leave as is"].map(name => statusBar().queryByRole("button", { name: new RegExp(name) }) !== null);
+    const offered = () => ["diff", "convert", "leave as is"].map(name => keyHints().queryByRole("button", { name: new RegExp(name) }) !== null);
 
     // The decision is the active cell until another is clicked: the keys are on offer with focus on the page or inside the cell.
     focusSurfaces();
@@ -664,8 +664,8 @@ describe("rules conversion (v, y)", () => {
     const { p } = await openPreview();
     press("Enter");
     expect(invokeMock).not.toHaveBeenCalledWith("apply_rules_conversion", expect.anything());
-    // The review pane's hints reach the status bar once it has focus, which lags a tick on a loaded runner.
-    fireEvent.click(await statusBar().findByRole("button", { name: /apply/ }));
+    // The review pane's hints reach the key hints once it has focus, which lags a tick on a loaded runner.
+    fireEvent.click(await keyHints().findByRole("button", { name: /apply/ }));
     await waitFor(() => expect(p.onApplied).toHaveBeenCalledTimes(1));
   });
 
@@ -726,7 +726,7 @@ describe("rules conversion (v, y)", () => {
     focusSurfaces();
     press("v");
     expect((await screen.findByRole("alert")).textContent).toContain("nothing to convert: this file is managed by the base block already");
-    expect(statusBar().queryByRole("button", { name: /apply/ })).toBeNull();
+    expect(keyHints().queryByRole("button", { name: /apply/ })).toBeNull();
     press("y");
     expect(invokeMock).not.toHaveBeenCalledWith("apply_rules_conversion", expect.anything());
   });
@@ -734,7 +734,7 @@ describe("rules conversion (v, y)", () => {
   it("waits for a running task before it applies", async () => {
     const { p, rerenderFrame } = await openPreview();
     rerenderFrame(<ClaudeView {...p} wsRunning="uninstall" runtimeHealth={CLAUDE_HEALTH} />);
-    const apply = statusBar().getByRole("button", { name: /apply/ });
+    const apply = keyHints().getByRole("button", { name: /apply/ });
     expect(apply.getAttribute("title")).toBe("uninstall is running");
     press("y");
     expect(invokeMock).not.toHaveBeenCalledWith("apply_rules_conversion", expect.anything());
@@ -894,6 +894,6 @@ describe("Cursor", () => {
     renderInFrame(<CursorView {...p} runtimeHealth={null} />);
     expect(screen.queryByLabelText("Rules file")).toBeNull();
     act(() => screen.getByRole("region", { name: "Cursor" }).focus());
-    expect(statusBar().queryByRole("button", { name: /diff|convert|leave/ })).toBeNull();
+    expect(keyHints().queryByRole("button", { name: /diff|convert|leave/ })).toBeNull();
   });
 });

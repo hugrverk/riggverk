@@ -49,7 +49,7 @@ export interface PaneListProps<T> {
   onActivate?: (item: T) => void;
   /** Space on the cursor row. A click toggles too, but only in a `multiSelectable` list; elsewhere it just moves the cursor. */
   onToggle?: (item: T) => void;
-  /** Label of the Enter hint shown in the status bar while the list's pane has focus ("open"). */
+  /** Label of the Enter binding's hint while the list's pane has focus ("open"). */
   activateHint?: string;
   /** Label of the Space hint, same placement ("toggle target"). Only shown while `onToggle` is given. */
   toggleHint?: string;
@@ -217,7 +217,7 @@ export function PaneList<T>({
       id: `list.${idBase}.filter`,
       keys: "/",
       title: "Filter",
-      // A filterable list offers it in the status bar like Enter and Space, for its whole pane.
+      // A filterable list offers it like Enter and Space, for its whole pane.
       hint: filter ? "filter" : undefined,
       paneId: filter && paneId ? paneId : undefined,
       when: () => latest.current.filter !== undefined,
