@@ -90,7 +90,7 @@ Claude Code includes:
 - scribe
 - verifier
 
-Claude-specific tools, permission mode, and turn limits belong in Claude headers. Claude settings, authentication, trust state, and MCP credentials remain Claude-managed.
+Claude-specific tools, permission mode, and turn limits belong in Claude headers. Authentication, trust state, and MCP credentials remain Claude-managed, and so do Claude settings except `attribution.commit` and `attribution.pr`, which the opt-in `claude_config` target sets in `~/.claude/settings.json`.
 
 ### Codex
 

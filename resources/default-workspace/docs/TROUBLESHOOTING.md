@@ -74,7 +74,7 @@ Harness installs need a usable workspace folder (absent, or a real folder). The 
 
 ## Settings and targets
 
-- A target that is off is not written. Check Space-toggles on the harness page; `codex_config` is off by default.
+- A target that is off is not written. Check Space-toggles on the harness page; `codex_config` and `claude_config` are off by default.
 - Disabled harnesses disappear from the tabs and cannot be written; re-enable them in Settings. Copilot, Pi, and Kilo are off by default.
 - A Copilot, Pi, or Kilo page shows `cli  not on PATH`: the app does not read your shell profile. A CLI installed through nvm is found in `~/.nvm/versions/node`; any other location needs the app started from a shell where the CLI runs. The skills row does not depend on the CLI.
 - The OpenCode page shows `config  synced · has comments`, or the review says `opencode.json has comments`: OpenCode reads JSONC, but the app writes strict JSON only, so it leaves the file as is. Move your own settings and their comments to `opencode.jsonc` and keep `opencode.json` strict JSON. An `overrides` row names a `config.json` or `opencode.jsonc` that sets managed keys (remove them there), OpenCode config variables in the app's environment, or a system managed config. See "Other config OpenCode reads" in `OPENCODE_CONFIG.md`.
