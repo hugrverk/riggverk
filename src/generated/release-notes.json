@@ -1,6 +1,25 @@
 {
   "releases": [
     {
+      "version": "2026.10.6",
+      "sections": [
+        {
+          "title": "Before you open it",
+          "items": [
+            "Quit any older Riggverk that is still running before the first launch of this version. This release moves Riggverk's data folder, and two versions working at the same time could split it."
+          ]
+        },
+        {
+          "title": "New",
+          "items": [
+            "Riggverk's own names now say Riggverk everywhere. The data folder moves from `~/.config/agent-workspace` to `~/.config/riggverk`, its state folder from `.agent-workspace/` to `.riggverk/`, and the markers in your rules files become `BEGIN RIGGVERK BASE` / `END RIGGVERK BASE`. Nothing moves when the app opens: the folder is renamed the first time Riggverk writes something, and your rules files get the new markers on their next update, with everything you wrote below END kept byte for byte. `RIGGVERK_WORKSPACE_PATH` and `RIGGVERK_BACKUP_DIR` replace the old variables, which still work. A saved custom folder is never moved. If the move cannot happen, Riggverk keeps working in the old folder and says why on the workspace row. Scripts or editors that open files in `~/.config/agent-workspace` need the new path, and going back to an older version after the move is not supported",
+            "Codex settings you changed on purpose can stay yours. When an enforced key in `~/.codex/config.toml` differs from Riggverk's value, such as `approvals_reviewer`, press `m` on the Codex config row: Riggverk keeps your value, stops reporting it as a conflict and never writes over it, while the other managed keys keep following Riggverk. Change the value again and it becomes a conflict again; press `m` once more to hand it back",
+            "First steps of the new look: a neutral graphite palette with no amber, a neutral light theme, and calmer review screens. Install previews, rules reviews, file conflicts and confirm dialogs are now cards that say what happens before you apply (\"Preview first · Backed up · Undo any time\"). Enter still never applies; `y` or the Apply button does (#89, #93)"
+          ]
+        }
+      ]
+    },
+    {
       "version": "2026.10.5",
       "sections": [
         {

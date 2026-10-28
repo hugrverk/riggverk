@@ -15,58 +15,37 @@ export type AppView =
 
 export interface ViewDef {
   id: AppView;
-  /** Accessible name of the tab. */
+  /** Sidebar text and accessible name. */
   label: string;
-  /** Tab text. */
-  tab: string;
-  /** Tab text below the width breakpoint. */
-  short: string;
-  /** Canonical command name (`:codex`). Stable regardless of tab numbering. */
+  /** Canonical command name (`:codex`). Stable regardless of sidebar numbering. */
   command: string;
   aliases: readonly string[];
   /** Set for harness pages, which are hidden when the harness is disabled in Settings. */
   harness?: InstallAgent;
 }
 
-const HARNESS_SHORT: Record<InstallAgent, string> = {
-  codex: "cdx",
-  opencode: "oc",
-  cursor: "cur",
-  claude: "cl",
-  copilot: "cop",
-  pi: "pi",
-  kilo: "kilo",
-};
-
-/** Tab order: workspace, harnesses, library, settings. */
+/** Sidebar order: overview, agents, library, settings. The id of Overview stays `start` (landing view, commands). */
 export const VIEW_DEFS: readonly ViewDef[] = [
-  { id: "start", label: "Workspace", tab: "workspace", short: "ws", command: "workspace", aliases: ["start", "ws"] },
+  { id: "start", label: "Overview", command: "workspace", aliases: ["overview", "start", "ws"] },
   ...HARNESS_NAV_ORDER.map((harness): ViewDef => ({
     id: harness,
     label: HARNESS_LABELS[harness],
-    tab: harness,
-    short: HARNESS_SHORT[harness],
     command: harness,
     aliases: [],
     harness,
   })),
-  { id: "library", label: "Library", tab: "library", short: "lib", command: "library", aliases: ["lib"] },
-  { id: "settings", label: "Settings", tab: "settings", short: "set", command: "settings", aliases: [] },
+  { id: "library", label: "Library", command: "library", aliases: ["lib"] },
+  { id: "settings", label: "Settings", command: "settings", aliases: [] },
 ];
 
 export function viewDef(view: AppView): ViewDef {
   return VIEW_DEFS.find(def => def.id === view) ?? VIEW_DEFS[0]!;
 }
 
-/** Destinations shown as tabs; disabled harnesses are hidden and the remaining tabs renumber. */
+/** Destinations shown in the sidebar; disabled harnesses are hidden and the destinations after them renumber. */
 export function visibleViews(enabledHarnessIds: readonly InstallAgent[]): ViewDef[] {
   return VIEW_DEFS.filter(def => !def.harness || enabledHarnessIds.includes(def.harness));
 }
 
-/** Digit keys 1-9 switch tabs; a tenth tab and any after it have no digit (`Mod+,` still opens Settings). */
+/** Digit keys 1-9 switch views; a tenth item and any after it have no digit (`Mod+,` still opens Settings). */
 export const MAX_NUMBERED_TABS = 9;
-
-/** How many of `tabs` the digit keys reach. */
-export function numberedTabCount(tabs: readonly ViewDef[]): number {
-  return Math.min(tabs.length, MAX_NUMBERED_TABS);
-}

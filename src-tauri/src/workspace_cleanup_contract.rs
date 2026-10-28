@@ -640,6 +640,8 @@ mod tests {
             schema_version: setup_transaction::ARTIFACT_MANIFEST_SCHEMA_VERSION,
             workspace_key: setup_transaction::workspace_key(&env.ws).expect("key"),
             created_at: id.to_string(),
+            finished_at: None,
+            receipt: None,
             surface_ids: vec![SetupSurfaceId::WorkspaceBundle],
             transaction_status: setup_transaction::TransactionStatus::Completed,
             previous_managed_state_present: false,

@@ -15,6 +15,7 @@ import type {
   RulesDiffView,
   RulesFileContent,
   RulesFileSummary,
+  SetupHistoryEntry,
   SetupPlan,
   SetupResult,
   SkillSummary,
@@ -448,5 +449,40 @@ describe("mock backend: keep mine for the Codex config", () => {
     const rolled = await invoke<SetupResult>("rollback_setup_transaction", { transactionId: result.transaction_id, dryRun: false });
     expect(rolled.success).toBe(true);
     expect(await configRow()).toMatchObject({ state: "conflict", codex_config: { differing: [{ key: "approvals_reviewer", value: "auto_review" }] } });
+  });
+});
+
+
+describe("mock backend: setup history", () => {
+  it("returns receipt-shaped entries newest first with Undo only on the newest completed run", async () => {
+    const history = await invoke<SetupHistoryEntry[]>("list_setup_history");
+    expect(history).toHaveLength(3);
+    expect(history.map(entry => entry.status)).toEqual(["applied", "rolled_back", "applied"]);
+    expect(history.map(entry => entry.transaction_id)).toEqual(
+      history.map(entry => entry.transaction_id).sort().reverse(),
+    );
+    expect(history.filter(entry => entry.undoable)).toEqual([history[0]]);
+    expect(history[0]).toMatchObject({
+      is_newest_completed: true,
+      operation_counts: { create: 1, update: 1, remove: 0 },
+      receipt: { synced: ["codex_rules", "open_code_config"], left_for_you: [{ surface: "cursor_agents", reason: "conflict" }] },
+    });
+    expect(history[2]!.receipt).toBeNull();
+    expect(history[2]!.finished_at).toBeNull();
+    for (const entry of history) {
+      expect(entry.created_at).toMatch(/^\d+$/);
+      expect(entry.surfaces.length).toBeGreaterThan(0);
+      expect(entry.changes).toHaveLength(Object.values(entry.operation_counts).reduce((sum, count) => sum + count, 0));
+      expect(entry.changes.every(change => change.path.startsWith("~/"))).toBe(true);
+    }
+    expect(JSON.stringify(history)).not.toContain("/Users/");
+    expect(JSON.stringify(history)).not.toContain("workspace_key");
+  });
+
+  it("honors the limit including zero and rejects invalid u32 values", async () => {
+    expect(await invoke("list_setup_history", { limit: 1 })).toHaveLength(1);
+    expect(await invoke("list_setup_history", { limit: 0 })).toEqual([]);
+    expect(await invoke("list_setup_history", { limit: null })).toHaveLength(3);
+    await expect(invoke("list_setup_history", { limit: -1 })).rejects.toThrow("unsigned 32-bit");
   });
 });

@@ -26,6 +26,7 @@ pub(crate) use opencode_runtime::{
 pub(crate) use status::file_eq;
 pub(crate) use workspace::configured_workspace_path;
 mod file_conflicts;
+mod history;
 mod rules;
 mod rules_refinements;
 mod settings_commands;
@@ -50,6 +51,7 @@ pub(crate) use file_conflicts::TakeBundledPreview;
 pub use file_conflicts::{
     apply_take_bundled, preview_file_diff, preview_take_bundled, set_files_kept,
 };
+pub use history::list_setup_history;
 pub use light_runtime::get_light_runtime_health;
 pub use opencode_runtime::{
     get_opencode_runtime_health, list_available_opencode_models, read_opencode_model_selection,

@@ -925,3 +925,35 @@ export interface SetupResult {
   manual_steps: string[];
   message: string;
 }
+
+/** Persisted plan facts. A null history receipt means these facts were not recorded. */
+export interface SetupReceipt {
+  synced: SetupSurfaceId[];
+  left_for_you: { surface: SetupSurfaceId; reason: "conflict" | "manual" }[];
+}
+
+/** Read-only transaction history for the active workspace (`list_setup_history`). */
+export interface SetupHistoryEntry {
+  transaction_id: string;
+  /** Unix nanoseconds as decimal strings. Older manifests have no finish time. */
+  created_at: string;
+  finished_at: string | null;
+  status: "applied" | "rolled_back" | "failed";
+  surfaces: SetupSurfaceId[];
+  /** Harness-specific surfaces; shared skills remain one surface. */
+  harnesses: InstallAgent[];
+  changes: {
+    surface: SetupSurfaceId;
+    kind: "create" | "update" | "remove";
+    /** Existing `~/...` display label, or a short label outside the home folder. */
+    path: string;
+    applied: boolean;
+    restored: boolean;
+  }[];
+  operation_counts: { create: number; update: number; remove: number };
+  backup_files: number;
+  is_newest_completed: boolean;
+  /** Offer only; always dry-run and confirm before calling rollback. */
+  undoable: boolean;
+  receipt: SetupReceipt | null;
+}

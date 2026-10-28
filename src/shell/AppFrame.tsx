@@ -6,13 +6,15 @@ import { Glyph } from "../ui/Glyph";
 import { Boot, type BootInfo } from "./Boot";
 import { CommandLine } from "./CommandLine";
 import { HelpOverlay } from "./HelpOverlay";
+import { Sidebar } from "./Sidebar";
 import { useShellState } from "./ShellState";
 import { StatusBar } from "./StatusBar";
-import { TopLine } from "./TopLine";
+import { Toast } from "./Toast";
+import { TopBar } from "./TopBar";
 import { useShellBindings } from "./useShellBindings";
 import { useViewFocus } from "./useViewFocus";
 import { WhatsNewOverlay } from "./WhatsNewOverlay";
-import { numberedTabCount, viewDef, visibleViews, type AppView } from "./views";
+import { viewDef, visibleViews, type AppView } from "./views";
 
 export interface AppFrameProps {
   view: AppView;
@@ -21,13 +23,25 @@ export interface AppFrameProps {
   libraryDirty: boolean;
   settingsErrored: boolean;
   enabledHarnessIds?: readonly InstallAgent[];
-  /** Global error message; rendered as a role=alert line under the top line. */
+  /** Global error message; rendered as a role=alert line under the top bar. */
   error: string | null;
   onDismissError: () => void;
-  /** Top-line right text. */
-  topRight?: ReactNode;
-  /** Status-bar right text. */
-  statusRight?: ReactNode;
+  /** Top bar Check: re-checks every agent. */
+  onCheck?: () => void;
+  /** Top bar Update all: opens the install review of everything enabled. */
+  onUpdateAll?: () => void;
+  /** Why Update all cannot run right now (tooltip and description), or false. */
+  updateAllDisabled?: string | false;
+  /** A check is running. */
+  checking?: boolean;
+  /** Items waiting for a decision per agent; the sidebar badges. */
+  decideCounts?: Partial<Record<InstallAgent, number>>;
+  /** App version for the sidebar's brand row. */
+  version?: string;
+  /** Backups on disk, for the sidebar foot; null or omitted while unknown. */
+  backupCount?: number | null;
+  /** When the installation status was last fetched, for the sidebar foot. */
+  checkedAt?: Date | null;
   /**
    * What the launch sequence reports. Pass it once the settings are loaded, when the motion level is final;
    * without it there is no boot.
@@ -38,8 +52,9 @@ export interface AppFrameProps {
 }
 
 /**
- * Layout of the shell: top line, error line, view area, status bar, plus the command-line, help and
- * what's new overlays and the global key layer. Must render inside `ShellProviders`.
+ * Layout of the shell: sidebar on the left; top bar, error line, view area and the slim status bar on the right;
+ * the toast, the command-line, help and what's new overlays, and the global key layer. Must render inside
+ * `ShellProviders`.
  */
 export function AppFrame({
   view,
@@ -49,8 +64,14 @@ export function AppFrame({
   enabledHarnessIds = DEFAULT_ENABLED_HARNESS_IDS,
   error,
   onDismissError,
-  topRight,
-  statusRight,
+  onCheck = () => {},
+  onUpdateAll = () => {},
+  updateAllDisabled = false,
+  checking = false,
+  decideCounts,
+  version,
+  backupCount,
+  checkedAt,
   boot,
   children,
 }: AppFrameProps) {
@@ -77,33 +98,46 @@ export function AppFrame({
 
   return (
     <div className="app-shell">
-      <TopLine
+      <Sidebar
         view={view}
         libraryDirty={libraryDirty}
         settingsErrored={settingsErrored}
         enabledHarnessIds={enabledHarnessIds}
+        decideCounts={decideCounts}
+        version={version}
+        backupCount={backupCount}
+        checkedAt={checkedAt}
         onSwitchView={goTo}
-        right={topRight}
       />
-      {error && (
-        <div className="error-line" role="alert">
-          <Glyph name="fail" tone="fail" />
-          <span className="error-line-text">{error}</span>
-          <button
-            type="button"
-            className="error-line-dismiss"
-            aria-label="Dismiss error"
-            title="Dismiss (esc)"
-            onClick={onDismissError}
-          >
-            ×
-          </button>
+      <div className="main">
+        <TopBar
+          viewLabel={viewDef(view).label}
+          onCheck={onCheck}
+          onUpdateAll={onUpdateAll}
+          updateAllDisabled={updateAllDisabled}
+          checking={checking}
+        />
+        {error && (
+          <div className="error-line" role="alert">
+            <Glyph name="fail" tone="fail" />
+            <span className="error-line-text">{error}</span>
+            <button
+              type="button"
+              className="error-line-dismiss"
+              aria-label="Dismiss error"
+              title="Dismiss (esc)"
+              onClick={onDismissError}
+            >
+              ×
+            </button>
+          </div>
+        )}
+        <div className="view-area" ref={viewAreaRef}>
+          {children}
         </div>
-      )}
-      <div className="view-area" ref={viewAreaRef}>
-        {children}
+        <StatusBar viewLabel={viewDef(view).label} />
       </div>
-      <StatusBar viewLabel={viewDef(view).tab} tabCount={numberedTabCount(tabs)} right={statusRight} />
+      <Toast />
       <CommandLine />
       <HelpOverlay />
       <WhatsNewOverlay />

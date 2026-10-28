@@ -53,7 +53,7 @@ describe("HelpOverlay", () => {
     expect(entries.length).toBeGreaterThan(15);
     const text = help.textContent!;
     for (const title of [
-      "Go to Workspace",
+      "Go to Overview",
       "Go to Settings",
       "Focus previous pane",
       "Focus next pane",
