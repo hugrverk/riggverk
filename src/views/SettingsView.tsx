@@ -27,6 +27,7 @@ import {
 import type { AppSettings } from "../types";
 import { INSTALL_AGENTS, type InstallAgent } from "../types";
 import { Pane } from "../ui/Pane";
+import { Switch } from "../ui/Switch";
 import { TButton } from "../ui/TButton";
 import { cx } from "../ui/tone";
 
@@ -641,19 +642,11 @@ export function SettingsView({
             const enabled = appSettings.enabled_harness_ids.includes(harness);
             return (
               <SettingRow key={harness} labelId={labelId(`harness-${harness}`)} label={HARNESS_LABELS[harness]}>
-                <div data-setting-row="">
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={enabled}
-                    aria-labelledby={labelId(`harness-${harness}`)}
-                    className="sw"
-                    onClick={() => onToggleHarness(harness)}
-                    data-setting-stop=""
-                  >
-                    <span className="sw-track" aria-hidden="true" />
-                    <span className="sw-state">{enabled ? "On" : "Off"}</span>
-                  </button>
+                <div className="setting-switch" data-setting-row="">
+                  <Switch label={HARNESS_LABELS[harness]} checked={enabled} onChange={() => onToggleHarness(harness)} />
+                  <span className="sw-state" aria-hidden="true">
+                    {enabled ? "On" : "Off"}
+                  </span>
                 </div>
               </SettingRow>
             );

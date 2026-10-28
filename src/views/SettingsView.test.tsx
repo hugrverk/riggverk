@@ -198,7 +198,7 @@ describe("SettingsView radio groups", () => {
     expect(screen.getByRole("switch", { name: "Codex" }).getAttribute("aria-checked")).toBe("true");
     const cursor = screen.getByRole("switch", { name: "Cursor" });
     expect(cursor.getAttribute("aria-checked")).toBe("false");
-    expect(cursor.textContent).toContain("Off");
+    expect(cursor.nextElementSibling!.textContent).toBe("Off");
     fireEvent.click(cursor);
     expect(props.onToggleHarness).toHaveBeenCalledWith("cursor");
   });
@@ -213,7 +213,7 @@ describe("SettingsView radio groups", () => {
     expect(boxes.map(box => box.getAttribute("aria-checked"))).toEqual(
       ["true", "true", "true", "true", "false", "false", "false"],
     );
-    for (const box of boxes.slice(4)) expect(box.textContent).toContain("Off");
+    for (const box of boxes.slice(4)) expect(box.nextElementSibling!.textContent).toBe("Off");
     fireEvent.click(screen.getByRole("switch", { name: "Pi" }));
     expect(props.onToggleHarness).toHaveBeenCalledWith("pi");
   });

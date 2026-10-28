@@ -52,8 +52,8 @@
 
 /* Grafit 1A "Bläck": graphite neutrals, one muted blue (--accent/--ready), no warm hues. The
    decision signal is the brightest ink (--decide) in weight 600 on a raised surface; every other
-   state is a hollow ring in its own hue. --warn and --dirty are transitional aliases kept until
-   the old terminal layout is removed. */
+   state is a hollow ring in its own hue. --warn (the ready blue) tints the warn button and an invalid
+   field's border, --dirty is the unsaved-changes marker; neither is a warm colour. */
 
 :root {
   color-scheme: dark;
@@ -95,15 +95,13 @@
   --radius: 0;
   --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
-  --font-ui: var(--font-mono);
+  --font-ui: var(--font-sans);
   --app-font-size: 13px;
   --app-font-scale: 1;
   --fs: var(--app-font-size);
   --fs-sm: max(12px, calc(var(--fs) - 1px));
   --lh: calc(var(--fs) * 1.54);
   --font-size-heading: 1rem;
-  --topline-height: 28px;
-  --statusbar-height: 24px;
   --traffic-light-reserve: 80px;
   --dur-view: 0.32s;
   --dur-nav: 0.4s;
@@ -199,6 +197,16 @@ input,
 select,
 textarea {
   font: inherit;
+}
+
+/* UI text is the system font; machine text (logs, diffs, file previews, code, key caps) stays monospaced. */
+pre,
+code,
+kbd,
+.out,
+.tui-out,
+.diff {
+  font-family: var(--font-mono);
 }
 
 #root {

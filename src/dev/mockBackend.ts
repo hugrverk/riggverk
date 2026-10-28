@@ -11,7 +11,9 @@
  *             skills: an older app copy of `tdd` beside the current one for Codex, and two copies of the user's own `my-deploy`;
  *             skill and agent files in conflict (edited `tdd`, two files of `security-audit`, an edited Claude agent `verifier`)
  *             and kept ones (`diagnose` with a bundled update waiting, the agent `sentinel`);
- *             the Codex config is on, with `approvals_reviewer = "auto_review"` differing from Riggverk's value (`m` keeps it)
+ *             the Codex config is on, with `approvals_reviewer = "auto_review"` differing from Riggverk's value: the card
+ *             offers "Keep mine" (`m`, which asks first) and "Use Riggverk defaults" (`preview_codex_config_defaults`, a
+ *             preview with fingerprint and token, then `apply_codex_config_defaults`, which writes the template value)
  *   fresh     nothing installed, no backups, no transactions
  *   error     status/diagnostics calls fail (exercises the error line); the workspace is not valid, so the
  *             Library still lists the bundled items but no personal doc

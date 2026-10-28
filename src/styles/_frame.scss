@@ -197,13 +197,13 @@
 .bar .b.p[aria-disabled="true"]:hover { filter: none; }
 
 /* ---- toast ----
-   The transient notice, bottom centre above the status bar. Ink pill (text on bg, the same contrast as body text);
+   The transient notice, bottom centre. Ink pill (text on bg, the same contrast as body text);
    full motion slides it in once, subtle and off just show it. */
 
 .toast {
   position: absolute;
   left: 50%;
-  bottom: calc(var(--statusbar-height) + 18px);
+  bottom: 18px;
   z-index: 60;
   display: flex;
   justify-content: center;

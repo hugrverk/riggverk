@@ -1,6 +1,6 @@
 /* ═══════════════════════════════════════════════════════════════════════════════════
-   TUI primitives — the class contract between these styles and src/ui/*, src/shell/*
-   and the pane-based views. Reference: design mockup "02 · TUI-native".
+   Primitives — the class contract between these styles and src/ui/*, src/shell/*
+   and the pane-based views (Library, Settings, the reviews).
    Every row is var(--lh) tall (20px at the 13px default); panes are bordered boxes
    with the title sitting on the top border; focus is shown by border colour only.
 
@@ -11,7 +11,7 @@
        .pane-body            scrollable body (tabIndex=0 when it is the primary target); shows an edge cue
                              where content continues. .scroll-cue gives any other scrolling box the same cue
        .pane-foot            optional static footer (confirm line, copy-path, nav text); key hints are not
-                             rendered here, they live in the status bar while the pane has focus
+                             rendered here, the owner of the pane offers the buttons
    Lists
      .rows                   <ul role="listbox">; .row = <li role="option" aria-selected>
        .row .cur             16px cursor cell (▸ on the active row)
@@ -21,16 +21,12 @@
      .filter                 pane filter row: <div class="filter"><span class="c-acc">/</span><input></div>
    Key/value
      .kv                     <dl class="kv"><dt>key</dt><dd>value</dd></dl>; dd.wrap allows wrapping
-   Motion
-     .roll                   RollingText: a changed value slides in (full motion only), see "rolling text" below
    Keys and glyphs
-     kbd                     light key cap (outline, no fill); .action-key = <button class="action-key"><kbd>u</kbd> update</button>
+     kbd                     light key cap (outline, no fill); .action-key = a plain button with a key cap (the uninstall cards)
      .tbtn                   button with a key cap for a review's action bar, a dialog footer or rollback (_review.scss)
      .g                      fixed-width glyph cell (▸ ● ◐ ✓ ✗ ❯ + ~ − !), inline-block 1ch, centred; never a <tr>
      .c-ok .c-warn .c-fail .c-acc .c-dim .c-head   semantic text colours
    Tables
-     .matrix-grid            surface matrix: display:grid, columns from --matrix-cols (inline style);
-                             header cells .h, body cells .cell = <span class="g">●</span><span class="visually-hidden">label</span>
      .plan                   install plan <table> (_review.scss)
    Overlays
      .cmdline-overlay        fixed backdrop with the palette centered near the top; .cmdbox = role=dialog box
@@ -53,7 +49,8 @@
 /* ---- semantic colours and glyph cell ---- */
 
 .c-ok { color: var(--ok); }
-.c-warn { color: var(--warn); }
+/* A warning is the decision's ink: the brightest text in weight 600, never a warm colour. */
+.c-warn { color: var(--text-heading); font-weight: 600; }
 .c-fail { color: var(--fail); }
 .c-acc { color: var(--accent); }
 .c-dim { color: var(--text-muted); }
@@ -266,22 +263,6 @@ kbd {
 
 .kv dd.wrap { white-space: normal; }
 
-/* ---- surface matrix ---- */
-
-.matrix-grid {
-  display: grid;
-  grid-template-columns: max-content repeat(var(--matrix-cols, 6), max-content);
-  gap: 0 14px;
-  align-items: center;
-  padding: 0 10px;
-  white-space: nowrap;
-  overflow-x: auto;
-}
-
-.matrix-grid > * { height: var(--lh); line-height: var(--lh); }
-.matrix-grid .h { color: var(--text-muted); font-size: var(--fs-sm); }
-.matrix-grid .cell { text-align: center; }
-
 /* ---- command line ---- */
 
 /* Centered palette over a backdrop (a click on the backdrop closes it). */
@@ -400,36 +381,3 @@ kbd {
 .help-overlay .foot { padding: 6px 10px 0; color: var(--text-muted); font-size: var(--fs-sm); }
 .help-overlay .help-note { margin: 8px 14px 0; color: var(--text-muted); font-size: var(--fs-sm); }
 .help-overlay .help-states dt { white-space: normal; }
-
-/* ---- rolling text (RollingText) ----
-   Only while motion is full and a value just changed: the box clips its own slide, so nothing around it moves.
-   Idle, the wrapper is plain inline text. The leaving copy only exists while it rolls. */
-
-.roll-old { display: none; }
-
-:root[data-motion="full"] .roll[data-rolling] {
-  position: relative;
-  display: inline-block;
-  clip-path: inset(0);
-}
-
-:root[data-motion="full"] .roll[data-rolling] .roll-new {
-  display: inline-block;
-  animation: roll-in 200ms ease-out;
-}
-
-:root[data-motion="full"] .roll[data-rolling] .roll-old {
-  display: block;
-  position: absolute;
-  top: 0;
-  left: 0;
-  white-space: nowrap;
-  animation: roll-out 200ms ease-in forwards;
-}
-
-@keyframes roll-out { to { transform: translateY(-100%); opacity: 0; } }
-@keyframes roll-in { from { transform: translateY(100%); opacity: 0; } }
-
-@media (prefers-reduced-motion: reduce) {
-  .roll .roll-old { display: none !important; }
-}
