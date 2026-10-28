@@ -1,6 +1,6 @@
 import { useEffect, useRef, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import type { ReleaseNotes } from "../lib/releaseNotes";
-import { ActionKey } from "../ui/ActionKey";
+import { TButton } from "../ui/TButton";
 import { scrollHelpBox, trapTab, useRestoreFocus } from "./overlay";
 import { useShellState } from "./ShellState";
 
@@ -39,7 +39,7 @@ function WhatsNewBody({ releases }: { releases: readonly ReleaseNotes[] }) {
   return (
     <div
       ref={dialogRef}
-      className="help-overlay"
+      className="help-overlay whatsnew"
       role="dialog"
       aria-modal="true"
       aria-label="What's new"
@@ -51,7 +51,7 @@ function WhatsNewBody({ releases }: { releases: readonly ReleaseNotes[] }) {
       }}
     >
       <div ref={boxRef} className="help-box">
-        <h2>what&apos;s new</h2>
+        <h2>What&apos;s new</h2>
         <div className="help-cols">
           {releases.map(release => (
             <section key={release.version} aria-label={release.version}>
@@ -67,9 +67,9 @@ function WhatsNewBody({ releases }: { releases: readonly ReleaseNotes[] }) {
           ))}
         </div>
         <p className="foot">
-          <ActionKey keys={["esc"]} onClick={closeWhatsNew}>
+          <TButton keys={["esc"]} onClick={closeWhatsNew}>
             close
-          </ActionKey>
+          </TButton>
         </p>
       </div>
     </div>
