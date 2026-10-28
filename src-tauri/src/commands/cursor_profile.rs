@@ -10,6 +10,7 @@ use crate::skill_health::skill_files_status;
 use crate::skill_roots::{
     codex_home_is_custom, install_roots, roots_read_by, SkillRoot, SkillScope,
 };
+use crate::skill_sources::SkillSources;
 
 #[derive(Serialize)]
 pub struct CursorProfileHealth {
@@ -113,7 +114,9 @@ pub(crate) fn skill_roots_status(
     home: &Path,
     roots: &[SkillRoot],
 ) -> (String, usize, usize) {
-    match bundled_root.map(|bundle| skill_files_status(bundle, home, roots)) {
+    match bundled_root
+        .map(|bundle| skill_files_status(&SkillSources::for_current(bundle), home, roots))
+    {
         Some(Ok(status)) => (status.label().to_string(), status.synced, status.expected),
         _ => ("missing".to_string(), 0, 0),
     }

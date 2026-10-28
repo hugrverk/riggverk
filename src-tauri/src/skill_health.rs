@@ -9,6 +9,7 @@ use std::path::Path;
 use crate::artifact_registry::{catalog_skill_files, ArtifactId, SkillFiles};
 use crate::commands::file_eq;
 use crate::skill_roots::SkillRoot;
+use crate::skill_sources::SourceRoot;
 
 /// How many skills of the bundle are installed correctly in the roots asked about.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -51,8 +52,8 @@ impl SkillFilesStatus {
 
 /// Compares every skill of the bundle with its installed files in each of `roots`. With no root
 /// there is nothing installed to compare: every skill is missing.
-pub fn skill_files_status(
-    bundled_root: &Path,
+pub fn skill_files_status<R: SourceRoot + ?Sized>(
+    bundled_root: &R,
     home: &Path,
     roots: &[SkillRoot],
 ) -> Result<SkillFilesStatus, String> {
@@ -67,7 +68,7 @@ pub fn skill_files_status(
             for rel in &skill.files {
                 let artifact = ArtifactId::skill_file(*root, skill.name.clone(), rel.clone());
                 let (Ok(dest), Some(source)) = (
-                    artifact.resolve_dest(home, bundled_root),
+                    artifact.resolve_dest(home, bundled_root.bundle()),
                     artifact.resolve_source(bundled_root),
                 ) else {
                     continue;
@@ -102,8 +103,8 @@ pub struct OldSkillCopies {
 }
 
 /// Looks at the `SKILL.md` of every bundled skill in `root`.
-pub fn old_skill_copies(
-    bundled_root: &Path,
+pub fn old_skill_copies<R: SourceRoot + ?Sized>(
+    bundled_root: &R,
     home: &Path,
     root: SkillRoot,
 ) -> Result<OldSkillCopies, String> {
@@ -111,7 +112,7 @@ pub fn old_skill_copies(
     let mut copies = OldSkillCopies::default();
     for skill in skills {
         let artifact = ArtifactId::skill_md(root, skill.name);
-        let Ok(dest) = artifact.resolve_dest(home, bundled_root) else {
+        let Ok(dest) = artifact.resolve_dest(home, bundled_root.bundle()) else {
             continue;
         };
         if !dest.is_file() {

@@ -194,18 +194,20 @@ pub struct OwnershipProof {
 }
 
 impl OwnershipProof {
-    pub fn new(bundled_root: &Path, records: &[ManagedArtifactRecord]) -> Result<Self, String> {
-        let catalog = crate::skill_discovery::discover_skill_catalog(bundled_root)
-            .map_err(|error| error.message().to_string())?;
+    pub fn new<R: crate::skill_sources::SourceRoot + ?Sized>(
+        sources: &R,
+        records: &[ManagedArtifactRecord],
+    ) -> Result<Self, String> {
+        let catalog = sources.catalog()?;
         let current = catalog
             .iter()
-            .filter_map(|skill| {
-                let digest = crate::stable_digest::file(&skill.skill_md_path).ok()?;
-                Some((skill.name.clone(), digest))
+            .filter_map(|entry| {
+                let digest = crate::stable_digest::file(&entry.skill.skill_md_path).ok()?;
+                Some((entry.skill.name.clone(), digest))
             })
             .collect();
         Ok(Self {
-            bundled_root: bundled_root.to_path_buf(),
+            bundled_root: sources.bundle().to_path_buf(),
             records: records
                 .iter()
                 .map(|record| (record.identity.clone(), record.hash.clone()))
@@ -259,7 +261,11 @@ impl OwnershipProof {
             .get(&artifact_identity(&artifact))
             .is_some_and(|hash| hash == digest);
         let owned = recorded
-            || crate::shipped_digests::is_shipped_version(&artifact, &self.bundled_root, digest);
+            || crate::shipped_digests::is_shipped_version(
+                &artifact,
+                &crate::skill_sources::BundleOnly(&self.bundled_root),
+                digest,
+            );
         (if owned { Owner::Aw } else { Owner::Foreign }, false)
     }
 }

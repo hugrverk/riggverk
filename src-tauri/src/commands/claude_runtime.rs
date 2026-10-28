@@ -20,6 +20,7 @@ use crate::agent_targets;
 use crate::commands::status::file_eq;
 use crate::skill_health::{skill_files_status, SkillFilesStatus};
 use crate::skill_roots::SkillRoot;
+use crate::skill_sources::SkillSources;
 
 /// All managed Claude surface states.
 #[derive(Debug, Clone, Serialize)]
@@ -152,7 +153,12 @@ fn check_agents_synced(home: &Path, bundled_root: &Path) -> bool {
 /// installed files are compared with the bundle. `None` when the bundle cannot be read: nothing
 /// is then reported as synced.
 fn claude_skills(bundled_root: Option<&Path>, home: &Path) -> Option<SkillFilesStatus> {
-    skill_files_status(bundled_root?, home, &[SkillRoot::Claude]).ok()
+    skill_files_status(
+        &SkillSources::for_current(bundled_root?),
+        home,
+        &[SkillRoot::Claude],
+    )
+    .ok()
 }
 
 /// Compute Claude runtime health from inspected managed surfaces only. Rules, agents and skills

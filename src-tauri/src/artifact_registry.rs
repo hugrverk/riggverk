@@ -15,6 +15,7 @@ use crate::light_harness::LightHarnessId;
 use crate::platform_paths::opencode_config_dir;
 use crate::setup_lifecycle::SetupSurfaceId;
 use crate::skill_roots::{SkillRoot, SkillScope};
+use crate::skill_sources::{BundleOnly, SourceRoot};
 
 // ── Artifact identity ──
 
@@ -281,12 +282,11 @@ impl SkillFileRef {
 
     /// The bundled file this one is copied from: the canonical `SKILL.md`, or the supporting file
     /// next to it.
-    fn source(&self, workspace_root: &Path) -> PathBuf {
+    fn source<R: SourceRoot + ?Sized>(&self, sources: &R) -> PathBuf {
         if self.rel.is_skill_md() {
-            return skill_source(workspace_root, self.skill.as_str());
+            return skill_source(sources, self.skill.as_str());
         }
-        let mut path =
-            crate::skill_discovery::canonical_skill_dir(workspace_root, self.skill.as_str());
+        let mut path = sources.skill_dir(self.skill.as_str());
         for part in self.rel.as_str().split('/') {
             path.push(part);
         }
@@ -436,7 +436,11 @@ impl ArtifactId {
     }
 
     /// Resolve the source path for this artifact (workspace-relative).
-    pub fn resolve_source(&self, workspace_root: &Path) -> Option<PathBuf> {
+    ///
+    /// Skill files come from the bundle or a pack, whichever the catalog takes the skill from;
+    /// everything else from the bundle.
+    pub fn resolve_source<R: SourceRoot + ?Sized>(&self, sources: &R) -> Option<PathBuf> {
+        let workspace_root = sources.bundle();
         match self {
             ArtifactId::OpenCodeConfig => Some(workspace_root.join("templates/opencode.json")),
             ArtifactId::OpenCodeTui => Some(workspace_root.join("templates/tui.json")),
@@ -449,7 +453,7 @@ impl ArtifactId {
             ArtifactId::OpenCodeAgent(name) => {
                 Some(workspace_root.join("agents").join(name.file_name()))
             }
-            ArtifactId::OpenCodeSkill(name) => Some(skill_source(workspace_root, name.as_str())),
+            ArtifactId::OpenCodeSkill(name) => Some(skill_source(sources, name.as_str())),
             ArtifactId::CodexConfig => Some(workspace_root.join("templates/codex/config.toml")),
             ArtifactId::CodexRules => Some(workspace_root.join("templates/sync/codex-rules.md")),
             ArtifactId::CodexAgent(name) => Some(
@@ -457,14 +461,14 @@ impl ArtifactId {
                     .join("templates/codex/agents")
                     .join(name.file_name_with_extension("toml")),
             ),
-            ArtifactId::CodexSkill(name) => Some(skill_source(workspace_root, name.as_str())),
+            ArtifactId::CodexSkill(name) => Some(skill_source(sources, name.as_str())),
             ArtifactId::ClaudeRules => Some(workspace_root.join("templates/sync/claude-rules.md")),
             ArtifactId::ClaudeAgent(name) => Some(
                 workspace_root
                     .join("templates/claude/agents")
                     .join(name.file_name()),
             ),
-            ArtifactId::ClaudeSkill(name) => Some(skill_source(workspace_root, name.as_str())),
+            ArtifactId::ClaudeSkill(name) => Some(skill_source(sources, name.as_str())),
             // The managed values are constants of the app (`claude_settings`); no bundled file.
             ArtifactId::ClaudeSettings => None,
             ArtifactId::CursorAgent(name) => Some(
@@ -472,13 +476,13 @@ impl ArtifactId {
                     .join("templates/cursor/agents")
                     .join(name.file_name()),
             ),
-            ArtifactId::CursorSkill(name) => Some(skill_source(workspace_root, name.as_str())),
+            ArtifactId::CursorSkill(name) => Some(skill_source(sources, name.as_str())),
             ArtifactId::CursorMcp => Some(
                 crate::commands::cursor_profile::cursor_root(workspace_root)
                     .join("mcp/playwright.mcp.json"),
             ),
-            ArtifactId::CodexLegacySkill(name) => Some(skill_source(workspace_root, name.as_str())),
-            ArtifactId::SkillFile(file) => Some(file.source(workspace_root)),
+            ArtifactId::CodexLegacySkill(name) => Some(skill_source(sources, name.as_str())),
+            ArtifactId::SkillFile(file) => Some(file.source(sources)),
             ArtifactId::WorkspaceFile(rel) => Some(workspace_root.join(rel.as_str())),
             ArtifactId::HarnessRules(harness) => harness
                 .rules()
@@ -487,6 +491,16 @@ impl ArtifactId {
                 .mcp()
                 .map(|mcp| workspace_root.join(&mcp.template_rel)),
         }
+    }
+
+    /// [`Self::resolve_source`] for an artifact that is no skill file: rules, agents, configs,
+    /// templates. They are read from the bundle only, so no packs are consulted.
+    pub fn resolve_bundle_source(&self, bundled_root: &Path) -> Option<PathBuf> {
+        debug_assert!(
+            !self.is_skill_file(),
+            "a skill file is read through the skill sources: {self:?}"
+        );
+        self.resolve_source(&BundleOnly(bundled_root))
     }
 
     /// A skill file of `root`: the `SKILL.md` of `skill`.
@@ -595,8 +609,8 @@ fn resolve_cursor_paths() -> Result<crate::cursor_profile_paths::CursorProfilePa
 
 /// Every harness installs the canonical SKILL.md byte for byte, so the source does not depend on
 /// which harness the artifact belongs to.
-fn skill_source(workspace_root: &Path, skill_name: &str) -> PathBuf {
-    crate::skill_discovery::canonical_skill_md(workspace_root, skill_name)
+fn skill_source<R: SourceRoot + ?Sized>(sources: &R, skill_name: &str) -> PathBuf {
+    sources.skill_md(skill_name)
 }
 
 // ── Surface-to-artifact expansion ──
@@ -611,9 +625,12 @@ pub struct SkillFiles {
 /// Every skill of the catalog with its files. `targets` stays validated metadata and filters
 /// nothing: the folders skills are installed into are shared by harnesses, so a skill cannot be
 /// installed for one of them only.
-pub fn catalog_skill_files(workspace_root: &Path) -> Result<Vec<SkillFiles>, String> {
-    let mut skills = crate::skill_discovery::discover_skill_catalog(workspace_root)
-        .map_err(|e| e.message().to_string())?;
+pub fn catalog_skill_files<R: SourceRoot + ?Sized>(sources: &R) -> Result<Vec<SkillFiles>, String> {
+    let mut skills: Vec<_> = sources
+        .catalog()?
+        .into_iter()
+        .map(|entry| entry.skill)
+        .collect();
     if skills.is_empty() {
         return Err("the skill catalog is empty".to_string());
     }
@@ -640,14 +657,14 @@ pub fn catalog_skill_files(workspace_root: &Path) -> Result<Vec<SkillFiles>, Str
 
 /// Every file of every skill as `SkillFile` artifacts, in each root of `scope`: per root, the
 /// skills in name order, each with its `SKILL.md` first.
-fn expand_skill_surface(
-    workspace_root: &Path,
+fn expand_skill_surface<R: SourceRoot + ?Sized>(
+    sources: &R,
     scope: &SkillScope,
 ) -> Result<Vec<ArtifactId>, String> {
     if scope.is_empty() {
         return Ok(Vec::new());
     }
-    let skills = catalog_skill_files(workspace_root)?;
+    let skills = catalog_skill_files(sources)?;
     let mut artifacts = Vec::new();
     for root in scope.roots() {
         for skill in &skills {
@@ -680,11 +697,12 @@ fn expand_agent_surface(
 ///
 /// `scope` names the skill roots the `Skills` surface expands into; no other surface depends on
 /// it. A retired per-harness skill surface expands like `Skills`.
-pub fn expand_surface(
+pub fn expand_surface<R: SourceRoot + ?Sized>(
     surface: SetupSurfaceId,
-    workspace_root: &Path,
+    sources: &R,
     scope: &SkillScope,
 ) -> Result<Vec<ArtifactId>, String> {
+    let workspace_root = sources.bundle();
     match surface.canonical() {
         SetupSurfaceId::OpenCodeConfig => Ok(vec![
             ArtifactId::OpenCodeConfig,
@@ -716,7 +734,7 @@ pub fn expand_surface(
             crate::agent_discovery::AgentHarness::Cursor,
             ArtifactId::CursorAgent,
         ),
-        SetupSurfaceId::Skills => expand_skill_surface(workspace_root, scope),
+        SetupSurfaceId::Skills => expand_skill_surface(sources, scope),
         SetupSurfaceId::CursorMcp => Ok(vec![ArtifactId::CursorMcp]),
         light @ (SetupSurfaceId::CopilotRules
         | SetupSurfaceId::PiRules

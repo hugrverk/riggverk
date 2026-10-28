@@ -116,7 +116,7 @@ pub fn set_files_kept(surface: String, units: Vec<String>, kept: bool) -> Result
         home,
         planned,
     } = plan(surface)?;
-    let bundled_root = crate::setup_roots::bundled_root_for(&workspace_root)?;
+    let bundled_root = crate::skill_sources::SkillSources::for_workspace(&workspace_root)?;
     let all = file_conflicts::units(&planned);
 
     let mut keeps: Vec<Keep> = Vec::new();
@@ -150,7 +150,7 @@ pub fn set_files_kept(surface: String, units: Vec<String>, kept: bool) -> Result
 
 fn bundle_digest(
     artifact: &ArtifactId,
-    bundled_root: &std::path::Path,
+    bundled_root: &crate::skill_sources::SkillSources,
     home: &std::path::Path,
 ) -> Option<String> {
     crate::setup_fingerprint::artifact_source_digest(artifact, bundled_root, home).ok()

@@ -1612,7 +1612,7 @@ fn run_planned_artifacts(
 
     match crate::managed_state::next_state_from_operations(
         previous_managed_state.as_ref(),
-        &roots.bundled_root,
+        &roots.sources,
         &roots.runtime_root,
         &roots.home,
         &manifest.operations,
@@ -1700,6 +1700,14 @@ fn run_planned_artifacts(
     if let Err(error) = crate::kept_files::release(&ws_root, &rewritten) {
         manual_steps.push(format!(
             "The files were applied, but a choice to keep your version of one of them could not be cleared: {error}"
+        ));
+    }
+
+    // Which installed skills came from a pack, so that a pack that later goes missing does not
+    // retire them. The apply is complete; a failure here is a warning, not a rollback.
+    if let Err(error) = crate::skill_sources::record_after_transaction(&ws_root, &roots.sources) {
+        manual_steps.push(format!(
+            "The files were applied, but the list of installed pack skills could not be saved: {error}"
         ));
     }
 

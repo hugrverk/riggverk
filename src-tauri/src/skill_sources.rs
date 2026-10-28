@@ -1,0 +1,925 @@
+//! Where the skills of an install come from: the bundle and the user's skill packs.
+//!
+//! A pack is a folder of the user's own skills, `<workspace>/packs/<pack>/skills/<skill>/SKILL.md`
+//! (one optional group level, as in the bundle). Packs add to the catalog and nothing else: rules,
+//! agents and configs are read from the bundle only. A skill is still identified by its root, name
+//! and relative path, so ownership, backups and rollback work as for a bundled skill; only the
+//! place its source is read from differs.
+//!
+//! - **Bundle wins.** A pack skill whose name the bundle ships is *shadowed*: listed, never
+//!   installed. Two pack skills of one name are both an *error* (that skill only; the plan goes on).
+//! - **Limits** are the bundle's (no symlinks, 64 files and 2 MiB per skill, four levels). On Unix a
+//!   pack folder that is group- or world-writable is refused as a whole.
+//! - **A missing pack is not a retirement.** After every successful transaction the installed pack
+//!   skills are recorded in `.riggverk/pack-skills.json` (pack to skill names). A recorded name the
+//!   catalog lacks is *held*: planned neither for update nor for removal until the user forgets the
+//!   pack. A skill gone from a pack that is present was removed on purpose and is retired as usual.
+
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::fs;
+use std::path::{Path, PathBuf};
+
+use serde::{Deserialize, Serialize};
+
+use crate::skill_discovery::DiscoveredSkill;
+
+/// Folder of the packs inside the data folder. Never `skills/`: that path belongs to the cleanup
+/// of the copies of the bundle that older releases kept in the data folder.
+pub const PACKS_DIR: &str = "packs";
+/// File name inside the state folder (see `workspace_layout::state_file`).
+pub const PACK_SKILLS_FILE: &str = "pack-skills.json";
+const SCHEMA_VERSION: u32 = 1;
+const MAX_FILE_BYTES: u64 = 512 * 1024;
+const MAX_PACKS: usize = 64;
+/// Entries one pack's `skills` tree may hold before it is read as hostile.
+const MAX_TREE_ENTRIES: usize = 20_000;
+const MAX_TREE_DEPTH: usize = 12;
+
+/// The folder packs live in.
+pub fn packs_dir(workspace_root: &Path) -> PathBuf {
+    workspace_root.join(PACKS_DIR)
+}
+
+/// `[a-z0-9][a-z0-9-]{0,63}`.
+pub fn valid_pack_name(name: &str) -> bool {
+    let mut chars = name.chars();
+    matches!(chars.next(), Some(c) if c.is_ascii_lowercase() || c.is_ascii_digit())
+        && name.len() <= 64
+        && chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+}
+
+// ── Catalog ──
+
+/// One skill of the merged catalog and the pack it comes from (`None`: the bundle).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CatalogSkill {
+    pub skill: DiscoveredSkill,
+    pub pack: Option<String>,
+}
+
+/// What skill sources are read from. Production code passes a [`SkillSources`]; the plain paths
+/// (the bundle alone) exist for tests only, so a production call site cannot silently ignore packs.
+pub trait SourceRoot {
+    /// The bundle: rules, agents, templates and configs are read from here only.
+    fn bundle(&self) -> &Path;
+    /// The merged catalog (bundle, then active pack skills).
+    fn catalog(&self) -> Result<Vec<CatalogSkill>, String>;
+    /// `SKILL.md` of the skill called `name`; the root-level bundle location when nothing holds it,
+    /// which callers then find missing.
+    fn skill_md(&self, name: &str) -> PathBuf;
+    /// Directory of the skill called `name`, with the same fallback.
+    fn skill_dir(&self, name: &str) -> PathBuf;
+}
+
+/// The bundle alone. For code that reads an artifact which is no skill (rules, agents, configs,
+/// templates); a skill read through it would miss the packs.
+#[derive(Debug, Clone, Copy)]
+pub struct BundleOnly<'a>(pub &'a Path);
+
+impl SourceRoot for BundleOnly<'_> {
+    fn bundle(&self) -> &Path {
+        self.0
+    }
+    fn catalog(&self) -> Result<Vec<CatalogSkill>, String> {
+        crate::skill_discovery::discover_skill_catalog(self.0)
+            .map(|skills| {
+                skills
+                    .into_iter()
+                    .map(|skill| CatalogSkill { skill, pack: None })
+                    .collect()
+            })
+            .map_err(|error| error.message().to_string())
+    }
+    fn skill_md(&self, name: &str) -> PathBuf {
+        crate::skill_discovery::canonical_skill_md(self.0, name)
+    }
+    fn skill_dir(&self, name: &str) -> PathBuf {
+        crate::skill_discovery::canonical_skill_dir(self.0, name)
+    }
+}
+
+/// Plain paths are the bundle alone, in tests.
+#[cfg(test)]
+impl SourceRoot for Path {
+    fn bundle(&self) -> &Path {
+        self
+    }
+    fn catalog(&self) -> Result<Vec<CatalogSkill>, String> {
+        BundleOnly(self).catalog()
+    }
+    fn skill_md(&self, name: &str) -> PathBuf {
+        BundleOnly(self).skill_md(name)
+    }
+    fn skill_dir(&self, name: &str) -> PathBuf {
+        BundleOnly(self).skill_dir(name)
+    }
+}
+
+#[cfg(test)]
+impl SourceRoot for PathBuf {
+    fn bundle(&self) -> &Path {
+        self.as_path()
+    }
+    fn catalog(&self) -> Result<Vec<CatalogSkill>, String> {
+        BundleOnly(self.as_path()).catalog()
+    }
+    fn skill_md(&self, name: &str) -> PathBuf {
+        BundleOnly(self.as_path()).skill_md(name)
+    }
+    fn skill_dir(&self, name: &str) -> PathBuf {
+        BundleOnly(self.as_path()).skill_dir(name)
+    }
+}
+
+/// State of one pack skill in the catalog.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PackSkillState {
+    /// In the catalog.
+    Active,
+    /// The bundle ships a skill of this name and wins.
+    Shadowed,
+    /// Not in the catalog: invalid, or its name is also another pack skill's.
+    Error,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PackSkillReport {
+    pub name: String,
+    pub description: String,
+    pub state: PackSkillState,
+    /// Why the skill is not active; empty when it is.
+    pub reason: String,
+    /// `/`-separated path of the `SKILL.md` below the pack folder; empty for a skill that did not
+    /// parse.
+    pub relative_path: String,
+    /// What the installer reads; `None` for a skill that did not parse.
+    discovered: Option<DiscoveredSkill>,
+}
+
+impl PackSkillReport {
+    /// The `SKILL.md`, for a skill that parsed.
+    pub fn skill_md_path(&self) -> Option<&Path> {
+        self.discovered
+            .as_ref()
+            .map(|skill| skill.skill_md_path.as_path())
+    }
+}
+
+/// One folder below `packs/`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PackReport {
+    pub name: String,
+    /// Set when the whole pack is refused: none of its skills is read.
+    pub refused: Option<String>,
+    pub skills: Vec<PackSkillReport>,
+}
+
+/// A recorded pack skill the catalog lacks. It is kept as it is installed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HeldSkill {
+    pub pack: String,
+    pub name: String,
+    /// `Missing`: the pack folder is gone or refused. `Error`: the skill is in the pack and broken.
+    pub state: HeldState,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HeldState {
+    Missing,
+    Error,
+}
+
+/// The bundle and the packs of one data folder, read once.
+#[derive(Debug, Clone)]
+pub struct SkillSources {
+    bundled: PathBuf,
+    workspace_root: PathBuf,
+    catalog: Result<Vec<CatalogSkill>, String>,
+    by_name: HashMap<String, usize>,
+    packs: Vec<PackReport>,
+    /// Problems with entries of `packs/` that are no pack (a bad name, a link).
+    ignored: Vec<(String, String)>,
+    held: Vec<HeldSkill>,
+}
+
+impl SourceRoot for SkillSources {
+    fn bundle(&self) -> &Path {
+        &self.bundled
+    }
+    fn catalog(&self) -> Result<Vec<CatalogSkill>, String> {
+        self.catalog.clone()
+    }
+    fn skill_md(&self, name: &str) -> PathBuf {
+        self.find(name)
+            .map(|skill| skill.skill.skill_md_path.clone())
+            .unwrap_or_else(|| self.bundled.join("skills").join(name).join("SKILL.md"))
+    }
+    fn skill_dir(&self, name: &str) -> PathBuf {
+        self.find(name)
+            .map(|skill| skill.skill.source_dir.clone())
+            .unwrap_or_else(|| self.bundled.join("skills").join(name))
+    }
+}
+
+/// Dereferences to the bundle, so code that reads rules, agents and configs takes it as a path.
+impl std::ops::Deref for SkillSources {
+    type Target = Path;
+    fn deref(&self) -> &Path {
+        &self.bundled
+    }
+}
+
+impl SkillSources {
+    /// The sources of the data folder `workspace_root`.
+    pub fn for_workspace(workspace_root: &Path) -> Result<Self, String> {
+        let bundled = crate::setup_roots::bundled_root_for(workspace_root)?;
+        Ok(Self::new(bundled, workspace_root))
+    }
+
+    /// The bundle at `bundled` and the packs of the data folder in use. For the health checks,
+    /// which compare installed files with what an install would write and are not told the folder.
+    /// An unresolvable folder has no packs.
+    pub fn for_current(bundled: &Path) -> Self {
+        let workspace = crate::commands::configured_workspace_path(&crate::settings::load())
+            .unwrap_or_else(|| bundled.join(".no-data-folder"));
+        Self::new(bundled.to_path_buf(), &workspace)
+    }
+
+    /// The bundle at `bundled` and the packs in `workspace_root`.
+    pub fn new(bundled: PathBuf, workspace_root: &Path) -> Self {
+        let bundle_catalog = crate::skill_discovery::discover_skill_catalog(&bundled);
+        let bundle_names: HashSet<String> = bundle_catalog
+            .as_ref()
+            .map(|skills| skills.iter().map(|skill| skill.name.clone()).collect())
+            .unwrap_or_default();
+        let (packs, ignored) = scan_packs(workspace_root, &bundle_names);
+        let mut catalog = bundle_catalog
+            .map(|skills| {
+                skills
+                    .into_iter()
+                    .map(|skill| CatalogSkill { skill, pack: None })
+                    .collect::<Vec<_>>()
+            })
+            .map_err(|error| error.message().to_string());
+        if let Ok(skills) = catalog.as_mut() {
+            for pack in &packs {
+                for skill in &pack.skills {
+                    if skill.state != PackSkillState::Active {
+                        continue;
+                    }
+                    if let Some(discovered) = &skill.discovered {
+                        skills.push(CatalogSkill {
+                            skill: discovered.clone(),
+                            pack: Some(pack.name.clone()),
+                        });
+                    }
+                }
+            }
+        }
+        let by_name = catalog
+            .as_ref()
+            .map(|skills| {
+                skills
+                    .iter()
+                    .enumerate()
+                    .map(|(index, skill)| (skill.skill.name.clone(), index))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let held = compute_held(workspace_root, &packs, &catalog);
+        Self {
+            bundled,
+            workspace_root: workspace_root.to_path_buf(),
+            catalog,
+            by_name,
+            packs,
+            ignored,
+            held,
+        }
+    }
+
+    /// The folder a source file must stay inside: its pack folder, or the bundle.
+    pub fn source_root_of(&self, source: &Path) -> PathBuf {
+        let packs = packs_dir(&self.workspace_root);
+        self.packs
+            .iter()
+            .map(|pack| packs.join(&pack.name))
+            .find(|dir| source.starts_with(dir))
+            .unwrap_or_else(|| self.bundled.clone())
+    }
+
+    fn find(&self, name: &str) -> Option<&CatalogSkill> {
+        let index = *self.by_name.get(name)?;
+        self.catalog.as_ref().ok()?.get(index)
+    }
+
+    pub fn packs(&self) -> &[PackReport] {
+        &self.packs
+    }
+
+    /// Entries of `packs/` that were not read, with the reason.
+    pub fn ignored(&self) -> &[(String, String)] {
+        &self.ignored
+    }
+
+    pub fn held(&self) -> &[HeldSkill] {
+        &self.held
+    }
+
+    /// Names of the held skills: not to be planned for removal.
+    pub fn held_names(&self) -> HashSet<&str> {
+        self.held.iter().map(|held| held.name.as_str()).collect()
+    }
+
+    /// Pack skills the catalog holds, by name.
+    fn active_pack_skills(&self) -> BTreeMap<&str, &str> {
+        self.catalog
+            .as_ref()
+            .map(|skills| {
+                skills
+                    .iter()
+                    .filter_map(|skill| {
+                        skill
+                            .pack
+                            .as_deref()
+                            .map(|pack| (skill.skill.name.as_str(), pack))
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+}
+
+// ── Reading packs ──
+
+/// A skill found in a pack before name conflicts are decided.
+struct Candidate {
+    /// Directory name, the label of a skill that does not parse.
+    label: String,
+    outcome: Result<DiscoveredSkill, String>,
+}
+
+fn scan_packs(
+    workspace_root: &Path,
+    bundle_names: &HashSet<String>,
+) -> (Vec<PackReport>, Vec<(String, String)>) {
+    let dir = packs_dir(workspace_root);
+    let mut ignored = Vec::new();
+    match fs::symlink_metadata(&dir) {
+        Err(_) => return (Vec::new(), ignored),
+        Ok(meta) if meta.file_type().is_symlink() => {
+            ignored.push((
+                PACKS_DIR.to_string(),
+                "refusing a symlinked packs folder".to_string(),
+            ));
+            return (Vec::new(), ignored);
+        }
+        Ok(meta) if !meta.is_dir() => return (Vec::new(), ignored),
+        Ok(_) => {}
+    }
+    let Ok(entries) = fs::read_dir(&dir) else {
+        ignored.push((
+            PACKS_DIR.to_string(),
+            "cannot read the packs folder".to_string(),
+        ));
+        return (Vec::new(), ignored);
+    };
+    let mut names: Vec<(String, fs::FileType)> = entries
+        .flatten()
+        .filter_map(|entry| {
+            let name = entry.file_name().into_string().ok()?;
+            Some((name, entry.file_type().ok()?))
+        })
+        .filter(|(name, _)| !name.starts_with('.'))
+        .collect();
+    names.sort_by(|a, b| a.0.cmp(&b.0));
+
+    let mut pending: Vec<(String, Result<Vec<Candidate>, String>)> = Vec::new();
+    for (name, kind) in names {
+        if kind.is_symlink() {
+            ignored.push((name, "refusing a symlinked pack".to_string()));
+            continue;
+        }
+        if !kind.is_dir() {
+            continue;
+        }
+        if !valid_pack_name(&name) {
+            ignored.push((
+                name,
+                "not a pack name (lowercase letters, digits and hyphens, at most 64)".to_string(),
+            ));
+            continue;
+        }
+        if pending.len() >= MAX_PACKS {
+            ignored.push((name, format!("more than {MAX_PACKS} packs")));
+            continue;
+        }
+        let outcome = scan_pack(&dir.join(&name));
+        pending.push((name, outcome));
+    }
+
+    // Bundle wins; among the rest, a name two pack skills share is an error for both.
+    let mut claims: HashMap<String, Vec<String>> = HashMap::new();
+    for (pack, outcome) in &pending {
+        if let Ok(candidates) = outcome {
+            for candidate in candidates {
+                if let Ok(skill) = &candidate.outcome {
+                    if !bundle_names.contains(&skill.name) {
+                        claims
+                            .entry(skill.name.clone())
+                            .or_default()
+                            .push(pack.clone());
+                    }
+                }
+            }
+        }
+    }
+
+    let mut reports = Vec::new();
+    for (pack, outcome) in pending {
+        match outcome {
+            Err(reason) => reports.push(PackReport {
+                name: pack,
+                refused: Some(reason),
+                skills: Vec::new(),
+            }),
+            Ok(candidates) => {
+                let mut skills = Vec::new();
+                for candidate in candidates {
+                    skills.push(report_candidate(&pack, candidate, bundle_names, &claims));
+                }
+                skills.sort_by(|a, b| a.name.cmp(&b.name));
+                reports.push(PackReport {
+                    name: pack,
+                    refused: None,
+                    skills,
+                });
+            }
+        }
+    }
+    (reports, ignored)
+}
+
+fn report_candidate(
+    pack: &str,
+    candidate: Candidate,
+    bundle_names: &HashSet<String>,
+    claims: &HashMap<String, Vec<String>>,
+) -> PackSkillReport {
+    let skill = match candidate.outcome {
+        Err(reason) => {
+            return PackSkillReport {
+                name: candidate.label,
+                description: String::new(),
+                state: PackSkillState::Error,
+                reason,
+                relative_path: String::new(),
+                discovered: None,
+            }
+        }
+        Ok(skill) => skill,
+    };
+    let (state, reason) = if bundle_names.contains(&skill.name) {
+        (
+            PackSkillState::Shadowed,
+            "the bundle ships a skill with this name; the bundle's version is used".to_string(),
+        )
+    } else {
+        let owners = claims.get(&skill.name).map(Vec::as_slice).unwrap_or(&[]);
+        if owners.len() > 1 {
+            let mut others: Vec<String> = Vec::new();
+            for owner in owners {
+                let label = if owner == pack {
+                    // Two skills of one pack with one name.
+                    format!("{owner} (a second skill)")
+                } else {
+                    owner.clone()
+                };
+                if !others.contains(&label) {
+                    others.push(label);
+                }
+            }
+            (
+                PackSkillState::Error,
+                format!(
+                    "another pack skill has this name too (packs: {}); none of them is used",
+                    others.join(", ")
+                ),
+            )
+        } else {
+            (PackSkillState::Active, String::new())
+        }
+    };
+    PackSkillReport {
+        name: skill.name.clone(),
+        description: skill.description.clone(),
+        state,
+        reason,
+        relative_path: skill.relative_path.clone(),
+        discovered: Some(skill),
+    }
+}
+
+/// Whether a directory is writable by its group or by anyone (Unix); always false elsewhere.
+fn loosely_writable(meta: &fs::Metadata) -> bool {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        meta.permissions().mode() & 0o022 != 0
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = meta;
+        false
+    }
+}
+
+/// Reads one pack folder. `Err` is the reason the whole pack is refused.
+fn scan_pack(pack_dir: &Path) -> Result<Vec<Candidate>, String> {
+    let meta = fs::symlink_metadata(pack_dir).map_err(|e| format!("cannot read the pack: {e}"))?;
+    if meta.file_type().is_symlink() {
+        return Err("refusing a symlinked pack".to_string());
+    }
+    if loosely_writable(&meta) {
+        return Err(
+            "refusing a pack folder that is writable by its group or by everyone; run chmod go-w on it"
+                .to_string(),
+        );
+    }
+    let skills_dir = pack_dir.join("skills");
+    match fs::symlink_metadata(&skills_dir) {
+        Err(_) => return Ok(Vec::new()),
+        Ok(meta) if meta.file_type().is_symlink() => {
+            return Err("refusing a symlinked skills folder".to_string())
+        }
+        Ok(meta) if !meta.is_dir() => return Ok(Vec::new()),
+        Ok(_) => {}
+    }
+    let mut seen = 0usize;
+    reject_links_below(&skills_dir, 0, &mut seen)?;
+
+    let mut candidates = Vec::new();
+    let mut entries = sorted_dirs(&skills_dir)?;
+    entries.retain(|(name, _)| !name.starts_with('.'));
+    for (entry_name, entry_path) in entries {
+        let root_skill_md = entry_path.join("SKILL.md");
+        if root_skill_md.is_file() {
+            candidates.push(candidate(
+                pack_dir,
+                &entry_path,
+                &root_skill_md,
+                &entry_name,
+                "",
+                true,
+            ));
+            continue;
+        }
+        let Ok(subs) = sorted_dirs(&entry_path) else {
+            candidates.push(Candidate {
+                label: entry_name,
+                outcome: Err("cannot read the group folder".to_string()),
+            });
+            continue;
+        };
+        for (sub_name, sub_path) in subs {
+            if sub_name.starts_with('.') {
+                continue;
+            }
+            let grouped = sub_path.join("SKILL.md");
+            if grouped.is_file() {
+                candidates.push(candidate(
+                    pack_dir,
+                    &sub_path,
+                    &grouped,
+                    &sub_name,
+                    &entry_name,
+                    false,
+                ));
+            } else if crate::skill_discovery::has_deeper_skill_md(&sub_path) {
+                candidates.push(Candidate {
+                    label: sub_name,
+                    outcome: Err(
+                        "skill nesting deeper than one group level is not supported".to_string()
+                    ),
+                });
+            }
+        }
+    }
+    Ok(candidates)
+}
+
+/// The sub-directories of `dir` (links are rejected before this runs), sorted by name.
+fn sorted_dirs(dir: &Path) -> Result<Vec<(String, PathBuf)>, String> {
+    let entries = fs::read_dir(dir).map_err(|e| format!("cannot read {}: {e}", dir.display()))?;
+    let mut out: Vec<(String, PathBuf)> = entries
+        .flatten()
+        .filter(|entry| entry.file_type().is_ok_and(|kind| kind.is_dir()))
+        .filter_map(|entry| Some((entry.file_name().into_string().ok()?, entry.path())))
+        .collect();
+    out.sort_by(|a, b| a.0.cmp(&b.0));
+    Ok(out)
+}
+
+/// Refuses the pack on a symlink or any other link-like entry below `dir`, and on a tree too big
+/// to read. Dot entries (`.git`) are never read, so they are not walked.
+fn reject_links_below(dir: &Path, depth: usize, seen: &mut usize) -> Result<(), String> {
+    if depth > MAX_TREE_DEPTH {
+        return Err("pack skills nested too deep".to_string());
+    }
+    let entries = fs::read_dir(dir).map_err(|e| format!("cannot read {}: {e}", dir.display()))?;
+    for entry in entries {
+        let entry = entry.map_err(|e| format!("read error in {}: {e}", dir.display()))?;
+        if entry.file_name().to_string_lossy().starts_with('.') {
+            continue;
+        }
+        *seen += 1;
+        if *seen > MAX_TREE_ENTRIES {
+            return Err("pack skills hold too many files".to_string());
+        }
+        let kind = entry
+            .file_type()
+            .map_err(|e| format!("file type error for {}: {e}", entry.path().display()))?;
+        if kind.is_symlink() {
+            return Err(format!(
+                "refusing a symlink in the pack: {}",
+                entry.path().display()
+            ));
+        }
+        if kind.is_dir() {
+            reject_links_below(&entry.path(), depth + 1, seen)?;
+        }
+    }
+    Ok(())
+}
+
+fn candidate(
+    pack_dir: &Path,
+    skill_dir: &Path,
+    skill_md: &Path,
+    fallback_name: &str,
+    group: &str,
+    check_nesting: bool,
+) -> Candidate {
+    let outcome = (|| {
+        if check_nesting && crate::skill_discovery::has_deeper_skill_md(skill_dir) {
+            return Err("skill nesting deeper than one group level is not supported".to_string());
+        }
+        let (name, description, targets) =
+            crate::skill_discovery::read_skill_metadata(skill_md, fallback_name)?;
+        if crate::artifact_registry::SkillName::new(name.as_str()).is_none() {
+            return Err(format!("invalid skill name: {name:?}"));
+        }
+        let skill = DiscoveredSkill {
+            name,
+            description,
+            targets,
+            group: group.to_string(),
+            source_dir: skill_dir.to_path_buf(),
+            skill_md_path: skill_md.to_path_buf(),
+            relative_path: skill_md
+                .strip_prefix(pack_dir)
+                .unwrap_or(skill_md)
+                .to_string_lossy()
+                .replace('\\', "/"),
+        };
+        crate::skill_discovery::validate_skill_targets(std::slice::from_ref(&skill))?;
+        for rel in crate::skill_discovery::skill_support_files(skill_dir)? {
+            if crate::artifact_registry::SkillRelPath::new(rel.as_str()).is_none() {
+                return Err(format!(
+                    "a supporting file the installer cannot represent: {rel}"
+                ));
+            }
+        }
+        Ok(skill)
+    })();
+    Candidate {
+        label: fallback_name.to_string(),
+        outcome,
+    }
+}
+
+// ── Held skills ──
+
+fn compute_held(
+    workspace_root: &Path,
+    packs: &[PackReport],
+    catalog: &Result<Vec<CatalogSkill>, String>,
+) -> Vec<HeldSkill> {
+    let Ok(catalog) = catalog else {
+        // A bundle that does not load is reported elsewhere; nothing is planned from it either.
+        return Vec::new();
+    };
+    let recorded = read_recorded(workspace_root).packs;
+    if recorded.is_empty() {
+        return Vec::new();
+    }
+    let in_catalog: HashSet<&str> = catalog.iter().map(|s| s.skill.name.as_str()).collect();
+    let installed = installed_skill_names(workspace_root);
+    let mut held = Vec::new();
+    for (pack, names) in recorded {
+        for name in names {
+            // Only what the app installed can be held; a name never installed, or since removed
+            // (uninstall, rollback), has nothing to protect.
+            if in_catalog.contains(name.as_str()) || !installed.contains(&name) {
+                continue;
+            }
+            let report = packs.iter().find(|report| report.name == pack);
+            let (state, reason) = match report {
+                None => (HeldState::Missing, "pack missing".to_string()),
+                Some(report) => match &report.refused {
+                    Some(reason) => (HeldState::Missing, format!("pack refused: {reason}")),
+                    None => match report.skills.iter().find(|skill| skill.name == name) {
+                        // Present and loaded, and the skill is not in it: removed on purpose.
+                        None => continue,
+                        Some(skill) => (HeldState::Error, skill.reason.clone()),
+                    },
+                },
+            };
+            held.push(HeldSkill {
+                pack: pack.clone(),
+                name,
+                state,
+                reason,
+            });
+        }
+    }
+    held
+}
+
+// ── pack-skills.json ──
+
+#[derive(Debug, Default, Serialize, Deserialize)]
+struct RecordDocument {
+    #[serde(default)]
+    schema_version: u32,
+    #[serde(default)]
+    packs: BTreeMap<String, BTreeSet<String>>,
+}
+
+enum Stored {
+    Absent,
+    Usable(BTreeMap<String, BTreeSet<String>>),
+    /// Valid JSON of another schema version.
+    Foreign,
+    Unusable,
+}
+
+/// What `pack-skills.json` holds; an unusable file reads as empty.
+struct Recorded {
+    packs: BTreeMap<String, BTreeSet<String>>,
+}
+
+fn record_path(workspace_root: &Path) -> PathBuf {
+    crate::workspace_layout::state_file(workspace_root, PACK_SKILLS_FILE)
+}
+
+fn read_stored(workspace_root: &Path) -> Stored {
+    let path = record_path(workspace_root);
+    if crate::path_safety::reject_symlink_parent_chain(&path, workspace_root, "pack skills")
+        .is_err()
+        || crate::path_safety::reject_symlink(&path, "pack skills").is_err()
+    {
+        return Stored::Unusable;
+    }
+    let meta = match fs::metadata(&path) {
+        Ok(meta) => meta,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Stored::Absent,
+        Err(_) => return Stored::Unusable,
+    };
+    if !meta.is_file() || meta.len() > MAX_FILE_BYTES {
+        return Stored::Unusable;
+    }
+    let Some(document) = fs::read_to_string(&path)
+        .ok()
+        .and_then(|raw| serde_json::from_str::<RecordDocument>(&raw).ok())
+    else {
+        return Stored::Unusable;
+    };
+    if document.schema_version != SCHEMA_VERSION {
+        return Stored::Foreign;
+    }
+    Stored::Usable(document.packs)
+}
+
+fn read_recorded(workspace_root: &Path) -> Recorded {
+    Recorded {
+        packs: match read_stored(workspace_root) {
+            Stored::Usable(packs) => packs,
+            Stored::Absent | Stored::Foreign | Stored::Unusable => BTreeMap::new(),
+        },
+    }
+}
+
+fn write_recorded(
+    workspace_root: &Path,
+    packs: BTreeMap<String, BTreeSet<String>>,
+) -> Result<(), String> {
+    let before = match read_stored(workspace_root) {
+        Stored::Usable(packs) => packs,
+        Stored::Absent | Stored::Unusable => BTreeMap::new(),
+        Stored::Foreign => {
+            return Err(
+                "pack-skills.json was written by another version of Riggverk; update the app or move the file away"
+                    .to_string(),
+            )
+        }
+    };
+    if before == packs {
+        return Ok(());
+    }
+    let document = RecordDocument {
+        schema_version: SCHEMA_VERSION,
+        packs,
+    };
+    let raw = serde_json::to_vec_pretty(&document)
+        .map_err(|error| format!("serialize pack skills: {error}"))?;
+    crate::managed_state::ensure_data_folder(workspace_root)?;
+    crate::safe_filesystem::write_regular_file_atomic(
+        &record_path(workspace_root),
+        &raw,
+        workspace_root,
+    )
+    .map_err(|error| format!("write pack skills: {error}"))
+}
+
+/// Names of the skills the managed state holds a file of.
+fn installed_skill_names(workspace_root: &Path) -> HashSet<String> {
+    crate::managed_state::read_managed_state(workspace_root)
+        .map(|state| {
+            state
+                .artifacts
+                .iter()
+                .filter_map(|record| {
+                    crate::managed_bootstrap::artifact_from_identity(&record.identity)
+                        .ok()?
+                        .as_skill_file()
+                })
+                .map(|file| file.skill.as_str().to_string())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Records the installed pack skills after a successful transaction: every active pack skill the
+/// managed state now holds, plus the held ones as they were. A name the catalog dropped from a
+/// pack that is present is not carried over: that skill was retired.
+pub fn record_after_transaction(
+    workspace_root: &Path,
+    sources: &SkillSources,
+) -> Result<(), String> {
+    let installed = installed_skill_names(workspace_root);
+    let mut packs: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    for (name, pack) in sources.active_pack_skills() {
+        if installed.contains(name) {
+            packs
+                .entry(pack.to_string())
+                .or_default()
+                .insert(name.to_string());
+        }
+    }
+    for held in sources.held() {
+        packs
+            .entry(held.pack.clone())
+            .or_default()
+            .insert(held.name.clone());
+    }
+    write_recorded(workspace_root, packs)
+}
+
+/// Forgets a pack: its recorded skills stop being held, so the next Install retires their
+/// app-owned copies with a backup. Refused while the pack still provides skills.
+pub fn forget_pack(workspace_root: &Path, pack: &str) -> Result<usize, String> {
+    if !valid_pack_name(pack) {
+        return Err(format!("not a pack name: {pack:?}"));
+    }
+    let sources = SkillSources::for_workspace(workspace_root)?;
+    if sources.active_pack_skills().values().any(|p| *p == pack) {
+        return Err(format!(
+            "pack {pack} is present and provides skills; remove its folder first"
+        ));
+    }
+    let mut recorded = read_recorded(workspace_root).packs;
+    let Some(names) = recorded.remove(pack) else {
+        return Err(format!("no installed skills are recorded for pack {pack}"));
+    };
+    write_recorded(workspace_root, recorded)?;
+    Ok(names.len())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pack_names_follow_the_contract() {
+        for ok in ["a", "0", "hugrverk", "my-pack-2", &"a".repeat(64)] {
+            assert!(valid_pack_name(ok), "{ok}");
+        }
+        for bad in ["", "-a", "A", "a_b", "a.b", ".git", "a b", &"a".repeat(65)] {
+            assert!(!valid_pack_name(bad), "{bad}");
+        }
+    }
+}

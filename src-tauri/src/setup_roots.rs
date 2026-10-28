@@ -5,7 +5,8 @@ static PACKAGED_BUNDLED_ROOT: OnceLock<PathBuf> = OnceLock::new();
 
 #[derive(Debug, Clone)]
 pub struct SetupRoots {
-    pub bundled_root: PathBuf,
+    /// The bundle and the packs of `runtime_root`, read once for the whole operation.
+    pub sources: crate::skill_sources::SkillSources,
     pub runtime_root: PathBuf,
     pub home: PathBuf,
     pub backup_root: PathBuf,
@@ -22,7 +23,7 @@ impl SetupRoots {
             return Err("bundled and runtime workspace roots must be distinct".to_string());
         }
         Ok(Self {
-            bundled_root,
+            sources: crate::skill_sources::SkillSources::new(bundled_root, &runtime_root),
             runtime_root,
             home,
             backup_root,
@@ -40,6 +41,10 @@ pub fn initialize(root: PathBuf) -> Result<(), String> {
 }
 
 pub fn bundled_root() -> Result<PathBuf, String> {
+    #[cfg(test)]
+    if let Some(root) = test_bundle::get() {
+        return Ok(root);
+    }
     if let Some(root) = PACKAGED_BUNDLED_ROOT.get() {
         return Ok(root.clone());
     }
@@ -61,6 +66,35 @@ pub fn bundled_root_for(runtime_root: &Path) -> Result<PathBuf, String> {
         return Err("bundled and runtime workspace roots must be distinct".to_string());
     }
     Ok(bundled)
+}
+
+/// Per-thread replacement of the bundle, so a test can ship a different set of skills.
+#[cfg(test)]
+pub(crate) mod test_bundle {
+    use std::cell::RefCell;
+    use std::path::PathBuf;
+
+    thread_local! {
+        static BUNDLE: RefCell<Option<PathBuf>> = const { RefCell::new(None) };
+    }
+
+    pub(super) fn get() -> Option<PathBuf> {
+        BUNDLE.with(|cell| cell.borrow().clone())
+    }
+
+    pub(crate) struct Guard;
+
+    impl Drop for Guard {
+        fn drop(&mut self) {
+            BUNDLE.with(|cell| *cell.borrow_mut() = None);
+        }
+    }
+
+    /// Use `root` as the bundle on this thread until the guard drops.
+    pub(crate) fn set(root: PathBuf) -> Guard {
+        BUNDLE.with(|cell| *cell.borrow_mut() = Some(root));
+        Guard
+    }
 }
 
 #[cfg(test)]

@@ -44,7 +44,7 @@ impl std::fmt::Display for SkillDiscoveryError {
     }
 }
 
-fn has_deeper_skill_md(dir: &Path) -> bool {
+pub(crate) fn has_deeper_skill_md(dir: &Path) -> bool {
     scan_deeper_skill_md(dir, 0)
 }
 
@@ -128,7 +128,7 @@ fn parse_frontmatter_body(content: &str) -> Result<&str, String> {
     Ok(&rest[..end])
 }
 
-fn read_skill_metadata(
+pub(crate) fn read_skill_metadata(
     skill_md: &Path,
     fallback_name: &str,
 ) -> Result<(String, String, Vec<String>), String> {

@@ -29,6 +29,7 @@ use crate::setup_lifecycle::OperationKind;
 use crate::setup_transaction;
 use crate::skill_health::skill_files_status;
 use crate::skill_roots::{codex_home_is_custom, roots_read_by, unserved, SkillRoot, SkillScope};
+use crate::skill_sources::SkillSources;
 
 /// How many version folders below `~/.nvm/versions/node` are looked at.
 const MAX_NVM_VERSIONS: usize = 256;
@@ -300,7 +301,8 @@ fn inspect_skills(
     let scope = SkillScope::for_harnesses(&with, codex_custom);
     let roots = roots_read_by(harness, &scope);
     let unserved = unserved(&with, codex_custom).contains(&harness);
-    let status = bundled_root.map(|bundle| skill_files_status(bundle, home, &roots));
+    let status = bundled_root
+        .map(|bundle| skill_files_status(&SkillSources::for_current(bundle), home, &roots));
     match status {
         Some(Ok(status)) => LightSkillsHealth {
             status: if unserved {

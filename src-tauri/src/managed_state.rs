@@ -16,6 +16,7 @@ use crate::artifact_registry::{expand_surface, ArtifactId};
 use crate::setup_fingerprint;
 use crate::setup_lifecycle::SetupSurfaceId;
 use crate::skill_roots::SkillScope;
+use crate::skill_sources::{BundleOnly, SourceRoot};
 
 pub const MANAGED_STATE_SCHEMA_VERSION: u32 = 2;
 pub const MANAGED_STATE_REL: &str = ".riggverk/managed-state.json";
@@ -224,9 +225,9 @@ fn validate_state(state: &ManagedState) -> Result<(), String> {
     Ok(())
 }
 
-pub fn next_state_from_operations(
+pub fn next_state_from_operations<R: SourceRoot + ?Sized>(
     previous: Option<&ManagedState>,
-    bundled_root: &Path,
+    bundled_root: &R,
     runtime_root: &Path,
     home: &Path,
     operations: &[crate::setup_transaction::ArtifactManifestOperation],
@@ -301,7 +302,11 @@ pub fn next_state_from_operations(
     artifacts.sort_by(|a, b| a.identity.cmp(&b.identity));
     Ok(ManagedState {
         schema_version: MANAGED_STATE_SCHEMA_VERSION,
-        bundled_version: compute_bundled_version(bundled_root, home, bundled_root)?,
+        bundled_version: compute_bundled_version(
+            bundled_root.bundle(),
+            home,
+            bundled_root.bundle(),
+        )?,
         artifacts,
     })
 }
@@ -312,9 +317,9 @@ pub fn next_state_from_operations(
 /// would turn the next source change into a false conflict. Artifacts that
 /// differ from both the record and the source are user-modified and keep their
 /// record untouched.
-fn refresh_records_matching_source(
+fn refresh_records_matching_source<R: SourceRoot + ?Sized>(
     records: &mut HashMap<String, ManagedArtifactRecord>,
-    bundled_root: &Path,
+    bundled_root: &R,
     runtime_root: &Path,
     home: &Path,
 ) {
@@ -346,8 +351,8 @@ fn refresh_records_matching_source(
 
 /// Collect canonical harness artifact IDs for all managed surfaces. The skill files are those of
 /// the roots in `scope`.
-pub fn canonical_harness_artifacts(
-    workspace_root: &Path,
+pub fn canonical_harness_artifacts<R: SourceRoot + ?Sized>(
+    workspace_root: &R,
     scope: &SkillScope,
 ) -> Result<Vec<ArtifactId>, String> {
     let surfaces: Vec<SetupSurfaceId> = SetupSurfaceId::ALL
@@ -367,11 +372,11 @@ pub fn canonical_harness_artifacts(
     Ok(artifacts)
 }
 
-/// Logical identities for all current canonical artifacts (from bundled sources). A recorded
+/// Logical identities for all current canonical artifacts (from the bundle and the packs). A recorded
 /// artifact that is not among them is stale: that includes a skill file in a root `scope` no
 /// longer wants.
-pub fn canonical_artifact_identities(
-    bundled_root: &Path,
+pub fn canonical_artifact_identities<R: SourceRoot + ?Sized>(
+    bundled_root: &R,
     scope: &SkillScope,
 ) -> Result<HashSet<String>, String> {
     let mut ids = HashSet::new();
@@ -386,15 +391,38 @@ pub fn canonical_artifact_identities(
     Ok(ids)
 }
 
+/// Identities of the recorded files of the skills in `held`, any root. They are not canonical, yet
+/// they must not be treated as stale either (see `skill_sources`).
+pub fn held_skill_identities(
+    held: &HashSet<&str>,
+    records: &[ManagedArtifactRecord],
+) -> HashSet<String> {
+    if held.is_empty() {
+        return HashSet::new();
+    }
+    records
+        .iter()
+        .filter(|record| {
+            crate::managed_bootstrap::artifact_from_identity(&record.identity)
+                .ok()
+                .and_then(|artifact| artifact.as_skill_file())
+                .is_some_and(|file| held.contains(file.skill.as_str()))
+        })
+        .map(|record| record.identity.clone())
+        .collect()
+}
+
 pub fn compute_bundled_version(
     _workspace_root: &Path,
     home: &Path,
     bundled_root: &Path,
 ) -> Result<String, String> {
     let mut input = Vec::new();
-    // The fingerprint of the bundle must not move with the settings: every root counts.
-    for artifact in canonical_harness_artifacts(bundled_root, &SkillScope::all())? {
-        let digest = setup_fingerprint::artifact_source_digest(&artifact, bundled_root, home)?;
+    // The fingerprint of the bundle must not move with the settings: every root counts. Packs
+    // are not part of the bundle, so they do not move it either.
+    let bundle = BundleOnly(bundled_root);
+    for artifact in canonical_harness_artifacts(&bundle, &SkillScope::all())? {
+        let digest = setup_fingerprint::artifact_source_digest(&artifact, &bundle, home)?;
         input.extend_from_slice(artifact_identity(&artifact).as_bytes());
         input.push(0);
         input.extend_from_slice(digest.as_bytes());
