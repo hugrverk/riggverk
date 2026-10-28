@@ -96,6 +96,26 @@ export interface CodexConfigStatus {
   kept: CodexConfigKey[];
   /** Installed value differs from what Riggverk writes and is not kept: `m` keeps it. */
   differing: CodexConfigKey[];
+  /** What Riggverk writes for each key in `kept` and `differing` (the bundled config's value). Absent from an older backend. */
+  expected?: CodexConfigKey[];
+}
+
+/** One enforced Codex config key that "use Riggverk's defaults" sets to Riggverk's value. Not secret. */
+export interface CodexConfigDefaultKey {
+  key: string;
+  /** The installed value that is replaced (cut when very long). */
+  yours: string;
+  /** The bundled config's value that is written. */
+  riggverk: string;
+}
+
+/** What `preview_codex_config_defaults` returns: the keys, a key-only diff, and the proof `apply_codex_config_defaults` needs. */
+export interface CodexConfigDefaultsPreview {
+  keys: CodexConfigDefaultKey[];
+  /** A removed and an added line per key; never other text of config.toml. */
+  diff: string;
+  plan_fingerprint: string;
+  preview_token: string;
 }
 
 /** What the workspace row tells about the data folder. Counts and a flag, never file contents. */
@@ -934,4 +954,36 @@ export interface PackLibrary {
   packs: PackEntry[];
   skills: PackSkillEntry[];
   ignored: { name: string; reason: string }[];
+}
+
+/** Persisted plan facts. A null history receipt means these facts were not recorded. */
+export interface SetupReceipt {
+  synced: SetupSurfaceId[];
+  left_for_you: { surface: SetupSurfaceId; reason: "conflict" | "manual" }[];
+}
+
+/** Read-only transaction history for the active workspace (`list_setup_history`). */
+export interface SetupHistoryEntry {
+  transaction_id: string;
+  /** Unix nanoseconds as decimal strings. Older manifests have no finish time. */
+  created_at: string;
+  finished_at: string | null;
+  status: "applied" | "rolled_back" | "failed";
+  surfaces: SetupSurfaceId[];
+  /** Harness-specific surfaces; shared skills remain one surface. */
+  harnesses: InstallAgent[];
+  changes: {
+    surface: SetupSurfaceId;
+    kind: "create" | "update" | "remove";
+    /** Existing `~/...` display label, or a short label outside the home folder. */
+    path: string;
+    applied: boolean;
+    restored: boolean;
+  }[];
+  operation_counts: { create: number; update: number; remove: number };
+  backup_files: number;
+  is_newest_completed: boolean;
+  /** Offer only; always dry-run and confirm before calling rollback. */
+  undoable: boolean;
+  receipt: SetupReceipt | null;
 }

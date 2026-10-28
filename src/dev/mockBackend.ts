@@ -27,6 +27,7 @@ import { mockIPC } from "@tauri-apps/api/mocks";
 import { isLightAgent } from "../lib/harnessInstallation";
 import type {
   ActionResult,
+  CodexConfigDefaultsPreview,
   CodexConfigKey,
   AgentMetadataListResponse,
   AgentSourceContent,
@@ -67,6 +68,7 @@ import type {
   RulesStatus,
   RulesSurfaceId,
   SecurityPosture,
+  SetupHistoryEntry,
   SetupPlan,
   SetupResult,
   SetupSurfaceId,
@@ -814,6 +816,71 @@ function setCodexConfigKept(kept: boolean) {
   }
 }
 
+/** Riggverk's value for each enforced key, as the bundled config sets them. */
+const CODEX_RIGGVERK_VALUES: Record<string, string> = {
+  approval_policy: "on-request",
+  approvals_reviewer: "user",
+  sandbox_mode: "workspace-write",
+  "apps._default.approvals_reviewer": "user",
+  "apps._default.default_tools_approval_mode": "prompt",
+};
+
+/** What Riggverk writes for each kept or differing key. */
+function codexConfigExpected(): CodexConfigKey[] {
+  return [...codexConfigKeys.kept, ...codexConfigKeys.differing].flatMap(item => {
+    const value = CODEX_RIGGVERK_VALUES[item.key];
+    return value === undefined ? [] : [{ key: item.key, value }];
+  });
+}
+
+let codexDefaultsSeq = 0;
+let codexDefaultsOpen: { fingerprint: string; token: string; keys: CodexConfigKey[] } | null = null;
+/** The differing keys a reset replaced, by transaction, so the rollback brings them back. */
+const codexDefaultsSnapshots = new Map<string, CodexConfigKey[]>();
+
+function mockCodexDefaults(): CodexConfigDefaultsPreview {
+  const { differing } = codexConfigKeys;
+  if (differing.length === 0) {
+    throw new Error("no enforced key differs from the bundled config; there is nothing to reset");
+  }
+  codexDefaultsSeq += 1;
+  const keys = differing.map(item => ({ key: item.key, yours: item.value, riggverk: CODEX_RIGGVERK_VALUES[item.key] ?? "" }));
+  const fingerprint = `${fakeHash(`codex-defaults-${keys.map(item => item.key).join(",")}`)}${fakeHash(`seq-${codexDefaultsSeq}`)}`;
+  const token = `tok-codex-defaults-${codexDefaultsSeq}`;
+  codexDefaultsOpen = { fingerprint, token, keys: [...differing] };
+  return {
+    keys,
+    diff: keys.flatMap(item => [`- ${item.key} = ${JSON.stringify(item.yours)}`, `+ ${item.key} = ${JSON.stringify(item.riggverk)}`]).join("\n"),
+    plan_fingerprint: fingerprint,
+    preview_token: token,
+  };
+}
+
+function applyCodexDefaults(fingerprint: string | null, token: string | null): SetupResult {
+  const open = codexDefaultsOpen;
+  if (!open || fingerprint !== open.fingerprint || open.keys.length !== codexConfigKeys.differing.length) {
+    throw new Error("Plan fingerprint mismatch: the config changed after preview. Re-run preview before applying.");
+  }
+  if (token !== open.token) throw new Error("invalid or expired preview token");
+  codexDefaultsOpen = null;
+  transactionSeq += 1;
+  const id = `2026-10-06T08-55-00Z-${(0x9c00 + transactionSeq).toString(16)}`;
+  codexDefaultsSnapshots.set(id, open.keys);
+  codexConfigKeys = { kept: codexConfigKeys.kept, differing: [] };
+  surfaceStates.set("codex_config", "current");
+  lastTransactionId = id;
+  backups.unshift({ id, timestamp: new Date().toISOString(), path: `${BACKUP_ROOT}/${id}`, targets: ["codex_config"], file_count: 1 });
+  return {
+    success: true,
+    transaction_id: id,
+    applied: ["Codex config"],
+    failed: [],
+    rolled_back: [],
+    manual_steps: [],
+    message: `applied 1 · preserved 0 · failed 0 · transaction ${id} recorded`,
+  };
+}
+
 /** The mock data folder: the old copies an update removes, and what it leaves alone. */
 const MOCK_OLD_COPIES = 133;
 
@@ -848,7 +915,7 @@ function installationStatus(surfaces: SetupSurfaceId[]): InstallationStatus {
       detail: file ? rulesDetail(file, state) : ((surface === "codex_config" && codexConfigDetail(state)) || surfaceDetail(surface, state)),
       ...(file ? { rules: { ...file } } : {}),
       ...(surface === "codex_config" && (codexConfigKeys.kept.length > 0 || codexConfigKeys.differing.length > 0)
-        ? { codex_config: { kept: [...codexConfigKeys.kept], differing: [...codexConfigKeys.differing] } }
+        ? { codex_config: { kept: [...codexConfigKeys.kept], differing: [...codexConfigKeys.differing], expected: codexConfigExpected() } }
         : {}),
       ...(filesFor(surface) ? { files: filesFor(surface) } : {}),
       ...(surface === "workspace_bundle"
@@ -1762,6 +1829,12 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
       await delay(100);
       setCodexConfigKept(arg<boolean>(args, "kept"));
       return null;
+    case "preview_codex_config_defaults":
+      await delay(200);
+      return mockCodexDefaults();
+    case "apply_codex_config_defaults":
+      await emitProgress("apply_codex_config_defaults", ["~/.codex/config.toml"]);
+      return applyCodexDefaults(arg<string | null>(args, "planFingerprint"), arg<string | null>(args, "previewToken"));
     case "preview_file_diff":
       await delay(150);
       return mockFileDiff(arg<FilesSurfaceId>(args, "surface"), arg<string>(args, "unit"));
@@ -1792,7 +1865,13 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
       if (!dryRun) {
         const snapshot = rulesSnapshots.get(id);
         const replaced = takeBundledSnapshots.get(id);
-        if (replaced) {
+        const resetKeys = codexDefaultsSnapshots.get(id);
+        if (resetKeys) {
+          // Your values are back, and the choice to keep them is not, like the backend.
+          codexConfigKeys = { kept: codexConfigKeys.kept, differing: resetKeys };
+          surfaceStates.set("codex_config", "conflict");
+          codexDefaultsSnapshots.delete(id);
+        } else if (replaced) {
           // Your files are back; the choice to keep them is not, like the backend.
           const units = fileUnits.get(replaced.surface) ?? [];
           fileUnits.set(replaced.surface, [...units, { ...replaced.unit, state: "conflict", files: replaced.unit.files.map(file => ({ ...file, state: "conflict", bundle_changed: false })) }]);
@@ -1830,6 +1909,8 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
       return { success: true, transaction_id: lastTransactionId, applied: ["~/.claude/CLAUDE.md", "~/.codex/agents"], failed: [], rolled_back: [], manual_steps: [], message: "uninstalled 2 · preserved 1 · merged 1" } satisfies SetupResult;
     case "list_backups":
       return backups;
+    case "list_setup_history":
+      return setupHistory(arg<number | null>(args, "limit") ?? 20);
     case "get_backup_details":
       return backupDetails(arg<string>(args, "runId"));
     case "get_codex_runtime_health":
@@ -1960,6 +2041,45 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
 }
 
 mockIPC((cmd, args) => handle(cmd, args as Args), { shouldMockEvents: true });
+
+function setupHistory(limit: number): SetupHistoryEntry[] {
+  if (!Number.isInteger(limit) || limit < 0 || limit > 0xffffffff) {
+    throw new Error("limit must be an unsigned 32-bit integer");
+  }
+  if (scenario === "fresh" || scenario === "empty") return [];
+  const entries: SetupHistoryEntry[] = [
+    {
+      transaction_id: "1792663200000000000",
+      created_at: "1792663200000000000", finished_at: "1792663202000000000",
+      status: "applied", surfaces: ["claude_rules", "skills"], harnesses: ["claude"],
+      changes: [
+        { surface: "claude_rules", kind: "update", path: "~/.claude/CLAUDE.md", applied: true, restored: false },
+        { surface: "skills", kind: "create", path: "~/.claude/skills/diagnose/SKILL.md", applied: true, restored: false },
+      ],
+      operation_counts: { create: 1, update: 1, remove: 0 }, backup_files: 1,
+      is_newest_completed: true, undoable: true,
+      receipt: { synced: ["codex_rules", "open_code_config"], left_for_you: [{ surface: "cursor_agents", reason: "conflict" }] },
+    },
+    {
+      transaction_id: "1792576800000000000",
+      created_at: "1792576800000000000", finished_at: "1792576803000000000",
+      status: "rolled_back", surfaces: ["open_code_config"], harnesses: ["opencode"],
+      changes: [{ surface: "open_code_config", kind: "update", path: "~/.config/opencode/opencode.json", applied: true, restored: true }],
+      operation_counts: { create: 0, update: 1, remove: 0 }, backup_files: 1,
+      is_newest_completed: false, undoable: false,
+      receipt: { synced: ["claude_rules"], left_for_you: [{ surface: "cursor_mcp", reason: "manual" }] },
+    },
+    {
+      transaction_id: "1792490400000000000",
+      created_at: "1792490400000000000", finished_at: null,
+      status: "applied", surfaces: ["codex_rules"], harnesses: ["codex"],
+      changes: [{ surface: "codex_rules", kind: "create", path: "~/.codex/AGENTS.md", applied: true, restored: false }],
+      operation_counts: { create: 1, update: 0, remove: 0 }, backup_files: 0,
+      is_newest_completed: false, undoable: false, receipt: null,
+    },
+  ];
+  return entries.slice(0, limit);
+}
 
 // Report as a Tauri host so the shell lays out exactly as in the app (traffic-light reserve).
 (globalThis as { isTauri?: boolean }).isTauri = true;

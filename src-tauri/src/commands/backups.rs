@@ -409,6 +409,18 @@ fn managed_run_summary(kind: RunKind, run_path: &Path, name: &str) -> Option<Bac
     })
 }
 
+pub(super) fn setup_backup_file_count(run_path: &Path) -> usize {
+    let mut entries = Vec::new();
+    collect_backup_entries(
+        &RunKind::Setup.files_dir(run_path),
+        "",
+        0,
+        usize::MAX,
+        &mut entries,
+    );
+    entries.len()
+}
+
 /// Files of a managed run. The artifact a file belongs to is not mapped back to
 /// its current location, so the comparison status is `unknown`.
 fn managed_run_files(kind: RunKind, run_path: &Path) -> Vec<BackupFileSummary> {

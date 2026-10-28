@@ -164,11 +164,39 @@ impl Default for ArtifactManifestOperation {
     }
 }
 
+/// Receipt facts only: no plan summaries, paths, or file contents are persisted here.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SetupReceipt {
+    #[serde(default)]
+    pub synced: Vec<SetupSurfaceId>,
+    #[serde(default)]
+    pub left_for_you: Vec<SetupReceiptItem>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SetupReceiptItem {
+    pub surface: SetupSurfaceId,
+    pub reason: SetupReceiptReason,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SetupReceiptReason {
+    Conflict,
+    Manual,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ArtifactTransactionManifest {
     pub schema_version: u32,
     pub workspace_key: String,
     pub created_at: String,
+    /// Unix nanoseconds, like `created_at`; absent in older manifests.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub finished_at: Option<String>,
+    /// Absent means the run did not record receipt facts.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub receipt: Option<SetupReceipt>,
     pub surface_ids: Vec<SetupSurfaceId>,
     #[serde(default)]
     pub transaction_status: TransactionStatus,
@@ -239,9 +267,9 @@ pub struct Overwrite {
     pub expected_installed_digest: String,
 }
 
-/// A rules file the user chose to convert: the complete new content, and the
-/// digest of the file it was computed from. Apply refuses to write when the
-/// file changed since.
+/// A file the user chose to rewrite (a rules conversion, or the Codex config reset to Riggverk's
+/// defaults): the complete new content, and the digest of the file it was computed from. Apply
+/// refuses to write when the file changed since.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RulesRewrite {
     pub content: String,
@@ -312,7 +340,7 @@ fn surfaces_match(a: &[SetupSurfaceId], b: &[SetupSurfaceId]) -> bool {
     left == right
 }
 
-fn stable_fingerprint(parts: &[String]) -> Result<String, String> {
+pub(crate) fn stable_fingerprint(parts: &[String]) -> Result<String, String> {
     let encoded =
         serde_json::to_vec(parts).map_err(|e| format!("serialize fingerprint input: {e}"))?;
     Ok(crate::stable_digest::bytes(&encoded)
@@ -3851,6 +3879,8 @@ mod tests {
             schema_version: ARTIFACT_MANIFEST_SCHEMA_VERSION,
             workspace_key: workspace_key(&ws).unwrap_or_default(),
             created_at: "1".into(),
+            finished_at: None,
+            receipt: None,
             surface_ids: vec![SetupSurfaceId::OpenCodeRules],
             transaction_status: TransactionStatus::Prepared,
             previous_managed_state_present: false,
@@ -4041,6 +4071,8 @@ mod tests {
             schema_version: ARTIFACT_MANIFEST_SCHEMA_VERSION,
             workspace_key: workspace_key(&ws).unwrap_or_default(),
             created_at: "1".into(),
+            finished_at: None,
+            receipt: None,
             surface_ids: vec![SetupSurfaceId::OpenCodeRules],
             transaction_status: TransactionStatus::RolledBack,
             previous_managed_state_present: false,

@@ -144,6 +144,11 @@ function statusBarText(): string | null {
   return document.querySelector(".statusbar .ctx")!.textContent;
 }
 
+/** The transient notice (toast). */
+function noticeText(): string | null {
+  return document.querySelector(".toast")!.textContent;
+}
+
 function focusList() {
   act(() => listbox().focus());
   return listbox();
@@ -1091,12 +1096,12 @@ describe("LibraryView save", () => {
     expect(onOpenDoc).not.toHaveBeenCalled();
   });
 
-  it("does not save a clean doc and says so in the status bar", () => {
+  it("does not save a clean doc and says so in a toast", () => {
     const onSaveDoc = vi.fn();
     renderLibrary({ docs, activeDoc: doc, docDraft: doc.content, onSaveDoc });
     pressSave();
     expect(onSaveDoc).not.toHaveBeenCalled();
-    expect(statusBarText()).toBe("no changes to save");
+    expect(noticeText()).toBe("no changes to save");
   });
 
   it("does not start a second save while one is running", () => {
@@ -1129,7 +1134,7 @@ describe("LibraryView save", () => {
     expect(screen.getByRole("alert").textContent).toContain(BUNDLED_REASON);
   });
 
-  it("shows save progress and results in the document footer, and announces a finished save in the status bar", () => {
+  it("shows save progress and results in the document footer, and announces a finished save in a toast", () => {
     const { update } = renderLibrary({ docs, activeDoc: doc, docDraft: "# Edited", docDirty: true, docSaving: true });
     const footer = screen.getByRole("region", { name: "Document" }).querySelector(".pane-foot")!;
     expect(footer.textContent).toContain("saving…");
@@ -1151,7 +1156,7 @@ describe("LibraryView save", () => {
       docSaveResult: { success: true, action: "save_doc", stdout: "saved docs/a.md", stderr: "", exit_code: 0 },
     });
     expect(footer.textContent).toContain("saved docs/a.md");
-    expect(statusBarText()).toBe("saved docs/a.md");
+    expect(noticeText()).toBe("saved docs/a.md");
   });
 
   it("does not announce an old save result when the library is opened again", () => {

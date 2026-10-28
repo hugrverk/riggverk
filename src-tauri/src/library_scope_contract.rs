@@ -22,7 +22,7 @@ mod tests {
     /// (`docs/context/<slug>.md`) only, the last only the text below the managed block of a rules
     /// file. The others are install, conflict, rules-conversion, settings and workspace-reset
     /// actions that never take Library text. `forget_pack` edits `pack-skills.json` only.
-    const WRITE_COMMANDS: [&str; 16] = [
+    const WRITE_COMMANDS: [&str; 17] = [
         "save_doc",
         "create_doc",
         "save_rules_refinements",
@@ -33,6 +33,7 @@ mod tests {
         "set_rules_user_managed",
         "set_files_kept",
         "set_codex_config_kept",
+        "apply_codex_config_defaults",
         "forget_pack",
         "apply_take_bundled",
         "update_settings",

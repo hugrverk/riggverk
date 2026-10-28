@@ -5,11 +5,13 @@ import { LEAVE_DIRTY_MESSAGE } from "./lib/editorGuards";
 import { invokeOpen } from "./lib/invokeOpen";
 import { useConfirm } from "./components/ConfirmDialog";
 import { useBackups } from "./lib/useBackups";
+import { decideCountsByHarness, updateAllDisabledReason } from "./lib/shellSummary";
 import { useUninstallRecovery } from "./lib/useUninstallRecovery";
 import { useWorkspaceActions } from "./lib/useWorkspaceActions";
 import { useWorkspaceGeneration } from "./lib/useWorkspaceGeneration";
 import { useAppSettingsController } from "./hooks/useAppSettingsController";
 import { useApplyProgress } from "./hooks/useApplyProgress";
+import { useCheckedAt } from "./hooks/useCheckedAt";
 import { useScanOnSuccess } from "./hooks/useScanOnSuccess";
 import { useWhatsNewOnUpgrade } from "./hooks/useWhatsNewOnUpgrade";
 import { useWorkspaceReset } from "./hooks/useWorkspaceReset";
@@ -596,6 +598,13 @@ function AppShell() {
     ]);
   }, [loadWorkspaceDiagnostics, loadWorkspaceResources, loadBackups, overview.refresh, skillLoads.refresh]);
 
+  const checkedAt = useCheckedAt(overview);
+  const updateAllDisabled = updateAllDisabledReason(overview, { dataFolderOk, busyLabel: wsRunning, settingsSaving });
+  const decideCounts = useMemo(
+    () => decideCountsByHarness(overview, enabledHarnessIds, appSettings, dataFolderOk),
+    [overview, enabledHarnessKey, appSettings, dataFolderOk],
+  );
+
   // What the Start and harness pages share: the output pane, the install review and the rollback path.
   const pageProps = {
     wsLog,
@@ -674,7 +683,17 @@ function AppShell() {
         enabledHarnessIds={enabledHarnessIds}
         error={error}
         onDismissError={() => setError(null)}
-        statusRight={`${backups.length} backup${backups.length === 1 ? "" : "s"}`}
+        onCheck={() => {
+          notify("Checking every agent again…");
+          void refreshAll();
+        }}
+        onUpdateAll={() => void install.open("all")}
+        updateAllDisabled={updateAllDisabled}
+        checking={overview.loading}
+        decideCounts={decideCounts}
+        version={APP_VERSION}
+        backupCount={backups.length}
+        checkedAt={checkedAt}
         // The launch sequence waits for the settings (the motion level is final then) and only tells what has loaded.
         boot={
           appSettings

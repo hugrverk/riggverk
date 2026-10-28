@@ -381,4 +381,546 @@ mod tests {
         assert_eq!(env.read(), config_before);
         assert_eq!(env.kind(), OperationKind::Conflict);
     }
+
+    // ── Riggverk's expected values ──
+
+    fn keys(items: &[crate::codex_config_keep::KeyValue]) -> Vec<(String, String)> {
+        items
+            .iter()
+            .map(|item| (item.key.clone(), item.value.clone()))
+            .collect()
+    }
+
+    fn pair(key: &str, value: &str) -> (String, String) {
+        (key.to_string(), value.to_string())
+    }
+
+    #[test]
+    fn the_status_names_riggverks_value_next_to_the_users() {
+        let env = Env::new("expected");
+        assert!(env.status().codex_config.is_none(), "nothing differs yet");
+
+        env.set_top_level("approvals_reviewer", "auto_review");
+        env.set_top_level("sandbox_mode", "read-only");
+        let differing = env.status().codex_config.expect("differing keys");
+        assert_eq!(
+            keys(&differing.differing),
+            vec![
+                pair("approvals_reviewer", "auto_review"),
+                pair("sandbox_mode", "read-only")
+            ]
+        );
+        // Riggverk's value, from the bundled config, for each key listed.
+        assert_eq!(
+            keys(&differing.expected),
+            vec![
+                pair("approvals_reviewer", "user"),
+                pair("sandbox_mode", "workspace-write")
+            ]
+        );
+
+        // A kept key still names what Riggverk would write, not the kept value.
+        env.keep().unwrap();
+        let kept = env.status().codex_config.expect("kept keys");
+        assert_eq!(kept.kept.len(), 2);
+        assert!(kept.differing.is_empty());
+        assert_eq!(
+            keys(&kept.expected),
+            vec![
+                pair("approvals_reviewer", "user"),
+                pair("sandbox_mode", "workspace-write")
+            ]
+        );
+
+        // The frontend reads the field by this name.
+        let json = serde_json::to_value(&kept).expect("serialize");
+        assert_eq!(json["expected"][0]["key"], "approvals_reviewer");
+        assert_eq!(json["expected"][0]["value"], "user");
+    }
+
+    // ── Use Riggverk's defaults ──
+
+    use crate::commands::{
+        apply_codex_config_defaults, preview_codex_config_defaults, rollback_setup_transaction,
+    };
+
+    impl Env {
+        /// The user's config as the next tests need it: a differing key, comments, a custom
+        /// model, and a section Riggverk knows nothing about.
+        fn customize(&self) -> String {
+            self.set_top_level("approvals_reviewer", "auto_review");
+            self.set_top_level("model", "my-own-model");
+            let text = format!(
+                "# my own note\n{}\n\n# my servers\n[mcp_servers.demo]\ncommand = \"demo\"\n",
+                self.read().trim_end()
+            );
+            self.write(&text);
+            text
+        }
+
+        fn transactions(&self) -> usize {
+            fs::read_dir(self.base.join("backups").join("setup"))
+                .map(|entries| entries.count())
+                .unwrap_or(0)
+        }
+
+        fn set_target(&self, on: bool) {
+            let mut settings = crate::settings::load();
+            settings.enabled_target_ids.retain(|id| id != SURFACE);
+            if on {
+                settings.enabled_target_ids.push(SURFACE.to_string());
+            }
+            settings.enabled_target_ids =
+                crate::agent_targets::normalize_enabled_ids(&settings.enabled_target_ids);
+            crate::settings::save_with_revision_check(settings, None).expect("settings");
+        }
+    }
+
+    #[test]
+    fn using_the_defaults_sets_only_the_differing_key_and_keeps_everything_else() {
+        let env = Env::new("defaults");
+        let before = env.customize();
+        assert_eq!(env.kind(), OperationKind::Conflict);
+        let transactions = env.transactions();
+
+        let preview = preview_codex_config_defaults().expect("preview");
+        assert_eq!(preview.keys.len(), 1);
+        assert_eq!(preview.keys[0].key, "approvals_reviewer");
+        assert_eq!(preview.keys[0].yours, "auto_review");
+        assert_eq!(preview.keys[0].riggverk, "user");
+        assert_eq!(
+            preview.diff,
+            "- approvals_reviewer = \"auto_review\"\n+ approvals_reviewer = \"user\""
+        );
+        assert_eq!(env.read(), before, "the preview writes nothing");
+        assert_eq!(env.transactions(), transactions);
+
+        let result = apply_codex_config_defaults(
+            Some(preview.plan_fingerprint),
+            Some(preview.preview_token),
+        )
+        .expect("apply");
+        assert!(result.success, "{}", result.message);
+        assert_eq!(env.transactions(), transactions + 1, "one transaction");
+
+        // Byte for byte the same file, except the one value.
+        let expected = before.replace(
+            "approvals_reviewer = \"auto_review\"",
+            "approvals_reviewer = \"user\"",
+        );
+        assert_ne!(expected, before);
+        assert_eq!(env.read(), expected);
+        let written = env.read();
+        assert!(written.contains("# my own note") && written.contains("# my servers"));
+        assert!(written.contains("[mcp_servers.demo]"));
+        assert!(written.contains("model = \"my-own-model\""));
+
+        // Install agrees with the file now: nothing differs, nothing to update.
+        assert_eq!(env.kind(), OperationKind::NoChange);
+        assert_eq!(env.status().state, InstallationState::Current);
+        assert!(env.status().codex_config.is_none());
+        assert_eq!(env.record(), Some(env.installed_digest()));
+    }
+
+    #[test]
+    fn rolling_the_reset_back_restores_the_original_bytes() {
+        let env = Env::new("rollback");
+        let before = env.customize();
+        let preview = preview_codex_config_defaults().expect("preview");
+        let result = apply_codex_config_defaults(
+            Some(preview.plan_fingerprint),
+            Some(preview.preview_token),
+        )
+        .expect("apply");
+        assert!(result.success, "{}", result.message);
+        assert_ne!(env.read(), before);
+
+        // The original is backed up in the transaction.
+        let backup = env
+            .base
+            .join("backups")
+            .join("setup")
+            .join(&result.transaction_id)
+            .join("artifacts")
+            .join("codex-config");
+        let backup_file = if backup.is_dir() {
+            fs::read_dir(&backup)
+                .expect("backup folder")
+                .next()
+                .expect("backup file")
+                .expect("entry")
+                .path()
+        } else {
+            backup
+        };
+        assert_eq!(
+            fs::read_to_string(backup_file).expect("backup of config.toml"),
+            before
+        );
+
+        let rolled = rollback_setup_transaction(result.transaction_id, false).expect("rollback");
+        assert!(rolled.success, "{}", rolled.message);
+        assert_eq!(env.read(), before);
+        assert_eq!(env.kind(), OperationKind::Conflict);
+    }
+
+    #[test]
+    fn a_stale_fingerprint_or_token_is_refused_and_nothing_is_written() {
+        let env = Env::new("stale");
+        env.customize();
+        let preview = preview_codex_config_defaults().expect("preview");
+        let transactions = env.transactions();
+
+        // The config changed after the preview.
+        env.set_top_level("sandbox_mode", "read-only");
+        let edited = env.read();
+        let error = apply_codex_config_defaults(
+            Some(preview.plan_fingerprint.clone()),
+            Some(preview.preview_token.clone()),
+        )
+        .unwrap_err();
+        assert!(error.contains("fingerprint mismatch"), "{error}");
+        assert_eq!(env.read(), edited);
+        assert_eq!(env.transactions(), transactions);
+
+        // A fresh preview covers both keys now; its pair works once.
+        let fresh = preview_codex_config_defaults().expect("preview");
+        assert_eq!(fresh.keys.len(), 2);
+        assert_ne!(fresh.plan_fingerprint, preview.plan_fingerprint);
+        // A token of another preview does not go with this fingerprint.
+        assert!(apply_codex_config_defaults(
+            Some(fresh.plan_fingerprint.clone()),
+            Some(preview.preview_token),
+        )
+        .is_err());
+        assert_eq!(env.read(), edited);
+        let first = apply_codex_config_defaults(
+            Some(fresh.plan_fingerprint.clone()),
+            Some(fresh.preview_token.clone()),
+        )
+        .expect("apply");
+        assert!(first.success, "{}", first.message);
+        // Spent: the same pair cannot write twice.
+        assert!(apply_codex_config_defaults(
+            Some(fresh.plan_fingerprint),
+            Some(fresh.preview_token)
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn a_value_of_another_kind_in_an_enforced_key_is_never_rewritten_by_a_reset() {
+        let env = Env::new("granular");
+        // approval_policy holds a table: no string to compare, so it is not a difference, but the
+        // render would still overwrite its line. The reset must refuse rather than do that.
+        let text: Vec<String> = env
+            .read()
+            .lines()
+            .map(|line| {
+                if line.starts_with("approval_policy =") {
+                    "approval_policy = { granular = { sandbox_approval = true } }".to_string()
+                } else {
+                    line.to_string()
+                }
+            })
+            .collect();
+        env.write(&(text.join("\n") + "\n"));
+        env.set_top_level("approvals_reviewer", "auto_review");
+        let before = env.read();
+        let transactions = env.transactions();
+
+        let error = preview_codex_config_defaults().expect_err("refused");
+        assert!(
+            error.contains("cannot edit this config.toml safely"),
+            "{error}"
+        );
+        assert!(
+            !error.contains("granular"),
+            "no file text in errors: {error}"
+        );
+        assert_eq!(env.read(), before);
+        assert_eq!(env.transactions(), transactions);
+    }
+
+    #[test]
+    fn a_user_profile_and_a_customised_legacy_profile_table_are_left_alone() {
+        let env = Env::new("profiles");
+        env.set_top_level("approvals_reviewer", "auto_review");
+        let user_part = "\nprofile = \"work\"\n\n[profiles.safe]\nmodel = \"mine\"\napproval_policy = \"never\"\n\n[profiles.work]\nmodel = \"mine\"\n";
+        // `profile` is a top-level key: it has to come before the first table.
+        let text = env.read();
+        let first_table = text.find("\n[").expect("a table");
+        let (top, tables) = text.split_at(first_table);
+        let (profile_line, profile_tables) = user_part.trim_start().split_once("\n\n").unwrap();
+        let before = format!("{top}{profile_line}\n{tables}\n{profile_tables}");
+        env.write(&before);
+
+        let preview = preview_codex_config_defaults().expect("preview");
+        assert_eq!(preview.keys.len(), 1);
+        let result = apply_codex_config_defaults(
+            Some(preview.plan_fingerprint),
+            Some(preview.preview_token),
+        )
+        .expect("apply");
+        assert!(result.success, "{}", result.message);
+        let expected = before.replace(
+            "approvals_reviewer = \"auto_review\"",
+            "approvals_reviewer = \"user\"",
+        );
+        assert_eq!(env.read(), expected);
+    }
+
+    #[test]
+    fn the_reset_fingerprint_is_tagged_and_not_that_of_a_rules_conversion() {
+        let env = Env::new("tagged");
+        env.customize();
+        let plan = crate::codex_config_keep::plan_defaults(&env.ws, &env.home).expect("plan");
+        let fingerprint =
+            crate::codex_config_keep::defaults_fingerprint(&env.ws, &env.home, &plan).unwrap();
+        // The same operation fingerprinted as a conversion is another value.
+        let as_conversion =
+            crate::setup_transaction::conversion_fingerprint(&env.ws, &env.home, &plan.operation)
+                .unwrap();
+        assert_ne!(fingerprint, as_conversion);
+        // Stable for the same plan, different once the file differs.
+        let again = crate::codex_config_keep::plan_defaults(&env.ws, &env.home).unwrap();
+        assert_eq!(
+            fingerprint,
+            crate::codex_config_keep::defaults_fingerprint(&env.ws, &env.home, &again).unwrap()
+        );
+        env.set_top_level("sandbox_mode", "read-only");
+        let changed = crate::codex_config_keep::plan_defaults(&env.ws, &env.home).unwrap();
+        assert_ne!(
+            fingerprint,
+            crate::codex_config_keep::defaults_fingerprint(&env.ws, &env.home, &changed).unwrap()
+        );
+    }
+
+    #[test]
+    fn the_proof_is_required_and_checked() {
+        let env = Env::new("proof");
+        env.customize();
+        let preview = preview_codex_config_defaults().expect("preview");
+        let edited = env.read();
+        for (fingerprint, token) in [
+            (None, Some(preview.preview_token.clone())),
+            (Some(preview.plan_fingerprint.clone()), None),
+            (
+                Some("not hex!".to_string()),
+                Some(preview.preview_token.clone()),
+            ),
+            (Some("0".repeat(64)), Some(preview.preview_token.clone())),
+            (
+                Some(preview.plan_fingerprint.clone()),
+                Some("forged".to_string()),
+            ),
+        ] {
+            assert!(apply_codex_config_defaults(fingerprint, token).is_err());
+        }
+        assert_eq!(env.read(), edited);
+        assert_eq!(env.transactions(), 1, "only the install transaction");
+    }
+
+    #[test]
+    fn using_the_defaults_ends_the_choice_to_keep_those_keys_only() {
+        let env = Env::new("kept");
+        // Keep the reviewer; the user then also changes the sandbox and edits the reviewer again.
+        env.set_top_level("approvals_reviewer", "auto_review");
+        env.keep().unwrap();
+        env.set_top_level("sandbox_mode", "read-only");
+        env.set_top_level("approvals_reviewer", "something_else");
+        let prefs = |env: &Env| crate::config_preferences::load_codex_config(&env.ws);
+        assert_eq!(prefs(&env).map(|c| c.kept.len()), Some(1));
+
+        let preview = preview_codex_config_defaults().expect("preview");
+        let names: Vec<&str> = preview.keys.iter().map(|k| k.key.as_str()).collect();
+        assert_eq!(names, vec!["approvals_reviewer", "sandbox_mode"]);
+        let result = apply_codex_config_defaults(
+            Some(preview.plan_fingerprint),
+            Some(preview.preview_token),
+        )
+        .expect("apply");
+        assert!(result.success, "{}", result.message);
+        assert!(result.manual_steps.is_empty(), "{:?}", result.manual_steps);
+
+        let written = env.read();
+        assert!(
+            written.contains("approvals_reviewer = \"user\""),
+            "{written}"
+        );
+        assert!(
+            written.contains("sandbox_mode = \"workspace-write\""),
+            "{written}"
+        );
+        assert!(prefs(&env).is_none(), "the kept entry is gone");
+        // An edit back to the old kept value is a new difference, not a silent keep.
+        env.set_top_level("approvals_reviewer", "auto_review");
+        assert_eq!(env.kind(), OperationKind::Conflict);
+        assert_eq!(
+            env.status().codex_config.map(|c| c.differing.len()),
+            Some(1)
+        );
+    }
+
+    #[test]
+    fn a_key_that_is_still_kept_is_not_reset() {
+        let env = Env::new("still-kept");
+        env.set_top_level("approvals_reviewer", "auto_review");
+        env.keep().unwrap();
+        env.set_top_level("sandbox_mode", "read-only");
+
+        let preview = preview_codex_config_defaults().expect("preview");
+        assert_eq!(preview.keys.len(), 1);
+        assert_eq!(preview.keys[0].key, "sandbox_mode");
+        let result = apply_codex_config_defaults(
+            Some(preview.plan_fingerprint),
+            Some(preview.preview_token),
+        )
+        .expect("apply");
+        assert!(result.success, "{}", result.message);
+
+        let written = env.read();
+        assert!(
+            written.contains("approvals_reviewer = \"auto_review\""),
+            "{written}"
+        );
+        assert!(
+            written.contains("sandbox_mode = \"workspace-write\""),
+            "{written}"
+        );
+        let prefs = crate::config_preferences::load_codex_config(&env.ws).expect("still kept");
+        assert_eq!(prefs.kept.len(), 1);
+        assert!(prefs.kept.contains_key("approvals_reviewer"));
+        assert_eq!(env.kind(), OperationKind::NoChange);
+    }
+
+    #[test]
+    fn nothing_is_written_when_nothing_differs() {
+        let env = Env::new("nothing");
+        let before = env.read();
+        let transactions = env.transactions();
+        let error = preview_codex_config_defaults().expect_err("refused");
+        assert!(error.contains("nothing to reset"), "{error}");
+        let error = apply_codex_config_defaults(Some("0".repeat(64)), Some("x".into()))
+            .expect_err("refused");
+        assert!(error.contains("nothing to reset"), "{error}");
+        assert_eq!(env.read(), before);
+        assert_eq!(env.transactions(), transactions);
+
+        // A key the user left out, and a kept difference, are not differences either.
+        env.set_top_level("model", "my-own-model");
+        assert!(preview_codex_config_defaults().is_err());
+        env.set_top_level("approvals_reviewer", "auto_review");
+        env.keep().unwrap();
+        assert!(preview_codex_config_defaults().is_err());
+    }
+
+    #[test]
+    fn the_reset_refuses_an_unreadable_config_a_link_and_a_disabled_target() {
+        let env = Env::new("refuse-defaults");
+        env.set_top_level("approvals_reviewer", "auto_review");
+        let transactions = env.transactions();
+
+        env.set_target(false);
+        let error = preview_codex_config_defaults().expect_err("refused");
+        assert!(error.contains("disabled"), "{error}");
+        let error = apply_codex_config_defaults(Some("0".repeat(64)), Some("x".into()))
+            .expect_err("refused");
+        assert!(error.contains("disabled"), "{error}");
+        env.set_target(true);
+        let preview = preview_codex_config_defaults().expect("preview while on");
+
+        // The target is switched off after the preview: the pair no longer works.
+        env.set_target(false);
+        assert!(apply_codex_config_defaults(
+            Some(preview.plan_fingerprint),
+            Some(preview.preview_token)
+        )
+        .is_err());
+        env.set_target(true);
+
+        let original = env.read();
+        env.write("this is = not [valid toml");
+        let error = preview_codex_config_defaults().expect_err("refused");
+        assert!(error.contains("not valid TOML"), "{error}");
+        assert!(
+            !error.contains("this is"),
+            "no file text in errors: {error}"
+        );
+        env.write(&original);
+
+        #[cfg(unix)]
+        {
+            let real = env.base.join("real-config.toml");
+            fs::write(&real, &original).unwrap();
+            fs::remove_file(env.config()).unwrap();
+            std::os::unix::fs::symlink(&real, env.config()).unwrap();
+            let error = preview_codex_config_defaults().expect_err("refused");
+            assert!(
+                error.to_lowercase().contains("symlink") || error.contains("link"),
+                "{error}"
+            );
+            assert_eq!(fs::read_to_string(&real).unwrap(), original);
+            fs::remove_file(env.config()).unwrap();
+            fs::write(env.config(), &original).unwrap();
+        }
+
+        fs::remove_file(env.config()).unwrap();
+        let error = preview_codex_config_defaults().expect_err("refused");
+        assert!(error.contains("not installed"), "{error}");
+        assert_eq!(env.transactions(), transactions);
+    }
+
+    #[test]
+    fn the_reset_also_completes_what_an_update_would_but_touches_no_other_setting() {
+        let env = Env::new("completes");
+        // A differing key, an app default that is missing, and an old profile selector.
+        let without_app_default: Vec<String> = env
+            .read()
+            .lines()
+            .filter(|line| !line.contains("default_tools_approval_mode"))
+            .map(str::to_string)
+            .collect();
+        env.write(&format!(
+            "profile = \"safe\"\n{}\n",
+            without_app_default.join("\n")
+        ));
+        env.set_top_level("sandbox_mode", "read-only");
+        let before = env.read();
+
+        let preview = preview_codex_config_defaults().expect("preview");
+        assert_eq!(preview.keys.len(), 1);
+        let result = apply_codex_config_defaults(
+            Some(preview.plan_fingerprint),
+            Some(preview.preview_token),
+        )
+        .expect("apply");
+        assert!(result.success, "{}", result.message);
+
+        let written = env.read();
+        assert!(
+            written.contains("sandbox_mode = \"workspace-write\""),
+            "{written}"
+        );
+        assert!(written.contains("default_tools_approval_mode"), "{written}");
+        assert!(!written.contains("profile = \"safe\""), "{written}");
+        assert_eq!(env.kind(), OperationKind::NoChange);
+        // Every other line of the user's file is where it was.
+        for line in before
+            .lines()
+            .filter(|line| !line.contains("sandbox_mode") && !line.starts_with("profile ="))
+        {
+            assert!(written.contains(line), "lost line {line:?}");
+        }
+    }
+
+    #[test]
+    fn a_plain_install_still_refuses_the_difference_the_reset_resolves() {
+        let env = Env::new("install-still-refuses");
+        env.set_top_level("approvals_reviewer", "auto_review");
+        // Install never writes over the user's value; only the explicit reset does.
+        assert_eq!(env.kind(), OperationKind::Conflict);
+        assert!(env.plan_fingerprint().is_none(), "nothing to apply");
+        assert!(env.read().contains("approvals_reviewer = \"auto_review\""));
+    }
 }

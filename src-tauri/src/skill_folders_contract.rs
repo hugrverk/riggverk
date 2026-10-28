@@ -1093,6 +1093,8 @@ mod tests {
             schema_version: crate::setup_transaction::ARTIFACT_MANIFEST_SCHEMA_VERSION,
             workspace_key: crate::setup_transaction::workspace_key(&env.ws).expect("key"),
             created_at: "1".to_string(),
+            finished_at: None,
+            receipt: None,
             surface_ids: SetupSurfaceId::ALL.to_vec(),
             transaction_status: crate::setup_transaction::TransactionStatus::Prepared,
             previous_managed_state_present: false,

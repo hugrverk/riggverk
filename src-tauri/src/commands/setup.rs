@@ -29,7 +29,8 @@ use super::workspace::{setup_workspace_target_path, workspace_target_for_write};
 pub type TransactionId = String;
 
 use crate::setup_transaction::{
-    self, ArtifactManifestOperation, ArtifactTransactionManifest, ARTIFACT_MANIFEST_SCHEMA_VERSION,
+    self, ArtifactManifestOperation, ArtifactTransactionManifest, SetupReceipt, SetupReceiptItem,
+    SetupReceiptReason, ARTIFACT_MANIFEST_SCHEMA_VERSION,
 };
 
 fn new_transaction_id() -> Result<TransactionId, String> {
@@ -261,7 +262,7 @@ fn newer_completed_writes(
 ///
 /// A completed transaction owns the managed state written after it, so older
 /// transactions must not restore their managed-state snapshot over it.
-fn newer_completed_transaction(
+pub(super) fn newer_completed_transaction(
     backup_dir: &Path,
     workspace_key: &str,
 ) -> Result<Option<String>, String> {
@@ -306,7 +307,7 @@ fn newer_completed_transaction(
 }
 
 /// Transaction ids are decimal timestamps; compare them numerically.
-fn transaction_id_is_newer(candidate: &str, base: &str) -> bool {
+pub(super) fn transaction_id_is_newer(candidate: &str, base: &str) -> bool {
     let candidate = candidate.trim_start_matches('0');
     let base = base.trim_start_matches('0');
     (candidate.len(), candidate) > (base.len(), base)
@@ -664,6 +665,13 @@ fn persist_setup_manifest(
     transaction_root: &Path,
 ) -> Result<(), String> {
     manifest.transaction_status = status;
+    manifest.finished_at = match status {
+        setup_transaction::TransactionStatus::Completed
+        | setup_transaction::TransactionStatus::Failed
+        | setup_transaction::TransactionStatus::RolledBack
+        | setup_transaction::TransactionStatus::RollbackFailed => new_transaction_id().ok(),
+        _ => None,
+    };
     setup_transaction::persist_manifest_atomic(manifest_path, manifest, transaction_root)
 }
 
@@ -971,6 +979,22 @@ fn apply_single_artifact(
     }
 
     if artifact == &crate::artifact_registry::ArtifactId::CodexConfig {
+        // The reset to Riggverk's defaults writes exactly the content its preview rendered, and
+        // only over the file the preview was computed from.
+        if let Some(rewrite) = rules_rewrite {
+            let installed = crate::codex_config_keep::read_config_bounded(&dest)?;
+            if crate::stable_digest::bytes(&installed) != rewrite.expected_installed_digest {
+                return Err(
+                    "the Codex config.toml changed since preview; preview the reset again"
+                        .to_string(),
+                );
+            }
+            return crate::safe_filesystem::write_regular_file_atomic(
+                &dest,
+                rewrite.content.as_bytes(),
+                &root,
+            );
+        }
         if dest.is_file() {
             // The keys the user keeps are rendered from their kept value, never from the template.
             let rendered = crate::commands::render_codex_config_for_apply(
@@ -1075,6 +1099,35 @@ fn user_home() -> Result<PathBuf, String> {
 
 // ── Apply ──
 
+fn receipt_for_artifacts(selected: &[setup_transaction::PlannedArtifact]) -> SetupReceipt {
+    let mut receipt = SetupReceipt::default();
+    for planned in selected {
+        if planned.kind == OperationKind::NoChange
+            && selected
+                .iter()
+                .filter(|other| other.surface == planned.surface)
+                .all(|other| other.kind == OperationKind::NoChange)
+            && !receipt.synced.contains(&planned.surface)
+        {
+            receipt.synced.push(planned.surface);
+        }
+        record_receipt_item(&mut receipt, planned.surface, planned.kind);
+    }
+    receipt
+}
+
+fn record_receipt_item(receipt: &mut SetupReceipt, surface: SetupSurfaceId, kind: OperationKind) {
+    let reason = match kind {
+        OperationKind::Conflict => SetupReceiptReason::Conflict,
+        OperationKind::Manual => SetupReceiptReason::Manual,
+        _ => return,
+    };
+    let item = SetupReceiptItem { surface, reason };
+    if !receipt.left_for_you.contains(&item) {
+        receipt.left_for_you.push(item);
+    }
+}
+
 /// Apply artifact-level operations using artifact-owned transactions, reporting progress as it goes.
 pub(super) fn apply_planned_artifacts(
     selected: &[setup_transaction::PlannedArtifact],
@@ -1082,7 +1135,13 @@ pub(super) fn apply_planned_artifacts(
     preview_token: Option<&str>,
     progress: &mut ProgressReporter,
 ) -> SetupResult {
-    let result = run_planned_artifacts(selected, manual_steps, preview_token, progress);
+    let result = run_planned_artifacts(
+        selected,
+        manual_steps,
+        preview_token,
+        receipt_for_artifacts(selected),
+        progress,
+    );
     progress.finish();
     result
 }
@@ -1091,6 +1150,7 @@ fn run_planned_artifacts(
     selected: &[setup_transaction::PlannedArtifact],
     mut manual_steps: Vec<String>,
     preview_token: Option<&str>,
+    receipt: SetupReceipt,
     progress: &mut ProgressReporter,
 ) -> SetupResult {
     let transaction_id = match new_transaction_id() {
@@ -1341,6 +1401,8 @@ fn run_planned_artifacts(
         schema_version: ARTIFACT_MANIFEST_SCHEMA_VERSION,
         workspace_key,
         created_at: transaction_id.clone(),
+        finished_at: None,
+        receipt: Some(receipt),
         surface_ids: surfaces.clone(),
         transaction_status: setup_transaction::TransactionStatus::Prepared,
         previous_managed_state_present,
@@ -2232,7 +2294,7 @@ pub fn detect_surface_state(
 }
 
 /// Validate transaction ID format — must be only digits (nanosecond timestamp).
-fn validate_transaction_id_format(id: &str) -> bool {
+pub(super) fn validate_transaction_id_format(id: &str) -> bool {
     if id.is_empty() || id.len() > 64 {
         return false;
     }
@@ -2787,7 +2849,18 @@ pub(crate) fn apply_setup_plan_with_token(
         }
     };
 
-    apply_planned_artifacts(&planned, manual_steps, preview_token, progress)
+    let mut receipt = receipt_for_artifacts(&planned);
+    for surface in &plan.synced {
+        if !receipt.synced.contains(surface) {
+            receipt.synced.push(*surface);
+        }
+    }
+    for operation in plan.conflicts.iter().chain(&plan.manual_steps) {
+        record_receipt_item(&mut receipt, operation.surface, operation.kind);
+    }
+    let result = run_planned_artifacts(&planned, manual_steps, preview_token, receipt, progress);
+    progress.finish();
+    result
 }
 
 /// One removable or preserved item in an uninstall plan, for display.
@@ -2973,6 +3046,144 @@ mod tests {
         let result = apply_setup_plan_with_token(&plan, None, &mut ProgressReporter::silent());
         assert!(result.success);
         assert_eq!(result.message, "No operations to apply");
+    }
+
+    #[test]
+    fn apply_persists_receipt_facts_and_finish_time() {
+        let env = TempSetupEnv::new("receipt");
+        let plan = test_plan(vec![
+            (
+                SetupSurfaceId::CodexRules,
+                OperationKind::Create,
+                "create".into(),
+            ),
+            (
+                SetupSurfaceId::ClaudeRules,
+                OperationKind::NoChange,
+                "current".into(),
+            ),
+            (
+                SetupSurfaceId::OpenCodeRules,
+                OperationKind::Conflict,
+                "/private/conflict text".into(),
+            ),
+            (
+                SetupSurfaceId::ClaudeConfig,
+                OperationKind::Manual,
+                "/private/manual text".into(),
+            ),
+        ]);
+        let result = apply_setup_plan_with_token(&plan, None, &mut ProgressReporter::silent());
+        assert!(result.success, "{}", result.message);
+        let path = env
+            .setup_root()
+            .join(&result.transaction_id)
+            .join("manifest.json");
+        let raw = fs::read_to_string(&path).expect("manifest");
+        let manifest: ArtifactTransactionManifest = serde_json::from_str(&raw).expect("parse");
+        assert!(manifest
+            .finished_at
+            .as_ref()
+            .is_some_and(|time| time >= &manifest.created_at));
+        assert_eq!(
+            manifest.receipt,
+            Some(SetupReceipt {
+                synced: vec![SetupSurfaceId::ClaudeRules],
+                left_for_you: vec![
+                    SetupReceiptItem {
+                        surface: SetupSurfaceId::OpenCodeRules,
+                        reason: SetupReceiptReason::Conflict
+                    },
+                    SetupReceiptItem {
+                        surface: SetupSurfaceId::ClaudeConfig,
+                        reason: SetupReceiptReason::Manual
+                    },
+                ],
+            })
+        );
+        assert!(!raw.contains("/private/conflict text"));
+        assert!(!raw.contains("/private/manual text"));
+
+        let before = fs::read(&path).unwrap();
+        let dry = rollback_transaction(
+            &result.transaction_id,
+            true,
+            &mut ProgressReporter::silent(),
+        );
+        assert!(dry.success, "{}", dry.message);
+        assert_eq!(fs::read(&path).unwrap(), before, "dry run writes nothing");
+        let undone = rollback_transaction(
+            &result.transaction_id,
+            false,
+            &mut ProgressReporter::silent(),
+        );
+        assert!(undone.success, "{}", undone.message);
+        let restored: ArtifactTransactionManifest =
+            serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
+        assert_eq!(
+            restored.receipt, manifest.receipt,
+            "rollback preserves receipt facts"
+        );
+    }
+
+    #[test]
+    fn receipt_records_partial_surface_conflicts_without_claiming_it_was_current() {
+        let env = TempSetupEnv::new("receipt-partial");
+        let mut planned = env.plan(&[SetupSurfaceId::CodexRules]);
+        let mut blocked = planned[0].clone();
+        blocked.kind = OperationKind::Conflict;
+        planned.push(blocked.clone());
+        planned.push(blocked);
+        let mut current = planned[0].clone();
+        current.kind = OperationKind::NoChange;
+        planned.push(current);
+        let receipt = receipt_for_artifacts(&planned);
+        assert!(receipt.synced.is_empty());
+        assert_eq!(
+            receipt.left_for_you,
+            vec![SetupReceiptItem {
+                surface: SetupSurfaceId::CodexRules,
+                reason: SetupReceiptReason::Conflict,
+            }]
+        );
+    }
+
+    #[test]
+    fn old_manifest_round_trips_without_receipt_or_finish_time() {
+        let env = TempSetupEnv::new("old-receipt");
+        let old = serde_json::json!({
+            "schema_version": ARTIFACT_MANIFEST_SCHEMA_VERSION,
+            "workspace_key": setup_transaction::workspace_key(&env.ws).unwrap(),
+            "created_at": "1",
+            "surface_ids": ["codex_rules"],
+            "transaction_status": "completed",
+            "previous_managed_state_present": false,
+            "previous_managed_state_trusted": false,
+            "operations": [{
+                "artifact": { "type": "CodexRules" },
+                "surface": "codex_rules",
+                "kind": "create",
+                "previous_state": "absent",
+                "rollback_action": "remove_created_file",
+                "backup_rel": null,
+                "apply_status": "applied",
+                "validation_status": "passed",
+                "rollback_status": "pending"
+            }]
+        });
+        let manifest: ArtifactTransactionManifest =
+            serde_json::from_value(old.clone()).expect("old manifest");
+        assert!(manifest.receipt.is_none());
+        assert!(manifest.finished_at.is_none());
+        setup_transaction::validate_manifest(&manifest, &env.ws).expect("valid old manifest");
+        let dir = env.setup_root().join("1");
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("manifest.json");
+        setup_transaction::persist_manifest_atomic(&path, &manifest, &dir)
+            .expect("persist old manifest");
+        let round_trip: serde_json::Value =
+            serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
+        assert_eq!(round_trip, old);
     }
 
     #[cfg(unix)]
@@ -3683,6 +3894,8 @@ mod tests {
             schema_version: ARTIFACT_MANIFEST_SCHEMA_VERSION,
             workspace_key: setup_transaction::workspace_key(&ws).unwrap_or_default(),
             created_at: "1".into(),
+            finished_at: None,
+            receipt: None,
             surface_ids: vec![SetupSurfaceId::OpenCodeRules],
             transaction_status: setup_transaction::TransactionStatus::Prepared,
             previous_managed_state_present: false,
@@ -3796,6 +4009,8 @@ mod tests {
             schema_version: ARTIFACT_MANIFEST_SCHEMA_VERSION,
             workspace_key: setup_transaction::workspace_key(&ws_root).unwrap(),
             created_at: txn_id.to_string(),
+            finished_at: None,
+            receipt: None,
             surface_ids: vec![SetupSurfaceId::CodexRules, SetupSurfaceId::OpenCodeRules],
             transaction_status: setup_transaction::TransactionStatus::Failed,
             previous_managed_state_present: false,
@@ -4232,7 +4447,7 @@ mod tests {
     impl TempSetupEnv {
         fn new(label: &str) -> Self {
             let lock = guard::lock();
-            let restore = guard::EnvRestore::capture();
+            let restore = guard::isolate_data_location_env();
             let nanos = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
@@ -4250,6 +4465,7 @@ mod tests {
                     "RIGGVERK_BACKUP_DIR",
                     base.join("backups").to_string_lossy().as_ref(),
                 );
+                std::env::set_var("CODEX_HOME", base.join("home/.codex"));
             }
             let home = user_home().expect("resolved home");
             let ws = setup_workspace_target_path().expect("workspace target");

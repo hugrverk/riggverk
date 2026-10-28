@@ -14,8 +14,9 @@ pub(crate) mod retired_workspace_files;
 mod security_posture;
 pub(crate) mod setup;
 pub(crate) use codex_runtime::{
-    extract_managed_codex_config, managed_codex_keys_match, render_codex_config_for_apply,
-    render_codex_config_managed_projection,
+    extract_managed_codex_config, is_app_shaped_legacy_profile, managed_codex_keys_match,
+    render_codex_config_for_apply, render_codex_config_managed_projection,
+    CREATE_ONLY_TOP_LEVEL_KEYS, LEGACY_TOP_LEVEL_PROFILE_VALUES,
 };
 pub(crate) use content::personal_doc_count;
 pub(crate) use opencode_runtime::{
@@ -25,6 +26,7 @@ pub(crate) use opencode_runtime::{
 pub(crate) use status::file_eq;
 pub(crate) use workspace::configured_workspace_path;
 mod file_conflicts;
+mod history;
 mod packs;
 mod rules;
 mod rules_refinements;
@@ -35,7 +37,9 @@ mod workspace;
 
 pub use backups::{get_backup_details, list_backups, open_backups_folder};
 pub use claude_runtime::get_claude_runtime_health;
-pub use codex_config::set_codex_config_kept;
+pub use codex_config::{
+    apply_codex_config_defaults, preview_codex_config_defaults, set_codex_config_kept,
+};
 pub use codex_runtime::get_codex_runtime_health;
 pub use content::{
     create_doc, list_agent_metadata, list_docs, list_opencode_config_editor_sources, open_doc,
@@ -48,6 +52,7 @@ pub(crate) use file_conflicts::TakeBundledPreview;
 pub use file_conflicts::{
     apply_take_bundled, preview_file_diff, preview_take_bundled, set_files_kept,
 };
+pub use history::list_setup_history;
 pub use light_runtime::get_light_runtime_health;
 pub use opencode_runtime::{
     get_opencode_runtime_health, list_available_opencode_models, read_opencode_model_selection,
