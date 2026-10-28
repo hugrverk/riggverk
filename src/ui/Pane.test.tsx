@@ -125,12 +125,12 @@ describe("ui primitives", () => {
   it("Glyph is decorative without a label and an image with one", () => {
     const { container } = renderWithShell(
       <>
-        <Glyph name="ok" tone="ok" />
+        <Glyph name="check" tone="ok" />
         <Glyph name="fail" tone="fail" label="conflict" />
       </>,
     );
     const [decor, labelled] = Array.from(container.querySelectorAll(".g"));
-    expect(decor!.textContent).toBe("●");
+    expect(decor!.textContent).toBe("✓");
     expect(decor!.getAttribute("aria-hidden")).toBe("true");
     expect(decor!.className).toBe("g c-ok");
     expect(labelled!.textContent).toBe("✗");

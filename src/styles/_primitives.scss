@@ -24,7 +24,7 @@
    Keys and glyphs
      kbd                     light key cap (outline, no fill); .action-key = a plain button with a key cap (the uninstall cards)
      .tbtn                   button with a key cap for a review's action bar, a dialog footer or rollback (_review.scss)
-     .g                      fixed-width glyph cell (▸ ● ◐ ✓ ✗ ❯ + ~ − !), inline-block 1ch, centred; never a <tr>
+     .g                      fixed-width glyph cell (✓ ✗ ❯), inline-block 1ch, centred; never a <tr>
      .c-ok .c-warn .c-fail .c-acc .c-dim .c-head   semantic text colours
    Tables
      .plan                   install plan <table> (_review.scss)
