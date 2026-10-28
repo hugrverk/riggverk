@@ -970,6 +970,32 @@ fn apply_single_artifact(
     }
 
     if artifact == &crate::artifact_registry::ArtifactId::CodexConfig {
+        // The reset to Riggverk's defaults writes exactly the content its preview rendered, and
+        // only over the file the preview was computed from.
+        if let Some(rewrite) = rules_rewrite {
+            let size = fs::metadata(&dest)
+                .map_err(|e| format!("read codex config {}: {e}", dest.display()))?
+                .len();
+            if size > crate::codex_config_keep::MAX_CONFIG_BYTES {
+                return Err(
+                    "the Codex config.toml changed since preview; preview the reset again"
+                        .to_string(),
+                );
+            }
+            let installed = fs::read(&dest)
+                .map_err(|e| format!("read codex config {}: {e}", dest.display()))?;
+            if crate::stable_digest::bytes(&installed) != rewrite.expected_installed_digest {
+                return Err(
+                    "the Codex config.toml changed since preview; preview the reset again"
+                        .to_string(),
+                );
+            }
+            return crate::safe_filesystem::write_regular_file_atomic(
+                &dest,
+                rewrite.content.as_bytes(),
+                &root,
+            );
+        }
         if dest.is_file() {
             // The keys the user keeps are rendered from their kept value, never from the template.
             let rendered = crate::commands::render_codex_config_for_apply(

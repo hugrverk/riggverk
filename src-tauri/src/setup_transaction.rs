@@ -238,9 +238,9 @@ pub struct Overwrite {
     pub expected_installed_digest: String,
 }
 
-/// A rules file the user chose to convert: the complete new content, and the
-/// digest of the file it was computed from. Apply refuses to write when the
-/// file changed since.
+/// A file the user chose to rewrite (a rules conversion, or the Codex config reset to Riggverk's
+/// defaults): the complete new content, and the digest of the file it was computed from. Apply
+/// refuses to write when the file changed since.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RulesRewrite {
     pub content: String,

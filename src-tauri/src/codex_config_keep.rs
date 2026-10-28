@@ -8,7 +8,9 @@
 //! value, so a later edit makes the entry inert and the key is enforced again.
 //!
 //! Nothing here writes `config.toml`; an apply renders from the effective template, so it never
-//! writes over a kept value.
+//! writes over a kept value. The one way a differing value is replaced is the explicit "use
+//! Riggverk's defaults" reset: [`plan_defaults`] plans it, and the regular setup transaction
+//! (backup, manifest, post-write check, rollback) writes exactly the planned content.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -17,6 +19,8 @@ use serde::Serialize;
 
 use crate::artifact_registry::ArtifactId;
 use crate::config_preferences::{self, CodexConfigChoice, CODEX_KEEPABLE_PATHS};
+use crate::setup_lifecycle::{OperationKind, SetupSurfaceId};
+use crate::setup_transaction::{self, PlannedArtifact, PreviousState, RulesRewrite};
 
 /// One key and a value of it, for the status the frontend reads. Key names and the values of the
 /// enforced approval and sandbox keys: nothing secret.
@@ -34,6 +38,9 @@ pub struct CodexConfigStatus {
     /// Enforced keys whose installed value differs from what Riggverk would write and is not
     /// kept: `m` can keep them.
     pub differing: Vec<KeyValue>,
+    /// What Riggverk writes for each key in `kept` and `differing`: the bundled config's value,
+    /// not the kept or installed one. A key the bundled config does not set is left out.
+    pub expected: Vec<KeyValue>,
 }
 
 /// The keys of the choice that apply right now.
@@ -225,7 +232,21 @@ pub fn status(workspace_root: &Path, home: &Path) -> Option<CodexConfigStatus> {
         })
         .collect();
     let differing = differing_keys(&installed, &assessment.effective);
-    (!kept.is_empty() || !differing.is_empty()).then_some(CodexConfigStatus { kept, differing })
+    let expected = kept
+        .iter()
+        .chain(&differing)
+        .filter_map(|item| {
+            Some(KeyValue {
+                key: item.key.clone(),
+                value: string_at(&template, &item.key)?,
+            })
+        })
+        .collect();
+    (!kept.is_empty() || !differing.is_empty()).then_some(CodexConfigStatus {
+        kept,
+        differing,
+        expected,
+    })
 }
 
 /// Records every enforced key whose installed value differs from the template, with that value.
@@ -253,6 +274,235 @@ pub fn keep(workspace_root: &Path, home: &Path) -> Result<Vec<KeyValue>, String>
 /// Clears the choice: every enforced key follows the bundle again.
 pub fn hand_back(workspace_root: &Path) -> Result<(), String> {
     config_preferences::set_codex_config(workspace_root, None)
+}
+
+// ── Use Riggverk's defaults ──
+
+/// Largest `config.toml` the defaults reset reads and rewrites.
+pub(crate) const MAX_CONFIG_BYTES: u64 = 1024 * 1024;
+/// Longest value shown in a preview; the reset itself never cuts a value.
+const MAX_SHOWN_VALUE_CHARS: usize = 120;
+
+const NOTHING_TO_RESET: &str =
+    "no enforced key differs from the bundled config; there is nothing to reset";
+const CANNOT_EDIT_SAFELY: &str =
+    "Riggverk cannot edit this config.toml safely (its structure is ambiguous); change the keys by hand";
+
+/// One enforced key the reset sets to Riggverk's value. Key names and the values of the enforced
+/// approval and sandbox keys: nothing secret.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct DefaultKey {
+    pub key: String,
+    /// The installed value that is replaced (cut when very long).
+    pub yours: String,
+    /// The bundled config's value that is written.
+    pub riggverk: String,
+}
+
+/// A reviewed reset: the keys, and the transaction operation that writes exactly the previewed
+/// content.
+pub struct DefaultsPlan {
+    pub keys: Vec<DefaultKey>,
+    pub operation: PlannedArtifact,
+}
+
+fn shown(value: &str) -> String {
+    if value.chars().count() <= MAX_SHOWN_VALUE_CHARS {
+        return value.to_string();
+    }
+    let cut: String = value.chars().take(MAX_SHOWN_VALUE_CHARS).collect();
+    format!("{cut}...")
+}
+
+/// Removes the tables that are empty, on the way up; true when `value` itself is an empty table.
+fn prune_empty_tables(value: &mut toml::Value) -> bool {
+    let Some(table) = value.as_table_mut() else {
+        return false;
+    };
+    let empty: Vec<String> = table
+        .iter_mut()
+        .filter_map(|(key, child)| prune_empty_tables(child).then(|| key.clone()))
+        .collect();
+    for key in empty {
+        table.remove(&key);
+    }
+    table.is_empty()
+}
+
+/// Besides the enforced keys, the regular update may seed the create-only keys and remove the
+/// pre-0.134 profile remnants; the same render does both in a reset.
+const OTHER_MANAGED_PATHS: [&str; 5] = [
+    "model",
+    "model_reasoning_effort",
+    "profile",
+    "profiles.safe",
+    "profiles.workspace-write",
+];
+
+/// The config without the keys the regular update may touch, and without empty tables.
+fn user_part(config: &toml::Value) -> toml::Value {
+    let mut rest = config.clone();
+    for path in CODEX_KEEPABLE_PATHS.iter().chain(&OTHER_MANAGED_PATHS) {
+        remove_value(&mut rest, path);
+    }
+    prune_empty_tables(&mut rest);
+    rest
+}
+
+/// Checks the rendered file before it is offered: every key to reset holds Riggverk's value, every
+/// kept key still holds the kept one, and nothing of the user's other settings changed.
+fn check_rendered(
+    installed: &toml::Value,
+    rendered: &toml::Value,
+    keys: &[DefaultKey],
+    kept: &BTreeMap<String, String>,
+) -> Result<(), String> {
+    let reset_ok = keys
+        .iter()
+        .all(|item| string_at(rendered, &item.key).as_deref() == Some(item.riggverk.as_str()));
+    let kept_ok = kept
+        .iter()
+        .all(|(key, value)| string_at(rendered, key).as_deref() == Some(value.as_str()));
+    if reset_ok && kept_ok && user_part(installed) == user_part(rendered) {
+        Ok(())
+    } else {
+        Err(CANNOT_EDIT_SAFELY.to_string())
+    }
+}
+
+/// Plans the reset of every differing enforced key to Riggverk's value. Read-only.
+///
+/// The file is rendered by the same merge scripts an update uses (so comments, other keys and the
+/// create-only keys survive), then checked. The operation carries the exact content and the
+/// digest of the file it was computed from; the transaction writes nothing else, and nothing over
+/// a file that changed since. Keys the user keeps are rendered from their kept value, as in an
+/// update. Refuses when nothing differs, or when the config is unreadable, not valid TOML, a link
+/// or too large.
+pub fn plan_defaults(workspace_root: &Path, home: &Path) -> Result<DefaultsPlan, String> {
+    let artifact = ArtifactId::CodexConfig;
+    let (source, dest) =
+        setup_transaction::validate_artifact_source_dest(&artifact, workspace_root, home)?;
+    let meta = std::fs::symlink_metadata(&dest).map_err(|_| {
+        "the Codex config.toml is not installed; there is nothing to reset".to_string()
+    })?;
+    if !meta.is_file() {
+        return Err("the Codex config.toml is not a regular file".to_string());
+    }
+    if meta.len() > MAX_CONFIG_BYTES {
+        return Err("the Codex config.toml is too large to reset here".to_string());
+    }
+    let installed_bytes = std::fs::read(&dest)
+        .map_err(|_| "cannot read the installed Codex config.toml".to_string())?;
+    let installed_text = String::from_utf8(installed_bytes.clone())
+        .map_err(|_| "the installed Codex config.toml is not valid TOML".to_string())?;
+    let installed: toml::Value = installed_text
+        .parse()
+        .map_err(|_| "the installed Codex config.toml is not valid TOML".to_string())?;
+    let template = read_toml(&source, "bundled Codex config")?;
+
+    let assessment = assess(Some(workspace_root), home, &installed, &template);
+    let keys: Vec<DefaultKey> = differing_keys(&installed, &assessment.effective)
+        .into_iter()
+        .filter_map(|item| {
+            let riggverk = string_at(&template, &item.key)?;
+            Some(DefaultKey {
+                key: item.key,
+                yours: shown(&item.value),
+                riggverk,
+            })
+        })
+        .collect();
+    if keys.is_empty() {
+        return Err(NOTHING_TO_RESET.to_string());
+    }
+
+    let rendered = crate::commands::render_codex_config_for_apply(
+        &crate::setup_roots::bundled_root_for(workspace_root)?,
+        workspace_root,
+        home,
+        &dest,
+        &source,
+    )
+    .map_err(|_| CANNOT_EDIT_SAFELY.to_string())?;
+    let rendered_toml: toml::Value = rendered
+        .parse()
+        .map_err(|_| CANNOT_EDIT_SAFELY.to_string())?;
+    check_rendered(&installed, &rendered_toml, &keys, &assessment.active)?;
+    if rendered == installed_text {
+        return Err(NOTHING_TO_RESET.to_string());
+    }
+    // The merge scripts read the file themselves: it must still be the bytes planned from.
+    let digest = crate::stable_digest::bytes(&installed_bytes);
+    let unchanged = std::fs::read(&dest)
+        .map(|now| crate::stable_digest::bytes(&now) == digest)
+        .unwrap_or(false);
+    if !unchanged {
+        return Err("the Codex config.toml changed while it was being read; try again".to_string());
+    }
+
+    let operation = PlannedArtifact {
+        artifact,
+        surface: SetupSurfaceId::CodexConfig,
+        kind: OperationKind::Update,
+        previous_state: PreviousState::MergeableConfigFile,
+        rollback_action: setup_transaction::rollback_action_for(
+            OperationKind::Update,
+            PreviousState::MergeableConfigFile,
+        ),
+        rules: None,
+        // The exact content to write and the file it replaces; see `apply_single_artifact`.
+        rules_rewrite: Some(RulesRewrite {
+            content: rendered,
+            expected_installed_digest: digest,
+        }),
+        mcp: None,
+        file: None,
+        overwrite: None,
+    };
+    Ok(DefaultsPlan { keys, operation })
+}
+
+/// The preview text of a reset: one removed and one added line per key. Built from the key names
+/// and the enforced values only, never from other text of the file.
+pub fn defaults_diff(keys: &[DefaultKey]) -> String {
+    let quoted = |value: &str| serde_json::to_string(value).unwrap_or_default();
+    keys.iter()
+        .flat_map(|item| {
+            [
+                format!("- {} = {}", item.key, quoted(&item.yours)),
+                format!("+ {} = {}", item.key, quoted(&item.riggverk)),
+            ]
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// Fingerprint of a reset: the regular plan fingerprint, the file it replaces and the exact
+/// content that replaces it. An edit of the config after the preview changes it.
+pub fn defaults_fingerprint(
+    workspace_root: &Path,
+    home: &Path,
+    plan: &DefaultsPlan,
+) -> Result<String, String> {
+    setup_transaction::conversion_fingerprint(workspace_root, home, &plan.operation)
+}
+
+/// Drops the kept entries of the keys a reset set to Riggverk's value: the choice is over, and a
+/// later edit back to the old value must be a new difference, not silently covered. An entry made
+/// for another destination is left alone.
+pub fn clear_kept(workspace_root: &Path, home: &Path, keys: &[DefaultKey]) -> Result<(), String> {
+    let Some(mut choice) = choice_for_dest(workspace_root, home) else {
+        return Ok(());
+    };
+    let before = choice.kept.len();
+    choice
+        .kept
+        .retain(|key, _| !keys.iter().any(|item| &item.key == key));
+    if choice.kept.len() == before {
+        return Ok(());
+    }
+    let rest = (!choice.kept.is_empty()).then_some(choice);
+    config_preferences::set_codex_config(workspace_root, rest)
 }
 
 /// The conflict line for the config: which keys differ and what `m` does. Key names only.

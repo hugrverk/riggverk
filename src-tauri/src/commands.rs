@@ -34,7 +34,9 @@ mod workspace;
 
 pub use backups::{get_backup_details, list_backups, open_backups_folder};
 pub use claude_runtime::get_claude_runtime_health;
-pub use codex_config::set_codex_config_kept;
+pub use codex_config::{
+    apply_codex_config_defaults, preview_codex_config_defaults, set_codex_config_kept,
+};
 pub use codex_runtime::get_codex_runtime_health;
 pub use content::{
     create_doc, list_agent_metadata, list_docs, list_opencode_config_editor_sources, open_doc,
