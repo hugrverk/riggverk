@@ -391,7 +391,7 @@ ARCHITECT_BASH_ACTIONS = [
 # entry is its default.
 GATED_TOP_LEVEL_KEYS = ("webfetch", "websearch", "doom_loop")
 # OpenCode allows its skill folders outside the worktree by default; a bare `external_directory: ask`
-# cancels that, so AW restates it. Everything else outside the worktree stays ask-gated. The OpenCode
+# cancels that, so Riggverk restates it. Everything else outside the worktree stays ask-gated. The OpenCode
 # tmp dir (`<os tmpdir>/opencode`) is platform-specific and deliberately not listed.
 EXTERNAL_DIRECTORY_RULES = {
     "*": "ask",

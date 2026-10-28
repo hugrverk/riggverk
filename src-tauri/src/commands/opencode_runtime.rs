@@ -1670,7 +1670,7 @@ pub(crate) fn apply_cli_probes(
     };
 
     if let Some(agent) = health.default_agent.clone() {
-        // `debug agent` is checked on 1.x only: that is the version whose output AW has seen.
+        // `debug agent` is checked on 1.x only: that is the version whose output Riggverk has seen.
         let outcome = match (program, unreachable, &report.version) {
             (_, Some(reason), _) => Err(reason.to_string()),
             (Some(program), None, Some(version)) if version.major == 1 => {

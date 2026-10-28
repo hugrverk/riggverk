@@ -300,7 +300,7 @@ def build_builtin_agent_overrides(policy: dict[str, Any]) -> dict[str, dict[str,
     """Managed `agent.<name>.permission` entries that restore OpenCode's built-in read-only agents.
 
     OpenCode builds a built-in agent as defaults + its own restriction + the user `permission`
-    (agent.ts), so the global AW block silently widens `plan` and `explore`. The config's
+    (agent.ts), so the global Riggverk block silently widens `plan` and `explore`. The config's
     `agent.<name>.permission` is appended after the user ruleset and wins. An entry either
     carries only the delta (`plan`), or is composed from the base permission with a bash profile
     (`from_base`, `explore`), because a trailing `"*": "deny"` has to be followed by every re-allow.
