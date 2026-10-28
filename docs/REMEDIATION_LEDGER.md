@@ -1,10 +1,10 @@
-# Agent Workspace Remediation Ledger
+# Remediation Ledger
 
-Riggverk (formerly Agent Workspace)
+Riggverk
 
 > Historical snapshot: numbers and counts are as of when this was written and are not maintained.
 
-Remediation record. The June 2026 sections below are historical (audit input `agent-workspace-deep-audit-2026-06-06.md`, which is not stored in the repository). The October 2026 overhaul section is the current state; where the two disagree, October wins. The Repo Dashboard, the Prompt Builder (with its prompt template docs), Brain Setup, the in-app release check and the CLI installer scripts were removed afterwards; entries below that name them record what was true at the time.
+Remediation record. The June 2026 sections below are historical (the June 2026 deep audit report, which is not stored in the repository). The October 2026 overhaul section is the current state; where the two disagree, October wins. The Repo Dashboard, the Prompt Builder (with its prompt template docs), Brain Setup, the in-app release check and the CLI installer scripts were removed afterwards; entries below that name them record what was true at the time.
 
 ## 2026-10 overhaul (branch `feat/hugrverk-overhaul`, from `main` at `66768375`)
 

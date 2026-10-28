@@ -2,12 +2,12 @@
 
 ## Workspace folder unusable
 
-The workspace folder (default `~/.config/agent-workspace`) holds the app's state in `.agent-workspace/` and your personal docs in `docs/context/`. A fresh profile has none yet, and that is fine: the first write that needs it (a state file, a personal doc) creates it, and harnesses install without it.
+The workspace folder (default `~/.config/riggverk`) holds the app's state in `.riggverk/` and your personal docs in `docs/context/`. A fresh profile has none yet, and that is fine: the first write that needs it (a state file, a personal doc) creates it, and harnesses install without it.
 
 1. Open Workspace (`1`). The row says `folder unusable`, and the `why` row says what is wrong.
 2. `the folder is a symlink` or `not a folder`: the app does not write through a link or over a file. Move the link or file away; the app creates a real folder on the next install.
-3. `folder not found` with `AGENT_WORKSPACE_PATH` set: the variable names a folder that does not exist. Create it or unset the variable. It wins over Settings.
-4. A custom folder from Settings is used only while it holds `.agent-workspace/workspace.json` or `.agent-workspace/managed-state.json`. Otherwise the app falls back to the default folder. Old copies in the folder, or removing them, do not change this.
+3. `folder not found` with `RIGGVERK_WORKSPACE_PATH` set: the variable names a folder that does not exist. Create it or unset the variable. It wins over Settings.
+4. A custom folder from Settings is used only while it holds the app's state: `.riggverk/managed-state.json`, or the state of an earlier release. Otherwise the app falls back to the default folder. Old copies in the folder, or removing them, do not change this.
 
 ## Bundled files in the workspace folder
 
@@ -20,7 +20,7 @@ Copies that earlier releases left there are ignored. The `workspace` row says `N
 A conflict is a file the app will not overwrite because it cannot prove it owns an unmodified copy. The plan shows `preserved, skipped`; `y` still applies the safe rows. Press `c` in the review to jump between conflicts, `d` for details.
 
 - **Harness file you edited** (a skill or agent file, edited outside the app): the app treats any edit as yours. To take the bundled version, move or delete your copy and install again. To keep yours, do nothing; it stays frozen against updates. An edited old copy in the workspace folder is not a conflict (see above).
-- **Deleted `.agent-workspace/managed-state.json`**: this is the ownership record. Without it the app cannot prove it owns what it installed, so any file that is not an exact copy of a bundled version becomes a conflict. Restore it from a backup (`setup/<transaction id>/managed-state.previous.json`) or resolve each file as above. It describes this machine's installs; do not copy it to another machine.
+- **Deleted `.riggverk/managed-state.json`**: this is the ownership record. Without it the app cannot prove it owns what it installed, so any file that is not an exact copy of a bundled version becomes a conflict. Restore it from a backup (`setup/<transaction id>/managed-state.previous.json`) or resolve each file as above. It describes this machine's installs; do not copy it to another machine.
 - **Rules file (`CLAUDE.md`, `AGENTS.md`)**: see the next section.
 - **Skill you installed by hand with the same name**: diverged copies are preserved. Rename yours or delete it to take the bundled one.
 - **Supporting file of a skill you edited** (for example `~/.claude/skills/security-audit/HUNTING.md`): that one file is a conflict and stays as you left it; the other files of the skill still update, so the skill can mix your file with newer ones. To take the bundled version, move or delete your copy and install again. To keep yours, do nothing.
@@ -28,7 +28,7 @@ A conflict is a file the app will not overwrite because it cannot prove it owns 
 
 ## Rules file conflicts
 
-Rules files hold the app's base between `BEGIN AGENT-WORKSPACE BASE` and `END AGENT-WORKSPACE BASE` markers. Text outside them is yours and is never touched.
+Rules files hold the app's base between `BEGIN RIGGVERK BASE` and `END RIGGVERK BASE` markers. Text outside them is yours and is never touched.
 
 | Conflict | Meaning |
 |----------|---------|
@@ -85,4 +85,12 @@ Harness installs need a usable workspace folder (absent, or a real folder). The 
 
 ## Environment overrides
 
-The app honors these in normal use, so check them when paths surprise you: `AGENT_WORKSPACE_PATH`, `AGENT_WORKSPACE_BACKUP_DIR`, `CODEX_HOME` (Codex config, rules, agents, and, when customised, skills), `CODEX_SKILLS_PATH`, `CLAUDE_SKILLS_PATH` (inside your home folder), `OPENCODE_SKILLS_PATH` and `CURSOR_SKILLS_PATH` (only where older copies are cleaned up), `PLAYWRIGHT_MCP_CONFIG_PATH`, `XDG_CONFIG_HOME` (Linux app support). `COPILOT_HOME` and `PI_CODING_AGENT_DIR` move those harnesses' own folders (rules file included); the app does not follow them and says so on the page when one is set. `XDG_CONFIG_HOME` also moves Kilo's rules file, and the app follows it.
+The app honors these in normal use, so check them when paths surprise you: `RIGGVERK_WORKSPACE_PATH`, `RIGGVERK_BACKUP_DIR`, `CODEX_HOME` (Codex config, rules, agents, and, when customised, skills), `CODEX_SKILLS_PATH`, `CLAUDE_SKILLS_PATH` (inside your home folder), `OPENCODE_SKILLS_PATH` and `CURSOR_SKILLS_PATH` (only where older copies are cleaned up), `PLAYWRIGHT_MCP_CONFIG_PATH`, `XDG_CONFIG_HOME` (Linux app support). `COPILOT_HOME` and `PI_CODING_AGENT_DIR` move those harnesses' own folders (rules file included); the app does not follow them and says so on the page when one is set. `XDG_CONFIG_HOME` also moves Kilo's rules file, and the app follows it.
+
+## After upgrading from an earlier release
+
+<!-- residue-allow-begin: the upgrade notes name the identifiers of earlier releases -->
+
+An earlier release kept its data in `~/.config/agent-workspace` with the state in `.agent-workspace/`. The app reads that folder in place, and the first write (an install, a saved doc, a kept choice) renames it to `~/.config/riggverk` and `.agent-workspace/` to `.riggverk/`. If you find both folders, the app uses `~/.config/riggverk` and leaves the old one alone: move what you still need out of it, then delete it. Rules files with `AGENT-WORKSPACE BASE` markers are rewritten with `RIGGVERK BASE` markers on the next update; your text outside the block is kept. `AGENT_WORKSPACE_PATH` and `AGENT_WORKSPACE_BACKUP_DIR` still work; use `RIGGVERK_WORKSPACE_PATH` and `RIGGVERK_BACKUP_DIR` instead.
+
+<!-- residue-allow-end -->

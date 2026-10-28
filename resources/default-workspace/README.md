@@ -2,7 +2,7 @@
 
 The docs, skills, templates, config, and scripts that the Riggverk app ships and installs into agent tool folders.
 
-This is the bundle: it lives inside the app and is read-only. The Library, the health checks and every install read it from there, so everyone sees the current text; it changes only with an app update. The app keeps no copy of it in your data folder (`~/.config/agent-workspace` by default); the data folder holds only the app's state and your personal docs (see [docs/CONCEPTS.md](docs/CONCEPTS.md)).
+This is the bundle: it lives inside the app and is read-only. The Library, the health checks and every install read it from there, so everyone sees the current text; it changes only with an app update. The app keeps no copy of it in your data folder (`~/.config/riggverk` by default); the data folder holds only the app's state and your personal docs (see [docs/CONCEPTS.md](docs/CONCEPTS.md)).
 
 Your personal docs are plain text and not encrypted. Do not store secrets, tokens, passwords, private keys, cookies, auth headers, signed or private URLs, or `.env` values in them, and do not commit them.
 
@@ -19,7 +19,7 @@ Requires Python 3 on `PATH` (config merges and generators).
 
 ## What lives in your data folder
 
-- **.agent-workspace/** - the app's state: ownership records (`managed-state.json`), `kept-files.json`, `rules-preferences.json`, `config-preferences.json`, and the `workspace.json` marker where an earlier release wrote it. Do not delete. They describe this machine's installs, so leave them out of Git.
+- **.riggverk/** - the app's state: ownership records (`managed-state.json`), `kept-files.json`, `rules-preferences.json`, `config-preferences.json`, and the `workspace.json` marker where an earlier release wrote it. Do not delete. They describe this machine's installs, so leave them out of Git.
 - **docs/context/** - your personal docs, written in the Library. Version this folder if you want a history ([docs/GIT_VERSIONING.md](docs/GIT_VERSIONING.md)).
 
 Earlier releases also copied the bundle into the data folder. The app no longer reads those copies; it removes the ones it can prove are its own only through the reviewed update of the `workspace` row (see [docs/USING_THE_APP.md](docs/USING_THE_APP.md#workspace-page)).
@@ -31,7 +31,7 @@ The app is the installer. It installs natively and runs only its own bundled cop
 - `generate-opencode-config.py` - builds `templates/opencode.json` from `opencode.base.json` and `opencode.policy.json`. `--check` verifies, `--write` regenerates.
 - `merge-codex-config.py`, `ensure-codex-routing-defaults.py` - merge the managed Codex keys and routing defaults into `config.toml` while keeping your own settings.
 
-Backups: `~/Library/Application Support/se.hugrverk.riggverk/backups` on macOS, `${XDG_CONFIG_HOME:-~/.config}/se.hugrverk.riggverk/backups` on Linux, or `AGENT_WORKSPACE_BACKUP_DIR`. Layout in [docs/USING_THE_APP.md](docs/USING_THE_APP.md#backups).
+Backups: `~/Library/Application Support/se.hugrverk.riggverk/backups` on macOS, `${XDG_CONFIG_HOME:-~/.config}/se.hugrverk.riggverk/backups` on Linux, or `RIGGVERK_BACKUP_DIR`. Layout in [docs/USING_THE_APP.md](docs/USING_THE_APP.md#backups).
 
 ## Separation
 

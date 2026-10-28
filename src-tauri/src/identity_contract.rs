@@ -1,33 +1,40 @@
 //! Product identity contract.
 //!
-//! The product is named Riggverk. Technical identifiers that live in users'
-//! files and environments keep their historical `agent-workspace` names on
-//! purpose, because renaming them would orphan or conflict with data that
-//! already exists. The app data directory is named like the bundle identifier
-//! and moved there once by `app_data_migration`; the old name is pinned only so
-//! that migration keeps finding it. This module pins all of it so a later
-//! rename cannot move any of it by accident.
+//! The product is named Riggverk, and so are the technical identifiers that live in users' files
+//! and environments: the data folder, the state folder inside it, the rules markers, the
+//! environment variables and the macOS icon. The names from before the rename survive only as
+//! `LEGACY_*` constants, so that installs made under them are still found and carried over (see
+//! `workspace_layout`, `rules_block` and `env_overrides`; `legacy_layout_contract` proves the
+//! upgrade). The app data directory is named like the bundle identifier and moved there once by
+//! `app_data_migration`; the old name is pinned only so that migration keeps finding it. This
+//! module pins all of it so a later rename cannot move any of it by accident.
 
 #[cfg(test)]
 mod tests {
     use serde_json::Value;
 
-    use crate::kept_files::KEPT_FILES_REL;
-    use crate::managed_state::MANAGED_STATE_REL;
+    use crate::env_overrides::{LEGACY_BACKUP_DIR_ENV, LEGACY_WORKSPACE_PATH_ENV};
+    use crate::kept_files::KEPT_FILES_FILE;
+    use crate::managed_state::{LEGACY_MANAGED_STATE_REL, MANAGED_STATE_REL};
     use crate::platform_paths::{
-        app_support_dir, default_installed_workspace_path, legacy_app_support_dir, Platform,
-        PlatformEnv, APP_DATA_DIR_NAME, LEGACY_APP_DATA_DIR_NAME,
+        app_support_dir, default_installed_workspace_path, legacy_app_support_dir,
+        legacy_default_installed_workspace_path, Platform, PlatformEnv, APP_DATA_DIR_NAME,
+        DEFAULT_WORKSPACE_DIR_NAME, LEGACY_APP_DATA_DIR_NAME, LEGACY_WORKSPACE_DIR_NAME,
     };
     use crate::rules_block::{
         assess, body_digest, parse, RulesLayout, RulesPlan, BEGIN_MARKER, BEGIN_PREFIX, END_MARKER,
+        LEGACY_BEGIN_PREFIX, LEGACY_END_MARKER,
     };
-    use crate::rules_preferences::RULES_PREFERENCES_REL;
+    use crate::rules_preferences::RULES_PREFERENCES_FILE;
+    use crate::workspace_layout::{LEGACY_STATE_DIR, STATE_DIR};
 
     const TAURI_CONF: &str = include_str!("../tauri.conf.json");
     const PACKAGE_JSON: &str = include_str!("../../package.json");
     const INDEX_HTML: &str = include_str!("../../index.html");
-    const BUNDLED_MARKER: &str =
+    const LEGACY_BUNDLED_MARKER: &str =
         include_str!("../../resources/default-workspace/.agent-workspace/workspace.json");
+    const LEGACY_MARKER_TYPE: &str = "agent-workspace";
+    const LEGACY_MARKER_OWNER: &str = "agent-workspace-app";
 
     const IDENTIFIER: &str = "se.hugrverk.riggverk";
 
@@ -127,17 +134,48 @@ mod tests {
     }
 
     #[test]
-    fn stable_technical_identifiers_keep_their_historical_names() {
-        assert_eq!(BEGIN_PREFIX, "<!-- BEGIN AGENT-WORKSPACE BASE");
-        assert_eq!(END_MARKER, "<!-- END AGENT-WORKSPACE BASE -->");
+    fn technical_identifiers_are_named_riggverk() {
+        assert_eq!(BEGIN_PREFIX, "<!-- BEGIN RIGGVERK BASE");
+        assert_eq!(END_MARKER, "<!-- END RIGGVERK BASE -->");
         assert!(BEGIN_MARKER.starts_with(BEGIN_PREFIX));
         assert!(BEGIN_MARKER.ends_with("-->"));
-        assert_eq!(MANAGED_STATE_REL, ".agent-workspace/managed-state.json");
+        assert_eq!(STATE_DIR, ".riggverk");
+        assert_eq!(MANAGED_STATE_REL, ".riggverk/managed-state.json");
+        assert_eq!(RULES_PREFERENCES_FILE, "rules-preferences.json");
+        assert_eq!(KEPT_FILES_FILE, "kept-files.json");
         assert_eq!(
-            RULES_PREFERENCES_REL,
-            ".agent-workspace/rules-preferences.json"
+            crate::config_preferences::CONFIG_PREFERENCES_FILE,
+            "config-preferences.json"
         );
-        assert_eq!(KEPT_FILES_REL, ".agent-workspace/kept-files.json");
+
+        use crate::env_overrides::{BACKUP_DIR_ENV, WORKSPACE_PATH_ENV};
+        assert_eq!(WORKSPACE_PATH_ENV, "RIGGVERK_WORKSPACE_PATH");
+        assert_eq!(BACKUP_DIR_ENV, "RIGGVERK_BACKUP_DIR");
+
+        assert_eq!(DEFAULT_WORKSPACE_DIR_NAME, "riggverk");
+        let home = PlatformEnv {
+            home: Some("/Users/example".into()),
+            ..PlatformEnv::default()
+        };
+        assert!(default_installed_workspace_path(&home, Platform::MacOS)
+            .expect("default workspace")
+            .ends_with(".config/riggverk"));
+    }
+
+    // The earlier names are read, never written. Each is pinned: changing one would strand an
+    // install made under it.
+    #[test]
+    fn the_earlier_identifiers_stay_pinned_for_reading() {
+        assert_eq!(LEGACY_BEGIN_PREFIX, "<!-- BEGIN AGENT-WORKSPACE BASE");
+        assert_eq!(LEGACY_END_MARKER, "<!-- END AGENT-WORKSPACE BASE -->");
+        assert_eq!(LEGACY_STATE_DIR, ".agent-workspace");
+        assert_eq!(
+            LEGACY_MANAGED_STATE_REL,
+            ".agent-workspace/managed-state.json"
+        );
+        assert_eq!(LEGACY_WORKSPACE_DIR_NAME, "agent-workspace");
+        assert_eq!(LEGACY_WORKSPACE_PATH_ENV, "AGENT_WORKSPACE_PATH");
+        assert_eq!(LEGACY_BACKUP_DIR_ENV, "AGENT_WORKSPACE_BACKUP_DIR");
 
         use crate::commands::retired_workspace_files::{
             workspace_copy_paths, LEGACY_MARKER_REL, RETIRED_WORKSPACE_FILES,
@@ -146,31 +184,34 @@ mod tests {
         assert_eq!(workspace_copy_paths().next(), Some(LEGACY_MARKER_REL));
         assert!(RETIRED_WORKSPACE_FILES
             .iter()
-            .all(|rel| !rel.starts_with(".agent-workspace/")));
+            .all(|rel| !rel.starts_with(LEGACY_STATE_DIR)));
 
-        // Unread by the app, but the file is digest-tracked: a change would turn
-        // every installed marker into a conflict.
-        let marker = json(BUNDLED_MARKER);
-        assert_eq!(marker["workspace_type"], "agent-workspace");
-        assert_eq!(marker["managed_by"], "agent-workspace-app");
+        // Unread by the app, but the file is digest-tracked: a change would turn every installed
+        // marker into a conflict. The app does not install it any more and ships no new one.
+        let marker = json(LEGACY_BUNDLED_MARKER);
+        assert_eq!(marker["workspace_type"], LEGACY_MARKER_TYPE);
+        assert_eq!(marker["managed_by"], LEGACY_MARKER_OWNER);
 
         let home = PlatformEnv {
             home: Some("/Users/example".into()),
             ..PlatformEnv::default()
         };
-        assert!(default_installed_workspace_path(&home, Platform::MacOS)
-            .expect("default workspace")
-            .ends_with(".config/agent-workspace"));
+        assert!(
+            legacy_default_installed_workspace_path(&home, Platform::MacOS)
+                .expect("earlier default workspace")
+                .ends_with(".config/agent-workspace")
+        );
     }
 
     #[test]
     fn a_begin_line_with_the_old_prose_is_still_this_apps_block() {
-        const OLD_BEGIN: &str = "<!-- BEGIN AGENT-WORKSPACE BASE: managed by Agent Workspace; edits inside are replaced on update; add refinements below END -->";
+        const LEGACY_OLD_PROSE_BEGIN: &str = "<!-- BEGIN AGENT-WORKSPACE BASE: managed by Agent Workspace; edits inside are replaced on update; add refinements below END -->";
         const BASE: &str = "# Base\n\n- one\n";
         const NEWER_BASE: &str = "# Base\n\n- one\n- two\n";
-        assert_ne!(OLD_BEGIN, BEGIN_MARKER);
+        assert_ne!(LEGACY_OLD_PROSE_BEGIN, BEGIN_MARKER);
 
-        let installed = format!("mine\n{OLD_BEGIN}\n{BASE}{END_MARKER}\ntail\n");
+        let installed =
+            format!("mine\n{LEGACY_OLD_PROSE_BEGIN}\n{BASE}{LEGACY_END_MARKER}\ntail\n");
         let never = |_: &str| false;
 
         // Same base body: the old prose is not a reason to rewrite the file.

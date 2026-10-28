@@ -100,7 +100,7 @@ Isolated temp `HOME` and workspace path; exercises the Rust command handlers the
 
 ## Manual GUI smoke
 
-Before sharing a build, run [APP_RELEASE_SMOKE.md](./APP_RELEASE_SMOKE.md) in the real Tauri app with an isolated `HOME`, `AGENT_WORKSPACE_PATH`, and `AGENT_WORKSPACE_BACKUP_DIR`. It covers, in order of risk:
+Before sharing a build, run [APP_RELEASE_SMOKE.md](./APP_RELEASE_SMOKE.md) in the real Tauri app with an isolated `HOME`, `RIGGVERK_WORKSPACE_PATH`, and `RIGGVERK_BACKUP_DIR`. It covers, in order of risk:
 
 - Install review: `u`, plan table, `n` cancels with nothing written, `y` applies, target toggles gate the plan.
 - Conflicts and rules: Convert, Leave as is, diff.
@@ -123,7 +123,7 @@ The app bundle is `Riggverk.app` (executable `riggverk`, identifier `se.hugrverk
 
 The old `Agent Workspace.app` that an earlier build left in `src-tauri/target/release/bundle/macos` is harmless, but `scripts/release-size-report.sh` lists it. Delete it or run `cargo clean`.
 
-The workspace stays at `~/.config/agent-workspace`. The bundle is ad-hoc signed and not notarized, so Gatekeeper and any folder-access prompts apply as for any local build.
+The data folder `~/.config/agent-workspace` is read in place and renamed to `~/.config/riggverk` by the first write (see "Upgrading from earlier versions" in the README); to undo that by hand, quit the app and rename it back, and the `.riggverk/` state folder inside it to `.agent-workspace/`. Going back to an older build after the move is not supported: it would find no folder under the old name and start as a fresh profile, and it does not recognise rules blocks rewritten with `RIGGVERK BASE` markers (restore those files from `backups/setup/<transaction id>/`). Quit any older Riggverk before the first launch of the new build, and update tools, editors and scripts that mention `~/.config/agent-workspace`. The bundle is ad-hoc signed and not notarized, so Gatekeeper and any folder-access prompts apply as for any local build.
 
 Releases are built and zipped by `scripts/release.sh publish` (see [Cutting a release](#cutting-a-release)); name any other manual zip `Riggverk-v<version>-<channel>-macOS.zip`. Release notes for testers who still have the old app must say: quit `Agent Workspace` first, then install and launch `Riggverk.app` (it moves your settings and backups on first launch), then move the old app to the Trash.
 
@@ -156,4 +156,4 @@ Launching Riggverk again moves it forward again, replacing the leftover `.migrat
 
 - The release check does not replace webview smoke for view wiring, install behavior in an installed bundle, or native open and folder-picker behavior.
 - Native UI automation is not wired; Vite-only browser tools lack `invoke`.
-- `AGENT_WORKSPACE_PATH` and `AGENT_WORKSPACE_BACKUP_DIR` stay part of the established workspace contract and are honored in release builds.
+- `RIGGVERK_WORKSPACE_PATH` and `RIGGVERK_BACKUP_DIR` are part of the established workspace contract and are honored in release builds; the earlier names `AGENT_WORKSPACE_PATH` and `AGENT_WORKSPACE_BACKUP_DIR` still work as aliases.

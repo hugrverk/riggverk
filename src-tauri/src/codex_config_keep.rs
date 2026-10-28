@@ -482,8 +482,11 @@ sandbox_mode = "read-only"
     fn malformed_or_foreign_preferences_keep_nothing() {
         let dirs = Dirs::new("malformed");
         let installed = parse("approvals_reviewer = \"auto_review\"\n");
-        std::fs::create_dir_all(dirs.ws.join(".agent-workspace")).unwrap();
-        let path = dirs.ws.join(config_preferences::CONFIG_PREFERENCES_REL);
+        std::fs::create_dir_all(dirs.ws.join(crate::workspace_layout::STATE_DIR)).unwrap();
+        let path = crate::workspace_layout::state_file(
+            &dirs.ws,
+            config_preferences::CONFIG_PREFERENCES_FILE,
+        );
         let dest = dest_label(&dirs.ws, &dirs.home).unwrap();
         for raw in [
             "not json".to_string(),

@@ -1,6 +1,6 @@
 //! End-to-end runtime smoke for Tauri command handlers (no webview).
 //! Run via `scripts/smoke-tauri-runtime.sh`, which prepares a temp HOME and workspace,
-//! sets `AGENT_WORKSPACE_SMOKE=1` and runs the ignored test explicitly.
+//! sets `RIGGVERK_SMOKE=1` and runs the ignored test explicitly.
 
 #[cfg(test)]
 mod tests {
@@ -12,12 +12,12 @@ mod tests {
     use std::path::PathBuf;
 
     fn smoke_enabled() -> bool {
-        std::env::var("AGENT_WORKSPACE_SMOKE").ok().as_deref() == Some("1")
+        std::env::var("RIGGVERK_SMOKE").ok().as_deref() == Some("1")
     }
 
     fn expected_workspace() -> PathBuf {
-        let path = std::env::var("AGENT_WORKSPACE_PATH")
-            .expect("AGENT_WORKSPACE_PATH must be set for runtime smoke");
+        let path = std::env::var("RIGGVERK_WORKSPACE_PATH")
+            .expect("RIGGVERK_WORKSPACE_PATH must be set for runtime smoke");
         PathBuf::from(path.trim())
     }
 
@@ -46,11 +46,11 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "driven by scripts/smoke-tauri-runtime.sh (temp HOME, prepared workspace, AGENT_WORKSPACE_SMOKE=1)"]
+    #[ignore = "driven by scripts/smoke-tauri-runtime.sh (temp HOME, prepared workspace, RIGGVERK_SMOKE=1)"]
     fn runtime_smoke_end_to_end() {
         assert!(
             smoke_enabled(),
-            "run this test through scripts/smoke-tauri-runtime.sh (AGENT_WORKSPACE_SMOKE=1)"
+            "run this test through scripts/smoke-tauri-runtime.sh (RIGGVERK_SMOKE=1)"
         );
 
         // The smoke applies setup artifacts under HOME: refuse anything but the

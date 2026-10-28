@@ -6,7 +6,7 @@ use crate::platform_paths::{
 
 /// Display form of the canonical installed workspace path (verified by release-check).
 #[cfg(test)]
-pub(crate) const DEFAULT_INSTALLED_WORKSPACE_DISPLAY: &str = "~/.config/agent-workspace";
+pub(crate) const DEFAULT_INSTALLED_WORKSPACE_DISPLAY: &str = "~/.config/riggverk";
 
 fn resolve_home_string() -> Result<String, String> {
     crate::platform_paths::resolve_user_home(&PlatformEnv::from_process_env(), Platform::current())
@@ -17,10 +17,16 @@ pub(crate) fn default_installed_workspace_path() -> Result<PathBuf, String> {
     platform_workspace_path(&PlatformEnv::from_process_env(), Platform::current())
 }
 
-/// Previous built-in default (`~/Agent Workspace`). Treated as deprecated, not a custom path.
+/// Display form of the first built-in default folder, before `~/.config`. A saved path naming it
+/// is deprecated, not a custom path.
+pub(crate) const LEGACY_FIRST_DEFAULT_DISPLAY: &str = "~/Agent Workspace";
+const LEGACY_FIRST_DEFAULT_DIR: &str = "Agent Workspace";
+
+/// Previous built-in default (see `LEGACY_FIRST_DEFAULT_DISPLAY`). Treated as deprecated, not a
+/// custom path.
 pub(crate) fn is_legacy_default_workspace_path(raw: &str) -> bool {
     let trimmed = raw.trim();
-    if trimmed == "~/Agent Workspace" {
+    if trimmed == LEGACY_FIRST_DEFAULT_DISPLAY {
         return true;
     }
     let Some(normalized) = normalize_user_workspace_path(trimmed) else {
@@ -30,7 +36,7 @@ pub(crate) fn is_legacy_default_workspace_path(raw: &str) -> bool {
         return false;
     };
     let legacy = PathBuf::from(home)
-        .join("Agent Workspace")
+        .join(LEGACY_FIRST_DEFAULT_DIR)
         .to_string_lossy()
         .into_owned();
     normalized == legacy
@@ -82,7 +88,8 @@ mod tests {
     use super::{
         default_installed_workspace_path, is_legacy_default_workspace_path,
         normalize_user_workspace_path, normalize_user_workspace_path_for_save,
-        DEFAULT_INSTALLED_WORKSPACE_DISPLAY,
+        DEFAULT_INSTALLED_WORKSPACE_DISPLAY, LEGACY_FIRST_DEFAULT_DIR,
+        LEGACY_FIRST_DEFAULT_DISPLAY,
     };
     #[test]
     fn tilde_expands_to_home_when_home_available() {
@@ -143,22 +150,28 @@ mod tests {
         let _guard = crate::test_env::guard::lock();
         let home = crate::test_env::process_home();
         let path = default_installed_workspace_path().expect("default path");
-        assert_eq!(path, home.join(".config/agent-workspace"));
-        assert_eq!(
-            DEFAULT_INSTALLED_WORKSPACE_DISPLAY,
-            "~/.config/agent-workspace"
-        );
+        assert_eq!(path, home.join(".config/riggverk"));
+        assert_eq!(DEFAULT_INSTALLED_WORKSPACE_DISPLAY, "~/.config/riggverk");
     }
 
     #[test]
     fn legacy_default_workspace_path_is_detected() {
         let _guard = crate::test_env::guard::lock();
         let home = crate::test_env::process_home();
-        let legacy = home.join("Agent Workspace").to_string_lossy().into_owned();
-        assert!(is_legacy_default_workspace_path("~/Agent Workspace"));
+        let legacy = home
+            .join(LEGACY_FIRST_DEFAULT_DIR)
+            .to_string_lossy()
+            .into_owned();
+        assert!(is_legacy_default_workspace_path(
+            LEGACY_FIRST_DEFAULT_DISPLAY
+        ));
         assert!(is_legacy_default_workspace_path(&legacy));
+        // A saved path naming the earlier `~/.config` default is a custom folder: never moved.
+        let earlier_default = home
+            .join(".config")
+            .join(crate::platform_paths::LEGACY_WORKSPACE_DIR_NAME);
         assert!(!is_legacy_default_workspace_path(
-            "~/.config/agent-workspace"
+            &earlier_default.to_string_lossy()
         ));
     }
 

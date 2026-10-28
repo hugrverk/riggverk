@@ -151,6 +151,9 @@ python3 scripts/check-source.py --group forbidden,require
 step "source: UI"
 python3 scripts/check-source.py --group ui
 
+step "public residue: no retired name outside the allowlist"
+python3 scripts/check-public-residue.py
+
 step "frontend typecheck"
 npm run typecheck
 
@@ -165,8 +168,11 @@ step "rust clippy"
 cargo clippy --manifest-path src-tauri/Cargo.toml --locked --all-targets -- -D warnings
 
 step "rust tests"
-env -u AGENT_WORKSPACE_SMOKE -u AGENT_WORKSPACE_PATH \
+# residue-allow-begin: the earlier aliases must not leak into the test run
+env -u RIGGVERK_SMOKE -u RIGGVERK_WORKSPACE_PATH -u RIGGVERK_BACKUP_DIR \
+  -u AGENT_WORKSPACE_PATH -u AGENT_WORKSPACE_BACKUP_DIR \
   cargo test --manifest-path src-tauri/Cargo.toml --locked -- --test-threads=1
+# residue-allow-end
 
 step "real pre-manifest source-commit upgrade smoke"
 bash scripts/smoke-pre-manifest-upgrade.sh

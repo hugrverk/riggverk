@@ -8,7 +8,7 @@ Recipes for changing the repository without breaking the release gate. Cutting a
 |---|---|
 | `src/` | React and TypeScript UI |
 | `src-tauri/` | Rust backend (Tauri 2) |
-| `resources/default-workspace/` | the bundled workspace. The app installs it to `~/.config/agent-workspace` and bundles the directory exactly as it is on disk, ignored files included |
+| `resources/default-workspace/` | the bundled workspace. The app installs it to `~/.config/riggverk` and bundles the directory exactly as it is on disk, ignored files included |
 | `scripts/` | generators, checkers, the release gate (`release-check.sh`) and the release script (`release.sh`) |
 | `release-notes/` | one Markdown file per release; the source of the app's "what's new" |
 | `docs/` | maintainer and contract docs |
@@ -163,6 +163,7 @@ The history generators share one walk of every commit reachable from `HEAD` (and
 | source: identity, Tauri config, startup order | `check-source.py` | product name, legal files, stable env vars and markers, install paths, window size, the app data move runs first |
 | source: forbidden patterns and required markers | `check-source.py` | no shell command strings or remote skill installs in scripts and source; no project-target or page-scoped install actions; Codex skills folders; pinned Rust regression tests that replaced older source checks |
 | source: UI | `check-source.py` | offline-first UI (no remote URLs, vendored font), dev-only mock backend, selected-state design rules, typography plumbing |
+| public residue | `check-public-residue.py` | no name the project retired (today: the name from before the Riggverk rename, in every spelling) outside its allowlist: `LEGACY_*` constants, metadata history, release notes, `docs/RELEASE.md`, the upgrade contract tests, and lines or blocks marked `residue-allow`; `--list-allowed` prints the allowlist, and a later rename is one more entry in `RESIDUES` |
 | frontend typecheck, tests and build | `npm run typecheck`, `npm test`, `npm run build` | |
 | rust fmt, clippy, tests | `cargo fmt --check`, `cargo clippy -D warnings`, `cargo test` | |
 | pre-manifest upgrade smoke | `smoke-pre-manifest-upgrade.sh` | an install from a real old commit upgrades cleanly |

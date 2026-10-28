@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Backend/runtime smoke for Riggverk Tauri command handlers.
-# Uses an isolated temp HOME and AGENT_WORKSPACE_PATH — never writes real harness dirs.
+# Uses an isolated temp HOME and RIGGVERK_WORKSPACE_PATH — never writes real harness dirs.
 #
 # Tauri webview UI automation is not run here (Playwright against Vite lacks invoke IPC).
 # See docs/APP_RELEASE_SMOKE.md for manual GUI smoke.
@@ -18,7 +18,7 @@ fail() {
   exit 1
 }
 
-SMOKE_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/agent-workspace-smoke.XXXXXX")"
+SMOKE_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/riggverk-smoke.XXXXXX")"
 cleanup() {
   rm -rf "$SMOKE_ROOT"
 }
@@ -41,15 +41,17 @@ WORKSPACE="$SMOKE_ROOT/workspace"
 step "prepare temp workspace"
 # An empty data folder: the app keeps no copy of the bundle there; installs read the bundle.
 mkdir -p "$WORKSPACE"
-export AGENT_WORKSPACE_PATH="$WORKSPACE"
+export RIGGVERK_WORKSPACE_PATH="$WORKSPACE"
 
 # Guard: refuse if harness env vars point outside smoke HOME
+# residue-allow-begin: the earlier alias of the backup variable is still honored by the app
 for var in \
   OPENCODE_CONFIG_PATH \
   OPENCODE_TUI_CONFIG_PATH \
   OPENCODE_AGENTS_DIR \
   CLAUDE_AGENTS_DIR \
   CURSOR_AGENTS_PATH \
+  RIGGVERK_BACKUP_DIR \
   AGENT_WORKSPACE_BACKUP_DIR; do
   if [ -n "${!var:-}" ]; then
     case "${!var}" in
@@ -58,13 +60,14 @@ for var in \
     esac
   fi
 done
+# residue-allow-end
 
 # The app only writes below the (temp) HOME.
 PLAYWRIGHT_CONFIG="$HOME/.config/playwright-mcp/config.json"
 PLAYWRIGHT_BROWSERS="$HOME/.cache/ms-playwright"
 
 step "rust command-handler smoke (same paths as Tauri IPC)"
-export AGENT_WORKSPACE_SMOKE=1
+export RIGGVERK_SMOKE=1
 export PLAYWRIGHT_MCP_CONFIG_PATH="$PLAYWRIGHT_CONFIG"
 export PLAYWRIGHT_BROWSERS_PATH="$PLAYWRIGHT_BROWSERS"
 CARGO_BIN="$CARGO_HOME/bin/cargo"

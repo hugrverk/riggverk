@@ -1,7 +1,7 @@
 ## Codex harness
 
 - Custom agents use bundled Codex TOML templates under `~/.codex/agents/`; skills install to `~/.agents/skills`, which Codex reads (`$CODEX_HOME/skills` with a customised `CODEX_HOME`).
-- `~/.codex/config.toml` is manual-review only; never assume Agent Workspace owns the full file.
+- `~/.codex/config.toml` is manual-review only; never assume Riggverk owns the full file.
 - Respect Codex sandbox, approval, and config boundaries; do not bypass documented safety settings.
 - For image generation, design mocks, screenshots, browser automation, CDP, or computer-use work, use the available Codex tools when they directly support the task and keep generated assets in scope.
 - Use background agents or separate worktrees only for separable exploration, review, or implementation slices; keep final judgment and integration in the main thread.

@@ -185,7 +185,7 @@ fn unique_render_temp_dir() -> PathBuf {
         .unwrap_or_default()
         .as_nanos();
     std::env::temp_dir().join(format!(
-        "agent-workspace-codex-render-{}-{nanos}",
+        "riggverk-codex-render-{}-{nanos}",
         std::process::id()
     ))
 }
@@ -907,7 +907,7 @@ apps._default.default_tools_approval_mode = "prompt"
         unsafe {
             std::env::remove_var("CODEX_HOME");
             std::env::remove_var("CODEX_SKILLS_PATH");
-            std::env::set_var("AGENT_WORKSPACE_PATH", &ws);
+            std::env::set_var("RIGGVERK_WORKSPACE_PATH", &ws);
         }
         let health = || get_codex_runtime_health().expect("codex health");
         for (source, dest) in [

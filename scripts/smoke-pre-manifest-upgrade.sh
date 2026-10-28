@@ -12,14 +12,14 @@ if ! git cat-file -e 2d85d94b6f2f1dc06f45f6ec52a22ae97e499588^{commit}; then
   exit 1
 fi
 
-smoke_root="$(mktemp -d "${TMPDIR:-/tmp}/agent-workspace-pre-manifest.XXXXXX")"
+smoke_root="$(mktemp -d "${TMPDIR:-/tmp}/riggverk-pre-manifest.XXXXXX")"
 trap 'rm -rf "$smoke_root"' EXIT
 export HOME="$smoke_root/home"
 export XDG_CONFIG_HOME="$smoke_root/xdg-config"
 export XDG_DATA_HOME="$smoke_root/xdg-data"
 export XDG_CACHE_HOME="$smoke_root/xdg-cache"
-export AGENT_WORKSPACE_PATH="$smoke_root/runtime"
-export AGENT_WORKSPACE_BACKUP_DIR="$smoke_root/backups"
+export RIGGVERK_WORKSPACE_PATH="$smoke_root/runtime"
+export RIGGVERK_BACKUP_DIR="$smoke_root/backups"
 mkdir -p "$HOME" "$XDG_CONFIG_HOME" "$XDG_DATA_HOME" "$XDG_CACHE_HOME"
 
 fixture="$smoke_root/source-commit-default-workspace"
@@ -39,7 +39,7 @@ if [ ! -f "$fixture/metadata/deprecated-skills.json" ]; then
   exit 1
 fi
 
-export AGENT_WORKSPACE_HISTORICAL_FIXTURE_PATH="$fixture"
+export RIGGVERK_HISTORICAL_FIXTURE_PATH="$fixture"
 echo "==> real source-commit pre-manifest upgrade (isolated profile)"
 # cargo exits 0 when the filter matches nothing; require one test that really ran.
 smoke_log="$smoke_root/cargo-test.log"

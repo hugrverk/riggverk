@@ -91,10 +91,10 @@ pub(crate) fn backup_root() -> Result<PathBuf, String> {
         crate::platform_paths::Platform::current(),
     )?;
 
-    let root = if let Ok(env_override) = std::env::var("AGENT_WORKSPACE_BACKUP_DIR") {
+    let root = if let Some((variable, env_override)) = crate::env_overrides::backup_dir_override() {
         let trimmed = env_override.trim().to_string();
         if trimmed.is_empty() {
-            return Err("AGENT_WORKSPACE_BACKUP_DIR is set but empty".to_string());
+            return Err(format!("{variable} is set but empty"));
         }
         PathBuf::from(&trimmed)
     } else {
@@ -725,7 +725,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .expect("system clock before unix epoch")
             .as_nanos();
-        std::env::temp_dir().join(format!("agent-workspace-backups-{name}-{nonce}"))
+        std::env::temp_dir().join(format!("riggverk-backups-{name}-{nonce}"))
     }
 
     #[test]
@@ -837,7 +837,7 @@ mod tests {
         let root = temp_root("open-create-root");
         let backup_root = root.join("backups");
         std::env::set_var(
-            "AGENT_WORKSPACE_BACKUP_DIR",
+            "RIGGVERK_BACKUP_DIR",
             backup_root.to_string_lossy().as_ref(),
         );
 

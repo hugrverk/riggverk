@@ -37,45 +37,53 @@ _OLD = "ux-work" "space"
 _LEGACY_NAMES = "|".join(
     (_OLD, "UX_WORK" "SPACE", "ux_" "workspace", r"\." + _OLD, _OLD + "-app", r"ai\.open" "workspace")
 )
+# The name before the Riggverk rename, in its prose, path and app id forms. The residue guard
+# (scripts/check-public-residue.py) covers every spelling; these rules keep the specific places.
+_PRODUCT = "Agent " "Workspace"
+_FIRST_DEFAULT = "~/" + _PRODUCT
+_EARLIER_APP_ID = r"ai\.agent" r"workspace\.app"
+_EARLIER_APP_ID_SAMPLE = "ai.agent" "workspace.app"
+_EARLIER_STATE = "agent" "-workspace"
 
 IDENTITY = (
     Rule("license-holder", "forbid", _HOLDER, ("LICENSE",), "LICENSE must not name the stale copyright holder", _HOLDER),
     Rule("notice-attribution", "require", _HOLDER, ("NOTICE.md",), "NOTICE.md must keep the upstream attribution", _HOLDER),
     Rule("readme-links-notice", "require", r"NOTICE[.]md", ("README.md",), "README.md must link NOTICE.md", "[NOTICE.md](./NOTICE.md)"),
     Rule("html-title", "require", r"<title>Riggverk</title>", ("index.html",), "the app HTML title must be Riggverk", "<title>Riggverk</title>"),
-    # Markers, env vars and paths in users' files and environments keep their historical names
-    # on purpose. Env var names are not reachable by unit tests without being set.
+    # Markers, env vars and paths in users' files and environments are named Riggverk; the earlier
+    # names are read only through LEGACY_* constants. Env var names are not reachable by unit tests
+    # without being set.
     Rule(
         "env-workspace-path",
         "require",
-        r"AGENT_WORKSPACE_PATH",
-        ("src-tauri/src/commands/workspace.rs",),
-        "the AGENT_WORKSPACE_PATH env var must stay in commands/workspace.rs",
-        'env::var("AGENT_WORKSPACE_PATH")',
+        r"RIGGVERK_WORKSPACE_PATH",
+        ("src-tauri/src/env_overrides.rs",),
+        "the RIGGVERK_WORKSPACE_PATH env var must stay in env_overrides.rs",
+        'pub const WORKSPACE_PATH_ENV: &str = "RIGGVERK_WORKSPACE_PATH";',
     ),
     Rule(
         "env-backup-dir",
         "require",
-        r"AGENT_WORKSPACE_BACKUP_DIR",
-        ("src-tauri/src/commands/backups.rs",),
-        "the AGENT_WORKSPACE_BACKUP_DIR env var must stay in commands/backups.rs",
-        'env::var("AGENT_WORKSPACE_BACKUP_DIR")',
+        r"RIGGVERK_BACKUP_DIR",
+        ("src-tauri/src/env_overrides.rs",),
+        "the RIGGVERK_BACKUP_DIR env var must stay in env_overrides.rs",
+        'pub const BACKUP_DIR_ENV: &str = "RIGGVERK_BACKUP_DIR";',
     ),
     Rule(
         "rules-marker",
         "require",
-        r"BEGIN AGENT-WORKSPACE BASE",
+        r"BEGIN RIGGVERK BASE",
         ("src-tauri/src/rules_block.rs",),
-        "the rules markers must stay BEGIN/END AGENT-WORKSPACE BASE in rules_block.rs",
-        "<!-- BEGIN AGENT-WORKSPACE BASE -->",
+        "the rules markers must stay BEGIN/END RIGGVERK BASE in rules_block.rs",
+        "<!-- BEGIN RIGGVERK BASE -->",
     ),
     Rule(
         "old-product-name",
         "forbid",
-        r"Agent Workspace",
+        _PRODUCT,
         ("src/", "README.md", "index.html", "src-tauri/tauri.conf.json"),
-        'old product name "Agent Workspace" in app sources (use Riggverk)',
-        "Welcome to Agent Workspace",
+        'old product name in app sources (use Riggverk)',
+        f"Welcome to {_PRODUCT}",
         # Release notes may name the app a release replaces; the app shows them in what's new.
         exclude=("src/generated/release-notes.json",),
     ),
@@ -84,19 +92,19 @@ IDENTITY = (
     Rule(
         "legacy-app-data-dir",
         "forbid",
-        r"ai\.agentworkspace\.app",
+        _EARLIER_APP_ID,
         ("README.md", "src/", "resources/", "docs/"),
         "previous app data directory name outside docs/RELEASE.md (use se.hugrverk.riggverk)",
-        "~/Library/Application Support/ai.agentworkspace.app",
+        f"~/Library/Application Support/{_EARLIER_APP_ID_SAMPLE}",
         exclude=("docs/RELEASE.md",),
     ),
     Rule(
         "deprecated-install-path",
         "forbid",
-        r"~/Agent Workspace",
+        re.escape(_FIRST_DEFAULT),
         ("src/lib/settingsDraft.ts", "src/views/StartView.tsx", "src/App.tsx"),
-        "deprecated ~/Agent Workspace default in active frontend sources",
-        'const path = "~/Agent Workspace";',
+        "deprecated first built-in default in active frontend sources",
+        f'const path = "{_FIRST_DEFAULT}";',
     ),
     Rule(
         "installed-workspace-constant",
@@ -109,18 +117,18 @@ IDENTITY = (
     Rule(
         "frontend-install-path",
         "require",
-        r"~/\.config/agent-workspace",
+        r"~/\.config/riggverk",
         ("src/lib/settingsDraft.ts", "src/views/StartView.tsx"),
-        "the frontend must show the canonical ~/.config/agent-workspace path",
-        '"~/.config/agent-workspace"',
+        "the frontend must show the canonical ~/.config/riggverk path",
+        '"~/.config/riggverk"',
     ),
     Rule(
         "mistaken-install-path",
         "forbid",
-        r"\.config/\.agent-workspace",
+        r"\.config/\.(riggverk|" + _EARLIER_STATE + ")",
         ("src/", "src-tauri/", "README.md", "docs/", BUNDLE),
-        "mistaken install path ~/.config/.agent-workspace in active sources",
-        "~/.config/.agent-workspace",
+        "mistaken install path ~/.config/.riggverk in active sources",
+        "~/.config/.riggverk",
     ),
     Rule(
         "legacy-workspace-names",
@@ -249,7 +257,7 @@ FORBIDDEN = (
         "OpenCode health must not byte-compare the raw templates/opencode.json",
         "let ok = file_eq(&template_config_path, &installed_config_path);",
     ),
-    # A folder is valid by its own state (`.agent-workspace/`); bundled copies as markers would let a
+    # A folder is valid by its own state (`.riggverk/`); bundled copies as markers would let a
     # removed copy invalidate a folder and drop a saved custom path with its ownership records.
     Rule(
         "workspace-validity-bundle-markers",

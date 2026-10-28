@@ -13,7 +13,8 @@ use serde::{Deserialize, Serialize};
 use crate::artifact_registry::ArtifactId;
 use crate::managed_state::artifact_identity;
 
-pub const RULES_PREFERENCES_REL: &str = ".agent-workspace/rules-preferences.json";
+/// File name inside the state folder (see `workspace_layout::state_file`).
+pub const RULES_PREFERENCES_FILE: &str = "rules-preferences.json";
 const SCHEMA_VERSION: u32 = 1;
 const MAX_FILE_BYTES: u64 = 16 * 1024;
 
@@ -27,7 +28,7 @@ struct RulesPreferences {
 }
 
 fn preferences_path(workspace_root: &Path) -> PathBuf {
-    workspace_root.join(RULES_PREFERENCES_REL)
+    crate::workspace_layout::state_file(workspace_root, RULES_PREFERENCES_FILE)
 }
 
 /// An unreadable, oversized, or unsupported file counts as "no choices": the

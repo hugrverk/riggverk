@@ -97,7 +97,7 @@ class CheckTests(unittest.TestCase):
         self.assertFails("lists a path twice")
 
     def test_marker_in_the_list(self) -> None:
-        self.edit_module(FIRST, '    ".agent-workspace/workspace.json",\n' + FIRST)
+        self.edit_module(FIRST, '    ".agent-workspace/workspace.json",\n' + FIRST)  # residue-allow: the earlier marker is the frozen list's first entry
         self.assertFails("stays canonical")
 
     def test_state_and_user_data_are_never_listed(self) -> None:

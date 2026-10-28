@@ -336,7 +336,7 @@ class WorkspaceCopyEntryTests(unittest.TestCase):
     def test_the_frozen_list_is_the_marker_and_every_retired_file(self) -> None:
         paths = ownership.workspace_copy_paths()
         self.assertEqual(paths, sorted(paths))
-        self.assertEqual(paths[0], ".agent-workspace/workspace.json")
+        self.assertEqual(paths[0], ".agent-workspace/workspace.json")  # residue-allow: the earlier marker is the frozen list's first entry
         self.assertIn("README.md", paths)
         self.assertEqual(len(paths), len(set(paths)))
 

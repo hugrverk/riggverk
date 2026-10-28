@@ -2,7 +2,7 @@
 //!
 //! A skill or agent file whose bytes are exactly a version the app shipped is
 //! app-owned even when managed-state.json has no matching record. Uses temp HOME
-//! and AGENT_WORKSPACE_PATH only, with injected shipped-digest metadata, so no
+//! and RIGGVERK_WORKSPACE_PATH only, with injected shipped-digest metadata, so no
 //! test depends on git history except the one that replays a real old version.
 
 #[cfg(test)]
@@ -103,9 +103,9 @@ mod tests {
             fs::create_dir_all(&home).expect("home");
             set_test_user_dirs(&home);
             unsafe {
-                std::env::set_var("AGENT_WORKSPACE_PATH", ws.to_string_lossy().as_ref());
+                std::env::set_var("RIGGVERK_WORKSPACE_PATH", ws.to_string_lossy().as_ref());
                 std::env::set_var(
-                    "AGENT_WORKSPACE_BACKUP_DIR",
+                    "RIGGVERK_BACKUP_DIR",
                     base.join("backups").to_string_lossy().as_ref(),
                 );
             }

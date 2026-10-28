@@ -172,9 +172,9 @@ const UPDATE_DIFF: RulesDiffView = {
 };
 
 const RESULT_FILE = [
-  "<!-- BEGIN AGENT-WORKSPACE BASE: managed by Riggverk -->",
+  "<!-- BEGIN RIGGVERK BASE: managed by Riggverk -->",
   "# Global Agent Rules",
-  "<!-- END AGENT-WORKSPACE BASE -->",
+  "<!-- END RIGGVERK BASE -->",
   "",
   "## Communication",
   "Respond in Swedish.",

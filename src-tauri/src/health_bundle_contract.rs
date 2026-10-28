@@ -41,8 +41,8 @@ mod tests {
             set_test_user_dirs(&base.join("home"));
             let ws = base.join("workspace");
             unsafe {
-                std::env::set_var("AGENT_WORKSPACE_PATH", &ws);
-                std::env::set_var("AGENT_WORKSPACE_BACKUP_DIR", base.join("backups"));
+                std::env::set_var("RIGGVERK_WORKSPACE_PATH", &ws);
+                std::env::set_var("RIGGVERK_BACKUP_DIR", base.join("backups"));
                 for key in [
                     "CODEX_HOME",
                     "CODEX_SKILLS_PATH",
@@ -195,7 +195,7 @@ mod tests {
         env.install_everything();
         let with_copy = health();
 
-        unsafe { std::env::set_var("AGENT_WORKSPACE_PATH", env.base.join("missing")) };
+        unsafe { std::env::set_var("RIGGVERK_WORKSPACE_PATH", env.base.join("missing")) };
         let without = health();
         assert_same(&with_copy, &without);
         assert_eq!(without[0].1["rules_synced"], true);
