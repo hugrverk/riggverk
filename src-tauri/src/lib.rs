@@ -121,7 +121,6 @@ pub fn run() {
             get_codex_runtime_health,
             get_cursor_profile_health,
             get_light_runtime_health,
-            get_security_posture,
             list_skills,
             get_installation_status,
             get_effective_skill_loads,
@@ -165,6 +164,7 @@ pub fn run() {
             set_files_kept,
             preview_take_bundled,
             apply_take_bundled,
+            get_security_posture,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
