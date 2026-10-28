@@ -89,6 +89,15 @@ Each recipe lists the files to touch, the command, and what fails if you forget.
 
 The harness list lives in several places no compiler connects: `HarnessId` and the target registry in Rust (`src-tauri/src/agent_targets.rs`, `skill_roots.rs`, `skill_loads.rs`, `setup_lifecycle.rs`), `metadata/light-harnesses.json` and `metadata/rules-adapters.json` in the bundle, the rules and MCP templates, and the TypeScript tables (`src/types.ts`, `src/lib/harnessInstallation.ts`, `src/lib/rulesView.ts`, `src/shell/views.ts`, `src/App.tsx`). `python3 scripts/check-harness-mirror.py` names the first mismatch of each kind; `check-managed-installation-contract.py` requires each harness view to render exactly one `HarnessPage`.
 
+### Add or change a posture check
+
+The code lives in `src-tauri/src/commands/security_posture.rs`, the phrases in `src/lib/securityPostureRows.ts`.
+
+- Add the variant to `FindingCode` and its level to `level()`, reduce the key to a bool, enum or count in the harness's facts function (never keep or format a value), and add the same code to `FindingCode` in `src/types.ts` and to the copy table. A Rust test fails when the table has no key for a code.
+- Add a fixture test, and extend the marker test in the same file when a new file or secret position is read.
+- Check the key against the vendor docs for the harness version and cite the page in the module doc. Leave out what the docs do not state.
+- A phrase never says secure, safe or all good; `enforced` means set in the file read.
+
 ### Add, rename or delete a bundled file
 
 - A new bundled file is not listed anywhere: the list of workspace copies, `RETIRED_WORKSPACE_FILES` in `src-tauri/src/commands/retired_workspace_files.rs`, is frozen and the app reads bundled files from the bundle. Renaming or deleting a file that list names fails `check-retired-workspace-files.py` and the Rust test `every_listed_path_is_in_the_bundle_or_documented_as_retired`; add the path to `RETIRED_FROM_BUNDLE` in that file's tests, with a comment naming the release that dropped it. The Rust test `the_frozen_list_matches_the_list_it_was_frozen_from` pins the list by digest, so the list itself changes only on purpose. An empty listed file fails `check-bundle-content.py`.
