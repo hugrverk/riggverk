@@ -171,8 +171,22 @@ mod tests {
         fn pack(&self, pack: &str) -> PathBuf {
             let dir = self.packs().join(pack);
             fs::create_dir_all(dir.join("skills")).expect("pack dir");
+            set_mode(&self.packs(), 0o755);
             set_mode(&dir, 0o755);
             dir
+        }
+
+        /// Owner-writable modes below `dir`, whatever the umask of the machine running the tests.
+        fn tighten(dir: &Path) {
+            set_mode(dir, 0o755);
+            for entry in fs::read_dir(dir).expect("read dir").flatten() {
+                let path = entry.path();
+                if entry.file_type().expect("file type").is_dir() {
+                    Self::tighten(&path);
+                } else {
+                    set_mode(&path, 0o644);
+                }
+            }
         }
 
         /// A skill in a pack. `files` are supporting files; `group` adds a folder level.
@@ -196,6 +210,7 @@ mod tests {
                 fs::create_dir_all(path.parent().expect("parent")).expect("support dir");
                 fs::write(path, text).expect("support file");
             }
+            Self::tighten(&skills);
             dir
         }
 
@@ -603,6 +618,128 @@ mod tests {
             .root(SkillRoot::Claude)
             .join("tight-skill/SKILL.md")
             .is_file());
+    }
+
+    /// The reason the pack `name` is refused with, if it is.
+    fn refusal(sources: &SkillSources, name: &str) -> Option<String> {
+        sources
+            .packs()
+            .iter()
+            .find(|p| p.name == name)
+            .expect(name)
+            .refused
+            .clone()
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_writable_skills_folder_or_skill_entry_refuses_the_pack_and_holds_its_skills() {
+        let env = Env::new("writable-inside");
+        let skill = env.pack_skill("mine", None, "my-checklist", "x", &[("notes/a.md", "a")]);
+        let pack = env.packs().join("mine");
+        let result = env.apply();
+        assert!(result.success, "install: {}", result.message);
+        assert_eq!(refusal(&env.sources(), "mine"), None);
+
+        // Each of these is a folder or file a pack-mate could rewrite after the review.
+        let loose: [(&str, PathBuf, u32, u32); 5] = [
+            ("skills", pack.join("skills"), 0o775, 0o755),
+            ("skill folder", skill.clone(), 0o757, 0o755),
+            ("nested folder", skill.join("notes"), 0o775, 0o755),
+            ("SKILL.md", skill.join("SKILL.md"), 0o666, 0o644),
+            ("nested file", skill.join("notes/a.md"), 0o664, 0o644),
+        ];
+        for (label, path, bad, good) in loose {
+            set_mode(&path, bad);
+            let sources = env.sources();
+            let reason = refusal(&sources, "mine");
+            assert!(
+                reason.as_deref().is_some_and(|r| r.contains("writable")),
+                "{label}: {reason:?}"
+            );
+            assert!(sources.packs()[0].skills.is_empty(), "{label}");
+            assert_eq!(sources.held().len(), 1, "{label}: {:?}", sources.held());
+            assert_eq!(sources.held()[0].name, "my-checklist", "{label}");
+            no_removals(&env);
+            set_mode(&path, good);
+            assert_eq!(refusal(&env.sources(), "mine"), None, "{label} restored");
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_writable_packs_folder_refuses_every_pack_and_holds_their_skills() {
+        let env = Env::new("writable-packs");
+        env.pack_skill("mine", None, "my-checklist", "x", &[]);
+        let result = env.apply();
+        assert!(result.success, "install: {}", result.message);
+
+        set_mode(&env.packs(), 0o775);
+        let sources = env.sources();
+        assert!(sources.packs().is_empty());
+        assert!(
+            sources
+                .ignored()
+                .iter()
+                .any(|(name, reason)| name == "packs" && reason.contains("writable")),
+            "{:?}",
+            sources.ignored()
+        );
+        assert_eq!(sources.held().len(), 1, "{:?}", sources.held());
+        no_removals(&env);
+        assert!(env
+            .root(SkillRoot::Claude)
+            .join("my-checklist/SKILL.md")
+            .is_file());
+
+        set_mode(&env.packs(), 0o755);
+        assert!(env.sources().ignored().is_empty());
+        assert_eq!(env.sources().packs().len(), 1);
+    }
+
+    /// Ownership cannot be changed without privileges, so only the side that can be tested is: the
+    /// entries a normal clone leaves are owned by the current user and pass.
+    #[cfg(unix)]
+    #[test]
+    fn entries_owned_by_the_current_user_pass_the_owner_check() {
+        let env = Env::new("owner");
+        env.pack_skill("mine", None, "my-checklist", "x", &[("notes/a.md", "a")]);
+        let sources = env.sources();
+        assert_eq!(refusal(&sources, "mine"), None);
+        assert_eq!(sources.packs()[0].skills.len(), 1);
+    }
+
+    #[test]
+    fn a_plan_with_many_artifacts_reads_the_bundle_and_packs_once() {
+        let env = Env::new("one-read");
+        env.pack_skill("mine", None, "my-checklist", "x", &[]);
+        env.pack_skill("mine", Some("group"), "grouped", "x", &[]);
+
+        let before = crate::skill_sources::reads::total();
+        let planned = env.plan();
+        let reads = crate::skill_sources::reads::total() - before;
+        assert!(planned.len() > 50, "a plan of {} artifacts", planned.len());
+        assert_eq!(reads, 1, "{reads} reads for {} artifacts", planned.len());
+
+        let before = crate::skill_sources::reads::total();
+        let plan = env.preview();
+        let reads = crate::skill_sources::reads::total() - before;
+        assert!(!plan.operations.is_empty());
+        assert_eq!(reads, 1, "a preview read the catalog {reads} times");
+
+        // An apply reads once per stage (the fingerprint check, the plan it applies, the run with
+        // its preflight), however many artifacts there are.
+        let before = crate::skill_sources::reads::total();
+        let result = apply_setup(
+            vec![surface_name(SetupSurfaceId::Skills)],
+            true,
+            plan.plan_fingerprint.clone(),
+            plan.preview_token.clone(),
+        )
+        .expect("apply_setup");
+        let reads = crate::skill_sources::reads::total() - before;
+        assert!(result.success, "install: {}", result.message);
+        assert_eq!(reads, 3, "an apply read the catalog {reads} times");
     }
 
     #[test]

@@ -1,64 +1,240 @@
-/* ---- settings ----
-   Two panes of `key  value` rows (src/views/SettingsView.tsx). Rows come from the Kv primitive; the value
-   column holds a radio group (.setting > .setting-option), a colour field (.setting-color) or plain text.
-   The key column is a fixed 13ch so rows line up across the Kv blocks of one pane. */
+/* ---- settings (Grafit 1A "Bläck") ----
+   Two hairline cards (src/views/SettingsView.tsx), each a flat pane (`.pane-flat`, _library.scss) whose title is a label row.
+   Inside, sections are mono labels (`.sgroup`) over joined rows:
+
+     .srows > .srow > dt.sl + dd.sc     label left, control right; `.srow-stack` puts the control under the label
+     .seg > .seg-opt                    segmented control (role=radiogroup of role=radio buttons): the checked option is
+                                        filled, bold and ringed
+     .sw                                switch (role=switch): square track, thumb right when on, "On"/"Off" beside it
+     .setting-color                     colour override: swatch, hex field, Default button
+     .sv, .sv-mark                      a state word led by a hollow ring in its hue (autosave, rejected hex, reset result)
+
+   Radius 0, 1px hairlines, system sans for labels and values, IBM Plex Mono for section labels and hex codes, no ochre.
+   Interactive states are weight, fill and rings, never colour alone. Motion is a short colour/transform fade, which
+   `subtle` keeps as a fade and `off` removes (global rules in _tokens.scss). */
 
 .settings-screen {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  grid-auto-rows: minmax(0, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 400px), 1fr));
+  grid-auto-rows: max-content;
+  align-content: start;
+  gap: 16px;
+  padding: 24px 28px 40px;
+  overflow-y: auto;
 }
 
-.settings-kv {
-  grid-template-columns: 13ch minmax(0, 1fr);
-  align-items: start;
+.settings-screen > .pane {
+  align-self: start;
+  border: 1px solid var(--border);
 }
 
-/* Focus rings of the controls in the value column must not be clipped by the Kv ellipsis rule. */
-.settings-kv dd {
-  overflow: visible;
-  white-space: normal;
+.settings-screen .pane-body {
+  padding: 4px 0 16px;
 }
 
-.settings-kv dt,
-.settings-kv dd {
-  min-height: var(--lh);
+/* A card's title is its name in the sans heading size; the autosave state after it is a small mono word. */
+.settings-screen > .pane > .pane-title b {
+  margin-right: 4px;
+  font-family: var(--font-sans);
+  font-size: calc(var(--fs) + 2px);
+  letter-spacing: -0.01em;
 }
 
-.setting {
+/* ---- sections ---- */
+
+.sgroup {
+  margin: 0;
+  padding: 18px 20px 6px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: max(10px, calc(var(--fs) * 0.77));
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.settings-screen .pane-body > .sgroup:first-child { padding-top: 12px; }
+
+/* ---- rows ---- */
+
+.srows { margin: 0; }
+
+.srow {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0 14px;
-  min-height: var(--lh);
+  gap: 8px 20px;
+  min-height: 48px;
+  padding: 8px 20px;
+  border-top: 1px solid var(--border);
 }
 
-.setting-option {
+.srows > .srow:first-child { border-top: 0; }
+
+.sl {
+  flex: 1 1 8rem;
+  min-width: 0;
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-weight: 500;
+}
+
+.sc {
+  display: flex;
+  flex: 0 1 auto;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+}
+
+/* A long value (the path, the status) gets the row to itself under its label. */
+.srow-stack { align-items: flex-start; gap: 4px; }
+.srow-stack > .sl,
+.srow-stack > .sc { flex: 1 1 100%; }
+
+.settings-screen .sc [role="group"],
+.settings-screen .sc [role="status"] { min-width: 0; }
+
+.setting-path {
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  overflow-wrap: anywhere;
+}
+
+.setting-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  margin-top: 6px;
+}
+
+.setting-line .tbtn { min-height: 28px; padding: 0 10px; }
+
+.setting-hint {
+  font-size: var(--fs-sm);
+}
+
+.setting-note {
+  margin-top: 0;
+  padding: 10px 20px 0;
+  font-size: var(--fs-sm);
+}
+
+.setting-warn { color: var(--text); }
+
+/* ---- segmented control ---- */
+
+.seg {
+  display: inline-flex;
+  flex-wrap: wrap;
+  max-width: 100%;
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+
+.seg-opt {
+  min-height: 28px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  font-size: max(12px, calc(var(--fs) - 0.5px));
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color var(--dur-state) var(--ease),
+    color var(--dur-state) var(--ease),
+    box-shadow var(--dur-state) var(--ease);
+}
+
+.seg-opt:hover { color: var(--text); }
+
+.seg-opt[aria-checked="true"] {
+  background: var(--sel);
+  box-shadow: inset 0 0 0 1px var(--accent);
+  color: var(--text-heading);
+  font-weight: 600;
+}
+
+.seg-opt:focus-visible { outline-offset: 1px; }
+
+/* ---- switch ---- */
+
+.sw {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  height: var(--lh);
+  gap: 10px;
+  min-height: 28px;
   padding: 0;
   border: 0;
   background: none;
   color: var(--text-muted);
-  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: max(11px, calc(var(--fs) * 0.85));
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   cursor: pointer;
 }
 
-.setting-option:hover { color: var(--text); }
-.setting-option[aria-checked="true"] { color: var(--text-heading); }
-.setting-option[aria-checked="true"] .mark { color: var(--accent); }
+.sw-track {
+  position: relative;
+  flex: none;
+  width: 38px;
+  height: 20px;
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+  transition:
+    background-color var(--dur-state) var(--ease),
+    box-shadow var(--dur-state) var(--ease);
+}
+
+.sw-track::after {
+  content: "";
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 12px;
+  height: 12px;
+  background: var(--text-muted);
+  transition:
+    transform var(--dur-state) var(--ease),
+    background-color var(--dur-state) var(--ease);
+}
+
+.sw[aria-checked="true"] { color: var(--text-heading); font-weight: 600; }
+
+.sw[aria-checked="true"] .sw-track {
+  background: var(--primary);
+  box-shadow: none;
+}
+
+.sw[aria-checked="true"] .sw-track::after {
+  background: var(--primary-fg);
+  transform: translateX(18px);
+}
+
+.sw:hover .sw-track { box-shadow: inset 0 0 0 1px var(--text-muted); }
+.sw[aria-checked="true"]:hover .sw-track { filter: brightness(1.08); box-shadow: none; }
+.sw:focus-visible { outline-offset: 3px; }
+.sw-state { min-width: 3ch; }
+
+/* ---- colour overrides ---- */
 
 .setting-color {
+  display: flex;
   flex-wrap: nowrap;
+  align-items: center;
   gap: 8px;
 }
 
 .setting-picker {
-  flex-shrink: 0;
-  width: 2em;
-  height: calc(var(--lh) - 6px);
-  padding: 1px;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  padding: 2px;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);
   background: transparent;
@@ -72,52 +248,51 @@
 .settings-input {
   flex: 1;
   min-width: 0;
-  height: calc(var(--lh) - 2px);
+  height: 28px;
   padding: 0 8px;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);
   background: var(--inset);
   color: var(--text);
+  font-family: var(--font-mono);
   outline: none;
 }
 
 .settings-input::placeholder { color: var(--text-muted); }
 .settings-input:focus { border-color: var(--accent); }
-.settings-input[aria-invalid="true"] { border-color: var(--fail); }
+.settings-input[aria-invalid="true"] { border-color: var(--fix); }
 
 .setting-hex {
   flex: 0 0 auto;
   width: 11ch;
 }
 
-.setting-hint {
-  font-size: var(--fs-sm);
+.setting-default { min-height: 28px; padding: 0 10px; }
+
+/* ---- state words ---- */
+
+.sv { white-space: nowrap; }
+
+.sv-mark {
+  display: inline-block;
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin-right: 2px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1.5px currentColor;
+  vertical-align: 0.02em;
 }
 
-.setting-note {
-  margin-top: var(--lh);
-  padding: 0 10px;
-  font-size: var(--fs-sm);
-}
+.sv-ok { color: var(--ok); }
+.sv-busy { color: var(--ready); }
+.sv-fail { color: var(--fix); }
 
-.setting-note.c-warn { margin-top: 6px; }
-
-.setting-group {
-  margin-top: var(--lh);
-}
-
-.setting-path { overflow-wrap: anywhere; }
-
-.setting-status {
-  margin-top: var(--lh);
-}
+.settings-screen .setting-warn .sv { white-space: normal; }
 
 @media (max-width: 760px) {
   .settings-screen {
     grid-template-columns: minmax(0, 1fr);
-    grid-auto-rows: auto;
-    overflow-y: auto;
+    padding: 16px;
   }
 }
-
-/* ---- harness target toggles (TargetSettingsPanel, Start) ---- */

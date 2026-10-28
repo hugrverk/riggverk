@@ -119,22 +119,21 @@ function renderCodex(state: InstallationState, config: CodexConfigStatus | undef
   return { p, ...renderInFrame(<CodexView {...p} runtimeHealth={health(configKept)} />) };
 }
 
+/** The page: the keys work with focus anywhere in it, and a click on it takes focus. */
 function surfaces() {
-  return screen.getByRole("listbox", { name: "Codex surfaces" });
+  return screen.getByRole("region", { name: "Codex" });
 }
 
 function focusSurfaces() {
   act(() => surfaces().focus());
 }
 
-/** A row of the surfaces list by its name. */
+/** The cell of a surface by its short name ("rules", "config"). */
 function surfaceRow(name: string) {
-  return within(surfaces())
-    .getAllByRole("option")
-    .find(option => option.querySelector(".nm")!.textContent!.includes(name))!;
+  return surfaces().querySelector<HTMLElement>(`[data-surface="codex_${name}"]`)!;
 }
 
-/** Moves the cursor to a row; the config row is under it first. */
+/** Makes a cell the active one, as a click in it does. */
 function selectRow(name: string) {
   fireEvent.click(surfaceRow(name));
 }
@@ -144,7 +143,7 @@ function press(key: string) {
 }
 
 function hint(name: RegExp) {
-  if (!screen.getByRole("region", { name: "Codex surfaces" }).contains(document.activeElement)) focusSurfaces();
+  if (!surfaces().contains(document.activeElement)) focusSurfaces();
   return within(screen.getByLabelText("Status bar")).queryByRole("button", { name });
 }
 
@@ -152,33 +151,38 @@ function mode() {
   return document.querySelector(".statusbar .mode")!.textContent;
 }
 
-describe("Codex config keys in the detail pane", () => {
-  it("names the differing key and offers keep mine while the config row is selected", () => {
+describe("Codex config keys in the settings cell", () => {
+  it("names the differing key and offers keep mine while the config cell is the active one", () => {
     renderCodex("conflict", DIFFERING, CONFLICT_DETAIL);
-    // On another row no config key is offered.
+    // Focus in another cell: the key is not offered.
     selectRow("rules");
     expect(hint(/keep mine/)).toBeNull();
-    expect(screen.queryByLabelText("Codex config keys")).toBeNull();
+    // The button is there all the same, without the key it would answer to.
+    expect(within(surfaceRow("config")).getByRole("button", { name: "Keep mine" }).getAttribute("aria-keyshortcuts")).toBeNull();
 
     selectRow("config");
     const summary = screen.getByLabelText("Codex config keys");
     expect(summary.textContent).toContain("differs");
     expect(summary.textContent).toContain("approvals_reviewer = auto_review");
-    expect(screen.getByRole("region", { name: "Codex detail" }).textContent).toContain("m keeps your value");
+    // The state says which key and why; the cell holds a decision that spans the row.
+    expect(surfaceRow("config").getAttribute("data-state")).toBe("decide");
+    expect(surfaceRow("config").textContent).toContain("approvals_reviewer differs from Riggverk's value");
+    expect(within(surfaceRow("config")).getByRole("button", { name: "Keep mine" })).toBeTruthy();
     expect(hint(/keep mine/)).not.toBeNull();
     expect(hint(/hand back/)).toBeNull();
   });
 
-  it("shows a kept key on the row and in the runtime, and offers hand back", () => {
+  it("shows a kept key on its cell and in the runtime, and offers hand back", () => {
     renderCodex("current", KEPT, "you keep approvals_reviewer = auto_review; other managed keys follow Riggverk", ["approvals_reviewer"]);
     selectRow("config");
     const row = surfaceRow("config");
-    expect(row.querySelector(".meta")!.textContent).toBe("current · you keep 1");
+    expect(row.querySelector(".state-pill")!.textContent).toBe("Yours");
+    expect(row.textContent).toContain("You keep approvals_reviewer");
     const summary = screen.getByLabelText("Codex config keys");
     expect(summary.textContent).toContain("you keep");
     expect(summary.textContent).toContain("the other managed keys follow Riggverk");
-    expect(screen.getByRole("region", { name: "Codex detail" }).textContent).toContain("config");
-    expect(screen.getByRole("region", { name: "Codex detail" }).textContent).toContain("synced · you keep 1");
+    expect(surfaces().textContent).toContain("synced · you keep 1");
+    expect(within(row).getByRole("button", { name: "Hand back" })).toBeTruthy();
     expect(hint(/hand back/)).not.toBeNull();
     expect(hint(/keep mine/)).toBeNull();
   });
@@ -230,7 +234,24 @@ describe("keep mine (m)", () => {
     await waitFor(() => expect(p.overview.refresh).toHaveBeenCalledTimes(1));
   });
 
-  it("does nothing on another row, and shows why the backend refused", async () => {
+  it("is a button in the cell too, which asks first and records the same choice", async () => {
+    const { p } = renderCodex("conflict", DIFFERING, CONFLICT_DETAIL);
+    fireEvent.click(within(surfaceRow("config")).getByRole("button", { name: "Keep mine" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(invokeMock).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByRole("button", { name: "keep mine" }));
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("set_codex_config_kept", { kept: true }));
+    await waitFor(() => expect(p.overview.refresh).toHaveBeenCalledTimes(1));
+  });
+
+  it("hands back from the button without a confirm", async () => {
+    renderCodex("current", KEPT, "you keep approvals_reviewer = auto_review; other managed keys follow Riggverk", ["approvals_reviewer"]);
+    fireEvent.click(within(surfaceRow("config")).getByRole("button", { name: "Hand back" }));
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("set_codex_config_kept", { kept: false }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("does nothing in another cell, and shows why the backend refused", async () => {
     invokeMock.mockImplementation(async (command: string) => {
       if (command === "set_codex_config_kept") throw new Error("no enforced key differs from the bundled config; there is nothing to keep");
       return null;

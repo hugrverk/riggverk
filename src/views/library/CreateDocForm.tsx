@@ -69,12 +69,12 @@ export function CreateDocForm({
       <div className="docs-create-actions">
         <button
           type="submit"
-          className="btn btn-primary btn-sm"
+          className="tbtn tbtn-primary"
           disabled={creating || !title.trim() || !slug.trim()}
         >
           {creating ? "creating…" : "create"}
         </button>
-        <button type="button" className="btn btn-sm" onClick={() => onSetShow(false)}>
+        <button type="button" className="tbtn" onClick={() => onSetShow(false)}>
           cancel
         </button>
         <span className="docs-create-hint">docs/context/</span>

@@ -19,6 +19,7 @@ import { rulesOverrideWarning } from "../lib/rulesView";
 import { updateAllDisabledReason } from "../lib/shellSummary";
 import { DEFAULT_WORKSPACE_PATH } from "../lib/settingsDraft";
 import type { AppView } from "../shell/views";
+import { Page } from "../ui/Page";
 import type { AppSettings, InstallAgent, WorkspaceDiagnostics } from "../types";
 import { installBindings } from "./installBindings";
 import type { PageInstallProps, PageOutputProps } from "./pageTypes";
@@ -194,7 +195,7 @@ export function OverviewView({
 
   return (
     <div className="ov">
-      <section className="ov-page" aria-label="Overview" data-pane-id="page" data-pane-default data-keyscope="pane" tabIndex={-1}>
+      <Page label="Overview" className="ov-page">
         <OverviewHeader summary={summary} checkedAt={checkedAt} />
         <div className="ov-grid">
           {cards.map(card => (
@@ -233,7 +234,7 @@ export function OverviewView({
             onUninstallPreviewHandled={onUninstallPreviewHandled}
           />
         </div>
-      </section>
+      </Page>
       <div className="ov-strip">{runPanel}</div>
     </div>
   );

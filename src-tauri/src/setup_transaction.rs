@@ -494,10 +494,20 @@ pub fn workspace_keys_match(recorded: &str, current: &str) -> bool {
 /// other empty expansion is an error.
 pub fn expand_surfaces_to_artifacts(
     surfaces: &[SetupSurfaceId],
-    _workspace_root: &Path,
+    workspace_root: &Path,
     scope: &SkillScope,
 ) -> Result<Vec<ArtifactId>, String> {
-    let sources = SkillSources::for_workspace(_workspace_root)?;
+    let sources = SkillSources::for_workspace(workspace_root)?;
+    expand_surfaces_to_artifacts_with(surfaces, workspace_root, scope, &sources)
+}
+
+/// [`expand_surfaces_to_artifacts`] with the sources already read.
+pub fn expand_surfaces_to_artifacts_with(
+    surfaces: &[SetupSurfaceId],
+    workspace_root: &Path,
+    scope: &SkillScope,
+    sources: &SkillSources,
+) -> Result<Vec<ArtifactId>, String> {
     let mut artifacts: Vec<ArtifactId> = Vec::new();
     let mut seen = HashSet::new();
     let mut seen_surfaces = HashSet::new();
@@ -506,7 +516,7 @@ pub fn expand_surfaces_to_artifacts(
         if !seen_surfaces.insert(surface) {
             continue;
         }
-        let expanded = expand_surface_fail_closed(surface, &sources, scope)?;
+        let expanded = expand_surface_fail_closed(surface, sources, scope)?;
         if expanded.is_empty()
             && !matches!(
                 surface,
@@ -523,7 +533,7 @@ pub fn expand_surfaces_to_artifacts(
                 return Err(format!("duplicate artifact {:?} across surfaces", artifact));
             }
             crate::artifact_registry::reject_broad_artifact_root(
-                &artifact.resolve_dest(&user_home()?, _workspace_root)?,
+                &artifact.resolve_dest(&user_home()?, workspace_root)?,
             )?;
             artifacts.push(artifact);
         }
@@ -583,17 +593,39 @@ pub fn validate_artifact_source_dest(
     workspace_root: &Path,
     home: &Path,
 ) -> Result<(PathBuf, PathBuf), String> {
-    let ws_root = workspace_root.to_path_buf();
-    let (dest, _) = validate_artifact_dest(artifact, &ws_root, home)?;
-    let bundled_root = crate::setup_roots::bundled_root_for(&ws_root)?
-        .canonicalize()
-        .map_err(|e| format!("cannot canonicalize bundled workspace: {e}"))?;
-    let sources = SkillSources::new(bundled_root, &ws_root);
+    let sources = SkillSources::for_workspace(workspace_root)?;
+    validate_artifact_source_dest_with(artifact, workspace_root, home, &sources)
+}
+
+/// [`validate_artifact_source_dest`] with the sources already read (by
+/// [`SkillSources::for_workspace`] for the same `workspace_root`), for a caller that validates
+/// many artifacts of one plan, preflight or apply.
+pub fn validate_artifact_source_dest_with(
+    artifact: &ArtifactId,
+    workspace_root: &Path,
+    home: &Path,
+    sources: &SkillSources,
+) -> Result<(PathBuf, PathBuf), String> {
+    let (dest, _) = validate_artifact_dest(artifact, workspace_root, home)?;
     let source = artifact
-        .resolve_source(&sources)
+        .resolve_source(sources)
         .ok_or_else(|| format!("missing source for {artifact:?}"))?;
     // A skill of a pack is read from its pack folder; everything else from the bundle.
-    let source_root = sources.source_root_of(&source);
+    let mut source_root = sources.source_root_of(&source);
+    // The bundle is checked by its canonical path: the packaged one may be spelled with `..`.
+    let source = if source_root == sources.bundle() {
+        let canonical = source_root
+            .canonicalize()
+            .map_err(|e| format!("cannot canonicalize bundled workspace: {e}"))?;
+        let below = source
+            .strip_prefix(&source_root)
+            .map(Path::to_path_buf)
+            .unwrap_or_default();
+        source_root = canonical.clone();
+        canonical.join(below)
+    } else {
+        source
+    };
     crate::path_safety::reject_path_escape(&source, &source_root, "source")?;
     reject_symlink_parent_chain(&source, &source_root, "source")?;
     reject_symlink(&source, "source")?;
@@ -633,13 +665,34 @@ pub fn aggregate_operation_kind(kinds: &[OperationKind]) -> OperationKind {
 }
 
 /// Detect surface state by aggregating artifact-level detection for all owned artifacts.
+#[cfg(test)]
 pub fn detect_surface_state(
     surface: SetupSurfaceId,
     workspace_root: &Path,
     home: &Path,
 ) -> (SetupSurfaceId, OperationKind, String) {
+    match SkillSources::for_workspace(workspace_root) {
+        Ok(sources) => detect_surface_state_with(surface, workspace_root, home, &sources),
+        Err(message) => (
+            surface,
+            OperationKind::Unavailable,
+            format!("{} unavailable: {message}", surface.label()),
+        ),
+    }
+}
+
+/// [`detect_surface_state`] with the sources already read, for a caller that looks at every
+/// surface of one plan.
+pub fn detect_surface_state_with(
+    surface: SetupSurfaceId,
+    workspace_root: &Path,
+    home: &Path,
+    sources: &SkillSources,
+) -> (SetupSurfaceId, OperationKind, String) {
     let (kinds, conflict_reason, manual_count): (Vec<OperationKind>, Option<String>, usize) =
-        match plan_artifacts_for_surfaces(&[surface], workspace_root, home) {
+        match scope_for_surfaces(&[surface], home).and_then(|scope| {
+            plan_artifacts_for_surfaces_with(&[surface], workspace_root, home, &scope, sources)
+        }) {
             Ok(planned) if !planned.is_empty() => {
                 // Why an MCP file is left alone, so the review says it beside the conflict.
                 let reason = planned
@@ -791,6 +844,18 @@ pub fn compute_plan_fingerprint(
     artifact_ops: &[PlannedArtifact],
     home: &Path,
 ) -> Result<String, String> {
+    let sources = SkillSources::for_workspace(workspace_root)?;
+    compute_plan_fingerprint_with(workspace_root, surfaces, artifact_ops, home, &sources)
+}
+
+/// [`compute_plan_fingerprint`] with the sources the plan was made from.
+pub fn compute_plan_fingerprint_with(
+    workspace_root: &Path,
+    surfaces: &[SetupSurfaceId],
+    artifact_ops: &[PlannedArtifact],
+    home: &Path,
+    sources: &SkillSources,
+) -> Result<String, String> {
     let ws_key = workspace_key(workspace_root)?;
     let mut parts = vec![ws_key];
     let mut surface_ids: Vec<_> = surfaces.to_vec();
@@ -800,7 +865,6 @@ pub fn compute_plan_fingerprint(
     }
     let mut artifacts: Vec<_> = artifact_ops.iter().map(|a| a.artifact.clone()).collect();
     artifacts.sort_by_key(|a| format!("{a:?}"));
-    let sources = SkillSources::for_workspace(workspace_root)?;
     for artifact in &artifacts {
         parts.push(format!("artifact:{artifact:?}"));
         let planned_kind = artifact_ops
@@ -810,13 +874,13 @@ pub fn compute_plan_fingerprint(
         let source_digest = if matches!(planned_kind, Some(OperationKind::Remove)) {
             crate::setup_fingerprint::ABSENT_DIGEST.to_string()
         } else if artifact
-            .resolve_source(&sources)
+            .resolve_source(sources)
             .is_some_and(|source| source.exists())
         {
             // The Codex config's keys the user keeps are part of what the source side says.
             crate::setup_fingerprint::artifact_effective_source_digest(
                 artifact,
-                &sources,
+                sources,
                 workspace_root,
                 home,
             )
@@ -854,17 +918,28 @@ pub fn validate_fingerprint_format(fingerprint: &str) -> bool {
         && fingerprint.chars().all(|c| c.is_ascii_hexdigit())
 }
 
+#[cfg(test)]
 pub fn detect_artifact_state(
     artifact: &ArtifactId,
     workspace_root: &Path,
     home: &Path,
 ) -> (OperationKind, PreviousState) {
+    match SkillSources::for_workspace(workspace_root) {
+        Ok(sources) => detect_artifact_state_with(artifact, workspace_root, home, &sources),
+        Err(_) => (OperationKind::Unavailable, PreviousState::Unavailable),
+    }
+}
+
+/// [`detect_artifact_state`] with the sources already read, for a caller that looks at many
+/// artifacts of one plan or apply.
+pub fn detect_artifact_state_with(
+    artifact: &ArtifactId,
+    workspace_root: &Path,
+    home: &Path,
+    sources: &SkillSources,
+) -> (OperationKind, PreviousState) {
     let dest = match artifact.resolve_dest(home, workspace_root) {
         Ok(p) => p,
-        Err(_) => return (OperationKind::Unavailable, PreviousState::Unavailable),
-    };
-    let sources = match SkillSources::for_workspace(workspace_root) {
-        Ok(sources) => sources,
         Err(_) => return (OperationKind::Unavailable, PreviousState::Unavailable),
     };
     let bundled_root = sources.bundle().to_path_buf();
@@ -873,7 +948,7 @@ pub fn detect_artifact_state(
         // never the app's.
         return claude_settings_outcome(&dest, false);
     }
-    let source = match artifact.resolve_source(&sources) {
+    let source = match artifact.resolve_source(sources) {
         Some(p) => p,
         None => return (OperationKind::Unavailable, PreviousState::Unavailable),
     };
@@ -1827,7 +1902,8 @@ pub fn plan_artifacts_for_uninstall(
 
     // Uninstall sees every root: copies in folders a harness no longer needs are the app's too.
     let scope = SkillScope::all();
-    let artifacts = expand_surfaces_to_artifacts(SetupSurfaceId::ALL, workspace_root, &scope)?;
+    let artifacts =
+        expand_surfaces_to_artifacts_with(SetupSurfaceId::ALL, workspace_root, &scope, &sources)?;
     let mut removals = Vec::new();
     let mut preserved = Vec::new();
     let mut merged = Vec::new();
@@ -2107,12 +2183,24 @@ pub fn plan_artifacts_for_surfaces_in(
     home: &Path,
     scope: &SkillScope,
 ) -> Result<Vec<PlannedArtifact>, String> {
+    let sources = SkillSources::for_workspace(workspace_root)?;
+    plan_artifacts_for_surfaces_with(surfaces, workspace_root, home, scope, &sources)
+}
+
+/// [`plan_artifacts_for_surfaces_in`] with the sources already read: the plan reads each pack
+/// skill once, however many artifacts it holds.
+pub fn plan_artifacts_for_surfaces_with(
+    surfaces: &[SetupSurfaceId],
+    workspace_root: &Path,
+    home: &Path,
+    scope: &SkillScope,
+    sources: &SkillSources,
+) -> Result<Vec<PlannedArtifact>, String> {
     let managed = crate::managed_state::read_managed_state(workspace_root);
     let records = records_with_bootstrap(workspace_root, home, managed.as_ref());
 
-    let sources = SkillSources::for_workspace(workspace_root)?;
     let mut canonical_identities =
-        match crate::managed_state::canonical_artifact_identities(&sources, scope) {
+        match crate::managed_state::canonical_artifact_identities(sources, scope) {
             Ok(identities) => identities,
             #[cfg(test)]
             Err(_) => std::collections::HashSet::new(),
@@ -2126,7 +2214,7 @@ pub fn plan_artifacts_for_surfaces_in(
         &records,
     ));
 
-    let artifacts = expand_surfaces_to_artifacts(surfaces, workspace_root, scope)?;
+    let artifacts = expand_surfaces_to_artifacts_with(surfaces, workspace_root, scope, sources)?;
     let kept = crate::kept_files::KeptFiles::load(workspace_root);
     let mut planned = Vec::new();
     let mut seen = std::collections::HashSet::new();
@@ -2139,7 +2227,7 @@ pub fn plan_artifacts_for_surfaces_in(
         let mcp = plan_mcp_artifact(
             &artifact,
             workspace_root,
-            &sources,
+            sources,
             home,
             managed_hash.as_deref(),
         );
@@ -2160,13 +2248,14 @@ pub fn plan_artifacts_for_surfaces_in(
             }
             (None, Some(plan)) => (plan.kind, plan.previous_state),
             (None, None) => {
-                let (kind, previous_state) = detect_artifact_state(&artifact, workspace_root, home);
+                let (kind, previous_state) =
+                    detect_artifact_state_with(&artifact, workspace_root, home, sources);
                 let (kind, previous_state) = refine_with_managed_hash(
                     kind,
                     previous_state,
                     &artifact,
                     workspace_root,
-                    &sources,
+                    sources,
                     home,
                     managed_hash.as_deref(),
                 );
@@ -2177,7 +2266,7 @@ pub fn plan_artifacts_for_surfaces_in(
                 let (kind, previous_state) = if managed_hash.is_none()
                     && matches!(kind, OperationKind::Update)
                     && !matches!(previous_state, PreviousState::MergeableConfigFile)
-                    && !installed_is_shipped_version(&artifact, workspace_root, &sources, home)
+                    && !installed_is_shipped_version(&artifact, workspace_root, sources, home)
                 {
                     (OperationKind::Conflict, PreviousState::Conflict)
                 } else {
@@ -2188,7 +2277,7 @@ pub fn plan_artifacts_for_surfaces_in(
                     file = file_conflict(
                         &artifact,
                         workspace_root,
-                        &sources,
+                        sources,
                         home,
                         &kept,
                         managed_hash.as_deref(),
@@ -2261,7 +2350,7 @@ pub fn plan_artifacts_for_surfaces_in(
         let (kind, previous_state) = detect_stale_artifact_state(
             &artifact,
             workspace_root,
-            &sources,
+            sources,
             home,
             managed_hash.as_deref(),
         );
@@ -2274,7 +2363,7 @@ pub fn plan_artifacts_for_surfaces_in(
                 file_conflict(
                     &artifact,
                     workspace_root,
-                    &sources,
+                    sources,
                     home,
                     &kept,
                     managed_hash.as_deref(),
@@ -3364,12 +3453,28 @@ pub fn validate_backup_for_rollback(
     Ok(())
 }
 
+#[cfg(test)]
 pub fn validate_artifact_after_apply(
     artifact: &ArtifactId,
     workspace_root: &Path,
     home: &Path,
 ) -> Result<(), String> {
     let (kind, _) = detect_artifact_state(artifact, workspace_root, home);
+    check_state_after_apply(artifact, kind)
+}
+
+/// [`validate_artifact_after_apply`] with the sources already read.
+pub fn validate_artifact_after_apply_with(
+    artifact: &ArtifactId,
+    workspace_root: &Path,
+    home: &Path,
+    sources: &SkillSources,
+) -> Result<(), String> {
+    let (kind, _) = detect_artifact_state_with(artifact, workspace_root, home, sources);
+    check_state_after_apply(artifact, kind)
+}
+
+fn check_state_after_apply(artifact: &ArtifactId, kind: OperationKind) -> Result<(), String> {
     if kind == OperationKind::Update {
         return Err(format!(
             "validation failed: artifact {:?} still shows Update after apply",

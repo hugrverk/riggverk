@@ -24,6 +24,8 @@ export interface UseCodexConfigActionsOptions {
 export interface CodexConfigActions {
   /** Why the last keep or hand back failed, or null. */
   error: string | null;
+  /** What `m` does (keep what differs, or hand the kept keys back), for a button; the same gates apply. */
+  run: () => void;
 }
 
 /**
@@ -77,6 +79,10 @@ export function useCodexConfigActions({
 
   // `m` is one key with two meanings: keep what differs, or hand back what is kept.
   const gate = gates.keep.visible ? gates.keep : gates.handBack;
+  const run = () => {
+    if (!gate.visible || gate.reason !== null) return;
+    void setKept(gates.keep.visible);
+  };
   const bindings: Binding[] = paneIds.map(
     (paneId): Binding => ({
       id: `codex.${paneId}.config-keep`,
@@ -88,12 +94,12 @@ export function useCodexConfigActions({
       paneId,
       when: () => (!active || !gate.visible ? false : (gate.reason ?? true)),
       run: () => {
-        if (!active || !gate.visible || gate.reason !== null) return;
-        void setKept(gates.keep.visible);
+        if (!active) return;
+        run();
       },
     }),
   );
   useKeymap(bindings, { enabled: blockedBy === null });
 
-  return { error };
+  return { error, run };
 }
