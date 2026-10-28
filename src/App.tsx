@@ -4,6 +4,7 @@ import { version as APP_VERSION } from "../package.json";
 import { LEAVE_DIRTY_MESSAGE } from "./lib/editorGuards";
 import { invokeOpen } from "./lib/invokeOpen";
 import { useConfirm } from "./components/ConfirmDialog";
+import { useKeymap } from "./keyboard/useKeymap";
 import { useBackups } from "./lib/useBackups";
 import { decideCountsByHarness, updateAllDisabledReason } from "./lib/shellSummary";
 import { useUninstallRecovery } from "./lib/useUninstallRecovery";
@@ -28,6 +29,7 @@ import { CursorView } from "./views/CursorView";
 import { ClaudeView } from "./views/ClaudeView";
 import { LightHarnessView } from "./views/LightHarnessView";
 import { OpenCodeView } from "./views/OpenCodeView";
+import { HistoryView } from "./views/HistoryView";
 import { OverviewView } from "./views/OverviewView";
 const LibraryView = lazy(() => import("./views/LibraryView").then(m => ({ default: m.LibraryView })));
 const SettingsView = lazy(() => import("./views/SettingsView").then(m => ({ default: m.SettingsView })));
@@ -523,6 +525,20 @@ function AppShell() {
     setError,
   });
 
+  // `z`: Undo last update, from anywhere outside a text field. The same dry run and confirm as `:rollback`; the key
+  // does nothing while there is no transaction of this session to undo.
+  useKeymap([
+    {
+      id: "app.undo-last-update",
+      keys: "z",
+      title: "Undo last update",
+      group: "Workspace",
+      scope: "global",
+      when: () => (rollbackTransactionId ? (wsRunning ? `${wsRunning} is running` : true) : false),
+      run: () => void requestRollback(),
+    },
+  ]);
+
   /**
    * `:uninstall`: go to the workspace page, where the Uninstall card opens its preview dialog. The card is not
    * on the page while the install review is open, so the request is dropped then instead of waiting to pop the
@@ -774,6 +790,16 @@ function AppShell() {
               runtimeHealth={lightRuntimeHealth[harness] ?? null}
             />
           ) : null,
+        )}
+
+        {view === "history" && (
+          <HistoryView
+            dataFolderOk={dataFolderOk}
+            backupCount={backups.length}
+            wsRunning={wsRunning}
+            wsLogCompletedAt={wsLogCompletedAt}
+            onUndo={transactionId => void requestRollback(transactionId)}
+          />
         )}
 
         {view === "library" && (

@@ -88,3 +88,39 @@ export function receiptLines(entry: SetupHistoryEntry, backupCount: number | nul
 export function lastUpdateEntry(history: readonly SetupHistoryEntry[]): SetupHistoryEntry | null {
   return history.find(entry => entry.status !== "failed") ?? null;
 }
+
+/** What the History page names a run: the agents (or, for shared files only, the surfaces) it touched. */
+function runSubject(entry: SetupHistoryEntry): string {
+  const agents = updateAgentsText(entry);
+  if (agents) return agents;
+  const surfaces = unique(entry.surfaces).map(surfaceTitle);
+  return surfaces.length > 0 ? listText(surfaces) : "files";
+}
+
+/**
+ * "Updated Codex", "Removed files" or, for a run that stopped, "Update of Codex". Only the recorded changes decide
+ * the verb: a run whose applied changes were all removals says "Removed"; everything else says "Updated".
+ */
+export function runTitle(entry: SetupHistoryEntry): string {
+  const subject = runSubject(entry);
+  if (entry.status === "failed") return `Update of ${subject}`;
+  const applied = entry.changes.filter(change => change.applied);
+  const verb = applied.length > 0 && applied.every(change => change.kind === "remove") ? "Removed" : "Updated";
+  return `${verb} ${subject}`;
+}
+
+/** "Today 15:39 · 2 files" or "Oct 21, 15:39": when it ran, and how many files it wrote when it wrote any. */
+export function runMetaText(entry: SetupHistoryEntry, now: Date = new Date()): string {
+  const time = updateTimeText(entry, now);
+  const millis = nanosToMillis(entry.finished_at) ?? nanosToMillis(entry.created_at);
+  const when = time === null ? null : millis !== null && sameDay(new Date(millis), now) ? `Today ${time}` : time;
+  const written = entry.changes.filter(change => change.applied).length;
+  return [when, written > 0 ? count(written, "file") : null].filter(Boolean).join(" · ") || "Time not recorded";
+}
+
+/** The pill of a run: Done, Undone (quiet outline) or Failed. */
+export function runPill(entry: SetupHistoryEntry): { state: "ok" | "tip" | "fix"; text: string } {
+  if (entry.status === "rolled_back") return { state: "tip", text: "Undone" };
+  if (entry.status === "failed") return { state: "fix", text: "Failed" };
+  return { state: "ok", text: "Done" };
+}

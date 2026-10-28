@@ -6,7 +6,8 @@ import type { SetupHistoryEntry } from "../types";
 /** How many entries to read: enough to get past runs that failed before writing anything. */
 const HISTORY_LIMIT = 8;
 
-function isHistory(value: unknown): value is SetupHistoryEntry[] {
+/** The answer has the shape of a history list (shared with the History page). */
+export function isHistory(value: unknown): value is SetupHistoryEntry[] {
   return Array.isArray(value) && value.every(entry => !!entry && typeof entry === "object" && typeof entry.transaction_id === "string");
 }
 
