@@ -302,10 +302,9 @@ pub fn get_workspace_diagnostics() -> Result<WorkspaceDiagnostics, String> {
 /// `configured_workspace_path`), so a reset of the saved workspace would silently not take effect
 /// while it is set.
 fn ensure_no_workspace_env_override() -> Result<(), String> {
-    if crate::env_overrides::workspace_path_override().is_some() {
+    if let Some((variable, _)) = crate::env_overrides::workspace_path_override_var() {
         return Err(format!(
-            "{} is set and overrides the saved workspace; unset it to reset the workspace",
-            crate::env_overrides::WORKSPACE_PATH_ENV
+            "{variable} is set and overrides the saved workspace; unset it to reset the workspace"
         ));
     }
     Ok(())
@@ -425,17 +424,14 @@ mod tests {
     }
 
     /// Runs `test` with HOME, the settings file and the backups under a temp dir and no
-    /// `RIGGVERK_WORKSPACE_PATH`, so nothing touches the real profile.
+    /// workspace or backup variable (aliases included), so nothing touches the real profile.
     fn with_isolated_settings<F: FnOnce(&Path)>(name: &str, test: F) {
         let _guard = crate::test_env::guard::lock();
-        let _restore = crate::test_env::guard::EnvRestore::capture();
+        let _restore = crate::test_env::guard::isolate_data_location_env();
         let home = temp_root(name);
         fs::create_dir_all(&home).expect("create temp home");
         crate::test_env::set_test_user_dirs(&home);
-        unsafe {
-            std::env::remove_var("RIGGVERK_WORKSPACE_PATH");
-            std::env::set_var("RIGGVERK_BACKUP_DIR", home.join("backups"));
-        }
+        unsafe { std::env::set_var("RIGGVERK_BACKUP_DIR", home.join("backups")) };
         test(&home);
         cleanup(&home);
     }
