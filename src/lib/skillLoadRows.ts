@@ -89,7 +89,7 @@ function effectOf(flag: SkillLoadFlag): string {
     case "possible_duplicate": return "possible duplicate";
     case "shadowed_by_folder_order": return "first folder wins, the others are hidden";
     case "duplicate_identical": return "identical copies";
-    case "foreign_copy": return "yours, AW cannot fix";
+    case "foreign_copy": return "yours, Riggverk cannot fix";
   }
 }
 

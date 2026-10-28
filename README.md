@@ -1,8 +1,8 @@
 # Riggverk
 
-Riggverk is a local agent environment manager: a Tauri control panel for managing a shared coding-agent workspace across Codex, OpenCode, Claude Code, and Cursor, and the shared skills for GitHub Copilot, Pi, and Kilo Code (an opt-in light tier). Keyboard-first terminal-style UI; every write is reviewed before it happens.
+Riggverk is a local agent environment manager: a Tauri control panel that installs and maintains one shared set of rules, skills, agents, and MCP entries across Codex, OpenCode, Claude Code, and Cursor, plus a lighter opt-in tier (rules, Playwright MCP entry, skills) for GitHub Copilot CLI, Pi, and Kilo Code. Keyboard-first terminal-style UI; every write is reviewed before it happens.
 
-The repository contains the application and its canonical bundled workspace. Installed workspaces and harness files are downstream user-owned data. The technical identifiers (the `AGENT-WORKSPACE BASE` rules markers, `~/.config/agent-workspace`, the `.agent-workspace/` state folder, and the `AGENT_WORKSPACE_*` environment variables) keep their historical names on purpose, so existing installs and files stay valid.
+The repository contains the application and its canonical bundled workspace. Installed workspaces and harness files are downstream user-owned data. The technical identifiers (the `AGENT-WORKSPACE BASE` rules markers, `~/.config/agent-workspace`, the `.agent-workspace/` state folder, and the `AGENT_WORKSPACE_*` environment variables) keep the names from before the app was called Riggverk, on purpose, so existing installs and files stay valid.
 
 ## Repository layout
 
@@ -13,6 +13,10 @@ The repository contains the application and its canonical bundled workspace. Ins
 - `docs/` - workspace contract, security model, release and smoke checklists.
 
 The workspace folder lives at `~/.config/agent-workspace` unless a custom folder saved by an earlier version is still in use or `AGENT_WORKSPACE_PATH` overrides it. It is the app's data folder and holds no copy of the bundle: only the app's state (`.agent-workspace/`) and your personal docs (`docs/context/`). It is valid by its own state, never by bundle files in it, and the first write that needs it creates it (nothing does at launch).
+
+## Install
+
+Releases are zips on GitHub Releases: unzip `Riggverk-v<version>-macOS.zip`, move `Riggverk.app` to `/Applications` and open it. The app is ad hoc signed and not notarized, so macOS stops the first launch: open System Settings, Privacy & Security, and choose Open Anyway next to the message about Riggverk. Riggverk replaces the app's earlier build under its previous name; moving over from it (settings and backups carry over) is described in `docs/RELEASE.md`.
 
 ## Development
 
@@ -54,7 +58,7 @@ Every harness file is installed from the packaged bundle, and the Library and he
 
 ## Skills
 
-The bundled catalog is listed in [SKILLS.md](resources/default-workspace/docs/SKILLS.md). `retro` is user-invoked only.
+The bundled catalog is listed in [SKILLS.md](resources/default-workspace/docs/SKILLS.md). `retro` is user-invoked only, and `adversarial-implementation`, `adversarial-review` and `adversarial-test` run only when you ask for them (they are not in the routing rules).
 
 ```text
 skills/<skill>/SKILL.md
@@ -155,6 +159,7 @@ Overrides are honored in release builds too. Use them with a temporary `HOME` wh
 - Config and rules merges preserve user-owned content or refuse unsafe writes with zero mutation.
 - Credential-bearing files and unrelated personal files are outside the workspace contract.
 - Python generators and merge scripts run from the bundled copy, never from the workspace.
+- Each harness page has a read-only `security` group: it reads named permission and sandbox keys of that harness's global config in memory, shows no values, and never reports a setup as secure. What Riggverk enforces per harness and what stays up to you is in the bundled Security Baseline (Library, Docs; `resources/default-workspace/docs/SECURITY_BASELINE.md`).
 
 See `docs/SECURITY_MODEL.md` for the full boundaries.
 
