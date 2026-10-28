@@ -1,6 +1,36 @@
 {
   "releases": [
     {
+      "version": "2026.10.6",
+      "sections": [
+        {
+          "title": "New",
+          "items": [
+            "Rename the technical identifiers to riggverk with an upgrade path",
+            "Restyle review surfaces and confirm dialog (S6)",
+            "Add pure UI state model for the Riggverk rebuild",
+            "Add Grafit graphite tokens, neutral light theme and motion tokens",
+            "Keep my value for enforced Codex config keys"
+          ]
+        },
+        {
+          "title": "Fixes",
+          "items": [
+            "Copy untracked files in the squashed-history test"
+          ]
+        },
+        {
+          "title": "Other",
+          "items": [
+            "Record the MIT license in package-lock.json",
+            "Add contributor, security and notice files",
+            "Keep history-derived outputs as append-only baseline",
+            "Use Riggverk in README and replace the AW shorthand"
+          ]
+        }
+      ]
+    },
+    {
       "version": "2026.10.5",
       "sections": [
         {
