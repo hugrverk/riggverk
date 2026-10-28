@@ -175,10 +175,10 @@ describe("StartView panes", () => {
     expect(claude.querySelector(".pane-title")!.textContent).toBe("claude · 1 to update · 1 conflict");
     expect(claude.querySelector(".pane-title .c-fail")!.textContent).toBe("1 to update · 1 conflict");
     const rows = within(within(claude).getByRole("list", { name: "claude surfaces" })).getAllByRole("listitem");
-    expect(rows.map(row => row.querySelector(".meta")!.textContent)).toEqual(["update", "current", "conflict"]);
+    expect(rows.map(row => row.querySelector(".meta")!.textContent)).toEqual(["update", "current", "off", "conflict"]);
     expect(rows[0]!.textContent).toContain("bundle a7c3e1 → installed 91be20");
     // One state signal per row: the word in its tone colour, no glyph.
-    expect(rows.map(row => row.querySelector(".meta")!.className)).toEqual(["meta c-warn", "meta c-ok", "meta c-fail"]);
+    expect(rows.map(row => row.querySelector(".meta")!.className)).toEqual(["meta c-warn", "meta c-ok", "meta c-dim", "meta c-fail"]);
     expect(claude.querySelector(".rows .g")).toBeNull();
   });
 
@@ -197,7 +197,8 @@ describe("StartView panes", () => {
     const matrix = screen.getByRole("table", { name: "Installed surfaces" });
     const claude = within(matrix).getByRole("rowheader", { name: "claude" }).parentElement!;
     const cells = within(claude).getAllByRole("cell").map(cell => cell.querySelector(".visually-hidden")!.textContent);
-    expect(cells).toEqual(["n/a", "current", "update", "conflict", "n/a", "n/a"]);
+    // Claude's config column is its opt-in attribution setting: off, where Cursor has no such surface.
+    expect(cells).toEqual(["off", "current", "update", "conflict", "n/a", "n/a"]);
   });
 
   it("shows status, verification and the last transaction for the selected target", () => {

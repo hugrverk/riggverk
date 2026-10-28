@@ -17,7 +17,7 @@ import {
 export const HARNESS_SURFACES: Record<InstallAgent, SetupSurfaceId[]> = {
   codex: ["codex_config", "codex_agents", "codex_rules", "skills"],
   opencode: ["open_code_config", "open_code_agents", "open_code_rules", "skills"],
-  claude: ["claude_rules", "claude_agents", "skills"],
+  claude: ["claude_rules", "claude_agents", "claude_config", "skills"],
   cursor: ["cursor_agents", "skills", "cursor_mcp"],
   copilot: ["copilot_rules", "skills", "copilot_mcp"],
   pi: ["pi_rules", "skills", "pi_mcp"],
@@ -36,6 +36,7 @@ export type SetupTargetId =
   | "opencode_config"
   | "claude_rules"
   | "claude_agents"
+  | "claude_config"
   | "cursor_setup"
   | "copilot_rules"
   | "copilot_mcp"
@@ -57,6 +58,7 @@ export const TARGET_SURFACES: Record<SetupTargetId, readonly SetupSurfaceId[]> =
   opencode_config: ["open_code_config"],
   claude_rules: ["claude_rules"],
   claude_agents: ["claude_agents"],
+  claude_config: ["claude_config"],
   cursor_setup: ["cursor_agents", "cursor_mcp"],
   copilot_rules: ["copilot_rules"],
   copilot_mcp: ["copilot_mcp"],
@@ -67,10 +69,11 @@ export const TARGET_SURFACES: Record<SetupTargetId, readonly SetupSurfaceId[]> =
 };
 
 /**
- * Targets that start OFF: `codex_config` rewrites the user's Codex approval/sandbox posture, `kilo_mcp` edits Kilo's
- * main config file, which may hold provider keys.
+ * Targets that start OFF: `codex_config` rewrites the user's Codex approval/sandbox posture, `claude_config` changes
+ * how Claude Code attributes commits and pull requests in `~/.claude/settings.json`, `kilo_mcp` edits Kilo's main
+ * config file, which may hold provider keys.
  */
-const DEFAULT_DISABLED_TARGET_IDS: readonly SetupTargetId[] = ["codex_config", "kilo_mcp"];
+const DEFAULT_DISABLED_TARGET_IDS: readonly SetupTargetId[] = ["codex_config", "claude_config", "kilo_mcp"];
 
 /** Target ids in backend registry order (`agent_targets::targets`), which settings normalize to. */
 const TARGET_IDS_REGISTRY_ORDER: readonly SetupTargetId[] = [
@@ -82,6 +85,7 @@ const TARGET_IDS_REGISTRY_ORDER: readonly SetupTargetId[] = [
   "codex_agents",
   "opencode_config",
   "codex_config",
+  "claude_config",
   "cursor_setup",
   "copilot_rules",
   "copilot_mcp",

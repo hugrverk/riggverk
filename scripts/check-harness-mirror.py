@@ -359,7 +359,7 @@ def check_harness_ids(root: Path) -> list[str]:
     surfaces_wire = [serde_name(name, surface_rename) for name in surfaces_all]
     target_surfaces = _block(install, "TARGET_SURFACES", TS_INSTALL)
     disabled_ts = ts_array(install, "DEFAULT_DISABLED_TARGET_IDS", TS_INSTALL)
-    expected_disabled = {"codex_config"}
+    expected_disabled = {"codex_config", "claude_config"}
     meta = re.search(r"export interface AgentTargetMeta\s*\{(.*?)\n\}", types, re.DOTALL)
     if not meta or '"mcp"' not in re.sub(r"\s+", " ", meta.group(1)).split("kind:")[-1].split(";")[0]:
         raise Mismatch(f"{TS_TYPES}: AgentTargetMeta.kind must include \"mcp\" (Rust TargetKind::Mcp)")

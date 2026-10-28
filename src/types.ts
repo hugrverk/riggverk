@@ -744,6 +744,7 @@ export type SetupSurfaceId =
   | "codex_rules"
   | "claude_rules"
   | "claude_agents"
+  | "claude_config"
   | "skills"
   | "cursor_agents"
   | "cursor_mcp"
