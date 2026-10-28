@@ -83,3 +83,81 @@
   color: var(--text-muted);
   font-size: var(--fs-sm);
 }
+
+/* ---- what's new (shell/WhatsNewOverlay) ----
+   Built on the help overlay's backdrop and key rows (`.help-overlay`, `.help-box`); `.whatsnew` gives it the Bläck look:
+   a hairline panel, a mono label row, one block per release with its notes as hairline-separated rows. */
+
+.whatsnew .help-box {
+  width: min(720px, 100%);
+  padding: 0;
+  border-color: var(--border-strong);
+  background: var(--bg-panel);
+  font-family: var(--font-sans);
+}
+
+.whatsnew h2 {
+  margin: 0;
+  padding: 16px 24px 12px;
+  font-family: var(--font-mono);
+  font-size: max(11px, calc(var(--fs) * 0.85));
+}
+
+.whatsnew .help-cols {
+  display: block;
+}
+
+.whatsnew section {
+  padding: 0 24px 10px;
+}
+
+.whatsnew section + section {
+  border-top: 1px solid var(--border);
+}
+
+.whatsnew h3.group {
+  margin: 0;
+  padding: 18px 0 8px;
+  color: var(--text-heading);
+  font-family: var(--font-mono);
+  font-size: var(--fs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: none;
+}
+
+.whatsnew .kv {
+  grid-template-columns: minmax(7ch, max-content) minmax(0, 1fr);
+  gap: 0 20px;
+  padding: 0;
+}
+
+.whatsnew .kv dt,
+.whatsnew .kv dd {
+  padding: 7px 0;
+  border-top: 1px solid var(--border);
+}
+
+.whatsnew .kv dt:first-of-type,
+.whatsnew .kv dd:first-of-type { border-top: 0; }
+
+.whatsnew .kv dt {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: max(10px, calc(var(--fs) * 0.77));
+  letter-spacing: 0.12em;
+  line-height: calc(var(--fs) * 1.54);
+  text-transform: uppercase;
+}
+
+.whatsnew .kv dd {
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.whatsnew .foot {
+  margin-top: 10px;
+  padding: 12px 24px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-raised);
+}

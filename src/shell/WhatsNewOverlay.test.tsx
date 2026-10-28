@@ -53,10 +53,10 @@ describe("WhatsNewOverlay", () => {
     ]);
   });
 
-  it("reuses the help overlay structure and styling hooks", () => {
+  it("reuses the help overlay structure and styling hooks, with its own modifier", () => {
     const { dialog } = open();
 
-    expect(dialog.className).toBe("help-overlay");
+    expect(dialog.className).toBe("help-overlay whatsnew");
     expect(dialog.getAttribute("aria-modal")).toBe("true");
     expect(dialog.getAttribute("data-keyscope")).toBe("overlay");
     expect(dialog.querySelector(":scope > .help-box > h2")).not.toBeNull();

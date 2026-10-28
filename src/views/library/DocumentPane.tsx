@@ -84,6 +84,7 @@ export function DocumentPane({ entry, emptyHint, editing, textareaRef, top, onCl
     <Pane
       id="editor"
       label="Document"
+      className="pane-flat lib-doc"
       title={entry ? entry.title : "document"}
       meta={
         entry ? (
@@ -92,7 +93,7 @@ export function DocumentPane({ entry, emptyHint, editing, textareaRef, top, onCl
             {entry.dirty && (
               <>
                 {" · "}
-                <span className="c-warn" title="Unsaved changes">modified</span>
+                <span className="lib-flag" title="Unsaved changes">modified</span>
               </>
             )}
             {entry.readOnly && (

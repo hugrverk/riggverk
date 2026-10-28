@@ -124,9 +124,9 @@ describe("App", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Settings" }));
     const settings = await screen.findByRole("region", { name: "Settings" });
-    fireEvent.click(await screen.findByRole("radio", { name: "library" }));
+    fireEvent.click(await screen.findByRole("radio", { name: "Library" }));
 
-    await waitFor(() => expect(screen.getByRole("radio", { name: "library" }).getAttribute("aria-checked")).toBe("true"));
+    await waitFor(() => expect(screen.getByRole("radio", { name: "Library" }).getAttribute("aria-checked")).toBe("true"));
     expect(screen.getByRole("region", { name: "Settings" })).toBe(settings);
     expect(commandCount(backend, "list_docs")).toBe(0);
   });
@@ -155,8 +155,9 @@ describe("App", () => {
       render(<App />);
       await waitFor(() => expect(commandCount(backend, "get_settings")).toBeGreaterThanOrEqual(1));
       fireEvent.click(screen.getByRole("button", { name: "Settings" }));
-      await screen.findByRole("region", { name: "Settings" });
-      return within(await screen.findByRole("group", { name: "workspace" }));
+      const settings = await screen.findByRole("region", { name: "Settings" });
+      // The sidebar has a "Workspace" group too, so look inside the Settings page.
+      return within(await within(settings).findByRole("group", { name: "Workspace" }));
     }
 
     const modeLabel = () => screen.getByLabelText("Status bar").querySelector(".mode")!.textContent;
@@ -184,7 +185,7 @@ describe("App", () => {
       expect(row.queryByRole("button", { name: /choose/ })).toBeNull();
       const commandsBefore = backend.commandLog.length;
 
-      fireEvent.keyDown(screen.getByRole("radio", { name: "workspace" }), { key: "c" });
+      fireEvent.keyDown(screen.getByRole("radio", { name: "Overview" }), { key: "c" });
 
       expect(screen.queryByRole("dialog", { name: "Reset workspace folder" })).toBeNull();
       expect(backend.commandLog.length).toBe(commandsBefore);
@@ -241,7 +242,7 @@ describe("App", () => {
       const row = await openSettings(backend);
       await waitFor(() => expect(row.getByText("/tmp/other")).toBeTruthy());
 
-      fireEvent.keyDown(screen.getByRole("radio", { name: "workspace" }), { key: "R", shiftKey: true });
+      fireEvent.keyDown(screen.getByRole("radio", { name: "Overview" }), { key: "R", shiftKey: true });
 
       await screen.findByRole("dialog", { name: "Reset workspace folder" });
       expect(commandCount(backend, "reset_active_workspace_path")).toBe(0);

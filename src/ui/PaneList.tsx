@@ -309,6 +309,7 @@ export function PaneList<T>({
                 className="row"
                 role="option"
                 aria-selected={isSelected}
+                data-cursor={isCursor ? "" : undefined}
                 onClick={() => {
                   listRef.current?.focus();
                   moveTo(index);

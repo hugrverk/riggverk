@@ -59,6 +59,8 @@ describe("PaneList", () => {
     expect(options.map(option => option.getAttribute("aria-selected"))).toEqual(["true", "false", "false", "false"]);
     expect(options[0]!.querySelector(".cur")!.textContent).toBe("▸");
     expect(options[1]!.querySelector(".cur")!.textContent).toBe(" ");
+    // The styled cursor row (a bar in the Library) is a data attribute, so it does not depend on the glyph.
+    expect(options.map(option => option.hasAttribute("data-cursor"))).toEqual([true, false, false, false]);
     expect(list.hasAttribute("data-pane-primary")).toBe(true);
     expect(list.getAttribute("data-keyscope")).toBe("list");
   });
