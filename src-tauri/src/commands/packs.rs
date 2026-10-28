@@ -42,6 +42,8 @@ pub struct IgnoredPackEntry {
 
 #[derive(Serialize)]
 pub struct PackLibrary {
+    /// Why `pack-skills.json` cannot be used; set, installed pack skills are kept as they are.
+    pub(crate) record_problem: Option<String>,
     /// The folder packs go in, as `~/...`.
     pub(crate) folder: String,
     pub(crate) packs: Vec<PackSummary>,
@@ -92,6 +94,19 @@ fn library(sources: &SkillSources, folder: String) -> PackLibrary {
     }
     // Installed skills whose pack is gone, or whose own folder no longer loads.
     for held in sources.held() {
+        // Held because the record is unusable: the pack it came from is not known.
+        if held.pack.is_empty() {
+            skills.push(PackSkillSummary {
+                id: skill_id("unknown", &held.name),
+                name: held.name.clone(),
+                description: String::new(),
+                pack: "unknown".to_string(),
+                state: "missing".to_string(),
+                reason: held.reason.clone(),
+                path: String::new(),
+            });
+            continue;
+        }
         if !packs.iter().any(|pack| pack.name == held.pack) {
             packs.push(PackSummary {
                 name: held.pack.clone(),
@@ -126,6 +141,7 @@ fn library(sources: &SkillSources, folder: String) -> PackLibrary {
     packs.sort_by(|a, b| a.name.cmp(&b.name));
     skills.sort_by(|a, b| (&a.pack, &a.name).cmp(&(&b.pack, &b.name)));
     PackLibrary {
+        record_problem: sources.record_problem().map(str::to_string),
         folder,
         packs,
         skills,

@@ -205,6 +205,8 @@ pub struct SkillSources {
     /// Problems with entries of `packs/` that are no pack (a bad name, a link).
     ignored: Vec<(String, String)>,
     held: Vec<HeldSkill>,
+    /// Why `pack-skills.json` cannot be used, when it exists and cannot.
+    record_problem: Option<String>,
 }
 
 impl SourceRoot for SkillSources {
@@ -266,6 +268,7 @@ impl SkillSources {
             packs: Vec::new(),
             ignored: Vec::new(),
             held: Vec::new(),
+            record_problem: None,
         }
     }
 
@@ -310,7 +313,7 @@ impl SkillSources {
             }
         }
         let by_name = index_by_name(&catalog);
-        let held = compute_held(workspace_root, &packs, &catalog);
+        let (held, record_problem) = compute_held(workspace_root, &packs, &catalog);
         Self {
             bundled,
             workspace_root: workspace_root.to_path_buf(),
@@ -319,6 +322,7 @@ impl SkillSources {
             packs,
             ignored,
             held,
+            record_problem,
         }
     }
 
@@ -344,6 +348,12 @@ impl SkillSources {
     /// Entries of `packs/` that were not read, with the reason.
     pub fn ignored(&self) -> &[(String, String)] {
         &self.ignored
+    }
+
+    /// Why `pack-skills.json` cannot be used. While it cannot, every installed skill the catalog
+    /// lacks is held (see [`HeldSkill`]), since the app cannot tell which pack it came from.
+    pub fn record_problem(&self) -> Option<&str> {
+        self.record_problem.as_deref()
     }
 
     pub fn held(&self) -> &[HeldSkill] {
@@ -760,16 +770,42 @@ fn compute_held(
     workspace_root: &Path,
     packs: &[PackReport],
     catalog: &Result<Vec<CatalogSkill>, String>,
-) -> Vec<HeldSkill> {
+) -> (Vec<HeldSkill>, Option<String>) {
     let Ok(catalog) = catalog else {
         // A bundle that does not load is reported elsewhere; nothing is planned from it either.
-        return Vec::new();
+        return (Vec::new(), None);
     };
-    let recorded = read_recorded(workspace_root).packs;
-    if recorded.is_empty() {
-        return Vec::new();
-    }
+    let Recorded {
+        packs: recorded,
+        problem,
+    } = read_recorded(workspace_root);
     let in_catalog: HashSet<&str> = catalog.iter().map(|s| s.skill.name.as_str()).collect();
+    if let Some(problem) = problem {
+        // Fail closed: without the record, any installed skill the catalog lacks may be a pack
+        // skill. Only the skills the app itself retired are left to the normal retirement.
+        let retired = |name: &str| {
+            crate::managed_bootstrap::REMOVED_SKILL_NAMES.contains(&name)
+                || name == crate::managed_bootstrap::LEGACY_SCOUT_AGENT
+        };
+        let mut names: Vec<String> = installed_skill_names(workspace_root)
+            .into_iter()
+            .filter(|name| !in_catalog.contains(name.as_str()) && !retired(name))
+            .collect();
+        names.sort();
+        let held = names
+            .into_iter()
+            .map(|name| HeldSkill {
+                pack: String::new(),
+                name,
+                state: HeldState::Missing,
+                reason: problem.clone(),
+            })
+            .collect();
+        return (held, Some(problem));
+    }
+    if recorded.is_empty() {
+        return (Vec::new(), None);
+    }
     let installed = installed_skill_names(workspace_root);
     let mut held = Vec::new();
     for (pack, names) in recorded {
@@ -824,7 +860,7 @@ fn compute_held(
             });
         }
     }
-    held
+    (held, None)
 }
 
 // ── pack-skills.json ──
@@ -845,9 +881,11 @@ enum Stored {
     Unusable,
 }
 
-/// What `pack-skills.json` holds; an unusable file reads as empty.
+/// What `pack-skills.json` holds. A file that exists and cannot be used is a `problem`, never an
+/// empty record.
 struct Recorded {
     packs: BTreeMap<String, BTreeSet<String>>,
+    problem: Option<String>,
 }
 
 fn record_path(workspace_root: &Path) -> PathBuf {
@@ -882,13 +920,17 @@ fn read_stored(workspace_root: &Path) -> Stored {
     Stored::Usable(document.packs)
 }
 
+const FOREIGN_RECORD: &str = "pack-skills.json was written by another version of Riggverk, so installed pack skills are kept as they are; update the app or move the file away";
+const UNUSABLE_RECORD: &str = "pack-skills.json cannot be read, so installed pack skills are kept as they are; fix or remove the file";
+
 fn read_recorded(workspace_root: &Path) -> Recorded {
-    Recorded {
-        packs: match read_stored(workspace_root) {
-            Stored::Usable(packs) => packs,
-            Stored::Absent | Stored::Foreign | Stored::Unusable => BTreeMap::new(),
-        },
-    }
+    let (packs, problem) = match read_stored(workspace_root) {
+        Stored::Usable(packs) => (packs, None),
+        Stored::Absent => (BTreeMap::new(), None),
+        Stored::Foreign => (BTreeMap::new(), Some(FOREIGN_RECORD.to_string())),
+        Stored::Unusable => (BTreeMap::new(), Some(UNUSABLE_RECORD.to_string())),
+    };
+    Recorded { packs, problem }
 }
 
 fn write_recorded(
@@ -898,12 +940,7 @@ fn write_recorded(
     let before = match read_stored(workspace_root) {
         Stored::Usable(packs) => packs,
         Stored::Absent | Stored::Unusable => BTreeMap::new(),
-        Stored::Foreign => {
-            return Err(
-                "pack-skills.json was written by another version of Riggverk; update the app or move the file away"
-                    .to_string(),
-            )
-        }
+        Stored::Foreign => return Err(FOREIGN_RECORD.to_string()),
     };
     if before == packs {
         return Ok(());
@@ -948,6 +985,11 @@ pub fn record_after_transaction(
     workspace_root: &Path,
     sources: &SkillSources,
 ) -> Result<(), String> {
+    // A file that cannot be used is left alone (a rewrite would lose what it said) and is reported
+    // where the skills it should cover are listed, not on every apply.
+    if sources.record_problem().is_some() {
+        return Ok(());
+    }
     let installed = installed_skill_names(workspace_root);
     let mut packs: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     for (name, pack) in sources.active_pack_skills() {
@@ -979,7 +1021,13 @@ pub fn forget_pack(workspace_root: &Path, pack: &str) -> Result<usize, String> {
             "pack {pack} is present and provides skills; remove its folder first"
         ));
     }
-    let mut recorded = read_recorded(workspace_root).packs;
+    let Recorded {
+        packs: mut recorded,
+        problem,
+    } = read_recorded(workspace_root);
+    if let Some(problem) = problem {
+        return Err(problem);
+    }
     let Some(names) = recorded.remove(pack) else {
         return Err(format!("no installed skills are recorded for pack {pack}"));
     };

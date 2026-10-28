@@ -931,6 +931,124 @@ mod tests {
         assert_held_not_retired(&env, "no skills");
     }
 
+    /// An installed skill the app retired long ago (`REMOVED_SKILL_NAMES`), with its record.
+    fn install_retired_bundle_skill(env: &Env) -> ArtifactId {
+        let artifact = file_of(SkillRoot::Claude, "grill-me", "SKILL.md");
+        let dest = env.path(&artifact);
+        fs::create_dir_all(dest.parent().expect("parent")).expect("dir");
+        fs::write(&dest, b"retired skill\n").expect("write");
+        let mut state = read_managed_state(&env.ws).expect("state");
+        state
+            .artifacts
+            .push(crate::managed_state::ManagedArtifactRecord {
+                identity: artifact_identity(&artifact),
+                hash: crate::stable_digest::bytes(b"retired skill\n"),
+                surface: None,
+            });
+        state.artifacts.sort_by(|a, b| a.identity.cmp(&b.identity));
+        crate::managed_state::write_managed_state_atomic(&env.ws, &state).expect("state");
+        artifact
+    }
+
+    fn record_path(env: &Env) -> PathBuf {
+        crate::workspace_layout::state_file(&env.ws, "pack-skills.json")
+    }
+
+    fn assert_everything_unknown_is_held(env: &Env, retired: &ArtifactId, expected: &str) {
+        let skill_md = file_of(SkillRoot::Claude, "my-checklist", "SKILL.md");
+        let sources = env.sources();
+        assert!(
+            sources
+                .record_problem()
+                .is_some_and(|problem| problem.contains(expected)),
+            "{:?}",
+            sources.record_problem()
+        );
+        let held: Vec<_> = sources
+            .held()
+            .iter()
+            .map(|held| held.name.as_str())
+            .collect();
+        assert_eq!(
+            held,
+            vec!["my-checklist"],
+            "the retired bundle skill is not held"
+        );
+        assert_eq!(env.kind(&skill_md), None, "a held skill is not planned");
+        assert_eq!(env.kind(retired), Some(OperationKind::Remove));
+        let removals: Vec<_> = env
+            .pending()
+            .into_iter()
+            .filter(|(_, kind)| *kind == OperationKind::Remove)
+            .map(|(artifact, _)| artifact)
+            .collect();
+        assert_eq!(removals, vec![retired.clone()]);
+    }
+
+    #[test]
+    fn a_corrupt_pack_record_holds_every_installed_skill_the_catalog_lacks() {
+        let env = Env::new("corrupt-record");
+        installed_pack(&env);
+        let retired = install_retired_bundle_skill(&env);
+        fs::remove_dir_all(env.packs()).expect("remove packs");
+        fs::write(record_path(&env), "{ not json").expect("corrupt the record");
+
+        assert_everything_unknown_is_held(&env, &retired, "cannot be read");
+        // An apply goes on with what is provably retired, says nothing about the file in the
+        // result, and leaves the file as it is.
+        let result = env.apply();
+        assert!(result.success, "apply: {}", result.message);
+        assert!(!env.path(&retired).exists());
+        assert!(
+            result
+                .manual_steps
+                .iter()
+                .all(|step| !step.contains("pack-skills")),
+            "{:?}",
+            result.manual_steps
+        );
+        assert_eq!(
+            fs::read_to_string(record_path(&env)).expect("kept"),
+            "{ not json"
+        );
+        assert!(env
+            .root(SkillRoot::Claude)
+            .join("my-checklist/SKILL.md")
+            .is_file());
+        assert_eq!(
+            crate::commands::forget_pack("mine".to_string()).expect_err("no forgetting"),
+            "pack-skills.json cannot be read, so installed pack skills are kept as they are; fix or remove the file"
+        );
+    }
+
+    #[test]
+    fn a_pack_record_of_another_schema_holds_them_too_and_is_not_rewritten() {
+        let env = Env::new("foreign-record");
+        installed_pack(&env);
+        let retired = install_retired_bundle_skill(&env);
+        fs::remove_dir_all(env.packs()).expect("remove packs");
+        let foreign = r#"{"schema_version":99,"packs":{"mine":["my-checklist"]}}"#;
+        fs::write(record_path(&env), foreign).expect("foreign record");
+
+        assert_everything_unknown_is_held(&env, &retired, "another version");
+        let result = env.apply();
+        assert!(result.success, "apply: {}", result.message);
+        assert_eq!(
+            fs::read_to_string(record_path(&env)).expect("kept"),
+            foreign
+        );
+        assert!(env
+            .root(SkillRoot::Claude)
+            .join("my-checklist/SKILL.md")
+            .is_file());
+        let library = crate::commands::list_pack_skills().expect("library");
+        assert!(library.record_problem.is_some());
+        assert!(library
+            .skills
+            .iter()
+            .any(|s| s.name == "my-checklist" && s.state == "missing"));
+    }
+
     impl Env {
         /// Applies when the plan has work; `None` when it has none.
         fn apply_if_needed(&self) -> Option<SetupResult> {
