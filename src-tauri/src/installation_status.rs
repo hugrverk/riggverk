@@ -53,6 +53,10 @@ pub struct SurfaceInstallationStatus {
     /// Conflicting and kept files for the skills and agent surfaces; absent while there are none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub files: Option<FilesStatus>,
+    /// The enforced Codex config keys the user keeps or could keep; absent while there are none,
+    /// and for every other surface.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub codex_config: Option<crate::codex_config_keep::CodexConfigStatus>,
     /// The data folder, for the workspace surface only.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub data_folder: Option<DataFolderStatus>,
@@ -295,6 +299,21 @@ fn surface_status(
         .iter()
         .find_map(|p| claude_settings_detail(p, workspace_root, home))
         .unwrap_or(detail);
+    let codex_config = (surface == SetupSurfaceId::CodexConfig)
+        .then(|| crate::codex_config_keep::status(workspace_root, home))
+        .flatten();
+    let detail = match &codex_config {
+        Some(config) => codex_config_detail(
+            detail,
+            state,
+            config,
+            own.iter()
+                .any(|p| p.kind == OperationKind::Conflict)
+                .then(|| crate::codex_config_keep::conflict_reason(workspace_root, home))
+                .flatten(),
+        ),
+        None => detail,
+    };
     let data_folder = (surface == SetupSurfaceId::WorkspaceBundle).then(|| DataFolderStatus {
         personal_docs: crate::commands::personal_doc_count(workspace_root),
         ownership_records,
@@ -324,6 +343,7 @@ fn surface_status(
         detail,
         rules,
         files,
+        codex_config,
         data_folder,
     }
 }
@@ -415,6 +435,55 @@ fn claude_settings_detail(
         }
         OperationKind::Unavailable | OperationKind::Remove => None,
     }
+}
+
+/// "approvals_reviewer = auto_review, sandbox_mode = read-only": key names and the kept values of
+/// the enforced approval and sandbox keys, nothing secret.
+fn key_values(items: &[crate::codex_config_keep::KeyValue]) -> String {
+    items
+        .iter()
+        .map(|item| format!("{} = {}", item.key, item.value))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// Status line of the Codex config when the user keeps enforced keys or could keep some. The other
+/// managed keys follow Riggverk, and the line says so, so "kept" is not read as "left alone".
+fn codex_config_detail(
+    detail: String,
+    state: InstallationState,
+    config: &crate::codex_config_keep::CodexConfigStatus,
+    conflict_reason: Option<String>,
+) -> String {
+    if state == InstallationState::Conflict {
+        if let Some(reason) = conflict_reason {
+            return reason;
+        }
+    }
+    let mut parts: Vec<String> = Vec::new();
+    if !(state == InstallationState::Current && !config.kept.is_empty()) {
+        parts.push(detail);
+    }
+    if !config.kept.is_empty() {
+        parts.push(format!(
+            "you keep {}; other managed keys follow Riggverk",
+            key_values(&config.kept)
+        ));
+    }
+    if !config.differing.is_empty() {
+        parts.push(format!(
+            "{} differ{} from Riggverk's; m keeps your value{}",
+            config
+                .differing
+                .iter()
+                .map(|item| item.key.as_str())
+                .collect::<Vec<_>>()
+                .join(", "),
+            if config.differing.len() == 1 { "s" } else { "" },
+            if config.differing.len() == 1 { "" } else { "s" },
+        ));
+    }
+    parts.join("; ")
 }
 
 /// Status line for a rules surface. A base update that keeps the user's text

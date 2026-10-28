@@ -311,6 +311,33 @@ describe("codex runtime rows", () => {
     const warnings = runtimeRowsFor({ harness: "codex", health }).filter(row => row.id?.startsWith("warning-"));
     expect(warnings.map(row => [row.label, row.value])).toEqual([["warnings", "another warning"]]);
   });
+
+  it("counts the enforced config keys the user keeps beside the config status", () => {
+    const health = (configKept?: string[]) =>
+      ({
+        status: "synced",
+        rules_status: "synced",
+        agents_status: "synced",
+        skills_status: "synced",
+        config_status: "synced",
+        config_kept: configKept,
+        installed_bundled_agent_count: 6,
+        bundled_agent_count: 6,
+        skills_synced_count: 18,
+        skills_expected_count: 18,
+        approval_policy: null,
+        sandbox_mode: null,
+        next_action: "",
+        summary: "",
+        checks: [],
+        warnings: [],
+      }) as unknown as CodexRuntimeHealth;
+    const config = (value?: string[]) => runtimeRowsFor({ harness: "codex", health: health(value) }).find(row => row.label === "config");
+    expect(config(undefined)?.value).toBe("synced");
+    expect(config([])?.value).toBe("synced");
+    expect(config(["approvals_reviewer"])).toMatchObject({ value: "synced · you keep 1", tone: "ok" });
+    expect(config(["approvals_reviewer", "sandbox_mode"])?.value).toBe("synced · you keep 2");
+  });
 });
 
 describe("light harness runtime rows", () => {

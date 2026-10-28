@@ -76,8 +76,24 @@ export interface SurfaceInstallationStatus {
   rules?: RulesStatus;
   /** Conflicting and kept files; present for the skills and agent surfaces while there are some. */
   files?: FilesStatus;
+  /** The enforced config keys the user keeps or could keep; present for the Codex config surface while there are some. */
+  codex_config?: CodexConfigStatus;
   /** The data folder; present for the workspace surface only. */
   data_folder?: DataFolderStatus;
+}
+
+/** One enforced Codex config key and a value of it (the kept value, or the installed one). Not secret. */
+export interface CodexConfigKey {
+  key: string;
+  value: string;
+}
+
+/** The Codex config's enforced keys the user keeps ("keep mine") or could keep. */
+export interface CodexConfigStatus {
+  /** Kept: the installed value is the kept one, so the key is not drift and an update never writes it. */
+  kept: CodexConfigKey[];
+  /** Installed value differs from what Riggverk writes and is not kept: `m` keeps it. */
+  differing: CodexConfigKey[];
 }
 
 /** What the workspace row tells about the data folder. Counts and a flag, never file contents. */
@@ -627,6 +643,8 @@ export interface CodexRuntimeHealth {
   extra_installed_agent_count: number;
   agent_mismatches: CodexAgentMismatch[];
   config_status: string;
+  /** Names of the enforced keys the user keeps; they count as matching while the installed value is the kept one. */
+  config_kept?: string[];
   template_config_path: string;
   installed_config_path: string;
   approval_policy: string | null;

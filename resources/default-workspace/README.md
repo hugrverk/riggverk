@@ -19,7 +19,7 @@ Requires Python 3 on `PATH` (config merges and generators).
 
 ## What lives in your data folder
 
-- **.agent-workspace/** - the app's state: ownership records (`managed-state.json`), `kept-files.json`, `rules-preferences.json`, and the `workspace.json` marker where an earlier release wrote it. Do not delete. They describe this machine's installs, so leave them out of Git.
+- **.agent-workspace/** - the app's state: ownership records (`managed-state.json`), `kept-files.json`, `rules-preferences.json`, `config-preferences.json`, and the `workspace.json` marker where an earlier release wrote it. Do not delete. They describe this machine's installs, so leave them out of Git.
 - **docs/context/** - your personal docs, written in the Library. Version this folder if you want a history ([docs/GIT_VERSIONING.md](docs/GIT_VERSIONING.md)).
 
 Earlier releases also copied the bundle into the data folder. The app no longer reads those copies; it removes the ones it can prove are its own only through the reviewed update of the `workspace` row (see [docs/USING_THE_APP.md](docs/USING_THE_APP.md#workspace-page)).

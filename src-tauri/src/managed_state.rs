@@ -268,8 +268,12 @@ pub fn next_state_from_operations(
         if records.contains_key(&identity) {
             continue;
         }
-        let expected =
-            setup_fingerprint::artifact_source_digest(&planned.artifact, bundled_root, home)?;
+        let expected = setup_fingerprint::artifact_effective_source_digest(
+            &planned.artifact,
+            bundled_root,
+            runtime_root,
+            home,
+        )?;
         let installed = setup_fingerprint::artifact_installed_managed_digest(
             &planned.artifact,
             runtime_root,
@@ -324,9 +328,13 @@ fn refresh_records_matching_source(
         if installed == setup_fingerprint::ABSENT_DIGEST || installed == record.hash {
             continue;
         }
-        let matches_source =
-            setup_fingerprint::artifact_source_digest(&artifact, bundled_root, home)
-                .is_ok_and(|source| source == installed);
+        let matches_source = setup_fingerprint::artifact_effective_source_digest(
+            &artifact,
+            bundled_root,
+            runtime_root,
+            home,
+        )
+        .is_ok_and(|source| source == installed);
         if matches_source {
             record.hash = installed;
         }

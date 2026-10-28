@@ -1,5 +1,6 @@
 pub(crate) mod backups;
 mod claude_runtime;
+mod codex_config;
 mod codex_runtime;
 mod content;
 pub(crate) mod cursor_profile;
@@ -13,7 +14,8 @@ pub(crate) mod retired_workspace_files;
 mod security_posture;
 pub(crate) mod setup;
 pub(crate) use codex_runtime::{
-    extract_managed_codex_config, managed_codex_keys_match, render_codex_config_managed_projection,
+    extract_managed_codex_config, managed_codex_keys_match, render_codex_config_for_apply,
+    render_codex_config_managed_projection,
 };
 pub(crate) use content::personal_doc_count;
 pub(crate) use opencode_runtime::{
@@ -32,6 +34,7 @@ mod workspace;
 
 pub use backups::{get_backup_details, list_backups, open_backups_folder};
 pub use claude_runtime::get_claude_runtime_health;
+pub use codex_config::set_codex_config_kept;
 pub use codex_runtime::get_codex_runtime_health;
 pub use content::{
     create_doc, list_agent_metadata, list_docs, list_opencode_config_editor_sources, open_doc,

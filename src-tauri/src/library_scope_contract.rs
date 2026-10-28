@@ -22,7 +22,7 @@ mod tests {
     /// (`docs/context/<slug>.md`) only, the last only the text below the managed block of a rules
     /// file. The others are install, conflict, rules-conversion, settings and workspace-reset
     /// actions that never take Library text.
-    const WRITE_COMMANDS: [&str; 14] = [
+    const WRITE_COMMANDS: [&str; 15] = [
         "save_doc",
         "create_doc",
         "save_rules_refinements",
@@ -32,6 +32,7 @@ mod tests {
         "apply_rules_conversion",
         "set_rules_user_managed",
         "set_files_kept",
+        "set_codex_config_kept",
         "apply_take_bundled",
         "update_settings",
         "update_opencode_model_selection",

@@ -32,7 +32,7 @@ git push -u origin main
 
 Only your own text: `docs/context/`.
 
-Keep `.agent-workspace/` out of Git. It describes this machine: `managed-state.json` records which files the app's installs own, `rules-preferences.json` which rules files you chose to leave as is, `kept-files.json` which skill and agent files you keep, and `workspace.json` is a marker an earlier release may have written. Do not delete the state files: a missing `managed-state.json` turns files that are not exact bundled copies into conflicts. On a new machine the first install creates them.
+Keep `.agent-workspace/` out of Git. It describes this machine: `managed-state.json` records which files the app's installs own, `rules-preferences.json` which rules files you chose to leave as is, `kept-files.json` which skill and agent files you keep, `config-preferences.json` which managed Codex config keys you keep, and `workspace.json` is a marker an earlier release may have written. Do not delete the state files: a missing `managed-state.json` turns files that are not exact bundled copies into conflicts. On a new machine the first install creates them.
 
 Never commit secrets, tokens, passwords, private keys, cookies, auth headers, signed or private URLs, `.env` files, or machine-specific absolute paths. App backups live outside this folder.
 
