@@ -333,7 +333,7 @@ mod tests {
             models_args(v("2.0.32").as_ref()),
             ["models", "--standalone"]
         );
-        // An unreadable version keeps the arguments AW has always used.
+        // An unreadable version keeps the arguments Riggverk has always used.
         assert_eq!(models_args(None), ["models", "--pure"]);
         assert_eq!(models_args(v("0.15.0").as_ref()), ["models", "--pure"]);
     }
