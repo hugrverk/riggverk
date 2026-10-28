@@ -25,18 +25,20 @@ export function useRollbackRequest({
   beginConfirm,
   runRollback,
   setError,
-}: UseRollbackRequestOptions): () => Promise<void> {
-  return useCallback(async () => {
-    if (!transactionId) return;
+}: UseRollbackRequestOptions): (undoTransactionId?: string) => Promise<void> {
+  return useCallback(async (undoTransactionId?: string) => {
+    // `z` and `:rollback` undo the transaction of this session; the Overview's Undo names the newest one on disk.
+    const target = typeof undoTransactionId === "string" ? undoTransactionId : transactionId;
+    if (!target) return;
     let dryRun: SetupResult;
     try {
-      dryRun = await invoke<SetupResult>("rollback_setup_transaction", { transactionId, dryRun: true });
+      dryRun = await invoke<SetupResult>("rollback_setup_transaction", { transactionId: target, dryRun: true });
     } catch (e) {
       setError(`rollback: ${e}`);
       return;
     }
     if (!dryRun.success || dryRun.applied.length === 0) {
-      setError(`rollback: nothing can be restored for transaction ${transactionId} (${dryRun.message})`);
+      setError(`rollback: nothing can be restored for transaction ${target} (${dryRun.message})`);
       return;
     }
     const release = beginConfirm();
@@ -44,12 +46,12 @@ export function useRollbackRequest({
     try {
       approved = await confirm({
         title: "Roll back",
-        message: `Restore the files of transaction ${transactionId} from its backup? ${dryRun.message}`,
+        message: `Restore the files of transaction ${target} from its backup? ${dryRun.message}`,
         confirmLabel: "roll back",
       });
     } finally {
       release();
     }
-    if (approved) await runRollback(transactionId);
+    if (approved) await runRollback(target);
   }, [transactionId, confirm, beginConfirm, runRollback, setError]);
 }

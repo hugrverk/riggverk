@@ -1,0 +1,90 @@
+import type { SetupHistoryEntry } from "../types";
+import { HARNESS_LABELS } from "./harnessInstallation";
+import { surfaceTitle } from "./installPlan";
+import { listText } from "./overviewModel";
+
+export interface ReceiptLine {
+  label: string;
+  value: string;
+}
+
+/** Unix nanoseconds as a decimal string, in milliseconds; null when it is not a plain number. */
+export function nanosToMillis(nanos: string | null): number | null {
+  if (!nanos || !/^\d+$/.test(nanos)) return null;
+  // Dropping six digits is a floor to the millisecond and stays exact where a float of the full value would not.
+  const millis = nanos.length > 6 ? Number(nanos.slice(0, -6)) : 0;
+  return Number.isFinite(millis) ? millis : null;
+}
+
+function sameDay(a: Date, b: Date): boolean {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+}
+
+/** "15:39" for today, "Oct 21, 15:39" for another day; null when the entry carries no usable time. */
+export function updateTimeText(entry: Pick<SetupHistoryEntry, "created_at" | "finished_at">, now: Date = new Date()): string | null {
+  const millis = nanosToMillis(entry.finished_at) ?? nanosToMillis(entry.created_at);
+  if (millis === null) return null;
+  const date = new Date(millis);
+  const time = date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false });
+  if (sameDay(date, now)) return time;
+  return `${date.toLocaleDateString("en-GB", { month: "short", day: "numeric" })}, ${time}`;
+}
+
+/** "Codex", "Claude and Codex"; null when the update touched no agent's own files (the shared skills, the workspace). */
+export function updateAgentsText(entry: Pick<SetupHistoryEntry, "harnesses">): string | null {
+  const names = entry.harnesses.map(harness => HARNESS_LABELS[harness]);
+  return names.length === 0 ? null : listText(names);
+}
+
+function count(n: number, noun: string): string {
+  return `${n} ${noun}${n === 1 ? "" : "s"}`;
+}
+
+function unique<T>(values: readonly T[]): T[] {
+  return [...new Set(values)];
+}
+
+/**
+ * The receipt of one history entry, only from what the manifest recorded: the files it changed and restored, what the
+ * plan found current ("Checked") and left for the user, and how many files were backed up. A run from before receipts
+ * were recorded has no Checked / Left for you lines; nothing is guessed for it.
+ */
+export function receiptLines(entry: SetupHistoryEntry, backupCount: number | null = null): ReceiptLine[] {
+  const lines: ReceiptLine[] = [];
+  const changed = entry.changes.filter(change => change.applied && !change.restored);
+  const restored = entry.changes.filter(change => change.restored);
+  if (changed.length > 0) {
+    const surfaces = unique(changed.map(change => change.surface)).map(surfaceTitle).join(", ");
+    lines.push({ label: "Changed", value: `${surfaces} · ${count(changed.length, "file")}` });
+  }
+  if (restored.length > 0) {
+    lines.push({ label: "Restored", value: `${count(restored.length, "file")} from the backup` });
+  }
+  if (entry.receipt) {
+    if (entry.receipt.synced.length > 0) {
+      lines.push({ label: "Checked", value: `${unique(entry.receipt.synced).map(surfaceTitle).join(", ")} · current` });
+    }
+    if (entry.receipt.left_for_you.length > 0) {
+      lines.push({
+        label: "Left for you",
+        value: entry.receipt.left_for_you
+          .map(item => `${surfaceTitle(item.surface)} · ${item.reason === "conflict" ? "you edited it" : "needs a manual step"}`)
+          .join("; "),
+      });
+    }
+  }
+  if (entry.backup_files > 0) {
+    const kept = backupCount !== null && backupCount > 0 ? ` · kept with ${count(backupCount, "backup")}` : "";
+    lines.push({ label: "Backup", value: `${count(entry.backup_files, "file")}${kept}` });
+  }
+  if (lines.length === 0) lines.push({ label: "Changed", value: "no files" });
+  return lines;
+}
+
+/**
+ * The entry the "Last update" cell is about: the newest update that ran (a run that failed before writing is not one).
+ * It may already be undone; the cell then says so and offers no Undo.
+ */
+export function lastUpdateEntry(history: readonly SetupHistoryEntry[]): SetupHistoryEntry | null {
+  return history.find(entry => entry.status !== "failed") ?? null;
+}

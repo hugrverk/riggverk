@@ -77,9 +77,8 @@ function commandCount(backend: Backend, command: string): number {
 }
 
 /**
- * A key hint of the Start view's detail pane (the cursor starts on "workspace"). Hints live in the status bar
- * while their pane has focus, so this moves focus (back) into the pane when the hint is not showing (a dialog
- * may have taken it). Call it outside `act`: a nested act would not flush the focus change before the query.
+ * A key hint of the Overview page. Hints live in the status bar while their pane has focus, so this moves focus
+ * (back) into the page when the hint is not showing (a dialog may have taken it). Call it outside `act`: a nested act would not flush the focus change before the query.
  */
 function findStatusHint(name: RegExp): Promise<HTMLElement> {
   return waitFor(() => {
@@ -88,7 +87,7 @@ function findStatusHint(name: RegExp): Promise<HTMLElement> {
     if (shown) return shown;
     act(() => {
       (document.activeElement as HTMLElement | null)?.blur();
-      screen.getByRole("group", { name: "workspace detail" }).focus();
+      screen.getByRole("region", { name: "Overview" }).focus();
     });
     return bar.getByRole("button", { name });
   });
@@ -137,8 +136,8 @@ describe("App", () => {
     render(<App />);
     await waitFor(() => expect(commandCount(backend, "get_settings")).toBeGreaterThanOrEqual(1));
 
-    // The Start view's detail pane offers the default workspace folder action once diagnostics report a valid workspace.
-    await screen.findByRole("region", { name: "workspace detail" });
+    // The Overview page offers the default workspace folder action once diagnostics report a valid workspace.
+    await screen.findByRole("region", { name: "Overview" });
     const openButton = await findStatusHint(/open folder/i);
     await act(async () => {
       fireEvent.click(openButton);
