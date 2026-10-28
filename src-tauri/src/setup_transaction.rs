@@ -266,9 +266,9 @@ pub struct Overwrite {
     pub expected_installed_digest: String,
 }
 
-/// A rules file the user chose to convert: the complete new content, and the
-/// digest of the file it was computed from. Apply refuses to write when the
-/// file changed since.
+/// A file the user chose to rewrite (a rules conversion, or the Codex config reset to Riggverk's
+/// defaults): the complete new content, and the digest of the file it was computed from. Apply
+/// refuses to write when the file changed since.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RulesRewrite {
     pub content: String,
@@ -339,7 +339,7 @@ fn surfaces_match(a: &[SetupSurfaceId], b: &[SetupSurfaceId]) -> bool {
     left == right
 }
 
-fn stable_fingerprint(parts: &[String]) -> Result<String, String> {
+pub(crate) fn stable_fingerprint(parts: &[String]) -> Result<String, String> {
     let encoded =
         serde_json::to_vec(parts).map_err(|e| format!("serialize fingerprint input: {e}"))?;
     Ok(crate::stable_digest::bytes(&encoded)

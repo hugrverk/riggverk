@@ -3,6 +3,7 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 import type { ActionResult } from "../components/TerminalOutput";
 import type {
   AgentTargetMeta,
+  CodexConfigDefaultsPreview,
   DocSummary,
   DocumentContent,
   FileDiffView,
@@ -415,6 +416,39 @@ describe("mock backend: keep mine for the Codex config", () => {
 
     await invoke("set_codex_config_kept", { kept: false });
     expect(await configRow()).toMatchObject({ state: "conflict", codex_config: { kept: [] } });
+  });
+
+  it("names Riggverk's value next to the user's, and uses the defaults only with the preview's own proof", async () => {
+    await invoke("set_codex_config_kept", { kept: false });
+    expect((await configRow()).codex_config).toMatchObject({
+      differing: [{ key: "approvals_reviewer", value: "auto_review" }],
+      expected: [{ key: "approvals_reviewer", value: "user" }],
+    });
+
+    const preview = await invoke<CodexConfigDefaultsPreview>("preview_codex_config_defaults");
+    expect(preview.keys).toEqual([{ key: "approvals_reviewer", yours: "auto_review", riggverk: "user" }]);
+    expect(preview.diff).toBe('- approvals_reviewer = "auto_review"\n+ approvals_reviewer = "user"');
+    await expect(
+      invoke("apply_codex_config_defaults", { planFingerprint: "0".repeat(64), previewToken: preview.preview_token }),
+    ).rejects.toThrow("mismatch");
+    expect((await configRow()).state).toBe("conflict");
+
+    const result = await invoke<SetupResult>("apply_codex_config_defaults", {
+      planFingerprint: preview.plan_fingerprint,
+      previewToken: preview.preview_token,
+    });
+    expect(result.success).toBe(true);
+    expect(await configRow()).toMatchObject({ state: "current" });
+    expect((await configRow()).codex_config).toBeUndefined();
+    // Nothing differs now, and the proof is spent.
+    await expect(invoke("preview_codex_config_defaults")).rejects.toThrow("nothing to reset");
+    await expect(
+      invoke("apply_codex_config_defaults", { planFingerprint: preview.plan_fingerprint, previewToken: preview.preview_token }),
+    ).rejects.toThrow("mismatch");
+
+    const rolled = await invoke<SetupResult>("rollback_setup_transaction", { transactionId: result.transaction_id, dryRun: false });
+    expect(rolled.success).toBe(true);
+    expect(await configRow()).toMatchObject({ state: "conflict", codex_config: { differing: [{ key: "approvals_reviewer", value: "auto_review" }] } });
   });
 });
 

@@ -94,6 +94,26 @@ export interface CodexConfigStatus {
   kept: CodexConfigKey[];
   /** Installed value differs from what Riggverk writes and is not kept: `m` keeps it. */
   differing: CodexConfigKey[];
+  /** What Riggverk writes for each key in `kept` and `differing` (the bundled config's value). Absent from an older backend. */
+  expected?: CodexConfigKey[];
+}
+
+/** One enforced Codex config key that "use Riggverk's defaults" sets to Riggverk's value. Not secret. */
+export interface CodexConfigDefaultKey {
+  key: string;
+  /** The installed value that is replaced (cut when very long). */
+  yours: string;
+  /** The bundled config's value that is written. */
+  riggverk: string;
+}
+
+/** What `preview_codex_config_defaults` returns: the keys, a key-only diff, and the proof `apply_codex_config_defaults` needs. */
+export interface CodexConfigDefaultsPreview {
+  keys: CodexConfigDefaultKey[];
+  /** A removed and an added line per key; never other text of config.toml. */
+  diff: string;
+  plan_fingerprint: string;
+  preview_token: string;
 }
 
 /** What the workspace row tells about the data folder. Counts and a flag, never file contents. */
