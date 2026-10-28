@@ -1120,6 +1120,32 @@ mod tests {
             .unwrap_or_default()
     }
 
+    #[test]
+    fn a_pack_skill_md_over_one_mebibyte_is_an_error_and_is_not_read_whole() {
+        let env = Env::new("huge-skill-md");
+        let dir = env.pack_skill("mine", None, "huge", "x", &[]);
+        let mut text = canonical_skill_text("huge", "x");
+        text.push_str(&"a".repeat(1024 * 1024 + 1));
+        fs::write(dir.join("SKILL.md"), text).expect("write");
+        env.pack_skill("mine", None, "normal", "x", &[]);
+
+        let sources = env.sources();
+        let pack = &sources.packs()[0];
+        let huge = pack
+            .skills
+            .iter()
+            .find(|s| s.folder == "huge")
+            .expect("huge");
+        assert_eq!(huge.state, PackSkillState::Error);
+        assert!(huge.reason.contains("over"), "{}", huge.reason);
+        let normal = pack
+            .skills
+            .iter()
+            .find(|s| s.name == "normal")
+            .expect("normal");
+        assert_eq!(normal.state, PackSkillState::Active);
+    }
+
     impl Env {
         /// Applies when the plan has work; `None` when it has none.
         fn apply_if_needed(&self) -> Option<SetupResult> {
