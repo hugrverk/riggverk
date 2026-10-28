@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { renderInFrame } from "../test/renderWithShell";
 import { Pane } from "../ui/Pane";
 import { PaneList } from "../ui/PaneList";
+import { useShellState } from "./ShellState";
 import type { AppView } from "./views";
 
 afterEach(cleanup);
@@ -34,7 +35,7 @@ function Panes({ withInput = false }: { withInput?: boolean }) {
 }
 
 describe("AppFrame", () => {
-  describe("tab keys", () => {
+  describe("view keys", () => {
     it("1-9 navigate positionally through the visible tabs", () => {
       const onSwitchView = vi.fn<(view: AppView) => void>();
       renderInFrame(<Panes />, { onSwitchView });
@@ -77,12 +78,12 @@ describe("AppFrame", () => {
       expect(onSwitchView).toHaveBeenLastCalledWith("settings");
     });
 
-    it("clicking a tab switches, and clicking the current tab re-focuses its default pane", async () => {
+    it("clicking a sidebar item switches, and clicking the current one re-focuses its default pane", async () => {
       const onSwitchView = vi.fn();
       renderInFrame(<Panes />, { onSwitchView });
       await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("listbox", { name: "Harnesses" })));
       act(() => screen.getByRole("group", { name: "output" }).focus());
-      fireEvent.click(screen.getByRole("button", { name: "Workspace" }));
+      fireEvent.click(screen.getByRole("button", { name: "Overview" }));
       expect(onSwitchView).toHaveBeenLastCalledWith("start");
       await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("listbox", { name: "Harnesses" })));
     });
@@ -198,10 +199,59 @@ describe("AppFrame", () => {
     });
   });
 
-  it("renders top line, view area and status bar", () => {
+  it("lays out the sidebar beside the top bar, view area and status bar, with a toast", () => {
     const { container } = renderInFrame(<Panes />);
-    expect(container.querySelector(".app-shell > header.topline")).not.toBeNull();
-    expect(container.querySelector(".app-shell > .view-area")).not.toBeNull();
-    expect(container.querySelector(".app-shell > footer.statusbar")).not.toBeNull();
+    expect(container.querySelector(".app-shell > aside.side")).not.toBeNull();
+    expect(container.querySelector(".app-shell > .main > header.bar")).not.toBeNull();
+    expect(container.querySelector(".app-shell > .main > .view-area")).not.toBeNull();
+    expect(container.querySelector(".app-shell > .main > footer.statusbar")).not.toBeNull();
+    expect(container.querySelector(".app-shell > .toast[role='status']")).not.toBeNull();
+  });
+
+  it("keeps the window draggable from the sidebar and the top bar", () => {
+    const { container } = renderInFrame(<Panes />);
+    expect(container.querySelector("aside.side")!.hasAttribute("data-tauri-drag-region")).toBe(true);
+    expect(container.querySelector("header.bar")!.hasAttribute("data-tauri-drag-region")).toBe(true);
+  });
+
+  describe("top bar", () => {
+    it("Check and Update all call their handlers", () => {
+      const onCheck = vi.fn();
+      const onUpdateAll = vi.fn();
+      renderInFrame(<Panes />, { onCheck, onUpdateAll });
+      fireEvent.click(screen.getByRole("button", { name: "Check" }));
+      expect(onCheck).toHaveBeenCalledTimes(1);
+      fireEvent.click(screen.getByRole("button", { name: "Update all" }));
+      expect(onUpdateAll).toHaveBeenCalledTimes(1);
+    });
+
+    it("a disabled Update all never runs and says why", () => {
+      const onUpdateAll = vi.fn();
+      renderInFrame(<Panes />, { onUpdateAll, updateAllDisabled: "Everything Riggverk can update is already up to date." });
+      const button = screen.getByRole("button", { name: "Update all" });
+      fireEvent.click(button);
+      expect(onUpdateAll).not.toHaveBeenCalled();
+      expect(button.getAttribute("aria-disabled")).toBe("true");
+      expect(button.getAttribute("title")).toBe("Everything Riggverk can update is already up to date.");
+      expect(button).toHaveAccessibleDescription("Everything Riggverk can update is already up to date.");
+    });
+
+    it("shows the current view in the crumb", () => {
+      renderInFrame(<Panes />, { view: "claude" });
+      expect(document.querySelector(".bar .crumb")!.textContent).toBe("Riggverk / Claude");
+    });
+  });
+
+  describe("toast", () => {
+    it("shows a notice from the shell instead of the status bar", () => {
+      function Notifier() {
+        const { notify } = useShellState();
+        return <button type="button" onClick={() => notify("Checking every agent again…")}>notify</button>;
+      }
+      renderInFrame(<Notifier />);
+      fireEvent.click(screen.getByRole("button", { name: "notify" }));
+      expect(screen.getAllByRole("status").some(node => node.textContent === "Checking every agent again…")).toBe(true);
+      expect(screen.getByLabelText("Status bar").textContent).not.toContain("Checking every agent");
+    });
   });
 });
