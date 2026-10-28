@@ -152,7 +152,7 @@ A pack is a folder of your own skills that Riggverk installs, updates and rolls 
 
 The pack name is lowercase letters, digits and hyphens. A `git clone` into `packs/` works, and `git pull` plus Install updates it; keep the folder writable by you only (`chmod go-w`). The skill format is the bundle's: `SKILL.md` with `name`, `description` and `targets`, supporting files beside it, no symlinks. Packs add skills only; they cannot change rules, agents or configs.
 
-In the Library, Skills lists them under `pack:<name>`. A pack skill named like a bundled one is *shadowed*: the bundle's wins. Two packs with one skill name are both an *error*. If a pack's folder disappears, the skills you installed from it stay as they are and show *pack missing*; **Forget pack** (Library, Skills) lets the next Install remove them, with a backup.
+In the Library, Skills lists them under `pack:<name>`. A pack skill named like a bundled one is *shadowed*: the bundle's wins. When two packs both provide a skill of the same name, neither is used and both show an *error*. If a pack's folder disappears, the skills you installed from it stay as they are and show *pack missing*; **Forget pack** (Library, Skills) lets the next Install remove them, with a backup.
 
 ### Which folders
 
