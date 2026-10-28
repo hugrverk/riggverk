@@ -15,6 +15,9 @@ Releases before the Riggverk rename used other technical names. An install made 
 - Rules blocks between `AGENT-WORKSPACE BASE` markers are recognised. The next update rewrites them with `RIGGVERK BASE` markers and keeps the text outside the block byte for byte. A block you edited stays a conflict, as before.
 - `AGENT_WORKSPACE_PATH` and `AGENT_WORKSPACE_BACKUP_DIR` still work as aliases of `RIGGVERK_WORKSPACE_PATH` and `RIGGVERK_BACKUP_DIR`; the new name wins when both are set.
 - Rolling back a transaction made before the move maps the old folder onto the new one. It is refused, with a message, if a folder under the old name exists again next to the new one.
+- Quit any older Riggverk (or the app under its earlier name) before the first launch of this version: the move is a rename, and an older app that writes during it can leave a mixed layout.
+- Tools, editors and scripts of your own that mention `~/.config/agent-workspace` must be pointed at `~/.config/riggverk` after the move.
+- Going back to an older version after the move is not supported: it looks for the old folder, finds none and starts as a fresh profile. To go back by hand, quit Riggverk, rename `~/.config/riggverk` to `~/.config/agent-workspace` and the `.riggverk/` folder inside it to `.agent-workspace/`; rules files that were rewritten with `RIGGVERK BASE` markers are not recognised by an older version, so restore them from the backups folder (`backups/setup/<transaction id>/`) if you need them as they were.
 
 <!-- residue-allow-end -->
 
