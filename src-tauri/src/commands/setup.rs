@@ -834,6 +834,26 @@ fn apply_mcp_artifact(
     .map_err(|e| format!("write MCP file {}: {e}", dest.display()))
 }
 
+/// Write the two attribution values into Claude's `settings.json`. Every other key keeps its
+/// value and its place. A file the app does not edit (comments, a trailing comma, ...), one that
+/// already says how attribution is shown, or a moved config folder (`CLAUDE_CONFIG_DIR`) is
+/// refused before anything is written. A new file is owner-only (0600).
+fn apply_claude_settings(dest: &Path, root: &Path) -> Result<(), String> {
+    if crate::claude_settings::config_dir_override() {
+        return Err(format!(
+            "refusing to change settings.json: {}",
+            crate::claude_settings::CONFIG_DIR_REASON
+        ));
+    }
+    let rendered = crate::claude_settings::render_install(dest)?;
+    if dest.exists() {
+        crate::safe_filesystem::write_regular_file_atomic(dest, rendered.as_bytes(), root)
+    } else {
+        crate::safe_filesystem::write_private_regular_file_atomic(dest, rendered.as_bytes(), root)
+    }
+    .map_err(|e| format!("write settings.json {}: {e}", dest.display()))
+}
+
 fn apply_single_artifact(
     artifact: &crate::artifact_registry::ArtifactId,
     workspace_root: &Path,
@@ -841,6 +861,15 @@ fn apply_single_artifact(
     rules_rewrite: Option<&setup_transaction::RulesRewrite>,
     overwrite: Option<&setup_transaction::Overwrite>,
 ) -> Result<(), String> {
+    // The attribution values of Claude's settings.json are constants of the app: no bundled source.
+    if artifact == &crate::artifact_registry::ArtifactId::ClaudeSettings {
+        if overwrite.is_some() || rules_rewrite.is_some() {
+            return Err("settings.json is never replaced or converted".to_string());
+        }
+        let (dest, root) =
+            setup_transaction::validate_artifact_dest(artifact, workspace_root, home)?;
+        return apply_claude_settings(&dest, &root);
+    }
     let (source, dest) =
         setup_transaction::validate_artifact_source_dest(artifact, workspace_root, home)?;
     let root = artifact.allowlist_root(home, workspace_root)?;
@@ -1153,9 +1182,13 @@ fn run_planned_artifacts(
         if matches!(p.kind, OperationKind::Remove) {
             continue;
         }
-        if let Err(e) =
+        let checked = if p.artifact == crate::artifact_registry::ArtifactId::ClaudeSettings {
+            setup_transaction::validate_artifact_dest(&p.artifact, &ws_root, &home).map(|_| ())
+        } else {
             setup_transaction::validate_artifact_source_dest(&p.artifact, &ws_root, &home)
-        {
+                .map(|_| ())
+        };
+        if let Err(e) = checked {
             return SetupResult {
                 success: false,
                 transaction_id,
@@ -2319,6 +2352,7 @@ fn plan_surfaces(
     attach_workspace_details(&mut plan, ws_root, home);
     attach_rules_details(&mut plan, home);
     attach_mcp_details(&mut plan, home);
+    attach_claude_settings_details(&mut plan);
     attach_plan_preview(&mut plan, ws_root, home)?;
     Ok(plan)
 }
@@ -2351,6 +2385,21 @@ fn attach_mcp_details(plan: &mut SetupPlan, home: &Path) {
                 "~ {path} (adds or updates the {} entry; your other servers stay)",
                 mcp.entry_key
             )
+        });
+    }
+}
+
+/// The review of Claude's attribution setting names the file and what changes in it.
+fn attach_claude_settings_details(plan: &mut SetupPlan) {
+    for op in plan.operations.iter_mut().filter(|op| {
+        op.surface == SetupSurfaceId::ClaudeConfig
+            && matches!(op.kind, OperationKind::Create | OperationKind::Update)
+    }) {
+        op.details.push(if op.kind == OperationKind::Create {
+            "+ ~/.claude/settings.json (new file; hides commit and PR attribution)".to_string()
+        } else {
+            "~ ~/.claude/settings.json (hides commit and PR attribution; other keys stay)"
+                .to_string()
         });
     }
 }

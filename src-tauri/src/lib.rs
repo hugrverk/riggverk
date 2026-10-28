@@ -4,6 +4,7 @@ mod agent_targets;
 mod app_data_migration;
 mod apply_progress;
 mod artifact_registry;
+mod claude_settings;
 mod commands;
 mod cursor_profile_ops;
 mod cursor_profile_paths;
@@ -45,6 +46,8 @@ mod stable_digest;
 
 #[cfg(test)]
 mod app_data_migration_contract;
+#[cfg(test)]
+mod claude_settings_contract;
 #[cfg(test)]
 mod file_conflicts_contract;
 #[cfg(test)]

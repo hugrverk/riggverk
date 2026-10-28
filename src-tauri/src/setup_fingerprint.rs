@@ -66,6 +66,7 @@ fn artifact_kind(artifact: &ArtifactId) -> ArtifactKind {
         ArtifactId::CodexLegacySkill(_) | ArtifactId::SkillFile(_) => ArtifactKind::SkillFile,
         ArtifactId::OpenCodeConfig | ArtifactId::CodexConfig => ArtifactKind::ConfigFile,
         ArtifactId::OpenCodeTui => ArtifactKind::TuiConfig,
+        ArtifactId::ClaudeSettings => ArtifactKind::ClaudeSettings,
         ArtifactId::OpenCodePlaywrightMcp => ArtifactKind::McpConfig,
         ArtifactId::OpenCodeRules
         | ArtifactId::CodexRules
@@ -177,6 +178,21 @@ fn tui_digest_from_path(path: &Path) -> Result<String, String> {
     }
 }
 
+/// Digest of the managed values of a `settings.json`: [`ABSENT_DIGEST`] when there is no file,
+/// and a fixed digest per refusal for a file the app does not edit (nothing of its text goes in,
+/// and such a file is never written).
+fn claude_settings_digest_from_path(path: &Path) -> Result<String, String> {
+    match crate::claude_settings::read(path) {
+        Ok(None) => Ok(ABSENT_DIGEST.into()),
+        Ok(Some(config)) => hash_json_value(&serde_json::Value::Object(
+            crate::claude_settings::managed_projection(&config),
+        )),
+        Err(refusal) => Ok(hash_bytes(
+            format!("unusable-claude-settings-file:{refusal:?}").as_bytes(),
+        )),
+    }
+}
+
 /// Hash canonical source content for an artifact. Missing source is an error.
 pub fn artifact_source_digest(
     artifact: &ArtifactId,
@@ -231,6 +247,10 @@ pub fn artifact_source_digest(
                 crate::opencode_tui::managed_projection(&template, keys),
             ))
         }
+        // The managed values are constants of the app: there is no bundled file.
+        ArtifactKind::ClaudeSettings => hash_json_value(&serde_json::Value::Object(
+            crate::claude_settings::managed_values(),
+        )),
         ArtifactKind::McpConfig if artifact == &ArtifactId::OpenCodePlaywrightMcp => {
             let source = require_source_path(artifact, workspace_root)?;
             hash_file(&source)
@@ -278,6 +298,7 @@ pub fn artifact_installed_managed_digest_from_path(
             }
         }
         ArtifactKind::TuiConfig => tui_digest_from_path(path),
+        ArtifactKind::ClaudeSettings => claude_settings_digest_from_path(path),
         ArtifactKind::SkillFile => {
             if path.is_file() {
                 hash_file(path)
@@ -369,6 +390,7 @@ pub fn artifact_installed_full_digest(
         }
         ArtifactKind::ConfigFile
         | ArtifactKind::TuiConfig
+        | ArtifactKind::ClaudeSettings
         | ArtifactKind::RulesFile
         | ArtifactKind::AgentFile
         | ArtifactKind::McpConfig => {

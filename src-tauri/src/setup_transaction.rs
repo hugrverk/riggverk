@@ -610,6 +610,11 @@ pub fn detect_surface_state(
                                     .then(|| opencode_config_conflict_reason(workspace_root, home))
                                     .flatten()
                             })
+                            .or_else(|| {
+                                (p.artifact == ArtifactId::ClaudeSettings)
+                                    .then(|| claude_settings_conflict_reason(workspace_root, home))
+                                    .flatten()
+                            })
                     });
                 let manual = planned
                     .iter()
@@ -682,6 +687,11 @@ pub fn detect_surface_state(
             surface.label(),
             if manual_count == 1 { "" } else { "s" }
         ),
+        // Attribution the user set themselves.
+        OperationKind::Manual if surface == SetupSurfaceId::ClaudeConfig => format!(
+            "{}: you set attribution yourself; left as is",
+            surface.label()
+        ),
         // A rules file the user chose to manage.
         OperationKind::Manual => format!(
             "{}: you manage this file; base updates are skipped",
@@ -699,6 +709,7 @@ fn artifact_kind(artifact: &ArtifactId) -> ArtifactKind {
         ArtifactId::CodexLegacySkill(_) | ArtifactId::SkillFile(_) => ArtifactKind::SkillFile,
         ArtifactId::OpenCodeConfig | ArtifactId::CodexConfig => ArtifactKind::ConfigFile,
         ArtifactId::OpenCodeTui => ArtifactKind::TuiConfig,
+        ArtifactId::ClaudeSettings => ArtifactKind::ClaudeSettings,
         ArtifactId::OpenCodePlaywrightMcp => ArtifactKind::McpConfig,
         ArtifactId::OpenCodeRules
         | ArtifactId::CodexRules
@@ -792,6 +803,11 @@ pub fn detect_artifact_state(
         Ok(root) => root,
         Err(_) => return (OperationKind::Unavailable, PreviousState::Unavailable),
     };
+    if artifact == &ArtifactId::ClaudeSettings {
+        // No bundled source; and no ownership record here, so values already in the file are
+        // never the app's.
+        return claude_settings_outcome(&dest, false);
+    }
     let source = match artifact.resolve_source(&bundled_root) {
         Some(p) => p,
         None => return (OperationKind::Unavailable, PreviousState::Unavailable),
@@ -816,6 +832,8 @@ pub fn detect_artifact_state(
     match artifact_kind(artifact) {
         ArtifactKind::ConfigFile => detect_config_artifact(artifact, &dest, &source, home),
         ArtifactKind::TuiConfig => detect_tui_artifact(&dest, &source),
+        // Answered above: the artifact has no source to resolve.
+        ArtifactKind::ClaudeSettings => claude_settings_outcome(&dest, false),
         ArtifactKind::RulesFile | ArtifactKind::AgentFile => {
             if !dest.exists() {
                 (OperationKind::Create, PreviousState::Absent)
@@ -995,7 +1013,8 @@ struct McpPlan {
     previous_state: PreviousState,
 }
 
-/// Plans the managed entry of a light harness's MCP file, or `None` for any other artifact.
+/// Plans the managed entry of a light harness's MCP file, or the attribution values of Claude's
+/// `settings.json`; `None` for any other artifact.
 ///
 /// A file without the entry is merged into (never created over, so a rollback cannot delete the
 /// user's file). An entry of that name that differs is the user's own unless a record proves the
@@ -1009,6 +1028,15 @@ fn plan_mcp_artifact(
     managed_hash: Option<&str>,
 ) -> Option<McpPlan> {
     use crate::light_mcp::EntryState;
+    if artifact == &ArtifactId::ClaudeSettings {
+        return Some(plan_claude_settings(
+            artifact,
+            workspace_root,
+            bundled_root,
+            home,
+            managed_hash,
+        ));
+    }
     if !matches!(artifact, ArtifactId::HarnessMcp(_)) {
         return None;
     }
@@ -1511,6 +1539,72 @@ fn tui_conflict_reason(workspace_root: &Path, home: &Path) -> Option<String> {
     }
 }
 
+/// What `settings.json` plans to. `owned` is whether an ownership record proves that the app
+/// wrote the values already in the file: a user's own `""` is theirs, however it looks.
+fn claude_settings_outcome(dest: &Path, owned: bool) -> (OperationKind, PreviousState) {
+    use crate::claude_settings::Assessment;
+    if crate::claude_settings::config_dir_override() {
+        return (OperationKind::Conflict, PreviousState::Conflict);
+    }
+    match crate::claude_settings::assess(dest) {
+        Assessment::Absent => (OperationKind::Create, PreviousState::Absent),
+        Assessment::Missing => (OperationKind::Update, PreviousState::MergeableConfigFile),
+        Assessment::Hidden if owned => {
+            (OperationKind::NoChange, PreviousState::MergeableConfigFile)
+        }
+        // The user's own choice is never written, and never recorded as the app's.
+        Assessment::Hidden | Assessment::UserSet => {
+            (OperationKind::Manual, PreviousState::MergeableConfigFile)
+        }
+        Assessment::UnexpectedType | Assessment::Refused(_) => {
+            (OperationKind::Conflict, PreviousState::Conflict)
+        }
+    }
+}
+
+/// Plans `settings.json`. The record owns the values only while they are still what the app
+/// wrote (the constant projection).
+fn plan_claude_settings(
+    artifact: &ArtifactId,
+    workspace_root: &Path,
+    bundled_root: &Path,
+    home: &Path,
+    managed_hash: Option<&str>,
+) -> McpPlan {
+    let Ok(dest) = artifact.resolve_dest(home, workspace_root) else {
+        return McpPlan {
+            state: None,
+            kind: OperationKind::Unavailable,
+            previous_state: PreviousState::Unavailable,
+        };
+    };
+    let owned = managed_hash.is_some_and(|hash| {
+        crate::setup_fingerprint::artifact_source_digest(artifact, bundled_root, home)
+            .is_ok_and(|expected| expected == hash)
+    });
+    let (kind, previous_state) = claude_settings_outcome(&dest, owned);
+    McpPlan {
+        state: None,
+        kind,
+        previous_state,
+    }
+}
+
+/// Why `settings.json` is left alone, for the review: `CLAUDE_CONFIG_DIR` is set, the file is not
+/// strict JSON, or `attribution` has a type nobody writes. Only fixed phrases.
+pub(crate) fn claude_settings_conflict_reason(
+    workspace_root: &Path,
+    home: &Path,
+) -> Option<String> {
+    if crate::claude_settings::config_dir_override() {
+        return Some(crate::claude_settings::CONFIG_DIR_REASON.to_string());
+    }
+    let dest = ArtifactId::ClaudeSettings
+        .resolve_dest(home, workspace_root)
+        .ok()?;
+    crate::claude_settings::conflict_reason(&crate::claude_settings::assess(&dest))
+}
+
 /// Why `opencode.json` is left alone, for the review, when its text is the reason: it has
 /// comments, trailing commas or a byte order mark (JSONC, which OpenCode reads but the app does
 /// not write), or it is not JSON at all. Only fixed phrases and file names.
@@ -1672,7 +1766,10 @@ pub fn plan_artifacts_for_uninstall(
         }
         if matches!(
             artifact_kind(&artifact),
-            ArtifactKind::ConfigFile | ArtifactKind::TuiConfig | ArtifactKind::McpConfig
+            ArtifactKind::ConfigFile
+                | ArtifactKind::TuiConfig
+                | ArtifactKind::McpConfig
+                | ArtifactKind::ClaudeSettings
         ) {
             // Managed keys were merged into a user-owned file; deleting the
             // file would destroy user content.
@@ -1797,6 +1894,18 @@ pub fn plan_artifacts_for_uninstall(
 /// the app never wrote into is the user's alone, and is not reported as merged; one that cannot be
 /// read as strict JSON was never written by the app either.
 fn holds_managed_entry(artifact: &ArtifactId, home: &Path, workspace_root: &Path) -> bool {
+    if artifact == &ArtifactId::ClaudeSettings {
+        // The user's own `settings.json` is the app's only where it wrote the values.
+        let identity = crate::managed_state::artifact_identity(artifact);
+        return crate::managed_state::read_managed_state(workspace_root)
+            .is_some_and(|state| state.artifacts.iter().any(|r| r.identity == identity))
+            && artifact
+                .resolve_dest(home, workspace_root)
+                .is_ok_and(|dest| {
+                    crate::claude_settings::assess(&dest)
+                        == crate::claude_settings::Assessment::Hidden
+                });
+    }
     let ArtifactId::HarnessMcp(harness) = artifact else {
         return true;
     };
@@ -2399,6 +2508,7 @@ pub fn artifact_backup_rel(artifact: &ArtifactId) -> String {
         ArtifactId::CodexConfig => "codex-config".into(),
         ArtifactId::CodexRules => "codex-rules".into(),
         ArtifactId::ClaudeRules => "claude-rules".into(),
+        ArtifactId::ClaudeSettings => "claude-settings".into(),
         ArtifactId::HarnessRules(harness) => format!("{}-rules", harness.harness().as_str()),
         ArtifactId::HarnessMcp(harness) => format!("{}-mcp", harness.harness().as_str()),
         ArtifactId::CursorMcp => "cursor-mcp".into(),
@@ -3274,6 +3384,17 @@ fn restore_artifact_from_backup_with_mode(
                             allowlist_root,
                         )
                         .map_err(|e| format!("write tui.json: {e}"))?;
+                    } else if op.artifact == ArtifactId::ClaudeSettings {
+                        // Put the two values back as the backup had them; the rest of the file
+                        // is whatever it is now.
+                        let rendered =
+                            crate::claude_settings::render_restored(&dest, &backup_path)?;
+                        crate::safe_filesystem::write_regular_file_atomic(
+                            &dest,
+                            rendered.as_bytes(),
+                            allowlist_root,
+                        )
+                        .map_err(|e| format!("write settings.json: {e}"))?;
                     } else if op.artifact == ArtifactId::CodexConfig {
                         let workspace_root = workspace_root.ok_or_else(|| {
                             "workspace root required for codex managed rollback".to_string()
