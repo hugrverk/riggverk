@@ -47,7 +47,7 @@
     ],
     "macOS": {
       "files": {
-        "Resources/AgentWorkspace.icns": "macos/AgentWorkspace.icns"
+        "Resources/Riggverk.icns": "macos/Riggverk.icns"
       },
       "infoPlist": "Info.plist",
       "minimumSystemVersion": "10.14"

@@ -33,14 +33,14 @@ if ! xcrun --find swift >/dev/null 2>&1; then
 fi
 
 renderer="scripts/render-macos-pyramid-icons.swift"
-output_icon="src-tauri/macos/AgentWorkspace.icns"
+output_icon="src-tauri/macos/Riggverk.icns"
 
 if [ ! -f "$renderer" ]; then
   printf 'FAIL: missing macOS app icon renderer: %s\n' "$renderer" >&2
   exit 1
 fi
 
-work_dir="$(mktemp -d "${TMPDIR:-/tmp}/agent-workspace-icon.XXXXXX")"
+work_dir="$(mktemp -d "${TMPDIR:-/tmp}/riggverk-icon.XXXXXX")"
 rendered_dir="$work_dir/rendered"
 cleanup() {
   rm -rf "$work_dir"
@@ -141,13 +141,13 @@ if [ ! -s "$output_icon" ]; then
   exit 1
 fi
 
-if ! /usr/libexec/PlistBuddy -c 'Print :CFBundleIconFile' src-tauri/Info.plist | grep -Fxq 'AgentWorkspace'; then
-  printf 'FAIL: src-tauri/Info.plist must set CFBundleIconFile to AgentWorkspace\n' >&2
+if ! /usr/libexec/PlistBuddy -c 'Print :CFBundleIconFile' src-tauri/Info.plist | grep -Fxq 'Riggverk'; then
+  printf 'FAIL: src-tauri/Info.plist must set CFBundleIconFile to Riggverk\n' >&2
   exit 1
 fi
 
-if ! /usr/libexec/PlistBuddy -c 'Print :CFBundleIconName' src-tauri/Info.plist | grep -Fxq 'AgentWorkspace'; then
-  printf 'FAIL: src-tauri/Info.plist must set CFBundleIconName to AgentWorkspace\n' >&2
+if ! /usr/libexec/PlistBuddy -c 'Print :CFBundleIconName' src-tauri/Info.plist | grep -Fxq 'Riggverk'; then
+  printf 'FAIL: src-tauri/Info.plist must set CFBundleIconName to Riggverk\n' >&2
   exit 1
 fi
 
