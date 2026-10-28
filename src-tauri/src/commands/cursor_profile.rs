@@ -111,12 +111,17 @@ fn cursor_skill_roots(home: &Path) -> Vec<SkillRoot> {
 /// the bundle, so that is what installed files are compared with.
 pub(crate) fn skill_roots_status(
     bundled_root: Option<&Path>,
+    workspace_root: Option<&Path>,
     home: &Path,
     roots: &[SkillRoot],
 ) -> (String, usize, usize) {
-    match bundled_root
-        .map(|bundle| skill_files_status(&SkillSources::for_current(bundle), home, roots))
-    {
+    match bundled_root.map(|bundle| {
+        skill_files_status(
+            &SkillSources::for_health(bundle, workspace_root),
+            home,
+            roots,
+        )
+    }) {
         Some(Ok(status)) => (status.label().to_string(), status.synced, status.expected),
         _ => ("missing".to_string(), 0, 0),
     }
@@ -500,6 +505,8 @@ fn manifest_status(root: &Path, warnings: &mut Vec<String>) -> String {
 #[tauri::command]
 pub fn get_cursor_profile_health() -> Result<CursorProfileHealth, String> {
     let root = crate::setup_roots::bundled_root()?;
+    // The data folder only adds the packs' skills to what the install is compared with.
+    let workspace_root = super::workspace::setup_workspace_target_path().ok();
     let paths = resolve_cursor_profile_paths()?;
     let profile_root = cursor_profile_root_display(&paths);
     let profile_root_source = "default".to_string();
@@ -520,6 +527,7 @@ pub fn get_cursor_profile_health() -> Result<CursorProfileHealth, String> {
     let (global_skills_status, global_skills_count, expected_global_skills_count) =
         skill_roots_status(
             Some(&root),
+            workspace_root.as_deref(),
             &paths.user_home,
             &cursor_skill_roots(&paths.user_home),
         );
@@ -671,11 +679,11 @@ mod tests {
         fs::write(installed.join("SKILL.md"), &canonical).expect("write installed");
         let roots = [SkillRoot::Claude];
 
-        let synced = skill_roots_status(Some(&bundle), &home, &roots);
+        let synced = skill_roots_status(Some(&bundle), None, &home, &roots);
         fs::write(installed.join("SKILL.md"), "an older per-harness copy\n").expect("diverge");
-        let diverged = skill_roots_status(Some(&bundle), &home, &roots);
-        let elsewhere = skill_roots_status(Some(&bundle), &home, &[SkillRoot::Agents]);
-        let no_bundle = skill_roots_status(None, &home, &roots);
+        let diverged = skill_roots_status(Some(&bundle), None, &home, &roots);
+        let elsewhere = skill_roots_status(Some(&bundle), None, &home, &[SkillRoot::Agents]);
+        let no_bundle = skill_roots_status(None, None, &home, &roots);
         let _ = fs::remove_dir_all(&base);
 
         assert_eq!(synced, ("synced".to_string(), 1, 1));

@@ -431,7 +431,11 @@ fn compute_health_with_bundle(
     let skills_status = match bundled_root
         .ok_or_else(|| "the bundled skills are not available".to_string())
         .and_then(|bundle| {
-            skill_files_status(&SkillSources::for_current(bundle), home_dir, &[skills_root])
+            skill_files_status(
+                &SkillSources::for_health(bundle, workspace_root),
+                home_dir,
+                &[skills_root],
+            )
         }) {
         Ok(status) => {
             skills_expected_count = status.expected;
@@ -488,7 +492,7 @@ fn compute_health_with_bundle(
         .zip(bundled_root)
         .and_then(|(_, bundle)| {
             old_skill_copies(
-                &SkillSources::for_current(bundle),
+                &SkillSources::for_health(bundle, workspace_root),
                 home_dir,
                 old_skills_root,
             )

@@ -755,6 +755,37 @@ mod tests {
         assert!(loads.foreign_duplicates.is_empty());
     }
 
+    #[test]
+    fn health_reads_packs_only_from_the_data_folder_it_is_given() {
+        let env = Env::new("health");
+        env.pack_skill("mine", None, "my-checklist", "kept in the pack", &[]);
+        let result = env.apply();
+        assert!(result.success, "install: {}", result.message);
+        let bundle = Env::real_bundle();
+        let roots = [SkillRoot::Claude];
+
+        // The environment names a data folder with a pack in it, and still a check that was not
+        // handed the folder looks at the bundle alone.
+        let without = crate::skill_health::skill_files_status(
+            &SkillSources::for_health(&bundle, None),
+            &env.home,
+            &roots,
+        )
+        .expect("status");
+        let with = crate::skill_health::skill_files_status(
+            &SkillSources::for_health(&bundle, Some(&env.ws)),
+            &env.home,
+            &roots,
+        )
+        .expect("status");
+        assert_eq!(with.expected, without.expected + 1);
+        assert_eq!(
+            with.synced,
+            without.synced + 1,
+            "the installed pack skill is in sync"
+        );
+    }
+
     impl Env {
         /// Applies when the plan has work; `None` when it has none.
         fn apply_if_needed(&self) -> Option<SetupResult> {

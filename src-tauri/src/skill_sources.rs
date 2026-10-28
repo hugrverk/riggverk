@@ -224,6 +224,19 @@ impl SourceRoot for SkillSources {
     }
 }
 
+fn index_by_name(catalog: &Result<Vec<CatalogSkill>, String>) -> HashMap<String, usize> {
+    catalog
+        .as_ref()
+        .map(|skills| {
+            skills
+                .iter()
+                .enumerate()
+                .map(|(index, skill)| (skill.skill.name.clone(), index))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 /// Dereferences to the bundle, so code that reads rules, agents and configs takes it as a path.
 impl std::ops::Deref for SkillSources {
     type Target = Path;
@@ -239,13 +252,28 @@ impl SkillSources {
         Ok(Self::new(bundled, workspace_root))
     }
 
-    /// The bundle at `bundled` and the packs of the data folder in use. For the health checks,
-    /// which compare installed files with what an install would write and are not told the folder.
-    /// An unresolvable folder has no packs.
-    pub fn for_current(bundled: &Path) -> Self {
-        let workspace = crate::commands::configured_workspace_path(&crate::settings::load())
-            .unwrap_or_else(|| bundled.join(".no-data-folder"));
-        Self::new(bundled.to_path_buf(), &workspace)
+    /// The bundle alone, no packs: for a caller that has no data folder to look in.
+    pub fn bundle_only(bundled: PathBuf) -> Self {
+        let catalog = BundleOnly(&bundled).catalog();
+        let by_name = index_by_name(&catalog);
+        Self {
+            workspace_root: bundled.clone(),
+            bundled,
+            catalog,
+            by_name,
+            packs: Vec::new(),
+            ignored: Vec::new(),
+            held: Vec::new(),
+        }
+    }
+
+    /// The sources for a health check: the bundle and, when the caller resolved a data folder, its
+    /// packs. The folder is always passed in; nothing here reads settings or the environment.
+    pub fn for_health(bundled: &Path, workspace_root: Option<&Path>) -> Self {
+        match workspace_root {
+            Some(workspace_root) => Self::new(bundled.to_path_buf(), workspace_root),
+            None => Self::bundle_only(bundled.to_path_buf()),
+        }
     }
 
     /// The bundle at `bundled` and the packs in `workspace_root`.
@@ -279,16 +307,7 @@ impl SkillSources {
                 }
             }
         }
-        let by_name = catalog
-            .as_ref()
-            .map(|skills| {
-                skills
-                    .iter()
-                    .enumerate()
-                    .map(|(index, skill)| (skill.skill.name.clone(), index))
-                    .collect()
-            })
-            .unwrap_or_default();
+        let by_name = index_by_name(&catalog);
         let held = compute_held(workspace_root, &packs, &catalog);
         Self {
             bundled,
