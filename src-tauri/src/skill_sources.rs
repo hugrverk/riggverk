@@ -146,6 +146,8 @@ pub enum PackSkillState {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PackSkillReport {
     pub name: String,
+    /// Name of the skill's directory, which may differ from `name`.
+    pub folder: String,
     pub description: String,
     pub state: PackSkillState,
     /// Why the skill is not active; empty when it is.
@@ -376,8 +378,10 @@ impl SkillSources {
 
 /// A skill found in a pack before name conflicts are decided.
 struct Candidate {
-    /// Directory name, the label of a skill that does not parse.
+    /// Directory name.
     label: String,
+    /// The `name` the skill declares, when it could be read, valid or not.
+    declared_name: Option<String>,
     outcome: Result<DiscoveredSkill, String>,
 }
 
@@ -491,13 +495,17 @@ fn report_candidate(
     let skill = match candidate.outcome {
         Err(reason) => {
             return PackSkillReport {
-                name: candidate.label,
+                // The name the skill declares, so a recorded skill is found even when it broke.
+                name: candidate
+                    .declared_name
+                    .unwrap_or_else(|| candidate.label.clone()),
+                folder: candidate.label,
                 description: String::new(),
                 state: PackSkillState::Error,
                 reason,
                 relative_path: String::new(),
                 discovered: None,
-            }
+            };
         }
         Ok(skill) => skill,
     };
@@ -534,6 +542,7 @@ fn report_candidate(
     };
     PackSkillReport {
         name: skill.name.clone(),
+        folder: candidate.label,
         description: skill.description.clone(),
         state,
         reason,
@@ -599,6 +608,7 @@ fn scan_pack(pack_dir: &Path) -> Result<Vec<Candidate>, String> {
         let Ok(subs) = sorted_dirs(&entry_path) else {
             candidates.push(Candidate {
                 label: entry_name,
+                declared_name: None,
                 outcome: Err("cannot read the group folder".to_string()),
             });
             continue;
@@ -620,6 +630,7 @@ fn scan_pack(pack_dir: &Path) -> Result<Vec<Candidate>, String> {
             } else if crate::skill_discovery::has_deeper_skill_md(&sub_path) {
                 candidates.push(Candidate {
                     label: sub_name,
+                    declared_name: None,
                     outcome: Err(
                         "skill nesting deeper than one group level is not supported".to_string()
                     ),
@@ -682,12 +693,18 @@ fn candidate(
     group: &str,
     check_nesting: bool,
 ) -> Candidate {
+    let mut declared_name = None;
     let outcome = (|| {
         if check_nesting && crate::skill_discovery::has_deeper_skill_md(skill_dir) {
             return Err("skill nesting deeper than one group level is not supported".to_string());
         }
-        let (name, description, targets) =
-            crate::skill_discovery::read_skill_metadata(skill_md, fallback_name)?;
+        let metadata = crate::skill_discovery::read_skill_metadata(skill_md, fallback_name);
+        declared_name = metadata
+            .as_ref()
+            .map(|(name, _, _)| name.clone())
+            .ok()
+            .or_else(|| crate::skill_discovery::declared_skill_name(skill_md));
+        let (name, description, targets) = metadata?;
         if crate::artifact_registry::SkillName::new(name.as_str()).is_none() {
             return Err(format!("invalid skill name: {name:?}"));
         }
@@ -714,8 +731,12 @@ fn candidate(
         }
         Ok(skill)
     })();
+    // A skill that failed before its metadata was read still has a declared name worth keeping.
+    let declared_name =
+        declared_name.or_else(|| crate::skill_discovery::declared_skill_name(skill_md));
     Candidate {
         label: fallback_name.to_string(),
+        declared_name,
         outcome,
     }
 }
@@ -750,10 +771,28 @@ fn compute_held(
                 None => (HeldState::Missing, "pack missing".to_string()),
                 Some(report) => match &report.refused {
                     Some(reason) => (HeldState::Missing, format!("pack refused: {reason}")),
-                    None => match report.skills.iter().find(|skill| skill.name == name) {
-                        // Present and loaded, and the skill is not in it: removed on purpose.
-                        None => continue,
+                    None => match report
+                        .skills
+                        .iter()
+                        .find(|skill| skill.name == name || skill.folder == name)
+                    {
                         Some(skill) => (HeldState::Error, skill.reason.clone()),
+                        None => match report
+                            .skills
+                            .iter()
+                            .find(|skill| skill.state == PackSkillState::Error)
+                        {
+                            // Present and loaded, and the skill is not in it: removed on purpose,
+                            // unless a skill of the pack is broken in a way that hides its name.
+                            None => continue,
+                            Some(broken) => (
+                                HeldState::Error,
+                                format!(
+                                    "a skill of this pack cannot be read, and may be this one ({}: {})",
+                                    broken.folder, broken.reason
+                                ),
+                            ),
+                        },
                     },
                 },
             };

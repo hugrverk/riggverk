@@ -786,6 +786,78 @@ mod tests {
         );
     }
 
+    /// A pack skill whose directory name differs from its declared name, installed.
+    fn install_renamed_pack_skill(env: &Env) -> PathBuf {
+        let dir = env.pack_skill("mine", None, "folder-name", "x", &[("notes.md", "n\n")]);
+        fs::write(
+            dir.join("SKILL.md"),
+            canonical_skill_text("declared-name", "kept in the pack"),
+        )
+        .expect("rename inside the file");
+        env.pack_skill("mine", None, "steady", "stays", &[]);
+        let result = env.apply();
+        assert!(result.success, "install: {}", result.message);
+        assert!(env
+            .root(SkillRoot::Claude)
+            .join("declared-name/SKILL.md")
+            .is_file());
+        dir
+    }
+
+    fn no_removals(env: &Env) {
+        let removals: Vec<_> = env
+            .pending()
+            .into_iter()
+            .filter(|(_, kind)| *kind == OperationKind::Remove)
+            .collect();
+        assert_eq!(removals, vec![], "a broken pack skill is held, not retired");
+    }
+
+    #[test]
+    fn a_broken_pack_skill_is_held_under_the_name_it_declares_not_its_folder_name() {
+        let env = Env::new("declared-name");
+        let dir = install_renamed_pack_skill(&env);
+
+        // Still parses as far as its name, but no longer as a skill (no description).
+        fs::write(
+            dir.join("SKILL.md"),
+            "---\nname: declared-name\n---\n# broken\n",
+        )
+        .expect("break it");
+        let sources = env.sources();
+        let held = sources.held();
+        assert_eq!(held.len(), 1, "{held:?}");
+        assert_eq!(
+            (held[0].pack.as_str(), held[0].name.as_str()),
+            ("mine", "declared-name")
+        );
+        assert_eq!(held[0].state, HeldState::Error);
+        no_removals(&env);
+    }
+
+    #[test]
+    fn a_pack_with_a_broken_skill_holds_recorded_names_it_cannot_find() {
+        let env = Env::new("fail-closed");
+        let dir = install_renamed_pack_skill(&env);
+
+        // Nothing readable is left of the skill, not even its name: another skill of a present pack
+        // is broken, so the recorded name cannot be told removed from hidden.
+        fs::write(dir.join("SKILL.md"), "garbage, no frontmatter at all\n").expect("break it");
+        let held = env.sources().held().to_vec();
+        assert_eq!(held.len(), 1, "{held:?}");
+        assert_eq!(held[0].name, "declared-name");
+        assert_eq!(held[0].state, HeldState::Error);
+        no_removals(&env);
+
+        // Deleting the skill from a pack with no broken skill is a removal on purpose.
+        fs::remove_dir_all(&dir).expect("delete the skill");
+        assert!(env.sources().held().is_empty());
+        assert_eq!(
+            env.kind(&file_of(SkillRoot::Claude, "declared-name", "SKILL.md")),
+            Some(OperationKind::Remove)
+        );
+    }
+
     impl Env {
         /// Applies when the plan has work; `None` when it has none.
         fn apply_if_needed(&self) -> Option<SetupResult> {

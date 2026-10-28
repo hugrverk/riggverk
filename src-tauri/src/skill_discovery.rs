@@ -128,12 +128,39 @@ fn parse_frontmatter_body(content: &str) -> Result<&str, String> {
     Ok(&rest[..end])
 }
 
+/// Largest `SKILL.md` read for its metadata.
+pub(crate) const MAX_SKILL_MD_BYTES: u64 = 1024 * 1024;
+
+/// The text of a `SKILL.md`, refusing one over [`MAX_SKILL_MD_BYTES`].
+pub(crate) fn read_skill_md_capped(skill_md: &Path) -> Result<String, String> {
+    use std::io::Read;
+    let file =
+        fs::File::open(skill_md).map_err(|e| format!("cannot read {}: {e}", skill_md.display()))?;
+    let mut content = String::new();
+    file.take(MAX_SKILL_MD_BYTES + 1)
+        .read_to_string(&mut content)
+        .map_err(|e| format!("cannot read {}: {e}", skill_md.display()))?;
+    if content.len() as u64 > MAX_SKILL_MD_BYTES {
+        return Err(format!(
+            "SKILL.md is over {MAX_SKILL_MD_BYTES} bytes: {}",
+            skill_md.display()
+        ));
+    }
+    Ok(content)
+}
+
+/// The `name` a `SKILL.md` declares, when it can be read at all (a skill that fails validation
+/// still has a name worth keeping).
+pub(crate) fn declared_skill_name(skill_md: &Path) -> Option<String> {
+    let name = extract_frontmatter(&read_skill_md_capped(skill_md).ok()?, "name");
+    (!name.is_empty()).then_some(name)
+}
+
 pub(crate) fn read_skill_metadata(
     skill_md: &Path,
     fallback_name: &str,
 ) -> Result<(String, String, Vec<String>), String> {
-    let content = fs::read_to_string(skill_md)
-        .map_err(|e| format!("cannot read {}: {e}", skill_md.display()))?;
+    let content = read_skill_md_capped(skill_md)?;
     parse_frontmatter_body(&content)
         .map_err(|e| format!("invalid frontmatter in {}: {e}", skill_md.display()))?;
     let name = extract_frontmatter(&content, "name");
