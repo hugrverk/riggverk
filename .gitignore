@@ -17,4 +17,9 @@ release/
 
 # Python cache
 __pycache__/
+
+# Local agent state and notes
+.claude/
 .claude/launch.json
+research_notes/
+reports/
