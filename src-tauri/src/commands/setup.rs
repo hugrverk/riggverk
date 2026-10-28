@@ -3685,6 +3685,8 @@ mod tests {
 
     #[test]
     fn rollback_nonexistent_transaction() {
+        // The backup folder comes from the environment.
+        let _env = TempSetupEnv::new("rollback-nonexistent");
         let result = rollback_transaction(
             "1234567890123456789",
             false,
@@ -3886,11 +3888,8 @@ mod tests {
 
     #[test]
     fn detect_opencode_config_create_when_missing() {
-        let home = std::env::temp_dir().join("aw-detect-oc-create");
-        let _ = fs::remove_dir_all(&home);
-        fs::create_dir_all(&home).expect("create dir");
-        let ws = std::env::temp_dir().join("aw-detect-oc-create-ws");
-        let _ = fs::remove_dir_all(&ws);
+        let env = TempSetupEnv::new("detect-oc-create");
+        let (ws, home) = (env.ws.clone(), env.home.clone());
         fs::create_dir_all(&ws).expect("create ws");
 
         let (_surface, kind, _summary) =
@@ -3904,12 +3903,8 @@ mod tests {
 
     #[test]
     fn detect_skills_create_when_missing() {
-        let home = std::env::temp_dir().join("aw-detect-cl-skills-create");
-        let _ = fs::remove_dir_all(&home);
-        fs::create_dir_all(&home).expect("create dir");
-
-        let ws = std::env::temp_dir().join("aw-detect-cl-skills-runtime");
-        let _ = fs::remove_dir_all(&ws);
+        let env = TempSetupEnv::new("detect-skills-create");
+        let (ws, home) = (env.ws.clone(), env.home.clone());
         fs::create_dir_all(&ws).expect("create runtime");
 
         let (_surface, kind, _summary) = detect_surface_state(SetupSurfaceId::Skills, &ws, &home);
@@ -3922,13 +3917,11 @@ mod tests {
 
     #[test]
     fn detect_codex_config_conflict_when_invalid_toml() {
-        let home = std::env::temp_dir().join("aw-detect-cx-invalid");
-        let _ = fs::remove_dir_all(&home);
-        fs::create_dir_all(&home).expect("create dir");
+        // CODEX_HOME is part of the environment the detection reads; the helper points it into
+        // the temp home.
+        let env = TempSetupEnv::new("detect-cx-invalid");
+        let (ws, home) = (env.ws.clone(), env.home.clone());
         fs::create_dir_all(home.join(".codex")).expect("create codex dir");
-
-        let ws = std::env::temp_dir().join("aw-detect-cx-invalid-ws");
-        let _ = fs::remove_dir_all(&ws);
         fs::create_dir_all(&ws).expect("create ws");
         fs::create_dir_all(ws.join("templates/codex")).expect("create templates");
 
@@ -3949,13 +3942,11 @@ mod tests {
 
     #[test]
     fn plan_fingerprint_is_stable_for_same_surface_set() {
+        // The fingerprint reads settings and paths from the process environment.
+        let env = TempSetupEnv::new("fingerprint-stable");
         setup_transaction::clear_preview_tokens_for_test();
-        let ws = std::env::temp_dir().join("aw-fingerprint-stable-runtime");
-        let home = std::env::temp_dir().join("aw-fingerprint-stable-home");
-        let _ = fs::remove_dir_all(&ws);
-        let _ = fs::remove_dir_all(&home);
+        let (ws, home) = (env.ws.clone(), env.home.clone());
         fs::create_dir_all(&ws).expect("runtime");
-        fs::create_dir_all(&home).expect("home");
         let surfaces = vec![SetupSurfaceId::OpenCodeRules, SetupSurfaceId::CodexRules];
         let fp1 = compute_plan_fingerprint_for_surfaces(&surfaces, &ws, &home).expect("fp1");
         let fp2 = compute_plan_fingerprint_for_surfaces(&surfaces, &ws, &home).expect("fp2");
@@ -3965,12 +3956,9 @@ mod tests {
 
     #[test]
     fn plan_fingerprint_changes_when_surfaces_differ() {
-        let ws = std::env::temp_dir().join("aw-fingerprint-different-runtime");
-        let home = std::env::temp_dir().join("aw-fingerprint-different-home");
-        let _ = fs::remove_dir_all(&ws);
-        let _ = fs::remove_dir_all(&home);
+        let env = TempSetupEnv::new("fingerprint-different");
+        let (ws, home) = (env.ws.clone(), env.home.clone());
         fs::create_dir_all(&ws).expect("runtime");
-        fs::create_dir_all(&home).expect("home");
         let fp1 =
             compute_plan_fingerprint_for_surfaces(&[SetupSurfaceId::OpenCodeRules], &ws, &home)
                 .expect("fp1");
