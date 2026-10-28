@@ -1184,4 +1184,17 @@ mod tests {
         }
         assert_eq!(before, listing(&f.root));
     }
+
+    #[test]
+    fn every_code_has_copy_in_the_frontend() {
+        const ROWS: &str = include_str!("../../../src/lib/securityPostureRows.ts");
+        for code in ALL_CODES {
+            let name = serde_json::to_value(code).expect("serialize code");
+            let name = name.as_str().expect("code is a string");
+            assert!(
+                ROWS.contains(&format!("  {name}:")),
+                "securityPostureRows.ts has no copy for {name}"
+            );
+        }
+    }
 }

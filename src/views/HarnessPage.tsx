@@ -47,6 +47,7 @@ import { toneClass } from "../ui/tone";
 import type { InstallAgent } from "../types";
 import { installBindings } from "./installBindings";
 import type { HarnessViewProps } from "./pageTypes";
+import { SecurityPostureRows } from "./SecurityPostureRows";
 
 export interface HarnessPageProps extends HarnessViewProps {
   harness: InstallAgent;
@@ -339,6 +340,7 @@ export function HarnessPage({
         </div>
         {dataFolderOk && <Kv items={runtimeRowsFor(runtime, skillLoadRows(skillLoads, harness))} />}
         {dataFolderOk && runtimeExtra}
+        <SecurityPostureRows harness={harness} refreshKey={`${wsRunning === null}:${entry?.status?.state ?? ""}`} />
       </Pane>
 
       {outputStrip()}

@@ -10,6 +10,9 @@ import type {
   InstallationState,
   InstallationStatus,
   PlannedOperation,
+  PostureFinding,
+  PostureSource,
+  SecurityPosture,
   SetupPlan,
   SetupSurfaceId,
   StatusData,
@@ -125,3 +128,32 @@ export function installScreenOf(flow: InstallFlow = flowOf(), openOn: AppView | 
     apply: vi.fn(),
   };
 }
+
+/** A security posture as the backend returns it: `findings` as [code, level] pairs or full findings, one read source by default. */
+export function postureOf(
+  harness: SecurityPosture["harness"],
+  findings: ReadonlyArray<readonly [PostureFinding["code"], PostureFinding["level"]] | PostureFinding> = [],
+  sources: PostureSource[] = [{ file: "~/.config/file.json", state: "read" }],
+): SecurityPosture {
+  return {
+    harness,
+    sources,
+    findings: findings.map(finding =>
+      Array.isArray(finding) ? { code: finding[0], level: finding[1], file: null, count: null } : (finding as PostureFinding),
+    ),
+  };
+}
+
+/** Claude with bypass mode as the starting mode. */
+export const RISKY_CLAUDE = postureOf(
+  "claude",
+  [["claude_bypass_default", "risky"], ["claude_sandbox_off", "advice"], ["claude_env_read_open", "advice"], ["config_only", "not_covered"]],
+  [{ file: "~/.claude/settings.json", state: "read" }],
+);
+
+/** Codex with nothing risky in its config. */
+export const CLEAN_CODEX = postureOf(
+  "codex",
+  [["codex_sandbox_workspace", "enforced"], ["codex_approvals_on_request", "enforced"], ["config_only", "not_covered"]],
+  [{ file: "~/.codex/config.toml", state: "read" }],
+);

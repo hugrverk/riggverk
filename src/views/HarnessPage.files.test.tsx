@@ -32,7 +32,8 @@ import type { HarnessViewProps } from "./pageTypes";
 const invokeMock = vi.fn();
 
 vi.mock("@tauri-apps/api/core", () => ({
-  invoke: (...args: unknown[]) => invokeMock(...args),
+  // The page also reads the harness's security posture; these tests count the commands of the flow under test.
+  invoke: (...args: unknown[]) => (args[0] === "get_security_posture" ? Promise.resolve(undefined) : invokeMock(...args)),
 }));
 
 const TARGETS: AgentTargetMeta[] = [
