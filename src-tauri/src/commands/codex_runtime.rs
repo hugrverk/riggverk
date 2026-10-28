@@ -179,15 +179,43 @@ pub(crate) fn managed_codex_keys_match(installed: &toml::Value, managed: &toml::
             .all(|key| managed.get(*key).is_none() || installed.get(*key).is_some())
 }
 
-fn unique_render_temp_dir() -> PathBuf {
+static RENDER_TEMP_SEQUENCE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// A new, empty folder for one render, owner-only (0700 on unix). It must not exist yet: a folder
+/// somebody else made first (or a link at that name) is refused, never reused.
+fn create_render_temp_dir() -> Result<PathBuf, String> {
     let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_nanos();
-    std::env::temp_dir().join(format!(
-        "riggverk-codex-render-{}-{nanos}",
+    let sequence = RENDER_TEMP_SEQUENCE.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let path = std::env::temp_dir().join(format!(
+        "riggverk-codex-render-{}-{nanos}-{sequence}",
         std::process::id()
-    ))
+    ));
+    let mut builder = fs::DirBuilder::new();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::DirBuilderExt;
+        builder.mode(0o700);
+    }
+    builder
+        .create(&path)
+        .map_err(|e| format!("create codex render temp dir: {e}"))?;
+    Ok(path)
+}
+
+/// Writes a new file in a render folder, owner-only (0600 on unix); refuses an existing path.
+fn write_render_file(path: &Path, content: &[u8]) -> std::io::Result<()> {
+    use std::io::Write;
+    let mut options = fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    options.open(path)?.write_all(content)
 }
 
 fn cleanup_temp_dir(path: &Path) {
@@ -244,12 +272,11 @@ pub(crate) fn render_codex_config_managed_projection(
         .parse::<toml::Value>()
         .map_err(|e| format!("codex legacy managed render produced invalid TOML: {e}"))?;
 
-    let temp_dir = unique_render_temp_dir();
+    let temp_dir = create_render_temp_dir()?;
     let result = (|| -> Result<String, String> {
-        fs::create_dir_all(&temp_dir).map_err(|e| format!("create codex render temp dir: {e}"))?;
         let temp_config = temp_dir.join("config.toml");
         let temp_backup = temp_dir.join("backup");
-        fs::write(&temp_config, legacy_stdout.as_bytes())
+        write_render_file(&temp_config, legacy_stdout.as_bytes())
             .map_err(|e| format!("write codex render temp config: {e}"))?;
 
         let routing_script_str = super::workspace::path_arg(&routing_script)?;
@@ -307,11 +334,10 @@ pub(crate) fn render_codex_config_for_apply(
     }
     let text = toml::to_string(&assessment.effective)
         .map_err(|e| format!("serialize the codex config with your kept keys: {e}"))?;
-    let temp_dir = unique_render_temp_dir();
+    let temp_dir = create_render_temp_dir()?;
     let result = (|| -> Result<String, String> {
-        fs::create_dir_all(&temp_dir).map_err(|e| format!("create codex render temp dir: {e}"))?;
         let effective_source = temp_dir.join("config.toml");
-        fs::write(&effective_source, text.as_bytes())
+        write_render_file(&effective_source, text.as_bytes())
             .map_err(|e| format!("write codex render source: {e}"))?;
         render_codex_config_managed_projection(bundled_root, dest, &effective_source)
     })();
@@ -1333,6 +1359,35 @@ apps._default.default_tools_approval_mode = "prompt"
         for dir in [&bundle, &runtime, &home] {
             cleanup(dir);
         }
+    }
+
+    #[test]
+    fn the_render_folder_is_new_private_and_never_reused() {
+        let first = create_render_temp_dir().expect("first");
+        let second = create_render_temp_dir().expect("second");
+        assert_ne!(first, second);
+        let file = first.join("config.toml");
+        write_render_file(&file, b"approvals_reviewer = \"user\"\n").expect("file");
+        // An existing path is refused, not reused or overwritten.
+        assert!(write_render_file(&file, b"other").is_err());
+        assert_eq!(fs::read(&file).unwrap(), b"approvals_reviewer = \"user\"\n");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = |path: &Path| fs::metadata(path).unwrap().permissions().mode() & 0o777;
+            assert_eq!(mode(&first), 0o700);
+            assert_eq!(mode(&second), 0o700);
+            assert_eq!(mode(&file), 0o600);
+            // A link planted at the name is not followed.
+            let target = second.join("target.toml");
+            fs::write(&target, "keep").unwrap();
+            let link = second.join("link.toml");
+            std::os::unix::fs::symlink(&target, &link).unwrap();
+            assert!(write_render_file(&link, b"x").is_err());
+            assert_eq!(fs::read_to_string(&target).unwrap(), "keep");
+        }
+        cleanup_temp_dir(&first);
+        cleanup_temp_dir(&second);
     }
 
     #[test]
