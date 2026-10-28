@@ -1,6 +1,18 @@
 {
   "releases": [
     {
+      "version": "2026.10.4",
+      "sections": [
+        {
+          "title": "Fixes",
+          "items": [
+            "Stop OpenCode critic on custom tools without _",
+            "Judge not installed per harness, not per profile"
+          ]
+        }
+      ]
+    },
+    {
       "version": "2026.10.3",
       "sections": [
         {
