@@ -1118,23 +1118,13 @@ pub(super) fn apply_planned_artifacts(
     preview_token: Option<&str>,
     progress: &mut ProgressReporter,
 ) -> SetupResult {
-    apply_planned_artifacts_with_receipt(
+    let result = run_planned_artifacts(
         selected,
         manual_steps,
         preview_token,
         receipt_for_artifacts(selected),
         progress,
-    )
-}
-
-fn apply_planned_artifacts_with_receipt(
-    selected: &[setup_transaction::PlannedArtifact],
-    manual_steps: Vec<String>,
-    preview_token: Option<&str>,
-    receipt: SetupReceipt,
-    progress: &mut ProgressReporter,
-) -> SetupResult {
-    let result = run_planned_artifacts(selected, manual_steps, preview_token, receipt, progress);
+    );
     progress.finish();
     result
 }
@@ -2836,7 +2826,9 @@ pub(crate) fn apply_setup_plan_with_token(
     for operation in plan.conflicts.iter().chain(&plan.manual_steps) {
         record_receipt_item(&mut receipt, operation.surface, operation.kind);
     }
-    apply_planned_artifacts_with_receipt(&planned, manual_steps, preview_token, receipt, progress)
+    let result = run_planned_artifacts(&planned, manual_steps, preview_token, receipt, progress);
+    progress.finish();
+    result
 }
 
 /// One removable or preserved item in an uninstall plan, for display.
