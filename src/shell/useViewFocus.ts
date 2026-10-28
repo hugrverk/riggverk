@@ -5,7 +5,7 @@ import type { AppView } from "./views";
 /** How long a view switch may wait for its first pane (lazy chunks, async data) before giving up. */
 const FOCUS_WINDOW_MS = 2000;
 
-/** Focus may be taken when nothing meaningful holds it: the body, the top line, or an element that was just unmounted. */
+/** Focus may be taken when nothing meaningful holds it: the body, the sidebar or top bar (`.topline`), or an element that was just unmounted. */
 function focusIsFree(container: HTMLElement): boolean {
   const active = document.activeElement;
   if (!active || active === document.body || active === document.documentElement) return true;

@@ -224,7 +224,7 @@ describe("HarnessPage", () => {
     expect(detail().querySelector(".pane-title")!.textContent).toContain("skills");
     press(" ");
     expect(p.onToggleTarget).not.toHaveBeenCalled();
-    expect(statusBar().getByText("skills have no target toggle")).toBeTruthy();
+    expect(within(document.querySelector<HTMLElement>(".toast")!).getByText("skills have no target toggle")).toBeTruthy();
   });
 
   it("shows the detail of the row under the cursor and follows it", () => {

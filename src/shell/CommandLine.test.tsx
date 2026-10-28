@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CommandSpec } from "../keyboard/commands/parser";
 import { useCommands } from "../keyboard/commands/useCommands";
@@ -212,13 +212,13 @@ describe("CommandLine", () => {
     expect(run).not.toHaveBeenCalled();
   });
 
-  it("reports a command that rejects through the status bar notice", async () => {
+  it("reports a command that rejects through the toast", async () => {
     setup(commandSet());
     const input = openCommandLine();
     type(input, "boom");
     fireEvent.keyDown(input, { key: "Enter" });
-    await waitFor(() => expect(within(screen.getByLabelText("Status bar")).getByRole("status").textContent).toBe("boom: exploded"));
-    expect(within(screen.getByLabelText("Status bar")).getByRole("status").getAttribute("data-tone")).toBe("fail");
+    await waitFor(() => expect(document.querySelector(".toast")!.textContent).toBe("boom: exploded"));
+    expect(document.querySelector(".toast-text")!.getAttribute("data-tone")).toBe("fail");
   });
 
   it("Mod+k opens it with an empty line", () => {

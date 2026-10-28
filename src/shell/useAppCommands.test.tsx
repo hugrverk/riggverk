@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { InstallationOverview, OverviewEntry } from "../hooks/useInstallationOverview";
 import { INSTALL_AGENTS, type InstallationStatus } from "../types";
@@ -263,8 +263,8 @@ describe("useAppCommands", () => {
       setup(deps);
       runLine("copy");
       await waitFor(() => expect(writeText).toHaveBeenCalledWith("line one\nline two"));
-      await waitFor(() => expect(within(screen.getByLabelText("Status bar")).getByRole("status").textContent).toBe("copied output"));
-      expect(within(screen.getByLabelText("Status bar")).getByRole("status").getAttribute("data-tone")).toBe("ok");
+      await waitFor(() => expect(document.querySelector(".toast")!.textContent).toBe("copied output"));
+      expect(document.querySelector(".toast-text")!.getAttribute("data-tone")).toBe("ok");
     });
 
     it("copy without output is disabled, and a clipboard failure surfaces as an error", async () => {

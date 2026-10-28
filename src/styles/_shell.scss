@@ -1,106 +1,14 @@
 /* ---- app shell ----
-   Frame classes (topline, statusbar, error line, overlays' anchor) for src/shell/*.
+   Frame classes (statusbar, error line, overlays' anchor) for src/shell/*; the sidebar, top bar and toast are in _frame.scss.
    Pane/list/kv/kbd primitives live in _primitives.scss together with the class contract. */
 
 .app-shell {
   position: relative;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   flex: 1;
   min-height: 0;
   height: 100%;
-}
-
-/* ---- top line ----
-   28px tall, draggable (Tauri overlay titlebar), tabs are no-drag. --traffic-light-reserve
-   keeps the tabs clear of the macOS window controls; the web preview has no controls. */
-
-.topline {
-  position: relative;
-  display: flex;
-  align-items: center;
-  flex-shrink: 0;
-  height: var(--topline-height);
-  padding: 0 0 0 var(--traffic-light-reserve);
-  border-bottom: 1px solid var(--border);
-  background: var(--surface);
-  white-space: nowrap;
-  overflow: hidden;
-  -webkit-app-region: drag;
-  app-region: drag;
-}
-
-:root:not([data-tauri]) .topline {
-  padding-left: 10px;
-}
-
-.tabs {
-  display: flex;
-  min-width: 0;
-  overflow: hidden;
-  -webkit-app-region: no-drag;
-  app-region: no-drag;
-}
-
-.tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  height: var(--topline-height);
-  padding: 0 10px;
-  border: 0;
-  border-bottom: 2px solid transparent;
-  background: none;
-  color: var(--text-muted);
-  white-space: nowrap;
-  cursor: pointer;
-  -webkit-app-region: no-drag;
-  app-region: no-drag;
-}
-
-.tab b, .tab kbd {
-  min-width: 0;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--text-heading);
-  font-size: inherit;
-  font-weight: 500;
-  line-height: inherit;
-}
-
-.tab:hover { color: var(--text); background: var(--inset); }
-.tab:focus-visible { outline-offset: -2px; }
-.tab[aria-current="page"] { background: var(--inv-bg); color: var(--inv-fg); }
-.tab[aria-current="page"] b, .tab[aria-current="page"] kbd { color: var(--inv-fg); }
-
-.tab .st {
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  margin-left: 2px;
-  border-radius: 50%;
-}
-
-.st-warn { background: var(--warn); }
-.tab[aria-current="page"] .st { box-shadow: 0 0 0 1px var(--inv-fg); }
-
-.tab .short { display: none; }
-
-@media (max-width: 1120px) {
-  .tab .full { display: none; }
-  .tab .short { display: inline; }
-}
-
-.topline .right {
-  margin-left: auto;
-  padding-right: 12px;
-  color: var(--text-muted);
-  font-size: var(--fs-sm);
-}
-
-@media (max-width: 1000px) {
-  .topline .right { display: none; }
 }
 
 /* ---- status bar ---- */
@@ -118,56 +26,10 @@
   overflow: hidden;
 }
 
-.statusbar .mode {
-  display: inline-flex;
-  align-items: center;
-  height: var(--statusbar-height);
-  margin: 0 10px 0 -10px;
-  padding: 0 8px;
-  background: var(--inv-bg);
-  color: var(--inv-fg);
-  font-weight: 600;
-  letter-spacing: 0.06em;
-}
-
-.statusbar .mode[data-mode="insert"] { background: var(--ok); }
-.statusbar .mode[data-mode="confirm"] { background: var(--warn); }
-
 .statusbar .ctx {
   margin-right: 16px;
   color: var(--text-muted);
 }
-
-/* A notice may carry an outcome tone; plain information keeps the muted colour. Enters once, full motion only. */
-.statusbar .ctx[data-tone="ok"] { color: var(--ok); }
-.statusbar .ctx[data-tone="warn"] { color: var(--warn); }
-.statusbar .ctx[data-tone="fail"] { color: var(--fail); }
-
-:root[data-motion="full"] .statusbar .ctx .notice {
-  display: inline-block;
-  animation: notice-in 160ms ease-out;
-}
-
-@keyframes notice-in { from { opacity: 0; transform: translateY(60%); } }
-
-/* The key just handled and its hint (showcmd): visual only, there for a moment after the mode badge. */
-.statusbar .echo {
-  display: inline-flex;
-  align-items: center;
-  flex-shrink: 0;
-  gap: 4px;
-  margin-right: 14px;
-  color: var(--text-muted);
-}
-
-.statusbar .echo kbd {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-:root[data-motion="full"] .statusbar .echo { animation: echo-in 120ms ease-out; }
-
-@keyframes echo-in { from { opacity: 0; } }
 
 /* One row tall: a hint that does not fit wraps onto a second, clipped row, so whole hints drop from the end
    instead of being cut mid-word. `.hints-keep` (command, help) is outside it and never shrinks. */
@@ -176,6 +38,7 @@
   flex-wrap: wrap;
   align-content: flex-start;
   column-gap: 14px;
+  flex: 1 1 auto;
   min-width: 0;
   height: var(--statusbar-height);
   overflow: hidden;
@@ -208,17 +71,7 @@
   font-weight: 600;
 }
 
-.statusbar .rt {
-  margin-left: auto;
-  padding-left: 14px;
-  color: var(--text-muted);
-}
-
-@media (max-width: 1100px) {
-  .statusbar .rt { display: none; }
-}
-
-/* ---- error line (role=alert under the top line) ---- */
+/* ---- error line (role=alert under the top bar) ---- */
 
 .error-line {
   display: flex;

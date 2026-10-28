@@ -250,7 +250,6 @@ def check_harness_ids(root: Path) -> list[str]:
         "INSTALL_AGENTS",
         install_ts,
     )
-    same_set("HARNESS_SHORT", "HARNESS_SHORT", ts_record_keys(views, "HARNESS_SHORT", TS_VIEWS), "INSTALL_AGENTS", install_ts)
 
     # The light descriptor.
     pairs: list[tuple[str, object]] = []

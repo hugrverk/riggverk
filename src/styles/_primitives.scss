@@ -35,7 +35,7 @@
                              tr[aria-selected="true"] cursor row, td.op op column, td.note why column
      .confirm                y/n line under a plan: .q question, .bk backup/transaction note
    Overlays
-     .cmdline-overlay        absolute strip above the status bar; .cmdbox = role=dialog box
+     .cmdline-overlay        fixed backdrop with the palette centered near the top; .cmdbox = role=dialog box
        .cmdbox .line         <span class="colon">:</span><input> row; .cmdbox .sug suggestion list
        .cmdbox .sug > *      one suggestion (button or li role=option); [aria-selected="true"] highlight; .d description
      .help-overlay           fixed modal backdrop (role=dialog aria-modal); .help-box inside holds
@@ -403,22 +403,22 @@ kbd {
 
 /* ---- command line ---- */
 
+/* Centered palette over a backdrop (a click on the backdrop closes it). */
 .cmdline-overlay {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: calc(var(--statusbar-height) + 8px);
-  z-index: 20;
+  position: fixed;
+  inset: 0;
+  z-index: 40;
   display: flex;
   justify-content: center;
-  pointer-events: none;
+  align-items: flex-start;
+  padding: 14vh 20px 20px;
+  background: var(--backdrop);
 }
 
 .cmdbox {
-  pointer-events: auto;
-  width: min(720px, calc(100% - 40px));
-  border: 1px solid var(--accent);
-  background: var(--surface);
+  width: min(560px, 100%);
+  border: 1px solid var(--border-strong);
+  background: var(--bg-raised);
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
 }
 
@@ -440,10 +440,10 @@ kbd {
   outline: none;
 }
 
-.cmdbox .line .colon { color: var(--accent); font-weight: 600; }
+.cmdbox .line .colon { color: var(--text-muted); font-weight: 600; }
 
 .cmdbox .sug {
-  max-height: 40vh;
+  max-height: min(40vh, 22em);
   margin: 0;
   padding: 4px 0;
   overflow: auto;
@@ -487,19 +487,22 @@ kbd {
   width: min(900px, 100%);
   max-height: 100%;
   overflow: auto;
-  border: 1px solid var(--accent);
-  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  background: var(--bg-raised);
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
-  padding: 10px 0 6px;
+  padding: 12px 0 8px;
 }
 
+/* Section labels in the shell's label style: mono, small caps-ish, muted. */
 .help-overlay h2 {
-  padding: 0 10px 4px;
-  margin: 0 0 6px;
+  padding: 0 14px 8px;
+  margin: 0 0 8px;
   border-bottom: 1px solid var(--border);
-  color: var(--text-heading);
-  font-size: var(--fs);
-  font-weight: 600;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
 }
 
 .help-cols {
@@ -509,7 +512,7 @@ kbd {
 }
 
 .help-overlay section { min-width: 0; }
-.help-overlay .group { text-transform: lowercase; }
+.help-overlay .group { letter-spacing: 0.14em; text-transform: uppercase; }
 .help-overlay .kv { grid-template-columns: minmax(64px, max-content) minmax(0, 1fr); }
 .help-overlay .kv dt { white-space: nowrap; }
 .help-overlay .kv dd { white-space: normal; }

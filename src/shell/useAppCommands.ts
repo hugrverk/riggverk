@@ -133,7 +133,7 @@ export function useAppCommands(deps: AppCommandDeps): void {
     group: "Views",
     args: viewArgs(def),
     enabled: () =>
-      def.harness && !deps.enabledHarnessIds.includes(def.harness) ? `${def.tab} is hidden in Settings` : true,
+      def.harness && !deps.enabledHarnessIds.includes(def.harness) ? `${def.command} is hidden in Settings` : true,
     validate: def.id === "start"
       ? parsed => {
           const action = parsed.named.action;
