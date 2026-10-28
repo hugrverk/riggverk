@@ -1,6 +1,18 @@
 {
   "releases": [
     {
+      "version": "2026.10.5",
+      "sections": [
+        {
+          "title": "New",
+          "items": [
+            "Read-only security posture check and baseline guide",
+            "Opt-in target that hides commit and PR attribution"
+          ]
+        }
+      ]
+    },
+    {
       "version": "2026.10.4",
       "sections": [
         {
