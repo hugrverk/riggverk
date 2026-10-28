@@ -11,6 +11,7 @@ import {
   rulesPageHint,
   rulesStatusOf,
   rulesSurfaceOf,
+  rulesWhy,
 } from "./rulesView";
 
 function rules(overrides: Partial<RulesStatus> = {}): RulesStatus {
@@ -138,5 +139,36 @@ describe("rules surfaces", () => {
     expect(rulesModelFor("cursor", status)).toBeNull();
     expect(rulesModelFor("codex", status)).toBeNull();
     expect(rulesModelFor("claude", null)).toBeNull();
+  });
+});
+
+describe("rulesWhy", () => {
+  const why = (state: InstallationState, overrides: Partial<RulesStatus>) => rulesWhy(model(state, overrides), "Claude", "CLAUDE.md");
+
+  it("says what happened to an edited block and a file that matches no shipped version, and what the harness reads", () => {
+    expect(why("conflict", { conflict_reason: "base_block_edited" })).toBe(
+      "Riggverk left CLAUDE.md exactly as it is, because its managed block was edited. Claude reads your version and doesn't have the newest Riggverk rules yet.",
+    );
+    expect(why("conflict", { layout: "legacy", conflict_reason: "legacy_diverged" })).toContain("it matches none of the versions Riggverk ships");
+  });
+
+  it("says a managed file is the user's, and a base update can be taken", () => {
+    expect(why("current", { conflict_reason: "base_block_edited", user_managed: true })).toContain("You manage CLAUDE.md, so Riggverk never writes it.");
+    expect(why("update_available", {})).toContain("CLAUDE.md can take the newest Riggverk rules.");
+  });
+
+  it("tells a fix by hand for markers and another file in the way", () => {
+    expect(why("conflict", { layout: "malformed", conflict_reason: "malformed_markers", malformed_reason: "duplicate_begin" })).toContain("Fix the markers by hand");
+    expect(why("conflict", { conflict_reason: "masked_by_override" })).toContain("Another file in the folder decides what Claude reads");
+  });
+
+  it("has nothing to add for a current file or a missing one: the state pill says it", () => {
+    expect(why("current", {})).toBeNull();
+    expect(why("not_installed", { layout: "absent" })).toBeNull();
+  });
+
+  it("keeps the model's conflict code for the wording", () => {
+    expect(model("conflict", { conflict_reason: "legacy_diverged", layout: "legacy" }).conflictReason).toBe("legacy_diverged");
+    expect(model("current", {}).conflictReason).toBeNull();
   });
 });

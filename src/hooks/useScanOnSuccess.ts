@@ -9,7 +9,7 @@ const SCAN_ANIMATION = "view-scan";
 const SCAN_FALLBACK_MS = 900;
 
 /** Backend commands whose success is worth a flourish: an install, a rules conversion, a take bundled, a rollback. */
-const SWEEP_COMMANDS = new Set(["apply_setup", "apply_rules_conversion", "apply_take_bundled", "rollback_setup_transaction"]);
+const SWEEP_COMMANDS = new Set(["apply_setup", "apply_rules_conversion", "apply_take_bundled", "apply_codex_config_defaults", "rollback_setup_transaction"]);
 
 function earnsSweep(result: ActionResult | null): boolean {
   if (!result?.success) return false;

@@ -307,7 +307,7 @@ describe("rules file in the detail pane", () => {
     renderClaude(rules({ refinement_lines: 14 }), "update_available");
     expect(rulesFile().textContent).toContain("managed base block");
     expect(rulesFile().textContent).toContain("14 refinement lines preserved");
-    expect(rulesFile().textContent).toContain("base update available");
+    expect(cell("claude_rules").textContent).toContain("can take the newest Riggverk rules");
     // A base update is "update ready", not a decision.
     expect(pill("claude_rules").textContent).toBe("Update ready");
     expect(cell("claude_rules").getAttribute("data-state")).toBe("ready");
@@ -319,9 +319,9 @@ describe("rules file in the detail pane", () => {
 
   it("explains an edited base block as a conflict with its reason and offers diff, convert and leave as is", () => {
     renderClaude(rules({ conflict_reason: "base_block_edited", refinement_lines: 2 }));
-    expect(rulesFile().textContent).toContain("base block edited: left as is");
-    expect(rulesFile().textContent).toContain("the base block was edited");
-    expect(rulesFile().textContent).toContain("2 refinement lines preserved");
+    // The decision says why in a sentence and offers the three ways forward as buttons.
+    expect(cell("claude_rules").textContent).toContain("Riggverk left CLAUDE.md exactly as it is, because its managed block was edited.");
+    expect(cell("claude_rules").textContent).toContain("Claude reads your version and doesn't have the newest Riggverk rules yet.");
     expect(pill("claude_rules").textContent).toBe("Needs your decision");
     expect(cell("claude_rules").getAttribute("data-state")).toBe("decide");
     expect(surfaceHint(/diff/)).not.toBeNull();
@@ -331,17 +331,16 @@ describe("rules file in the detail pane", () => {
 
   it("explains a plain file that differs from every shipped base", () => {
     renderClaude(rules({ layout: "legacy", conflict_reason: "legacy_diverged" }));
-    expect(rulesFile().textContent).toContain("plain file, no base block");
-    expect(rulesFile().textContent).toContain("the file differs from every shipped base");
+    expect(cell("claude_rules").textContent).toContain("it matches none of the versions Riggverk ships");
     expect(surfaceHint(/convert/)).not.toBeNull();
   });
 
   it("names the marker rule that failed and offers neither conversion nor leave as is", () => {
     renderClaude(rules({ layout: "malformed", conflict_reason: "malformed_markers", malformed_reason: "duplicate_begin" }));
-    expect(rulesFile().textContent).toContain("markers malformed: left as is, never rewritten");
+    expect(rulesFile().textContent).toContain("base block markers malformed");
     expect(rulesFile().textContent).toContain("more than one BEGIN marker");
     // Nothing in the app can fix it, so this is the one case that says what to do.
-    expect(rulesFile().textContent).toContain("fix the markers by hand; the app never rewrites a file whose block it cannot split");
+    expect(cell("claude_rules").textContent).toContain("Riggverk cannot split, so it never rewrites the file. Fix the markers by hand");
     expect(surfaceHint(/convert/)?.getAttribute("title")).toContain("malformed");
     expect(surfaceHint(/diff/)?.getAttribute("title")).toContain("malformed");
     expect(surfaceHint(/leave as is/)).toBeNull();
@@ -353,7 +352,7 @@ describe("rules file in the detail pane", () => {
 
   it("shows a file the user manages as base updates available, not as a red conflict", () => {
     renderClaude(rules({ conflict_reason: "base_block_edited", user_managed: true }), "current");
-    expect(rulesFile().textContent).toContain("base updates available, you manage this file");
+    expect(cell("claude_rules").textContent).toContain("You manage CLAUDE.md, so Riggverk never writes it.");
     // Yours, not a decision and not a failure.
     expect(pill("claude_rules").textContent).toBe("Yours");
     expect(cell("claude_rules").getAttribute("data-state")).toBe("yours");
@@ -364,7 +363,7 @@ describe("rules file in the detail pane", () => {
   it("leaves what to do about the file to the status bar: no instructions under the facts", () => {
     renderClaude(rules({ conflict_reason: "base_block_edited", refinement_lines: 2 }));
     expect(detailPane().textContent).not.toMatch(/An update replaces|Update skips this file|Base updates are not applied/);
-    expect(detailPane().textContent).not.toContain("fix the markers");
+    expect(detailPane().textContent).not.toContain("Fix the markers");
     // The rules summary says it all: the backend's one-line detail is not repeated above it.
     expect(detailPane().textContent).not.toContain("conflict detail");
     cleanup();
@@ -445,68 +444,122 @@ describe("rules file in the detail pane", () => {
   });
 });
 
-describe("rules diff (d)", () => {
-  it("opens the update diff for a base update with exact args, read-only, in CONFIRM mode", async () => {
+/** The Compare fold-out under the rules cell. */
+function compareFold() {
+  return screen.getByRole("group", { name: "Compare CLAUDE.md with Riggverk’s rules" });
+}
+
+function compareButton() {
+  return within(cell("claude_rules")).getByRole("button", { name: /^(d\s*)?compare$/i });
+}
+
+describe("Compare (d), inline", () => {
+  it("opens the update diff for a base update with exact args, read-only, with the page still in place", async () => {
     backend();
     renderClaude(rules({ refinement_lines: 14 }), "update_available");
     focusSurfaces();
     press("d");
     await screen.findByRole("group", { name: "installed to after update" });
+    // Compare never writes and needs no token: the one command it ran is the read-only diff.
+    expect(invokeMock).toHaveBeenCalledTimes(1);
     expect(invokeMock).toHaveBeenCalledWith("preview_rules_diff", { surface: "claude_rules", mode: "update" });
-    expect(mode()).toBe("CONFIRM");
-    const pane = rulesPane();
-    expect(pane.textContent).toContain("+2");
-    // The title counts with the same minus sign as the install plan.
-    expect(pane.querySelector(".pane-title")!.textContent).toContain("+2 −0");
-    // Added lines carry a + in their own column; the diff has no way to write.
-    const added = Array.from(pane.querySelectorAll(".diff-line.add")).map(row => [row.querySelector(".diff-mark")!.textContent, row.querySelector(".diff-text")!.textContent]);
+    // The page stays (inline), so there is no confirm mode and the cells and their keys are still there.
+    expect(mode()).toBe("NORMAL");
+    expect(screen.getByRole("region", { name: "Claude" })).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "Claude rules review" })).toBeNull();
+    // Added lines carry a + in their own column, on the right; the diff has no way to write.
+    const fold = compareFold();
+    const added = Array.from(fold.querySelectorAll(".diff-line.add")).map(row => [row.querySelector(".diff-mark")!.textContent, row.querySelector(".diff-text")!.textContent]);
     expect(added).toEqual([["+", "## Verification"], ["+", "Run the lightest falsifying check."]]);
-    expect(pane.querySelector("input, textarea, [contenteditable]")).toBeNull();
+    expect(fold.querySelector(".diff-split")).not.toBeNull();
+    expect(fold.querySelector("input, textarea, [contenteditable]")).toBeNull();
     expect(screen.queryByRole("button", { name: /apply/ })).toBeNull();
-    // The page's pair is replaced by one pane and the output strip, like the install review.
-    expect(screen.queryByRole("region", { name: "Claude" })).toBeNull();
-    expect(screen.getByRole("region", { name: "Claude rules review" }).className).toContain("review");
-    expect(screen.getByRole("region", { name: "Output" })).toBeTruthy();
+    // A base update has nothing to convert or leave as is: no choice cards.
+    expect(within(fold).queryByRole("group", { name: "Resolve CLAUDE.md" })).toBeNull();
   });
 
-  it("opens your edits against the shipped base for a conflict, with + and - glyphs", async () => {
+  it("opens your edits against the shipped base for a conflict, side by side, with + and - in their own column", async () => {
     backend();
     renderClaude(rules({ conflict_reason: "base_block_edited" }));
     focusSurfaces();
     fireEvent.click(surfaceHint(/diff/)!);
     await screen.findByRole("group", { name: "shipped base sha256:0123456789abcd to installed" });
     expect(invokeMock).toHaveBeenCalledWith("preview_rules_diff", { surface: "claude_rules", mode: "edits" });
-    const pane = rulesPane();
-    expect(pane.querySelector(".diff-line.remove .diff-mark")!.textContent).toBe("-");
-    expect(pane.querySelector(".diff-line.remove .diff-text")!.textContent).toBe("Respond in the user's language.");
-    expect(pane.querySelector(".diff-line.add .diff-mark")!.textContent).toBe("+");
-    expect(pane.textContent).toContain("compared with the closest shipped base (2 lines differ)");
+    const fold = compareFold();
+    expect(fold.querySelector(".diff-row .diff-line.remove .diff-mark")!.textContent).toBe("-");
+    expect(fold.querySelector(".diff-row .diff-line.remove .diff-text")!.textContent).toBe("Respond in the user's language.");
+    expect(fold.querySelector(".diff-row .diff-line.add .diff-mark")!.textContent).toBe("+");
+    expect(fold.textContent).toContain("compared with the closest shipped base (2 lines differ)");
   });
 
-  it("t switches between your edits and the update, n closes and brings the panes back", async () => {
+  it("is a toggle: aria-expanded and aria-controls follow it, and d, the button and Escape close it", async () => {
     backend();
     renderClaude(rules({ conflict_reason: "base_block_edited" }));
+    expect(compareButton().getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(compareButton());
+    await screen.findByRole("group", { name: /to installed/ });
+    expect(compareButton().getAttribute("aria-expanded")).toBe("true");
+    expect(compareButton().getAttribute("aria-controls")).toBe(compareFold().id);
+    // The button closes it again.
+    fireEvent.click(compareButton());
+    expect(screen.queryByRole("group", { name: "Compare CLAUDE.md with Riggverk’s rules" })).toBeNull();
+    expect(compareButton().getAttribute("aria-expanded")).toBe("false");
+    // d opens and closes it.
     focusSurfaces();
     press("d");
     await screen.findByRole("group", { name: /to installed/ });
-    press("t");
-    await screen.findByRole("group", { name: "installed to after update" });
-    expect(invokeMock).toHaveBeenLastCalledWith("preview_rules_diff", { surface: "claude_rules", mode: "update" });
-    press("n");
-    expect(surfaces()).toBeTruthy();
-    expect(mode()).toBe("NORMAL");
-    // The keyboard goes back to the pane the review was opened from, so d, v and m work again at once.
-    expect(document.activeElement).toBe(surfaces());
-  });
-
-  it("Escape closes the diff from anywhere", async () => {
-    backend();
-    renderClaude(rules({ conflict_reason: "base_block_edited" }));
-    focusSurfaces();
+    press("d");
+    expect(screen.queryByRole("group", { name: "Compare CLAUDE.md with Riggverk’s rules" })).toBeNull();
+    // Escape closes it from anywhere.
     press("d");
     await screen.findByRole("group", { name: /to installed/ });
     fireEvent.keyDown(document.body, { key: "Escape" });
-    expect(screen.queryByRole("region", { name: "Rules review" })).toBeNull();
+    expect(screen.queryByRole("group", { name: "Compare CLAUDE.md with Riggverk’s rules" })).toBeNull();
+    expect(compareButton().getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("switches between your edits and the update from the fold-out", async () => {
+    backend();
+    renderClaude(rules({ conflict_reason: "base_block_edited" }));
+    focusSurfaces();
+    press("d");
+    await screen.findByRole("group", { name: /to installed/ });
+    fireEvent.click(within(compareFold()).getByRole("button", { name: "Show the update instead" }));
+    await screen.findByRole("group", { name: "installed to after update" });
+    expect(invokeMock).toHaveBeenLastCalledWith("preview_rules_diff", { surface: "claude_rules", mode: "update" });
+    fireEvent.click(within(compareFold()).getByRole("button", { name: "Show my edits instead" }));
+    await screen.findByRole("group", { name: /to installed/ });
+    expect(invokeMock).toHaveBeenLastCalledWith("preview_rules_diff", { surface: "claude_rules", mode: "edits" });
+  });
+
+  it("offers the two ways out as cards with what is promised, and Merge in updates opens the preview of the exact file", async () => {
+    backend();
+    renderClaude(rules({ conflict_reason: "base_block_edited", refinement_lines: 2 }));
+    focusSurfaces();
+    press("d");
+    await screen.findByRole("group", { name: /to installed/ });
+    const cards = within(compareFold()).getByRole("group", { name: "Resolve CLAUDE.md" });
+    expect(within(cards).getAllByRole("button").map(card => card.querySelector(".hp-choice-t")!.firstChild!.textContent)).toEqual(["Merge in updates", "Keep mine"]);
+    expect(compareFold().querySelector(".hp-conseq")!.textContent).toBe("Preview of the exact file firstBacked upUndo any time");
+    // Merging writes nothing: it opens the conversion review, where only y applies.
+    fireEvent.click(within(cards).getByRole("button", { name: /Merge in updates/ }));
+    await screen.findByLabelText("Conversion summary");
+    expect(invokeMock).toHaveBeenLastCalledWith("preview_rules_conversion", { surface: "claude_rules" });
+    expect(invokeMock).not.toHaveBeenCalledWith("apply_rules_conversion", expect.anything());
+    expect(screen.getByRole("region", { name: "Claude rules review" })).toBeTruthy();
+  });
+
+  it("asks first when the Keep mine card is chosen", async () => {
+    backend();
+    renderClaude(rules({ conflict_reason: "base_block_edited" }));
+    focusSurfaces();
+    press("d");
+    await screen.findByRole("group", { name: /to installed/ });
+    fireEvent.click(within(within(compareFold()).getByRole("group", { name: "Resolve CLAUDE.md" })).getByRole("button", { name: /Keep mine/ }));
+    const dialog = await screen.findByRole("dialog");
+    expect(invokeMock).not.toHaveBeenCalledWith("set_rules_user_managed", expect.anything());
+    fireEvent.click(within(dialog).getByRole("button", { name: "leave as is" }));
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("set_rules_user_managed", { surface: "claude_rules", userManaged: true }));
   });
 
   it("says so when nothing differs", async () => {
@@ -514,10 +567,19 @@ describe("rules diff (d)", () => {
     renderClaude(rules({ conflict_reason: "base_block_edited" }));
     focusSurfaces();
     press("d");
-    expect((await screen.findByText("no differences from the shipped base")).tagName).toBe("P");
+    expect((await screen.findByText("No differences from the shipped base.")).tagName).toBe("P");
   });
 
-  it("shows a failed preview with a way to try again", async () => {
+  it("shows the cut at 64 KB and the backend's note, as the review did", async () => {
+    backend({ preview_rules_diff: () => ({ ...EDITS_DIFF, truncated: true }) });
+    renderClaude(rules({ conflict_reason: "base_block_edited" }));
+    focusSurfaces();
+    press("d");
+    await screen.findByRole("group", { name: /to installed/ });
+    expect(compareFold().textContent).toContain("The diff is cut at 64 KB; the rest is not shown.");
+  });
+
+  it("shows a failed preview inline with a way to try again, and nothing was written", async () => {
     let attempts = 0;
     backend({
       preview_rules_diff: () => {
@@ -530,9 +592,21 @@ describe("rules diff (d)", () => {
     focusSurfaces();
     press("d");
     expect((await screen.findByRole("alert")).textContent).toContain("rules file is not valid UTF-8");
-    press("r");
+    expect(compareFold().textContent).toContain("Nothing was written.");
+    fireEvent.click(within(compareFold()).getByRole("button", { name: "Try again" }));
     await screen.findByRole("group", { name: /to installed/ });
     expect(attempts).toBe(2);
+  });
+
+  it("keeps the other keys working while it is open: v previews the conversion in its place", async () => {
+    backend();
+    renderClaude(rules({ conflict_reason: "base_block_edited" }));
+    focusSurfaces();
+    press("d");
+    await screen.findByRole("group", { name: /to installed/ });
+    press("v");
+    await screen.findByLabelText("Conversion summary");
+    expect(screen.queryByRole("group", { name: "Compare CLAUDE.md with Riggverk’s rules" })).toBeNull();
   });
 });
 

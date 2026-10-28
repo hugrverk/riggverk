@@ -331,28 +331,63 @@ function review() {
   return screen.getByRole("region", { name: "Conflict review" });
 }
 
+/** The Compare fold-out under a files cell. */
+function fold() {
+  return screen.getByRole("group", { name: /^Compare .* with Riggverk’s version$/ });
+}
+
+function foldGone() {
+  return screen.queryByRole("group", { name: /^Compare .* with Riggverk’s version$/ });
+}
+
+/** The row of one unit (by its key) in a cell, as a query scope. */
+function unitRow(surface: string, key: string) {
+  return within(surfaceRow(surface).querySelector<HTMLElement>(`[data-unit="${key}"]`)!);
+}
+
+function buttonNames(scope: { getAllByRole: (role: string) => HTMLElement[] }) {
+  return scope.getAllByRole("button").map(button => button.querySelector(".tbtn-label")!.textContent);
+}
+
+/** The index of the unit the page keys act on. */
+function markedIndex() {
+  return Array.from(fileLines()!.querySelectorAll(".hp-unit")).findIndex(row => row.hasAttribute("data-marked"));
+}
+
+/** [name, detail] of each unit row. */
+function unitRows() {
+  return Array.from(fileLines()!.querySelectorAll(".hp-unit")).map(row => [
+    row.querySelector(".hp-unit-id b")!.textContent,
+    row.querySelector(".hp-unit-detail")!.textContent,
+  ]);
+}
+
 describe("skill and agent files in their cells", () => {
   it("lists each skill with where it is, how many files, why, and who reads it, and marks the first", () => {
     renderClaude({ skills: [TDD, AUDIT, DIAGNOSE] });
     moveTo("skills");
-    const lines = fileLines()!.textContent!;
-    expect(lines).toContain("tdd · ~/.claude/skills · SKILL.md · edited since Riggverk wrote it · read by Claude, OpenCode");
-    expect(lines).toContain("security-audit · ~/.agents/skills · HUNTING.md +2 files · not written by Riggverk (no record) · read by Codex, OpenCode");
-    expect(lines).toContain("diagnose · ~/.claude/skills · SKILL.md · you manage · bundled update available");
-    expect(Array.from(fileLines()!.querySelectorAll("dt")).map(dt => dt.textContent)).toEqual(["▸", " ", " "]);
+    expect(unitRows()).toEqual([
+      ["▸ tdd", "~/.claude/skills · SKILL.md · edited since Riggverk wrote it · read by Claude, OpenCode"],
+      ["security-audit", "~/.agents/skills · HUNTING.md +2 files · not written by Riggverk (no record) · read by Codex, OpenCode"],
+      ["diagnose", "~/.claude/skills · SKILL.md · you manage · bundled update available · read by Claude, OpenCode"],
+    ]);
+    expect(markedIndex()).toBe(0);
     // The row says how many files need a look, and the old "preserved" list is not repeated for them.
     // Files count, not units: tdd has one file in conflict and security-audit three.
     expect(surfaceRow("skills").getAttribute("data-state")).toBe("decide");
     expect(surfaceRow("skills").querySelector(".hp-ch b")!.textContent).toBe("4 files you edited");
     expect(surfaceRow("skills").querySelector(".state-pill")!.textContent).toBe("Needs your decision");
+    expect(surfaceRow("skills").textContent).toContain("Riggverk left the 2 skills you edited exactly as they are.");
     expect(detailPane().textContent).not.toContain("preserved");
   });
 
   it("tells an agent in conflict and one the user keeps on the agents row", () => {
     renderClaude({ agents: [VERIFIER, unit({ key: "agent:sentinel", kind: "agent", name: "sentinel", folder: "~/.claude/agents", state: "kept", files: [file("sentinel.md", "kept")] })] });
     moveTo("agents");
-    expect(fileLines()!.textContent).toContain("verifier · ~/.claude/agents · edited since Riggverk wrote it");
-    expect(fileLines()!.textContent).toContain("sentinel · ~/.claude/agents · you manage · bundle unchanged");
+    expect(unitRows()).toEqual([
+      ["▸ verifier", "~/.claude/agents · edited since Riggverk wrote it"],
+      ["sentinel", "~/.claude/agents · you manage · bundle unchanged"],
+    ]);
     expect(surfaceRow("agents").querySelector(".hp-ch b")!.textContent).toBe("1 file you edited");
   });
 
@@ -397,37 +432,35 @@ describe("keys and buttons on the skills and agents cells", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
-  it("has a button for each action, and each does what its key does", async () => {
+  it("has a button in each unit's row for each action, and each does what its key does", async () => {
     backend();
     renderClaude({ skills: [TDD, AUDIT, DIAGNOSE] });
-    const acts = () => within(surfaceRow("skills"));
-    expect(acts().getAllByRole("button").map(button => button.textContent!.replace(/^[a-z](?=[A-Z])/, ""))).toEqual([
-      "Review files",
-      "Use Riggverk’s version…",
-      "Keep mine",
-      "Next file",
-    ]);
-    // Next file marks the next unit; the other buttons act on the marked one.
-    fireEvent.click(acts().getByRole("button", { name: "Next file" }));
-    fireEvent.click(acts().getByRole("button", { name: "Review files" }));
+    const audit = () => unitRow("skills", "skill:agents:security-audit");
+    expect(buttonNames(unitRow("skills", "skill:claude:tdd"))).toEqual(["Compare", "Use Riggverk’s version…", "Keep mine"]);
+    expect(buttonNames(unitRow("skills", "skill:claude:diagnose"))).toEqual(["Compare", "Use Riggverk’s version…", "Hand back"]);
+    // Next file marks the next unit; a unit's own buttons act on that unit and mark it.
+    fireEvent.click(within(surfaceRow("skills")).getByRole("button", { name: "Next file" }));
+    expect(markedIndex()).toBe(1);
+    fireEvent.click(audit().getByRole("button", { name: "Compare" }));
     await screen.findByRole("group", { name: "SKILL.md: yours to bundled" });
     expect(invokeMock).toHaveBeenLastCalledWith("preview_file_diff", { surface: "skills", unit: "skill:agents:security-audit" });
-    press("n");
-    fireEvent.click(acts().getByRole("button", { name: "Use Riggverk’s version…" }));
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    expect(foldGone()).toBeNull();
+    fireEvent.click(audit().getByRole("button", { name: "Use Riggverk’s version…" }));
     await waitFor(() => expect(invokeMock).toHaveBeenLastCalledWith("preview_take_bundled", expect.objectContaining({ surface: "skills", units: ["skill:agents:security-audit"] })));
     press("n");
-    fireEvent.click(acts().getByRole("button", { name: "Keep mine" }));
+    fireEvent.click(audit().getByRole("button", { name: "Keep mine" }));
     const dialog = await screen.findByRole("dialog");
     expect(invokeMock).not.toHaveBeenCalledWith("set_files_kept", expect.anything());
     fireEvent.click(within(dialog).getByRole("button", { name: "keep mine" }));
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("set_files_kept", { surface: "skills", units: ["skill:agents:security-audit"], kept: true }));
   });
 
-  it("acts on the cell whose button was clicked, whichever cell is the active one", async () => {
+  it("acts on the unit whose button was clicked, whichever cell is the active one", async () => {
     backend();
     renderClaude({ skills: [TDD], agents: [VERIFIER] });
     // The keys follow the first decision (skills here), but a button of the other cell does its own.
-    fireEvent.click(within(surfaceRow("agents")).getByRole("button", { name: "Review files" }));
+    fireEvent.click(unitRow("agents", "agent:verifier").getByRole("button", { name: "Compare" }));
     await screen.findByRole("group", { name: "SKILL.md: yours to bundled" });
     expect(invokeMock).toHaveBeenLastCalledWith("preview_file_diff", { surface: "claude_agents", unit: "agent:verifier" });
   });
@@ -445,13 +478,12 @@ describe("keys and buttons on the skills and agents cells", () => {
     backend();
     renderClaude({ skills: [TDD, AUDIT, DIAGNOSE] });
     moveTo("skills");
-    const marked = () => Array.from(fileLines()!.querySelectorAll("dt")).findIndex(dt => dt.textContent === "▸");
-    expect(marked()).toBe(0);
+    expect(markedIndex()).toBe(0);
     press("c");
-    expect(marked()).toBe(1);
+    expect(markedIndex()).toBe(1);
     press("c");
     press("c");
-    expect(marked()).toBe(0);
+    expect(markedIndex()).toBe(0);
     press("c");
     press("d");
     await screen.findByRole("group", { name: "SKILL.md: yours to bundled" });
@@ -469,26 +501,48 @@ describe("keys and buttons on the skills and agents cells", () => {
   });
 });
 
-describe("conflict diff (d)", () => {
-  it("opens the diff of the marked unit with exact args, read-only, in CONFIRM mode", async () => {
+describe("Compare (d), inline", () => {
+  it("opens the diff of the marked unit with exact args, read-only, with the page still in place", async () => {
     backend();
     renderClaude({ skills: [TDD] });
     moveTo("skills");
     press("d");
     await screen.findByRole("group", { name: "SKILL.md: yours to bundled" });
     expect(invokeMock).toHaveBeenCalledWith("preview_file_diff", { surface: "skills", unit: "skill:claude:tdd" });
-    expect(mode()).toBe("CONFIRM");
-    const pane = review();
-    expect(pane.querySelector(".pane-title")!.textContent).toContain("tdd");
-    expect(pane.querySelector(".pane-title")!.textContent).toContain("+1 −1");
-    expect(pane.querySelector(".diff-line.remove .diff-text")!.textContent).toBe("Write the failing test first.");
-    expect(pane.querySelector("input, textarea, [contenteditable]")).toBeNull();
-    // The page's pair is replaced by one pane and the output strip, like the other reviews.
-    expect(screen.queryByRole("listbox", { name: "Claude surfaces" })).toBeNull();
-    expect(screen.getByRole("region", { name: "Claude conflict review" }).className).toContain("review");
-    expect(screen.getByRole("region", { name: "Output" })).toBeTruthy();
-    // Only the diff was asked for.
+    // The page stays (inline), so there is no confirm mode and no review replaces it.
+    expect(mode()).toBe("NORMAL");
+    expect(screen.queryByRole("region", { name: "Claude conflict review" })).toBeNull();
+    expect(surfaces()).toBeTruthy();
+    const diff = fold();
+    expect(diff.getAttribute("aria-label")).toBe("Compare tdd with Riggverk’s version");
+    expect(diff.querySelector(".diff-split .diff-row .diff-line.remove .diff-text")!.textContent).toBe("Write the failing test first.");
+    expect(diff.querySelector("input, textarea, [contenteditable]")).toBeNull();
+    // Only the diff was asked for, and it needs no token.
     expect(invokeMock.mock.calls.map(call => call[0])).toEqual(["preview_file_diff"]);
+  });
+
+  it("is a toggle: aria-expanded and aria-controls follow it, per unit, and d, the button and Escape close it", async () => {
+    backend();
+    renderClaude({ skills: [TDD, AUDIT] });
+    const compare = (key: string) => unitRow("skills", key).getByRole("button", { name: "Compare" });
+    expect(compare("skill:claude:tdd").getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(compare("skill:claude:tdd"));
+    await screen.findByRole("group", { name: "SKILL.md: yours to bundled" });
+    expect(compare("skill:claude:tdd").getAttribute("aria-expanded")).toBe("true");
+    expect(compare("skill:agents:security-audit").getAttribute("aria-expanded")).toBe("false");
+    expect(compare("skill:claude:tdd").getAttribute("aria-controls")).toBe(fold().id);
+    fireEvent.click(compare("skill:claude:tdd"));
+    expect(foldGone()).toBeNull();
+    expect(compare("skill:claude:tdd").getAttribute("aria-expanded")).toBe("false");
+    moveTo("skills");
+    press("d");
+    await screen.findByRole("group", { name: "SKILL.md: yours to bundled" });
+    press("d");
+    expect(foldGone()).toBeNull();
+    press("d");
+    await screen.findByRole("group", { name: "SKILL.md: yours to bundled" });
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    expect(foldGone()).toBeNull();
   });
 
   it("masks token shapes in the diff before they reach the screen", async () => {
@@ -497,8 +551,8 @@ describe("conflict diff (d)", () => {
     moveTo("skills");
     press("d");
     await screen.findByRole("group", { name: "SKILL.md: yours to bundled" });
-    expect(review().textContent).not.toContain(FAKE_GH);
-    expect(review().textContent).toContain("Write one failing test. token [REDACTED]");
+    expect(fold().textContent).not.toContain(FAKE_GH);
+    expect(fold().textContent).toContain("Write one failing test. token [REDACTED]");
   });
 
   it("keeps words like session and token readable", async () => {
@@ -510,8 +564,8 @@ describe("conflict diff (d)", () => {
     moveTo("skills");
     press("d");
     await screen.findByRole("group", { name: "SKILL.md: yours to bundled" });
-    expect(review().textContent).toContain("session: kept per run");
-    expect(review().textContent).toContain("token: the bearer of the request");
+    expect(fold().textContent).toContain("session: kept per run");
+    expect(fold().textContent).toContain("token: the bearer of the request");
   });
 
   it("says what it cannot show without showing it: key material, binary, too large, line endings only", async () => {
@@ -528,12 +582,12 @@ describe("conflict diff (d)", () => {
     moveTo("skills");
     press("d");
     await screen.findByText("contains key material, not shown");
-    const text = review().textContent!;
+    const text = fold().textContent!;
     expect(text).toContain("not text; sizes and digests only");
     expect(text).toContain("too large to compare here");
     expect(text).toContain("600,000 bytes · sha256:aaaaaaaaaaaa");
     expect(text).toContain("differs only in line endings or trailing bytes");
-    expect(review().querySelector(".diff")).toBeNull();
+    expect(fold().querySelector(".diff")).toBeNull();
   });
 
   it("says when a diff is cut and when files are not shown", async () => {
@@ -544,8 +598,8 @@ describe("conflict diff (d)", () => {
     moveTo("skills");
     press("d");
     await screen.findByRole("group", { name: "SKILL.md: yours to bundled" });
-    expect(review().textContent).toContain("The diff of this file is cut at 64 KB");
-    expect(review().textContent).toContain("3 more files of this unit not shown");
+    expect(fold().textContent).toContain("The diff of this file is cut at 64 KB");
+    expect(fold().textContent).toContain("3 more files of this unit not shown");
   });
 
   it("says so when nothing differs", async () => {
@@ -556,23 +610,7 @@ describe("conflict diff (d)", () => {
     expect((await screen.findByText("no differences")).tagName).toBe("P");
   });
 
-  it("n and Escape close it and bring the panes and the keyboard back", async () => {
-    backend();
-    renderClaude({ skills: [TDD] });
-    moveTo("skills");
-    press("d");
-    await screen.findByRole("group", { name: "SKILL.md: yours to bundled" });
-    press("n");
-    expect(surfaces()).toBeTruthy();
-    expect(mode()).toBe("NORMAL");
-    expect(document.activeElement).toBe(surfaces());
-    press("d");
-    await screen.findByRole("group", { name: "SKILL.md: yours to bundled" });
-    fireEvent.keyDown(document.body, { key: "Escape" });
-    expect(screen.queryByRole("region", { name: "Conflict review" })).toBeNull();
-  });
-
-  it("shows a failed diff with a way to try again", async () => {
+  it("shows a failed diff inline with a way to try again, and nothing was written", async () => {
     let attempts = 0;
     backend({
       preview_file_diff: () => {
@@ -585,7 +623,8 @@ describe("conflict diff (d)", () => {
     moveTo("skills");
     press("d");
     expect((await screen.findByRole("alert")).textContent).toContain("has no conflicting or kept files right now");
-    press("r");
+    expect(fold().textContent).toContain("Nothing was written.");
+    fireEvent.click(within(fold()).getByRole("button", { name: "Try again" }));
     await screen.findByRole("group", { name: "SKILL.md: yours to bundled" });
     expect(attempts).toBe(2);
   });
@@ -598,11 +637,34 @@ describe("conflict diff (d)", () => {
     await screen.findByRole("group", { name: "SKILL.md: yours to bundled" });
     press("]");
     await waitFor(() => expect(invokeMock).toHaveBeenLastCalledWith("preview_file_diff", { surface: "skills", unit: "skill:agents:security-audit" }));
-    await waitFor(() => expect(review().querySelector(".pane-title")!.textContent).toContain("security-audit"));
+    await waitFor(() => expect(fold().getAttribute("aria-label")).toBe("Compare security-audit with Riggverk’s version"));
+    expect(markedIndex()).toBe(1);
     press("[");
     await waitFor(() => expect(invokeMock).toHaveBeenLastCalledWith("preview_file_diff", { surface: "skills", unit: "skill:claude:tdd" }));
-    press("n");
-    expect(Array.from(fileLines()!.querySelectorAll("dt")).map(dt => dt.textContent)).toEqual(["▸", " "]);
+    expect(markedIndex()).toBe(0);
+  });
+
+  it("offers the ways out as cards: Use Riggverk’s version opens the preview, Keep mine asks first", async () => {
+    backend();
+    renderClaude({ skills: [TDD] });
+    moveTo("skills");
+    press("d");
+    await screen.findByRole("group", { name: "SKILL.md: yours to bundled" });
+    const cards = within(fold()).getByRole("group", { name: "Resolve tdd" });
+    expect(within(cards).getAllByRole("button").map(card => card.getAttribute("aria-labelledby") && document.getElementById(card.getAttribute("aria-labelledby")!)!.firstChild!.textContent)).toEqual([
+      "Use Riggverk’s version",
+      "Keep mine",
+    ]);
+    expect(fold().querySelector(".hp-conseq")!.textContent).toBe("Preview firstBacked upUndo any time");
+    fireEvent.click(within(cards).getByRole("button", { name: "Keep mine" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(invokeMock).not.toHaveBeenCalledWith("set_files_kept", expect.anything());
+    fireEvent.click(within(dialog).getByRole("button", { name: "cancel" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    fireEvent.click(within(cards).getByRole("button", { name: "Use Riggverk’s version" }));
+    await screen.findByLabelText("Take bundled summary");
+    expect(invokeMock).toHaveBeenLastCalledWith("preview_take_bundled", { surface: "skills", units: ["skill:claude:tdd"] });
+    expect(invokeMock).not.toHaveBeenCalledWith("apply_take_bundled", expect.anything());
   });
 
   it("gives way to the install review when it opens", async () => {
@@ -614,7 +676,7 @@ describe("conflict diff (d)", () => {
     const install = installScreenOf(flowOf([op("claude_rules", "update")], { label: "update claude", surfaces: ["claude_rules"] }), "claude");
     rerenderFrame(<ClaudeView {...p} install={install} runtimeHealth={CLAUDE_HEALTH} />);
     expect(screen.getByRole("grid", { name: "Install plan" })).toBeTruthy();
-    expect(screen.queryByRole("region", { name: "Conflict review" })).toBeNull();
+    expect(foldGone()).toBeNull();
   });
 });
 
@@ -686,26 +748,23 @@ describe("keep mine and hand back (m)", () => {
     expect((await screen.findByRole("alert")).textContent).toContain("setup operation already in progress");
   });
 
-  it("works from inside the review too, and the review then offers the other action", async () => {
+  it("works from inside the fold-out too, and the fold-out then offers the other action", async () => {
     backend();
     const { p, rerenderFrame } = renderClaude({ skills: [TDD] });
     moveTo("skills");
     press("d");
     await screen.findByRole("group", { name: "SKILL.md: yours to bundled" });
-    await waitFor(() => expect(review().contains(document.activeElement)).toBe(true));
-    // The review pane's hints reach the status bar once it has focus, which lags a tick on a loaded runner.
-    expect(await statusBar().findByRole("button", { name: /keep mine/ })).toBeTruthy();
     press("m");
     const dialog = await screen.findByRole("dialog");
     fireEvent.click(within(dialog).getByRole("button", { name: "keep mine" }));
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("set_files_kept", { surface: "skills", units: ["skill:claude:tdd"], kept: true }));
-    // The reloaded status says it is kept now: the same pane offers to hand it back, and says it keeps it.
+    // The reloaded status says it is kept now: the same fold-out offers to hand it back, and says it keeps it.
     p.overview.entries.claude = overviewWith({ skills: [unit({ state: "kept", files: [file("SKILL.md", "kept")] })] }).entries.claude!;
     rerenderFrame(<ClaudeView {...p} runtimeHealth={CLAUDE_HEALTH} />);
-    expect(await within(review()).findByRole("button", { name: /hand back/ })).toBeTruthy();
-    expect(within(review()).queryByRole("button", { name: /keep mine/ })).toBeNull();
-    expect(review().textContent).toContain("You keep your version: updates never write it");
-    expect(review().textContent).toContain("SKILL.md · you manage");
+    expect(await within(fold()).findByRole("button", { name: "Hand back" })).toBeTruthy();
+    expect(within(fold()).queryByRole("button", { name: "Keep mine" })).toBeNull();
+    expect(fold().textContent).toContain("You keep your version: updates never write it");
+    expect(fold().textContent).toContain("SKILL.md · you manage");
   });
 });
 
@@ -998,14 +1057,12 @@ describe("take bundled (b, y)", () => {
     expect(invokeMock).not.toHaveBeenCalled();
   });
 
-  it("opens from the diff with b, and offers keeping only there", async () => {
+  it("opens from the fold-out with b, and offers keeping only there", async () => {
     backend();
     renderClaude({ skills: [TDD] });
     moveTo("skills");
     press("d");
     await screen.findByRole("group", { name: "SKILL.md: yours to bundled" });
-    await waitFor(() => expect(review().contains(document.activeElement)).toBe(true));
-    expect(await statusBar().findByRole("button", { name: /take bundled/ })).toBeTruthy();
     press("b");
     await screen.findByLabelText("Take bundled summary");
     expect(invokeMock).toHaveBeenLastCalledWith("preview_take_bundled", { surface: "skills", units: ["skill:claude:tdd"] });

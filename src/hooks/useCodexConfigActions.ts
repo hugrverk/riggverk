@@ -5,6 +5,7 @@ import type { Binding } from "../keyboard/registry";
 import { useKeymap } from "../keyboard/useKeymap";
 import { codexConfigGates, keepMessage, keyNames, type CodexConfigModel } from "../lib/codexConfig";
 import { useShellState } from "../shell/ShellState";
+import type { CodexDefaultsFlow } from "./useCodexDefaultsFlow";
 
 export interface UseCodexConfigActionsOptions {
   /** The Codex config's kept and keepable keys, or null (no such keys, the target is off, status not loaded). */
@@ -13,7 +14,9 @@ export interface UseCodexConfigActionsOptions {
   busyLabel: string | null;
   /** A review (install, rules or conflict) is open on this page. */
   blockedBy: string | null;
-  /** Panes whose focus offers `m` as a status-bar hint. */
+  /** The "use Riggverk defaults" review: `b` opens its preview. */
+  defaults: CodexDefaultsFlow;
+  /** Panes whose focus offers `m` and `b` as status-bar hints. */
   paneIds: readonly string[];
   /** Whether the key applies right now (the page's cursor is on the Codex config row). Default true. */
   active?: boolean;
@@ -26,6 +29,8 @@ export interface CodexConfigActions {
   error: string | null;
   /** What `m` does (keep what differs, or hand the kept keys back), for a button; the same gates apply. */
   run: () => void;
+  /** Preview setting the differing keys to Riggverk's values (`b`), for a button; the same gates apply. Writes nothing. */
+  runDefaults: () => void;
 }
 
 /**
@@ -38,6 +43,7 @@ export function useCodexConfigActions({
   dataFolderOk,
   busyLabel,
   blockedBy,
+  defaults,
   paneIds,
   active = true,
   reload,
@@ -83,8 +89,12 @@ export function useCodexConfigActions({
     if (!gate.visible || gate.reason !== null) return;
     void setKept(gates.keep.visible);
   };
-  const bindings: Binding[] = paneIds.map(
-    (paneId): Binding => ({
+  const runDefaults = () => {
+    if (!gates.defaults.visible || gates.defaults.reason !== null) return;
+    void defaults.openPreview();
+  };
+  const bindings: Binding[] = paneIds.flatMap((paneId): Binding[] => [
+    {
       id: `codex.${paneId}.config-keep`,
       keys: "m",
       title: gates.keep.visible ? "Keep my values for the Codex config keys that differ" : "Hand the kept Codex config keys back to Riggverk",
@@ -97,9 +107,23 @@ export function useCodexConfigActions({
         if (!active) return;
         run();
       },
-    }),
-  );
+    },
+    {
+      id: `codex.${paneId}.config-defaults`,
+      keys: "b",
+      title: "Preview setting the Codex config keys that differ to Riggverk's values",
+      hint: "use Riggverk defaults",
+      group: "Codex config",
+      scope: "pane",
+      paneId,
+      when: () => (!active || !gates.defaults.visible ? false : (gates.defaults.reason ?? true)),
+      run: () => {
+        if (!active) return;
+        runDefaults();
+      },
+    },
+  ]);
   useKeymap(bindings, { enabled: blockedBy === null });
 
-  return { error, run };
+  return { error, run, runDefaults };
 }

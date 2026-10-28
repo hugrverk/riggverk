@@ -1,6 +1,6 @@
 import { act, cleanup, fireEvent, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { RulesFlow, RulesReviewState } from "../hooks/useRulesFlow";
+import { isInlineRulesState, type RulesFlow, type RulesReviewState } from "../hooks/useRulesFlow";
 import { renderInFrame } from "../test/renderWithShell";
 import type { RulesConversionPreview, RulesDiffView } from "../types";
 import { RulesPane } from "./RulesPane";
@@ -41,6 +41,8 @@ function flowOf(state: RulesReviewState): RulesFlow {
   return {
     state,
     open: state.status !== "idle",
+    inline: isInlineRulesState(state),
+    reviewing: state.status !== "idle" && !isInlineRulesState(state),
     openDiff: vi.fn(async () => {}),
     openConversion: vi.fn(async () => {}),
     switchDiffMode: vi.fn(async () => {}),

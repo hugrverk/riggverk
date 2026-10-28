@@ -13,6 +13,9 @@ export interface CellButtonProps {
   keyName: string;
   active: boolean;
   variant?: TButtonProps["variant"];
+  /** The button folds a region out (Compare): whether it is out, and the region's id. */
+  expanded?: boolean;
+  controls?: string;
   onClick: () => void;
   children: ReactNode;
 }
@@ -21,13 +24,15 @@ export interface CellButtonProps {
  * An action of a harness cell as a button. It exists exactly when the key would be offered (`gate.visible`) and is
  * disabled, with the reason as its tooltip, exactly when the key would refuse. Click and key run the same code.
  */
-export function CellButton({ gate, keyName, active, variant, onClick, children }: CellButtonProps) {
+export function CellButton({ gate, keyName, active, variant, expanded, controls, onClick, children }: CellButtonProps) {
   if (!gate.visible) return null;
   return (
     <TButton
       keys={active ? [keyName] : []}
       shortcut={active ? keyName : undefined}
       variant={variant}
+      expanded={expanded}
+      controls={controls}
       disabled={gate.reason ?? false}
       onClick={onClick}
     >
