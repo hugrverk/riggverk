@@ -103,8 +103,8 @@ mod tests {
             fs::create_dir_all(base.join("workspace")).expect("workspace");
             set_test_user_dirs(&base.join("home"));
             let ws = base.join("workspace").canonicalize().expect("workspace");
-            std::env::set_var("AGENT_WORKSPACE_PATH", &ws);
-            std::env::set_var("AGENT_WORKSPACE_BACKUP_DIR", base.join("backups"));
+            std::env::set_var("RIGGVERK_WORKSPACE_PATH", &ws);
+            std::env::set_var("RIGGVERK_BACKUP_DIR", base.join("backups"));
             std::env::remove_var("CODEX_HOME");
             let home = crate::platform_paths::resolve_user_home(
                 &crate::platform_paths::PlatformEnv::from_process_env(),

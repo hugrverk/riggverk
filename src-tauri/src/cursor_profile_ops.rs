@@ -723,7 +723,7 @@ mod tests {
         let _restore = guard::EnvRestore::capture();
         let base = temp_root("private-backup");
         let backups = base.join("backups");
-        unsafe { std::env::set_var("AGENT_WORKSPACE_BACKUP_DIR", &backups) };
+        unsafe { std::env::set_var("RIGGVERK_BACKUP_DIR", &backups) };
         let source = base.join("mcp.json");
         fs::write(&source, "{}").unwrap();
 
@@ -1024,7 +1024,7 @@ mod tests {
         unsafe {
             std::env::set_var("HOME", home.to_string_lossy().as_ref());
             std::env::set_var(
-                "AGENT_WORKSPACE_BACKUP_DIR",
+                "RIGGVERK_BACKUP_DIR",
                 profile.join("backups").to_string_lossy().as_ref(),
             );
             std::env::set_var(
@@ -1123,7 +1123,7 @@ mod tests {
         unsafe {
             std::env::set_var("HOME", profile.parent().unwrap());
             std::env::set_var(
-                "AGENT_WORKSPACE_BACKUP_DIR",
+                "RIGGVERK_BACKUP_DIR",
                 profile.join("backups").to_string_lossy().as_ref(),
             );
             std::env::set_var(
@@ -1176,7 +1176,7 @@ mod tests {
         unsafe {
             std::env::set_var("HOME", profile.parent().unwrap());
             std::env::set_var(
-                "AGENT_WORKSPACE_BACKUP_DIR",
+                "RIGGVERK_BACKUP_DIR",
                 profile.join("backups").to_string_lossy().as_ref(),
             );
             std::env::set_var(
@@ -1227,7 +1227,7 @@ mod tests {
         unsafe {
             std::env::set_var("HOME", profile.parent().unwrap());
             std::env::set_var(
-                "AGENT_WORKSPACE_BACKUP_DIR",
+                "RIGGVERK_BACKUP_DIR",
                 profile.join("backups").to_string_lossy().as_ref(),
             );
             std::env::remove_var("CURSOR_SKILLS_PATH");

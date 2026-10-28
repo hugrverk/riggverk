@@ -7,7 +7,7 @@ fn temp_root(name: &str) -> PathBuf {
         .duration_since(UNIX_EPOCH)
         .expect("system clock before unix epoch")
         .as_nanos();
-    std::env::temp_dir().join(format!("agent-workspace-model-override-{name}-{nonce}"))
+    std::env::temp_dir().join(format!("riggverk-model-override-{name}-{nonce}"))
 }
 
 fn write_file(root: &Path, rel: &str, content: &str) -> PathBuf {
@@ -763,8 +763,8 @@ fn reset_removes_an_override_file_that_no_longer_parses() {
 fn a_real_install_pins_the_roles_and_the_next_one_removes_them_after_a_reset() {
     with_isolated_home("apply", |home| {
         unsafe {
-            std::env::set_var("AGENT_WORKSPACE_PATH", home.join("workspace"));
-            std::env::set_var("AGENT_WORKSPACE_BACKUP_DIR", home.join("backups"));
+            std::env::set_var("RIGGVERK_WORKSPACE_PATH", home.join("workspace"));
+            std::env::set_var("RIGGVERK_BACKUP_DIR", home.join("backups"));
         }
         let home = crate::agent_targets::home_dir().expect("resolved home");
         let config_path = home.join(".config/opencode/opencode.json");

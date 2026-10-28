@@ -2410,7 +2410,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .expect("system clock before unix epoch")
             .as_nanos();
-        std::env::temp_dir().join(format!("agent-workspace-runtime-{name}-{nonce}"))
+        std::env::temp_dir().join(format!("riggverk-runtime-{name}-{nonce}"))
     }
 
     fn write_file(root: &Path, rel: &str, content: &str) {
@@ -2472,7 +2472,7 @@ mod tests {
         let ws = temp_root("bundle-baseline-ws");
         let home = temp_root("bundle-baseline-home");
         crate::test_env::set_test_user_dirs(&home);
-        unsafe { std::env::set_var("AGENT_WORKSPACE_PATH", &ws) };
+        unsafe { std::env::set_var("RIGGVERK_WORKSPACE_PATH", &ws) };
         let bundle = crate::setup_roots::bundled_root().unwrap();
         let template: serde_json::Value =
             serde_json::from_str(&bundled_template("opencode.json")).unwrap();
@@ -2575,7 +2575,7 @@ mod tests {
         let xdg = temp_root("xdg-health-config");
         crate::test_env::set_test_user_dirs(&home);
         unsafe {
-            std::env::set_var("AGENT_WORKSPACE_PATH", &ws);
+            std::env::set_var("RIGGVERK_WORKSPACE_PATH", &ws);
             std::env::set_var("XDG_CONFIG_HOME", &xdg);
         }
         let bundle = crate::setup_roots::bundled_root().unwrap();
@@ -3474,7 +3474,7 @@ mod tests {
     }
 
     fn write_marker_workspace(root: &Path) {
-        write_file(root, ".agent-workspace/workspace.json", "{}");
+        write_file(root, ".riggverk/workspace.json", "{}");
         write_file(root, "templates/global-agent-rules.md", "# rules\n");
         write_file(root, "templates/opencode.json", "{}");
         write_file(root, "README.md", "# readme\n");
@@ -3680,7 +3680,7 @@ mod tests {
         );
         write_file(&ws, "templates/opencode.json", r#"{}"#);
         write_file(&ws, "templates/tui.json", r#"{}"#);
-        write_file(&ws, ".agent-workspace/workspace.json", "{}");
+        write_file(&ws, ".riggverk/workspace.json", "{}");
         write_file(&ws, "templates/global-agent-rules.md", "# rules\n");
         write_file(&ws, "README.md", "# readme\n");
         fs::create_dir_all(ws.join("skills")).expect("create skills dir");
@@ -3733,7 +3733,7 @@ mod tests {
         );
         write_file(&ws, "templates/opencode.json", r#"{}"#);
         write_file(&ws, "templates/tui.json", r#"{}"#);
-        write_file(&ws, ".agent-workspace/workspace.json", "{}");
+        write_file(&ws, ".riggverk/workspace.json", "{}");
         write_file(&ws, "templates/global-agent-rules.md", "# rules\n");
         write_file(&ws, "README.md", "# readme\n");
         fs::create_dir_all(ws.join("skills")).expect("create skills dir");
@@ -3895,7 +3895,7 @@ mod tests {
 
     #[test]
     fn test_list_models_unspawnable_cli_is_an_error() {
-        let missing = std::env::temp_dir().join("agent-workspace-no-such-opencode-binary");
+        let missing = std::env::temp_dir().join("riggverk-no-such-opencode-binary");
         let msg = list_models_with_executable(Some(missing), Duration::from_secs(1))
             .expect_err("unspawnable CLI must be an error");
         assert!(msg.starts_with("failed to run opencode models"), "{msg}");
@@ -4646,7 +4646,7 @@ mod tests {
         );
         write_file(&ws, "templates/opencode.json", r#"{}"#);
         write_file(&ws, "templates/tui.json", r#"{}"#);
-        write_file(&ws, ".agent-workspace/workspace.json", "{}");
+        write_file(&ws, ".riggverk/workspace.json", "{}");
         write_file(&ws, "templates/global-agent-rules.md", "# rules\n");
         write_file(&ws, "README.md", "# readme\n");
         fs::create_dir_all(ws.join("skills")).expect("create skills dir");
@@ -4753,7 +4753,7 @@ mod tests {
         );
         write_file(&ws, "templates/opencode.json", r#"{}"#);
         write_file(&ws, "templates/tui.json", r#"{}"#);
-        write_file(&ws, ".agent-workspace/workspace.json", "{}");
+        write_file(&ws, ".riggverk/workspace.json", "{}");
         write_file(&ws, "templates/global-agent-rules.md", "# rules\n");
         write_file(&ws, "README.md", "# readme\n");
         fs::create_dir_all(ws.join("skills")).expect("create skills dir");
@@ -4838,7 +4838,7 @@ mod tests {
         );
         write_file(&ws, "templates/opencode.json", r#"{}"#);
         write_file(&ws, "templates/tui.json", r#"{}"#);
-        write_file(&ws, ".agent-workspace/workspace.json", "{}");
+        write_file(&ws, ".riggverk/workspace.json", "{}");
         write_file(&ws, "templates/global-agent-rules.md", "# rules\n");
         write_file(&ws, "README.md", "# readme\n");
         fs::create_dir_all(ws.join("skills")).expect("create skills dir");

@@ -272,7 +272,7 @@ mod mirror_independence {
             fs::create_dir_all(base.join("home")).expect("home");
             set_test_user_dirs(&base.join("home"));
             unsafe {
-                std::env::set_var("AGENT_WORKSPACE_BACKUP_DIR", base.join("backups"));
+                std::env::set_var("RIGGVERK_BACKUP_DIR", base.join("backups"));
             }
             Self {
                 base,
@@ -284,7 +284,7 @@ mod mirror_independence {
         /// Points the app at `data` as its workspace folder.
         fn use_folder(&self, data: &Path) {
             unsafe {
-                std::env::set_var("AGENT_WORKSPACE_PATH", data);
+                std::env::set_var("RIGGVERK_WORKSPACE_PATH", data);
             }
         }
     }

@@ -760,11 +760,11 @@ mod tests {
     #[test]
     fn cursor_script_arg_strips_extended_prefix_for_bash() {
         let path = PathBuf::from(
-            r"\\?\C:\Users\me\.config\agent-workspace\scripts\generate-opencode-config.py",
+            r"\\?\C:\Users\Example\.config\riggverk\scripts\generate-opencode-config.py",
         );
         assert_eq!(
             path_arg_for_bash(&path).expect("bash script path"),
-            "C:/Users/me/.config/agent-workspace/scripts/generate-opencode-config.py"
+            "C:/Users/Example/.config/riggverk/scripts/generate-opencode-config.py"
         );
     }
 

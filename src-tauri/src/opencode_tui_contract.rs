@@ -54,8 +54,8 @@ mod tests {
             // The Playwright sidecar goes into the temp HOME, never to a path set for the real one.
             let playwright_config = std::env::var("PLAYWRIGHT_MCP_CONFIG_PATH").ok();
             unsafe {
-                std::env::set_var("AGENT_WORKSPACE_PATH", &ws);
-                std::env::set_var("AGENT_WORKSPACE_BACKUP_DIR", base.join("backups"));
+                std::env::set_var("RIGGVERK_WORKSPACE_PATH", &ws);
+                std::env::set_var("RIGGVERK_BACKUP_DIR", base.join("backups"));
                 std::env::remove_var("CODEX_HOME");
                 std::env::remove_var("PLAYWRIGHT_MCP_CONFIG_PATH");
             }

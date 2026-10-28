@@ -80,12 +80,11 @@ mod tests {
 
     #[test]
     fn extended_windows_path_becomes_forward_slash_for_bash() {
-        let path = Path::new(
-            r"\\?\C:\Users\me\.config\agent-workspace\scripts\generate-opencode-config.py",
-        );
+        let path =
+            Path::new(r"\\?\C:\Users\Example\.config\riggverk\scripts\generate-opencode-config.py");
         assert_eq!(
             path_arg_for_bash(path).expect("bash path"),
-            "C:/Users/me/.config/agent-workspace/scripts/generate-opencode-config.py"
+            "C:/Users/Example/.config/riggverk/scripts/generate-opencode-config.py"
         );
     }
 
@@ -112,12 +111,11 @@ mod tests {
 
     #[test]
     fn native_process_path_preserves_extended_prefix() {
-        let path = Path::new(
-            r"\\?\C:\Users\me\.config\agent-workspace\scripts\generate-opencode-config.py",
-        );
+        let path =
+            Path::new(r"\\?\C:\Users\Example\.config\riggverk\scripts\generate-opencode-config.py");
         assert_eq!(
             path_arg_for_native_process(path).expect("native path"),
-            r"\\?\C:\Users\me\.config\agent-workspace\scripts\generate-opencode-config.py"
+            r"\\?\C:\Users\Example\.config\riggverk\scripts\generate-opencode-config.py"
         );
     }
 

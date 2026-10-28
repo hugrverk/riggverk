@@ -383,7 +383,7 @@ mod tests {
     #[test]
     fn display_path_is_relative_to_home() {
         let home = Path::new("/home/someone");
-        let workspace = Path::new("/home/someone/.config/agent-workspace");
+        let workspace = Path::new("/home/someone/.config/riggverk");
         assert_eq!(
             artifact_display_path(&ArtifactId::ClaudeRules, home, workspace),
             "~/.claude/CLAUDE.md"
@@ -393,7 +393,7 @@ mod tests {
         );
         assert_eq!(
             artifact_display_path(&file, home, workspace),
-            "~/.config/agent-workspace/docs/guide.md"
+            "~/.config/riggverk/docs/guide.md"
         );
     }
 
