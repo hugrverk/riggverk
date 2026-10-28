@@ -2,7 +2,7 @@
   "schema_version": "1.3",
   "setup_runtime": "native",
   "profile": {
-    "id": "agent-workspace-cursor",
+    "id": "riggverk-cursor",
     "name": "Riggverk Cursor Setup",
     "description": "Cursor setup assets for global agents, canonical bundled skills, and Playwright MCP. Auto Review and permissions remain IDE-managed."
   },
