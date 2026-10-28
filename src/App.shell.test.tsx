@@ -184,7 +184,7 @@ describe("App shell", () => {
     await ready();
     fireEvent.keyDown(document.body, { key: ",", ctrlKey: true });
     const settings = await screen.findByRole("region", { name: "Settings" });
-    fireEvent.click(within(settings).getByRole("checkbox", { name: "kilo" }));
+    fireEvent.click(within(settings).getByRole("switch", { name: "Kilo" }));
     await within(nav()).findByRole("button", { name: "Kilo" });
     await waitFor(() => expect(backend.lightHealthRequests).toEqual(["kilo"]));
     await waitFor(() => expect(backend.settings.enabled_harness_ids).toEqual(["codex", "opencode", "claude", "cursor", "kilo"]), { timeout: 3000 });
@@ -245,7 +245,7 @@ describe("App shell", () => {
 
     fireEvent.keyDown(document.body, { key: ",", ctrlKey: true });
     const settings = await screen.findByRole("region", { name: "Settings" });
-    fireEvent.click(within(settings).getByRole("checkbox", { name: "claude" }));
+    fireEvent.click(within(settings).getByRole("switch", { name: "Claude" }));
     await waitFor(() => expect(backend.commandLog).toContain("update_settings"), { timeout: 3000 });
     // Toggled in memory, not yet saved: the backend would still answer "Harness disabled".
     expect(claudeRequests()).toHaveLength(0);

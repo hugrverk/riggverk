@@ -328,6 +328,7 @@ export function LibraryView(props: LibraryViewProps) {
         title={activeSource.label}
         meta={activeCount !== undefined ? `· ${activeCount}` : undefined}
         defaultFocus
+        className="pane-flat lib-items"
         bodyClassName="lib-list-body"
       >
         <SourceSwitcher

@@ -106,16 +106,16 @@ describe("SettingsView layout", () => {
     expect(within(appearance).getByLabelText("Accent hex code")).toBeTruthy();
     const app = pane("App");
     expect(within(app).getByRole("radiogroup", { name: "Landing page" })).toBeTruthy();
-    expect(within(app).getByRole("checkbox", { name: "codex" })).toBeTruthy();
+    expect(within(app).getByRole("switch", { name: "Codex" })).toBeTruthy();
   });
 
   it("offers the four persisted text sizes", () => {
     renderSettings();
-    expect(radios("Global app text size").map(radio => radio.textContent!.replace(/^\(.\)/, "").trim())).toEqual([
-      "small",
-      "medium",
-      "large",
-      "extra large",
+    expect(radios("Global app text size").map(radio => radio.textContent)).toEqual([
+      "Small",
+      "Medium",
+      "Large",
+      "Extra large",
     ]);
   });
 
@@ -187,34 +187,34 @@ describe("SettingsView radio groups", () => {
 
   it("selects by click for motion and landing page", () => {
     const { props } = renderSettings();
-    fireEvent.click(within(screen.getByRole("radiogroup", { name: "Motion" })).getByRole("radio", { name: "off" }));
+    fireEvent.click(within(screen.getByRole("radiogroup", { name: "Motion" })).getByRole("radio", { name: "Off" }));
     expect(props.onSetMotion).toHaveBeenCalledWith("off");
-    fireEvent.click(within(screen.getByRole("radiogroup", { name: "Landing page" })).getByRole("radio", { name: "library" }));
+    fireEvent.click(within(screen.getByRole("radiogroup", { name: "Landing page" })).getByRole("radio", { name: "Library" }));
     expect(props.onSetLandingView).toHaveBeenCalledWith("library");
   });
 
-  it("toggles a harness with a checkbox button", () => {
+  it("toggles an agent with a switch", () => {
     const { props } = renderSettings({ appSettings: { ...defaultSettings(), enabled_harness_ids: ["codex"] } });
-    expect(screen.getByRole("checkbox", { name: "codex" }).getAttribute("aria-checked")).toBe("true");
-    const cursor = screen.getByRole("checkbox", { name: "cursor" });
+    expect(screen.getByRole("switch", { name: "Codex" }).getAttribute("aria-checked")).toBe("true");
+    const cursor = screen.getByRole("switch", { name: "Cursor" });
     expect(cursor.getAttribute("aria-checked")).toBe("false");
-    expect(cursor.textContent).toContain("disabled");
+    expect(cursor.textContent).toContain("Off");
     fireEvent.click(cursor);
     expect(props.onToggleHarness).toHaveBeenCalledWith("cursor");
   });
 
   it("offers Copilot, Pi and Kilo after the four central harnesses, off by default", () => {
     const { props } = renderSettings();
-    const harnesses = ["codex", "opencode", "claude", "cursor", "copilot", "pi", "kilo"];
-    const boxes = harnesses.map(name => screen.getByRole("checkbox", { name }));
+    const harnesses = ["Codex", "OpenCode", "Claude", "Cursor", "Copilot", "Pi", "Kilo"];
+    const boxes = harnesses.map(name => screen.getByRole("switch", { name }));
     boxes.slice(1).forEach((box, index) => {
       expect(boxes[index]!.compareDocumentPosition(box) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
     expect(boxes.map(box => box.getAttribute("aria-checked"))).toEqual(
       ["true", "true", "true", "true", "false", "false", "false"],
     );
-    for (const box of boxes.slice(4)) expect(box.textContent).toContain("disabled");
-    fireEvent.click(screen.getByRole("checkbox", { name: "pi" }));
+    for (const box of boxes.slice(4)) expect(box.textContent).toContain("Off");
+    fireEvent.click(screen.getByRole("switch", { name: "Pi" }));
     expect(props.onToggleHarness).toHaveBeenCalledWith("pi");
   });
 });
@@ -246,7 +246,7 @@ describe("SettingsView motion control", () => {
   it("offers full, subtle and off as radios in that order, with the setting checked", () => {
     renderSettings({ appSettings: { ...defaultSettings(), revision: 1, motion: "subtle" } });
     const options = radios("Motion");
-    expect(options.map(option => option.textContent)).toEqual(["( )full", "(•)subtle", "( )off"]);
+    expect(options.map(option => option.textContent)).toEqual(["Full", "Subtle", "Off"]);
     expect(options.map(option => option.getAttribute("aria-checked"))).toEqual(["false", "true", "false"]);
     // The roving tab stop is on the checked option.
     expect(options.map(option => option.getAttribute("tabindex"))).toEqual(["-1", "0", "-1"]);
@@ -430,7 +430,7 @@ describe("SettingsView autosave status", () => {
   it.each(cases)("shows %s in the pane title and the autosave row", (status, label) => {
     renderSettings({ settingsSaveStatus: status });
     expect(pane("Appearance").querySelector(".pane-title")!.textContent).toContain(label);
-    expect(screen.getByRole("status", { name: "autosave" }).textContent).toContain(label);
+    expect(screen.getByRole("status", { name: "Autosave" }).textContent).toContain(label);
   });
 
   it("calls a failed save with a settings conflict message a conflict", () => {
@@ -438,14 +438,14 @@ describe("SettingsView autosave status", () => {
       settingsSaveStatus: "error",
       settingsMsg: { ok: false, text: "settings conflict: revision 3 is stale" },
     });
-    const row = screen.getByRole("status", { name: "autosave" });
+    const row = screen.getByRole("status", { name: "Autosave" });
     expect(row.textContent).toContain("conflict");
     expect(row.textContent).toContain("revision 3 is stale");
   });
 
   it("shows the message of a successful action as dim text", () => {
     renderSettings({ settingsMsg: { ok: true, text: "appearance reset to defaults" } });
-    const message = within(screen.getByRole("status", { name: "autosave" })).getByText("appearance reset to defaults");
+    const message = within(screen.getByRole("status", { name: "Autosave" })).getByText("appearance reset to defaults");
     expect(message.className).toContain("c-dim");
   });
 
@@ -516,7 +516,7 @@ describe("SettingsView workspace row", () => {
   const custom = { ...defaultSettings(), workspace_path: "/Users/dev/other-workspace", revision: 1 };
 
   function workspaceRow() {
-    return within(pane("App")).getByRole("group", { name: "workspace" });
+    return within(pane("App")).getByRole("group", { name: "Workspace" });
   }
 
   it("shows the default workspace and offers a reset that has nothing to do", () => {
@@ -649,7 +649,7 @@ describe("SettingsView workspace row", () => {
     renderSettings({ appSettings: custom, onResetWorkspace: vi.fn(async () => null) });
     const reset = within(workspaceRow()).getByRole("button", { name: /reset to default/ });
     focus(radios("Landing page")[0]!);
-    // Landing page, harness checkboxes, then the workspace action.
+    // Landing page, agent switches, then the workspace action.
     for (let step = 0; step < 8; step += 1) press(document.activeElement!, "j");
     expect(document.activeElement).toBe(reset);
     press(document.activeElement!, "k");
