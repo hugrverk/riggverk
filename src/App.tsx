@@ -90,6 +90,7 @@ function AppShell() {
   const {
     skills,
     packLibrary,
+    packError,
     forgetPack,
     activeSkillId,
     activeSkillContent,
@@ -789,6 +790,7 @@ function AppShell() {
             onSetSkillSearch={setSkillSearch}
             onSelectSkillPreview={readSkill}
             packLibrary={packLibrary}
+            packError={packError}
             onForgetPack={forgetPack}
             // Agents
             agentSources={visibleAgentSources}

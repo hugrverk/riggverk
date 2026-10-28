@@ -926,6 +926,8 @@ export interface PackEntry {
 }
 
 export interface PackLibrary {
+  /** Why `pack-skills.json` cannot be used; set, installed pack skills are kept as they are. */
+  record_problem?: string | null;
   folder: string;
   packs: PackEntry[];
   skills: PackSkillEntry[];

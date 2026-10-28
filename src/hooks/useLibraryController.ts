@@ -48,6 +48,7 @@ export function useLibraryController({
   const [skills, setSkills] = useState<SkillSummary[]>([]);
   const [skillsLoaded, setSkillsLoaded] = useState(false);
   const [packLibrary, setPackLibrary] = useState<PackLibrary | null>(null);
+  const [packError, setPackError] = useState<string | null>(null);
   const [activeSkillId, setActiveSkillId] = useState<string | null>(null);
   const [activeSkillContent, setActiveSkillContent] = useState<DocumentContent | null>(null);
   const [skillSearch, setSkillSearch] = useState("");
@@ -140,10 +141,17 @@ export function useLibraryController({
     try {
       const bundled = await invoke<SkillSummary[]>("list_skills");
       // The skills of the user's packs follow the bundled ones. A pack problem never hides the bundle.
-      const packs = await invoke<PackLibrary>("list_pack_skills").catch(() => null);
+      let packs: PackLibrary | null = null;
+      let packFailure: string | null = null;
+      try {
+        packs = await invoke<PackLibrary>("list_pack_skills");
+      } catch (e) {
+        packFailure = String(e);
+      }
       const loaded = [...bundled, ...packSkillSummaries(packs)];
       if (!isWorkspaceLoadCurrent(generation)) return;
       setPackLibrary(packs);
+      setPackError(packFailure);
       setSkills(loaded);
       setSkillsLoaded(true);
       if (loaded.length > 0) {
@@ -703,6 +711,7 @@ export function useLibraryController({
     skills,
     skillsLoaded,
     packLibrary,
+    packError,
     forgetPack,
     activeSkillId,
     activeSkillContent,

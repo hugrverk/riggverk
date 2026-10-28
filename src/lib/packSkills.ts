@@ -37,3 +37,30 @@ export function packSkillSummaries(library: PackLibrary | null): SkillSummary[] 
 export function forgettablePacks(library: PackLibrary | null): PackEntry[] {
   return library ? library.packs.filter(pack => pack.forgettable) : [];
 }
+
+export interface PackNoticeLine {
+  key: string;
+  label: string;
+  text: string;
+}
+
+/**
+ * What the Library says about packs besides their skills: why the list failed, a record the app cannot use,
+ * packs it refused to read, and folders in `packs/` that are no pack. A refused pack that offers "Forget pack"
+ * is worded there instead.
+ */
+export function packNoticeLines(library: PackLibrary | null, error: string | null): PackNoticeLine[] {
+  const lines: PackNoticeLine[] = [];
+  if (error) lines.push({ key: "error", label: "packs", text: `could not be listed: ${error}` });
+  if (!library) return lines;
+  if (library.record_problem) lines.push({ key: "record", label: "packs", text: library.record_problem });
+  for (const pack of library.packs) {
+    if (pack.state === "refused" && !pack.forgettable) {
+      lines.push({ key: `refused:${pack.name}`, label: packGroup(pack.name), text: `refused: ${pack.reason}` });
+    }
+  }
+  for (const entry of library.ignored) {
+    lines.push({ key: `ignored:${entry.name}`, label: `${library.folder}/${entry.name}`, text: `ignored: ${entry.reason}` });
+  }
+  return lines;
+}

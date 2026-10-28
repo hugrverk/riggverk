@@ -98,6 +98,7 @@ export interface LibraryViewProps {
   onSelectSkillPreview: (id: string) => void;
   /** Skill packs: those whose installed skills are kept while the pack cannot be read, and the way to forget one. */
   packLibrary?: PackLibrary | null;
+  packError?: string | null;
   onForgetPack?: (name: string) => void;
 
   // Agents
@@ -335,7 +336,11 @@ export function LibraryView(props: LibraryViewProps) {
           onSelect={type => void onSetSourceType(type)}
         />
         {sourceType === "skills" && props.onForgetPack && (
-          <PackNotice library={props.packLibrary ?? null} onForgetPack={props.onForgetPack} />
+          <PackNotice
+            library={props.packLibrary ?? null}
+            error={props.packError ?? null}
+            onForgetPack={props.onForgetPack}
+          />
         )}
         {list}
       </Pane>
