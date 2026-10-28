@@ -1834,7 +1834,12 @@ pub fn rollback_transaction(
             };
         }
     };
-    let ws_root = match workspace_target_for_write() {
+    let ws_root = match if dry_run {
+        // A dry run writes nothing, so it does not take the first-mutation move either.
+        setup_workspace_target_path()
+    } else {
+        workspace_target_for_write()
+    } {
         Ok(r) => r,
         Err(e) => {
             return SetupResult {

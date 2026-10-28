@@ -21,6 +21,7 @@ mod tests {
     };
     use crate::commands::{
         apply_rules_conversion, get_workspace_diagnostics, preview_rules_conversion,
+        reset_active_workspace_path,
     };
     use crate::kept_files::{self, KeptFiles};
     use crate::managed_state::{
@@ -64,7 +65,7 @@ mod tests {
     impl Home {
         fn new(label: &str) -> Self {
             let lock = guard::lock();
-            let restore = guard::EnvRestore::capture();
+            let restore = guard::isolate_data_location_env();
             crate::workspace_layout::clear_notes_for_test();
             let nanos = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -77,14 +78,7 @@ mod tests {
             let backups = base.join("backups");
             set_test_user_dirs(&home);
             unsafe {
-                for name in [
-                    "AGENT_WORKSPACE_PATH",
-                    "RIGGVERK_WORKSPACE_PATH",
-                    "AGENT_WORKSPACE_BACKUP_DIR",
-                    "CODEX_HOME",
-                ] {
-                    std::env::remove_var(name);
-                }
+                std::env::remove_var("CODEX_HOME");
                 std::env::set_var("RIGGVERK_BACKUP_DIR", &backups);
             }
             let home = crate::test_env::process_home();
@@ -457,7 +451,7 @@ mod tests {
         );
         let notes = env.diagnostics()["layout_notes"].to_string();
         assert!(
-            notes.contains("agent-workspace") && notes.contains("not merged"),
+            notes.contains("agent-workspace") && notes.contains("untouched"),
             "the leftover is reported: {notes}"
         );
     }
@@ -587,7 +581,7 @@ mod tests {
         assert!(
             diagnostics["layout_notes"]
                 .to_string()
-                .contains("could not move"),
+                .contains("kept using"),
             "{}",
             diagnostics["layout_notes"]
         );
@@ -628,6 +622,119 @@ mod tests {
             .is_symlink());
         assert!(!env.new_ws().exists());
         assert!(target.join(LEGACY_STATE).is_dir());
+    }
+
+    #[test]
+    fn an_empty_current_folder_counts_as_absent_and_the_earlier_one_replaces_it() {
+        let env = Home::new("empty-current");
+        let old_base = shipped_old_claude_base();
+        env.seed_legacy_install(&old_base);
+        fs::create_dir_all(env.new_ws()).unwrap();
+
+        assert_eq!(
+            resolved(&env.diagnostics()),
+            env.legacy_ws(),
+            "an empty folder holds nothing: the earlier one is read"
+        );
+        let notes = env.diagnostics()["layout_notes"].to_string();
+        assert!(!notes.contains("still exists"), "{notes}");
+
+        let result = env.apply("claude_rules");
+        assert!(result.success, "{}", result.message);
+        assert!(!env.legacy_ws().exists());
+        assert!(env
+            .new_ws()
+            .join(NEW_STATE)
+            .join("managed-state.json")
+            .is_file());
+        assert_eq!(resolved(&env.diagnostics()), env.new_ws());
+    }
+
+    #[test]
+    fn a_workspace_key_maps_the_earlier_folder_only_for_the_default_origin_before_the_move() {
+        use crate::setup_transaction::workspace_key;
+        let env = Home::new("keys");
+        let key = |path: &Path| workspace_key(path).expect("key");
+        let (earlier, current) = (env.legacy_ws(), env.new_ws());
+        fs::create_dir_all(&earlier).unwrap();
+
+        // The default folder waiting for its first move is the same workspace as after it.
+        assert_eq!(key(&earlier), key(&current));
+
+        // An explicit override or a saved custom folder at that path is its own workspace.
+        unsafe { std::env::set_var("RIGGVERK_WORKSPACE_PATH", &earlier) };
+        assert_eq!(key(&earlier), earlier.to_string_lossy());
+        unsafe { std::env::remove_var("RIGGVERK_WORKSPACE_PATH") };
+        let saved = earlier.to_string_lossy().into_owned();
+        fs::create_dir_all(earlier.join(LEGACY_STATE)).unwrap();
+        fs::write(
+            earlier.join(LEGACY_STATE).join("workspace.json"),
+            MARKER_JSON,
+        )
+        .unwrap();
+        crate::settings::mutate_settings(|settings| {
+            settings.workspace_path = Some(saved.clone());
+            Ok(crate::settings::MutationOutcome::Changed)
+        })
+        .expect("save");
+        assert_eq!(key(&earlier), saved);
+        crate::settings::mutate_settings(|settings| {
+            settings.workspace_path = None;
+            Ok(crate::settings::MutationOutcome::Changed)
+        })
+        .expect("clear");
+        assert_eq!(key(&earlier), key(&current));
+
+        // Both folders hold something: the earlier path is no longer the default.
+        fs::create_dir_all(&current).unwrap();
+        fs::write(current.join("mine.txt"), "x").unwrap();
+        assert_eq!(key(&earlier), earlier.to_string_lossy());
+
+        // After the move, a key recorded for the earlier folder names the current one.
+        fs::remove_dir_all(&earlier).unwrap();
+        assert_eq!(key(&earlier), key(&current));
+    }
+
+    #[test]
+    fn a_dry_run_rollback_never_performs_the_move() {
+        let env = Home::new("dry-run");
+        let old_base = shipped_old_claude_base();
+        env.seed_legacy_install(&old_base);
+        let applied = env.apply("claude_rules");
+        assert!(applied.success, "{}", applied.message);
+        // Put the install back as the earlier release had it, with its manifest.
+        fs::rename(
+            env.new_ws().join(NEW_STATE),
+            env.new_ws().join(LEGACY_STATE),
+        )
+        .unwrap();
+        fs::rename(env.new_ws(), env.legacy_ws()).unwrap();
+        record_as_earlier_release(&env, &applied.transaction_id);
+
+        let dry =
+            rollback_setup_transaction(applied.transaction_id.clone(), true).expect("dry run");
+        assert!(dry.success, "{}", dry.message);
+        assert!(
+            env.legacy_ws().join(LEGACY_STATE).is_dir(),
+            "a dry run moves nothing"
+        );
+        assert!(!env.new_ws().exists());
+
+        let real =
+            rollback_setup_transaction(applied.transaction_id.clone(), false).expect("rollback");
+        assert!(real.success, "{}", real.message);
+        assert!(env.new_ws().is_dir() && !env.legacy_ws().exists());
+    }
+
+    #[test]
+    fn resetting_the_workspace_names_the_variable_that_is_set() {
+        let env = Home::new("reset-names");
+        unsafe { std::env::set_var("AGENT_WORKSPACE_PATH", env.base.join("somewhere")) };
+        let error = reset_active_workspace_path().expect_err("an override blocks the reset");
+        assert!(error.contains("AGENT_WORKSPACE_PATH"), "{error}");
+        unsafe { std::env::set_var("RIGGVERK_WORKSPACE_PATH", env.base.join("somewhere")) };
+        let error = reset_active_workspace_path().expect_err("an override blocks the reset");
+        assert!(error.contains("RIGGVERK_WORKSPACE_PATH"), "{error}");
     }
 
     // ── environment variable aliases ──

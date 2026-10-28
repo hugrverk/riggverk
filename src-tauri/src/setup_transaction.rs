@@ -3153,9 +3153,6 @@ pub fn validate_manifest(
         return Err("invalid operation count".into());
     }
     let ws_key = workspace_key(workspace_root)?;
-    if !workspace_keys_match(&manifest.workspace_key, &ws_key) {
-        return Err("manifest workspace mismatch".into());
-    }
     // A manifest keyed by the earlier default folder maps onto the current folder only when that
     // folder was moved. If an earlier folder exists again next to the current one, the manifest
     // could mean either, and rolling it back could write into the wrong one.
@@ -3170,6 +3167,9 @@ pub fn validate_manifest(
                 workspace_root.display()
             ));
         }
+    }
+    if !workspace_keys_match(&manifest.workspace_key, &ws_key) {
+        return Err("manifest workspace mismatch".into());
     }
     match (
         manifest.previous_managed_state_present,
