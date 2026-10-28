@@ -571,17 +571,25 @@ fn compare_sides(rel: String, state: UnitState, installed: &Side, bundled: &Side
     }
 }
 
-fn diff_file(operation: &PlannedArtifact, workspace_root: &Path, home: &Path) -> FileDiffEntry {
+fn diff_file(
+    operation: &PlannedArtifact,
+    workspace_root: &Path,
+    home: &Path,
+    sources: Option<&crate::skill_sources::SkillSources>,
+) -> FileDiffEntry {
     let state = file_status(operation, "").state;
     let rel = match &operation.artifact {
         ArtifactId::SkillFile(skill) => skill.rel.as_str().to_string(),
         other => dest_file_name(other, home, workspace_root),
     };
-    let Ok((source, dest)) = crate::setup_transaction::validate_artifact_source_dest(
-        &operation.artifact,
-        workspace_root,
-        home,
-    ) else {
+    let Some(Ok((source, dest))) = sources.map(|sources| {
+        crate::setup_transaction::validate_artifact_source_dest_with(
+            &operation.artifact,
+            workspace_root,
+            home,
+            sources,
+        )
+    }) else {
         return entry(
             rel,
             state,
@@ -600,8 +608,10 @@ pub fn diff_unit(unit: &Unit<'_>, workspace_root: &Path, home: &Path) -> FileDif
     let mut files = Vec::new();
     let mut budget = MAX_UNIT_DIFF_BYTES;
     let mut truncated = false;
+    // Read once for the whole unit; a file is "unreadable" when the sources cannot be.
+    let sources = crate::skill_sources::SkillSources::for_workspace(workspace_root).ok();
     for operation in unit.files.iter().take(MAX_DIFF_FILES) {
-        let mut file = diff_file(operation, workspace_root, home);
+        let mut file = diff_file(operation, workspace_root, home, sources.as_ref());
         if file.diff.len() > budget {
             file.diff = String::new();
             file.truncated = true;

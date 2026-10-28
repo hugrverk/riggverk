@@ -285,6 +285,8 @@ impl SkillSources {
 
     /// The bundle at `bundled` and the packs in `workspace_root`.
     pub fn new(bundled: PathBuf, workspace_root: &Path) -> Self {
+        #[cfg(test)]
+        reads::count();
         let bundle_catalog = crate::skill_discovery::discover_skill_catalog(&bundled);
         let bundle_names: HashSet<String> = bundle_catalog
             .as_ref()
@@ -388,6 +390,26 @@ impl SkillSources {
                     .collect()
             })
             .unwrap_or_default()
+    }
+}
+
+/// Counts, per thread, how often the catalog was read, so a test can hold a plan, an apply or a
+/// diff to one read.
+#[cfg(test)]
+pub(crate) mod reads {
+    use std::cell::Cell;
+
+    thread_local! {
+        static COUNT: Cell<usize> = const { Cell::new(0) };
+    }
+
+    pub(super) fn count() {
+        COUNT.with(|count| count.set(count.get() + 1));
+    }
+
+    /// Reads of the catalog on this thread so far.
+    pub(crate) fn total() -> usize {
+        COUNT.with(Cell::get)
     }
 }
 

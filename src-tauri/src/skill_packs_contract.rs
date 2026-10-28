@@ -710,6 +710,39 @@ mod tests {
     }
 
     #[test]
+    fn a_plan_with_many_artifacts_reads_the_bundle_and_packs_once() {
+        let env = Env::new("one-read");
+        env.pack_skill("mine", None, "my-checklist", "x", &[]);
+        env.pack_skill("mine", Some("group"), "grouped", "x", &[]);
+
+        let before = crate::skill_sources::reads::total();
+        let planned = env.plan();
+        let reads = crate::skill_sources::reads::total() - before;
+        assert!(planned.len() > 50, "a plan of {} artifacts", planned.len());
+        assert_eq!(reads, 1, "{reads} reads for {} artifacts", planned.len());
+
+        let before = crate::skill_sources::reads::total();
+        let plan = env.preview();
+        let reads = crate::skill_sources::reads::total() - before;
+        assert!(!plan.operations.is_empty());
+        assert_eq!(reads, 1, "a preview read the catalog {reads} times");
+
+        // An apply reads once per stage (the fingerprint check, the plan it applies, the run with
+        // its preflight), however many artifacts there are.
+        let before = crate::skill_sources::reads::total();
+        let result = apply_setup(
+            vec![surface_name(SetupSurfaceId::Skills)],
+            true,
+            plan.plan_fingerprint.clone(),
+            plan.preview_token.clone(),
+        )
+        .expect("apply_setup");
+        let reads = crate::skill_sources::reads::total() - before;
+        assert!(result.success, "install: {}", result.message);
+        assert_eq!(reads, 3, "an apply read the catalog {reads} times");
+    }
+
+    #[test]
     fn folders_that_are_no_pack_are_ignored_with_a_reason() {
         let env = Env::new("names");
         env.pack_skill("good-pack", None, "good-skill", "x", &[]);
