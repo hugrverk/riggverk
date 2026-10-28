@@ -25,6 +25,9 @@ holds every committed version of that path plus the working-tree version.
 Retired skills and agents are included so stale removal can prove ownership. Digests use the
 format of setup_fingerprint::hash_file. Binary and oversized versions are skipped.
 
+The committed file is an append-only baseline: the output is the baseline plus what the git
+history and working tree prove, so it survives a repository whose history was squashed.
+
 Usage:
   python3 scripts/generate-shipped-digests.py --check
   python3 scripts/generate-shipped-digests.py --write
@@ -99,6 +102,14 @@ def source_key(rel: str) -> str | None:
     return None
 
 
+def baseline() -> dict[str, list[str]]:
+    try:
+        sources = json.loads(OUTPUT.read_text(encoding="utf-8"))["sources"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return {}
+    return sources if isinstance(sources, dict) else {}
+
+
 def generate() -> dict[str, object]:
     # Refuses a shallow clone: a partial history would silently drop shipped versions.
     by_rel = generate_history.historical_blobs_by_rel()
@@ -131,6 +142,10 @@ def generate() -> dict[str, object]:
         if key is not None:
             add(key, path.read_bytes())
 
+    # Append-only: digests already committed stay even when this history cannot prove them.
+    for key, listed in baseline().items():
+        sources.setdefault(key, set()).update(listed)
+
     if not sources:
         raise RuntimeError("no shipped versions found; is the full git history available?")
     return {
@@ -153,7 +168,7 @@ def describe_difference(expected: dict[str, object], actual: object) -> list[str
         missing = sorted(set(want.get(key, [])) - set(have.get(key, [])))
         extra = sorted(set(have.get(key, [])) - set(want.get(key, [])))
         if missing or extra:
-            lines.append(f"{key}: {len(missing)} missing, {len(extra)} stale")
+            lines.append(f"{key}: {len(missing)} missing, {len(extra)} unexpected")
     return lines
 
 
