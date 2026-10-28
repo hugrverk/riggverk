@@ -1,6 +1,6 @@
 [package]
 name = "riggverk"
-version = "2026.10.3"
+version = "2026.10.4"
 description = "Local macOS GUI for Riggverk"
 authors = []
 edition = "2021"
