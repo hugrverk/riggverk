@@ -2,7 +2,7 @@
 
 ## What this is
 
-A bundle of docs, skills, templates, and scripts inside the Riggverk app, which installs it. The app keeps no copy of the bundle in its data folder, `~/.config/agent-workspace`, which holds only its state and your personal docs. The app shows what is installed where, and installs rules, agents, skills, and config into Codex, OpenCode, Cursor, and Claude Code. GitHub Copilot, Pi, and Kilo Code are an opt-in light tier (Settings): the app installs the shared rules block and skills for them and shows their CLI version. Every write is reviewed first.
+A bundle of docs, skills, templates, and scripts inside the Riggverk app, which installs it. The app keeps no copy of the bundle in its data folder, `~/.config/riggverk`, which holds only its state and your personal docs. The app shows what is installed where, and installs rules, agents, skills, and config into Codex, OpenCode, Cursor, and Claude Code. GitHub Copilot, Pi, and Kilo Code are an opt-in light tier (Settings): the app installs the shared rules block and skills for them and shows their CLI version. Every write is reviewed first.
 
 Requirements: Python 3 on `PATH` (config merges and generators).
 
@@ -58,11 +58,11 @@ A file that is yours, not the app's, is never overwritten. The plan shows it as 
 
 ## Your own rules
 
-Rules files hold the app's base between `BEGIN AGENT-WORKSPACE BASE` and `END AGENT-WORKSPACE BASE` markers. Write your own instructions below the END marker. They are kept on every update and override the base where they conflict. Do not edit inside the block. See [AGENT_RULES.md](AGENT_RULES.md).
+Rules files hold the app's base between `BEGIN RIGGVERK BASE` and `END RIGGVERK BASE` markers. Write your own instructions below the END marker. They are kept on every update and override the base where they conflict. Do not edit inside the block. See [AGENT_RULES.md](AGENT_RULES.md).
 
 ## Where things are
 
-- Data folder: `~/.config/agent-workspace` (the app's state in `.agent-workspace/`, your personal docs in `docs/context/`; `AGENT_WORKSPACE_PATH` overrides it).
+- Data folder: `~/.config/riggverk` (the app's state in `.riggverk/`, your personal docs in `docs/context/`; `RIGGVERK_WORKSPACE_PATH` overrides it).
 - Backups: `~/Library/Application Support/se.hugrverk.riggverk/backups` on macOS, `${XDG_CONFIG_HOME:-~/.config}/se.hugrverk.riggverk/backups` on Linux, `%APPDATA%\se.hugrverk.riggverk\backups` on Windows. `B` on the Workspace page opens the folder.
 - Settings file: `settings.json` in the app support folder, the parent of the default backups folder.
 

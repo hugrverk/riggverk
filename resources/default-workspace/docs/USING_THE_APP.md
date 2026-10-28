@@ -79,7 +79,7 @@ The `workspace` row stands for the data folder, which holds only the app's state
 
 The cursor row decides what `u` does: on `workspace` it reviews the removal of old copies (there is nothing to do on a fresh profile); on a harness row it installs that harness. Harness artifacts are not part of the workspace row.
 
-Old copies: earlier releases copied the bundle into the data folder, and the app no longer reads or updates those files. `u` on the `workspace` row (or `:update workspace`, `:update --all`) opens a review that lists the removals per top-level folder, for example `- skills/ (46 old copies; backed up, z restores them)`, and each file left in place. `y` removes them in one transaction with backups; `z` restores every file and the previous ownership records; `n` or Escape cancels, and nothing runs at launch. A copy is removed only when its bytes equal what the app recorded, the current bundled file, or a version an earlier release shipped. Anything else (an edited copy, a file not provably the app's, a symlink on the file or on a folder above it, a folder where the file was) is left in place, listed as `edited or not the app's: left in place`, and is not a conflict. Your own files, `.agent-workspace/` and `docs/context/` are never touched, and folders emptied by the removals are pruned.
+Old copies: earlier releases copied the bundle into the data folder, and the app no longer reads or updates those files. `u` on the `workspace` row (or `:update workspace`, `:update --all`) opens a review that lists the removals per top-level folder, for example `- skills/ (46 old copies; backed up, z restores them)`, and each file left in place. `y` removes them in one transaction with backups; `z` restores every file and the previous ownership records; `n` or Escape cancels, and nothing runs at launch. A copy is removed only when its bytes equal what the app recorded, the current bundled file, or a version an earlier release shipped. Anything else (an edited copy, a file not provably the app's, a symlink on the file or on a folder above it, a folder where the file was) is left in place, listed as `edited or not the app's: left in place`, and is not a conflict. Your own files, `.riggverk/` and `docs/context/` are never touched, and folders emptied by the removals are pruned.
 
 Status pane: **backups** (run count and folder), **last tx** (the transaction `z` can roll back). Enter on a harness row opens its page.
 
@@ -111,7 +111,7 @@ OpenCode also shows the model override for `model`, `small model` and an optiona
 
 ## Backups
 
-Anything Install, uninstall, or a Library save would overwrite or remove is copied first, owner-only. Backup root: `~/Library/Application Support/se.hugrverk.riggverk/backups` (macOS), `${XDG_CONFIG_HOME:-~/.config}/se.hugrverk.riggverk/backups` (Linux), `%APPDATA%\se.hugrverk.riggverk\backups` (Windows), or `AGENT_WORKSPACE_BACKUP_DIR`.
+Anything Install, uninstall, or a Library save would overwrite or remove is copied first, owner-only. Backup root: `~/Library/Application Support/se.hugrverk.riggverk/backups` (macOS), `${XDG_CONFIG_HOME:-~/.config}/se.hugrverk.riggverk/backups` (Linux), `%APPDATA%\se.hugrverk.riggverk\backups` (Windows), or `RIGGVERK_BACKUP_DIR`.
 
 ```text
 <backup root>/setup/<transaction id>/manifest.json
@@ -126,7 +126,7 @@ New files have no backup. Restore by rollback while the transaction is in this s
 
 ## Uninstall
 
-**preview uninstall** (or `:uninstall`) lists what would be removed (files proven to be app-owned), preserved (files you modified or that are not the app's), and left merge-managed (config files and rules files that hold your text). **uninstall everything** applies it after a confirmation and records a transaction. It also removes any old workspace copies the app still owns (same proof as the cleanup); the data folder, its `.agent-workspace/` state, your personal docs and your files stay. Afterwards **Recover previous uninstall** appears for the current session only: **preview recovery** (read-only), then **restore workspace**, then **confirm restore**.
+**preview uninstall** (or `:uninstall`) lists what would be removed (files proven to be app-owned), preserved (files you modified or that are not the app's), and left merge-managed (config files and rules files that hold your text). **uninstall everything** applies it after a confirmation and records a transaction. It also removes any old workspace copies the app still owns (same proof as the cleanup); the data folder, its `.riggverk/` state, your personal docs and your files stay. Afterwards **Recover previous uninstall** appears for the current session only: **preview recovery** (read-only), then **restore workspace**, then **confirm restore**.
 
 ## Library
 
@@ -142,7 +142,7 @@ Everything else is bundled with the app and read-only here: the pane title says 
 
 Harnesses (which tools appear and may be written), appearance (dark, light, system), text size, motion, landing page (workspace, library), colors, and the workspace folder. Settings autosave; `r` resets appearance after a confirmation.
 
-Workspace: Settings no longer picks a folder. A custom folder saved by an earlier version stays in use while it holds the app's `.agent-workspace/` state; `R` (or `:workspace reset`) asks first, then returns to `~/.config/agent-workspace`. The old folder is left as it is, its ownership records stay there, and the app cannot switch back to it. `AGENT_WORKSPACE_PATH` overrides the setting. Generator scripts the app runs always come from its bundled copy, not from the saved folder.
+Workspace: Settings no longer picks a folder. A custom folder saved by an earlier version stays in use while it holds the app's `.riggverk/` state; `R` (or `:workspace reset`) asks first, then returns to `~/.config/riggverk`. The old folder is left as it is, its ownership records stay there, and the app cannot switch back to it. `RIGGVERK_WORKSPACE_PATH` overrides the setting. Generator scripts the app runs always come from its bundled copy, not from the saved folder.
 
 Disabling a harness hides it and blocks new writes to it. It does not delete files or forget target choices, and re-enabling does not install.
 

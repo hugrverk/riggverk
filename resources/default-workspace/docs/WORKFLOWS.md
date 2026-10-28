@@ -24,7 +24,7 @@ On a harness page, Space toggles targets (rules, agents, config; Cursor is one `
 ## Add your own rules without losing updates
 
 1. Install once so the rules file has the managed block.
-2. Open the file (`~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, or `~/.config/opencode/AGENTS.md`) and add your text below `<!-- END AGENT-WORKSPACE BASE -->`.
+2. Open the file (`~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, or `~/.config/opencode/AGENTS.md`) and add your text below `<!-- END RIGGVERK BASE -->`.
 3. Later updates replace only the block; your text stays and overrides the base where it conflicts.
 
 Do not edit inside the block. See [AGENT_RULES.md](AGENT_RULES.md).
@@ -45,13 +45,13 @@ The app never overwrites a file it does not provably own. To accept the bundled 
 
 ## Remove old workspace copies
 
-Earlier releases copied the bundle into `~/.config/agent-workspace`. The app no longer reads those files.
+Earlier releases copied the bundle into `~/.config/riggverk`. The app no longer reads those files.
 
 1. Workspace tab (`1`). The `workspace` row says `N old copies to remove` (a fresh profile says `current`).
 2. `u` on the row. The review lists the removals per folder and each file left in place (edited, or not provably the app's).
 3. `y` removes the copies in one transaction with backups. `n` or Escape keeps everything; `z` afterwards restores every file.
 
-Your own files, `.agent-workspace/` and `docs/context/` are never touched.
+Your own files, `.riggverk/` and `docs/context/` are never touched.
 
 ## Undo the last install
 
@@ -70,7 +70,7 @@ Skills you add to the workspace folder are not installed; harness installs come 
 
 ## The workspace folder
 
-The app keeps its state and your personal docs in `~/.config/agent-workspace`; Settings no longer picks another folder. A custom folder saved by an earlier version stays in use while it holds the app's `.agent-workspace/` state. Settings -> workspace: `R` asks first, then returns to the default folder (the old folder and its ownership records are left as they are, and the app cannot switch back to it). `AGENT_WORKSPACE_PATH` overrides the setting.
+The app keeps its state and your personal docs in `~/.config/riggverk`; Settings no longer picks another folder. A custom folder saved by an earlier version stays in use while it holds the app's `.riggverk/` state. Settings -> workspace: `R` asks first, then returns to the default folder (the old folder and its ownership records are left as they are, and the app cannot switch back to it). `RIGGVERK_WORKSPACE_PATH` overrides the setting.
 
 ## Version the workspace with Git
 

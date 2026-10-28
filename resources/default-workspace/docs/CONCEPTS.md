@@ -2,7 +2,7 @@
 
 ## Workspace
 
-The app's data folder, `~/.config/agent-workspace`. It holds the app's state in `.agent-workspace/` (ownership records and your choices) and your personal docs in `docs/context/`, and it holds no copy of the bundle. It is plain text and its personal docs can be versioned with Git (see [GIT_VERSIONING.md](GIT_VERSIONING.md)).
+The app's data folder, `~/.config/riggverk`. It holds the app's state in `.riggverk/` (ownership records and your choices) and your personal docs in `docs/context/`, and it holds no copy of the bundle. It is plain text and its personal docs can be versioned with Git (see [GIT_VERSIONING.md](GIT_VERSIONING.md)).
 
 The app creates it on the first write that needs it (state, or a personal doc) and never writes it without a confirmed install or an explicit save. It does not run scripts from it.
 
@@ -28,7 +28,7 @@ The first five rows are paths in the bundle; the last two are in your data folde
 | Templates | `templates/` | Source templates for rules and config |
 | Scripts | `scripts/` | Python helpers the app runs from its bundled copy |
 | Runtime agents | `agents/`, `agent-specs/` | OpenCode agents and shared agent bodies |
-| Ownership records | `.agent-workspace/` | Managed-state digests, "leave as is" and "keep mine" choices |
+| Ownership records | `.riggverk/` | Managed-state digests, "leave as is" and "keep mine" choices |
 | Personal docs | `docs/context/` | Your own text, written in the Library |
 
 ## Skills
@@ -37,7 +37,7 @@ Reusable agent instruction files. Canonical skills live under `skills/` (for Cod
 
 ## Rules and the managed block
 
-Rules define default behavior for coding agents. The source is `templates/global-agent-rules.md` plus a harness appendix. Installed rules files are shared: the app owns only the text between `BEGIN AGENT-WORKSPACE BASE` and `END AGENT-WORKSPACE BASE`, and everything outside is yours. Instructions below the block are your refinements and override the base. An edited block or an unmarked pre-existing file is a conflict you resolve with a diff, **Convert**, or **Leave as is**. See [AGENT_RULES.md](AGENT_RULES.md).
+Rules define default behavior for coding agents. The source is `templates/global-agent-rules.md` plus a harness appendix. Installed rules files are shared: the app owns only the text between `BEGIN RIGGVERK BASE` and `END RIGGVERK BASE`, and everything outside is yours. Instructions below the block are your refinements and override the base. An edited block or an unmarked pre-existing file is a conflict you resolve with a diff, **Convert**, or **Leave as is**. See [AGENT_RULES.md](AGENT_RULES.md).
 
 ## Tool configuration
 

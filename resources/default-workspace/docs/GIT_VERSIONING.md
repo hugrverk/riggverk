@@ -1,6 +1,6 @@
 # Git Versioning
 
-The data folder (`~/.config/agent-workspace`) holds only the app's state and your personal docs. It holds no copy of the bundle: the bundle ships inside the app and changes with app updates. Version `docs/context/`, your own text, with Git like any other project.
+The data folder (`~/.config/riggverk`) holds only the app's state and your personal docs. It holds no copy of the bundle: the bundle ships inside the app and changes with app updates. Version `docs/context/`, your own text, with Git like any other project.
 
 The app never runs Git in this folder and never shows its Git state. It does not initialize repositories, create commits, create remotes, manage GitHub auth, or push or pull. Use your normal Git workflow (CLI, GitHub Desktop, IDE).
 
@@ -9,11 +9,11 @@ The app never runs Git in this folder and never shows its Git state. It does not
 ```bash
 # 1. Write a personal doc in the Library (Library tab, n); this creates docs/context/
 # 2. Open a terminal in the data folder
-cd ~/.config/agent-workspace
+cd ~/.config/riggverk
 
 # 3. Initialize Git and keep the app's machine-local state out of it
 git init
-echo ".agent-workspace/" > .gitignore
+echo ".riggverk/" > .gitignore
 
 # 4. Commit your personal docs
 git add .gitignore docs/context
@@ -32,7 +32,7 @@ git push -u origin main
 
 Only your own text: `docs/context/`.
 
-Keep `.agent-workspace/` out of Git. It describes this machine: `managed-state.json` records which files the app's installs own, `rules-preferences.json` which rules files you chose to leave as is, `kept-files.json` which skill and agent files you keep, `config-preferences.json` which managed Codex config keys you keep, and `workspace.json` is a marker an earlier release may have written. Do not delete the state files: a missing `managed-state.json` turns files that are not exact bundled copies into conflicts. On a new machine the first install creates them.
+Keep `.riggverk/` out of Git. It describes this machine: `managed-state.json` records which files the app's installs own, `rules-preferences.json` which rules files you chose to leave as is, `kept-files.json` which skill and agent files you keep, `config-preferences.json` which managed Codex config keys you keep, and `workspace.json` is a marker an earlier release may have written. Do not delete the state files: a missing `managed-state.json` turns files that are not exact bundled copies into conflicts. On a new machine the first install creates them.
 
 Never commit secrets, tokens, passwords, private keys, cookies, auth headers, signed or private URLs, `.env` files, or machine-specific absolute paths. App backups live outside this folder.
 
@@ -40,7 +40,7 @@ Suggested `.gitignore`:
 
 ```gitignore
 # Machine-local app state
-.agent-workspace/
+.riggverk/
 
 # Secrets and credentials
 **/secrets*
