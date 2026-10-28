@@ -55,6 +55,8 @@ export interface FileConflictActions {
   error: string | null;
   /** `m` on a unit: keep my version when it is in conflict, hand it back when it is kept. */
   toggleKept: (surface: FilesSurfaceId, unit: FileUnit) => void;
+  /** `action` on the marked unit of `surface`, as the key would, for a button; the same gates apply. */
+  runOn: (action: FileAction, surface: FilesSurfaceId) => void;
 }
 
 interface Target {
@@ -149,11 +151,16 @@ export function useFileConflictActions({
     action === "diff" ? found.diff : action === "bundled" ? found.bundled : action === "mine" ? found.keep : found.manage;
 
   // ── Keys ──
-  const run = (action: FileAction) => {
-    if (!activeModel || !activeUnit) return;
-    const gate = gateFor(action, gates);
+  const runOn = (action: FileAction, surface: FilesSurfaceId) => {
+    const model = models.find(candidate => candidate.surface === surface) ?? null;
+    const unit = markedUnit(model, markedKey);
+    if (!model || !unit) return;
+    const gate = gateFor(action, fileGates(model, unit, context));
     if (!gate.visible || gate.reason !== null) return;
-    execute(action, { model: activeModel, unit: activeUnit });
+    execute(action, { model, unit });
+  };
+  const run = (action: FileAction) => {
+    if (activeModel) runOn(action, activeModel.surface);
   };
 
   const whenFor = (gate: FileGate) => () => (!gate.visible ? false : gate.reason ?? true);
@@ -261,5 +268,5 @@ export function useFileConflictActions({
   };
   useCommands([resolveCommand]);
 
-  return { error, toggleKept };
+  return { error, toggleKept, runOn };
 }

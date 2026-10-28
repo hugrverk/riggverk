@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { postureRowsFor, POSTURE_UNAVAILABLE } from "../lib/securityPostureRows";
-import { Kv } from "../ui/Kv";
-import { toneClass } from "../ui/tone";
+import { SafetyNotes } from "../components/harness/SafetyNotes";
+import { postureNotesFor, POSTURE_UNAVAILABLE } from "../lib/securityPostureRows";
 import type { InstallAgent, SecurityPosture } from "../types";
 
 /** A usable answer: the mocks of other tests resolve `invoke` with nothing, and a failure must not break the page. */
@@ -12,9 +11,9 @@ function isPosture(value: unknown): value is SecurityPosture {
 }
 
 /**
- * The `security` group of a harness page: which permission and sandbox settings the harness's global config sets
- * (`get_security_posture`, read-only). Read when the page opens and when `refreshKey` changes. It needs no workspace
- * folder: it reads the harness's own config, not the data folder.
+ * The "Safety notes" cell of a harness page: which permission and sandbox settings the harness's global config sets
+ * (`get_security_posture`, read-only, advice only). Read when the page opens and when `refreshKey` changes. It needs no
+ * workspace folder: it reads the harness's own config, not the data folder.
  */
 export function SecurityPostureRows({ harness, refreshKey }: { harness: InstallAgent; refreshKey: string }) {
   const [posture, setPosture] = useState<SecurityPosture | null>(null);
@@ -36,14 +35,6 @@ export function SecurityPostureRows({ harness, refreshKey }: { harness: InstallA
   // The last answer stays while the next one loads, but never one for another harness.
   const shown = posture?.harness === harness ? posture : null;
   if (!shown && !failed) return null;
-  const { verdict, rows } = shown ? postureRowsFor(shown) : { verdict: POSTURE_UNAVAILABLE, rows: [] };
-  return (
-    <>
-      <div className="group">
-        {"security · "}
-        <span className={toneClass(verdict.tone) || undefined}>{verdict.text}</span>
-      </div>
-      {rows.length > 0 && <Kv items={rows} />}
-    </>
-  );
+  const { verdict, notes } = shown ? postureNotesFor(shown) : { verdict: POSTURE_UNAVAILABLE, notes: [] };
+  return <SafetyNotes verdict={verdict} notes={notes} />;
 }

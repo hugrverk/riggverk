@@ -252,8 +252,9 @@ function renderClaude(status: RulesStatus, state: InstallationState = "conflict"
   return { p, ...renderInFrame(<ClaudeView {...p} runtimeHealth={CLAUDE_HEALTH} />) };
 }
 
+/** The page: the keys work with focus anywhere in it, and a click on it takes focus. */
 function surfaces() {
-  return screen.getByRole("listbox", { name: "Claude surfaces" });
+  return screen.getByRole("region", { name: "Claude" });
 }
 
 function press(key: string) {
@@ -265,9 +266,14 @@ function focusSurfaces() {
   act(() => surfaces().focus());
 }
 
-/** A row of the surfaces list by its name: the `[x]` toggle in front of it is not part of the name. */
-function surfaceRow(name: string) {
-  return within(surfaces()).getAllByRole("option").find(row => new RegExp(`^(\\[.\\] )?${name}\\b`).test(row.querySelector(".nm")!.textContent!.trim()))!;
+/** The cell of a surface (`claude_rules`, `claude_agents`). */
+function cell(surface: string) {
+  return surfaces().querySelector<HTMLElement>(`[data-surface="${surface}"]`)!;
+}
+
+/** The state pill of a cell: its words. */
+function pill(surface: string) {
+  return cell(surface).querySelector(".state-pill")!;
 }
 
 function rulesFile() {
@@ -275,7 +281,7 @@ function rulesFile() {
 }
 
 function detailPane() {
-  return screen.getByRole("region", { name: "Claude detail" });
+  return surfaces();
 }
 
 function statusBar() {
@@ -284,7 +290,7 @@ function statusBar() {
 
 /** A key hint of the surfaces pane (or of the pane that has focus). Hints live in the status bar while their pane has focus. */
 function surfaceHint(name: RegExp) {
-  if (!screen.getByRole("region", { name: "Claude surfaces" }).contains(document.activeElement)) focusSurfaces();
+  if (!surfaces().contains(document.activeElement)) focusSurfaces();
   return statusBar().queryByRole("button", { name });
 }
 
@@ -302,8 +308,9 @@ describe("rules file in the detail pane", () => {
     expect(rulesFile().textContent).toContain("managed base block");
     expect(rulesFile().textContent).toContain("14 refinement lines preserved");
     expect(rulesFile().textContent).toContain("base update available");
-    expect(surfaceRow("rules").querySelector(".meta")!.textContent).toContain("update");
-    expect(surfaceRow("rules").querySelector(".meta")!.textContent).not.toContain("conflict");
+    // A base update is "update ready", not a decision.
+    expect(pill("claude_rules").textContent).toBe("Update ready");
+    expect(cell("claude_rules").getAttribute("data-state")).toBe("ready");
     // A base update offers the diff only: nothing to convert, nothing to leave as is.
     expect(surfaceHint(/diff/)).not.toBeNull();
     expect(surfaceHint(/convert/)).toBeNull();
@@ -315,7 +322,8 @@ describe("rules file in the detail pane", () => {
     expect(rulesFile().textContent).toContain("base block edited: left as is");
     expect(rulesFile().textContent).toContain("the base block was edited");
     expect(rulesFile().textContent).toContain("2 refinement lines preserved");
-    expect(surfaceRow("rules").querySelector(".meta")!.textContent).toContain("conflict");
+    expect(pill("claude_rules").textContent).toBe("Needs your decision");
+    expect(cell("claude_rules").getAttribute("data-state")).toBe("decide");
     expect(surfaceHint(/diff/)).not.toBeNull();
     expect(surfaceHint(/convert/)).not.toBeNull();
     expect(surfaceHint(/leave as is/)).not.toBeNull();
@@ -346,10 +354,9 @@ describe("rules file in the detail pane", () => {
   it("shows a file the user manages as base updates available, not as a red conflict", () => {
     renderClaude(rules({ conflict_reason: "base_block_edited", user_managed: true }), "current");
     expect(rulesFile().textContent).toContain("base updates available, you manage this file");
-    const meta = surfaceRow("rules").querySelector(".meta")!;
-    expect(meta.textContent).toContain("you manage");
-    expect(meta.className).toContain("c-warn");
-    expect(meta.className).not.toContain("c-fail");
+    // Yours, not a decision and not a failure.
+    expect(pill("claude_rules").textContent).toBe("Yours");
+    expect(cell("claude_rules").getAttribute("data-state")).toBe("yours");
     expect(surfaceHint(/hand back/)).not.toBeNull();
     expect(surfaceHint(/leave as is/)).toBeNull();
   });
@@ -365,37 +372,62 @@ describe("rules file in the detail pane", () => {
     expect(detailPane().textContent).not.toMatch(/An update replaces/);
   });
 
-  it("offers d, v and m only while the cursor is on the rules row", () => {
+  it("offers d, v and m only while the rules cell is the active one", () => {
     backend();
     renderClaude(rules({ conflict_reason: "base_block_edited" }));
-    const detailBody = () => within(detailPane()).getByRole("group", { name: "Claude detail" });
     const offered = () => ["diff", "convert", "leave as is"].map(name => statusBar().queryByRole("button", { name: new RegExp(name) }) !== null);
 
-    // The rules row is first: the keys are on offer from the list and from the detail of that row.
+    // The decision is the active cell until another is clicked: the keys are on offer with focus on the page or inside the cell.
     focusSurfaces();
     expect(offered()).toEqual([true, true, true]);
-    act(() => detailBody().focus());
+    act(() => within(cell("claude_rules")).getByRole("button", { name: /compare/i }).focus());
     expect(offered()).toEqual([true, true, true]);
 
-    // Agents: nothing to diff, convert or leave, in either pane, and the keys do nothing.
-    focusSurfaces();
-    press("j");
-    expect(detailPane().querySelector(".pane-title")!.textContent).toContain("agents");
+    // A click in the agents cell makes it the active one: nothing to diff, convert or leave there, and the keys do nothing.
+    fireEvent.click(cell("claude_agents"));
     expect(offered()).toEqual([false, false, false]);
     press("d");
     press("v");
     press("m");
-    act(() => detailBody().focus());
-    expect(offered()).toEqual([false, false, false]);
-    press("d");
     expect(invokeMock).not.toHaveBeenCalled();
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(screen.queryByRole("region", { name: "Claude rules review" })).toBeNull();
 
-    // Back on the rules row they are on offer again.
-    focusSurfaces();
-    press("k");
+    // Back in the rules cell they are on offer again.
+    fireEvent.click(cell("claude_rules"));
     expect(offered()).toEqual([true, true, true]);
+  });
+
+  it("has a button for each action of the rules file, which does what its key does", async () => {
+    backend();
+    renderClaude(rules({ conflict_reason: "base_block_edited" }));
+    const actions = within(cell("claude_rules"));
+    expect(actions.getAllByRole("button").map(button => button.textContent?.replace(/^[a-z]/, "").trim())).toEqual(["Compare", "Merge in updates…", "Keep mine"]);
+    fireEvent.click(actions.getByRole("button", { name: "Compare" }));
+    await screen.findByRole("group", { name: /to installed/ });
+    expect(invokeMock).toHaveBeenCalledWith("preview_rules_diff", { surface: "claude_rules", mode: "edits" });
+    press("n");
+    fireEvent.click(within(cell("claude_rules")).getByRole("button", { name: "Merge in updates…" }));
+    await screen.findByLabelText("Conversion summary");
+    expect(invokeMock).toHaveBeenLastCalledWith("preview_rules_conversion", { surface: "claude_rules" });
+  });
+
+  it("asks first when Keep mine is clicked, and the button waits for a running task", async () => {
+    backend();
+    const { p, rerenderFrame } = renderClaude(rules({ conflict_reason: "base_block_edited" }));
+    fireEvent.click(within(cell("claude_rules")).getByRole("button", { name: "Keep mine" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(invokeMock).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByRole("button", { name: "cancel" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(invokeMock).not.toHaveBeenCalled();
+
+    rerenderFrame(<ClaudeView {...p} wsRunning="update claude" runtimeHealth={CLAUDE_HEALTH} />);
+    const keep = within(cell("claude_rules")).getByRole("button", { name: "Keep mine" });
+    expect(keep.getAttribute("aria-disabled")).toBe("true");
+    expect(keep.getAttribute("title")).toBe("update claude is running");
+    fireEvent.click(keep);
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 
   it("has no rules block for a surface that is not in the status, and no rules actions", () => {
@@ -432,7 +464,7 @@ describe("rules diff (d)", () => {
     expect(pane.querySelector("input, textarea, [contenteditable]")).toBeNull();
     expect(screen.queryByRole("button", { name: /apply/ })).toBeNull();
     // The page's pair is replaced by one pane and the output strip, like the install review.
-    expect(screen.queryByRole("listbox", { name: "Claude surfaces" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Claude" })).toBeNull();
     expect(screen.getByRole("region", { name: "Claude rules review" }).className).toContain("review");
     expect(screen.getByRole("region", { name: "Output" })).toBeTruthy();
   });
@@ -461,7 +493,7 @@ describe("rules diff (d)", () => {
     await screen.findByRole("group", { name: "installed to after update" });
     expect(invokeMock).toHaveBeenLastCalledWith("preview_rules_diff", { surface: "claude_rules", mode: "update" });
     press("n");
-    expect(screen.getByRole("listbox", { name: "Claude surfaces" })).toBeTruthy();
+    expect(surfaces()).toBeTruthy();
     expect(mode()).toBe("NORMAL");
     // The keyboard goes back to the pane the review was opened from, so d, v and m work again at once.
     expect(document.activeElement).toBe(surfaces());
@@ -552,7 +584,7 @@ describe("rules conversion (v, y)", () => {
     expect(log.stdout).toContain("kept         1 section below the END marker: ## Communication");
     expect(log.stdout).toContain("transaction tx-rules-1 recorded · rollback available");
     // The review closes and the page's panes come back (after the apply settles; a loaded run can lag a tick).
-    expect(await screen.findByRole("listbox", { name: "Claude surfaces" })).toBeTruthy();
+    expect(await screen.findByRole("region", { name: "Claude" })).toBeTruthy();
     await waitFor(() => expect(mode()).toBe("NORMAL"));
   });
 
@@ -569,7 +601,7 @@ describe("rules conversion (v, y)", () => {
     await openPreview();
     press("n");
     expect(invokeMock).not.toHaveBeenCalledWith("apply_rules_conversion", expect.anything());
-    expect(screen.getByRole("listbox", { name: "Claude surfaces" })).toBeTruthy();
+    expect(surfaces()).toBeTruthy();
   });
 
   it("opens from the diff with v", async () => {
@@ -766,18 +798,18 @@ describe("Codex rules override", () => {
 
   it("warns prominently that AGENTS.override.md replaces AGENTS.md", () => {
     renderCodex(codexHealth([OVERRIDE_CHECK]));
-    const alert = within(screen.getByRole("region", { name: "Codex detail" })).getByRole("alert");
+    const alert = within(screen.getByRole("region", { name: "Codex" })).getByRole("alert");
     expect(alert.textContent).toContain("AGENTS.override.md replaces AGENTS.md");
     expect(alert.textContent).toContain("the Riggverk base block is not loaded until it is removed or emptied");
-    expect(alert.className).toContain("rules-alert");
+    expect(alert.className).toContain("hp-alert");
   });
 
   it("stays quiet without the warning", () => {
     renderCodex(codexHealth([{ ...OVERRIDE_CHECK, status: "pass" }]));
-    expect(within(screen.getByRole("region", { name: "Codex detail" })).queryByRole("alert")).toBeNull();
+    expect(within(screen.getByRole("region", { name: "Codex" })).queryByRole("alert")).toBeNull();
     cleanup();
     renderCodex(codexHealth([]));
-    expect(within(screen.getByRole("region", { name: "Codex detail" })).queryByRole("alert")).toBeNull();
+    expect(within(screen.getByRole("region", { name: "Codex" })).queryByRole("alert")).toBeNull();
   });
 });
 
@@ -789,7 +821,7 @@ describe("Cursor", () => {
     });
     renderInFrame(<CursorView {...p} runtimeHealth={null} />);
     expect(screen.queryByLabelText("Rules file")).toBeNull();
-    act(() => screen.getByRole("listbox", { name: "Cursor surfaces" }).focus());
+    act(() => screen.getByRole("region", { name: "Cursor" }).focus());
     expect(statusBar().queryByRole("button", { name: /diff|convert|leave/ })).toBeNull();
   });
 });

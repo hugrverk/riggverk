@@ -172,8 +172,8 @@ describe("App shell", () => {
     ]);
     fireEvent.keyDown(document.body, { key: "6" });
     await waitFor(() => expect(currentTab()).toBe("Pi"));
-    const detail = await screen.findByRole("region", { name: "Pi detail" });
-    await waitFor(() => expect(detail.textContent).toContain("runtime · synced"));
+    const page = await screen.findByRole("region", { name: "Pi" });
+    await waitFor(() => expect(within(page).getByRole("region", { name: "Runtime" }).querySelector(".hp-ch b")?.textContent).toBe("synced"));
     expect(backend.lightHealthRequests.every(harness => harness === "pi")).toBe(true);
     expect(backend.lightHealthRequests.length).toBeGreaterThan(0);
   });

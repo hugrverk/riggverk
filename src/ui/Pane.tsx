@@ -1,7 +1,7 @@
 import { createContext, useContext, useId, type FocusEvent, type ReactNode } from "react";
 import { cx } from "./tone";
 
-const PaneContext = createContext<string | null>(null);
+export const PaneContext = createContext<string | null>(null);
 
 /** Id of the enclosing Pane (`data-pane-id`), or null outside one. */
 export function usePaneId(): string | null {
