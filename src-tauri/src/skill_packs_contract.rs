@@ -933,7 +933,9 @@ mod tests {
 
     /// An installed skill the app retired long ago (`REMOVED_SKILL_NAMES`), with its record.
     fn install_retired_bundle_skill(env: &Env) -> ArtifactId {
-        let artifact = file_of(SkillRoot::Claude, "grill-me", "SKILL.md");
+        // Any retired name works; take it from the list so no retired name is spelled out here.
+        let retired = crate::managed_bootstrap::REMOVED_SKILL_NAMES[0];
+        let artifact = file_of(SkillRoot::Claude, retired, "SKILL.md");
         let dest = env.path(&artifact);
         fs::create_dir_all(dest.parent().expect("parent")).expect("dir");
         fs::write(&dest, b"retired skill\n").expect("write");
