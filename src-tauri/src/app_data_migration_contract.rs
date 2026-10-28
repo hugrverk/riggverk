@@ -288,20 +288,10 @@ fn seed_simple(old: &Path) {
 
 fn with_isolated_home<T>(name: &str, run: impl FnOnce(&Path) -> T) -> T {
     let _guard = crate::test_env::guard::lock();
-    let _env = crate::test_env::guard::EnvRestore::capture();
+    let _env = crate::test_env::guard::isolate_data_location_env();
     let _warning = ClearStartupWarning;
     let home = TempDir::new(name);
     crate::test_env::set_test_user_dirs(home.path());
-    unsafe {
-        for name in [
-            crate::env_overrides::BACKUP_DIR_ENV,
-            crate::env_overrides::LEGACY_BACKUP_DIR_ENV,
-            crate::env_overrides::WORKSPACE_PATH_ENV,
-            crate::env_overrides::LEGACY_WORKSPACE_PATH_ENV,
-        ] {
-            std::env::remove_var(name);
-        }
-    }
     run(home.path())
 }
 

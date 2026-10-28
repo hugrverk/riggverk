@@ -171,6 +171,26 @@ pub mod guard {
         }
     }
 
+    /// The four variables that decide where data and backups go, current names and aliases.
+    const DATA_LOCATION_VARS: [&str; 4] = [
+        WORKSPACE_PATH_ENV,
+        LEGACY_WORKSPACE_PATH_ENV,
+        BACKUP_DIR_ENV,
+        LEGACY_BACKUP_DIR_ENV,
+    ];
+
+    /// Removes every variable that can point the app at a data or backup folder, and restores
+    /// them when the returned value drops. A test that holds the env lock calls this first, so a
+    /// variable exported in the shell that runs `cargo test` (an alias included) can never steer
+    /// it into a real folder. Take the lock (`lock()`) before calling it and keep both alive.
+    pub fn isolate_data_location_env() -> EnvRestore {
+        let restore = EnvRestore::capture();
+        for name in DATA_LOCATION_VARS {
+            unsafe { std::env::remove_var(name) };
+        }
+        restore
+    }
+
     /// The env lock, with `XDG_CONFIG_HOME` removed until it drops (fields drop in order: the
     /// environment is restored before the lock is released).
     pub struct DefaultXdgConfigHome {
@@ -274,5 +294,35 @@ mod tests {
             offenders.is_empty(),
             "a test changes the process PATH, which breaks parallel tests that spawn python3 or git: {offenders:?}"
         );
+    }
+    /// A variable exported in the shell that runs `cargo test`, an alias included, must not reach
+    /// a test that isolates the data location, and must be back afterwards.
+    #[test]
+    fn the_data_location_helper_ignores_exported_aliases_and_restores_them() {
+        use crate::env_overrides::{
+            backup_dir_override, workspace_path_override, LEGACY_BACKUP_DIR_ENV,
+            LEGACY_WORKSPACE_PATH_ENV,
+        };
+        let _lock = super::guard::lock();
+        let outer = super::guard::EnvRestore::capture();
+        unsafe {
+            std::env::set_var(LEGACY_WORKSPACE_PATH_ENV, "/exported/data");
+            std::env::set_var(LEGACY_BACKUP_DIR_ENV, "/exported/backups");
+        }
+        assert_eq!(workspace_path_override().as_deref(), Some("/exported/data"));
+        {
+            let _isolated = super::guard::isolate_data_location_env();
+            assert_eq!(workspace_path_override(), None);
+            assert_eq!(backup_dir_override(), None);
+        }
+        assert_eq!(
+            std::env::var(LEGACY_WORKSPACE_PATH_ENV).as_deref(),
+            Ok("/exported/data")
+        );
+        assert_eq!(
+            std::env::var(LEGACY_BACKUP_DIR_ENV).as_deref(),
+            Ok("/exported/backups")
+        );
+        drop(outer);
     }
 }
