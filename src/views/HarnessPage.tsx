@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
+import { CodexConfigSummary } from "../components/CodexConfigSummary";
 import { ConflictPane } from "../components/ConflictPane";
 import { FileConflictSummary } from "../components/FileConflictSummary";
 import { InstallPlanPane } from "../components/InstallPlanPane";
@@ -6,6 +7,7 @@ import { OutputStrip, useFocusOutputOnNewTransaction } from "../components/Outpu
 import { RulesPane } from "../components/RulesPane";
 import { RulesSummary } from "../components/RulesSummary";
 import { useFileConflictActions } from "../hooks/useFileConflictActions";
+import { useCodexConfigActions } from "../hooks/useCodexConfigActions";
 import { useFileConflictFlow } from "../hooks/useFileConflictFlow";
 import { useRulesActions } from "../hooks/useRulesActions";
 import { useRulesFlow } from "../hooks/useRulesFlow";
@@ -17,6 +19,7 @@ import {
   withFileConflicts,
   type FileConflictModel,
 } from "../lib/fileConflicts";
+import { CODEX_CONFIG_SURFACE, codexConfigModelFor, withKeptKeys } from "../lib/codexConfig";
 import { HARNESS_LABELS } from "../lib/harnessInstallation";
 import { runtimeRowsFor, runtimeVerdict, type HarnessRuntimeHealth } from "../lib/harnessRuntimeRows";
 import {
@@ -159,6 +162,27 @@ export function HarnessPage({
     if (installOpen || rulesFlow.open) conflictFlow.close();
   }, [installOpen, rulesFlow.open, conflictFlow.close]);
 
+  // Codex config: `m` keeps the enforced keys that differ from Riggverk's, or hands the kept ones back.
+  const codexConfigModel = dataFolderOk && harness === "codex" ? codexConfigModelFor(entry?.status) : null;
+  const codexConfig = useCodexConfigActions({
+    model: codexConfigModel,
+    dataFolderOk,
+    busyLabel: wsRunning,
+    blockedBy: installOpen
+      ? "close the install review first"
+      : rulesFlow.open
+        ? "close the rules review first"
+        : conflictFlow.state.status !== "idle"
+          ? "close the conflict review first"
+          : null,
+    paneIds: ["surfaces", "detail"],
+    active: selected?.surface === CODEX_CONFIG_SURFACE,
+    // The runtime health reads the choice too: its config row follows.
+    reload: async () => {
+      await Promise.all([overview.refresh(), refreshAfterApply()]);
+    },
+  });
+
   useKeymap(
     installBindings({
       idPrefix: harness,
@@ -239,6 +263,7 @@ export function HarnessPage({
   // A file the user keeps is not current and not a conflict; the rules model says so.
   const displayOf = (row: HarnessRowModel): StateDisplay => {
     if (row.surface === rulesSurface && rulesModel?.display) return rulesModel.display;
+    if (row.surface === CODEX_CONFIG_SURFACE) return withKeptKeys(row.display, codexConfigModel);
     const base = row.surface === "skills" && row.state !== "off" ? withSkillProblems(row.display, skillProblems) : row.display;
     // Files in conflict or kept are told on their row: "update · 2 conflicts", "current · you manage 1".
     return isFilesSurface(row.surface) ? withFileConflicts(base, fileModels.find(model => model.surface === row.surface) ?? null) : base;
@@ -333,6 +358,9 @@ export function HarnessPage({
         )}
         {facts.length > 0 && <Kv items={facts} />}
         {showRules && <RulesSummary model={rulesModel} error={rules.error} />}
+        {codexConfigModel && selected?.surface === CODEX_CONFIG_SURFACE && (
+          <CodexConfigSummary model={codexConfigModel} error={codexConfig.error} />
+        )}
         {activeModel && <FileConflictSummary model={activeModel} markedKey={markedKey} error={files.error} />}
         <div className="group">
           {"runtime · "}

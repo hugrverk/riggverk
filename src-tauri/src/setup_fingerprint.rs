@@ -193,6 +193,47 @@ fn claude_settings_digest_from_path(path: &Path) -> Result<String, String> {
     }
 }
 
+/// Digest of the managed projection of a Codex config.
+pub fn codex_managed_digest(config: &toml::Value) -> String {
+    hash_toml_value(&extract_managed_codex_config(config))
+}
+
+/// The digest of what an apply makes of `artifact`: [`artifact_source_digest`], except for the
+/// Codex config, where the keys the user keeps are substituted into the template first (see
+/// [`crate::codex_config_keep`]). It must be used wherever the source side is compared with the
+/// installed side, so plans, fingerprints and ownership records agree on what "current" means.
+/// `bundled_root` holds the template; `runtime_root` is the workspace folder that records the
+/// choice. The version of the bundle is not such a place: it stays the plain template's.
+pub fn artifact_effective_source_digest(
+    artifact: &ArtifactId,
+    bundled_root: &Path,
+    runtime_root: &Path,
+    home: &Path,
+) -> Result<String, String> {
+    if artifact != &ArtifactId::CodexConfig {
+        return artifact_source_digest(artifact, bundled_root, home);
+    }
+    let source = require_source_path(artifact, bundled_root)?;
+    let source_str = fs::read_to_string(&source).map_err(|e| format!("read codex source: {e}"))?;
+    let template: toml::Value = source_str
+        .parse()
+        .map_err(|e| format!("parse codex source toml: {e}"))?;
+    // The choice applies to the installed file; one that is absent or unreadable keeps nothing.
+    let installed = artifact
+        .resolve_dest(home, runtime_root)
+        .ok()
+        .and_then(|dest| fs::read_to_string(dest).ok())
+        .and_then(|raw| raw.parse::<toml::Value>().ok());
+    let effective = match installed {
+        Some(installed) => {
+            crate::codex_config_keep::assess(Some(runtime_root), home, &installed, &template)
+                .effective
+        }
+        None => template,
+    };
+    Ok(codex_managed_digest(&effective))
+}
+
 /// Hash canonical source content for an artifact. Missing source is an error.
 pub fn artifact_source_digest(
     artifact: &ArtifactId,
@@ -237,7 +278,7 @@ pub fn artifact_source_digest(
             let source_toml: toml::Value = source_str
                 .parse()
                 .map_err(|e| format!("parse codex source toml: {e}"))?;
-            Ok(hash_toml_value(&extract_managed_codex_config(&source_toml)))
+            Ok(codex_managed_digest(&source_toml))
         }
         ArtifactKind::TuiConfig => {
             let source = require_source_path(artifact, workspace_root)?;

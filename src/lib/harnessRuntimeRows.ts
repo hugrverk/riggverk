@@ -58,6 +58,13 @@ function warningRows(warnings: readonly string[]): KvItem[] {
  * The overall verdict is the runtime group's heading (`runtimeVerdict`), so the rows below start with the parts.
  */
 
+/** The config status, and how many enforced keys the user keeps ("synced · you keep 1"). */
+function codexConfigRow(health: CodexRuntimeHealth): KvItem {
+  const kept = health.config_kept?.length ?? 0;
+  const status = runtimeChipLabel(health.config_status).toLowerCase();
+  return { label: "config", value: kept > 0 ? `${status} · you keep ${kept}` : status, tone: toneOf(health.config_status) };
+}
+
 function codexRows(health: CodexRuntimeHealth): KvItem[] {
   // The AGENTS.override.md warning has its own alert on the Codex page; the warnings row would repeat it.
   const override = health.checks?.find(check => check.id === "rules_override" && check.status === "warn")?.detail;
@@ -65,7 +72,7 @@ function codexRows(health: CodexRuntimeHealth): KvItem[] {
     statusRow("rules", health.rules_status),
     { label: "agents", value: `${runtimeChipLabel(health.agents_status).toLowerCase()} · ${health.installed_bundled_agent_count}/${health.bundled_agent_count}`, tone: toneOf(health.agents_status) },
     { label: "skills", value: `${runtimeChipLabel(health.skills_status).toLowerCase()} · ${health.skills_synced_count}/${health.skills_expected_count}`, tone: toneOf(health.skills_status) },
-    { label: "config", value: runtimeChipLabel(health.config_status).toLowerCase(), tone: toneOf(health.config_status) },
+    codexConfigRow(health),
     ...textRow("approval", health.approval_policy),
     ...textRow("sandbox", health.sandbox_mode),
     ...nextRows(health.status, health.next_action),

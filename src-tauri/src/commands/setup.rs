@@ -966,8 +966,11 @@ fn apply_single_artifact(
 
     if artifact == &crate::artifact_registry::ArtifactId::CodexConfig {
         if dest.is_file() {
-            let rendered = crate::commands::render_codex_config_managed_projection(
+            // The keys the user keeps are rendered from their kept value, never from the template.
+            let rendered = crate::commands::render_codex_config_for_apply(
                 &crate::setup_roots::bundled_root_for(workspace_root)?,
+                workspace_root,
+                home,
                 &dest,
                 &source,
             )?;

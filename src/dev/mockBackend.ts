@@ -10,7 +10,8 @@
  *             OpenCode plain file that differs from every shipped base;
  *             skills: an older app copy of `tdd` beside the current one for Codex, and two copies of the user's own `my-deploy`;
  *             skill and agent files in conflict (edited `tdd`, two files of `security-audit`, an edited Claude agent `verifier`)
- *             and kept ones (`diagnose` with a bundled update waiting, the agent `sentinel`)
+ *             and kept ones (`diagnose` with a bundled update waiting, the agent `sentinel`);
+ *             the Codex config is on, with `approvals_reviewer = "auto_review"` differing from Riggverk's value (`m` keeps it)
  *   fresh     nothing installed, no backups, no transactions
  *   error     status/diagnostics calls fail (exercises the error line); the workspace is not valid, so the
  *             Library still lists the bundled items but no personal doc
@@ -26,6 +27,7 @@ import { mockIPC } from "@tauri-apps/api/mocks";
 import { isLightAgent } from "../lib/harnessInstallation";
 import type {
   ActionResult,
+  CodexConfigKey,
   AgentMetadataListResponse,
   AgentSourceContent,
   AgentTargetMeta,
@@ -125,7 +127,10 @@ let settings: AppSettings = {
   appearance,
   app_font_size: "medium",
   workspace_path: null,
-  enabled_target_ids: TARGETS.map(t => t.id).filter(id => id !== "codex_config" && id !== "claude_config" && id !== "kilo_mcp"),
+  // The conflict scenario turns the Codex config on: it shows the enforced key the user can keep.
+  enabled_target_ids: TARGETS.map(t => t.id).filter(
+    id => (id !== "codex_config" || scenario === "conflict") && id !== "claude_config" && id !== "kilo_mcp",
+  ),
   enabled_harness_ids: ["codex", "opencode", "claude", "cursor"],
   accent_color: null,
   background_color: null,
@@ -199,6 +204,8 @@ function initialSurfaceStates(): Map<SetupSurfaceId, InstallationState> {
       states.set("claude_rules", "update_available");
       states.set("claude_agents", "update_available");
       states.set("skills", "conflict");
+      // The owner set approvals_reviewer on purpose: the recorded digest no longer matches.
+      states.set("codex_config", "conflict");
       states.set("cursor_mcp", "conflict");
       // Pi's file has comments, which the app does not edit; Kilo's entry has an update waiting.
       states.set("copilot_mcp", "not_installed");
@@ -775,6 +782,37 @@ function applyTakeBundled(surface: FilesSurfaceId, keys: string[], fingerprint: 
   };
 }
 
+/* ---- Codex config: enforced keys the user keeps ---- */
+
+const CODEX_CONFIG_REASON =
+  "approvals_reviewer differs from Riggverk's and changed since Riggverk wrote the file, so nothing is written; m keeps your value";
+
+let codexConfigKeys: { kept: CodexConfigKey[]; differing: CodexConfigKey[] } = {
+  kept: [],
+  differing: scenario === "conflict" ? [{ key: "approvals_reviewer", value: "auto_review" }] : [],
+};
+
+function codexConfigDetail(state: InstallationState): string | null {
+  const { kept, differing } = codexConfigKeys;
+  if (state === "conflict" && differing.length > 0) return CODEX_CONFIG_REASON;
+  if (kept.length > 0) return `you keep ${kept.map(item => `${item.key} = ${item.value}`).join(", ")}; other managed keys follow Riggverk`;
+  return null;
+}
+
+function setCodexConfigKept(kept: boolean) {
+  if (kept) {
+    if (codexConfigKeys.differing.length === 0) {
+      throw new Error("no enforced key differs from the bundled config; there is nothing to keep");
+    }
+    codexConfigKeys = { kept: [...codexConfigKeys.kept, ...codexConfigKeys.differing], differing: [] };
+    surfaceStates.set("codex_config", "current");
+  } else if (codexConfigKeys.kept.length > 0) {
+    // The value is still the user's, and the recorded digest still does not match: a conflict again.
+    codexConfigKeys = { kept: [], differing: [...codexConfigKeys.kept, ...codexConfigKeys.differing] };
+    surfaceStates.set("codex_config", "conflict");
+  }
+}
+
 /** The mock data folder: the old copies an update removes, and what it leaves alone. */
 const MOCK_OLD_COPIES = 133;
 
@@ -806,8 +844,11 @@ function installationStatus(surfaces: SetupSurfaceId[]): InstallationStatus {
       surface,
       label: SURFACE_LABELS[surface],
       state,
-      detail: file ? rulesDetail(file, state) : surfaceDetail(surface, state),
+      detail: file ? rulesDetail(file, state) : ((surface === "codex_config" && codexConfigDetail(state)) || surfaceDetail(surface, state)),
       ...(file ? { rules: { ...file } } : {}),
+      ...(surface === "codex_config" && (codexConfigKeys.kept.length > 0 || codexConfigKeys.differing.length > 0)
+        ? { codex_config: { kept: [...codexConfigKeys.kept], differing: [...codexConfigKeys.differing] } }
+        : {}),
       ...(filesFor(surface) ? { files: filesFor(surface) } : {}),
       ...(surface === "workspace_bundle"
         ? { data_folder: { personal_docs: scenario === "fresh" ? 0 : 2, ownership_records: scenario !== "fresh", left_in_place: 0 } }
@@ -1027,7 +1068,8 @@ function codexHealth(): CodexRuntimeHealth {
     installed_bundled_agent_count: fresh ? 0 : 6,
     extra_installed_agent_count: 0,
     agent_mismatches: [],
-    config_status: "manual",
+    config_status: scenario === "conflict" && codexConfigKeys.differing.length > 0 ? "diverged" : "manual",
+    config_kept: codexConfigKeys.kept.map(item => item.key),
     template_config_path: `${WORKSPACE}/templates/codex/config.toml`,
     installed_config_path: `${HOME}/.codex/config.toml`,
     approval_policy: fresh ? null : "on-request",
@@ -1697,6 +1739,10 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
     case "set_rules_user_managed":
       await delay(100);
       setRulesUserManaged(arg<RulesSurfaceId>(args, "surface"), arg<boolean>(args, "userManaged"));
+      return null;
+    case "set_codex_config_kept":
+      await delay(100);
+      setCodexConfigKept(arg<boolean>(args, "kept"));
       return null;
     case "preview_file_diff":
       await delay(150);

@@ -44,6 +44,9 @@ pub struct CodexRuntimeHealth {
     pub extra_installed_agent_count: usize,
     pub agent_mismatches: Vec<CodexAgentMismatch>,
     pub config_status: String,
+    /// Enforced keys the user keeps (names only): they count as matching while the installed value
+    /// is the kept one.
+    pub config_kept: Vec<String>,
     pub template_config_path: String,
     pub installed_config_path: String,
     pub model: Option<String>,
@@ -283,6 +286,39 @@ pub(crate) fn render_codex_config_managed_projection(
     result
 }
 
+/// [`render_codex_config_managed_projection`] for an apply into `dest`: the keys the user keeps
+/// (see [`crate::codex_config_keep`]) are rendered from their kept value, so the update never
+/// writes over them. Without kept keys it is the plain render from `source`.
+pub(crate) fn render_codex_config_for_apply(
+    bundled_root: &Path,
+    workspace_root: &Path,
+    home: &Path,
+    dest: &Path,
+    source: &Path,
+) -> Result<String, String> {
+    let (Some(installed), Some(template)) = (parse_codex_config(dest), parse_codex_config(source))
+    else {
+        return render_codex_config_managed_projection(bundled_root, dest, source);
+    };
+    let assessment =
+        crate::codex_config_keep::assess(Some(workspace_root), home, &installed, &template);
+    if assessment.active.is_empty() {
+        return render_codex_config_managed_projection(bundled_root, dest, source);
+    }
+    let text = toml::to_string(&assessment.effective)
+        .map_err(|e| format!("serialize the codex config with your kept keys: {e}"))?;
+    let temp_dir = unique_render_temp_dir();
+    let result = (|| -> Result<String, String> {
+        fs::create_dir_all(&temp_dir).map_err(|e| format!("create codex render temp dir: {e}"))?;
+        let effective_source = temp_dir.join("config.toml");
+        fs::write(&effective_source, text.as_bytes())
+            .map_err(|e| format!("write codex render source: {e}"))?;
+        render_codex_config_managed_projection(bundled_root, dest, &effective_source)
+    })();
+    cleanup_temp_dir(&temp_dir);
+    result
+}
+
 fn extract_string_field(table: &toml::Value, path: &[&str]) -> Option<String> {
     let mut current = table;
     for key in path {
@@ -301,14 +337,19 @@ fn codex_skill_roots(home_dir: &Path) -> (SkillRoot, SkillRoot) {
     }
 }
 
-/// Health against the app's bundle; the workspace folder plays no part, so none is needed.
-pub fn compute_health(home_dir: &Path) -> CodexRuntimeHealth {
+/// Health against the app's bundle; the workspace folder's copies play no part. `workspace_root`
+/// is only where the user's kept config keys are recorded: without it nothing is kept.
+pub fn compute_health(home_dir: &Path, workspace_root: Option<&Path>) -> CodexRuntimeHealth {
     let bundled = crate::setup_roots::bundled_root().ok();
-    compute_health_with_bundle(bundled.as_deref(), home_dir)
+    compute_health_with_bundle(bundled.as_deref(), workspace_root, home_dir)
 }
 
 /// All managed files are compared with the bundled sources that install applies.
-fn compute_health_with_bundle(bundled_root: Option<&Path>, home_dir: &Path) -> CodexRuntimeHealth {
+fn compute_health_with_bundle(
+    bundled_root: Option<&Path>,
+    workspace_root: Option<&Path>,
+    home_dir: &Path,
+) -> CodexRuntimeHealth {
     let source_path = |rel: &str| bundled_root.map(|root| root.join(rel)).unwrap_or_default();
     let rules_source_path = source_path("templates/sync/codex-rules.md");
     let codex_dir = codex_home(home_dir);
@@ -552,6 +593,14 @@ fn compute_health_with_bundle(bundled_root: Option<&Path>, home_dir: &Path) -> C
     let mut app_default_tools_approval_mode = None;
     let template_config = parse_codex_config(&template_config_path);
     let installed_config = parse_codex_config(&installed_config_path);
+    // The template with the keys the user keeps substituted: what the installed config is held to.
+    let effective_template =
+        template_config
+            .as_ref()
+            .zip(installed_config.as_ref())
+            .map(|(template, installed)| {
+                crate::codex_config_keep::assess(workspace_root, home_dir, installed, template)
+            });
     let config_status = if !template_config_path.is_file() {
         has_fail = true;
         "missing".into()
@@ -566,13 +615,20 @@ fn compute_health_with_bundle(bundled_root: Option<&Path>, home_dir: &Path) -> C
         "invalid".into()
     } else if managed_codex_keys_match(
         installed_config.as_ref().expect("installed config"),
-        template_config.as_ref().expect("template config"),
+        &effective_template
+            .as_ref()
+            .expect("template config")
+            .effective,
     ) {
         "synced".into()
     } else {
         has_warn = true;
         "diverged".into()
     };
+    let config_kept: Vec<String> = effective_template
+        .as_ref()
+        .map(|assessment| assessment.active.keys().cloned().collect())
+        .unwrap_or_default();
 
     if let Some(installed) = &installed_config {
         model = extract_string_field(installed, &["model"]);
@@ -602,7 +658,7 @@ fn compute_health_with_bundle(bundled_root: Option<&Path>, home_dir: &Path) -> C
         has_fail = true;
     }
 
-    if let Some(template) = &template_config {
+    if template_config.is_some() {
         checks.push(CodexRuntimeCheck {
             id: "template_config_valid".into(),
             label: "Template config is valid TOML".into(),
@@ -611,7 +667,10 @@ fn compute_health_with_bundle(bundled_root: Option<&Path>, home_dir: &Path) -> C
         });
         let managed_match = installed_config
             .as_ref()
-            .map(|installed| managed_codex_keys_match(installed, template))
+            .zip(effective_template.as_ref())
+            .map(|(installed, assessment)| {
+                managed_codex_keys_match(installed, &assessment.effective)
+            })
             .unwrap_or(false);
         checks.push(CodexRuntimeCheck {
             id: "managed_config_match".into(),
@@ -624,8 +683,15 @@ fn compute_health_with_bundle(bundled_root: Option<&Path>, home_dir: &Path) -> C
                 "fail".into()
             },
             detail: if managed_match {
-                "managed routing defaults match bundled workspace (personality/MCP preserved)"
-                    .into()
+                if config_kept.is_empty() {
+                    "managed routing defaults match bundled workspace (personality/MCP preserved)"
+                        .into()
+                } else {
+                    format!(
+                        "managed routing defaults match bundled workspace, except {} you keep (personality/MCP preserved)",
+                        config_kept.join(", ")
+                    )
+                }
             } else if installed_config.is_some() {
                 "managed routing defaults differ from bundled workspace".into()
             } else {
@@ -686,6 +752,7 @@ fn compute_health_with_bundle(bundled_root: Option<&Path>, home_dir: &Path) -> C
         extra_installed_agent_count,
         agent_mismatches,
         config_status,
+        config_kept,
         template_config_path: template_config_path_str,
         installed_config_path: installed_config_path_str,
         model,
@@ -705,7 +772,9 @@ fn compute_health_with_bundle(bundled_root: Option<&Path>, home_dir: &Path) -> C
 #[tauri::command]
 pub fn get_codex_runtime_health() -> Result<CodexRuntimeHealth, String> {
     let home_dir = crate::cursor_profile_paths::resolve_user_home()?;
-    Ok(compute_health(&home_dir))
+    // Only the record of the keys the user keeps lives there; no workspace folder, no choices.
+    let workspace_root = super::workspace::setup_workspace_target_path().ok();
+    Ok(compute_health(&home_dir, workspace_root.as_deref()))
 }
 
 #[cfg(test)]
@@ -824,7 +893,7 @@ apps._default.default_tools_approval_mode = "prompt"
 
     /// Health with the fixture workspace standing in for the bundled install sources.
     fn health_of(ws: &Path, home: &Path) -> CodexRuntimeHealth {
-        compute_health_with_bundle(Some(ws), home)
+        compute_health_with_bundle(Some(ws), None, home)
     }
 
     #[test]
@@ -1098,6 +1167,175 @@ apps._default.default_tools_approval_mode = "prompt"
     }
 
     #[test]
+    fn test_keepable_paths_are_exactly_the_enforced_keys() {
+        let mut enforced: Vec<String> = ENFORCED_TOP_LEVEL_KEYS
+            .iter()
+            .map(|key| key.to_string())
+            .chain(
+                MANAGED_APP_DEFAULT_KEYS
+                    .iter()
+                    .map(|key| format!("apps._default.{key}")),
+            )
+            .collect();
+        let mut keepable: Vec<String> = crate::config_preferences::CODEX_KEEPABLE_PATHS
+            .iter()
+            .map(|path| path.to_string())
+            .collect();
+        enforced.sort();
+        keepable.sort();
+        assert_eq!(keepable, enforced);
+    }
+
+    /// A temp home and workspace folder for the kept keys, `CODEX_HOME` unset.
+    fn kept_env(label: &str) -> (PathBuf, PathBuf, PathBuf) {
+        let bundle = temp_root(&format!("{label}-bundle"));
+        let runtime = temp_root(&format!("{label}-runtime"));
+        let home = temp_root(&format!("{label}-home"));
+        add_rules(&bundle, &home);
+        write_file(
+            &bundle.join("templates/codex/config.toml"),
+            managed_codex_config(),
+        );
+        add_agent(&bundle, &home, "repo_scout.toml", "name = \"repo_scout\"\n");
+        add_skill(&bundle, &home, "diagnose");
+        (bundle, runtime, home)
+    }
+
+    fn keep_in(runtime: &Path, home: &Path, pairs: &[(&str, &str)]) {
+        crate::config_preferences::set_codex_config(
+            runtime,
+            Some(crate::config_preferences::CodexConfigChoice {
+                dest: crate::codex_config_keep::dest_label(runtime, home).expect("dest"),
+                kept: pairs
+                    .iter()
+                    .map(|(key, value)| (key.to_string(), value.to_string()))
+                    .collect(),
+            }),
+        )
+        .expect("record the kept keys");
+    }
+
+    const REVIEWER_AUTO_REVIEW: &str = r#"
+model = "gpt-6.1-sol"
+model_reasoning_effort = "xhigh"
+approval_policy = "on-request"
+approvals_reviewer = "auto_review"
+sandbox_mode = "workspace-write"
+apps._default.approvals_reviewer = "user"
+apps._default.default_tools_approval_mode = "prompt"
+"#;
+
+    #[test]
+    fn test_a_kept_key_reads_as_synced_and_the_other_keys_stay_enforced() {
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        unsafe {
+            std::env::remove_var("CODEX_HOME");
+            std::env::remove_var("CODEX_SKILLS_PATH");
+        }
+        let (bundle, runtime, home) = kept_env("kept-health");
+        write_file(&home.join(".codex/config.toml"), REVIEWER_AUTO_REVIEW);
+
+        let health_with =
+            |runtime: Option<&Path>| compute_health_with_bundle(Some(&bundle), runtime, &home);
+        assert_eq!(health_with(Some(&runtime)).config_status, "diverged");
+
+        keep_in(&runtime, &home, &[("approvals_reviewer", "auto_review")]);
+        let kept = health_with(Some(&runtime));
+        assert_eq!(kept.config_status, "synced");
+        assert_eq!(kept.config_kept, vec!["approvals_reviewer".to_string()]);
+        let check = kept
+            .checks
+            .iter()
+            .find(|c| c.id == "managed_config_match")
+            .expect("managed check");
+        assert_eq!(check.status, "pass");
+        assert!(
+            check.detail.contains("approvals_reviewer"),
+            "{}",
+            check.detail
+        );
+        // Without the workspace folder nothing is kept.
+        assert_eq!(health_with(None).config_status, "diverged");
+
+        // Another enforced key that differs still diverges.
+        write_file(
+            &home.join(".codex/config.toml"),
+            &REVIEWER_AUTO_REVIEW.replace("workspace-write", "danger-full-access"),
+        );
+        assert_eq!(health_with(Some(&runtime)).config_status, "diverged");
+
+        // The kept value changed again: the entry is inert.
+        write_file(
+            &home.join(".codex/config.toml"),
+            &REVIEWER_AUTO_REVIEW.replace("auto_review", "never"),
+        );
+        let changed = health_with(Some(&runtime));
+        assert_eq!(changed.config_status, "diverged");
+        assert!(changed.config_kept.is_empty());
+
+        for dir in [&bundle, &runtime, &home] {
+            cleanup(dir);
+        }
+    }
+
+    #[test]
+    fn test_render_for_apply_updates_other_keys_and_never_writes_over_a_kept_one() {
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        unsafe { std::env::remove_var("CODEX_HOME") };
+        let (bundle, runtime, home) = kept_env("kept-render");
+        let dest = home.join(".codex/config.toml");
+        let source = bundle.join("templates/codex/config.toml");
+        write_file(
+            &dest,
+            &format!(
+                "{}\n# my own note\n[mcp_servers.demo]\ncommand = \"demo\"\n",
+                REVIEWER_AUTO_REVIEW.replace("workspace-write", "read-only")
+            ),
+        );
+
+        // Not kept: the template's reviewer comes back.
+        let plain = render_codex_config_for_apply(
+            &bundled_workspace_root(),
+            &runtime,
+            &home,
+            &dest,
+            &source,
+        )
+        .expect("render");
+        let plain = plain.parse::<toml::Value>().expect("toml");
+        assert_eq!(plain["approvals_reviewer"].as_str(), Some("user"));
+        assert_eq!(plain["sandbox_mode"].as_str(), Some("workspace-write"));
+
+        keep_in(&runtime, &home, &[("approvals_reviewer", "auto_review")]);
+        let rendered = render_codex_config_for_apply(
+            &bundled_workspace_root(),
+            &runtime,
+            &home,
+            &dest,
+            &source,
+        )
+        .expect("render");
+        let parsed = rendered.parse::<toml::Value>().expect("toml");
+        assert_eq!(parsed["approvals_reviewer"].as_str(), Some("auto_review"));
+        assert_eq!(parsed["sandbox_mode"].as_str(), Some("workspace-write"));
+        assert_eq!(
+            parsed["apps"]["_default"]["approvals_reviewer"].as_str(),
+            Some("user")
+        );
+        assert!(rendered.contains("# my own note"), "{rendered}");
+        assert_eq!(
+            parsed["mcp_servers"]["demo"]["command"].as_str(),
+            Some("demo")
+        );
+
+        for dir in [&bundle, &runtime, &home] {
+            cleanup(dir);
+        }
+    }
+
+    #[test]
     fn test_render_projection_seeds_absent_model_and_effort() {
         let dir = temp_root("render-absent-model");
         let dest = dir.join("config.toml");
@@ -1322,7 +1560,7 @@ sandbox_mode = "workspace-write"
         );
 
         // Without a readable bundle nothing is reported as installed.
-        let unreadable = compute_health_with_bundle(None, &home);
+        let unreadable = compute_health_with_bundle(None, None, &home);
         assert_eq!(unreadable.skills_status, "missing");
         assert_eq!(unreadable.skills_expected_count, 0);
         cleanup(&ws);

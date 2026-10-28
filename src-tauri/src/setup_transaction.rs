@@ -615,6 +615,16 @@ pub fn detect_surface_state(
                                     .then(|| claude_settings_conflict_reason(workspace_root, home))
                                     .flatten()
                             })
+                            .or_else(|| {
+                                (p.artifact == ArtifactId::CodexConfig)
+                                    .then(|| {
+                                        crate::codex_config_keep::conflict_reason(
+                                            workspace_root,
+                                            home,
+                                        )
+                                    })
+                                    .flatten()
+                            })
                     });
                 let manual = planned
                     .iter()
@@ -755,10 +765,16 @@ pub fn compute_plan_fingerprint(
             .resolve_source(&bundled_root)
             .is_some_and(|source| source.exists())
         {
-            crate::setup_fingerprint::artifact_source_digest(artifact, &bundled_root, home)
-                .map_err(|error| {
-                    format!("fingerprint source for {artifact:?} ({planned_kind:?}): {error}")
-                })?
+            // The Codex config's keys the user keeps are part of what the source side says.
+            crate::setup_fingerprint::artifact_effective_source_digest(
+                artifact,
+                &bundled_root,
+                workspace_root,
+                home,
+            )
+            .map_err(|error| {
+                format!("fingerprint source for {artifact:?} ({planned_kind:?}): {error}")
+            })?
         } else {
             crate::setup_fingerprint::ABSENT_DIGEST.to_string()
         };
@@ -830,7 +846,9 @@ pub fn detect_artifact_state(
     }
 
     match artifact_kind(artifact) {
-        ArtifactKind::ConfigFile => detect_config_artifact(artifact, &dest, &source, home),
+        ArtifactKind::ConfigFile => {
+            detect_config_artifact(artifact, &dest, &source, workspace_root, home)
+        }
         ArtifactKind::TuiConfig => detect_tui_artifact(&dest, &source),
         // Answered above: the artifact has no source to resolve.
         ArtifactKind::ClaudeSettings => claude_settings_outcome(&dest, false),
@@ -1442,6 +1460,7 @@ fn detect_config_artifact(
     artifact: &ArtifactId,
     dest: &Path,
     source: &Path,
+    workspace_root: &Path,
     home: &Path,
 ) -> (OperationKind, PreviousState) {
     if !dest.exists() {
@@ -1467,7 +1486,15 @@ fn detect_config_artifact(
             Ok(v) => v,
             Err(_) => return (OperationKind::Unavailable, PreviousState::Unavailable),
         };
-        if crate::commands::managed_codex_keys_match(&installed_toml, &source_toml) {
+        // The keys the user keeps match as they are installed; the others follow the template.
+        let effective = crate::codex_config_keep::assess(
+            Some(workspace_root),
+            home,
+            &installed_toml,
+            &source_toml,
+        )
+        .effective;
+        if crate::commands::managed_codex_keys_match(&installed_toml, &effective) {
             (OperationKind::NoChange, PreviousState::MergeableConfigFile)
         } else {
             (OperationKind::Update, PreviousState::MergeableConfigFile)
@@ -2465,11 +2492,51 @@ fn refine_with_managed_hash(
     if installed == expected
         || crate::shipped_digests::is_shipped_version(artifact, bundled_root, &installed)
         || legacy_whole_file_record_holds(artifact, workspace_root, home, expected)
+        || codex_record_holds_beside_kept(artifact, workspace_root, bundled_root, home, expected)
     {
         (OperationKind::Update, previous)
     } else {
         (OperationKind::Conflict, PreviousState::Conflict)
     }
+}
+
+/// The record of the Codex config describes the file as the app last wrote it, before the user
+/// kept any key. With the kept keys put back to the template's values, a file that is still what
+/// the record describes (or a version the app shipped) is the app's to update: the update leaves
+/// the kept keys alone.
+fn codex_record_holds_beside_kept(
+    artifact: &ArtifactId,
+    workspace_root: &Path,
+    bundled_root: &Path,
+    home: &Path,
+    recorded: &str,
+) -> bool {
+    if *artifact != ArtifactId::CodexConfig {
+        return false;
+    }
+    let read = |path: PathBuf| {
+        fs::read_to_string(path)
+            .ok()
+            .and_then(|raw| raw.parse::<toml::Value>().ok())
+    };
+    let (Ok(dest), Some(source)) = (
+        artifact.resolve_dest(home, workspace_root),
+        artifact.resolve_source(bundled_root),
+    ) else {
+        return false;
+    };
+    let (Some(installed), Some(template)) = (read(dest), read(source)) else {
+        return false;
+    };
+    let active = crate::codex_config_keep::active_kept(workspace_root, home, &installed);
+    if active.is_empty() {
+        return false;
+    }
+    let digest = crate::setup_fingerprint::codex_managed_digest(
+        &crate::codex_config_keep::with_kept_reset(&installed, &template, &active),
+    );
+    digest == recorded
+        || crate::shipped_digests::is_shipped_version(artifact, bundled_root, &digest)
 }
 
 /// Before `tui.json` was merge-managed its record held the digest of the whole file the app
@@ -2729,7 +2796,12 @@ fn artifact_matches_unrecorded_apply_output(
         return Ok(current == crate::setup_fingerprint::ABSENT_DIGEST);
     }
     let expected = crate::setup_roots::bundled_root_for(workspace_root).and_then(|bundled| {
-        crate::setup_fingerprint::artifact_source_digest(&op.artifact, &bundled, home)
+        crate::setup_fingerprint::artifact_effective_source_digest(
+            &op.artifact,
+            &bundled,
+            workspace_root,
+            home,
+        )
     });
     Ok(expected.is_ok_and(|expected| expected == current))
 }

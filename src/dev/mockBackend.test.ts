@@ -380,3 +380,39 @@ describe("mock backend: OpenCode critic model", () => {
     expect(await invoke("read_opencode_model_selection")).toEqual(defaults);
   });
 });
+
+describe("mock backend: keep mine for the Codex config", () => {
+  beforeAll(async () => {
+    vi.resetModules();
+    window.history.replaceState(null, "", "/?mock=conflict");
+    await import("./mockBackend");
+  });
+
+  const configRow = async () =>
+    (await invoke<InstallationStatus>("get_installation_status", { surfaces: ["codex_config"] })).surfaces.find(row => row.surface === "codex_config")!;
+  const health = () => invoke<{ config_status: string; config_kept: string[] }>("get_codex_runtime_health");
+
+  it("shows the owner's conflict, keeps the key the way the app does, and hands it back", async () => {
+    const { settings } = await invoke<{ settings: { enabled_target_ids: string[] } }>("get_settings");
+    expect(settings.enabled_target_ids).toContain("codex_config");
+
+    expect(await configRow()).toMatchObject({
+      state: "conflict",
+      codex_config: { kept: [], differing: [{ key: "approvals_reviewer", value: "auto_review" }] },
+    });
+    expect((await configRow()).detail).toContain("m keeps your value");
+    expect(await health()).toMatchObject({ config_status: "diverged", config_kept: [] });
+
+    await invoke("set_codex_config_kept", { kept: true });
+    expect(await configRow()).toMatchObject({
+      state: "current",
+      detail: "you keep approvals_reviewer = auto_review; other managed keys follow Riggverk",
+      codex_config: { kept: [{ key: "approvals_reviewer", value: "auto_review" }], differing: [] },
+    });
+    expect(await health()).toMatchObject({ config_kept: ["approvals_reviewer"] });
+    await expect(invoke("set_codex_config_kept", { kept: true })).rejects.toThrow("nothing to keep");
+
+    await invoke("set_codex_config_kept", { kept: false });
+    expect(await configRow()).toMatchObject({ state: "conflict", codex_config: { kept: [] } });
+  });
+});

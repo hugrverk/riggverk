@@ -5,7 +5,9 @@ mod app_data_migration;
 mod apply_progress;
 mod artifact_registry;
 mod claude_settings;
+mod codex_config_keep;
 mod commands;
+mod config_preferences;
 mod cursor_profile_ops;
 mod cursor_profile_paths;
 mod executable_resolver;
@@ -48,6 +50,8 @@ mod stable_digest;
 mod app_data_migration_contract;
 #[cfg(test)]
 mod claude_settings_contract;
+#[cfg(test)]
+mod codex_config_keep_contract;
 #[cfg(test)]
 mod file_conflicts_contract;
 #[cfg(test)]
@@ -95,8 +99,8 @@ use commands::{
     preview_take_bundled, preview_uninstall, read_agent_source, read_agent_template,
     read_config_template, read_doc, read_opencode_config_source, read_opencode_model_selection,
     read_rules_file, read_skill, reset_active_workspace_path, reset_opencode_model_selection,
-    rollback_setup_transaction, save_doc, save_rules_refinements, set_files_kept,
-    set_rules_user_managed, update_opencode_model_selection, update_settings,
+    rollback_setup_transaction, save_doc, save_rules_refinements, set_codex_config_kept,
+    set_files_kept, set_rules_user_managed, update_opencode_model_selection, update_settings,
 };
 use tauri::Manager;
 
@@ -163,6 +167,7 @@ pub fn run() {
             preview_rules_conversion,
             apply_rules_conversion,
             set_rules_user_managed,
+            set_codex_config_kept,
             preview_file_diff,
             set_files_kept,
             preview_take_bundled,
