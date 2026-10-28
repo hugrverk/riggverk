@@ -1,1 +1,511 @@
-/* Populated by a later slice of the UI rebuild. */
+/* ═══════════════════════════════════════════════════════════════════════════════════
+   Review surfaces and dialogs (Grafit 1A "Bläck"): the install, rules and conflict reviews, the confirm
+   dialog, the diff and the buttons they share.
+
+     .tbtn                  button (ui/TButton): hairline by default, .tbtn-primary the muted blue fill,
+                            .tbtn-danger a hairline button with --fix text (never a red fill); .tbtn-apply is
+                            the primary that writes (ui/ApplyButton); .tbtn-row groups them
+     .pane-card             a Pane in `variant="card"`: titled hairline card, the footer is the action bar
+       .pane-foot           action bar: .q question, .tbtn-row buttons, .bk backup note, .rv-conseq consequences
+     .plan                  install plan <table>; tr.g group label, tr.conf conflict (the decision), td.op word + mark
+     .rv-mark               hollow ring per kind; a conflict is the one filled square (the decision signal)
+     .diff / .diff-split    read-only diff, unified or side by side
+     dialog.app-modal       the confirm dialog
+
+   Sans for prose, mono for paths, values and labels. Radius 0, 1px hairlines, no ochre or amber: the only
+   emphasis is weight and a filled mark. Motion: one short fade-in (full only; subtle and off drop it via the
+   global motion rules in _tokens.scss).
+   ═══════════════════════════════════════════════════════════════════════════════════ */
+
+@keyframes rv-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* ---- buttons ---- */
+
+.tbtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: calc(var(--lh) + 8px);
+  padding: 0 14px;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--border);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: var(--fs);
+  font-weight: 500;
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 0.2s, box-shadow 0.2s, filter 0.2s, opacity 0.25s;
+}
+
+.tbtn-label { display: inline-block; }
+.tbtn-label::first-letter { text-transform: uppercase; }
+
+.tbtn kbd {
+  min-width: 0;
+  padding: 0 5px;
+  border: 0;
+  border-radius: 0;
+  background: color-mix(in srgb, currentColor 14%, transparent);
+  color: inherit;
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  font-weight: 400;
+  line-height: 18px;
+  opacity: 0.85;
+}
+
+.tbtn:hover:not([aria-disabled="true"]) { box-shadow: inset 0 0 0 1px var(--border-strong); }
+.tbtn:active:not([aria-disabled="true"]) { background: var(--sel); }
+.tbtn:focus-visible { outline-offset: 2px; }
+.tbtn[aria-disabled="true"] { opacity: 0.5; cursor: default; }
+
+.tbtn-primary {
+  background: var(--primary);
+  box-shadow: none;
+  color: var(--primary-fg);
+}
+
+.tbtn-primary:hover:not([aria-disabled="true"]) { box-shadow: none; filter: brightness(1.08); }
+.tbtn-primary:active:not([aria-disabled="true"]) { background: var(--primary); filter: brightness(0.95); }
+
+/* Destructive confirmations say so with --fix text and a fix-coloured hairline, not a filled red button. */
+.tbtn-danger {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--fix) 55%, transparent);
+  color: var(--fix);
+}
+
+.tbtn-danger:hover:not([aria-disabled="true"]) { box-shadow: inset 0 0 0 1px var(--fix); }
+
+.tbtn-row { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.tbtn-row:empty { display: none; }
+
+/* ---- marks ---- */
+
+.rv-mark {
+  display: inline-block;
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin-right: 8px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1.5px currentColor;
+  color: var(--off);
+}
+
+.rv-mark-create { color: var(--ok); }
+.rv-mark-update { color: var(--ready); }
+.rv-mark-remove { color: var(--fail); }
+.rv-mark-manual { color: var(--yours); }
+.rv-mark-unavailable { color: var(--off); }
+
+/* The decision: a filled square in the brightest ink. */
+.rv-mark-conflict {
+  border-radius: 0;
+  background: var(--decide);
+  box-shadow: none;
+  color: var(--decide);
+}
+
+/* ---- review card ---- */
+
+.pane-card {
+  width: min(100%, 1000px);
+  justify-self: center;
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  font-family: var(--font-sans);
+  animation: rv-in 0.18s var(--ease) both;
+}
+
+.pane-card > .pane-title {
+  position: static;
+  transform: none;
+  max-width: none;
+  padding: 14px 16px 10px;
+  overflow: visible;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--fs);
+  line-height: 1.4;
+  white-space: normal;
+}
+
+.pane-card > .pane-title b,
+.pane-card:focus-within > .pane-title b {
+  margin-right: 10px;
+  color: var(--text-heading);
+  font-size: calc(var(--fs) + 2px);
+  font-weight: 600;
+}
+
+.pane-card > .pane-body {
+  padding: 8px 0 14px;
+  font-size: var(--fs);
+}
+
+.pane-card .pane-note {
+  padding: 10px 16px 0;
+  line-height: 1.5;
+}
+
+.pane-card .group.pane-group {
+  margin-top: 12px;
+  padding: 10px 16px 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.rv-count-conflict { color: var(--text-heading); font-weight: 600; }
+.rv-added { color: var(--ok); }
+.rv-removed { color: var(--text); font-weight: 600; }
+
+.pane-card .plan-state {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px 16px 0;
+}
+
+.pane-card .plan-state > div { display: flex; align-items: center; gap: 10px; }
+
+.rv-error {
+  display: flex;
+  align-items: baseline;
+  color: var(--fail);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+/* Key/value block of a conversion or take-bundled summary: label muted, value mono, hairline between rows. */
+.pane-card .kv {
+  grid-template-columns: minmax(10ch, max-content) minmax(0, 1fr);
+  gap: 0 20px;
+  margin: 6px 16px 0;
+  padding: 0;
+}
+
+.pane-card .kv dt,
+.pane-card .kv dd {
+  padding: 7px 0;
+  border-top: 1px solid var(--border);
+}
+
+.pane-card .kv dt:first-of-type,
+.pane-card .kv dd:first-of-type { border-top: 0; }
+
+.pane-card .kv dd {
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  overflow-wrap: anywhere;
+}
+
+/* ---- action bar ---- */
+
+.pane-card > .pane-foot {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px 16px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-raised);
+  color: var(--text);
+  font-size: var(--fs);
+}
+
+.pane-card .pane-foot > * { white-space: normal; }
+
+.pane-card .pane-foot .q {
+  grid-column: 1;
+  grid-row: 1;
+  min-width: 0;
+  color: var(--text-heading);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.pane-card .pane-foot .q::first-letter { text-transform: uppercase; }
+
+.pane-card .pane-foot .tbtn-row {
+  grid-column: 2;
+  grid-row: 1;
+  justify-self: end;
+}
+
+.pane-card .pane-foot .bk,
+.pane-card .pane-foot .rv-conseq { grid-column: 1 / -1; }
+
+.pane-card .pane-foot .bk {
+  min-width: 0;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  overflow-wrap: anywhere;
+}
+
+/* "Preview first · Backed up · Undo any time": what applying does, in three short facts. */
+.rv-conseq {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+
+.rv-conseq > span::before {
+  content: "✓ ";
+  color: var(--ok);
+}
+
+@media (max-width: 860px) {
+  .pane-card > .pane-foot { grid-template-columns: minmax(0, 1fr); }
+  .pane-card .pane-foot .tbtn-row { grid-column: 1; grid-row: auto; justify-self: start; }
+}
+
+/* ---- install plan ---- */
+
+.pane-card .plan {
+  width: 100%;
+  margin: 0;
+  border-collapse: collapse;
+  font-size: var(--fs);
+  white-space: normal;
+}
+
+.plan:focus-visible { outline: none; }
+
+.plan th {
+  padding: 4px 12px 6px 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.plan td {
+  padding: 7px 12px 7px 0;
+  border-top: 1px solid var(--border);
+  overflow-wrap: anywhere;
+  vertical-align: baseline;
+}
+
+.plan td:last-child,
+.plan th:last-child { padding-right: 16px; }
+
+/* The first column is the left gutter: the cursor row draws a 2px bar in it. */
+.plan th:first-child,
+.plan td.cur {
+  position: relative;
+  width: 16px;
+  padding: 0;
+}
+
+.plan td.cur::before {
+  content: "";
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 0;
+  width: 2px;
+  background: var(--accent);
+  transform: scaleY(0);
+  transition: transform 0.2s var(--ease);
+}
+
+.plan tr[aria-selected="true"] td.cur::before { transform: scaleY(1); }
+.plan tr.g td { padding: 14px 16px 6px; border-top: 0; }
+.plan tbody tr.g:first-child td { padding-top: 6px; }
+
+.plan tr.g td {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.plan td.op {
+  display: table-cell;
+  white-space: nowrap;
+  font-weight: 500;
+  text-transform: capitalize;
+}
+
+.plan td:nth-child(3) {
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+}
+
+.plan .note { color: var(--text-muted); }
+
+/* A conflict is the decision: raised ground, weight 600 and the filled square. */
+.plan tr.conf td { background: var(--decide-bg); }
+.plan tr.conf td.op { font-weight: 600; }
+.plan tr.conf .note { color: var(--text); }
+.plan tr[aria-selected="true"] td { background: var(--sel); }
+
+.plan tr.detail td {
+  padding-top: 0;
+  padding-bottom: 8px;
+  border-top: 0;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+
+.plan tr.detail td > div { overflow-wrap: anywhere; }
+
+/* ---- diff ---- */
+
+.diff {
+  margin: 8px 16px 0;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+}
+
+.diff-line {
+  display: grid;
+  grid-template-columns: 2ch minmax(0, 1fr);
+  gap: 0 1ch;
+  padding: 1px 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.diff-mark { text-align: center; }
+.diff-line.context { color: var(--text-muted); }
+.diff-line.file { color: var(--text-heading); font-weight: 600; }
+.diff-line.hunk { color: var(--accent); }
+.diff-line.note { color: var(--text-muted); font-style: italic; }
+
+/* Additions are green; removals are the neutral ink tint, so no red or amber carries the diff. The sign stays in its own column. */
+.diff-line.add { background: color-mix(in srgb, var(--ok) 14%, transparent); }
+.diff-line.add .diff-mark { color: var(--ok); font-weight: 600; }
+.diff-line.remove { background: color-mix(in srgb, var(--text) 9%, transparent); }
+.diff-line.remove .diff-mark { color: var(--text); font-weight: 600; }
+
+.diff-empty { padding: 8px 16px; }
+
+/* Side by side: the old text left, the new text right, hunk and note lines across both. */
+.diff-head,
+.diff-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.diff-head > span {
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  overflow-wrap: anywhere;
+}
+
+.diff-head > span + span,
+.diff-row > .diff-line + .diff-line { border-left: 1px solid var(--border); }
+
+.diff-line.blank { background: transparent; }
+
+/* The exact file a conversion writes. */
+.rules-file {
+  margin: 8px 16px 0;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  color: var(--text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* ---- confirm dialog ---- */
+
+dialog.app-modal {
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  width: min(480px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.35);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: var(--fs);
+}
+
+dialog.app-modal[open] { animation: rv-in 0.16s var(--ease) both; }
+
+/* The fallback keeps the dim backdrop in engines where ::backdrop does not inherit custom properties. */
+dialog.app-modal::backdrop { background: var(--backdrop, rgba(0, 0, 0, 0.45)); }
+
+.app-modal-header { padding: 18px 20px 0; }
+
+.app-modal-title {
+  margin: 0;
+  color: var(--text-heading);
+  font-size: calc(var(--fs) + 2px);
+  font-weight: 600;
+}
+
+.app-modal-body {
+  max-height: calc(100vh - 170px);
+  padding: 8px 20px 18px;
+  overflow-y: auto;
+  color: var(--text);
+  line-height: 1.5;
+}
+
+.app-modal-body p { margin: 0 0 var(--lh); }
+.app-modal-body p:last-child { margin-bottom: 0; }
+
+.app-modal-body ul {
+  max-height: 240px;
+  margin: 6px 0;
+  padding-left: 18px;
+  overflow-y: auto;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+
+.app-modal-body ul li { margin: 2px 0; }
+
+.app-modal-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-raised);
+}
+
+.app-modal-footer .btn kbd {
+  min-width: 0;
+  border-color: currentColor;
+  background: transparent;
+  color: inherit;
+  line-height: calc(var(--lh) - 6px);
+}

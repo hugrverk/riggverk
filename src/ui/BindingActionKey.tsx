@@ -3,6 +3,7 @@ import { useKeymapContext, usePlatform } from "../keyboard/context";
 import { ariaKeyShortcuts, formatKeys, parseKeys } from "../keyboard/keymap";
 import { evaluateWhen, type Binding, type RegisteredBinding } from "../keyboard/registry";
 import { ActionKey } from "./ActionKey";
+import { ApplyButton } from "./ApplyButton";
 import { TButton, type TButtonProps } from "./TButton";
 
 /** Runs a binding from a click: the handler receives a synthetic keydown for its first key. False when it declined. */
@@ -41,37 +42,42 @@ export function BindingActionKey({ entry }: { entry: RegisteredBinding }) {
 }
 
 /**
- * The bracket-button form of a binding its owner holds (a confirm line's `y apply`): the same visibility and
- * disabled rules as `BindingActionKey`, and a click runs the binding exactly as its key does, never a second code path.
+ * The button form of a binding its owner holds (a review's `y apply`): the same visibility and disabled rules as
+ * `BindingActionKey`, and a click runs the binding exactly as its key does, never a second code path. `apply`
+ * renders an `ApplyButton` (primary, Enter never activates it) for the binding that writes.
  */
 export function BindingButton({
   binding,
   variant,
   label,
+  apply = false,
 }: {
   binding: Binding;
   variant?: TButtonProps["variant"];
   /** The text after the key cap; defaults to the binding's hint. */
   label?: ReactNode;
+  /** The binding applies a reviewed plan: render an `ApplyButton`. */
+  apply?: boolean;
 }) {
   const platform = usePlatform();
   const keymap = useKeymapContext()?.keymap;
   const { active, disabledReason } = evaluateWhen(binding);
   if (!binding.hint || (!active && disabledReason === null)) return null;
+  const props = {
+    keys: formatKeys(binding.keys, platform),
+    shortcut: ariaKeyShortcuts(binding.keys, platform),
+    disabled: disabledReason ?? false,
+    onClick: () => {
+      // Echoed like its key, the same as a status-bar hint.
+      const chord = parseKeys(binding.keys)[0];
+      if (invokeBinding(binding) && chord) {
+        keymap?.emitRun({ binding, chord, source: "click", editable: false, repeat: false });
+      }
+    },
+  };
+  if (apply) return <ApplyButton {...props}>{label ?? binding.hint}</ApplyButton>;
   return (
-    <TButton
-      keys={formatKeys(binding.keys, platform)}
-      shortcut={ariaKeyShortcuts(binding.keys, platform)}
-      variant={variant}
-      disabled={disabledReason ?? false}
-      onClick={() => {
-        // Echoed like its key, the same as a status-bar hint.
-        const chord = parseKeys(binding.keys)[0];
-        if (invokeBinding(binding) && chord) {
-          keymap?.emitRun({ binding, chord, source: "click", editable: false, repeat: false });
-        }
-      }}
-    >
+    <TButton {...props} variant={variant}>
       {label ?? binding.hint}
     </TButton>
   );

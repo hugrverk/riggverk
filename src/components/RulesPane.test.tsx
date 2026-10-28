@@ -157,11 +157,25 @@ describe("RulesPane", () => {
       expect(flow.close).toHaveBeenCalledTimes(1);
     });
 
-    it("never apply on Enter, on the pane or on the cancel button", () => {
+    it("never apply on Enter, on the pane, on the cancel button or on the apply button itself", () => {
       const flow = renderPane({ status: "conversion", surface: "codex_rules", preview: PREVIEW });
       press("Enter");
       fireEvent.keyDown(confirmLine().getByRole("button", { name: "cancel" }), { key: "Enter" });
       expect(flow.apply).not.toHaveBeenCalled();
+      const apply = confirmLine().getByRole("button", { name: "apply" });
+      apply.focus();
+      expect(fireEvent.keyDown(apply, { key: "Enter" })).toBe(false);
+      expect(flow.apply).not.toHaveBeenCalled();
+    });
+
+    it("state the consequences beside a conversion, and nothing beside a read-only diff", () => {
+      renderPane({ status: "conversion", surface: "codex_rules", preview: PREVIEW });
+      expect(confirmLine().getByText("Preview first")).toBeTruthy();
+      expect(confirmLine().getByText("Backed up")).toBeTruthy();
+      expect(confirmLine().getByText("Undo any time")).toBeTruthy();
+      cleanup();
+      renderPane({ status: "diff", surface: "codex_rules", diff: DIFF });
+      expect(screen.queryByText("Undo any time")).toBeNull();
     });
 
     it("hold apply for a running task or a preview without a token, with the reason", () => {
