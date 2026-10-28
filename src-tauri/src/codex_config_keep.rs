@@ -279,7 +279,7 @@ pub fn hand_back(workspace_root: &Path) -> Result<(), String> {
 // ── Use Riggverk's defaults ──
 
 /// Largest `config.toml` the defaults reset reads and rewrites.
-pub(crate) const MAX_CONFIG_BYTES: u64 = 1024 * 1024;
+const MAX_CONFIG_BYTES: u64 = 1024 * 1024;
 /// Longest value shown in a preview; the reset itself never cuts a value.
 const MAX_SHOWN_VALUE_CHARS: usize = 120;
 
@@ -370,6 +370,43 @@ fn check_rendered(
     }
 }
 
+/// Reads the Codex `config.toml` for a reset: a regular file with no link at the path, at most
+/// [`MAX_CONFIG_BYTES`]. The path is checked, opened, and checked again, and the file that was
+/// opened must be the one the path names after the open (same device and inode on unix), so a link
+/// swapped in between is never read. The read itself is bounded, whatever the file grows to.
+pub(crate) fn read_config_bounded(path: &Path) -> Result<Vec<u8>, String> {
+    use std::io::Read;
+    const NOT_REGULAR: &str = "the Codex config.toml is not a regular file";
+    const UNREADABLE: &str = "cannot read the installed Codex config.toml";
+    let before = std::fs::symlink_metadata(path).map_err(|_| UNREADABLE.to_string())?;
+    if !before.is_file() {
+        return Err(NOT_REGULAR.to_string());
+    }
+    let file = std::fs::File::open(path).map_err(|_| UNREADABLE.to_string())?;
+    let opened = file.metadata().map_err(|_| UNREADABLE.to_string())?;
+    let after = std::fs::symlink_metadata(path).map_err(|_| UNREADABLE.to_string())?;
+    if !opened.is_file() || !after.is_file() {
+        return Err(NOT_REGULAR.to_string());
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        if opened.dev() != after.dev() || opened.ino() != after.ino() {
+            return Err(
+                "the Codex config.toml changed while it was being read; try again".to_string(),
+            );
+        }
+    }
+    let mut content = Vec::new();
+    file.take(MAX_CONFIG_BYTES + 1)
+        .read_to_end(&mut content)
+        .map_err(|_| UNREADABLE.to_string())?;
+    if content.len() as u64 > MAX_CONFIG_BYTES {
+        return Err("the Codex config.toml is too large to reset here".to_string());
+    }
+    Ok(content)
+}
+
 /// Plans the reset of every differing enforced key to Riggverk's value. Read-only.
 ///
 /// The file is rendered by the same merge scripts an update uses (so comments, other keys and the
@@ -382,17 +419,12 @@ pub fn plan_defaults(workspace_root: &Path, home: &Path) -> Result<DefaultsPlan,
     let artifact = ArtifactId::CodexConfig;
     let (source, dest) =
         setup_transaction::validate_artifact_source_dest(&artifact, workspace_root, home)?;
-    let meta = std::fs::symlink_metadata(&dest).map_err(|_| {
-        "the Codex config.toml is not installed; there is nothing to reset".to_string()
-    })?;
-    if !meta.is_file() {
-        return Err("the Codex config.toml is not a regular file".to_string());
+    if std::fs::symlink_metadata(&dest).is_err() {
+        return Err(
+            "the Codex config.toml is not installed; there is nothing to reset".to_string(),
+        );
     }
-    if meta.len() > MAX_CONFIG_BYTES {
-        return Err("the Codex config.toml is too large to reset here".to_string());
-    }
-    let installed_bytes = std::fs::read(&dest)
-        .map_err(|_| "cannot read the installed Codex config.toml".to_string())?;
+    let installed_bytes = read_config_bounded(&dest)?;
     let installed_text = String::from_utf8(installed_bytes.clone())
         .map_err(|_| "the installed Codex config.toml is not valid TOML".to_string())?;
     let installed: toml::Value = installed_text
@@ -433,7 +465,7 @@ pub fn plan_defaults(workspace_root: &Path, home: &Path) -> Result<DefaultsPlan,
     }
     // The merge scripts read the file themselves: it must still be the bytes planned from.
     let digest = crate::stable_digest::bytes(&installed_bytes);
-    let unchanged = std::fs::read(&dest)
+    let unchanged = read_config_bounded(&dest)
         .map(|now| crate::stable_digest::bytes(&now) == digest)
         .unwrap_or(false);
     if !unchanged {
@@ -686,6 +718,50 @@ sandbox_mode = "read-only"
         fn drop(&mut self) {
             let _ = std::fs::remove_dir_all(&self.base);
         }
+    }
+
+    #[test]
+    fn the_config_is_read_only_as_a_bounded_regular_file_without_links() {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        let base = std::env::temp_dir().join(format!("aw-codex-bounded-read-{nanos}"));
+        std::fs::create_dir_all(&base).unwrap();
+
+        let file = base.join("config.toml");
+        std::fs::write(&file, "approvals_reviewer = \"user\"\n").unwrap();
+        assert_eq!(
+            read_config_bounded(&file).unwrap(),
+            b"approvals_reviewer = \"user\"\n"
+        );
+
+        // The limit is exact: the limit itself reads, one byte more is refused.
+        std::fs::write(&file, vec![b'#'; MAX_CONFIG_BYTES as usize]).unwrap();
+        assert_eq!(
+            read_config_bounded(&file).unwrap().len() as u64,
+            MAX_CONFIG_BYTES
+        );
+        std::fs::write(&file, vec![b'#'; MAX_CONFIG_BYTES as usize + 1]).unwrap();
+        assert!(read_config_bounded(&file)
+            .unwrap_err()
+            .contains("too large"));
+
+        assert!(read_config_bounded(&base)
+            .unwrap_err()
+            .contains("regular file"));
+        assert!(read_config_bounded(&base.join("missing.toml")).is_err());
+        #[cfg(unix)]
+        {
+            let real = base.join("real.toml");
+            std::fs::write(&real, "model = \"x\"\n").unwrap();
+            let link = base.join("link.toml");
+            std::os::unix::fs::symlink(&real, &link).unwrap();
+            assert!(read_config_bounded(&link)
+                .unwrap_err()
+                .contains("regular file"));
+        }
+        let _ = std::fs::remove_dir_all(&base);
     }
 
     #[test]

@@ -973,17 +973,7 @@ fn apply_single_artifact(
         // The reset to Riggverk's defaults writes exactly the content its preview rendered, and
         // only over the file the preview was computed from.
         if let Some(rewrite) = rules_rewrite {
-            let size = fs::metadata(&dest)
-                .map_err(|e| format!("read codex config {}: {e}", dest.display()))?
-                .len();
-            if size > crate::codex_config_keep::MAX_CONFIG_BYTES {
-                return Err(
-                    "the Codex config.toml changed since preview; preview the reset again"
-                        .to_string(),
-                );
-            }
-            let installed = fs::read(&dest)
-                .map_err(|e| format!("read codex config {}: {e}", dest.display()))?;
+            let installed = crate::codex_config_keep::read_config_bounded(&dest)?;
             if crate::stable_digest::bytes(&installed) != rewrite.expected_installed_digest {
                 return Err(
                     "the Codex config.toml changed since preview; preview the reset again"
