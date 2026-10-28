@@ -578,12 +578,15 @@ fn scan_pack(pack_dir: &Path) -> Result<Vec<Candidate>, String> {
         );
     }
     let skills_dir = pack_dir.join("skills");
+    // Only a skills folder that is not there at all means "no skills". One that cannot be looked
+    // at, or is no folder, must not read as an empty pack: that would retire everything installed.
     match fs::symlink_metadata(&skills_dir) {
-        Err(_) => return Ok(Vec::new()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(error) => return Err(format!("cannot read the skills folder: {error}")),
         Ok(meta) if meta.file_type().is_symlink() => {
             return Err("refusing a symlinked skills folder".to_string())
         }
-        Ok(meta) if !meta.is_dir() => return Ok(Vec::new()),
+        Ok(meta) if !meta.is_dir() => return Err("skills is not a folder".to_string()),
         Ok(_) => {}
     }
     let mut seen = 0usize;
@@ -644,11 +647,21 @@ fn scan_pack(pack_dir: &Path) -> Result<Vec<Candidate>, String> {
 /// The sub-directories of `dir` (links are rejected before this runs), sorted by name.
 fn sorted_dirs(dir: &Path) -> Result<Vec<(String, PathBuf)>, String> {
     let entries = fs::read_dir(dir).map_err(|e| format!("cannot read {}: {e}", dir.display()))?;
-    let mut out: Vec<(String, PathBuf)> = entries
-        .flatten()
-        .filter(|entry| entry.file_type().is_ok_and(|kind| kind.is_dir()))
-        .filter_map(|entry| Some((entry.file_name().into_string().ok()?, entry.path())))
-        .collect();
+    let mut out: Vec<(String, PathBuf)> = Vec::new();
+    for entry in entries {
+        let entry = entry.map_err(|e| format!("read error in {}: {e}", dir.display()))?;
+        let kind = entry
+            .file_type()
+            .map_err(|e| format!("file type error for {}: {e}", entry.path().display()))?;
+        if !kind.is_dir() {
+            continue;
+        }
+        let name = entry
+            .file_name()
+            .into_string()
+            .map_err(|_| format!("non-UTF-8 file name in {}", dir.display()))?;
+        out.push((name, entry.path()));
+    }
     out.sort_by(|a, b| a.0.cmp(&b.0));
     Ok(out)
 }
@@ -771,6 +784,13 @@ fn compute_held(
                 None => (HeldState::Missing, "pack missing".to_string()),
                 Some(report) => match &report.refused {
                     Some(reason) => (HeldState::Missing, format!("pack refused: {reason}")),
+                    // A present pack with no skill in it at all, while a skill of it is installed:
+                    // an emptied or unreadable checkout is told apart from a removal by the user
+                    // forgetting the pack.
+                    None if report.skills.is_empty() => (
+                        HeldState::Missing,
+                        "the pack holds no skills now".to_string(),
+                    ),
                     None => match report
                         .skills
                         .iter()

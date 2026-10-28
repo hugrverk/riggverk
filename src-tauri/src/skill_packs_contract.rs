@@ -858,6 +858,79 @@ mod tests {
         );
     }
 
+    /// A pack with one installed skill, `my-checklist`.
+    fn installed_pack(env: &Env) -> PathBuf {
+        env.pack_skill("mine", None, "my-checklist", "kept in the pack", &[]);
+        let result = env.apply();
+        assert!(result.success, "install: {}", result.message);
+        env.packs().join("mine")
+    }
+
+    fn assert_held_not_retired(env: &Env, expected_reason: &str) {
+        let sources = env.sources();
+        let held = sources.held();
+        assert_eq!(held.len(), 1, "{held:?}");
+        assert_eq!(held[0].name, "my-checklist");
+        assert!(
+            held[0].reason.contains(expected_reason),
+            "{}",
+            held[0].reason
+        );
+        no_removals(env);
+        assert!(env
+            .root(SkillRoot::Claude)
+            .join("my-checklist/SKILL.md")
+            .is_file());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_skills_folder_that_cannot_be_inspected_holds_the_installed_skills() {
+        let env = Env::new("unreadable-skills");
+        let pack = installed_pack(&env);
+
+        // The pack folder cannot be searched, so its skills folder can neither be read nor found
+        // missing.
+        set_mode(&pack, 0o000);
+        let reason = env.sources().packs()[0].refused.clone();
+        set_mode(&pack, 0o755);
+        assert!(
+            reason.is_some_and(|reason| reason.contains("cannot")),
+            "refused"
+        );
+        set_mode(&pack, 0o000);
+        let held = env.sources().held().len();
+        let removals = env
+            .pending()
+            .into_iter()
+            .filter(|(_, kind)| *kind == OperationKind::Remove)
+            .count();
+        set_mode(&pack, 0o755);
+        assert_eq!(held, 1);
+        assert_eq!(removals, 0);
+    }
+
+    #[test]
+    fn a_skills_entry_that_is_no_folder_refuses_the_pack_and_holds_its_skills() {
+        let env = Env::new("skills-is-a-file");
+        let pack = installed_pack(&env);
+        fs::remove_dir_all(pack.join("skills")).expect("remove skills");
+        fs::write(pack.join("skills"), "not a folder\n").expect("a file in its place");
+        assert_held_not_retired(&env, "not a folder");
+    }
+
+    #[test]
+    fn a_pack_that_holds_no_skills_any_more_holds_the_installed_ones() {
+        let env = Env::new("emptied");
+        let pack = installed_pack(&env);
+        fs::remove_dir_all(pack.join("skills/my-checklist")).expect("empty the pack");
+        assert_held_not_retired(&env, "no skills");
+
+        // A pack folder without any skills folder is the same.
+        fs::remove_dir_all(pack.join("skills")).expect("remove skills");
+        assert_held_not_retired(&env, "no skills");
+    }
+
     impl Env {
         /// Applies when the plan has work; `None` when it has none.
         fn apply_if_needed(&self) -> Option<SetupResult> {
