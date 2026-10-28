@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { PACK_STATE_LABEL } from "../../lib/packSkills";
 import type { SkillSummary } from "../../types";
 import { riskTone } from "./entry";
 import { LibraryList } from "./LibraryList";
@@ -49,6 +50,9 @@ export function SkillItemList({
           <>
             <span className="nm">{skill.name}</span>
             {skill.risk && <span className={tone ? `meta c-${tone}` : "meta"}>{skill.risk}</span>}
+            {skill.packState && skill.packState !== "active" && (
+              <span className="meta c-warn">{PACK_STATE_LABEL[skill.packState]}</span>
+            )}
           </>
         );
       }}

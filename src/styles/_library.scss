@@ -271,3 +271,22 @@
   overflow-x: auto;
   background: transparent;
 }
+
+/* ---- skill packs ---- */
+
+/* Packs whose installed skills are kept while the pack cannot be read; each row offers "Forget pack". */
+.lib-pack-note {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 6px;
+  padding: 0 10px 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+.lib-pack-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 8px;
+}

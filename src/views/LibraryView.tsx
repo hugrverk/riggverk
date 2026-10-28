@@ -10,6 +10,7 @@ import type {
   ConfigEditorSourceMeta,
   DocSummary,
   DocumentContent,
+  PackLibrary,
   RulesFileContent,
   RulesFileSummary,
   RulesSurfaceId,
@@ -21,6 +22,7 @@ import { CreateDocForm } from "./library/CreateDocForm";
 import { DocItemList } from "./library/DocItemList";
 import { DocumentPane } from "./library/DocumentPane";
 import { buildEntry, emptyStateHint } from "./library/entry";
+import { PackNotice } from "./library/PackNotice";
 import { RULES_LIST_KEY, rulesFileKey, RulesItemList } from "./library/RulesItemList";
 import { SkillItemList } from "./library/SkillItemList";
 import { SourceSwitcher, type LibrarySourceTab } from "./library/SourceSwitcher";
@@ -94,6 +96,9 @@ export interface LibraryViewProps {
   skillSearch: string;
   onSetSkillSearch: (value: string) => void;
   onSelectSkillPreview: (id: string) => void;
+  /** Skill packs: those whose installed skills are kept while the pack cannot be read, and the way to forget one. */
+  packLibrary?: PackLibrary | null;
+  onForgetPack?: (name: string) => void;
 
   // Agents
   agentSources: AgentMetadataResponse[];
@@ -329,6 +334,9 @@ export function LibraryView(props: LibraryViewProps) {
           activeId={sourceType}
           onSelect={type => void onSetSourceType(type)}
         />
+        {sourceType === "skills" && props.onForgetPack && (
+          <PackNotice library={props.packLibrary ?? null} onForgetPack={props.onForgetPack} />
+        )}
         {list}
       </Pane>
 

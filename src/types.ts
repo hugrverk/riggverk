@@ -17,6 +17,8 @@ export interface DocSummary {
 export interface SkillSummary {
   id: string; name: string; description: string; path: string; group: string;
   category: string; risk: string; targets: string[]; related: string[];
+  /** Set on a skill from a pack: its state and why it is not active. */
+  packState?: PackSkillState; packReason?: string;
 }
 
 export interface AgentMetadataEntry {
@@ -904,4 +906,28 @@ export interface SetupResult {
   rolled_back: string[];
   manual_steps: string[];
   message: string;
+}
+
+/** A pack skill: `active` is in the catalog, `shadowed` loses to a bundled skill of its name, `error` is invalid or ambiguous, `missing` is installed while its pack cannot be read. */
+export type PackSkillState = "active" | "shadowed" | "error" | "missing";
+
+export interface PackSkillEntry {
+  id: string; name: string; description: string; pack: string;
+  state: PackSkillState; reason: string; path: string;
+}
+
+export interface PackEntry {
+  name: string;
+  /** `ok`, `refused`, or `missing` (skills of it are installed, its folder is gone). */
+  state: "ok" | "refused" | "missing";
+  reason: string;
+  /** "Forget pack" applies: its installed skills are held and it provides none. */
+  forgettable: boolean;
+}
+
+export interface PackLibrary {
+  folder: string;
+  packs: PackEntry[];
+  skills: PackSkillEntry[];
+  ignored: { name: string; reason: string }[];
 }

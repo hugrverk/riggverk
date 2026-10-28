@@ -89,6 +89,8 @@ function AppShell() {
 
   const {
     skills,
+    packLibrary,
+    forgetPack,
     activeSkillId,
     activeSkillContent,
     skillSearch,
@@ -786,6 +788,8 @@ function AppShell() {
             skillSearch={skillSearch}
             onSetSkillSearch={setSkillSearch}
             onSelectSkillPreview={readSkill}
+            packLibrary={packLibrary}
+            onForgetPack={forgetPack}
             // Agents
             agentSources={visibleAgentSources}
             activeAgentId={activeAgentId && visibleAgentIds.has(activeAgentId) ? activeAgentId : null}
