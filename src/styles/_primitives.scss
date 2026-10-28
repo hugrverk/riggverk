@@ -231,6 +231,7 @@ kbd {
 .filter input {
   flex: 1;
   min-width: 0;
+  min-height: 24px;
   padding: 0;
   border: none;
   background: transparent;
@@ -380,4 +381,5 @@ kbd {
 .help-overlay .kv dd { white-space: normal; }
 .help-overlay .foot { padding: 6px 10px 0; color: var(--text-muted); font-size: var(--fs-sm); }
 .help-overlay .help-note { margin: 8px 14px 0; color: var(--text-muted); font-size: var(--fs-sm); }
+.help-overlay .help-states-section { grid-column: 1 / -1; }
 .help-overlay .help-states dt { white-space: normal; }

@@ -18,6 +18,7 @@ describe("Toast", () => {
   it("is an always-mounted polite live region, empty until a notice", () => {
     renderInFrame(<Notifier />);
     expect(toast().getAttribute("role")).toBe("status");
+    expect(toast().getAttribute("aria-live")).toBe("polite");
     expect(toast().textContent).toBe("");
     fireEvent.click(screen.getByRole("button", { name: "notify" }));
     expect(toast().textContent).toBe("applied");

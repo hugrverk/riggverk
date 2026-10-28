@@ -8,7 +8,7 @@ import { useShellState } from "./ShellState";
 export function Toast() {
   const { notice, noticeTone, noticeId } = useShellState();
   return (
-    <div className="toast" role="status">
+    <div className="toast" role="status" aria-live="polite" aria-atomic="true">
       {notice && (
         <span key={noticeId} className="toast-text" data-tone={noticeTone ?? undefined}>
           {notice}

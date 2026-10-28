@@ -140,7 +140,7 @@ function HelpBody() {
               </dl>
             </section>
           )}
-          <section aria-label="States">
+          <section aria-label="States" className="help-states-section">
             <h3 className="group">States</h3>
             <dl className="kv help-states">
               {UI_STATE_SUMMARY_ORDER.map(state => (
