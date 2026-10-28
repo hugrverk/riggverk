@@ -329,45 +329,88 @@ fn prune_empty_tables(value: &mut toml::Value) -> bool {
     table.is_empty()
 }
 
-/// Besides the enforced keys, the regular update may seed the create-only keys and remove the
-/// pre-0.134 profile remnants; the same render does both in a reset.
-const OTHER_MANAGED_PATHS: [&str; 5] = [
-    "model",
-    "model_reasoning_effort",
-    "profile",
-    "profiles.safe",
-    "profiles.workspace-write",
-];
+/// The legacy profile tables the regular update removes when they still have the shape the app
+/// wrote.
+const LEGACY_PROFILE_PATHS: [&str; 2] = ["profiles.safe", "profiles.workspace-write"];
 
-/// The config without the keys the regular update may touch, and without empty tables.
+/// The config without any key the render may touch, and without empty tables: what must come out
+/// of the render exactly as it went in.
 fn user_part(config: &toml::Value) -> toml::Value {
     let mut rest = config.clone();
-    for path in CODEX_KEEPABLE_PATHS.iter().chain(&OTHER_MANAGED_PATHS) {
+    for path in CODEX_KEEPABLE_PATHS
+        .iter()
+        .chain(crate::commands::CREATE_ONLY_TOP_LEVEL_KEYS)
+        .chain(&["profile"])
+        .chain(&LEGACY_PROFILE_PATHS)
+    {
         remove_value(&mut rest, path);
     }
     prune_empty_tables(&mut rest);
     rest
 }
 
-/// Checks the rendered file before it is offered: every key to reset holds Riggverk's value, every
-/// kept key still holds the kept one, and nothing of the user's other settings changed.
+/// Checks the rendered file before it is offered, key by key, so that it differs from the
+/// installed file only where the preview says so:
+/// - a key being reset holds Riggverk's value;
+/// - a key the user still keeps holds the kept value;
+/// - any other enforced or create-only key that is set is unchanged, whatever kind of value it
+///   is; when it is absent it may only be added with the bundled value;
+/// - `profile` and the two legacy `profiles` tables may only be removed, and only when they are
+///   the app-shipped remnants the regular update removes;
+/// - everything else is unchanged.
 fn check_rendered(
     installed: &toml::Value,
     rendered: &toml::Value,
+    template: &toml::Value,
     keys: &[DefaultKey],
     kept: &BTreeMap<String, String>,
 ) -> Result<(), String> {
-    let reset_ok = keys
+    let refused = || Err(CANNOT_EDIT_SAFELY.to_string());
+    let string = |value: &str| toml::Value::String(value.to_string());
+    for path in CODEX_KEEPABLE_PATHS
         .iter()
-        .all(|item| string_at(rendered, &item.key).as_deref() == Some(item.riggverk.as_str()));
-    let kept_ok = kept
-        .iter()
-        .all(|(key, value)| string_at(rendered, key).as_deref() == Some(value.as_str()));
-    if reset_ok && kept_ok && user_part(installed) == user_part(rendered) {
-        Ok(())
-    } else {
-        Err(CANNOT_EDIT_SAFELY.to_string())
+        .chain(crate::commands::CREATE_ONLY_TOP_LEVEL_KEYS)
+    {
+        let (before, after) = (value_at(installed, path), value_at(rendered, path));
+        let allowed = if let Some(item) = keys.iter().find(|item| item.key == *path) {
+            after == Some(&string(&item.riggverk))
+        } else if let Some(value) = kept.get(*path) {
+            after == Some(&string(value))
+        } else if before.is_some() {
+            after == before
+        } else {
+            after.is_none() || after == value_at(template, path)
+        };
+        if !allowed {
+            return refused();
+        }
     }
+    let (before, after) = (
+        value_at(installed, "profile"),
+        value_at(rendered, "profile"),
+    );
+    let removable = matches!(
+        before,
+        Some(toml::Value::String(selector))
+            if crate::commands::LEGACY_TOP_LEVEL_PROFILE_VALUES.contains(&selector.as_str())
+    );
+    if after != before && !(removable && after.is_none()) {
+        return refused();
+    }
+    for path in LEGACY_PROFILE_PATHS {
+        let (before, after) = (value_at(installed, path), value_at(rendered, path));
+        let removable = matches!(
+            before,
+            Some(toml::Value::Table(profile)) if crate::commands::is_app_shaped_legacy_profile(profile)
+        );
+        if after != before && !(removable && after.is_none()) {
+            return refused();
+        }
+    }
+    if user_part(installed) != user_part(rendered) {
+        return refused();
+    }
+    Ok(())
 }
 
 /// Reads the Codex `config.toml` for a reset: a regular file with no link at the path, at most
@@ -459,7 +502,13 @@ pub fn plan_defaults(workspace_root: &Path, home: &Path) -> Result<DefaultsPlan,
     let rendered_toml: toml::Value = rendered
         .parse()
         .map_err(|_| CANNOT_EDIT_SAFELY.to_string())?;
-    check_rendered(&installed, &rendered_toml, &keys, &assessment.active)?;
+    check_rendered(
+        &installed,
+        &rendered_toml,
+        &template,
+        &keys,
+        &assessment.active,
+    )?;
     if rendered == installed_text {
         return Err(NOTHING_TO_RESET.to_string());
     }
@@ -739,6 +788,118 @@ sandbox_mode = "read-only"
         fn drop(&mut self) {
             let _ = std::fs::remove_dir_all(&self.base);
         }
+    }
+
+    fn reset_key(key: &str, yours: &str, riggverk: &str) -> DefaultKey {
+        DefaultKey {
+            key: key.to_string(),
+            yours: yours.to_string(),
+            riggverk: riggverk.to_string(),
+        }
+    }
+
+    /// `check_rendered` for a reset of `approvals_reviewer` from "auto_review", with the given
+    /// installed and rendered files (each added to the base text below).
+    fn checked(installed_extra: &str, rendered_extra: &str, rendered_reviewer: &str) -> bool {
+        let base = |reviewer: &str, extra: &str| {
+            parse(&format!("approvals_reviewer = \"{reviewer}\"\n{extra}\n"))
+        };
+        check_rendered(
+            &base("auto_review", installed_extra),
+            &base(rendered_reviewer, rendered_extra),
+            &parse(TEMPLATE),
+            &[reset_key("approvals_reviewer", "auto_review", "user")],
+            &BTreeMap::new(),
+        )
+        .is_ok()
+    }
+
+    #[test]
+    fn the_rendered_file_may_differ_from_the_installed_one_only_where_the_preview_says() {
+        // The reset itself.
+        assert!(checked("", "", "user"));
+        assert!(
+            !checked("", "", "auto_review"),
+            "the key must hold Riggverk's value"
+        );
+        assert!(!checked("", "", "something_else"));
+
+        // A value of another kind in an enforced key is never rewritten by the render.
+        let granular = "approval_policy = { granular = { sandbox_approval = true } }";
+        assert!(checked(granular, granular, "user"));
+        assert!(!checked(
+            granular,
+            "approval_policy = \"on-request\"",
+            "user"
+        ));
+        // An enforced key that is set stays as it is, even when it is a string that differs.
+        assert!(!checked(
+            "sandbox_mode = \"read-only\"",
+            "sandbox_mode = \"workspace-write\"",
+            "user"
+        ));
+        // An absent enforced or create-only key may only be added with the bundled value.
+        assert!(checked("", "sandbox_mode = \"workspace-write\"", "user"));
+        assert!(!checked(
+            "",
+            "sandbox_mode = \"danger-full-access\"",
+            "user"
+        ));
+        assert!(checked("", "model = \"gpt-6.1-sol\"", "user"));
+        assert!(!checked("", "model = \"something-else\"", "user"));
+
+        // A model the user set is never touched.
+        assert!(checked("model = \"mine\"", "model = \"mine\"", "user"));
+        assert!(!checked(
+            "model = \"mine\"",
+            "model = \"gpt-6.1-sol\"",
+            "user"
+        ));
+        assert!(!checked("model = \"mine\"", "", "user"));
+        assert!(!checked(
+            "model_reasoning_effort = \"low\"",
+            "model_reasoning_effort = \"xhigh\"",
+            "user"
+        ));
+
+        // `profile` goes only when it is an app-shipped selector.
+        assert!(checked("profile = \"safe\"", "", "user"));
+        assert!(checked("profile = \"workspace-write\"", "", "user"));
+        assert!(!checked("profile = \"work\"", "", "user"));
+        assert!(checked("profile = \"work\"", "profile = \"work\"", "user"));
+        assert!(!checked("profile = \"safe\"", "profile = \"work\"", "user"));
+
+        // The legacy tables go only in the shape the app wrote them.
+        let shipped = "[profiles.safe]\napproval_policy = \"never\"";
+        assert!(checked(shipped, "", "user"));
+        let custom = "[profiles.safe]\nmodel = \"mine\"\napproval_policy = \"never\"";
+        assert!(!checked(custom, "", "user"));
+        assert!(checked(custom, custom, "user"));
+        assert!(!checked("[profiles.work]\nmodel = \"mine\"", "", "user"));
+
+        // Nothing else changes.
+        assert!(!checked(
+            "personality = \"pragmatic\"",
+            "personality = \"friendly\"",
+            "user"
+        ));
+        assert!(!checked(
+            "[mcp_servers.demo]\ncommand = \"demo\"",
+            "",
+            "user"
+        ));
+    }
+
+    #[test]
+    fn a_kept_key_must_keep_its_kept_value_in_the_rendered_file() {
+        let installed = parse("approvals_reviewer = \"user\"\nsandbox_mode = \"read-only\"\n");
+        let kept = kept(&[("sandbox_mode", "read-only")]);
+        let keys = [reset_key("approvals_reviewer", "user", "user")];
+        let same = parse("approvals_reviewer = \"user\"\nsandbox_mode = \"read-only\"\n");
+        let reset = parse("approvals_reviewer = \"user\"\nsandbox_mode = \"workspace-write\"\n");
+        let template = parse(TEMPLATE);
+        assert!(check_rendered(&installed, &same, &template, &keys, &kept).is_ok());
+        assert!(check_rendered(&installed, &reset, &template, &keys, &kept).is_err());
     }
 
     #[test]

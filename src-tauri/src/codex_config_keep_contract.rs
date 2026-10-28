@@ -609,6 +609,68 @@ mod tests {
     }
 
     #[test]
+    fn a_value_of_another_kind_in_an_enforced_key_is_never_rewritten_by_a_reset() {
+        let env = Env::new("granular");
+        // approval_policy holds a table: no string to compare, so it is not a difference, but the
+        // render would still overwrite its line. The reset must refuse rather than do that.
+        let text: Vec<String> = env
+            .read()
+            .lines()
+            .map(|line| {
+                if line.starts_with("approval_policy =") {
+                    "approval_policy = { granular = { sandbox_approval = true } }".to_string()
+                } else {
+                    line.to_string()
+                }
+            })
+            .collect();
+        env.write(&(text.join("\n") + "\n"));
+        env.set_top_level("approvals_reviewer", "auto_review");
+        let before = env.read();
+        let transactions = env.transactions();
+
+        let error = preview_codex_config_defaults().expect_err("refused");
+        assert!(
+            error.contains("cannot edit this config.toml safely"),
+            "{error}"
+        );
+        assert!(
+            !error.contains("granular"),
+            "no file text in errors: {error}"
+        );
+        assert_eq!(env.read(), before);
+        assert_eq!(env.transactions(), transactions);
+    }
+
+    #[test]
+    fn a_user_profile_and_a_customised_legacy_profile_table_are_left_alone() {
+        let env = Env::new("profiles");
+        env.set_top_level("approvals_reviewer", "auto_review");
+        let user_part = "\nprofile = \"work\"\n\n[profiles.safe]\nmodel = \"mine\"\napproval_policy = \"never\"\n\n[profiles.work]\nmodel = \"mine\"\n";
+        // `profile` is a top-level key: it has to come before the first table.
+        let text = env.read();
+        let first_table = text.find("\n[").expect("a table");
+        let (top, tables) = text.split_at(first_table);
+        let (profile_line, profile_tables) = user_part.trim_start().split_once("\n\n").unwrap();
+        let before = format!("{top}{profile_line}\n{tables}\n{profile_tables}");
+        env.write(&before);
+
+        let preview = preview_codex_config_defaults().expect("preview");
+        assert_eq!(preview.keys.len(), 1);
+        let result = apply_codex_config_defaults(
+            Some(preview.plan_fingerprint),
+            Some(preview.preview_token),
+        )
+        .expect("apply");
+        assert!(result.success, "{}", result.message);
+        let expected = before.replace(
+            "approvals_reviewer = \"auto_review\"",
+            "approvals_reviewer = \"user\"",
+        );
+        assert_eq!(env.read(), expected);
+    }
+
+    #[test]
     fn the_reset_fingerprint_is_tagged_and_not_that_of_a_rules_conversion() {
         let env = Env::new("tagged");
         env.customize();

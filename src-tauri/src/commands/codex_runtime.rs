@@ -66,12 +66,12 @@ pub struct CodexRuntimeHealth {
 const ENFORCED_TOP_LEVEL_KEYS: &[&str] = &["approval_policy", "approvals_reviewer", "sandbox_mode"];
 /// Written from the template only while `config.toml` has no value for the key.
 /// Afterwards they are user-owned: never overwritten and never counted as drift.
-const CREATE_ONLY_TOP_LEVEL_KEYS: &[&str] = &["model", "model_reasoning_effort"];
+pub(crate) const CREATE_ONLY_TOP_LEVEL_KEYS: &[&str] = &["model", "model_reasoning_effort"];
 const MANAGED_APP_DEFAULT_KEYS: &[&str] = &["approvals_reviewer", "default_tools_approval_mode"];
 // Pre-0.134 profile scheme this app used to write. Codex now rejects the
 // top-level `profile` selector and ignores `[profiles.*]` tables, so
 // app-shipped remnants count as divergence and are removed on update.
-const LEGACY_TOP_LEVEL_PROFILE_VALUES: &[&str] = &["safe", "workspace-write"];
+pub(crate) const LEGACY_TOP_LEVEL_PROFILE_VALUES: &[&str] = &["safe", "workspace-write"];
 const LEGACY_PROFILES: &[&str] = &["safe", "workspace-write"];
 const LEGACY_PROFILE_FIELDS: &[&str] = &["approval_policy", "sandbox_mode"];
 
@@ -107,7 +107,7 @@ fn parse_codex_config(path: &Path) -> Option<toml::Value> {
     toml::from_str(&content).ok()
 }
 
-fn is_app_shaped_legacy_profile(profile: &toml::map::Map<String, toml::Value>) -> bool {
+pub(crate) fn is_app_shaped_legacy_profile(profile: &toml::map::Map<String, toml::Value>) -> bool {
     !profile.is_empty()
         && profile
             .keys()

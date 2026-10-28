@@ -14,8 +14,9 @@ pub(crate) mod retired_workspace_files;
 mod security_posture;
 pub(crate) mod setup;
 pub(crate) use codex_runtime::{
-    extract_managed_codex_config, managed_codex_keys_match, render_codex_config_for_apply,
-    render_codex_config_managed_projection,
+    extract_managed_codex_config, is_app_shaped_legacy_profile, managed_codex_keys_match,
+    render_codex_config_for_apply, render_codex_config_managed_projection,
+    CREATE_ONLY_TOP_LEVEL_KEYS, LEGACY_TOP_LEVEL_PROFILE_VALUES,
 };
 pub(crate) use content::personal_doc_count;
 pub(crate) use opencode_runtime::{
