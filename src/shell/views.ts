@@ -10,6 +10,7 @@ export type AppView =
   | "copilot"
   | "pi"
   | "kilo"
+  | "history"
   | "library"
   | "settings";
 
@@ -24,7 +25,7 @@ export interface ViewDef {
   harness?: InstallAgent;
 }
 
-/** Sidebar order: overview, agents, library, settings. The id of Overview stays `start` (landing view, commands). */
+/** Sidebar order: overview, agents, history, library, settings. The id of Overview stays `start` (landing view, commands). */
 export const VIEW_DEFS: readonly ViewDef[] = [
   { id: "start", label: "Overview", command: "workspace", aliases: ["overview", "start", "ws"] },
   ...HARNESS_NAV_ORDER.map((harness): ViewDef => ({
@@ -34,6 +35,7 @@ export const VIEW_DEFS: readonly ViewDef[] = [
     aliases: [],
     harness,
   })),
+  { id: "history", label: "History", command: "history", aliases: [] },
   { id: "library", label: "Library", command: "library", aliases: ["lib"] },
   { id: "settings", label: "Settings", command: "settings", aliases: [] },
 ];

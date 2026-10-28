@@ -1859,6 +1859,13 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
       const id = arg<string>(args, "transactionId");
       if (dryRun) await delay(400);
       else await emitProgress("rollback_setup_transaction", ["~/.claude/CLAUDE.md", "~/.claude/agents/verifier.md"], { backup: false });
+      const historyUndo = id !== lastTransactionId && historyLog.some(entry => entry.transaction_id === id && entry.undoable);
+      if (historyUndo) {
+        // A run from the history (the Overview's and History's Undo): the dry run lists what would be restored.
+        const restored = historyLog.find(entry => entry.transaction_id === id)!.changes.map(change => change.path);
+        if (!dryRun) markHistoryUndone(id);
+        return { success: true, transaction_id: id, applied: dryRun ? restored : [], failed: [], rolled_back: dryRun ? [] : restored, manual_steps: [], message: dryRun ? `Dry run: would restore ${restored.length} artifact(s); 0 already restored; 0 conflicted` : `restored ${restored.length} files` } satisfies SetupResult;
+      }
       if (!lastTransactionId || id !== lastTransactionId) {
         return { success: false, transaction_id: id, applied: [], failed: [id], rolled_back: [], manual_steps: [], message: `transaction ${id} not found` } satisfies SetupResult;
       }
@@ -2047,7 +2054,25 @@ function setupHistory(limit: number): SetupHistoryEntry[] {
     throw new Error("limit must be an unsigned 32-bit integer");
   }
   if (scenario === "fresh" || scenario === "empty") return [];
-  const entries: SetupHistoryEntry[] = [
+  return historyLog.slice(0, limit).map(entry => structuredClone(entry));
+}
+
+/** Like the backend, Undo goes to the newest completed run only; undoing it hands the offer to the next completed one. */
+function markHistoryUndone(transactionId: string): void {
+  const entry = historyLog.find(item => item.transaction_id === transactionId);
+  if (!entry) return;
+  entry.status = "rolled_back";
+  entry.undoable = false;
+  entry.is_newest_completed = false;
+  entry.changes = entry.changes.map(change => ({ ...change, restored: true }));
+  const next = historyLog.find(item => item.status === "applied");
+  if (next) {
+    next.is_newest_completed = true;
+    next.undoable = true;
+  }
+}
+
+const historyLog: SetupHistoryEntry[] = [
     {
       transaction_id: "1792663200000000000",
       created_at: "1792663200000000000", finished_at: "1792663202000000000",
@@ -2078,8 +2103,6 @@ function setupHistory(limit: number): SetupHistoryEntry[] {
       is_newest_completed: false, undoable: false, receipt: null,
     },
   ];
-  return entries.slice(0, limit);
-}
 
 // Report as a Tauri host so the shell lays out exactly as in the app (traffic-light reserve).
 (globalThis as { isTauri?: boolean }).isTauri = true;

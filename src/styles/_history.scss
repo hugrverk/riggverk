@@ -1,1 +1,149 @@
-/* Populated by a later slice of the UI rebuild. */
+/* ═══════════════════════════════════════════════════════════════════════════════════
+   History page (Grafit 1A "Bläck"): every update, newest first.
+
+     .hist-page               the page (data-pane-id="page"), scrolls on its own
+     .hist-head               the title and the mono uppercase sub line
+     .runs > .hist-run        a joined hairline list; each run is a button (.hist-run-h) over a receipt that folds open
+                              (.hist-body, grid-template-rows 0fr to 1fr). Under motion subtle and off the fold is
+                              instant (the token block turns that transition off); a collapsed receipt is also
+                              hidden from the tab order and from assistive technology.
+
+   Radius 0. The pill carries the outcome in words (Done, Undone, Failed); no row is coloured as a whole.
+   ═══════════════════════════════════════════════════════════════════════════════════ */
+
+.hist {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+
+.hist-page {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 26px 28px 40px;
+  font-family: var(--font-sans);
+  font-size: var(--fs);
+}
+
+.hist-page:focus-visible { outline: none; }
+
+.hist-head { margin-bottom: 20px; }
+
+.hist-title {
+  font-size: calc(var(--fs) * 1.85);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  color: var(--text-heading);
+}
+
+.hist-sub {
+  margin: 6px 0 0;
+  font-family: var(--font-mono);
+  font-size: max(10px, calc(var(--fs) * 0.77));
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.hist-note {
+  max-width: 62ch;
+  margin: 0;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+/* ---- the joined list ---- */
+
+.runs {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+}
+
+.hist-run + .hist-run { border-top: 1px solid var(--border); }
+
+.hist-run-h {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 11px 14px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.hist-run-h:hover { background: var(--bg-raised); }
+.hist-run-h:focus-visible { outline-offset: -2px; }
+
+.hist-run-t {
+  display: grid;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.hist-run-t b {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hist-run-t span {
+  font-family: var(--font-mono);
+  font-size: calc(var(--fs) * 0.85);
+  color: var(--text-muted);
+}
+
+.hist-chev {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  margin: 0 4px 3px;
+  border-right: 1.5px solid var(--text-muted);
+  border-bottom: 1.5px solid var(--text-muted);
+  transform: rotate(-45deg);
+  transition: transform var(--dur-nav) var(--ease);
+}
+
+.hist-run.is-open .hist-chev { transform: rotate(45deg); }
+
+/* ---- the receipt folds open ---- */
+
+.hist-body {
+  display: grid;
+  grid-template-rows: 0fr;
+  visibility: hidden;
+  transition:
+    grid-template-rows var(--dur-fold) var(--ease),
+    visibility 0s linear var(--dur-fold);
+}
+
+.hist-run.is-open > .hist-body {
+  grid-template-rows: 1fr;
+  visibility: visible;
+  transition-delay: 0s;
+}
+
+.hist-inner {
+  display: grid;
+  gap: 12px;
+  justify-items: start;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0 14px;
+}
+
+.hist-run.is-open .hist-inner { padding-bottom: 14px; }
+
+.hist-inner .receipt { justify-self: stretch; }

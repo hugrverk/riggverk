@@ -1,6 +1,7 @@
 import { useId } from "react";
 import { receiptLines, updateAgentsText, updateTimeText } from "../../lib/lastUpdate";
 import type { SetupHistoryEntry } from "../../types";
+import { Receipt } from "../run/Receipt";
 import { StatePill } from "../../ui/StatePill";
 import { TButton } from "../../ui/TButton";
 import { cx } from "../../ui/tone";
@@ -36,14 +37,7 @@ export function LastUpdateCell({ entry, backupCount, span = 2, undoDisabled = fa
         </span>
         {entry.status === "rolled_back" && <StatePill state="tip">Undone</StatePill>}
       </div>
-      <dl className="ov-rcpt">
-        {lines.map(line => (
-          <div key={line.label}>
-            <dt>{line.label}</dt>
-            <dd>{line.value}</dd>
-          </div>
-        ))}
-      </dl>
+      <Receipt lines={lines} />
       {entry.undoable && (
         <TButton keys={[]} disabled={undoDisabled} onClick={() => onUndo(entry.transaction_id)}>
           Undo this update…

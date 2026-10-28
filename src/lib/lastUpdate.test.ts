@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { SetupHistoryEntry } from "../types";
-import { lastUpdateEntry, nanosToMillis, receiptLines, updateAgentsText, updateTimeText } from "./lastUpdate";
+import { lastUpdateEntry, nanosToMillis, receiptLines, runMetaText, runPill, runTitle, updateAgentsText, updateTimeText } from "./lastUpdate";
 
 function entry(overrides: Partial<SetupHistoryEntry> = {}): SetupHistoryEntry {
   return {
@@ -81,5 +81,35 @@ describe("update helpers", () => {
     expect(lastUpdateEntry([failed, undone, entry()])?.transaction_id).toBe("2");
     expect(lastUpdateEntry([failed])).toBeNull();
     expect(lastUpdateEntry([])).toBeNull();
+  });
+});
+
+describe("run rows of the History page", () => {
+  const ran = new Date(1792663202000);
+
+  it("names a run after the agents it touched, or its surfaces when only shared files changed", () => {
+    expect(runTitle(entry())).toBe("Updated Claude");
+    expect(runTitle(entry({ harnesses: [], surfaces: ["skills", "workspace_bundle"] }))).toBe("Updated skills and workspace bundle");
+    expect(runTitle(entry({ harnesses: [], surfaces: [] }))).toBe("Updated files");
+  });
+
+  it("says Removed only when every applied change was a removal, and never claims an update for a run that stopped", () => {
+    const removals = entry({ changes: [{ surface: "skills", kind: "remove", path: "~/.claude/skills/old", applied: true, restored: false }] });
+    expect(runTitle(removals)).toBe("Removed Claude");
+    expect(runTitle(entry({ status: "failed", changes: [] }))).toBe("Update of Claude");
+  });
+
+  it("gives the day and the number of files written", () => {
+    const time = ran.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false });
+    expect(runMetaText(entry(), ran)).toBe(`Today ${time} · 2 files`);
+    const later = new Date(ran.getTime() + 3 * 24 * 3600 * 1000);
+    expect(runMetaText(entry({ changes: [] }), later)).not.toContain("Today");
+    expect(runMetaText(entry({ changes: [], finished_at: null, created_at: "bad" }))).toBe("Time not recorded");
+  });
+
+  it("maps the status to a pill with words", () => {
+    expect(runPill(entry())).toEqual({ state: "ok", text: "Done" });
+    expect(runPill(entry({ status: "rolled_back" }))).toEqual({ state: "tip", text: "Undone" });
+    expect(runPill(entry({ status: "failed" }))).toEqual({ state: "fix", text: "Failed" });
   });
 });
