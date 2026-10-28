@@ -274,6 +274,9 @@ describe("App shell", () => {
 
     fireEvent.keyDown(document.body, { key: "Escape" });
     await waitFor(() => expect(screen.queryByRole("region", { name: "Workspace install review" })).toBeNull());
+    // The workspace folder cell is collapsed: the card is not there until the cell opens.
+    expect(screen.queryByRole("region", { name: "Uninstall" })).toBeNull();
+    fireEvent.click(await screen.findByRole("button", { name: /Workspace folder/ }));
     await screen.findByRole("region", { name: "Uninstall" });
     await act(async () => {});
     expect(backend.commandLog).not.toContain("preview_uninstall");
