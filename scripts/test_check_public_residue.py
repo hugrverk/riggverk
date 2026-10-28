@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import importlib.util
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -14,6 +15,7 @@ SCRIPTS = ROOT / "scripts"
 _spec = importlib.util.spec_from_file_location("check_public_residue", SCRIPTS / "check-public-residue.py")
 assert _spec is not None and _spec.loader is not None
 guard = importlib.util.module_from_spec(_spec)
+sys.modules["check_public_residue"] = guard  # dataclasses look their module up while the class is built
 _spec.loader.exec_module(guard)
 
 # Built from fragments so this file does not itself hold the names the guard bans.
