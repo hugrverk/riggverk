@@ -93,7 +93,7 @@ export function InstallPlanPane({ flow, busyLabel, backupRoot, onApply }: Instal
     const active = document.activeElement;
     const pane = document.querySelector(`[data-pane-id="${INSTALL_PLAN_PANE_ID}"]`);
     const free =
-      !active || active === document.body || !active.isConnected || pane?.contains(active) === true || active.closest(".topline") !== null;
+      !active || active === document.body || !active.isConnected || pane?.contains(active) === true || active.closest(".shell-chrome") !== null;
     if (free) focusPaneById(INSTALL_PLAN_PANE_ID);
   }, [open, status]);
 

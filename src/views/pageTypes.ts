@@ -2,7 +2,7 @@ import type { EffectiveSkillLoadsState } from "../hooks/useEffectiveSkillLoads";
 import type { InstallationOverview } from "../hooks/useInstallationOverview";
 import type { InstallScreen, RunWorkspaceTask } from "../hooks/useInstallScreen";
 import type { SettingsSaveStatus } from "../lib/settingsDraft";
-import type { ActionResult, AgentTargetMeta, ApplyProgress, AppSettings, SetupResult, StatusData } from "../types";
+import type { ActionResult, AgentTargetMeta, ApplyProgress, AppSettings, SetupResult } from "../types";
 
 /** What the output pane of the Start and harness pages needs. */
 export interface PageOutputProps {
@@ -12,7 +12,6 @@ export interface PageOutputProps {
   wsRunning: string | null;
   /** What the backend last reported for that task (backup/apply counts, current file), or null. */
   wsProgress: ApplyProgress | null;
-  status: StatusData | null;
   dataFolderOk: boolean;
   onClearOutput: () => void;
 }

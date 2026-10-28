@@ -8,7 +8,6 @@ import {
   overviewOf,
   settingsOf,
   skillLoadsOf,
-  STATUS_DATA,
   surfaceStatus,
 } from "../test/pageFixtures";
 import type { ActionResult, AgentTargetMeta, CodexConfigDefaultsPreview, CodexConfigStatus, CodexRuntimeHealth, InstallationState, SetupResult } from "../types";
@@ -86,7 +85,6 @@ function props(overrides: Partial<HarnessViewProps> = {}): HarnessViewProps {
     wsLogCompletedAt: null,
     wsRunning: null,
     wsProgress: null,
-    status: STATUS_DATA,
     dataFolderOk: true,
     onClearOutput: vi.fn(),
     ...overrides,

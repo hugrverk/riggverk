@@ -69,7 +69,6 @@ function AppShell() {
   const { workspaceLoadGenerationRef, isWorkspaceLoadCurrent, beginWorkspaceLoadGeneration } = useWorkspaceGeneration();
 
   const {
-    status,
     workspaceDiagnostics,
     opencodeRuntimeHealth,
     codexRuntimeHealth,
@@ -642,7 +641,6 @@ function AppShell() {
     wsLogCompletedAt,
     wsRunning,
     wsProgress,
-    status,
     dataFolderOk,
     onClearOutput: resetTerminalOutput,
     overview,

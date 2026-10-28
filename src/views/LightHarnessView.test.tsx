@@ -7,7 +7,6 @@ import {
   overviewOf,
   settingsOf,
   skillLoadsOf,
-  STATUS_DATA,
   surfaceStatus,
 } from "../test/pageFixtures";
 import {
@@ -88,7 +87,6 @@ function props(harness: LightAgent, overrides: Partial<HarnessViewProps> = {}): 
     wsLogCompletedAt: null,
     wsRunning: null,
     wsProgress: null,
-    status: STATUS_DATA,
     dataFolderOk: true,
     onClearOutput: vi.fn(),
     ...overrides,

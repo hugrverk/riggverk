@@ -171,7 +171,7 @@ export function RulesPane({ flow, busyLabel, backupRoot, canConvert, returnPaneI
     const active = document.activeElement;
     const pane = document.querySelector(`[data-pane-id="${RULES_PANE_ID}"]`);
     const free =
-      !active || active === document.body || !active.isConnected || pane?.contains(active) === true || active.closest(".topline") !== null;
+      !active || active === document.body || !active.isConnected || pane?.contains(active) === true || active.closest(".shell-chrome") !== null;
     if (free) focusPaneById(RULES_PANE_ID);
   }, [open, state.status]);
 

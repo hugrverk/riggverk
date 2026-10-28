@@ -195,7 +195,7 @@ export function ConflictPane({ flow, units, onMark, onToggleKept, busyLabel, bac
     const active = document.activeElement;
     const pane = document.querySelector(`[data-pane-id="${CONFLICT_PANE_ID}"]`);
     const free =
-      !active || active === document.body || !active.isConnected || pane?.contains(active) === true || active.closest(".topline") !== null;
+      !active || active === document.body || !active.isConnected || pane?.contains(active) === true || active.closest(".shell-chrome") !== null;
     if (free) focusPaneById(CONFLICT_PANE_ID);
   }, [open, state.status]);
 

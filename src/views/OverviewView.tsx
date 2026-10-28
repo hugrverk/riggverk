@@ -6,8 +6,8 @@ import { OverviewHeader } from "../components/overview/OverviewHeader";
 import { WorkspaceFolderCell } from "../components/overview/WorkspaceFolderCell";
 import { WorthALookCell } from "../components/overview/WorthALookCell";
 import { InstallPlanPane } from "../components/InstallPlanPane";
-import { useFocusOutputOnNewTransaction } from "../components/OutputStrip";
 import { RunPanel } from "../components/run/RunPanel";
+import { useFocusRunOnNewTransaction } from "../components/run/useFocusRunOnNewTransaction";
 import { useLastUpdate } from "../hooks/useLastUpdate";
 import { usePostureOverview } from "../hooks/usePostureOverview";
 import type { Binding } from "../keyboard/registry";
@@ -92,7 +92,7 @@ export function OverviewView({
   dataFolderOk,
   onClearOutput,
 }: OverviewViewProps) {
-  useFocusOutputOnNewTransaction(rollbackTransactionId);
+  useFocusRunOnNewTransaction(rollbackTransactionId);
   const busy = wsRunning !== null;
   const showPlan = install.isOpenOn("start");
   const resolvedPath =

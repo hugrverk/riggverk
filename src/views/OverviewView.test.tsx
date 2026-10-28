@@ -11,7 +11,6 @@ import {
   overviewOf,
   RISKY_CLAUDE,
   settingsOf,
-  STATUS_DATA,
   surfaceStatus,
   VALID_DIAGNOSTICS,
 } from "../test/pageFixtures";
@@ -107,7 +106,6 @@ function props(overrides: Partial<OverviewViewProps> = {}): OverviewViewProps {
     wsLogCompletedAt: null,
     wsRunning: null,
     wsProgress: null,
-    status: STATUS_DATA,
     dataFolderOk: true,
     onClearOutput: vi.fn(),
     ...overrides,

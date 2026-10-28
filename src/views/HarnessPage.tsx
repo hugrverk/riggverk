@@ -7,7 +7,8 @@ import { RulesDecision } from "../components/decisions/RulesDecision";
 import { RuntimeCell } from "../components/harness/RuntimeCell";
 import { SurfaceCell } from "../components/harness/SurfaceCell";
 import { InstallPlanPane } from "../components/InstallPlanPane";
-import { OutputStrip, useFocusOutputOnNewTransaction } from "../components/OutputStrip";
+import { RunPanel } from "../components/run/RunPanel";
+import { useFocusRunOnNewTransaction } from "../components/run/useFocusRunOnNewTransaction";
 import { RulesPane } from "../components/RulesPane";
 import { useCodexDefaultsFlow } from "../hooks/useCodexDefaultsFlow";
 import { useFileConflictActions } from "../hooks/useFileConflictActions";
@@ -95,12 +96,11 @@ export function HarnessPage({
   wsLogCompletedAt,
   wsRunning,
   wsProgress,
-  status,
   dataFolderOk,
   onClearOutput,
 }: HarnessPageProps) {
   const label = HARNESS_LABELS[harness];
-  useFocusOutputOnNewTransaction(rollbackTransactionId);
+  useFocusRunOnNewTransaction(rollbackTransactionId);
   const entry = overview.entries[harness];
   const [activeSurface, setActiveSurface] = useState<string | null>(null);
   const [markedKey, setMarkedKey] = useState<string | null>(null);
@@ -236,14 +236,12 @@ export function HarnessPage({
     { enabled: !installOpen && !rulesFlow.reviewing && !conflictFlow.reviewing && !defaultsFlow.open },
   );
 
-  const outputStrip = () => (
-    <OutputStrip
+  const runPanel = () => (
+    <RunPanel
       wsRunning={wsRunning}
       progress={wsProgress}
       wsLog={wsLog}
       wsLogCompletedAt={wsLogCompletedAt}
-      status={status}
-      dataFolderOk={dataFolderOk}
       onClear={onClearOutput}
       onRefresh={onRefresh}
       rollbackTransactionId={rollbackTransactionId}
@@ -255,7 +253,7 @@ export function HarnessPage({
     return (
       <section className="screen review" aria-label={`${label} install review`}>
         <InstallPlanPane flow={install.flow} busyLabel={wsRunning} backupRoot={backupRoot} onApply={install.apply} />
-        {outputStrip()}
+        {runPanel()}
       </section>
     );
   }
@@ -269,7 +267,7 @@ export function HarnessPage({
           backupRoot={backupRoot}
           canConvert={rulesModel?.convertible === true}
         />
-        {outputStrip()}
+        {runPanel()}
       </section>
     );
   }
@@ -287,7 +285,7 @@ export function HarnessPage({
           busyLabel={wsRunning}
           backupRoot={backupRoot}
         />
-        {outputStrip()}
+        {runPanel()}
       </section>
     );
   }
@@ -296,7 +294,7 @@ export function HarnessPage({
     return (
       <section className="screen review" aria-label={`${label} config review`}>
         <CodexDefaultsPane flow={defaultsFlow} busyLabel={wsRunning} backupRoot={backupRoot} />
-        {outputStrip()}
+        {runPanel()}
       </section>
     );
   }
@@ -489,7 +487,7 @@ export function HarnessPage({
           <p className="hp-loading">Loading settings…</p>
         )}
       </Page>
-      <div className="hp-strip">{outputStrip()}</div>
+      <div className="hp-run">{runPanel()}</div>
     </div>
   );
 }

@@ -38,7 +38,7 @@ export function formatCheckedAt(date: Date): string {
  * stable) and the numbers show only as `aria-keyshortcuts` and tooltip. The current item draws a 2px hairline
  * (`::before`, scaleY). Markers: the count of decisions waiting per agent (read out as the item's description), a dot on Library (unsaved edits) and
  * Settings (failed autosave). Agents that are turned off collapse into one dim "N more agents" row leading to
- * Settings. The `topline` class is the focus hook the review panes use to tell that focus sits in the shell chrome.
+ * Settings. The `shell-chrome` class is the focus hook the review panes use to tell that focus sits in the shell chrome.
  */
 export function Sidebar({
   view,
@@ -89,7 +89,7 @@ export function Sidebar({
   };
 
   return (
-    <aside className="side topline" data-tauri-drag-region>
+    <aside className="side shell-chrome" data-tauri-drag-region>
       <div className="brand" data-tauri-drag-region>
         <b data-tauri-drag-region>Riggverk</b>
         {version && <span data-tauri-drag-region>{version}</span>}

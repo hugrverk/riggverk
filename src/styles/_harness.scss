@@ -42,7 +42,7 @@
 /* The page holds the keys (u, p, r, d, v, m, b, c) but is not a stop in the tab order: the controls are. */
 .hp-page:focus-visible { outline: none; }
 
-.hp-strip {
+.hp-run {
   flex: none;
   padding: 0 10px 10px;
 }
