@@ -871,6 +871,25 @@ describe("Library new doc", () => {
     expect(screen.queryByRole("dialog", { name: "New doc" })).toBeNull();
   });
 
+  it("says why Create is dead when the title has no letter a-z or digit, and offers a neutral example", async () => {
+    await renderLibrary();
+    await goToTopic("Docs");
+    fireEvent.click(screen.getByRole("button", { name: "New doc" }));
+    const dialog = await screen.findByRole("dialog", { name: "New doc" });
+    const title = within(dialog).getByRole("textbox", { name: "Title" });
+    expect(title.getAttribute("placeholder")).toBe("Project notes");
+    expect(within(dialog).queryByRole("status")).toBeNull();
+
+    fireEvent.change(title, { target: { value: "日本語" } });
+    const hint = within(dialog).getByRole("status");
+    expect(hint.textContent).toContain("Use at least one letter a-z or digit");
+    expect(title.getAttribute("aria-describedby")).toContain(hint.id);
+    expect(within(dialog).getByRole("button", { name: "Create" }).getAttribute("aria-disabled")).toBe("true");
+
+    fireEvent.change(title, { target: { value: "日本語 notes" } });
+    expect(within(dialog).queryByRole("status")).toBeNull();
+  });
+
   it("leaves the title alone when Mod+N is pressed inside the dialog", async () => {
     await renderLibrary();
     await goToTopic("Docs");

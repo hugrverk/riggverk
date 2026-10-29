@@ -22,6 +22,9 @@ export function NewDocDialog({ title, slug, error, creating, onChangeTitle, onCr
   const inputRef = useRef<HTMLInputElement>(null);
   const headingId = useId();
   const errorId = useId();
+  const hintId = useId();
+  // A title with nothing usable in it (only symbols, or letters outside a-z) cannot become a file name.
+  const unusable = title.trim() !== "" && slug === "";
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -64,16 +67,21 @@ export function NewDocDialog({ title, slug, error, creating, onChangeTitle, onCr
             className="lib-input"
             type="text"
             value={title}
-            placeholder="Kretsverket release notes"
+            placeholder="Project notes"
             autoComplete="off"
             spellCheck={false}
             aria-invalid={error ? true : undefined}
-            aria-describedby={error ? errorId : undefined}
+            aria-describedby={[error ? errorId : null, unusable ? hintId : null].filter(Boolean).join(" ") || undefined}
             onChange={event => onChangeTitle(event.target.value, docSlug(event.target.value))}
           />
           <p className="lib-slug" aria-live="polite">
             docs/context/<b>{slug || "…"}</b>.md
           </p>
+          {unusable && (
+            <p id={hintId} className="lib-newdoc-error" role="status">
+              Use at least one letter a-z or digit. The file name is lowercase ASCII.
+            </p>
+          )}
           {error && (
             <p id={errorId} className="lib-newdoc-error" role="alert">
               {error}
