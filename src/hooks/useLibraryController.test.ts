@@ -909,6 +909,35 @@ describe("useLibraryController leaving with unsaved changes", () => {
     expect(result.current.libraryDirty).toBe(true);
   });
 
+  it("stays when text was typed during the save of Save and continue", async () => {
+    const result = await openEditedDoc();
+    choose.mockResolvedValue("confirm");
+    let resolveSave: (value: ActionResult) => void = () => {};
+    const savePending = new Promise<ActionResult>(resolve => {
+      resolveSave = resolve;
+    });
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === "save_doc") return savePending;
+      if (cmd === "read_doc") return Promise.resolve({ ...docA, content: "alpha edited" });
+      return Promise.reject(new Error(`unexpected invoke: ${cmd}`));
+    });
+    let leave: Promise<boolean>;
+    await act(async () => {
+      leave = result.current.confirmLeave("Save and quit");
+    });
+    await act(async () => {
+      result.current.onChangeDocDraft("alpha edited and more");
+    });
+    let allowed = true;
+    await act(async () => {
+      resolveSave(successResult("save_doc"));
+      allowed = await leave!;
+    });
+    expect(allowed).toBe(false);
+    expect(result.current.docDraft).toBe("alpha edited and more");
+    expect(result.current.libraryDirty).toBe(true);
+  });
+
   it("asks only once when a discard is followed at once by the move it was for", async () => {
     const result = await openEditedDoc();
     await act(async () => {

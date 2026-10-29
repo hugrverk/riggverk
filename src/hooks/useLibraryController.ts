@@ -188,7 +188,7 @@ export function useLibraryController({
    * The one leave guard of the Library, for everything that would drop the open draft (another item, another topic,
    * closing the sheet, leaving the page). With nothing unsaved it says yes at once. Otherwise it asks:
    * Discard drops the draft, Save and continue writes it first, Keep editing stays. Resolves true when the caller may
-   * go on, and the draft is then already settled. `confirmLabel` words the save answer for the way out ("Save and quit").
+   * go on, and the draft is then already settled (text typed while Save and continue ran keeps the caller here). `confirmLabel` words the save answer for the way out ("Save and quit").
    */
   const confirmLeave = useCallback(async (confirmLabel = "Save and continue"): Promise<boolean> => {
     if (!docDirtyRef.current && !rulesDirtyRef.current && !skillDirtyRef.current) return true;
@@ -213,6 +213,8 @@ export function useLibraryController({
       else if (rulesDirtyRef.current) setRulesSaveResult(result => (result && !result.success ? result : failed));
       else if (skillDirtyRef.current) setSkillSaveResult(result => (result && !result.success ? result : failed));
     }
+    // Text typed while the save ran is still unsaved: leaving now would drop it, so the caller stays and may ask again.
+    if (saved && (docDirtyRef.current || rulesDirtyRef.current || skillDirtyRef.current)) return false;
     return saved;
   }, [activeDoc?.title, activeRulesFile?.label, activeSkillContent?.title, choose, discardDrafts]);
 
