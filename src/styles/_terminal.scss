@@ -63,7 +63,8 @@
 .tui-out {
   margin: 0;
   overflow-x: auto;
-  font: inherit;
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
   color: var(--text);
   white-space: pre;
 }
