@@ -96,6 +96,7 @@ mod tests {
                         identity: artifact_identity(artifact),
                         hash: hash.to_string(),
                         surface: None,
+                        role_models: Default::default(),
                     }],
                 },
             )
@@ -611,11 +612,13 @@ mod tests {
                         identity: artifact_identity(&ArtifactId::CodexRules),
                         hash: body_digest(OLD_BASE),
                         surface: None,
+                        role_models: Default::default(),
                     },
                     ManagedArtifactRecord {
                         identity: artifact_identity(&ArtifactId::OpenCodeRules),
                         hash: body_digest(OLD_BASE),
                         surface: None,
+                        role_models: Default::default(),
                     },
                 ],
             },

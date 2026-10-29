@@ -130,11 +130,13 @@ mod tests {
                         identity: artifact_identity(&ArtifactId::ClaudeRules),
                         hash: body_digest(claude_body),
                         surface: Some("claude_rules".to_string()),
+                        role_models: Default::default(),
                     },
                     ManagedArtifactRecord {
                         identity: "workspace:file:.agent-workspace/workspace.json".to_string(),
                         hash: crate::stable_digest::bytes(MARKER_JSON.as_bytes()),
                         surface: None,
+                        role_models: Default::default(),
                     },
                 ],
             };
@@ -474,6 +476,7 @@ mod tests {
                     identity: artifact_identity(&ArtifactId::ClaudeRules),
                     hash: body_digest(&shipped_old_claude_base()),
                     surface: None,
+                    role_models: Default::default(),
                 }],
             })
             .unwrap(),

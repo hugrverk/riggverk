@@ -3,7 +3,7 @@
 //! Records only app-owned artifacts that Riggverk has successfully applied.
 //! Unknown files are never added merely because they live inside a managed parent.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -33,6 +33,12 @@ pub struct ManagedArtifactRecord {
     /// Setup surface when the artifact is harness-owned.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub surface: Option<String>,
+    /// OpenCode config only: the `agent.<role>.model` values the app wrote at the last apply that
+    /// left the file current, by role. Proof that a pin is the app's: a value not recorded here
+    /// and not pinned by the model override is the user's, never changed or removed. Records
+    /// from older versions have none.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub role_models: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -278,6 +284,7 @@ pub fn next_state_from_operations<R: SourceRoot + ?Sized>(
                         surface: serde_json::to_value(operation.surface)
                             .ok()
                             .and_then(|value| value.as_str().map(str::to_string)),
+                        role_models: Default::default(),
                     },
                 );
             }
@@ -318,10 +325,12 @@ pub fn next_state_from_operations<R: SourceRoot + ?Sized>(
                 surface: serde_json::to_value(planned.surface)
                     .ok()
                     .and_then(|value| value.as_str().map(str::to_string)),
+                role_models: Default::default(),
             },
         );
     }
     refresh_records_matching_source(&mut records, bundled_root, runtime_root, home);
+    record_opencode_role_models(&mut records, bundled_root, runtime_root, home);
     let mut artifacts: Vec<_> = records.into_values().collect();
     artifacts.sort_by(|a, b| a.identity.cmp(&b.identity));
     Ok(ManagedState {
@@ -370,6 +379,36 @@ fn refresh_records_matching_source<R: SourceRoot + ?Sized>(
         if matches_source {
             record.hash = installed;
         }
+    }
+}
+
+/// While the installed `opencode.json` is what an install makes of it, the role models it holds
+/// for the app are the ones the override pins: record those, and only those, as written by the
+/// app. A file that differs keeps the roles it had: what the app wrote is still unchanged there.
+fn record_opencode_role_models<R: SourceRoot + ?Sized>(
+    records: &mut HashMap<String, ManagedArtifactRecord>,
+    bundled_root: &R,
+    runtime_root: &Path,
+    home: &Path,
+) {
+    let artifact = ArtifactId::OpenCodeConfig;
+    let Some(record) = records.get_mut(&artifact_identity(&artifact)) else {
+        return;
+    };
+    let current =
+        setup_fingerprint::artifact_installed_managed_digest(&artifact, runtime_root, home)
+            .is_ok_and(|installed| {
+                installed != setup_fingerprint::ABSENT_DIGEST
+                    && setup_fingerprint::artifact_effective_source_digest(
+                        &artifact,
+                        bundled_root,
+                        runtime_root,
+                        home,
+                    )
+                    .is_ok_and(|source| source == installed)
+            });
+    if current {
+        record.role_models = crate::commands::pinned_role_models(home);
     }
 }
 
@@ -480,6 +519,7 @@ mod tests {
                 identity: "workspace:file:README.md".into(),
                 hash: crate::stable_digest::bytes(b"artifact"),
                 surface: None,
+                role_models: Default::default(),
             }],
         };
         write_managed_state_atomic(&root, &state).unwrap();
@@ -499,6 +539,7 @@ mod tests {
             identity: identity.to_string(),
             hash: crate::stable_digest::bytes(bytes),
             surface: Some("claude_skills".into()),
+            role_models: Default::default(),
         }
     }
 
@@ -646,6 +687,7 @@ mod tests {
             identity: artifact_identity(artifact),
             hash: stale_hash.clone(),
             surface: None,
+            role_models: Default::default(),
         };
         let previous = ManagedState {
             schema_version: MANAGED_STATE_SCHEMA_VERSION,

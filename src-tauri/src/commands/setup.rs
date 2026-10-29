@@ -989,9 +989,11 @@ fn apply_single_artifact(
         } else {
             serde_json::Value::Object(serde_json::Map::new())
         };
+        // A role model the app cannot prove it wrote is the user's: kept as it is.
+        let app = crate::commands::AppRoleModels::load(Some(workspace_root), home);
         let merged = crate::commands::merge_managed_opencode_config(
             &installed,
-            &crate::commands::extract_managed_opencode_config(&rendered),
+            &crate::commands::managed_opencode_install_projection(&installed, &rendered, &app),
         );
         crate::safe_filesystem::write_regular_file_atomic(
             &dest,
@@ -5211,6 +5213,7 @@ mod tests {
                 identity: crate::managed_state::artifact_identity(artifact),
                 hash: crate::stable_digest::bytes(installed_by_app.as_bytes()),
                 surface: None,
+                role_models: Default::default(),
             });
         }
         // The user edits one skill the app once installed and has since retired.
@@ -5271,6 +5274,7 @@ mod tests {
                 identity: crate::managed_state::artifact_identity(artifact),
                 hash: crate::stable_digest::bytes(b"app copy"),
                 surface: None,
+                role_models: Default::default(),
             });
         }
         let edited_dest = edited.resolve_dest(&env.home, &env.ws).unwrap();
@@ -5352,6 +5356,7 @@ mod tests {
                 identity: crate::managed_state::artifact_identity(artifact),
                 hash: crate::stable_digest::bytes(b"app copy"),
                 surface: None,
+                role_models: Default::default(),
             });
         }
         let edited_dest = edited.resolve_dest(&env.home, &env.ws).unwrap();

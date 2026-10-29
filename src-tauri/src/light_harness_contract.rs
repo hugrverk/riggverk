@@ -176,6 +176,7 @@ mod tests {
                         identity: artifact_identity(&self.artifact()),
                         hash: hash.to_string(),
                         surface: None,
+                        role_models: Default::default(),
                     }],
                 },
             )
@@ -1213,6 +1214,7 @@ mod tests {
                             identity: artifact_identity(&self.artifact()),
                             hash: hash.to_string(),
                             surface: None,
+                            role_models: Default::default(),
                         }],
                     },
                 )

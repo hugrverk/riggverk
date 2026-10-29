@@ -216,6 +216,7 @@ mod tests {
                     identity: format!(r#"{{"type":"{variant}","name":"{name}"}}"#),
                     hash: stable_digest::bytes(&bytes),
                     surface: None,
+                    role_models: Default::default(),
                 });
             }
             self.add_records(records);
@@ -975,6 +976,7 @@ mod tests {
                 identity,
                 hash: stable_digest::bytes(bytes),
                 surface: None,
+                role_models: Default::default(),
             });
         };
 

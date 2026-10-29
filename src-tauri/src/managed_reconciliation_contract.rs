@@ -1823,6 +1823,7 @@ mod tests {
                     identity: artifact_identity(&ArtifactId::ClaudeRules),
                     hash: crate::stable_digest::bytes(recorded_template.as_bytes()),
                     surface: None,
+                    role_models: Default::default(),
                 }],
             },
         )

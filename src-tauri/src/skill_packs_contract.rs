@@ -1272,6 +1272,7 @@ mod tests {
                 identity: artifact_identity(&artifact),
                 hash: crate::stable_digest::bytes(b"retired skill\n"),
                 surface: None,
+                role_models: Default::default(),
             });
         state.artifacts.sort_by(|a, b| a.identity.cmp(&b.identity));
         crate::managed_state::write_managed_state_atomic(&env.ws, &state).expect("state");

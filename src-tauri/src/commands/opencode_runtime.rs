@@ -1,5 +1,5 @@
 use serde::Serialize;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -209,6 +209,146 @@ fn remove_agent_field(
     }
     if agent.is_empty() {
         config.shift_remove("agent");
+    }
+}
+
+/// The `agent.<role>.model` values the app may change in `opencode.json`, by role: the one the
+/// model override pins now and the one the managed record says the app wrote. Any other value of
+/// a role is the user's own: drift, conflicts and digests ignore it, and an install keeps it.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct AppRoleModels {
+    pinned: BTreeMap<String, String>,
+    recorded: BTreeMap<String, String>,
+}
+
+impl AppRoleModels {
+    /// The override saved for `home` and the record kept in the workspace at `workspace_root`.
+    /// No readable record (none yet, or one from an older version) proves nothing.
+    pub(crate) fn load(workspace_root: Option<&Path>, home: &Path) -> Self {
+        let identity = crate::managed_state::artifact_identity(
+            &crate::artifact_registry::ArtifactId::OpenCodeConfig,
+        );
+        let recorded = workspace_root
+            .and_then(crate::managed_state::read_managed_state)
+            .and_then(|state| {
+                state
+                    .artifacts
+                    .into_iter()
+                    .find(|record| record.identity == identity)
+            })
+            .map(|record| record.role_models)
+            .unwrap_or_default();
+        Self {
+            pinned: pinned_role_models(home),
+            recorded,
+        }
+    }
+
+    fn owns(&self, role: &str, model: &serde_json::Value) -> bool {
+        let Some(model) = model.as_str() else {
+            return false;
+        };
+        self.pinned.get(role).is_some_and(|m| m == model)
+            || self.recorded.get(role).is_some_and(|m| m == model)
+    }
+
+    /// The roles whose model in `config` is the user's own.
+    fn user_roles(&self, config: &serde_json::Value) -> Vec<&'static str> {
+        SUBAGENT_MODEL_ROLES
+            .iter()
+            .copied()
+            .filter(|role| agent_model(config, role).is_some_and(|model| !self.owns(role, model)))
+            .collect()
+    }
+}
+
+/// The role models the override saved for `home` pins, as an install writes them.
+pub(crate) fn pinned_role_models(home: &Path) -> BTreeMap<String, String> {
+    let mut pinned = BTreeMap::new();
+    let Some(model_override) = read_stored_opencode_model_override_for_home(home) else {
+        return pinned;
+    };
+    if let Some(model) = model_override.subagent_model {
+        for role in SUBAGENT_MODEL_ROLES {
+            pinned.insert((*role).to_string(), model.clone());
+        }
+    }
+    if let Some(model) = model_override.critic_model {
+        pinned.insert(CRITIC_MODEL_ROLE.to_string(), model);
+    }
+    pinned
+}
+
+/// `config` without the role models that are the user's own: the view of it that drift,
+/// conflicts and digests compare.
+pub(crate) fn without_user_role_models(
+    config: &serde_json::Value,
+    app: &AppRoleModels,
+) -> serde_json::Value {
+    let mut config = config.clone();
+    let roles = app.user_roles(&config);
+    if let Some(obj) = config.as_object_mut() {
+        for role in roles {
+            remove_agent_field(obj, role, "model");
+        }
+    }
+    config
+}
+
+/// `config` with the model of every role the override does not pin set back to the one the app
+/// recorded writing. A file that only differs from the record there was changed by the user on
+/// roles that are theirs now, so the record still holds for everything the app manages.
+pub(crate) fn with_recorded_role_models(
+    config: &serde_json::Value,
+    app: &AppRoleModels,
+) -> serde_json::Value {
+    let mut config = config.clone();
+    if let Some(obj) = config.as_object_mut() {
+        for (role, model) in &app.recorded {
+            if !app.pinned.contains_key(role) {
+                set_agent_model(obj, role, serde_json::Value::String(model.clone()));
+            }
+        }
+    }
+    config
+}
+
+/// The managed projection an install merges into `installed`: `rendered`'s, plus the user's own
+/// role models from `installed`, so the merge leaves them as they are. A role the override pins
+/// takes the override's model.
+pub(crate) fn managed_opencode_install_projection(
+    installed: &serde_json::Value,
+    rendered: &serde_json::Value,
+    app: &AppRoleModels,
+) -> serde_json::Value {
+    let mut managed = extract_managed_opencode_config(rendered);
+    for role in app.user_roles(installed) {
+        if agent_model(&managed, role).is_some() {
+            continue;
+        }
+        if let (Some(model), Some(obj)) = (agent_model(installed, role), managed.as_object_mut()) {
+            set_agent_model(obj, role, model.clone());
+        }
+    }
+    managed
+}
+
+fn set_agent_model(
+    config: &mut serde_json::Map<String, serde_json::Value>,
+    role: &str,
+    model: serde_json::Value,
+) {
+    let agent = config
+        .entry("agent")
+        .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
+    let Some(agent) = agent.as_object_mut() else {
+        return;
+    };
+    let entry = agent
+        .entry(role.to_string())
+        .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
+    if let Some(entry) = entry.as_object_mut() {
+        entry.insert("model".to_string(), model);
     }
 }
 
@@ -544,22 +684,8 @@ fn pin_agent_models(
     roles: &[&str],
     model: &str,
 ) {
-    let agent = config
-        .entry("agent")
-        .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
-    let Some(agent) = agent.as_object_mut() else {
-        return;
-    };
     for role in roles {
-        let entry = agent
-            .entry((*role).to_string())
-            .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
-        if let Some(entry) = entry.as_object_mut() {
-            entry.insert(
-                "model".to_string(),
-                serde_json::Value::String(model.to_string()),
-            );
-        }
+        set_agent_model(config, role, serde_json::Value::String(model.to_string()));
     }
 }
 
@@ -609,14 +735,17 @@ pub(crate) fn render_expected_opencode_config(
 }
 
 /// Managed keys of the installed config that differ from the rendered bundled template, or
-/// `None` when the expected config cannot be rendered.
+/// `None` when the expected config cannot be rendered. The user's own role models are not.
 fn installed_config_diverged_keys(
     template_json: &serde_json::Value,
     installed_json: &serde_json::Value,
     home_dir: &Path,
+    workspace_root: Option<&Path>,
 ) -> Option<Vec<String>> {
-    render_expected_opencode_config(template_json, home_dir)
-        .map(|expected| differing_managed_opencode_keys(installed_json, &expected))
+    let app = AppRoleModels::load(workspace_root, home_dir);
+    render_expected_opencode_config(template_json, home_dir).map(|expected| {
+        differing_managed_opencode_keys(&without_user_role_models(installed_json, &app), &expected)
+    })
 }
 
 /// The config generators are sub-second scripts; anything longer is hung.
@@ -739,20 +868,22 @@ fn opencode_rules_status(source: &Path, installed: &Path) -> String {
 }
 
 /// Compute OpenCode runtime health against the bundled install sources, with
-/// no CLI probe (`apply_cli_probes` adds those). The workspace folder plays no part.
+/// no CLI probe (`apply_cli_probes` adds those). Of the workspace folder only the record of the
+/// role models the app wrote plays a part.
 /// This is a pure function suitable for unit testing with temp dirs.
-pub fn compute_health(home_dir: &Path) -> OpenCodeRuntimeHealth {
+pub fn compute_health(home_dir: &Path, workspace_root: Option<&Path>) -> OpenCodeRuntimeHealth {
     let bundled = crate::setup_roots::bundled_root().ok();
-    compute_health_with_bundle(bundled.as_deref(), home_dir)
+    compute_health_with_bundle(bundled.as_deref(), home_dir, workspace_root)
 }
 
 fn compute_health_with_bundle(
     bundled_root: Option<&Path>,
     home_dir: &Path,
+    workspace_root: Option<&Path>,
 ) -> OpenCodeRuntimeHealth {
     // The folder the install writes to: `XDG_CONFIG_HOME` moves it, as it moves OpenCode's.
     let config_dir = crate::platform_paths::opencode_config_dir(home_dir);
-    compute_health_in(bundled_root, home_dir, &config_dir)
+    compute_health_in(bundled_root, home_dir, &config_dir, workspace_root)
 }
 
 /// The health of the OpenCode files in `config_dir`, the OpenCode config folder of `home_dir`.
@@ -760,6 +891,7 @@ fn compute_health_in(
     bundled_root: Option<&Path>,
     home_dir: &Path,
     config_dir: &Path,
+    workspace_root: Option<&Path>,
 ) -> OpenCodeRuntimeHealth {
     let source_path = |rel: &str| bundled_root.map(|root| root.join(rel)).unwrap_or_default();
     let template_config_path = source_path("templates/opencode.json");
@@ -1015,7 +1147,8 @@ fn compute_health_in(
         });
 
         // Compare against the same bundled render that install applies.
-        let diverged_keys = installed_config_diverged_keys(t_json, i_json, home_dir);
+        let diverged_keys =
+            installed_config_diverged_keys(t_json, i_json, home_dir, workspace_root);
         let configs_match_result = diverged_keys.as_ref().map(|keys| keys.is_empty());
         let configs_match = configs_match_result.unwrap_or(false);
         if let Some(keys) = diverged_keys {
@@ -1520,8 +1653,9 @@ pub fn get_opencode_runtime_health() -> Result<OpenCodeRuntimeHealth, String> {
 
     let home = agent_targets::home_dir()?;
 
-    // Compared with the bundle alone, so no workspace folder is needed.
-    let mut health = compute_health(&home);
+    // Compared with the bundle; only the record of the role models the app wrote lives there.
+    let workspace_root = super::workspace::setup_workspace_target_path().ok();
+    let mut health = compute_health(&home, workspace_root.as_deref());
     // The app's own environment: the one it was launched with, not the user's shell's.
     let user = std::env::var("USER").ok().or_else(|| {
         home.file_name()
@@ -2412,7 +2546,17 @@ mod tests {
     /// Existing fixtures supply the install bundle explicitly, independently of the runtime root,
     /// and check the default folder below `home`, whatever `XDG_CONFIG_HOME` the test process has.
     fn compute_health(bundle: &Path, home: &Path) -> OpenCodeRuntimeHealth {
-        super::compute_health_in(Some(bundle), home, &home.join(".config/opencode"))
+        super::compute_health_in(
+            Some(bundle),
+            home,
+            &home.join(".config/opencode"),
+            Some(&record_root(home)),
+        )
+    }
+
+    /// Where `install_for` keeps the record of the role models it wrote.
+    fn record_root(home: &Path) -> PathBuf {
+        home.join("workspace")
     }
 
     fn temp_root(name: &str) -> PathBuf {
@@ -2514,7 +2658,7 @@ mod tests {
                 &fs::read_to_string(bundle.join("agents").join(name)).unwrap(),
             );
         }
-        assert_eq!(super::compute_health(&home).status, "synced");
+        assert_eq!(super::compute_health(&home, None).status, "synced");
 
         write_file(
             &ws,
@@ -2535,7 +2679,7 @@ mod tests {
         write_file(&ws, "templates/sync/opencode-rules.md", "workspace rules");
         write_file(&ws, "agents/architect.md", "workspace agent");
 
-        let health = super::compute_health(&home);
+        let health = super::compute_health(&home, None);
         assert_eq!(health.status, "synced", "{:?}", health.checks);
         assert_eq!(health.config_status, "synced");
         assert_eq!(health.tui_status, "synced");
@@ -2561,15 +2705,15 @@ mod tests {
             ".config/opencode/opencode.json",
             r#"{"model":"workspace/main","provider":{"mine":{}}}"#,
         );
-        assert_eq!(super::compute_health(&home).config_status, "diverged");
+        assert_eq!(super::compute_health(&home, None).config_status, "diverged");
         install_for(&bundle, &home);
-        assert_eq!(super::compute_health(&home).config_status, "synced");
+        assert_eq!(super::compute_health(&home, None).config_status, "synced");
         let installed: serde_json::Value =
             serde_json::from_slice(&fs::read(home.join(".config/opencode/opencode.json")).unwrap())
                 .unwrap();
         assert_eq!(installed["provider"], serde_json::json!({"mine":{}}));
 
-        let unavailable = super::compute_health_with_bundle(None, &home);
+        let unavailable = super::compute_health_with_bundle(None, &home, None);
         assert_ne!(unavailable.config_status, "synced");
         assert_eq!(unavailable.bundled_agent_count, 0);
         cleanup(&ws);
@@ -2627,7 +2771,7 @@ mod tests {
             r#"{"model":"old/place"}"#,
         );
 
-        let health = super::compute_health(&home);
+        let health = super::compute_health(&home, None);
         assert_eq!(health.status, "synced", "{:?}", health.checks);
         assert_eq!(
             (
@@ -2653,7 +2797,9 @@ mod tests {
 
         // A sibling beside the installed file is found in the same folder.
         write_file(&xdg, "opencode/opencode.jsonc", r#"{"model":"mine/other"}"#);
-        let siblings = super::compute_health(&home).config_precedence.sibling_files;
+        let siblings = super::compute_health(&home, None)
+            .config_precedence
+            .sibling_files;
         assert_eq!(
             siblings.iter().map(|s| s.file.as_str()).collect::<Vec<_>>(),
             ["opencode.jsonc"]
@@ -2661,7 +2807,7 @@ mod tests {
 
         // Without the variable the default folder is read again.
         unsafe { std::env::remove_var("XDG_CONFIG_HOME") };
-        let health = super::compute_health(&home);
+        let health = super::compute_health(&home, None);
         assert_eq!(
             PathBuf::from(&health.installed_config_path),
             home.join(".config/opencode/opencode.json")
@@ -5968,9 +6114,27 @@ exit 64"#
             serde_json::from_str(&fs::read_to_string(&installed_path).expect("installed"))
                 .expect("parse installed");
         let rendered = render_expected_opencode_config(&template, home).expect("render");
-        let merged =
-            merge_managed_opencode_config(&installed, &extract_managed_opencode_config(&rendered));
+        let app = AppRoleModels::load(Some(&record_root(home)), home);
+        let merged = merge_managed_opencode_config(
+            &installed,
+            &managed_opencode_install_projection(&installed, &rendered, &app),
+        );
         fs::write(&installed_path, merged.to_string()).expect("write installed");
+        // The record an install keeps: the role models it pinned.
+        let state = crate::managed_state::ManagedState {
+            schema_version: crate::managed_state::MANAGED_STATE_SCHEMA_VERSION,
+            bundled_version: crate::stable_digest::bytes(b"bundle"),
+            artifacts: vec![crate::managed_state::ManagedArtifactRecord {
+                identity: crate::managed_state::artifact_identity(
+                    &crate::artifact_registry::ArtifactId::OpenCodeConfig,
+                ),
+                hash: crate::stable_digest::bytes(b"record"),
+                surface: None,
+                role_models: pinned_role_models(home),
+            }],
+        };
+        crate::managed_state::write_managed_state_atomic(&record_root(home), &state)
+            .expect("write record");
     }
 
     #[test]
