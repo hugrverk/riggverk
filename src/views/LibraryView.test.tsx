@@ -796,7 +796,7 @@ describe("Library skills of your own", () => {
       expect(callsTo("save_pack_skill")).toEqual([{ id: "pack:personal/my-notes", content: "# my-notes\n\nSecond text." }]),
     );
     await within(sheet).findByText("Saved");
-    expect(document.querySelector(".toast")!.textContent).toBe("Saved · Update installs it");
+    await waitFor(() => expect(document.querySelector(".toast")?.textContent).toBe("Saved · Update installs it"));
   });
 
   it("guards unsaved skill edits like any other draft", async () => {
