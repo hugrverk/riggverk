@@ -644,7 +644,7 @@ describe("OpenCodeView model override", () => {
       await waitFor(() => expect(critic().value).toBe("openai/gpt-5"));
       const body = paneBody();
       act(() => body.focus());
-      expect(hint(/reset model/).getAttribute("aria-disabled")).toBeNull();
+      await waitFor(() => expect(hint(/reset model/).getAttribute("aria-disabled")).toBeNull());
       fireEvent.keyDown(body, { key: "x" });
       await waitFor(() => expect(critic().value).toBe(""));
       expect(model().value).toBe(BUNDLED.model);
