@@ -60,6 +60,18 @@ export interface AgentCardModel {
   notes: string[];
   /** The backend reports every surface of the agent as unavailable: it is turned on but not on this Mac. */
   unavailable: boolean;
+  /**
+   * Why nothing in the card is counted (rows that are off do not count): still `loading`, the check `failed`, or the
+   * workspace `folder` is unusable. Null once any row has a state.
+   */
+  unchecked: "loading" | "failed" | "folder" | null;
+}
+
+function uncheckedReason(items: readonly UiItem[], dataFolderOk: boolean): AgentCardModel["unchecked"] {
+  const open = items.filter(item => item.state === null);
+  if (open.length === 0 || items.some(item => item.state !== null && item.state !== "off")) return null;
+  if (!dataFolderOk) return "folder";
+  return open.some(item => item.subline === "Checking…") ? "loading" : "failed";
 }
 
 function rowText(item: UiItem, notInstalled: boolean): string {
@@ -125,6 +137,7 @@ function harnessModel(input: {
       rows,
       notes,
       unavailable,
+      unchecked: uncheckedReason(items, dataFolderOk),
     },
     items,
     allNotInstalled,

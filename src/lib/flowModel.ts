@@ -177,7 +177,9 @@ export function agentsWritten(entry: SetupHistoryEntry | null): Set<InstallAgent
 }
 
 function agentSub(card: AgentCardModel): string {
-  if (!card.badge) return "checking…";
+  if (card.unchecked === "failed") return "check failed";
+  if (card.unchecked === "folder") return "workspace folder unusable";
+  if (card.unchecked === "loading" || !card.badge) return "checking…";
   const first = (state: UiState) => card.rows.find(row => row.state === state);
   switch (card.badge.state) {
     case "decide":
@@ -204,14 +206,17 @@ function flowAgent(harness: InstallAgent, card: AgentCardModel | undefined): Flo
   if (card.unavailable) {
     return { id: harness, label, status: "missing", state: null, decision: false, sub: "not on this Mac", pillText: "Not on this Mac", card };
   }
+  // Nothing counted: "checking…" only while the fetch runs. A check that failed or a folder that is unusable gets the fix ring and says so.
+  const { unchecked } = card;
+  const stuck = unchecked === "failed" || unchecked === "folder";
   return {
     id: harness,
     label,
     status: "active",
-    state: card.badge?.state ?? null,
-    decision: card.badge?.state === "decide",
+    state: stuck ? "fix" : unchecked ? null : (card.badge?.state ?? null),
+    decision: !unchecked && card.badge?.state === "decide",
     sub: agentSub(card),
-    pillText: card.badge?.text ?? "Checking…",
+    pillText: stuck ? (unchecked === "failed" ? "Couldn't check" : "Folder unusable") : unchecked ? "Checking…" : (card.badge?.text ?? "Checking…"),
     card,
   };
 }

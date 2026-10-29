@@ -18,6 +18,7 @@ import {
   traceStep,
   type FlowSourceData,
 } from "./flowModel";
+import { defaultSettings } from "./settingsDraft";
 import { overviewSummaryModel, type AgentCardModel } from "./overviewModel";
 
 const SETTINGS: Pick<AppSettings, "enabled_target_ids" | "enabled_harness_ids"> = {
@@ -216,6 +217,19 @@ describe("buildFlowModel states of the agents and curves", () => {
     expect(cursor).toMatchObject({ status: "missing", sub: "not on this Mac" });
     expect(edge(model, "base", "cursor")!.status).toBe("ghost");
     expect(edge(model, "pack:mine", "cursor")).toBeUndefined();
+  });
+
+  it("tells a failed check and an unusable folder from one that is still running", () => {
+    const summaryFor = (entryOf: (id: InstallAgent) => { status: null; loading: boolean; error: string | null }, dataFolderOk = true) => {
+      const overview = overviewOf({ workspace: WORKSPACE });
+      for (const id of ["codex", "claude", "cursor"] as const) overview.entries[id] = { id, ...entryOf(id) };
+      return overviewSummaryModel({ overview, settings: defaultSettings(), enabledHarnessIds: ["codex", "claude", "cursor"], dataFolderOk, diagnostics: { error: null } }).cards;
+    };
+    const codex = (cards: AgentCardModel[]) => buildFlowModel({ cards, sources: SOURCES, personalDocs: null, lastUpdate: null }).agents.find(agent => agent.id === "codex")!;
+
+    expect(codex(summaryFor(() => ({ status: null, loading: true, error: null })))).toMatchObject({ sub: "checking…", pillText: "Checking…", state: null });
+    expect(codex(summaryFor(() => ({ status: null, loading: false, error: "boom" })))).toMatchObject({ sub: "check failed", pillText: "Couldn't check", state: "fix", decision: false });
+    expect(codex(summaryFor(() => ({ status: null, loading: false, error: null }), false))).toMatchObject({ sub: "workspace folder unusable", pillText: "Folder unusable", state: "fix" });
   });
 
   it("says not installed while everything waits for its first install", () => {
