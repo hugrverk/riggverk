@@ -1023,22 +1023,21 @@ function setupPlan(surfaces: SetupSurfaceId[]): SetupPlan {
 }
 
 /** The last install preview, like the backend's: apply needs its fingerprint and its one-time token, and spends them. */
-let setupPreview: { key: string; fingerprint: string; token: string } | null = null;
+let setupPreview: { surfaces: SetupSurfaceId[]; fingerprint: string; token: string } | null = null;
 /** What each install run changed, to put the surfaces back when it is undone. */
 const installSnapshots = new Map<string, Array<[SetupSurfaceId, InstallationState]>>();
 
-const surfacesKey = (surfaces: readonly SetupSurfaceId[]): string => [...surfaces].sort().join("+");
-
 function previewSetup(surfaces: SetupSurfaceId[]): SetupPlan {
   const plan = setupPlan(surfaces);
-  setupPreview = plan.plan_fingerprint && plan.preview_token ? { key: surfacesKey(surfaces), fingerprint: plan.plan_fingerprint, token: plan.preview_token } : null;
+  setupPreview = plan.plan_fingerprint && plan.preview_token ? { surfaces, fingerprint: plan.plan_fingerprint, token: plan.preview_token } : null;
   return plan;
 }
 
 function checkSetupPreview(surfaces: SetupSurfaceId[], fingerprint: string | null, token: string | null): void {
   if (!fingerprint) throw new Error("Plan fingerprint required. Re-run preview before applying.");
   if (!token) throw new Error("Preview token required. Re-run preview before applying.");
-  if (!setupPreview || setupPreview.key !== surfacesKey(surfaces) || setupPreview.fingerprint !== fingerprint) {
+  // The review applies the surfaces that need it, a part of what was previewed.
+  if (!setupPreview || !surfaces.every(surface => setupPreview!.surfaces.includes(surface)) || setupPreview.fingerprint !== fingerprint) {
     throw new Error("Plan fingerprint mismatch: state changed after preview. Re-run preview before applying.");
   }
   if (setupPreview.token !== token) throw new Error("Preview token expired or already used. Re-run preview before applying.");
