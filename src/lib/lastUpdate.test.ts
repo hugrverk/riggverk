@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { SetupHistoryEntry } from "../types";
-import { lastUpdateEntry, nanosToMillis, receiptLines, runMetaText, runPill, runTitle, updateAgentsText, updateTimeText } from "./lastUpdate";
+import { agentReceipt, lastUpdateEntry, nanosToMillis, receiptLines, runMetaText, runPill, runTitle, updateAgentsText, updateTimeText } from "./lastUpdate";
 
 function entry(overrides: Partial<SetupHistoryEntry> = {}): SetupHistoryEntry {
   return {
@@ -111,5 +111,41 @@ describe("run rows of the History page", () => {
     expect(runPill(entry())).toEqual({ state: "ok", text: "Done" });
     expect(runPill(entry({ status: "rolled_back" }))).toEqual({ state: "tip", text: "Undone" });
     expect(runPill(entry({ status: "failed" }))).toEqual({ state: "fix", text: "Failed" });
+  });
+});
+
+describe("agentReceipt", () => {
+  const full = entry({
+    harnesses: ["claude", "codex"],
+    surfaces: ["claude_rules", "codex_rules", "skills"],
+    changes: [
+      { surface: "claude_rules", kind: "update", path: "~/.claude/CLAUDE.md", applied: true, restored: false },
+      { surface: "codex_rules", kind: "update", path: "~/.codex/AGENTS.md", applied: true, restored: false },
+      { surface: "skills", kind: "create", path: "~/.claude/skills/diagnose/SKILL.md", applied: true, restored: false },
+    ],
+    receipt: { synced: ["claude_agents", "cursor_agents"], left_for_you: [{ surface: "codex_config", reason: "manual" }] },
+  });
+
+  it("keeps the lines of the agent's own surfaces and the shared skills, and drops the other agents' and the backup", () => {
+    const claude = agentReceipt(full, "claude");
+    expect(claude.part).toBe(true);
+    expect(claude.lines).toEqual([
+      { label: "Changed", value: "claude rules, skills · 2 files" },
+      { label: "Checked", value: "claude agents · current" },
+    ]);
+    const codex = agentReceipt(full, "codex");
+    expect(codex.lines).toContainEqual({ label: "Left for you", value: "codex config · needs a manual step" });
+    expect(codex.lines.map(line => line.value).join(" ")).not.toContain("claude");
+  });
+
+  it("is not part of an update that only changed the shared skills and names no surface of the agent", () => {
+    const skillsOnly = entry({
+      harnesses: ["claude"],
+      surfaces: ["skills"],
+      changes: [{ surface: "skills", kind: "create", path: "~/.claude/skills/x/SKILL.md", applied: true, restored: false }],
+      receipt: null,
+    });
+    expect(agentReceipt(skillsOnly, "claude").part).toBe(true);
+    expect(agentReceipt(skillsOnly, "cursor")).toEqual({ part: false, lines: [] });
   });
 });

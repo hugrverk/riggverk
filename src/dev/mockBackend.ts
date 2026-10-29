@@ -20,6 +20,7 @@
  *   empty     valid workspace with no docs, skills or agents (the empty states of the lists; the real bundle is never empty)
  * `&theme=light|dark|system` sets the persisted appearance. Copilot, Pi and Kilo are off until Settings turns
  * them on; `&light=unserved` leaves Copilot and Pi without a skills folder (an isolated Codex home).
+ * `&pace=slow` slows the progress events of a task down, so a run can be watched.
  *
  * Mutating commands update in-memory state so install/rollback/save flows round-trip. Apply, uninstall and
  * rollback emit `apply-progress` events like the backend does (backup, then one file at a time, then done).
@@ -95,6 +96,7 @@ const scenario: Scenario = (["default", "conflict", "fresh", "error", "empty"] a
 )
   ? (scenarioParam as Scenario)
   : "default";
+const progressPace = params.get("pace") === "slow" ? 10 : 1;
 const themeParam = params.get("theme");
 const appearance: AppSettings["appearance"] =
   themeParam === "light" || themeParam === "dark" || themeParam === "system" ? themeParam : "dark";
@@ -1554,12 +1556,12 @@ async function emitProgress(task: string, files: string[], options: { backup?: b
   if (options.backup !== false) {
     for (const [index, file] of files.entries()) {
       await report("backup", index, file);
-      await delay(45);
+      await delay(45 * progressPace);
     }
   }
   for (const [index, file] of files.entries()) {
     await report("apply", index, file);
-    await delay(110);
+    await delay(110 * progressPace);
   }
   await report("apply", total, null);
   await report("done", total, null);
