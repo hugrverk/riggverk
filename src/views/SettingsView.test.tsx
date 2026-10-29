@@ -459,6 +459,31 @@ describe("SettingsView autosave status", () => {
   });
 });
 
+describe("SettingsView buttons for the key-only actions", () => {
+  it("resets the appearance from a button in the Appearance pane", async () => {
+    const { props } = renderSettings();
+    fireEvent.click(within(pane("Appearance")).getByRole("button", { name: "reset appearance" }));
+    expect(props.onReset).toHaveBeenCalledTimes(1);
+    await act(async () => {});
+  });
+
+  it("offers Retry save in the Autosave row only after a failed save, and holds it while a colour is invalid", () => {
+    const { props, rerenderFrame } = renderSettings();
+    expect(within(pane("App")).queryByRole("button", { name: "retry save" })).toBeNull();
+
+    rerenderFrame(<SettingsView {...props} settingsSaveStatus="error" />);
+    fireEvent.click(within(pane("App")).getByRole("button", { name: "retry save" }));
+    expect(props.onRetrySave).toHaveBeenCalledTimes(1);
+
+    fireEvent.change(screen.getByLabelText("Accent hex code"), { target: { value: "nope" } });
+    const retry = within(pane("App")).getByRole("button", { name: "retry save" });
+    expect(retry.getAttribute("aria-disabled")).toBe("true");
+    expect(retry.getAttribute("title")).toBe("fix the invalid colors first");
+    fireEvent.click(retry);
+    expect(props.onRetrySave).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("SettingsView reset", () => {
   it("resets appearance from the footer key and from r, through onReset", async () => {
     const { props } = renderSettings();

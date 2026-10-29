@@ -25,6 +25,7 @@ import {
 } from "../lib/settingsDraft";
 import type { AppSettings } from "../types";
 import { INSTALL_AGENTS, type InstallAgent } from "../types";
+import { BindingButton } from "../ui/BindingButton";
 import { Pane } from "../ui/Pane";
 import { Switch } from "../ui/Switch";
 import { TButton } from "../ui/TButton";
@@ -620,6 +621,9 @@ export function SettingsView({
           </div>
         )}
         <p className="setting-note c-dim">Optional hex overrides; empty uses the theme default. Changes save automatically.</p>
+        <div className="tbtn-row setting-actions">
+          <BindingButton binding={bindings.find(binding => binding.id === "settings.reset")!} />
+        </div>
       </Pane>
       <Pane id="settings-app" title="App" label="App" className="pane-flat">
         <h3 className="sgroup">Startup</h3>
@@ -685,6 +689,9 @@ export function SettingsView({
               {settingsMsg && (
                 <div className={settingsMsg.ok ? "c-dim" : "c-fail"}>{settingsMsg.text}</div>
               )}
+            </div>
+            <div className="tbtn-row setting-actions">
+              <BindingButton binding={bindings.find(binding => binding.id === "settings.retry")!} />
             </div>
           </SettingRow>
         </SettingRows>
