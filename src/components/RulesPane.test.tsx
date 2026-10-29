@@ -103,6 +103,26 @@ describe("RulesPane", () => {
     expect(flow.apply).not.toHaveBeenCalled();
   });
 
+  it("switches between the diff and the resulting file with a button, as f does", () => {
+    renderPane({ status: "conversion", surface: "codex_rules", preview: PREVIEW });
+    const pane = screen.getByRole("region", { name: "Rules review" });
+    fireEvent.click(within(pane).getByRole("button", { name: /show file/ }));
+    expect(screen.getByLabelText("Resulting file").textContent).toBe("BEGIN\nbase\nEND\n");
+    fireEvent.click(within(pane).getByRole("button", { name: /show diff/ }));
+    expect(screen.queryByLabelText("Resulting file")).toBeNull();
+  });
+
+  it("offers no file switch while there is nothing to convert", () => {
+    renderPane({ status: "error", surface: "codex_rules", what: "apply", message: "Preview token expired" });
+    expect(screen.queryByRole("button", { name: /show file/ })).toBeNull();
+  });
+
+  it("has a Try again button on a failure, which does what r does", () => {
+    const flow = renderPane({ status: "error", surface: "codex_rules", what: "apply", message: "Preview token expired" });
+    fireEvent.click(within(screen.getByRole("region", { name: "Rules review" })).getByRole("button", { name: /try again/ }));
+    expect(flow.retry).toHaveBeenCalledTimes(1);
+  });
+
   it("explains a failure, says nothing was written, and offers to open the review again", () => {
     const flow = renderPane({ status: "error", surface: "codex_rules", what: "apply", message: "Preview token expired" });
     expect(screen.getByRole("alert").textContent).toContain("Preview token expired");
@@ -123,7 +143,7 @@ describe("RulesPane", () => {
       const flow = renderPane({ status: "conversion", surface: "codex_rules", preview: PREVIEW });
       const footer = screen.getByRole("region", { name: "Rules review" }).querySelector(".pane-foot")!;
       expect(footer.querySelector(".q")!.textContent).toBe("convert codex rules: write the file shown?");
-      expect(Array.from(footer.querySelectorAll("button.tbtn")).map(button => button.textContent)).toEqual(["yapply", "ncancel"]);
+      expect(Array.from(footer.querySelectorAll("button.tbtn")).map(button => button.textContent)).toEqual(["yapply", "fshow file", "ncancel"]);
       expect(confirmLine().getByRole("button", { name: "apply" }).classList.contains("tbtn-primary")).toBe(true);
       fireEvent.click(confirmLine().getByRole("button", { name: "apply" }));
       expect(flow.apply).toHaveBeenCalledTimes(1);

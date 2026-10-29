@@ -125,20 +125,22 @@ export function CodexDefaultsPane({ flow, busyLabel, backupRoot, returnPaneId = 
     run: () => flow.close(),
   };
 
+  const retryAction: Binding = {
+    id: "codex-defaults.retry",
+    keys: "r",
+    title: "Open the review again",
+    hint: "again",
+    group: "Codex config review",
+    scope: "pane",
+    paneId: CODEX_DEFAULTS_PANE_ID,
+    when: () => state.status === "error",
+    run: () => void flow.retry(),
+  };
+
   const actions: Binding[] = [
     applyAction,
     closeAction,
-    {
-      id: "codex-defaults.retry",
-      keys: "r",
-      title: "Open the review again",
-      hint: "again",
-      group: "Codex config review",
-      scope: "pane",
-      paneId: CODEX_DEFAULTS_PANE_ID,
-      when: () => state.status === "error",
-      run: () => void flow.retry(),
-    },
+    retryAction,
     { id: "codex-defaults.down", keys: ["j", "ArrowDown"], title: "Scroll down", group: "Codex config review", scope: "pane", paneId: CODEX_DEFAULTS_PANE_ID, repeat: true, run: () => scrollBody(60) },
     { id: "codex-defaults.up", keys: ["k", "ArrowUp"], title: "Scroll up", group: "Codex config review", scope: "pane", paneId: CODEX_DEFAULTS_PANE_ID, repeat: true, run: () => scrollBody(-60) },
     { id: "codex-defaults.top", keys: ["g g", "Home"], title: "Scroll to top", group: "Codex config review", scope: "pane", paneId: CODEX_DEFAULTS_PANE_ID, run: () => scrollBody("top") },
@@ -181,6 +183,7 @@ export function CodexDefaultsPane({ flow, busyLabel, backupRoot, returnPaneId = 
       footer={
         <ReviewFooter question={question} backup={preview !== null && { root: backupRoot }}>
           <BindingButton binding={applyAction} apply />
+          <BindingButton binding={retryAction} label="try again" />
           <BindingButton binding={closeAction} />
         </ReviewFooter>
       }
