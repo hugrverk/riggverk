@@ -267,6 +267,8 @@ The one Claude setting it manages is attribution, only while the `claude_config`
 
 Cursor global agents, skills, and the named Playwright MCP entry are managed by native Rust operations. User Rules and Auto Review remain manual IDE settings. Project `.cursor/*`, project agents, project MCP, `.cursorignore`, and `AGENTS.md` are not written by the global setup flow.
 
+In `~/.cursor/mcp.json` the app sets only `mcpServers.playwright`; every other key and server keeps its value and place. As for the light tier, only the bundled entry template is scanned for credential-like literals: the user's other servers (which may hold tokens in `env`) are never scanned, shown or logged, and never make the merge fail.
+
 ### GitHub Copilot, Pi and Kilo Code
 
 The light tier is off by default and manages the rules file of each (see Rules), one Playwright MCP entry (see MCP entry of the light tier) and the shared skills (see the skill folders above). Nothing else in `~/.copilot`, `~/.pi` or `~/.config/kilo` is written, and apart from the Kilo config file read by the posture check (see Security posture check), nothing else is read. Their pages show the CLI version, the rules row, the Playwright entry and whether the bundled skills are installed in the folders each one reads. `COPILOT_HOME` and `PI_CODING_AGENT_DIR` are not followed: the app writes the default location and the page warns when one is set. A transaction recorded while a light harness was enabled names a `HarnessRules` or `HarnessMcp` artifact, which a build from before the light tier cannot read: roll such a transaction back before downgrading. The managed state itself is unaffected (artifact identities are opaque strings to older builds).

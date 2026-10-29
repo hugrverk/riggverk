@@ -323,6 +323,12 @@ fn prepare_mcp_merge(
         .and_then(|v| v.get("playwright"))
         .cloned()
         .ok_or_else(|| "MCP template missing playwright server".to_string())?;
+    // Only the template entry the app inserts is scanned (before the local paths are filled in,
+    // as for the light harnesses): the user's other servers are theirs, and a token in their
+    // `env` is no reason to refuse the merge.
+    if json_has_unsafe_literals(&serde_json::to_string(&playwright_entry).unwrap_or_default()) {
+        return Err("Playwright MCP template entry contains unsafe literals".into());
+    }
     let transformed = transform_playwright_template_value(
         &playwright_entry,
         &config_path.to_string_lossy(),
@@ -340,11 +346,6 @@ fn prepare_mcp_merge(
         server_map.insert("playwright".into(), transformed);
     } else {
         return Err("mcpServers must be an object".into());
-    }
-
-    if json_has_unsafe_literals(&serde_json::to_string(&data).unwrap_or_else(|_| "{}".to_string()))
-    {
-        return Err("merged MCP JSON contains unsafe literals".into());
     }
 
     serde_json::to_string_pretty(&data)

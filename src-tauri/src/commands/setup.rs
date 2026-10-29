@@ -936,7 +936,7 @@ fn apply_single_artifact(
             true,
         );
         if !result.success {
-            return Err(format!("Cursor MCP create failed: {}", result.stderr));
+            return Err(format!("Cursor MCP merge failed: {}", result.stderr));
         }
         return Ok(());
     }
@@ -5543,6 +5543,59 @@ mod tests {
             .keys()
             .map(String::as_str)
             .collect()
+    }
+
+    /// Only the entry the app inserts is scanned for credentials: another server of the user's
+    /// with a token in `env`, or any word holding `sk-`, neither fails the apply nor is changed.
+    #[test]
+    fn cursor_mcp_merge_never_scans_the_users_other_servers() {
+        for (label, content) in [
+            (
+                "token",
+                r#"{"mcpServers":{"github":{"command":"gh-mcp","env":{"GITHUB_TOKEN":"abc123"}}}}"#,
+            ),
+            (
+                "disk",
+                r#"{"mcpServers":{"fs":{"command":"fs-mcp","args":["--disk-cache"]}}}"#,
+            ),
+        ] {
+            let env = TempSetupEnv::new(&format!("cursor-mcp-user-{label}"));
+            let path = seed_cursor_mcp(&env, content);
+            let planned = env.plan(&[SetupSurfaceId::CursorMcp]);
+            assert_eq!(planned[0].kind, OperationKind::Update, "{label}");
+
+            let result = apply_cursor_mcp();
+            assert!(result.success, "{label}: {}", result.message);
+            let before: serde_json::Value = serde_json::from_str(content).unwrap();
+            let after: serde_json::Value =
+                serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+            let user_server = server_names(&before)[0];
+            assert_eq!(
+                after["mcpServers"][user_server], before["mcpServers"][user_server],
+                "{label}"
+            );
+            assert!(after["mcpServers"]["playwright"].is_object(), "{label}");
+        }
+    }
+
+    #[test]
+    fn a_user_server_with_a_token_does_not_roll_back_the_rest_of_the_install() {
+        let env = TempSetupEnv::new("cursor-mcp-user-token-whole");
+        seed_cursor_mcp(
+            &env,
+            r#"{"mcpServers":{"fs":{"command":"fs-mcp","args":["--disk-cache"]}}}"#,
+        );
+        let surfaces = vec!["claude_rules".to_string(), "cursor_mcp".to_string()];
+        let plan = preview_setup(surfaces.clone()).expect("preview");
+        let result = apply_setup(
+            surfaces,
+            true,
+            plan.plan_fingerprint.clone(),
+            plan.preview_token.clone(),
+        )
+        .expect("apply");
+        assert!(result.success, "{}", result.message);
+        assert!(env.home.join(".claude/CLAUDE.md").is_file());
     }
 
     #[test]
