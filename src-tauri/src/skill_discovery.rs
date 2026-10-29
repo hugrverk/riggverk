@@ -505,7 +505,22 @@ pub fn skill_support_files(skill_dir: &Path) -> Result<Vec<String>, String> {
     let mut total_bytes = 0u64;
     scan_support_dir(skill_dir, "", 1, &mut files, &mut total_bytes)?;
     files.sort();
+    refuse_case_collisions(&files)?;
     Ok(files)
+}
+
+/// Two supporting files whose paths differ only in case are one file on a case-insensitive volume
+/// (APFS by default), so a skill that has them (from a case-sensitive one) cannot be installed.
+fn refuse_case_collisions(files: &[String]) -> Result<(), String> {
+    let mut folded = HashSet::new();
+    for file in files {
+        if !folded.insert(file.to_ascii_lowercase()) {
+            return Err(format!(
+                "supporting files whose names differ only in case cannot be installed side by side: {file}"
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn scan_support_dir(
@@ -1037,6 +1052,27 @@ mod tests {
         let err = skill_support_files(&dir).unwrap_err();
         cleanup(&dir);
         assert!(err.contains("symlink"), "{err}");
+    }
+
+    #[test]
+    fn supporting_files_that_differ_only_in_case_are_an_error() {
+        let dir = support_fixture("support-case");
+        write_support(&dir, "Notes.md", b"a");
+        write_support(&dir, "notes.md", b"b");
+        let both_exist = fs::read_dir(&dir).unwrap().count() == 3;
+        let result = skill_support_files(&dir);
+        cleanup(&dir);
+        if both_exist {
+            let err = result.unwrap_err();
+            assert!(err.contains("differ only in case"), "{err}");
+        } else {
+            // A case-insensitive volume holds one file: nothing collides.
+            assert_eq!(result.unwrap().len(), 1);
+        }
+        let files = |names: &[&str]| names.iter().map(|n| n.to_string()).collect::<Vec<_>>();
+        let err = refuse_case_collisions(&files(&["Notes.md", "a/b.md", "notes.md"])).unwrap_err();
+        assert!(err.contains("differ only in case"), "{err}");
+        assert!(refuse_case_collisions(&files(&["A/b.md", "a/c.md", "notes.md"])).is_ok());
     }
 
     #[test]

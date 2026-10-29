@@ -225,6 +225,28 @@ fn validate_state(state: &ManagedState) -> Result<(), String> {
     Ok(())
 }
 
+/// Drops the records of `artifact`'s skill file under another case (`Notes.md` for `notes.md`):
+/// on a case-insensitive volume they are the one file the new record now covers.
+fn drop_case_variants(
+    records: &mut HashMap<String, ManagedArtifactRecord>,
+    artifact: &crate::artifact_registry::ArtifactId,
+) {
+    let Some(file) = artifact.as_skill_file() else {
+        return;
+    };
+    let own = artifact_identity(artifact);
+    records.retain(|identity, _| {
+        // The identity string differs in case too; checked first, so a plan parses no record of
+        // another file.
+        *identity == own
+            || !identity.eq_ignore_ascii_case(&own)
+            || crate::managed_bootstrap::artifact_from_identity(identity)
+                .ok()
+                .and_then(|other| other.as_skill_file())
+                .is_none_or(|other| !file.same_file_ignoring_case(&other))
+    });
+}
+
 pub fn next_state_from_operations<R: SourceRoot + ?Sized>(
     previous: Option<&ManagedState>,
     bundled_root: &R,
@@ -247,6 +269,7 @@ pub fn next_state_from_operations<R: SourceRoot + ?Sized>(
                     .post_apply_digest
                     .clone()
                     .ok_or_else(|| format!("missing validated digest for {identity}"))?;
+                drop_case_variants(&mut records, &operation.artifact);
                 records.insert(
                     identity.clone(),
                     ManagedArtifactRecord {
@@ -286,6 +309,7 @@ pub fn next_state_from_operations<R: SourceRoot + ?Sized>(
         if expected != installed || installed == setup_fingerprint::ABSENT_DIGEST {
             return Err(format!("cannot adopt unverified exact artifact {identity}"));
         }
+        drop_case_variants(&mut records, &planned.artifact);
         records.insert(
             identity.clone(),
             ManagedArtifactRecord {

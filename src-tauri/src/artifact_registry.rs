@@ -252,6 +252,12 @@ impl SkillRelPath {
     pub fn is_skill_md(&self) -> bool {
         self.0 == Self::SKILL_MD
     }
+
+    /// Whether `other` names the same file on a case-insensitive volume (APFS by default). Paths
+    /// are ASCII, so ASCII case folding is the volume's.
+    pub fn same_file_ignoring_case(&self, other: &Self) -> bool {
+        self.0.eq_ignore_ascii_case(&other.0)
+    }
 }
 
 /// One file of one skill in one skill root: the identity of a `SkillFile` artifact.
@@ -263,6 +269,14 @@ pub struct SkillFileRef {
 }
 
 impl SkillFileRef {
+    /// Whether `other` is this file on a case-insensitive volume: the same root and skill, and a
+    /// path that differs at most in case (`Notes.md` and `notes.md`).
+    pub fn same_file_ignoring_case(&self, other: &Self) -> bool {
+        self.root == other.root
+            && self.skill == other.skill
+            && self.rel.same_file_ignoring_case(&other.rel)
+    }
+
     pub fn skill_md(root: SkillRoot, skill: SkillName) -> Self {
         Self {
             root,

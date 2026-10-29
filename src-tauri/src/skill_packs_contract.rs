@@ -416,6 +416,68 @@ mod tests {
         assert!(twice.reason.contains("more than once"), "{}", twice.reason);
     }
 
+    /// On a case-insensitive volume `Notes.md` and `notes.md` are one file: a case-only rename is
+    /// an update of the installed file, never a conflict plus a removal that deletes it.
+    #[test]
+    fn a_case_only_rename_of_a_supporting_file_updates_it_and_removes_nothing() {
+        let env = Env::new("case-rename");
+        let dir = env.pack_skill("mine", None, "casey", "body", &[("Notes.md", "v1\n")]);
+        let result = env.apply();
+        assert!(result.success, "install: {}", result.message);
+        let claude = env.root(SkillRoot::Claude).join("casey");
+        if !claude.join("notes.md").is_file() {
+            // A case-sensitive volume: the two names are two files, nothing to prove here.
+            return;
+        }
+
+        // Same content, new case: nothing to write, and nothing removed.
+        fs::rename(dir.join("Notes.md"), dir.join("tmp.md")).expect("rename");
+        fs::rename(dir.join("tmp.md"), dir.join("notes.md")).expect("rename");
+        Env::tighten(&env.pack("mine").join("skills"));
+        assert!(
+            env.pending()
+                .iter()
+                .all(|(_, kind)| *kind != OperationKind::Remove),
+            "{:?}",
+            env.pending()
+        );
+        if let Some(result) = env.apply_if_needed() {
+            assert!(result.success, "apply: {}", result.message);
+        }
+        assert_eq!(
+            fs::read_to_string(claude.join("notes.md")).expect("still installed"),
+            "v1\n"
+        );
+
+        // New content too: one update per root, no conflict, no removal.
+        fs::write(dir.join("notes.md"), "v2\n").expect("edit");
+        Env::tighten(&env.pack("mine").join("skills"));
+        let pending = env.pending();
+        assert_eq!(pending.len(), 2, "{pending:?}");
+        for (artifact, kind) in &pending {
+            assert_eq!(*kind, OperationKind::Update, "{artifact:?}");
+            assert!(
+                artifact
+                    .as_skill_file()
+                    .is_some_and(|file| file.rel.as_str() == "notes.md"),
+                "{artifact:?}"
+            );
+        }
+        let result = env.apply();
+        assert!(result.success, "apply: {}", result.message);
+        for root in [SkillRoot::Claude, SkillRoot::Agents] {
+            let installed = files_below(&env.root(root).join("casey"));
+            assert_eq!(installed.len(), 2, "{root:?}: {:?}", installed.keys());
+            assert_eq!(
+                fs::read_to_string(env.root(root).join("casey/notes.md")).expect("installed"),
+                "v2\n"
+            );
+        }
+        assert_eq!(env.pending(), vec![]);
+        let state = String::from_utf8(env.state_bytes().expect("state")).expect("utf-8");
+        assert!(!state.contains("Notes.md"), "the old case is not recorded");
+    }
+
     /// Dot folders are never read: a `.venv` (symlinks) or an `.archive` of old skills inside a
     /// pack skill is skipped, not taken for nesting, and not installed.
     #[test]
