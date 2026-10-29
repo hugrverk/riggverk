@@ -4,20 +4,22 @@
       "version": "2026.10.10",
       "sections": [
         {
-          "title": "Fixes",
+          "title": "Before you open it",
           "items": [
-            "Keep role models the app cannot prove it wrote",
-            "Round-2 frontend audit fixes",
-            "Skill trust, frontmatter, release checks and content after audit",
-            "Cursor mcp scan, playwright conflicts and retired skill edits",
-            "Frontend audit fixes for guards, buttons, headline and a11y",
-            "Harden setup, codex config and library saves after the audit"
+            "Updating the Codex config now needs Python 3.11 or newer, because the version that ships with macOS cannot read every valid `config.toml`. If none is found, Riggverk holds the Codex config update back in the preview and says why; everything else still installs. Homebrew's `python3` is enough."
           ]
         },
         {
-          "title": "Other",
+          "title": "Fixes",
           "items": [
-            "Remove dead code and speed up health refresh after the audit"
+            "Quitting or closing the window with unsaved changes in the Library now asks first: Save and quit, Discard, or Keep editing. Typing while a save runs is kept, and a doc or skill that changed on disk since you opened it is not overwritten (#120, #121)",
+            "A Cursor `mcp.json` with a token in one of your own servers no longer makes every Install fail and roll back, and your own `playwright` entry there is a conflict for you to decide instead of being replaced",
+            "Your own agent models in OpenCode's `opencode.json` stay yours. Riggverk removes only the models it wrote itself",
+            "Renaming a skill file in letter case only no longer deletes it, a skill with an edit you have not decided on is never removed by halves, and a nested `name:` in a pack skill can no longer pass as a bundled skill (#119, #122)",
+            "Errors never quote lines from your config files, which can hold tokens. Undo is refused while a newer update was not rolled back, a second Riggverk window cannot write at the same time as the first, and an Install after a crash asks you to preview again",
+            "Overview says when an agent could not be checked instead of \"Everything is set up.\", lists items to fix by hand, and the run panel with progress and Undo now shows on every page (#121, #123)",
+            "Actions that only had a key now have a button: OpenCode model Save, Reset and Reload, Settings Reset appearance and Retry save, install plan details, and the rules and Codex reviews. The Undo dialog names the update instead of showing an id, and custom colours warn when text or the focus ring would be hard to see (#121, #123)",
+            "Update all and Undo finish about a second sooner when OpenCode is on"
           ]
         }
       ]
