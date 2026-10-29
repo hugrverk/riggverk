@@ -17,11 +17,10 @@ import {
   APP_FONT_SIZE_LABELS,
   APP_FONT_SIZE_VALUES,
   DEFAULT_WORKSPACE_PATH,
-  contrastRatio,
-  hasPoorContrast,
   isValidThemeHex,
   themeAccentDefault,
   themeColorDefaults,
+  themeColorWarnings,
   type SettingsSaveStatus,
 } from "../lib/settingsDraft";
 import type { AppSettings } from "../types";
@@ -480,16 +479,12 @@ export function SettingsView({
 
   const appearanceDefaults = themeColorDefaults(appSettings.appearance);
 
-  const contrastWarning = hasPoorContrast(
-    appSettings.foreground_color ?? (isValidThemeHex(foregroundDraft) ? foregroundDraft : null),
-    appSettings.background_color ?? (isValidThemeHex(backgroundDraft) ? backgroundDraft : null),
-  );
-
-  const contrastDetail = contrastWarning && isValidThemeHex(foregroundDraft) && isValidThemeHex(backgroundDraft)
-    ? `Contrast ratio ${contrastRatio(foregroundDraft, backgroundDraft).toFixed(1)}:1 is below 4.5:1.`
-    : contrastWarning
-      ? "Custom foreground and background may be hard to read."
-      : null;
+  const contrastWarnings = themeColorWarnings({
+    appearance: appSettings.appearance,
+    foreground: appSettings.foreground_color ?? (isValidThemeHex(foregroundDraft) ? foregroundDraft : null),
+    background: appSettings.background_color ?? (isValidThemeHex(backgroundDraft) ? backgroundDraft : null),
+    accent: appSettings.accent_color ?? (isValidThemeHex(accentDraft) ? accentDraft : null),
+  });
 
   const applyAccent = (value: string) => {
     setAccentTouched(true);
@@ -615,10 +610,14 @@ export function SettingsView({
             />
           </SettingRow>
         </SettingRows>
-        {contrastDetail && (
-          <p className="setting-note setting-warn" role="status">
-            <StateText tone="fail">{contrastDetail}</StateText>
-          </p>
+        {contrastWarnings.length > 0 && (
+          <div className="setting-note setting-warn" role="status">
+            {contrastWarnings.map(text => (
+              <p key={text}>
+                <StateText tone="fail">{text}</StateText>
+              </p>
+            ))}
+          </div>
         )}
         <p className="setting-note c-dim">Optional hex overrides; empty uses the theme default. Changes save automatically.</p>
       </Pane>
