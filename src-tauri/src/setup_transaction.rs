@@ -1599,10 +1599,11 @@ fn detect_config_artifact(
         return (OperationKind::Unavailable, PreviousState::Unavailable);
     }
     if artifact == &ArtifactId::CodexConfig {
-        let installed_str = match fs::read_to_string(dest) {
-            Ok(s) => s,
-            Err(_) => return (OperationKind::Conflict, PreviousState::Conflict),
-        };
+        let installed_str =
+            match crate::setup_fingerprint::read_user_config(dest, "Codex config.toml") {
+                Ok(s) => s,
+                Err(_) => return (OperationKind::Conflict, PreviousState::Conflict),
+            };
         let source_str = match fs::read_to_string(source) {
             Ok(s) => s,
             Err(_) => return (OperationKind::Unavailable, PreviousState::Unavailable),
@@ -1629,10 +1630,11 @@ fn detect_config_artifact(
             (OperationKind::Update, PreviousState::MergeableConfigFile)
         }
     } else if artifact == &ArtifactId::OpenCodeConfig {
-        let installed_str = match fs::read_to_string(dest) {
-            Ok(s) => s,
-            Err(_) => return (OperationKind::Conflict, PreviousState::Conflict),
-        };
+        let installed_str =
+            match crate::setup_fingerprint::read_user_config(dest, "OpenCode opencode.json") {
+                Ok(s) => s,
+                Err(_) => return (OperationKind::Conflict, PreviousState::Conflict),
+            };
         let source_str = match fs::read_to_string(source) {
             Ok(s) => s,
             Err(_) => return (OperationKind::Unavailable, PreviousState::Unavailable),
@@ -2679,7 +2681,7 @@ fn codex_record_holds_beside_kept<R: SourceRoot + ?Sized>(
         return false;
     }
     let read = |path: PathBuf| {
-        fs::read_to_string(path)
+        crate::setup_fingerprint::read_user_config(&path, "Codex config.toml")
             .ok()
             .and_then(|raw| raw.parse::<toml::Value>().ok())
     };

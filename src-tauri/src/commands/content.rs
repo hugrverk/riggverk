@@ -279,7 +279,7 @@ fn list_custom_docs(root: &Path) -> Vec<(String, String, String, PathBuf)> {
                 continue;
             }
             let id = format!("custom:{}", stem);
-            let content = std::fs::read_to_string(&path).unwrap_or_default();
+            let content = read_doc_text(&path).unwrap_or_default();
             let title = doc_title_from_content_or_slug(&content, stem);
             docs.push((id, "Context".to_string(), title, path));
         }
@@ -416,6 +416,9 @@ fn personal_doc_open_path(root: &Path, id: &str) -> Result<PathBuf, String> {
 }
 
 pub(super) const MAX_DOC_SIZE: usize = 512 * 1024;
+/// A doc that grew past [`MAX_DOC_SIZE`] outside the app is never loaded whole.
+pub(super) const DOC_TOO_LARGE: &str =
+    "the doc on disk is larger than 512 KB; open it in your editor instead";
 
 pub(super) fn doc_backup_path(
     doc_id: &str,
@@ -505,7 +508,21 @@ pub(crate) fn safe_canonical_target(root: &Path, target_path: &Path) -> Result<P
 fn read_file_under_root(root: &Path, path: &Path) -> Result<String, String> {
     safe_canonical_target(root, path)?;
     crate::path_safety::reject_symlink_parent_chain(path, root, "workspace file")?;
-    std::fs::read_to_string(path).map_err(|e| format!("read error: {}", e))
+    read_doc_text(path)
+}
+
+/// The text of a doc of at most [`MAX_DOC_SIZE`] bytes; never reads more than one byte past it.
+fn read_doc_text(path: &Path) -> Result<String, String> {
+    use std::io::Read;
+    let file = std::fs::File::open(path).map_err(|e| format!("read error: {e}"))?;
+    let mut bytes = Vec::new();
+    file.take(MAX_DOC_SIZE as u64 + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|e| format!("read error: {e}"))?;
+    if bytes.len() > MAX_DOC_SIZE {
+        return Err(DOC_TOO_LARGE.to_string());
+    }
+    String::from_utf8(bytes).map_err(|_| "read error: the doc is not valid UTF-8".to_string())
 }
 
 /// Atomic, symlink-refusing write of a workspace file (temp file + rename inside `root`).
@@ -535,8 +552,7 @@ fn save_doc_at_root(
         ));
     }
 
-    let existing =
-        std::fs::read_to_string(&target_path).map_err(|e| format!("read error: {}", e))?;
+    let existing = read_doc_text(&target_path)?;
     if existing == content {
         return Ok(ActionResult::new(
             true,
@@ -1373,6 +1389,25 @@ mod tests {
             "oversized create_doc must not leave a file behind"
         );
         cleanup(&root);
+    }
+
+    #[test]
+    fn a_doc_grown_past_the_cap_on_disk_is_refused_on_read_and_save() {
+        let root = temp_root("doc-grown");
+        let huge = "a".repeat(MAX_DOC_SIZE + 1);
+        write_file(&root, "docs/context/huge.md", &huge);
+        let backups = root.join("backups");
+
+        let read = read_custom_doc(&root, "huge");
+        let saved = save_doc_at_root(&root, "custom:huge", "short\n", Some(&backups));
+        let on_disk = fs::read_to_string(root.join("docs/context/huge.md")).unwrap();
+        let backup_made = backups.exists();
+        cleanup(&root);
+
+        assert_eq!(read.err().as_deref(), Some(DOC_TOO_LARGE));
+        assert_eq!(saved.err().as_deref(), Some(DOC_TOO_LARGE));
+        assert_eq!(on_disk, huge);
+        assert!(!backup_made);
     }
 
     #[test]

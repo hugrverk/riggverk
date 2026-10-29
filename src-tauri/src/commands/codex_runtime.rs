@@ -104,7 +104,7 @@ fn list_bundled_codex_agents(agents_dir: &Path) -> Vec<String> {
 }
 
 fn parse_codex_config(path: &Path) -> Option<toml::Value> {
-    let content = fs::read_to_string(path).ok()?;
+    let content = crate::setup_fingerprint::read_user_config(path, "Codex config.toml").ok()?;
     toml::from_str(&content).ok()
 }
 

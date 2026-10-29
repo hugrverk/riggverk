@@ -205,7 +205,10 @@ pub fn read_pack_skill(id: String) -> Result<DocumentContent, String> {
             let Some(path) = skill.skill_md_path() else {
                 return Ok(notice(&pack.name, &skill.name, &skill.reason));
             };
-            let content = std::fs::read_to_string(path).map_err(|e| format!("read error: {e}"))?;
+            // Discovery read it capped too; the file may have grown since.
+            let content = crate::skill_discovery::read_skill_md_capped(path).map_err(|_| {
+                "cannot read this SKILL.md: it is missing or over 1 MiB".to_string()
+            })?;
             return Ok(DocumentContent {
                 id,
                 title: skill.name.clone(),
