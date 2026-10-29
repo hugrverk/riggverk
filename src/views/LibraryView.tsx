@@ -239,13 +239,13 @@ export function LibraryView(props: LibraryViewProps) {
   }, [sheet]);
 
   // Switching topic replaces the rows, and focus on one of them goes with it: it lands on the selected tab, so the
-  // next key still reaches the Library.
+  // next key still reaches the Library. Focus on a tab follows the selection too.
   const previousTopicId = useRef(topicId);
   useEffect(() => {
     if (previousTopicId.current === topicId) return;
     previousTopicId.current = topicId;
     const active = document.activeElement;
-    if (!active || active === document.body || !active.isConnected) {
+    if (!active || active === document.body || !active.isConnected || active.getAttribute("role") === "tab") {
       rootRef.current?.querySelector<HTMLElement>('[role="tab"][tabindex="0"]')?.focus();
     }
   }, [topicId]);

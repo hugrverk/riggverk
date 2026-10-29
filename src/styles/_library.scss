@@ -121,6 +121,7 @@
 
 .lib-scroll {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   flex: 1;
   align-content: start;
   gap: 18px;
@@ -129,7 +130,7 @@
   overflow-y: auto;
 }
 
-.lib-section { display: grid; gap: 18px; }
+.lib-section { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; }
 
 .lib-topic-head {
   margin: 4px 0 -6px;
