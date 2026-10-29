@@ -22,6 +22,13 @@ function model(sourceCount: number, edges: Array<[string, string]> = []): FlowMo
 }
 
 describe("flowLayout", () => {
+  it("starts an agent's name clear of its 16 unit icon and the badge on the icon's corner", () => {
+    const layout = flowLayout(model(2), 600);
+    expect(layout.agentIcon).toBe(layout.agentX + 4);
+    expect(layout.agentText).toBeGreaterThanOrEqual(layout.agentIcon + 16 + 4);
+    expect(layout.agentText).toBeLessThan(layout.agentX + 176);
+  });
+
   it("clamps the width, so a very narrow or very wide map keeps its proportions", () => {
     expect(flowLayout(model(1), 100).width).toBe(MIN_MAP_WIDTH);
     expect(flowLayout(model(1), 5000).width).toBe(MAX_MAP_WIDTH);

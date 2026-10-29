@@ -19,6 +19,7 @@ import type { UiState } from "../../lib/uiState";
 import type { ApplyProgress, InstallAgent, SetupHistoryEntry } from "../../types";
 import type { AppView } from "../../shell/views";
 import { StateMark, StatePill, type StatePillKind } from "../../ui/StatePill";
+import { AgentIcon, type AgentBadgeState } from "../../ui/agentIcons";
 import { TButton } from "../../ui/TButton";
 import { Receipt } from "../run/Receipt";
 
@@ -29,9 +30,12 @@ export interface InspectorActions {
   undoDisabled: string | false;
 }
 
-export const Heading = ({ children, pill }: { children: ReactNode; pill?: ReactNode }) => (
+export const Heading = ({ children, pill, icon }: { children: ReactNode; pill?: ReactNode; icon?: ReactNode }) => (
   <div className="flow-ih">
-    <h3 className="flow-h">{children}</h3>
+    <h3 className="flow-h">
+      {icon}
+      {children}
+    </h3>
     {pill}
   </div>
 );
@@ -83,10 +87,13 @@ export function AgentView({
 }) {
   const pillState: StatePillKind = agent.status === "active" ? (agent.state ?? "off") : "off";
   const pill = <StatePill state={pillState}>{agent.pillText}</StatePill>;
+  // The icon is decorative here: the name and the pill beside it say the state in words.
+  const badge: AgentBadgeState = agent.status === "active" ? (agent.decision ? "decide" : (agent.state ?? "off")) : agent.status;
+  const icon = <AgentIcon harness={agent.id} state={badge} decorative />;
   if (agent.status !== "active" || !agent.card) {
     return (
       <>
-        <Heading pill={pill}>{agent.label}</Heading>
+        <Heading pill={pill} icon={icon}>{agent.label}</Heading>
         <p className="flow-dim">
           {agent.status === "missing" ? "Turned on, but not found on this Mac. Nothing flows to it." : "Off in Settings. Nothing flows to it."}
         </p>
@@ -104,7 +111,7 @@ export function AgentView({
   const receipt = lastUpdate ? agentReceipt(lastUpdate, agent.id) : null;
   return (
     <>
-      <Heading pill={pill}>{agent.label}</Heading>
+      <Heading pill={pill} icon={icon}>{agent.label}</Heading>
       <Rows
         label={`${agent.label} surfaces`}
         rows={card.rows.map(row => ({ key: row.surface, name: row.label, state: row.state, text: rowText(row, received) }))}

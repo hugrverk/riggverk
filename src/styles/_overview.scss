@@ -49,6 +49,63 @@
   border-radius: 0;
 }
 
+/* ---- agent icon (ui/agentIcons.tsx) ----
+   The monochrome glyph in the surrounding text colour; muted while the agent is off or missing. The state is a badge on
+   its bottom-right corner: a hollow ring in the state's hue, the filled square for the decision, a dashed ring for off
+   or missing. The surface colour around the badge cuts a gap into the glyph. */
+
+.agent-icon {
+  position: relative;
+  display: inline-block;
+  flex: none;
+  vertical-align: middle;
+  color: var(--text);
+}
+
+.agent-icon.is-dim { color: var(--text-muted); }
+
+.agent-glyph { display: block; fill: currentColor; }
+
+.agent-mono-box { fill: none; stroke: currentColor; stroke-width: 2; }
+
+.agent-mono-letter {
+  fill: currentColor;
+  font-family: var(--font-sans);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.agent-badge {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  box-sizing: border-box;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--bg);
+  box-shadow: inset 0 0 0 1.5px currentColor, 0 0 0 1.5px var(--bg);
+  color: var(--text-muted);
+}
+
+.agent-badge.is-ok { color: var(--ok); }
+.agent-badge.is-ready { color: var(--ready); }
+.agent-badge.is-yours { color: var(--yours); }
+.agent-badge.is-fix { color: var(--fix); }
+
+.agent-badge.is-off,
+.agent-badge.is-missing {
+  border: 1.5px dashed var(--off);
+  box-shadow: 0 0 0 1.5px var(--bg);
+}
+
+/* The decision: the one filled square, in the brightest ink. */
+.agent-badge.is-decide {
+  border-radius: 0;
+  background: var(--decide);
+  box-shadow: 0 0 0 1.5px var(--bg);
+}
+
 .state-pill {
   display: inline-flex;
   align-items: center;

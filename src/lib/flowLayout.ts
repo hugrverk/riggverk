@@ -9,7 +9,10 @@ export interface FlowLayout {
   labelEnd: number;
   sourceDot: number;
   agentX: number;
-  agentMarker: number;
+  /** Left edge of the agent's icon (16 units wide); its state badge sits on the icon's bottom-right corner. */
+  agentIcon: number;
+  /** Where the agent's name and its sub-line start, clear of the icon and its badge. */
+  agentText: number;
   sourceY: Record<string, number>;
   agentY: Partial<Record<InstallAgent, number>>;
   curves: Record<string, FlowCurve>;
@@ -27,6 +30,9 @@ export const MAX_MAP_WIDTH = 760;
 const AGENT_WIDTH = 176;
 const LABEL_END = 148;
 const AGENT_ROW = 44;
+/** The icon starts this far in from the agent's left edge, and the name this far. */
+export const AGENT_ICON_INSET = 4;
+export const AGENT_TEXT_INSET = 32;
 const PAD = 14;
 
 /** A cubic from a source to an agent: both control points at the middle x, so every curve leaves and arrives level. */
@@ -57,5 +63,5 @@ export function flowLayout(model: FlowModel, measured: number): FlowLayout {
   for (const edge of model.edges) {
     curves[edge.id] = cubic(sourceDot + 8, sourceY[edge.source]!, agentX, agentY[edge.agent]!);
   }
-  return { width, height, labelEnd: LABEL_END, sourceDot, agentX, agentMarker: agentX + 12, sourceY, agentY, curves };
+  return { width, height, labelEnd: LABEL_END, sourceDot, agentX, agentIcon: agentX + AGENT_ICON_INSET, agentText: agentX + AGENT_TEXT_INSET, sourceY, agentY, curves };
 }
