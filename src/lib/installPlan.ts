@@ -14,7 +14,7 @@ export type InstallTarget = "workspace" | InstallAgent | "all";
 
 type EnabledSettings = Pick<AppSettings, "enabled_target_ids" | "enabled_harness_ids">;
 
-/** The page the review is shown on (`AppView` id): the workspace page for workspace/all, else the harness page. */
+/** The page the review is shown on (`AppView` id): the Overview for workspace/all, else the harness page. */
 export type InstallScope = "start" | InstallAgent;
 
 export function scopeForTarget(target: InstallTarget): InstallScope {

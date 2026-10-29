@@ -40,7 +40,7 @@ import { LIGHT_AGENTS, type InstallAgent, type SetupResult } from "./types";
 
 type View = AppView;
 
-/** The workspace page and every harness page show diagnostics and runtime health. */
+/** The Overview and every harness page show diagnostics and runtime health. */
 function isWorkspaceLoadView(view: View): boolean {
   return view === "start" || harnessForView(view) !== null;
 }
@@ -526,7 +526,7 @@ function AppShell() {
   ]);
 
   /**
-   * `:uninstall`: go to the workspace page, where the Uninstall card opens its preview dialog. The card is not
+   * `:uninstall`: go to the Overview, where the Workspace folder cell's Uninstall card opens its preview dialog. The card is not
    * on the page while the install review is open, so the request is dropped then instead of waiting to pop the
    * dialog once the review closes.
    */
