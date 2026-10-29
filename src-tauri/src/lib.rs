@@ -110,7 +110,9 @@ use commands::{
     rollback_setup_transaction, save_doc, save_rules_refinements, set_codex_config_kept,
     set_files_kept, set_rules_user_managed, update_opencode_model_selection, update_settings,
 };
-use commands::{forget_pack, list_pack_skills, read_pack_skill};
+use commands::{
+    copy_skill_to_pack, forget_pack, list_pack_skills, read_pack_skill, save_pack_skill,
+};
 use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -188,6 +190,8 @@ pub fn run() {
             list_pack_skills,
             read_pack_skill,
             forget_pack,
+            copy_skill_to_pack,
+            save_pack_skill,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

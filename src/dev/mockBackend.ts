@@ -2110,3 +2110,61 @@ const historyLog: SetupHistoryEntry[] = [
 (globalThis as { isTauri?: boolean }).isTauri = true;
 
 console.info(`[mock backend] scenario=${scenario} appearance=${appearance}`);
+
+// Append personal pack support, then register the extended dispatcher for browser-only IPC.
+const personalPackDocuments = new Map<string, DocumentContent>();
+
+function validPersonalSkillName(name: string): boolean {
+  return name.match(/^[a-z0-9][a-z0-9-]{0,63}$/)?.[0] === name;
+}
+
+async function handlePersonalPackWrites(cmd: string, args: Args): Promise<unknown> {
+  if (cmd === "copy_skill_to_pack") {
+    if (!workspaceIsValid()) return unavailable();
+    const name = arg<string>(args, "name");
+    const newName = arg<string>(args, "newName");
+    if (!validPersonalSkillName(newName)) throw new Error("invalid skill name");
+    const source = skills.find(skill => skill.name === name);
+    if (!source) throw new Error("source must be a bundled skill name");
+    if (skills.some(skill => skill.name === newName)) throw new Error("this name belongs to a bundled skill");
+    if (packLibrary.skills.some(skill => skill.name === newName)) throw new Error("a pack already has a skill with this name");
+    if (packLibrary.packs.some(pack => pack.state === "refused")) throw new Error("cannot check skill name collisions while a pack is refused");
+    const id = `pack:personal/${newName}`;
+    const path = `skills/${newName}/SKILL.md`;
+    if (!packLibrary.packs.some(pack => pack.name === "personal")) {
+      packLibrary.packs.push({ name: "personal", state: "ok", reason: "", forgettable: false });
+    }
+    packLibrary.skills.push({ id, name: newName, description: source.description, pack: "personal", state: "active", reason: "", path });
+    const sourceContent = skillContent(source.id);
+    const frontmatterEnd = sourceContent.indexOf("\n---", 4);
+    const content = sourceContent.slice(0, frontmatterEnd).replace(/^name:.*$/m, `name: ${newName}`) + sourceContent.slice(frontmatterEnd);
+    personalPackDocuments.set(id, { id, title: newName, path, section: "pack:personal", source: "pack", content });
+    return { id, name: newName, pack: "personal", path: `${packLibrary.folder}/personal/${path}` } satisfies import("../types").PackSkillCopy;
+  }
+  if (cmd === "save_pack_skill") {
+    if (!workspaceIsValid()) return unavailable();
+    const id = arg<string>(args, "id");
+    const name = id.startsWith("pack:personal/") ? id.slice("pack:personal/".length) : "";
+    if (!validPersonalSkillName(name)) throw new Error("only personal pack skill ids can be saved");
+    const content = arg<string>(args, "content");
+    if (new TextEncoder().encode(content).length > 512 * 1024) throw new Error("content exceeds 512 KB limit");
+    const pack = packLibrary.packs.find(pack => pack.name === "personal");
+    const skill = packLibrary.skills.find(skill => skill.id === id && skill.pack === "personal" && skill.state === "active");
+    if (pack?.state !== "ok" || !skill) throw new Error("personal skill does not exist or is not active");
+    const previous = personalPackDocuments.get(id);
+    personalPackDocuments.set(id, { id, title: name, path: skill.path, section: "pack:personal", source: "pack", content });
+    return actionResult("save_pack_skill", true, previous?.content === content ? "unchanged" : "saved with backup");
+  }
+  if (cmd === "read_pack_skill" || cmd === "read_skill") {
+    const id = arg<string>(args, "id");
+    const skill = packLibrary.skills.find(skill => skill.id === id);
+    if (skill && personalPackDocuments.has(id)) return personalPackDocuments.get(id);
+    if (cmd === "read_pack_skill") {
+      if (!skill) throw new Error("unknown pack skill");
+      return handle("read_skill", args);
+    }
+  }
+  return handle(cmd, args);
+}
+
+mockIPC((cmd, args) => handlePersonalPackWrites(cmd, args as Args), { shouldMockEvents: true });

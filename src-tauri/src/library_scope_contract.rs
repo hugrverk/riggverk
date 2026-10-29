@@ -17,15 +17,17 @@ mod tests {
     /// Prefixes of commands that only read. Every other command is in one of the lists below.
     const READ_PREFIXES: [&str; 4] = ["get_", "list_", "read_", "preview_"];
 
-    /// Every command that changes a file or a setting. Only `save_doc`, `create_doc` and
-    /// `save_rules_refinements` take Library text: the first two write personal docs
-    /// (`docs/context/<slug>.md`) only, the last only the text below the managed block of a rules
-    /// file. The others are install, conflict, rules-conversion, settings and workspace-reset
+    /// Every command that changes a file or a setting. Library text writes personal docs
+    /// (`docs/context/<slug>.md`), personal pack skills, or the text below a rules managed block.
+    /// The others are install, conflict, rules-conversion, settings and workspace-reset
     /// actions that never take Library text. `forget_pack` edits `pack-skills.json` only.
-    const WRITE_COMMANDS: [&str; 17] = [
+    /// `copy_skill_to_pack` and `save_pack_skill` write only inside `<data>/packs/personal/`.
+    const WRITE_COMMANDS: [&str; 19] = [
         "save_doc",
         "create_doc",
         "save_rules_refinements",
+        "copy_skill_to_pack",
+        "save_pack_skill",
         "apply_setup",
         "apply_uninstall",
         "rollback_setup_transaction",
@@ -105,18 +107,24 @@ mod tests {
     }
 
     #[test]
-    fn the_only_library_writes_are_personal_doc_and_rules_refinement_writes() {
+    fn the_only_library_writes_are_personal_docs_pack_skills_and_rules_refinements() {
         let library_writes: BTreeSet<&str> = registered_commands()
             .into_iter()
             .filter(|name| {
-                ["save_", "create_", "write_"]
+                ["save_", "create_", "write_", "copy_"]
                     .iter()
                     .any(|p| name.starts_with(p))
             })
             .collect();
         assert_eq!(
             library_writes,
-            set(&["save_doc", "create_doc", "save_rules_refinements"])
+            set(&[
+                "save_doc",
+                "create_doc",
+                "save_rules_refinements",
+                "copy_skill_to_pack",
+                "save_pack_skill",
+            ])
         );
     }
 

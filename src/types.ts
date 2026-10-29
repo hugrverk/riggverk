@@ -987,3 +987,12 @@ export interface SetupHistoryEntry {
   undoable: boolean;
   receipt: SetupReceipt | null;
 }
+
+/** A bundled skill copied into the personal pack, ready for the next Update. */
+export interface PackSkillCopy {
+  id: string;
+  name: string;
+  pack: string;
+  /** Display path of SKILL.md (`~/...`, or `<data>/...` outside home). */
+  path: string;
+}
