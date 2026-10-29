@@ -8,10 +8,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { useKeymapState } from "../keyboard/context";
 import type { WhatsNewRequest } from "../lib/releaseNotes";
-
-export type ShellMode = "NORMAL" | "INSERT" | "COMMAND" | "CONFIRM" | "HELP";
 
 /** Outcome of a toast notice; a notice without one is plain information. */
 export type NoticeTone = "ok" | "warn" | "fail";
@@ -28,8 +25,6 @@ export interface ShellStateValue {
   helpOpen: boolean;
   /** The release notes the "what's new" overlay shows, or null while it is closed. */
   whatsNew: WhatsNewRequest | null;
-  /** Number of confirm/review surfaces currently open (CONFIRM mode while > 0). */
-  confirmDepth: number;
   /** Transient one-line message, shown as the toast. */
   notice: string | null;
   noticeTone: NoticeTone | null;
@@ -43,8 +38,6 @@ export interface ShellStateValue {
   /** Opens the "what's new" overlay; `request.onClose` runs once when it is closed. */
   openWhatsNew: (request: WhatsNewRequest) => void;
   closeWhatsNew: () => void;
-  /** Marks a confirm/review surface as open; returns the release function. */
-  beginConfirm: () => () => void;
   /** A bare number is the duration, kept for older callers; prefer `{ tone, durationMs }`. */
   notify: (text: string, options?: number | NotifyOptions) => void;
 }
@@ -58,7 +51,6 @@ const DETACHED_STATE: ShellStateValue = {
   commandLineInitial: "",
   helpOpen: false,
   whatsNew: null,
-  confirmDepth: 0,
   notice: null,
   noticeTone: null,
   noticeId: 0,
@@ -69,7 +61,6 @@ const DETACHED_STATE: ShellStateValue = {
   toggleHelp: noop,
   openWhatsNew: noop,
   closeWhatsNew: noop,
-  beginConfirm: () => noop,
   notify: noop,
 };
 
@@ -81,7 +72,6 @@ export function ShellStateProvider({ children }: { children: ReactNode }) {
   const [helpOpen, setHelpOpen] = useState(false);
   const [whatsNew, setWhatsNew] = useState<WhatsNewRequest | null>(null);
   const whatsNewRef = useRef<WhatsNewRequest | null>(null);
-  const [confirmDepth, setConfirmDepth] = useState(0);
   const [notice, setNotice] = useState<{ text: string; tone: NoticeTone | null; id: number } | null>(null);
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const noticeSeq = useRef(0);
@@ -120,16 +110,6 @@ export function ShellStateProvider({ children }: { children: ReactNode }) {
     request.onClose?.();
   }, []);
 
-  const beginConfirm = useCallback(() => {
-    setConfirmDepth(depth => depth + 1);
-    let released = false;
-    return () => {
-      if (released) return;
-      released = true;
-      setConfirmDepth(depth => Math.max(0, depth - 1));
-    };
-  }, []);
-
   const notify = useCallback((text: string, options: number | NotifyOptions = {}) => {
     const { tone = null, durationMs = NOTICE_MS } = typeof options === "number" ? { durationMs: options } : options;
     if (noticeTimer.current) clearTimeout(noticeTimer.current);
@@ -146,7 +126,6 @@ export function ShellStateProvider({ children }: { children: ReactNode }) {
       commandLineInitial,
       helpOpen,
       whatsNew,
-      confirmDepth,
       notice: notice?.text ?? null,
       noticeTone: notice?.tone ?? null,
       noticeId: notice?.id ?? 0,
@@ -157,7 +136,6 @@ export function ShellStateProvider({ children }: { children: ReactNode }) {
       toggleHelp,
       openWhatsNew,
       closeWhatsNew,
-      beginConfirm,
       notify,
     }),
     [
@@ -165,7 +143,6 @@ export function ShellStateProvider({ children }: { children: ReactNode }) {
       commandLineInitial,
       helpOpen,
       whatsNew,
-      confirmDepth,
       notice,
       openCommandLine,
       closeCommandLine,
@@ -174,7 +151,6 @@ export function ShellStateProvider({ children }: { children: ReactNode }) {
       toggleHelp,
       openWhatsNew,
       closeWhatsNew,
-      beginConfirm,
       notify,
     ],
   );
@@ -184,25 +160,6 @@ export function ShellStateProvider({ children }: { children: ReactNode }) {
 
 export function useShellState(): ShellStateValue {
   return useContext(ShellStateContext);
-}
-
-/** Derived shell mode: COMMAND > HELP (also while "what's new" is open) > CONFIRM > INSERT > NORMAL. */
-export function useShellMode(): ShellMode {
-  const { commandLineOpen, helpOpen, whatsNew, confirmDepth } = useShellState();
-  const { editing } = useKeymapState();
-  if (commandLineOpen) return "COMMAND";
-  if (helpOpen || whatsNew) return "HELP";
-  if (confirmDepth > 0) return "CONFIRM";
-  return editing ? "INSERT" : "NORMAL";
-}
-
-/** Views call this while a review/confirm surface is open so the shell mode is CONFIRM. */
-export function useConfirmMode(active: boolean): void {
-  const { beginConfirm } = useShellState();
-  useEffect(() => {
-    if (!active) return;
-    return beginConfirm();
-  }, [active, beginConfirm]);
 }
 
 export function useNotify(): ShellStateValue["notify"] {

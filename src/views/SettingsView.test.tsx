@@ -64,10 +64,6 @@ function focus(element: HTMLElement) {
   act(() => element.focus());
 }
 
-function mode(): string {
-  return screen.getByLabelText("Shell mode").textContent!;
-}
-
 function radios(group: string): HTMLElement[] {
   return within(screen.getByRole("radiogroup", { name: group })).getAllByRole("radio");
 }
@@ -322,14 +318,12 @@ describe("SettingsView keyboard navigation", () => {
     renderSettings();
     const accent = screen.getByLabelText("Accent hex code");
     focus(accent);
-    expect(mode()).toBe("INSERT");
 
     press(accent, "j");
     expect(document.activeElement).toBe(accent);
 
     press(accent, "Escape");
     expect(document.activeElement).toBe(radios("Theme")[0]);
-    expect(mode()).toBe("NORMAL");
   });
 
   it("k from the first row and j from the last row leave focus where it is", () => {

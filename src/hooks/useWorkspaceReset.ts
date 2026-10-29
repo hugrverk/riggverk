@@ -30,8 +30,8 @@ export interface WorkspaceReset {
 
 /**
  * The only workspace folder action left, behind Settings (`R`) and `:workspace reset`: the app no longer picks a
- * folder, it only drops a custom one saved by an earlier version. The shell mode is CONFIRM while the dialog
- * is open and nothing is written unless it is confirmed. Never reloads the app; a refusal comes back as a message.
+ * folder, it only drops a custom one saved by an earlier version. Nothing is written unless the
+ * dialog is confirmed. Never reloads the app; a refusal comes back as a message.
  */
 export function useWorkspaceReset({
   activePath,

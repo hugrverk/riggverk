@@ -551,7 +551,6 @@ describe("LibraryView key hints", () => {
     fireEvent.click(statusHint("↵ edit"));
     expect(document.activeElement).toBe(textarea("Edit document"));
     const bar = within(screen.getByLabelText("Key hints"));
-    expect(screen.getByLabelText("Shell mode").textContent).toBe("INSERT");
     expect(queryStatusHint("↵ edit")).toBeNull();
     expect(bar.getByRole("button", { name: /save/ })).not.toBeNull();
   });
@@ -784,7 +783,7 @@ describe("LibraryView document pane", () => {
     expect(document.activeElement).toBe(textarea("Edit document"));
   });
 
-  it("lands on the document pane in NORMAL mode when the pane takes focus, and the list keeps its own keys", () => {
+  it("lands on the document pane, not the editor, when the pane takes focus, and the list keeps its own keys", () => {
     renderLibrary({ docs, activeDoc: doc, docDraft: doc.content });
     focusList();
     focusPane("Document");
@@ -795,7 +794,6 @@ describe("LibraryView document pane", () => {
     expect(press(body, "l")).toBe(true);
     expect(press(body, "h")).toBe(true);
     expect(document.activeElement).toBe(body);
-    expect(screen.getByLabelText("Shell mode").textContent).toBe("NORMAL");
   });
 
   it("lands on the pane, not in the textarea, when the pane takes focus while it is still in edit mode", () => {

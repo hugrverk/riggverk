@@ -16,7 +16,6 @@ import {
   isAllowedModCombo,
   isModifierKey,
   matchesPrefix,
-  type KeyChord,
   type KeyEventLike,
   type Platform,
 } from "./keymap";
@@ -100,24 +99,22 @@ export function KeymapProvider({ children, platform: platformOverride, chordTime
       usable: readonly RegisteredBinding[],
       seq: readonly KeyEventLike[],
       event: KeyboardEvent,
-      editable: boolean,
     ) => {
-      const exact: Array<{ entry: RegisteredBinding; chord: KeyChord }> = [];
+      const exact: RegisteredBinding[] = [];
       let partial = false;
       for (const entry of usable) {
         for (const chord of entry.chords) {
           if (!matchesPrefix(chord, seq, platform)) continue;
           if (chord.length === seq.length) {
-            if (!exact.some(item => item.entry === entry)) exact.push({ entry, chord });
+            if (!exact.includes(entry)) exact.push(entry);
           } else {
             partial = true;
           }
         }
       }
-      for (const { entry, chord } of exact) {
+      for (const entry of exact) {
         if (entry.binding.run(event) !== false) {
           event.preventDefault();
-          keymap.emitRun({ binding: entry.binding, chord, source: "key", editable, repeat: event.repeat });
           return { handled: true, pending: false };
         }
       }
@@ -143,12 +140,12 @@ export function KeymapProvider({ children, platform: platformOverride, chordTime
       });
 
       let seq = [...buffer, snapshotEvent(event)];
-      let result = evaluate(usable, seq, event, editable);
+      let result = evaluate(usable, seq, event);
       if (!result.handled && !result.pending && buffer.length > 0) {
         // A broken chord drops the buffer and the key gets a fresh start (g then j still moves down).
         setBuffer([]);
         seq = [snapshotEvent(event)];
-        result = evaluate(usable, seq, event, editable);
+        result = evaluate(usable, seq, event);
       }
       if (result.handled) {
         if (buffer.length > 0) setBuffer([]);

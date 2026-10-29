@@ -100,10 +100,6 @@ function bar() {
   return within(screen.getByLabelText("Key hints"));
 }
 
-function modeText() {
-  return screen.getByLabelText("Shell mode").textContent;
-}
-
 beforeEach(() => {
   invokeMock.mockReset();
 });
@@ -259,9 +255,9 @@ describe("InstallPlanPane", () => {
     });
   });
 
-  it("shows CONFIRM mode while the review is open", () => {
+  it("shows the review as its own region while it is open", () => {
     renderPane(makeFlow());
-    expect(modeText()).toBe("CONFIRM");
+    expect(screen.getByRole("region", { name: "Install plan" })).toBeTruthy();
   });
 
   it("takes focus when it opens so its keys work without a click", () => {

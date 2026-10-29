@@ -1,6 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { useConfirmMode } from "../shell/ShellState";
 import { Kbd } from "../ui/Kbd";
 import { Kv } from "../ui/Kv";
 import type { UninstallPlanView } from "../types";
@@ -30,8 +29,6 @@ export function UninstallCard({
   const [plan, setPlan] = useState<UninstallPlanView | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  useConfirmMode(dialogOpen);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const titleId = useId();
 
@@ -42,7 +39,6 @@ export function UninstallCard({
       const next = await invoke<UninstallPlanView>("preview_uninstall");
       setPlan(next);
       dialogRef.current?.showModal();
-      setDialogOpen(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -91,7 +87,7 @@ export function UninstallCard({
           </p>
         )}
       </div>
-      <dialog ref={dialogRef} aria-labelledby={titleId} className="app-modal" onClose={() => setDialogOpen(false)}>
+      <dialog ref={dialogRef} aria-labelledby={titleId} className="app-modal">
         <div className="app-modal-header">
           <h2 id={titleId} className="app-modal-title">Uninstall everything?</h2>
         </div>

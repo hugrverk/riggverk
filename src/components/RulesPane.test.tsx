@@ -111,9 +111,9 @@ describe("RulesPane", () => {
     expect(flow.retry).toHaveBeenCalledTimes(1);
   });
 
-  it("holds the shell in CONFIRM mode while it is open", () => {
+  it("shows the review as its own region while it is open", () => {
     renderPane({ status: "conversion", surface: "codex_rules", preview: PREVIEW });
-    expect(screen.getByLabelText("Shell mode").textContent).toBe("CONFIRM");
+    expect(screen.getByRole("region", { name: "Rules review" })).toBeTruthy();
   });
 
   describe("confirm line buttons", () => {

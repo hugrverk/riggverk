@@ -83,7 +83,7 @@ export function useRulesActions({
   reload,
 }: UseRulesActionsOptions): RulesActions {
   const confirm = useConfirm();
-  const { beginConfirm, notify } = useShellState();
+  const { notify } = useShellState();
   const [error, setError] = useState<string | null>(null);
   const label = HARNESS_LABELS[harness];
 
@@ -95,17 +95,11 @@ export function useRulesActions({
     async (userManaged: boolean) => {
       if (!model) return;
       if (userManaged) {
-        const release = beginConfirm();
-        let approved = false;
-        try {
-          approved = await confirm({
-            title: "Leave as is",
-            message: `Leave ${rulesFileName(harness)} as it is? Riggverk stops proposing changes to it and never writes it. Base updates stay available; press m again to hand the file back, or convert it to keep your edits under the base block.`,
-            confirmLabel: "leave as is",
-          });
-        } finally {
-          release();
-        }
+        const approved = await confirm({
+          title: "Leave as is",
+          message: `Leave ${rulesFileName(harness)} as it is? Riggverk stops proposing changes to it and never writes it. Base updates stay available; press m again to hand the file back, or convert it to keep your edits under the base block.`,
+          confirmLabel: "leave as is",
+        });
         if (!approved) return;
       }
       try {
@@ -120,7 +114,7 @@ export function useRulesActions({
         setError(e instanceof Error ? e.message : String(e));
       }
     },
-    [model, harness, label, confirm, beginConfirm, notify, reload],
+    [model, harness, label, confirm, notify, reload],
   );
 
   const diffOpen = flow.inline && flow.state.status !== "idle" && flow.state.surface === model?.surface;

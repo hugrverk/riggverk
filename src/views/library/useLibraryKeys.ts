@@ -53,7 +53,7 @@ export function useLibraryKeys({
   stopEdit,
 }: LibraryKeysOptions): { close: () => Promise<void> } {
   const confirm = useConfirm();
-  const { notify, beginConfirm } = useShellState();
+  const { notify } = useShellState();
   const latest = useRef(entry);
   latest.current = entry;
 
@@ -91,14 +91,7 @@ export function useLibraryKeys({
   const close = async () => {
     const current = latest.current;
     if (current?.dirty) {
-      const release = beginConfirm();
-      let ok = false;
-      try {
-        ok = await confirm(LEAVE_DIRTY_MESSAGE);
-      } finally {
-        release();
-      }
-      if (!ok) return;
+      if (!(await confirm(LEAVE_DIRTY_MESSAGE))) return;
       latest.current?.onReset();
     }
     stopEdit();

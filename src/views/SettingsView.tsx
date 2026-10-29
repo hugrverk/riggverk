@@ -373,7 +373,6 @@ export function SettingsView({
   const colorsValid = accentValid && backgroundValid && foregroundValid;
   const showRetry = settingsSaveStatus === "error" && !!onRetrySave;
 
-  // The reset asks through the confirm dialog, which puts the shell in CONFIRM mode itself.
   const runReset = useCallback(async () => {
     if (resetting) return;
     setResetting(true);

@@ -4,11 +4,8 @@ export { HelpOverlay, groupBindings } from "./HelpOverlay";
 export { ShellProviders } from "./ShellProviders";
 export {
   ShellStateProvider,
-  useConfirmMode,
   useNotify,
-  useShellMode,
   useShellState,
-  type ShellMode,
   type ShellStateValue,
 } from "./ShellState";
 export { Sidebar, type SidebarProps } from "./Sidebar";

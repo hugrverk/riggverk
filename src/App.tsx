@@ -211,7 +211,7 @@ function AppShell() {
   const rollbackTransactionId = applyTransactionId ?? uninstallRecoveryTransactionId;
   const [uninstallPreviewRequested, setUninstallPreviewRequested] = useState(false);
   const [overviewRefreshKey, setOverviewRefreshKey] = useState(0);
-  const { beginConfirm, notify } = useShellState();
+  const { notify } = useShellState();
 
   // workspace action runner (terminal output, activity animation, action wrappers)
   const {
@@ -519,7 +519,6 @@ function AppShell() {
   const requestRollback = useRollbackRequest({
     transactionId: rollbackTransactionId,
     confirm,
-    beginConfirm,
     runRollback: runRollbackTransaction,
     setError,
   });

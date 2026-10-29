@@ -99,7 +99,7 @@ export function useFileConflictActions({
   reload,
 }: UseFileConflictActionsOptions): FileConflictActions {
   const confirm = useConfirm();
-  const { beginConfirm, notify } = useShellState();
+  const { notify } = useShellState();
   const [error, setError] = useState<string | null>(null);
 
   const blockedBy = installOpen
@@ -117,13 +117,7 @@ export function useFileConflictActions({
   const setKept = useCallback(
     async (surface: FilesSurfaceId, unit: FileUnit, kept: boolean) => {
       if (kept) {
-        const release = beginConfirm();
-        let approved = false;
-        try {
-          approved = await confirm({ title: "Keep mine", message: keepMessage(unit), confirmLabel: "keep mine" });
-        } finally {
-          release();
-        }
+        const approved = await confirm({ title: "Keep mine", message: keepMessage(unit), confirmLabel: "keep mine" });
         if (!approved) return;
       }
       try {
@@ -135,7 +129,7 @@ export function useFileConflictActions({
         setError(e instanceof Error ? e.message : String(e));
       }
     },
-    [confirm, beginConfirm, notify, reload],
+    [confirm, notify, reload],
   );
 
   const toggleKept = useCallback(

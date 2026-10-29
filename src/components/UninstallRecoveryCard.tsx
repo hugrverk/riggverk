@@ -1,6 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { useConfirmMode } from "../shell/ShellState";
 import { Kv, type KvItem } from "../ui/Kv";
 import { Kbd } from "../ui/Kbd";
 import type { SetupResult } from "../types";
@@ -27,8 +26,6 @@ export function UninstallRecoveryCard({
   const [dryRunResult, setDryRunResult] = useState<SetupResult | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  useConfirmMode(dialogOpen);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const restoreButtonRef = useRef<HTMLButtonElement>(null);
   const confirmTitleId = useId();
@@ -59,7 +56,6 @@ export function UninstallRecoveryCard({
   const openConfirm = () => {
     if (!rollbackDryRunReady(dryRunResult)) return;
     dialogRef.current?.showModal();
-    setDialogOpen(true);
   };
 
   const closeConfirm = () => {
@@ -128,10 +124,7 @@ export function UninstallRecoveryCard({
         ref={dialogRef}
         aria-labelledby={confirmTitleId}
         className="app-modal"
-        onClose={() => {
-          setDialogOpen(false);
-          restoreButtonRef.current?.focus();
-        }}
+        onClose={() => restoreButtonRef.current?.focus()}
       >
         <div className="app-modal-header">
           <h2 id={confirmTitleId} className="app-modal-title">Restore workspace from uninstall backup?</h2>

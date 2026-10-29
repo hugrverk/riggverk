@@ -321,10 +321,6 @@ function hint(name: RegExp) {
   return keyHints().queryByRole("button", { name });
 }
 
-function mode() {
-  return screen.getByLabelText("Shell mode").textContent;
-}
-
 function review() {
   return screen.getByRole("region", { name: "Conflict review" });
 }
@@ -507,8 +503,7 @@ describe("Compare (d), inline", () => {
     press("d");
     await screen.findByRole("group", { name: "SKILL.md: yours to bundled" });
     expect(invokeMock).toHaveBeenCalledWith("preview_file_diff", { surface: "skills", unit: "skill:claude:tdd" });
-    // The page stays (inline), so there is no confirm mode and no review replaces it.
-    expect(mode()).toBe("NORMAL");
+    // The page stays (inline), so no review replaces it.
     expect(screen.queryByRole("region", { name: "Claude conflict review" })).toBeNull();
     expect(surfaces()).toBeTruthy();
     const diff = fold();
@@ -686,7 +681,6 @@ describe("keep mine and hand back (m)", () => {
     moveTo("skills");
     press("m");
     const dialog = await screen.findByRole("dialog");
-    expect(mode()).toBe("CONFIRM");
     expect(dialog.textContent).toContain("Keep your version of tdd in ~/.claude/skills (1 file)?");
     expect(dialog.textContent).toContain("Riggverk stops proposing changes to it and never writes it");
     expect(invokeMock).not.toHaveBeenCalled();
@@ -705,7 +699,7 @@ describe("keep mine and hand back (m)", () => {
     expect(dialog.textContent).toContain("Keep your version of security-audit in ~/.agents/skills (3 files)?");
     expect(dialog.textContent).toContain("Other files of the skill keep updating");
     fireEvent.click(within(dialog).getByRole("button", { name: "cancel" }));
-    await waitFor(() => expect(mode()).toBe("NORMAL"));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     moveTo("agents");
     press("m");
     dialog = await screen.findByRole("dialog");
@@ -720,7 +714,7 @@ describe("keep mine and hand back (m)", () => {
     press("m");
     const dialog = await screen.findByRole("dialog");
     fireEvent.click(within(dialog).getByRole("button", { name: "cancel" }));
-    await waitFor(() => expect(mode()).toBe("NORMAL"));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(invokeMock).not.toHaveBeenCalled();
   });
 
@@ -886,7 +880,7 @@ describe("take bundled (b, y)", () => {
   it("previews with exact args: the files that go, where yours is backed up, and the diff, and writes nothing", async () => {
     await openPreview();
     expect(invokeMock).toHaveBeenCalledWith("preview_take_bundled", { surface: "skills", units: ["skill:claude:tdd"] });
-    expect(mode()).toBe("CONFIRM");
+    expect(review()).toBeTruthy();
     const summary = screen.getByLabelText("Take bundled summary").textContent!;
     expect(summary).toContain("tdd · ~/.claude/skills");
     expect(summary).toContain("Claude, OpenCode");
@@ -943,7 +937,6 @@ describe("take bundled (b, y)", () => {
     expect(log.stdout).toContain("transaction tx-take-1 recorded · rollback available");
     // The review closes and the page's panes come back.
     expect(await screen.findByRole("region", { name: "Claude" })).toBeTruthy();
-    await waitFor(() => expect(mode()).toBe("NORMAL"));
   });
 
   it("never applies on Enter, and y is also a button", async () => {
@@ -960,7 +953,6 @@ describe("take bundled (b, y)", () => {
     press("n");
     expect(invokeMock).not.toHaveBeenCalledWith("apply_take_bundled", expect.anything());
     expect(surfaces()).toBeTruthy();
-    expect(mode()).toBe("NORMAL");
     press("b");
     await screen.findByLabelText("Take bundled summary");
     fireEvent.keyDown(document.body, { key: "Escape" });

@@ -7,7 +7,6 @@ export {
   isVisibleHint,
   paneHintEntries,
   type Binding,
-  type BindingRun,
   type RegisteredBinding,
   type Scope,
 } from "./registry";

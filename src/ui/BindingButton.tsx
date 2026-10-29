@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { useKeymapContext, usePlatform } from "../keyboard/context";
+import { usePlatform } from "../keyboard/context";
 import { ariaKeyShortcuts, formatKeys, parseKeys } from "../keyboard/keymap";
 import { evaluateWhen, type Binding } from "../keyboard/registry";
 import { ApplyButton } from "./ApplyButton";
@@ -32,7 +32,6 @@ export function BindingButton({
   apply?: boolean;
 }) {
   const platform = usePlatform();
-  const keymap = useKeymapContext()?.keymap;
   const { active, disabledReason } = evaluateWhen(binding);
   if (!binding.hint || (!active && disabledReason === null)) return null;
   const props = {
@@ -40,11 +39,7 @@ export function BindingButton({
     shortcut: ariaKeyShortcuts(binding.keys, platform),
     disabled: disabledReason ?? false,
     onClick: () => {
-      // Announced to the keymap like a key press.
-      const chord = parseKeys(binding.keys)[0];
-      if (invokeBinding(binding) && chord) {
-        keymap?.emitRun({ binding, chord, source: "click", editable: false, repeat: false });
-      }
+      invokeBinding(binding);
     },
   };
   if (apply) return <ApplyButton {...props}>{label ?? binding.hint}</ApplyButton>;
