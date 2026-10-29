@@ -562,13 +562,15 @@ pub fn save_with_revision_check(
     let _guard = SETTINGS_WRITE_MUTEX
         .lock()
         .map_err(|_| "settings lock poisoned".to_string())?;
-    let incoming = settings;
+    let mut incoming = settings;
     mutate_settings_locked(|current| {
         if let Some(expected) = expected_revision {
             if current.revision != expected {
                 return Err(SETTINGS_CONFLICT_ERROR.to_string());
             }
         }
+        // A workspace folder cannot be chosen: only `reset_active_workspace_path` changes it.
+        incoming.workspace_path = current.workspace_path.clone();
         *current = incoming;
         Ok(MutationOutcome::Changed)
     })
@@ -1223,6 +1225,25 @@ mod tests {
     }
 
     #[test]
+    fn a_settings_save_never_chooses_a_workspace_folder() {
+        with_temp_home(|_| {
+            let first = save(AppSettings::default()).expect("first save");
+            let mut next = first.clone();
+            next.appearance = "light".into();
+            next.workspace_path = Some(
+                std::env::temp_dir()
+                    .join("another-workspace")
+                    .to_string_lossy()
+                    .into_owned(),
+            );
+            let saved = save_with_revision_check(next, Some(first.revision)).expect("save");
+            assert_eq!(saved.appearance, "light");
+            assert_eq!(saved.workspace_path, None);
+            assert_eq!(load().workspace_path, None);
+        });
+    }
+
+    #[test]
     fn workspace_path_mutation_rejects_stale_revision() {
         with_temp_home(|_| {
             let first = save(AppSettings::default()).expect("first save");
@@ -1341,16 +1362,20 @@ mod tests {
     #[test]
     fn stale_workspace_scrub_preserves_unrelated_settings() {
         with_temp_home(|_| {
-            let saved = save(AppSettings {
-                appearance: "light".into(),
-                enabled_target_ids: vec!["codex_rules".into(), "opencode_config".into()],
-                workspace_path: Some(
-                    std::env::temp_dir()
-                        .join("riggverk-scrub-missing")
-                        .to_string_lossy()
-                        .into_owned(),
-                ),
-                ..AppSettings::default()
+            // A folder saved by an earlier version: a settings save cannot set one.
+            let saved = mutate_settings(|current| {
+                *current = AppSettings {
+                    appearance: "light".into(),
+                    enabled_target_ids: vec!["codex_rules".into(), "opencode_config".into()],
+                    workspace_path: Some(
+                        std::env::temp_dir()
+                            .join("riggverk-scrub-missing")
+                            .to_string_lossy()
+                            .into_owned(),
+                    ),
+                    ..AppSettings::default()
+                };
+                Ok(MutationOutcome::Changed)
             })
             .expect("seed save");
 
