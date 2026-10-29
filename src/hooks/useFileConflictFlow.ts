@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ActionResult, FileDiffView, FilesSurfaceId, SetupResult, TakeBundledPreview, TakeBundledUnit } from "../types";
 import type { RunWorkspaceTask } from "./useInstallScreen";
+import { formatReceipt } from "../lib/installPlan";
 import { plural } from "../lib/plural";
 
 /**
@@ -67,8 +68,6 @@ function errorText(e: unknown): string {
   return String(e);
 }
 
-const SHORT_FINGERPRINT = 8;
-
 /** "tdd", "tdd (2 files)": what a take bundled replaces, for the output and the review. */
 export function takeBundledTitle(unit: TakeBundledUnit): string {
   const files = unit.files.length + unit.more_files;
@@ -77,21 +76,13 @@ export function takeBundledTitle(unit: TakeBundledUnit): string {
 
 /** Output-pane text for a finished take bundled: the line the first word tones, then the transaction. */
 export function formatTakeBundledOutput(preview: TakeBundledPreview, result: SetupResult) {
-  const word = result.success ? "applied" : result.rolled_back.length > 0 ? "rolled back" : "failed";
-  const pad = (text: string) => text.padEnd(13);
   const names = preview.units.map(unit => takeBundledTitle(unit)).join(", ");
-  const lines = [
-    `plan ${preview.plan_fingerprint.slice(0, SHORT_FINGERPRINT) || "-"} · take bundled ${names} · fingerprint verified`,
-    `${pad(word)}${names}${result.success ? " · yours backed up" : ""}`,
-    ...result.manual_steps.map(step => `${pad("manual")}${step}`),
-    result.message,
-    `applied ${result.applied.length} · failed ${result.failed.length} · rolled back ${result.rolled_back.length}`,
-    result.transaction_id
-      ? `transaction ${result.transaction_id} ${result.success && result.applied.length > 0 ? "recorded · rollback available" : "recorded"}`
-      : "",
-  ].filter(Boolean);
-  const stderr = result.success ? "" : [...result.failed, ...(result.failed.length === 0 ? [result.message] : [])].join("\n");
-  return { stdout: lines.join("\n"), stderr };
+  return formatReceipt({
+    fingerprint: preview.plan_fingerprint,
+    subject: `take bundled ${names}`,
+    lines: (word, pad) => [`${pad(word)}${names}${result.success ? " · yours backed up" : ""}`],
+    result,
+  });
 }
 
 export function useFileConflictFlow({ runWorkspaceTask, refresh, onApplied }: UseFileConflictFlowOptions): FileConflictFlow {
