@@ -1067,3 +1067,147 @@ describe("useLibraryController drafts and reads", () => {
     expect(result.current.activeConfigSourceType).toBe("policy");
   });
 });
+
+describe("useLibraryController typing during an in-flight save", () => {
+  beforeEach(() => {
+    invoke.mockReset();
+  });
+
+  function deferred<T>() {
+    let resolve: (value: T) => void = () => {};
+    const promise = new Promise<T>(r => {
+      resolve = r;
+    });
+    return { promise, resolve };
+  }
+
+  it("keeps text typed while a doc save is in flight and leaves it marked unsaved", async () => {
+    const { deps } = createDeps();
+    const { result } = renderHook(() => useLibraryController(deps));
+    const save = deferred<ActionResult>();
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === "read_doc") return Promise.resolve(docA);
+      return Promise.reject(new Error(`unexpected invoke: ${cmd}`));
+    });
+    await act(async () => {
+      await result.current.selectDoc("doc-a");
+    });
+    await act(async () => {
+      result.current.onChangeDocDraft("alpha one");
+    });
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === "save_doc") return save.promise;
+      if (cmd === "read_doc") return Promise.resolve({ ...docA, content: "alpha one" });
+      return Promise.reject(new Error(`unexpected invoke: ${cmd}`));
+    });
+    let handle: Promise<boolean>;
+    await act(async () => {
+      handle = result.current.onSaveDoc();
+    });
+    await act(async () => {
+      result.current.onChangeDocDraft("alpha one two");
+    });
+    await act(async () => {
+      save.resolve(successResult("save_doc"));
+      await handle;
+    });
+    expect(result.current.docDraft).toBe("alpha one two");
+    expect(result.current.docDirty).toBe(true);
+    expect(result.current.activeDoc?.content).toBe("alpha one");
+  });
+
+  it("keeps the dirty mark of text typed during an unchanged doc save", async () => {
+    const { deps } = createDeps();
+    const { result } = renderHook(() => useLibraryController(deps));
+    const save = deferred<ActionResult>();
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === "read_doc") return Promise.resolve(docA);
+      return Promise.reject(new Error(`unexpected invoke: ${cmd}`));
+    });
+    await act(async () => {
+      await result.current.selectDoc("doc-a");
+    });
+    await act(async () => {
+      result.current.onChangeDocDraft("alpha one");
+    });
+    invoke.mockImplementation((cmd: string) => (cmd === "save_doc" ? save.promise : Promise.reject(new Error(cmd))));
+    let handle: Promise<boolean>;
+    await act(async () => {
+      handle = result.current.onSaveDoc();
+    });
+    await act(async () => {
+      result.current.onChangeDocDraft("alpha one two");
+    });
+    await act(async () => {
+      save.resolve(successResult("save_doc", "unchanged"));
+      await handle;
+    });
+    expect(result.current.docDraft).toBe("alpha one two");
+    expect(result.current.docDirty).toBe(true);
+  });
+
+  it("keeps text typed while a rules save is in flight and leaves it marked unsaved", async () => {
+    const { deps } = createDeps();
+    const { result } = renderHook(() => useLibraryController(deps));
+    const claude = rulesFile("claude_rules");
+    const save = deferred<ActionResult>();
+    invoke.mockImplementation((cmd: string) => (cmd === "read_rules_file" ? Promise.resolve(claude) : Promise.reject(new Error(cmd))));
+    await act(async () => {
+      await result.current.selectRulesFile("claude_rules");
+    });
+    await act(async () => {
+      result.current.onChangeRulesDraft("one\n");
+    });
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === "save_rules_refinements") return save.promise;
+      if (cmd === "read_rules_file") return Promise.resolve(rulesFile("claude_rules", { refinements: "one\n", revision: "rev-claude_rules-2" }));
+      return Promise.reject(new Error(cmd));
+    });
+    let handle: Promise<boolean>;
+    await act(async () => {
+      handle = result.current.onSaveRules();
+    });
+    await act(async () => {
+      result.current.onChangeRulesDraft("one\ntwo\n");
+    });
+    await act(async () => {
+      save.resolve(successResult("save_rules_refinements"));
+      await handle;
+    });
+    expect(result.current.rulesDraft).toBe("one\ntwo\n");
+    expect(result.current.rulesDirty).toBe(true);
+    expect(result.current.activeRulesFile?.revision).toBe("rev-claude_rules-2");
+  });
+
+  it("keeps text typed while a personal skill save is in flight and leaves it marked unsaved", async () => {
+    const { deps } = createDeps();
+    const { result } = renderHook(() => useLibraryController(deps));
+    const personal: DocumentContent = { id: "pack:personal/mine", title: "mine", path: "skills/mine/SKILL.md", section: "pack:personal", source: "pack", content: "one" };
+    const save = deferred<ActionResult>();
+    invoke.mockImplementation((cmd: string) => (cmd === "read_skill" ? Promise.resolve(personal) : Promise.reject(new Error(cmd))));
+    await act(async () => {
+      await result.current.readSkill(personal.id);
+    });
+    await act(async () => {
+      result.current.onChangeSkillDraft("two");
+    });
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === "save_pack_skill") return save.promise;
+      if (cmd === "read_skill") return Promise.resolve({ ...personal, content: "two" });
+      return Promise.reject(new Error(cmd));
+    });
+    let handle: Promise<boolean>;
+    await act(async () => {
+      handle = result.current.onSaveSkill();
+    });
+    await act(async () => {
+      result.current.onChangeSkillDraft("two three");
+    });
+    await act(async () => {
+      save.resolve(successResult("save_pack_skill"));
+      await handle;
+    });
+    expect(result.current.skillDraft).toBe("two three");
+    expect(result.current.skillDirty).toBe(true);
+  });
+});
