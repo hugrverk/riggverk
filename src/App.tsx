@@ -729,6 +729,7 @@ function AppShell() {
             workspaceDiagnostics={workspaceDiagnostics}
             appSettings={appSettings}
             enabledHarnessIds={enabledHarnessIds}
+            agentTargets={agentTargets}
             runtimeHealth={runtimeHealthByHarness}
             checkedAt={checkedAt}
             updateAllDisabled={updateAllDisabled}

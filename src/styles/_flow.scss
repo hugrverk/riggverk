@@ -1,0 +1,361 @@
+/* ═══════════════════════════════════════════════════════════════════════════════════
+   Overview flow map and inspector (Grafit 1A "Bläck").
+
+     .ov-flow                    the map and the inspector side by side; stacked below 900px of window width
+     .flow-map > .flow-svg       sources left, agents right, a cubic curve for what flows between them
+       .flow-ln                  a curve: weight = items flowing, dashed = update ready (.is-ready), dotted ghost
+                                 (.is-ghost, to an agent that is off or missing), dashed fix hue (.is-fix, a pack
+                                 that is held); .has-glow marks agents the newest update wrote (.flow-glow)
+       .flow-src / .flow-agent   a node: a hollow ring in its state's hue, the filled square for a decision
+     .flow-insp > .flow-body     the inspector: home, agent, source, curve or run; hairline left border
+     .flow-dec                   a decision: raised surface, bright top edge, the filled square
+
+   Radius 0, hairlines, system font for text; system mono only for paths and counts. No amber or ochre: the states
+   keep the hues of _tokens.scss, the decision is the brightest ink in weight 600. Motion follows data-motion:
+   curves draw in once and the decision square breathes three times at full motion only, and nothing else animates
+   (the run's dots are driven from useFlowPulses and only exist at full motion).
+   ═══════════════════════════════════════════════════════════════════════════════════ */
+
+.ov-flow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 266px;
+  gap: 0 22px;
+  align-items: start;
+  margin: 4px 0 24px;
+}
+
+.flow-map { min-width: 0; }
+
+.flow-svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  overflow: visible;
+  font-family: var(--font-sans);
+}
+
+/* ---- curves ---- */
+
+.flow-ln {
+  fill: none;
+  stroke: var(--border-strong);
+  opacity: 0.7;
+  transition:
+    opacity var(--dur-state) var(--ease),
+    stroke var(--dur-state) var(--ease);
+}
+
+.flow-ln.is-ready { stroke-dasharray: 3 4; opacity: 0.62; }
+.flow-ln.is-ghost { stroke-dasharray: 2 5; opacity: 0.26; }
+.flow-ln.is-fix { stroke: var(--fix); stroke-dasharray: 3 4; opacity: 0.85; }
+.flow-ln.live { stroke: var(--ready); stroke-dasharray: none; opacity: 1; }
+
+.flow-glow {
+  fill: none;
+  stroke: var(--ready);
+  stroke-width: 6;
+  opacity: 0.14;
+  pointer-events: none;
+  transition: opacity var(--dur-state) var(--ease);
+}
+
+.flow-svg.has-hl .flow-ln,
+.flow-svg.has-hl .flow-glow { opacity: 0.09; }
+.flow-svg.has-hl .flow-ln.hl { opacity: 1; stroke: var(--text); }
+.flow-svg.has-hl .flow-ln.hl.live { stroke: var(--ready); }
+.flow-svg.has-hl .flow-ln.hl.is-fix { stroke: var(--fix); }
+.flow-ln.sel { opacity: 1; stroke: var(--text); }
+
+.flow-hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 10;
+  cursor: pointer;
+}
+
+/* The first appearance: every solid curve draws from its source. pathLength is 1, so no measuring is needed. */
+[data-motion="full"] .flow-ln.draw {
+  stroke-dasharray: 1;
+  animation: flow-draw 0.6s var(--ease) calc(var(--i, 0) * 22ms) backwards;
+}
+
+@keyframes flow-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+
+/* ---- nodes ---- */
+
+.flow-src,
+.flow-agent {
+  cursor: pointer;
+  outline: none;
+  transition: opacity var(--dur-state) var(--ease);
+}
+
+.flow-node-hit {
+  fill: transparent;
+  transition: fill var(--dur-view) var(--ease);
+}
+
+.flow-src.sel > .flow-node-hit,
+.flow-agent.sel > .flow-node-hit { fill: var(--bg-raised); }
+
+.flow-src:focus-visible > .flow-node-hit,
+.flow-agent:focus-visible > .flow-node-hit {
+  stroke: var(--focus-ring);
+  stroke-width: 2;
+}
+
+.flow-svg.has-hl .flow-src:not(.hl),
+.flow-svg.has-hl .flow-agent:not(.hl) { opacity: 0.35; }
+
+.flow-name {
+  font-size: var(--fs);
+  font-weight: 600;
+  fill: var(--text);
+}
+
+.flow-sub {
+  font-size: calc(var(--fs) * 0.85);
+  fill: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.flow-ring {
+  fill: var(--bg);
+  stroke: var(--text-muted);
+  stroke-width: 1.5;
+  transition: stroke var(--dur-state) var(--ease);
+}
+
+.flow-src.is-base .flow-ring { stroke: var(--text); }
+.flow-src.is-yours .flow-ring { stroke: var(--yours); }
+.flow-src.is-fix .flow-ring { stroke: var(--fix); }
+
+.flow-agent.is-ok .flow-ring { stroke: var(--ok); }
+.flow-agent.is-ready .flow-ring { stroke: var(--ready); }
+.flow-agent.is-yours .flow-ring { stroke: var(--yours); }
+.flow-agent.is-fix .flow-ring { stroke: var(--fix); }
+.flow-agent.is-off .flow-ring,
+.flow-agent.is-missing .flow-ring { stroke: var(--off); stroke-dasharray: 2 2; }
+.flow-agent.is-live .flow-ring { stroke: var(--ready); stroke-dasharray: none; }
+
+.flow-agent.is-dim .flow-name { font-weight: 500; fill: var(--text-muted); }
+
+/* The decision: the one filled square, in the brightest ink. */
+.flow-square {
+  fill: var(--decide);
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+[data-motion="full"] .flow-square { animation: flow-breathe 2.2s var(--ease) 3; }
+
+@keyframes flow-breathe { 50% { transform: scale(1.35); } }
+
+.flow-agent.is-decide .flow-name { fill: var(--decide); }
+
+.flow-cnt {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  fill: var(--text);
+  paint-order: stroke;
+  stroke: var(--bg);
+  stroke-width: 4px;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+
+[data-motion="full"] .flow-cnt { animation: ov-in 0.2s both; }
+
+.flow-pulse {
+  fill: var(--ready);
+  pointer-events: none;
+}
+
+/* ---- inspector ---- */
+
+.flow-insp {
+  min-width: 0;
+  min-height: 300px;
+  padding-left: 20px;
+  border-left: 1px solid var(--border);
+  font-family: var(--font-sans);
+  font-size: calc(var(--fs) * 0.96);
+}
+
+.flow-body {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+
+[data-motion="full"] .flow-body { animation: ov-in var(--dur-view) var(--ease) both; }
+
+.flow-body p { margin: 0; }
+
+.flow-ih {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 24px;
+}
+
+.flow-h {
+  margin: 0;
+  min-width: 0;
+  font-size: calc(var(--fs) * 1.08);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-heading);
+  overflow-wrap: anywhere;
+}
+
+.flow-lbl {
+  font-family: var(--font-mono);
+  font-size: max(10px, calc(var(--fs) * 0.77));
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.flow-dim { color: var(--text-muted); }
+
+.flow-rows {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.flow-rows li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 5px 0;
+  border-top: 1px solid var(--border);
+}
+
+.flow-rows li:last-child { border-bottom: 1px solid var(--border); }
+.flow-rows li > span:first-child { color: var(--text-muted); }
+
+.flow-val {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.flow-acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.flow-receipt { display: grid; gap: 8px; }
+.flow-receipt .flow-ih { min-height: 0; }
+
+.flow-insp .receipt > div {
+  grid-template-columns: minmax(7ch, 78px) minmax(0, 1fr);
+  gap: 10px;
+}
+
+.flow-dec {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px 10px;
+  padding: 12px;
+  background: var(--decide-bg);
+  box-shadow: inset 0 2px 0 var(--decide);
+}
+
+.flow-dec .state-mark { width: 9px; height: 9px; margin-top: 0.3em; }
+.flow-dec b { display: block; font-weight: 600; }
+.flow-dec .flow-dim { display: block; }
+.flow-dec .flow-acts { grid-column: 1 / -1; }
+
+/* Codex reads AGENTS.override.md instead of AGENTS.md: the base is silently off. Weight and a top edge, no hue. */
+.flow-alert {
+  padding: 8px 10px;
+  background: var(--bg-raised);
+  box-shadow: inset 0 2px 0 var(--decide);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.flow-alert b { font-weight: 600; }
+
+/* ---- a run in the inspector ---- */
+
+.flow-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.flow-bar {
+  flex: 1 1 auto;
+  height: 3px;
+  background: var(--border);
+}
+
+.flow-bar > i {
+  display: block;
+  width: var(--p, 0%);
+  height: 100%;
+  background: var(--ready);
+  transition: width var(--dur-view) var(--ease);
+}
+
+.flow-count {
+  font-family: var(--font-mono);
+  font-size: calc(var(--fs) * 0.9);
+  font-variant-numeric: tabular-nums;
+}
+
+.flow-file {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: calc(var(--fs) * 0.9);
+  color: var(--text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flow-check {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.flow-check li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+}
+
+.flow-check li.is-current { font-weight: 600; }
+.flow-check .flow-val { margin-left: auto; font-weight: 400; color: var(--text-muted); }
+
+/* ---- narrow windows: the inspector goes under the map ---- */
+
+@media (max-width: 900px) {
+  .ov-flow {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 18px 0;
+  }
+
+  .flow-insp {
+    min-height: 0;
+    padding: 16px 0 0;
+    border-top: 1px solid var(--border);
+    border-left: 0;
+  }
+}

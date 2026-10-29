@@ -1,5 +1,5 @@
-import type { SetupHistoryEntry } from "../types";
-import { HARNESS_LABELS } from "./harnessInstallation";
+import type { InstallAgent, SetupHistoryEntry } from "../types";
+import { HARNESS_LABELS, HARNESS_SURFACES } from "./harnessInstallation";
 import { surfaceTitle } from "./installPlan";
 import { listText } from "./overviewModel";
 
@@ -123,4 +123,39 @@ export function runPill(entry: SetupHistoryEntry): { state: "ok" | "tip" | "fix"
   if (entry.status === "rolled_back") return { state: "tip", text: "Undone" };
   if (entry.status === "failed") return { state: "fix", text: "Failed" };
   return { state: "ok", text: "Done" };
+}
+
+/**
+ * The receipt of one history entry for one agent: the lines of `receiptLines` narrowed to the surfaces that belong to
+ * the agent (the shared `skills` surface included, since every agent reads skills). `part` is false when the update
+ * did not touch the agent: it names no surface of the agent's own and does not list the agent. The Backup line is
+ * left out because the backup is counted for the whole run, not per agent.
+ */
+export function agentReceipt(entry: SetupHistoryEntry, harness: InstallAgent): { part: boolean; lines: ReceiptLine[] } {
+  const own = new Set(HARNESS_SURFACES[harness]);
+  const ownOnly = (surface: SetupHistoryEntry["surfaces"][number]) => own.has(surface) && surface !== "skills";
+  const changed = entry.changes.filter(change => own.has(change.surface) && change.applied && !change.restored);
+  const restored = entry.changes.filter(change => own.has(change.surface) && change.restored);
+  const synced = unique((entry.receipt?.synced ?? []).filter(surface => own.has(surface)));
+  const left = (entry.receipt?.left_for_you ?? []).filter(item => own.has(item.surface));
+  const part =
+    entry.harnesses.includes(harness) ||
+    entry.changes.some(change => ownOnly(change.surface)) ||
+    (entry.receipt?.synced ?? []).some(ownOnly) ||
+    (entry.receipt?.left_for_you ?? []).some(item => ownOnly(item.surface));
+  if (!part) return { part: false, lines: [] };
+  const lines: ReceiptLine[] = [];
+  if (changed.length > 0) {
+    lines.push({ label: "Changed", value: `${unique(changed.map(change => change.surface)).map(surfaceTitle).join(", ")} · ${count(changed.length, "file")}` });
+  }
+  if (restored.length > 0) lines.push({ label: "Restored", value: `${count(restored.length, "file")} from the backup` });
+  if (synced.length > 0) lines.push({ label: "Checked", value: `${synced.map(surfaceTitle).join(", ")} · current` });
+  if (left.length > 0) {
+    lines.push({
+      label: "Left for you",
+      value: left.map(item => `${surfaceTitle(item.surface)} · ${item.reason === "conflict" ? "you edited it" : "needs a manual step"}`).join("; "),
+    });
+  }
+  if (lines.length === 0) lines.push({ label: "Changed", value: "no files" });
+  return { part: true, lines };
 }

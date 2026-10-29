@@ -58,6 +58,8 @@ export interface AgentCardModel {
   rows: CardRow[];
   /** At most two lines under the rows: why the most urgent row is not up to date, and the runtime warning. */
   notes: string[];
+  /** The backend reports every surface of the agent as unavailable: it is turned on but not on this Mac. */
+  unavailable: boolean;
 }
 
 function rowText(item: UiItem, notInstalled: boolean): string {
@@ -114,8 +116,16 @@ function harnessModel(input: {
     .map((item, index) => ({ item, notInstalled: notInstalled[index]! }))
     .filter(({ item }) => item.state !== null && item.state !== "off");
   const allNotInstalled = counted.length > 0 && counted.every(entry => entry.item.state === "ready" && entry.notInstalled);
+  const unavailable = surfaceRows.length > 0 && surfaceRows.every(row => row.state === "unavailable");
   return {
-    card: { harness, label: HARNESS_LABELS[harness], badge: harnessBadge(items, { installing: allNotInstalled }), rows, notes },
+    card: {
+      harness,
+      label: HARNESS_LABELS[harness],
+      badge: harnessBadge(items, { installing: allNotInstalled }),
+      rows,
+      notes,
+      unavailable,
+    },
     items,
     allNotInstalled,
   };
