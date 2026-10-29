@@ -1313,3 +1313,127 @@ describe("useLibraryController typing during an in-flight save", () => {
     expect(result.current.skillDirty).toBe(true);
   });
 });
+
+describe("useLibraryController refresh keeps unsaved drafts", () => {
+  const personal: DocumentContent = { id: "pack:personal/mine", title: "mine", path: "skills/mine/SKILL.md", section: "pack:personal", source: "pack", content: "one" };
+  const summaries: DocSummary[] = [docA, docB].map(d => ({
+    id: d.id, title: d.title, path: d.path, section: d.section, source: d.source,
+  }));
+
+  beforeEach(() => {
+    invoke.mockReset();
+    choose.mockReset();
+    choose.mockResolvedValue("alternate");
+  });
+
+  async function openDirtyDoc() {
+    const { deps } = createDeps();
+    const hook = renderHook(() => useLibraryController(deps));
+    invoke.mockImplementation((cmd: string) =>
+      cmd === "read_doc" ? Promise.resolve(docA) : Promise.reject(new Error(`unexpected invoke: ${cmd}`)),
+    );
+    await act(async () => {
+      await hook.result.current.selectDoc("doc-a");
+    });
+    await act(async () => {
+      hook.result.current.onChangeDocDraft("alpha typed");
+    });
+    return { result: hook.result, deps };
+  }
+
+  it("keeps the open doc and its draft when the doc list fails to load", async () => {
+    const { result, deps } = await openDirtyDoc();
+    invoke.mockImplementation(() => Promise.reject(new Error("list failed")));
+    await act(async () => {
+      await result.current.loadDocs();
+    });
+    expect(deps.setError).toHaveBeenCalledWith(expect.stringContaining("list failed"));
+    expect(result.current.activeDoc?.id).toBe("doc-a");
+    expect(result.current.docDraft).toBe("alpha typed");
+    expect(result.current.docDirty).toBe(true);
+  });
+
+  it("keeps the open doc and its draft when a refreshed list omits it", async () => {
+    const { result } = await openDirtyDoc();
+    invoke.mockImplementation((cmd: string, args?: { id?: string }) => {
+      if (cmd === "list_docs") return Promise.resolve([summaries[1]]);
+      if (cmd === "read_doc" && args?.id === "doc-b") return Promise.resolve(docB);
+      return Promise.reject(new Error(`unexpected invoke: ${cmd}`));
+    });
+    await act(async () => {
+      await result.current.loadDocs();
+    });
+    expect(result.current.activeDoc?.id).toBe("doc-a");
+    expect(result.current.docDraft).toBe("alpha typed");
+    expect(result.current.docDirty).toBe(true);
+  });
+
+  async function openDirtySkill() {
+    const { deps } = createDeps();
+    const hook = renderHook(() => useLibraryController(deps));
+    invoke.mockImplementation((cmd: string) =>
+      cmd === "read_skill" ? Promise.resolve(personal) : Promise.reject(new Error(`unexpected invoke: ${cmd}`)),
+    );
+    await act(async () => {
+      await hook.result.current.readSkill(personal.id);
+    });
+    await act(async () => {
+      hook.result.current.onChangeSkillDraft("two");
+    });
+    return { result: hook.result, deps };
+  }
+
+  it("keeps the open personal skill and its draft when the skill list fails to load", async () => {
+    const { result } = await openDirtySkill();
+    invoke.mockImplementation(() => Promise.reject(new Error("list failed")));
+    await act(async () => {
+      await result.current.loadSkills();
+    });
+    expect(result.current.activeSkillContent?.id).toBe(personal.id);
+    expect(result.current.skillDraft).toBe("two");
+    expect(result.current.skillDirty).toBe(true);
+  });
+
+  it("keeps the open personal skill and its draft when the pack list fails and the bundle has others", async () => {
+    const { result } = await openDirtySkill();
+    const bundled: SkillSummary = {
+      id: "s1", name: "s1", description: "", path: "skills/s1", group: "g", category: "c", risk: "low", targets: [], related: [],
+    };
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === "list_skills") return Promise.resolve([bundled]);
+      if (cmd === "list_pack_skills") return Promise.reject(new Error("pack failed"));
+      if (cmd === "read_skill") return Promise.resolve({ ...docA, id: "s1", content: "bundled" });
+      return Promise.reject(new Error(`unexpected invoke: ${cmd}`));
+    });
+    await act(async () => {
+      await result.current.loadSkills();
+    });
+    expect(result.current.activeSkillContent?.id).toBe(personal.id);
+    expect(result.current.skillDraft).toBe("two");
+    expect(result.current.skillDirty).toBe(true);
+  });
+
+  it("keeps unsaved rules refinements when a refreshed list omits the open file", async () => {
+    const { deps } = createDeps();
+    const { result } = renderHook(() => useLibraryController(deps));
+    const claude = rulesFile("claude_rules");
+    invoke.mockImplementation((cmd: string) =>
+      cmd === "read_rules_file" ? Promise.resolve(claude) : Promise.reject(new Error(`unexpected invoke: ${cmd}`)),
+    );
+    await act(async () => {
+      await result.current.selectRulesFile("claude_rules");
+    });
+    await act(async () => {
+      result.current.onChangeRulesDraft(`${claude.refinements} typed`);
+    });
+    invoke.mockImplementation((cmd: string) =>
+      cmd === "list_rules_files" ? Promise.resolve([rulesFile("codex_rules")]) : Promise.reject(new Error(cmd)),
+    );
+    await act(async () => {
+      await result.current.loadRulesFiles();
+    });
+    expect(result.current.activeRulesSurface).toBe("claude_rules");
+    expect(result.current.rulesDraft).toBe(`${claude.refinements} typed`);
+    expect(result.current.rulesDirty).toBe(true);
+  });
+});
