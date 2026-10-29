@@ -19,12 +19,23 @@ export interface ConfirmConfig {
   destructive?: boolean;
 }
 
+/** A question with a third answer between the two: "Discard" / "Keep editing" / "Save and continue". */
+export interface ConfirmChoiceConfig extends ConfirmConfig {
+  /** The third button, shown first. */
+  alternateLabel: string;
+}
+
+/** Which button settled a choice. Escape and closing the dialog are `cancel`. */
+export type ConfirmChoice = "confirm" | "alternate" | "cancel";
+
 interface ConfirmContextValue {
   confirm: (config: ConfirmConfig | string) => Promise<boolean>;
+  choose: (config: ConfirmChoiceConfig) => Promise<ConfirmChoice>;
 }
 
 const ConfirmContext = createContext<ConfirmContextValue>({
   confirm: () => Promise.resolve(false),
+  choose: () => Promise.resolve("cancel"),
 });
 
 /**
@@ -43,30 +54,44 @@ export function useConfirm() {
 }
 
 /**
+ * Like `useConfirm`, with a third button: resolves `"confirm"`, `"alternate"` or `"cancel"` (Escape included).
+ * The y/n keys of the plain confirmation do not apply: three answers are chosen by button.
+ */
+export function useConfirmChoice() {
+  return useContext(ConfirmContext).choose;
+}
+
+/**
  * Wraps the app tree and provides the `confirm` function via `useConfirm()`.
  * Renders a single themed `<dialog>` at the root level, mounted by `ShellProviders`.
  */
 export function ConfirmProvider({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
-  const [config, setConfig] = useState<ConfirmConfig | null>(null);
-  const resolveRef = useRef<(value: boolean) => void>(() => {});
+  const [config, setConfig] = useState<(ConfirmConfig & { alternateLabel?: string }) | null>(null);
+  const resolveRef = useRef<(value: ConfirmChoice) => void>(() => {});
   const dialogRef = useRef<HTMLDialogElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
   const titleId = useId();
   const messageId = useId();
 
-  const confirm = useCallback((cfg: ConfirmConfig | string) => {
-    const resolved = typeof cfg === "string" ? { message: cfg } : cfg;
-    return new Promise<boolean>((resolve) => {
+  const ask = useCallback(<T,>(cfg: ConfirmConfig & { alternateLabel?: string }, settle: (choice: ConfirmChoice) => T) => {
+    return new Promise<T>((resolve) => {
       // A confirmation that is still open is superseded: settle it as declined instead of leaking its promise.
-      resolveRef.current(false);
-      resolveRef.current = resolve;
-      setConfig(resolved);
+      resolveRef.current("cancel");
+      resolveRef.current = choice => resolve(settle(choice));
+      setConfig(cfg);
       setOpen(true);
     });
   }, []);
 
-  useEffect(() => () => resolveRef.current(false), []);
+  const confirm = useCallback(
+    (cfg: ConfirmConfig | string) => ask(typeof cfg === "string" ? { message: cfg } : cfg, choice => choice === "confirm"),
+    [ask],
+  );
+
+  const choose = useCallback((cfg: ConfirmChoiceConfig) => ask(cfg, choice => choice), [ask]);
+
+  useEffect(() => () => resolveRef.current("cancel"), []);
 
   // Show the native dialog when a confirm is triggered; the safe choice (cancel) takes focus.
   useEffect(() => {
@@ -83,7 +108,15 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
     resolveRef.current = () => {};
     setOpen(false);
     dialogRef.current?.close();
-    resolve(true);
+    resolve("confirm");
+  }, []);
+
+  const handleAlternate = useCallback(() => {
+    const resolve = resolveRef.current;
+    resolveRef.current = () => {};
+    setOpen(false);
+    dialogRef.current?.close();
+    resolve("alternate");
   }, []);
 
   const handleCancel = useCallback(() => {
@@ -91,7 +124,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
     resolveRef.current = () => {};
     setOpen(false);
     dialogRef.current?.close();
-    resolve(false);
+    resolve("cancel");
   }, []);
 
   // Dialog close event: fires on Escape or form method="dialog" submit
@@ -99,7 +132,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
     if (open) {
       // Dialog was closed externally (Escape) — treat as cancel
       setOpen(false);
-      resolveRef.current(false);
+      resolveRef.current("cancel");
     }
   }, [open]);
 
@@ -113,7 +146,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
       handleCancel();
       return;
     }
-    if (event.repeat) return;
+    if (event.repeat || config?.alternateLabel) return;
     const key = event.key.toLowerCase();
     if (key === "y") {
       event.preventDefault();
@@ -126,8 +159,9 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
 
   // The buttons keep the plain accessible names "cancel" / "confirm" (their key caps are aria-hidden);
   // aria-keyshortcuts exposes the keys to assistive technology instead.
+  const three = config?.alternateLabel !== undefined;
   return (
-    <ConfirmContext.Provider value={{ confirm }}>
+    <ConfirmContext.Provider value={{ confirm, choose }}>
       {children}
       <dialog
         ref={dialogRef}
@@ -148,12 +182,17 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
         </div>
         <div className="app-modal-footer">
           <span className="tbtn-row">
-            <TButton ref={cancelRef} keys={["n"]} shortcut="n" onClick={handleCancel}>
+            {three && (
+              <TButton keys={[]} onClick={handleAlternate}>
+                {config?.alternateLabel}
+              </TButton>
+            )}
+            <TButton ref={cancelRef} keys={three ? [] : ["n"]} shortcut={three ? undefined : "n"} onClick={handleCancel}>
               {config?.cancelLabel ?? "cancel"}
             </TButton>
             <TButton
-              keys={["y"]}
-              shortcut="y"
+              keys={three ? [] : ["y"]}
+              shortcut={three ? undefined : "y"}
               variant={config?.destructive ? "danger" : "primary"}
               onClick={handleConfirm}
             >

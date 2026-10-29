@@ -96,7 +96,7 @@ describe("App", () => {
     render(<App />);
 
     await waitFor(() => expect(commandCount(backend, "list_docs")).toBeGreaterThanOrEqual(1));
-    await screen.findByLabelText("Library source type");
+    await screen.findByRole("tablist", { name: "Library topics" });
   });
 
   it("does not navigate away from Settings when the landing page option changes", async () => {

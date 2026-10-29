@@ -1,12 +1,11 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useRef, useState, type MutableRefObject } from "react";
 import type { ActionResult } from "../components/TerminalOutput";
-import { LEAVE_DIRTY_MESSAGE } from "../lib/editorGuards";
 import { invokeOpen } from "../lib/invokeOpen";
-import { useConfirm } from "../components/ConfirmDialog";
+import { useConfirm, useConfirmChoice } from "../components/ConfirmDialog";
 import { createSaveOperationTracker } from "../lib/editorSaveOperation";
-import { isLibrarySourceTypeDirty, isPersonalDoc } from "../lib/libraryDirtyGuards";
-import { packSkillSummaries } from "../lib/packSkills";
+import { isLibraryDirty, isPersonalDoc } from "../lib/libraryDirtyGuards";
+import { PERSONAL_SKILL_PREFIX, packSkillSummaries } from "../lib/packSkills";
 import type { LibrarySourceType } from "../views/LibraryView";
 import type {
   AgentMetadataListResponse,
@@ -16,6 +15,7 @@ import type {
   DocSummary,
   DocumentContent,
   PackLibrary,
+  PackSkillCopy,
   RulesFileContent,
   RulesFileSummary,
   RulesSurfaceId,
@@ -45,24 +45,41 @@ export function useLibraryController({
   view,
 }: LibraryControllerDeps) {
   const confirm = useConfirm();
+  const choose = useConfirmChoice();
   const [skills, setSkills] = useState<SkillSummary[]>([]);
   const [skillsLoaded, setSkillsLoaded] = useState(false);
   const [packLibrary, setPackLibrary] = useState<PackLibrary | null>(null);
   const [packError, setPackError] = useState<string | null>(null);
   const [activeSkillId, setActiveSkillId] = useState<string | null>(null);
   const [activeSkillContent, setActiveSkillContent] = useState<DocumentContent | null>(null);
-  const [skillSearch, setSkillSearch] = useState("");
   const activeSkillIdRef = useRef<string | null>(null);
   const activeSkillContentIdRef = useRef<string | null>(null);
+  // The open skill of the user's own pack is the third item with a draft.
+  const [skillDraft, setSkillDraft] = useState("");
+  const [skillDirty, setSkillDirtyState] = useState(false);
+  const skillDirtyRef = useRef(false);
+  const setSkillDirty = useCallback((value: boolean) => {
+    skillDirtyRef.current = value;
+    setSkillDirtyState(value);
+  }, []);
+  const [skillSaving, setSkillSaving] = useState(false);
+  const [skillSaveResult, setSkillSaveResult] = useState<ActionResult | null>(null);
+  const skillSaveOpRef = useRef(createSaveOperationTracker());
 
   const [docs, setDocs] = useState<DocSummary[]>([]);
   const [activeDoc, setActiveDoc] = useState<DocumentContent | null>(null);
   const activeDocIdRef = useRef<string | null>(null);
   const [docDraft, setDocDraft] = useState("");
-  const [docDirty, setDocDirty] = useState(false);
+  const [docDirty, setDocDirtyState] = useState(false);
+  // The guards read the refs: a discard or a save that has just settled must not ask a second time while React has
+  // not rendered the new state yet.
+  const docDirtyRef = useRef(false);
+  const setDocDirty = useCallback((value: boolean) => {
+    docDirtyRef.current = value;
+    setDocDirtyState(value);
+  }, []);
   const [docSaving, setDocSaving] = useState(false);
   const [docSaveResult, setDocSaveResult] = useState<ActionResult | null>(null);
-  const [docMode, setDocMode] = useState<"preview" | "edit">("preview");
   const [showCreateDoc, setShowCreateDoc] = useState(false);
   const [createDocTitle, setCreateDocTitle] = useState("");
   const [createDocSlug, setCreateDocSlug] = useState("");
@@ -79,14 +96,17 @@ export function useLibraryController({
   const activeRulesSurfaceRef = useRef<RulesSurfaceId | null>(null);
   const [activeRulesFile, setActiveRulesFile] = useState<RulesFileContent | null>(null);
   const [rulesDraft, setRulesDraft] = useState("");
-  const [rulesDirty, setRulesDirty] = useState(false);
+  const [rulesDirty, setRulesDirtyState] = useState(false);
   const rulesDirtyRef = useRef(false);
-  rulesDirtyRef.current = rulesDirty;
+  const setRulesDirty = useCallback((value: boolean) => {
+    rulesDirtyRef.current = value;
+    setRulesDirtyState(value);
+  }, []);
   const [rulesSaving, setRulesSaving] = useState(false);
   const [rulesSaveResult, setRulesSaveResult] = useState<ActionResult | null>(null);
   const rulesSaveOpRef = useRef(createSaveOperationTracker());
 
-  const [librarySourceType, setLibrarySourceType] = useState<LibrarySourceType>("docs");
+  const [librarySourceType, setLibrarySourceType] = useState<LibrarySourceType>("rules");
 
   const [agentSources, setAgentSources] = useState<AgentMetadataResponse[]>([]);
   const [activeAgentId, setActiveAgentId] = useState<string | null>(null);
@@ -104,28 +124,38 @@ export function useLibraryController({
   // Bumped when a workspace switch reloads the Library, so the config source effects refetch for the new workspace.
   const [libraryReloadEpoch, setLibraryReloadEpoch] = useState(0);
 
+  // A doc opens with nothing unsaved. Another doc starts a new draft; the same doc read again (after an edit made
+  // elsewhere) refreshes the draft too, unless the user has unsaved edits, which a read never takes away.
+  const draftDocIdRef = useRef<string | null>(null);
   useEffect(() => {
-    if (activeDoc) {
-      setDocDraft(activeDoc.content);
-      setDocDirty(false);
-      setDocSaveResult(null);
-    } else {
-      setDocDraft("");
-      setDocDirty(false);
-      setDocSaveResult(null);
-      setDocMode("preview");
-    }
-  }, [activeDoc?.id]);
+    const id = activeDoc?.id ?? null;
+    const another = draftDocIdRef.current !== id;
+    draftDocIdRef.current = id;
+    if (!another && docDirtyRef.current) return;
+    setDocDraft(activeDoc?.content ?? "");
+    setDocDirty(false);
+    if (another) setDocSaveResult(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeDoc]);
+
+  // The same for a skill: the draft belongs to the skill that is open and follows each finished read while clean.
+  const draftSkillIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    const id = activeSkillContent?.id ?? null;
+    const another = draftSkillIdRef.current !== id;
+    draftSkillIdRef.current = id;
+    if (!another && skillDirtyRef.current) return;
+    setSkillDraft(activeSkillContent?.content ?? "");
+    setSkillDirty(false);
+    if (another) setSkillSaveResult(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSkillContent]);
 
   useEffect(() => {
     activeConfigSourceTypeRef.current = activeConfigSourceType;
   }, [activeConfigSourceType]);
 
-  const isLibrarySourceDirty = useCallback((sourceType: LibrarySourceType): boolean => {
-    return isLibrarySourceTypeDirty(sourceType, docDirty, rulesDirty);
-  }, [docDirty, rulesDirty]);
-
-  const libraryDirty = docDirty || rulesDirty;
+  const libraryDirty = isLibraryDirty(docDirty, rulesDirty, skillDirty);
 
   /**
    * The user confirmed leaving with unsaved changes: both drafts go back to what is saved, so nothing stays marked
@@ -138,18 +168,52 @@ export function useLibraryController({
     setRulesDraft(activeRulesFile?.refinements ?? "");
     setRulesDirty(false);
     setRulesSaveResult(null);
-  }, [activeDoc, activeRulesFile]);
+    setSkillDraft(activeSkillContent?.content ?? "");
+    setSkillDirty(false);
+    setSkillSaveResult(null);
+  }, [activeDoc, activeRulesFile, activeSkillContent, setDocDirty, setRulesDirty, setSkillDirty]);
+
+  // Set below, once the saves exist: "Save and continue" writes the draft that is unsaved.
+  const saveDirtyDraftRef = useRef<() => Promise<boolean>>(async () => true);
+
+  /**
+   * The one leave guard of the Library, for everything that would drop the open draft (another item, another topic,
+   * closing the sheet, leaving the page). With nothing unsaved it says yes at once. Otherwise it asks:
+   * Discard drops the draft, Save and continue writes it first, Keep editing stays. Resolves true when the caller may
+   * go on, and the draft is then already settled.
+   */
+  const confirmLeave = useCallback(async (): Promise<boolean> => {
+    if (!docDirtyRef.current && !rulesDirtyRef.current && !skillDirtyRef.current) return true;
+    const name = docDirtyRef.current ? activeDoc?.title : rulesDirtyRef.current ? activeRulesFile?.label : activeSkillContent?.title;
+    const choice = await choose({
+      title: "Unsaved changes",
+      message: `${name ?? "This item"} has changes you have not saved.`,
+      alternateLabel: "Discard",
+      cancelLabel: "Keep editing",
+      confirmLabel: "Save and continue",
+    });
+    if (choice === "cancel") return false;
+    if (choice === "alternate") {
+      discardDrafts();
+      return true;
+    }
+    const saved = await saveDirtyDraftRef.current();
+    if (!saved) {
+      // The caller stays where it is, with the editor in view: make sure it says why nothing was written.
+      const failed: ActionResult = { success: false, action: "save", stdout: "", stderr: "could not be saved: your changes are still here", exit_code: null };
+      if (docDirtyRef.current) setDocSaveResult(result => (result && !result.success ? result : failed));
+      else if (rulesDirtyRef.current) setRulesSaveResult(result => (result && !result.success ? result : failed));
+      else if (skillDirtyRef.current) setSkillSaveResult(result => (result && !result.success ? result : failed));
+    }
+    return saved;
+  }, [activeDoc?.title, activeRulesFile?.label, activeSkillContent?.title, choose, discardDrafts]);
 
   const setGuardedLibrarySourceType = useCallback(async (type: LibrarySourceType) => {
     if (type === librarySourceType) return;
-    if (isLibrarySourceDirty(librarySourceType)) {
-      const ok = await confirm(LEAVE_DIRTY_MESSAGE);
-      if (!ok) return;
-      discardDrafts();
-    }
+    if (!(await confirmLeave())) return;
     setLibrarySourceType(type);
     if (type === "configs") fetchStatus();
-  }, [librarySourceType, isLibrarySourceDirty, fetchStatus, confirm, discardDrafts]);
+  }, [librarySourceType, fetchStatus, confirmLeave]);
 
   const loadSkills = useCallback(async (generation = workspaceLoadGenerationRef.current) => {
     try {
@@ -393,11 +457,8 @@ export function useLibraryController({
   /** Opens a rules file (or, with null, the bundled base row); asks first when it would drop unsaved refinements. */
   const selectRulesFile = useCallback(async (surface: RulesSurfaceId | null) => {
     const current = activeRulesSurfaceRef.current;
-    if (surface === current && rulesDirty) return;
-    if (surface !== current && rulesDirty) {
-      const ok = await confirm(LEAVE_DIRTY_MESSAGE);
-      if (!ok) return;
-    }
+    if (surface === current && rulesDirtyRef.current) return;
+    if (surface !== current && !(await confirmLeave())) return;
     clearActiveRulesFile();
     if (surface === null) return;
     activeRulesSurfaceRef.current = surface;
@@ -413,7 +474,7 @@ export function useLibraryController({
       if (activeRulesSurfaceRef.current !== surface) return;
       setError(`Read rules file: ${e}`);
     }
-  }, [applyRulesFile, clearActiveRulesFile, confirm, isWorkspaceLoadCurrent, rulesDirty, setError, workspaceLoadGenerationRef]);
+  }, [applyRulesFile, clearActiveRulesFile, confirmLeave, isWorkspaceLoadCurrent, setError, workspaceLoadGenerationRef]);
 
   const openRulesFile = useCallback(
     (surface: RulesSurfaceId) => invokeOpen("open_rules_file", { surface }, "Open rules file", setError),
@@ -423,19 +484,19 @@ export function useLibraryController({
   const onChangeRulesDraft = useCallback((value: string) => {
     setRulesDraft(value);
     setRulesDirty(value !== (activeRulesFile?.refinements ?? ""));
-  }, [activeRulesFile]);
+  }, [activeRulesFile, setRulesDirty]);
 
   const onResetRules = useCallback(() => {
     if (!activeRulesFile) return;
     setRulesDraft(activeRulesFile.refinements);
     setRulesDirty(false);
     setRulesSaveResult(null);
-  }, [activeRulesFile]);
+  }, [activeRulesFile, setRulesDirty]);
 
-  const onSaveRules = useCallback(async () => {
+  const onSaveRules = useCallback(async (): Promise<boolean> => {
     // Only the refinements of a file the backend called editable are sent; it checks everything again.
     const file = activeRulesFile;
-    if (!file || !file.editable || file.revision === null) return;
+    if (!file || !file.editable || file.conflict !== null || file.revision === null) return false;
     const saveOpId = rulesSaveOpRef.current.capture();
     const surface = file.surface;
     const generation = workspaceLoadGenerationRef.current;
@@ -458,43 +519,42 @@ export function useLibraryController({
         content: rulesDraft,
         expectedRevision: file.revision,
       });
-      if (!isCurrent()) return;
+      if (!isCurrent()) return false;
       setRulesSaveResult(result);
-      if (!result.success) return;
+      if (!result.success) return false;
       if (result.stdout === "unchanged") {
         setRulesDirty(false);
-        return;
+        return true;
       }
       const updated = await invoke<RulesFileContent>("read_rules_file", { surface });
-      if (!isCurrent()) return;
+      if (!isCurrent()) return false;
       applyRulesFile(updated);
+      return true;
     } catch (e) {
-      if (!isCurrent()) return;
+      if (!isCurrent()) return false;
       const message = String(e);
       if (!message.includes(RULES_CHANGED_ON_DISK)) {
         setRulesSaveResult(failed(message));
-        return;
+        return false;
       }
       // The file changed elsewhere: show it as it is now and keep the draft, which a second save then writes.
       try {
         const updated = await invoke<RulesFileContent>("read_rules_file", { surface });
-        if (!isCurrent()) return;
+        if (!isCurrent()) return false;
         setActiveRulesFile(updated);
         setRulesSaveResult(failed("changed on disk: reloaded, save again to overwrite"));
       } catch (reloadError) {
-        if (!isCurrent()) return;
+        if (!isCurrent()) return false;
         setRulesSaveResult(failed(String(reloadError)));
       }
+      return false;
     } finally {
       setRulesSaving(false);
     }
-  }, [activeRulesFile, applyRulesFile, isWorkspaceLoadCurrent, rulesDraft, workspaceLoadGenerationRef]);
+  }, [activeRulesFile, applyRulesFile, isWorkspaceLoadCurrent, rulesDraft, setRulesDirty, workspaceLoadGenerationRef]);
 
   const selectDoc = useCallback(async (id: string) => {
-    if (docDirty && id !== activeDoc?.id) {
-      const ok = await confirm(LEAVE_DIRTY_MESSAGE);
-      if (!ok) return;
-    }
+    if (id !== activeDoc?.id && !(await confirmLeave())) return;
     docSaveOpRef.current.invalidate();
     activeDocIdRef.current = id;
     const generation = workspaceLoadGenerationRef.current;
@@ -508,16 +568,16 @@ export function useLibraryController({
       if (activeDocIdRef.current !== id) return;
       setError(`Read doc: ${e}`);
     }
-  }, [activeDoc?.id, docDirty, isWorkspaceLoadCurrent, setError, workspaceLoadGenerationRef, confirm]);
+  }, [activeDoc?.id, confirmLeave, isWorkspaceLoadCurrent, setError, workspaceLoadGenerationRef]);
 
   const openDocEditor = useCallback(
     (id: string) => invokeOpen("open_doc", { id }, "Open doc", setError),
     [setError],
   );
 
-  const onSaveDoc = useCallback(async () => {
+  const onSaveDoc = useCallback(async (): Promise<boolean> => {
     // Only personal docs are saved; the backend refuses bundled ids too.
-    if (!activeDoc || !isPersonalDoc(activeDoc)) return;
+    if (!activeDoc || !isPersonalDoc(activeDoc)) return false;
     const saveOpId = docSaveOpRef.current.capture();
     const docId = activeDoc.id;
     const generation = workspaceLoadGenerationRef.current;
@@ -525,25 +585,26 @@ export function useLibraryController({
     setDocSaveResult(null);
     try {
       const result = await invoke<ActionResult>("save_doc", { id: docId, content: docDraft });
-      if (!docSaveOpRef.current.isCurrent(saveOpId)) return;
-      if (!isWorkspaceLoadCurrent(generation)) return;
-      if (activeDocIdRef.current !== docId) return;
+      if (!docSaveOpRef.current.isCurrent(saveOpId)) return false;
+      if (!isWorkspaceLoadCurrent(generation)) return false;
+      if (activeDocIdRef.current !== docId) return false;
       setDocSaveResult(result);
       if (result.success) {
         if (result.stdout !== "unchanged") {
           const updated = await invoke<DocumentContent>("read_doc", { id: docId });
-          if (!docSaveOpRef.current.isCurrent(saveOpId)) return;
-          if (!isWorkspaceLoadCurrent(generation)) return;
-          if (activeDocIdRef.current !== docId) return;
+          if (!docSaveOpRef.current.isCurrent(saveOpId)) return false;
+          if (!isWorkspaceLoadCurrent(generation)) return false;
+          if (activeDocIdRef.current !== docId) return false;
           setActiveDoc(updated);
           setDocDraft(updated.content);
         }
         setDocDirty(false);
       }
+      return result.success;
     } catch (e) {
-      if (!docSaveOpRef.current.isCurrent(saveOpId)) return;
-      if (!isWorkspaceLoadCurrent(generation)) return;
-      if (activeDocIdRef.current !== docId) return;
+      if (!docSaveOpRef.current.isCurrent(saveOpId)) return false;
+      if (!isWorkspaceLoadCurrent(generation)) return false;
+      if (activeDocIdRef.current !== docId) return false;
       setDocSaveResult({
         success: false,
         action: "save_doc",
@@ -551,10 +612,11 @@ export function useLibraryController({
         stderr: String(e),
         exit_code: null,
       });
+      return false;
     } finally {
       setDocSaving(false);
     }
-  }, [activeDoc, docDraft, isWorkspaceLoadCurrent, workspaceLoadGenerationRef]);
+  }, [activeDoc, docDraft, isWorkspaceLoadCurrent, setDocDirty, workspaceLoadGenerationRef]);
 
   const onResetDoc = useCallback(() => {
     if (activeDoc) {
@@ -562,23 +624,21 @@ export function useLibraryController({
       setDocDirty(false);
       setDocSaveResult(null);
     }
-  }, [activeDoc]);
+  }, [activeDoc, setDocDirty]);
 
   const onChangeDocDraft = useCallback((value: string) => {
     setDocDraft(value);
     setDocDirty(value !== (activeDoc?.content ?? ""));
-  }, [activeDoc]);
+  }, [activeDoc, setDocDirty]);
 
-  const onCreateDoc = useCallback(async () => {
-    if (docDirty) {
-      const ok = await confirm(LEAVE_DIRTY_MESSAGE);
-      if (!ok) return;
-    }
+  /** Creates the doc from the title and slug; resolves with its id (it is then the open doc), or null when it was not created. */
+  const onCreateDoc = useCallback(async (): Promise<string | null> => {
+    if (!(await confirmLeave())) return null;
     const title = createDocTitle.trim();
     const slug = createDocSlug.trim();
     if (!title || !slug) {
       setCreateDocError("Title and slug are required");
-      return;
+      return null;
     }
     setCreateDocCreating(true);
     setCreateDocError(null);
@@ -590,12 +650,14 @@ export function useLibraryController({
       activeDocIdRef.current = doc.id;
       setActiveDoc(doc);
       await loadDocs();
+      return doc.id;
     } catch (e) {
       setCreateDocError(String(e));
+      return null;
     } finally {
       setCreateDocCreating(false);
     }
-  }, [createDocSlug, createDocTitle, docDirty, loadDocs, confirm]);
+  }, [createDocSlug, createDocTitle, confirmLeave, loadDocs]);
 
   const selectAgent = useCallback(async (id: string) => {
     activeAgentIdRef.current = id;
@@ -685,6 +747,7 @@ export function useLibraryController({
   }, [confirm, loadSkills, setError]);
 
   const readSkill = useCallback(async (id: string) => {
+    if (id !== activeSkillIdRef.current && !(await confirmLeave())) return;
     activeSkillIdRef.current = id;
     setActiveSkillId(id);
     const generation = workspaceLoadGenerationRef.current;
@@ -699,27 +762,93 @@ export function useLibraryController({
       if (activeSkillIdRef.current !== id) return;
       setError(`Read skill: ${e}`);
     }
-  }, [isWorkspaceLoadCurrent, setError, workspaceLoadGenerationRef]);
+  }, [confirmLeave, isWorkspaceLoadCurrent, setError, workspaceLoadGenerationRef]);
 
+  const onChangeSkillDraft = useCallback((value: string) => {
+    setSkillDraft(value);
+    setSkillDirty(value !== (activeSkillContent?.content ?? ""));
+  }, [activeSkillContent, setSkillDirty]);
+
+  const onResetSkill = useCallback(() => {
+    setSkillDraft(activeSkillContent?.content ?? "");
+    setSkillDirty(false);
+    setSkillSaveResult(null);
+  }, [activeSkillContent, setSkillDirty]);
+
+  /** Saves the open skill of the personal pack (the backend refuses every other id); true once it is on disk. */
+  const onSaveSkill = useCallback(async (): Promise<boolean> => {
+    const skill = activeSkillContent;
+    if (!skill || !skill.id.startsWith(PERSONAL_SKILL_PREFIX)) return false;
+    const saveOpId = skillSaveOpRef.current.capture();
+    const generation = workspaceLoadGenerationRef.current;
+    const isCurrent = () =>
+      skillSaveOpRef.current.isCurrent(saveOpId) &&
+      isWorkspaceLoadCurrent(generation) &&
+      activeSkillIdRef.current === skill.id;
+    setSkillSaving(true);
+    setSkillSaveResult(null);
+    try {
+      const result = await invoke<ActionResult>("save_pack_skill", { id: skill.id, content: skillDraft });
+      if (!isCurrent()) return false;
+      setSkillSaveResult(result);
+      if (!result.success) return false;
+      if (result.stdout !== "unchanged") {
+        const updated = await invoke<DocumentContent>("read_skill", { id: skill.id });
+        if (!isCurrent()) return false;
+        activeSkillContentIdRef.current = updated.id;
+        setActiveSkillContent(updated);
+        setSkillDraft(updated.content);
+      }
+      setSkillDirty(false);
+      return true;
+    } catch (e) {
+      if (!isCurrent()) return false;
+      setSkillSaveResult({ success: false, action: "save_pack_skill", stdout: "", stderr: String(e), exit_code: null });
+      return false;
+    } finally {
+      setSkillSaving(false);
+    }
+  }, [activeSkillContent, isWorkspaceLoadCurrent, setSkillDirty, skillDraft, workspaceLoadGenerationRef]);
+
+  /**
+   * Copies a bundled skill into the personal pack under `newName`, then lists the packs again so the copy shows. The
+   * backend's refusal (a taken name, a refused pack) is thrown for the caller to show; nothing else changes.
+   */
+  const copySkillToPack = useCallback(async (name: string, newName: string): Promise<PackSkillCopy> => {
+    const copy = await invoke<PackSkillCopy>("copy_skill_to_pack", { name, newName });
+    await loadSkills();
+    return copy;
+  }, [loadSkills]);
+
+  // The configs load whenever the Library is open, not only on their topic: a search result can open one from any topic.
+  // Choosing a target resets the source itself, so only a new visit or a workspace reload sends it back to the base.
+  const configSourceVisitRef = useRef("");
   useEffect(() => {
-    if ((view === "library" && librarySourceType === "configs") && activeConfigTargetId) {
+    if (view === "library" && activeConfigTargetId) {
       configSourceLoadSeqRef.current += 1;
       setConfigTemplateContent(null);
       setConfigEditorSourceContent(null);
+      // Every run notes the visit, whatever the target: a source chosen together with a switch to OpenCode's target
+      // (a search result) is not a first visit and keeps its source.
+      const visit = `${view}:${libraryReloadEpoch}`;
+      const firstOfVisit = configSourceVisitRef.current !== visit;
+      configSourceVisitRef.current = visit;
       if (activeConfigTargetId === "opencode_config") {
         void loadConfigEditorSources();
-        setActiveConfigSourceType("base");
+        if (firstOfVisit) setActiveConfigSourceType("base");
       } else {
         void loadConfigTemplate(activeConfigTargetId);
       }
     }
-  }, [view, librarySourceType, activeConfigTargetId, libraryReloadEpoch, loadConfigTemplate, loadConfigEditorSources]);
+  }, [view, activeConfigTargetId, libraryReloadEpoch, loadConfigTemplate, loadConfigEditorSources]);
 
   useEffect(() => {
-    if (activeConfigTargetId === "opencode_config" && activeConfigSourceType && view === "library" && librarySourceType === "configs") {
+    if (activeConfigTargetId === "opencode_config" && activeConfigSourceType && view === "library") {
       void loadConfigEditorSourceContent(activeConfigSourceType);
     }
-  }, [activeConfigTargetId, activeConfigSourceType, view, librarySourceType, libraryReloadEpoch, loadConfigEditorSourceContent]);
+  }, [activeConfigTargetId, activeConfigSourceType, view, libraryReloadEpoch, loadConfigEditorSourceContent]);
+
+  saveDirtyDraftRef.current = () => (docDirtyRef.current ? onSaveDoc() : rulesDirtyRef.current ? onSaveRules() : onSaveSkill());
 
   return {
     skills,
@@ -729,17 +858,21 @@ export function useLibraryController({
     forgetPack,
     activeSkillId,
     activeSkillContent,
-    skillSearch,
-    setSkillSearch,
     readSkill,
+    skillDraft,
+    skillDirty,
+    skillSaving,
+    skillSaveResult,
+    onChangeSkillDraft,
+    onSaveSkill,
+    onResetSkill,
+    copySkillToPack,
     docs,
     activeDoc,
     docDraft,
     docDirty,
     docSaving,
     docSaveResult,
-    docMode,
-    setDocMode,
     showCreateDoc,
     createDocTitle,
     createDocSlug,
@@ -770,7 +903,7 @@ export function useLibraryController({
     loadRulesFiles,
     librarySourceType,
     setGuardedLibrarySourceType,
-    isLibrarySourceDirty,
+    confirmLeave,
     discardDrafts,
     libraryDirty,
     agentSources,

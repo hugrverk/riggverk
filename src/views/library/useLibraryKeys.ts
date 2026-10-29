@@ -1,205 +1,150 @@
-import { useEffect, useRef, type RefObject } from "react";
-import { useConfirm } from "../../components/ConfirmDialog";
+import { useRef, type KeyboardEvent as ReactKeyboardEvent, type RefObject } from "react";
 import { useCommands } from "../../keyboard/commands/useCommands";
 import type { CommandSpec } from "../../keyboard/commands/parser";
-import { focusPaneById } from "../../keyboard/focus";
 import type { Binding } from "../../keyboard/registry";
 import { useKeymap } from "../../keyboard/useKeymap";
-import { LEAVE_DIRTY_MESSAGE } from "../../lib/editorGuards";
-import { redactTerminalOutput } from "../../lib/redactTerminalOutput";
-import { useShellState } from "../../shell/ShellState";
-import type { LibrarySourceType } from "../LibraryView";
 import type { LibraryEntry } from "./entry";
 
 interface LibraryKeysOptions {
-  /** Library bindings are live while focus is inside this element. */
+  /** The Library's root: its bindings are live while focus is inside it. */
   rootRef: RefObject<HTMLElement | null>;
-  textareaRef: RefObject<HTMLTextAreaElement | null>;
+  /** The open sheet's element, or a ref that is empty while no sheet is open. */
+  sheetRef: RefObject<HTMLElement | null>;
+  sheetOpen: boolean;
+  /** The item in the sheet, once loaded. */
   entry: LibraryEntry | null;
-  sourceType: LibrarySourceType;
-  /** Source ids in tab order (configs left out while it is hidden). */
-  sourceIds: readonly LibrarySourceType[];
-  dataFolderOk: boolean;
-  onSetSourceType: (type: LibrarySourceType) => void | Promise<void>;
-  showCreateDoc: boolean;
-  onSetShowCreateDoc: (show: boolean) => void;
-  /** Switches the document pane to the source textarea and puts the cursor in it. */
-  startEdit: () => void;
-  /** Switches the document pane back to the rendered view (focus follows in the caller). */
-  stopEdit: () => void;
+  /** Focuses the search field and selects its text. */
+  focusSearch: () => void;
+  /** Moves to the previous (-1) or next (+1) topic. */
+  stepTopic: (delta: number) => void;
+  /** Opens "New doc"; null while the Library cannot create one (no workspace folder). */
+  newDoc: (() => void) | null;
+  /** Closes the sheet, asking first when there are unsaved changes. */
+  requestClose: () => void | Promise<void>;
 }
 
-/** Panes whose focus offers `o` as a key hint (the key itself works anywhere in the library). */
-const OPEN_PANES = ["items", "editor"] as const;
+/** Rows the arrow keys move between: the first verb of each row. */
+const ROW_STOP = "[data-row-primary]";
 
 /**
- * Library key layer: `[`/`]` source, `/` filter (hint only: the list owns the key), `i`/Enter edit the open
- * item (rendered view -> textarea), Mod+s and `:w` save, Escape back to the rendered view, `:q` close (asks
- * first when there are unsaved edits), `:reset`, `o` open externally, `n` new doc. Edit, save and open are
- * offered only where the item is the user's own text; on a bundled item their hints say why not.
- * Selection itself lives in the item lists; every guard (dirty confirm, stale loads) stays in the controller.
+ * Library key layer, mouse-first with keys that speed it up. While no sheet is open: `/` searches, `[` and `]` step
+ * through the topics, the arrow keys move between rows (Enter or Space on a row's button opens it, as any button),
+ * Mod+N makes a new doc and Mod+F searches too (those two are handled on the root element, not registered: the window
+ * key layer leaves them to the webview by design). In the sheet: Mod+S saves, Escape closes (asks first when edits are
+ * unsaved). The command line gets `:w`, `:q` and `:reset` for the open item. Guards live with the controller.
  */
 export function useLibraryKeys({
   rootRef,
-  textareaRef,
+  sheetRef,
+  sheetOpen,
   entry,
-  sourceType,
-  sourceIds,
-  dataFolderOk,
-  onSetSourceType,
-  showCreateDoc,
-  onSetShowCreateDoc,
-  startEdit,
-  stopEdit,
-}: LibraryKeysOptions): { close: () => Promise<void> } {
-  const confirm = useConfirm();
-  const { notify } = useShellState();
+  focusSearch,
+  stepTopic,
+  newDoc,
+  requestClose,
+}: LibraryKeysOptions): { onRootKeyDown: (event: ReactKeyboardEvent<HTMLElement>) => void } {
   const latest = useRef(entry);
   latest.current = entry;
 
-  const focusItems = () => focusPaneById("items", rootRef.current ?? document);
-  /** After the command line closes, which hands focus back to whatever opened it. */
-  const focusItemsSoon = () => {
-    window.setTimeout(focusItems, 0);
+  const moveRow = (delta: number): void | false => {
+    const root = rootRef.current;
+    if (!root) return false;
+    const stops = Array.from(root.querySelectorAll<HTMLElement>(ROW_STOP));
+    const active = document.activeElement;
+    const current = active instanceof Element ? active.closest(".lib-row")?.querySelector<HTMLElement>(ROW_STOP) ?? null : null;
+    if (current === null) {
+      // From a tab or the search field: down enters the rows, up has nowhere to go.
+      if (delta > 0 && stops[0]) stops[0].focus();
+      else return false;
+      return;
+    }
+    const next = stops[stops.indexOf(current) + delta];
+    if (next) next.focus();
+    else if (delta < 0) root.querySelector<HTMLElement>('[role="tab"][tabindex="0"]')?.focus();
   };
 
-  const stepSource = (delta: number) => {
-    if (sourceIds.length === 0) return;
-    const index = Math.max(0, sourceIds.indexOf(sourceType));
-    const next = sourceIds[(index + delta + sourceIds.length) % sourceIds.length]!;
-    void onSetSourceType(next);
-  };
+  const rootBindings: Binding[] = [
+    {
+      id: "library.search",
+      keys: "/",
+      title: "Search the Library",
+      hint: "search",
+      group: "Library",
+      scope: "pane",
+      when: () => !sheetOpen,
+      run: focusSearch,
+    },
+    {
+      id: "library.topic.prev",
+      keys: ["[", "<"],
+      title: "Previous topic",
+      group: "Library",
+      scope: "pane",
+      when: () => !sheetOpen,
+      run: () => stepTopic(-1),
+    },
+    {
+      id: "library.topic.next",
+      keys: ["]", ">"],
+      title: "Next topic",
+      group: "Library",
+      scope: "pane",
+      when: () => !sheetOpen,
+      run: () => stepTopic(1),
+    },
+    {
+      id: "library.row.next",
+      keys: "ArrowDown",
+      title: "Next row",
+      group: "Library",
+      scope: "pane",
+      repeat: true,
+      when: () => !sheetOpen,
+      run: () => moveRow(1),
+    },
+    {
+      id: "library.row.prev",
+      keys: "ArrowUp",
+      title: "Previous row",
+      group: "Library",
+      scope: "pane",
+      repeat: true,
+      when: () => !sheetOpen,
+      run: () => moveRow(-1),
+    },
+  ];
+  useKeymap(rootBindings, { ref: rootRef });
 
   const save = () => {
     const current = latest.current;
-    if (!current) {
-      notify("nothing is open", { tone: "warn" });
-      return;
-    }
-    if (current.readOnly) {
-      notify(current.readOnlyReason ?? "read-only item", { tone: "warn" });
-      return;
-    }
-    if (!current.dirty) {
-      notify("no changes to save", { tone: "warn" });
-      return;
-    }
-    if (current.saving) return;
-    current.onSave();
+    if (!current || current.readOnly || !current.dirty || current.saving) return;
+    void current.onSave();
   };
 
-  const close = async () => {
-    const current = latest.current;
-    if (current?.dirty) {
-      if (!(await confirm(LEAVE_DIRTY_MESSAGE))) return;
-      latest.current?.onReset();
-    }
-    stopEdit();
-    focusItemsSoon();
-  };
-
-  // A save that finishes successfully is reported as a notice too, for when focus is elsewhere.
-  const saving = entry?.saving ?? false;
-  const wasSaving = useRef(false);
-  useEffect(() => {
-    const result = latest.current?.saveResult;
-    if (wasSaving.current && !saving && result?.success) notify(redactTerminalOutput(result.stdout) || "saved", { tone: "ok" });
-    wasSaving.current = saving;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [saving]);
-
-  const bindings: Binding[] = [
-    {
-      id: "library.source.prev",
-      keys: ["[", "<"],
-      title: "Previous source",
-      hint: "prev source",
-      group: "Library",
-      scope: "pane",
-      paneId: "items",
-      run: () => stepSource(-1),
-    },
-    {
-      id: "library.source.next",
-      keys: ["]", ">"],
-      title: "Next source",
-      hint: "next source",
-      group: "Library",
-      scope: "pane",
-      paneId: "items",
-      run: () => stepSource(1),
-    },
-    {
-      id: "library.edit",
-      keys: ["Enter", "i"],
-      title: "Edit the open item",
-      hint: "edit",
-      group: "Library",
-      scope: "pane",
-      paneId: "editor",
-      when: () => {
-        const current = latest.current;
-        if (!current) return false;
-        return current.readOnly ? current.readOnlyReason ?? "read-only" : true;
-      },
-      run: startEdit,
-    },
+  const sheetBindings: Binding[] = [
     {
       id: "library.save",
       keys: "Mod+s",
-      title: "Save",
-      hint: "save",
+      title: "Save the open item",
       group: "Library",
       scope: "editor",
-      paneId: "editor",
       inEditable: true,
-      when: () => {
-        const current = latest.current;
-        if (!current) return false;
-        return current.readOnly ? current.readOnlyReason ?? "read-only" : true;
-      },
+      when: () => (latest.current && !latest.current.readOnly ? true : false),
       run: save,
     },
     {
-      id: "library.leave",
+      id: "library.close",
       keys: "Escape",
-      title: "Leave the editor",
+      title: "Close the open item",
       group: "Library",
       scope: "editor",
       inEditable: true,
-      run: event => {
-        if (event.target !== textareaRef.current) return false;
-        stopEdit();
+      run: () => {
+        void requestClose();
       },
-    },
-    ...OPEN_PANES.map((paneId): Binding => ({
-      id: `library.open.${paneId}`,
-      keys: "o",
-      title: "Open in the external editor",
-      hint: "open",
-      group: "Library",
-      scope: "pane",
-      paneId,
-      when: () => {
-        const current = latest.current;
-        if (!current) return false;
-        return current.onOpen ? true : current.readOnlyReason ?? "nothing to open";
-      },
-      run: () => latest.current?.onOpen?.(),
-    })),
-    {
-      id: "library.new-doc",
-      keys: "n",
-      title: "New doc",
-      hint: "new doc",
-      group: "Library",
-      scope: "pane",
-      paneId: "items",
-      when: () => sourceType === "docs" && dataFolderOk,
-      run: () => onSetShowCreateDoc(!showCreateDoc),
     },
   ];
-  useKeymap(bindings, { ref: rootRef });
+  useKeymap(sheetBindings, { ref: sheetRef, enabled: sheetOpen });
 
   const hasItem = () => (latest.current ? true : "nothing is open");
   const commands: CommandSpec[] = [
@@ -216,8 +161,8 @@ export function useLibraryKeys({
       aliases: ["close"],
       summary: "close the open item (asks before discarding edits)",
       group: "Library",
-      enabled: hasItem,
-      run: close,
+      enabled: () => (sheetOpen ? true : "nothing is open"),
+      run: () => void requestClose(),
     },
     {
       name: "reset",
@@ -229,5 +174,19 @@ export function useLibraryKeys({
   ];
   useCommands(commands);
 
-  return { close };
+  const onRootKeyDown = (event: ReactKeyboardEvent<HTMLElement>) => {
+    if (event.defaultPrevented || event.altKey || event.shiftKey || !(event.metaKey || event.ctrlKey)) return;
+    const key = event.key.toLowerCase();
+    // Not while a dialog is up: Mod+N typed in "New doc" must not start another one, and the sheet has its own keys.
+    if (sheetOpen || event.nativeEvent.isComposing || document.querySelector("dialog[open]")) return;
+    if (key === "f") {
+      event.preventDefault();
+      focusSearch();
+    } else if (key === "n" && newDoc) {
+      event.preventDefault();
+      newDoc();
+    }
+  };
+
+  return { onRootKeyDown };
 }

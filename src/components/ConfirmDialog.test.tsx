@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useKeymap } from "../keyboard/useKeymap";
 import { renderInFrame, renderWithShell } from "../test/renderWithShell";
-import { ConfirmProvider, useConfirm } from "./ConfirmDialog";
+import { ConfirmProvider, useConfirm, useConfirmChoice, type ConfirmChoice } from "./ConfirmDialog";
 
 function TestConsumer({ message = "Test message" }: { message?: string }) {
   const confirm = useConfirm();
@@ -393,6 +393,62 @@ describe("ConfirmDialog", () => {
       fireEvent.keyDown(await screen.findByRole("button", { name: "cancel" }), { key: "y" });
       await vi.waitFor(() => expect(results).toEqual([true]));
       expect(globalRun).not.toHaveBeenCalled();
+    });
+  });
+  describe("choice with a third answer", () => {
+    function ChoiceProbe({ results }: { results: ConfirmChoice[] }) {
+      const choose = useConfirmChoice();
+      return (
+        <button
+          type="button"
+          onClick={async () => {
+            results.push(
+              await choose({
+                title: "Unsaved changes",
+                message: "Notes has changes you have not saved.",
+                alternateLabel: "Discard",
+                cancelLabel: "Keep editing",
+                confirmLabel: "Save and continue",
+              }),
+            );
+          }}
+        >
+          ask choice
+        </button>
+      );
+    }
+
+    it.each([
+      ["Discard", "alternate"],
+      ["Keep editing", "cancel"],
+      ["Save and continue", "confirm"],
+    ] as const)("resolves %s as %s", async (label, expected) => {
+      const results: ConfirmChoice[] = [];
+      render(
+        <ConfirmProvider>
+          <ChoiceProbe results={results} />
+        </ConfirmProvider>,
+      );
+      fireEvent.click(screen.getByRole("button", { name: "ask choice" }));
+      expect(await screen.findByText("Unsaved changes")).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: label }));
+      await vi.waitFor(() => expect(results).toEqual([expected]));
+    });
+
+    it("keeps focus on the safe answer and treats Escape as keep editing", async () => {
+      const results: ConfirmChoice[] = [];
+      render(
+        <ConfirmProvider>
+          <ChoiceProbe results={results} />
+        </ConfirmProvider>,
+      );
+      fireEvent.click(screen.getByRole("button", { name: "ask choice" }));
+      const keep = await screen.findByRole("button", { name: "Keep editing" });
+      expect(document.activeElement).toBe(keep);
+      fireEvent.keyDown(keep, { key: "y" });
+      expect(results).toEqual([]);
+      fireEvent.keyDown(keep, { key: "Escape" });
+      await vi.waitFor(() => expect(results).toEqual(["cancel"]));
     });
   });
 });

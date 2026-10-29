@@ -31,7 +31,7 @@ The digit keys below are fixed: `1` Overview, `2`-`5` Codex, OpenCode, Cursor, C
 - [ ] `:` opens the command line; `:help`, `:codex`, `:theme toggle`, an unknown command (error, no crash)
 - [ ] `:whatsnew` opens the release notes (Escape closes); the first launch after an update shows them once, a fresh install does not
 - [ ] `Mod+k` opens the command line, `Mod+,` opens Settings, also from inside a text field
-- [ ] `1`-`8` open their fixed pages (the digit of a turned-off agent does nothing); `h` and `l` do nothing; `j`/`k`, `g g`/`G` move in the Library lists; `/` filters a filterable list; Escape clears the filter
+- [ ] `1`-`8` open their fixed pages (the digit of a turned-off agent does nothing); `h` and `l` do nothing; `/` focuses the Library search; Escape leaves a text field
 - [ ] Digits and letters typed into a text field are not treated as shortcuts; Escape leaves the field
 - [ ] Tab goes sidebar, top bar, page, and the focus ring is visible on every stop; the actions of each page are visible buttons that show their key; there is no status bar
 - [ ] An error line is dismissed with Escape
@@ -47,7 +47,7 @@ Run these on a profile with a few things to decide (edit `~/.claude/CLAUDE.md` i
 - [ ] **Merge in updates…**, **Use Riggverk's version…** and **Use Riggverk defaults** each open a review first (the exact file, the files and backup name, or the exact keys); Enter does nothing, `y` or the Apply button applies, `n` cancels; the card becomes **Up to date** afterwards. **Keep mine** and **Hand back** ask first
 - [ ] **Use Riggverk defaults** (Codex, `approvals_reviewer` differing): the review lists the key with Riggverk's value and yours, nothing else; after `y` only that key in `config.toml` changed, the file has a backup, comments and other keys are untouched, and `z` restores the previous bytes; a preview made before an edit of `config.toml` is refused as stale
 - [ ] **History**: every update newest first with a pill (**Done**, **Undone**, **Failed**) in words; a row opens to its receipt (Changed, Checked, Left for you, Backup) and the newest is open; the list is the same after a restart; **Undo this update…** is offered on the newest completed update only, asks first (dry run, confirm), and the row then reads **Undone**; an empty profile says nothing has been updated yet
-- [ ] **Library packs**: a pack in `packs/<pack>/skills/` appears under Skills as `pack:<name>`, read-only, with its state; **Forget pack** asks first; a skill shadowed by a bundled one says so
+- [ ] **Library packs**: a pack in `packs/<pack>/skills/` appears under Skills (Yours) as `pack:<name>` and under Packs, read-only, with its state ring; **Forget pack** asks first; a skill shadowed by a bundled one says "shadowed · bundle wins"; an empty Packs topic says **No packs** with the packs folder
 - [ ] **Settings**: Theme, Text size and Motion are segmented controls that autosave; colours take a hex with a contrast warning; each agent has a named switch; the landing page is Overview or Library; `R` asks before it resets the workspace folder
 - [ ] Both themes and the window at its minimum size: nothing overflows sideways at the largest text size, text stays readable, state words are never colour alone
 
@@ -204,17 +204,18 @@ Use a scratch profile or back up `~/.claude/settings.json` first.
 
 ## 9. Library
 
-- [ ] Library shows the items list and one document pane (rendered by default); `[` `]` (and `<` `>`) switch among docs, rules, skills, agents, configs
-- [ ] On a personal doc (`docs/context/`, tagged "context"), `i` or Enter swaps the rendered document for its source; `Mod+s` and `:w` save; Escape returns to the rendered view; `:q` asks before discarding edits; `:reset` discards them; `n` creates a doc; `o` opens it externally
-- [ ] Bundled items (bundled docs, the Global Rules row, skills, agents, every config source) show "read-only" in the pane title and "bundled with the app: read-only here" in the footer; the `i`/Enter, `Mod+s` and `o` hints are disabled with that reason; `:w` refuses with it; no textarea ever opens
-- [ ] Docs: select, preview, personal doc edit, dirty state, save, reset, create form, Markdown table, fenced code, code copy; bundled docs show their path inside the bundle (`docs/START_HERE.md`), and no "Bundled docs need update" banner exists
+- [ ] Library shows a search field (top right), the topic tabs Rules, Skills, Agents, Docs, Configs (when on) and Packs, and the topic's items as grouped boxes of rows; `[` `]` (and `<` `>`) switch topic, `/` and `Mod+F` focus the search, the arrow keys move between rows, Enter opens one
+- [ ] Opening a row drops a sheet over the Library (a dialog: focus moves in and stays, Tab does not leave it, Close, Escape and a click on the backdrop close it and focus returns to the row). A personal doc (`docs/context/`, tagged yours) opens as a textarea with **Unsaved changes** or **Saved**, Discard and Save `Mod+s`; **New doc** (the group button or `Mod+N`) asks for a title, shows `docs/context/<slug>.md` live and opens the new doc for editing
+- [ ] Bundled items (bundled docs, Managed base, skills, agents, every config source) and pack skills open read-only: the reason line ("bundled with the app: read-only here") and the rendered text; no textarea opens; "Edit as my copy" appears only where the app can make a copy
+- [ ] Docs: open, personal doc edit, unsaved state, save, discard, New doc, Markdown table, fenced code, code copy; bundled docs show their path inside the bundle (`docs/START_HERE.md`), and no "Bundled docs need update" banner exists
 - [ ] Saving a personal doc over its existing file creates `docs/custom_<slug>-<timestamp>/` in the backup root; a symlinked doc or a linked `docs/context` folder is refused
 - [ ] Library edits do not change what a harness install writes (installs come from the bundle)
-- [ ] With a throwaway `HOME`, put an edited old copy in the data folder (for example `docs/START_HERE.md`): the Library still shows the bundled text, and the item's footer has no "may differ" note
-- [ ] Rules lists Global Rules under "bundled base" and, under "your rules files", one row per enabled harness; a disabled harness or rules target has no row
-- [ ] With a throwaway `HOME`: on a rules file with a block, the managed base shows dimmed and read-only above the refinements, `i` edits only the refinements, and `Mod+s` saves; a hash of the file up to and including the END line is unchanged, `docs/rules-<surface>-<timestamp>/` holds the previous file, and Install then reports the file current (or a base update) with the refinement count unchanged
-- [ ] A rules file that is absent, has no block, has malformed markers, or is a symlink (or sits in a linked folder) is listed with its reason, read-only; `o` opens an existing one, also through a link
+- [ ] With a throwaway `HOME`, put an edited old copy in the data folder (for example `docs/START_HERE.md`): the Library still shows the bundled text
+- [ ] Rules lists, under "Your rules files", one row per enabled harness (**Edit refinements**, or **Add refinements** with none) and, under "Base template", the Managed base; a disabled harness or rules target has no row; the Rules tab carries the filled square while a file needs a decision, and a conflict row says **Needs your decision** with **Open <harness> view ›**
+- [ ] With a throwaway `HOME`: on a rules file with a block, the sheet has Refinements (the managed base dimmed and read-only above the textarea, a hint when a `## Heading` repeats one of the base), Effective (the whole file as it will read after saving) and Diff against disk ("No difference against disk." when equal); only the refinements are edited, and `Mod+s` saves; a hash of the file up to and including the END line is unchanged, `docs/rules-<surface>-<timestamp>/` holds the previous file, and Install then reports the file current (or a base update) with the refinement count unchanged
+- [ ] A rules file that is absent, has no block, has malformed markers, or is a symlink (or sits in a linked folder) is listed with its reason, read-only; a file whose managed block was edited by hand opens as a **Needs your decision** card (read-only, the file as on disk, a button to the harness page); **Open in editor** opens an existing one, also through a link
 - [ ] Editing a rules file elsewhere after opening it: the save is refused as changed on disk, the file reloads with the draft kept, and a second save writes it
+- [ ] With edits unsaved, switching topic, opening another item, closing the sheet and leaving through the sidebar each ask **Unsaved changes**: Discard, Keep editing, Save and continue (the save is the same backed-up save)
 - [ ] No Tools icon or tool switcher exists
 
 ## 10. Known limitations

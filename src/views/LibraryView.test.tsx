@@ -1,102 +1,312 @@
-import type { ComponentProps } from "react";
-import { act, cleanup, fireEvent, screen, within } from "@testing-library/react";
+import { useEffect, useRef } from "react";
+import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useLibraryController } from "../hooks/useLibraryController";
+import { renderInFrame } from "../test/renderWithShell";
 import type {
   AgentMetadataResponse,
   AgentTargetMeta,
-  ConfigEditorSourceMeta,
-  DocSummary,
   DocumentContent,
+  InstallAgent,
+  PackLibrary,
   RulesFileContent,
   RulesFileSummary,
   SkillSummary,
 } from "../types";
-import { renderInFrame } from "../test/renderWithShell";
 import { LibraryView } from "./LibraryView";
 
-type LibraryViewProps = ComponentProps<typeof LibraryView>;
+const invoke = vi.fn();
 
-function baseProps(overrides: Partial<LibraryViewProps> = {}): LibraryViewProps {
-  const noop = () => {};
+vi.mock("@tauri-apps/api/core", () => ({
+  invoke: (...args: unknown[]) => invoke(...args),
+  isTauri: () => true,
+}));
+
+// ---- a small backend: what the Library asks for, in memory ----
+
+const BEFORE = "<!-- BEGIN BASE -->\n## Verification\nEvidence first.\n<!-- END BASE -->";
+
+interface Fixture {
+  docs: Map<string, DocumentContent>;
+  rulesRefinements: Map<string, string>;
+  packs: PackLibrary;
+  /** Text of the skills of the personal pack, by id. */
+  personalSkills: Map<string, string>;
+  /** When set, copy_skill_to_pack refuses with this reason. */
+  refuseCopy: string | null;
+  /** When set, copy_skill_to_pack answers only once this promise settles. */
+  holdCopy: Promise<void> | null;
+  packListFails: boolean;
+  /** A copy turns packListFails on. */
+  packListFailsAfterCopy: boolean;
+}
+
+function skill(id: string, description: string, extra: Partial<SkillSummary> = {}): SkillSummary {
+  return { id, name: id, description, path: `skills/${id}/SKILL.md`, group: "bundled", category: "", risk: "low", targets: [], related: [], ...extra };
+}
+
+const BUNDLED_SKILLS = [skill("tdd", "Drives red, green, refactor."), skill("diagnose", "Finds the root cause.")];
+
+const AGENTS: AgentMetadataResponse[] = [
+  {
+    id: "verifier.md",
+    title: "verifier",
+    path: "agents/verifier.md",
+    exists: true,
+    metadata: { role: "verify", summary: "Runs the checks and reports evidence.", targets: [], risk: "low", default_skills: [], safe_to_edit_runtime: true, notes: [] },
+  },
+];
+
+const CONFIG_TARGETS: AgentTargetMeta[] = [
+  { id: "codex_config", label: "Codex config", harness: "codex", kind: "config", target_rel: ".codex/config.toml", source_rel: "templates/codex-config.toml" },
+];
+
+function rulesSummary(surface: RulesFileSummary["surface"], label: string, extra: Partial<RulesFileSummary> = {}): RulesFileSummary {
+  return { surface, label, file: `~/${label}.md`, layout: "block", conflict: null, malformed: null, refinement_lines: 2, editable: true, reason: null, ...extra };
+}
+
+const RULES_FILES: RulesFileSummary[] = [
+  rulesSummary("claude_rules", "Claude rules"),
+  rulesSummary("codex_rules", "Codex rules", { conflict: "base_block_edited", refinement_lines: 1 }),
+  rulesSummary("open_code_rules", "OpenCode rules", { refinement_lines: 0 }),
+];
+
+function freshFixture(): Fixture {
+  const doc = (id: string, title: string, content: string, source: string): DocumentContent => ({
+    id,
+    title,
+    path: source === "custom" ? `docs/context/${id}.md` : `docs/${id}`,
+    section: "Docs",
+    source,
+    content,
+  });
   return {
-    sourceType: "docs",
-    onSetSourceType: noop,
-    docs: [],
-    activeDoc: null,
-    onSelectDoc: noop,
-    onOpenDoc: noop,
-    docDraft: "",
-    docDirty: false,
-    docSaving: false,
-    docSaveResult: null,
-    docMode: "preview",
-    onSetDocMode: noop,
-    onChangeDocDraft: noop,
-    onSaveDoc: noop,
-    onResetDoc: noop,
-    showCreateDoc: false,
-    createDocTitle: "",
-    createDocSlug: "",
-    createDocError: null,
-    createDocCreating: false,
-    onSetShowCreateDoc: noop,
-    onSetCreateDocTitle: noop,
-    onSetCreateDocSlug: noop,
-    onCreateDoc: noop,
-    agentTemplate: null,
-    agentTargets: [],
-    rulesFiles: [],
-    activeRulesSurface: null,
-    activeRulesFile: null,
-    onSelectRulesFile: noop,
-    onOpenRulesFile: noop,
-    rulesDraft: "",
-    rulesDirty: false,
-    rulesSaving: false,
-    rulesSaveResult: null,
-    onChangeRulesDraft: noop,
-    onSaveRules: noop,
-    onResetRules: noop,
-    skills: [],
-    activeSkillId: null,
-    activeSkillContent: null,
-    skillSearch: "",
-    onSetSkillSearch: noop,
-    onSelectSkillPreview: noop,
-    agentSources: [],
-    activeAgentId: null,
-    activeAgentContent: null,
-    onSelectAgent: noop,
-    configTemplateContent: null,
-    activeConfigTargetId: "",
-    configTargets: [],
-    onSelectConfigTarget: noop,
-    configEditorSources: [],
-    activeConfigSourceType: "base",
-    onSelectConfigSource: noop,
-    configEditorSourceContent: null,
-    dataFolderOk: true,
-    showConfigs: true,
-    ...overrides,
+    docs: new Map([
+      ["custom:notes", doc("custom:notes", "Notes", "# Notes\nfirst", "custom")],
+      ["README.md", doc("README.md", "README", "# Readme\nbundled text", "curated")],
+    ]),
+    rulesRefinements: new Map([
+      ["claude_rules", "\n\n## Mine\nSwedish.\n"],
+      ["codex_rules", "\n\n## Mine\nHand edited.\n"],
+      ["open_code_rules", ""],
+    ]),
+    packs: {
+      folder: "~/.config/riggverk/packs",
+      packs: [
+        { name: "mine", state: "ok", reason: "", forgettable: false },
+        { name: "personal", state: "ok", reason: "", forgettable: false },
+        { name: "old-pack", state: "missing", reason: "the pack folder is gone", forgettable: true },
+      ],
+      skills: [
+        { id: "pack:mine/my-checklist", name: "my-checklist", description: "A checklist of mine.", pack: "mine", state: "active", reason: "", path: "my-checklist/SKILL.md" },
+        { id: "pack:mine/tdd", name: "tdd", description: "Named like a bundled skill.", pack: "mine", state: "shadowed", reason: "the bundle wins", path: "tdd/SKILL.md" },
+        { id: "pack:personal/my-notes", name: "my-notes", description: "Notes of my own.", pack: "personal", state: "active", reason: "", path: "skills/my-notes/SKILL.md" },
+      ],
+      ignored: [],
+    },
+    personalSkills: new Map([["pack:personal/my-notes", "---\nname: my-notes\n---\n\n# my-notes\n\nMy first text."]]),
+    refuseCopy: null,
+    holdCopy: null,
+    packListFails: false,
+    packListFailsAfterCopy: false,
   };
 }
 
-/**
- * An open item. Docs open as personal docs (`custom`, editable) unless a test passes `curated` for a bundled
- * one; the list rows in `docs` only drive selection. Other sources ignore the doc source.
- */
-function makeDoc(id: string, title: string, content: string, source = "custom"): DocumentContent {
-  return { id, title, path: `docs/${id}.md`, section: "docs", source, content };
+let fixture: Fixture;
+let calls: Array<[string, unknown]>;
+
+function rulesContent(summary: RulesFileSummary): RulesFileContent {
+  return { ...summary, before: BEFORE, refinements: fixture.rulesRefinements.get(summary.surface) ?? "", revision: "rev-1" };
 }
 
-const BUNDLED_REASON = "bundled with the app: read-only here";
+function ok(action: string, stdout = "saved"): unknown {
+  return { success: true, action, stdout, stderr: "", exit_code: 0 };
+}
 
-function renderLibrary(overrides: Partial<LibraryViewProps> = {}) {
-  const result = renderInFrame(<LibraryView {...baseProps(overrides)} />, { view: "library" });
-  return {
-    ...result,
-    update: (next: Partial<LibraryViewProps>) => result.rerenderFrame(<LibraryView {...baseProps(next)} />),
-  };
+function installBackend() {
+  fixture = freshFixture();
+  calls = [];
+  invoke.mockReset();
+  invoke.mockImplementation((command: string, args?: Record<string, unknown>) => {
+    calls.push([command, args]);
+    switch (command) {
+      case "list_docs":
+        return Promise.resolve([...fixture.docs.values()].map(({ content: _content, ...summary }) => summary));
+      case "read_doc":
+        return Promise.resolve(fixture.docs.get(args!.id as string));
+      case "save_doc": {
+        const doc = fixture.docs.get(args!.id as string)!;
+        fixture.docs.set(doc.id, { ...doc, content: args!.content as string });
+        return Promise.resolve(ok("save_doc"));
+      }
+      case "create_doc": {
+        const slug = args!.slug as string;
+        const doc: DocumentContent = {
+          id: `custom:${slug}`,
+          title: args!.title as string,
+          path: `docs/context/${slug}.md`,
+          section: "Docs",
+          source: "custom",
+          content: `# ${args!.title as string}\n`,
+        };
+        fixture.docs.set(doc.id, doc);
+        return Promise.resolve(doc);
+      }
+      case "list_skills":
+        return Promise.resolve(BUNDLED_SKILLS);
+      case "list_pack_skills":
+        return fixture.packListFails ? Promise.reject(new Error("packs cannot be listed")) : Promise.resolve(fixture.packs);
+      case "copy_skill_to_pack": {
+        const newName = args!.newName as string;
+        if (fixture.refuseCopy) return Promise.reject(fixture.refuseCopy);
+        const id = `pack:personal/${newName}`;
+        fixture.personalSkills.set(id, `---\nname: ${newName}\n---\n\n# ${newName}\n\nCopied from ${args!.name as string}.`);
+        fixture.packs.skills.push({ id, name: newName, description: "A copy.", pack: "personal", state: "active", reason: "", path: `skills/${newName}/SKILL.md` });
+        const made = { id, name: newName, pack: "personal", path: `~/packs/personal/skills/${newName}/SKILL.md` };
+        // Listing the packs fails from here on, as in a copy made while the pack folder cannot be read.
+        if (fixture.packListFailsAfterCopy) fixture.packListFails = true;
+        return fixture.holdCopy ? fixture.holdCopy.then(() => made) : Promise.resolve(made);
+      }
+      case "save_pack_skill": {
+        const id = args!.id as string;
+        const unchanged = fixture.personalSkills.get(id) === args!.content;
+        fixture.personalSkills.set(id, args!.content as string);
+        return Promise.resolve(ok("save_pack_skill", unchanged ? "unchanged" : "saved with backup"));
+      }
+      case "read_skill": {
+        const id = args!.id as string;
+        const personal = fixture.personalSkills.get(id);
+        if (personal !== undefined) {
+          const name = id.slice("pack:personal/".length);
+          return Promise.resolve({ id, title: name, path: `~/packs/personal/skills/${name}/SKILL.md`, section: "pack:personal", source: "pack", content: personal });
+        }
+        return Promise.resolve({ id, title: id, path: `skills/${id}/SKILL.md`, section: "", source: "curated", content: `# ${id} skill\n\nBody of ${id}.` });
+      }
+      case "forget_pack":
+        fixture.packs = { ...fixture.packs, packs: fixture.packs.packs.filter(pack => pack.name !== args!.name) };
+        return Promise.resolve(1);
+      case "list_agent_metadata":
+        return Promise.resolve({ agents: AGENTS, warnings: [] });
+      case "read_agent_source":
+        return Promise.resolve({ id: args!.filename, title: "verifier", path: "agents/verifier.md", content: "# verifier agent", exists: true });
+      case "read_agent_template":
+        return Promise.resolve({ id: "template", title: "Rules", path: "templates/rules.md", section: "", source: "curated", content: "# Base rules\n\nShipped text." });
+      case "list_rules_files":
+        return Promise.resolve(RULES_FILES);
+      case "read_rules_file":
+        return Promise.resolve(rulesContent(RULES_FILES.find(file => file.surface === args!.surface)!));
+      case "save_rules_refinements":
+        fixture.rulesRefinements.set(args!.surface as string, args!.content as string);
+        return Promise.resolve(ok("save_rules_refinements"));
+      case "read_config_template":
+        return Promise.resolve({ id: `config-template:${args!.targetId as string}`, title: "config", path: "templates/codex-config.toml", section: "", source: "curated", content: "{\"model\": \"x\"}" });
+      case "list_opencode_config_editor_sources":
+        return Promise.resolve([]);
+      default:
+        return Promise.reject(new Error(`unexpected invoke: ${command}`));
+    }
+  });
+}
+
+// ---- the view, wired like the app does it ----
+
+interface HarnessProps {
+  showConfigs?: boolean;
+  onOpenHarnessView?: (harness: InstallAgent) => void;
+  /** The app cannot copy a skill: the rows and sheets offer no "Edit as my copy". */
+  withoutCopy?: boolean;
+  /** Starts on this topic once the Library has loaded. */
+  topic?: "rules" | "skills" | "agents" | "docs" | "configs" | "packs";
+}
+
+function Harness({ showConfigs = true, onOpenHarnessView, withoutCopy = false, topic }: HarnessProps) {
+  // Like the app's, these are stable: the controller's effects depend on them.
+  const generation = useRef({ current: 0 }).current;
+  const deps = useRef({
+    setError: () => {},
+    workspaceLoadGenerationRef: generation,
+    isWorkspaceLoadCurrent: (g: number) => g === generation.current,
+    isInvalidWorkspaceError: () => false,
+    fetchStatus: async () => {},
+    view: "library",
+  }).current;
+  const lib = useLibraryController(deps);
+  const { loadLibraryView, setActiveConfigTargetId, setGuardedLibrarySourceType } = lib;
+  useEffect(() => {
+    setActiveConfigTargetId("codex_config");
+    loadLibraryView();
+    if (topic) void setGuardedLibrarySourceType(topic);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return (
+    <LibraryView
+      sourceType={lib.librarySourceType}
+      onSetSourceType={lib.setGuardedLibrarySourceType}
+      docs={lib.docs}
+      activeDoc={lib.activeDoc}
+      onSelectDoc={lib.selectDoc}
+      onOpenDoc={lib.openDocEditor}
+      docDraft={lib.docDraft}
+      docDirty={lib.docDirty}
+      docSaving={lib.docSaving}
+      docSaveResult={lib.docSaveResult}
+      onChangeDocDraft={lib.onChangeDocDraft}
+      onSaveDoc={lib.onSaveDoc}
+      onResetDoc={lib.onResetDoc}
+      showCreateDoc={lib.showCreateDoc}
+      createDocTitle={lib.createDocTitle}
+      createDocSlug={lib.createDocSlug}
+      createDocError={lib.createDocError}
+      createDocCreating={lib.createDocCreating}
+      onSetShowCreateDoc={lib.setShowCreateDoc}
+      onSetCreateDocTitle={lib.setCreateDocTitle}
+      onSetCreateDocSlug={lib.setCreateDocSlug}
+      onCreateDoc={lib.onCreateDoc}
+      agentTemplate={lib.agentTemplate}
+      agentTargets={CONFIG_TARGETS}
+      rulesFiles={lib.rulesFiles}
+      activeRulesSurface={lib.activeRulesSurface}
+      activeRulesFile={lib.activeRulesFile}
+      onSelectRulesFile={lib.selectRulesFile}
+      onOpenRulesFile={lib.openRulesFile}
+      rulesDraft={lib.rulesDraft}
+      rulesDirty={lib.rulesDirty}
+      rulesSaving={lib.rulesSaving}
+      rulesSaveResult={lib.rulesSaveResult}
+      onChangeRulesDraft={lib.onChangeRulesDraft}
+      onSaveRules={lib.onSaveRules}
+      onResetRules={lib.onResetRules}
+      skills={lib.skills}
+      activeSkillContent={lib.activeSkillContent}
+      onSelectSkillPreview={lib.readSkill}
+      skillDraft={lib.skillDraft}
+      skillDirty={lib.skillDirty}
+      skillSaving={lib.skillSaving}
+      skillSaveResult={lib.skillSaveResult}
+      onChangeSkillDraft={lib.onChangeSkillDraft}
+      onSaveSkill={lib.onSaveSkill}
+      onResetSkill={lib.onResetSkill}
+      onCopySkill={withoutCopy ? undefined : lib.copySkillToPack}
+      packLibrary={lib.packLibrary}
+      packError={lib.packError}
+      onForgetPack={lib.forgetPack}
+      agentSources={lib.agentSources}
+      activeAgentContent={lib.activeAgentContent}
+      onSelectAgent={lib.selectAgent}
+      configTemplateContent={lib.configTemplateContent}
+      activeConfigTargetId={lib.activeConfigTargetId}
+      configTargets={CONFIG_TARGETS}
+      onSelectConfigTarget={lib.selectConfigTarget}
+      configEditorSources={lib.configEditorSources}
+      activeConfigSourceType={lib.activeConfigSourceType}
+      onSelectConfigSource={lib.selectConfigSourceType}
+      configEditorSourceContent={lib.configEditorSourceContent}
+      dataFolderOk
+      showConfigs={showConfigs}
+      onOpenHarnessView={onOpenHarnessView}
+      onConfirmLeave={lib.confirmLeave}
+    />
+  );
 }
 
 const originalShowModal = HTMLDialogElement.prototype.showModal;
@@ -111,1376 +321,659 @@ beforeEach(() => {
     this.removeAttribute("open");
     this.dispatchEvent(new Event("close"));
   });
+  installBackend();
 });
 
 afterEach(() => {
   cleanup();
-  vi.useRealTimers();
   HTMLDialogElement.prototype.showModal = originalShowModal;
   HTMLDialogElement.prototype.close = originalClose;
 });
 
-function press(target: Element, key: string, init: KeyboardEventInit = {}) {
-  return fireEvent.keyDown(target, { key, ...init });
+/** A row that only exists once the topic's items have loaded. */
+const TOPIC_LOADED: Record<string, string> = {
+  rules: "Claude rules",
+  skills: "my-checklist",
+  agents: "verifier",
+  docs: "Notes",
+  configs: "Codex config",
+  packs: "old-pack",
+};
+
+async function renderLibrary(props: HarnessProps = {}): Promise<void> {
+  renderInFrame(<Harness {...props} />, { view: "library" });
+  await screen.findByText(TOPIC_LOADED[props.topic ?? "rules"]!);
 }
 
-function listbox() {
-  return screen.getByRole("listbox");
+function tab(name: string) {
+  return screen.getByRole("tab", { name });
 }
 
-function cursorName(): string | null {
-  const id = listbox().getAttribute("aria-activedescendant");
-  return id ? document.getElementById(id)?.querySelector(".nm")?.textContent ?? null : null;
+function rowOf(name: string): HTMLElement {
+  const row = screen.getAllByRole("listitem").find(item => item.querySelector("b")?.textContent === name);
+  if (!row) throw new Error(`no row named ${name}`);
+  return row;
 }
 
-function selectedNames(): string[] {
-  return within(listbox())
-    .getAllByRole("option")
-    .filter(option => option.getAttribute("aria-selected") === "true")
-    .map(option => option.querySelector(".nm")!.textContent!);
+async function openSheet(rowName: string, verb: string): Promise<HTMLElement> {
+  fireEvent.click(within(rowOf(rowName)).getByRole("button", { name: verb }));
+  return screen.findByRole("dialog", { name: new RegExp(rowName, "i") });
 }
 
-/** The transient notice (toast). */
-function noticeText(): string | null {
-  return document.querySelector(".toast")!.textContent;
+async function goToTopic(name: string) {
+  fireEvent.click(tab(name));
+  await waitFor(() => expect(tab(name).getAttribute("aria-selected")).toBe("true"));
 }
 
-function focusList() {
-  act(() => listbox().focus());
-  return listbox();
+async function editNotes(text = "# Notes\nunsaved"): Promise<HTMLElement> {
+  await goToTopic("Docs");
+  const sheet = await openSheet("Notes", "Edit");
+  const textarea = await within(sheet).findByRole("textbox", { name: "Edit document" });
+  fireEvent.change(textarea, { target: { value: text } });
+  await within(sheet).findByText("Unsaved changes");
+  return sheet;
 }
 
-/** Moves focus into a pane by its accessible name (the pane hands it to its primary target). */
-function focusPane(name: string) {
-  act(() => screen.getByRole("region", { name }).focus());
+function callsTo(command: string): Array<Record<string, unknown>> {
+  return calls.filter(([name]) => name === command).map(([, args]) => (args ?? {}) as Record<string, unknown>);
 }
 
-/** Key hints of the focused pane live as a key hint; look them up outside `act`. */
-function statusHint(name: string) {
-  return within(screen.getByLabelText("Key hints")).getByRole("button", { name });
-}
+// ---- tests ----
 
-function queryStatusHint(name: string) {
-  return within(screen.getByLabelText("Key hints")).queryByRole("button", { name });
-}
-
-function textarea(label: string) {
-  return screen.getByLabelText(label) as HTMLTextAreaElement;
-}
-
-/** Edit mode: Enter or `i` on the focused document pane swaps the rendered view for the source textarea. */
-function editDocument(label: string) {
-  focusPane("Document");
-  press(document.activeElement!, "i");
-  return textarea(label);
-}
-
-/** Mod+s from the document pane, whichever mode it is in. */
-function pressSave() {
-  focusPane("Document");
-  press(document.activeElement!, "s", { ctrlKey: true });
-}
-
-/** Mod+s on a bundled item runs nothing: its key hint stays disabled and says why. */
-function expectSaveRefused() {
-  pressSave();
-  const hint = within(screen.getByLabelText("Key hints")).getByRole("button", { name: / save$/ });
-  expect(hint.getAttribute("aria-disabled")).toBe("true");
-  expect(hint.getAttribute("title")).toBe(BUNDLED_REASON);
-}
-
-function runCommand(line: string) {
-  press(document.activeElement ?? document.body, ":", { shiftKey: true });
-  const input = screen.getByRole("combobox", { name: "Command" });
-  fireEvent.change(input, { target: { value: line } });
-  press(input, "Enter");
-}
-
-const docs: DocSummary[] = [
-  { id: "a", title: "Alpha", section: "Bundled", path: "docs/alpha.md", source: "curated" },
-  { id: "b", title: "Beta notes", section: "Context", path: "docs/context/beta.md", source: "custom" },
-  { id: "c", title: "Gamma", section: "Bundled", path: "docs/gamma.md", source: "curated" },
-];
-
-describe("LibraryView layout", () => {
-  it("renders the items and one document pane with the source switcher and counts", () => {
-    renderLibrary({ docs, activeDoc: makeDoc("a", "Alpha", "# A"), docDraft: "# A" });
-    expect(screen.getByRole("region", { name: "Library items" }).getAttribute("data-pane-id")).toBe("items");
-    expect(screen.getByRole("region", { name: "Document" }).getAttribute("data-pane-id")).toBe("editor");
-    expect(document.querySelectorAll("section.pane")).toHaveLength(2);
-    expect(screen.queryByRole("region", { name: "Editor" })).toBeNull();
-    expect(screen.queryByRole("region", { name: "Preview" })).toBeNull();
-    const group = screen.getByRole("group", { name: "Library source type" });
-    expect(within(group).getAllByRole("button").map(button => button.textContent)).toEqual([
-      "docs 3",
-      "rules",
-      "skills",
-      "agents",
-      "configs",
+describe("Library topics", () => {
+  it("opens on Rules, lists the topic tabs and switches topic", async () => {
+    await renderLibrary();
+    expect(screen.getByRole("tablist", { name: "Library topics" })).toBeTruthy();
+    expect(screen.getAllByRole("tab").map(item => item.textContent?.replace(/\s+/g, " ").trim())).toEqual([
+      "Rules",
+      "Skills",
+      "Agents",
+      "Docs",
+      "Configs",
+      "Packs",
     ]);
-    expect(within(group).getByRole("button", { name: /^docs/ }).getAttribute("aria-current")).toBe("true");
+    expect(tab("Rules").getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByRole("heading", { name: "Your rules files" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Base template" })).toBeTruthy();
+
+    await goToTopic("Skills");
+    expect(screen.getByRole("heading", { name: "Yours" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Bundled" })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Your rules files" })).toBeNull();
   });
 
-  it("hides the configs source while no bundled config target is enabled", () => {
-    renderLibrary({ showConfigs: false });
-    const group = screen.getByRole("group", { name: "Library source type" });
-    expect(within(group).queryByRole("button", { name: /configs/ })).toBeNull();
+  it("leaves Configs out when the view does not show configs", async () => {
+    await renderLibrary({ showConfigs: false });
+    expect(screen.queryByRole("tab", { name: "Configs" })).toBeNull();
+    expect(screen.getAllByRole("tab")).toHaveLength(5);
   });
 
-  it("shows one empty state in the document pane while nothing is open", () => {
-    renderLibrary({ docs });
-    expect(screen.getAllByText("Select a document to preview")).toHaveLength(1);
-    expect(screen.queryByText("Nothing to preview")).toBeNull();
-    expect(screen.getByRole("region", { name: "Document" }).querySelector(".pane-title")!.textContent).toBe("document");
+  it("marks the Rules tab while a rules file needs a decision, and the Packs tab while a pack needs attention", async () => {
+    await renderLibrary();
+    expect(tab("Rules").getAttribute("aria-describedby")).toBeTruthy();
+    expect(document.getElementById(tab("Rules").getAttribute("aria-describedby")!)?.textContent).toBe("Needs your decision");
+    expect(document.getElementById(tab("Packs").getAttribute("aria-describedby")!)?.textContent).toBe("A pack needs attention");
+    expect(tab("Skills").getAttribute("aria-describedby")).toBeNull();
+  });
+
+  it("lists rules files with their verbs and sends a conflict to the harness page", async () => {
+    const onOpenHarnessView = vi.fn();
+    await renderLibrary({ onOpenHarnessView });
+    expect(within(rowOf("Claude rules")).getByRole("button", { name: "Edit refinements" })).toBeTruthy();
+    expect(within(rowOf("OpenCode rules")).getByRole("button", { name: "Add refinements" })).toBeTruthy();
+    const conflict = rowOf("Codex rules");
+    expect(within(conflict).getByText("Needs your decision")).toBeTruthy();
+    fireEvent.click(within(conflict).getByRole("button", { name: "Open Codex view ›" }));
+    expect(onOpenHarnessView).toHaveBeenCalledWith("codex");
+  });
+
+  it("shows the pack skills as yours (with the shadowed and missing reasons) and every bundled skill", async () => {
+    await renderLibrary();
+    await goToTopic("Skills");
+    const mine = rowOf("my-checklist");
+    expect(within(mine).getByText("A checklist of mine.")).toBeTruthy();
+    const shadowed = within(screen.getByRole("heading", { name: "Yours" }).closest("section")!).getAllByRole("listitem")[1]!;
+    expect(within(shadowed).getByText("shadowed · bundle wins")).toBeTruthy();
+    expect(within(shadowed).getByText(/bundle wins\. Rename it in the pack/)).toBeTruthy();
+    const bundled = within(screen.getByRole("heading", { name: "Bundled" }).closest("section")!);
+    expect(bundled.getAllByRole("button", { name: "Read" })).toHaveLength(BUNDLED_SKILLS.length);
+  });
+
+  it("offers no Edit as my copy while the app cannot make the copy", async () => {
+    await renderLibrary({ topic: "skills", withoutCopy: true });
+    expect(screen.queryByRole("button", { name: "Edit as my copy" })).toBeNull();
+  });
+
+  it("offers Edit on the personal pack's skills and Read on every other pack skill", async () => {
+    await renderLibrary({ topic: "skills" });
+    expect(within(rowOf("my-notes")).getByRole("button", { name: "Edit" })).toBeTruthy();
+    expect(within(rowOf("my-checklist")).getByRole("button", { name: "Read" })).toBeTruthy();
+  });
+
+  it("lists bundled agents, docs with a New doc button, and configs", async () => {
+    await renderLibrary();
+    await goToTopic("Agents");
+    expect(within(rowOf("verifier")).getByText("Runs the checks and reports evidence.")).toBeTruthy();
+    await goToTopic("Docs");
+    const yours = screen.getByRole("heading", { name: "Yours" }).closest("section")!;
+    expect(within(yours).getByRole("button", { name: "New doc" })).toBeTruthy();
+    expect(within(yours).getByRole("button", { name: "Edit" })).toBeTruthy();
+    expect(within(rowOf("README")).getByRole("button", { name: "Read" })).toBeTruthy();
+    await goToTopic("Configs");
+    expect(within(rowOf("Codex config")).getByRole("button", { name: "View" })).toBeTruthy();
+  });
+
+  it("says No packs with the packs folder when there are none", async () => {
+    fixture.packs = { folder: "~/.config/riggverk/packs", packs: [], skills: [], ignored: [] };
+    await renderLibrary();
+    await goToTopic("Packs");
+    expect(screen.getByText("No packs")).toBeTruthy();
+    expect(screen.getByText("~/.config/riggverk/packs")).toBeTruthy();
+    expect(tab("Packs").getAttribute("aria-describedby")).toBeNull();
   });
 });
 
-describe("LibraryView Configs pane", () => {
-  const configTargets: AgentTargetMeta[] = [
-    { id: "opencode_config", label: "OpenCode config", harness: "opencode", kind: "config", source_rel: "templates/opencode.base.json", target_rel: "opencode.json" },
-    { id: "codex_config", label: "Codex config", harness: "codex", kind: "config", source_rel: "templates/codex.toml", target_rel: "config.toml" },
-  ];
-  const sources: ConfigEditorSourceMeta[] = [
-    { id: "base", label: "Base", rel_path: "templates/opencode.base.json", helper: "bundled base" },
-    { id: "policy", label: "Policy", rel_path: "templates/opencode.policy.json", helper: "overrides" },
-    { id: "snapshot", label: "Snapshot", rel_path: "templates/opencode.json", helper: "generated" },
-  ];
-
-  it("shows the editor source content for opencode_config, rendered and read-only", () => {
-    const content = makeDoc("base", "base", '{"opencode_marker": true}');
-    renderLibrary({
-      sourceType: "configs",
-      configTargets,
-      configEditorSources: sources,
-      activeConfigTargetId: "opencode_config",
-      configTemplateContent: null,
-      configEditorSourceContent: content,
-    });
-    // Rendered: the source, pretty-printed, and never a textarea.
-    expect(document.querySelector(".configs-code")!.textContent).toContain('"opencode_marker": true');
-    expect(screen.queryByText("Select a config target to preview")).toBeNull();
-    // The bundle summary is gated on the same active content.
-    expect(screen.getByRole("region", { name: "bundle" })).not.toBeNull();
-    focusPane("Document");
-    press(document.activeElement!, "i");
-    expect(screen.queryByRole("textbox")).toBeNull();
-    expect(document.querySelector(".configs-code")).not.toBeNull();
-    expect(screen.getByText(BUNDLED_REASON)).not.toBeNull();
+describe("Library search", () => {
+  it("searches every topic with a heading per topic, and leaves no tab selected", async () => {
+    await renderLibrary();
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search all topics" }), { target: { value: "tdd" } });
+    const results = await screen.findByRole("region", { name: "Search results" });
+    expect(within(results).getAllByRole("heading", { level: 2 }).map(heading => heading.textContent)).toEqual(["Skills", "Packs"]);
+    expect(within(results).getAllByText("tdd").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByRole("tab").every(item => item.getAttribute("aria-selected") === "false")).toBe(true);
   });
 
-  it("shows a loading state for opencode_config and then renders content", () => {
-    const props: Partial<LibraryViewProps> = {
-      sourceType: "configs",
-      configTargets,
-      activeConfigTargetId: "opencode_config",
-      configEditorSourceContent: null,
-    };
-    const { update } = renderLibrary(props);
-    expect(screen.getByText("Loading config source…")).not.toBeNull();
-
-    const loaded = makeDoc("base", "base", '{"loaded_marker": 1}');
-    update({ ...props, configEditorSourceContent: loaded });
-    expect(document.querySelector(".configs-code")!.textContent).toContain('"loaded_marker": 1');
+  it("says Nothing matches for a search without results, and a topic click ends the search", async () => {
+    await renderLibrary();
+    const search = screen.getByRole("searchbox", { name: "Search all topics" });
+    fireEvent.change(search, { target: { value: "zzzq" } });
+    expect(await screen.findByText("Nothing matches “zzzq”.")).toBeTruthy();
+    fireEvent.click(tab("Docs"));
+    await waitFor(() => expect((search as HTMLInputElement).value).toBe(""));
+    expect(tab("Docs").getAttribute("aria-selected")).toBe("true");
   });
 
-  it("shows the template content for other config targets as a read-only preview", () => {
-    const template = makeDoc("codex", "codex", 'model = "template_marker"');
-    renderLibrary({
-      sourceType: "configs",
-      configTargets,
-      activeConfigTargetId: "codex_config",
-      configTemplateContent: template,
-    });
-    expect(document.querySelector(".configs-code")!.textContent).toContain("template_marker");
-    expect(screen.getByText(BUNDLED_REASON)).not.toBeNull();
-    // Never a textarea for a read-only item, however it is asked for.
-    focusPane("Document");
-    press(document.activeElement!, "i");
-    press(document.activeElement!, "Enter");
-    expect(screen.queryByRole("textbox")).toBeNull();
-    expect(screen.queryByRole("region", { name: "bundle" })).toBeNull();
+  it("opens a result from another topic", async () => {
+    await renderLibrary();
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search all topics" }), { target: { value: "readme" } });
+    const results = await screen.findByRole("region", { name: "Search results" });
+    fireEvent.click(within(results).getByRole("button", { name: "Read" }));
+    const sheet = await screen.findByRole("dialog", { name: /README/ });
+    expect(await within(sheet).findByRole("heading", { name: "Readme" })).toBeTruthy();
+  });
+});
+
+describe("Library sheet", () => {
+  it("opens a read-only item as a modal with its reason and rendered text, and returns focus to the row on Close", async () => {
+    await renderLibrary({ topic: "skills" });
+    const bundledTdd = within(screen.getByRole("heading", { name: "Bundled" }).closest("section")!).getAllByRole("listitem")[0]!;
+    fireEvent.click(within(bundledTdd).getByRole("button", { name: "Read" }));
+    const sheet = await screen.findByRole("dialog", { name: /tdd/ });
+    expect(sheet.getAttribute("aria-modal")).toBe("true");
+    expect(await within(sheet).findByText("bundled with the app: read-only here")).toBeTruthy();
+    expect(await within(sheet).findByRole("heading", { name: "tdd skill" })).toBeTruthy();
+    expect(within(sheet).queryByRole("textbox")).toBeNull();
+    expect(sheet.contains(document.activeElement)).toBe(true);
+
+    fireEvent.click(within(sheet).getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    const bundled = within(screen.getByRole("heading", { name: "Bundled" }).closest("section")!);
+    expect(document.activeElement).toBe(bundled.getAllByRole("button", { name: "Read" })[0]);
   });
 
-  it("keeps the empty hint when a non-opencode target has no template yet", () => {
-    renderLibrary({
-      sourceType: "configs",
-      configTargets,
-      activeConfigTargetId: "codex_config",
-      configTemplateContent: null,
-    });
-    expect(screen.getByText("Select a config target to preview")).not.toBeNull();
+  it("closes on Escape and on a click on the backdrop", async () => {
+    await renderLibrary({ topic: "agents" });
+    let sheet = await openSheet("verifier", "Read");
+    fireEvent.keyDown(sheet, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+
+    sheet = await openSheet("verifier", "Read");
+    fireEvent.click(document.querySelector(".lib-sheet-back")!);
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   });
 
-  it("lists the editor sources of opencode_config and marks the active one", () => {
-    const content = makeDoc("policy", "policy", "{}");
-    renderLibrary({
-      sourceType: "configs",
-      configTargets: [configTargets[0]!],
-      configEditorSources: sources,
-      activeConfigTargetId: "opencode_config",
-      activeConfigSourceType: "policy",
-      configEditorSourceContent: content,
-    });
-    expect(within(listbox()).getAllByRole("option").map(option => option.querySelector(".nm")!.textContent)).toEqual([
-      "OpenCode config",
-      "Base",
-      "Policy",
-      "Snapshot",
-    ]);
-    expect(selectedNames()).toEqual(["Policy"]);
-    // Every source is read-only: the pane says so once, no row needs its own tag.
-    expect(within(listbox()).queryByText("read-only")).toBeNull();
+  it("keeps Tab inside the sheet", async () => {
+    await renderLibrary({ topic: "agents" });
+    const sheet = await openSheet("verifier", "Read");
+    const close = within(sheet).getByRole("button", { name: "Close" });
+    close.focus();
+    fireEvent.keyDown(close, { key: "Tab" });
+    expect(sheet.contains(document.activeElement)).toBe(true);
+    fireEvent.keyDown(document.activeElement!, { key: "Tab", shiftKey: true });
+    expect(sheet.contains(document.activeElement)).toBe(true);
   });
 
-  it("opens a source after the cursor rests on it, and never re-selects the active target", () => {
-    vi.useFakeTimers();
-    const onSelectConfigSource = vi.fn();
-    const onSelectConfigTarget = vi.fn();
-    const content = makeDoc("base", "base", "{}");
-    renderLibrary({
-      sourceType: "configs",
-      configTargets: [configTargets[0]!],
-      configEditorSources: sources,
-      activeConfigTargetId: "opencode_config",
-      configEditorSourceContent: content,
-      onSelectConfigSource,
-      onSelectConfigTarget,
-    });
-    const list = focusList();
-    // Cursor starts on the open source (Base); k reaches the target row, which must not reset the source.
-    press(list, "k");
-    act(() => {
-      vi.advanceTimersByTime(200);
-    });
-    expect(onSelectConfigTarget).not.toHaveBeenCalled();
-    expect(onSelectConfigSource).not.toHaveBeenCalled();
-    press(list, "j");
-    press(list, "j");
-    act(() => {
-      vi.advanceTimersByTime(200);
-    });
-    expect(onSelectConfigSource).toHaveBeenCalledWith("policy");
+  it("edits and saves a personal doc", async () => {
+    await renderLibrary();
+    const sheet = await editNotes("# Notes\nsecond");
+    expect(within(sheet).getByRole("button", { name: "Save" }).getAttribute("aria-disabled")).toBeNull();
+    fireEvent.click(within(sheet).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(callsTo("save_doc")).toEqual([{ id: "custom:notes", content: "# Notes\nsecond" }]));
+    await within(sheet).findByText("Saved");
+    expect(within(sheet).queryByText("Unsaved changes")).toBeNull();
   });
 
-  it("treats every opencode source as bundled: no textarea, Mod+s says why", () => {
-    for (const source of sources) {
-      const content = makeDoc(source.id, source.id, '{"snap": 1}');
-      renderLibrary({
-        sourceType: "configs",
-        configTargets: [configTargets[0]!],
-        configEditorSources: sources,
-        activeConfigTargetId: "opencode_config",
-        activeConfigSourceType: source.id,
-        configEditorSourceContent: content,
-      });
-      expect(screen.queryByRole("textbox")).toBeNull();
-      expect(screen.getByText(BUNDLED_REASON)).not.toBeNull();
-      expectSaveRefused();
-      cleanup();
+  it("saves with the save key, and discards back to what is on disk", async () => {
+    await renderLibrary();
+    const sheet = await editNotes("# Notes\nthird");
+    fireEvent.keyDown(within(sheet).getByRole("textbox"), { key: "s", ctrlKey: true });
+    await waitFor(() => expect(callsTo("save_doc")).toHaveLength(1));
+    await within(sheet).findByText("Saved");
+
+    fireEvent.change(within(sheet).getByRole("textbox"), { target: { value: "changed again" } });
+    fireEvent.click(await within(sheet).findByRole("button", { name: "Discard" }));
+    await waitFor(() => expect((within(sheet).getByRole("textbox") as HTMLTextAreaElement).value).toBe("# Notes\nthird"));
+  });
+});
+
+describe("Library unsaved changes", () => {
+  it("asks before a topic switch, and Keep editing stays on the topic with the draft", async () => {
+    await renderLibrary();
+    const sheet = await editNotes();
+    fireEvent.click(tab("Skills"));
+    const dialog = await screen.findByRole("dialog", { name: "Unsaved changes" });
+    expect(within(dialog).getByText("Notes has changes you have not saved.")).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Keep editing" }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Unsaved changes" })).toBeNull());
+    expect(tab("Docs").getAttribute("aria-selected")).toBe("true");
+    expect((within(sheet).getByRole("textbox") as HTMLTextAreaElement).value).toBe("# Notes\nunsaved");
+  });
+
+  it("Discard drops the draft and switches the topic", async () => {
+    await renderLibrary();
+    await editNotes();
+    fireEvent.click(tab("Skills"));
+    fireEvent.click(await within(await screen.findByRole("dialog", { name: "Unsaved changes" })).findByRole("button", { name: "Discard" }));
+    await waitFor(() => expect(tab("Skills").getAttribute("aria-selected")).toBe("true"));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(callsTo("save_doc")).toEqual([]);
+    // The draft did not come back: the doc opens as it is on disk.
+    await goToTopic("Docs");
+    const sheet = await openSheet("Notes", "Edit");
+    expect((await within(sheet).findByRole("textbox", { name: "Edit document" }) as HTMLTextAreaElement).value).toBe("# Notes\nfirst");
+  });
+
+  it("Save and continue writes the draft, then switches the topic", async () => {
+    await renderLibrary();
+    await editNotes();
+    fireEvent.click(tab("Skills"));
+    fireEvent.click(await within(await screen.findByRole("dialog", { name: "Unsaved changes" })).findByRole("button", { name: "Save and continue" }));
+    await waitFor(() => expect(tab("Skills").getAttribute("aria-selected")).toBe("true"));
+    expect(callsTo("save_doc")).toEqual([{ id: "custom:notes", content: "# Notes\nunsaved" }]);
+    expect(fixture.docs.get("custom:notes")!.content).toBe("# Notes\nunsaved");
+  });
+
+  it("asks before the sheet closes, whether by Close, Escape or the backdrop", async () => {
+    await renderLibrary();
+    const sheet = await editNotes();
+    for (const close of [
+      () => fireEvent.click(within(sheet).getByRole("button", { name: "Close" })),
+      () => fireEvent.keyDown(sheet, { key: "Escape" }),
+      () => fireEvent.click(document.querySelector(".lib-sheet-back")!),
+    ]) {
+      close();
+      const dialog = await screen.findByRole("dialog", { name: "Unsaved changes" });
+      fireEvent.click(within(dialog).getByRole("button", { name: "Keep editing" }));
+      await waitFor(() => expect(screen.queryByRole("dialog", { name: "Unsaved changes" })).toBeNull());
+      expect(screen.getByRole("dialog", { name: /Notes/ })).toBeTruthy();
     }
   });
-});
 
-describe("LibraryView Docs list", () => {
-  it("groups documents by section, marks the open doc and tags custom context docs", () => {
-    renderLibrary({ docs, activeDoc: makeDoc("b", "Beta notes", ""), docDraft: "" });
-    const groups = Array.from(listbox().querySelectorAll("li.group")).map(el => el.textContent);
-    expect(groups).toEqual(["Bundled", "Context"]);
-    expect(within(listbox()).getAllByRole("option").map(option => option.querySelector(".nm")!.textContent)).toEqual([
-      "Alpha",
-      "Gamma",
-      "Beta notes",
-    ]);
-    expect(selectedNames()).toEqual(["Beta notes"]);
-    expect(cursorName()).toBe("Beta notes");
-    expect(screen.getByText("context")).not.toBeNull();
-  });
-
-  it("filters the list by the search box", () => {
-    renderLibrary({ docs });
-    fireEvent.change(screen.getByLabelText("Filter documents"), { target: { value: "alp" } });
-    expect(screen.getByText("Alpha")).not.toBeNull();
-    expect(screen.queryByText("Beta notes")).toBeNull();
-
-    fireEvent.change(screen.getByLabelText("Filter documents"), { target: { value: "zzz" } });
-    expect(screen.getByText("No documents match the current filter.")).not.toBeNull();
-  });
-
-  it("selects a document when its row is clicked, after the selection delay", () => {
-    vi.useFakeTimers();
-    const onSelectDoc = vi.fn();
-    renderLibrary({ docs, activeDoc: makeDoc("a", "Alpha", ""), onSelectDoc });
-    fireEvent.click(screen.getByRole("option", { name: /Beta notes/ }));
-    expect(onSelectDoc).not.toHaveBeenCalled();
-    act(() => {
-      vi.advanceTimersByTime(120);
-    });
-    expect(onSelectDoc).toHaveBeenCalledTimes(1);
-    expect(onSelectDoc).toHaveBeenCalledWith("b");
-  });
-
-  it("lists the bundled docs whether or not the workspace is valid, with no stale-docs banner or action", () => {
-    const { update } = renderLibrary({ docs, dataFolderOk: true });
-    const names = () => within(listbox()).getAllByRole("option").map(option => option.querySelector(".nm")!.textContent);
-    expect(names()).toEqual(["Alpha", "Gamma", "Beta notes"]);
-    expect(screen.queryByText("Bundled docs need update")).toBeNull();
-    expect(screen.queryByRole("button", { name: "open workspace update" })).toBeNull();
-
-    update({ docs, dataFolderOk: false });
-    expect(names()).toEqual(["Alpha", "Gamma", "Beta notes"]);
-    expect(screen.queryByText("No valid workspace")).toBeNull();
-    expect(screen.queryByText("Bundled docs need update")).toBeNull();
-  });
-
-  it("says so when there are no docs", () => {
-    renderLibrary({ docs: [] });
-    expect(screen.getByText("No docs found")).not.toBeNull();
-  });
-
-  it("opens a bundled doc in a workspace that is not valid", () => {
-    const bundled = makeDoc("a", "Alpha", "# Bundled heading", "curated");
-    renderLibrary({ docs, activeDoc: bundled, docDraft: bundled.content, dataFolderOk: false });
-    expect(screen.getByRole("heading", { name: "Bundled heading" })).not.toBeNull();
-    expect(screen.queryByText("No valid workspace selected")).toBeNull();
+  it("asks before another item opens", async () => {
+    await renderLibrary();
+    await editNotes();
+    // The sheet is modal for people, but a command can still change the topic and open another item.
+    const readme = within(document.querySelector(".lib-main")!).getByRole("button", { name: "Read" });
+    fireEvent.click(readme);
+    const dialog = await screen.findByRole("dialog", { name: "Unsaved changes" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Keep editing" }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Unsaved changes" })).toBeNull());
+    expect(screen.getByRole("dialog", { name: /Notes/ })).toBeTruthy();
   });
 });
 
-describe("LibraryView source switching", () => {
-  it("steps through the sources with ] and [ (and < / > on layouts where brackets need Alt), wrapping around", () => {
-    const onSetSourceType = vi.fn();
-    const { update } = renderLibrary({ docs, onSetSourceType });
-    const list = focusList();
-    press(list, "]");
-    expect(onSetSourceType).toHaveBeenLastCalledWith("rules");
-    press(list, ">");
-    expect(onSetSourceType).toHaveBeenLastCalledWith("rules");
-    press(list, "[");
-    expect(onSetSourceType).toHaveBeenLastCalledWith("configs");
-    press(list, "<");
-    expect(onSetSourceType).toHaveBeenLastCalledWith("configs");
+describe("Library rules sheet", () => {
+  async function openClaude(): Promise<HTMLElement> {
+    const sheet = await openSheet("Claude rules", "Edit refinements");
+    await within(sheet).findByRole("textbox", { name: /your refinements/i });
+    return sheet;
+  }
 
-    update({ sourceType: "configs", onSetSourceType });
-    press(screen.getByRole("listbox"), "]");
-    expect(onSetSourceType).toHaveBeenLastCalledWith("docs");
+  it("shows the managed block above the refinements, read-only", async () => {
+    await renderLibrary();
+    const sheet = await openClaude();
+    expect(within(sheet).getAllByRole("tab").map(item => item.textContent)).toEqual(["Refinements", "Effective", "Diff against disk"]);
+    expect(within(sheet).getByText("managed base · read-only")).toBeTruthy();
+    expect(within(sheet).getByLabelText("Managed base").textContent).toBe(BEFORE);
+    expect((within(sheet).getByRole("textbox", { name: /your refinements/i }) as HTMLTextAreaElement).value).toBe("\n\n## Mine\nSwedish.\n");
+    expect(within(sheet).getByText("Preview first · Backed up · Undo any time")).toBeTruthy();
   });
 
-  it("skips configs while it is hidden", () => {
-    const onSetSourceType = vi.fn();
-    renderLibrary({ sourceType: "agents", showConfigs: false, onSetSourceType, agentSources: [] });
-    press(screen.getByRole("button", { name: /^agents/ }), "]");
-    expect(onSetSourceType).toHaveBeenLastCalledWith("docs");
+  it("points out a section the managed base has too", async () => {
+    await renderLibrary();
+    const sheet = await openClaude();
+    expect(within(sheet).queryByRole("status")).toBeNull();
+    fireEvent.change(within(sheet).getByRole("textbox", { name: /your refinements/i }), { target: { value: "\n\n## Verification\nMine.\n" } });
+    expect(await within(sheet).findByText(/“Verification” is also a section in the managed base\. The agent reads both; yours comes later in the file\./)).toBeTruthy();
   });
 
-  it("switches source with the clickable source buttons", () => {
-    const onSetSourceType = vi.fn();
-    renderLibrary({ onSetSourceType });
-    fireEvent.click(screen.getByRole("button", { name: /^skills/ }));
-    expect(onSetSourceType).toHaveBeenCalledWith("skills");
+  it("shows the effective file as it will read after saving, and the diff against disk", async () => {
+    await renderLibrary();
+    const sheet = await openClaude();
+    fireEvent.click(within(sheet).getByRole("tab", { name: "Diff against disk" }));
+    expect(within(sheet).getByText("No difference against disk.")).toBeTruthy();
+
+    fireEvent.click(within(sheet).getByRole("tab", { name: "Refinements" }));
+    fireEvent.change(within(sheet).getByRole("textbox", { name: /your refinements/i }), { target: { value: "\n\n## Mine\nDanish.\n" } });
+
+    fireEvent.click(within(sheet).getByRole("tab", { name: "Effective" }));
+    expect(within(sheet).getByLabelText("Effective file").textContent).toBe(`${BEFORE}\n\n## Mine\nDanish.\n`);
+    expect(within(sheet).getByText(/after you save/)).toBeTruthy();
+
+    fireEvent.click(within(sheet).getByRole("tab", { name: "Diff against disk" }));
+    const diff = within(sheet).getByRole("group", { name: "Refinements against disk" });
+    expect(within(diff).getByText("Swedish.").closest(".diff-line")!.classList.contains("remove")).toBe(true);
+    expect(within(diff).getByText("Danish.").closest(".diff-line")!.classList.contains("add")).toBe(true);
+    expect(within(sheet).queryByText("No difference against disk.")).toBeNull();
   });
 
-  it("does not switch source while a text field has focus", () => {
-    const onSetSourceType = vi.fn();
-    renderLibrary({ docs, onSetSourceType });
-    const filter = screen.getByLabelText("Filter documents");
-    act(() => filter.focus());
-    press(filter, "]");
-    expect(onSetSourceType).not.toHaveBeenCalled();
+  it("saves the refinements with the revision it opened", async () => {
+    await renderLibrary();
+    const sheet = await openClaude();
+    fireEvent.change(within(sheet).getByRole("textbox", { name: /your refinements/i }), { target: { value: "\n\n## Mine\nNorwegian.\n" } });
+    fireEvent.click(await within(sheet).findByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(callsTo("save_rules_refinements")).toEqual([{ surface: "claude_rules", content: "\n\n## Mine\nNorwegian.\n", expectedRevision: "rev-1" }]),
+    );
   });
 
-  it("puts focus back on the list when the list was replaced by another source's list", () => {
-    const skill: SkillSummary = { id: "s", name: "tdd", description: "", path: "", group: "g", category: "", risk: "low", targets: [], related: [] };
-    const { update } = renderLibrary({ docs });
-    focusList();
-    update({ sourceType: "skills", skills: [skill] });
-    expect(document.activeElement).toBe(screen.getByRole("listbox", { name: "Skills" }));
-  });
-});
-
-describe("LibraryView key hints", () => {
-  const doc = makeDoc("a", "Alpha", "# A");
-
-  it("offers filter, source stepping and open while the items pane has focus, and no pane footer", () => {
-    const onSetSourceType = vi.fn();
-    const onOpenDoc = vi.fn();
-    renderLibrary({ docs, activeDoc: doc, docDraft: doc.content, onSetSourceType, onOpenDoc });
-    focusList();
-    expect(statusHint("[ prev source")).not.toBeNull();
-    expect(statusHint("o open")).not.toBeNull();
-
-    fireEvent.click(statusHint("] next source"));
-    expect(onSetSourceType).toHaveBeenLastCalledWith("rules");
-    fireEvent.click(statusHint("[ prev source"));
-    expect(onSetSourceType).toHaveBeenLastCalledWith("configs");
-    fireEvent.click(statusHint("o open"));
-    expect(onOpenDoc).toHaveBeenCalledWith("a");
-
-    expect(screen.getByRole("region", { name: "Library items" }).querySelector(".pane-foot")).toBeNull();
-  });
-
-  it("focuses the filter from its hint, and still from the list key", () => {
-    renderLibrary({ docs });
-    focusList();
-    fireEvent.click(statusHint("/ filter"));
-    expect(document.activeElement).toBe(screen.getByLabelText("Filter documents"));
-    focusList();
-    press(listbox(), "/");
-    expect(document.activeElement).toBe(screen.getByLabelText("Filter documents"));
-  });
-
-  it("only offers the filter for sources that have one", () => {
-    const { update } = renderLibrary({ docs });
-    focusList();
-    expect(queryStatusHint("/ filter")).not.toBeNull();
-    update({ sourceType: "rules" });
-    focusList();
-    expect(queryStatusHint("/ filter")).toBeNull();
-  });
-
-  it("offers edit, save and open, not the list hints, while the document pane has focus", () => {
-    renderLibrary({ docs, activeDoc: doc, docDraft: doc.content });
-    focusPane("Document");
-    expect(statusHint("↵ edit")).not.toBeNull();
-    expect(statusHint("o open")).not.toBeNull();
-    expect(queryStatusHint("/ filter")).toBeNull();
-    expect(queryStatusHint("] next source")).toBeNull();
-  });
-
-  it("edits from the key hint, and then offers save but no edit while typing", () => {
-    renderLibrary({ docs, activeDoc: doc, docDraft: doc.content });
-    focusPane("Document");
-    fireEvent.click(statusHint("↵ edit"));
-    expect(document.activeElement).toBe(textarea("Edit document"));
-    const bar = within(screen.getByLabelText("Key hints"));
-    expect(queryStatusHint("↵ edit")).toBeNull();
-    expect(bar.getByRole("button", { name: /save/ })).not.toBeNull();
-  });
-
-  it("keeps the edit and open hints disabled, with the reason, for a bundled item", () => {
-    const skill: SkillSummary = { id: "tdd", name: "tdd", description: "", path: "", group: "g", category: "", risk: "low", targets: [], related: [] };
-    renderLibrary({
-      sourceType: "skills",
-      skills: [skill],
-      activeSkillId: "tdd",
-      activeSkillContent: makeDoc("tdd", "tdd", "# Tdd"),
-    });
-    focusPane("Document");
-    const hint = statusHint("↵ edit");
-    expect(hint.getAttribute("aria-disabled")).toBe("true");
-    expect(hint.getAttribute("title")).toBe(BUNDLED_REASON);
-    fireEvent.click(hint);
-    expect(screen.queryByLabelText("Skill source")).toBeNull();
-    const open = statusHint("o open");
-    expect(open.getAttribute("aria-disabled")).toBe("true");
-    expect(open.getAttribute("title")).toBe(BUNDLED_REASON);
-  });
-
-  it("hides edit and open while nothing is open", () => {
-    renderLibrary({ docs });
-    focusList();
-    expect(queryStatusHint("o open")).toBeNull();
-    focusPane("Document");
-    expect(queryStatusHint("o open")).toBeNull();
-    expect(queryStatusHint("↵ edit")).toBeNull();
+  it("keeps a conflicting file read-only, explains why and points to the harness view", async () => {
+    const onOpenHarnessView = vi.fn();
+    await renderLibrary({ onOpenHarnessView });
+    const sheet = await openSheet("Codex rules", "View");
+    expect(await within(sheet).findByText("Needs your decision")).toBeTruthy();
+    expect(within(sheet).getByText(/edited by hand/)).toBeTruthy();
+    expect(within(sheet).queryByRole("textbox")).toBeNull();
+    expect(within(sheet).queryByRole("button", { name: "Save" })).toBeNull();
+    expect(within(sheet).getByLabelText("File on disk").textContent).toBe(`${BEFORE}\n\n## Mine\nHand edited.\n`);
+    fireEvent.click(within(sheet).getByRole("button", { name: "Open Codex view ›" }));
+    expect(onOpenHarnessView).toHaveBeenCalledWith("codex");
   });
 });
 
-describe("LibraryView list and filter keys", () => {
-  it("focuses the filter with / and returns to the list with Escape, which then clears the filter", () => {
-    renderLibrary({ docs });
-    const list = focusList();
-    press(list, "/");
-    const filter = screen.getByLabelText("Filter documents") as HTMLInputElement;
-    expect(document.activeElement).toBe(filter);
-    fireEvent.change(filter, { target: { value: "gam" } });
-    press(filter, "Escape");
-    expect(document.activeElement).toBe(listbox());
-    expect(within(listbox()).getAllByRole("option")).toHaveLength(1);
-    press(listbox(), "Escape");
-    expect(filter.value).toBe("");
-    expect(within(listbox()).getAllByRole("option")).toHaveLength(3);
+describe("Library skills of your own", () => {
+  function bundledRow(name: string): HTMLElement {
+    const section = screen.getByRole("heading", { name: "Bundled" }).closest("section")!;
+    return within(section).getAllByRole("listitem").find(item => item.querySelector("b")?.textContent === name)!;
+  }
+
+  async function openCopyDialog(skillName = "tdd"): Promise<HTMLElement> {
+    fireEvent.click(within(bundledRow(skillName)).getByRole("button", { name: "Edit as my copy" }));
+    return screen.findByRole("dialog", { name: "Edit as my copy" });
+  }
+
+  it("asks for a name, prefilled, and says what the copy is", async () => {
+    await renderLibrary({ topic: "skills" });
+    const dialog = await openCopyDialog();
+    const name = within(dialog).getByRole("textbox", { name: "Name" }) as HTMLInputElement;
+    expect(name.value).toBe("tdd-mine");
+    expect(document.activeElement).toBe(name);
+    expect(dialog.textContent).toContain(
+      "The bundled tdd keeps its name and stays active. Your copy is a new skill in pack:personal that Update installs next to it.",
+    );
   });
 
-  it("filters skills by name, category, targets and related, and runtime agents by title and role", () => {
-    const skills: SkillSummary[] = [
-      { id: "tdd", name: "tdd", description: "red green", path: "", group: "workflow", category: "testing", risk: "low", targets: ["codex"], related: ["diagnose"] },
-      { id: "fd", name: "frontend-design", description: "ui", path: "", group: "frontend", category: "design", risk: "medium", targets: ["claude"], related: [] },
-    ];
-    const { update } = renderLibrary({ sourceType: "skills", skills });
-    expect(Array.from(listbox().querySelectorAll("li.group")).map(el => el.textContent)).toEqual(["workflow", "frontend"]);
-    const onSetSkillSearch = vi.fn();
-    update({ sourceType: "skills", skills, skillSearch: "diagnose", onSetSkillSearch });
-    expect(within(listbox()).getAllByRole("option")).toHaveLength(1);
-    expect(screen.getByText("tdd")).not.toBeNull();
+  it("refuses a bad name before anything is sent: characters, a bundled name, a name a pack has", async () => {
+    await renderLibrary({ topic: "skills" });
+    const dialog = await openCopyDialog();
+    const name = within(dialog).getByRole("textbox", { name: "Name" });
+    const create = within(dialog).getByRole("button", { name: "Create copy" });
+    const tryName = (value: string) => fireEvent.change(name, { target: { value } });
 
-    const agents: AgentMetadataResponse[] = [
-      { id: "a.md", title: "verifier", path: "agents/a.md", exists: true, metadata: { role: "verification", summary: "", targets: [], risk: "low", default_skills: [], safe_to_edit_runtime: true, notes: [] } },
-      { id: "b.md", title: "planner", path: "agents/b.md", exists: false, metadata: null },
-    ];
-    update({ sourceType: "agents", agentSources: agents });
-    fireEvent.change(screen.getByLabelText("Filter agents"), { target: { value: "verif" } });
-    expect(within(listbox()).getAllByRole("option")).toHaveLength(1);
-  });
+    tryName("Not Valid");
+    expect(within(dialog).getByText("Use 1–64 lowercase letters, digits and dashes, and no dash first.")).toBeTruthy();
+    expect(create.getAttribute("aria-disabled")).toBe("true");
+    tryName("diagnose");
+    expect(within(dialog).getByText("A bundled skill is already named diagnose. Choose another name.")).toBeTruthy();
+    tryName("my-notes");
+    expect(within(dialog).getByText("pack:personal already has my-notes.")).toBeTruthy();
+    tryName("my-checklist");
+    expect(within(dialog).getByText("A pack already has a skill named my-checklist.")).toBeTruthy();
 
-  it("flags agents that are not in the workspace", () => {
-    const agents: AgentMetadataResponse[] = [
-      { id: "b.md", title: "planner", path: "agents/b.md", exists: false, metadata: null },
-    ];
-    renderLibrary({ sourceType: "agents", agentSources: agents });
-    expect(screen.getByText("not in ws")).not.toBeNull();
-  });
-
-  it("moves the cursor to a new doc once its row is in the list", () => {
-    const created = { id: "n", title: "Notes", section: "Context", path: "docs/context/n.md", source: "custom" };
-    const { update } = renderLibrary({ docs, activeDoc: makeDoc("a", "Alpha", "") });
-    update({ docs, activeDoc: makeDoc("n", "Notes", "") });
-    expect(cursorName()).toBe("Alpha");
-    update({ docs: [...docs, created], activeDoc: makeDoc("n", "Notes", "") });
-    expect(cursorName()).toBe("Notes");
-    expect(selectedNames()).toEqual(["Notes"]);
-  });
-
-  it("follows an outside change of the open item with the cursor", () => {
-    const { update } = renderLibrary({ docs, activeDoc: makeDoc("a", "Alpha", "") });
-    expect(cursorName()).toBe("Alpha");
-    update({ docs, activeDoc: makeDoc("c", "Gamma", "") });
-    expect(cursorName()).toBe("Gamma");
-    expect(selectedNames()).toEqual(["Gamma"]);
-  });
-});
-
-describe("LibraryView debounced selection", () => {
-  it("opens the row the cursor rests on once, not one per key press", () => {
-    vi.useFakeTimers();
-    const onSelectDoc = vi.fn();
-    renderLibrary({ docs, activeDoc: makeDoc("a", "Alpha", ""), onSelectDoc });
-    const list = focusList();
-    press(list, "j");
-    expect(cursorName()).toBe("Gamma");
-    act(() => {
-      vi.advanceTimersByTime(60);
-    });
-    press(list, "j");
-    expect(cursorName()).toBe("Beta notes");
-    act(() => {
-      vi.advanceTimersByTime(119);
-    });
-    expect(onSelectDoc).not.toHaveBeenCalled();
-    act(() => {
-      vi.advanceTimersByTime(1);
-    });
-    expect(onSelectDoc).toHaveBeenCalledTimes(1);
-    expect(onSelectDoc).toHaveBeenCalledWith("b");
-  });
-
-  it("does not open anything when the cursor returns to the open row", () => {
-    vi.useFakeTimers();
-    const onSelectDoc = vi.fn();
-    renderLibrary({ docs, activeDoc: makeDoc("a", "Alpha", ""), onSelectDoc });
-    const list = focusList();
-    press(list, "j");
-    press(list, "k");
-    act(() => {
-      vi.advanceTimersByTime(500);
-    });
-    expect(onSelectDoc).not.toHaveBeenCalled();
-  });
-
-  it("only moves the cursor while the open item has unsaved edits, and opens a row on Enter", () => {
-    vi.useFakeTimers();
-    const onSelectDoc = vi.fn();
-    renderLibrary({
-      docs,
-      activeDoc: makeDoc("a", "Alpha", "saved"),
-      docDraft: "edited",
-      docDirty: true,
-      onSelectDoc,
-    });
-    const list = focusList();
-    press(list, "j");
-    act(() => {
-      vi.advanceTimersByTime(500);
-    });
-    expect(cursorName()).toBe("Gamma");
-    expect(selectedNames()).toEqual(["Alpha"]);
-    expect(onSelectDoc).not.toHaveBeenCalled();
-
-    press(list, "Enter");
-    expect(onSelectDoc).toHaveBeenCalledWith("c");
-  });
-
-  it("opens a skill's content through the skill selection handler", () => {
-    vi.useFakeTimers();
-    const onSelectSkillPreview = vi.fn();
-    const skills: SkillSummary[] = [
-      { id: "one", name: "one", description: "", path: "", group: "g", category: "", risk: "", targets: [], related: [] },
-      { id: "two", name: "two", description: "", path: "", group: "g", category: "", risk: "", targets: [], related: [] },
-    ];
-    renderLibrary({ sourceType: "skills", skills, activeSkillId: "one", onSelectSkillPreview });
-    const list = focusList();
-    press(list, "j");
-    act(() => {
-      vi.advanceTimersByTime(120);
-    });
-    expect(onSelectSkillPreview).toHaveBeenCalledWith("two");
-  });
-});
-
-describe("LibraryView document pane", () => {
-  const doc = makeDoc("a", "Alpha", "# Saved heading");
-
-  it("shows the open doc in the pane title with its path, and a modified marker while dirty", () => {
-    const { update } = renderLibrary({ docs, activeDoc: doc, docDraft: doc.content });
-    const title = screen.getByRole("region", { name: "Document" }).querySelector(".pane-title")!;
-    expect(title.textContent).toBe("Alpha · docs/a.md");
-    update({ docs, activeDoc: doc, docDraft: "# Edited", docDirty: true });
-    expect(title.textContent).toBe("Alpha · docs/a.md · modified");
-  });
-
-  it("shows the document once, rendered, and no textarea until it is edited", () => {
-    renderLibrary({ docs, activeDoc: doc, docDraft: doc.content });
-    const pane = screen.getByRole("region", { name: "Document" });
-    expect(within(pane).getAllByRole("heading", { name: "Saved heading" })).toHaveLength(1);
-    expect(screen.queryByLabelText("Edit document")).toBeNull();
-    expect(screen.getAllByText(/Saved heading/)).toHaveLength(1);
-  });
-
-  it("moves into edit mode with Enter or i from the list, and Escape returns to the rendered view", () => {
-    renderLibrary({ docs, activeDoc: doc, docDraft: doc.content });
-    const list = focusList();
-    press(list, "Enter");
-    const editor = textarea("Edit document");
-    expect(document.activeElement).toBe(editor);
-    // Edit mode swaps the rendered view for the source: the text is not shown twice.
-    expect(screen.queryByRole("heading", { name: "Saved heading" })).toBeNull();
-
-    press(editor, "Escape");
-    expect(screen.queryByLabelText("Edit document")).toBeNull();
-    expect(screen.getByRole("heading", { name: "Saved heading" })).not.toBeNull();
-    expect(document.activeElement).toBe(screen.getByRole("group", { name: "Document" }));
-
-    press(focusList(), "i");
-    expect(document.activeElement).toBe(textarea("Edit document"));
-  });
-
-  it("edits from the focused pane with Enter or i, and shows the edit rendered after Escape", () => {
-    const { update } = renderLibrary({ docs, activeDoc: doc, docDraft: doc.content });
-    focusPane("Document");
-    press(document.activeElement!, "Enter");
-    const editor = textarea("Edit document");
-    expect(document.activeElement).toBe(editor);
-
-    // Typing reaches the controller, which hands the working copy back as the draft.
-    update({ docs, activeDoc: doc, docDraft: "# Draft heading", docDirty: true });
-    expect(textarea("Edit document").value).toBe("# Draft heading");
-    press(textarea("Edit document"), "Escape");
-    const pane = screen.getByRole("region", { name: "Document" });
-    expect(within(pane).getByRole("heading", { name: "Draft heading" })).not.toBeNull();
-    expect(within(pane).queryByRole("heading", { name: "Saved heading" })).toBeNull();
-    expect(pane.querySelector(".pane-title")!.textContent).toContain("modified");
-    expect(document.activeElement).toBe(screen.getByRole("group", { name: "Document" }));
-
-    press(document.activeElement!, "i");
-    expect(document.activeElement).toBe(textarea("Edit document"));
-  });
-
-  it("lands on the document pane, not the editor, when the pane takes focus, and the list keeps its own keys", () => {
-    renderLibrary({ docs, activeDoc: doc, docDraft: doc.content });
-    focusList();
-    focusPane("Document");
-    const body = screen.getByRole("group", { name: "Document" });
-    expect(document.activeElement).toBe(body);
-    expect(screen.queryByLabelText("Edit document")).toBeNull();
-    // h and l are not pane keys any more: they do nothing on the pane.
-    expect(press(body, "l")).toBe(true);
-    expect(press(body, "h")).toBe(true);
-    expect(document.activeElement).toBe(body);
-  });
-
-  it("lands on the pane, not in the textarea, when the pane takes focus while it is still in edit mode", () => {
-    renderLibrary({ docs, activeDoc: doc, docDraft: doc.content });
-    const editor = editDocument("Edit document");
-    // Leave through the list without Escape: the item stays in edit mode.
-    act(() => listbox().focus());
-    focusPane("Document");
-    const pane = screen.getByRole("region", { name: "Document" });
-    expect(document.activeElement).toBe(pane.querySelector(".lib-editor"));
-    expect(document.activeElement).not.toBe(editor);
-    act(() => listbox().focus());
-    press(listbox(), "i");
-    expect(document.activeElement).toBe(editor);
-  });
-
-  it("does not run list keys while typing in the editor", () => {
-    const onSetSourceType = vi.fn();
-    renderLibrary({ docs, activeDoc: doc, docDraft: doc.content, onSetSourceType });
-    const editor = editDocument("Edit document");
-    press(editor, "]");
-    press(editor, "i");
-    press(editor, "j");
-    expect(onSetSourceType).not.toHaveBeenCalled();
-    expect(document.activeElement).toBe(editor);
-  });
-
-  it("returns to the rendered view when another item opens", () => {
-    const other = makeDoc("c", "Gamma", "# Gamma heading");
-    const { update } = renderLibrary({ docs, activeDoc: doc, docDraft: doc.content });
-    editDocument("Edit document");
-    update({ docs, activeDoc: other, docDraft: other.content });
-    expect(screen.queryByLabelText("Edit document")).toBeNull();
-    expect(screen.getByRole("heading", { name: "Gamma heading" })).not.toBeNull();
-    // Coming back to the first item does not resume editing it.
-    update({ docs, activeDoc: doc, docDraft: doc.content });
-    expect(screen.queryByLabelText("Edit document")).toBeNull();
-    expect(screen.getByRole("heading", { name: "Saved heading" })).not.toBeNull();
-  });
-
-  it("opens the row and then edits it when Enter is pressed before the selection landed", () => {
-    const onSelectDoc = vi.fn();
-    const { update } = renderLibrary({ docs, activeDoc: doc, docDraft: doc.content, onSelectDoc });
-    const list = focusList();
-    press(list, "j");
-    press(list, "Enter");
-    expect(onSelectDoc).toHaveBeenCalledWith("c");
-    expect(document.activeElement).toBe(list);
-    expect(screen.queryByLabelText("Edit document")).toBeNull();
-
-    const next = makeDoc("c", "Gamma", "# Gamma");
-    update({ docs, activeDoc: next, docDraft: next.content, onSelectDoc });
-    expect(document.activeElement).toBe(textarea("Edit document"));
-  });
-
-  it("opens a read-only row with Enter into the rendered pane, not a textarea", () => {
-    const onSelectSkillPreview = vi.fn();
-    const skills: SkillSummary[] = [
-      { id: "one", name: "one", description: "", path: "", group: "g", category: "", risk: "", targets: [], related: [] },
-      { id: "two", name: "two", description: "", path: "", group: "g", category: "", risk: "", targets: [], related: [] },
-    ];
-    const one = makeDoc("one", "one", "# One");
-    const { update } = renderLibrary({ sourceType: "skills", skills, activeSkillId: "one", activeSkillContent: one, onSelectSkillPreview });
-    const list = focusList();
-    press(list, "j");
-    press(list, "Enter");
-    expect(onSelectSkillPreview).toHaveBeenCalledWith("two");
-    update({ sourceType: "skills", skills, activeSkillId: "two", activeSkillContent: makeDoc("two", "two", "# Two"), onSelectSkillPreview });
-    expect(document.activeElement).toBe(screen.getByRole("group", { name: "Document" }));
-    expect(screen.queryByLabelText("Skill source")).toBeNull();
-  });
-
-  it("reports edits through the draft handler", () => {
-    const onChangeDocDraft = vi.fn();
-    renderLibrary({ docs, activeDoc: doc, docDraft: doc.content, onChangeDocDraft });
-    editDocument("Edit document");
-    fireEvent.change(textarea("Edit document"), { target: { value: "# New" } });
-    expect(onChangeDocDraft).toHaveBeenCalledWith("# New");
-  });
-
-  it("renders the document from the draft, not from the saved content", () => {
-    const { update } = renderLibrary({ docs, activeDoc: doc, docDraft: doc.content });
-    const pane = screen.getByRole("region", { name: "Document" });
-    expect(within(pane).getByRole("heading", { name: "Saved heading" })).not.toBeNull();
-    update({ docs, activeDoc: doc, docDraft: "# Draft heading", docDirty: true });
-    expect(within(pane).getByRole("heading", { name: "Draft heading" })).not.toBeNull();
-    expect(within(pane).queryByRole("heading", { name: "Saved heading" })).toBeNull();
-  });
-
-  it("renders tables and links", () => {
-    const content = "Paragraph with [safe link](https://example.com).\n\n| A | B |\n|---|---|\n| 1 | 2 |";
-    renderLibrary({ docs, activeDoc: makeDoc("a", "Alpha", content), docDraft: content });
-    const pane = screen.getByRole("region", { name: "Document" });
-    expect(pane.querySelector(".lib-docs-markdown")).not.toBeNull();
-    expect(pane.querySelector("table")).not.toBeNull();
-    expect(pane.querySelector("a[href='https://example.com']")).not.toBeNull();
-  });
-
-  it("leaves YAML front matter out of the rendered skill and offers no textarea for it", () => {
-    const content = "---\nname: tdd\ndescription: Red green\n---\n\n# Tdd\n\nBody.";
-    const skill: SkillSummary = { id: "tdd", name: "tdd", description: "Red green", path: "", group: "g", category: "testing", risk: "low", targets: ["codex"], related: [] };
-    renderLibrary({
-      sourceType: "skills",
-      skills: [skill],
-      activeSkillId: "tdd",
-      activeSkillContent: { id: "tdd", title: "tdd", path: "skills/tdd/SKILL.md", section: "skills", source: "workspace", content },
-    });
-    const pane = screen.getByRole("region", { name: "Document" });
-    expect(pane.querySelector("hr")).toBeNull();
-    expect(within(pane).getByRole("heading", { name: "Tdd" })).not.toBeNull();
-    expect(screen.queryByLabelText("Skill source")).toBeNull();
-  });
-
-  it("keeps the new-doc form at the top of the pane in both modes", () => {
-    renderLibrary({ docs, activeDoc: doc, docDraft: doc.content, showCreateDoc: true });
-    const pane = screen.getByRole("region", { name: "Document" });
-    const form = within(pane).getByRole("form", { name: "New document" });
-    expect(form.nextElementSibling).toBe(pane.querySelector(".lib-docs-markdown"));
-    editDocument("Edit document");
-    expect(within(pane).getByRole("form", { name: "New document" }).nextElementSibling).toBe(textarea("Edit document"));
-  });
-
-  it("opens the item externally from the list key and from the key hint of the document pane", () => {
-    const onOpenDoc = vi.fn();
-    renderLibrary({ docs, activeDoc: doc, docDraft: doc.content, onOpenDoc });
-    press(focusList(), "o");
-    expect(onOpenDoc).toHaveBeenCalledWith("a");
-    focusPane("Document");
-    fireEvent.click(statusHint("o open"));
-    expect(onOpenDoc).toHaveBeenCalledTimes(2);
-    expect(within(screen.getByRole("region", { name: "Document" })).queryByRole("button", { name: /open/ })).toBeNull();
-  });
-
-  it("offers copy path, close and discard in the document footer", () => {
-    renderLibrary({ docs, activeDoc: doc, docDraft: doc.content });
-    const footer = screen.getByRole("region", { name: "Document" }).querySelector<HTMLElement>(".pane-foot")!;
-    expect(within(footer).getByRole("button", { name: "Copy path" })).not.toBeNull();
-    // `:q` and `:reset` are command-line commands with no key binding, so these buttons are their only mouse path.
-    expect(within(footer).getByRole("button", { name: "close" })).not.toBeNull();
-    expect(within(footer).getByRole("button", { name: "discard" })).not.toBeNull();
-  });
-
-  it("marks skills read-only: rendered only, marker, no edit, no save, nothing to open", () => {
-    const onSaveDoc = vi.fn();
-    const onOpenDoc = vi.fn();
-    const skill: SkillSummary = { id: "tdd", name: "tdd", description: "", path: "", group: "g", category: "", risk: "low", targets: [], related: [] };
-    renderLibrary({
-      sourceType: "skills",
-      skills: [skill],
-      activeSkillId: "tdd",
-      activeSkillContent: { id: "tdd", title: "tdd", path: "skills/tdd/SKILL.md", section: "skills", source: "workspace", content: "# Tdd" },
-      onSaveDoc,
-      onOpenDoc,
-    });
-    const pane = screen.getByRole("region", { name: "Document" });
-    expect(within(pane).getByRole("heading", { name: "Tdd" })).not.toBeNull();
-    expect(pane.querySelector(".pane-title")!.textContent).toContain("read-only");
-    expect(within(pane).getByText(BUNDLED_REASON)).not.toBeNull();
-    // The Library shows the bundle itself now: no note that "this copy" may differ.
-    expect(pane.querySelector(".pane-foot")!.textContent).not.toContain("may differ");
-
-    focusPane("Document");
-    press(document.activeElement!, "i");
-    press(document.activeElement!, "Enter");
-    press(focusList(), "i");
-    expect(screen.queryByLabelText("Skill source")).toBeNull();
-    expect(screen.queryByRole("textbox", { name: /source/i })).toBeNull();
-
-    pressSave();
-    expect(onSaveDoc).not.toHaveBeenCalled();
-    press(focusList(), "o");
-    expect(onOpenDoc).not.toHaveBeenCalled();
-  });
-
-  it("marks a bundled doc read-only with the reason everywhere, and keeps personal docs editable", () => {
-    const onSaveDoc = vi.fn();
-    const onOpenDoc = vi.fn();
-    const bundled = makeDoc("a", "Alpha", "# Bundled heading", "curated");
-    const { update } = renderLibrary({ docs, activeDoc: bundled, docDraft: bundled.content, onSaveDoc, onOpenDoc });
-    const pane = screen.getByRole("region", { name: "Document" });
-    expect(pane.querySelector(".pane-title")!.textContent).toBe("Alpha · docs/a.md · read-only");
-    const footer = pane.querySelector<HTMLElement>(".pane-foot")!;
-    expect(within(footer).getByText(BUNDLED_REASON)).not.toBeNull();
-    expect(footer.textContent).not.toContain("may differ");
-    expect(within(footer).queryByRole("button", { name: ":reset discard" })).toBeNull();
-    // From the list, Enter reads a bundled doc: it moves into the rendered pane.
-    focusList();
-    expect(statusHint("↵ read")).not.toBeNull();
-
-    focusPane("Document");
-    for (const name of ["↵ edit", "o open"]) {
-      const hint = statusHint(name);
-      expect(hint.getAttribute("aria-disabled")).toBe("true");
-      expect(hint.getAttribute("title")).toBe(BUNDLED_REASON);
-    }
-    press(document.activeElement!, "Enter");
-    press(document.activeElement!, "i");
-    press(focusList(), "o");
-    expect(screen.queryByLabelText("Edit document")).toBeNull();
-    expect(onOpenDoc).not.toHaveBeenCalled();
-    expectSaveRefused();
-    focusList();
-    runCommand("w");
-    expect(screen.getByRole("alert").textContent).toContain(BUNDLED_REASON);
-    expect(onSaveDoc).not.toHaveBeenCalled();
-    press(screen.getByRole("combobox", { name: "Command" }), "Escape");
-
-    // A personal doc in the same list is the user's own text: edit and open are offered.
-    const personal = makeDoc("b", "Beta notes", "# Notes");
-    update({ docs, activeDoc: personal, docDraft: personal.content, onSaveDoc, onOpenDoc });
-    expect(pane.querySelector(".pane-title")!.textContent).not.toContain("read-only");
-    focusList();
-    expect(statusHint("↵ edit")).not.toBeNull();
-    press(focusList(), "o");
-    expect(onOpenDoc).toHaveBeenCalledWith("b");
-    expect(editDocument("Edit document").value).toBe("# Notes");
-  });
-
-  it("shows agent metadata and notes above the rendered source in the document pane", () => {
-    const agents: AgentMetadataResponse[] = [
-      {
-        id: "v.md",
-        title: "verifier",
-        path: "agents/v.md",
-        exists: true,
-        metadata: { role: "verification", summary: "Checks things", targets: ["codex"], risk: "high", default_skills: ["tdd"], safe_to_edit_runtime: false, notes: ["first note", "second note"] },
-      },
-    ];
-    renderLibrary({
-      sourceType: "agents",
-      agentSources: agents,
-      activeAgentId: "v.md",
-      activeAgentContent: { id: "v.md", title: "verifier", path: "agents/v.md", content: "# Verifier", exists: true },
-    });
-    const pane = screen.getByRole("region", { name: "Document" });
-    const meta = within(pane).getByRole("region", { name: "metadata" });
-    expect(within(meta).getByText("Checks things")).not.toBeNull();
-    expect(within(meta).getByText("runtime-sensitive: edit with care")).not.toBeNull();
-    expect(within(meta).getByText("first note")).not.toBeNull();
-    expect(within(meta).getByText("second note")).not.toBeNull();
-    expect(within(pane).getByRole("heading", { name: "Verifier" })).not.toBeNull();
-  });
-});
-
-describe("LibraryView save", () => {
-  const doc = makeDoc("a", "Alpha", "# Saved");
-
-  it("saves the open doc with Mod+s from the rendered pane, from the textarea and from the list", () => {
-    const onSaveDoc = vi.fn();
-    renderLibrary({ docs, activeDoc: doc, docDraft: "# Edited", docDirty: true, onSaveDoc });
-    pressSave();
-    expect(onSaveDoc).toHaveBeenCalledTimes(1);
-    press(editDocument("Edit document"), "s", { ctrlKey: true });
-    expect(onSaveDoc).toHaveBeenCalledTimes(2);
-    press(focusList(), "s", { ctrlKey: true });
-    expect(onSaveDoc).toHaveBeenCalledTimes(3);
-  });
-
-  it("saves nothing from the bundled sources: rules and agents refuse Mod+s and :w with the reason", () => {
-    const onSaveDoc = vi.fn();
-    const onOpenDoc = vi.fn();
-    const { update } = renderLibrary({
-      sourceType: "rules",
-      agentTemplate: makeDoc("tpl", "tpl", "rules"),
-      onSaveDoc,
-      onOpenDoc,
-    });
-    expectSaveRefused();
-
-    update({
-      sourceType: "agents",
-      agentSources: [{ id: "v.md", title: "v", path: "agents/v.md", exists: true, metadata: null }],
-      activeAgentId: "v.md",
-      activeAgentContent: { id: "v.md", title: "v", path: "agents/v.md", content: "a", exists: true },
-      onSaveDoc,
-      onOpenDoc,
-    });
-    expectSaveRefused();
-    focusList();
-    runCommand("w");
-    expect(screen.getByRole("alert").textContent).toContain(BUNDLED_REASON);
-    press(screen.getByRole("combobox", { name: "Command" }), "Escape");
-    press(focusList(), "o");
-    press(focusList(), "i");
-    expect(screen.queryByRole("textbox", { name: /agent/i })).toBeNull();
-    expect(onSaveDoc).not.toHaveBeenCalled();
-    expect(onOpenDoc).not.toHaveBeenCalled();
-  });
-
-  it("does not save a clean doc and says so in a toast", () => {
-    const onSaveDoc = vi.fn();
-    renderLibrary({ docs, activeDoc: doc, docDraft: doc.content, onSaveDoc });
-    pressSave();
-    expect(onSaveDoc).not.toHaveBeenCalled();
-    expect(noticeText()).toBe("no changes to save");
-  });
-
-  it("does not start a second save while one is running", () => {
-    const onSaveDoc = vi.fn();
-    renderLibrary({ docs, activeDoc: doc, docDraft: "# Edited", docDirty: true, docSaving: true, onSaveDoc });
-    pressSave();
-    expect(onSaveDoc).not.toHaveBeenCalled();
-  });
-
-  it("saves with :w", () => {
-    const onSaveDoc = vi.fn();
-    renderLibrary({ docs, activeDoc: doc, docDraft: "# Edited", docDirty: true, onSaveDoc });
-    focusList();
-    runCommand("w");
-    expect(onSaveDoc).toHaveBeenCalledTimes(1);
-  });
-
-  it("refuses :w for a read-only item with its reason", () => {
-    const content = makeDoc("snapshot", "snapshot", "{}");
-    renderLibrary({
-      sourceType: "configs",
-      configTargets: [{ id: "opencode_config", label: "OpenCode config", harness: "opencode", kind: "config", source_rel: "a", target_rel: "b" }],
-      configEditorSources: [{ id: "snapshot", label: "Snapshot", rel_path: "x", helper: "" }],
-      activeConfigTargetId: "opencode_config",
-      activeConfigSourceType: "snapshot",
-      configEditorSourceContent: content,
-    });
-    focusList();
-    runCommand("w");
-    expect(screen.getByRole("alert").textContent).toContain(BUNDLED_REASON);
-  });
-
-  it("shows save progress and results in the document footer, and announces a finished save in a toast", () => {
-    const { update } = renderLibrary({ docs, activeDoc: doc, docDraft: "# Edited", docDirty: true, docSaving: true });
-    const footer = screen.getByRole("region", { name: "Document" }).querySelector(".pane-foot")!;
-    expect(footer.textContent).toContain("saving…");
-    update({
-      docs,
-      activeDoc: doc,
-      docDraft: "# Edited",
-      docDirty: true,
-      docSaveResult: { success: false, action: "save_doc", stdout: "", stderr: "disk full", exit_code: 1 },
-    });
-    expect(footer.textContent).toContain("disk full");
-
-    update({ docs, activeDoc: doc, docDraft: "# Edited", docDirty: true, docSaving: true });
-    update({
-      docs,
-      activeDoc: doc,
-      docDraft: "# Edited",
-      docSaveResult: { success: true, action: "save_doc", stdout: "saved docs/a.md", stderr: "", exit_code: 0 },
-    });
-    expect(footer.textContent).toContain("saved docs/a.md");
-    expect(noticeText()).toBe("saved docs/a.md");
-  });
-
-  it("does not announce an old save result when the library is opened again", () => {
-    renderLibrary({
-      docs,
-      activeDoc: doc,
-      docDraft: doc.content,
-      docSaveResult: { success: true, action: "save_doc", stdout: "saved docs/a.md", stderr: "", exit_code: 0 },
-    });
-  });
-
-  it("redacts secrets in save results", () => {
-    renderLibrary({
-      docs,
-      activeDoc: doc,
-      docDraft: doc.content,
-      docSaveResult: { success: false, action: "save_doc", stdout: "", stderr: "failed with token=sk-abcdefghijklmnopqrstuvwxyz0123456789", exit_code: 1 },
-    });
-    const footer = screen.getByRole("region", { name: "Document" }).querySelector(".pane-foot")!;
-    expect(footer.textContent).not.toContain("sk-abcdefghijklmnopqrstuvwxyz0123456789");
-  });
-});
-
-describe("LibraryView close and reset", () => {
-  const doc = makeDoc("a", "Alpha", "# Saved");
-
-  it("closes a clean item with :q without asking, and hands focus to the list", async () => {
-    vi.useFakeTimers();
-    const onResetDoc = vi.fn();
-    renderLibrary({ docs, activeDoc: doc, docDraft: doc.content, onResetDoc });
-    const editor = editDocument("Edit document");
-    // Opening the command line from the editor needs Mod+k (":" would be typed).
-    press(editor, "k", { ctrlKey: true });
-    const input = screen.getByRole("combobox", { name: "Command" });
-    fireEvent.change(input, { target: { value: "q" } });
-    press(input, "Enter");
-    act(() => {
-      vi.advanceTimersByTime(10);
-    });
-    expect(screen.queryByRole("dialog", { name: /confirm/i })).toBeNull();
-    expect(onResetDoc).not.toHaveBeenCalled();
-    expect(document.activeElement).toBe(listbox());
-    // The pane is back to the rendered view.
-    expect(screen.queryByLabelText("Edit document")).toBeNull();
-    expect(screen.getByRole("heading", { name: "Saved" })).not.toBeNull();
-  });
-
-  it("asks before closing a dirty item and discards the edits only after the confirmation", async () => {
-    const onResetDoc = vi.fn();
-    renderLibrary({ docs, activeDoc: doc, docDraft: "# Edited", docDirty: true, onResetDoc });
-    focusList();
-    runCommand("q");
-    const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getByText("Leave with unsaved changes?")).not.toBeNull();
-    expect(onResetDoc).not.toHaveBeenCalled();
-    fireEvent.click(within(dialog).getByRole("button", { name: "confirm" }));
+    fireEvent.click(create);
+    fireEvent.submit(dialog.querySelector("form")!);
     await act(async () => {});
-    expect(onResetDoc).toHaveBeenCalledTimes(1);
+    expect(callsTo("copy_skill_to_pack")).toEqual([]);
   });
 
-  it("keeps the edits when the confirmation is declined", async () => {
-    const onResetDoc = vi.fn();
-    renderLibrary({ docs, activeDoc: doc, docDraft: "# Edited", docDirty: true, onResetDoc });
-    focusList();
-    runCommand("q");
-    const dialog = await screen.findByRole("dialog");
-    fireEvent.click(within(dialog).getByRole("button", { name: "cancel" }));
-    await act(async () => {});
-    expect(onResetDoc).not.toHaveBeenCalled();
+  it("shows the backend's refusal in the dialog and keeps it open", async () => {
+    fixture.refuseCopy = "cannot check skill name collisions while a pack is refused or ignored";
+    await renderLibrary({ topic: "skills" });
+    const dialog = await openCopyDialog();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Create copy" }));
+    expect((await within(dialog).findByRole("alert")).textContent).toBe("cannot check skill name collisions while a pack is refused or ignored");
+    expect(screen.getByRole("dialog", { name: "Edit as my copy" })).toBeTruthy();
+    expect(screen.queryByRole("dialog", { name: /tdd-mine/ })).toBeNull();
   });
 
-  it("closes through the footer button with the same confirmation", async () => {
-    renderLibrary({ docs, activeDoc: doc, docDraft: "# Edited", docDirty: true });
-    fireEvent.click(within(screen.getByRole("region", { name: "Document" })).getByRole("button", { name: /close/ }));
-    expect(await screen.findByRole("dialog")).not.toBeNull();
+  it("copies the skill, lists it under Yours and opens it in the sheet, ready to edit", async () => {
+    await renderLibrary({ topic: "skills" });
+    const dialog = await openCopyDialog();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Create copy" }));
+    await waitFor(() => expect(callsTo("copy_skill_to_pack")).toEqual([{ name: "tdd", newName: "tdd-mine" }]));
+    const sheet = await screen.findByRole("dialog", { name: /tdd-mine/ });
+    const textarea = (await within(sheet).findByRole("textbox", { name: "Edit skill" })) as HTMLTextAreaElement;
+    expect(textarea.value).toContain("Copied from tdd.");
+    expect(document.activeElement).toBe(textarea);
+    expect(screen.queryByRole("dialog", { name: "Edit as my copy" })).toBeNull();
+    expect(within(sheet).getByRole("button", { name: "Save" })).toBeTruthy();
+    // The pack library was listed again: the copy is a row of its own, with the Edit verb.
+    fireEvent.click(within(sheet).getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(within(rowOf("tdd-mine")).getByRole("button", { name: "Edit" })).toBeTruthy();
   });
 
-  it("discards edits with :reset and only offers it while there are some", () => {
-    const onResetDoc = vi.fn();
-    const { update } = renderLibrary({ docs, activeDoc: doc, docDraft: doc.content, onResetDoc });
-    focusList();
-    press(document.activeElement!, ":", { shiftKey: true });
-    const input = screen.getByRole("combobox", { name: "Command" });
-    fireEvent.change(input, { target: { value: "reset" } });
-    press(input, "Enter");
-    expect(screen.getByRole("alert").textContent).toContain("no unsaved changes");
-    expect(onResetDoc).not.toHaveBeenCalled();
-    press(input, "Escape");
+  it("offers the copy in the sheet of a bundled skill too", async () => {
+    await renderLibrary({ topic: "skills" });
+    fireEvent.click(within(bundledRow("diagnose")).getByRole("button", { name: "Read" }));
+    const sheet = await screen.findByRole("dialog", { name: /diagnose/ });
+    fireEvent.click(await within(sheet).findByRole("button", { name: "Edit as my copy" }));
+    const dialog = await screen.findByRole("dialog", { name: "Edit as my copy" });
+    expect((within(dialog).getByRole("textbox", { name: "Name" }) as HTMLInputElement).value).toBe("diagnose-mine");
+  });
 
-    update({ docs, activeDoc: doc, docDraft: "# Edited", docDirty: true, onResetDoc });
-    focusList();
-    runCommand("reset");
-    expect(onResetDoc).toHaveBeenCalledTimes(1);
+  it("edits and saves a skill of the personal pack, and says Update installs it", async () => {
+    await renderLibrary({ topic: "skills" });
+    fireEvent.click(within(rowOf("my-notes")).getByRole("button", { name: "Edit" }));
+    const sheet = await screen.findByRole("dialog", { name: /my-notes/ });
+    const textarea = (await within(sheet).findByRole("textbox", { name: "Edit skill" })) as HTMLTextAreaElement;
+    expect(textarea.value).toContain("My first text.");
+    expect(within(sheet).getByText("Update installs your saved copy")).toBeTruthy();
+    fireEvent.change(textarea, { target: { value: "# my-notes\n\nSecond text." } });
+    await within(sheet).findByText("Unsaved changes");
+    fireEvent.click(within(sheet).getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(callsTo("save_pack_skill")).toEqual([{ id: "pack:personal/my-notes", content: "# my-notes\n\nSecond text." }]),
+    );
+    await within(sheet).findByText("Saved");
+    expect(document.querySelector(".toast")!.textContent).toBe("Saved · Update installs it");
+  });
+
+  it("guards unsaved skill edits like any other draft", async () => {
+    await renderLibrary({ topic: "skills" });
+    fireEvent.click(within(rowOf("my-notes")).getByRole("button", { name: "Edit" }));
+    const sheet = await screen.findByRole("dialog", { name: /my-notes/ });
+    fireEvent.change(await within(sheet).findByRole("textbox", { name: "Edit skill" }), { target: { value: "changed" } });
+    fireEvent.click(within(sheet).getByRole("button", { name: "Close" }));
+    const dialog = await screen.findByRole("dialog", { name: "Unsaved changes" });
+    expect(within(dialog).getByText("my-notes has changes you have not saved.")).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Discard" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(callsTo("save_pack_skill")).toEqual([]);
+  });
+
+  it("opens a fresh copy for editing even when the pack list could not be read afterwards", async () => {
+    fixture.packListFailsAfterCopy = true;
+    await renderLibrary({ topic: "skills" });
+    const dialog = await openCopyDialog();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Create copy" }));
+    const sheet = await screen.findByRole("dialog", { name: /tdd-mine/ });
+    expect(await within(sheet).findByRole("textbox", { name: "Edit skill" })).toBeTruthy();
+    expect(within(sheet).queryByRole("button", { name: "Edit as my copy" })).toBeNull();
+  });
+
+  it("cannot be closed while the copy is being made", async () => {
+    let finish: () => void = () => {};
+    fixture.holdCopy = new Promise<void>(resolve => {
+      finish = resolve;
+    });
+    await renderLibrary({ topic: "skills" });
+    const dialog = await openCopyDialog();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Create copy" }));
+    await within(dialog).findByText("Creating…");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    expect(screen.getByRole("dialog", { name: "Edit as my copy" })).toBeTruthy();
+    await act(async () => finish());
+    expect(await screen.findByRole("dialog", { name: /tdd-mine/ })).toBeTruthy();
+    expect(screen.queryByRole("dialog", { name: "Edit as my copy" })).toBeNull();
+  });
+
+  it("keeps the other pack skills read-only, with their reason", async () => {
+    await renderLibrary({ topic: "skills" });
+    fireEvent.click(within(rowOf("my-checklist")).getByRole("button", { name: "Read" }));
+    const sheet = await screen.findByRole("dialog", { name: /my-checklist/ });
+    expect(await within(sheet).findByText("from a skill pack: read-only here, edit it in the pack folder")).toBeTruthy();
+    expect(within(sheet).queryByRole("textbox")).toBeNull();
+    expect(within(sheet).queryByRole("button", { name: "Save" })).toBeNull();
   });
 });
 
-describe("LibraryView new doc form", () => {
-  it("opens the form with n, shows its controls and creates through the existing handlers", () => {
-    const onSetShowCreateDoc = vi.fn();
-    const onCreateDoc = vi.fn();
-    const onSetCreateDocTitle = vi.fn();
-    const { update } = renderLibrary({ docs, onSetShowCreateDoc, onCreateDoc, onSetCreateDocTitle });
-    press(focusList(), "n");
-    expect(onSetShowCreateDoc).toHaveBeenCalledWith(true);
-
-    update({ docs, showCreateDoc: true, createDocTitle: "Notes", createDocSlug: "notes", onCreateDoc, onSetCreateDocTitle, onSetShowCreateDoc });
-    const title = screen.getByLabelText("New doc title");
+describe("Library new doc", () => {
+  it("shows the file the title becomes, and opens the new doc for editing", async () => {
+    await renderLibrary();
+    await goToTopic("Docs");
+    fireEvent.click(screen.getByRole("button", { name: "New doc" }));
+    const dialog = await screen.findByRole("dialog", { name: "New doc" });
+    const title = within(dialog).getByRole("textbox", { name: "Title" });
     expect(document.activeElement).toBe(title);
-    expect(screen.getByLabelText("New doc slug")).not.toBeNull();
-    fireEvent.change(title, { target: { value: "More" } });
-    expect(onSetCreateDocTitle).toHaveBeenCalledWith("More");
-    fireEvent.click(screen.getByRole("button", { name: "create" }));
-    expect(onCreateDoc).toHaveBeenCalledTimes(1);
+    expect(dialog.querySelector(".lib-slug")!.textContent).toBe("docs/context/….md");
+    expect(within(dialog).getByRole("button", { name: "Create" }).getAttribute("aria-disabled")).toBe("true");
+
+    fireEvent.change(title, { target: { value: "Release ritual" } });
+    expect(dialog.querySelector(".lib-slug")!.textContent).toBe("docs/context/release-ritual.md");
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Create" }));
+    await waitFor(() => expect(callsTo("create_doc")).toEqual([{ title: "Release ritual", slug: "release-ritual", content: null }]));
+    const sheet = await screen.findByRole("dialog", { name: /Release ritual/ });
+    const textarea = await within(sheet).findByRole("textbox", { name: "Edit document" });
+    expect((textarea as HTMLTextAreaElement).value).toBe("# Release ritual\n");
+    expect(screen.queryByRole("dialog", { name: "New doc" })).toBeNull();
   });
 
-  it("disables create until title and slug are filled, and shows errors", () => {
-    renderLibrary({ docs, showCreateDoc: true, createDocTitle: "", createDocSlug: "x", createDocError: "doc already exists" });
-    expect((screen.getByRole("button", { name: "create" }) as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.getByRole("alert").textContent).toBe("doc already exists");
+  it("leaves the title alone when Mod+N is pressed inside the dialog", async () => {
+    await renderLibrary();
+    await goToTopic("Docs");
+    fireEvent.click(screen.getByRole("button", { name: "New doc" }));
+    const dialog = await screen.findByRole("dialog", { name: "New doc" });
+    const title = within(dialog).getByRole("textbox", { name: "Title" }) as HTMLInputElement;
+    fireEvent.change(title, { target: { value: "Release ritual" } });
+    fireEvent.keyDown(title, { key: "n", ctrlKey: true });
+    await act(async () => {});
+    expect(title.value).toBe("Release ritual");
+    expect(document.activeElement).toBe(title);
   });
 
-  it("cancels with Escape and returns to the list", () => {
-    const onSetShowCreateDoc = vi.fn();
-    renderLibrary({ docs, showCreateDoc: true, onSetShowCreateDoc });
-    press(screen.getByLabelText("New doc title"), "Escape");
-    expect(onSetShowCreateDoc).toHaveBeenCalledWith(false);
-    expect(document.activeElement).toBe(listbox());
-  });
-
-  it("only offers new doc for the docs source of a valid workspace", () => {
-    const { update } = renderLibrary({ docs });
-    act(() => listbox().focus());
-    const bar = within(screen.getByLabelText("Key hints"));
-    expect(bar.getByRole("button", { name: /new doc/ })).not.toBeNull();
-    update({ docs, dataFolderOk: false });
-    expect(bar.queryByRole("button", { name: /new doc/ })).toBeNull();
-  });
-});
-
-describe("LibraryView bundled sources without a valid workspace", () => {
-  it("shows a skill, an agent and a config source from the bundle, read-only, with no workspace message", () => {
-    const skill: SkillSummary = { id: "tdd", name: "tdd", description: "", path: "skills/tdd/SKILL.md", group: "g", category: "", risk: "low", targets: [], related: [] };
-    const { update } = renderLibrary({
-      sourceType: "skills",
-      skills: [skill],
-      activeSkillId: "tdd",
-      activeSkillContent: { id: "tdd", title: "tdd", path: "skills/tdd/SKILL.md", section: "workspace", source: "curated", content: "# Bundled skill" },
-      dataFolderOk: false,
-    });
-    expect(screen.getByRole("heading", { name: "Bundled skill" })).not.toBeNull();
-    expect(screen.queryByText("No valid workspace selected")).toBeNull();
-
-    const agents: AgentMetadataResponse[] = [{ id: "architect.md", title: "Architect", path: "agents/architect.md", exists: true, metadata: null }];
-    update({
-      sourceType: "agents",
-      agentSources: agents,
-      activeAgentId: "architect.md",
-      activeAgentContent: { id: "architect.md", title: "Architect", path: "agents/architect.md", content: "# Bundled agent", exists: true },
-      dataFolderOk: false,
-    });
-    expect(screen.getByRole("heading", { name: "Bundled agent" })).not.toBeNull();
-
-    update({
-      sourceType: "configs",
-      activeConfigTargetId: "opencode_config",
-      configTargets: [{ id: "opencode_config", label: "OpenCode config", harness: "opencode", kind: "config", source_rel: "templates/opencode.json", target_rel: "opencode.json" }],
-      configEditorSources: [{ id: "base", label: "Base", rel_path: "templates/opencode.base.json", helper: "bundled base" }],
-      configEditorSourceContent: makeDoc("base", "base", '{"bundled_marker": true}', "curated"),
-      dataFolderOk: false,
-    });
-    expect(screen.getByText(/bundled_marker/)).not.toBeNull();
-  });
-
-  it("asks for an item to open, not for a workspace, while nothing is open", () => {
-    const { update } = renderLibrary({ sourceType: "skills", dataFolderOk: false });
-    expect(screen.getByText("Select a skill to preview")).not.toBeNull();
-    update({ sourceType: "agents", dataFolderOk: false });
-    expect(screen.getByText("Select an agent to preview")).not.toBeNull();
-    update({ sourceType: "docs", dataFolderOk: false });
-    expect(screen.getByText("Select a document to preview")).not.toBeNull();
-    expect(screen.queryByText("No valid workspace selected")).toBeNull();
+  it("closes on Cancel without creating anything", async () => {
+    await renderLibrary();
+    await goToTopic("Docs");
+    fireEvent.click(screen.getByRole("button", { name: "New doc" }));
+    const dialog = await screen.findByRole("dialog", { name: "New doc" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "New doc" })).toBeNull());
+    expect(callsTo("create_doc")).toEqual([]);
   });
 });
 
-describe("LibraryView Rules", () => {
-  it("lists the bundled rules template, read-only, with the targets it installs to", () => {
-    const template = makeDoc("tpl", "tpl", "# Rules");
-    renderLibrary({
-      sourceType: "rules",
-      agentTemplate: template,
-      agentTargets: [
-        { id: "claude_rules", label: "claude rules", harness: "claude", kind: "rules", source_rel: "a", target_rel: ".claude/CLAUDE.md" },
-        { id: "claude_agents", label: "claude agents", harness: "claude", kind: "agents", source_rel: "a", target_rel: ".claude/agents" },
-      ],
-    });
-    expect(within(listbox()).getAllByRole("option").map(option => option.querySelector(".nm")!.textContent)).toEqual(["Global Rules"]);
-    expect(within(listbox()).getByText("bundled")).not.toBeNull();
-    const meta = screen.getByRole("region", { name: "installs to" });
-    expect(within(meta).getByText(".claude/CLAUDE.md")).not.toBeNull();
-    expect(within(meta).queryByText(".claude/agents")).toBeNull();
-    expect(screen.getByText(BUNDLED_REASON)).not.toBeNull();
-    press(focusList(), "Enter");
-    expect(screen.queryByRole("textbox")).toBeNull();
-    expect(document.activeElement).toBe(screen.getByRole("group", { name: "Document" }));
+describe("Library packs", () => {
+  it("asks before it forgets a pack, and only forgets once confirmed", async () => {
+    await renderLibrary();
+    await goToTopic("Packs");
+    fireEvent.click(within(rowOf("old-pack")).getByRole("button", { name: "Forget pack" }));
+    let dialog = await screen.findByRole("dialog", { name: "Forget pack old-pack?" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "cancel" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(callsTo("forget_pack")).toEqual([]);
+
+    fireEvent.click(within(rowOf("old-pack")).getByRole("button", { name: "Forget pack" }));
+    dialog = await screen.findByRole("dialog", { name: "Forget pack old-pack?" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Forget pack" }));
+    await waitFor(() => expect(callsTo("forget_pack")).toEqual([{ name: "old-pack" }]));
+    await waitFor(() => expect(screen.queryAllByRole("listitem").some(item => item.querySelector("b")?.textContent === "old-pack")).toBe(false));
+  });
+});
+
+describe("Library keys", () => {
+  it("/ and Mod+F focus the search, [ and ] step through the topics", async () => {
+    await renderLibrary();
+    const search = screen.getByRole("searchbox", { name: "Search all topics" });
+    const row = within(rowOf("Claude rules")).getByRole("button", { name: "Edit refinements" });
+    row.focus();
+    fireEvent.keyDown(row, { key: "/" });
+    expect(document.activeElement).toBe(search);
+
+    row.focus();
+    fireEvent.keyDown(row, { key: "f", ctrlKey: true });
+    expect(document.activeElement).toBe(search);
+
+    row.focus();
+    fireEvent.keyDown(row, { key: "]" });
+    await waitFor(() => expect(tab("Skills").getAttribute("aria-selected")).toBe("true"));
+    const skillRow = within(rowOf("my-checklist")).getByRole("button", { name: "Read" });
+    skillRow.focus();
+    fireEvent.keyDown(skillRow, { key: "[" });
+    await waitFor(() => expect(tab("Rules").getAttribute("aria-selected")).toBe("true"));
+    // The row that had focus is gone with the old rows: the selected tab has it, so the keys keep working.
+    expect(document.activeElement).toBe(tab("Rules"));
+    fireEvent.keyDown(document.activeElement!, { key: "[" });
+    await waitFor(() => expect(tab("Packs").getAttribute("aria-selected")).toBe("true"));
   });
 
-  function rulesFile(overrides: Partial<RulesFileContent> = {}): RulesFileContent {
-    return {
-      surface: "claude_rules",
-      label: "Claude rules",
-      file: "~/.claude/CLAUDE.md",
-      layout: "block",
-      conflict: null,
-      malformed: null,
-      refinement_lines: 2,
-      editable: true,
-      reason: null,
-      before: "# Managed base heading\n\n- base rule\n",
-      refinements: "## My refinements\n- answer in Swedish\n",
-      revision: "sha256:r1",
-      ...overrides,
-    };
-  }
-
-  const LEGACY_REASON = "no base block: convert or install first (harness page, v)";
-  const files: RulesFileSummary[] = [
-    rulesFile(),
-    rulesFile({ surface: "codex_rules", label: "Codex rules", file: "~/.codex/AGENTS.md", layout: "legacy", editable: false, reason: LEGACY_REASON }),
-    rulesFile({ surface: "pi_rules", label: "Pi rules", file: "~/.pi/agent/AGENTS.md", conflict: "masked_by_override", editable: false, reason: "an override file in the same folder masks this file" }),
-    rulesFile({ surface: "copilot_rules", label: "Copilot rules", file: "~/.copilot/copilot-instructions.md", layout: "absent", editable: false, reason: "no file yet: install rules from the harness page first" }),
-  ];
-
-  function openRulesFile(file: RulesFileContent, overrides: Partial<LibraryViewProps> = {}) {
-    return renderLibrary({
-      sourceType: "rules",
-      agentTemplate: makeDoc("tpl", "tpl", "# Rules"),
-      rulesFiles: files,
-      activeRulesSurface: file.surface,
-      activeRulesFile: file,
-      rulesDraft: file.refinements,
-      ...overrides,
-    });
-  }
-
-  it("lists the user's rules files below the bundled base, with what each one allows", () => {
-    vi.useFakeTimers();
-    const onSelectRulesFile = vi.fn();
-    renderLibrary({ sourceType: "rules", agentTemplate: makeDoc("tpl", "tpl", "# Rules"), rulesFiles: files, onSelectRulesFile });
-    const rows = within(listbox()).getAllByRole("option");
-    expect(rows.map(row => [row.querySelector(".nm")!.textContent, row.querySelector(".meta")!.textContent])).toEqual([
-      ["Global Rules", "bundled"],
-      ["Claude rules", "refinements"],
-      ["Codex rules", "no base block"],
-      ["Pi rules", "masked"],
-      ["Copilot rules", "no file"],
-    ]);
-    expect(screen.getByText("bundled base")).not.toBeNull();
-    expect(screen.getByText("your rules files")).not.toBeNull();
-
-    fireEvent.click(screen.getByRole("option", { name: /Claude rules/ }));
-    act(() => {
-      vi.advanceTimersByTime(120);
-    });
-    expect(onSelectRulesFile).toHaveBeenCalledWith("claude_rules");
+  it("moves between rows with the arrow keys, and an Enter on a row opens it", async () => {
+    await renderLibrary();
+    const first = within(rowOf("Claude rules")).getByRole("button", { name: "Edit refinements" });
+    first.focus();
+    fireEvent.keyDown(first, { key: "ArrowDown" });
+    expect(document.activeElement).toBe(within(rowOf("Codex rules")).getByRole("button", { name: "View" }));
+    fireEvent.keyDown(document.activeElement!, { key: "ArrowDown" });
+    expect(document.activeElement).toBe(within(rowOf("OpenCode rules")).getByRole("button", { name: "Add refinements" }));
+    fireEvent.keyDown(document.activeElement!, { key: "ArrowUp" });
+    fireEvent.keyDown(document.activeElement!, { key: "ArrowUp" });
+    fireEvent.keyDown(document.activeElement!, { key: "ArrowUp" });
+    expect(document.activeElement).toBe(tab("Rules"));
+    fireEvent.keyDown(document.activeElement!, { key: "ArrowDown" });
+    expect(document.activeElement).toBe(first);
+    // Enter on a focused button is a click.
+    fireEvent.click(document.activeElement!);
+    expect(await screen.findByRole("dialog", { name: /Claude rules/ })).toBeTruthy();
   });
 
-  it("lists no rules file while the workspace is not valid, and still shows the bundled base", () => {
-    renderLibrary({ sourceType: "rules", agentTemplate: makeDoc("tpl", "tpl", "# Bundled rules"), rulesFiles: files, dataFolderOk: false });
-    expect(within(listbox()).getAllByRole("option").map(option => option.querySelector(".nm")!.textContent)).toEqual(["Global Rules"]);
-    expect(screen.getByRole("heading", { name: "Bundled rules" })).not.toBeNull();
+  it("Mod+N opens New doc, and the sheet's own keys leave the rows alone", async () => {
+    await renderLibrary();
+    const row = within(rowOf("Claude rules")).getByRole("button", { name: "Edit refinements" });
+    row.focus();
+    fireEvent.keyDown(row, { key: "n", ctrlKey: true });
+    expect(await screen.findByRole("dialog", { name: "New doc" })).toBeTruthy();
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "Title" }), { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "New doc" })).toBeNull());
   });
 
-  it("edits only the refinements: the managed base is shown read-only above them", () => {
-    const onChangeRulesDraft = vi.fn();
-    const onSaveDoc = vi.fn();
-    const onOpenRulesFile = vi.fn();
-    const file = rulesFile();
-    openRulesFile(file, { onChangeRulesDraft, onSaveDoc, onOpenRulesFile });
-    const pane = screen.getByRole("region", { name: "Document" });
-    expect(pane.querySelector(".pane-title")!.textContent).toBe("Claude rules · ~/.claude/CLAUDE.md");
-    const base = screen.getByRole("region", { name: "managed base · read-only" });
-    expect(within(base).getByText("Managed base heading")).not.toBeNull();
-    expect(within(pane.querySelector<HTMLElement>(".pane-foot")!).getByText("below the managed block only")).not.toBeNull();
-
-    const editor = editDocument("Edit refinements");
-    expect(editor.value).toBe(file.refinements);
-    expect(editor.value).not.toContain("Managed base heading");
-    fireEvent.change(editor, { target: { value: "## Mine\n" } });
-    expect(onChangeRulesDraft).toHaveBeenCalledWith("## Mine\n");
-
-    press(editor, "Escape");
-    press(focusList(), "o");
-    expect(onOpenRulesFile).toHaveBeenCalledWith("claude_rules");
-    expect(onSaveDoc).not.toHaveBeenCalled();
-  });
-
-  it("saves the refinements through the rules handler, with Mod+s and :w", () => {
-    const onSaveRules = vi.fn();
-    const onSaveDoc = vi.fn();
-    const file = rulesFile();
-    openRulesFile(file, { rulesDraft: "## Changed\n", rulesDirty: true, onSaveRules, onSaveDoc });
-    pressSave();
-    expect(onSaveRules).toHaveBeenCalledTimes(1);
-    focusList();
-    runCommand("w");
-    expect(onSaveRules).toHaveBeenCalledTimes(2);
-    expect(onSaveDoc).not.toHaveBeenCalled();
-  });
-
-  it("shows why a rules file is not editable, offers no edit or save, and still opens an existing file", () => {
-    const onSaveRules = vi.fn();
-    const onOpenRulesFile = vi.fn();
-    const legacy = { ...files[1]!, before: "", refinements: "", revision: null } as RulesFileContent;
-    const { update } = openRulesFile(legacy, { onSaveRules, onOpenRulesFile });
-    const footer = screen.getByRole("region", { name: "Document" }).querySelector<HTMLElement>(".pane-foot")!;
-    expect(within(footer).getByText(LEGACY_REASON)).not.toBeNull();
-    expect(screen.queryByRole("region", { name: "managed base · read-only" })).toBeNull();
-    focusPane("Document");
-    const edit = statusHint("↵ edit");
-    expect(edit.getAttribute("aria-disabled")).toBe("true");
-    expect(edit.getAttribute("title")).toBe(LEGACY_REASON);
-    press(document.activeElement!, "i");
-    expect(screen.queryByLabelText("Edit refinements")).toBeNull();
-    pressSave();
-    focusList();
-    runCommand("w");
-    expect(screen.getByRole("alert").textContent).toContain(LEGACY_REASON);
-    expect(onSaveRules).not.toHaveBeenCalled();
-    press(screen.getByRole("combobox", { name: "Command" }), "Escape");
-    press(focusList(), "o");
-    expect(onOpenRulesFile).toHaveBeenCalledWith("codex_rules");
-
-    // No file at all: nothing to open either.
-    const absent = { ...files[3]!, before: "", refinements: "", revision: null } as RulesFileContent;
-    update({ sourceType: "rules", rulesFiles: files, activeRulesSurface: absent.surface, activeRulesFile: absent, onOpenRulesFile });
-    focusPane("Document");
-    const open = statusHint("o open");
-    expect(open.getAttribute("aria-disabled")).toBe("true");
-    expect(open.getAttribute("title")).toBe(absent.reason);
+  it("is quiet about the topic keys while the sheet is open", async () => {
+    await renderLibrary({ topic: "agents" });
+    const sheet = await openSheet("verifier", "Read");
+    fireEvent.keyDown(sheet, { key: "]" });
+    await act(async () => {});
+    // The content behind the sheet is inert, so it is read from the DOM rather than through roles.
+    expect(document.querySelector('[role="tab"][aria-selected="true"]')!.textContent).toBe("Agents");
   });
 });
