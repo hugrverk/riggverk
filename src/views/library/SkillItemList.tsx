@@ -18,6 +18,39 @@ export function filterSkills(skills: SkillSummary[], search: string): SkillSumma
   );
 }
 
+/** Group identity: spelling, case and the spacing around the separator dot must not split a group. */
+export function skillGroupKey(group: string): string {
+  return group.trim().toLowerCase().replace(/\s*·\s*/g, " · ").replace(/\s+/g, " ");
+}
+
+/**
+ * Puts the skills of one group next to each other, so the list shows each group heading once. Groups keep the
+ * order in which they first appear, skills keep their order inside a group, and the heading uses the first
+ * spelling seen.
+ */
+export function mergeSkillGroups(skills: readonly SkillSummary[]): { items: SkillSummary[]; groupOf: Map<string, string> } {
+  const buckets = new Map<string, SkillSummary[]>();
+  const heading = new Map<string, string>();
+  for (const skill of skills) {
+    const key = skillGroupKey(skill.group);
+    const bucket = buckets.get(key);
+    if (bucket) bucket.push(skill);
+    else {
+      buckets.set(key, [skill]);
+      heading.set(key, skill.group.trim());
+    }
+  }
+  const items: SkillSummary[] = [];
+  const groupOf = new Map<string, string>();
+  for (const [key, bucket] of buckets) {
+    for (const skill of bucket) {
+      items.push(skill);
+      groupOf.set(skill.id, heading.get(key) ?? "");
+    }
+  }
+  return { items, groupOf };
+}
+
 interface SkillItemListProps {
   skills: SkillSummary[];
   activeKey: string | null;
@@ -37,13 +70,13 @@ export function SkillItemList({
   search,
   onSearchChange,
 }: SkillItemListProps) {
-  const items = useMemo(() => filterSkills(skills, search), [skills, search]);
+  const { items, groupOf } = useMemo(() => mergeSkillGroups(filterSkills(skills, search)), [skills, search]);
   return (
     <LibraryList<SkillSummary>
       label="Skills"
       items={items}
       getKey={skill => skill.id}
-      getGroup={skill => skill.group}
+      getGroup={skill => groupOf.get(skill.id)}
       renderItem={skill => {
         const tone = riskTone(skill.risk);
         return (

@@ -7,6 +7,7 @@ import {
   buildPlanGroups,
   countPlanRows,
   describePlanCounts,
+  installReviewLabel,
   planRows,
   type PlanCounts,
 } from "../lib/installPlan";
@@ -258,7 +259,7 @@ export function InstallPlanPane({ flow, busyLabel, backupRoot, onApply }: Instal
       meta={
         request ? (
           <>
-            {request.label}
+            {hasTable ? installReviewLabel(request.label, counts) : request.label}
             {reviewing && (
               <>
                 {` · ${groups.length} surface${groups.length === 1 ? "" : "s"} · `}

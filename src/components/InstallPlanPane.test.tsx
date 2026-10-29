@@ -150,6 +150,17 @@ describe("InstallPlanPane", () => {
     expect(screen.queryByText("Undo any time")).toBeNull();
   });
 
+  it("titles a plan that only creates as an install, and keeps update when anything is updated", () => {
+    const creates = [op("claude_rules", "create"), op("skills", "create")];
+    renderPane(makeFlow({ operations: creates, request: { ...REQUEST, label: "update codex" } }));
+    const title = () => screen.getByRole("region", { name: "Install plan" }).querySelector(".pane-title")!.textContent!;
+    expect(title()).toContain("install codex");
+    expect(title()).not.toContain("update codex");
+    cleanup();
+    renderPane(makeFlow({ operations: [...creates, op("claude_agents", "update")], request: { ...REQUEST, label: "update codex" } }));
+    expect(title()).toContain("update codex");
+  });
+
   it("puts the counts in the pane title and highlights conflict rows with their description", () => {
     renderPane(makeFlow());
     const title = screen.getByRole("region", { name: "Install plan" }).querySelector(".pane-title")!.textContent!;

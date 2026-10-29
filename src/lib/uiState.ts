@@ -27,6 +27,9 @@ export const UI_STATE_LABEL: Record<UiState, string> = {
   off: "Not managed",
 };
 
+/** The label of `ready` while every counted item waits only for its first install: the label, not another state. */
+export const READY_TO_INSTALL_LABEL = "Ready to install";
+
 export interface UiItem {
   key: string;
   owner: OverviewId;
@@ -149,7 +152,10 @@ export function aggregateState(states: readonly (UiState | null)[]): UiState | n
 }
 
 /** The pill of one harness: its aggregate state and text. Null when none of its items is counted. */
-export function harnessBadge(items: readonly UiItem[]): { state: UiState; text: string } | null {
+export function harnessBadge(
+  items: readonly UiItem[],
+  { installing = false }: { installing?: boolean } = {},
+): { state: UiState; text: string } | null {
   const state = aggregateState(items.map(item => item.state));
   if (!state) return null;
   const count = items.filter(item => item.state === state).length;
@@ -159,7 +165,7 @@ export function harnessBadge(items: readonly UiItem[]): { state: UiState; text: 
     case "fix":
       return { state, text: `${count} to fix` };
     case "ready":
-      return { state, text: "Update ready" };
+      return { state, text: installing ? READY_TO_INSTALL_LABEL : UI_STATE_LABEL.ready };
     case "yours":
       return { state, text: "Yours" };
     case "ok":
@@ -185,13 +191,13 @@ export function tally(items: readonly UiItem[]): Record<UiState, number> {
   return counts;
 }
 
-function summaryText(state: UiState, count: number): string {
+function summaryText(state: UiState, count: number, installing: boolean): string {
   const one = count === 1;
   switch (state) {
     case "ok":
       return `${count} up to date`;
     case "ready":
-      return `${count} ${one ? "update" : "updates"} ready`;
+      return installing ? `${count} ready to install` : `${count} ${one ? "update" : "updates"} ready`;
     case "decide":
       return `${count} ${one ? "needs" : "need"} your decision`;
     case "yours":
@@ -203,12 +209,18 @@ function summaryText(state: UiState, count: number): string {
   }
 }
 
-/** The summary row: non-zero states in `UI_STATE_SUMMARY_ORDER`. */
-export function summaryParts(t: Record<UiState, number>): Array<{ state: UiState; count: number; text: string }> {
+/**
+ * The summary row: non-zero states in `UI_STATE_SUMMARY_ORDER`. `installing` says the `ready` items wait only for
+ * their first install, so they read "ready to install" instead of "updates ready".
+ */
+export function summaryParts(
+  t: Record<UiState, number>,
+  { installing = false }: { installing?: boolean } = {},
+): Array<{ state: UiState; count: number; text: string }> {
   return UI_STATE_SUMMARY_ORDER.filter(state => t[state] > 0).map(state => ({
     state,
     count: t[state],
-    text: summaryText(state, t[state]),
+    text: summaryText(state, t[state], installing),
   }));
 }
 

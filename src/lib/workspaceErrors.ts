@@ -1,6 +1,11 @@
 export const INVALID_WORKSPACE_TEXT = "invalid workspace path";
 export const NO_WORKSPACE_TEXT = "no workspace selected";
 
+/** The text of a rejection: an Error's message (not "Error: message"), or what the backend rejected with. */
+export function errorMessage(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
+}
+
 export function isInvalidWorkspaceError(e: unknown): boolean {
   const message = String(e).toLowerCase();
   return message.includes(INVALID_WORKSPACE_TEXT) || message.includes(NO_WORKSPACE_TEXT);

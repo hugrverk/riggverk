@@ -113,10 +113,11 @@ function harnessModel(input: {
   const counted = items
     .map((item, index) => ({ item, notInstalled: notInstalled[index]! }))
     .filter(({ item }) => item.state !== null && item.state !== "off");
+  const allNotInstalled = counted.length > 0 && counted.every(entry => entry.item.state === "ready" && entry.notInstalled);
   return {
-    card: { harness, label: HARNESS_LABELS[harness], badge: harnessBadge(items), rows, notes },
+    card: { harness, label: HARNESS_LABELS[harness], badge: harnessBadge(items, { installing: allNotInstalled }), rows, notes },
     items,
-    allNotInstalled: counted.length > 0 && counted.every(entry => entry.item.state === "ready" && entry.notInstalled),
+    allNotInstalled,
   };
 }
 
@@ -202,7 +203,8 @@ export function overviewSummaryModel(input: {
       anyStatus: entries.some(entry => entry.status !== null),
       allNotInstalled,
     }),
-    parts: summaryParts(counts),
+    // Only the first install is "ready to install"; a ready workspace item (old copies to remove) is not one.
+    parts: summaryParts(counts, { installing: allNotInstalled && workspace.item.state !== "ready" }),
     counts,
     failedChecks: entries.filter(entry => entry.error).length,
     cards: models.map(model => model.card),

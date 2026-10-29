@@ -342,7 +342,8 @@ kbd {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 20px;
+  /* The backdrop covers the window; the box is centred in the content column, clear of the sidebar (`.side` is 200px). */
+  padding: 20px 20px 20px 220px;
   background: var(--backdrop);
 }
 

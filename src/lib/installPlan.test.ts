@@ -8,6 +8,7 @@ import {
   describePlanCounts,
   formatApplyOutput,
   installRequestFor,
+  installReviewLabel,
   planRows,
   scopeForTarget,
   surfaceTitle,
@@ -179,6 +180,20 @@ describe("plan counts", () => {
   it("singularises one change and mentions manual steps", () => {
     const one = review([op("claude_rules", "update"), op("cursor_mcp", "manual")], ["claude_rules", "cursor_mcp"]);
     expect(describePlanCounts(countPlanRows(buildPlanGroups(one)))).toBe("apply 1 safe change, 1 manual step left to you");
+  });
+});
+
+describe("installReviewLabel", () => {
+  it("says install when the plan only creates", () => {
+    const created = countPlanRows(buildPlanGroups(review([op("codex_rules", "create"), op("skills", "create")], ["codex_rules", "skills"])));
+    expect(installReviewLabel("update codex", created)).toBe("install codex");
+    expect(installReviewLabel("preview codex", created)).toBe("preview codex");
+  });
+
+  it("keeps update when anything is updated or removed", () => {
+    expect(installReviewLabel("update claude", countPlanRows(buildPlanGroups(MIXED)))).toBe("update claude");
+    const mixed = countPlanRows(buildPlanGroups(review([op("codex_rules", "create"), op("skills", "update")], ["codex_rules", "skills"])));
+    expect(installReviewLabel("update codex", mixed)).toBe("update codex");
   });
 });
 

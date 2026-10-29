@@ -1,4 +1,4 @@
-import { useMemo, type ReactNode, type RefObject } from "react";
+import { Fragment, useMemo, type ReactNode, type RefObject } from "react";
 import { CopyableBlock } from "../../components/CopyableBlock";
 import { CopyButton } from "../../components/CopyButton";
 import { redactTerminalOutput } from "../../lib/redactTerminalOutput";
@@ -72,6 +72,30 @@ function DocumentView({ entry }: { entry: LibraryEntry }) {
   );
 }
 
+/** The pane title's segments after the name: the path, "modified", "read-only". A missing path leaves no empty one. */
+function metaSegments(entry: LibraryEntry): ReactNode[] {
+  const segments: ReactNode[] = [];
+  if (entry.path) segments.push(entry.path);
+  if (entry.dirty) segments.push(<span className="lib-flag" title="Unsaved changes">modified</span>);
+  if (entry.readOnly) segments.push(<span className="c-dim">read-only</span>);
+  return segments;
+}
+
+function MetaSegments({ segments }: { segments: ReactNode[] }) {
+  if (segments.length === 0) return null;
+  return (
+    <>
+      {"· "}
+      {segments.map((segment, index) => (
+        <Fragment key={index}>
+          {index > 0 && " · "}
+          {segment}
+        </Fragment>
+      ))}
+    </>
+  );
+}
+
 /**
  * The open item, one pane. It shows the working copy rendered, so unsaved edits are visible; the rendered body
  * is the pane's NORMAL-mode focus target (`l` from the list lands on it and scrolls it). Editable items switch
@@ -86,25 +110,7 @@ export function DocumentPane({ entry, emptyHint, editing, textareaRef, top, onCl
       label="Document"
       className="pane-flat lib-doc"
       title={entry ? entry.title : "document"}
-      meta={
-        entry ? (
-          <>
-            · {entry.path}
-            {entry.dirty && (
-              <>
-                {" · "}
-                <span className="lib-flag" title="Unsaved changes">modified</span>
-              </>
-            )}
-            {entry.readOnly && (
-              <>
-                {" · "}
-                <span className="c-dim">read-only</span>
-              </>
-            )}
-          </>
-        ) : undefined
-      }
+      meta={entry ? <MetaSegments segments={metaSegments(entry)} /> : undefined}
       scrollable={!showTextarea}
       bodyClassName={showTextarea ? "lib-fill" : undefined}
       footer={
