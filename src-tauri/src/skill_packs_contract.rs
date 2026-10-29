@@ -18,6 +18,7 @@ mod tests {
         apply_setup, apply_uninstall, preview_setup, preview_uninstall, rollback_setup_transaction,
         SetupResult,
     };
+    use crate::commands::{copy_skill_to_pack, read_pack_skill, save_pack_skill};
     use crate::managed_state::{artifact_identity, read_managed_state};
     use crate::setup_lifecycle::{OperationKind, SetupPlan, SetupSurfaceId};
     use crate::setup_transaction::{plan_artifacts_for_surfaces, PlannedArtifact};
@@ -1319,6 +1320,26 @@ mod tests {
     }
 
     impl Env {
+        /// An isolated personal data folder and a small, grouped bundle with supporting files.
+        fn personal_copy(label: &str) -> Self {
+            let mut env = Self::new(label);
+            env.ws = env.home.join(".config/riggverk");
+            unsafe { std::env::set_var("RIGGVERK_WORKSPACE_PATH", &env.ws) };
+            let bundle = env.base.join("copy-bundle");
+            copy_tree(&Self::real_bundle(), &bundle);
+            fs::remove_dir_all(bundle.join("skills")).expect("replace bundled skills");
+            let source = bundle.join("skills/group/original");
+            fs::create_dir_all(source.join("assets")).expect("source assets");
+            fs::write(
+                source.join("SKILL.md"),
+                canonical_skill_text("original", "# Original\n\nname: body-stays-original\n"),
+            )
+            .expect("source skill");
+            fs::write(source.join("assets/guide.txt"), "supporting text\n").expect("support file");
+            env._bundle = Some(crate::setup_roots::test_bundle::set(bundle));
+            env
+        }
+
         /// Applies when the plan has work; `None` when it has none.
         fn apply_if_needed(&self) -> Option<SetupResult> {
             if self.pending().is_empty() {
@@ -1327,5 +1348,362 @@ mod tests {
                 Some(self.apply())
             }
         }
+    }
+
+    // ── Library personal copies and edits ──
+
+    fn assert_no_copy_or_staging(env: &Env, name: &str) {
+        let skills = env.packs().join("personal/skills");
+        assert!(
+            !skills.join(name).exists(),
+            "no published copy after a failure"
+        );
+        if let Ok(entries) = fs::read_dir(skills) {
+            assert!(entries
+                .flatten()
+                .all(|entry| !entry.file_name().to_string_lossy().starts_with(".copy-")));
+        }
+    }
+
+    #[test]
+    fn library_copy_renames_only_frontmatter_and_joins_the_personal_catalog_without_installing() {
+        let env = Env::personal_copy("library-copy");
+        let original = files_below(&env.base.join("copy-bundle/skills/group/original"));
+        let copied = copy_skill_to_pack("original".into(), "my-original".into()).expect("copy");
+        assert_eq!(copied.id, "pack:personal/my-original");
+        assert_eq!(copied.name, "my-original");
+        assert_eq!(copied.pack, "personal");
+        assert_eq!(
+            copied.path,
+            "~/.config/riggverk/packs/personal/skills/my-original/SKILL.md"
+        );
+        let dir = env.packs().join("personal/skills/my-original");
+        let text = fs::read_to_string(dir.join("SKILL.md")).expect("copied SKILL.md");
+        assert_eq!(
+            text,
+            std::str::from_utf8(&original["SKILL.md"])
+                .expect("source text")
+                .replacen("name: original\n", "name: my-original\n", 1)
+        );
+        assert_eq!(
+            fs::read(dir.join("assets/guide.txt")).expect("support file"),
+            original["assets/guide.txt"]
+        );
+        assert_eq!(
+            files_below(&env.base.join("copy-bundle/skills/group/original")),
+            original,
+            "bundle unchanged"
+        );
+        let sources = env.sources();
+        assert_eq!(sources.pack_of("my-original"), Some("personal"));
+        let personal = sources
+            .packs()
+            .iter()
+            .find(|pack| pack.name == "personal")
+            .expect("personal pack");
+        assert!(personal.refused.is_none());
+        assert_eq!(personal.skills[0].state, PackSkillState::Active);
+        assert!(
+            !env.root(SkillRoot::Claude).exists(),
+            "copy does not install"
+        );
+        assert!(
+            !env.root(SkillRoot::Agents).exists(),
+            "copy does not install"
+        );
+        assert!(env.state_bytes().is_none());
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            for path in [
+                env.packs(),
+                env.packs().join("personal"),
+                env.packs().join("personal/skills"),
+                dir.clone(),
+                dir.join("assets"),
+            ] {
+                assert_eq!(
+                    fs::metadata(path).expect("dir mode").permissions().mode() & 0o777,
+                    0o700
+                );
+            }
+            for path in [dir.join("SKILL.md"), dir.join("assets/guide.txt")] {
+                assert_eq!(
+                    fs::metadata(path).expect("file mode").permissions().mode() & 0o777,
+                    0o600
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn library_copy_refuses_bundled_and_existing_personal_names() {
+        let env = Env::personal_copy("copy-collisions");
+        assert!(copy_skill_to_pack("original".into(), "original".into()).is_err());
+        let copied = copy_skill_to_pack("original".into(), "mine".into()).expect("copy");
+        let before = files_below(&env.packs());
+        assert!(copy_skill_to_pack("original".into(), "mine".into()).is_err());
+        assert!(
+            copy_skill_to_pack(copied.id, "another".into()).is_err(),
+            "pack ids are not bundled names"
+        );
+        assert!(
+            copy_skill_to_pack("mine".into(), "another".into()).is_err(),
+            "pack names are not bundle sources"
+        );
+        assert_eq!(files_below(&env.packs()), before);
+        fs::create_dir(env.packs().join("personal/skills/empty-folder"))
+            .expect("existing empty folder");
+        assert!(copy_skill_to_pack("original".into(), "empty-folder".into()).is_err());
+        assert_no_copy_or_staging(&env, "another");
+    }
+
+    #[test]
+    fn library_copy_refuses_a_name_claimed_by_another_pack_or_a_held_skill() {
+        let env = Env::personal_copy("copy-other-pack");
+        env.pack_skill("team", Some("group"), "taken", "# Taken\n", &[]);
+        assert!(copy_skill_to_pack("original".into(), "taken".into()).is_err());
+        assert_no_copy_or_staging(&env, "taken");
+        assert!(save_pack_skill("pack:team/taken".into(), "changed\n".into()).is_err());
+        let result = env.apply();
+        assert!(result.success, "{}", result.message);
+        fs::remove_dir_all(env.packs().join("team")).expect("missing team pack");
+        assert!(env.sources().held().iter().any(|held| held.name == "taken"));
+        assert!(copy_skill_to_pack("original".into(), "taken".into()).is_err());
+    }
+
+    #[test]
+    fn library_copy_refuses_invalid_names_without_creating_a_pack_or_exposing_paths() {
+        let env = Env::personal_copy("copy-invalid");
+        for name in [
+            "../x",
+            "X",
+            "-x",
+            "",
+            "/private/x",
+            "has_underscore",
+            &"x".repeat(65),
+        ] {
+            let error =
+                copy_skill_to_pack("original".into(), name.into()).expect_err("invalid name");
+            assert!(!error.contains("/private/"));
+            assert!(!error.contains(env.home.to_string_lossy().as_ref()));
+        }
+        assert!(!env.packs().exists());
+    }
+
+    #[test]
+    fn library_copy_refuses_oversized_or_too_many_files_and_cleans_staging() {
+        let env = Env::personal_copy("copy-limits");
+        let source = env.base.join("copy-bundle/skills/group/original");
+        fs::write(source.join("large.txt"), vec![b'x'; 1024 * 1024]).expect("large file");
+        let error =
+            copy_skill_to_pack("original".into(), "too-large".into()).expect_err("size limit");
+        assert!(error.contains("1 MiB"));
+        assert_no_copy_or_staging(&env, "too-large");
+        fs::remove_file(source.join("large.txt")).expect("remove large file");
+        for index in 0..64 {
+            fs::write(source.join(format!("file-{index}.txt")), "x").expect("extra file");
+        }
+        let error =
+            copy_skill_to_pack("original".into(), "too-many".into()).expect_err("file limit");
+        assert!(error.contains("64 file"));
+        assert_no_copy_or_staging(&env, "too-many");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn library_copy_refuses_source_symlinks_including_hidden_entries_and_special_files() {
+        let env = Env::personal_copy("copy-unsafe-source");
+        let source = env.base.join("copy-bundle/skills/group/original");
+        let outside = env.base.join("outside.txt");
+        fs::write(&outside, "outside\n").expect("outside file");
+        for rel in ["assets/link", ".hidden-link"] {
+            let link = source.join(rel);
+            std::os::unix::fs::symlink(&outside, &link).expect("source symlink");
+            let error = copy_skill_to_pack("original".into(), "unsafe-copy".into())
+                .expect_err("symlink refused");
+            assert!(!error.contains(env.base.to_string_lossy().as_ref()));
+            assert_no_copy_or_staging(&env, "unsafe-copy");
+            fs::remove_file(link).expect("remove symlink");
+        }
+        // Unix socket addresses have a small length limit; bind in /tmp before moving the inode.
+        let socket_path = Path::new("/tmp").join(format!(
+            "riggverk-copy-socket-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _socket = std::os::unix::net::UnixListener::bind(&socket_path).expect("special file");
+        fs::rename(socket_path, source.join("socket")).expect("move special file into source");
+        assert!(copy_skill_to_pack("original".into(), "unsafe-copy".into()).is_err());
+        assert_no_copy_or_staging(&env, "unsafe-copy");
+        assert_eq!(
+            fs::read_to_string(outside).expect("outside unchanged"),
+            "outside\n"
+        );
+    }
+
+    #[test]
+    fn library_save_writes_only_skill_md_with_an_owner_only_backup_and_skips_unchanged_text() {
+        let env = Env::personal_copy("save-personal");
+        let copied = copy_skill_to_pack("original".into(), "my-original".into()).expect("copy");
+        let dir = env.packs().join("personal/skills/my-original");
+        let before = fs::read_to_string(dir.join("SKILL.md")).expect("previous text");
+        let content = canonical_skill_text("my-original", "# Edited\n");
+        let saved = save_pack_skill(copied.id.clone(), content.clone()).expect("save");
+        assert!(saved.success);
+        assert_eq!(saved.action, "save_pack_skill");
+        assert_eq!(saved.stdout, "saved with backup");
+        assert_eq!(saved.stderr, "");
+        assert_eq!(saved.exit_code, Some(0));
+        assert_eq!(
+            fs::read_to_string(dir.join("SKILL.md")).expect("saved content"),
+            content
+        );
+        assert_eq!(
+            read_pack_skill(copied.id.clone())
+                .expect("read after save")
+                .content,
+            content
+        );
+        assert_eq!(
+            fs::read_to_string(dir.join("assets/guide.txt")).expect("support unchanged"),
+            "supporting text\n"
+        );
+        let backup_root = env.base.join("backups/docs");
+        let backups = files_below(&backup_root);
+        assert_eq!(backups.len(), 1);
+        assert_eq!(
+            backups.values().next().expect("backup text"),
+            before.as_bytes()
+        );
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let backup = backup_root.join(backups.keys().next().expect("backup path"));
+            assert_eq!(
+                fs::metadata(&backup)
+                    .expect("backup mode")
+                    .permissions()
+                    .mode()
+                    & 0o777,
+                0o600
+            );
+            assert_eq!(
+                fs::metadata(backup.parent().expect("parent"))
+                    .expect("backup dir mode")
+                    .permissions()
+                    .mode()
+                    & 0o777,
+                0o700
+            );
+            assert_eq!(
+                fs::metadata(dir.join("SKILL.md"))
+                    .expect("saved mode")
+                    .permissions()
+                    .mode()
+                    & 0o777,
+                0o600
+            );
+        }
+        assert_eq!(
+            save_pack_skill(copied.id, content)
+                .expect("unchanged")
+                .stdout,
+            "unchanged"
+        );
+        assert_eq!(
+            files_below(&backup_root),
+            backups,
+            "unchanged saves make no backup"
+        );
+        assert_eq!(files_below(&dir).len(), 2, "no temporary file remains");
+    }
+
+    #[test]
+    fn library_save_refuses_other_packs_bundle_ids_traversal_missing_and_oversized_content() {
+        let env = Env::personal_copy("save-refusals");
+        env.pack_skill("team", None, "team-skill", "# Team\n", &[]);
+        let copied = copy_skill_to_pack("original".into(), "mine".into()).expect("copy");
+        let before = files_below(&env.packs());
+        for id in [
+            "pack:team/team-skill",
+            "original",
+            "pack:personal/original",
+            "pack:personal/../mine",
+            "pack:personal/mine/SKILL.md",
+            "pack:personal/",
+            "pack:personal/missing",
+            "pack:personal/..\\mine",
+        ] {
+            assert!(
+                save_pack_skill(id.into(), "changed\n".into()).is_err(),
+                "{id}"
+            );
+        }
+        assert!(save_pack_skill(copied.id, "x".repeat(512 * 1024 + 1)).is_err());
+        assert_eq!(files_below(&env.packs()), before);
+        assert!(!env.base.join("backups").exists());
+    }
+
+    #[test]
+    fn library_save_refuses_shadowed_ambiguous_broken_and_held_personal_skills() {
+        let env = Env::personal_copy("save-inactive");
+        let shadowed = env.pack_skill("personal", None, "original", "# Shadowed\n", &[]);
+        let before = fs::read(shadowed.join("SKILL.md")).expect("shadowed text");
+        assert!(save_pack_skill("pack:personal/original".into(), "changed".into()).is_err());
+        assert_eq!(
+            fs::read(shadowed.join("SKILL.md")).expect("unchanged"),
+            before
+        );
+        let copied = copy_skill_to_pack("original".into(), "mine".into()).expect("copy");
+        env.pack_skill("team", None, "mine", "# Ambiguous\n", &[]);
+        assert!(save_pack_skill(copied.id.clone(), "changed".into()).is_err());
+        fs::remove_dir_all(env.packs().join("team")).expect("remove duplicate");
+        let result = env.apply();
+        assert!(result.success, "{}", result.message);
+        fs::write(
+            env.packs().join("personal/skills/mine/SKILL.md"),
+            "broken frontmatter\n",
+        )
+        .expect("break it");
+        assert!(save_pack_skill(copied.id.clone(), "changed".into()).is_err());
+        fs::remove_dir_all(env.packs().join("personal")).expect("missing personal pack");
+        assert!(env
+            .sources()
+            .held()
+            .iter()
+            .any(|held| held.pack == "personal" && held.name == "mine"));
+        assert!(save_pack_skill(copied.id, "changed".into()).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn library_writes_refuse_unsafe_pack_permissions_and_symlinked_save_targets() {
+        let env = Env::personal_copy("library-permissions");
+        let copied = copy_skill_to_pack("original".into(), "mine".into()).expect("copy");
+        let target = env.packs().join("personal/skills/mine/SKILL.md");
+        let original = fs::read(&target).expect("copied text");
+        for dir in [
+            env.packs(),
+            env.packs().join("personal"),
+            env.packs().join("personal/skills"),
+        ] {
+            set_mode(&dir, 0o777);
+            assert!(save_pack_skill(copied.id.clone(), "changed".into()).is_err());
+            assert!(copy_skill_to_pack("original".into(), "second".into()).is_err());
+            assert_no_copy_or_staging(&env, "second");
+            set_mode(&dir, 0o700);
+        }
+        let outside = env.base.join("outside.md");
+        fs::write(&outside, &original).expect("outside file");
+        fs::remove_file(&target).expect("remove target");
+        std::os::unix::fs::symlink(&outside, &target).expect("target symlink");
+        assert!(save_pack_skill(copied.id, "changed".into()).is_err());
+        assert_eq!(fs::read(outside).expect("outside unchanged"), original);
+        assert!(!env.base.join("backups").exists());
     }
 }

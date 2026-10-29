@@ -32,7 +32,7 @@ pub const PACKS_DIR: &str = "packs";
 pub const PACK_SKILLS_FILE: &str = "pack-skills.json";
 const SCHEMA_VERSION: u32 = 1;
 const MAX_FILE_BYTES: u64 = 512 * 1024;
-const MAX_PACKS: usize = 64;
+pub(crate) const MAX_PACKS: usize = 64;
 /// Entries one pack's `skills` tree may hold before it is read as hostile.
 const MAX_TREE_ENTRIES: usize = 20_000;
 const MAX_TREE_DEPTH: usize = 12;
@@ -608,7 +608,7 @@ fn effective_uid() -> u32 {
 
 /// Why a pack entry cannot be trusted (Unix): writable by its group or by everyone, or owned by
 /// someone else than the current user. Always `Ok` elsewhere. `what` names the entry in the reason.
-fn check_trusted(meta: &fs::Metadata, what: &str) -> Result<(), String> {
+pub(crate) fn check_trusted(meta: &fs::Metadata, what: &str) -> Result<(), String> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::{MetadataExt, PermissionsExt};
