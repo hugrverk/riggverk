@@ -13,6 +13,7 @@ import {
 } from "../../lib/flowModel";
 import { useMotion } from "../../lib/motion";
 import type { InstallAgent } from "../../types";
+import { AgentGlyph } from "../../ui/agentIcons";
 import { cx } from "../../ui/tone";
 import { useFlowPulses } from "./useFlowPulses";
 
@@ -28,6 +29,8 @@ export interface FlowMapProps {
 
 const FALLBACK_WIDTH = 480;
 const AGENT_HIT_WIDTH = 176;
+const ICON_SIZE = 16;
+const BADGE_SIZE = 8;
 
 /** The width of an element, kept current. Without a ResizeObserver (a test renderer) it stays at the fallback. */
 function useElementWidth(ref: { current: HTMLElement | null }): number {
@@ -179,7 +182,8 @@ export function FlowMap({ model, selected, onSelect, live, liveFiles }: FlowMapP
             agent={agent}
             y={layout.agentY[agent.id]!}
             x={layout.agentX}
-            marker={layout.agentMarker}
+            icon={layout.agentIcon}
+            text={layout.agentText}
             live={live === agent.id}
             liveFiles={liveFiles}
             highlighted={!!highlight?.agents.has(agent.id)}
@@ -202,7 +206,8 @@ function AgentNode({
   agent,
   x,
   y,
-  marker,
+  icon,
+  text,
   live,
   liveFiles,
   highlighted,
@@ -212,7 +217,8 @@ function AgentNode({
   agent: FlowAgent;
   x: number;
   y: number;
-  marker: number;
+  icon: number;
+  text: number;
   live: boolean;
   liveFiles: number;
   highlighted: boolean;
@@ -228,15 +234,17 @@ function AgentNode({
       {...props}
     >
       <rect className="flow-node-hit" x={x} y={y - 19} width={AGENT_HIT_WIDTH} height={38} />
+      <AgentGlyph harness={agent.id} x={icon} y={y - ICON_SIZE / 2} size={ICON_SIZE} />
+      {/* The state is a badge on the icon's bottom-right corner: a hollow ring, the filled square for a decision. */}
       {agent.decision ? (
-        <rect className="flow-square" x={marker - 4.5} y={y - 4.5} width={9} height={9} />
+        <rect className="flow-square" x={icon + ICON_SIZE - BADGE_SIZE / 2 - 1} y={y + ICON_SIZE / 2 - BADGE_SIZE / 2 - 1} width={BADGE_SIZE} height={BADGE_SIZE} />
       ) : (
-        <circle className="flow-ring" cx={marker} cy={y} r={4.5} />
+        <circle className="flow-ring" cx={icon + ICON_SIZE - 1} cy={y + ICON_SIZE / 2 - 1} r={BADGE_SIZE / 2 - 0.5} />
       )}
-      <text className="flow-name" x={x + 24} y={y}>
+      <text className="flow-name" x={text} y={y}>
         {agent.label}
       </text>
-      <text className="flow-sub" x={x + 24} y={y + 14}>
+      <text className="flow-sub" x={text} y={y + 14}>
         {sub}
       </text>
     </g>

@@ -258,6 +258,52 @@ describe("Overview flow map", () => {
     expect(node("Codex").querySelector(".flow-square")).toBeNull();
   });
 
+  it("puts a monochrome icon before every agent name, the state as a badge on its corner, not a ring beside the name", () => {
+    renderOverview();
+    for (const name of ["Claude", "Codex", "OpenCode", "Copilot", "Pi", "Kilo"]) {
+      const agent = node(name);
+      expect(agent.querySelectorAll("svg.agent-glyph"), name).toHaveLength(1);
+      // The badge sits on the icon's bottom-right corner: inside the icon's box, right and below its centre.
+      const glyph = agent.querySelector("svg.agent-glyph")!;
+      const badge = agent.querySelector(".flow-ring, .flow-square")!;
+      const iconX = Number(glyph.getAttribute("x"));
+      const iconY = Number(glyph.getAttribute("y"));
+      const cx = Number(badge.getAttribute("cx") ?? Number(badge.getAttribute("x")) + Number(badge.getAttribute("width")) / 2);
+      const cy = Number(badge.getAttribute("cy") ?? Number(badge.getAttribute("y")) + Number(badge.getAttribute("height")) / 2);
+      expect(cx, `${name} badge x`).toBeGreaterThan(iconX + 8);
+      expect(cx, `${name} badge x`).toBeLessThanOrEqual(iconX + 16 + 1);
+      expect(cy, `${name} badge y`).toBeGreaterThan(iconY + 8);
+      expect(cy, `${name} badge y`).toBeLessThanOrEqual(iconY + 16 + 1);
+      // The name starts clear of the icon and its badge.
+      const nameX = Number(agent.querySelector(".flow-name")!.getAttribute("x"));
+      expect(nameX).toBeGreaterThanOrEqual(iconX + 16 + 4);
+    }
+    // Every agent, Codex and Kilo too, has a path-drawn glyph and no text.
+    expect(node("Codex").querySelector("svg.agent-glyph path")).not.toBeNull();
+    expect(node("Codex").querySelector("svg.agent-glyph text")).toBeNull();
+  });
+
+  it("keeps the state in the accessible name of each node, with a dashed badge for the agents that are off", () => {
+    renderOverview();
+    expect(node("Pi").getAttribute("aria-label")).toBe("Pi, off in Settings");
+    expect(node("Pi").classList.contains("is-dim")).toBe(true);
+    expect(node("Pi").querySelector(".flow-ring")).not.toBeNull();
+    expect(node("Claude").getAttribute("aria-label")).toBe("Claude, 1 to decide");
+    // The icons are decorative inside a node that already has a name.
+    expect(node("Claude").querySelector("svg.agent-glyph")!.getAttribute("aria-hidden")).toBe("true");
+  });
+
+  it("shows the icon with the state in the inspector header of an agent", () => {
+    renderOverview();
+    fireEvent.click(node("Claude"));
+    const header = inspector().querySelector(".flow-h")!;
+    expect(header.querySelector(".agent-icon svg.agent-glyph")).not.toBeNull();
+    expect(header.querySelector(".agent-badge.is-decide")).not.toBeNull();
+    expect(header.textContent).toBe("Claude");
+    fireEvent.click(node("Pi"));
+    expect(inspector().querySelector(".flow-h .agent-badge.is-off")).not.toBeNull();
+  });
+
   it("has a source for the base and for each pack, with a held pack named as such", async () => {
     sources = { skills: 24, agents: 6, rules: [], packs: PACKS };
     renderOverview();

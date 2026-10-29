@@ -479,7 +479,8 @@ dialog.app-modal[open] { animation: rv-in 0.16s var(--ease) both; }
 /* The fallback keeps the dim backdrop in engines where ::backdrop does not inherit custom properties. */
 dialog.app-modal::backdrop { background: var(--backdrop, rgba(0, 0, 0, 0.45)); }
 
-.app-modal-header { padding: 18px 20px 0; }
+/* The dialogs share the sheet's rhythm: 24px side padding, 16px between the title, the content and the footer. */
+.app-modal-header { padding: var(--sp-5) var(--sp-5) 0; }
 
 .app-modal-title {
   margin: 0;
@@ -490,7 +491,7 @@ dialog.app-modal::backdrop { background: var(--backdrop, rgba(0, 0, 0, 0.45)); }
 
 .app-modal-body {
   max-height: calc(100vh - 170px);
-  padding: 8px 20px 18px;
+  padding: var(--sp-4) var(--sp-5) var(--sp-5);
   overflow-y: auto;
   color: var(--text);
   line-height: 1.5;
@@ -515,8 +516,8 @@ dialog.app-modal::backdrop { background: var(--backdrop, rgba(0, 0, 0, 0.45)); }
   flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
-  gap: 8px;
-  padding: 12px 20px;
+  gap: var(--sp-2);
+  padding: var(--sp-4) var(--sp-5);
   border-top: 1px solid var(--border);
   background: var(--bg-raised);
 }

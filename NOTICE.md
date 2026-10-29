@@ -50,3 +50,7 @@ The root LICENSE applies to this repository. This notice preserves attribution f
 The bundled `security-audit` skill is vendored from [cloudflare/security-audit-skill](https://github.com/cloudflare/security-audit-skill) at commit `c1c8a8c1471069fb0e188eeaff69b8e8db6564a8`, as recorded in [UPSTREAM.md](resources/default-workspace/skills/security-audit/UPSTREAM.md).
 
 Path: `resources/default-workspace/skills/security-audit/`. Copyright (c) 2025-2026 Cloudflare, Inc. Licensed under MIT; the full [license](resources/default-workspace/skills/security-audit/LICENSE) accompanies the vendored files. Local adaptations are described in `UPSTREAM.md`.
+
+## Lobe Icons
+
+The vector paths of the agent icons in `src/ui/agentIcons.tsx` (Claude, Codex, Cursor, GitHub Copilot, OpenCode, Pi and Kilo Code) come from [Lobe Icons](https://github.com/lobehub/lobe-icons) (`@lobehub/icons-static-svg` 1.101.0), (c) LobeHub, licensed under the MIT License. The marks themselves belong to their owners and are used only to name the tool each icon stands for; Riggverk is not affiliated with or endorsed by them.

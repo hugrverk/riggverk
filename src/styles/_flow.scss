@@ -98,6 +98,8 @@
 
 .flow-src.sel > .flow-node-hit,
 .flow-agent.sel > .flow-node-hit { fill: var(--bg-raised); }
+.flow-agent.sel .flow-ring { fill: var(--bg-raised); }
+.flow-agent.sel .flow-square { stroke: var(--bg-raised); }
 
 .flow-src:focus-visible > .flow-node-hit,
 .flow-agent:focus-visible > .flow-node-hit {
@@ -127,6 +129,10 @@
   transition: stroke var(--dur-state) var(--ease);
 }
 
+/* An agent's icon: the monochrome glyph in ink, muted while the agent is off or missing (ui/agentIcons.tsx). */
+.flow-agent .agent-glyph { color: var(--text); transition: color var(--dur-state) var(--ease); }
+.flow-agent.is-dim .agent-glyph { color: var(--text-muted); opacity: 0.8; }
+
 .flow-src.is-base .flow-ring { stroke: var(--text); }
 .flow-src.is-yours .flow-ring { stroke: var(--yours); }
 .flow-src.is-fix .flow-ring { stroke: var(--fix); }
@@ -138,6 +144,11 @@
 .flow-agent.is-off .flow-ring,
 .flow-agent.is-missing .flow-ring { stroke: var(--off); stroke-dasharray: 2 2; }
 .flow-agent.is-live .flow-ring { stroke: var(--ready); stroke-dasharray: none; }
+
+/* On an agent the ring and the square are badges on the icon's corner: the surface colour cuts a gap in the glyph
+   under them (paint-order puts the stroke of the square behind its fill). */
+.flow-agent .flow-ring { stroke-width: 1.5; }
+.flow-agent .flow-square { stroke: var(--bg); stroke-width: 2; paint-order: stroke; }
 
 .flow-agent.is-dim .flow-name { font-weight: 500; fill: var(--text-muted); }
 
@@ -203,6 +214,9 @@
 }
 
 .flow-h {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
   margin: 0;
   min-width: 0;
   font-size: calc(var(--fs) * 1.08);

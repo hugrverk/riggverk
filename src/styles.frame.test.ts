@@ -3,6 +3,8 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const frame = readFileSync(resolve(import.meta.dirname, "styles", "_frame.scss"), "utf8");
+const run = readFileSync(resolve(import.meta.dirname, "styles", "_run.scss"), "utf8");
+const shell = readFileSync(resolve(import.meta.dirname, "styles", "_shell.scss"), "utf8");
 
 /** The declaration block of the first rule whose selector list is exactly `selector`. */
 function block(selector: string): string {
@@ -40,6 +42,18 @@ describe("frame styles", () => {
 
   it("keeps the toast out of the pointer's way", () => {
     expect(block(".toast")).toMatch(/pointer-events:\s*none/);
+  });
+
+  it("makes the run dock a bar of its own under a view area that cannot run beneath it", () => {
+    const dock = run.match(/(?:^|\n)\.run-dock\s*\{([^}]*)\}/)?.[1] ?? "";
+    expect(dock).toMatch(/flex:\s*none/);
+    expect(dock).toMatch(/border-top:\s*1px solid var\(--border\)/);
+    expect(dock).toMatch(/background:\s*var\(--bg-panel\)/);
+    expect(dock).toMatch(/padding:\s*var\(--sp-3\) 28px/);
+    const viewArea = shell.match(/(?:^|\n)\.view-area\s*\{([^}]*)\}/)?.[1] ?? "";
+    expect(viewArea).toMatch(/flex:\s*1/);
+    expect(viewArea).toMatch(/min-height:\s*0/);
+    expect(viewArea).toMatch(/overflow:\s*hidden/);
   });
 
   it("uses no radius and no amber", () => {
