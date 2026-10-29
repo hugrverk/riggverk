@@ -2430,7 +2430,7 @@ dependencies = [
 
 [[package]]
 name = "riggverk"
-version = "2026.10.9"
+version = "2026.10.10"
 dependencies = [
  "serde",
  "serde_json",
