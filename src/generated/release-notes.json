@@ -1,6 +1,17 @@
 {
   "releases": [
     {
+      "version": "2026.10.11",
+      "sections": [
+        {
+          "title": "Fixes",
+          "items": [
+            "Run dock, sheet spacing, enabled-only sidebar and agent icons"
+          ]
+        }
+      ]
+    },
+    {
       "version": "2026.10.10",
       "sections": [
         {
