@@ -1,11 +1,3 @@
-export interface StatusData {
-  repo_path: string;
-  enabled_rule_target_ids: string[];
-  enabled_config_target_ids: string[];
-  enabled_agent_target_ids: string[];
-  enabled_target_ids: string[];
-}
-
 export interface DocumentContent {
   id: string; title: string; path: string; section: string; source: string; content: string;
 }

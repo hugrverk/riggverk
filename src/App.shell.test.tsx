@@ -22,6 +22,8 @@ interface Backend {
   holdUpdate: Promise<void> | null;
   /** Harness of every get_light_runtime_health call, in order. */
   lightHealthRequests: string[];
+  /** When set, get_claude_runtime_health resolves only after this promise does. */
+  holdClaudeHealth: Promise<void> | null;
   /** Personal docs the Library lists. */
   docs: Array<{ id: string; title: string; content: string }>;
 }
@@ -34,6 +36,7 @@ function installBackend(overrides: Partial<AppSettings> = {}): Backend {
     statusRequests: [],
     holdUpdate: null,
     lightHealthRequests: [],
+    holdClaudeHealth: null,
     docs: [],
   };
   invokeMock.mockImplementation((command: string, args?: { settings?: AppSettings; surfaces?: string[]; harness?: string }) => {
@@ -77,6 +80,18 @@ function installBackend(overrides: Partial<AppSettings> = {}): Backend {
         return Promise.resolve({ agents: [], warnings: [] });
       case "preview_setup":
         return Promise.resolve(planOf([op("workspace_bundle", "update")]));
+      case "apply_setup":
+        return Promise.resolve({
+          success: true,
+          transaction_id: "tx-1",
+          applied: ["workspace_bundle"],
+          failed: [],
+          rolled_back: [],
+          manual_steps: [],
+          message: "applied",
+        });
+      case "get_claude_runtime_health":
+        return (backend.holdClaudeHealth ?? Promise.resolve()).then(() => Promise.reject(new Error("no runtime")));
       case "get_installation_status": {
         const surface = args?.surfaces?.[0] ?? "";
         // A light harness has the shared `skills` surface only, so the request does not say which one it is.
@@ -397,6 +412,35 @@ describe("App shell", () => {
     await screen.findByRole("region", { name: "Uninstall" });
     await act(async () => {});
     expect(backend.commandLog).not.toContain("preview_uninstall");
+  });
+
+  it("frees the install task once the files are written, without waiting for a slow health probe", async () => {
+    const backend = installBackend();
+    render(<App />);
+    await ready();
+    const runCommand = (line: string) => {
+      fireEvent.keyDown(document.body, { key: ":", shiftKey: true });
+      const input = screen.getByRole("combobox", { name: "Command" });
+      fireEvent.change(input, { target: { value: line } });
+      fireEvent.keyDown(input, { key: "Enter" });
+    };
+
+    runCommand("update workspace");
+    await screen.findByRole("region", { name: "Workspace install review" });
+    // From here on the Claude health probe never answers.
+    backend.holdClaudeHealth = new Promise<void>(() => {});
+    const healthCallsBefore = backend.commandLog.filter(entry => entry === "get_claude_runtime_health").length;
+    fireEvent.click(within(screen.getByRole("region", { name: "Workspace install review" })).getByRole("button", { name: /apply/i }));
+    await waitFor(() => expect(backend.commandLog).toContain("apply_setup"));
+    await waitFor(() =>
+      expect(backend.commandLog.filter(entry => entry === "get_claude_runtime_health").length).toBeGreaterThan(healthCallsBefore),
+    );
+
+    // The task lock is free again: a second update opens its review instead of being refused.
+    await waitFor(() => {
+      runCommand("update workspace");
+      expect(screen.queryByRole("region", { name: "Workspace install review" })).not.toBeNull();
+    }, { timeout: 3000 });
   });
 
   describe("top bar", () => {

@@ -22,6 +22,7 @@ import { previewDisabledFor } from "../lib/installationView";
 import { disabledHarnesses, overviewSummaryModel, worthALook } from "../lib/overviewModel";
 import { rulesOverrideWarning } from "../lib/rulesView";
 import { updateAllDisabledReason } from "../lib/shellSummary";
+import type { SavedSelection } from "../hooks/useAppSettingsController";
 import { DEFAULT_WORKSPACE_PATH } from "../lib/settingsDraft";
 import type { AppView } from "../shell/views";
 import { Page } from "../ui/Page";
@@ -33,6 +34,8 @@ export interface OverviewViewProps extends PageOutputProps, PageInstallProps {
   workspaceDiagnostics: WorkspaceDiagnostics | null;
   appSettings: AppSettings | null;
   enabledHarnessIds: InstallAgent[];
+  /** The toggles as the backend last acknowledged them; the flow sources are read for these, not for an edit waiting for its autosave. */
+  savedSelection?: SavedSelection | null;
   /** The agents' targets: where each agent keeps its files, so the map can tell whose file a running task is writing. */
   agentTargets?: readonly AgentTargetMeta[];
   /** Runtime health per enabled agent: the Codex AGENTS.override.md warning and the runtime sub-lines. */
@@ -72,6 +75,7 @@ export function OverviewView({
   workspaceDiagnostics,
   appSettings,
   enabledHarnessIds,
+  savedSelection,
   agentTargets = [],
   runtimeHealth,
   checkedAt = null,
@@ -125,7 +129,7 @@ export function OverviewView({
   const flowSources = useFlowSources({
     enabled: dataFolderOk,
     refreshKey,
-    scopeKey: `${enabledHarnessIds.join(",")}|${appSettings?.enabled_target_ids.join(",") ?? ""}`,
+    scopeKey: `${(savedSelection?.harnessIds ?? enabledHarnessIds).join(",")}|${(savedSelection?.targetIds ?? appSettings?.enabled_target_ids ?? []).join(",")}`,
   });
   const dataFolder =
     overview.entries.workspace?.status?.surfaces.find(row => row.surface === "workspace_bundle")?.data_folder ?? null;

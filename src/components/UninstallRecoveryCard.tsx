@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { Kv, type KvItem } from "../ui/Kv";
 import { Kbd } from "../ui/Kbd";
 import type { SetupResult } from "../types";
+import { plural } from "../lib/plural";
 
 interface UninstallRecoveryCardProps {
   transactionId: string | null;
@@ -12,10 +13,6 @@ interface UninstallRecoveryCardProps {
 
 function rollbackDryRunReady(result: SetupResult | null): boolean {
   return Boolean(result?.success && result.applied.length > 0);
-}
-
-function count(n: number, noun: string): string {
-  return `${n} ${noun}${n === 1 ? "" : "s"}`;
 }
 
 export function UninstallRecoveryCard({
@@ -136,8 +133,8 @@ export function UninstallRecoveryCard({
           </p>
           {dryRunResult && (
             <p className="uninstall-summary">
-              Preview: {count(dryRunResult.applied.length, "file")} to restore
-              {dryRunResult.failed.length > 0 ? `; ${count(dryRunResult.failed.length, "conflict")} reported` : ""}.
+              Preview: {plural(dryRunResult.applied.length, "file")} to restore
+              {dryRunResult.failed.length > 0 ? `; ${plural(dryRunResult.failed.length, "conflict")} reported` : ""}.
             </p>
           )}
         </div>

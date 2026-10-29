@@ -58,9 +58,7 @@ pub use opencode_runtime::{
     get_opencode_runtime_health, list_available_opencode_models, read_opencode_model_selection,
     reset_opencode_model_selection, update_opencode_model_selection,
 };
-pub use packs::{
-    copy_skill_to_pack, forget_pack, list_pack_skills, read_pack_skill, save_pack_skill,
-};
+pub use packs::{copy_skill_to_pack, forget_pack, list_pack_skills, save_pack_skill};
 pub use rules::{
     apply_rules_conversion, preview_rules_conversion, preview_rules_diff, set_rules_user_managed,
 };
@@ -74,7 +72,6 @@ pub use setup::{
     rollback_setup_transaction,
 };
 pub use skills::{get_effective_skill_loads, list_skills, read_skill};
-pub use status::get_status;
 pub use workspace::{
     get_workspace_diagnostics, open_default_workspace_folder, reset_active_workspace_path,
 };

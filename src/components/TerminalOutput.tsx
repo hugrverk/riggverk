@@ -1,10 +1,10 @@
-import { Fragment, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import { actionLabel } from "../lib/actionLabel";
 import { applyOutputLineTone } from "../lib/installPlan";
 import { useMotion, type MotionLevel } from "../lib/motion";
 import { redactTerminalOutput } from "../lib/redactTerminalOutput";
 import { Glyph } from "../ui/Glyph";
-import { cx, toneClass } from "../ui/tone";
+import { toneClass } from "../ui/tone";
 import type { ActionResult, ApplyProgress } from "../types";
 
 // Re-exported so existing component-level imports keep working; the type lives in `types.ts`.
@@ -61,27 +61,6 @@ export function ActivityLoader({ idle = false }: { idle?: boolean }) {
   );
 }
 
-const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
-const SPINNER_STEP_MS = 100;
-
-/** One braille cell that turns while a task runs; a still `·` when motion is off. Decorative: the task text says "running". */
-export function Spinner() {
-  const [frame, setFrame] = useState(0);
-  const still = useMotion() === "off";
-
-  useEffect(() => {
-    if (still) return;
-    const id = window.setInterval(() => setFrame(f => (f + 1) % SPINNER_FRAMES.length), SPINNER_STEP_MS);
-    return () => window.clearInterval(id);
-  }, [still]);
-
-  return (
-    <span className="g spin" aria-hidden="true">
-      {still ? "·" : SPINNER_FRAMES[frame]}
-    </span>
-  );
-}
-
 /** "1.2s" while motion runs (100 ms ticks); whole seconds, ticking once a second, when it is off. */
 export function formatElapsed(ms: number, motion: MotionLevel): string {
   return motion === "off" ? `${Math.floor(ms / 1000)}s` : `${(ms / 1000).toFixed(1)}s`;
@@ -105,32 +84,6 @@ export function Elapsed() {
   );
 }
 
-const PROGRESS_CELLS = 10;
-
-/**
- * Ten character cells, the fill clipped to `done / total`: `██████░░░░`. The fill moves with a 160 ms clip-path
- * transition; the stylesheet turns transitions off for motion "off", so the bar jumps there.
- */
-export function ProgressBar({ done, total }: { done: number; total: number }) {
-  const ratio = total > 0 ? Math.min(1, Math.max(0, done / total)) : 0;
-  const cells = (glyph: string) => Array.from({ length: PROGRESS_CELLS }, (_, i) => <span key={i} className="g">{glyph}</span>);
-  return (
-    <span
-      className={cx("pbar", ratio >= 1 && "done")}
-      role="progressbar"
-      aria-label="Progress"
-      aria-valuemin={0}
-      aria-valuemax={total}
-      aria-valuenow={Math.min(done, total)}
-      aria-valuetext={`${done} of ${total}`}
-      style={{ "--p": `${Math.round(ratio * 100)}%` } as CSSProperties}
-    >
-      <span className="track" aria-hidden="true">{cells("░")}</span>
-      <span className="fill" aria-hidden="true">{cells("█")}</span>
-    </span>
-  );
-}
-
 /** What a progress event says to show: a bar with its count and file, or only a phase word (no total yet, or backing up). */
 function readProgress(progress: ApplyProgress | null | undefined) {
   const total = progress?.total ?? null;
@@ -140,30 +93,6 @@ function readProgress(progress: ApplyProgress | null | undefined) {
     file: progress?.file ?? null,
     backingUp: progress?.phase === "backup",
   };
-}
-
-/**
- * The strip line's middle while a task runs: `[██████░░░░] 4/7 skills/handoff/SKILL.md`, or the loader and a phase
- * word (`backing up…`, `working…`) while there is nothing to count. The file is ellipsized, never wrapped.
- * `loader` false drops the loader when the open log below already shows one.
- */
-export function RunningProgress({ progress, loader = true }: { progress?: ApplyProgress | null; loader?: boolean }) {
-  const { bar, file, backingUp } = readProgress(progress);
-  if (bar) {
-    return (
-      <>
-        <ProgressBar done={bar.done} total={bar.total} />
-        <span className="c-dim pcount">{bar.done}/{bar.total}</span>
-        {file && <span className="c-dim pfile" title={file}>{file}</span>}
-      </>
-    );
-  }
-  return (
-    <>
-      {loader && <ActivityLoader />}
-      <span className="c-dim pfile">{backingUp ? "backing up…" : "working…"}</span>
-    </>
-  );
 }
 
 /** `── stdout ──────`: a labelled rule. The rule is drawn by CSS; the label stays text. */

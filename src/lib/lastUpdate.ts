@@ -2,6 +2,7 @@ import type { InstallAgent, SetupHistoryEntry } from "../types";
 import { HARNESS_LABELS, HARNESS_SURFACES } from "./harnessInstallation";
 import { surfaceTitle } from "./installPlan";
 import { listText } from "./overviewModel";
+import { plural } from "./plural";
 
 export interface ReceiptLine {
   label: string;
@@ -36,10 +37,6 @@ export function updateAgentsText(entry: Pick<SetupHistoryEntry, "harnesses">): s
   return names.length === 0 ? null : listText(names);
 }
 
-function count(n: number, noun: string): string {
-  return `${n} ${noun}${n === 1 ? "" : "s"}`;
-}
-
 function unique<T>(values: readonly T[]): T[] {
   return [...new Set(values)];
 }
@@ -55,10 +52,10 @@ export function receiptLines(entry: SetupHistoryEntry, backupCount: number | nul
   const restored = entry.changes.filter(change => change.restored);
   if (changed.length > 0) {
     const surfaces = unique(changed.map(change => change.surface)).map(surfaceTitle).join(", ");
-    lines.push({ label: "Changed", value: `${surfaces} · ${count(changed.length, "file")}` });
+    lines.push({ label: "Changed", value: `${surfaces} · ${plural(changed.length, "file")}` });
   }
   if (restored.length > 0) {
-    lines.push({ label: "Restored", value: `${count(restored.length, "file")} from the backup` });
+    lines.push({ label: "Restored", value: `${plural(restored.length, "file")} from the backup` });
   }
   if (entry.receipt) {
     if (entry.receipt.synced.length > 0) {
@@ -74,8 +71,8 @@ export function receiptLines(entry: SetupHistoryEntry, backupCount: number | nul
     }
   }
   if (entry.backup_files > 0) {
-    const kept = backupCount !== null && backupCount > 0 ? ` · kept with ${count(backupCount, "backup")}` : "";
-    lines.push({ label: "Backup", value: `${count(entry.backup_files, "file")}${kept}` });
+    const kept = backupCount !== null && backupCount > 0 ? ` · kept with ${plural(backupCount, "backup")}` : "";
+    lines.push({ label: "Backup", value: `${plural(entry.backup_files, "file")}${kept}` });
   }
   if (lines.length === 0) lines.push({ label: "Changed", value: "no files" });
   return lines;
@@ -115,7 +112,7 @@ export function runMetaText(entry: SetupHistoryEntry, now: Date = new Date()): s
   const millis = nanosToMillis(entry.finished_at) ?? nanosToMillis(entry.created_at);
   const when = time === null ? null : millis !== null && sameDay(new Date(millis), now) ? `Today ${time}` : time;
   const written = entry.changes.filter(change => change.applied).length;
-  return [when, written > 0 ? count(written, "file") : null].filter(Boolean).join(" · ") || "Time not recorded";
+  return [when, written > 0 ? plural(written, "file") : null].filter(Boolean).join(" · ") || "Time not recorded";
 }
 
 /** The pill of a run: Done, Undone (quiet outline) or Failed. */
@@ -146,9 +143,9 @@ export function agentReceipt(entry: SetupHistoryEntry, harness: InstallAgent): {
   if (!part) return { part: false, lines: [] };
   const lines: ReceiptLine[] = [];
   if (changed.length > 0) {
-    lines.push({ label: "Changed", value: `${unique(changed.map(change => change.surface)).map(surfaceTitle).join(", ")} · ${count(changed.length, "file")}` });
+    lines.push({ label: "Changed", value: `${unique(changed.map(change => change.surface)).map(surfaceTitle).join(", ")} · ${plural(changed.length, "file")}` });
   }
-  if (restored.length > 0) lines.push({ label: "Restored", value: `${count(restored.length, "file")} from the backup` });
+  if (restored.length > 0) lines.push({ label: "Restored", value: `${plural(restored.length, "file")} from the backup` });
   if (synced.length > 0) lines.push({ label: "Checked", value: `${synced.map(surfaceTitle).join(", ")} · current` });
   if (left.length > 0) {
     lines.push({

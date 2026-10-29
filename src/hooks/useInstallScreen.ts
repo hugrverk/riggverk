@@ -47,10 +47,9 @@ export interface InstallScreen {
   /** The review (or its preview/error state) is showing on this page. */
   isOpenOn: (view: AppView) => boolean;
   /**
-   * Opens the review for `target`: switches to its page first (the harness page, or the workspace page for the
-   * workspace and `all`), then previews. `scope` keeps the review on the page that asked for it, as the workspace
-   * page does for the harness under its cursor. `readOnly` shows the plan without an apply path. Ignored while a
-   * preview or an apply is running.
+   * Opens the review for `target`: switches to its page first (the harness page, or the Overview for the
+   * workspace and `all`), then previews. `scope` keeps the review on the page that asked for it.
+   * `readOnly` shows the plan without an apply path. Ignored while a preview or an apply is running.
    */
   open: (target: InstallTarget, options?: InstallOpenOptions) => Promise<void>;
   /** Applies the reviewed plan through the workspace task runner so the run panel shows the run. */

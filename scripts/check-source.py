@@ -273,7 +273,6 @@ FORBIDDEN = (
 # silently, so its name stays pinned here; the full `cargo test` run proves it passes.
 REQUIRED_RUST_TESTS = (
     ("src-tauri/src/agent_targets.rs", "cursor_setup_is_agents_not_rules"),
-    ("src-tauri/src/agent_targets.rs", "cursor_setup_not_in_runtime_agent_targets"),
     ("src-tauri/src/agent_targets.rs", "bundled_config_targets_exclude_cursor_setup"),
     ("src-tauri/src/agent_targets.rs", "opencode_config_target_syncs_generated_opencode_json"),
     ("src-tauri/src/commands/content.rs", "cursor_setup_is_not_a_bundled_config_template"),

@@ -8,7 +8,6 @@ import type { Binding } from "../keyboard/registry";
 import { useKeymap } from "../keyboard/useKeymap";
 import { renderInFrame } from "../test/renderWithShell";
 import { Pane } from "../ui/Pane";
-import { PaneList } from "../ui/PaneList";
 
 afterEach(cleanup);
 
@@ -31,6 +30,8 @@ describe("HelpOverlay", () => {
       { id: "t.update", keys: "u", title: "Update harness", group: "Harness", hint: "update", scope: "pane", paneId: "main", run: noop },
       { id: "t.save", keys: "Mod+s", title: "Save", group: "Editor", scope: "editor", inEditable: true, run: noop },
       { id: "t.top", keys: "g g", title: "Jump to top", group: "Harness", scope: "pane", paneId: "main", run: noop },
+      { id: "t.first", keys: "Home", title: "First item", group: "Lists", scope: "pane", paneId: "main", run: noop },
+      { id: "t.last", keys: "End", title: "Last item", group: "Lists", scope: "pane", paneId: "main", run: noop },
       { id: "t.off", keys: "x", title: "Needs a plan", group: "Harness", scope: "pane", paneId: "main", when: () => "no plan yet", run: noop },
     ];
     let registered: readonly string[] = [];
@@ -43,7 +44,9 @@ describe("HelpOverlay", () => {
         <Registrar bindings={extra} />
         <Probe />
         <Pane id="main" title="main">
-          <PaneList label="rows" items={[{ id: "a" }]} getKey={row => row.id} renderItem={row => <span>{row.id}</span>} />
+          <ul role="listbox" aria-label="rows" tabIndex={0} data-pane-primary="">
+            <li role="option" aria-selected="false">a</li>
+          </ul>
         </Pane>
       </>,
     );
@@ -59,8 +62,6 @@ describe("HelpOverlay", () => {
       "Keyboard help",
       "Open settings",
       "Leave text field, dismiss error",
-      "Move down",
-      "Move up",
       "First item",
       "Last item",
       "Update harness",

@@ -9,7 +9,7 @@ import type {
   SkillLoadFlag,
   SkillReadFolder,
 } from "../types";
-import type { StateDisplay } from "./installationView";
+import { plural } from "./plural";
 
 /** Flagged names listed under the summary row; the rest is counted as "+N more". */
 export const MAX_FLAGGED_ROWS = 5;
@@ -56,20 +56,6 @@ export function summarizeSkillLoads(
 /** Names that need a look on this harness: the app's duplicates plus the user's own. */
 export function skillLoadProblemCount(summary: HarnessLoadSummary | null): number {
   return summary ? summary.flagged.length + summary.foreign.length : 0;
-}
-
-/** A surface state with the number of duplicate names after it; an ok state turns into a warning. */
-export function withSkillProblems(display: StateDisplay, problems: number): StateDisplay {
-  if (problems <= 0) return display;
-  return {
-    ...display,
-    tone: display.tone === "ok" ? "warn" : display.tone,
-    label: `${display.label} · ${problems} duplicate${problems === 1 ? "" : "s"}`,
-  };
-}
-
-function plural(count: number, noun: string): string {
-  return `${count} ${noun}${count === 1 ? "" : "s"}`;
 }
 
 function folderPath(harness: HarnessSkillLoads, folder: SkillReadFolder): string {

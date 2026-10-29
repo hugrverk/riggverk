@@ -40,7 +40,7 @@ import { LIGHT_AGENTS, type InstallAgent, type SetupResult } from "./types";
 
 type View = AppView;
 
-/** The workspace page and every harness page show diagnostics and runtime health. */
+/** The Overview and every harness page show diagnostics and runtime health. */
 function isWorkspaceLoadView(view: View): boolean {
   return view === "start" || harnessForView(view) !== null;
 }
@@ -73,7 +73,6 @@ function AppShell() {
     cursorProfileHealth,
     claudeRuntimeHealth,
     lightRuntimeHealth,
-    fetchStatus,
     loadWorkspaceDiagnostics,
     loadOpenCodeRuntimeHealth,
     loadCodexRuntimeHealth,
@@ -163,7 +162,6 @@ function AppShell() {
     workspaceLoadGenerationRef,
     isWorkspaceLoadCurrent,
     isInvalidWorkspaceError,
-    fetchStatus,
     view,
   });
 
@@ -191,17 +189,14 @@ function AppShell() {
   ]);
 
   const loadWorkspaceResources = useCallback(async (generation = workspaceLoadGenerationRef.current) => {
-    const tasks: Promise<unknown>[] = [
-      fetchStatus(generation).catch(() => {}),
-      loadEnabledHarnessHealth(generation),
-    ];
+    const tasks: Promise<unknown>[] = [loadEnabledHarnessHealth(generation)];
     // Library data is loaded on demand by loadLibraryView when the Library
     // opens; refresh here only when it is the active view (workspace change).
     if (viewRef.current === "library") {
       tasks.push(loadWorkspaceLibraryResources(generation));
     }
     await Promise.all(tasks);
-  }, [loadWorkspaceLibraryResources, fetchStatus, loadEnabledHarnessHealth, workspaceLoadGenerationRef]);
+  }, [loadWorkspaceLibraryResources, loadEnabledHarnessHealth, workspaceLoadGenerationRef]);
 
   const {
     transactionId: uninstallRecoveryTransactionId,
@@ -274,7 +269,6 @@ function AppShell() {
     resetWorkspaceBoundState,
     loadWorkspaceDiagnostics,
     loadWorkspaceResources,
-    fetchStatus,
     workspaceTaskLabel: wsRunning,
   });
 
@@ -363,7 +357,7 @@ function AppShell() {
       .forEach(clearHarnessHealth);
     const newlyEnabled = enabledHarnessIds.filter(harness => !previous.includes(harness));
     if (newlyEnabled.length > 0) {
-      void Promise.all([fetchStatus(), loadEnabledHarnessHealth(undefined, newlyEnabled)]);
+      void loadEnabledHarnessHealth(undefined, newlyEnabled);
     }
     const activeHarness = harnessForView(viewRef.current);
     if (activeHarness && !enabledHarnessIds.includes(activeHarness)) setView("start");
@@ -371,7 +365,6 @@ function AppShell() {
     appSettings,
     enabledHarnessKey,
     clearHarnessHealth,
-    fetchStatus,
     loadEnabledHarnessHealth,
     loadWorkspaceDiagnostics,
     loadWorkspaceResources,
@@ -409,13 +402,14 @@ function AppShell() {
   // Reload what an install or rollback may have changed on disk.
   const refreshAfterApply = useCallback(async () => {
     const gen = workspaceLoadGenerationRef.current;
+    // Health is not awaited: the runtime probes can take a second or more and only feed verdict
+    // lines, so they must not hold the install task lock. The generation guard drops stale answers.
+    void loadEnabledHarnessHealth(gen);
     await Promise.all([
       loadWorkspaceDiagnostics(gen),
       loadDocs(gen),
-      fetchStatus(),
-      loadEnabledHarnessHealth(gen),
     ]);
-  }, [loadWorkspaceDiagnostics, loadDocs, fetchStatus, loadEnabledHarnessHealth, workspaceLoadGenerationRef]);
+  }, [loadWorkspaceDiagnostics, loadDocs, loadEnabledHarnessHealth, workspaceLoadGenerationRef]);
 
   // An install or a rules conversion that wrote files leaves the transaction `z` rolls back.
   const onApplied = useCallback((result: SetupResult) => {
@@ -449,10 +443,9 @@ function AppShell() {
       }),
       refresh: async () => {
         const gen = workspaceLoadGenerationRef.current;
+        void loadEnabledHarnessHealth(gen);
         await Promise.all([
           loadWorkspaceDiagnostics(gen),
-          fetchStatus(),
-          loadEnabledHarnessHealth(gen),
         ]);
       },
     }).then(result => {
@@ -463,7 +456,6 @@ function AppShell() {
     runWsTask,
     captureFromUninstallResult,
     loadWorkspaceDiagnostics,
-    fetchStatus,
     loadEnabledHarnessHealth,
     workspaceLoadGenerationRef,
   ]);
@@ -483,11 +475,10 @@ function AppShell() {
       }),
       refresh: async () => {
         const gen = workspaceLoadGenerationRef.current;
+        void loadEnabledHarnessHealth(gen);
         await Promise.all([
           loadWorkspaceDiagnostics(gen),
           loadDocs(gen),
-          fetchStatus(),
-          loadEnabledHarnessHealth(gen),
         ]);
       },
     }).then((result) => {
@@ -502,7 +493,6 @@ function AppShell() {
     clearUninstallRecovery,
     loadWorkspaceDiagnostics,
     loadDocs,
-    fetchStatus,
     loadEnabledHarnessHealth,
     workspaceLoadGenerationRef,
   ]);
@@ -536,7 +526,7 @@ function AppShell() {
   ]);
 
   /**
-   * `:uninstall`: go to the workspace page, where the Uninstall card opens its preview dialog. The card is not
+   * `:uninstall`: go to the Overview, where the Workspace folder cell's Uninstall card opens its preview dialog. The card is not
    * on the page while the install review is open, so the request is dropped then instead of waiting to pop the
    * dialog once the review closes.
    */
@@ -727,6 +717,7 @@ function AppShell() {
             workspaceDiagnostics={workspaceDiagnostics}
             appSettings={appSettings}
             enabledHarnessIds={enabledHarnessIds}
+            savedSelection={savedSelection}
             agentTargets={agentTargets}
             runtimeHealth={runtimeHealthByHarness}
             checkedAt={checkedAt}

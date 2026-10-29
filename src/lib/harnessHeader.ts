@@ -1,5 +1,6 @@
 import type { AgentTargetMeta, InstallAgent } from "../types";
 import type { HarnessRuntimeHealth } from "./harnessRuntimeRows";
+import { plural } from "./plural";
 
 /**
  * The folder a harness keeps its files in, as people write it ("~/.claude", "~/.config/opencode"): the directory all
@@ -19,10 +20,6 @@ export function harnessHomePath(targets: readonly AgentTargetMeta[], harness: In
   return common.length > 0 ? `~/${common.join("/")}` : null;
 }
 
-function count(n: number, noun: string): string {
-  return `${n} ${noun}${n === 1 ? "" : "s"}`;
-}
-
 /** What the runtime health says about a harness in a few words each: counts, CLI, approval and sandbox. */
 function runtimeParts(runtime: HarnessRuntimeHealth): string[] {
   const health = runtime.health;
@@ -30,7 +27,7 @@ function runtimeParts(runtime: HarnessRuntimeHealth): string[] {
   switch (runtime.harness) {
     case "claude": {
       const claude = runtime.health!;
-      return [count(claude.installed_agent_count, "agent"), claude.claude_cli_available ? "CLI available" : "CLI not found"];
+      return [plural(claude.installed_agent_count, "agent"), claude.claude_cli_available ? "CLI available" : "CLI not found"];
     }
     case "codex": {
       const codex = runtime.health!;
@@ -46,7 +43,7 @@ function runtimeParts(runtime: HarnessRuntimeHealth): string[] {
       ];
     }
     case "cursor":
-      return [count(runtime.health!.global_agents_count, "agent")];
+      return [plural(runtime.health!.global_agents_count, "agent")];
     default: {
       const cli = runtime.health!.cli;
       return [cli.status === "missing" ? "CLI not found" : cli.version ? `CLI ${cli.version}` : "CLI found"];
@@ -67,7 +64,7 @@ export function harnessSubline(input: {
 }): string {
   const parts = [
     ...(input.home ? [input.home] : []),
-    ...(input.dataFolderOk ? [...(input.skills !== null ? [count(input.skills, "skill")] : []), ...runtimeParts(input.runtime)] : []),
+    ...(input.dataFolderOk ? [...(input.skills !== null ? [plural(input.skills, "skill")] : []), ...runtimeParts(input.runtime)] : []),
   ];
   return parts.join(" · ");
 }
