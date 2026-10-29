@@ -86,6 +86,73 @@ describe("useAppSettingsController loadSettings", () => {
   });
 });
 
+describe("useAppSettingsController stale loads", () => {
+  beforeEach(() => {
+    invoke.mockReset();
+  });
+
+  it("ignores a delayed load that finishes after the user changed settings", async () => {
+    mockInitialLoad();
+    const { result } = renderHook(() => useAppSettingsController(createDeps()));
+    await act(async () => {
+      await result.current.loadSettings();
+    });
+
+    let resolveGet: (value: unknown) => void = () => {};
+    const delayed = new Promise(resolve => {
+      resolveGet = resolve;
+    });
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === "get_settings") return delayed;
+      if (cmd === "get_agent_targets") return Promise.resolve([]);
+      return Promise.reject(new Error(`unexpected invoke: ${cmd}`));
+    });
+    let loading: Promise<void>;
+    await act(async () => {
+      loading = result.current.loadSettings();
+    });
+    await act(async () => {
+      result.current.setAppFontSize("extra-large");
+    });
+    await act(async () => {
+      resolveGet({ settings: baseSettings, load_warning: null });
+      await loading!;
+    });
+
+    expect(result.current.appSettings?.app_font_size).toBe("extra-large");
+    expect(result.current.settingsDirty).toBe(true);
+  });
+
+  it("lets the newest of two overlapping loads win", async () => {
+    mockInitialLoad();
+    const { result } = renderHook(() => useAppSettingsController(createDeps()));
+    await act(async () => {
+      await result.current.loadSettings();
+    });
+
+    const resolvers: Array<(value: unknown) => void> = [];
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === "get_settings") return new Promise(resolve => resolvers.push(resolve));
+      if (cmd === "get_agent_targets") return Promise.resolve([]);
+      return Promise.reject(new Error(`unexpected invoke: ${cmd}`));
+    });
+    let first: Promise<void>;
+    let second: Promise<void>;
+    await act(async () => {
+      first = result.current.loadSettings();
+      second = result.current.loadSettings();
+    });
+    await act(async () => {
+      resolvers[1]({ settings: { ...baseSettings, app_font_size: "large", revision: 3 }, load_warning: null });
+      await second!;
+      resolvers[0]({ settings: { ...baseSettings, app_font_size: "small", revision: 2 }, load_warning: null });
+      await first!;
+    });
+
+    expect(result.current.appSettings?.app_font_size).toBe("large");
+  });
+});
+
 describe("useAppSettingsController setAppFontSize", () => {
   beforeEach(() => {
     invoke.mockReset();
