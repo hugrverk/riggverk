@@ -11,6 +11,7 @@ import {
   normalizeAppFontSize,
   themeAccentDefault,
   themeColorDefaults,
+  themeColorWarnings,
 } from "./settingsDraft";
 
 describe("defaultSettings", () => {
@@ -148,5 +149,36 @@ describe("typography inheritance", () => {
       applyThemeSettings({ ...defaultSettings(), app_font_size: size });
       expect(document.documentElement.style.getPropertyValue("--app-font-size")).toBe(px);
     }
+  });
+});
+
+describe("themeColorWarnings", () => {
+  const none = { foreground: null, background: null, accent: null };
+
+  it("is silent for the theme defaults and a readable same-class pair", () => {
+    expect(themeColorWarnings({ appearance: "dark", ...none })).toEqual([]);
+    expect(themeColorWarnings({ appearance: "dark", foreground: "#ffffff", background: "#000000", accent: null })).toEqual([]);
+    expect(themeColorWarnings({ appearance: "light", foreground: "#111111", background: "#ffffff", accent: null })).toEqual([]);
+  });
+
+  it("warns when foreground and background are below 4.5:1", () => {
+    const [warning] = themeColorWarnings({ appearance: "dark", foreground: "#777777", background: "#808080", accent: null });
+    expect(warning).toContain("below 4.5:1");
+  });
+
+  it("warns when the accent is below 3:1 against the background", () => {
+    const warnings = themeColorWarnings({ appearance: "dark", foreground: null, background: null, accent: "#222224" });
+    expect(warnings.join(" ")).toContain("below 3:1");
+    expect(themeColorWarnings({ appearance: "dark", foreground: null, background: null, accent: "#7d9cc4" })).toEqual([]);
+  });
+
+  it("warns when a custom background is the opposite luminance class of the theme", () => {
+    const warnings = themeColorWarnings({ appearance: "dark", foreground: "#111111", background: "#ffffff", accent: null });
+    expect(warnings.join(" ")).toContain("light on the dark theme");
+  });
+
+  it("warns when the fixed muted and status inks do not read on a same-class background", () => {
+    const warnings = themeColorWarnings({ appearance: "dark", foreground: "#ffffff", background: "#5a5a60", accent: null });
+    expect(warnings.join(" ")).toContain("Muted and status text");
   });
 });

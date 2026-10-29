@@ -13,12 +13,8 @@
        .pane-foot            optional static footer (confirm line, copy-path, nav text); key hints are not
                              rendered here, the owner of the pane offers the buttons
    Lists
-     .rows                   <ul role="listbox">; .row = <li role="option" aria-selected>
-       .row .cur             16px cursor cell (▸ on the active row)
-       .row .nm              name cell (ellipsis); .row .meta right cell (muted)
-     .group                  lowercase muted group label inside .rows or a pane body; one blank row above
+     .group                  lowercase muted group label inside a pane body; one blank row above
                              (margin-top: var(--lh)) unless it is the first child
-     .filter                 pane filter row: <div class="filter"><span class="c-acc">/</span><input></div>
    Key/value
      .kv                     <dl class="kv"><dt>key</dt><dd>value</dd></dl>; dd.wrap allows wrapping
    Keys and glyphs
@@ -176,34 +172,7 @@ kbd {
 
 .pane-foot > * { white-space: nowrap; }
 
-/* ---- rows ---- */
-
-.rows {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-/* The pane border + cursor row show focus; a second ring around the whole list is noise. */
-.rows:focus-visible { outline: none; }
-
-.row {
-  display: grid;
-  grid-template-columns: 16px minmax(0, 1fr) auto;
-  gap: 0 8px;
-  align-items: center;
-  height: var(--lh);
-  padding: 0 10px 0 8px;
-  white-space: nowrap;
-  cursor: default;
-}
-
-.row .cur { color: var(--accent); text-align: center; }
-.row .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.row .meta { color: var(--text-muted); font-size: var(--fs); }
-.row:hover { background: var(--inset); }
-.row[aria-selected="true"] { background: var(--sel); }
-.row[aria-selected="true"] .nm { color: var(--text-heading); font-weight: 500; }
+/* ---- groups ---- */
 
 .group {
   margin-top: var(--lh);
@@ -216,30 +185,6 @@ kbd {
 }
 
 .group:first-child { margin-top: 0; }
-
-.filter {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 6px;
-  padding: 0 10px 6px;
-  border-bottom: 1px solid var(--border);
-}
-
-.filter:focus-within { border-bottom-color: var(--accent); }
-
-.filter input {
-  flex: 1;
-  min-width: 0;
-  min-height: 24px;
-  padding: 0;
-  border: none;
-  background: transparent;
-  color: var(--text);
-  outline: none;
-}
-
-.filter input::placeholder { color: var(--text-muted); }
 
 /* ---- key/value ---- */
 

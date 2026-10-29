@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { formatReceipt } from "../lib/installPlan";
 import type { ActionResult, CodexConfigDefaultsPreview, SetupResult } from "../types";
 import type { RunWorkspaceTask } from "./useInstallScreen";
 
@@ -51,8 +52,6 @@ function errorText(e: unknown): string {
   return String(e);
 }
 
-const SHORT_FINGERPRINT = 8;
-
 /** "approvals_reviewer, sandbox_mode": the keys a reset sets, for the output and the review. */
 export function defaultsKeyList(preview: CodexConfigDefaultsPreview): string {
   return preview.keys.map(item => item.key).join(", ");
@@ -60,22 +59,15 @@ export function defaultsKeyList(preview: CodexConfigDefaultsPreview): string {
 
 /** Output-pane text for a finished reset: the line the first word tones, then the transaction. */
 export function formatCodexDefaultsOutput(preview: CodexConfigDefaultsPreview, result: SetupResult) {
-  const word = result.success ? "applied" : result.rolled_back.length > 0 ? "rolled back" : "failed";
-  const pad = (text: string) => text.padEnd(13);
-  const keys = defaultsKeyList(preview);
-  const lines = [
-    `plan ${preview.plan_fingerprint.slice(0, SHORT_FINGERPRINT) || "-"} · use Riggverk defaults ${keys} · fingerprint verified`,
-    `${pad(word)}Codex config${result.success ? " · yours backed up" : ""}`,
-    ...preview.keys.map(item => `${pad("set")}${item.key} = ${item.riggverk}`),
-    ...result.manual_steps.map(step => `${pad("manual")}${step}`),
-    result.message,
-    `applied ${result.applied.length} · failed ${result.failed.length} · rolled back ${result.rolled_back.length}`,
-    result.transaction_id
-      ? `transaction ${result.transaction_id} ${result.success && result.applied.length > 0 ? "recorded · rollback available" : "recorded"}`
-      : "",
-  ].filter(Boolean);
-  const stderr = result.success ? "" : [...result.failed, ...(result.failed.length === 0 ? [result.message] : [])].join("\n");
-  return { stdout: lines.join("\n"), stderr };
+  return formatReceipt({
+    fingerprint: preview.plan_fingerprint,
+    subject: `use Riggverk defaults ${defaultsKeyList(preview)}`,
+    lines: (word, pad) => [
+      `${pad(word)}Codex config${result.success ? " · yours backed up" : ""}`,
+      ...preview.keys.map(item => `${pad("set")}${item.key} = ${item.riggverk}`),
+    ],
+    result,
+  });
 }
 
 export function useCodexDefaultsFlow({ runWorkspaceTask, refresh, onApplied }: UseCodexDefaultsFlowOptions): CodexDefaultsFlow {

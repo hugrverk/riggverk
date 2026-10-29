@@ -8,8 +8,6 @@ import {
   RULES_HARNESSES,
   rulesModel,
   rulesModelFor,
-  rulesPageHint,
-  rulesStatusOf,
   rulesSurfaceOf,
   rulesWhy,
 } from "./rulesView";
@@ -86,7 +84,6 @@ describe("rulesModel", () => {
     const gates = rulesGates(m, { dataFolderOk: true, busyLabel: null, blockedBy: null });
     expect(gates.diff.visible).toBe(true);
     expect([gates.convert.visible, gates.leave.visible, gates.manage.visible]).toEqual([false, false, false]);
-    expect(rulesPageHint(m, "Pi")).toContain("another file in the rules folder");
   });
 
   it("calls a missing file that a peer would be hidden by blocked, not not installed", () => {
@@ -134,7 +131,6 @@ describe("rules surfaces", () => {
       { ...surfaceStatus("claude_rules", "conflict"), rules: rules({ conflict_reason: "base_block_edited" }) },
       surfaceStatus("claude_agents", "current"),
     ]);
-    expect(rulesStatusOf(status, "claude_rules")?.conflict_reason).toBe("base_block_edited");
     expect(rulesModelFor("claude", status)?.kind).toBe("conflict");
     expect(rulesModelFor("cursor", status)).toBeNull();
     expect(rulesModelFor("codex", status)).toBeNull();

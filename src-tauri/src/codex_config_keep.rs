@@ -498,7 +498,13 @@ pub fn plan_defaults(workspace_root: &Path, home: &Path) -> Result<DefaultsPlan,
         &dest,
         &source,
     )
-    .map_err(|_| CANNOT_EDIT_SAFELY.to_string())?;
+    .map_err(|error| {
+        if error == crate::commands::CODEX_PYTHON_REQUIRED {
+            error
+        } else {
+            CANNOT_EDIT_SAFELY.to_string()
+        }
+    })?;
     let rendered_toml: toml::Value = rendered
         .parse()
         .map_err(|_| CANNOT_EDIT_SAFELY.to_string())?;

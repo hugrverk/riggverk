@@ -13,10 +13,13 @@ mod process;
 pub(crate) mod retired_workspace_files;
 mod security_posture;
 pub(crate) mod setup;
+#[cfg(test)]
+pub(crate) use codex_runtime::with_codex_python;
 pub(crate) use codex_runtime::{
-    extract_managed_codex_config, is_app_shaped_legacy_profile, managed_codex_keys_match,
-    render_codex_config_for_apply, render_codex_config_managed_projection,
-    CREATE_ONLY_TOP_LEVEL_KEYS, LEGACY_TOP_LEVEL_PROFILE_VALUES,
+    codex_python, extract_managed_codex_config, is_app_shaped_legacy_profile,
+    managed_codex_keys_match, render_codex_config_for_apply,
+    render_codex_config_managed_projection, CODEX_PYTHON_REQUIRED, CREATE_ONLY_TOP_LEVEL_KEYS,
+    LEGACY_TOP_LEVEL_PROFILE_VALUES,
 };
 pub(crate) use content::personal_doc_count;
 pub(crate) use opencode_runtime::{
@@ -58,9 +61,7 @@ pub use opencode_runtime::{
     get_opencode_runtime_health, list_available_opencode_models, read_opencode_model_selection,
     reset_opencode_model_selection, update_opencode_model_selection,
 };
-pub use packs::{
-    copy_skill_to_pack, forget_pack, list_pack_skills, read_pack_skill, save_pack_skill,
-};
+pub use packs::{copy_skill_to_pack, forget_pack, list_pack_skills, save_pack_skill};
 pub use rules::{
     apply_rules_conversion, preview_rules_conversion, preview_rules_diff, set_rules_user_managed,
 };
@@ -74,7 +75,6 @@ pub use setup::{
     rollback_setup_transaction,
 };
 pub use skills::{get_effective_skill_loads, list_skills, read_skill};
-pub use status::get_status;
 pub use workspace::{
     get_workspace_diagnostics, open_default_workspace_folder, reset_active_workspace_path,
 };

@@ -693,18 +693,9 @@ fn run_generator_check_with_timeout(
     // so no freshness check is possible.
     out.exit_code?;
     let passed = out.success;
-    let stderr = out.stderr.trim().to_string();
-    let stdout = out.stdout.trim().to_string();
+    // Fixed phrases: the generator's own output is never shown.
     let detail = if passed {
-        if !stdout.is_empty() {
-            stdout
-        } else {
-            "snapshot is current".into()
-        }
-    } else if !stderr.is_empty() {
-        stderr
-    } else if !stdout.is_empty() {
-        stdout
+        "snapshot is current".into()
     } else {
         "snapshot is stale (generator check failed)".into()
     };
@@ -1669,23 +1660,63 @@ pub(crate) fn apply_cli_probes(
         (Some(_), true) => None,
     };
 
-    if let Some(agent) = health.default_agent.clone() {
-        // `debug agent` is checked on 1.x only: that is the version whose output Riggverk has seen.
-        let outcome = match (program, unreachable, &report.version) {
-            (_, Some(reason), _) => Err(reason.to_string()),
-            (Some(program), None, Some(version)) if version.major == 1 => {
-                match opencode_cli::probe_agent(program, &agent, limits.agent) {
-                    AgentProbe::Resolves => Ok(true),
-                    AgentProbe::Unresolved => Ok(false),
-                    AgentProbe::TimedOut => Err(format!(
-                        "opencode debug agent timed out after {}s",
-                        limits.agent.as_secs()
-                    )),
-                    AgentProbe::NotRun => Err("opencode debug agent could not run".to_string()),
+    let configured = [
+        ("model", health.model.clone()),
+        ("small_model", health.small_model.clone()),
+        ("subagent_model", health.subagent_model.clone()),
+        ("critic_model", health.critic_model.clone()),
+    ];
+    let wants_models = configured.iter().any(|(_, value)| value.is_some());
+
+    // Both probes only need the version result, so they run side by side: the cost is the slower
+    // of the two, not their sum.
+    let default_agent = health.default_agent.clone();
+    let version = report.version.as_ref();
+    let (agent_outcome, models) = std::thread::scope(|scope| {
+        let agent_probe = default_agent.as_deref().map(|agent| {
+            scope.spawn(move || {
+                // `debug agent` is checked on 1.x only: that is the version whose output Riggverk has seen.
+                match (program, unreachable, version) {
+                    (_, Some(reason), _) => Err(reason.to_string()),
+                    (Some(program), None, Some(version)) if version.major == 1 => {
+                        match opencode_cli::probe_agent(program, agent, limits.agent) {
+                            AgentProbe::Resolves => Ok(true),
+                            AgentProbe::Unresolved => Ok(false),
+                            AgentProbe::TimedOut => Err(format!(
+                                "opencode debug agent timed out after {}s",
+                                limits.agent.as_secs()
+                            )),
+                            AgentProbe::NotRun => {
+                                Err("opencode debug agent could not run".to_string())
+                            }
+                        }
+                    }
+                    _ => Err("only checked on OpenCode 1.x".to_string()),
                 }
-            }
-            _ => Err("only checked on OpenCode 1.x".to_string()),
-        };
+            })
+        });
+        let models: Option<Result<Vec<String>, String>> =
+            wants_models.then(|| match (program, unreachable) {
+                (_, Some(reason)) => Err(reason.to_string()),
+                (Some(program), None) => {
+                    let listed = run_models_listing(program, program, version, limits.models);
+                    match listed {
+                        Ok(result) if result.warning.is_none() => Ok(result.models),
+                        Ok(_) => Err("opencode models gave no usable list".to_string()),
+                        Err(_) => Err("opencode models did not complete".to_string()),
+                    }
+                }
+                (None, None) => Err(UNVERIFIED_NO_CLI.to_string()),
+            });
+        let agent_outcome = agent_probe.map(|handle| {
+            handle
+                .join()
+                .unwrap_or_else(|panic| std::panic::resume_unwind(panic))
+        });
+        (agent_outcome, models)
+    });
+
+    if let (Some(agent), Some(outcome)) = (default_agent, agent_outcome) {
         let (status, detail) = match outcome {
             Ok(true) => ("pass", format!("{agent} resolves")),
             Ok(false) => {
@@ -1711,28 +1742,7 @@ pub(crate) fn apply_cli_probes(
         );
     }
 
-    let configured = [
-        ("model", health.model.clone()),
-        ("small_model", health.small_model.clone()),
-        ("subagent_model", health.subagent_model.clone()),
-        ("critic_model", health.critic_model.clone()),
-    ];
-    if configured.iter().all(|(_, value)| value.is_none()) {
-        return;
-    }
-    let models: Result<Vec<String>, String> = match (program, unreachable) {
-        (_, Some(reason)) => Err(reason.to_string()),
-        (Some(program), None) => {
-            let listed =
-                run_models_listing(program, program, report.version.as_ref(), limits.models);
-            match listed {
-                Ok(result) if result.warning.is_none() => Ok(result.models),
-                Ok(_) => Err("opencode models gave no usable list".to_string()),
-                Err(_) => Err("opencode models did not complete".to_string()),
-            }
-        }
-        (None, None) => Err(UNVERIFIED_NO_CLI.to_string()),
-    };
+    let Some(models) = models else { return };
     let mut warned_models = BTreeSet::new();
     for (id, value) in configured {
         let Some(value) = value else { continue };
@@ -2269,7 +2279,7 @@ pub fn update_opencode_model_selection(
     critic_model: Option<String>,
 ) -> Result<String, String> {
     // Writes files an apply may also write: wait for a running mutation instead of interleaving.
-    let _mutation = crate::mutation_lock::acquire();
+    let _mutation = crate::mutation_lock::acquire()?;
     // Validate inputs; persist the trimmed values.
     let model = validate_model_id(&model)?;
     let small_model = validate_model_id(&small_model)?;
@@ -2379,7 +2389,7 @@ fn write_model_override_file(
 /// is gone. Installed `opencode.json` is not touched until the next Install/Update.
 #[tauri::command(async)]
 pub fn reset_opencode_model_selection() -> Result<String, String> {
-    let _mutation = crate::mutation_lock::acquire();
+    let _mutation = crate::mutation_lock::acquire()?;
     let override_path = opencode_model_selection_path()?;
     match std::fs::remove_file(&override_path) {
         Ok(()) => Ok(
@@ -3964,6 +3974,22 @@ mod tests {
             started.elapsed() < Duration::from_secs(10),
             "timeout must bound the wait"
         );
+    }
+
+    #[test]
+    fn test_generator_check_never_shows_the_generator_output() {
+        let ws = temp_root("gen-check-quiet");
+        write_marker_workspace(&ws);
+        let (gen_dir, script) = fake_generator(
+            "gen-check-quiet-script",
+            "sys.stdout.write('OUT-FAKE-SECRET')\nsys.stderr.write('ERR-FAKE-SECRET')\nsys.exit(1)\n",
+        );
+        let result = run_generator_check_with_timeout(&script, &ws, Duration::from_secs(30));
+        cleanup(&ws);
+        cleanup(&gen_dir);
+        let (status, detail) = result.expect("generator ran");
+        assert_eq!(status, "stale");
+        assert!(!detail.contains("FAKE-SECRET"), "{detail}");
     }
 
     #[cfg(unix)]

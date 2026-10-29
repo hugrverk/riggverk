@@ -133,6 +133,8 @@ export interface LibraryViewProps {
    * edits were discarded or saved), false for "Keep editing". Without it nothing is guarded.
    */
   onConfirmLeave?: () => Promise<boolean>;
+  /** Why the open item could not be read; the sheet shows it in place of "Loading…". */
+  itemLoadError?: string | null;
 }
 
 interface SheetState {
@@ -500,6 +502,7 @@ export function LibraryView(props: LibraryViewProps) {
         <LibrarySheet
           title={sheet.title}
           entry={entry}
+          loadError={props.itemLoadError ?? null}
           sheetRef={sheetRef}
           rulesMode={rulesMode}
           onRulesMode={setRulesMode}

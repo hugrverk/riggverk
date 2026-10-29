@@ -9,7 +9,6 @@ import type {
   LightAgent,
   LightRuntimeHealth,
   OpenCodeRuntimeHealth,
-  StatusData,
   WorkspaceDiagnostics,
   InstallAgent,
 } from "../types";
@@ -25,7 +24,6 @@ export function useWorkspaceHealthController({
   workspaceLoadGenerationRef,
   isWorkspaceLoadCurrent,
 }: WorkspaceHealthControllerDeps) {
-  const [status, setStatus] = useState<StatusData | null>(null);
   const [workspaceDiagnostics, setWorkspaceDiagnostics] = useState<WorkspaceDiagnostics | null>(null);
   const [opencodeRuntimeHealth, setOpencodeRuntimeHealth] = useState<OpenCodeRuntimeHealth | null>(null);
   const [codexRuntimeHealth, setCodexRuntimeHealth] = useState<CodexRuntimeHealth | null>(null);
@@ -33,18 +31,6 @@ export function useWorkspaceHealthController({
   const [claudeRuntimeHealth, setClaudeRuntimeHealth] = useState<ClaudeRuntimeHealth | null>(null);
   // Copilot, Pi and Kilo share one command and one page; a harness that is off has no entry.
   const [lightRuntimeHealth, setLightRuntimeHealth] = useState<Partial<Record<LightAgent, LightRuntimeHealth | null>>>({});
-
-  const fetchStatus = useCallback(async (generation = workspaceLoadGenerationRef.current) => {
-    try {
-      const data = await invoke<StatusData>("get_status");
-      if (!isWorkspaceLoadCurrent(generation)) return;
-      setStatus(data);
-    } catch (e) {
-      if (!isWorkspaceLoadCurrent(generation)) return;
-      setStatus(null);
-      if (!isInvalidWorkspaceError(e)) setError(`Status error: ${errorMessage(e)}`);
-    }
-  }, [isWorkspaceLoadCurrent, setError, workspaceLoadGenerationRef]);
 
   const loadWorkspaceDiagnostics = useCallback(async (generation = workspaceLoadGenerationRef.current) => {
     try {
@@ -114,7 +100,6 @@ export function useWorkspaceHealthController({
   }, [isWorkspaceLoadCurrent, workspaceLoadGenerationRef]);
 
   const resetWorkspaceHealthState = useCallback(() => {
-    setStatus(null);
     setWorkspaceDiagnostics(null);
     setOpencodeRuntimeHealth(null);
     setCodexRuntimeHealth(null);
@@ -137,14 +122,12 @@ export function useWorkspaceHealthController({
   }, []);
 
   return {
-    status,
     workspaceDiagnostics,
     opencodeRuntimeHealth,
     codexRuntimeHealth,
     cursorProfileHealth,
     claudeRuntimeHealth,
     lightRuntimeHealth,
-    fetchStatus,
     loadWorkspaceDiagnostics,
     loadOpenCodeRuntimeHealth,
     loadCodexRuntimeHealth,

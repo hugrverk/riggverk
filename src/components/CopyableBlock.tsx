@@ -4,15 +4,14 @@ import { CopyButton } from "./CopyButton";
 interface CopyableBlockProps {
   text: string;
   children: ReactNode;
-  className?: string;
 }
 
-export function CopyableBlock({ text, children, className = "" }: CopyableBlockProps) {
+export function CopyableBlock({ text, children }: CopyableBlockProps) {
   const rawId = useId();
   const blockId = `copyable-${rawId.replace(/:/g, "")}`;
 
   return (
-    <div className={`copyable-block${className ? ` ${className}` : ""}`}>
+    <div className="copyable-block">
       <CopyButton getText={() => text} fallbackElementId={blockId} />
       <div id={blockId} className="copyable-block-content">
         {children}

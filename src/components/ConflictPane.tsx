@@ -17,6 +17,7 @@ import type {
 import { DiffView } from "./DiffView";
 import { ReviewFooter } from "./ReviewFooter";
 import { ActivityLoader } from "./TerminalOutput";
+import { plural } from "../lib/plural";
 
 export const CONFLICT_PANE_ID = "conflicts";
 
@@ -51,10 +52,6 @@ function scrollBody(to: "top" | "bottom" | number) {
 
 function size(side: { bytes: number; digest: string } | null): string {
   return side ? `${side.bytes.toLocaleString("en-US")} bytes · ${side.digest}` : "not available";
-}
-
-function plural(n: number, noun: string): string {
-  return `${n} ${noun}${n === 1 ? "" : "s"}`;
 }
 
 function FileSection({ entry, state, layout }: { entry: FileDiffEntry; state: FileUnitState; layout: "unified" | "split" }) {

@@ -170,6 +170,29 @@ export function InstallPlanPane({ flow, busyLabel, backupRoot, onApply }: Instal
     run: () => flow.cancel(),
   };
 
+  const toggleDetails = (rowId: string) =>
+    setExpanded(current => {
+      const next = new Set(current);
+      if (!next.delete(rowId)) next.add(rowId);
+      return next;
+    });
+
+  const conflictAction: Binding = {
+    id: "plan.conflict",
+    keys: "c",
+    title: "Jump to the next conflict",
+    hint: "next conflict",
+    group: "Install plan",
+    scope: "pane",
+    paneId: INSTALL_PLAN_PANE_ID,
+    when: () => reviewing && counts.conflict > 0,
+    run: () => {
+      const ordered = [...rows.slice(at + 1), ...rows.slice(0, at + 1)];
+      const next = ordered.find(row => row.conflict);
+      if (next) moveTo(rows.indexOf(next));
+    },
+  };
+
   const actions: Binding[] = [
     applyAction,
     cancelAction,
@@ -183,29 +206,10 @@ export function InstallPlanPane({ flow, busyLabel, backupRoot, onApply }: Instal
       paneId: INSTALL_PLAN_PANE_ID,
       when: () => reviewing && rows.length > 0,
       run: () => {
-        if (!activeRow) return;
-        setExpanded(current => {
-          const next = new Set(current);
-          if (!next.delete(activeRow.id)) next.add(activeRow.id);
-          return next;
-        });
+        if (activeRow) toggleDetails(activeRow.id);
       },
     },
-    {
-      id: "plan.conflict",
-      keys: "c",
-      title: "Jump to the next conflict",
-      hint: "next conflict",
-      group: "Install plan",
-      scope: "pane",
-      paneId: INSTALL_PLAN_PANE_ID,
-      when: () => reviewing && counts.conflict > 0,
-      run: () => {
-        const ordered = [...rows.slice(at + 1), ...rows.slice(0, at + 1)];
-        const next = ordered.find(row => row.conflict);
-        if (next) moveTo(rows.indexOf(next));
-      },
-    },
+    conflictAction,
     {
       id: "plan.repreview",
       keys: "r",
@@ -243,6 +247,7 @@ export function InstallPlanPane({ flow, busyLabel, backupRoot, onApply }: Instal
     <ReviewFooter question={question} backup={noteBackup && { root: backupRoot }}>
       <BindingButton binding={applyAction} apply />
       <BindingButton binding={cancelAction} />
+      <BindingButton binding={conflictAction} />
     </ReviewFooter>
   );
 
@@ -334,6 +339,22 @@ export function InstallPlanPane({ flow, busyLabel, backupRoot, onApply }: Instal
                         <td className={cx("op", `op-${row.kind}`)}>
                           <span className={`rv-mark rv-mark-${row.kind}`} aria-hidden="true" />
                           {row.label}
+                          <button
+                            type="button"
+                            className="plan-more"
+                            aria-expanded={isOpen}
+                            aria-label={`details of ${row.file}`}
+                            onMouseDown={event => event.preventDefault()}
+                            onClick={event => {
+                              // The row's own click moves the cursor; this one also toggles, so it must not bubble twice.
+                              event.stopPropagation();
+                              tableRef.current?.focus();
+                              setCursor(rows.indexOf(row));
+                              toggleDetails(row.id);
+                            }}
+                          >
+                            {isOpen ? "hide" : "details"}
+                          </button>
                         </td>
                         <td title={row.file}>{row.file}</td>
                         <td className="note" title={row.note}>

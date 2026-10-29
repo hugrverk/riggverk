@@ -222,6 +222,11 @@ export function EdgeView({ edge, model, actions }: { edge: FlowEdge; model: Flow
   );
 }
 
+/** The word for the run's phase: what a screen reader hears when it changes. */
+export function runPhaseWord(progress: ApplyProgress | null): string {
+  return progress?.phase === "backup" ? "Backing up" : progress?.phase === "apply" ? "Writing" : "Working";
+}
+
 export function RunningView({
   label,
   progress,
@@ -237,7 +242,7 @@ export function RunningView({
   const counted = progress && progress.phase !== "backup" && total !== null && total > 0;
   const ratio = counted ? Math.min(1, Math.max(0, progress.done / total)) : 0;
   const checklist = runChecklist(trace, startAgents);
-  const phase = progress?.phase === "backup" ? "Backing up" : progress?.phase === "apply" ? "Writing" : "Working";
+  const phase = runPhaseWord(progress);
   return (
     <>
       <Heading pill={<StatePill state="ready">{phase}</StatePill>}>{label.charAt(0).toUpperCase() + label.slice(1)}</Heading>
