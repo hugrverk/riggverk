@@ -937,6 +937,20 @@ describe("HarnessPage skill loads", () => {
     expect(text).toContain("tdd · ~/.agents/skills + ~/.codex/skills");
   });
 
+  it("keeps the flagged names with the skill loads row instead of giving them cells with empty labels", () => {
+    renderCodex({ skillLoads: skillLoadsOf(codexLoads(["tdd", "diagnose"], ["zoom-out"])) });
+    expect(labels().filter(label => label === "")).toEqual([]);
+    const block = valueOf("skill loads").closest(".hp-fact")!;
+    expect(block.className).toContain("hp-fact-block");
+    expect([...block.querySelectorAll("dd")].map(dd => dd.textContent)).toEqual([
+      "2 names with 2 copies",
+      expect.stringContaining("tdd ·"),
+      expect.stringContaining("diagnose ·"),
+    ]);
+    // A plain fact stays its own cell.
+    expect(valueOf("skills").closest(".hp-fact")!.className).not.toContain("hp-fact-block");
+  });
+
   it("says each skill has one copy when none is duplicated, in the ok tone", () => {
     renderCodex({ skillLoads: skillLoadsOf(codexLoads([], ["tdd", "diagnose"])) });
     expect(facts(runtime())["skill loads"]).toBe("2 skills, 1 copy each");

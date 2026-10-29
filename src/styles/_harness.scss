@@ -510,6 +510,10 @@
 
 .hp-fact dt { color: var(--text-muted); }
 
+/* A fact with continuation rows (the skill names that need a look) spans every column; its rows stack in the value column. */
+.hp-fact-block { grid-column: 1 / -1; }
+.hp-fact-block dd { grid-column: 2; }
+
 .hp-fact dd {
   margin: 0;
   font-family: var(--font-mono);
