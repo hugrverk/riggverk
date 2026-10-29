@@ -177,7 +177,9 @@ export function agentsWritten(entry: SetupHistoryEntry | null): Set<InstallAgent
 }
 
 function agentSub(card: AgentCardModel): string {
-  if (!card.badge) return "checking…";
+  if (card.unchecked === "failed") return "check failed";
+  if (card.unchecked === "folder") return "workspace folder unusable";
+  if (card.unchecked === "loading" || !card.badge) return "checking…";
   const first = (state: UiState) => card.rows.find(row => row.state === state);
   switch (card.badge.state) {
     case "decide":
@@ -204,14 +206,17 @@ function flowAgent(harness: InstallAgent, card: AgentCardModel | undefined): Flo
   if (card.unavailable) {
     return { id: harness, label, status: "missing", state: null, decision: false, sub: "not on this Mac", pillText: "Not on this Mac", card };
   }
+  // Nothing counted: "checking…" only while the fetch runs. A check that failed or a folder that is unusable gets the fix ring and says so.
+  const { unchecked } = card;
+  const stuck = unchecked === "failed" || unchecked === "folder";
   return {
     id: harness,
     label,
     status: "active",
-    state: card.badge?.state ?? null,
-    decision: card.badge?.state === "decide",
+    state: stuck ? "fix" : unchecked ? null : (card.badge?.state ?? null),
+    decision: !unchecked && card.badge?.state === "decide",
     sub: agentSub(card),
-    pillText: card.badge?.text ?? "Checking…",
+    pillText: stuck ? (unchecked === "failed" ? "Couldn't check" : "Folder unusable") : unchecked ? "Checking…" : (card.badge?.text ?? "Checking…"),
     card,
   };
 }
@@ -394,6 +399,20 @@ export function decisionsOf(cards: readonly AgentCardModel[]): FlowDecision[] {
   return cards
     .filter(card => card.badge?.state === "decide")
     .map(card => ({ harness: card.harness, label: card.label, rows: card.rows.filter(row => row.state === "decide"), reason: card.notes[0] ?? null }));
+}
+
+export interface FlowFix {
+  harness: InstallAgent;
+  label: string;
+  /** The rows the app cannot touch, each with why ("Base block markers are malformed…"). */
+  rows: Array<{ label: string; reason: string | null }>;
+}
+
+/** The agents with something to fix by hand, in card order: rows the app leaves alone until the file is repaired. */
+export function fixesOf(cards: readonly AgentCardModel[]): FlowFix[] {
+  return cards
+    .map(card => ({ harness: card.harness, label: card.label, rows: card.rows.filter(row => row.state === "fix").map(row => ({ label: row.label, reason: row.subline })) }))
+    .filter(fix => fix.rows.length > 0);
 }
 
 /** Nothing is installed yet: every agent that is counted waits only for its first install. */

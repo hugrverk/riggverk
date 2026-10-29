@@ -357,7 +357,10 @@ describe("mock backend: OpenCode critic model", () => {
     const save = (criticModel: string | null, subagentModel: string | null = "cheap/fast") => invoke("update_opencode_model_selection", {
       model: defaults.model, smallModel: defaults.small_model, subagentModel, criticModel,
     });
-    const install = () => invoke<SetupResult>("apply_setup", { surfaces: ["open_code_config"] });
+    const install = async () => {
+      const plan = await invoke<SetupPlan>("preview_setup", { surfaces: ["open_code_config"] });
+      return invoke<SetupResult>("apply_setup", { surfaces: ["open_code_config"], skipManual: true, planFingerprint: plan.plan_fingerprint, previewToken: plan.preview_token });
+    };
     await save("  strong/critic  ");
     expect(await invoke<OpenCodeModelSelection>("read_opencode_model_selection")).toMatchObject({
       critic_model: "strong/critic", critic_source: "override", subagent_model: "cheap/fast", model_source: "bundled default",
@@ -510,5 +513,42 @@ describe("mock backend: setup history", () => {
     // A run that is not offered cannot be undone.
     const refused = await invoke<SetupResult>("rollback_setup_transaction", { transactionId: after[1]!.transaction_id, dryRun: true });
     expect(refused.success).toBe(false);
+  });
+});
+
+describe("mock backend: an install run", () => {
+  beforeAll(async () => {
+    vi.resetModules();
+    window.history.replaceState(null, "", "/?mock=default");
+    await import("./mockBackend");
+  });
+
+  const SURFACES = ["claude_rules", "claude_agents"];
+
+  it("needs the preview's fingerprint and its one-time token, like the backend", async () => {
+    await expect(invoke("apply_setup", { surfaces: SURFACES, skipManual: true })).rejects.toThrow(/fingerprint required/i);
+    const plan = await invoke<SetupPlan>("preview_setup", { surfaces: SURFACES });
+    await expect(invoke("apply_setup", { surfaces: SURFACES, skipManual: true, planFingerprint: "fp-other", previewToken: plan.preview_token })).rejects.toThrow(/mismatch/i);
+    await expect(invoke("apply_setup", { surfaces: SURFACES, skipManual: true, planFingerprint: plan.plan_fingerprint, previewToken: "tok-other" })).rejects.toThrow(/token/i);
+  });
+
+  it("lands in the history, and undoing it marks the entry undone and puts back what it changed", async () => {
+    const before = await invoke<SetupHistoryEntry[]>("list_setup_history");
+    const plan = await invoke<SetupPlan>("preview_setup", { surfaces: SURFACES });
+    const result = await invoke<SetupResult>("apply_setup", { surfaces: SURFACES, skipManual: true, planFingerprint: plan.plan_fingerprint, previewToken: plan.preview_token });
+    expect(result.success).toBe(true);
+    // The token is spent.
+    await expect(invoke("apply_setup", { surfaces: SURFACES, skipManual: true, planFingerprint: plan.plan_fingerprint, previewToken: plan.preview_token })).rejects.toThrow();
+
+    const after = await invoke<SetupHistoryEntry[]>("list_setup_history");
+    expect(after).toHaveLength(before.length + 1);
+    expect(after[0]).toMatchObject({ transaction_id: result.transaction_id, status: "applied", undoable: true, is_newest_completed: true, harnesses: ["claude"] });
+    expect(after.slice(1).some(entry => entry.undoable)).toBe(false);
+
+    await invoke("rollback_setup_transaction", { transactionId: result.transaction_id, dryRun: false });
+    const undone = await invoke<SetupHistoryEntry[]>("list_setup_history");
+    expect(undone[0]).toMatchObject({ status: "rolled_back", undoable: false });
+    const status = await invoke<InstallationStatus>("get_installation_status", { surfaces: SURFACES });
+    expect(status.surfaces.map(surface => surface.state)).toEqual(["update_available", "update_available"]);
   });
 });

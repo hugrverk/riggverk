@@ -1,4 +1,4 @@
-import { unifiedLineDiff } from "../../lib/lineDiff";
+import { endingsOnlyNote, unifiedLineDiff } from "../../lib/lineDiff";
 import type { RulesFileContent } from "../../types";
 
 /**
@@ -12,6 +12,11 @@ export function effectiveRulesText(file: Pick<RulesFileContent, "before">, draft
 /** The refinements on disk against the draft, as unified-diff lines for `DiffView`; "" when they are equal. */
 export function refinementsDiff(file: Pick<RulesFileContent, "refinements">, draft: string): string {
   return unifiedLineDiff(file.refinements, draft);
+}
+
+/** What to say instead of a diff when the draft differs from the disk only in its line endings or final newline; null otherwise. */
+export function refinementsEndingsNote(file: Pick<RulesFileContent, "refinements">, draft: string): string | null {
+  return endingsOnlyNote(file.refinements, draft);
 }
 
 const HEADING = /^##[ \t]+(.+?)[ \t]*$/;

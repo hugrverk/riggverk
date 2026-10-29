@@ -5,7 +5,7 @@ import { CONFLICT_TEXT } from "../../lib/rulesView";
 import type { InstallAgent } from "../../types";
 import { TButton } from "../../ui/TButton";
 import type { LibraryEntry } from "./entry";
-import { effectiveRulesText, overrideHint, refinementsDiff, sharedHeadings } from "./rulesText";
+import { effectiveRulesText, overrideHint, refinementsDiff, refinementsEndingsNote, sharedHeadings } from "./rulesText";
 
 export type RulesMode = "refinements" | "effective" | "diff";
 
@@ -77,6 +77,7 @@ export function RulesEditor({ entry, mode, onMode, onOpenHarness }: RulesEditorP
   const ids = useId();
   const effective = useMemo(() => effectiveRulesText(file, entry.draft), [file, entry.draft]);
   const diff = useMemo(() => refinementsDiff(file, entry.draft), [file, entry.draft]);
+  const endingsNote = useMemo(() => refinementsEndingsNote(file, entry.draft), [file, entry.draft]);
   const hint = useMemo(() => overrideHint(sharedHeadings(file.before, entry.draft)), [file.before, entry.draft]);
 
   if (conflict) return <ConflictCard entry={entry} onOpenHarness={onOpenHarness} />;
@@ -149,7 +150,7 @@ export function RulesEditor({ entry, mode, onMode, onOpenHarness }: RulesEditorP
         {mode === "diff" && (
           <>
             <p className="lib-dim">Your working copy against the file on disk. Save writes a backup first.</p>
-            <DiffView diff={diff} label="Refinements against disk" empty="No difference against disk." />
+            <DiffView diff={diff} labelled={false} label="Refinements against disk" empty={endingsNote ?? "No difference against disk."} />
           </>
         )}
       </div>

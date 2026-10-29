@@ -3,6 +3,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { version as APP_VERSION } from "../package.json";
 import { invokeOpen } from "./lib/invokeOpen";
 import { useConfirm } from "./components/ConfirmDialog";
+import { RunPanel } from "./components/run/RunPanel";
+import { useFocusRunOnNewTransaction } from "./components/run/useFocusRunOnNewTransaction";
 import { useCloseGuard } from "./hooks/useCloseGuard";
 import { useKeymap } from "./keyboard/useKeymap";
 import { useBackups } from "./lib/useBackups";
@@ -223,6 +225,8 @@ function AppShell() {
   } = useWorkspaceActions({ setError });
 
   const wsProgress = useApplyProgress(wsRunning);
+  // A finished apply or uninstall leaves a transaction: the run panel takes focus unless the user put it elsewhere.
+  useFocusRunOnNewTransaction(rollbackTransactionId);
 
   // Keep the backups chip current: on mount and whenever a workspace task (apply, uninstall, rollback) finishes.
   useEffect(() => {
@@ -645,19 +649,16 @@ function AppShell() {
     [codexRuntimeHealth, opencodeRuntimeHealth, claudeRuntimeHealth, cursorProfileHealth, lightRuntimeHealth],
   );
 
-  // What the Overview and harness pages share: the run panel, the install review and the rollback path.
+  // What the Overview and harness pages share: the running task, the install review and the rollback id.
   const pageProps = {
-    wsLog,
     wsLogCompletedAt,
     wsRunning,
     wsProgress,
     dataFolderOk,
-    onClearOutput: resetTerminalOutput,
     overview,
     install,
     backupRoot: workspaceDiagnostics?.backup_root ?? null,
     rollbackTransactionId,
-    onRollback: () => void requestRollback(),
     onRefresh: () => void refreshAll(),
   };
   const harnessPageProps = {
@@ -733,6 +734,18 @@ function AppShell() {
         version={APP_VERSION}
         backupCount={backups.length}
         checkedAt={checkedAt}
+        dock={
+          <RunPanel
+            wsRunning={wsRunning}
+            progress={wsProgress}
+            wsLog={wsLog}
+            wsLogCompletedAt={wsLogCompletedAt}
+            onClear={resetTerminalOutput}
+            onRefresh={() => void refreshAll()}
+            rollbackTransactionId={rollbackTransactionId}
+            onRollback={() => void requestRollback()}
+          />
+        }
       >
         {view === "start" && (
           <OverviewView

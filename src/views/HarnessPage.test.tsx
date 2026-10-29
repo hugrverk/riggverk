@@ -13,7 +13,7 @@ import {
   CLEAN_CODEX,
   RISKY_CLAUDE,
 } from "../test/pageFixtures";
-import type { ActionResult, AgentTargetMeta, ApplyProgress, ClaudeRuntimeHealth, CodexRuntimeHealth, EffectiveSkillLoads, OpenCodeModelSelection, OpenCodeRuntimeHealth, SkillCopy } from "../types";
+import type { AgentTargetMeta, ClaudeRuntimeHealth, CodexRuntimeHealth, EffectiveSkillLoads, OpenCodeModelSelection, OpenCodeRuntimeHealth, SkillCopy } from "../types";
 import { ClaudeView } from "./ClaudeView";
 import { CodexView } from "./CodexView";
 import { CursorView } from "./CursorView";
@@ -26,22 +26,6 @@ const invokeMock = vi.fn();
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: (...args: unknown[]) => invokeMock(...args),
 }));
-
-const runPanelProps = vi.fn();
-
-// The real panel, with its props recorded: the pages must hand it the backend's progress.
-vi.mock("../components/run/RunPanel", async importOriginal => {
-  const actual = await importOriginal<typeof import("../components/run/RunPanel")>();
-  return {
-    ...actual,
-    RunPanel: (panelProps: Parameters<typeof actual.RunPanel>[0]) => {
-      runPanelProps(panelProps);
-      return <actual.RunPanel {...panelProps} />;
-    },
-  };
-});
-
-const APPLY_OK: ActionResult = { success: true, action: "apply_setup update codex", stdout: "applied 1 file", stderr: "", exit_code: 0 };
 
 const TARGETS: AgentTargetMeta[] = [
   { id: "codex_rules", label: "codex rules", harness: "codex", kind: "rules", target_rel: ".codex/AGENTS.md", source_rel: "templates/codex-rules.md" },
@@ -93,17 +77,14 @@ function props(overrides: Partial<HarnessViewProps> = {}): HarnessViewProps {
     install: installScreenOf(),
     backupRoot: "/tmp/backups",
     rollbackTransactionId: null,
-    onRollback: vi.fn(),
     onRefresh: vi.fn(),
     runWorkspaceTask: vi.fn(async () => null) as unknown as HarnessViewProps["runWorkspaceTask"],
     refreshAfterApply: vi.fn(),
     onApplied: vi.fn(),
-    wsLog: null,
     wsLogCompletedAt: null,
     wsRunning: null,
     wsProgress: null,
     dataFolderOk: true,
-    onClearOutput: vi.fn(),
     ...overrides,
   };
 }
@@ -166,16 +147,14 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("HarnessPage", () => {
-  it("shows the name with a mono line under it, a grid of cells, and the run panel once a task has run", () => {
-    const { rerenderFrame, props: p } = renderCodex();
+  it("shows the name with a mono line under it and a grid of cells, and leaves the run panel to the app frame", () => {
+    renderCodex({ wsRunning: "update codex" });
     const page = surfaces();
     expect(within(page).getByRole("heading", { name: "Codex" }).tagName).toBe("H4");
     // Where it lives, how many skills it loads and what the runtime says, in one line.
     expect(page.querySelector(".hp-sub")!.textContent).toBe("~/.codex · approval on-request · sandbox workspace-write");
     expect(page.querySelector(".hp-grid")).not.toBeNull();
     expect(screen.queryByRole("region", { name: "Run" })).toBeNull();
-    rerenderFrame(<CodexView {...p} wsLog={APPLY_OK} wsLogCompletedAt={Date.now()} runtimeHealth={CODEX_HEALTH} />);
-    expect(screen.getByRole("region", { name: "Run" })).toBeTruthy();
   });
 
   it("is the page-level focus container: it takes focus on click, so the page keys keep working", () => {
@@ -240,15 +219,6 @@ describe("HarnessPage", () => {
     expect(cell("cursor_mcp", page).textContent).toContain("Also agents");
     fireEvent.click(within(cell("cursor_mcp", page)).getByRole("switch"));
     expect(p.onToggleTarget).toHaveBeenCalledWith("cursor_setup");
-  });
-
-  it("moves focus to the run panel when an apply leaves a rollback transaction, so Undo is in reach", () => {
-    const { rerenderFrame, props: p } = renderCodex({ wsLog: APPLY_OK, wsLogCompletedAt: Date.now() });
-    act(() => surfaces().focus());
-    rerenderFrame(<CodexView {...p} rollbackTransactionId="tx-1" runtimeHealth={CODEX_HEALTH} />);
-    expect(document.activeElement?.closest("[data-pane-id]")?.getAttribute("data-pane-id")).toBe("output");
-    fireEvent.click(screen.getByRole("button", { name: "Undo last update…" }));
-    expect(p.onRollback).toHaveBeenCalledTimes(1);
   });
 
   it("shows autosave progress and failure in the mono line", () => {
@@ -340,14 +310,13 @@ describe("HarnessPage", () => {
     expect(surfaces().querySelector("[data-surface]")).toBeNull();
   });
 
-  it("shows the review in place of the page, with the run panel, while it is open", () => {
+  it("shows the review in place of the page while it is open", () => {
     const flow = flowOf([op("codex_rules", "update")], { label: "update codex", surfaces: ["codex_rules"] });
     const install = installScreenOf(flow, "codex");
-    renderCodex({ install, wsLog: APPLY_OK, wsLogCompletedAt: Date.now() });
+    renderCodex({ install });
     const review = screen.getByRole("region", { name: "Codex install review" });
     expect(review.className).toContain("review");
-    expect(within(review).getAllByRole("region").map(pane => pane.getAttribute("aria-label")).at(-1)).toBe("Run");
-    expect(within(review).getAllByRole("region")).toHaveLength(2);
+    expect(within(review).getAllByRole("region")).toHaveLength(1);
     expect(screen.getByRole("grid", { name: "Install plan" })).toBeTruthy();
     expect(screen.queryByRole("region", { name: "Codex" })).toBeNull();
     fireEvent.keyDown(screen.getByRole("grid", { name: "Install plan" }), { key: "y" });
@@ -948,28 +917,6 @@ describe("OpenCodeView model override", () => {
   });
 });
 
-describe("HarnessPage run panel progress", () => {
-  const progress: ApplyProgress = {
-    task: "apply_setup",
-    phase: "apply",
-    done: 2,
-    total: 5,
-    file: "~/.codex/AGENTS.md",
-  };
-
-  beforeEach(() => runPanelProps.mockClear());
-
-  it("hands the backend's progress to the run panel", () => {
-    renderCodex({ wsRunning: "update codex", wsProgress: progress });
-    expect(runPanelProps).toHaveBeenLastCalledWith(expect.objectContaining({ progress }));
-  });
-
-  it("hands it null until the backend reports", () => {
-    renderCodex({ wsRunning: "update codex", wsProgress: null });
-    expect(runPanelProps).toHaveBeenLastCalledWith(expect.objectContaining({ progress: null }));
-  });
-});
-
 describe("HarnessPage skill loads", () => {
   const CODEX_FOLDERS = [
     { folder: "agents" as const, path: "~/.agents/skills", exists: true },
@@ -1013,6 +960,20 @@ describe("HarnessPage skill loads", () => {
     const text = runtime().textContent!;
     expect(text).toContain("diagnose · ~/.agents/skills + ~/.codex/skills · plain $name mention is ambiguous");
     expect(text).toContain("tdd · ~/.agents/skills + ~/.codex/skills");
+  });
+
+  it("keeps the flagged names with the skill loads row instead of giving them cells with empty labels", () => {
+    renderCodex({ skillLoads: skillLoadsOf(codexLoads(["tdd", "diagnose"], ["zoom-out"])) });
+    expect(labels().filter(label => label === "")).toEqual([]);
+    const block = valueOf("skill loads").closest(".hp-fact")!;
+    expect(block.className).toContain("hp-fact-block");
+    expect([...block.querySelectorAll("dd")].map(dd => dd.textContent)).toEqual([
+      "2 names with 2 copies",
+      expect.stringContaining("tdd ·"),
+      expect.stringContaining("diagnose ·"),
+    ]);
+    // A plain fact stays its own cell.
+    expect(valueOf("skills").closest(".hp-fact")!.className).not.toContain("hp-fact-block");
   });
 
   it("says each skill has one copy when none is duplicated, in the ok tone", () => {

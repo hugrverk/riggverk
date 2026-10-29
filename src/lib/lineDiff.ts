@@ -1,11 +1,36 @@
+const withLf = (text: string): string => text.replace(/\r\n/g, "\n");
+
+/**
+ * The lines of a text, compared without their endings: CRLF reads as LF (a textarea hands back LF whatever the file
+ * had), and the final newline is a property of the text, not an empty last line, so appending a line does not show a
+ * removed blank one. "" has no lines.
+ */
+function linesOf(text: string): string[] {
+  const lf = withLf(text);
+  if (lf === "") return [];
+  const lines = lf.split("\n");
+  if (lines[lines.length - 1] === "") lines.pop();
+  return lines;
+}
+
+/**
+ * What differs when the diff of two different texts shows no line: only the line endings (CRLF against LF) or only
+ * the final newline. Null when the texts are equal, or when a line differs.
+ */
+export function endingsOnlyNote(before: string, after: string): string | null {
+  if (before === after || unifiedLineDiff(before, after) !== "") return null;
+  return withLf(before) === withLf(after) ? "Only the line endings differ." : "Only the final newline differs.";
+}
+
 /**
  * A line diff of two texts as unified-diff lines (`+`, `-` or a space in front of every line, no file labels),
  * the shape `DiffView` reads. Unchanged stretches longer than the context around a change are folded into one
- * `@@ N unchanged lines @@` line. Returns "" when the texts are equal.
+ * `@@ N unchanged lines @@` line. Line endings are not compared (CRLF equals LF) and the final newline is not a
+ * line: returns "" when no line differs; `endingsOnlyNote` says so when the texts still differ in bytes.
  */
 export function unifiedLineDiff(before: string, after: string, context = 3): string {
   if (before === after) return "";
-  const ops = diffOps(before.split("\n"), after.split("\n"));
+  const ops = diffOps(linesOf(before), linesOf(after));
   if (!ops.some(op => op.mark !== " ")) return "";
   const out: string[] = [];
   let run: string[] = [];

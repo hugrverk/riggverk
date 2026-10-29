@@ -1,7 +1,7 @@
 import { renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ConfirmConfig } from "../components/ConfirmDialog";
-import type { SetupResult } from "../types";
+import type { SetupHistoryEntry, SetupResult } from "../types";
 import { useRollbackRequest } from "./useRollbackRequest";
 
 const invokeMock = vi.fn();
@@ -20,6 +20,23 @@ function dryRun(overrides: Partial<SetupResult> = {}): SetupResult {
     manual_steps: [],
     message: "Dry run: would restore 2 artifact(s); 0 already restored; 0 conflicted",
     ...overrides,
+  };
+}
+
+function historyEntry(transactionId: string): SetupHistoryEntry {
+  return {
+    transaction_id: transactionId,
+    created_at: "1792663200000000000",
+    finished_at: "1792663202000000000",
+    status: "applied",
+    surfaces: ["claude_rules"],
+    harnesses: ["claude"],
+    changes: [{ surface: "claude_rules", kind: "update", path: "~/.claude/CLAUDE.md", applied: true, restored: false }],
+    operation_counts: { create: 0, update: 1, remove: 0 },
+    backup_files: 1,
+    is_newest_completed: true,
+    undoable: true,
+    receipt: null,
   };
 }
 
@@ -47,19 +64,28 @@ describe("useRollbackRequest", () => {
   });
 
   it("dry-runs first, confirms with the dry-run summary, then rolls back that transaction", async () => {
-    invokeMock.mockResolvedValue(dryRun());
+    invokeMock.mockImplementation(async (command: string) => (command === "list_setup_history" ? [historyEntry("1710000000000")] : dryRun()));
     const t = setup();
     await t.request();
 
-    expect(invokeMock).toHaveBeenCalledTimes(1);
     expect(invokeMock).toHaveBeenCalledWith("rollback_setup_transaction", { transactionId: "1710000000000", dryRun: true });
-    expect(t.confirm).toHaveBeenCalledWith(
-      expect.objectContaining({
-        confirmLabel: "roll back",
-        message: expect.stringContaining("would restore 2 artifact(s)"),
-      }),
-    );
-    expect(t.confirm.mock.calls[0]![0]).toEqual(expect.objectContaining({ message: expect.stringContaining("1710000000000") }));
+    expect(t.confirm).toHaveBeenCalledWith(expect.objectContaining({ confirmLabel: "roll back" }));
+    // The run is named by what it did and when, with the restored count; the id and the engine's sentence stay out of it.
+    const message = (t.confirm.mock.calls[0]![0] as ConfirmConfig).message as string;
+    expect(message).toMatch(/^Undo Updated Claude \(.+\)\? This restores 2 items from the backup\.$/);
+    expect(message).not.toContain("1710000000000");
+    expect(message).not.toMatch(/dry run|artifact/i);
+    expect(t.runRollback).toHaveBeenCalledWith("1710000000000");
+  });
+
+  it("still asks, without a name, when the history cannot be read", async () => {
+    invokeMock.mockImplementation(async (command: string) => {
+      if (command === "list_setup_history") throw new Error("no history");
+      return dryRun({ applied: ["ClaudeRules"] });
+    });
+    const t = setup();
+    await t.request();
+    expect((t.confirm.mock.calls[0]![0] as ConfirmConfig).message).toBe("Undo the update? This restores 1 item from the backup.");
     expect(t.runRollback).toHaveBeenCalledWith("1710000000000");
   });
 
