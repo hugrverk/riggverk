@@ -1,4 +1,3 @@
-import type { Tone } from "../ui/tone";
 import type {
   FileConflictReason,
   FilesSurfaceId,
@@ -8,7 +7,6 @@ import type {
   SetupSurfaceId,
 } from "../types";
 import { HARNESS_LABELS } from "./harnessInstallation";
-import type { StateDisplay } from "./installationView";
 
 /** The agents surface of each harness that has one. Copilot, Pi and Kilo have none. */
 const AGENTS_SURFACE: Partial<Record<InstallAgent, FilesSurfaceId>> = {
@@ -115,12 +113,6 @@ export function unitDetail(unit: FileUnit): string {
     .join(" · ");
 }
 
-/** One line per unit: what, where, and why or since when. */
-export function unitLine(unit: FileUnit): { text: string; tone: Tone } {
-  const tone: Tone = unit.state === "conflict" ? "fail" : unit.bundle_changed ? "warn" : "dim";
-  return { text: [unit.name, unitDetail(unit)].filter(Boolean).join(" · "), tone };
-}
-
 /** The sentence above the files of a decision: what Riggverk left alone, or what the user manages. */
 export function filesWhy(model: FileConflictModel): string {
   const noun = model.surface === "skills" ? "skill" : "agent";
@@ -130,20 +122,6 @@ export function filesWhy(model: FileConflictModel): string {
   }
   const kept = model.units.filter(unit => unit.state === "kept").length;
   return `You manage ${plural(kept, noun)}, so Riggverk never writes ${kept === 1 ? "it" : "them"}. Bundled updates stay visible.`;
-}
-
-/** A surface row's label with the files the user has to look at: "update · 2 conflicts", "current · you manage 1". */
-export function withFileConflicts(display: StateDisplay, model: FileConflictModel | null): StateDisplay {
-  if (!model || (model.conflicts === 0 && model.kept === 0)) return display;
-  // The words "conflict" and "you manage" are already the label of those states; the counts replace them.
-  const replaced = (model.conflicts > 0 && display.label === "conflict") || (model.kept > 0 && display.label === "you manage");
-  const parts = [
-    ...(replaced ? [] : [display.label]),
-    ...(model.conflicts > 0 ? [plural(model.conflicts, "conflict")] : []),
-    ...(model.kept > 0 ? [`you manage ${model.kept}`] : []),
-  ];
-  const tone: Tone = model.conflicts > 0 ? "fail" : display.tone === "ok" ? "warn" : display.tone;
-  return { tone, label: parts.join(" · ") };
 }
 
 /** Why an action cannot run now, or null. */
@@ -189,23 +167,6 @@ export function fileGates(model: FileConflictModel | null, unit: FileUnit | null
     keep: gate(unit.state === "conflict"),
     manage: gate(unit.state === "kept"),
   };
-}
-
-/** "2 in conflict", "you manage 1", "2 in conflict · you manage 1". */
-export function filesCountsText(model: FileConflictModel): string {
-  return [
-    ...(model.conflicts > 0 ? [`${model.conflicts} in conflict`] : []),
-    ...(model.kept > 0 ? [`you manage ${model.kept}`] : []),
-  ].join(" · ");
-}
-
-/** What the workspace page tells about the skill and agent files it cannot act on: where the actions are. */
-export function filesPageHint(model: FileConflictModel, pageLabel: string): string {
-  const keys =
-    model.units.some(unit => unit.state === "kept") && model.conflicts === 0
-      ? "d diff · b take bundled · m hand back"
-      : "d diff · b take bundled · m keep mine";
-  return `open the ${pageLabel} page: ${keys}`;
 }
 
 /** The pointer line in the install review's detail of a file in conflict. */

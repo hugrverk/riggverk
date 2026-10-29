@@ -1,6 +1,5 @@
 import {
   surfacesForOverview,
-  safeOperationCount,
   type OverviewEntry,
   type OverviewId,
 } from "../hooks/useInstallationOverview";
@@ -44,54 +43,11 @@ const STATE_DISPLAY: Record<SurfaceDisplayState, StateDisplay> = {
   user_managed: { tone: "warn", label: "you manage" },
 };
 
-function plural(n: number, noun: string): string {
-  return `${n} ${noun}${n === 1 ? "" : "s"}`;
-}
-
-export interface TargetMeta {
-  text: string;
-  tone: Tone;
-}
-
 /**
  * Why nothing that needs the workspace folder can run. The folder is unusable only when it is a link, a file, or a
  * missing `RIGGVERK_WORKSPACE_PATH` folder: a fresh profile without one is fine, its first install creates it.
  */
 export const WORKSPACE_FOLDER_UNUSABLE = "workspace folder unusable";
-
-/** The right-hand cell of a harness-list row: "current", "current · you manage 2", "2 to update", "1 conflict", "…". */
-export function targetMeta(entry: OverviewEntry | undefined, options: { dataFolderOk: boolean; id: OverviewId }): TargetMeta {
-  if (!options.dataFolderOk) {
-    return options.id === "workspace" ? { text: "folder unusable", tone: "warn" } : { text: "needs workspace folder", tone: "dim" };
-  }
-  if (!entry || (entry.loading && !entry.status)) return { text: "…", tone: "dim" };
-  if (entry.error) return { text: "status failed", tone: "fail" };
-  const status = entry.status;
-  if (!status) return { text: "unknown", tone: "dim" };
-  const safe = safeOperationCount(status);
-  const conflicts = status.counts.conflict_count;
-  if (conflicts > 0) {
-    return { text: safe > 0 ? `${safe} to update · ${plural(conflicts, "conflict")}` : plural(conflicts, "conflict"), tone: "fail" };
-  }
-  // The workspace row stands for the data folder: an update only removes old copies of the bundle.
-  if (options.id === "workspace" && status.state === "update_available" && status.counts.remove_count > 0) {
-    const removes = status.counts.remove_count;
-    return { text: `${removes} old ${removes === 1 ? "copy" : "copies"} to remove`, tone: "warn" };
-  }
-  switch (status.state) {
-    case "current": {
-      // Files the user keeps are not conflicts and not current: they have bundled updates the app never applies.
-      const kept = status.counts.kept_count ?? 0;
-      return kept > 0 ? { text: `current · you manage ${kept}`, tone: "warn" } : { text: "current", tone: "ok" };
-    }
-    case "unavailable":
-      return { text: "unavailable", tone: "dim" };
-    case "not_installed":
-      return { text: "not installed", tone: "warn" };
-    default:
-      return { text: safe > 0 ? `${safe} to update` : "update available", tone: "warn" };
-  }
-}
 
 /** What an off target tells beyond its name, for a target whose default is not obvious from the name. */
 const OFF_DETAIL: Partial<Record<string, string>> = {

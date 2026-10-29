@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { installationStatus, surfaceStatus } from "../test/pageFixtures";
 import type { CodexConfigStatus } from "../types";
-import { CODEX_MANAGED_KEYS, codexConfigGates, codexConfigModelFor, codexKeyRows, codexWhy, keepMessage, keyNames, keyValueText, withKeptKeys } from "./codexConfig";
+import { CODEX_MANAGED_KEYS, codexConfigGates, codexConfigModelFor, codexKeyRows, codexWhy, keepMessage, keyNames, keyValueText } from "./codexConfig";
 
 const REVIEWER = { key: "approvals_reviewer", value: "auto_review" };
 const SANDBOX = { key: "sandbox_mode", value: "read-only" };
@@ -40,20 +40,6 @@ describe("texts", () => {
     expect(message).toContain("never writes it");
     expect(message).toContain("other managed keys keep following Riggverk");
     expect(keepMessage([REVIEWER, SANDBOX])).toContain("never writes them");
-  });
-});
-
-describe("withKeptKeys", () => {
-  const CURRENT = { tone: "ok", label: "current" } as const;
-
-  it("counts the kept keys on the row and no longer reads as plainly current", () => {
-    expect(withKeptKeys(CURRENT, { kept: [REVIEWER], differing: [] })).toEqual({ tone: "warn", label: "current · you keep 1" });
-    expect(withKeptKeys(CURRENT, { kept: [REVIEWER, SANDBOX], differing: [] }).label).toBe("current · you keep 2");
-  });
-
-  it("leaves the row alone when nothing is kept", () => {
-    expect(withKeptKeys(CURRENT, null)).toBe(CURRENT);
-    expect(withKeptKeys(CURRENT, { kept: [], differing: [REVIEWER] })).toBe(CURRENT);
   });
 });
 
