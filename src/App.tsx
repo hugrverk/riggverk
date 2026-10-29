@@ -97,6 +97,14 @@ function AppShell() {
     activeSkillId,
     activeSkillContent,
     readSkill,
+    skillDraft,
+    skillDirty,
+    skillSaving,
+    skillSaveResult,
+    onChangeSkillDraft,
+    onSaveSkill,
+    onResetSkill,
+    copySkillToPack,
     docs,
     activeDoc,
     docDraft,
@@ -824,6 +832,14 @@ function AppShell() {
             skills={visibleSkills}
             activeSkillContent={activeSkillId && visibleSkillIds.has(activeSkillId) ? activeSkillContent : null}
             onSelectSkillPreview={readSkill}
+            skillDraft={skillDraft}
+            skillDirty={skillDirty}
+            skillSaving={skillSaving}
+            skillSaveResult={skillSaveResult}
+            onChangeSkillDraft={onChangeSkillDraft}
+            onSaveSkill={onSaveSkill}
+            onResetSkill={onResetSkill}
+            onCopySkill={copySkillToPack}
             packLibrary={packLibrary}
             packError={packError}
             onForgetPack={forgetPack}

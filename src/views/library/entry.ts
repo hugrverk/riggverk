@@ -7,6 +7,7 @@ import type { InstallAgent, RulesFileContent } from "../../types";
 import type { KvItem } from "../../ui/Kv";
 import type { Tone } from "../../ui/tone";
 import type { LibraryViewProps } from "../LibraryView";
+import { isPersonalSkill } from "../../lib/packSkills";
 import type { OpenTarget, RowTagKind } from "./model";
 
 export type LibraryPreviewKind = "markdown" | "json";
@@ -48,6 +49,8 @@ export interface LibraryEntry {
   rules?: { file: RulesFileContent; harness: InstallAgent | null; conflict: boolean };
   /** A bundled skill: "Edit as my copy" starts from this name. */
   copySkill?: string;
+  /** Plain words in the footer of an editable item (what Update does with the saved text). */
+  footNote?: string;
   onChange: (value: string) => void;
   onSave: () => unknown;
   onReset: () => void;
@@ -198,6 +201,31 @@ function skillEntry(props: LibraryViewProps, id: string): LibraryEntry | null {
     meta.push(...listItems("targets", skill.targets), ...listItems("related", skill.related));
   }
   const fromPack = skill?.packState !== undefined;
+  if (isPersonalSkill(content.id, skill)) {
+    return {
+      kind: "skill",
+      id: content.id,
+      title: content.title,
+      path: displayPath(content.path),
+      tag: "yours",
+      editorLabel: "Edit skill",
+      saved: content.content,
+      draft: props.skillDraft,
+      dirty: props.skillDirty,
+      saving: props.skillSaving,
+      saveResult: props.skillSaveResult,
+      readOnly: false,
+      readOnlyReason: null,
+      preview: "markdown",
+      metaTitle: "metadata",
+      meta,
+      footNote: "Update installs your saved copy",
+      onChange: props.onChangeSkillDraft,
+      onSave: props.onSaveSkill,
+      onReset: props.onResetSkill,
+      onOpen: null,
+    };
+  }
   return readOnlyEntry(
     {
       kind: "skill",

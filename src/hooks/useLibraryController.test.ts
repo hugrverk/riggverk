@@ -861,3 +861,80 @@ describe("useLibraryController leaving with unsaved changes", () => {
     expect(choose).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("useLibraryController skills of the personal pack", () => {
+  const personal: DocumentContent = { id: "pack:personal/mine", title: "mine", path: "skills/mine/SKILL.md", section: "pack:personal", source: "pack", content: "one" };
+  const other: DocumentContent = { ...personal, id: "pack:team/shared", title: "shared" };
+
+  beforeEach(() => {
+    invoke.mockReset();
+    choose.mockReset();
+    choose.mockResolvedValue("alternate");
+  });
+
+  it("saves the draft of a personal skill and takes the text the backend now has", async () => {
+    const { deps } = createDeps();
+    const { result } = renderHook(() => useLibraryController(deps));
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === "read_skill") return Promise.resolve(personal);
+      return Promise.reject(new Error(`unexpected invoke: ${cmd}`));
+    });
+    await act(async () => {
+      await result.current.readSkill(personal.id);
+    });
+    await act(async () => {
+      result.current.onChangeSkillDraft("two");
+    });
+    expect(result.current.skillDirty).toBe(true);
+    expect(result.current.libraryDirty).toBe(true);
+
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === "save_pack_skill") return Promise.resolve(successResult(cmd, "saved with backup"));
+      if (cmd === "read_skill") return Promise.resolve({ ...personal, content: "two" });
+      return Promise.reject(new Error(`unexpected invoke: ${cmd}`));
+    });
+    let saved = false;
+    await act(async () => {
+      saved = await result.current.onSaveSkill();
+    });
+    expect(saved).toBe(true);
+    expect(invoke).toHaveBeenCalledWith("save_pack_skill", { id: personal.id, content: "two" });
+    expect(result.current.skillDirty).toBe(false);
+    expect(result.current.skillDraft).toBe("two");
+  });
+
+  it("never sends a skill of another pack to be saved", async () => {
+    const { deps } = createDeps();
+    const { result } = renderHook(() => useLibraryController(deps));
+    invoke.mockImplementation((cmd: string) => (cmd === "read_skill" ? Promise.resolve(other) : Promise.reject(new Error(`unexpected invoke: ${cmd}`))));
+    await act(async () => {
+      await result.current.readSkill(other.id);
+    });
+    let saved = true;
+    await act(async () => {
+      saved = await result.current.onSaveSkill();
+    });
+    expect(saved).toBe(false);
+    expect(invoke.mock.calls.some(([cmd]) => cmd === "save_pack_skill")).toBe(false);
+  });
+
+  it("copies a bundled skill and lists the skills again; a refusal is thrown for the dialog", async () => {
+    const { deps } = createDeps();
+    const { result } = renderHook(() => useLibraryController(deps));
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === "copy_skill_to_pack") return Promise.resolve({ id: "pack:personal/tdd-mine", name: "tdd-mine", pack: "personal", path: "~/x" });
+      if (cmd === "list_skills" || cmd === "list_pack_skills") return Promise.resolve(cmd === "list_skills" ? [] : { folder: "f", packs: [], skills: [], ignored: [] });
+      return Promise.reject(new Error(`unexpected invoke: ${cmd}`));
+    });
+    let copy: { id: string } | null = null;
+    await act(async () => {
+      copy = await result.current.copySkillToPack("tdd", "tdd-mine");
+    });
+    expect(copy).toMatchObject({ id: "pack:personal/tdd-mine" });
+    expect(invoke).toHaveBeenCalledWith("copy_skill_to_pack", { name: "tdd", newName: "tdd-mine" });
+    expect(invoke.mock.calls.some(([cmd]) => cmd === "list_pack_skills")).toBe(true);
+
+    invoke.mockImplementation(() => Promise.reject("a pack already has a skill with this name"));
+    await expect(result.current.copySkillToPack("tdd", "x")).rejects.toBe("a pack already has a skill with this name");
+  });
+});

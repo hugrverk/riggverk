@@ -7,6 +7,14 @@ export const PACK_STATE_LABEL: Record<Exclude<PackSkillState, "active">, string>
   missing: "pack missing",
 };
 
+/** The id prefix of the skills in the user's own pack: the only pack skills the Library edits. */
+export const PERSONAL_SKILL_PREFIX = "pack:personal/";
+
+/** A skill of the user's own pack that is in the catalog: the only skill the Library edits. */
+export function isPersonalSkill(id: string, skill: { packState?: string } | undefined): boolean {
+  return id.startsWith(PERSONAL_SKILL_PREFIX) && skill?.packState === "active";
+}
+
 /** Group heading of a pack's skills in the Library list. */
 export function packGroup(pack: string): string {
   return `pack:${pack}`;

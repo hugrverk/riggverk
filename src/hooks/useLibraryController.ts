@@ -5,7 +5,7 @@ import { invokeOpen } from "../lib/invokeOpen";
 import { useConfirm, useConfirmChoice } from "../components/ConfirmDialog";
 import { createSaveOperationTracker } from "../lib/editorSaveOperation";
 import { isLibraryDirty, isPersonalDoc } from "../lib/libraryDirtyGuards";
-import { packSkillSummaries } from "../lib/packSkills";
+import { PERSONAL_SKILL_PREFIX, packSkillSummaries } from "../lib/packSkills";
 import type { LibrarySourceType } from "../views/LibraryView";
 import type {
   AgentMetadataListResponse,
@@ -15,6 +15,7 @@ import type {
   DocSummary,
   DocumentContent,
   PackLibrary,
+  PackSkillCopy,
   RulesFileContent,
   RulesFileSummary,
   RulesSurfaceId,
@@ -53,6 +54,17 @@ export function useLibraryController({
   const [activeSkillContent, setActiveSkillContent] = useState<DocumentContent | null>(null);
   const activeSkillIdRef = useRef<string | null>(null);
   const activeSkillContentIdRef = useRef<string | null>(null);
+  // The open skill of the user's own pack is the third item with a draft.
+  const [skillDraft, setSkillDraft] = useState("");
+  const [skillDirty, setSkillDirtyState] = useState(false);
+  const skillDirtyRef = useRef(false);
+  const setSkillDirty = useCallback((value: boolean) => {
+    skillDirtyRef.current = value;
+    setSkillDirtyState(value);
+  }, []);
+  const [skillSaving, setSkillSaving] = useState(false);
+  const [skillSaveResult, setSkillSaveResult] = useState<ActionResult | null>(null);
+  const skillSaveOpRef = useRef(createSaveOperationTracker());
 
   const [docs, setDocs] = useState<DocSummary[]>([]);
   const [activeDoc, setActiveDoc] = useState<DocumentContent | null>(null);
@@ -124,11 +136,19 @@ export function useLibraryController({
     }
   }, [activeDoc?.id]);
 
+  // A skill opens with nothing unsaved; the draft belongs to the skill that is open.
+  useEffect(() => {
+    setSkillDraft(activeSkillContent?.content ?? "");
+    setSkillDirty(false);
+    setSkillSaveResult(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSkillContent?.id]);
+
   useEffect(() => {
     activeConfigSourceTypeRef.current = activeConfigSourceType;
   }, [activeConfigSourceType]);
 
-  const libraryDirty = isLibraryDirty(docDirty, rulesDirty);
+  const libraryDirty = isLibraryDirty(docDirty, rulesDirty, skillDirty);
 
   /**
    * The user confirmed leaving with unsaved changes: both drafts go back to what is saved, so nothing stays marked
@@ -141,7 +161,10 @@ export function useLibraryController({
     setRulesDraft(activeRulesFile?.refinements ?? "");
     setRulesDirty(false);
     setRulesSaveResult(null);
-  }, [activeDoc, activeRulesFile, setDocDirty, setRulesDirty]);
+    setSkillDraft(activeSkillContent?.content ?? "");
+    setSkillDirty(false);
+    setSkillSaveResult(null);
+  }, [activeDoc, activeRulesFile, activeSkillContent, setDocDirty, setRulesDirty, setSkillDirty]);
 
   // Set below, once the saves exist: "Save and continue" writes the draft that is unsaved.
   const saveDirtyDraftRef = useRef<() => Promise<boolean>>(async () => true);
@@ -153,8 +176,8 @@ export function useLibraryController({
    * go on, and the draft is then already settled.
    */
   const confirmLeave = useCallback(async (): Promise<boolean> => {
-    if (!docDirtyRef.current && !rulesDirtyRef.current) return true;
-    const name = docDirtyRef.current ? activeDoc?.title : activeRulesFile?.label;
+    if (!docDirtyRef.current && !rulesDirtyRef.current && !skillDirtyRef.current) return true;
+    const name = docDirtyRef.current ? activeDoc?.title : rulesDirtyRef.current ? activeRulesFile?.label : activeSkillContent?.title;
     const choice = await choose({
       title: "Unsaved changes",
       message: `${name ?? "This item"} has changes you have not saved.`,
@@ -168,7 +191,7 @@ export function useLibraryController({
       return true;
     }
     return saveDirtyDraftRef.current();
-  }, [activeDoc?.title, activeRulesFile?.label, choose, discardDrafts]);
+  }, [activeDoc?.title, activeRulesFile?.label, activeSkillContent?.title, choose, discardDrafts]);
 
   const setGuardedLibrarySourceType = useCallback(async (type: LibrarySourceType) => {
     if (type === librarySourceType) return;
@@ -709,6 +732,7 @@ export function useLibraryController({
   }, [confirm, loadSkills, setError]);
 
   const readSkill = useCallback(async (id: string) => {
+    if (id !== activeSkillIdRef.current && !(await confirmLeave())) return;
     activeSkillIdRef.current = id;
     setActiveSkillId(id);
     const generation = workspaceLoadGenerationRef.current;
@@ -723,7 +747,63 @@ export function useLibraryController({
       if (activeSkillIdRef.current !== id) return;
       setError(`Read skill: ${e}`);
     }
-  }, [isWorkspaceLoadCurrent, setError, workspaceLoadGenerationRef]);
+  }, [confirmLeave, isWorkspaceLoadCurrent, setError, workspaceLoadGenerationRef]);
+
+  const onChangeSkillDraft = useCallback((value: string) => {
+    setSkillDraft(value);
+    setSkillDirty(value !== (activeSkillContent?.content ?? ""));
+  }, [activeSkillContent, setSkillDirty]);
+
+  const onResetSkill = useCallback(() => {
+    setSkillDraft(activeSkillContent?.content ?? "");
+    setSkillDirty(false);
+    setSkillSaveResult(null);
+  }, [activeSkillContent, setSkillDirty]);
+
+  /** Saves the open skill of the personal pack (the backend refuses every other id); true once it is on disk. */
+  const onSaveSkill = useCallback(async (): Promise<boolean> => {
+    const skill = activeSkillContent;
+    if (!skill || !skill.id.startsWith(PERSONAL_SKILL_PREFIX)) return false;
+    const saveOpId = skillSaveOpRef.current.capture();
+    const generation = workspaceLoadGenerationRef.current;
+    const isCurrent = () =>
+      skillSaveOpRef.current.isCurrent(saveOpId) &&
+      isWorkspaceLoadCurrent(generation) &&
+      activeSkillIdRef.current === skill.id;
+    setSkillSaving(true);
+    setSkillSaveResult(null);
+    try {
+      const result = await invoke<ActionResult>("save_pack_skill", { id: skill.id, content: skillDraft });
+      if (!isCurrent()) return false;
+      setSkillSaveResult(result);
+      if (!result.success) return false;
+      if (result.stdout !== "unchanged") {
+        const updated = await invoke<DocumentContent>("read_skill", { id: skill.id });
+        if (!isCurrent()) return false;
+        activeSkillContentIdRef.current = updated.id;
+        setActiveSkillContent(updated);
+        setSkillDraft(updated.content);
+      }
+      setSkillDirty(false);
+      return true;
+    } catch (e) {
+      if (!isCurrent()) return false;
+      setSkillSaveResult({ success: false, action: "save_pack_skill", stdout: "", stderr: String(e), exit_code: null });
+      return false;
+    } finally {
+      setSkillSaving(false);
+    }
+  }, [activeSkillContent, isWorkspaceLoadCurrent, setSkillDirty, skillDraft, workspaceLoadGenerationRef]);
+
+  /**
+   * Copies a bundled skill into the personal pack under `newName`, then lists the packs again so the copy shows. The
+   * backend's refusal (a taken name, a refused pack) is thrown for the caller to show; nothing else changes.
+   */
+  const copySkillToPack = useCallback(async (name: string, newName: string): Promise<PackSkillCopy> => {
+    const copy = await invoke<PackSkillCopy>("copy_skill_to_pack", { name, newName });
+    await loadSkills();
+    return copy;
+  }, [loadSkills]);
 
   // The configs load whenever the Library is open, not only on their topic: a search result can open one from any topic.
   // Choosing a target resets the source itself, so only a new visit or a workspace reload sends it back to the base.
@@ -752,7 +832,7 @@ export function useLibraryController({
     }
   }, [activeConfigTargetId, activeConfigSourceType, view, libraryReloadEpoch, loadConfigEditorSourceContent]);
 
-  saveDirtyDraftRef.current = () => (docDirtyRef.current ? onSaveDoc() : onSaveRules());
+  saveDirtyDraftRef.current = () => (docDirtyRef.current ? onSaveDoc() : rulesDirtyRef.current ? onSaveRules() : onSaveSkill());
 
   return {
     skills,
@@ -763,6 +843,14 @@ export function useLibraryController({
     activeSkillId,
     activeSkillContent,
     readSkill,
+    skillDraft,
+    skillDirty,
+    skillSaving,
+    skillSaveResult,
+    onChangeSkillDraft,
+    onSaveSkill,
+    onResetSkill,
+    copySkillToPack,
     docs,
     activeDoc,
     docDraft,

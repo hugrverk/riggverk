@@ -31,8 +31,10 @@ import {
   type OpenTarget,
   type RowVerb,
 } from "./library/model";
+import { CopySkillDialog } from "./library/CopySkillDialog";
 import { NewDocDialog } from "./library/NewDocDialog";
 import type { RulesMode } from "./library/RulesEditor";
+import { skillCopyProblem, suggestedCopyName } from "./library/skillCopy";
 import { useLibraryKeys } from "./library/useLibraryKeys";
 
 export type { LibrarySourceType } from "./library/model";
@@ -89,8 +91,20 @@ export interface LibraryViewProps {
   skills: SkillSummary[];
   activeSkillContent: DocumentContent | null;
   onSelectSkillPreview: (id: string) => Maybe<void>;
-  /** A personal copy of a bundled skill. Without it the bundled rows and sheets offer no "Edit as my copy". */
-  onCopySkill?: (name: string) => void;
+  /** The open skill of the personal pack is editable: it has a draft like a personal doc. */
+  skillDraft: string;
+  skillDirty: boolean;
+  skillSaving: boolean;
+  skillSaveResult: ActionResult | null;
+  onChangeSkillDraft: (value: string) => void;
+  onSaveSkill: () => unknown;
+  onResetSkill: () => void;
+  /**
+   * Copies a bundled skill into the personal pack under a new name and resolves with the copy (its id opens in the
+   * sheet); rejects with the reason when the backend refuses. Without it the bundled rows and sheets offer no
+   * "Edit as my copy".
+   */
+  onCopySkill?: (name: string, newName: string) => Promise<{ id: string }>;
   /** Skill packs: the packs, their problems and the way to forget one that cannot be read. */
   packLibrary?: PackLibrary | null;
   packError?: string | null;
@@ -146,6 +160,9 @@ export function LibraryView(props: LibraryViewProps) {
   /** The row (or group button) that opened the sheet, for focus to return to. */
   const returnKeyRef = useRef<string | null>(null);
   const newDocOpenerRef = useRef<Element | null>(null);
+  const copyOpenerRef = useRef<Element | null>(null);
+  /** The "Edit as my copy" dialog: the bundled skill, the name typed, the backend's refusal, and a copy under way. */
+  const [copy, setCopy] = useState<{ source: string; name: string; error: string | null; busy: boolean } | null>(null);
   const searching = query.trim() !== "";
 
   const confirmLeave = async (): Promise<boolean> => (onConfirmLeave ? onConfirmLeave() : true);
@@ -242,7 +259,7 @@ export function LibraryView(props: LibraryViewProps) {
   }, [sourceType]);
 
   // A save that finishes is also a notice, for when the sheet has already closed (Save and continue).
-  const wasSaving = useRef({ doc: false, rules: false });
+  const wasSaving = useRef({ doc: false, rules: false, skill: false });
   useEffect(() => {
     const before = wasSaving.current;
     if (before.doc && !props.docSaving && props.docSaveResult?.success) {
@@ -251,9 +268,12 @@ export function LibraryView(props: LibraryViewProps) {
     if (before.rules && !props.rulesSaving && props.rulesSaveResult?.success) {
       notify(redactTerminalOutput(props.rulesSaveResult.stdout) || "saved", { tone: "ok" });
     }
-    wasSaving.current = { doc: props.docSaving, rules: props.rulesSaving };
+    if (before.skill && !props.skillSaving && props.skillSaveResult?.success) {
+      notify(props.skillSaveResult.stdout === "unchanged" ? "no changes to save" : "Saved · Update installs it", { tone: "ok" });
+    }
+    wasSaving.current = { doc: props.docSaving, rules: props.rulesSaving, skill: props.skillSaving };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [props.docSaving, props.rulesSaving]);
+  }, [props.docSaving, props.rulesSaving, props.skillSaving]);
 
   // ---- topics and search ----
 
@@ -298,6 +318,35 @@ export function LibraryView(props: LibraryViewProps) {
     setSheet({ target: { kind: "doc", id }, title: props.createDocTitle.trim() || "New doc" });
   };
 
+  const openCopy = (source: string) => {
+    copyOpenerRef.current = document.activeElement;
+    setCopy({ source, name: suggestedCopyName(source), error: null, busy: false });
+  };
+
+  const closeCopy = () => {
+    setCopy(null);
+    const opener = copyOpenerRef.current;
+    copyOpenerRef.current = null;
+    if (opener instanceof HTMLElement && opener.isConnected) opener.focus();
+  };
+
+  const createCopy = async () => {
+    if (!copy || !props.onCopySkill || copy.busy) return;
+    const { source, name } = copy;
+    setCopy({ ...copy, busy: true, error: null });
+    try {
+      const made = await props.onCopySkill(source, name);
+      copyOpenerRef.current = null;
+      setCopy(null);
+      // The new skill opens for editing; the bundled sheet it was made from is replaced.
+      setSheet(null);
+      await openTarget({ kind: "skill", id: made.id }, name, `skills/skill:${made.id}`);
+    } catch (error) {
+      const text = String(error instanceof Error ? error.message : error);
+      setCopy(current => (current ? { ...current, busy: false, error: text } : current));
+    }
+  };
+
   const { onRootKeyDown } = useLibraryKeys({
     rootRef,
     sheetRef,
@@ -319,7 +368,7 @@ export function LibraryView(props: LibraryViewProps) {
         props.onOpenHarnessView?.(action.harness);
         break;
       case "copy":
-        props.onCopySkill?.(action.skill);
+        openCopy(action.skill);
         break;
       case "forget":
         props.onForgetPack?.(action.pack);
@@ -454,8 +503,21 @@ export function LibraryView(props: LibraryViewProps) {
           rulesMode={rulesMode}
           onRulesMode={setRulesMode}
           onRequestClose={() => void requestClose()}
-          onCopySkill={props.onCopySkill}
+          onCopySkill={props.onCopySkill ? openCopy : undefined}
           onOpenHarness={props.onOpenHarnessView}
+        />
+      )}
+
+      {copy && (
+        <CopySkillDialog
+          source={copy.source}
+          name={copy.name}
+          problem={skillCopyProblem(copy.name, props.skills)}
+          error={copy.error}
+          creating={copy.busy}
+          onChangeName={name => setCopy({ ...copy, name, error: null })}
+          onCreate={() => void createCopy()}
+          onClose={closeCopy}
         />
       )}
 

@@ -1,6 +1,6 @@
 import { displayPath } from "../../lib/displayPath";
 import { isPersonalDoc } from "../../lib/libraryDirtyGuards";
-import { packGroup, packNoticeLines, type PackNoticeLine } from "../../lib/packSkills";
+import { isPersonalSkill, packGroup, packNoticeLines, type PackNoticeLine } from "../../lib/packSkills";
 import { harnessOfRulesSurface } from "../../lib/rulesView";
 import { HARNESS_LABELS } from "../../lib/harnessInstallation";
 import type { UiState } from "../../lib/uiState";
@@ -193,8 +193,10 @@ function skillRow(skill: SkillSummary, input: Pick<LibraryModelInput, "canCopySk
       haystack: haystack(skill.name, skill.description, skill.category, "skill", "riggverk"),
     };
   }
-  const tag = { kind: "pack" as const, label: skill.group || "pack" };
-  const base = { ...common, tag, verbs, haystack: haystack(skill.name, skill.description, skill.group, "skill", "pack") };
+  const personal = isPersonalSkill(skill.id, skill);
+  const tag = { kind: personal ? ("yours" as const) : ("pack" as const), label: skill.group || "pack" };
+  if (personal) verbs[0] = { label: "Edit", action: { type: "open", target } };
+  const base = { ...common, tag, verbs, haystack: haystack(skill.name, skill.description, skill.group, "skill", personal ? "yours" : "pack") };
   if (skill.packState === "active") {
     return { ...base, desc: skill.description, state: { state: "ok", label: "Active" } };
   }

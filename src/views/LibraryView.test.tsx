@@ -30,6 +30,10 @@ interface Fixture {
   docs: Map<string, DocumentContent>;
   rulesRefinements: Map<string, string>;
   packs: PackLibrary;
+  /** Text of the skills of the personal pack, by id. */
+  personalSkills: Map<string, string>;
+  /** When set, copy_skill_to_pack refuses with this reason. */
+  refuseCopy: string | null;
 }
 
 function skill(id: string, description: string, extra: Partial<SkillSummary> = {}): SkillSummary {
@@ -85,14 +89,18 @@ function freshFixture(): Fixture {
       folder: "~/.config/riggverk/packs",
       packs: [
         { name: "mine", state: "ok", reason: "", forgettable: false },
+        { name: "personal", state: "ok", reason: "", forgettable: false },
         { name: "old-pack", state: "missing", reason: "the pack folder is gone", forgettable: true },
       ],
       skills: [
         { id: "pack:mine/my-checklist", name: "my-checklist", description: "A checklist of mine.", pack: "mine", state: "active", reason: "", path: "my-checklist/SKILL.md" },
         { id: "pack:mine/tdd", name: "tdd", description: "Named like a bundled skill.", pack: "mine", state: "shadowed", reason: "the bundle wins", path: "tdd/SKILL.md" },
+        { id: "pack:personal/my-notes", name: "my-notes", description: "Notes of my own.", pack: "personal", state: "active", reason: "", path: "skills/my-notes/SKILL.md" },
       ],
       ignored: [],
     },
+    personalSkills: new Map([["pack:personal/my-notes", "---\nname: my-notes\n---\n\n# my-notes\n\nMy first text."]]),
+    refuseCopy: null,
   };
 }
 
@@ -140,8 +148,27 @@ function installBackend() {
         return Promise.resolve(BUNDLED_SKILLS);
       case "list_pack_skills":
         return Promise.resolve(fixture.packs);
+      case "copy_skill_to_pack": {
+        const newName = args!.newName as string;
+        if (fixture.refuseCopy) return Promise.reject(fixture.refuseCopy);
+        const id = `pack:personal/${newName}`;
+        fixture.personalSkills.set(id, `---\nname: ${newName}\n---\n\n# ${newName}\n\nCopied from ${args!.name as string}.`);
+        fixture.packs.skills.push({ id, name: newName, description: "A copy.", pack: "personal", state: "active", reason: "", path: `skills/${newName}/SKILL.md` });
+        return Promise.resolve({ id, name: newName, pack: "personal", path: `~/packs/personal/skills/${newName}/SKILL.md` });
+      }
+      case "save_pack_skill": {
+        const id = args!.id as string;
+        const unchanged = fixture.personalSkills.get(id) === args!.content;
+        fixture.personalSkills.set(id, args!.content as string);
+        return Promise.resolve(ok("save_pack_skill", unchanged ? "unchanged" : "saved with backup"));
+      }
       case "read_skill": {
         const id = args!.id as string;
+        const personal = fixture.personalSkills.get(id);
+        if (personal !== undefined) {
+          const name = id.slice("pack:personal/".length);
+          return Promise.resolve({ id, title: name, path: `~/packs/personal/skills/${name}/SKILL.md`, section: "pack:personal", source: "pack", content: personal });
+        }
         return Promise.resolve({ id, title: id, path: `skills/${id}/SKILL.md`, section: "", source: "curated", content: `# ${id} skill\n\nBody of ${id}.` });
       }
       case "forget_pack":
@@ -175,12 +202,13 @@ function installBackend() {
 interface HarnessProps {
   showConfigs?: boolean;
   onOpenHarnessView?: (harness: InstallAgent) => void;
-  onCopySkill?: (name: string) => void;
+  /** The app cannot copy a skill: the rows and sheets offer no "Edit as my copy". */
+  withoutCopy?: boolean;
   /** Starts on this topic once the Library has loaded. */
   topic?: "rules" | "skills" | "agents" | "docs" | "configs" | "packs";
 }
 
-function Harness({ showConfigs = true, onOpenHarnessView, onCopySkill, topic }: HarnessProps) {
+function Harness({ showConfigs = true, onOpenHarnessView, withoutCopy = false, topic }: HarnessProps) {
   // Like the app's, these are stable: the controller's effects depend on them.
   const generation = useRef({ current: 0 }).current;
   const deps = useRef({
@@ -240,7 +268,14 @@ function Harness({ showConfigs = true, onOpenHarnessView, onCopySkill, topic }: 
       skills={lib.skills}
       activeSkillContent={lib.activeSkillContent}
       onSelectSkillPreview={lib.readSkill}
-      onCopySkill={onCopySkill}
+      skillDraft={lib.skillDraft}
+      skillDirty={lib.skillDirty}
+      skillSaving={lib.skillSaving}
+      skillSaveResult={lib.skillSaveResult}
+      onChangeSkillDraft={lib.onChangeSkillDraft}
+      onSaveSkill={lib.onSaveSkill}
+      onResetSkill={lib.onResetSkill}
+      onCopySkill={withoutCopy ? undefined : lib.copySkillToPack}
       packLibrary={lib.packLibrary}
       packError={lib.packError}
       onForgetPack={lib.forgetPack}
@@ -394,16 +429,14 @@ describe("Library topics", () => {
   });
 
   it("offers no Edit as my copy while the app cannot make the copy", async () => {
-    await renderLibrary({ topic: "skills" });
+    await renderLibrary({ topic: "skills", withoutCopy: true });
     expect(screen.queryByRole("button", { name: "Edit as my copy" })).toBeNull();
   });
 
-  it("offers Edit as my copy on the bundled skills when the app can make the copy", async () => {
-    const onCopySkill = vi.fn();
-    await renderLibrary({ onCopySkill, topic: "skills" });
-    const bundled = within(screen.getByRole("heading", { name: "Bundled" }).closest("section")!);
-    fireEvent.click(bundled.getAllByRole("button", { name: "Edit as my copy" })[0]!);
-    expect(onCopySkill).toHaveBeenCalledWith("tdd");
+  it("offers Edit on the personal pack's skills and Read on every other pack skill", async () => {
+    await renderLibrary({ topic: "skills" });
+    expect(within(rowOf("my-notes")).getByRole("button", { name: "Edit" })).toBeTruthy();
+    expect(within(rowOf("my-checklist")).getByRole("button", { name: "Read" })).toBeTruthy();
   });
 
   it("lists bundled agents, docs with a New doc button, and configs", async () => {
@@ -654,6 +687,127 @@ describe("Library rules sheet", () => {
     expect(within(sheet).getByLabelText("File on disk").textContent).toBe(`${BEFORE}\n\n## Mine\nHand edited.\n`);
     fireEvent.click(within(sheet).getByRole("button", { name: "Open Codex view ›" }));
     expect(onOpenHarnessView).toHaveBeenCalledWith("codex");
+  });
+});
+
+describe("Library skills of your own", () => {
+  function bundledRow(name: string): HTMLElement {
+    const section = screen.getByRole("heading", { name: "Bundled" }).closest("section")!;
+    return within(section).getAllByRole("listitem").find(item => item.querySelector("b")?.textContent === name)!;
+  }
+
+  async function openCopyDialog(skillName = "tdd"): Promise<HTMLElement> {
+    fireEvent.click(within(bundledRow(skillName)).getByRole("button", { name: "Edit as my copy" }));
+    return screen.findByRole("dialog", { name: "Edit as my copy" });
+  }
+
+  it("asks for a name, prefilled, and says what the copy is", async () => {
+    await renderLibrary({ topic: "skills" });
+    const dialog = await openCopyDialog();
+    const name = within(dialog).getByRole("textbox", { name: "Name" }) as HTMLInputElement;
+    expect(name.value).toBe("tdd-mine");
+    expect(document.activeElement).toBe(name);
+    expect(dialog.textContent).toContain(
+      "The bundled tdd keeps its name and stays active. Your copy is a new skill in pack:personal that Update installs next to it.",
+    );
+  });
+
+  it("refuses a bad name before anything is sent: characters, a bundled name, a name a pack has", async () => {
+    await renderLibrary({ topic: "skills" });
+    const dialog = await openCopyDialog();
+    const name = within(dialog).getByRole("textbox", { name: "Name" });
+    const create = within(dialog).getByRole("button", { name: "Create copy" });
+    const tryName = (value: string) => fireEvent.change(name, { target: { value } });
+
+    tryName("Not Valid");
+    expect(within(dialog).getByText("Use 1–64 lowercase letters, digits and dashes, and no dash first.")).toBeTruthy();
+    expect(create.getAttribute("aria-disabled")).toBe("true");
+    tryName("diagnose");
+    expect(within(dialog).getByText("A bundled skill is already named diagnose. Choose another name.")).toBeTruthy();
+    tryName("my-notes");
+    expect(within(dialog).getByText("pack:personal already has my-notes.")).toBeTruthy();
+    tryName("my-checklist");
+    expect(within(dialog).getByText("A pack already has a skill named my-checklist.")).toBeTruthy();
+
+    fireEvent.click(create);
+    fireEvent.submit(dialog.querySelector("form")!);
+    await act(async () => {});
+    expect(callsTo("copy_skill_to_pack")).toEqual([]);
+  });
+
+  it("shows the backend's refusal in the dialog and keeps it open", async () => {
+    fixture.refuseCopy = "cannot check skill name collisions while a pack is refused or ignored";
+    await renderLibrary({ topic: "skills" });
+    const dialog = await openCopyDialog();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Create copy" }));
+    expect((await within(dialog).findByRole("alert")).textContent).toBe("cannot check skill name collisions while a pack is refused or ignored");
+    expect(screen.getByRole("dialog", { name: "Edit as my copy" })).toBeTruthy();
+    expect(screen.queryByRole("dialog", { name: /tdd-mine/ })).toBeNull();
+  });
+
+  it("copies the skill, lists it under Yours and opens it in the sheet, ready to edit", async () => {
+    await renderLibrary({ topic: "skills" });
+    const dialog = await openCopyDialog();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Create copy" }));
+    await waitFor(() => expect(callsTo("copy_skill_to_pack")).toEqual([{ name: "tdd", newName: "tdd-mine" }]));
+    const sheet = await screen.findByRole("dialog", { name: /tdd-mine/ });
+    const textarea = (await within(sheet).findByRole("textbox", { name: "Edit skill" })) as HTMLTextAreaElement;
+    expect(textarea.value).toContain("Copied from tdd.");
+    expect(document.activeElement).toBe(textarea);
+    expect(screen.queryByRole("dialog", { name: "Edit as my copy" })).toBeNull();
+    expect(within(sheet).getByRole("button", { name: "Save" })).toBeTruthy();
+    // The pack library was listed again: the copy is a row of its own, with the Edit verb.
+    fireEvent.click(within(sheet).getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(within(rowOf("tdd-mine")).getByRole("button", { name: "Edit" })).toBeTruthy();
+  });
+
+  it("offers the copy in the sheet of a bundled skill too", async () => {
+    await renderLibrary({ topic: "skills" });
+    fireEvent.click(within(bundledRow("diagnose")).getByRole("button", { name: "Read" }));
+    const sheet = await screen.findByRole("dialog", { name: /diagnose/ });
+    fireEvent.click(await within(sheet).findByRole("button", { name: "Edit as my copy" }));
+    const dialog = await screen.findByRole("dialog", { name: "Edit as my copy" });
+    expect((within(dialog).getByRole("textbox", { name: "Name" }) as HTMLInputElement).value).toBe("diagnose-mine");
+  });
+
+  it("edits and saves a skill of the personal pack, and says Update installs it", async () => {
+    await renderLibrary({ topic: "skills" });
+    fireEvent.click(within(rowOf("my-notes")).getByRole("button", { name: "Edit" }));
+    const sheet = await screen.findByRole("dialog", { name: /my-notes/ });
+    const textarea = (await within(sheet).findByRole("textbox", { name: "Edit skill" })) as HTMLTextAreaElement;
+    expect(textarea.value).toContain("My first text.");
+    expect(within(sheet).getByText("Update installs your saved copy")).toBeTruthy();
+    fireEvent.change(textarea, { target: { value: "# my-notes\n\nSecond text." } });
+    await within(sheet).findByText("Unsaved changes");
+    fireEvent.click(within(sheet).getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(callsTo("save_pack_skill")).toEqual([{ id: "pack:personal/my-notes", content: "# my-notes\n\nSecond text." }]),
+    );
+    await within(sheet).findByText("Saved");
+    expect(document.querySelector(".toast")!.textContent).toBe("Saved · Update installs it");
+  });
+
+  it("guards unsaved skill edits like any other draft", async () => {
+    await renderLibrary({ topic: "skills" });
+    fireEvent.click(within(rowOf("my-notes")).getByRole("button", { name: "Edit" }));
+    const sheet = await screen.findByRole("dialog", { name: /my-notes/ });
+    fireEvent.change(await within(sheet).findByRole("textbox", { name: "Edit skill" }), { target: { value: "changed" } });
+    fireEvent.click(within(sheet).getByRole("button", { name: "Close" }));
+    const dialog = await screen.findByRole("dialog", { name: "Unsaved changes" });
+    expect(within(dialog).getByText("my-notes has changes you have not saved.")).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Discard" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(callsTo("save_pack_skill")).toEqual([]);
+  });
+
+  it("keeps the other pack skills read-only, with their reason", async () => {
+    await renderLibrary({ topic: "skills" });
+    fireEvent.click(within(rowOf("my-checklist")).getByRole("button", { name: "Read" }));
+    const sheet = await screen.findByRole("dialog", { name: /my-checklist/ });
+    expect(await within(sheet).findByText("from a skill pack: read-only here, edit it in the pack folder")).toBeTruthy();
+    expect(within(sheet).queryByRole("textbox")).toBeNull();
+    expect(within(sheet).queryByRole("button", { name: "Save" })).toBeNull();
   });
 });
 
