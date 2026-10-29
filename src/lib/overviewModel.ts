@@ -48,6 +48,8 @@ export interface CardRow {
   state: UiState | null;
   /** The state in a word or two: "up to date", "not installed", "checking…". */
   text: string;
+  /** The row's own sentence ("Base block markers are malformed…"); null when it has none. */
+  subline: string | null;
 }
 
 export interface AgentCardModel {
@@ -105,7 +107,7 @@ function harnessModel(input: {
       const short = surfaceShortName(item.surface);
       return {
         short,
-        row: { surface: item.surface, label: ROW_LABEL[short] ?? short, state: item.state, text: rowText(item, notInstalled[index]!) },
+        row: { surface: item.surface, label: ROW_LABEL[short] ?? short, state: item.state, text: rowText(item, notInstalled[index]!), subline: item.subline },
       };
     })
     .sort((a, b) => ROW_ORDER.indexOf(a.short) - ROW_ORDER.indexOf(b.short))

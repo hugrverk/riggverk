@@ -320,6 +320,22 @@ describe("Overview inspector", () => {
     expect(decision.querySelector(".state-mark.is-decide")).not.toBeNull();
   });
 
+  it("lists what has to be fixed by hand, with the reason and a button to the agent's page", () => {
+    const malformed = installationStatus(
+      "conflict",
+      [{ ...surfaceStatus("claude_rules", "conflict"), rules: { ...RULES_CONFLICT, conflict_reason: "malformed_markers" as const, malformed_reason: "missing_end" as const } }, surfaceStatus("claude_agents", "current")],
+      { conflict_count: 1 },
+    );
+    const { props: p } = renderOverview({ overview: overviewOf({ workspace: OVERVIEW.entries.workspace!.status, claude: malformed }), enabledHarnessIds: ["claude"] });
+    expect(within(inspector()).getByText("1 to fix")).toBeTruthy();
+    const fix = within(inspector()).getByText(/^Claude · Rules to fix by hand/).closest(".flow-fix") as HTMLElement;
+    expect(fix.textContent).toContain("Rules:");
+    expect(fix.textContent).toMatch(/markers/i);
+    expect(fix.querySelector(".state-mark.is-fix")).not.toBeNull();
+    fireEvent.click(within(fix).getByRole("button", { name: "Open Claude" }));
+    expect(p.onNavigate).toHaveBeenCalledWith("claude");
+  });
+
   it("shows Install everything on a fresh profile, which does what Update all does", () => {
     const fresh = installationStatus("not_installed", [surfaceStatus("codex_rules", "not_installed"), surfaceStatus("skills", "not_installed")]);
     const { props: p } = renderOverview({ overview: overviewOf({ workspace: OVERVIEW.entries.workspace!.status, codex: fresh }), enabledHarnessIds: ["codex"] });

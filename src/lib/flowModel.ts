@@ -401,6 +401,20 @@ export function decisionsOf(cards: readonly AgentCardModel[]): FlowDecision[] {
     .map(card => ({ harness: card.harness, label: card.label, rows: card.rows.filter(row => row.state === "decide"), reason: card.notes[0] ?? null }));
 }
 
+export interface FlowFix {
+  harness: InstallAgent;
+  label: string;
+  /** The rows the app cannot touch, each with why ("Base block markers are malformed…"). */
+  rows: Array<{ label: string; reason: string | null }>;
+}
+
+/** The agents with something to fix by hand, in card order: rows the app leaves alone until the file is repaired. */
+export function fixesOf(cards: readonly AgentCardModel[]): FlowFix[] {
+  return cards
+    .map(card => ({ harness: card.harness, label: card.label, rows: card.rows.filter(row => row.state === "fix").map(row => ({ label: row.label, reason: row.subline })) }))
+    .filter(fix => fix.rows.length > 0);
+}
+
 /** Nothing is installed yet: every agent that is counted waits only for its first install. */
 export function nothingInstalled(cards: readonly AgentCardModel[]): boolean {
   const judged = cards.filter(card => card.badge !== null && card.badge.state !== "off");

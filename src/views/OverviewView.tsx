@@ -14,7 +14,7 @@ import { usePostureOverview } from "../hooks/usePostureOverview";
 import { useRunTrace } from "../hooks/useRunTrace";
 import type { Binding } from "../keyboard/registry";
 import { useKeymap } from "../keyboard/useKeymap";
-import { buildFlowModel, decisionsOf, nothingInstalled, sameRef, type FlowRef, type HarnessHomes } from "../lib/flowModel";
+import { buildFlowModel, decisionsOf, fixesOf, nothingInstalled, sameRef, type FlowRef, type HarnessHomes } from "../lib/flowModel";
 import { harnessHomePath } from "../lib/harnessHeader";
 import { HARNESS_NAV_ORDER } from "../lib/harnessInstallation";
 import type { HarnessRuntimeHealth } from "../lib/harnessRuntimeRows";
@@ -251,6 +251,7 @@ export function OverviewView({
             counts={summary.counts}
             installing={nothingInstalled(summary.cards)}
             decisions={decisionsOf(summary.cards)}
+            fixes={fixesOf(summary.cards)}
             lastUpdate={lastUpdate}
             backupCount={backupCount}
             run={busy ? { label: wsRunning, progress: wsProgress, trace, startAgents } : null}
