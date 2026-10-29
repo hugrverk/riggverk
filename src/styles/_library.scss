@@ -128,21 +128,30 @@
 
 /* ---- source switcher ---- */
 
+/* One row: the tabs do not wrap (that orphaned the last one). They are tight enough to fit the list column at the
+   default size and scroll sideways, without a visible scrollbar, when a larger text size needs more room. The
+   hairline is an inset shadow because overflow would clip a tab's underline overlapping a real border. */
 .lib-sources {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0 18px;
+  flex-wrap: nowrap;
+  gap: 0 12px;
   margin: 0;
   padding: 0 20px;
-  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  box-shadow: inset 0 -1px 0 var(--border);
   font-family: var(--font-mono);
   font-size: max(10px, calc(var(--fs) * 0.8));
-  letter-spacing: 0.1em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
+.lib-sources::-webkit-scrollbar { display: none; }
+
 .lib-source {
-  margin-bottom: -1px;
+  flex: none;
+  white-space: nowrap;
   padding: 10px 0 9px;
   border: 0;
   border-bottom: 2px solid transparent;
@@ -156,6 +165,8 @@
     color var(--dur-state) var(--ease),
     border-color var(--dur-state) var(--ease);
 }
+
+.lib-source .c-dim { font-size: 0.9em; }
 
 .lib-source:hover { color: var(--text); }
 
