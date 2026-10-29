@@ -28,12 +28,14 @@ fn skill_summary_from_path(
     group: String,
 ) -> SkillSummary {
     let content = std::fs::read_to_string(skill_md).unwrap_or_default();
-    let name = extract_frontmatter(&content, "name");
-    let desc = extract_frontmatter(&content, "description");
-    let category = extract_frontmatter(&content, "category");
-    let risk = extract_frontmatter(&content, "risk");
-    let targets = extract_frontmatter_list(&content, "targets");
-    let related = extract_frontmatter_list(&content, "related");
+    let fields = crate::skill_discovery::frontmatter_fields(&content).unwrap_or_default();
+    let field = |key: &str| fields.get(key).cloned().unwrap_or_default();
+    let name = field("name");
+    let desc = field("description");
+    let category = field("category");
+    let risk = field("risk");
+    let targets = split_list(&field("targets"));
+    let related = split_list(&field("related"));
     let rel = skill_md
         .strip_prefix(root)
         .unwrap_or(skill_md)
@@ -54,44 +56,7 @@ fn skill_summary_from_path(
 }
 
 fn has_deeper_skill_md(dir: &Path) -> bool {
-    scan_deeper_skill_md(dir, 0)
-}
-
-/// Recursively scan for SKILL.md files at depths deeper than one group level.
-/// Bounded to MAX_ENTRIES to prevent infinite recursion on deep trees.
-fn scan_deeper_skill_md(dir: &Path, depth: usize) -> bool {
-    const MAX_ENTRIES: usize = 10_000;
-    const MAX_DEPTH: usize = 20;
-
-    if depth > MAX_DEPTH {
-        return true; // Too deep — treat as violation
-    }
-
-    let Ok(entries) = std::fs::read_dir(dir) else {
-        return false;
-    };
-
-    let mut count = 0;
-    for entry in entries.flatten() {
-        count += 1;
-        if count > MAX_ENTRIES {
-            return true; // Too many entries — treat as violation
-        }
-        let path = entry.path();
-        if path.is_symlink() {
-            return true; // Symlinked descendants rejected
-        }
-        if !path.is_dir() {
-            continue;
-        }
-        if path.join("SKILL.md").is_file() {
-            return true;
-        }
-        if scan_deeper_skill_md(&path, depth + 1) {
-            return true;
-        }
-    }
-    false
+    crate::skill_discovery::has_deeper_skill_md(dir)
 }
 
 pub(crate) fn discover_skills(root: &Path) -> Result<Vec<SkillSummary>, String> {
@@ -245,32 +210,14 @@ pub fn read_skill(id: String) -> Result<DocumentContent, String> {
                 path: s.path.clone(),
                 source: "curated".into(),
                 content,
+                revision: None,
             })
         }
         None => Err(format!("unknown skill: {}", id)),
     }
 }
 
-fn extract_frontmatter(content: &str, key: &str) -> String {
-    let prefix = format!("{}:", key);
-    for line in content.lines() {
-        if line.trim_start().starts_with(&prefix) {
-            return line
-                .trim_start()
-                .strip_prefix(&prefix)
-                .unwrap_or("")
-                .trim()
-                .to_string();
-        }
-    }
-    String::new()
-}
-
-fn extract_frontmatter_list(content: &str, key: &str) -> Vec<String> {
-    let raw = extract_frontmatter(content, key);
-    if raw.is_empty() {
-        return Vec::new();
-    }
+fn split_list(raw: &str) -> Vec<String> {
     raw.split(',')
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())

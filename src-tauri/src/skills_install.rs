@@ -5,17 +5,6 @@ use std::path::{Path, PathBuf};
 use crate::agent_skill_targets::validate_skill_name;
 use crate::path_safety::reject_symlink;
 
-fn extract_frontmatter(content: &str, key: &str) -> String {
-    let prefix = format!("{key}:");
-    for line in content.lines() {
-        let trimmed = line.trim_start();
-        if trimmed.starts_with(&prefix) {
-            return trimmed[prefix.len()..].trim().to_string();
-        }
-    }
-    String::new()
-}
-
 fn path_within_root(child: &Path, root: &Path) -> Result<(), String> {
     let canonical_child = child
         .canonicalize()
@@ -87,7 +76,10 @@ fn register_discovered_skill(
     }
     let content = fs::read_to_string(skill_md)
         .map_err(|e| format!("cannot read {}: {e}", skill_md.display()))?;
-    let mut name = extract_frontmatter(&content, "name");
+    let mut name = crate::skill_discovery::frontmatter_fields(&content)
+        .ok()
+        .and_then(|mut fields| fields.remove("name"))
+        .unwrap_or_default();
     if name.is_empty() {
         name = fallback_name.to_string();
     }

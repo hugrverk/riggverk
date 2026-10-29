@@ -13,11 +13,14 @@ pub fn get_settings() -> Result<GetSettingsResponse, String> {
     })
 }
 
-#[tauri::command]
+// Async: the mutation lock waits for a running apply, which must not block the main thread.
+#[tauri::command(async)]
 pub fn update_settings(
     settings: AppSettings,
     expected_revision: Option<u64>,
 ) -> Result<AppSettings, String> {
+    // Which harnesses and targets are on decides what an apply does: never changed under one.
+    let _mutation = crate::mutation_lock::acquire()?;
     settings::save_with_revision_check(settings, expected_revision)
 }
 

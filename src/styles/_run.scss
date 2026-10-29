@@ -64,6 +64,15 @@
   padding: 10px 14px;
 }
 
+/* The finished run's outcome, one status for a screen reader; it lays out like the line's own items. */
+.run-outcome {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  min-width: 0;
+}
+
 .run-lbl {
   font-family: var(--font-mono);
   font-size: max(10px, calc(var(--fs) * 0.77));

@@ -665,7 +665,7 @@ mod tests {
         // reads, and nothing is touched.
         let after = rollback_setup_transaction(id.to_string(), true).expect("dry run after");
         assert!(
-            after.message.contains("newer completed transaction"),
+            after.message.contains("newer transaction"),
             "{} {:?}",
             after.message,
             after.failed

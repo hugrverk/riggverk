@@ -397,7 +397,7 @@ pub fn save_rules_refinements(
     expected_revision: String,
 ) -> Result<ActionResult, String> {
     // Writes a file an apply may also write: wait for a running mutation instead of interleaving.
-    let _mutation = crate::mutation_lock::acquire();
+    let _mutation = crate::mutation_lock::acquire()?;
     let (surface_id, artifact) = rules_target(&surface)?;
     let ws_root = workspace_target_for_write()?;
     let home = user_home()?;
@@ -868,7 +868,7 @@ mod tests {
         let env = Env::new("lock");
         env.write(&env.claude(), format!("{}mine\n", block(BASE)).as_bytes());
         let revision = revision("claude_rules");
-        let running = crate::mutation_lock::acquire();
+        let running = crate::mutation_lock::acquire().expect("mutation lock");
         let saver = std::thread::spawn(move || save("claude_rules", "after\n", &revision));
         std::thread::sleep(std::time::Duration::from_millis(150));
         assert!(!saver.is_finished(), "the save must wait for the lock");

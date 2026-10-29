@@ -13,6 +13,8 @@ interface LibrarySheetProps {
   /** Shown in the header while the item loads. */
   title: string;
   entry: LibraryEntry | null;
+  /** Why the item could not be read; shown while there is no entry. */
+  loadError?: string | null;
   sheetRef: RefObject<HTMLDivElement | null>;
   rulesMode: RulesMode;
   onRulesMode: (mode: RulesMode) => void;
@@ -101,6 +103,7 @@ function SheetFooter({ entry }: { entry: LibraryEntry }) {
 export function LibrarySheet({
   title,
   entry,
+  loadError = null,
   sheetRef,
   rulesMode,
   onRulesMode,
@@ -149,6 +152,7 @@ export function LibrarySheet({
         className="lib-sheet"
         role="dialog"
         aria-modal="true"
+        data-keyscope="overlay"
         aria-labelledby={headingId}
         tabIndex={-1}
         onKeyDown={onKeyDown}
@@ -170,7 +174,11 @@ export function LibrarySheet({
         </header>
         <div className="lib-sheet-body" ref={bodyRef} tabIndex={editable ? undefined : 0} role={editable ? undefined : "region"} aria-label={editable ? undefined : "Content"}>
           {entry === null ? (
-            <p className="lib-dim" role="status">Loading…</p>
+            loadError ? (
+              <p className="lib-fail" role="alert">{redactTerminalOutput(loadError)}</p>
+            ) : (
+              <p className="lib-dim" role="status">Loading…</p>
+            )
           ) : entry.rules ? (
             <RulesEditor entry={entry as LibraryEntry & { rules: NonNullable<LibraryEntry["rules"]> }} mode={rulesMode} onMode={onRulesMode} onOpenHarness={onOpenHarness} />
           ) : entry.readOnly ? (

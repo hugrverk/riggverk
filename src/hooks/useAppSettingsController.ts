@@ -38,7 +38,6 @@ export interface AppSettingsControllerDeps {
   resetWorkspaceBoundState: () => void;
   loadWorkspaceDiagnostics: (generation?: number) => Promise<void>;
   loadWorkspaceResources: (generation?: number) => Promise<void>;
-  fetchStatus: (generation?: number) => Promise<void>;
   /** Label of the workspace task in flight (apply, uninstall, rollback, ...), or null. A switch must not run under it. */
   workspaceTaskLabel?: string | null;
 }
@@ -52,7 +51,6 @@ export function useAppSettingsController({
   resetWorkspaceBoundState,
   loadWorkspaceDiagnostics,
   loadWorkspaceResources,
-  fetchStatus,
   workspaceTaskLabel = null,
 }: AppSettingsControllerDeps) {
   const confirm = useConfirm();
@@ -181,7 +179,6 @@ export function useAppSettingsController({
                 loadWorkspaceResources(generation),
               ]);
             } else {
-              fetchStatus(generation);
               loadWorkspaceDiagnostics(generation);
             }
           } else if (latest) {
@@ -217,7 +214,6 @@ export function useAppSettingsController({
     acknowledgeSaved,
     appliedWorkspacePathRef,
     beginWorkspaceLoadGeneration,
-    fetchStatus,
     isWorkspaceLoadCurrent,
     loadWorkspaceDiagnostics,
     loadWorkspaceResources,
@@ -296,6 +292,22 @@ export function useAppSettingsController({
 
     return () => window.clearTimeout(timer);
   }, [appSettings, persistAppSettings]);
+
+  /**
+   * Writes a change that is still inside the autosave delay (or waits for the write already under way), for a window
+   * that is about to close. Resolves true when nothing is left unsaved.
+   */
+  const flushSettings = useCallback(async (): Promise<boolean> => {
+    if (!settingsLoadedRef.current) return true;
+    // A write of this very text is in flight: wait for it, then look again.
+    for (let waited = 0; settingsAutosaveInFlightRef.current !== null && waited < 50; waited++) {
+      await new Promise(resolve => window.setTimeout(resolve, 100));
+    }
+    const latest = appSettingsRef.current;
+    if (!latest || savedSettingsRef.current === null) return true;
+    if (serializeSettingsForCompare(latest) === savedSettingsRef.current) return true;
+    return persistAppSettings(latest);
+  }, [persistAppSettings]);
 
   const updateThemeField = useCallback(<K extends keyof AppSettings>(field: K, value: AppSettings[K]) => {
     setSettingsMsg(null);
@@ -445,6 +457,7 @@ export function useAppSettingsController({
     colorResetKey,
     loadSettings,
     persistAppSettings,
+    flushSettings,
     applySavedSettings,
     retrySaveSettings,
     resetSettings,

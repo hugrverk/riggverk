@@ -80,7 +80,6 @@ import type {
   SkillLoadFlag,
   SkillReadFolder,
   SkillSummary,
-  StatusData,
   SurfaceInstallationStatus,
   TakeBundledPreview,
   UninstallPlanView,
@@ -1147,17 +1146,6 @@ function backupDetails(runId: string): BackupRunDetails {
 
 /* ---- status + diagnostics ---- */
 
-function statusData(): StatusData {
-  const enabled = new Set(settings.enabled_target_ids);
-  return {
-    repo_path: WORKSPACE,
-    enabled_rule_target_ids: TARGETS.filter(t => t.kind === "rules" && enabled.has(t.id)).map(t => t.id),
-    enabled_config_target_ids: TARGETS.filter(t => t.kind === "config" && enabled.has(t.id)).map(t => t.id),
-    enabled_agent_target_ids: TARGETS.filter(t => t.kind === "agents" && enabled.has(t.id)).map(t => t.id),
-    enabled_target_ids: [...enabled],
-  };
-}
-
 function diagnostics(): WorkspaceDiagnostics {
   const valid = scenario !== "error";
   const enabled = new Set(settings.enabled_target_ids);
@@ -1753,6 +1741,21 @@ function arg<T>(args: Args, key: string): T {
   return (args ?? {})[key] as T;
 }
 
+/** Stand-in for the backend's content digest of an editable doc or personal skill. */
+function textRevision(content: string): string {
+  let hash = 5381;
+  for (let i = 0; i < content.length; i++) hash = ((hash * 33) ^ content.charCodeAt(i)) >>> 0;
+  return `mock-text-${content.length}-${hash}`;
+}
+
+/** Like the backend: a save that names the revision it loaded is refused once the file changed since. */
+function requireTextRevision(args: Args, current: string): void {
+  const expected = arg<string | null | undefined>(args, "expectedRevision");
+  if (expected != null && expected !== textRevision(current)) {
+    throw new Error("the file changed on disk since it was opened: reload it");
+  }
+}
+
 // Callers prefix their own label ("Status error: …"), so the message carries none.
 function workspaceIsValid(): boolean {
   return scenario !== "error";
@@ -1862,8 +1865,6 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
       return settings;
     case "get_agent_targets":
       return TARGETS;
-    case "get_status":
-      return scenario === "error" ? unavailable() : statusData();
     case "get_workspace_diagnostics":
       return diagnostics();
     case "get_installation_status":
@@ -2038,7 +2039,7 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
       requireWorkspaceForPersonalDoc(id);
       const doc = docStore.get(id);
       if (!doc) throw new Error("doc not found");
-      return doc;
+      return doc.source === "custom" ? { ...doc, revision: textRevision(doc.content) } : doc;
     }
     case "save_doc": {
       const id = arg<string>(args, "id");
@@ -2047,6 +2048,7 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
       requireWorkspaceForPersonalDoc(id);
       const doc = docStore.get(id);
       if (!doc) throw new Error("doc not found");
+      requireTextRevision(args, doc.content);
       docStore.set(doc.id, { ...doc, content: arg<string>(args, "content") });
       return actionResult("save_doc", true, "saved with backup");
     }
@@ -2221,17 +2223,15 @@ async function handlePersonalPackWrites(cmd: string, args: Args): Promise<unknow
     const skill = packLibrary.skills.find(skill => skill.id === id && skill.pack === "personal" && skill.state === "active");
     if (pack?.state !== "ok" || !skill) throw new Error("personal skill does not exist or is not active");
     const previous = personalPackDocuments.get(id);
+    if (previous) requireTextRevision(args, previous.content);
     personalPackDocuments.set(id, { id, title: name, path: skill.path, section: "pack:personal", source: "pack", content });
     return actionResult("save_pack_skill", true, previous?.content === content ? "unchanged" : "saved with backup");
   }
-  if (cmd === "read_pack_skill" || cmd === "read_skill") {
+  if (cmd === "read_skill") {
     const id = arg<string>(args, "id");
     const skill = packLibrary.skills.find(skill => skill.id === id);
-    if (skill && personalPackDocuments.has(id)) return personalPackDocuments.get(id);
-    if (cmd === "read_pack_skill") {
-      if (!skill) throw new Error("unknown pack skill");
-      return handle("read_skill", args);
-    }
+    const personal = personalPackDocuments.get(id);
+    if (skill && personal) return { ...personal, revision: textRevision(personal.content) };
   }
   return handle(cmd, args);
 }

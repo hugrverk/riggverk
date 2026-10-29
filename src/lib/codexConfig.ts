@@ -1,5 +1,4 @@
 import type { CodexConfigKey, InstallationStatus } from "../types";
-import type { StateDisplay } from "./installationView";
 
 /** The surface that writes `$CODEX_HOME/config.toml`. */
 export const CODEX_CONFIG_SURFACE = "codex_config";
@@ -81,15 +80,6 @@ export function keyValueText(keys: readonly CodexConfigKey[]): string {
 export function keyNames(keys: readonly CodexConfigKey[]): string {
   const names = keys.map(({ key }) => key);
   return names.length <= 1 ? (names[0] ?? "") : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
-}
-
-/** The surface row's label with the keys the user keeps: "current · you keep 1". */
-export function withKeptKeys(display: StateDisplay, model: CodexConfigModel | null): StateDisplay {
-  if (!model || model.kept.length === 0) return display;
-  return {
-    tone: display.tone === "ok" ? "warn" : display.tone,
-    label: `${display.label} · you keep ${model.kept.length}`,
-  };
 }
 
 /** Whether an action is offered (`visible`) and, when it is offered but cannot run now, why not (`reason`). */

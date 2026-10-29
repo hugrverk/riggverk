@@ -133,6 +133,63 @@ export function hasPoorContrast(foreground: string | null, background: string | 
   return contrastRatio(foreground, background) < 4.5;
 }
 
+/**
+ * Theme inks that custom colours do not override: muted text and the state inks. Mirrors `--text-muted`, `--ok`,
+ * `--fail`, `--yours` and `--off` in _tokens.scss (dark `:root` block and the paper `[data-theme="light"]` block).
+ */
+const FIXED_INKS = {
+  dark: ["#9b9ba0", "#86b48f", "#cf8e85", "#a9aec4"],
+  light: ["#68686d", "#2f7a47", "#b0493e", "#5a6184"],
+} as const;
+
+/** Luminance where black and white text have equal contrast; above it a background reads as light. */
+const LIGHT_BACKGROUND_LUMINANCE = 0.179;
+
+function resolvedThemeClass(appearance: AppSettings["appearance"]): "dark" | "light" {
+  if (appearance === "light") return "light";
+  if (appearance === "dark") return "dark";
+  return window.matchMedia?.("(prefers-color-scheme: light)").matches ? "light" : "dark";
+}
+
+/**
+ * Warnings for a custom colour set. Only colours that are set (or typed as a valid hex) are judged; an unset colour
+ * keeps the theme default, which the palette test already covers.
+ */
+export function themeColorWarnings(input: {
+  appearance: AppSettings["appearance"];
+  foreground: string | null;
+  background: string | null;
+  accent: string | null;
+}): string[] {
+  const foreground = isValidThemeHex(input.foreground) ? input.foreground : null;
+  const background = isValidThemeHex(input.background) ? input.background : null;
+  const accent = isValidThemeHex(input.accent) ? input.accent : null;
+  const warnings: string[] = [];
+
+  if (foreground && background && hasPoorContrast(foreground, background)) {
+    warnings.push(`Contrast ratio ${contrastRatio(foreground, background).toFixed(1)}:1 is below 4.5:1.`);
+  } else if (hasPoorContrast(input.foreground, input.background)) {
+    warnings.push("Custom foreground and background may be hard to read.");
+  }
+
+  const theme = resolvedThemeClass(input.appearance);
+  const effectiveBackground = background ?? themeColorDefaults(input.appearance).background;
+  if (accent && contrastRatio(accent, effectiveBackground) < 3) {
+    warnings.push(
+      `Accent contrast ${contrastRatio(accent, effectiveBackground).toFixed(1)}:1 against the background is below 3:1; the focus ring may be hard to see.`,
+    );
+  }
+  if (background) {
+    const isLight = relativeLuminance(background) > LIGHT_BACKGROUND_LUMINANCE;
+    if (isLight !== (theme === "light")) {
+      warnings.push(`This background is ${isLight ? "light" : "dark"} on the ${theme} theme; muted and status text will be hard to read. Switch the appearance instead.`);
+    } else if (FIXED_INKS[theme].some(ink => contrastRatio(ink, background) < 4.5)) {
+      warnings.push("Muted and status text may be hard to read on this background.");
+    }
+  }
+  return warnings;
+}
+
 export function applyThemeSettings(settings: AppSettings): void {
   const root = document.documentElement;
   root.setAttribute("data-theme", settings.appearance);

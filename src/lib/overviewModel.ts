@@ -146,21 +146,6 @@ function harnessModel(input: {
   };
 }
 
-/**
- * The Overview card of one enabled agent: a pill for its aggregate state, one row per surface with its state in words,
- * and the sub-line of the most urgent row. Runtime health is never a row or a state; it only adds a sub-line when the
- * agent reads as up to date or ready (`runtimeSubline`).
- */
-export function agentCardModel(input: {
-  harness: InstallAgent;
-  entry: OverviewEntry | undefined;
-  settings: EnabledSettings;
-  dataFolderOk: boolean;
-  runtime?: HarnessRuntimeHealth | null;
-}): AgentCardModel {
-  return harnessModel(input).card;
-}
-
 export interface WorkspaceItemModel {
   item: UiItem;
   /** The workspace item's sub-line ("133 old copies to remove", why the folder is unusable). */
@@ -227,6 +212,8 @@ export function overviewSummaryModel(input: {
       dataFolderOk,
       anyStatus: entries.some(entry => entry.status !== null),
       allNotInstalled,
+      failedChecks: entries.filter(entry => entry.error).length,
+      pendingChecks: entries.filter(entry => entry.loading && entry.status === null && !entry.error).length,
     }),
     // Only the first install is "ready to install"; a ready workspace item (old copies to remove) is not one.
     parts: summaryParts(counts, { installing: allNotInstalled && workspace.item.state !== "ready" }),

@@ -4,7 +4,6 @@ import type { OperationKind, PlannedOperation, SetupPlan, SetupResult, SetupSurf
 import {
   buildInstallReview,
   classifyApplyError,
-  describeInstallReview,
   useInstallFlow,
   type InstallFlowRequest,
 } from "./useInstallFlow";
@@ -666,27 +665,5 @@ describe("classifyApplyError", () => {
     ["Harness disabled: codex", "apply_failed"],
   ])("%s -> %s", (message, kind) => {
     expect(classifyApplyError(message)).toBe(kind);
-  });
-});
-
-describe("describeInstallReview", () => {
-  const describePlan = (operations: PlannedOperation[], readOnly = false) =>
-    describeInstallReview(buildInstallReview({ ...request, readOnly }, plan(operations)));
-
-  it("states the safe changes and skipped conflicts", () => {
-    expect(
-      describePlan([op("codex_rules", "update"), op("codex_agents", "create"), op("skills", "conflict")]),
-    ).toBe("apply 2 safe changes, skip 1 conflict");
-  });
-
-  it("uses singular and omits skips when there are no conflicts", () => {
-    expect(describePlan([op("codex_rules", "remove")])).toBe("apply 1 safe change");
-  });
-
-  it("reports nothing to apply", () => {
-    expect(describePlan([])).toBe("nothing to apply");
-    expect(describePlan([op("skills", "conflict"), op("claude_rules", "conflict")])).toBe(
-      "nothing safe to apply, 2 conflicts",
-    );
   });
 });

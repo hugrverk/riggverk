@@ -10,7 +10,8 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::content::{
-    doc_backup_path, safe_canonical_target, write_doc_backup, DocumentContent, MAX_DOC_SIZE,
+    doc_backup_path, safe_canonical_target, text_revision, write_doc_backup, DocumentContent,
+    DOC_CHANGED_ON_DISK, MAX_DOC_SIZE,
 };
 use super::process::ActionResult;
 use super::workspace::{setup_workspace_target_path, workspace_target_for_write};
@@ -184,9 +185,9 @@ pub fn list_pack_skills() -> Result<PackLibrary, String> {
 }
 
 /// The `SKILL.md` of a pack skill, by the id [`list_pack_skills`] gave. A skill that is not
-/// active has no file to show; its reason is shown instead.
-#[tauri::command(async)]
-pub fn read_pack_skill(id: String) -> Result<DocumentContent, String> {
+/// active has no file to show; its reason is shown instead. Not a command of its own: the UI
+/// reads pack skills through `read_skill`, which forwards `pack:` ids here.
+pub(super) fn read_pack_skill(id: String) -> Result<DocumentContent, String> {
     let workspace_root = setup_workspace_target_path()?;
     let sources = SkillSources::for_workspace(&workspace_root)?;
     let notice = |pack: &str, name: &str, reason: &str| DocumentContent {
@@ -196,6 +197,7 @@ pub fn read_pack_skill(id: String) -> Result<DocumentContent, String> {
         path: String::new(),
         source: "pack".to_string(),
         content: format!("# {name}\n\nNot active: {reason}\n"),
+        revision: None,
     };
     for pack in sources.packs() {
         for skill in &pack.skills {
@@ -205,13 +207,18 @@ pub fn read_pack_skill(id: String) -> Result<DocumentContent, String> {
             let Some(path) = skill.skill_md_path() else {
                 return Ok(notice(&pack.name, &skill.name, &skill.reason));
             };
-            let content = std::fs::read_to_string(path).map_err(|e| format!("read error: {e}"))?;
+            // Discovery read it capped too; the file may have grown since.
+            let content = crate::skill_discovery::read_skill_md_capped(path).map_err(|_| {
+                "cannot read this SKILL.md: it is missing or over 1 MiB".to_string()
+            })?;
             return Ok(DocumentContent {
                 id,
                 title: skill.name.clone(),
                 section: format!("pack:{}", pack.name),
                 path: skill.relative_path.clone(),
                 source: "pack".to_string(),
+                // Only the personal pack is saved from the Library.
+                revision: (pack.name == "personal").then(|| text_revision(&content)),
                 content,
             });
         }
@@ -229,7 +236,7 @@ pub fn read_pack_skill(id: String) -> Result<DocumentContent, String> {
 #[tauri::command(async)]
 pub fn forget_pack(name: String) -> Result<usize, String> {
     // Writes next to files an apply may also write: wait for a running mutation.
-    let _mutation = crate::mutation_lock::acquire();
+    let _mutation = crate::mutation_lock::acquire()?;
     let _guard = crate::setup_mutation_guard::try_acquire_setup_mutation_guard()?;
     let workspace_root = workspace_target_for_write()?;
     crate::skill_sources::forget_pack(&workspace_root, &name)
@@ -423,7 +430,7 @@ pub fn copy_skill_to_pack(name: String, new_name: String) -> Result<PackSkillCop
                 .to_string(),
         );
     }
-    let _mutation = crate::mutation_lock::acquire();
+    let _mutation = crate::mutation_lock::acquire()?;
     let _guard = crate::setup_mutation_guard::try_acquire_setup_mutation_guard()?;
     let root = workspace_target_for_write()
         .map_err(|_| "data folder is unavailable or unsafe".to_string())?;
@@ -512,9 +519,15 @@ pub fn copy_skill_to_pack(name: String, new_name: String) -> Result<PackSkillCop
     })
 }
 
-/// Writes only inside `<data>/packs/personal/`, with the previous `SKILL.md` backed up.
+/// Writes only inside `<data>/packs/personal/`, with the previous `SKILL.md` backed up. With
+/// `expected_revision` (the revision [`read_pack_skill`] gave) the save is refused when the file
+/// changed on disk since.
 #[tauri::command(async)]
-pub fn save_pack_skill(id: String, content: String) -> Result<ActionResult, String> {
+pub fn save_pack_skill(
+    id: String,
+    content: String,
+    expected_revision: Option<String>,
+) -> Result<ActionResult, String> {
     let name = id
         .strip_prefix("pack:personal/")
         .filter(|name| valid_personal_skill_name(name))
@@ -522,7 +535,7 @@ pub fn save_pack_skill(id: String, content: String) -> Result<ActionResult, Stri
     if content.len() > MAX_DOC_SIZE {
         return Err("content exceeds 512 KB limit".to_string());
     }
-    let _mutation = crate::mutation_lock::acquire();
+    let _mutation = crate::mutation_lock::acquire()?;
     let _guard = crate::setup_mutation_guard::try_acquire_setup_mutation_guard()?;
     let root = workspace_target_for_write()
         .map_err(|_| "data folder is unavailable or unsafe".to_string())?;
@@ -541,6 +554,7 @@ pub fn save_pack_skill(id: String, content: String) -> Result<ActionResult, Stri
                 .any(|held| held.pack == "personal" && held.name == name)
         })
         .ok_or_else(|| "personal skill does not exist or is not active".to_string())?;
+    crate::skill_discovery::check_skill_text(&content, name, &skill.folder)?;
     let target = skill
         .skill_md_path()
         .ok_or_else(|| "personal skill has no SKILL.md".to_string())?;
@@ -551,6 +565,9 @@ pub fn save_pack_skill(id: String, content: String) -> Result<ActionResult, Stri
         .map_err(|_| "refusing a symlink in the personal SKILL.md path".to_string())?;
     let existing = crate::skill_discovery::read_skill_md_capped(target)
         .map_err(|_| "cannot read personal SKILL.md".to_string())?;
+    if expected_revision.is_some_and(|expected| expected != text_revision(&existing)) {
+        return Err(DOC_CHANGED_ON_DISK.to_string());
+    }
     let message = if existing == content {
         "unchanged"
     } else {

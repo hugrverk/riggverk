@@ -1,4 +1,4 @@
-import type { PackEntry, PackLibrary, PackSkillEntry, PackSkillState, SkillSummary } from "../types";
+import type { PackLibrary, PackSkillEntry, PackSkillState, SkillSummary } from "../types";
 
 /** Label of a pack skill that is not active, for the list and the metadata. */
 export const PACK_STATE_LABEL: Record<Exclude<PackSkillState, "active">, string> = {
@@ -42,11 +42,6 @@ function toSummary(skill: PackSkillEntry): SkillSummary {
 /** The Library rows for the skills of the packs, after the bundled ones. */
 export function packSkillSummaries(library: PackLibrary | null): SkillSummary[] {
   return library ? library.skills.map(toSummary) : [];
-}
-
-/** The packs that need the user's decision: installed skills of a pack that cannot be read. */
-export function forgettablePacks(library: PackLibrary | null): PackEntry[] {
-  return library ? library.packs.filter(pack => pack.forgettable) : [];
 }
 
 export interface PackNoticeLine {

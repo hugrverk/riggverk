@@ -7,13 +7,14 @@ import {
   enabledSurfacesForHarness,
   WORKSPACE_SURFACES,
 } from "./harnessInstallation";
+import { plural } from "./plural";
 
 /** What an install review can be about: the workspace bundle, one harness, or everything enabled. */
 export type InstallTarget = "workspace" | InstallAgent | "all";
 
 type EnabledSettings = Pick<AppSettings, "enabled_target_ids" | "enabled_harness_ids">;
 
-/** The page the review is shown on (`AppView` id): the workspace page for workspace/all, else the harness page. */
+/** The page the review is shown on (`AppView` id): the Overview for workspace/all, else the harness page. */
 export type InstallScope = "start" | InstallAgent;
 
 export function scopeForTarget(target: InstallTarget): InstallScope {
@@ -202,10 +203,6 @@ export function installReviewLabel(label: string, counts: PlanCounts): string {
   return label;
 }
 
-function plural(n: number, noun: string): string {
-  return `${n} ${noun}${n === 1 ? "" : "s"}`;
-}
-
 /** The y/n question: "apply 7 safe changes, skip 1 conflict". Counts rows, so it matches the table. */
 export function describePlanCounts(counts: PlanCounts): string {
   const safe = counts.create + counts.update + counts.remove;
@@ -228,16 +225,24 @@ export interface ApplyOutput {
 const SHORT_FINGERPRINT = 8;
 
 /**
- * Output-pane text for a finished apply. Surface lines come from the reviewed plan (the backend result
- * lists artifacts, not surfaces): `applied` when the run succeeded, `rolled back` or `failed` otherwise.
+ * Output-pane text for a finished apply of any kind (install, take bundled, rules conversion, Codex defaults): the
+ * `plan` line, the caller's own lines (the first word of the surface line is `applied`, `rolled back` or `failed`),
+ * then the manual steps, the backend message, the counts and the transaction. `applyOutputLineTone` reads this format.
+ * `lines` gets that word and `pad`, which aligns a word to the column the tone parser expects.
  */
-export function formatApplyOutput(review: InstallReview, result: SetupResult): ApplyOutput {
-  const fingerprint = review.plan.plan_fingerprint ?? "";
-  const surfaceStatus = result.success ? "applied" : result.rolled_back.length > 0 ? "rolled back" : "failed";
-  const pad = (word: string) => word.padEnd(13);
+export function formatReceipt(input: {
+  fingerprint: string | null | undefined;
+  /** What the plan was about: "2 surfaces", "convert Pi rules". */
+  subject: string;
+  lines: (word: string, pad: (text: string) => string) => string[];
+  result: SetupResult;
+}): ApplyOutput {
+  const { result } = input;
+  const word = result.success ? "applied" : result.rolled_back.length > 0 ? "rolled back" : "failed";
+  const pad = (text: string) => text.padEnd(13);
   const lines = [
-    `plan ${fingerprint.slice(0, SHORT_FINGERPRINT) || "-"} · ${review.applySurfaces.length} surface${review.applySurfaces.length === 1 ? "" : "s"} · fingerprint verified`,
-    ...review.applySurfaces.map(surface => `${pad(surfaceStatus)}${surfaceTitle(surface)}`),
+    `plan ${(input.fingerprint ?? "").slice(0, SHORT_FINGERPRINT) || "-"} · ${input.subject} · fingerprint verified`,
+    ...input.lines(word, pad),
     ...result.manual_steps.map(step => `${pad("manual")}${step}`),
     result.message,
     `applied ${result.applied.length} · failed ${result.failed.length} · rolled back ${result.rolled_back.length}`,
@@ -247,6 +252,19 @@ export function formatApplyOutput(review: InstallReview, result: SetupResult): A
   ].filter(Boolean);
   const stderr = result.success ? "" : [...result.failed, ...(result.failed.length === 0 ? [result.message] : [])].join("\n");
   return { stdout: lines.join("\n"), stderr };
+}
+
+/**
+ * Output-pane text for a finished apply. Surface lines come from the reviewed plan (the backend result
+ * lists artifacts, not surfaces): `applied` when the run succeeded, `rolled back` or `failed` otherwise.
+ */
+export function formatApplyOutput(review: InstallReview, result: SetupResult): ApplyOutput {
+  return formatReceipt({
+    fingerprint: review.plan.plan_fingerprint,
+    subject: plural(review.applySurfaces.length, "surface"),
+    lines: (word, pad) => review.applySurfaces.map(surface => `${pad(word)}${surfaceTitle(surface)}`),
+    result,
+  });
 }
 
 /** Tone for an output line written by `formatApplyOutput` (the first word decides). */

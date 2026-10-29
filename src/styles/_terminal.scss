@@ -98,34 +98,7 @@
   transition: none;
 }
 
-/* ── progress: the bar, its count and file, the spinner and the clock ──
-   Components in TerminalOutput.tsx. The file is the only part that shrinks; everything else keeps its size. */
-
-/* Ten 1ch cells; the fill sits over the track and is clipped to --p. Only clip-path moves. */
-.pbar {
-  position: relative;
-  display: inline-block;
-  flex: none;
-  width: 10ch;
-  height: var(--lh);
-  line-height: var(--lh);
-  vertical-align: top;
-}
-
-.pbar > span { position: absolute; inset: 0; white-space: nowrap; }
-.pbar .track { color: var(--border-strong); }
-.pbar .fill { color: var(--accent); clip-path: inset(0 calc(100% - var(--p, 0%)) 0 0); transition: clip-path 160ms linear; }
-.pbar.done .fill { color: var(--ok); }
-
-.pcount { flex: none; }
-
-.pfile {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.spin { flex: none; color: var(--accent); }
+/* ── the clock ── Component in TerminalOutput.tsx. */
 .elapsed { flex: none; min-width: 4ch; color: var(--text-muted); font-variant-numeric: tabular-nums; }
 
 /* The files of a running task, as they are written. */

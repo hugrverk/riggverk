@@ -313,8 +313,11 @@ fn ensure_no_workspace_env_override() -> Result<(), String> {
 /// Back to the default workspace (`~/.config/riggverk`): no custom path saved. The app no
 /// longer sets a custom folder; this only drops one saved by an earlier version. The ownership
 /// records stay in the old folder.
-#[tauri::command]
+// Async: the mutation lock waits for a running apply, which must not block the main thread.
+#[tauri::command(async)]
 pub fn reset_active_workspace_path() -> Result<settings::AppSettings, String> {
+    // An apply resolves the workspace folder more than once: it must not change under it.
+    let _mutation = crate::mutation_lock::acquire()?;
     ensure_no_workspace_env_override()?;
     settings::mutate_settings(|current| {
         if current.workspace_path.is_none() {
@@ -716,7 +719,6 @@ mod tests {
             // matter here, only that none of them writes the data folder.
             let _ = crate::commands::get_settings();
             let _ = get_workspace_diagnostics();
-            let _ = crate::commands::get_status();
             let _ = crate::commands::get_installation_status(Vec::new());
             let _ = crate::commands::list_docs();
             let _ = crate::commands::list_skills();

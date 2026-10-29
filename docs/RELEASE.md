@@ -70,7 +70,7 @@ Merge the pull request, then on `main` (pulled, nothing else merged in between):
 ./scripts/release.sh publish
 ```
 
-`publish` checks that the version files agree, that it is newer than the latest release, that `release-notes/<version>.md` exists and the bundled notes match it, that neither the tag nor the GitHub release exists, and that `main` ends with the release pull request (`--allow-newer` skips that last check; use it only when you know the notes cover what was merged since). Then it builds with `npm run tauri build -- --bundles app`, checks the bundle reports the version, ad hoc signs it (`codesign --force --deep --sign -`) and verifies the signature, zips it with `ditto -c -k --keepParent` as `release/Riggverk-v<version>-macOS.zip` (checking that the signature survives the zip), creates the annotated tag `v<version>`, pushes it and runs `gh release create v<version> <zip> --notes-file release-notes/<version>.md`. The zip is the only upload. It prints the release URL. It does not rerun `release-check.sh`; `prepare` did.
+`publish` checks that the version files agree, that it is newer than the latest release, that `release-notes/<version>.md` exists and the bundled notes match it, that neither the tag nor the GitHub release exists, that `node_modules` is what `package-lock.json` locks (`node_modules/.package-lock.json`; run `npm ci` otherwise), and that `main` ends with the release pull request and nothing landed on `main` after the release commit, whether merged meanwhile or brought into the release branch by updating it from `main` (`--allow-newer` skips the two `main` checks; use it only when you know the notes cover what was merged since). Then it builds with `npm run tauri build -- --bundles app`, checks the bundle reports the version, ad hoc signs it (`codesign --force --deep --sign -`) and verifies the signature, zips it with `ditto -c -k --keepParent` as `release/Riggverk-v<version>-macOS.zip` (checking that the signature survives the zip), creates the annotated tag `v<version>`, pushes it and runs `gh release create v<version> <zip> --notes-file release-notes/<version>.md`. The zip is the only upload. It prints the release URL. It does not rerun `release-check.sh`; `prepare` did.
 
 The app is not notarized (there is no Apple Developer ID yet). On first launch macOS says it cannot verify the app: open System Settings, Privacy & Security, and choose Open Anyway. The **Install** section of every release says so.
 
@@ -117,7 +117,7 @@ The app bundle is `Riggverk.app` (executable `riggverk`, identifier `se.hugrverk
 1. Quit the old app (`Agent Workspace`) if it is running.
 2. Build: `npm run tauri build` (`npm run tauri build -- --bundles app` skips the disk image).
 3. Install: `ditto "src-tauri/target/release/bundle/macos/Riggverk.app" /Applications/Riggverk.app`.
-4. Launch Riggverk. Check that the Workspace page and Settings still show your workspace and settings.
+4. Launch Riggverk. Check that the Overview and Settings still show your workspace and settings.
 5. Move `/Applications/Agent Workspace.app` to the Trash, then re-pin the Dock item.
 
 The old `Agent Workspace.app` that an earlier build left in `src-tauri/target/release/bundle/macos` is harmless, but `scripts/release-size-report.sh` lists it. Delete it or run `cargo clean`.

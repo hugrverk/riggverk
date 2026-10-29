@@ -343,7 +343,7 @@ describe("useAppCommands", () => {
       runLine("update workspace");
       expect(none.openInstall).toHaveBeenCalledWith("workspace");
       runLine("update --all");
-      expect(commandLineError()).toBe("update: workspace folder unusable (the workspace page says why)");
+      expect(commandLineError()).toBe("update: workspace folder unusable (the Overview says why)");
       runLine("update claude");
       expect(none.openInstall).toHaveBeenCalledTimes(1);
 
@@ -446,7 +446,7 @@ describe("useAppCommands", () => {
       expect(deps.requestRollback).not.toHaveBeenCalled();
     });
 
-    it("uninstall asks the workspace page for its preview (no direct write)", () => {
+    it("uninstall asks the Overview for its preview (no direct write)", () => {
       const deps = makeDeps();
       setup(deps);
       runLine("uninstall");

@@ -42,7 +42,7 @@ export interface AppCommandDeps {
   rollbackTransactionId: string | null;
   /** Dry run, confirm, then roll back `rollbackTransactionId`. */
   requestRollback: () => void | Promise<void>;
-  /** Opens the uninstall preview dialog on the workspace page. */
+  /** Opens the uninstall preview dialog from the Overview's Workspace folder cell. */
   requestUninstallPreview: () => void | Promise<void>;
   /** `:workspace reset`: back to the default folder, after a confirm. Absent: the command only opens the page. */
   workspaceReset?: {
@@ -106,7 +106,7 @@ export function useAppCommands(deps: AppCommandDeps): void {
     const name = parsed.cmd.name;
     if (!parsed.named.target && !parsed.flags.all) return `${name}: name a target (${targetValues().join(" | ")}) or pass --all`;
     if (parsed.named.target && parsed.flags.all) return `${name}: use either a target or --all`;
-    if (!deps.dataFolderOk && parsed.flags.all) return `${name}: ${WORKSPACE_FOLDER_UNUSABLE} (the workspace page says why)`;
+    if (!deps.dataFolderOk && parsed.flags.all) return `${name}: ${WORKSPACE_FOLDER_UNUSABLE} (the Overview says why)`;
     return null;
   };
 

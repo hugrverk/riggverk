@@ -115,7 +115,10 @@ describe("InstallPlanPane", () => {
       "skills",
     ]);
     const rows = Array.from(grid().querySelectorAll("tbody tr:not(.g)"));
-    expect(rows.map(row => row.querySelector("td.op")!.textContent!.trim())).toEqual(["update", "create", "update", "conflict"]);
+    // The word is the cell's own text; the details button after it has a name of its own.
+    const wordOf = (row: Element) =>
+      Array.from(row.querySelector("td.op")!.childNodes).filter(node => node.nodeType === Node.TEXT_NODE).map(node => node.textContent).join("").trim();
+    expect(rows.map(wordOf)).toEqual(["update", "create", "update", "conflict"]);
     // The mark is decoration; the word next to it carries the meaning.
     expect(rows.map(row => row.querySelector("td.op .rv-mark")!.className)).toEqual([
       "rv-mark rv-mark-update",
@@ -178,7 +181,7 @@ describe("InstallPlanPane", () => {
     expect(pane.querySelector(".bk")!.textContent).toContain("/tmp/backups");
     // The question and its two bracket buttons share the footer row; the key hints repeats them as hints.
     const footer = pane.querySelector(".pane-foot")!;
-    expect(Array.from(footer.querySelectorAll("button.tbtn")).map(button => button.textContent)).toEqual(["yapply", "ncancel"]);
+    expect(Array.from(footer.querySelectorAll("button.tbtn")).map(button => button.textContent)).toEqual(["yapply", "ncancel", "cnext conflict"]);
     expect(within(pane).getByRole("button", { name: "apply" }).classList.contains("tbtn-primary")).toBe(true);
     expect(within(pane).getByRole("button", { name: "cancel" }).getAttribute("aria-keyshortcuts")).toBe("N Escape");
     expect(bar().getByRole("button", { name: /apply/ })).toBeTruthy();
@@ -395,6 +398,28 @@ describe("InstallPlanPane", () => {
     expect(detail.textContent).toContain("~/.claude/skills was modified locally since install");
     press("d");
     expect(grid().querySelector("tr.detail")).toBeNull();
+  });
+
+  it("opens and closes the details of a row by pointer, and the cursor follows", () => {
+    renderPane(makeFlow());
+    const toggles = within(grid()).getAllByRole("button", { name: /^details of / });
+    const second = toggles[1]!;
+    expect(second.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(second);
+    expect(second.getAttribute("aria-expanded")).toBe("true");
+    expect(grid().querySelector("tr.detail")).not.toBeNull();
+    expect(second.closest("tr")).toBe(cursorRow());
+    fireEvent.click(second);
+    expect(grid().querySelector("tr.detail")).toBeNull();
+  });
+
+  it("jumps to the next conflict from a button in the footer", () => {
+    renderPane(makeFlow({ operations: [op("claude_rules", "update"), op("skills", "conflict", { summary: "differs" }), op("claude_agents", "update")] }));
+    const pane = screen.getByRole("region", { name: "Install plan" });
+    const before = cursorRow();
+    fireEvent.click(within(pane).getByRole("button", { name: "next conflict" }));
+    expect(cursorRow()).not.toBe(before);
+    expect(cursorRow().className).toContain("conf");
   });
 
   it("offers a new preview with r after a stale or expired plan, and only then", () => {

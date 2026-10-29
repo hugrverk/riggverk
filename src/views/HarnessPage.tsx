@@ -47,6 +47,8 @@ export interface HarnessPageProps extends HarnessViewProps {
   runtime: HarnessRuntimeHealth;
   /** Extra content after the runtime facts (OpenCode: the editable model override). */
   runtimeExtra?: ReactNode;
+  /** Why Update and Preview are held for now (OpenCode: unsaved model edits that a review would not include). */
+  installBlockedBy?: string;
 }
 
 /** The decision first, then what has to be fixed by hand, then the rest in reading order. */
@@ -72,6 +74,7 @@ export function HarnessPage({
   harness,
   runtime,
   runtimeExtra,
+  installBlockedBy,
   appSettings,
   skillLoads,
   agentTargets,
@@ -92,8 +95,10 @@ export function HarnessPage({
   const [markedKey, setMarkedKey] = useState<string | null>(null);
   const saving = settingsSaveStatus === "saving" || settingsSaveStatus === "pending";
 
-  const update = updateActionFor(harness, entry, { dataFolderOk, busyLabel: wsRunning, settingsSaving: saving });
-  const previewDisabled = previewDisabledFor(harness, { dataFolderOk, busyLabel: wsRunning });
+  const baseUpdate = updateActionFor(harness, entry, { dataFolderOk, busyLabel: wsRunning, settingsSaving: saving });
+  const update = baseUpdate.disabled === false && installBlockedBy ? { ...baseUpdate, disabled: installBlockedBy } : baseUpdate;
+  const basePreviewDisabled = previewDisabledFor(harness, { dataFolderOk, busyLabel: wsRunning });
+  const previewDisabled = basePreviewDisabled === false && installBlockedBy ? installBlockedBy : basePreviewDisabled;
 
   const rows = useMemo(
     () => (appSettings ? harnessRowsFor(harness, entry, appSettings, agentTargets) : []),
