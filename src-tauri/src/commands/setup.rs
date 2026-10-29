@@ -277,6 +277,28 @@ pub(super) fn newer_completed_transaction(
     backup_dir: &Path,
     workspace_key: &str,
 ) -> Result<Option<String>, String> {
+    newest_newer_transaction(backup_dir, workspace_key, |status| {
+        status == setup_transaction::TransactionStatus::Completed
+    })
+}
+
+/// Id of a newer transaction for the same workspace that blocks an Undo of this one: any that was
+/// not rolled back. A completed one owns the managed state; one whose rollback failed (or that is
+/// still unfinished) left artifacts whose records the older snapshot would erase.
+pub(super) fn newer_transaction_blocking_undo(
+    backup_dir: &Path,
+    workspace_key: &str,
+) -> Result<Option<String>, String> {
+    newest_newer_transaction(backup_dir, workspace_key, |status| {
+        status != setup_transaction::TransactionStatus::RolledBack
+    })
+}
+
+fn newest_newer_transaction(
+    backup_dir: &Path,
+    workspace_key: &str,
+    counts: impl Fn(setup_transaction::TransactionStatus) -> bool,
+) -> Result<Option<String>, String> {
     let (Some(setup_root), Some(transaction_id)) = (
         backup_dir.parent(),
         backup_dir.file_name().and_then(|name| name.to_str()),
@@ -306,7 +328,7 @@ pub(super) fn newer_completed_transaction(
         };
         if header.workspace_key.as_deref().is_some_and(|recorded| {
             setup_transaction::workspace_keys_match(recorded, workspace_key)
-        }) && header.status == setup_transaction::TransactionStatus::Completed
+        }) && counts(header.status)
             && newest
                 .as_deref()
                 .is_none_or(|current| transaction_id_is_newer(&candidate, current))
@@ -2038,11 +2060,11 @@ pub fn rollback_transaction(
         }
     }
 
-    match newer_completed_transaction(&backup_dir, &manifest.workspace_key) {
+    match newer_transaction_blocking_undo(&backup_dir, &manifest.workspace_key) {
         Ok(None) => {}
         Ok(Some(newer)) => {
             let message = format!(
-                "cannot roll back transaction {transaction_id}: newer completed transaction {newer} exists; roll that one back first"
+                "cannot roll back transaction {transaction_id}: newer transaction {newer} is not rolled back; roll that one back first"
             );
             return SetupResult {
                 success: false,
@@ -4901,6 +4923,19 @@ mod tests {
 
     #[test]
     fn explicit_rollback_refuses_when_a_newer_completed_transaction_exists() {
+        explicit_rollback_refuses_with_a_newer(setup_transaction::TransactionStatus::Completed);
+    }
+
+    #[test]
+    fn explicit_rollback_refuses_when_a_newer_rollback_failed() {
+        // Its leftover artifacts are still recorded in the managed state the older undo would
+        // restore its snapshot over.
+        explicit_rollback_refuses_with_a_newer(
+            setup_transaction::TransactionStatus::RollbackFailed,
+        );
+    }
+
+    fn explicit_rollback_refuses_with_a_newer(status: setup_transaction::TransactionStatus) {
         let _guard = guard::lock();
         let _restore = guard::EnvRestore::capture();
         let (base, home, _ws, older) = rollback_test_fixture();
@@ -4908,7 +4943,7 @@ mod tests {
         seed_two_artifact_transaction(&older);
         let backup_dir = seed_two_artifact_transaction(newer);
         let mut manifest = read_manifest(newer);
-        manifest.transaction_status = setup_transaction::TransactionStatus::Completed;
+        manifest.transaction_status = status;
         setup_transaction::persist_manifest_atomic(
             &backup_dir.join("manifest.json"),
             &manifest,
@@ -4920,8 +4955,7 @@ mod tests {
             let result = rollback_transaction(&older, dry_run, &mut ProgressReporter::silent());
             assert!(!result.success, "dry_run={dry_run}");
             assert!(
-                result.message.contains("newer completed transaction")
-                    && result.message.contains(newer),
+                result.message.contains("newer transaction") && result.message.contains(newer),
                 "unclear refusal: {}",
                 result.message
             );
