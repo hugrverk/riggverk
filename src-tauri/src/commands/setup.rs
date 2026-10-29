@@ -2783,7 +2783,7 @@ pub fn apply_setup(
     plan_fingerprint: Option<String>,
     preview_token: Option<String>,
 ) -> Result<SetupResult, String> {
-    let _mutation = crate::mutation_lock::acquire();
+    let _mutation = crate::mutation_lock::acquire()?;
     // Validate all provided surface IDs are known before any processing
     let unknown: Vec<&String> = surfaces
         .iter()
@@ -3079,7 +3079,7 @@ pub fn apply_uninstall(
     plan_fingerprint: Option<String>,
     preview_token: Option<String>,
 ) -> Result<SetupResult, String> {
-    let _mutation = crate::mutation_lock::acquire();
+    let _mutation = crate::mutation_lock::acquire()?;
     let ws_root = workspace_target_for_write()?;
     let home = user_home()?;
     reconcile_before_preview_check(&ws_root, &home)?;
@@ -3119,7 +3119,7 @@ pub fn rollback_setup_transaction(
     transaction_id: String,
     dry_run: bool,
 ) -> Result<SetupResult, String> {
-    let _mutation = crate::mutation_lock::acquire();
+    let _mutation = crate::mutation_lock::acquire()?;
     if !validate_transaction_id_format(&transaction_id) {
         return Err("invalid transaction_id: must be a numeric timestamp".to_string());
     }

@@ -564,7 +564,7 @@ fn save_doc_at_root(
 #[tauri::command(async)]
 pub fn save_doc(id: String, content: String) -> Result<ActionResult, String> {
     // Writes files an apply may also write: wait for a running mutation instead of interleaving.
-    let _mutation = crate::mutation_lock::acquire();
+    let _mutation = crate::mutation_lock::acquire()?;
     let root = workspace_root_for_write()?;
     save_doc_at_root(&root, &id, &content, None)
 }
@@ -627,7 +627,7 @@ pub fn create_doc(
     content: Option<String>,
 ) -> Result<DocumentContent, String> {
     // Writes files an apply may also write: wait for a running mutation instead of interleaving.
-    let _mutation = crate::mutation_lock::acquire();
+    let _mutation = crate::mutation_lock::acquire()?;
     let root = workspace_root_for_write()?;
     create_doc_at_root(&root, &title, &slug, content)
 }

@@ -107,7 +107,7 @@ pub fn set_files_kept(surface: String, units: Vec<String>, kept: bool) -> Result
     }
     // Writes next to files an apply may also write: wait for a running mutation instead of
     // interleaving with it.
-    let _mutation = crate::mutation_lock::acquire();
+    let _mutation = crate::mutation_lock::acquire()?;
     let surface = files_surface(&surface)?;
     let _guard = crate::setup_mutation_guard::try_acquire_setup_mutation_guard()?;
     workspace_target_for_write()?;
@@ -281,7 +281,7 @@ pub fn apply_take_bundled(
     plan_fingerprint: Option<String>,
     preview_token: Option<String>,
 ) -> Result<SetupResult, String> {
-    let _mutation = crate::mutation_lock::acquire();
+    let _mutation = crate::mutation_lock::acquire()?;
     check_take_bundled_units(&units)?;
     let surface = files_surface(&surface)?;
     let workspace_root = workspace_target_for_write()?;

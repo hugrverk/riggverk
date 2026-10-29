@@ -229,7 +229,7 @@ pub fn read_pack_skill(id: String) -> Result<DocumentContent, String> {
 #[tauri::command(async)]
 pub fn forget_pack(name: String) -> Result<usize, String> {
     // Writes next to files an apply may also write: wait for a running mutation.
-    let _mutation = crate::mutation_lock::acquire();
+    let _mutation = crate::mutation_lock::acquire()?;
     let _guard = crate::setup_mutation_guard::try_acquire_setup_mutation_guard()?;
     let workspace_root = workspace_target_for_write()?;
     crate::skill_sources::forget_pack(&workspace_root, &name)
@@ -423,7 +423,7 @@ pub fn copy_skill_to_pack(name: String, new_name: String) -> Result<PackSkillCop
                 .to_string(),
         );
     }
-    let _mutation = crate::mutation_lock::acquire();
+    let _mutation = crate::mutation_lock::acquire()?;
     let _guard = crate::setup_mutation_guard::try_acquire_setup_mutation_guard()?;
     let root = workspace_target_for_write()
         .map_err(|_| "data folder is unavailable or unsafe".to_string())?;
@@ -522,7 +522,7 @@ pub fn save_pack_skill(id: String, content: String) -> Result<ActionResult, Stri
     if content.len() > MAX_DOC_SIZE {
         return Err("content exceeds 512 KB limit".to_string());
     }
-    let _mutation = crate::mutation_lock::acquire();
+    let _mutation = crate::mutation_lock::acquire()?;
     let _guard = crate::setup_mutation_guard::try_acquire_setup_mutation_guard()?;
     let root = workspace_target_for_write()
         .map_err(|_| "data folder is unavailable or unsafe".to_string())?;

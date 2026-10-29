@@ -2260,7 +2260,7 @@ pub fn update_opencode_model_selection(
     critic_model: Option<String>,
 ) -> Result<String, String> {
     // Writes files an apply may also write: wait for a running mutation instead of interleaving.
-    let _mutation = crate::mutation_lock::acquire();
+    let _mutation = crate::mutation_lock::acquire()?;
     // Validate inputs; persist the trimmed values.
     let model = validate_model_id(&model)?;
     let small_model = validate_model_id(&small_model)?;
@@ -2370,7 +2370,7 @@ fn write_model_override_file(
 /// is gone. Installed `opencode.json` is not touched until the next Install/Update.
 #[tauri::command(async)]
 pub fn reset_opencode_model_selection() -> Result<String, String> {
-    let _mutation = crate::mutation_lock::acquire();
+    let _mutation = crate::mutation_lock::acquire()?;
     let override_path = opencode_model_selection_path()?;
     match std::fs::remove_file(&override_path) {
         Ok(()) => Ok(

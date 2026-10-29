@@ -36,7 +36,7 @@ fn ensure_surface_enabled() -> Result<(), String> {
 pub fn set_codex_config_kept(kept: bool) -> Result<(), String> {
     // Writes next to files an apply may also write: wait for a running mutation instead of
     // interleaving with it.
-    let _mutation = crate::mutation_lock::acquire();
+    let _mutation = crate::mutation_lock::acquire()?;
     let workspace_root = workspace_target_for_write()?;
     let home = user_home()?;
     let _guard = crate::setup_mutation_guard::try_acquire_setup_mutation_guard()?;
@@ -98,7 +98,7 @@ pub fn apply_codex_config_defaults(
     plan_fingerprint: Option<String>,
     preview_token: Option<String>,
 ) -> Result<SetupResult, String> {
-    let _mutation = crate::mutation_lock::acquire();
+    let _mutation = crate::mutation_lock::acquire()?;
     ensure_surface_enabled()?;
     let workspace_root = workspace_target_for_write()?;
     let home = user_home()?;

@@ -479,7 +479,7 @@ pub fn apply_rules_conversion(
     plan_fingerprint: Option<String>,
     preview_token: Option<String>,
 ) -> Result<SetupResult, String> {
-    let _mutation = crate::mutation_lock::acquire();
+    let _mutation = crate::mutation_lock::acquire()?;
     let (surface_id, artifact) = rules_target(&surface)?;
     let ws_root = workspace_target_for_write()?;
     let home = user_home()?;
@@ -554,7 +554,7 @@ fn clear_user_managed_after_conversion(
 #[tauri::command(async)]
 pub fn set_rules_user_managed(surface: String, user_managed: bool) -> Result<(), String> {
     // Writes files an apply may also write: wait for a running mutation instead of interleaving.
-    let _mutation = crate::mutation_lock::acquire();
+    let _mutation = crate::mutation_lock::acquire()?;
     let (_, artifact) = rules_target(&surface)?;
     let ws_root = workspace_target_for_write()?;
     let home = user_home()?;
