@@ -1,6 +1,38 @@
 {
   "releases": [
     {
+      "version": "2026.10.7",
+      "sections": [
+        {
+          "title": "New",
+          "items": [
+            "Decision surfaces with inline Compare and Codex defaults",
+            "Add History page, run panel and shared receipts",
+            "Lay out harness pages as the Bläck cell grid",
+            "Restyle Library, Settings and What's new as Bläck",
+            "Overview rebuild (S4)",
+            "Runtime skill packs in the data folder",
+            "Expected values and a Use Riggverk defaults reset",
+            "List setup transactions and persist receipts",
+            "Replace top line with sidebar, top bar and toast"
+          ]
+        },
+        {
+          "title": "Fixes",
+          "items": [
+            "Visual QA polish for the rebuilt UI",
+            "Pack permission/owner checks, one source read per plan, env-isolated setup tests"
+          ]
+        },
+        {
+          "title": "Other",
+          "items": [
+            "Remove the old TUI pieces (S9)"
+          ]
+        }
+      ]
+    },
+    {
       "version": "2026.10.6",
       "sections": [
         {
