@@ -66,7 +66,7 @@ function SheetFooter({ entry }: { entry: LibraryEntry }) {
     <footer className="lib-sheet-foot">
       <div className="lib-foot-left">
         {entry.dirty ? <span className="lib-flag">Unsaved changes</span> : <span className="lib-dim">Saved</span>}
-        {entry.rules && <span className="lib-dim">Preview first · Backed up · Undo any time</span>}
+        {entry.rules && <span className="lib-dim">Backed up before saving</span>}
         {entry.footNote && <span className="lib-dim">{entry.footNote}</span>}
         {failed && (
           <span className="lib-fail" role="alert">

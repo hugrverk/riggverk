@@ -646,7 +646,7 @@ describe("Library rules sheet", () => {
     expect(within(sheet).getByText("managed base · read-only")).toBeTruthy();
     expect(within(sheet).getByLabelText("Managed base").textContent).toBe(BEFORE);
     expect((within(sheet).getByRole("textbox", { name: /your refinements/i }) as HTMLTextAreaElement).value).toBe("\n\n## Mine\nSwedish.\n");
-    expect(within(sheet).getByText("Preview first · Backed up · Undo any time")).toBeTruthy();
+    expect(within(sheet).getByText("Backed up before saving")).toBeTruthy();
   });
 
   it("points out a section the managed base has too", async () => {
