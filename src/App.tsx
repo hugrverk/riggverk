@@ -378,16 +378,16 @@ function AppShell() {
     loadWorkspaceResources,
   ]);
 
-  // The runtime health reads the saved selection. A toggle loads it before its autosave has written, so once a changed
-  // selection is saved the health is read again.
-  const savedSelectionKey = `${(appSettings?.enabled_target_ids ?? []).join(",")}|${enabledHarnessKey}`;
+  // The runtime health reads the saved selection. A toggle loads it before its autosave has written, so once a
+  // changed selection is saved the health is read again.
+  const savedSelectionKey = savedSelection ? `${savedSelection.harnessIds.join(",")}|${savedSelection.targetIds.join(",")}` : null;
   const healthSelectionRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!appSettings || settingsSaveStatus !== "saved") return;
+    if (savedSelectionKey === null) return;
     const previous = healthSelectionRef.current;
     healthSelectionRef.current = savedSelectionKey;
     if (previous !== null && previous !== savedSelectionKey) void loadEnabledHarnessHealth();
-  }, [appSettings, settingsSaveStatus, savedSelectionKey, loadEnabledHarnessHealth]);
+  }, [savedSelectionKey, loadEnabledHarnessHealth]);
 
   const lastWorkspaceRefreshRef = useRef(0);
   const switchView = useCallback(async (v: View) => {
