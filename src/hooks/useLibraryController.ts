@@ -729,20 +729,22 @@ export function useLibraryController({
     setConfigEditorSourceContent(null);
   }, []);
 
-  /** Stops holding the installed skills of a pack that is gone; the next Install removes them (with a backup). */
-  const forgetPack = useCallback(async (name: string) => {
+  /** Stops holding the installed skills of a pack that is gone; the next Install removes them (with a backup). Resolves true once it is forgotten. */
+  const forgetPack = useCallback(async (name: string): Promise<boolean> => {
     const ok = await confirm({
       title: `Forget pack ${name}?`,
       message: `The skills installed from ${name} are no longer kept. The next Install removes the copies Riggverk installed, with a backup. Your own files in the pack folder are not touched.`,
       confirmLabel: "Forget pack",
       destructive: true,
     });
-    if (!ok) return;
+    if (!ok) return false;
     try {
       await invoke<number>("forget_pack", { name });
       await loadSkills();
+      return true;
     } catch (e) {
       setError(`Forget pack: ${e}`);
+      return false;
     }
   }, [confirm, loadSkills, setError]);
 

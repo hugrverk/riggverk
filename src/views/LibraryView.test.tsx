@@ -932,6 +932,34 @@ describe("Library packs", () => {
   });
 });
 
+describe("Library packs focus", () => {
+  it("moves focus to a row (or the tab) after a pack is forgotten, not to the page", async () => {
+    await renderLibrary();
+    await goToTopic("Packs");
+    const button = within(rowOf("old-pack")).getByRole("button", { name: "Forget pack" });
+    button.focus();
+    fireEvent.click(button);
+    const dialog = await screen.findByRole("dialog", { name: "Forget pack old-pack?" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Forget pack" }));
+    await waitFor(() => expect(screen.queryAllByRole("listitem").some(item => item.querySelector("b")?.textContent === "old-pack")).toBe(false));
+    await waitFor(() => expect(document.activeElement).not.toBe(document.body));
+    const library = screen.getByRole("region", { name: "Library" });
+    expect(library.contains(document.activeElement)).toBe(true);
+  });
+
+  it("leaves focus alone when the forget is declined", async () => {
+    await renderLibrary();
+    await goToTopic("Packs");
+    const button = within(rowOf("old-pack")).getByRole("button", { name: "Forget pack" });
+    button.focus();
+    fireEvent.click(button);
+    const dialog = await screen.findByRole("dialog", { name: "Forget pack old-pack?" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "cancel" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(callsTo("forget_pack")).toEqual([]);
+  });
+});
+
 describe("Library keys", () => {
   it("/ and Mod+F focus the search, [ and ] step through the topics", async () => {
     await renderLibrary();
