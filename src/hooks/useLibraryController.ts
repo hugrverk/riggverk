@@ -124,25 +124,32 @@ export function useLibraryController({
   // Bumped when a workspace switch reloads the Library, so the config source effects refetch for the new workspace.
   const [libraryReloadEpoch, setLibraryReloadEpoch] = useState(0);
 
+  // A doc opens with nothing unsaved. Another doc starts a new draft; the same doc read again (after an edit made
+  // elsewhere) refreshes the draft too, unless the user has unsaved edits, which a read never takes away.
+  const draftDocIdRef = useRef<string | null>(null);
   useEffect(() => {
-    if (activeDoc) {
-      setDocDraft(activeDoc.content);
-      setDocDirty(false);
-      setDocSaveResult(null);
-    } else {
-      setDocDraft("");
-      setDocDirty(false);
-      setDocSaveResult(null);
-    }
-  }, [activeDoc?.id]);
+    const id = activeDoc?.id ?? null;
+    const another = draftDocIdRef.current !== id;
+    draftDocIdRef.current = id;
+    if (!another && docDirtyRef.current) return;
+    setDocDraft(activeDoc?.content ?? "");
+    setDocDirty(false);
+    if (another) setDocSaveResult(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeDoc]);
 
-  // A skill opens with nothing unsaved; the draft belongs to the skill that is open.
+  // The same for a skill: the draft belongs to the skill that is open and follows each finished read while clean.
+  const draftSkillIdRef = useRef<string | null>(null);
   useEffect(() => {
+    const id = activeSkillContent?.id ?? null;
+    const another = draftSkillIdRef.current !== id;
+    draftSkillIdRef.current = id;
+    if (!another && skillDirtyRef.current) return;
     setSkillDraft(activeSkillContent?.content ?? "");
     setSkillDirty(false);
-    setSkillSaveResult(null);
+    if (another) setSkillSaveResult(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSkillContent?.id]);
+  }, [activeSkillContent]);
 
   useEffect(() => {
     activeConfigSourceTypeRef.current = activeConfigSourceType;
@@ -190,7 +197,15 @@ export function useLibraryController({
       discardDrafts();
       return true;
     }
-    return saveDirtyDraftRef.current();
+    const saved = await saveDirtyDraftRef.current();
+    if (!saved) {
+      // The caller stays where it is, with the editor in view: make sure it says why nothing was written.
+      const failed: ActionResult = { success: false, action: "save", stdout: "", stderr: "could not be saved: your changes are still here", exit_code: null };
+      if (docDirtyRef.current) setDocSaveResult(result => (result && !result.success ? result : failed));
+      else if (rulesDirtyRef.current) setRulesSaveResult(result => (result && !result.success ? result : failed));
+      else if (skillDirtyRef.current) setSkillSaveResult(result => (result && !result.success ? result : failed));
+    }
+    return saved;
   }, [activeDoc?.title, activeRulesFile?.label, activeSkillContent?.title, choose, discardDrafts]);
 
   const setGuardedLibrarySourceType = useCallback(async (type: LibrarySourceType) => {
@@ -481,7 +496,7 @@ export function useLibraryController({
   const onSaveRules = useCallback(async (): Promise<boolean> => {
     // Only the refinements of a file the backend called editable are sent; it checks everything again.
     const file = activeRulesFile;
-    if (!file || !file.editable || file.revision === null) return false;
+    if (!file || !file.editable || file.conflict !== null || file.revision === null) return false;
     const saveOpId = rulesSaveOpRef.current.capture();
     const surface = file.surface;
     const generation = workspaceLoadGenerationRef.current;
@@ -813,13 +828,14 @@ export function useLibraryController({
       configSourceLoadSeqRef.current += 1;
       setConfigTemplateContent(null);
       setConfigEditorSourceContent(null);
+      // Every run notes the visit, whatever the target: a source chosen together with a switch to OpenCode's target
+      // (a search result) is not a first visit and keeps its source.
+      const visit = `${view}:${libraryReloadEpoch}`;
+      const firstOfVisit = configSourceVisitRef.current !== visit;
+      configSourceVisitRef.current = visit;
       if (activeConfigTargetId === "opencode_config") {
         void loadConfigEditorSources();
-        const visit = `${view}:${libraryReloadEpoch}`;
-        if (configSourceVisitRef.current !== visit) {
-          configSourceVisitRef.current = visit;
-          setActiveConfigSourceType("base");
-        }
+        if (firstOfVisit) setActiveConfigSourceType("base");
       } else {
         void loadConfigTemplate(activeConfigTargetId);
       }

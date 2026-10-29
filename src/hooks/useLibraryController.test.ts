@@ -430,6 +430,23 @@ describe("useLibraryController rules refinements", () => {
     expect(invoke.mock.calls.map(([cmd]) => cmd)).toEqual(["read_rules_file"]);
   });
 
+  it("never sends a file the Library shows as a conflict, even when the backend called it editable", async () => {
+    const { deps } = createDeps();
+    const { result } = renderHook(() => useLibraryController(deps));
+    const edited = rulesFile("codex_rules", { conflict: "base_block_edited" });
+    invoke.mockImplementation(reads({ codex_rules: edited }));
+    await act(async () => {
+      await result.current.selectRulesFile("codex_rules");
+    });
+    let saved = true;
+    await act(async () => {
+      result.current.onChangeRulesDraft("edited\n");
+      saved = await result.current.onSaveRules();
+    });
+    expect(saved).toBe(false);
+    expect(invoke.mock.calls.map(([cmd]) => cmd)).toEqual(["read_rules_file"]);
+  });
+
   it("returns to the bundled base when the open file's harness is switched off", async () => {
     const { deps } = createDeps();
     const { result } = renderHook(() => useLibraryController(deps));
@@ -936,5 +953,117 @@ describe("useLibraryController skills of the personal pack", () => {
 
     invoke.mockImplementation(() => Promise.reject("a pack already has a skill with this name"));
     await expect(result.current.copySkillToPack("tdd", "x")).rejects.toBe("a pack already has a skill with this name");
+  });
+});
+
+describe("useLibraryController drafts and reads", () => {
+  beforeEach(() => {
+    invoke.mockReset();
+    choose.mockReset();
+    choose.mockResolvedValue("alternate");
+  });
+
+  it("takes the text of a doc read again after an edit made elsewhere, while nothing is unsaved", async () => {
+    const { deps } = createDeps();
+    const { result } = renderHook(() => useLibraryController(deps));
+    invoke.mockImplementation((cmd: string) => (cmd === "read_doc" ? Promise.resolve(docA) : Promise.reject(new Error(cmd))));
+    await act(async () => {
+      await result.current.selectDoc("doc-a");
+    });
+    invoke.mockImplementation((cmd: string) => (cmd === "read_doc" ? Promise.resolve({ ...docA, content: "alpha from outside" }) : Promise.reject(new Error(cmd))));
+    await act(async () => {
+      await result.current.selectDoc("doc-a");
+    });
+    expect(result.current.docDraft).toBe("alpha from outside");
+    expect(result.current.docDirty).toBe(false);
+  });
+
+  it("keeps unsaved edits of a doc when a read of it finishes", async () => {
+    const { deps } = createDeps();
+    const { result } = renderHook(() => useLibraryController(deps));
+    invoke.mockImplementation((cmd: string) => (cmd === "read_doc" ? Promise.resolve(docA) : Promise.reject(new Error(cmd))));
+    await act(async () => {
+      await result.current.selectDoc("doc-a");
+    });
+    await act(async () => {
+      result.current.onChangeDocDraft("mine");
+    });
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === "list_docs") return Promise.resolve([{ id: "doc-a", title: "Doc A", path: "p", section: "Context", source: "custom" }]);
+      if (cmd === "read_doc") return Promise.resolve({ ...docA, content: "alpha from outside" });
+      return Promise.reject(new Error(cmd));
+    });
+    await act(async () => {
+      await result.current.loadDocs();
+    });
+    expect(result.current.docDraft).toBe("mine");
+    expect(result.current.docDirty).toBe(true);
+  });
+
+  it("takes the text of a skill read again, and keeps a skill draft that is unsaved", async () => {
+    const { deps } = createDeps();
+    const { result } = renderHook(() => useLibraryController(deps));
+    const skill: DocumentContent = { id: "pack:personal/mine", title: "mine", path: "p", section: "", source: "pack", content: "one" };
+    invoke.mockImplementation((cmd: string) => (cmd === "read_skill" ? Promise.resolve(skill) : Promise.reject(new Error(cmd))));
+    await act(async () => {
+      await result.current.readSkill(skill.id);
+    });
+    invoke.mockImplementation((cmd: string) => (cmd === "read_skill" ? Promise.resolve({ ...skill, content: "two" }) : Promise.reject(new Error(cmd))));
+    await act(async () => {
+      await result.current.readSkill(skill.id);
+    });
+    expect(result.current.skillDraft).toBe("two");
+    await act(async () => {
+      result.current.onChangeSkillDraft("three");
+    });
+    invoke.mockImplementation((cmd: string) => (cmd === "read_skill" ? Promise.resolve({ ...skill, content: "four" }) : Promise.reject(new Error(cmd))));
+    await act(async () => {
+      await result.current.readSkill(skill.id);
+    });
+    expect(result.current.skillDraft).toBe("three");
+    expect(result.current.skillDirty).toBe(true);
+  });
+
+  it("stays and says why when Save and continue could not write", async () => {
+    const { deps } = createDeps();
+    const { result } = renderHook(() => useLibraryController(deps));
+    invoke.mockImplementation((cmd: string) => (cmd === "read_doc" ? Promise.resolve(docA) : Promise.reject(new Error(cmd))));
+    await act(async () => {
+      await result.current.selectDoc("doc-a");
+    });
+    await act(async () => {
+      result.current.onChangeDocDraft("edited");
+    });
+    choose.mockResolvedValue("confirm");
+    invoke.mockImplementation((cmd: string) => (cmd === "save_doc" ? Promise.reject(new Error("disk full")) : Promise.reject(new Error(cmd))));
+    let allowed = true;
+    await act(async () => {
+      allowed = await result.current.confirmLeave();
+    });
+    expect(allowed).toBe(false);
+    expect(result.current.docDirty).toBe(true);
+    expect(result.current.docSaveResult).toMatchObject({ success: false });
+    expect(result.current.docSaveResult?.stderr).toContain("disk full");
+  });
+
+  it("keeps the source chosen with the switch to OpenCode's config, which is not a first visit", async () => {
+    const { deps } = createDeps();
+    const { result } = renderHook(() => useLibraryController(deps));
+    invoke.mockImplementation((cmd: string, args?: { sourceType?: string }) => {
+      if (cmd === "read_config_template") return Promise.resolve({ ...bundledDoc, id: "config-template:codex_config" });
+      if (cmd === "list_opencode_config_editor_sources") return Promise.resolve([]);
+      if (cmd === "read_opencode_config_source") return Promise.resolve({ ...bundledDoc, id: `opencode_config:${args?.sourceType}` });
+      return Promise.reject(new Error(`unexpected invoke: ${cmd}`));
+    });
+    await act(async () => {
+      result.current.setActiveConfigTargetId("codex_config");
+    });
+    await waitFor(() => expect(result.current.configTemplateContent?.id).toBe("config-template:codex_config"));
+    await act(async () => {
+      result.current.selectConfigTarget("opencode_config");
+      result.current.selectConfigSourceType("policy");
+    });
+    await waitFor(() => expect(result.current.configEditorSourceContent?.id).toBe("opencode_config:policy"));
+    expect(result.current.activeConfigSourceType).toBe("policy");
   });
 });
