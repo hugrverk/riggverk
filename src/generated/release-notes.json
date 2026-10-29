@@ -1,6 +1,19 @@
 {
   "releases": [
     {
+      "version": "2026.10.9",
+      "sections": [
+        {
+          "title": "New",
+          "items": [
+            "Rebuild the Library as settings-style topics with a sheet",
+            "Replace the agent grid with a flow map and inspector",
+            "Add personal skill copy and save commands"
+          ]
+        }
+      ]
+    },
+    {
       "version": "2026.10.8",
       "sections": [
         {
