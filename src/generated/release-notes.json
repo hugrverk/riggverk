@@ -6,9 +6,10 @@
         {
           "title": "New",
           "items": [
-            "Rebuild the Library as settings-style topics with a sheet",
-            "Replace the agent grid with a flow map and inspector",
-            "Add personal skill copy and save commands"
+            "Overview shows how your setup flows: Riggverk's base, your own refinements and each skill pack on the left, your agents on the right, joined by curves. A thicker curve carries more, a dashed one has an update waiting, and the agents your last update wrote keep a faint glow. A decision is a filled square on the agent. Select an agent, a source or a curve and the panel beside the map shows its details, the last update for just that agent, and what you can do next, such as Open, Undo or Install everything. While an update runs, the panel follows it file by file and the map shows which agent is being written",
+            "The Library is laid out like System Settings: topics for Rules, Skills, Agents, Docs, Configs and Packs, one search across all of them, and rows that say what you can do. Opening an item brings down a sheet to read or edit it. Leaving with unsaved changes always asks: Discard, Keep editing, or Save and continue",
+            "Edit your rules files in the Library: the managed block stays read-only above, and you edit only your refinements below it. Effective shows exactly what the agent will read, and Diff shows your change against the file on disk before you save. Riggverk says when one of your headings also exists in the base. A file whose managed block was edited by hand stays read-only and points you to the agent's page to decide",
+            "Edit as my copy: copy a bundled skill into your own `personal` pack under a new name, such as `tdd-mine`, and edit it there. The bundled skill keeps its name and stays active, and the next Update installs your copy next to it. Saving keeps a backup (#113, #115)"
           ]
         }
       ]
