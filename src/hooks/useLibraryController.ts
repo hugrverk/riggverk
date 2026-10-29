@@ -51,7 +51,6 @@ export function useLibraryController({
   const [packError, setPackError] = useState<string | null>(null);
   const [activeSkillId, setActiveSkillId] = useState<string | null>(null);
   const [activeSkillContent, setActiveSkillContent] = useState<DocumentContent | null>(null);
-  const [skillSearch, setSkillSearch] = useState("");
   const activeSkillIdRef = useRef<string | null>(null);
   const activeSkillContentIdRef = useRef<string | null>(null);
 
@@ -69,7 +68,6 @@ export function useLibraryController({
   }, []);
   const [docSaving, setDocSaving] = useState(false);
   const [docSaveResult, setDocSaveResult] = useState<ActionResult | null>(null);
-  const [docMode, setDocMode] = useState<"preview" | "edit">("preview");
   const [showCreateDoc, setShowCreateDoc] = useState(false);
   const [createDocTitle, setCreateDocTitle] = useState("");
   const [createDocSlug, setCreateDocSlug] = useState("");
@@ -123,7 +121,6 @@ export function useLibraryController({
       setDocDraft("");
       setDocDirty(false);
       setDocSaveResult(null);
-      setDocMode("preview");
     }
   }, [activeDoc?.id]);
 
@@ -765,8 +762,6 @@ export function useLibraryController({
     forgetPack,
     activeSkillId,
     activeSkillContent,
-    skillSearch,
-    setSkillSearch,
     readSkill,
     docs,
     activeDoc,
@@ -774,8 +769,6 @@ export function useLibraryController({
     docDirty,
     docSaving,
     docSaveResult,
-    docMode,
-    setDocMode,
     showCreateDoc,
     createDocTitle,
     createDocSlug,
