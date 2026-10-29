@@ -1,6 +1,7 @@
 import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { renderInFrame } from "../test/renderWithShell";
+import { RunPanel } from "../components/run/RunPanel";
 import { Pane } from "../ui/Pane";
 import { PaneList } from "../ui/PaneList";
 import { useShellState } from "./ShellState";
@@ -253,6 +254,27 @@ describe("AppFrame", () => {
     it("shows the current view in the crumb", () => {
       renderInFrame(<Panes />, { view: "claude" });
       expect(document.querySelector(".bar .crumb")!.textContent).toBe("Riggverk / Claude");
+    });
+  });
+
+  describe("run dock", () => {
+    const running = <RunPanel wsRunning="update all" progress={{ task: "apply_setup", phase: "apply", done: 2, total: 5, file: "~/.codex/AGENTS.md" }} wsLog={null} wsLogCompletedAt={null} />;
+
+    it("shows the run panel under every view, not just the Overview and the agent pages", () => {
+      for (const view of ["start", "codex", "history", "library", "settings"] as const) {
+        renderInFrame(<Panes />, { view, dock: running });
+        const panel = screen.getByRole("region", { name: "Run" });
+        expect(within(panel).getByRole("progressbar").getAttribute("aria-valuetext")).toBe("2 of 5");
+        // Under the view, outside it.
+        expect(document.querySelector(".view-area")!.contains(panel)).toBe(false);
+        cleanup();
+      }
+    });
+
+    it("takes no room while nothing has run", () => {
+      renderInFrame(<Panes />, { dock: <RunPanel wsRunning={null} wsLog={null} wsLogCompletedAt={null} /> });
+      expect(screen.queryByRole("region", { name: "Run" })).toBeNull();
+      expect(document.querySelector(".run-dock")!.childElementCount).toBe(0);
     });
   });
 

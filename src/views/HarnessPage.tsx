@@ -7,8 +7,6 @@ import { RulesDecision } from "../components/decisions/RulesDecision";
 import { RuntimeCell } from "../components/harness/RuntimeCell";
 import { SurfaceCell } from "../components/harness/SurfaceCell";
 import { InstallPlanPane } from "../components/InstallPlanPane";
-import { RunPanel } from "../components/run/RunPanel";
-import { useFocusRunOnNewTransaction } from "../components/run/useFocusRunOnNewTransaction";
 import { RulesPane } from "../components/RulesPane";
 import { useCodexDefaultsFlow } from "../hooks/useCodexDefaultsFlow";
 import { useFileConflictActions } from "../hooks/useFileConflictActions";
@@ -82,21 +80,13 @@ export function HarnessPage({
   overview,
   install,
   backupRoot,
-  rollbackTransactionId,
-  onRollback,
-  onRefresh,
   runWorkspaceTask,
   refreshAfterApply,
   onApplied,
-  wsLog,
-  wsLogCompletedAt,
   wsRunning,
-  wsProgress,
   dataFolderOk,
-  onClearOutput,
 }: HarnessPageProps) {
   const label = HARNESS_LABELS[harness];
-  useFocusRunOnNewTransaction(rollbackTransactionId);
   const entry = overview.entries[harness];
   const [activeSurface, setActiveSurface] = useState<string | null>(null);
   const [markedKey, setMarkedKey] = useState<string | null>(null);
@@ -232,24 +222,10 @@ export function HarnessPage({
     { enabled: !installOpen && !rulesFlow.reviewing && !conflictFlow.reviewing && !defaultsFlow.open },
   );
 
-  const runPanel = () => (
-    <RunPanel
-      wsRunning={wsRunning}
-      progress={wsProgress}
-      wsLog={wsLog}
-      wsLogCompletedAt={wsLogCompletedAt}
-      onClear={onClearOutput}
-      onRefresh={onRefresh}
-      rollbackTransactionId={rollbackTransactionId}
-      onRollback={onRollback}
-    />
-  );
-
   if (installOpen) {
     return (
       <section className="screen review" aria-label={`${label} install review`}>
         <InstallPlanPane flow={install.flow} busyLabel={wsRunning} backupRoot={backupRoot} onApply={install.apply} />
-        {runPanel()}
       </section>
     );
   }
@@ -262,7 +238,6 @@ export function HarnessPage({
           busyLabel={wsRunning}
           backupRoot={backupRoot}
         />
-        {runPanel()}
       </section>
     );
   }
@@ -278,7 +253,6 @@ export function HarnessPage({
           busyLabel={wsRunning}
           backupRoot={backupRoot}
         />
-        {runPanel()}
       </section>
     );
   }
@@ -287,7 +261,6 @@ export function HarnessPage({
     return (
       <section className="screen review" aria-label={`${label} config review`}>
         <CodexDefaultsPane flow={defaultsFlow} busyLabel={wsRunning} backupRoot={backupRoot} />
-        {runPanel()}
       </section>
     );
   }
@@ -479,7 +452,6 @@ export function HarnessPage({
           <p className="hp-loading">Loading settings…</p>
         )}
       </Page>
-      <div className="hp-run">{runPanel()}</div>
     </div>
   );
 }

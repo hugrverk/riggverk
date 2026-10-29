@@ -39,6 +39,8 @@ export interface AppFrameProps {
   backupCount?: number | null;
   /** When the installation status was last fetched, for the sidebar foot. */
   checkedAt?: Date | null;
+  /** Shown under every view: the run panel, so a task's progress and outcome are visible wherever the user is. */
+  dock?: ReactNode;
   /** The active view. */
   children: ReactNode;
 }
@@ -63,6 +65,7 @@ export function AppFrame({
   version,
   backupCount,
   checkedAt,
+  dock,
   children,
 }: AppFrameProps) {
   const viewAreaRef = useRef<HTMLDivElement>(null);
@@ -118,6 +121,7 @@ export function AppFrame({
         <div className="view-area" ref={viewAreaRef}>
           {children}
         </div>
+        <div className="run-dock">{dock}</div>
       </div>
       <Toast />
       <CommandLine />

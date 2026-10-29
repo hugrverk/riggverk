@@ -57,7 +57,7 @@ Run these on a profile with a few things to decide (edit `~/.claude/CLAUDE.md` i
 - [ ] `n` (and Escape) cancels; nothing was written (check the isolated workspace dir)
 - [ ] `p` shows the plan with no apply path; `n` closes it
 - [ ] `u` then `y` on a harness installs it: `.riggverk/managed-state.json` exists; no `.riggverk/workspace.json` is created and no bundle file (`docs/`, `skills/`, `templates/`, ...) appears in the data folder
-- [ ] The run line under the page shows the progress while it runs, then **Done** with the time, **Undo last update…**, **Details** (the redacted log, with a Copy output button) and **Dismiss**; a second `u` reports `nothing to change`, no mutation
+- [ ] The run line under the page (on every page, Library, History and Settings included) shows the progress while it runs, then **Done** with the time, **Undo last update…**, **Details** (the redacted log, with a Copy output button) and **Dismiss**; a second `u` reports `nothing to change`, no mutation
 - [ ] `d` expands a row's details; `c` jumps to the next conflict; `j`/`k` move rows
 - [ ] A modified installed harness file (for example `~/.claude/skills/tdd/SKILL.md`) appears as a conflict row (`preserved, skipped`), `y` applies only the safe rows, and the conflict file is unchanged
 - [ ] Moving the conflicting file away and installing again updates it

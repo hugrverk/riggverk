@@ -122,7 +122,6 @@ function props(overrides: Partial<OverviewViewProps> = {}): OverviewViewProps {
     install: installScreenOf(),
     backupRoot: "/tmp/backups",
     rollbackTransactionId: null,
-    onRollback: vi.fn(),
     onRefresh: vi.fn(),
     onUninstall: vi.fn(),
     uninstallRecoveryTransactionId: null,
@@ -133,12 +132,10 @@ function props(overrides: Partial<OverviewViewProps> = {}): OverviewViewProps {
     backupCount: 2,
     onOpenBackupsFolder: vi.fn(),
     onUndo: vi.fn(),
-    wsLog: null,
     wsLogCompletedAt: null,
     wsRunning: null,
     wsProgress: null,
     dataFolderOk: true,
-    onClearOutput: vi.fn(),
     ...overrides,
   };
 }
@@ -721,15 +718,14 @@ describe("Overview workspace folder", () => {
 });
 
 describe("Overview install review", () => {
-  it("shows the plan and the run panel instead of the page while the review is open", () => {
+  it("shows the plan instead of the page while the review is open", () => {
     const flow = flowOf([op("workspace_bundle", "update")], { label: "update all", surfaces: ["workspace_bundle"] });
     renderOverview({ install: installScreenOf(flow, "start"), wsRunning: "update all" });
     expect(screen.getByRole("grid", { name: "Install plan" })).toBeTruthy();
-    expect(screen.getByRole("region", { name: "Run" })).toBeTruthy();
     expect(screen.queryByRole("region", { name: "Overview" })).toBeNull();
     const review = screen.getByRole("region", { name: "Workspace install review" });
     expect(review.classList.contains("review")).toBe(true);
-    expect([...review.children].map(child => child.getAttribute("data-pane-id"))).toEqual(["plan", "output"]);
+    expect([...review.children].map(child => child.getAttribute("data-pane-id"))).toEqual(["plan"]);
   });
 
   it("hands apply to the install screen when y is pressed, and never on Enter", () => {
@@ -752,32 +748,11 @@ describe("Overview install review", () => {
 });
 
 describe("Overview run panel", () => {
-  const progress: ApplyProgress = { task: "apply_setup", phase: "apply", done: 4, total: 7, file: "~/.claude/skills/handoff/SKILL.md" };
-  const done = { success: true, action: "apply_setup update claude", stdout: "applied 2", stderr: "", exit_code: 0 };
-
-  it("takes no room before the first run", () => {
-    renderOverview();
+  it("leaves the run panel to the app frame, which shows it on every page", () => {
+    renderOverview({ wsRunning: "update claude", wsProgress: { task: "apply_setup", phase: "apply", done: 4, total: 7, file: "~/.claude/skills/handoff/SKILL.md" } });
     expect(screen.queryByRole("region", { name: "Run" })).toBeNull();
-  });
-
-  it("shows the backend's progress while a task runs, and only a phase word until the backend reports", () => {
-    renderOverview({ wsRunning: "update claude", wsProgress: progress });
-    const panel = screen.getByRole("region", { name: "Run" });
-    expect(within(panel).getByRole("progressbar").getAttribute("aria-valuetext")).toBe("4 of 7");
-    expect(within(panel).getByText("~/.claude/skills/handoff/SKILL.md")).toBeTruthy();
-    cleanup();
-    renderOverview({ wsRunning: "update claude", wsProgress: null });
-    expect(screen.queryByRole("progressbar")).toBeNull();
-    expect(within(screen.getByRole("region", { name: "Run" })).getByText("working…")).toBeTruthy();
-  });
-
-  it("offers Undo last update when the run left a transaction, and hands it to the app's rollback path", () => {
-    const onRollback = vi.fn();
-    renderOverview({ wsLog: done, wsLogCompletedAt: Date.now(), rollbackTransactionId: "1710000000000", onRollback });
-    const undo = within(screen.getByRole("region", { name: "Run" })).getByRole("button", { name: "Undo last update…" });
-    expect(undo.getAttribute("aria-keyshortcuts")).toBe("z");
-    fireEvent.click(undo);
-    expect(onRollback).toHaveBeenCalledTimes(1);
+    // The inspector still follows the run.
+    expect(within(inspector()).getByText("Update claude")).toBeTruthy();
   });
 });
 

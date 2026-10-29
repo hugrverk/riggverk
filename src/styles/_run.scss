@@ -34,8 +34,13 @@
 
 /* ---- run panel ---- */
 
-/* Nothing has run: the strip around the panel has no content and takes no room. */
-.ov-strip:empty { display: none; }
+/* The dock under every view. Nothing has run: it has no content and takes no room. */
+.run-dock {
+  flex: none;
+  padding: 0 10px 10px;
+}
+
+.run-dock:empty { display: none; }
 
 .run-panel {
   border: 1px solid var(--border);

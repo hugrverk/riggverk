@@ -4,7 +4,7 @@
      .state-mark / .state-pill   the marker and the pill of one state (ui/StatePill.tsx); other pages use them too.
                                  A hollow ring for every state, one filled square for the decision, which is also the
                                  brightest ink in weight 600 on the raised surface. No state has an amber or ochre hue.
-     .ov                         page + output strip; .ov-page is the page (data-pane-id="page"), scrolls on its own
+     .ov                         the page; .ov-page is the page (data-pane-id="page"), scrolls on its own
      .ov-head                    the verdict (.ov-title) and the count row (.ov-sumrow > .ov-si, non-zero states only)
      .ov-flow                    the flow map beside its inspector (_flow.scss)
      .ov-grid > .ov-cell         joined 1px hairline grid, radius 0, under the map: worth a look, agents that are off,
@@ -98,11 +98,6 @@
 
 /* The page holds the keys (u, p, r, o, B) but is not a stop in the tab order: the cells are, and each shows its own ring. */
 .ov-page:focus-visible { outline: none; }
-
-.ov-strip {
-  flex: none;
-  padding: 0 10px 10px;
-}
 
 /* ---- header ---- */
 
