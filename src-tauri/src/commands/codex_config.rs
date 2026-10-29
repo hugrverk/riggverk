@@ -102,6 +102,7 @@ pub fn apply_codex_config_defaults(
     ensure_surface_enabled()?;
     let workspace_root = workspace_target_for_write()?;
     let home = user_home()?;
+    super::setup::reconcile_before_preview_check(&workspace_root, &home)?;
 
     let expected = plan_fingerprint
         .as_deref()

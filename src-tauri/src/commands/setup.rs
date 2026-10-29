@@ -181,6 +181,17 @@ fn reconcile_interrupted_setup_transactions(
     Ok(notes)
 }
 
+/// Rolls back the workspace's interrupted transactions before a mutating command checks its
+/// preview. The reconcile changes files and managed state, so a plan approved before it no longer
+/// describes the disk: the fingerprint then mismatches and the user previews again. Call under the
+/// mutation lock, before the fingerprint and the token are checked.
+pub(super) fn reconcile_before_preview_check(ws_root: &Path, home: &Path) -> Result<(), String> {
+    let _guard = crate::setup_mutation_guard::try_acquire_setup_mutation_guard()?;
+    reconcile_interrupted_setup_transactions(ws_root, home)
+        .map(|_| ())
+        .map_err(|e| format!("Cannot reconcile interrupted setup: {e}"))
+}
+
 /// What newer completed transactions for the same workspace wrote. An older transaction must
 /// not restore its backup over an artifact one of them wrote, because the current content
 /// belongs to the newer transaction.
@@ -2820,6 +2831,7 @@ pub fn apply_setup(
         crate::platform_paths::Platform::current(),
     )
     .map_err(|e| format!("user home: {e}"))?;
+    reconcile_before_preview_check(&ws_root, &home)?;
 
     let sources = crate::skill_sources::SkillSources::for_workspace(&ws_root);
     let states = surface_states(&surface_ids, &ws_root, &home, &sources);
@@ -3070,6 +3082,7 @@ pub fn apply_uninstall(
     let _mutation = crate::mutation_lock::acquire();
     let ws_root = workspace_target_for_write()?;
     let home = user_home()?;
+    reconcile_before_preview_check(&ws_root, &home)?;
     let plan = setup_transaction::plan_artifacts_for_uninstall(&ws_root, &home)?;
     if plan.removals.is_empty() {
         return Err("nothing to uninstall: no app-owned installed files found".to_string());
@@ -4607,6 +4620,60 @@ mod tests {
         let dir = setup_root.join(transaction_id);
         fs::create_dir_all(&dir).expect("transaction dir");
         fs::write(dir.join("manifest.json"), manifest.to_string()).expect("raw manifest");
+    }
+
+    /// Marks a finished transaction as interrupted mid-apply, as a crash would have left it.
+    fn mark_interrupted(env: &TempSetupEnv, transaction_id: &str) {
+        let path = env.setup_root().join(transaction_id).join("manifest.json");
+        let mut manifest: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&path).expect("manifest")).expect("json");
+        manifest["transaction_status"] = serde_json::json!("applying");
+        fs::write(&path, manifest.to_string()).expect("write manifest");
+    }
+
+    #[test]
+    fn an_apply_reconciles_interrupted_transactions_before_it_checks_the_preview() {
+        let env = TempSetupEnv::new("reconcile-before-check");
+        let surfaces = vec!["codex_agents".to_string()];
+        let plan = preview_setup(surfaces.clone()).expect("first preview");
+        let first = apply_setup(
+            surfaces.clone(),
+            false,
+            plan.plan_fingerprint,
+            plan.preview_token,
+        )
+        .expect("first apply");
+        assert!(first.success, "{}", first.message);
+        let agents_dir = env.home.join(".codex/agents");
+        let mut agents: Vec<PathBuf> = fs::read_dir(&agents_dir)
+            .expect("agents")
+            .map(|entry| entry.expect("entry").path())
+            .collect();
+        agents.sort();
+        assert!(agents.len() >= 2, "{agents:?}");
+
+        // The app crashed before the first apply finished, and one agent file is gone since.
+        mark_interrupted(&env, &first.transaction_id);
+        fs::remove_file(&agents[0]).expect("remove one agent");
+
+        // The preview still sees the other agents as installed; the reconcile removes them.
+        let plan = preview_setup(surfaces.clone()).expect("second preview");
+        let err = apply_setup(
+            surfaces.clone(),
+            false,
+            plan.plan_fingerprint,
+            plan.preview_token,
+        )
+        .expect_err("the plan approved before the reconcile is stale");
+        assert!(err.contains("fingerprint mismatch"), "{err}");
+
+        let plan = preview_setup(surfaces.clone()).expect("third preview");
+        let result = apply_setup(surfaces, false, plan.plan_fingerprint, plan.preview_token)
+            .expect("third apply");
+        assert!(result.success, "{}", result.message);
+        for agent in &agents {
+            assert!(agent.is_file(), "{}", agent.display());
+        }
     }
 
     #[test]

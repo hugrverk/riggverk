@@ -286,6 +286,7 @@ pub fn apply_take_bundled(
     let surface = files_surface(&surface)?;
     let workspace_root = workspace_target_for_write()?;
     let home = user_home()?;
+    super::setup::reconcile_before_preview_check(&workspace_root, &home)?;
 
     let expected = plan_fingerprint
         .as_deref()

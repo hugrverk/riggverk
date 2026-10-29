@@ -483,6 +483,7 @@ pub fn apply_rules_conversion(
     let (surface_id, artifact) = rules_target(&surface)?;
     let ws_root = workspace_target_for_write()?;
     let home = user_home()?;
+    super::setup::reconcile_before_preview_check(&ws_root, &home)?;
 
     let expected = plan_fingerprint
         .as_deref()
