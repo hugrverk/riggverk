@@ -370,6 +370,27 @@ create_release() {
   printf '\nReleased: %s\n' "$url"
 }
 
+# The notes were drafted at the release commit. Whatever landed on main after it (a PR merged meanwhile, or brought
+# into the release branch by updating it from main) is built but not covered, so main before the merge of the
+# release PR must be an ancestor of the release commit. A squash merge has no second parent to check.
+check_nothing_merged_since_the_release_commit() {
+  local allow_newer="$1" release_commit newer
+  git rev-parse --verify --quiet 'HEAD^2' >/dev/null || return 0
+  release_commit="$(git log -1 --format=%H --fixed-strings --grep="chore(release): $version" 'HEAD^2')"
+  if [ -z "$release_commit" ]; then
+    problem "the merged release PR has no chore(release): $version commit"
+    return 0
+  fi
+  git merge-base --is-ancestor 'HEAD^1' "$release_commit" && return 0
+  newer="$(git log --oneline --first-parent -n 5 "$release_commit..HEAD^1")"
+  if [ "$allow_newer" -eq 1 ]; then
+    info "main has changes the release commit does not cover (--allow-newer)"
+  else
+    problem "main has changes merged after the release commit for $version, so the notes may not cover what is built (--allow-newer to build anyway):
+$newer"
+  fi
+}
+
 cmd_publish() {
   local allow_newer=0 head_message
   while [ $# -gt 0 ]; do
@@ -385,7 +406,12 @@ cmd_publish() {
   require_python
   require_tools git gh npm codesign ditto
   require_gh_login
-  [ -e node_modules ] || problem "node_modules is missing (npm ci)"
+  # The build uses whatever is installed; it must be what the tag's lock says.
+  if python3 scripts/release_tools.py check-node-modules; then
+    info "checked: node_modules matches package-lock.json"
+  else
+    problem "node_modules is not what package-lock.json locks (npm ci)"
+  fi
   require_clean_main
 
   step "version and notes"
@@ -412,7 +438,10 @@ cmd_publish() {
     fi
     head_message="$(git log -1 --first-parent --format='%s%n%b' HEAD)"
     case "$head_message" in
-      *"release/v$version"* | *"chore(release): $version"*) info "checked: main ends with the merge of the release PR" ;;
+      *"release/v$version"* | *"chore(release): $version"*)
+        info "checked: main ends with the merge of the release PR"
+        check_nothing_merged_since_the_release_commit "$allow_newer"
+        ;;
       *)
         if [ "$allow_newer" -eq 1 ]; then
           info "main has moved past the release PR (--allow-newer)"

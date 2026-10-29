@@ -413,6 +413,25 @@ pub(crate) mod reads {
     }
 }
 
+/// Makes, per thread, every write of `pack-skills.json` fail, so a test can tell what an apply does
+/// when the record cannot be saved (a full disk, an unwritable state folder).
+#[cfg(test)]
+pub(crate) mod failing_writes {
+    use std::cell::Cell;
+
+    thread_local! {
+        static ON: Cell<bool> = const { Cell::new(false) };
+    }
+
+    pub(crate) fn set(on: bool) {
+        ON.with(|cell| cell.set(on));
+    }
+
+    pub(super) fn on() -> bool {
+        ON.with(Cell::get)
+    }
+}
+
 // ── Reading packs ──
 
 /// A skill found in a pack before name conflicts are decided.
@@ -1022,6 +1041,10 @@ fn write_record(workspace_root: &Path, after: Record) -> Result<(), String> {
     };
     if before == after {
         return Ok(());
+    }
+    #[cfg(test)]
+    if failing_writes::on() {
+        return Err("write pack skills: failure injected by a test".to_string());
     }
     let document = RecordDocument {
         schema_version: SCHEMA_VERSION,

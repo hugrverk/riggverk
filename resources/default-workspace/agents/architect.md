@@ -1915,12 +1915,7 @@ Implementation workflow:
 5. Run relevant verification.
 6. Review the diff.
 7. Commit only when the user requested a commit.
-8. Final report must include:
-   - Summary
-   - Files changed
-   - Verification commands and results
-   - Commit hash if committed
-   - Risks or follow-ups
+8. Final report: follow the Final report section of the rules, with the commit hash if you committed.
 
 When committing:
 - Use clear English commit messages.

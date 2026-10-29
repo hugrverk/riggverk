@@ -22,6 +22,7 @@ from typing import Any
 
 def strip_inline_comment(text: str) -> str:
     in_double = False
+    in_single = False
     escape = False
     i = 0
     while i < len(text):
@@ -33,9 +34,15 @@ def strip_inline_comment(text: str) -> str:
                 escape = True
             elif ch == '"':
                 in_double = False
+        elif in_single:
+            # A literal string has no escapes: it ends at the next single quote.
+            if ch == "'":
+                in_single = False
         else:
             if ch == '"':
                 in_double = True
+            elif ch == "'":
+                in_single = True
             elif ch == "#":
                 return text[:i].rstrip()
         i += 1
@@ -47,6 +54,7 @@ def split_top_level(text: str) -> list[str]:
     parts: list[str] = []
     depth = 0
     in_double = False
+    in_single = False
     escape = False
     start = 0
     for i, ch in enumerate(text):
@@ -57,8 +65,13 @@ def split_top_level(text: str) -> list[str]:
                 escape = True
             elif ch == '"':
                 in_double = False
+        elif in_single:
+            if ch == "'":
+                in_single = False
         elif ch == '"':
             in_double = True
+        elif ch == "'":
+            in_single = True
         elif ch in "[{":
             depth += 1
         elif ch in "]}":
@@ -84,6 +97,16 @@ def parse_compat_value(raw: str) -> Any:
             return ast.literal_eval(value)
         except (SyntaxError, ValueError) as exc:
             raise ValueError(f"invalid string value: {exc}") from exc
+    if value.startswith("'''"):
+        end = value.find("'''", 3)
+        if end < 0:
+            raise ValueError("unterminated multiline literal string")
+        return value[3:end]
+    if value.startswith("'"):
+        # A literal string: everything up to the closing quote, no escapes.
+        if len(value) < 2 or not value.endswith("'") or "'" in value[1:-1]:
+            raise ValueError(f"invalid literal string value: {value!r}")
+        return value[1:-1]
     if value == "true":
         return True
     if value == "false":
@@ -272,6 +295,7 @@ def find_inline_comment_start(value_region: str) -> int | None:
     """Return index of inline comment # outside quoted TOML strings."""
     in_triple = False
     in_double = False
+    in_single = False
     escape = False
     i = 0
     while i < len(value_region):
@@ -280,6 +304,12 @@ def find_inline_comment_start(value_region: str) -> int | None:
                 in_triple = False
                 i += 3
                 continue
+            i += 1
+            continue
+        if in_single:
+            # A literal string has no escapes: it ends at the next single quote.
+            if value_region[i] == "'":
+                in_single = False
             i += 1
             continue
         if in_double:
@@ -297,6 +327,10 @@ def find_inline_comment_start(value_region: str) -> int | None:
             continue
         if value_region[i] == '"':
             in_double = True
+            i += 1
+            continue
+        if value_region[i] == "'":
+            in_single = True
             i += 1
             continue
         if value_region[i] == "#":

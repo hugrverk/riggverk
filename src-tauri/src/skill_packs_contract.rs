@@ -359,6 +359,158 @@ mod tests {
         assert_eq!(env.pending(), vec![]);
     }
 
+    /// The name and description are the ones a YAML harness reads, so a nested `name:` cannot
+    /// slip a bundled name past "bundle wins".
+    #[test]
+    fn pack_skill_frontmatter_is_read_like_yaml_top_level_keys() {
+        let env = Env::new("frontmatter");
+        let skills = env.pack("mine").join("skills");
+        for (folder, text) in [
+            (
+                "nested",
+                "---\ndescription: shadow try\ntargets: claude\nmetadata:\n  name: nested-helper\nname: tdd\n---\nbody\n",
+            ),
+            (
+                "quoted",
+                "---\nname: \"quoted\"\ndescription: 'a quoted name'\ntargets: claude\n---\nbody\n",
+            ),
+            (
+                "folded",
+                "---\nname: folded\ndescription: >-\n  the real description\n  continues\ntargets: claude\n---\nbody\n",
+            ),
+            (
+                "twice",
+                "---\nname: twice\ndescription: d\ntargets: claude\nname: tdd\n---\nbody\n",
+            ),
+        ] {
+            fs::create_dir_all(skills.join(folder)).expect("skill dir");
+            fs::write(skills.join(folder).join("SKILL.md"), text).expect("SKILL.md");
+        }
+        Env::tighten(&skills);
+
+        let sources = env.sources();
+        let by_folder = |folder: &str| {
+            sources.packs()[0]
+                .skills
+                .iter()
+                .find(|skill| skill.folder == folder)
+                .cloned()
+                .expect(folder)
+        };
+        let nested = by_folder("nested");
+        assert_eq!(
+            (nested.name.as_str(), nested.state),
+            ("tdd", PackSkillState::Shadowed)
+        );
+        let quoted = by_folder("quoted");
+        assert_eq!(
+            (quoted.name.as_str(), quoted.state),
+            ("quoted", PackSkillState::Active)
+        );
+        assert_eq!(quoted.description, "a quoted name");
+        let folded = by_folder("folded");
+        assert_eq!(folded.state, PackSkillState::Active);
+        assert_eq!(folded.description, "the real description continues");
+        let twice = by_folder("twice");
+        assert_eq!(twice.state, PackSkillState::Error);
+        assert!(twice.reason.contains("more than once"), "{}", twice.reason);
+    }
+
+    /// On a case-insensitive volume `Notes.md` and `notes.md` are one file: a case-only rename is
+    /// an update of the installed file, never a conflict plus a removal that deletes it.
+    #[test]
+    fn a_case_only_rename_of_a_supporting_file_updates_it_and_removes_nothing() {
+        let env = Env::new("case-rename");
+        let dir = env.pack_skill("mine", None, "casey", "body", &[("Notes.md", "v1\n")]);
+        let result = env.apply();
+        assert!(result.success, "install: {}", result.message);
+        let claude = env.root(SkillRoot::Claude).join("casey");
+        if !claude.join("notes.md").is_file() {
+            // A case-sensitive volume: the two names are two files, nothing to prove here.
+            return;
+        }
+
+        // Same content, new case: nothing to write, and nothing removed.
+        fs::rename(dir.join("Notes.md"), dir.join("tmp.md")).expect("rename");
+        fs::rename(dir.join("tmp.md"), dir.join("notes.md")).expect("rename");
+        Env::tighten(&env.pack("mine").join("skills"));
+        assert!(
+            env.pending()
+                .iter()
+                .all(|(_, kind)| *kind != OperationKind::Remove),
+            "{:?}",
+            env.pending()
+        );
+        if let Some(result) = env.apply_if_needed() {
+            assert!(result.success, "apply: {}", result.message);
+        }
+        assert_eq!(
+            fs::read_to_string(claude.join("notes.md")).expect("still installed"),
+            "v1\n"
+        );
+
+        // New content too: one update per root, no conflict, no removal.
+        fs::write(dir.join("notes.md"), "v2\n").expect("edit");
+        Env::tighten(&env.pack("mine").join("skills"));
+        let pending = env.pending();
+        assert_eq!(pending.len(), 2, "{pending:?}");
+        for (artifact, kind) in &pending {
+            assert_eq!(*kind, OperationKind::Update, "{artifact:?}");
+            assert!(
+                artifact
+                    .as_skill_file()
+                    .is_some_and(|file| file.rel.as_str() == "notes.md"),
+                "{artifact:?}"
+            );
+        }
+        let result = env.apply();
+        assert!(result.success, "apply: {}", result.message);
+        for root in [SkillRoot::Claude, SkillRoot::Agents] {
+            let installed = files_below(&env.root(root).join("casey"));
+            assert_eq!(installed.len(), 2, "{root:?}: {:?}", installed.keys());
+            assert_eq!(
+                fs::read_to_string(env.root(root).join("casey/notes.md")).expect("installed"),
+                "v2\n"
+            );
+        }
+        assert_eq!(env.pending(), vec![]);
+        let state = String::from_utf8(env.state_bytes().expect("state")).expect("utf-8");
+        assert!(!state.contains("Notes.md"), "the old case is not recorded");
+    }
+
+    /// Dot folders are never read: a `.venv` (symlinks) or an `.archive` of old skills inside a
+    /// pack skill is skipped, not taken for nesting, and not installed.
+    #[test]
+    fn dot_folders_inside_a_pack_skill_are_skipped() {
+        let env = Env::new("dot-folders");
+        let dir = env.pack_skill("mine", None, "venvy", "body", &[("REFERENCE.md", "r\n")]);
+        fs::create_dir_all(dir.join(".venv/bin")).expect("venv");
+        #[cfg(unix)]
+        std::os::unix::fs::symlink("/usr/bin/python3", dir.join(".venv/bin/python"))
+            .expect("venv link");
+        fs::create_dir_all(dir.join(".archive/old")).expect("archive");
+        fs::write(
+            dir.join(".archive/old/SKILL.md"),
+            canonical_skill_text("old", "old"),
+        )
+        .expect("archived skill");
+
+        let sources = env.sources();
+        let skill = &sources.packs()[0].skills[0];
+        assert_eq!(
+            (skill.name.as_str(), skill.state),
+            ("venvy", PackSkillState::Active),
+            "{}",
+            skill.reason
+        );
+        let result = env.apply();
+        assert!(result.success, "install: {}", result.message);
+        let installed: Vec<String> = files_below(&env.root(SkillRoot::Claude).join("venvy"))
+            .into_keys()
+            .collect();
+        assert_eq!(installed, vec!["REFERENCE.md", "SKILL.md"]);
+    }
+
     #[test]
     fn two_packs_with_one_skill_name_fail_that_skill_only() {
         let env = Env::new("two-packs");
@@ -388,6 +540,42 @@ mod tests {
     }
 
     // ── A pack that goes missing ──
+
+    /// Without the record, a pack that later goes missing would read as a retirement: an Install
+    /// that cannot save it is undone, not reported as a success with a warning.
+    #[test]
+    fn an_install_whose_pack_record_cannot_be_saved_is_undone() {
+        let env = Env::new("record-write");
+        env.pack_skill("mine", None, "my-checklist", "kept in the pack", &[]);
+        let before = env.footprint();
+        crate::skill_sources::failing_writes::set(true);
+        let result = env.apply();
+        crate::skill_sources::failing_writes::set(false);
+        assert!(!result.success, "{}", result.message);
+        assert!(
+            result
+                .message
+                .starts_with(crate::commands::setup::PACK_RECORD_NOT_SAVED),
+            "{}",
+            result.message
+        );
+        assert!(!env
+            .path(&file_of(SkillRoot::Claude, "my-checklist", "SKILL.md"))
+            .exists());
+        assert_eq!(
+            (env.footprint().0, env.footprint().1),
+            (before.0, before.1),
+            "the installed files are rolled back"
+        );
+        assert!(!crate::workspace_layout::state_file(&env.ws, "pack-skills.json").exists());
+
+        let result = env.apply();
+        assert!(result.success, "install: {}", result.message);
+        assert_eq!(
+            env.recorded_packs()["packs"]["mine"],
+            serde_json::json!(["my-checklist"])
+        );
+    }
 
     #[test]
     fn a_missing_pack_plans_no_removal_and_forgetting_it_removes_the_copies_with_a_backup() {
@@ -1623,6 +1811,55 @@ mod tests {
         assert_eq!(files_below(&dir).len(), 2, "no temporary file remains");
     }
 
+    /// A save that renames or breaks the skill would leave it unreadable and unsaveable in the
+    /// Library, with its installed copy held stale; it is refused before anything is written.
+    #[test]
+    fn library_save_refuses_text_that_renames_or_breaks_the_skill() {
+        let env = Env::personal_copy("save-rename");
+        let copied = copy_skill_to_pack("original".into(), "my-original".into()).expect("copy");
+        let result = env.apply();
+        assert!(result.success, "install: {}", result.message);
+        let before = files_below(&env.packs());
+        for (content, expected) in [
+            (
+                canonical_skill_text("original", "# Edited\n"),
+                "The name in the frontmatter must stay my-original.",
+            ),
+            (
+                canonical_skill_text("another-name", "# Edited\n"),
+                "The name in the frontmatter must stay my-original.",
+            ),
+            (
+                "---\nname: \"my-original\"\nname: original\ndescription: d\ntargets: claude\n---\n"
+                    .to_string(),
+                "The frontmatter cannot be read",
+            ),
+            (
+                "---\nname: my-original\ntargets: claude\n---\n".to_string(),
+                "The description in the frontmatter cannot be empty.",
+            ),
+            (
+                "---\nname: my-original\ndescription: d\ntargets: gemini\n---\n".to_string(),
+                "The targets in the frontmatter",
+            ),
+            ("no frontmatter\n".to_string(), "The frontmatter cannot be read"),
+        ] {
+            let error = save_pack_skill(copied.id.clone(), content, None).unwrap_err();
+            assert!(error.starts_with(expected), "{error}");
+        }
+        assert_eq!(files_below(&env.packs()), before, "nothing written");
+        assert!(!env.base.join("backups/docs").exists(), "no backup");
+        let quoted =
+            "---\nname: 'my-original'\ndescription: still mine\ntargets: claude\n---\nbody\n";
+        assert!(save_pack_skill(copied.id.clone(), quoted.into(), None).is_ok());
+        assert!(save_pack_skill(
+            copied.id,
+            canonical_skill_text("my-original", "# Back\n"),
+            None
+        )
+        .is_ok());
+    }
+
     #[test]
     fn library_save_refuses_a_personal_skill_changed_on_disk_since_it_was_read() {
         let env = Env::personal_copy("save-revision");
@@ -1684,14 +1921,24 @@ mod tests {
         let env = Env::personal_copy("save-inactive");
         let shadowed = env.pack_skill("personal", None, "original", "# Shadowed\n", &[]);
         let before = fs::read(shadowed.join("SKILL.md")).expect("shadowed text");
-        assert!(save_pack_skill("pack:personal/original".into(), "changed".into(), None).is_err());
+        assert!(save_pack_skill(
+            "pack:personal/original".into(),
+            canonical_skill_text("original", "changed"),
+            None
+        )
+        .is_err());
         assert_eq!(
             fs::read(shadowed.join("SKILL.md")).expect("unchanged"),
             before
         );
         let copied = copy_skill_to_pack("original".into(), "mine".into()).expect("copy");
         env.pack_skill("team", None, "mine", "# Ambiguous\n", &[]);
-        assert!(save_pack_skill(copied.id.clone(), "changed".into(), None).is_err());
+        assert!(save_pack_skill(
+            copied.id.clone(),
+            canonical_skill_text("mine", "changed"),
+            None
+        )
+        .is_err());
         fs::remove_dir_all(env.packs().join("team")).expect("remove duplicate");
         let result = env.apply();
         assert!(result.success, "{}", result.message);
@@ -1700,14 +1947,19 @@ mod tests {
             "broken frontmatter\n",
         )
         .expect("break it");
-        assert!(save_pack_skill(copied.id.clone(), "changed".into(), None).is_err());
+        assert!(save_pack_skill(
+            copied.id.clone(),
+            canonical_skill_text("mine", "changed"),
+            None
+        )
+        .is_err());
         fs::remove_dir_all(env.packs().join("personal")).expect("missing personal pack");
         assert!(env
             .sources()
             .held()
             .iter()
             .any(|held| held.pack == "personal" && held.name == "mine"));
-        assert!(save_pack_skill(copied.id, "changed".into(), None).is_err());
+        assert!(save_pack_skill(copied.id, canonical_skill_text("mine", "changed"), None).is_err());
     }
 
     #[cfg(unix)]
@@ -1723,7 +1975,12 @@ mod tests {
             env.packs().join("personal/skills"),
         ] {
             set_mode(&dir, 0o777);
-            assert!(save_pack_skill(copied.id.clone(), "changed".into(), None).is_err());
+            assert!(save_pack_skill(
+                copied.id.clone(),
+                canonical_skill_text("mine", "changed"),
+                None
+            )
+            .is_err());
             assert!(copy_skill_to_pack("original".into(), "second".into()).is_err());
             assert_no_copy_or_staging(&env, "second");
             set_mode(&dir, 0o700);
@@ -1732,7 +1989,7 @@ mod tests {
         fs::write(&outside, &original).expect("outside file");
         fs::remove_file(&target).expect("remove target");
         std::os::unix::fs::symlink(&outside, &target).expect("target symlink");
-        assert!(save_pack_skill(copied.id, "changed".into(), None).is_err());
+        assert!(save_pack_skill(copied.id, canonical_skill_text("mine", "changed"), None).is_err());
         assert_eq!(fs::read(outside).expect("outside unchanged"), original);
         assert!(!env.base.join("backups").exists());
     }
