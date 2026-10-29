@@ -63,7 +63,7 @@ Grouped source: `skills/kretsverket/<skill>/SKILL.md`.
 | `frontend-design` / `browser-qa` | Frontend-design owns visual direction; browser-qa supplies runtime verification evidence. |
 | `handoff` / `release-check` | Handoff compacts session state; release-check validates merge/deploy readiness. |
 | `security-review` / `security-audit` | Security-review checks a change or answers a focused question in the current context; security-audit runs a full multi-agent audit of a whole codebase only when one is explicitly asked for. |
-| `security-review` / `sentinel` (agent) | Skill guides the review in the current context; sentinel agent performs an independent read-only review of a finished diff. |
+| `security-review` / `sentinel` (agent) | Skill guides the review in the current context; where the harness has the sentinel agent (OpenCode, Claude), it performs an independent read-only review of a finished diff, otherwise the review stays inline. |
 | `retro` / `context-budget` | Retro mines one named session for environment fixes; context-budget audits instruction surfaces without a session. |
 | `zoom-out` / repo-scout (agent) | Zoom-out explains code context in chat; repo-scout agent maps unfamiliar repos read-only before implementation. |
 | Kretsverket quartet | `kretsverket-editor-change` (editor layers), `kretsverket-file-compatibility` (persistence), `kretsverket-symbol-system` (symbols), `kretsverket-electrical-drawing` (wiring semantics)—kept separate because triggers and invariants differ. |
@@ -107,7 +107,7 @@ The `adversarial-*` skills keep model invocation so plain words can start them, 
 
 Claude-only frontmatter keys sit directly in the skill's frontmatter: `context`, `agent`, `background`, and `allowed-tools` (for example `release-check` runs in a forked `verifier` context on Claude Code, and `handoff` and `release-check` pre-approve the read-only commands behind their `!` state injection). Codex and OpenCode ignore them. A skill that sets one also carries a `### Claude Code` notes section (see below).
 
-`targets` is validated metadata and selects nothing: skills folders are shared between harnesses, so every bundled skill is installed into every folder that is wanted, flat as `<skills-folder>/<name>/`, with its `SKILL.md` and every supporting file in it. Other metadata fields are operator guidance only.
+`targets` is validated metadata and selects nothing: skills folders are shared between harnesses, so every bundled skill is installed into every folder that is wanted, flat as `<skills-folder>/<name>/`, with its `SKILL.md` and every supporting file in it. Other metadata fields are operator guidance only. `category`, `risk`, `targets` and `related` are top-level keys outside the Agent Skills spec: the harnesses Riggverk installs into ignore unknown keys, but a strict validator (a skill upload to claude.ai or the Skills API, `skills-ref validate`) may refuse them, so remove them from a copy you upload elsewhere.
 
 ## Description standard
 
@@ -150,7 +150,7 @@ A pack is a folder of your own skills that Riggverk installs, updates and rolls 
 ~/.config/riggverk/packs/<pack>/skills/<group>/<skill>/SKILL.md
 ```
 
-The pack name is lowercase letters, digits and hyphens. A `git clone` into `packs/` works, and `git pull` plus Install updates it; keep the folder writable by you only (`chmod go-w`). The skill format is the bundle's: `SKILL.md` with `name`, `description` and `targets`, supporting files beside it, no symlinks. Packs add skills only; they cannot change rules, agents or configs.
+The pack name is lowercase letters, digits and hyphens. A `git clone` into `packs/` works, and `git pull` plus Install updates it; keep the folder writable by you only (`chmod go-w`). The skill format is the bundle's: `SKILL.md` with `name`, `description` and `targets`, supporting files beside it, no symlinks. Only top-level frontmatter keys count, read as YAML reads them (quotes, `|` and `>` block scalars); a key given twice, or supporting files whose names differ only in case, refuse the skill. Dot entries (`.git`, `.venv`) are skipped and never installed. Packs add skills only; they cannot change rules, agents or configs.
 
 In the Library, Skills lists them under `pack:<name>`. A pack skill named like a bundled one is *shadowed*: the bundle's wins. When two packs both provide a skill of the same name, neither is used and both show an *error*. If a pack's folder disappears, the skills you installed from it stay as they are and show *pack missing*; **Forget pack** (Library, Skills) lets the next Install remove them, with a backup.
 

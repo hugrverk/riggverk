@@ -144,18 +144,18 @@ Ledger: Granskning klar efter 1 runda; ändringar krävs; fynd 2 accepterade, 1 
 ### Claude Code
 
 - Routine reviews stay with the built-in `/code-review`; use this skill only on an explicit request.
-- Critic, other family: Codex with the recipe in `critic-recipes.md`. If Claude Code's sandbox is on, Codex cannot start its own sandbox inside it (`sandbox_apply: Operation not permitted`); run that one command outside the sandbox with the user's approval, or fall back.
+- Critic, other family: Codex with the recipe in `../adversarial-implementation/critic-recipes.md`. If Claude Code's sandbox is on, Codex cannot start its own sandbox inside it (`sandbox_apply: Operation not permitted`); run that one command outside the sandbox with the user's approval, or fall back.
 - Critic, same family: a fresh `inspector` subagent, with the model set to the strongest you have (your rules allow this for the critic only). It has no shell; the pasted diff is all it needs.
 
 ### Codex
 
-- Critic, other family: Claude Code with the recipe in `critic-recipes.md`. Your sandbox blocks network and hides the login keychain, so request escalated permissions for that command, or fall back.
+- Critic, other family: Claude Code with the recipe in `../adversarial-implementation/critic-recipes.md`. Your sandbox blocks network and hides the login keychain, so request escalated permissions for that command, or fall back.
 - Critic, same family: a fresh `inspector` agent (read-only sandbox). Use this skill's brief, not the built-in review prompt.
 
 ### OpenCode
 
 - Critic, same harness: a fresh `inspector` task. It runs on the critic model set on Riggverk's OpenCode page (critic model row) when one is set, otherwise on the subagent or default model; if that is weaker than the author's model, set a stronger one there or use an external critic.
-- Critic, other harness: Codex or Claude Code through bash with the recipes in `critic-recipes.md`; bash asks for approval once per run.
+- Critic, other harness: Codex or Claude Code through bash with the recipes in `../adversarial-implementation/critic-recipes.md`; bash asks for approval once per run.
 
 ### Cursor
 
