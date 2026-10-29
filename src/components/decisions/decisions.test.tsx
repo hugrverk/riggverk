@@ -6,6 +6,29 @@ import { SideBySideDiff } from "./SideBySideDiff";
 
 afterEach(cleanup);
 
+describe("Fold", () => {
+  it("scrolls itself into view when it opens, and does not take focus", () => {
+    const scrollIntoView = vi.fn();
+    const original = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = scrollIntoView;
+    try {
+      render(
+        <>
+          <button type="button">Compare</button>
+          <Fold id="f" label="Compare CLAUDE.md">
+            <p>Computing the diff…</p>
+          </Fold>
+        </>,
+      );
+      expect(scrollIntoView).toHaveBeenCalledWith(expect.objectContaining({ block: "nearest" }));
+      expect(scrollIntoView.mock.contexts[0]).toBe(screen.getByRole("group", { name: "Compare CLAUDE.md" }));
+      expect(document.activeElement).toBe(document.body);
+    } finally {
+      Element.prototype.scrollIntoView = original;
+    }
+  });
+});
+
 describe("ChoiceCards", () => {
   const choices = (onMerge = vi.fn(), onKeep = vi.fn()) => [
     { id: "merge", title: "Merge in updates", sub: "Riggverk’s rules go in a managed block.", keyName: "v", onChoose: onMerge },
