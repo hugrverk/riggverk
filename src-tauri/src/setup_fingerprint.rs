@@ -221,7 +221,7 @@ pub fn artifact_effective_source_digest<R: SourceRoot + ?Sized>(
     let source_str = fs::read_to_string(&source).map_err(|e| format!("read codex source: {e}"))?;
     let template: toml::Value = source_str
         .parse()
-        .map_err(|e| format!("parse codex source toml: {e}"))?;
+        .map_err(|_| "the bundled Codex config is not valid TOML".to_string())?;
     // The choice applies to the installed file; one that is absent or unreadable keeps nothing.
     let installed = artifact
         .resolve_dest(home, runtime_root)
@@ -271,7 +271,7 @@ pub fn artifact_source_digest<R: SourceRoot + ?Sized>(
             let template_str =
                 fs::read_to_string(&source).map_err(|e| format!("read opencode source: {e}"))?;
             let template_json: serde_json::Value = serde_json::from_str(&template_str)
-                .map_err(|e| format!("parse opencode source json: {e}"))?;
+                .map_err(|_| "the bundled OpenCode config is not valid JSON".to_string())?;
             let rendered = render_expected_opencode_config(&template_json, home)
                 .ok_or_else(|| "cannot render expected opencode config".to_string())?;
             hash_json_value(&extract_managed_opencode_config(&rendered))
@@ -282,7 +282,7 @@ pub fn artifact_source_digest<R: SourceRoot + ?Sized>(
                 fs::read_to_string(&source).map_err(|e| format!("read codex source: {e}"))?;
             let source_toml: toml::Value = source_str
                 .parse()
-                .map_err(|e| format!("parse codex source toml: {e}"))?;
+                .map_err(|_| "the bundled Codex config is not valid TOML".to_string())?;
             Ok(codex_managed_digest(&source_toml))
         }
         ArtifactKind::TuiConfig => {
@@ -359,7 +359,7 @@ pub fn artifact_installed_managed_digest_from_path(
             let installed_str =
                 fs::read_to_string(path).map_err(|e| format!("read opencode config: {e}"))?;
             let installed_json: serde_json::Value = serde_json::from_str(&installed_str)
-                .map_err(|e| format!("parse opencode json: {e}"))?;
+                .map_err(|_| "the OpenCode opencode.json is not valid JSON".to_string())?;
             hash_json_value(&extract_managed_opencode_config(&installed_json))
         }
         ArtifactKind::ConfigFile if artifact == &ArtifactId::CodexConfig => {
@@ -370,7 +370,7 @@ pub fn artifact_installed_managed_digest_from_path(
                 fs::read_to_string(path).map_err(|e| format!("read codex config: {e}"))?;
             let installed_toml: toml::Value = installed_str
                 .parse()
-                .map_err(|e| format!("parse codex toml: {e}"))?;
+                .map_err(|_| "the Codex config.toml is not valid TOML".to_string())?;
             Ok(hash_toml_value(&extract_managed_codex_config(
                 &installed_toml,
             )))
@@ -388,8 +388,8 @@ pub fn artifact_installed_managed_digest_from_path(
             }
             let content =
                 fs::read_to_string(path).map_err(|e| format!("read cursor mcp config: {e}"))?;
-            let parsed: serde_json::Value =
-                serde_json::from_str(&content).map_err(|e| format!("parse cursor mcp: {e}"))?;
+            let parsed: serde_json::Value = serde_json::from_str(&content)
+                .map_err(|_| "the Cursor mcp.json is not valid JSON".to_string())?;
             match parsed.get("mcpServers").and_then(|v| v.get("playwright")) {
                 Some(projection) => hash_json_value(projection),
                 None => Ok(ABSENT_DIGEST.into()),
@@ -687,5 +687,28 @@ mod tests {
         let ws = temp("no-src-ws");
         let err = artifact_source_digest(&ArtifactId::CodexRules, &ws, &home).unwrap_err();
         assert!(err.contains("source") || err.contains("read"));
+    }
+    #[test]
+    fn invalid_user_config_errors_never_quote_the_file() {
+        let dir = temp("parse-leak");
+        let toml_path = dir.join("config.toml");
+        write(
+            &toml_path,
+            "model = \"x\"\n[mcp_servers.gh.env]\nGITHUB_TOKEN = \"FAKE-SECRET-VALUE-123\" oops\n",
+        );
+        let err = artifact_installed_managed_digest_from_path(&ArtifactId::CodexConfig, &toml_path)
+            .unwrap_err();
+        assert!(!err.contains("FAKE-SECRET"), "{err}");
+        assert_eq!(err, "the Codex config.toml is not valid TOML");
+        let json_path = dir.join("opencode.json");
+        write(&json_path, "{\"token\": \"FAKE-SECRET-VALUE-123\" oops}");
+        let err =
+            artifact_installed_managed_digest_from_path(&ArtifactId::OpenCodeConfig, &json_path)
+                .unwrap_err();
+        assert!(
+            !err.contains("FAKE-SECRET") && !err.contains("line"),
+            "{err}"
+        );
+        let _ = fs::remove_dir_all(&dir);
     }
 }

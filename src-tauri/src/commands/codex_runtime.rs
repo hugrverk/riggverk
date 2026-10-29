@@ -271,7 +271,7 @@ pub(crate) fn render_codex_config_managed_projection(
     }
     legacy_stdout
         .parse::<toml::Value>()
-        .map_err(|e| format!("codex legacy managed render produced invalid TOML: {e}"))?;
+        .map_err(|_| "the Codex config render produced invalid TOML".to_string())?;
 
     let temp_dir = create_render_temp_dir()?;
     let result = (|| -> Result<String, String> {
@@ -307,7 +307,7 @@ pub(crate) fn render_codex_config_managed_projection(
             .map_err(|e| format!("read codex rendered temp config: {e}"))?;
         rendered
             .parse::<toml::Value>()
-            .map_err(|e| format!("codex rendered config invalid TOML: {e}"))?;
+            .map_err(|_| "the Codex config render produced invalid TOML".to_string())?;
         Ok(rendered)
     })();
     cleanup_temp_dir(&temp_dir);

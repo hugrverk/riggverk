@@ -3607,12 +3607,15 @@ fn restore_artifact_from_backup_with_mode(
                         let installed_str = fs::read_to_string(&dest)
                             .map_err(|e| format!("read installed opencode config: {e}"))?;
                         let installed_json: serde_json::Value =
-                            serde_json::from_str(&installed_str)
-                                .map_err(|e| format!("parse installed opencode json: {e}"))?;
+                            serde_json::from_str(&installed_str).map_err(|_| {
+                                "the OpenCode opencode.json is not valid JSON".to_string()
+                            })?;
                         let backup_str = fs::read_to_string(&backup_path)
                             .map_err(|e| format!("read backup opencode config: {e}"))?;
                         let backup_json: serde_json::Value = serde_json::from_str(&backup_str)
-                            .map_err(|e| format!("parse backup opencode json: {e}"))?;
+                            .map_err(|_| {
+                                "the backed-up opencode.json is not valid JSON".to_string()
+                            })?;
                         let merged = crate::commands::merge_managed_opencode_config(
                             &installed_json,
                             &crate::commands::extract_managed_opencode_config(&backup_json),
@@ -3665,11 +3668,13 @@ fn restore_artifact_from_backup_with_mode(
                             .map_err(|e| format!("read installed cursor mcp: {e}"))?;
                         let installed_json: serde_json::Value =
                             serde_json::from_str(&installed_str)
-                                .map_err(|e| format!("parse installed cursor mcp: {e}"))?;
+                                .map_err(|_| "the Cursor mcp.json is not valid JSON".to_string())?;
                         let backup_str = fs::read_to_string(&backup_path)
                             .map_err(|e| format!("read backup cursor mcp: {e}"))?;
                         let backup_json: serde_json::Value = serde_json::from_str(&backup_str)
-                            .map_err(|e| format!("parse backup cursor mcp: {e}"))?;
+                            .map_err(|_| {
+                                "the backed-up Cursor mcp.json is not valid JSON".to_string()
+                            })?;
                         let backup_projection = backup_json
                             .get("mcpServers")
                             .and_then(|v| v.get("playwright"))

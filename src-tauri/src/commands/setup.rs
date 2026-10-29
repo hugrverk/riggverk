@@ -952,7 +952,7 @@ fn apply_single_artifact(
             let content = fs::read_to_string(&dest)
                 .map_err(|e| format!("read opencode config {}: {e}", dest.display()))?;
             serde_json::from_str(&content)
-                .map_err(|e| format!("parse opencode config json: {e}"))?
+                .map_err(|_| "the OpenCode opencode.json is not valid JSON".to_string())?
         } else {
             serde_json::Value::Object(serde_json::Map::new())
         };
