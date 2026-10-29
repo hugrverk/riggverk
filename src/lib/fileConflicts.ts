@@ -7,6 +7,7 @@ import type {
   SetupSurfaceId,
 } from "../types";
 import { HARNESS_LABELS } from "./harnessInstallation";
+import { plural } from "./plural";
 
 /** The agents surface of each harness that has one. Copilot, Pi and Kilo have none. */
 const AGENTS_SURFACE: Partial<Record<InstallAgent, FilesSurfaceId>> = {
@@ -82,10 +83,6 @@ export function nextUnitKey(model: FileConflictModel, markedKey: string | null):
   if (!current || model.units.length < 2) return current?.key ?? null;
   const index = model.units.findIndex(unit => unit.key === current.key);
   return model.units[(index + 1) % model.units.length]!.key;
-}
-
-function plural(n: number, noun: string): string {
-  return `${n} ${noun}${n === 1 ? "" : "s"}`;
 }
 
 /** "SKILL.md", "SKILL.md +1 file": the files of a skill unit; an agent is its one file. */

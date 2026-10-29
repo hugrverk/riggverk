@@ -7,6 +7,7 @@ import {
   enabledSurfacesForHarness,
   WORKSPACE_SURFACES,
 } from "./harnessInstallation";
+import { plural } from "./plural";
 
 /** What an install review can be about: the workspace bundle, one harness, or everything enabled. */
 export type InstallTarget = "workspace" | InstallAgent | "all";
@@ -200,10 +201,6 @@ export function installReviewLabel(label: string, counts: PlanCounts): string {
     return `install ${label.slice("update ".length)}`;
   }
   return label;
-}
-
-function plural(n: number, noun: string): string {
-  return `${n} ${noun}${n === 1 ? "" : "s"}`;
 }
 
 /** The y/n question: "apply 7 safe changes, skip 1 conflict". Counts rows, so it matches the table. */

@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ActionResult, FileDiffView, FilesSurfaceId, SetupResult, TakeBundledPreview, TakeBundledUnit } from "../types";
 import type { RunWorkspaceTask } from "./useInstallScreen";
+import { plural } from "../lib/plural";
 
 /**
  * The conflict review as a sub-state of a harness page:
@@ -67,10 +68,6 @@ function errorText(e: unknown): string {
 }
 
 const SHORT_FINGERPRINT = 8;
-
-function plural(n: number, noun: string): string {
-  return `${n} ${noun}${n === 1 ? "" : "s"}`;
-}
 
 /** "tdd", "tdd (2 files)": what a take bundled replaces, for the output and the review. */
 export function takeBundledTitle(unit: TakeBundledUnit): string {
