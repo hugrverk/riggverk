@@ -8,18 +8,27 @@ afterEach(cleanup);
 const STATES: AgentBadgeState[] = ["ok", "ready", "decide", "yours", "fix", "off", "missing"];
 
 describe("AgentIcon", () => {
-  it("draws a glyph for every agent: a brand path where Simple Icons has one, a monogram box for Codex and Kilo", () => {
+  it("draws one monochrome 24 x 24 glyph for every agent, from path data only", () => {
+    const shapes = new Set<string>();
     for (const harness of INSTALL_AGENTS) {
       const { container, unmount } = render(<AgentIcon harness={harness} />);
       const svg = container.querySelector("svg.agent-glyph")!;
       expect(svg.getAttribute("viewBox")).toBe("0 0 24 24");
       expect(svg.getAttribute("aria-hidden")).toBe("true");
-      const monogram = harness === "codex" || harness === "kilo";
-      expect(svg.querySelector("path") !== null, harness).toBe(!monogram);
-      expect(svg.querySelector(".agent-mono-box") !== null, harness).toBe(monogram);
-      if (monogram) expect(svg.querySelector(".agent-mono-letter")!.textContent).toBe(harness === "codex" ? "C" : "K");
+      const paths = [...svg.querySelectorAll("path")];
+      expect(paths.length, harness).toBeGreaterThan(0);
+      // Nothing but paths, filled even-odd; the colour comes from CSS (currentColor), never from the shapes.
+      expect(svg.children.length).toBe(paths.length);
+      for (const path of paths) {
+        expect(path.getAttribute("fill-rule")).toBe("evenodd");
+        expect(path.getAttribute("fill")).toBeNull();
+        expect(path.getAttribute("style")).toBeNull();
+      }
+      shapes.add(paths.map(path => path.getAttribute("d")).join("|"));
       unmount();
     }
+    // Seven agents, seven different glyphs.
+    expect(shapes.size).toBe(INSTALL_AGENTS.length);
   });
 
   it("is named after the agent and its state in words, and has no badge without a state", () => {

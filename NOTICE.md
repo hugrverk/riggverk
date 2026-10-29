@@ -51,6 +51,6 @@ The bundled `security-audit` skill is vendored from [cloudflare/security-audit-s
 
 Path: `resources/default-workspace/skills/security-audit/`. Copyright (c) 2025-2026 Cloudflare, Inc. Licensed under MIT; the full [license](resources/default-workspace/skills/security-audit/LICENSE) accompanies the vendored files. Local adaptations are described in `UPSTREAM.md`.
 
-## Simple Icons
+## Lobe Icons
 
-The vector paths of the Claude, Cursor, GitHub Copilot, OpenCode and Pi icons in `src/ui/agentIcons.tsx` come from [Simple Icons](https://simpleicons.org) (simple-icons 16.36.0), which is dedicated to the public domain under [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/). The marks themselves belong to their owners and are used only to name the tool each icon stands for; Riggverk is not affiliated with or endorsed by them. Codex and Kilo use a neutral monogram instead of a logo.
+The vector paths of the agent icons in `src/ui/agentIcons.tsx` (Claude, Codex, Cursor, GitHub Copilot, OpenCode, Pi and Kilo Code) come from [Lobe Icons](https://github.com/lobehub/lobe-icons) (`@lobehub/icons-static-svg` 1.101.0), (c) LobeHub, licensed under the MIT License. The marks themselves belong to their owners and are used only to name the tool each icon stands for; Riggverk is not affiliated with or endorsed by them.

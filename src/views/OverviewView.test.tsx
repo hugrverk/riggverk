@@ -260,7 +260,7 @@ describe("Overview flow map", () => {
 
   it("puts a monochrome icon before every agent name, the state as a badge on its corner, not a ring beside the name", () => {
     renderOverview();
-    for (const name of ["Claude", "Codex", "OpenCode", "Copilot", "Pi"]) {
+    for (const name of ["Claude", "Codex", "OpenCode", "Copilot", "Pi", "Kilo"]) {
       const agent = node(name);
       expect(agent.querySelectorAll("svg.agent-glyph"), name).toHaveLength(1);
       // The badge sits on the icon's bottom-right corner: inside the icon's box, right and below its centre.
@@ -278,9 +278,9 @@ describe("Overview flow map", () => {
       const nameX = Number(agent.querySelector(".flow-name")!.getAttribute("x"));
       expect(nameX).toBeGreaterThanOrEqual(iconX + 16 + 4);
     }
-    // Codex and Kilo have no Simple Icons mark: a monogram, never an imitation of another logo.
-    expect(node("Codex").querySelector(".agent-mono-letter")!.textContent).toBe("C");
-    expect(node("Claude").querySelector(".agent-mono-box")).toBeNull();
+    // Every agent, Codex and Kilo too, has a path-drawn glyph and no text.
+    expect(node("Codex").querySelector("svg.agent-glyph path")).not.toBeNull();
+    expect(node("Codex").querySelector("svg.agent-glyph text")).toBeNull();
   });
 
   it("keeps the state in the accessible name of each node, with a dashed badge for the agents that are off", () => {
