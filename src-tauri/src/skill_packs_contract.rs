@@ -1680,6 +1680,52 @@ mod tests {
         assert_eq!(files_below(&dir).len(), 2, "no temporary file remains");
     }
 
+    /// A save that renames or breaks the skill would leave it unreadable and unsaveable in the
+    /// Library, with its installed copy held stale; it is refused before anything is written.
+    #[test]
+    fn library_save_refuses_text_that_renames_or_breaks_the_skill() {
+        let env = Env::personal_copy("save-rename");
+        let copied = copy_skill_to_pack("original".into(), "my-original".into()).expect("copy");
+        let result = env.apply();
+        assert!(result.success, "install: {}", result.message);
+        let before = files_below(&env.packs());
+        for (content, expected) in [
+            (
+                canonical_skill_text("original", "# Edited\n"),
+                "The name in the frontmatter must stay my-original.",
+            ),
+            (
+                canonical_skill_text("another-name", "# Edited\n"),
+                "The name in the frontmatter must stay my-original.",
+            ),
+            (
+                "---\nname: \"my-original\"\nname: original\ndescription: d\ntargets: claude\n---\n"
+                    .to_string(),
+                "The frontmatter cannot be read",
+            ),
+            (
+                "---\nname: my-original\ntargets: claude\n---\n".to_string(),
+                "The description in the frontmatter cannot be empty.",
+            ),
+            (
+                "---\nname: my-original\ndescription: d\ntargets: gemini\n---\n".to_string(),
+                "The targets in the frontmatter",
+            ),
+            ("no frontmatter\n".to_string(), "The frontmatter cannot be read"),
+        ] {
+            let error = save_pack_skill(copied.id.clone(), content).unwrap_err();
+            assert!(error.starts_with(expected), "{error}");
+        }
+        assert_eq!(files_below(&env.packs()), before, "nothing written");
+        assert!(!env.base.join("backups/docs").exists(), "no backup");
+        let quoted =
+            "---\nname: 'my-original'\ndescription: still mine\ntargets: claude\n---\nbody\n";
+        assert!(save_pack_skill(copied.id.clone(), quoted.into()).is_ok());
+        assert!(
+            save_pack_skill(copied.id, canonical_skill_text("my-original", "# Back\n")).is_ok()
+        );
+    }
+
     #[test]
     fn library_save_refuses_other_packs_bundle_ids_traversal_missing_and_oversized_content() {
         let env = Env::personal_copy("save-refusals");
@@ -1711,14 +1757,20 @@ mod tests {
         let env = Env::personal_copy("save-inactive");
         let shadowed = env.pack_skill("personal", None, "original", "# Shadowed\n", &[]);
         let before = fs::read(shadowed.join("SKILL.md")).expect("shadowed text");
-        assert!(save_pack_skill("pack:personal/original".into(), "changed".into()).is_err());
+        assert!(save_pack_skill(
+            "pack:personal/original".into(),
+            canonical_skill_text("original", "changed")
+        )
+        .is_err());
         assert_eq!(
             fs::read(shadowed.join("SKILL.md")).expect("unchanged"),
             before
         );
         let copied = copy_skill_to_pack("original".into(), "mine".into()).expect("copy");
         env.pack_skill("team", None, "mine", "# Ambiguous\n", &[]);
-        assert!(save_pack_skill(copied.id.clone(), "changed".into()).is_err());
+        assert!(
+            save_pack_skill(copied.id.clone(), canonical_skill_text("mine", "changed")).is_err()
+        );
         fs::remove_dir_all(env.packs().join("team")).expect("remove duplicate");
         let result = env.apply();
         assert!(result.success, "{}", result.message);
@@ -1727,14 +1779,16 @@ mod tests {
             "broken frontmatter\n",
         )
         .expect("break it");
-        assert!(save_pack_skill(copied.id.clone(), "changed".into()).is_err());
+        assert!(
+            save_pack_skill(copied.id.clone(), canonical_skill_text("mine", "changed")).is_err()
+        );
         fs::remove_dir_all(env.packs().join("personal")).expect("missing personal pack");
         assert!(env
             .sources()
             .held()
             .iter()
             .any(|held| held.pack == "personal" && held.name == "mine"));
-        assert!(save_pack_skill(copied.id, "changed".into()).is_err());
+        assert!(save_pack_skill(copied.id, canonical_skill_text("mine", "changed")).is_err());
     }
 
     #[cfg(unix)]
@@ -1750,7 +1804,10 @@ mod tests {
             env.packs().join("personal/skills"),
         ] {
             set_mode(&dir, 0o777);
-            assert!(save_pack_skill(copied.id.clone(), "changed".into()).is_err());
+            assert!(
+                save_pack_skill(copied.id.clone(), canonical_skill_text("mine", "changed"))
+                    .is_err()
+            );
             assert!(copy_skill_to_pack("original".into(), "second".into()).is_err());
             assert_no_copy_or_staging(&env, "second");
             set_mode(&dir, 0o700);
@@ -1759,7 +1816,7 @@ mod tests {
         fs::write(&outside, &original).expect("outside file");
         fs::remove_file(&target).expect("remove target");
         std::os::unix::fs::symlink(&outside, &target).expect("target symlink");
-        assert!(save_pack_skill(copied.id, "changed".into()).is_err());
+        assert!(save_pack_skill(copied.id, canonical_skill_text("mine", "changed")).is_err());
         assert_eq!(fs::read(outside).expect("outside unchanged"), original);
         assert!(!env.base.join("backups").exists());
     }

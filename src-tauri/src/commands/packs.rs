@@ -541,6 +541,7 @@ pub fn save_pack_skill(id: String, content: String) -> Result<ActionResult, Stri
                 .any(|held| held.pack == "personal" && held.name == name)
         })
         .ok_or_else(|| "personal skill does not exist or is not active".to_string())?;
+    crate::skill_discovery::check_skill_text(&content, name, &skill.folder)?;
     let target = skill
         .skill_md_path()
         .ok_or_else(|| "personal skill has no SKILL.md".to_string())?;

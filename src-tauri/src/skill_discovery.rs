@@ -270,6 +270,36 @@ pub(crate) fn declared_skill_name(skill_md: &Path) -> Option<String> {
     fields.get("name").filter(|name| !name.is_empty()).cloned()
 }
 
+/// Why the text of a `SKILL.md` would not load as the skill `name` (in the folder `folder`), in
+/// words for the editor; `Ok` when it would. A save that breaks the skill is refused with this,
+/// since a skill that does not load can no longer be edited in the app.
+pub(crate) fn check_skill_text(content: &str, name: &str, folder: &str) -> Result<(), String> {
+    let fields =
+        frontmatter_fields(content).map_err(|e| format!("The frontmatter cannot be read: {e}."))?;
+    let declared = fields
+        .get("name")
+        .filter(|declared| !declared.is_empty())
+        .map_or(folder, String::as_str);
+    if declared != name {
+        return Err(format!("The name in the frontmatter must stay {name}."));
+    }
+    if fields.get("description").is_none_or(String::is_empty) {
+        return Err("The description in the frontmatter cannot be empty.".to_string());
+    }
+    let targets = extract_frontmatter_list(&fields, "targets");
+    if targets.is_empty()
+        || targets
+            .iter()
+            .any(|target| !VALID_SKILL_AGENTS.contains(&target.as_str()))
+    {
+        return Err(format!(
+            "The targets in the frontmatter must list harnesses from: {}.",
+            VALID_SKILL_AGENTS.join(", ")
+        ));
+    }
+    Ok(())
+}
+
 pub(crate) fn read_skill_metadata(
     skill_md: &Path,
     fallback_name: &str,
