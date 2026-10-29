@@ -181,6 +181,17 @@ fn reconcile_interrupted_setup_transactions(
     Ok(notes)
 }
 
+/// Rolls back the workspace's interrupted transactions before a mutating command checks its
+/// preview. The reconcile changes files and managed state, so a plan approved before it no longer
+/// describes the disk: the fingerprint then mismatches and the user previews again. Call under the
+/// mutation lock, before the fingerprint and the token are checked.
+pub(super) fn reconcile_before_preview_check(ws_root: &Path, home: &Path) -> Result<(), String> {
+    let _guard = crate::setup_mutation_guard::try_acquire_setup_mutation_guard()?;
+    reconcile_interrupted_setup_transactions(ws_root, home)
+        .map(|_| ())
+        .map_err(|e| format!("Cannot reconcile interrupted setup: {e}"))
+}
+
 /// What newer completed transactions for the same workspace wrote. An older transaction must
 /// not restore its backup over an artifact one of them wrote, because the current content
 /// belongs to the newer transaction.
@@ -266,6 +277,28 @@ pub(super) fn newer_completed_transaction(
     backup_dir: &Path,
     workspace_key: &str,
 ) -> Result<Option<String>, String> {
+    newest_newer_transaction(backup_dir, workspace_key, |status| {
+        status == setup_transaction::TransactionStatus::Completed
+    })
+}
+
+/// Id of a newer transaction for the same workspace that blocks an Undo of this one: any that was
+/// not rolled back. A completed one owns the managed state; one whose rollback failed (or that is
+/// still unfinished) left artifacts whose records the older snapshot would erase.
+pub(super) fn newer_transaction_blocking_undo(
+    backup_dir: &Path,
+    workspace_key: &str,
+) -> Result<Option<String>, String> {
+    newest_newer_transaction(backup_dir, workspace_key, |status| {
+        status != setup_transaction::TransactionStatus::RolledBack
+    })
+}
+
+fn newest_newer_transaction(
+    backup_dir: &Path,
+    workspace_key: &str,
+    counts: impl Fn(setup_transaction::TransactionStatus) -> bool,
+) -> Result<Option<String>, String> {
     let (Some(setup_root), Some(transaction_id)) = (
         backup_dir.parent(),
         backup_dir.file_name().and_then(|name| name.to_str()),
@@ -295,7 +328,7 @@ pub(super) fn newer_completed_transaction(
         };
         if header.workspace_key.as_deref().is_some_and(|recorded| {
             setup_transaction::workspace_keys_match(recorded, workspace_key)
-        }) && header.status == setup_transaction::TransactionStatus::Completed
+        }) && counts(header.status)
             && newest
                 .as_deref()
                 .is_none_or(|current| transaction_id_is_newer(&candidate, current))
@@ -952,7 +985,7 @@ fn apply_single_artifact(
             let content = fs::read_to_string(&dest)
                 .map_err(|e| format!("read opencode config {}: {e}", dest.display()))?;
             serde_json::from_str(&content)
-                .map_err(|e| format!("parse opencode config json: {e}"))?
+                .map_err(|_| "the OpenCode opencode.json is not valid JSON".to_string())?
         } else {
             serde_json::Value::Object(serde_json::Map::new())
         };
@@ -2027,11 +2060,11 @@ pub fn rollback_transaction(
         }
     }
 
-    match newer_completed_transaction(&backup_dir, &manifest.workspace_key) {
+    match newer_transaction_blocking_undo(&backup_dir, &manifest.workspace_key) {
         Ok(None) => {}
         Ok(Some(newer)) => {
             let message = format!(
-                "cannot roll back transaction {transaction_id}: newer completed transaction {newer} exists; roll that one back first"
+                "cannot roll back transaction {transaction_id}: newer transaction {newer} is not rolled back; roll that one back first"
             );
             return SetupResult {
                 success: false,
@@ -2772,7 +2805,7 @@ pub fn apply_setup(
     plan_fingerprint: Option<String>,
     preview_token: Option<String>,
 ) -> Result<SetupResult, String> {
-    let _mutation = crate::mutation_lock::acquire();
+    let _mutation = crate::mutation_lock::acquire()?;
     // Validate all provided surface IDs are known before any processing
     let unknown: Vec<&String> = surfaces
         .iter()
@@ -2820,6 +2853,7 @@ pub fn apply_setup(
         crate::platform_paths::Platform::current(),
     )
     .map_err(|e| format!("user home: {e}"))?;
+    reconcile_before_preview_check(&ws_root, &home)?;
 
     let sources = crate::skill_sources::SkillSources::for_workspace(&ws_root);
     let states = surface_states(&surface_ids, &ws_root, &home, &sources);
@@ -3067,9 +3101,10 @@ pub fn apply_uninstall(
     plan_fingerprint: Option<String>,
     preview_token: Option<String>,
 ) -> Result<SetupResult, String> {
-    let _mutation = crate::mutation_lock::acquire();
+    let _mutation = crate::mutation_lock::acquire()?;
     let ws_root = workspace_target_for_write()?;
     let home = user_home()?;
+    reconcile_before_preview_check(&ws_root, &home)?;
     let plan = setup_transaction::plan_artifacts_for_uninstall(&ws_root, &home)?;
     if plan.removals.is_empty() {
         return Err("nothing to uninstall: no app-owned installed files found".to_string());
@@ -3106,7 +3141,7 @@ pub fn rollback_setup_transaction(
     transaction_id: String,
     dry_run: bool,
 ) -> Result<SetupResult, String> {
-    let _mutation = crate::mutation_lock::acquire();
+    let _mutation = crate::mutation_lock::acquire()?;
     if !validate_transaction_id_format(&transaction_id) {
         return Err("invalid transaction_id: must be a numeric timestamp".to_string());
     }
@@ -4609,6 +4644,60 @@ mod tests {
         fs::write(dir.join("manifest.json"), manifest.to_string()).expect("raw manifest");
     }
 
+    /// Marks a finished transaction as interrupted mid-apply, as a crash would have left it.
+    fn mark_interrupted(env: &TempSetupEnv, transaction_id: &str) {
+        let path = env.setup_root().join(transaction_id).join("manifest.json");
+        let mut manifest: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&path).expect("manifest")).expect("json");
+        manifest["transaction_status"] = serde_json::json!("applying");
+        fs::write(&path, manifest.to_string()).expect("write manifest");
+    }
+
+    #[test]
+    fn an_apply_reconciles_interrupted_transactions_before_it_checks_the_preview() {
+        let env = TempSetupEnv::new("reconcile-before-check");
+        let surfaces = vec!["codex_agents".to_string()];
+        let plan = preview_setup(surfaces.clone()).expect("first preview");
+        let first = apply_setup(
+            surfaces.clone(),
+            false,
+            plan.plan_fingerprint,
+            plan.preview_token,
+        )
+        .expect("first apply");
+        assert!(first.success, "{}", first.message);
+        let agents_dir = env.home.join(".codex/agents");
+        let mut agents: Vec<PathBuf> = fs::read_dir(&agents_dir)
+            .expect("agents")
+            .map(|entry| entry.expect("entry").path())
+            .collect();
+        agents.sort();
+        assert!(agents.len() >= 2, "{agents:?}");
+
+        // The app crashed before the first apply finished, and one agent file is gone since.
+        mark_interrupted(&env, &first.transaction_id);
+        fs::remove_file(&agents[0]).expect("remove one agent");
+
+        // The preview still sees the other agents as installed; the reconcile removes them.
+        let plan = preview_setup(surfaces.clone()).expect("second preview");
+        let err = apply_setup(
+            surfaces.clone(),
+            false,
+            plan.plan_fingerprint,
+            plan.preview_token,
+        )
+        .expect_err("the plan approved before the reconcile is stale");
+        assert!(err.contains("fingerprint mismatch"), "{err}");
+
+        let plan = preview_setup(surfaces.clone()).expect("third preview");
+        let result = apply_setup(surfaces, false, plan.plan_fingerprint, plan.preview_token)
+            .expect("third apply");
+        assert!(result.success, "{}", result.message);
+        for agent in &agents {
+            assert!(agent.is_file(), "{}", agent.display());
+        }
+    }
+
     #[test]
     fn reconcile_skips_unreadable_terminal_manifests_and_apply_still_succeeds() {
         let env = TempSetupEnv::new("reconcile-terminal");
@@ -4834,6 +4923,19 @@ mod tests {
 
     #[test]
     fn explicit_rollback_refuses_when_a_newer_completed_transaction_exists() {
+        explicit_rollback_refuses_with_a_newer(setup_transaction::TransactionStatus::Completed);
+    }
+
+    #[test]
+    fn explicit_rollback_refuses_when_a_newer_rollback_failed() {
+        // Its leftover artifacts are still recorded in the managed state the older undo would
+        // restore its snapshot over.
+        explicit_rollback_refuses_with_a_newer(
+            setup_transaction::TransactionStatus::RollbackFailed,
+        );
+    }
+
+    fn explicit_rollback_refuses_with_a_newer(status: setup_transaction::TransactionStatus) {
         let _guard = guard::lock();
         let _restore = guard::EnvRestore::capture();
         let (base, home, _ws, older) = rollback_test_fixture();
@@ -4841,7 +4943,7 @@ mod tests {
         seed_two_artifact_transaction(&older);
         let backup_dir = seed_two_artifact_transaction(newer);
         let mut manifest = read_manifest(newer);
-        manifest.transaction_status = setup_transaction::TransactionStatus::Completed;
+        manifest.transaction_status = status;
         setup_transaction::persist_manifest_atomic(
             &backup_dir.join("manifest.json"),
             &manifest,
@@ -4853,8 +4955,7 @@ mod tests {
             let result = rollback_transaction(&older, dry_run, &mut ProgressReporter::silent());
             assert!(!result.success, "dry_run={dry_run}");
             assert!(
-                result.message.contains("newer completed transaction")
-                    && result.message.contains(newer),
+                result.message.contains("newer transaction") && result.message.contains(newer),
                 "unclear refusal: {}",
                 result.message
             );

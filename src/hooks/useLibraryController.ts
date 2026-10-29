@@ -32,7 +32,6 @@ export interface LibraryControllerDeps {
   workspaceLoadGenerationRef: MutableRefObject<number>;
   isWorkspaceLoadCurrent: (generation: number) => boolean;
   isInvalidWorkspaceError: (e: unknown) => boolean;
-  fetchStatus: (generation?: number) => Promise<void>;
   view: string;
 }
 
@@ -41,7 +40,6 @@ export function useLibraryController({
   workspaceLoadGenerationRef,
   isWorkspaceLoadCurrent,
   isInvalidWorkspaceError,
-  fetchStatus,
   view,
 }: LibraryControllerDeps) {
   const confirm = useConfirm();
@@ -62,6 +60,9 @@ export function useLibraryController({
     skillDirtyRef.current = value;
     setSkillDirtyState(value);
   }, []);
+  // The drafts as they are now, for a save that settles after the user kept typing.
+  const skillDraftRef = useRef(skillDraft);
+  skillDraftRef.current = skillDraft;
   const [skillSaving, setSkillSaving] = useState(false);
   const [skillSaveResult, setSkillSaveResult] = useState<ActionResult | null>(null);
   const skillSaveOpRef = useRef(createSaveOperationTracker());
@@ -78,6 +79,8 @@ export function useLibraryController({
     docDirtyRef.current = value;
     setDocDirtyState(value);
   }, []);
+  const docDraftRef = useRef(docDraft);
+  docDraftRef.current = docDraft;
   const [docSaving, setDocSaving] = useState(false);
   const [docSaveResult, setDocSaveResult] = useState<ActionResult | null>(null);
   const [showCreateDoc, setShowCreateDoc] = useState(false);
@@ -102,9 +105,14 @@ export function useLibraryController({
     rulesDirtyRef.current = value;
     setRulesDirtyState(value);
   }, []);
+  const rulesDraftRef = useRef(rulesDraft);
+  rulesDraftRef.current = rulesDraft;
   const [rulesSaving, setRulesSaving] = useState(false);
   const [rulesSaveResult, setRulesSaveResult] = useState<ActionResult | null>(null);
   const rulesSaveOpRef = useRef(createSaveOperationTracker());
+
+  /** Why the item being opened could not be read; the sheet shows it instead of loading for ever. */
+  const [itemLoadError, setItemLoadError] = useState<string | null>(null);
 
   const [librarySourceType, setLibrarySourceType] = useState<LibrarySourceType>("rules");
 
@@ -180,9 +188,9 @@ export function useLibraryController({
    * The one leave guard of the Library, for everything that would drop the open draft (another item, another topic,
    * closing the sheet, leaving the page). With nothing unsaved it says yes at once. Otherwise it asks:
    * Discard drops the draft, Save and continue writes it first, Keep editing stays. Resolves true when the caller may
-   * go on, and the draft is then already settled.
+   * go on, and the draft is then already settled. `confirmLabel` words the save answer for the way out ("Save and quit").
    */
-  const confirmLeave = useCallback(async (): Promise<boolean> => {
+  const confirmLeave = useCallback(async (confirmLabel = "Save and continue"): Promise<boolean> => {
     if (!docDirtyRef.current && !rulesDirtyRef.current && !skillDirtyRef.current) return true;
     const name = docDirtyRef.current ? activeDoc?.title : rulesDirtyRef.current ? activeRulesFile?.label : activeSkillContent?.title;
     const choice = await choose({
@@ -190,7 +198,7 @@ export function useLibraryController({
       message: `${name ?? "This item"} has changes you have not saved.`,
       alternateLabel: "Discard",
       cancelLabel: "Keep editing",
-      confirmLabel: "Save and continue",
+      confirmLabel,
     });
     if (choice === "cancel") return false;
     if (choice === "alternate") {
@@ -212,8 +220,7 @@ export function useLibraryController({
     if (type === librarySourceType) return;
     if (!(await confirmLeave())) return;
     setLibrarySourceType(type);
-    if (type === "configs") fetchStatus();
-  }, [librarySourceType, fetchStatus, confirmLeave]);
+  }, [librarySourceType, confirmLeave]);
 
   const loadSkills = useCallback(async (generation = workspaceLoadGenerationRef.current) => {
     try {
@@ -358,10 +365,15 @@ export function useLibraryController({
   }, [isWorkspaceLoadCurrent, setError, workspaceLoadGenerationRef]);
 
   /** Shows one rules file: its refinements become the draft, with nothing unsaved. */
-  const applyRulesFile = useCallback((file: RulesFileContent) => {
+  const applyRulesFile = useCallback((file: RulesFileContent, savedDraft?: string) => {
     setActiveRulesFile(file);
-    setRulesDraft(file.refinements);
-    setRulesDirty(false);
+    if (savedDraft !== undefined && rulesDraftRef.current !== savedDraft) {
+      // The user kept typing while the save ran: the newer text stays, unsaved unless it already is the saved text.
+      setRulesDirty(rulesDraftRef.current !== file.refinements);
+    } else {
+      setRulesDraft(file.refinements);
+      setRulesDirty(false);
+    }
     // The list row follows what the file holds now (its refinement count, its state), never its text.
     const { layout, conflict, malformed, refinement_lines, editable, reason } = file;
     setRulesFiles(list =>
@@ -423,8 +435,7 @@ export function useLibraryController({
     void loadAgentSources();
     void loadAgentTemplate();
     void loadRulesFiles();
-    void fetchStatus();
-  }, [fetchStatus, loadAgentSources, loadAgentTemplate, loadDocs, loadRulesFiles, loadSkills]);
+  }, [loadAgentSources, loadAgentTemplate, loadDocs, loadRulesFiles, loadSkills]);
 
   const resetLibraryState = useCallback(() => {
     docSaveOpRef.current.invalidate();
@@ -463,6 +474,7 @@ export function useLibraryController({
     if (surface === null) return;
     activeRulesSurfaceRef.current = surface;
     setActiveRulesSurface(surface);
+    setItemLoadError(null);
     const generation = workspaceLoadGenerationRef.current;
     try {
       const file = await invoke<RulesFileContent>("read_rules_file", { surface });
@@ -473,6 +485,7 @@ export function useLibraryController({
       if (!isWorkspaceLoadCurrent(generation)) return;
       if (activeRulesSurfaceRef.current !== surface) return;
       setError(`Read rules file: ${e}`);
+      setItemLoadError(`Read rules file: ${e}`);
     }
   }, [applyRulesFile, clearActiveRulesFile, confirmLeave, isWorkspaceLoadCurrent, setError, workspaceLoadGenerationRef]);
 
@@ -499,6 +512,7 @@ export function useLibraryController({
     if (!file || !file.editable || file.conflict !== null || file.revision === null) return false;
     const saveOpId = rulesSaveOpRef.current.capture();
     const surface = file.surface;
+    const sentDraft = rulesDraft;
     const generation = workspaceLoadGenerationRef.current;
     const isCurrent = () =>
       rulesSaveOpRef.current.isCurrent(saveOpId) &&
@@ -523,12 +537,12 @@ export function useLibraryController({
       setRulesSaveResult(result);
       if (!result.success) return false;
       if (result.stdout === "unchanged") {
-        setRulesDirty(false);
+        setRulesDirty(rulesDraftRef.current !== sentDraft);
         return true;
       }
       const updated = await invoke<RulesFileContent>("read_rules_file", { surface });
       if (!isCurrent()) return false;
-      applyRulesFile(updated);
+      applyRulesFile(updated, sentDraft);
       return true;
     } catch (e) {
       if (!isCurrent()) return false;
@@ -557,6 +571,7 @@ export function useLibraryController({
     if (id !== activeDoc?.id && !(await confirmLeave())) return;
     docSaveOpRef.current.invalidate();
     activeDocIdRef.current = id;
+    setItemLoadError(null);
     const generation = workspaceLoadGenerationRef.current;
     try {
       const doc = await invoke<DocumentContent>("read_doc", { id });
@@ -567,6 +582,7 @@ export function useLibraryController({
       if (!isWorkspaceLoadCurrent(generation)) return;
       if (activeDocIdRef.current !== id) return;
       setError(`Read doc: ${e}`);
+      setItemLoadError(`Read doc: ${e}`);
     }
   }, [activeDoc?.id, confirmLeave, isWorkspaceLoadCurrent, setError, workspaceLoadGenerationRef]);
 
@@ -580,11 +596,16 @@ export function useLibraryController({
     if (!activeDoc || !isPersonalDoc(activeDoc)) return false;
     const saveOpId = docSaveOpRef.current.capture();
     const docId = activeDoc.id;
+    const sentDraft = docDraft;
     const generation = workspaceLoadGenerationRef.current;
     setDocSaving(true);
     setDocSaveResult(null);
     try {
-      const result = await invoke<ActionResult>("save_doc", { id: docId, content: docDraft });
+      const result = await invoke<ActionResult>("save_doc", {
+        id: docId,
+        content: docDraft,
+        expectedRevision: activeDoc.revision,
+      });
       if (!docSaveOpRef.current.isCurrent(saveOpId)) return false;
       if (!isWorkspaceLoadCurrent(generation)) return false;
       if (activeDocIdRef.current !== docId) return false;
@@ -596,22 +617,40 @@ export function useLibraryController({
           if (!isWorkspaceLoadCurrent(generation)) return false;
           if (activeDocIdRef.current !== docId) return false;
           setActiveDoc(updated);
-          setDocDraft(updated.content);
+          // Text typed while the save ran stays, unsaved; otherwise the draft is the text the backend has now.
+          if (docDraftRef.current === sentDraft) {
+            setDocDraft(updated.content);
+            setDocDirty(false);
+          } else {
+            setDocDirty(docDraftRef.current !== updated.content);
+          }
+        } else {
+          setDocDirty(docDraftRef.current !== sentDraft);
         }
-        setDocDirty(false);
       }
       return result.success;
     } catch (e) {
-      if (!docSaveOpRef.current.isCurrent(saveOpId)) return false;
-      if (!isWorkspaceLoadCurrent(generation)) return false;
-      if (activeDocIdRef.current !== docId) return false;
-      setDocSaveResult({
-        success: false,
-        action: "save_doc",
-        stdout: "",
-        stderr: String(e),
-        exit_code: null,
-      });
+      const isCurrent = () =>
+        docSaveOpRef.current.isCurrent(saveOpId) &&
+        isWorkspaceLoadCurrent(generation) &&
+        activeDocIdRef.current === docId;
+      const failed = (stderr: string) =>
+        setDocSaveResult({ success: false, action: "save_doc", stdout: "", stderr, exit_code: null });
+      if (!isCurrent()) return false;
+      const message = String(e);
+      if (!message.includes(RULES_CHANGED_ON_DISK)) {
+        failed(message);
+        return false;
+      }
+      // Changed elsewhere, as for rules: show the file as it is now and keep the draft, which a second save writes.
+      try {
+        const updated = await invoke<DocumentContent>("read_doc", { id: docId });
+        if (!isCurrent()) return false;
+        setActiveDoc(updated);
+        failed("changed on disk: reloaded, save again to overwrite");
+      } catch (reloadError) {
+        if (isCurrent()) failed(String(reloadError));
+      }
       return false;
     } finally {
       setDocSaving(false);
@@ -662,6 +701,7 @@ export function useLibraryController({
   const selectAgent = useCallback(async (id: string) => {
     activeAgentIdRef.current = id;
     setActiveAgentId(id);
+    setItemLoadError(null);
     const generation = workspaceLoadGenerationRef.current;
     try {
       const content = await invoke<AgentSourceContent>("read_agent_source", { filename: id });
@@ -672,6 +712,7 @@ export function useLibraryController({
       if (!isWorkspaceLoadCurrent(generation)) return;
       if (activeAgentIdRef.current !== id) return;
       setError(`Read agent: ${e}`);
+      setItemLoadError(`Read agent: ${e}`);
     }
   }, [isWorkspaceLoadCurrent, setError, workspaceLoadGenerationRef]);
 
@@ -688,6 +729,7 @@ export function useLibraryController({
       if (!isWorkspaceLoadCurrent(generation)) return;
       if (configSourceLoadSeqRef.current !== loadSeq) return;
       setError(`Config: ${e}`);
+      setItemLoadError(`Config: ${e}`);
     }
   }, [activeConfigTargetId, isWorkspaceLoadCurrent, setError, workspaceLoadGenerationRef]);
 
@@ -715,16 +757,19 @@ export function useLibraryController({
       if (!isWorkspaceLoadCurrent(generation)) return;
       if (configSourceLoadSeqRef.current !== loadSeq) return;
       setError(`Config source: ${e}`);
+      setItemLoadError(`Config source: ${e}`);
     }
   }, [activeConfigTargetId, isWorkspaceLoadCurrent, setError, workspaceLoadGenerationRef]);
 
   const selectConfigTarget = useCallback((targetId: string) => {
+    setItemLoadError(null);
     setActiveConfigTargetId(targetId);
     setActiveConfigSourceType("base");
     setConfigEditorSourceContent(null);
   }, []);
 
   const selectConfigSourceType = useCallback((sourceType: string) => {
+    setItemLoadError(null);
     setActiveConfigSourceType(sourceType);
     setConfigEditorSourceContent(null);
   }, []);
@@ -750,6 +795,7 @@ export function useLibraryController({
     if (id !== activeSkillIdRef.current && !(await confirmLeave())) return;
     activeSkillIdRef.current = id;
     setActiveSkillId(id);
+    setItemLoadError(null);
     const generation = workspaceLoadGenerationRef.current;
     try {
       const content = await invoke<DocumentContent>("read_skill", { id });
@@ -761,6 +807,7 @@ export function useLibraryController({
       if (!isWorkspaceLoadCurrent(generation)) return;
       if (activeSkillIdRef.current !== id) return;
       setError(`Read skill: ${e}`);
+      setItemLoadError(`Read skill: ${e}`);
     }
   }, [confirmLeave, isWorkspaceLoadCurrent, setError, workspaceLoadGenerationRef]);
 
@@ -780,6 +827,7 @@ export function useLibraryController({
     const skill = activeSkillContent;
     if (!skill || !skill.id.startsWith(PERSONAL_SKILL_PREFIX)) return false;
     const saveOpId = skillSaveOpRef.current.capture();
+    const sentDraft = skillDraft;
     const generation = workspaceLoadGenerationRef.current;
     const isCurrent = () =>
       skillSaveOpRef.current.isCurrent(saveOpId) &&
@@ -788,7 +836,11 @@ export function useLibraryController({
     setSkillSaving(true);
     setSkillSaveResult(null);
     try {
-      const result = await invoke<ActionResult>("save_pack_skill", { id: skill.id, content: skillDraft });
+      const result = await invoke<ActionResult>("save_pack_skill", {
+        id: skill.id,
+        content: skillDraft,
+        expectedRevision: skill.revision,
+      });
       if (!isCurrent()) return false;
       setSkillSaveResult(result);
       if (!result.success) return false;
@@ -797,13 +849,35 @@ export function useLibraryController({
         if (!isCurrent()) return false;
         activeSkillContentIdRef.current = updated.id;
         setActiveSkillContent(updated);
-        setSkillDraft(updated.content);
+        if (skillDraftRef.current === sentDraft) {
+          setSkillDraft(updated.content);
+          setSkillDirty(false);
+        } else {
+          setSkillDirty(skillDraftRef.current !== updated.content);
+        }
+      } else {
+        setSkillDirty(skillDraftRef.current !== sentDraft);
       }
-      setSkillDirty(false);
       return true;
     } catch (e) {
       if (!isCurrent()) return false;
-      setSkillSaveResult({ success: false, action: "save_pack_skill", stdout: "", stderr: String(e), exit_code: null });
+      const failed = (stderr: string) =>
+        setSkillSaveResult({ success: false, action: "save_pack_skill", stdout: "", stderr, exit_code: null });
+      const message = String(e);
+      if (!message.includes(RULES_CHANGED_ON_DISK)) {
+        failed(message);
+        return false;
+      }
+      // Changed elsewhere, as for rules: show the file as it is now and keep the draft, which a second save writes.
+      try {
+        const updated = await invoke<DocumentContent>("read_skill", { id: skill.id });
+        if (!isCurrent()) return false;
+        activeSkillContentIdRef.current = updated.id;
+        setActiveSkillContent(updated);
+        failed("changed on disk: reloaded, save again to overwrite");
+      } catch (reloadError) {
+        if (isCurrent()) failed(String(reloadError));
+      }
       return false;
     } finally {
       setSkillSaving(false);
@@ -906,6 +980,7 @@ export function useLibraryController({
     confirmLeave,
     discardDrafts,
     libraryDirty,
+    itemLoadError,
     agentSources,
     activeAgentId,
     activeAgentContent,

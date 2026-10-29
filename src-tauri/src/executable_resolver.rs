@@ -130,22 +130,31 @@ pub fn extend_path_with_tool_dirs() {
     let Some(current) = std::env::var_os("PATH") else {
         return;
     };
-    let mut fallbacks = vec![
-        PathBuf::from("/opt/homebrew/bin"),
-        PathBuf::from("/usr/local/bin"),
-    ];
-    if let Ok(home) = crate::cursor_profile_paths::resolve_user_home() {
-        fallbacks.push(home.join(".local/bin"));
-        // The official OpenCode installer puts its binary here.
-        fallbacks.push(home.join(".opencode/bin"));
-    }
-    if let Some(updated) = append_missing_path_dirs(&current, &fallbacks) {
+    if let Some(updated) = append_missing_path_dirs(&current, &tool_dirs()) {
         std::env::set_var("PATH", updated);
     }
 }
 
 #[cfg(not(unix))]
 pub fn extend_path_with_tool_dirs() {}
+
+/// The tool folders a GUI launch's `PATH` lacks (Homebrew, the per-user bin folders), in the
+/// order they are searched. Empty off unix.
+pub(crate) fn tool_dirs() -> Vec<PathBuf> {
+    if !cfg!(unix) {
+        return Vec::new();
+    }
+    let mut dirs = vec![
+        PathBuf::from("/opt/homebrew/bin"),
+        PathBuf::from("/usr/local/bin"),
+    ];
+    if let Ok(home) = crate::cursor_profile_paths::resolve_user_home() {
+        dirs.push(home.join(".local/bin"));
+        // The official OpenCode installer puts its binary here.
+        dirs.push(home.join(".opencode/bin"));
+    }
+    dirs
+}
 
 #[cfg(test)]
 mod tests {

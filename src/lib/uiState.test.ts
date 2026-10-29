@@ -271,12 +271,23 @@ describe("overviewHeadline", () => {
     expect(overviewHeadline(counts(), { ...ctx, anyStatus: false })).toBe("Checking your setup…");
   });
 
+  it("says the checks failed, not that it is checking, once every check has failed", () => {
+    expect(overviewHeadline(counts(), { ...ctx, anyStatus: false, failedChecks: 2 })).toBe("Some agents could not be checked.");
+    expect(overviewHeadline(counts(), { ...ctx, anyStatus: false, failedChecks: 1, pendingChecks: 1 })).toBe("Checking your setup…");
+  });
+
   it("says nothing is set up when everything is a fresh install", () => {
     expect(overviewHeadline(counts({ ready: 4 }), { ...ctx, allNotInstalled: true })).toBe("Nothing is set up yet.");
   });
 
   it("says everything is set up when nothing needs a decision, a fix or an update", () => {
     expect(overviewHeadline(counts({ ok: 5, yours: 1, off: 2 }), ctx)).toBe("Everything is set up.");
+  });
+
+  it("does not claim the all-clear while a check failed or is still loading", () => {
+    expect(overviewHeadline(counts({ ok: 4 }), { ...ctx, failedChecks: 1 })).toBe("Some agents could not be checked.");
+    expect(overviewHeadline(counts({ ok: 4 }), { ...ctx, pendingChecks: 1 })).toBe("Checking your setup…");
+    expect(overviewHeadline(counts({ ok: 4 }), { ...ctx, failedChecks: 0, pendingChecks: 0 })).toBe("Everything is set up.");
   });
 
   it("says the setup works when something is left to do", () => {

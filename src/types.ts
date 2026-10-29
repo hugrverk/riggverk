@@ -1,13 +1,7 @@
-export interface StatusData {
-  repo_path: string;
-  enabled_rule_target_ids: string[];
-  enabled_config_target_ids: string[];
-  enabled_agent_target_ids: string[];
-  enabled_target_ids: string[];
-}
-
 export interface DocumentContent {
   id: string; title: string; path: string; section: string; source: string; content: string;
+  /** Digest of `content` for an item the Library can save; the save sends it back and is refused once the file changed. */
+  revision?: string;
 }
 
 export interface DocSummary {

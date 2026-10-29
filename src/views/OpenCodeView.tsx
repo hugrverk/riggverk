@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { OpenCodeRuntimeHealth } from "../types";
 import { HarnessPage } from "./HarnessPage";
 import { OpenCodeModelRows } from "./OpenCodeModelRows";
@@ -10,12 +11,15 @@ interface OpenCodeViewProps extends HarnessViewProps {
 }
 
 export function OpenCodeView({ runtimeHealth, onModelUpdated, ...props }: OpenCodeViewProps) {
+  // Unsaved model edits live in the rows; the page holds Update and Preview until they are saved or dropped.
+  const [modelUnsaved, setModelUnsaved] = useState(false);
   return (
     <HarnessPage
       {...props}
+      installBlockedBy={modelUnsaved ? "Save or discard the model change first" : undefined}
       harness="opencode"
       runtime={{ harness: "opencode", health: runtimeHealth }}
-      runtimeExtra={<OpenCodeModelRows dataFolderOk={props.dataFolderOk} health={runtimeHealth} onModelUpdated={onModelUpdated} />}
+      runtimeExtra={<OpenCodeModelRows dataFolderOk={props.dataFolderOk} health={runtimeHealth} onModelUpdated={onModelUpdated} onUnsavedChange={setModelUnsaved} />}
     />
   );
 }

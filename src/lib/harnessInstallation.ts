@@ -138,14 +138,6 @@ export function enabledSurfacesForHarness(
   return HARNESS_SURFACES[harness].filter((surface) => isSurfaceEnabledFor(harness, settings, surface));
 }
 
-/** Surfaces of a harness that Install skips because a target toggle (or the harness) is off. */
-export function disabledSurfacesForHarness(
-  harness: InstallAgent,
-  settings: EnabledSettings,
-): SetupSurfaceId[] {
-  return HARNESS_SURFACES[harness].filter((surface) => !isSurfaceEnabledFor(harness, settings, surface));
-}
-
 /** Per-surface on/off state for a harness page; `targetId` names the toggle that gates it (null = never gated). */
 export function harnessSurfaceStates(
   harness: InstallAgent,

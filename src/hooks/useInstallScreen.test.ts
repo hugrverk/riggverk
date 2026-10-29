@@ -110,7 +110,7 @@ describe("useInstallScreen", () => {
     expect(result.current.scope).toBe("codex");
   });
 
-  it("does not switch when the page is already open, and shows workspace updates on the workspace page", async () => {
+  it("does not switch when the page is already open, and shows workspace updates on the Overview", async () => {
     mockBackend(planOf([op("workspace_bundle", "update")]));
     const h = harness("start");
     const { result } = renderHook(() => useInstallScreen(h.options));

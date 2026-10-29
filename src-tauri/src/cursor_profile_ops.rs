@@ -204,7 +204,7 @@ fn read_permissions_target(target_path: &Path) -> Result<serde_json::Value, Stri
     }
     let content =
         fs::read_to_string(target_path).map_err(|e| format!("read permissions target: {e}"))?;
-    serde_json::from_str(&content).map_err(|e| format!("permissions target invalid JSON: {e}"))
+    serde_json::from_str(&content).map_err(|_| "permissions target invalid JSON".to_string())
 }
 
 #[cfg(test)]
@@ -309,7 +309,7 @@ fn read_mcp_target(target_path: &Path) -> Result<serde_json::Value, String> {
         return Ok(serde_json::json!({}));
     }
     let content = fs::read_to_string(target_path).map_err(|e| format!("read MCP target: {e}"))?;
-    serde_json::from_str(&content).map_err(|e| format!("MCP target invalid JSON: {e}"))
+    serde_json::from_str(&content).map_err(|_| "MCP target invalid JSON".to_string())
 }
 
 fn prepare_mcp_merge(

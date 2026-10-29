@@ -112,6 +112,11 @@
 
 .setting-line .tbtn { min-height: 28px; padding: 0 10px; }
 
+/* Buttons for the pane's key-only actions (reset appearance, retry save). */
+.setting-actions { margin-top: 6px; }
+.setting-actions .tbtn { min-height: 28px; padding: 0 10px; }
+.setting-note.setting-actions { padding-bottom: 14px; }
+
 .setting-hint {
   font-size: var(--fs-sm);
 }

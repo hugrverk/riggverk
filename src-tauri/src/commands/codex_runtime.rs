@@ -104,7 +104,7 @@ fn list_bundled_codex_agents(agents_dir: &Path) -> Vec<String> {
 }
 
 fn parse_codex_config(path: &Path) -> Option<toml::Value> {
-    let content = fs::read_to_string(path).ok()?;
+    let content = crate::setup_fingerprint::read_user_config(path, "Codex config.toml").ok()?;
     toml::from_str(&content).ok()
 }
 
@@ -223,6 +223,94 @@ fn cleanup_temp_dir(path: &Path) {
     let _ = fs::remove_dir_all(path);
 }
 
+/// Shown when no Python that can read TOML is found: the merge scripts need `tomllib`.
+pub(crate) const CODEX_PYTHON_REQUIRED: &str =
+    "Python 3.11 or newer is needed to update the Codex config.";
+/// A merge script failed. Its output is never shown: it can quote lines of the user's config.
+const CODEX_MERGE_FAILED: &str = "the Codex config could not be merged safely; nothing was written";
+const PYTHON_PROBE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+
+#[cfg(test)]
+thread_local! {
+    /// Test override of [`codex_python`] for the current thread: `Some(None)` is "none found".
+    static FORCED_CODEX_PYTHON: std::cell::RefCell<Option<Option<PathBuf>>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// Runs `f` with [`codex_python`] answering `python` on this thread.
+#[cfg(test)]
+pub(crate) fn with_codex_python<T>(python: Option<PathBuf>, f: impl FnOnce() -> T) -> T {
+    FORCED_CODEX_PYTHON.with(|forced| *forced.borrow_mut() = Some(python));
+    let out = f();
+    FORCED_CODEX_PYTHON.with(|forced| *forced.borrow_mut() = None);
+    out
+}
+
+/// The `python3` that runs the Codex merge scripts: the first one that can `import tomllib`
+/// (Python 3.11+), from the tool folders a GUI launch lacks and then `PATH`. A Finder launch puts
+/// macOS's own `/usr/bin/python3` (3.9) first, whose fallback parser refuses valid TOML. Probed
+/// once per process; `None` when there is none.
+pub(crate) fn codex_python() -> Option<PathBuf> {
+    #[cfg(test)]
+    if let Some(forced) = FORCED_CODEX_PYTHON.with(|forced| forced.borrow().clone()) {
+        return forced;
+    }
+    static FOUND: std::sync::OnceLock<Option<PathBuf>> = std::sync::OnceLock::new();
+    FOUND
+        .get_or_init(|| first_python_with_tomllib(&python_candidates()))
+        .clone()
+}
+
+fn python_candidates() -> Vec<PathBuf> {
+    let mut dirs = crate::executable_resolver::tool_dirs();
+    if let Some(path) = std::env::var_os("PATH") {
+        dirs.extend(std::env::split_paths(&path));
+    }
+    let pathext = std::env::var("PATHEXT").ok();
+    let mut found: Vec<PathBuf> = Vec::new();
+    for dir in dirs {
+        let Some(dir) = dir.to_str().filter(|dir| !dir.is_empty()) else {
+            continue;
+        };
+        if let Some(python) =
+            crate::executable_resolver::resolve_executable("python3", dir, pathext.as_deref())
+        {
+            if !found.contains(&python) {
+                found.push(python);
+            }
+        }
+    }
+    found
+}
+
+fn first_python_with_tomllib(candidates: &[PathBuf]) -> Option<PathBuf> {
+    let cwd = if cfg!(unix) {
+        PathBuf::from("/")
+    } else {
+        std::env::temp_dir()
+    };
+    candidates
+        .iter()
+        .find(|python| {
+            let Some(program) = python.to_str() else {
+                return false;
+            };
+            super::process::run_cmd_bounded(
+                program,
+                &["-I", "-c", "import tomllib"],
+                &cwd,
+                super::process::BoundedCmdOptions {
+                    timeout: Some(PYTHON_PROBE_TIMEOUT),
+                    stdout_cap: 1024,
+                    stderr_cap: 1024,
+                    ..super::process::BoundedCmdOptions::default()
+                },
+            )
+            .success
+        })
+        .cloned()
+}
+
 /// Render Codex managed config fields from `managed_source` into `dest` via the
 /// line-preserving Python owners. Refuses on malformed TOML or ambiguous structure.
 ///
@@ -249,11 +337,13 @@ pub(crate) fn render_codex_config_managed_projection(
         ));
     }
 
+    let python = codex_python().ok_or_else(|| CODEX_PYTHON_REQUIRED.to_string())?;
+    let python = super::workspace::path_arg(&python)?;
     let legacy_script_str = super::workspace::path_arg(&legacy_script)?;
     let dest_str = super::workspace::path_arg(dest)?;
     let managed_source_str = super::workspace::path_arg(managed_source)?;
-    let (ok, legacy_stdout, legacy_stderr, legacy_code) = super::process::run_cmd(
-        "python3",
+    let (ok, legacy_stdout, _legacy_stderr, _legacy_code) = super::process::run_cmd(
+        &python,
         &[
             &legacy_script_str,
             &dest_str,
@@ -263,15 +353,11 @@ pub(crate) fn render_codex_config_managed_projection(
         bundled_root,
     );
     if !ok {
-        return Err(format!(
-            "codex legacy managed render failed (exit {:?}): {}",
-            legacy_code,
-            legacy_stderr.trim()
-        ));
+        return Err(CODEX_MERGE_FAILED.to_string());
     }
     legacy_stdout
         .parse::<toml::Value>()
-        .map_err(|e| format!("codex legacy managed render produced invalid TOML: {e}"))?;
+        .map_err(|_| "the Codex config render produced invalid TOML".to_string())?;
 
     let temp_dir = create_render_temp_dir()?;
     let result = (|| -> Result<String, String> {
@@ -283,8 +369,8 @@ pub(crate) fn render_codex_config_managed_projection(
         let routing_script_str = super::workspace::path_arg(&routing_script)?;
         let temp_config_str = super::workspace::path_arg(&temp_config)?;
         let temp_backup_str = super::workspace::path_arg(&temp_backup)?;
-        let (routing_ok, _routing_stdout, routing_stderr, routing_code) = super::process::run_cmd(
-            "python3",
+        let (routing_ok, _routing_stdout, _routing_stderr, _routing_code) = super::process::run_cmd(
+            &python,
             &[
                 &routing_script_str,
                 &temp_config_str,
@@ -296,18 +382,14 @@ pub(crate) fn render_codex_config_managed_projection(
             bundled_root,
         );
         if !routing_ok {
-            return Err(format!(
-                "codex routing defaults render failed (exit {:?}): {}",
-                routing_code,
-                routing_stderr.trim()
-            ));
+            return Err(CODEX_MERGE_FAILED.to_string());
         }
 
         let rendered = fs::read_to_string(&temp_config)
             .map_err(|e| format!("read codex rendered temp config: {e}"))?;
         rendered
             .parse::<toml::Value>()
-            .map_err(|e| format!("codex rendered config invalid TOML: {e}"))?;
+            .map_err(|_| "the Codex config render produced invalid TOML".to_string())?;
         Ok(rendered)
     })();
     cleanup_temp_dir(&temp_dir);
@@ -852,6 +934,63 @@ sandbox_mode = "workspace-write"
 apps._default.approvals_reviewer = "user"
 apps._default.default_tools_approval_mode = "prompt"
 "#
+    }
+
+    #[test]
+    fn a_failing_merge_script_never_puts_its_output_in_the_error() {
+        let dir = temp_root("render-stderr");
+        let bundled = dir.join("bundled");
+        let leak = "import sys\nsys.stderr.write('invalid TOML line: GITHUB_TOKEN = \"FAKE-SECRET-VALUE-123\"')\nsys.exit(1)\n";
+        write_file(&bundled.join("scripts/merge-codex-config.py"), leak);
+        write_file(
+            &bundled.join("scripts/ensure-codex-routing-defaults.py"),
+            leak,
+        );
+        let dest = dir.join("config.toml");
+        write_file(&dest, "model = \"x\"\n");
+        let source = dir.join("template.toml");
+        write_file(&source, managed_codex_config());
+
+        let err = render_codex_config_managed_projection(&bundled, &dest, &source)
+            .expect_err("the script fails");
+        cleanup(&dir);
+        assert!(!err.contains("FAKE-SECRET"), "{err}");
+    }
+
+    #[test]
+    fn the_render_refuses_without_a_python_that_reads_toml() {
+        let dir = temp_root("render-no-python");
+        let dest = dir.join("config.toml");
+        write_file(&dest, "model = \"x\"\n");
+        let source = dir.join("template.toml");
+        write_file(&source, managed_codex_config());
+        let err = with_codex_python(None, || {
+            render_codex_config_managed_projection(&bundled_workspace_root(), &dest, &source)
+        })
+        .expect_err("no python");
+        cleanup(&dir);
+        assert_eq!(err, CODEX_PYTHON_REQUIRED);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn the_first_python_that_can_import_tomllib_is_used() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = temp_root("python-probe");
+        let fake = |name: &str, exit: u8| {
+            let path = dir.join(name).join("python3");
+            write_file(&path, &format!("#!/bin/sh\nexit {exit}\n"));
+            fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).expect("chmod");
+            path
+        };
+        let old = fake("old", 1);
+        let new = fake("new", 0);
+        let newer = fake("newer", 0);
+        let found = first_python_with_tomllib(&[old.clone(), new.clone(), newer]);
+        let none = first_python_with_tomllib(&[old]);
+        cleanup(&dir);
+        assert_eq!(found, Some(new));
+        assert_eq!(none, None);
     }
 
     fn add_rules(ws: &Path, home: &Path) {

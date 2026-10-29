@@ -3,22 +3,16 @@ import type { FilesStatus, FileUnit, InstallationStatus, SetupSurfaceId } from "
 import {
   fileConflictModelFor,
   fileGates,
-  filesCountsText,
-  filesPageHint,
   filesSurfacesOf,
   isFilesSurface,
   markedUnit,
   nextUnitKey,
   NO_BUNDLED_COPY,
   resolvePointer,
-  unitFilesText,
   unitDetail,
-  unitLine,
   filesWhy,
-  withFileConflicts,
   type FileConflictModel,
 } from "./fileConflicts";
-import type { StateDisplay } from "./installationView";
 
 function unit(overrides: Partial<FileUnit> = {}): FileUnit {
   return {
@@ -63,10 +57,6 @@ function modelOf(units: FileUnit[], surface: FileConflictModel["surface"] = "ski
 
 const CONTEXT = { dataFolderOk: true, busyLabel: null, blockedBy: null };
 
-const CURRENT: StateDisplay = { tone: "ok", label: "current" };
-const UPDATE: StateDisplay = { tone: "warn", label: "update" };
-const CONFLICT: StateDisplay = { tone: "fail", label: "conflict" };
-
 describe("which surfaces hold skill and agent files", () => {
   it("is the shared skills surface and the agents surface of the harness, when it has one", () => {
     expect(filesSurfacesOf("claude")).toEqual(["claude_agents", "skills"]);
@@ -107,74 +97,6 @@ describe("marking a unit", () => {
     expect(nextUnitKey(model, "skill:agents:tdd")).toBe("skill:claude:diagnose");
     expect(nextUnitKey(model, "skill:claude:diagnose")).toBe("skill:claude:tdd");
     expect(nextUnitKey(modelOf([unit()]), null)).toBe("skill:claude:tdd");
-  });
-});
-
-describe("unitLine", () => {
-  it("tells a skill in conflict by what, where, how many files and why", () => {
-    const line = unitLine(
-      unit({
-        files: [
-          { rel: "SKILL.md", state: "conflict", reason: "edited", bundle_changed: false },
-          { rel: "HUNTING.md", state: "conflict", reason: "edited", bundle_changed: false },
-        ],
-        read_by: ["Claude", "OpenCode"],
-      }),
-    );
-    expect(line.text).toBe("tdd · ~/.claude/skills · SKILL.md +1 file · edited since Riggverk wrote it · read by Claude, OpenCode");
-    expect(line.tone).toBe("fail");
-  });
-
-  it("says when nothing proves the app wrote the file", () => {
-    expect(unitLine(unit({ reason: "unproven" })).text).toContain("not written by Riggverk (no record)");
-  });
-
-  it("tells a kept skill and whether the bundle moved on", () => {
-    const kept = unit({ state: "kept", files: [{ rel: "SKILL.md", state: "kept", reason: "edited", bundle_changed: false }] });
-    expect(unitLine(kept)).toEqual({ text: "tdd · ~/.claude/skills · SKILL.md · you manage · bundle unchanged", tone: "dim" });
-    expect(unitLine({ ...kept, bundle_changed: true })).toEqual({
-      text: "tdd · ~/.claude/skills · SKILL.md · you manage · bundled update available",
-      tone: "warn",
-    });
-  });
-
-  it("does not wait for a bundled update that nothing bundles", () => {
-    const retired = unit({ state: "kept", wanted: false });
-    expect(unitLine(retired).text).toContain("you manage · no bundled copy here");
-    expect(unitLine(unit({ wanted: false })).text).toContain("no longer bundled here");
-  });
-
-  it("names an agent without repeating its file, and counts files beyond the listed ones", () => {
-    const agent = unit({ kind: "agent", name: "verifier", folder: "~/.claude/agents", files: [{ rel: "verifier.md", state: "conflict", reason: "edited", bundle_changed: false }], read_by: ["Claude"] });
-    expect(unitLine(agent).text).toBe("verifier · ~/.claude/agents · edited since Riggverk wrote it");
-    expect(unitFilesText(unit({ more_files: 4 }))).toBe("SKILL.md +4 files");
-    expect(unitFilesText(unit())).toBe("SKILL.md");
-  });
-});
-
-describe("withFileConflicts", () => {
-  it("adds the count of files in conflict and turns a good state into a bad one", () => {
-    const conflicts = modelOf([unit(), unit({ key: "skill:claude:b", name: "b" })]);
-    expect(withFileConflicts(UPDATE, conflicts)).toEqual({ tone: "fail", label: "update · 2 conflicts" });
-    // The backend state "conflict" is replaced by the count, not repeated.
-    expect(withFileConflicts(CONFLICT, conflicts).label).toBe("2 conflicts");
-    expect(withFileConflicts(CONFLICT, modelOf([unit()])).label).toBe("1 conflict");
-  });
-
-  it("tells the files the user keeps beside a state that is otherwise current, as a warning", () => {
-    const kept = modelOf([unit({ state: "kept", files: [{ rel: "SKILL.md", state: "kept", reason: "edited", bundle_changed: false }] })]);
-    expect(withFileConflicts(CURRENT, kept)).toEqual({ tone: "warn", label: "current · you manage 1" });
-    // The matrix word "you manage" is replaced by the count.
-    expect(withFileConflicts({ tone: "warn", label: "you manage" }, kept).label).toBe("you manage 1");
-  });
-
-  it("keeps both counts when there are conflicts and kept files", () => {
-    const both = modelOf([unit(), unit({ key: "skill:claude:b", name: "b", state: "kept", files: [{ rel: "SKILL.md", state: "kept", reason: "edited", bundle_changed: false }] })]);
-    expect(withFileConflicts(UPDATE, both).label).toBe("update · 1 conflict · you manage 1");
-  });
-
-  it("leaves a surface without files as it is", () => {
-    expect(withFileConflicts(CURRENT, null)).toBe(CURRENT);
   });
 });
 
@@ -227,19 +149,6 @@ describe("fileGates", () => {
 });
 
 describe("texts", () => {
-  it("counts files in conflict and kept ones in one phrase", () => {
-    expect(filesCountsText(modelOf([unit()]))).toBe("1 in conflict");
-    const kept = unit({ state: "kept", files: [{ rel: "SKILL.md", state: "kept", reason: "edited", bundle_changed: false }] });
-    expect(filesCountsText(modelOf([kept]))).toBe("you manage 1");
-    expect(filesCountsText(modelOf([unit(), { ...kept, key: "skill:claude:b" }]))).toBe("1 in conflict · you manage 1");
-  });
-
-  it("points the workspace page at the harness page and the keys there", () => {
-    expect(filesPageHint(modelOf([unit()]), "claude")).toBe("open the claude page: d diff · b take bundled · m keep mine");
-    const kept = unit({ state: "kept", files: [{ rel: "SKILL.md", state: "kept", reason: "edited", bundle_changed: false }] });
-    expect(filesPageHint(modelOf([kept]), "claude")).toBe("open the claude page: d diff · b take bundled · m hand back");
-  });
-
   it("points the install review at the page where a file in conflict is resolved", () => {
     expect(resolvePointer("skills")).toBe("resolve from a harness page: d diff · b take bundled · m keep mine");
     expect(resolvePointer("claude_agents")).toBe("resolve from the Claude page: d diff · b take bundled · m keep mine");
@@ -252,7 +161,6 @@ describe("texts", () => {
 describe("unitDetail and filesWhy", () => {
   it("leaves the name out of the detail, which is the line without it", () => {
     expect(unitDetail(unit())).toBe("~/.claude/skills · SKILL.md · edited since Riggverk wrote it");
-    expect(unitLine(unit()).text).toBe(`tdd · ${unitDetail(unit())}`);
   });
 
   it("says what Riggverk left alone, counted by unit, and what the user manages", () => {

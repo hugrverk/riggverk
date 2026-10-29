@@ -13,7 +13,7 @@ use crate::setup_transaction::{
 };
 
 use super::setup::{
-    newer_completed_transaction, transaction_id_is_newer, validate_transaction_id_format,
+    newer_transaction_blocking_undo, transaction_id_is_newer, validate_transaction_id_format,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -131,7 +131,7 @@ fn list_history_from_root(
         .find(|(_, _, manifest)| manifest.transaction_status == TransactionStatus::Completed)
         .and_then(|(id, dir, manifest)| {
             // Reuse rollback's guard, including completed headers whose full manifest is damaged.
-            newer_completed_transaction(dir, &manifest.workspace_key)
+            newer_transaction_blocking_undo(dir, &manifest.workspace_key)
                 .is_ok_and(|newer| newer.is_none())
                 .then_some(id.as_str())
         });
@@ -375,9 +375,9 @@ mod tests {
         let env = Env::new();
         for (id, status) in [
             ("1", TransactionStatus::Completed),
-            ("2", TransactionStatus::Completed),
-            ("3", TransactionStatus::RolledBack),
-            ("4", TransactionStatus::Failed),
+            ("2", TransactionStatus::Failed),
+            ("3", TransactionStatus::Completed),
+            ("4", TransactionStatus::RolledBack),
         ] {
             env.write(id, &env.manifest(id, status));
         }
@@ -386,7 +386,7 @@ mod tests {
             let history = list_setup_history(None).unwrap();
             let undoable: Vec<_> = history.iter().filter(|entry| entry.undoable).collect();
             assert_eq!(undoable.len(), 1);
-            assert_eq!(undoable[0].transaction_id, "2");
+            assert_eq!(undoable[0].transaction_id, "3");
             assert!(undoable[0].is_newest_completed);
             assert_eq!(
                 history
@@ -395,9 +395,27 @@ mod tests {
                     .count(),
                 1
             );
-            assert_eq!(history[0].status, SetupHistoryStatus::Failed);
-            assert_eq!(history[1].status, SetupHistoryStatus::RolledBack);
-            assert_eq!(history[2].status, SetupHistoryStatus::Applied);
+            assert_eq!(history[0].status, SetupHistoryStatus::RolledBack);
+            assert_eq!(history[1].status, SetupHistoryStatus::Applied);
+            assert_eq!(history[2].status, SetupHistoryStatus::Failed);
+        }
+    }
+
+    #[test]
+    fn a_newer_transaction_that_was_not_rolled_back_blocks_undo() {
+        for newer in [
+            TransactionStatus::RollbackFailed,
+            TransactionStatus::Failed,
+            TransactionStatus::Applying,
+        ] {
+            let env = Env::new();
+            env.write("1", &env.manifest("1", TransactionStatus::Completed));
+            env.write("2", &env.manifest("2", newer));
+            let history = list_setup_history(None).unwrap();
+            assert!(
+                history.iter().all(|entry| !entry.undoable),
+                "{newer:?} must block undo of the older transaction"
+            );
         }
     }
 

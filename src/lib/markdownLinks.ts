@@ -6,7 +6,3 @@ export function classifyMarkdownHref(href: string): MarkdownHrefKind {
   if (trimmed.startsWith("#")) return "anchor";
   return /^https?:/i.test(trimmed) ? "external" : "blocked";
 }
-
-export function isSafeExternalMarkdownHref(href: string): boolean {
-  return classifyMarkdownHref(href) === "external";
-}

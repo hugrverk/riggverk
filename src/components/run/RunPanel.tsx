@@ -1,4 +1,5 @@
 import { useId, useRef, useState, type CSSProperties, type FocusEvent } from "react";
+import { focusPanePrimary, listPanes } from "../../keyboard/focus";
 import { useKeymap } from "../../keyboard/useKeymap";
 import type { Binding } from "../../keyboard/registry";
 import { actionLabel } from "../../lib/actionLabel";
@@ -93,6 +94,15 @@ export function RunPanel({
   const latest = useRef({ expanded, wsRunning, onRefresh });
   latest.current = { expanded, wsRunning, onRefresh };
   const toggleRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLElement>(null);
+
+  // The panel is about to disappear with the focused Dismiss button in it: hand focus to the page's default pane first.
+  const dismiss = () => {
+    const panes = listPanes().filter(pane => pane !== panelRef.current);
+    const next = panes.find(pane => pane.hasAttribute("data-pane-default")) ?? panes[0];
+    if (next) focusPanePrimary(next);
+    onClear?.();
+  };
 
   const collapse = () => {
     // The log is about to be hidden: keep focus in the panel rather than dropping it to the page.
@@ -137,6 +147,7 @@ export function RunPanel({
   const outcome = finished ? (wsLog.success ? "ok" : "fix") : null;
   return (
     <section
+      ref={panelRef}
       className={cx("run-panel", wsRunning ? "is-running" : outcome === "fix" && "is-failed")}
       data-pane-id={id}
       data-keyscope="pane"
@@ -155,11 +166,11 @@ export function RunPanel({
           </>
         ) : (
           wsLog && (
-            <>
+            <span className="run-outcome" role="status">
               <StatePill state={outcome ?? "ok"}>{wsLog.success ? "Done" : "Failed"}</StatePill>
               <span className="run-cmd">{actionLabel(wsLog.action)}</span>
               {wsLogCompletedAt !== null && <span className="run-when">{formatCheckedAt(new Date(wsLogCompletedAt))}</span>}
-            </>
+            </span>
           )
         )}
         {finished && (
@@ -181,7 +192,7 @@ export function RunPanel({
               <span className="tbtn-label">Details</span>
             </button>
             {onClear && (
-              <TButton keys={[]} onClick={onClear}>
+              <TButton keys={[]} onClick={dismiss}>
                 Dismiss
               </TButton>
             )}

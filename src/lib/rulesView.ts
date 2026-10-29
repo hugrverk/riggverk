@@ -35,11 +35,6 @@ export function harnessOfRulesSurface(surface: RulesSurfaceId): InstallAgent | n
 /** Harnesses that have a rules surface, in the order the command line offers them. */
 export const RULES_HARNESSES: readonly InstallAgent[] = ["codex", "opencode", "claude", "copilot", "pi", "kilo"];
 
-/** The block details the backend reported for `surface`, or null (surface off, not fetched, or not a rules surface). */
-export function rulesStatusOf(status: InstallationStatus | null | undefined, surface: RulesSurfaceId): RulesStatus | null {
-  return status?.surfaces.find(row => row.surface === surface)?.rules ?? null;
-}
-
 export const LAYOUT_TEXT: Record<RulesLayout, string> = {
   absent: "no file yet",
   block: "managed base block",
@@ -284,24 +279,6 @@ export function rulesWhy(model: RulesModel, harnessLabel: string, fileName: stri
       return `Another file in the folder decides what ${harnessLabel} reads, so Riggverk writes nothing here. Remove or rename that file, or add the base to it by hand.`;
     default:
       // A current file, or none yet: the state pill says it all.
-      return null;
-  }
-}
-
-/** What the workspace page tells about a rules file it cannot act on: where the actions are. */
-export function rulesPageHint(model: RulesModel, pageLabel: string): string | null {
-  switch (model.kind) {
-    case "update":
-      return `open the ${pageLabel} page: d diff`;
-    case "conflict":
-      return `open the ${pageLabel} page: d diff · v convert · m leave as is`;
-    case "managed":
-      return `open the ${pageLabel} page: d diff · v convert · m hand back`;
-    case "malformed":
-      return "fix the markers by hand; the app never rewrites them";
-    case "blocked":
-      return `open the ${pageLabel} page: another file in the rules folder decides what the harness reads`;
-    default:
       return null;
   }
 }
