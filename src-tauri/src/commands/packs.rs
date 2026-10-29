@@ -476,6 +476,7 @@ pub fn copy_skill_to_pack(name: String, new_name: String) -> Result<PackSkillCop
         .as_nanos();
     let temp = skills.join(format!(".copy-{}-{nonce}", std::process::id()));
     let mut builder = fs::DirBuilder::new();
+    builder.recursive(false);
     #[cfg(unix)]
     {
         use std::os::unix::fs::DirBuilderExt;
