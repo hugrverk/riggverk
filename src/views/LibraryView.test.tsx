@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, configure, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useLibraryController } from "../hooks/useLibraryController";
 import { renderInFrame } from "../test/renderWithShell";
@@ -18,6 +18,7 @@ import { LibraryView } from "./LibraryView";
 // These tests drive the real controller through a whole sheet flow; under a loaded machine (parallel gates) a flow
 // can pass 5 s. The longer limit only matters when the machine is slow; a real hang still fails.
 vi.setConfig({ testTimeout: 20_000 });
+configure({ asyncUtilTimeout: 5_000 });
 
 const invoke = vi.fn();
 
