@@ -174,9 +174,9 @@ describe("buildFlowModel sources and reach", () => {
   });
 
   it("tells what an agent receives in total and who feeds it", () => {
-    expect(receivedBy(model, "claude")).toMatchObject({ skills: 24 + 2 + 1, agents: 6, rules: 1 });
-    expect(sourcesFeeding(model, "claude").map(source => source.id)).toEqual(["base", "yours", "pack:mine", "pack:old-pack"]);
-    expect(sourcesFeeding(model, "codex").map(source => source.id)).toEqual(["base", "pack:mine", "pack:old-pack"]);
+    expect(receivedBy(model, "claude")).toMatchObject({ skills: 24 + 2, agents: 6, rules: 1 });
+    expect(sourcesFeeding(model, "claude").map(source => source.id)).toEqual(["base", "yours", "pack:mine"]);
+    expect(sourcesFeeding(model, "codex").map(source => source.id)).toEqual(["base", "pack:mine"]);
   });
 });
 

@@ -240,7 +240,7 @@ export function RunningView({
   const phase = progress?.phase === "backup" ? "Backing up" : progress?.phase === "apply" ? "Writing" : "Working";
   return (
     <>
-      <Heading pill={<StatePill state="ready">{phase}</StatePill>}>{label}</Heading>
+      <Heading pill={<StatePill state="ready">{phase}</StatePill>}>{label.charAt(0).toUpperCase() + label.slice(1)}</Heading>
       {counted && (
         <div className="flow-progress">
           <span

@@ -346,13 +346,16 @@ export function highlightOf(model: FlowModel, ref: FlowRef | null): FlowHighligh
 
 /** The agents a source reaches, by their curves; ghost curves do not count. */
 export function agentsReachedBy(model: FlowModel, sourceId: string): FlowAgent[] {
-  const ids = new Set(model.edges.filter(edge => edge.source === sourceId && edge.status !== "ghost").map(edge => edge.agent));
+  const ids = new Set(model.edges.filter(edge => edge.source === sourceId && flows(edge)).map(edge => edge.agent));
   return model.agents.filter(agent => ids.has(agent.id));
 }
 
+/** A curve that carries something now: not a ghost to an agent that is off, not a pack that is held. */
+const flows = (edge: FlowEdge): boolean => edge.status === "ok" || edge.status === "ready";
+
 /** The sources that feed an agent, by their curves. */
 export function sourcesFeeding(model: FlowModel, agent: InstallAgent): FlowSource[] {
-  const ids = new Set(model.edges.filter(edge => edge.agent === agent && edge.status !== "ghost").map(edge => edge.source));
+  const ids = new Set(model.edges.filter(edge => edge.agent === agent && flows(edge)).map(edge => edge.source));
   return model.sources.filter(source => ids.has(source.id));
 }
 
@@ -360,7 +363,7 @@ export function sourcesFeeding(model: FlowModel, agent: InstallAgent): FlowSourc
 export function receivedBy(model: FlowModel, agent: InstallAgent): Partial<Record<FlowSurface, number>> {
   const received: Partial<Record<FlowSurface, number>> = {};
   for (const edge of model.edges) {
-    if (edge.agent !== agent || edge.status === "ghost") continue;
+    if (edge.agent !== agent || !flows(edge)) continue;
     for (const entry of edge.items) if (isFlowSurface(entry.key)) received[entry.key] = (received[entry.key] ?? 0) + entry.n;
   }
   return received;
