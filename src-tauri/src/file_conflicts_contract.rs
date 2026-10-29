@@ -741,6 +741,48 @@ mod tests {
         assert_eq!(env.kind(&SKILLS, &edited), OperationKind::Manual);
     }
 
+    /// An edited file of a retired skill that the user has not resolved yet holds the whole skill
+    /// as well: its clean siblings stay until the user decides.
+    #[test]
+    fn a_retired_skill_with_an_unresolved_edit_keeps_its_clean_siblings() {
+        let env = Env::new("retired-unresolved", &SKILLS);
+        let claude = env.root(SkillRoot::Claude);
+        for (rel, bytes) in [
+            ("SKILL.md", &b"retired skill\n"[..]),
+            ("HUNTING.md", &b"retired notes\n"[..]),
+        ] {
+            let artifact = skill_file(SkillRoot::Claude, "retired-edited", rel);
+            env.write(&artifact, bytes);
+            env.set_record(&artifact, bytes);
+        }
+        let edited = skill_file(SkillRoot::Claude, "retired-edited", "SKILL.md");
+        let mine = b"my own copy\n";
+        env.write(&edited, mine);
+        let sibling = skill_file(SkillRoot::Claude, "retired-edited", "HUNTING.md");
+
+        assert_eq!(env.kind(&SKILLS, &edited), OperationKind::Conflict);
+        assert_eq!(env.kind(&SKILLS, &sibling), OperationKind::Manual);
+        assert!(
+            env.pending(&SKILLS)
+                .iter()
+                .all(|(_, kind)| *kind != OperationKind::Remove),
+            "nothing of the skill is removed"
+        );
+
+        // The Install has nothing to write for the skill, so it stays whole.
+        let plan = env.preview(&SKILLS);
+        assert!(
+            plan.operations.iter().all(|op| !op.kind.needs_apply()),
+            "{:?}",
+            plan.operations
+        );
+        assert_eq!(fs::read(env.path(&edited)).expect("edited stays"), mine);
+        assert_eq!(
+            fs::read(claude.join("retired-edited/HUNTING.md")).expect("sibling stays"),
+            b"retired notes\n"
+        );
+    }
+
     #[test]
     fn uninstall_leaves_a_kept_file_and_the_choice_alone() {
         let env = Env::new("uninstall", &SKILLS);

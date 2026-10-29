@@ -2450,13 +2450,16 @@ fn file_conflict(
     })
 }
 
-/// A retired skill with a file the user keeps keeps all its files: removing the others would leave
-/// half a skill behind. Its other removals become manual steps.
+/// A retired skill with a file the user keeps, or an edited file they have not resolved yet,
+/// keeps all its files: removing the others would leave half a skill behind. Its other removals
+/// become manual steps.
 fn keep_stale_units_whole(planned: &mut [PlannedArtifact]) {
     use crate::artifact_registry::ArtifactId::SkillFile;
     let kept_units: HashSet<_> = planned
         .iter()
-        .filter(|operation| crate::file_conflicts::is_kept(operation))
+        .filter(|operation| {
+            crate::file_conflicts::is_kept(operation) || operation.kind == OperationKind::Conflict
+        })
         .filter(|operation| operation.file.is_some_and(|file| !file.wanted))
         .filter_map(|operation| match &operation.artifact {
             SkillFile(file) => Some((file.root, file.skill.clone())),
