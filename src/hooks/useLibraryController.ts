@@ -32,7 +32,6 @@ export interface LibraryControllerDeps {
   workspaceLoadGenerationRef: MutableRefObject<number>;
   isWorkspaceLoadCurrent: (generation: number) => boolean;
   isInvalidWorkspaceError: (e: unknown) => boolean;
-  fetchStatus: (generation?: number) => Promise<void>;
   view: string;
 }
 
@@ -41,7 +40,6 @@ export function useLibraryController({
   workspaceLoadGenerationRef,
   isWorkspaceLoadCurrent,
   isInvalidWorkspaceError,
-  fetchStatus,
   view,
 }: LibraryControllerDeps) {
   const confirm = useConfirm();
@@ -212,8 +210,7 @@ export function useLibraryController({
     if (type === librarySourceType) return;
     if (!(await confirmLeave())) return;
     setLibrarySourceType(type);
-    if (type === "configs") fetchStatus();
-  }, [librarySourceType, fetchStatus, confirmLeave]);
+  }, [librarySourceType, confirmLeave]);
 
   const loadSkills = useCallback(async (generation = workspaceLoadGenerationRef.current) => {
     try {
@@ -423,8 +420,7 @@ export function useLibraryController({
     void loadAgentSources();
     void loadAgentTemplate();
     void loadRulesFiles();
-    void fetchStatus();
-  }, [fetchStatus, loadAgentSources, loadAgentTemplate, loadDocs, loadRulesFiles, loadSkills]);
+  }, [loadAgentSources, loadAgentTemplate, loadDocs, loadRulesFiles, loadSkills]);
 
   const resetLibraryState = useCallback(() => {
     docSaveOpRef.current.invalidate();

@@ -13,15 +13,20 @@ function isPosture(value: unknown): value is SecurityPosture {
 /**
  * The security posture of every enabled agent (`get_security_posture`, read-only, one call per agent), for the
  * Overview's "Worth a look" cell. It reads each agent's own config, not the workspace folder, so it needs no folder.
- * Read when the set of agents or `refreshKey` changes; an agent whose read fails is left out. A generation guard drops
- * answers that arrive after a newer read started.
+ * Read when the set of agents or `refreshKey` changes; an agent whose read fails is left out. The first change of the
+ * key away from 0 (the first completed check, right after the read on mount) is not a reason to read again. A generation
+ * guard drops answers that arrive after a newer read started.
  */
 export function usePostureOverview(harnesses: readonly InstallAgent[], refreshKey: string | number): PostureOverview {
   const [postures, setPostures] = useState<PostureOverview>({});
   const generationRef = useRef(0);
+  const lastReadRef = useRef<{ harnessKey: string; refreshKey: string | number } | null>(null);
   const harnessKey = harnesses.join(",");
 
   useEffect(() => {
+    const previous = lastReadRef.current;
+    lastReadRef.current = { harnessKey, refreshKey };
+    if (previous && previous.harnessKey === harnessKey && previous.refreshKey === 0 && refreshKey !== 0) return;
     const generation = ++generationRef.current;
     const ids = harnessKey ? (harnessKey.split(",") as InstallAgent[]) : [];
     void Promise.all(

@@ -41,9 +41,28 @@ describe("usePostureOverview", () => {
   });
 
   it("reads again when the refresh key changes", async () => {
-    const { rerender } = renderHook(({ key }) => usePostureOverview(["codex"], key), { initialProps: { key: 0 } });
+    const { rerender } = renderHook(({ key }) => usePostureOverview(["codex"], key), { initialProps: { key: 1 } });
     await waitFor(() => expect(invokeMock).toHaveBeenCalledTimes(1));
-    rerender({ key: 1 });
+    rerender({ key: 2 });
     await waitFor(() => expect(invokeMock).toHaveBeenCalledTimes(2));
+  });
+
+  it("does not read again when the key first moves off 0, as the first check completes after the mount read", async () => {
+    const { result, rerender } = renderHook(({ key }) => usePostureOverview(["codex"], key), { initialProps: { key: 0 } });
+    await waitFor(() => expect(Object.keys(result.current)).toEqual(["codex"]));
+    rerender({ key: 1700000000000 });
+    await Promise.resolve();
+    expect(invokeMock).toHaveBeenCalledTimes(1);
+    rerender({ key: 1700000005000 });
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledTimes(2));
+  });
+
+  it("still reads a new agent when the key moves off 0 in the same render", async () => {
+    const { rerender } = renderHook(({ agents, key }) => usePostureOverview(agents, key), {
+      initialProps: { agents: ["codex"] as InstallAgent[], key: 0 },
+    });
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledTimes(1));
+    rerender({ agents: ["codex", "claude"], key: 1700000000000 });
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledTimes(3));
   });
 });

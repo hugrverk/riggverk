@@ -1660,23 +1660,63 @@ pub(crate) fn apply_cli_probes(
         (Some(_), true) => None,
     };
 
-    if let Some(agent) = health.default_agent.clone() {
-        // `debug agent` is checked on 1.x only: that is the version whose output Riggverk has seen.
-        let outcome = match (program, unreachable, &report.version) {
-            (_, Some(reason), _) => Err(reason.to_string()),
-            (Some(program), None, Some(version)) if version.major == 1 => {
-                match opencode_cli::probe_agent(program, &agent, limits.agent) {
-                    AgentProbe::Resolves => Ok(true),
-                    AgentProbe::Unresolved => Ok(false),
-                    AgentProbe::TimedOut => Err(format!(
-                        "opencode debug agent timed out after {}s",
-                        limits.agent.as_secs()
-                    )),
-                    AgentProbe::NotRun => Err("opencode debug agent could not run".to_string()),
+    let configured = [
+        ("model", health.model.clone()),
+        ("small_model", health.small_model.clone()),
+        ("subagent_model", health.subagent_model.clone()),
+        ("critic_model", health.critic_model.clone()),
+    ];
+    let wants_models = configured.iter().any(|(_, value)| value.is_some());
+
+    // Both probes only need the version result, so they run side by side: the cost is the slower
+    // of the two, not their sum.
+    let default_agent = health.default_agent.clone();
+    let version = report.version.as_ref();
+    let (agent_outcome, models) = std::thread::scope(|scope| {
+        let agent_probe = default_agent.as_deref().map(|agent| {
+            scope.spawn(move || {
+                // `debug agent` is checked on 1.x only: that is the version whose output Riggverk has seen.
+                match (program, unreachable, version) {
+                    (_, Some(reason), _) => Err(reason.to_string()),
+                    (Some(program), None, Some(version)) if version.major == 1 => {
+                        match opencode_cli::probe_agent(program, agent, limits.agent) {
+                            AgentProbe::Resolves => Ok(true),
+                            AgentProbe::Unresolved => Ok(false),
+                            AgentProbe::TimedOut => Err(format!(
+                                "opencode debug agent timed out after {}s",
+                                limits.agent.as_secs()
+                            )),
+                            AgentProbe::NotRun => {
+                                Err("opencode debug agent could not run".to_string())
+                            }
+                        }
+                    }
+                    _ => Err("only checked on OpenCode 1.x".to_string()),
                 }
-            }
-            _ => Err("only checked on OpenCode 1.x".to_string()),
-        };
+            })
+        });
+        let models: Option<Result<Vec<String>, String>> =
+            wants_models.then(|| match (program, unreachable) {
+                (_, Some(reason)) => Err(reason.to_string()),
+                (Some(program), None) => {
+                    let listed = run_models_listing(program, program, version, limits.models);
+                    match listed {
+                        Ok(result) if result.warning.is_none() => Ok(result.models),
+                        Ok(_) => Err("opencode models gave no usable list".to_string()),
+                        Err(_) => Err("opencode models did not complete".to_string()),
+                    }
+                }
+                (None, None) => Err(UNVERIFIED_NO_CLI.to_string()),
+            });
+        let agent_outcome = agent_probe.map(|handle| {
+            handle
+                .join()
+                .unwrap_or_else(|panic| std::panic::resume_unwind(panic))
+        });
+        (agent_outcome, models)
+    });
+
+    if let (Some(agent), Some(outcome)) = (default_agent, agent_outcome) {
         let (status, detail) = match outcome {
             Ok(true) => ("pass", format!("{agent} resolves")),
             Ok(false) => {
@@ -1702,28 +1742,7 @@ pub(crate) fn apply_cli_probes(
         );
     }
 
-    let configured = [
-        ("model", health.model.clone()),
-        ("small_model", health.small_model.clone()),
-        ("subagent_model", health.subagent_model.clone()),
-        ("critic_model", health.critic_model.clone()),
-    ];
-    if configured.iter().all(|(_, value)| value.is_none()) {
-        return;
-    }
-    let models: Result<Vec<String>, String> = match (program, unreachable) {
-        (_, Some(reason)) => Err(reason.to_string()),
-        (Some(program), None) => {
-            let listed =
-                run_models_listing(program, program, report.version.as_ref(), limits.models);
-            match listed {
-                Ok(result) if result.warning.is_none() => Ok(result.models),
-                Ok(_) => Err("opencode models gave no usable list".to_string()),
-                Err(_) => Err("opencode models did not complete".to_string()),
-            }
-        }
-        (None, None) => Err(UNVERIFIED_NO_CLI.to_string()),
-    };
+    let Some(models) = models else { return };
     let mut warned_models = BTreeSet::new();
     for (id, value) in configured {
         let Some(value) = value else { continue };

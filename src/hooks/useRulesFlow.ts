@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { surfaceTitle } from "../lib/installPlan";
+import { formatReceipt, surfaceTitle } from "../lib/installPlan";
 import type {
   ActionResult,
   RulesConversionPreview,
@@ -73,29 +73,21 @@ function errorText(e: unknown): string {
   return String(e);
 }
 
-const SHORT_FINGERPRINT = 8;
-
 /** Output-pane text for a finished conversion: the surface line the first word tones, then the transaction. */
 export function formatConversionOutput(preview: RulesConversionPreview, result: SetupResult) {
   const title = surfaceTitle(preview.surface);
-  const word = result.success ? "applied" : result.rolled_back.length > 0 ? "rolled back" : "failed";
-  const pad = (text: string) => text.padEnd(13);
   const moved = preview.moved_sections.length;
-  const lines = [
-    `plan ${(preview.plan_fingerprint ?? "").slice(0, SHORT_FINGERPRINT) || "-"} · convert ${title} · fingerprint verified`,
-    `${pad(word)}${title}`,
-    ...(result.success && moved > 0
-      ? [`${pad("kept")}${moved} section${moved === 1 ? "" : "s"} below the END marker: ${preview.moved_sections.join(", ")}`]
-      : []),
-    ...result.manual_steps.map(step => `${pad("manual")}${step}`),
-    result.message,
-    `applied ${result.applied.length} · failed ${result.failed.length} · rolled back ${result.rolled_back.length}`,
-    result.transaction_id
-      ? `transaction ${result.transaction_id} ${result.success && result.applied.length > 0 ? "recorded · rollback available" : "recorded"}`
-      : "",
-  ].filter(Boolean);
-  const stderr = result.success ? "" : [...result.failed, ...(result.failed.length === 0 ? [result.message] : [])].join("\n");
-  return { stdout: lines.join("\n"), stderr };
+  return formatReceipt({
+    fingerprint: preview.plan_fingerprint,
+    subject: `convert ${title}`,
+    lines: (word, pad) => [
+      `${pad(word)}${title}`,
+      ...(result.success && moved > 0
+        ? [`${pad("kept")}${moved} section${moved === 1 ? "" : "s"} below the END marker: ${preview.moved_sections.join(", ")}`]
+        : []),
+    ],
+    result,
+  });
 }
 
 export function useRulesFlow({ runWorkspaceTask, refresh, onApplied }: UseRulesFlowOptions): RulesFlow {

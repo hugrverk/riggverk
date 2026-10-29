@@ -350,18 +350,6 @@ pub fn harness_enabled(settings: &AppSettings, harness: HarnessId) -> bool {
     settings.enabled_harness_ids.contains(&harness)
 }
 
-pub fn effective_enabled_target_ids(settings: &AppSettings) -> Vec<String> {
-    settings
-        .enabled_target_ids
-        .iter()
-        .filter(|id| {
-            agent_targets::target_harness(id)
-                .is_some_and(|harness| harness_enabled(settings, harness))
-        })
-        .cloned()
-        .collect()
-}
-
 /// A surface may be installed when its harness is enabled and, for
 /// target-gated surfaces, its target toggle is on.
 pub fn surface_enabled(
@@ -600,11 +588,11 @@ fn save_inner(settings: &mut AppSettings) -> Result<AppSettings, String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        effective_enabled_target_ids, enabled_setup_surfaces, get_settings_snapshot,
-        get_settings_snapshot_with_mutate, harness_enabled, load, mutate_settings, normalize,
-        normalize_for_save, save_with_revision_check, validate_hex_color, AppSettings,
-        MutationOutcome, SETTINGS_CONFLICT_ERROR, SETTINGS_CORRUPT_RECOVERY_MESSAGE,
-        TARGETS_ADDED_IN, TARGET_DEFAULTS_VERSION,
+        enabled_setup_surfaces, get_settings_snapshot, get_settings_snapshot_with_mutate,
+        harness_enabled, load, mutate_settings, normalize, normalize_for_save,
+        save_with_revision_check, validate_hex_color, AppSettings, MutationOutcome,
+        SETTINGS_CONFLICT_ERROR, SETTINGS_CORRUPT_RECOVERY_MESSAGE, TARGETS_ADDED_IN,
+        TARGET_DEFAULTS_VERSION,
     };
     use crate::agent_targets;
     use crate::path_utils::is_legacy_default_workspace_path;
@@ -829,10 +817,6 @@ mod tests {
                 SetupSurfaceId::WorkspaceBundle
             ]
         );
-        assert_eq!(
-            effective_enabled_target_ids(&settings),
-            ["pi_rules", "pi_mcp"]
-        );
         settings.enabled_target_ids.retain(|id| id != "pi_rules");
         assert_eq!(
             enabled_setup_surfaces(&settings),
@@ -849,7 +833,6 @@ mod tests {
             vec![SetupSurfaceId::Skills, SetupSurfaceId::WorkspaceBundle],
             "and the MCP surface on its own"
         );
-        assert!(effective_enabled_target_ids(&settings).is_empty());
     }
 
     #[test]
@@ -865,7 +848,6 @@ mod tests {
             settings.enabled_target_ids,
             vec!["codex_rules".to_string(), "opencode_config".to_string()]
         );
-        assert!(effective_enabled_target_ids(&settings).is_empty());
         // Skills belong to no single harness; with none enabled they are planned as nothing.
         assert_eq!(
             enabled_setup_surfaces(&settings),

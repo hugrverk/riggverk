@@ -185,9 +185,9 @@ pub fn list_pack_skills() -> Result<PackLibrary, String> {
 }
 
 /// The `SKILL.md` of a pack skill, by the id [`list_pack_skills`] gave. A skill that is not
-/// active has no file to show; its reason is shown instead.
-#[tauri::command(async)]
-pub fn read_pack_skill(id: String) -> Result<DocumentContent, String> {
+/// active has no file to show; its reason is shown instead. Not a command of its own: the UI
+/// reads pack skills through `read_skill`, which forwards `pack:` ids here.
+pub(super) fn read_pack_skill(id: String) -> Result<DocumentContent, String> {
     let workspace_root = setup_workspace_target_path()?;
     let sources = SkillSources::for_workspace(&workspace_root)?;
     let notice = |pack: &str, name: &str, reason: &str| DocumentContent {

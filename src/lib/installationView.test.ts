@@ -6,7 +6,6 @@ import {
   previewDisabledFor,
   surfaceRowsFor,
   surfaceShortName,
-  targetMeta,
   updateActionFor,
 } from "./installationView";
 
@@ -36,48 +35,6 @@ const SETTINGS = {
   // codex_config is off by default; codex_agents is off here too.
   enabled_target_ids: ["codex_rules", "claude_rules", "claude_agents"],
 };
-
-describe("targetMeta", () => {
-  const options = { dataFolderOk: true, id: "claude" as const };
-
-  it("describes the installation state in the list's right-hand cell", () => {
-    expect(targetMeta(entry("claude", status("current")), options)).toEqual({ text: "current", tone: "ok" });
-    expect(targetMeta(entry("claude", status("update_available", [], { update_count: 2 })), options)).toEqual({ text: "2 to update", tone: "warn" });
-    expect(targetMeta(entry("claude", status("not_installed", [], { create_count: 3 })), options)).toEqual({ text: "not installed", tone: "warn" });
-    expect(targetMeta(entry("claude", status("conflict", [], { conflict_count: 1 })), options)).toEqual({ text: "1 conflict", tone: "fail" });
-    expect(targetMeta(entry("claude", status("update_available", [], { update_count: 2, conflict_count: 2 })), options)).toEqual({
-      text: "2 to update · 2 conflicts",
-      tone: "fail",
-    });
-  });
-
-  it("says 'you manage' beside current when the user keeps files, never plain current", () => {
-    expect(targetMeta(entry("claude", status("current", [], { kept_count: 2 })), options)).toEqual({ text: "current · you manage 2", tone: "warn" });
-    expect(targetMeta(entry("claude", status("current", [], { kept_count: 0 })), options)).toEqual({ text: "current", tone: "ok" });
-    // Updates and conflicts keep their own words.
-    expect(targetMeta(entry("claude", status("update_available", [], { update_count: 2, kept_count: 1 })), options).text).toBe("2 to update");
-  });
-
-  it("tells the old copies of the bundle the workspace row removes, not an update", () => {
-    const workspace = { dataFolderOk: true, id: "workspace" as const };
-    expect(targetMeta(entry("workspace", status("update_available", [], { remove_count: 133 })), workspace)).toEqual({
-      text: "133 old copies to remove",
-      tone: "warn",
-    });
-    expect(targetMeta(entry("workspace", status("update_available", [], { remove_count: 1 })), workspace).text).toBe("1 old copy to remove");
-    expect(targetMeta(entry("workspace", status("current")), workspace)).toEqual({ text: "current", tone: "ok" });
-    // A harness that also has old files to remove keeps its own words.
-    expect(targetMeta(entry("claude", status("update_available", [], { remove_count: 2 })), options).text).toBe("2 to update");
-  });
-
-  it("says why there is no state yet", () => {
-    expect(targetMeta(undefined, options).text).toBe("…");
-    expect(targetMeta(entry("claude", null, { loading: true }), options).text).toBe("…");
-    expect(targetMeta(entry("claude", null, { error: "hash failed" }), options)).toEqual({ text: "status failed", tone: "fail" });
-    expect(targetMeta(undefined, { dataFolderOk: false, id: "claude" })).toEqual({ text: "needs workspace folder", tone: "dim" });
-    expect(targetMeta(undefined, { dataFolderOk: false, id: "workspace" })).toEqual({ text: "folder unusable", tone: "warn" });
-  });
-});
 
 describe("surfaceRowsFor", () => {
   it("lists surfaces whose target toggle is off as off, without reading them from the status", () => {

@@ -79,7 +79,6 @@ function createDeps(workspaceGeneration = 0) {
       workspaceLoadGenerationRef,
       isWorkspaceLoadCurrent: (generation: number) => generation === workspaceLoadGenerationRef.current,
       isInvalidWorkspaceError: () => false,
-      fetchStatus: vi.fn(async () => {}),
       view: "library",
     },
     workspaceLoadGenerationRef,

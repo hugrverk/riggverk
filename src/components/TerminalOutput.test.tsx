@@ -1,7 +1,7 @@
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MotionLevel } from "../lib/motion";
-import { ActivityLoader, Elapsed, formatElapsed, ProgressBar, RunningProgress, RunningState, Spinner } from "./TerminalOutput";
+import { ActivityLoader, Elapsed, formatElapsed, RunningState } from "./TerminalOutput";
 
 function activeCellIndex(container: HTMLElement): number {
   const cells = Array.from(container.querySelectorAll(".terminal-activity-cell"));
@@ -86,51 +86,6 @@ describe("motion-aware progress elements", () => {
     });
   });
 
-  describe("Spinner", () => {
-    it.each(["full", "subtle"] as const)("turns through braille frames in one cell under %s", level => {
-      setMotion(level);
-      const { container } = render(<Spinner />);
-      const spinner = container.querySelector(".spin")!;
-      expect(spinner.getAttribute("aria-hidden")).toBe("true");
-      expect(spinner.classList.contains("g")).toBe(true);
-      expect(spinner.textContent).toBe("⠋");
-      act(() => {
-        vi.advanceTimersByTime(100);
-      });
-      expect(spinner.textContent).toBe("⠙");
-      act(() => {
-        vi.advanceTimersByTime(900);
-      });
-      // Ten frames, then around again.
-      expect(spinner.textContent).toBe("⠋");
-    });
-
-    it("is a still dot under off and never ticks", () => {
-      setMotion("off");
-      const { container } = render(<Spinner />);
-      expect(container.querySelector(".spin")!.textContent).toBe("·");
-      expect(vi.getTimerCount()).toBe(0);
-      act(() => {
-        vi.advanceTimersByTime(2000);
-      });
-      expect(container.querySelector(".spin")!.textContent).toBe("·");
-    });
-
-    it("follows the motion level when it changes, and stops its timer on unmount", async () => {
-      setMotion("full");
-      const { container, unmount } = render(<Spinner />);
-      expect(vi.getTimerCount()).toBe(1);
-      // The attribute change reaches the component through a MutationObserver, a microtask.
-      await act(async () => setMotion("off"));
-      expect(container.querySelector(".spin")!.textContent).toBe("·");
-      expect(vi.getTimerCount()).toBe(0);
-      await act(async () => setMotion("subtle"));
-      expect(vi.getTimerCount()).toBe(1);
-      unmount();
-      expect(vi.getTimerCount()).toBe(0);
-    });
-  });
-
   describe("Elapsed", () => {
     it("formats tenths while motion runs and whole seconds when it is off", () => {
       expect(formatElapsed(1234, "full")).toBe("1.2s");
@@ -172,66 +127,6 @@ describe("motion-aware progress elements", () => {
         vi.advanceTimersByTime(2000);
       });
       expect(clock.textContent).toBe("3s");
-    });
-  });
-
-  describe("ProgressBar", () => {
-    it.each(["full", "subtle", "off"] as const)("is a ten-cell progressbar under %s", level => {
-      setMotion(level);
-      const { container } = render(<ProgressBar done={4} total={7} />);
-      const bar = screen.getByRole("progressbar");
-      expect(bar.getAttribute("aria-valuemin")).toBe("0");
-      expect(bar.getAttribute("aria-valuemax")).toBe("7");
-      expect(bar.getAttribute("aria-valuenow")).toBe("4");
-      expect(bar.getAttribute("aria-valuetext")).toBe("4 of 7");
-      expect(container.querySelectorAll(".track .g")).toHaveLength(10);
-      expect(container.querySelectorAll(".fill .g")).toHaveLength(10);
-      expect(bar.textContent).toBe("░".repeat(10) + "█".repeat(10));
-      expect(bar.getAttribute("style")).toContain("--p: 57%");
-      expect(bar.classList.contains("done")).toBe(false);
-      // The cells are decorative; the role carries the value.
-      expect(container.querySelector(".track")!.getAttribute("aria-hidden")).toBe("true");
-      expect(container.querySelector(".fill")!.getAttribute("aria-hidden")).toBe("true");
-    });
-
-    it("clamps to its range and marks a full bar done", () => {
-      const { rerender } = render(<ProgressBar done={9} total={7} />);
-      expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe("7");
-      expect(screen.getByRole("progressbar").getAttribute("style")).toContain("--p: 100%");
-      expect(screen.getByRole("progressbar").classList.contains("done")).toBe(true);
-      rerender(<ProgressBar done={0} total={7} />);
-      expect(screen.getByRole("progressbar").getAttribute("style")).toContain("--p: 0%");
-      expect(screen.getByRole("progressbar").classList.contains("done")).toBe(false);
-    });
-
-    it("moves by its custom property only, so the stylesheet decides whether it glides", () => {
-      const { rerender } = render(<ProgressBar done={1} total={10} />);
-      const fill = screen.getByRole("progressbar").querySelector(".fill")!;
-      rerender(<ProgressBar done={5} total={10} />);
-      // The same node, a new --p: the 160 ms transition (off under motion off) does the rest.
-      expect(screen.getByRole("progressbar").querySelector(".fill")).toBe(fill);
-      expect(screen.getByRole("progressbar").getAttribute("style")).toContain("--p: 50%");
-    });
-  });
-
-  describe("RunningProgress", () => {
-    it("shows the bar, count and file once files are counted", () => {
-      render(<RunningProgress progress={{ task: "apply_setup", phase: "apply", done: 2, total: 5, file: "~/a.md" }} />);
-      expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe("2");
-      expect(document.body.textContent).toContain("2/5");
-      expect(document.body.textContent).toContain("~/a.md");
-    });
-
-    it("shows a word instead of a bar while backing up or without progress", () => {
-      const { rerender, container } = render(<RunningProgress />);
-      expect(screen.queryByRole("progressbar")).toBeNull();
-      expect(container.textContent).toBe("working…");
-      rerender(<RunningProgress progress={{ task: "apply_setup", phase: "backup", done: 1, total: 5, file: "~/a.md" }} />);
-      expect(screen.queryByRole("progressbar")).toBeNull();
-      expect(container.textContent).toBe("backing up…");
-      expect(container.querySelector(".terminal-activity")).not.toBeNull();
-      rerender(<RunningProgress loader={false} />);
-      expect(container.querySelector(".terminal-activity")).toBeNull();
     });
   });
 

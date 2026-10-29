@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyMarkdownHref, isSafeExternalMarkdownHref } from "./markdownLinks";
+import { classifyMarkdownHref } from "./markdownLinks";
 
 describe("classifyMarkdownHref", () => {
   it.each([
@@ -43,13 +43,5 @@ describe("classifyMarkdownHref", () => {
     "httpx://example.com",
   ])("blocks %j", href => {
     expect(classifyMarkdownHref(href)).toBe("blocked");
-  });
-});
-
-describe("isSafeExternalMarkdownHref", () => {
-  it("is true only for http(s) links", () => {
-    expect(isSafeExternalMarkdownHref("https://example.com")).toBe(true);
-    expect(isSafeExternalMarkdownHref("#anchor")).toBe(false);
-    expect(isSafeExternalMarkdownHref("mailto:a@b.c")).toBe(false);
   });
 });

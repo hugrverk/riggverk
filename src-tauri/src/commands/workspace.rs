@@ -719,7 +719,6 @@ mod tests {
             // matter here, only that none of them writes the data folder.
             let _ = crate::commands::get_settings();
             let _ = get_workspace_diagnostics();
-            let _ = crate::commands::get_status();
             let _ = crate::commands::get_installation_status(Vec::new());
             let _ = crate::commands::list_docs();
             let _ = crate::commands::list_skills();

@@ -3,14 +3,19 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { InstallationState, InstallationStatus, InstallAgent } from "../types";
 import {
   describeUpdate,
-  overviewState,
   safeOperationCount,
   surfacesForOverview,
   useInstallationOverview,
+  type InstallationOverview,
+  type OverviewId,
   type UseInstallationOverviewOptions,
 } from "./useInstallationOverview";
 
 const invokeMock = vi.fn();
+
+function overviewState(overview: InstallationOverview, id: OverviewId): InstallationState | null {
+  return overview.entries[id]?.status?.state ?? null;
+}
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: (...args: unknown[]) => invokeMock(...args),
