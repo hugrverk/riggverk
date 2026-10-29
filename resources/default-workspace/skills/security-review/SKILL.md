@@ -9,7 +9,7 @@ related: diagnose, release-check
 
 # Security Review
 
-Focus on the changed surface and realistic abuse paths; keep findings evidence-based, scoped, and actionable. This skill guides the review in the current context; for an independent read-only pass over a finished diff, delegate to the `sentinel` agent.
+Focus on the changed surface and realistic abuse paths; keep findings evidence-based, scoped, and actionable. This skill guides the review in the current context; for an independent read-only pass over a finished diff, use the `sentinel` agent where the harness has it, otherwise review inline.
 
 Done when: every changed trust boundary is listed as checked or not checked, and each finding has evidence and a fix.
 

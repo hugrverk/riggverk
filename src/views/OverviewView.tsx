@@ -6,15 +6,13 @@ import { OverviewHeader } from "../components/overview/OverviewHeader";
 import { WorkspaceFolderCell } from "../components/overview/WorkspaceFolderCell";
 import { WorthALookCell } from "../components/overview/WorthALookCell";
 import { InstallPlanPane } from "../components/InstallPlanPane";
-import { RunPanel } from "../components/run/RunPanel";
-import { useFocusRunOnNewTransaction } from "../components/run/useFocusRunOnNewTransaction";
 import { useFlowSources } from "../hooks/useFlowSources";
 import { useLastUpdate } from "../hooks/useLastUpdate";
 import { usePostureOverview } from "../hooks/usePostureOverview";
 import { useRunTrace } from "../hooks/useRunTrace";
 import type { Binding } from "../keyboard/registry";
 import { useKeymap } from "../keyboard/useKeymap";
-import { buildFlowModel, decisionsOf, nothingInstalled, sameRef, type FlowRef, type HarnessHomes } from "../lib/flowModel";
+import { buildFlowModel, decisionsOf, fixesOf, nothingInstalled, sameRef, type FlowRef, type HarnessHomes } from "../lib/flowModel";
 import { harnessHomePath } from "../lib/harnessHeader";
 import { HARNESS_NAV_ORDER } from "../lib/harnessInstallation";
 import type { HarnessRuntimeHealth } from "../lib/harnessRuntimeRows";
@@ -85,7 +83,6 @@ export function OverviewView({
   install,
   backupRoot,
   rollbackTransactionId,
-  onRollback,
   onRefresh,
   onUninstall,
   uninstallRecoveryTransactionId,
@@ -96,14 +93,11 @@ export function OverviewView({
   backupCount,
   onOpenBackupsFolder,
   onUndo,
-  wsLog,
   wsLogCompletedAt,
   wsRunning,
   wsProgress,
   dataFolderOk,
-  onClearOutput,
 }: OverviewViewProps) {
-  useFocusRunOnNewTransaction(rollbackTransactionId);
   const busy = wsRunning !== null;
   const showPlan = install.isOpenOn("start");
   const resolvedPath =
@@ -210,24 +204,10 @@ export function OverviewView({
     { enabled: !showPlan },
   );
 
-  const runPanel = (
-    <RunPanel
-      wsRunning={wsRunning}
-      progress={wsProgress}
-      wsLog={wsLog}
-      wsLogCompletedAt={wsLogCompletedAt}
-      onClear={onClearOutput}
-      onRefresh={onRefresh}
-      rollbackTransactionId={rollbackTransactionId}
-      onRollback={onRollback}
-    />
-  );
-
   if (showPlan) {
     return (
       <section className="screen review" aria-label="Workspace install review">
         <InstallPlanPane flow={install.flow} busyLabel={wsRunning} backupRoot={backupRoot} onApply={install.apply} />
-        {runPanel}
       </section>
     );
   }
@@ -255,6 +235,7 @@ export function OverviewView({
             counts={summary.counts}
             installing={nothingInstalled(summary.cards)}
             decisions={decisionsOf(summary.cards)}
+            fixes={fixesOf(summary.cards)}
             lastUpdate={lastUpdate}
             backupCount={backupCount}
             run={busy ? { label: wsRunning, progress: wsProgress, trace, startAgents } : null}
@@ -289,7 +270,6 @@ export function OverviewView({
           />
         </div>
       </Page>
-      <div className="ov-strip">{runPanel}</div>
     </div>
   );
 }

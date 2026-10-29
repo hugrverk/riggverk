@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, configure, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useLibraryController } from "../hooks/useLibraryController";
 import { renderInFrame } from "../test/renderWithShell";
@@ -14,6 +14,11 @@ import type {
   SkillSummary,
 } from "../types";
 import { LibraryView } from "./LibraryView";
+
+// These tests drive the real controller through a whole sheet flow; under a loaded machine (parallel gates) a flow
+// can pass 5 s. The longer limit only matters when the machine is slow; a real hang still fails.
+vi.setConfig({ testTimeout: 20_000 });
+configure({ asyncUtilTimeout: 5_000 });
 
 const invoke = vi.fn();
 
@@ -677,7 +682,7 @@ describe("Library rules sheet", () => {
     expect(within(sheet).getByText("managed base · read-only")).toBeTruthy();
     expect(within(sheet).getByLabelText("Managed base").textContent).toBe(BEFORE);
     expect((within(sheet).getByRole("textbox", { name: /your refinements/i }) as HTMLTextAreaElement).value).toBe("\n\n## Mine\nSwedish.\n");
-    expect(within(sheet).getByText("Preview first · Backed up · Undo any time")).toBeTruthy();
+    expect(within(sheet).getByText("Backed up before saving")).toBeTruthy();
   });
 
   it("points out a section the managed base has too", async () => {
@@ -902,6 +907,25 @@ describe("Library new doc", () => {
     expect(screen.queryByRole("dialog", { name: "New doc" })).toBeNull();
   });
 
+  it("says why Create is dead when the title has no letter a-z or digit, and offers a neutral example", async () => {
+    await renderLibrary();
+    await goToTopic("Docs");
+    fireEvent.click(screen.getByRole("button", { name: "New doc" }));
+    const dialog = await screen.findByRole("dialog", { name: "New doc" });
+    const title = within(dialog).getByRole("textbox", { name: "Title" });
+    expect(title.getAttribute("placeholder")).toBe("Project notes");
+    expect(within(dialog).queryByRole("status")).toBeNull();
+
+    fireEvent.change(title, { target: { value: "日本語" } });
+    const hint = within(dialog).getByRole("status");
+    expect(hint.textContent).toContain("Use at least one letter a-z or digit");
+    expect(title.getAttribute("aria-describedby")).toContain(hint.id);
+    expect(within(dialog).getByRole("button", { name: "Create" }).getAttribute("aria-disabled")).toBe("true");
+
+    fireEvent.change(title, { target: { value: "日本語 notes" } });
+    expect(within(dialog).queryByRole("status")).toBeNull();
+  });
+
   it("leaves the title alone when Mod+N is pressed inside the dialog", async () => {
     await renderLibrary();
     await goToTopic("Docs");
@@ -941,6 +965,34 @@ describe("Library packs", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "Forget pack" }));
     await waitFor(() => expect(callsTo("forget_pack")).toEqual([{ name: "old-pack" }]));
     await waitFor(() => expect(screen.queryAllByRole("listitem").some(item => item.querySelector("b")?.textContent === "old-pack")).toBe(false));
+  });
+});
+
+describe("Library packs focus", () => {
+  it("moves focus to a row (or the tab) after a pack is forgotten, not to the page", async () => {
+    await renderLibrary();
+    await goToTopic("Packs");
+    const button = within(rowOf("old-pack")).getByRole("button", { name: "Forget pack" });
+    button.focus();
+    fireEvent.click(button);
+    const dialog = await screen.findByRole("dialog", { name: "Forget pack old-pack?" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Forget pack" }));
+    await waitFor(() => expect(screen.queryAllByRole("listitem").some(item => item.querySelector("b")?.textContent === "old-pack")).toBe(false));
+    await waitFor(() => expect(document.activeElement).not.toBe(document.body));
+    const library = screen.getByRole("region", { name: "Library" });
+    expect(library.contains(document.activeElement)).toBe(true);
+  });
+
+  it("leaves focus alone when the forget is declined", async () => {
+    await renderLibrary();
+    await goToTopic("Packs");
+    const button = within(rowOf("old-pack")).getByRole("button", { name: "Forget pack" });
+    button.focus();
+    fireEvent.click(button);
+    const dialog = await screen.findByRole("dialog", { name: "Forget pack old-pack?" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "cancel" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(callsTo("forget_pack")).toEqual([]);
   });
 });
 

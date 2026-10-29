@@ -13,11 +13,13 @@ export interface DiffLine {
 /**
  * Splits the backend's unified diff into typed lines. The first two lines are the `---`/`+++` labels when
  * present; after that the first character decides, so a removed line that reads `-- x` is not mistaken for a header.
+ * A diff made without labels (`unifiedLineDiff`) says `labelled = false`: its first two lines may be a removed `-- x` and
+ * an added `++ y`, which read as `--- x` and `+++ y`.
  */
-export function parseUnifiedDiff(diff: string): DiffLine[] {
+export function parseUnifiedDiff(diff: string, labelled = true): DiffLine[] {
   if (diff === "") return [];
   const lines = diff.replace(/\r\n/g, "\n").replace(/\n$/, "").split("\n");
-  const hasLabels = lines.length >= 2 && lines[0]!.startsWith("--- ") && lines[1]!.startsWith("+++ ");
+  const hasLabels = labelled && lines.length >= 2 && lines[0]!.startsWith("--- ") && lines[1]!.startsWith("+++ ");
   return lines.map((line, index): DiffLine => {
     if (hasLabels && index < 2) return { kind: "file", mark: "", text: line };
     if (line.startsWith("@@")) return { kind: "hunk", mark: "", text: line };
@@ -35,6 +37,8 @@ export interface DiffViewProps {
   label: string;
   /** Shown when the two sides are equal. */
   empty?: string;
+  /** False for a diff without `---`/`+++` file labels, so its first lines are never taken for them. Default true. */
+  labelled?: boolean;
   /** `unified` (default): one column, `+`/`-` in their own column. `split`: the old text left, the new text right. */
   layout?: "unified" | "split";
 }
@@ -95,10 +99,11 @@ function SplitCell({ side }: { side: SplitSide }) {
  * Read-only diff. Every changed line starts with a `+` or `-` in its own column, so the colour is never the
  * only signal; long lines wrap instead of scrolling sideways. The `split` layout is the side-by-side Compare view.
  */
-export function DiffView({ diff, label, empty = "no differences", layout = "unified" }: DiffViewProps) {
-  const lines = useMemo(() => parseUnifiedDiff(diff), [diff]);
+export function DiffView({ diff, label, empty = "no differences", layout = "unified", labelled = true }: DiffViewProps) {
+  const lines = useMemo(() => parseUnifiedDiff(diff, labelled), [diff, labelled]);
   const rows = useMemo(() => (layout === "split" ? splitRows(lines) : []), [layout, lines]);
-  if (lines.length === 0) {
+  // Labels alone are no difference.
+  if (lines.every(line => line.kind === "file")) {
     return (
       <p className="c-dim diff-empty" role="status">
         {empty}

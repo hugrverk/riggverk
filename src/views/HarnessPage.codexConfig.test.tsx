@@ -76,17 +76,14 @@ function props(overrides: Partial<HarnessViewProps> = {}): HarnessViewProps {
     install: installScreenOf(),
     backupRoot: "/tmp/backups",
     rollbackTransactionId: null,
-    onRollback: vi.fn(),
     onRefresh: vi.fn(),
     runWorkspaceTask: vi.fn(async () => null) as unknown as HarnessViewProps["runWorkspaceTask"],
     refreshAfterApply: vi.fn(),
     onApplied: vi.fn(),
-    wsLog: null,
     wsLogCompletedAt: null,
     wsRunning: null,
     wsProgress: null,
     dataFolderOk: true,
-    onClearOutput: vi.fn(),
     ...overrides,
   };
 }
@@ -486,7 +483,7 @@ describe("use Riggverk defaults (b, y)", () => {
     fireEvent.click(within(surfaceRow("config")).getByRole("button", { name: "Use Riggverk defaults" }));
     expect((await screen.findByRole("alert")).textContent).toContain("nothing to reset");
     expect(review().textContent).toContain("Nothing was written.");
-    press("r");
+    fireEvent.click(within(review()).getByRole("button", { name: /try again/ }));
     await screen.findByLabelText("Keys set to Riggverk's values");
     expect(invokeMock).not.toHaveBeenCalledWith("apply_codex_config_defaults", expect.anything());
   });

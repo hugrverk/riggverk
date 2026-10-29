@@ -136,19 +136,19 @@ Background: the split between a test agent and a repair agent, with qualified te
 ### Claude Code
 
 - Implementer: one `general-purpose` subagent, continued between rounds (SendMessage) so it keeps its context. With `implementer=codex`, delegate through the "Codex delegation" section of your rules instead and check the path guard the same way.
-- Adversary, other family: Codex with the recipe in `critic-recipes.md`. If Claude Code's sandbox is on, Codex cannot start its own sandbox inside it; run that one command outside the sandbox with the user's approval, or fall back.
+- Adversary, other family: Codex with the recipe in `../adversarial-implementation/critic-recipes.md`. If Claude Code's sandbox is on, Codex cannot start its own sandbox inside it; run that one command outside the sandbox with the user's approval, or fall back.
 - Adversary, same family: a fresh `inspector` subagent per round, on the strongest model you have. It has no shell; the pasted diff and the file paths are all it needs.
 
 ### Codex
 
 - Implementer: one write-capable subagent for the whole loop, continued between rounds.
-- Adversary, other family: Claude Code with the recipe in `critic-recipes.md`. Your sandbox blocks network and hides the login keychain, so request escalated permissions for that command (one approval per round), or fall back.
+- Adversary, other family: Claude Code with the recipe in `../adversarial-implementation/critic-recipes.md`. Your sandbox blocks network and hides the login keychain, so request escalated permissions for that command (one approval per round), or fall back.
 - Adversary, same family: a fresh `inspector` agent (read-only sandbox) per round.
 
 ### OpenCode
 
 - Degraded mode: you implement the production changes yourself; say so in the start line (`implementer=lead, degraded`). The adversary stays a separate fresh agent, and the frozen tests and the path guard bind you as they would bind an implementer.
-- Adversary: a fresh `inspector` task per round, on the critic model set on Riggverk's OpenCode page when one is set; or Codex or Claude Code through bash with the recipes in `critic-recipes.md`.
+- Adversary: a fresh `inspector` task per round, on the critic model set on Riggverk's OpenCode page when one is set; or Codex or Claude Code through bash with the recipes in `../adversarial-implementation/critic-recipes.md`.
 
 ### Cursor
 

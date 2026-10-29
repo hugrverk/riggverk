@@ -651,6 +651,41 @@ def test_fallback_parser_array_values() -> None:
     assert result["empty"] == {}
 
 
+LITERAL_STRINGS = """approval_policy = 'on-request'
+profile = 'safe#not-a-comment' # a comment
+args = ['a, b', "c"]
+multi = '''raw \\n text'''
+[apps._default]
+approvals_reviewer = 'user'
+"""
+
+
+def _load_routing_module():
+    spec = importlib.util.spec_from_file_location(
+        "_routing_module", str(Path(__file__).resolve().parent / "ensure-codex-routing-defaults.py")
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_fallback_parsers_read_single_quoted_literal_strings() -> None:
+    for parse in (parse_minimal_toml, _load_routing_module().parse_minimal_toml):
+        result = parse(LITERAL_STRINGS)
+        assert result["approval_policy"] == "on-request", result
+        assert result["profile"] == "safe#not-a-comment", result
+        assert result["args"] == ["a, b", "c"], result
+        assert result["multi"] == "raw \\n text", result
+        assert result["apps"]["_default"]["approvals_reviewer"] == "user", result
+
+
+def test_line_patchers_keep_a_hash_inside_a_literal_string() -> None:
+    line = "profile = 'safe#x' # note"
+    assert _merge_mod.split_managed_scalar_assignment(line, "profile") == ("profile = ", " # note")
+    routing = _load_routing_module()
+    assert routing.split_scalar_assignment(line, "profile") == ("profile = ", " # note")
+
+
 # ── Routing defaults: model and reasoning effort are create-only ──
 
 ROUTING_SCRIPT = Path(__file__).resolve().parent / "ensure-codex-routing-defaults.py"

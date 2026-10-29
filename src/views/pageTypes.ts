@@ -2,18 +2,16 @@ import type { EffectiveSkillLoadsState } from "../hooks/useEffectiveSkillLoads";
 import type { InstallationOverview } from "../hooks/useInstallationOverview";
 import type { InstallScreen, RunWorkspaceTask } from "../hooks/useInstallScreen";
 import type { SettingsSaveStatus } from "../lib/settingsDraft";
-import type { ActionResult, AgentTargetMeta, ApplyProgress, AppSettings, SetupResult } from "../types";
+import type { AgentTargetMeta, ApplyProgress, AppSettings, SetupResult } from "../types";
 
-/** What the run panel of the Overview and harness pages needs. */
+/** What the Overview and harness pages read of the running task (the run panel itself lives in the app frame). */
 export interface PageOutputProps {
-  wsLog: ActionResult | null;
   wsLogCompletedAt: number | null;
   /** Label of the workspace task in flight, or null. */
   wsRunning: string | null;
   /** What the backend last reported for that task (backup/apply counts, current file), or null. */
   wsProgress: ApplyProgress | null;
   dataFolderOk: boolean;
-  onClearOutput: () => void;
 }
 
 /** Installation state, the install review and the rollback path, shared by the Start and harness pages. */
@@ -24,8 +22,6 @@ export interface PageInstallProps {
   backupRoot: string | null;
   /** Transaction the last install or uninstall left, if it can still be rolled back. */
   rollbackTransactionId: string | null;
-  /** Dry run, confirm, then roll back. */
-  onRollback: () => void;
   /** Reload workspace status, installation state and backups. */
   onRefresh: () => void;
 }

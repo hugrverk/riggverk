@@ -1802,6 +1802,35 @@ fn managed_hash_for(
         .map(|r| r.hash.clone())
 }
 
+/// [`managed_hash_for`], and for a skill file without a record of its own the record of the same
+/// file under another case: on a case-insensitive volume (APFS by default) a case-only rename
+/// (`Notes.md` to `notes.md`) finds the installed file, which the app owns.
+fn managed_hash_for_artifact(
+    artifact: &ArtifactId,
+    identity: &str,
+    records: &[crate::managed_state::ManagedArtifactRecord],
+) -> Option<String> {
+    managed_hash_for(identity, records).or_else(|| {
+        let file = artifact.as_skill_file()?;
+        records
+            .iter()
+            .find(|record| {
+                record.identity.eq_ignore_ascii_case(identity)
+                    && crate::managed_bootstrap::artifact_from_identity(&record.identity)
+                        .ok()
+                        .and_then(|other| other.as_skill_file())
+                        .is_some_and(|other| file.same_file_ignoring_case(&other))
+            })
+            .map(|record| record.hash.clone())
+    })
+}
+
+/// A destination as a case-insensitive volume compares it: two paths that differ only in case are
+/// one file there, so one of them being wanted means the other is not stale.
+fn folded_destination(dest: &Path) -> PathBuf {
+    PathBuf::from(dest.to_string_lossy().to_ascii_lowercase())
+}
+
 fn detect_stale_artifact_state<R: SourceRoot + ?Sized>(
     artifact: &ArtifactId,
     workspace_root: &Path,
@@ -2243,7 +2272,7 @@ pub fn plan_artifacts_for_surfaces_with(
         seen.insert(crate::managed_state::artifact_identity(&artifact));
         let surface = artifact.surface();
         let identity = crate::managed_state::artifact_identity(&artifact);
-        let managed_hash = managed_hash_for(&identity, &records);
+        let managed_hash = managed_hash_for_artifact(&artifact, &identity, &records);
         let rules = plan_rules_artifact(&artifact, workspace_root, home, managed_hash.as_deref());
         let mcp = plan_mcp_artifact(
             &artifact,
@@ -2336,10 +2365,11 @@ pub fn plan_artifacts_for_surfaces_with(
     let requested_surfaces: std::collections::HashSet<SetupSurfaceId> =
         surfaces.iter().map(|surface| surface.canonical()).collect();
     // One file is never both wanted and stale: whatever has a wanted artifact's destination is
-    // that artifact, however an older record named it.
+    // that artifact, however an older record named it, in whatever case.
     let wanted_destinations: HashSet<PathBuf> = planned
         .iter()
         .filter_map(|operation| operation.artifact.resolve_dest(home, workspace_root).ok())
+        .map(|dest| folded_destination(&dest))
         .collect();
     let stale = crate::managed_bootstrap::collect_stale_removal_artifacts(
         workspace_root,
@@ -2364,6 +2394,7 @@ pub fn plan_artifacts_for_surfaces_with(
         if seen.contains(&identity)
             || artifact
                 .resolve_dest(home, workspace_root)
+                .map(|dest| folded_destination(&dest))
                 .is_ok_and(|dest| {
                     wanted_destinations.contains(&dest)
                     // Two skill roots that are one folder: the file is removed once.

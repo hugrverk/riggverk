@@ -5,7 +5,7 @@ alwaysApply: false
 
 # Repository Workflow
 
-- Keep profile content public-safe in starter workspaces. Do not copy private operating docs, private prompts, personal memory, or domain-specific private skills into shared defaults.
+- Keep shared profile content public-safe. Do not copy private operating docs, private prompts, personal memory, or domain-specific private skills into shared defaults.
 - Scripts remain the source of truth for install and sync behavior. Update docs and checks when script behavior changes.
 - Do not modify lockfiles, generated files, build config, CI config, database migrations, or environment files unless the task explicitly requires it.
 - If the tree is dirty, distinguish task changes from unrelated user changes and do not revert unrelated work.

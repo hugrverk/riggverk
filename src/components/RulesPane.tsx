@@ -192,31 +192,34 @@ export function RulesPane({ flow, busyLabel, backupRoot, returnPaneId = "surface
     run: () => flow.close(),
   };
 
+  const viewAction: Binding = {
+    id: "rules.view",
+    keys: "f",
+    title: "Switch between the diff and the resulting file",
+    hint: view === "diff" ? "show file" : "show diff",
+    group: "Rules review",
+    scope: "pane",
+    paneId: RULES_PANE_ID,
+    when: () => converting,
+    run: () => setView(current => (current === "diff" ? "file" : "diff")),
+  };
+  const retryAction: Binding = {
+    id: "rules.retry",
+    keys: "r",
+    title: "Open the review again",
+    hint: "again",
+    group: "Rules review",
+    scope: "pane",
+    paneId: RULES_PANE_ID,
+    when: () => state.status === "error",
+    run: () => void flow.retry(),
+  };
+
   const actions: Binding[] = [
     applyAction,
     closeAction,
-    {
-      id: "rules.view",
-      keys: "f",
-      title: "Switch between the diff and the resulting file",
-      hint: view === "diff" ? "show file" : "show diff",
-      group: "Rules review",
-      scope: "pane",
-      paneId: RULES_PANE_ID,
-      when: () => converting,
-      run: () => setView(current => (current === "diff" ? "file" : "diff")),
-    },
-    {
-      id: "rules.retry",
-      keys: "r",
-      title: "Open the review again",
-      hint: "again",
-      group: "Rules review",
-      scope: "pane",
-      paneId: RULES_PANE_ID,
-      when: () => state.status === "error",
-      run: () => void flow.retry(),
-    },
+    viewAction,
+    retryAction,
     { id: "rules.down", keys: ["j", "ArrowDown"], title: "Scroll down", group: "Rules review", scope: "pane", paneId: RULES_PANE_ID, repeat: true, run: () => scrollBody(60) },
     { id: "rules.up", keys: ["k", "ArrowUp"], title: "Scroll up", group: "Rules review", scope: "pane", paneId: RULES_PANE_ID, repeat: true, run: () => scrollBody(-60) },
     { id: "rules.top", keys: ["g g", "Home"], title: "Scroll to top", group: "Rules review", scope: "pane", paneId: RULES_PANE_ID, run: () => scrollBody("top") },
@@ -267,6 +270,8 @@ export function RulesPane({ flow, busyLabel, backupRoot, returnPaneId = "surface
       footer={
         <ReviewFooter question={question} backup={noteBackup && { root: backupRoot }}>
           <BindingButton binding={applyAction} apply />
+          <BindingButton binding={viewAction} />
+          <BindingButton binding={retryAction} label="try again" />
           <BindingButton binding={closeAction} />
         </ReviewFooter>
       }

@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { homePill, resolveRef, type FlowDecision, type FlowModel, type FlowRef, type RunTrace } from "../../lib/flowModel";
+import { homePill, resolveRef, type FlowDecision, type FlowFix, type FlowModel, type FlowRef, type RunTrace } from "../../lib/flowModel";
 import { receiptLines, updateAgentsText, updateTimeText } from "../../lib/lastUpdate";
 import type { RulesOverrideWarning } from "../../lib/rulesView";
 import type { UiState } from "../../lib/uiState";
@@ -23,6 +23,8 @@ export interface FlowInspectorProps extends InspectorActions {
   counts: Record<UiState, number>;
   installing: boolean;
   decisions: readonly FlowDecision[];
+  /** Agents with rows to fix by hand; listed next to the decisions. */
+  fixes: readonly FlowFix[];
   lastUpdate: SetupHistoryEntry | null;
   backupCount: number;
   /** Set while a task runs: the inspector shows it instead of the selection. */
@@ -34,7 +36,7 @@ export interface FlowInspectorProps extends InspectorActions {
 }
 
 function HomeView({ props }: { props: FlowInspectorProps }) {
-  const { counts, installing, decisions, lastUpdate, backupCount, onNavigate } = props;
+  const { counts, installing, decisions, fixes, lastUpdate, backupCount, onNavigate } = props;
   const pill = homePill(counts, installing);
   const title = lastUpdate ? ["Last update", updateAgentsText(lastUpdate), updateTimeText(lastUpdate)].filter(Boolean).join(" · ") : null;
   return (
@@ -52,6 +54,26 @@ function HomeView({ props }: { props: FlowInspectorProps }) {
           <div className="flow-acts">
             <TButton keys={[]} onClick={() => onNavigate(decision.harness)}>
               Open {decision.label}
+            </TButton>
+          </div>
+        </div>
+      ))}
+      {fixes.map(fix => (
+        <div key={fix.harness} className="flow-dec flow-fix">
+          <StateMark state="fix" />
+          <div>
+            <b>
+              {fix.label} · {fix.rows.map(row => row.label).join(", ")} to fix by hand
+            </b>
+            {fix.rows.map(row => (
+              <span key={row.label} className="flow-dim">
+                {row.label}: {row.reason ?? "Riggverk leaves it alone until you repair it."}
+              </span>
+            ))}
+          </div>
+          <div className="flow-acts">
+            <TButton keys={[]} onClick={() => onNavigate(fix.harness)}>
+              Open {fix.label}
             </TButton>
           </div>
         </div>

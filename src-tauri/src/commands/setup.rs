@@ -1084,6 +1084,10 @@ fn run_persisted_automatic_rollback(
     )
 }
 
+/// The message of an apply undone because `pack-skills.json` could not be written.
+pub(crate) const PACK_RECORD_NOT_SAVED: &str =
+    "The list of installed pack skills could not be saved, so the changes were undone";
+
 struct FailedApplyRollback<'a> {
     manifest_path: &'a Path,
     manifest: &'a mut ArtifactTransactionManifest,
@@ -1791,6 +1795,24 @@ fn run_planned_artifacts(
         }
     }
 
+    // Which installed skills came from a pack, so that a pack that later goes missing does not
+    // retire them. Without that record a missing pack would read as a retirement, so an apply that
+    // cannot save it is undone (the rollback puts the previous record back).
+    if let Err(error) = crate::skill_sources::record_after_transaction(&ws_root, &roots.sources) {
+        return finish_failed_apply_with_rollback(FailedApplyRollback {
+            manifest_path: &manifest_path,
+            manifest: &mut manifest,
+            backup_dir: &backup_dir,
+            home: &home,
+            workspace_root: &ws_root,
+            transaction_id,
+            applied,
+            failed: vec![error],
+            manual_steps,
+            message: PACK_RECORD_NOT_SAVED.to_string(),
+        });
+    }
+
     if let Err(e) = persist_setup_manifest(
         &manifest_path,
         &mut manifest,
@@ -1840,14 +1862,6 @@ fn run_planned_artifacts(
     if let Err(error) = crate::kept_files::release(&ws_root, &rewritten) {
         manual_steps.push(format!(
             "The files were applied, but a choice to keep your version of one of them could not be cleared: {error}"
-        ));
-    }
-
-    // Which installed skills came from a pack, so that a pack that later goes missing does not
-    // retire them. The apply is complete; a failure here is a warning, not a rollback.
-    if let Err(error) = crate::skill_sources::record_after_transaction(&ws_root, &roots.sources) {
-        manual_steps.push(format!(
-            "The files were applied, but the list of installed pack skills could not be saved: {error}"
         ));
     }
 

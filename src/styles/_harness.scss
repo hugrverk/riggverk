@@ -1,7 +1,7 @@
 /* ═══════════════════════════════════════════════════════════════════════════════════
    Harness pages (Grafit 1A "Bläck"): Claude Code, Codex, OpenCode, Cursor, Copilot, Pi and Kilo.
 
-     .hp                       page + output strip; .hp-page is the page (data-pane-id="page", ui/Page.tsx), scrolls on its own
+     .hp                       the page; .hp-page is the page (data-pane-id="page", ui/Page.tsx), scrolls on its own
      .hp-head                  the name (.hp-title, an h4), the mono line under it (.hp-sub), Preview / Update (.hp-head-actions)
      .hp-grid > .hp-cell       joined 1px hairline grid, radius 0; .hp-span3 takes the whole row
        [data-state="decide"]   a decision: the bright top edge (a top inset, never a side bar)
@@ -41,11 +41,6 @@
 
 /* The page holds the keys (u, p, r, d, v, m, b, c) but is not a stop in the tab order: the controls are. */
 .hp-page:focus-visible { outline: none; }
-
-.hp-run {
-  flex: none;
-  padding: 0 10px 10px;
-}
 
 /* ---- header ---- */
 
@@ -288,6 +283,8 @@
 }
 
 .hp-fold {
+  /* Where Fold.tsx scrolls its top to: the unit it belongs to stays in view above it. */
+  scroll-margin-top: 120px;
   display: grid;
   grid-template-rows: 1fr;
   animation: hp-unfold var(--dur-fold) var(--ease) both;
@@ -509,6 +506,10 @@
 }
 
 .hp-fact dt { color: var(--text-muted); }
+
+/* A fact with continuation rows (the skill names that need a look) spans every column; its rows stack in the value column. */
+.hp-fact-block { grid-column: 1 / -1; }
+.hp-fact-block dd { grid-column: 2; }
 
 .hp-fact dd {
   margin: 0;
