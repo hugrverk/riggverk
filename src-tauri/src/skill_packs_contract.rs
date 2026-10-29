@@ -541,6 +541,42 @@ mod tests {
 
     // ── A pack that goes missing ──
 
+    /// Without the record, a pack that later goes missing would read as a retirement: an Install
+    /// that cannot save it is undone, not reported as a success with a warning.
+    #[test]
+    fn an_install_whose_pack_record_cannot_be_saved_is_undone() {
+        let env = Env::new("record-write");
+        env.pack_skill("mine", None, "my-checklist", "kept in the pack", &[]);
+        let before = env.footprint();
+        crate::skill_sources::failing_writes::set(true);
+        let result = env.apply();
+        crate::skill_sources::failing_writes::set(false);
+        assert!(!result.success, "{}", result.message);
+        assert!(
+            result
+                .message
+                .starts_with(crate::commands::setup::PACK_RECORD_NOT_SAVED),
+            "{}",
+            result.message
+        );
+        assert!(!env
+            .path(&file_of(SkillRoot::Claude, "my-checklist", "SKILL.md"))
+            .exists());
+        assert_eq!(
+            (env.footprint().0, env.footprint().1),
+            (before.0, before.1),
+            "the installed files are rolled back"
+        );
+        assert!(!crate::workspace_layout::state_file(&env.ws, "pack-skills.json").exists());
+
+        let result = env.apply();
+        assert!(result.success, "install: {}", result.message);
+        assert_eq!(
+            env.recorded_packs()["packs"]["mine"],
+            serde_json::json!(["my-checklist"])
+        );
+    }
+
     #[test]
     fn a_missing_pack_plans_no_removal_and_forgetting_it_removes_the_copies_with_a_backup() {
         let env = Env::new("missing");
