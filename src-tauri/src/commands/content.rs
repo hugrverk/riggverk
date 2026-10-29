@@ -415,7 +415,7 @@ fn personal_doc_open_path(root: &Path, id: &str) -> Result<PathBuf, String> {
     Ok(path)
 }
 
-const MAX_DOC_SIZE: usize = 512 * 1024;
+pub(super) const MAX_DOC_SIZE: usize = 512 * 1024;
 
 pub(super) fn doc_backup_path(
     doc_id: &str,
