@@ -239,6 +239,13 @@ describe("mock backend: the Library edits only personal docs", () => {
     expect(created).toMatchObject({ id: "custom:mine", source: "custom", section: "Context" });
   });
 
+  it("refuses a personal doc save whose revision is no longer the file's, like the backend", async () => {
+    const opened = await invoke<DocumentContent>("read_doc", { id: "custom:project-notes" });
+    expect(opened.revision).toEqual(expect.any(String));
+    expect(await invoke<ActionResult>("save_doc", { id: opened.id, content: "# Elsewhere\n", expectedRevision: opened.revision })).toMatchObject({ success: true });
+    await expect(invoke("save_doc", { id: opened.id, content: "# Mine\n", expectedRevision: opened.revision })).rejects.toThrow("changed on disk");
+  });
+
   it("does not answer the removed commands that edited or opened bundled items", async () => {
     const removed = [
       "save_agent_template",

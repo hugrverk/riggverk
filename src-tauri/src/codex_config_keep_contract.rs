@@ -923,4 +923,48 @@ mod tests {
         assert!(env.plan_fingerprint().is_none(), "nothing to apply");
         assert!(env.read().contains("approvals_reviewer = \"auto_review\""));
     }
+    #[test]
+    fn without_a_python_that_reads_toml_an_update_is_held_back_at_preview() {
+        let env = Env::new("no-python");
+        env.set_top_level("sandbox_mode", "read-only");
+        env.set_record(env.installed_digest());
+        assert_eq!(env.kind(), OperationKind::Update);
+        let before = env.read();
+        crate::commands::with_codex_python(None, || {
+            assert_eq!(env.kind(), OperationKind::Conflict);
+            let plan = preview_setup(vec![SURFACE.to_string()]).expect("preview");
+            assert!(plan.plan_fingerprint.is_none(), "nothing to apply");
+            assert!(
+                plan.conflicts
+                    .iter()
+                    .any(|op| op.summary.contains(crate::commands::CODEX_PYTHON_REQUIRED)),
+                "{:?}",
+                plan.conflicts
+            );
+        });
+        assert_eq!(env.read(), before);
+    }
+    #[test]
+    fn without_a_python_that_reads_toml_the_undo_preview_refuses_a_merge_back() {
+        let env = Env::new("no-python-undo");
+        env.set_top_level("sandbox_mode", "read-only");
+        env.set_record(env.installed_digest());
+        let result = env.apply();
+        assert!(result.success, "{}", result.message);
+        // A line the user adds afterwards: the undo has to merge the managed keys back.
+        let edited = format!("{}\n# my note\n", env.read().trim_end());
+        env.write(&edited);
+        let rolled = crate::commands::with_codex_python(None, || {
+            rollback_setup_transaction(result.transaction_id.clone(), true).expect("dry run")
+        });
+        assert!(!rolled.success);
+        assert!(
+            rolled
+                .message
+                .contains(crate::commands::CODEX_PYTHON_REQUIRED),
+            "{}",
+            rolled.message
+        );
+        assert_eq!(env.read(), edited);
+    }
 }

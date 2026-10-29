@@ -9,7 +9,6 @@ import type {
   SkillLoadFlag,
   SkillReadFolder,
 } from "../types";
-import type { StateDisplay } from "./installationView";
 import {
   isWarningFlag,
   MAX_FLAGGED_ROWS,
@@ -17,7 +16,6 @@ import {
   skillLoadRows,
   skillReadsRows,
   summarizeSkillLoads,
-  withSkillProblems,
 } from "./skillLoadRows";
 
 const PATHS: Record<SkillReadFolder, string> = {
@@ -206,20 +204,5 @@ describe("skillLoadRows", () => {
       { label: "reads", value: "~/.agents/skills (1 not read (a link outside your home folder)), ~/.codex/skills (missing)", wrap: true },
     ]);
     expect(skillReadsRows({ loads: null, error: null }, "codex")).toEqual([]);
-  });
-});
-
-describe("withSkillProblems", () => {
-  const CURRENT: StateDisplay = { tone: "ok", label: "current" };
-
-  it("adds the number of duplicate names and turns an ok state into a warning", () => {
-    expect(withSkillProblems(CURRENT, 2)).toEqual({ tone: "warn", label: "current · 2 duplicates" });
-    expect(withSkillProblems(CURRENT, 1).label).toBe("current · 1 duplicate");
-  });
-
-  it("keeps a state that is already worse, and a clean one untouched", () => {
-    const conflict: StateDisplay = { tone: "fail", label: "conflict" };
-    expect(withSkillProblems(conflict, 3)).toEqual({ tone: "fail", label: "conflict · 3 duplicates" });
-    expect(withSkillProblems(CURRENT, 0)).toBe(CURRENT);
   });
 });

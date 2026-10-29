@@ -221,12 +221,12 @@ pub fn artifact_effective_source_digest<R: SourceRoot + ?Sized>(
     let source_str = fs::read_to_string(&source).map_err(|e| format!("read codex source: {e}"))?;
     let template: toml::Value = source_str
         .parse()
-        .map_err(|e| format!("parse codex source toml: {e}"))?;
+        .map_err(|_| "the bundled Codex config is not valid TOML".to_string())?;
     // The choice applies to the installed file; one that is absent or unreadable keeps nothing.
     let installed = artifact
         .resolve_dest(home, runtime_root)
         .ok()
-        .and_then(|dest| fs::read_to_string(dest).ok())
+        .and_then(|dest| read_user_config(&dest, "Codex config.toml").ok())
         .and_then(|raw| raw.parse::<toml::Value>().ok());
     let effective = match installed {
         Some(installed) => {
@@ -271,7 +271,7 @@ pub fn artifact_source_digest<R: SourceRoot + ?Sized>(
             let template_str =
                 fs::read_to_string(&source).map_err(|e| format!("read opencode source: {e}"))?;
             let template_json: serde_json::Value = serde_json::from_str(&template_str)
-                .map_err(|e| format!("parse opencode source json: {e}"))?;
+                .map_err(|_| "the bundled OpenCode config is not valid JSON".to_string())?;
             let rendered = render_expected_opencode_config(&template_json, home)
                 .ok_or_else(|| "cannot render expected opencode config".to_string())?;
             hash_json_value(&extract_managed_opencode_config(&rendered))
@@ -282,7 +282,7 @@ pub fn artifact_source_digest<R: SourceRoot + ?Sized>(
                 fs::read_to_string(&source).map_err(|e| format!("read codex source: {e}"))?;
             let source_toml: toml::Value = source_str
                 .parse()
-                .map_err(|e| format!("parse codex source toml: {e}"))?;
+                .map_err(|_| "the bundled Codex config is not valid TOML".to_string())?;
             Ok(codex_managed_digest(&source_toml))
         }
         ArtifactKind::TuiConfig => {
@@ -313,6 +313,24 @@ pub fn artifact_source_digest<R: SourceRoot + ?Sized>(
             artifact
         )),
     }
+}
+
+/// Largest user config (`opencode.json`, `config.toml`, `mcp.json`) a preview reads.
+pub(crate) const MAX_USER_CONFIG_BYTES: u64 = 1024 * 1024;
+
+/// The text of a user config of at most [`MAX_USER_CONFIG_BYTES`]; never reads more than one byte
+/// past it. `what` names the file in the fixed-phrase error.
+pub(crate) fn read_user_config(path: &Path, what: &str) -> Result<String, String> {
+    use std::io::Read;
+    let file = fs::File::open(path).map_err(|_| format!("cannot read the {what}"))?;
+    let mut bytes = Vec::new();
+    file.take(MAX_USER_CONFIG_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|_| format!("cannot read the {what}"))?;
+    if bytes.len() as u64 > MAX_USER_CONFIG_BYTES {
+        return Err(format!("the {what} is larger than 1 MiB"));
+    }
+    String::from_utf8(bytes).map_err(|_| format!("the {what} is not valid UTF-8"))
 }
 
 /// Hash managed content from an on-disk artifact path (backup or installed).
@@ -356,21 +374,19 @@ pub fn artifact_installed_managed_digest_from_path(
             if !path.is_file() {
                 return Ok(ABSENT_DIGEST.into());
             }
-            let installed_str =
-                fs::read_to_string(path).map_err(|e| format!("read opencode config: {e}"))?;
+            let installed_str = read_user_config(path, "OpenCode opencode.json")?;
             let installed_json: serde_json::Value = serde_json::from_str(&installed_str)
-                .map_err(|e| format!("parse opencode json: {e}"))?;
+                .map_err(|_| "the OpenCode opencode.json is not valid JSON".to_string())?;
             hash_json_value(&extract_managed_opencode_config(&installed_json))
         }
         ArtifactKind::ConfigFile if artifact == &ArtifactId::CodexConfig => {
             if !path.is_file() {
                 return Ok(ABSENT_DIGEST.into());
             }
-            let installed_str =
-                fs::read_to_string(path).map_err(|e| format!("read codex config: {e}"))?;
+            let installed_str = read_user_config(path, "Codex config.toml")?;
             let installed_toml: toml::Value = installed_str
                 .parse()
-                .map_err(|e| format!("parse codex toml: {e}"))?;
+                .map_err(|_| "the Codex config.toml is not valid TOML".to_string())?;
             Ok(hash_toml_value(&extract_managed_codex_config(
                 &installed_toml,
             )))
@@ -386,10 +402,9 @@ pub fn artifact_installed_managed_digest_from_path(
             if !path.is_file() {
                 return Ok(ABSENT_DIGEST.into());
             }
-            let content =
-                fs::read_to_string(path).map_err(|e| format!("read cursor mcp config: {e}"))?;
-            let parsed: serde_json::Value =
-                serde_json::from_str(&content).map_err(|e| format!("parse cursor mcp: {e}"))?;
+            let content = read_user_config(path, "Cursor mcp.json")?;
+            let parsed: serde_json::Value = serde_json::from_str(&content)
+                .map_err(|_| "the Cursor mcp.json is not valid JSON".to_string())?;
             match parsed.get("mcpServers").and_then(|v| v.get("playwright")) {
                 Some(projection) => hash_json_value(projection),
                 None => Ok(ABSENT_DIGEST.into()),
@@ -687,5 +702,51 @@ mod tests {
         let ws = temp("no-src-ws");
         let err = artifact_source_digest(&ArtifactId::CodexRules, &ws, &home).unwrap_err();
         assert!(err.contains("source") || err.contains("read"));
+    }
+    #[test]
+    fn invalid_user_config_errors_never_quote_the_file() {
+        let dir = temp("parse-leak");
+        let toml_path = dir.join("config.toml");
+        write(
+            &toml_path,
+            "model = \"x\"\n[mcp_servers.gh.env]\nGITHUB_TOKEN = \"FAKE-SECRET-VALUE-123\" oops\n",
+        );
+        let err = artifact_installed_managed_digest_from_path(&ArtifactId::CodexConfig, &toml_path)
+            .unwrap_err();
+        assert!(!err.contains("FAKE-SECRET"), "{err}");
+        assert_eq!(err, "the Codex config.toml is not valid TOML");
+        let json_path = dir.join("opencode.json");
+        write(&json_path, "{\"token\": \"FAKE-SECRET-VALUE-123\" oops}");
+        let err =
+            artifact_installed_managed_digest_from_path(&ArtifactId::OpenCodeConfig, &json_path)
+                .unwrap_err();
+        assert!(
+            !err.contains("FAKE-SECRET") && !err.contains("line"),
+            "{err}"
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+    #[test]
+    fn a_user_config_over_the_cap_is_refused_without_reading_it_whole() {
+        let dir = temp("config-cap");
+        let mut big = String::from("model = \"x\"\n");
+        while big.len() <= MAX_USER_CONFIG_BYTES as usize {
+            big.push_str("# padding padding padding padding padding padding padding padding\n");
+        }
+        let toml_path = dir.join("config.toml");
+        write(&toml_path, &big);
+        let err = artifact_installed_managed_digest_from_path(&ArtifactId::CodexConfig, &toml_path)
+            .unwrap_err();
+        assert_eq!(err, "the Codex config.toml is larger than 1 MiB");
+        let json_path = dir.join("opencode.json");
+        write(
+            &json_path,
+            &format!("{{\"a\": \"{}\"}}", "x".repeat(big.len())),
+        );
+        let err =
+            artifact_installed_managed_digest_from_path(&ArtifactId::OpenCodeConfig, &json_path)
+                .unwrap_err();
+        assert_eq!(err, "the OpenCode opencode.json is larger than 1 MiB");
+        let _ = fs::remove_dir_all(&dir);
     }
 }

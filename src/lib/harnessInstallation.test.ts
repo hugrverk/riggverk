@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_ENABLED_HARNESS_IDS,
   DEFAULT_ENABLED_TARGET_IDS,
-  disabledSurfacesForHarness,
   enabledSetupSurfaces,
   enabledSurfacesForHarness,
   harnessForSurface,
@@ -134,21 +133,17 @@ describe("target to surface mapping", () => {
 describe("target-filtered surfaces", () => {
   it("leaves codex_config out of a default Codex install but keeps its other surfaces", () => {
     expect(enabledSurfacesForHarness("codex", defaults())).toEqual(["codex_agents", "codex_rules", "skills"]);
-    expect(disabledSurfacesForHarness("codex", defaults())).toEqual(["codex_config"]);
   });
 
   it("adds codex_config back, in harness order, once the user enables it", () => {
     const settings = defaults({ enabled_target_ids: [...DEFAULT_ENABLED_TARGET_IDS, "codex_config"] });
     expect(enabledSurfacesForHarness("codex", settings)).toEqual(HARNESS_SURFACES.codex);
-    expect(disabledSurfacesForHarness("codex", settings)).toEqual([]);
   });
 
   it("leaves claude_config out of a default Claude install and adds it back, in harness order, once enabled", () => {
     expect(enabledSurfacesForHarness("claude", defaults())).toEqual(["claude_rules", "claude_agents", "skills"]);
-    expect(disabledSurfacesForHarness("claude", defaults())).toEqual(["claude_config"]);
     const on = defaults({ enabled_target_ids: [...DEFAULT_ENABLED_TARGET_IDS, "claude_config"] });
     expect(enabledSurfacesForHarness("claude", on)).toEqual(HARNESS_SURFACES.claude);
-    expect(disabledSurfacesForHarness("claude", on)).toEqual([]);
     expect(targetIdForSurface("claude_config")).toBe("claude_config");
     expect(harnessForSurface("claude_config")).toBe("claude");
   });
@@ -163,13 +158,11 @@ describe("target-filtered surfaces", () => {
   it("treats the cursor_setup toggle as gating both cursor_agents and cursor_mcp", () => {
     const off = defaults({ enabled_target_ids: DEFAULT_ENABLED_TARGET_IDS.filter((id) => id !== "cursor_setup") });
     expect(enabledSurfacesForHarness("cursor", off)).toEqual(["skills"]);
-    expect(disabledSurfacesForHarness("cursor", off)).toEqual(["cursor_agents", "cursor_mcp"]);
   });
 
   it("returns nothing for a disabled harness, even for ungated skills", () => {
     const settings = defaults({ enabled_harness_ids: ["opencode", "claude", "cursor"] });
     expect(enabledSurfacesForHarness("codex", settings)).toEqual([]);
-    expect(disabledSurfacesForHarness("codex", settings)).toEqual(HARNESS_SURFACES.codex);
     expect(isSurfaceEnabled(settings, "codex_rules")).toBe(false);
     // The skills surface is global: it is on whichever harnesses are, but a disabled harness's page offers nothing.
     expect(isSurfaceEnabled(settings, "skills")).toBe(true);
@@ -263,7 +256,6 @@ describe("the light tier (Copilot, Pi, Kilo)", () => {
         enabled_target_ids: DEFAULT_ENABLED_TARGET_IDS.filter((id) => id !== rules && id !== mcp),
       });
       expect(enabledSurfacesForHarness(harness, targetsOff)).toEqual(["skills"]);
-      expect(disabledSurfacesForHarness(harness, targetsOff)).toEqual([rules, mcp]);
       // Each target switches only its own surface.
       const rulesOff = defaults({
         enabled_harness_ids: [harness],

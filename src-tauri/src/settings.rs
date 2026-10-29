@@ -350,18 +350,6 @@ pub fn harness_enabled(settings: &AppSettings, harness: HarnessId) -> bool {
     settings.enabled_harness_ids.contains(&harness)
 }
 
-pub fn effective_enabled_target_ids(settings: &AppSettings) -> Vec<String> {
-    settings
-        .enabled_target_ids
-        .iter()
-        .filter(|id| {
-            agent_targets::target_harness(id)
-                .is_some_and(|harness| harness_enabled(settings, harness))
-        })
-        .cloned()
-        .collect()
-}
-
 /// A surface may be installed when its harness is enabled and, for
 /// target-gated surfaces, its target toggle is on.
 pub fn surface_enabled(
@@ -562,13 +550,15 @@ pub fn save_with_revision_check(
     let _guard = SETTINGS_WRITE_MUTEX
         .lock()
         .map_err(|_| "settings lock poisoned".to_string())?;
-    let incoming = settings;
+    let mut incoming = settings;
     mutate_settings_locked(|current| {
         if let Some(expected) = expected_revision {
             if current.revision != expected {
                 return Err(SETTINGS_CONFLICT_ERROR.to_string());
             }
         }
+        // A workspace folder cannot be chosen: only `reset_active_workspace_path` changes it.
+        incoming.workspace_path = current.workspace_path.clone();
         *current = incoming;
         Ok(MutationOutcome::Changed)
     })
@@ -598,11 +588,11 @@ fn save_inner(settings: &mut AppSettings) -> Result<AppSettings, String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        effective_enabled_target_ids, enabled_setup_surfaces, get_settings_snapshot,
-        get_settings_snapshot_with_mutate, harness_enabled, load, mutate_settings, normalize,
-        normalize_for_save, save_with_revision_check, validate_hex_color, AppSettings,
-        MutationOutcome, SETTINGS_CONFLICT_ERROR, SETTINGS_CORRUPT_RECOVERY_MESSAGE,
-        TARGETS_ADDED_IN, TARGET_DEFAULTS_VERSION,
+        enabled_setup_surfaces, get_settings_snapshot, get_settings_snapshot_with_mutate,
+        harness_enabled, load, mutate_settings, normalize, normalize_for_save,
+        save_with_revision_check, validate_hex_color, AppSettings, MutationOutcome,
+        SETTINGS_CONFLICT_ERROR, SETTINGS_CORRUPT_RECOVERY_MESSAGE, TARGETS_ADDED_IN,
+        TARGET_DEFAULTS_VERSION,
     };
     use crate::agent_targets;
     use crate::path_utils::is_legacy_default_workspace_path;
@@ -827,10 +817,6 @@ mod tests {
                 SetupSurfaceId::WorkspaceBundle
             ]
         );
-        assert_eq!(
-            effective_enabled_target_ids(&settings),
-            ["pi_rules", "pi_mcp"]
-        );
         settings.enabled_target_ids.retain(|id| id != "pi_rules");
         assert_eq!(
             enabled_setup_surfaces(&settings),
@@ -847,7 +833,6 @@ mod tests {
             vec![SetupSurfaceId::Skills, SetupSurfaceId::WorkspaceBundle],
             "and the MCP surface on its own"
         );
-        assert!(effective_enabled_target_ids(&settings).is_empty());
     }
 
     #[test]
@@ -863,7 +848,6 @@ mod tests {
             settings.enabled_target_ids,
             vec!["codex_rules".to_string(), "opencode_config".to_string()]
         );
-        assert!(effective_enabled_target_ids(&settings).is_empty());
         // Skills belong to no single harness; with none enabled they are planned as nothing.
         assert_eq!(
             enabled_setup_surfaces(&settings),
@@ -1223,6 +1207,25 @@ mod tests {
     }
 
     #[test]
+    fn a_settings_save_never_chooses_a_workspace_folder() {
+        with_temp_home(|_| {
+            let first = save(AppSettings::default()).expect("first save");
+            let mut next = first.clone();
+            next.appearance = "light".into();
+            next.workspace_path = Some(
+                std::env::temp_dir()
+                    .join("another-workspace")
+                    .to_string_lossy()
+                    .into_owned(),
+            );
+            let saved = save_with_revision_check(next, Some(first.revision)).expect("save");
+            assert_eq!(saved.appearance, "light");
+            assert_eq!(saved.workspace_path, None);
+            assert_eq!(load().workspace_path, None);
+        });
+    }
+
+    #[test]
     fn workspace_path_mutation_rejects_stale_revision() {
         with_temp_home(|_| {
             let first = save(AppSettings::default()).expect("first save");
@@ -1341,16 +1344,20 @@ mod tests {
     #[test]
     fn stale_workspace_scrub_preserves_unrelated_settings() {
         with_temp_home(|_| {
-            let saved = save(AppSettings {
-                appearance: "light".into(),
-                enabled_target_ids: vec!["codex_rules".into(), "opencode_config".into()],
-                workspace_path: Some(
-                    std::env::temp_dir()
-                        .join("riggverk-scrub-missing")
-                        .to_string_lossy()
-                        .into_owned(),
-                ),
-                ..AppSettings::default()
+            // A folder saved by an earlier version: a settings save cannot set one.
+            let saved = mutate_settings(|current| {
+                *current = AppSettings {
+                    appearance: "light".into(),
+                    enabled_target_ids: vec!["codex_rules".into(), "opencode_config".into()],
+                    workspace_path: Some(
+                        std::env::temp_dir()
+                            .join("riggverk-scrub-missing")
+                            .to_string_lossy()
+                            .into_owned(),
+                    ),
+                    ..AppSettings::default()
+                };
+                Ok(MutationOutcome::Changed)
             })
             .expect("seed save");
 

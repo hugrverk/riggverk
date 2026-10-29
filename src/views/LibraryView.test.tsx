@@ -231,7 +231,6 @@ function Harness({ showConfigs = true, onOpenHarnessView, withoutCopy = false, t
     workspaceLoadGenerationRef: generation,
     isWorkspaceLoadCurrent: (g: number) => g === generation.current,
     isInvalidWorkspaceError: () => false,
-    fetchStatus: async () => {},
     view: "library",
   }).current;
   const lib = useLibraryController(deps);

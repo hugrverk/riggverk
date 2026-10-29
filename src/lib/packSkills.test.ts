@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { PackLibrary } from "../types";
-import { forgettablePacks, packGroup, packSkillSummaries } from "./packSkills";
+import { packGroup, packSkillSummaries } from "./packSkills";
 
 const library: PackLibrary = {
   folder: "~/.config/riggverk/packs",
@@ -25,9 +25,7 @@ describe("pack skills in the Library", () => {
     expect(rows[1]?.packReason).toBe("pack missing");
   });
 
-  it("offers Forget pack only for packs whose installed skills are held", () => {
-    expect(forgettablePacks(library).map(pack => pack.name)).toEqual(["gone"]);
-    expect(forgettablePacks(null)).toEqual([]);
+  it("has no rows without a library", () => {
     expect(packSkillSummaries(null)).toEqual([]);
   });
 });

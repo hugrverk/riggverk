@@ -99,7 +99,7 @@ use commands::{
     apply_uninstall, create_doc, get_agent_targets, get_backup_details, get_claude_runtime_health,
     get_codex_runtime_health, get_cursor_profile_health, get_effective_skill_loads,
     get_installation_status, get_light_runtime_health, get_opencode_runtime_health,
-    get_security_posture, get_settings, get_status, get_workspace_diagnostics, list_agent_metadata,
+    get_security_posture, get_settings, get_workspace_diagnostics, list_agent_metadata,
     list_available_opencode_models, list_backups, list_docs, list_opencode_config_editor_sources,
     list_rules_files, list_setup_history, list_skills, open_backups_folder,
     open_default_workspace_folder, open_doc, open_rules_file, preview_codex_config_defaults,
@@ -110,9 +110,7 @@ use commands::{
     rollback_setup_transaction, save_doc, save_rules_refinements, set_codex_config_kept,
     set_files_kept, set_rules_user_managed, update_opencode_model_selection, update_settings,
 };
-use commands::{
-    copy_skill_to_pack, forget_pack, list_pack_skills, read_pack_skill, save_pack_skill,
-};
+use commands::{copy_skill_to_pack, forget_pack, list_pack_skills, save_pack_skill};
 use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -131,7 +129,6 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            get_status,
             get_workspace_diagnostics,
             open_default_workspace_folder,
             reset_active_workspace_path,
@@ -188,7 +185,6 @@ pub fn run() {
             apply_take_bundled,
             get_security_posture,
             list_pack_skills,
-            read_pack_skill,
             forget_pack,
             copy_skill_to_pack,
             save_pack_skill,

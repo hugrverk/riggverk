@@ -25,7 +25,7 @@ export interface PaneProps {
   defaultFocus?: boolean;
   /**
    * Make the body the keyboard focus target (tabIndex=0, scrollable with arrows). Use for panes without a
-   * PaneList or input; panes with a listbox leave this off because the listbox is the primary target.
+   * list or input; panes with a listbox leave this off because the listbox is the primary target.
    */
   scrollable?: boolean;
   /**

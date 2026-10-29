@@ -5,6 +5,7 @@ import { keyNames, type CodexConfigModel } from "./codexConfig";
 import type { FileConflictModel } from "./fileConflicts";
 import type { SurfaceDisplayState } from "./installationView";
 import { CONFLICT_TEXT, type RulesModel } from "./rulesView";
+import { plural } from "./plural";
 
 /**
  * The six states the pages show. Runtime health and security posture are never a state: a runtime divergence that only
@@ -70,10 +71,6 @@ export interface SurfaceUiStateInput {
 export interface SurfaceUiState {
   state: UiState | null;
   subline: string | null;
-}
-
-function plural(n: number, noun: string): string {
-  return `${n} ${noun}${n === 1 ? "" : "s"}`;
 }
 
 function result(state: UiState | null, subline: string | null): SurfaceUiState {

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { OverviewId } from "../hooks/useInstallationOverview";
 import { installationStatus, overviewOf, postureOf, surfaceStatus } from "../test/pageFixtures";
 import type { AppSettings, InstallAgent, InstallationStatus } from "../types";
-import { agentCardModel, disabledHarnesses, listText, overviewSummaryModel, worthALook } from "./overviewModel";
+import { disabledHarnesses, listText, overviewSummaryModel, worthALook } from "./overviewModel";
 
 const SETTINGS: Pick<AppSettings, "enabled_target_ids" | "enabled_harness_ids"> = {
   enabled_harness_ids: ["codex", "claude", "cursor"],
@@ -123,9 +123,25 @@ describe("overviewSummaryModel headline and counts", () => {
   });
 });
 
-describe("agentCardModel", () => {
+/** The Overview card of one agent, as the summary builds it. */
+function cardFor(
+  harness: InstallAgent,
+  overview: ReturnType<typeof overviewOf>,
+  options: { dataFolderOk?: boolean; runtime?: Parameters<typeof overviewSummaryModel>[0]["runtime"] } = {},
+) {
+  return overviewSummaryModel({
+    overview,
+    settings: SETTINGS,
+    enabledHarnessIds: [harness],
+    dataFolderOk: options.dataFolderOk ?? true,
+    diagnostics: { error: null },
+    runtime: options.runtime,
+  }).cards[0]!;
+}
+
+describe("the agent card", () => {
   it("shows the decision in the badge and the urgent row's sentence", () => {
-    const card = agentCardModel({ harness: "claude", entry: overviewOf({ claude: rulesConflict }).entries.claude, settings: SETTINGS, dataFolderOk: true });
+    const card = cardFor("claude", overviewOf({ claude: rulesConflict }));
     expect(card.badge).toEqual({ state: "decide", text: "1 to decide" });
     expect(card.rows.map(row => row.label)).toEqual(["Rules", "Agents", "Skills", "Settings"]);
     expect(card.rows.find(row => row.label === "Rules")).toMatchObject({ state: "decide", text: "needs decision" });
@@ -139,14 +155,14 @@ describe("agentCardModel", () => {
       harness: "claude" as const,
       health: { rules_synced: false, agents_synced: true, skills_synced: true } as never,
     };
-    const ok = agentCardModel({ harness: "claude", entry: overviewOf({ claude: current }).entries.claude, settings: SETTINGS, dataFolderOk: true, runtime: diverged });
+    const ok = cardFor("claude", overviewOf({ claude: current }), { runtime: { claude: diverged } });
     expect(ok.notes).toEqual(["Runtime check: diverged"]);
-    const decided = agentCardModel({ harness: "claude", entry: overviewOf({ claude: rulesConflict }).entries.claude, settings: SETTINGS, dataFolderOk: true, runtime: diverged });
+    const decided = cardFor("claude", overviewOf({ claude: rulesConflict }), { runtime: { claude: diverged } });
     expect(decided.notes).toEqual(["Your file differs from every shipped version"]);
   });
 
   it("does not count an agent while the workspace folder is unusable", () => {
-    const card = agentCardModel({ harness: "codex", entry: undefined, settings: SETTINGS, dataFolderOk: false });
+    const card = cardFor("codex", overviewOf({}), { dataFolderOk: false });
     expect(card.badge).toBeNull();
     expect(card.notes).toEqual(["Needs the workspace folder"]);
   });

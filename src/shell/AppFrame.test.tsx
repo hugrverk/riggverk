@@ -2,7 +2,6 @@ import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-libra
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { renderInFrame } from "../test/renderWithShell";
 import { Pane } from "../ui/Pane";
-import { PaneList } from "../ui/PaneList";
 import { useShellState } from "./ShellState";
 import type { AppView } from "./views";
 
@@ -16,12 +15,10 @@ function Panes({ withInput = false }: { withInput?: boolean }) {
   return (
     <>
       <Pane id="harnesses" title="harnesses" defaultFocus>
-        <PaneList
-          label="Harnesses"
-          items={[{ id: "a" }, { id: "b" }]}
-          getKey={item => item.id}
-          renderItem={item => <span className="nm">{item.id}</span>}
-        />
+        <ul role="listbox" aria-label="Harnesses" tabIndex={0} data-pane-primary="">
+          <li role="option" aria-selected="false">a</li>
+          <li role="option" aria-selected="false">b</li>
+        </ul>
       </Pane>
       <Pane id="surfaces" title="surfaces" scrollable>
         {withInput && <input aria-label="name" />}

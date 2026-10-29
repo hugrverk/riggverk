@@ -39,7 +39,6 @@ function createDeps() {
     resetWorkspaceBoundState: vi.fn(),
     loadWorkspaceDiagnostics: vi.fn(async () => {}),
     loadWorkspaceResources: vi.fn(async () => {}),
-    fetchStatus: vi.fn(async () => {}),
   };
 }
 
