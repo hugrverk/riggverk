@@ -5626,6 +5626,27 @@ mod tests {
         assert_eq!(fs::read_to_string(&path).unwrap(), content);
     }
 
+    /// The transaction backs `mcp.json` up; the apply makes no second, untracked copy beside it.
+    #[test]
+    fn cursor_mcp_apply_backs_the_file_up_only_in_its_transaction() {
+        let env = TempSetupEnv::new("cursor-mcp-one-backup");
+        seed_cursor_mcp(&env, CURSOR_USER_MCP);
+
+        let result = apply_cursor_mcp();
+        assert!(result.success, "{}", result.message);
+
+        let root = backup_root().expect("backup root");
+        let runs: Vec<String> = fs::read_dir(&root)
+            .expect("backup root")
+            .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(runs, vec!["setup".to_string()], "{runs:?}");
+        let copies = fs::read_dir(env.setup_root().join(&result.transaction_id))
+            .expect("transaction backup")
+            .count();
+        assert!(copies > 0, "the transaction holds the backup");
+    }
+
     #[test]
     fn cursor_mcp_apply_adds_only_playwright_and_keeps_the_other_servers() {
         let env = TempSetupEnv::new("cursor-mcp-partial-apply");

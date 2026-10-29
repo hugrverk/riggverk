@@ -1,6 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+#[cfg(test)]
 use crate::commands::backups::backup_root;
 #[cfg(test)]
 use crate::commands::cursor_profile::manifest_recommended_skills;
@@ -75,6 +76,7 @@ pub struct ProfileRunOutput {
 }
 
 /// `YYYYMMDD-HHMMSS` in UTC, the directory name format the Backups view recognizes.
+#[cfg(test)]
 fn utc_backup_timestamp(unix_secs: u64) -> String {
     let days = (unix_secs / 86_400) as i64;
     let secs_of_day = unix_secs % 86_400;
@@ -103,6 +105,7 @@ fn utc_backup_timestamp(unix_secs: u64) -> String {
 
 /// First backup destination at or after `now_secs` that does not exist yet, so a second
 /// backup of the same file within one second never overwrites the first.
+#[cfg(test)]
 fn unique_backup_dest(
     root: &Path,
     label: &str,
@@ -124,6 +127,7 @@ fn unique_backup_dest(
     ))
 }
 
+#[cfg(test)]
 fn backup_file_before_write(path: &Path, label: &str) -> Result<(), String> {
     if !path.is_file() {
         return Ok(());
@@ -644,26 +648,7 @@ pub fn run_global_mcp_only(
             }
         };
 
-        // Ensure backup root is accessible
-        if let Err(e) = backup_root() {
-            return ProfileRunOutput {
-                success: false,
-                stdout,
-                stderr: format!("backup root unavailable: {e}"),
-                exit_code: 1,
-            };
-        }
-
-        // Backup existing MCP config
-        if let Err(e) = backup_file_before_write(&paths.mcp_config, "cursor-mcp") {
-            return ProfileRunOutput {
-                success: false,
-                stdout,
-                stderr: format!("backup MCP: {e}"),
-                exit_code: 1,
-            };
-        }
-
+        // The setup transaction has already backed the file up; no second copy is made here.
         // Write merged MCP config
         if let Err(e) = crate::safe_filesystem::write_regular_file_atomic(
             &paths.mcp_config,
