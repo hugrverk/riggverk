@@ -283,6 +283,8 @@
 }
 
 .hp-fold {
+  /* Where Fold.tsx scrolls its top to: the unit it belongs to stays in view above it. */
+  scroll-margin-top: 120px;
   display: grid;
   grid-template-rows: 1fr;
   animation: hp-unfold var(--dur-fold) var(--ease) both;

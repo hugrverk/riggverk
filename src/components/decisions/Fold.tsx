@@ -17,15 +17,16 @@ export interface FoldProps {
  * a failed preview), so a closed Compare leaves nothing in the page for a reader or the Tab order. It unfolds with a
  * height animation of `--dur-fold` on mount (`_harness.scss`); the subtle and off motion levels, and the OS
  * preference, drop the animation and show it at once. It opens below the cards it belongs to, often under the
- * fold of the window, so it scrolls itself into view (nearest edge, instantly when motion is off) and keeps doing so
- * for a moment while the diff replaces the loading line and makes it taller. Focus stays where it was.
+ * fold of the window and taller than it, so it scrolls its top up to just under the page's head (`scroll-margin-top`;
+ * instantly when motion is off) and keeps doing so for a moment while the diff replaces the loading line and makes it
+ * taller. Focus stays where it was.
  */
 export function Fold({ id, label, children }: FoldProps) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const fold = ref.current;
     if (!fold) return;
-    const reveal = () => fold.scrollIntoView?.({ block: "nearest", behavior: currentMotion() === "off" ? "auto" : "smooth" });
+    const reveal = () => fold.scrollIntoView?.({ block: "start", behavior: currentMotion() === "off" ? "auto" : "smooth" });
     reveal();
     if (typeof ResizeObserver === "undefined") return;
     const until = Date.now() + SETTLE_MS;

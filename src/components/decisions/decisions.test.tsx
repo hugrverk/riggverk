@@ -20,7 +20,7 @@ describe("Fold", () => {
           </Fold>
         </>,
       );
-      expect(scrollIntoView).toHaveBeenCalledWith(expect.objectContaining({ block: "nearest" }));
+      expect(scrollIntoView).toHaveBeenCalledWith(expect.objectContaining({ block: "start" }));
       expect(scrollIntoView.mock.contexts[0]).toBe(screen.getByRole("group", { name: "Compare CLAUDE.md" }));
       expect(document.activeElement).toBe(document.body);
     } finally {
