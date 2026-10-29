@@ -6,7 +6,7 @@ import {
   HARNESS_SURFACES,
   WORKSPACE_SURFACES,
 } from "../lib/harnessInstallation";
-import type { InstallationState, InstallationStatus, InstallAgent, SetupSurfaceId } from "../types";
+import type { InstallationStatus, InstallAgent, SetupSurfaceId } from "../types";
 
 export type OverviewId = "workspace" | InstallAgent;
 
@@ -106,11 +106,6 @@ export function useInstallationOverview({
   }, [busy, refresh, refreshKey]);
 
   return useMemo(() => ({ entries, loading, refresh }), [entries, loading, refresh]);
-}
-
-/** Installation state of one target, or null while unknown. */
-export function overviewState(overview: InstallationOverview | undefined, id: OverviewId): InstallationState | null {
-  return overview?.entries[id]?.status?.state ?? null;
 }
 
 /** Operations an update would apply without touching conflicts. */

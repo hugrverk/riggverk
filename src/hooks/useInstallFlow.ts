@@ -172,21 +172,6 @@ export function buildInstallReview(request: InstallFlowRequest, plan: SetupPlan)
   return { request, plan, counts, safeOperations, conflicts, manualSteps, applySurfaces, canApply };
 }
 
-function plural(n: number, noun: string): string {
-  return `${n} ${noun}${n === 1 ? "" : "s"}`;
-}
-
-/** One-line prompt for the review, e.g. "apply 7 safe changes, skip 1 conflict". */
-export function describeInstallReview(review: InstallReview): string {
-  const safe = review.safeOperations.length;
-  const conflicts = review.conflicts.length;
-  if (safe === 0) {
-    return conflicts > 0 ? `nothing safe to apply, ${plural(conflicts, "conflict")}` : "nothing to apply";
-  }
-  const skip = conflicts > 0 ? `, skip ${plural(conflicts, "conflict")}` : "";
-  return `apply ${plural(safe, "safe change")}${skip}`;
-}
-
 export function useInstallFlow(): InstallFlow {
   const [flow, setFlow] = useState<FlowState>(IDLE);
   const [outcome, setOutcome] = useState<InstallFlowOutcome | null>(null);
