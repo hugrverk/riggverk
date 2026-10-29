@@ -215,14 +215,6 @@ pub fn rule_targets() -> Vec<AgentSyncTarget> {
         .collect()
 }
 
-pub fn runtime_agent_targets() -> Vec<AgentSyncTarget> {
-    targets()
-        .into_iter()
-        .filter(|t| matches!(t.kind, TargetKind::Agents))
-        .filter(|t| t.id != "cursor_setup")
-        .collect()
-}
-
 pub fn config_targets() -> Vec<AgentSyncTarget> {
     targets()
         .into_iter()
@@ -316,13 +308,6 @@ pub fn normalize_enabled_harness_ids(raw: &[HarnessId]) -> Vec<HarnessId> {
         .copied()
         .filter(|id| raw.contains(id))
         .collect()
-}
-
-pub fn target_harness(target_id: &str) -> Option<HarnessId> {
-    targets()
-        .into_iter()
-        .find(|target| target.id == target_id)
-        .map(|target| target.harness)
 }
 
 pub fn home_dir() -> Result<PathBuf, String> {
@@ -433,7 +418,6 @@ mod tests {
             surface_target_id(SetupSurfaceId::ClaudeConfig),
             Some("claude_config")
         );
-        assert_eq!(target_harness("claude_config"), Some(HarnessId::Claude));
         // It has no bundled file, so the Library has no template to show for it.
         assert!(bundled_config_targets()
             .iter()
@@ -532,15 +516,6 @@ mod tests {
             .find(|t| t.id == "cursor_setup")
             .expect("cursor_setup target");
         assert!(matches!(cursor.kind, TargetKind::Agents));
-    }
-
-    #[test]
-    fn cursor_setup_not_in_runtime_agent_targets() {
-        let runtime = runtime_agent_targets();
-        assert!(
-            runtime.iter().all(|t| t.id != "cursor_setup"),
-            "cursor_setup must be excluded from runtime_agent_targets"
-        );
     }
 
     #[test]
@@ -668,7 +643,6 @@ mod tests {
             surface_target_id(SetupSurfaceId::CopilotRules),
             Some("copilot_rules")
         );
-        assert_eq!(target_harness("copilot_rules"), Some(HarnessId::Copilot));
         let rules: Vec<&str> = rule_targets().iter().map(|t| t.id).collect();
         assert_eq!(
             rules.len(),
@@ -695,7 +669,6 @@ mod tests {
         assert_eq!(kilo_mcp.source_rel, "templates/mcp/kilo.playwright.json");
         assert_eq!(target_surfaces("kilo_mcp"), [SetupSurfaceId::KiloMcp]);
         assert_eq!(surface_target_id(SetupSurfaceId::PiMcp), Some("pi_mcp"));
-        assert_eq!(target_harness("copilot_mcp"), Some(HarnessId::Copilot));
         assert_eq!(
             serde_json::to_value(TargetKind::Mcp).unwrap(),
             serde_json::json!("mcp")

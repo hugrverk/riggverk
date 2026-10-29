@@ -73,7 +73,6 @@ function AppShell() {
     cursorProfileHealth,
     claudeRuntimeHealth,
     lightRuntimeHealth,
-    fetchStatus,
     loadWorkspaceDiagnostics,
     loadOpenCodeRuntimeHealth,
     loadCodexRuntimeHealth,
@@ -163,7 +162,6 @@ function AppShell() {
     workspaceLoadGenerationRef,
     isWorkspaceLoadCurrent,
     isInvalidWorkspaceError,
-    fetchStatus,
     view,
   });
 
@@ -191,17 +189,14 @@ function AppShell() {
   ]);
 
   const loadWorkspaceResources = useCallback(async (generation = workspaceLoadGenerationRef.current) => {
-    const tasks: Promise<unknown>[] = [
-      fetchStatus(generation).catch(() => {}),
-      loadEnabledHarnessHealth(generation),
-    ];
+    const tasks: Promise<unknown>[] = [loadEnabledHarnessHealth(generation)];
     // Library data is loaded on demand by loadLibraryView when the Library
     // opens; refresh here only when it is the active view (workspace change).
     if (viewRef.current === "library") {
       tasks.push(loadWorkspaceLibraryResources(generation));
     }
     await Promise.all(tasks);
-  }, [loadWorkspaceLibraryResources, fetchStatus, loadEnabledHarnessHealth, workspaceLoadGenerationRef]);
+  }, [loadWorkspaceLibraryResources, loadEnabledHarnessHealth, workspaceLoadGenerationRef]);
 
   const {
     transactionId: uninstallRecoveryTransactionId,
@@ -274,7 +269,6 @@ function AppShell() {
     resetWorkspaceBoundState,
     loadWorkspaceDiagnostics,
     loadWorkspaceResources,
-    fetchStatus,
     workspaceTaskLabel: wsRunning,
   });
 
@@ -363,7 +357,7 @@ function AppShell() {
       .forEach(clearHarnessHealth);
     const newlyEnabled = enabledHarnessIds.filter(harness => !previous.includes(harness));
     if (newlyEnabled.length > 0) {
-      void Promise.all([fetchStatus(), loadEnabledHarnessHealth(undefined, newlyEnabled)]);
+      void loadEnabledHarnessHealth(undefined, newlyEnabled);
     }
     const activeHarness = harnessForView(viewRef.current);
     if (activeHarness && !enabledHarnessIds.includes(activeHarness)) setView("start");
@@ -371,7 +365,6 @@ function AppShell() {
     appSettings,
     enabledHarnessKey,
     clearHarnessHealth,
-    fetchStatus,
     loadEnabledHarnessHealth,
     loadWorkspaceDiagnostics,
     loadWorkspaceResources,
@@ -415,9 +408,8 @@ function AppShell() {
     await Promise.all([
       loadWorkspaceDiagnostics(gen),
       loadDocs(gen),
-      fetchStatus(),
     ]);
-  }, [loadWorkspaceDiagnostics, loadDocs, fetchStatus, loadEnabledHarnessHealth, workspaceLoadGenerationRef]);
+  }, [loadWorkspaceDiagnostics, loadDocs, loadEnabledHarnessHealth, workspaceLoadGenerationRef]);
 
   // An install or a rules conversion that wrote files leaves the transaction `z` rolls back.
   const onApplied = useCallback((result: SetupResult) => {
@@ -454,7 +446,6 @@ function AppShell() {
         void loadEnabledHarnessHealth(gen);
         await Promise.all([
           loadWorkspaceDiagnostics(gen),
-          fetchStatus(),
         ]);
       },
     }).then(result => {
@@ -465,7 +456,6 @@ function AppShell() {
     runWsTask,
     captureFromUninstallResult,
     loadWorkspaceDiagnostics,
-    fetchStatus,
     loadEnabledHarnessHealth,
     workspaceLoadGenerationRef,
   ]);
@@ -489,7 +479,6 @@ function AppShell() {
         await Promise.all([
           loadWorkspaceDiagnostics(gen),
           loadDocs(gen),
-          fetchStatus(),
         ]);
       },
     }).then((result) => {
@@ -504,7 +493,6 @@ function AppShell() {
     clearUninstallRecovery,
     loadWorkspaceDiagnostics,
     loadDocs,
-    fetchStatus,
     loadEnabledHarnessHealth,
     workspaceLoadGenerationRef,
   ]);

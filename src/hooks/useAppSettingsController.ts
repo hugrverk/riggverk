@@ -38,7 +38,6 @@ export interface AppSettingsControllerDeps {
   resetWorkspaceBoundState: () => void;
   loadWorkspaceDiagnostics: (generation?: number) => Promise<void>;
   loadWorkspaceResources: (generation?: number) => Promise<void>;
-  fetchStatus: (generation?: number) => Promise<void>;
   /** Label of the workspace task in flight (apply, uninstall, rollback, ...), or null. A switch must not run under it. */
   workspaceTaskLabel?: string | null;
 }
@@ -52,7 +51,6 @@ export function useAppSettingsController({
   resetWorkspaceBoundState,
   loadWorkspaceDiagnostics,
   loadWorkspaceResources,
-  fetchStatus,
   workspaceTaskLabel = null,
 }: AppSettingsControllerDeps) {
   const confirm = useConfirm();
@@ -181,7 +179,6 @@ export function useAppSettingsController({
                 loadWorkspaceResources(generation),
               ]);
             } else {
-              fetchStatus(generation);
               loadWorkspaceDiagnostics(generation);
             }
           } else if (latest) {
@@ -217,7 +214,6 @@ export function useAppSettingsController({
     acknowledgeSaved,
     appliedWorkspacePathRef,
     beginWorkspaceLoadGeneration,
-    fetchStatus,
     isWorkspaceLoadCurrent,
     loadWorkspaceDiagnostics,
     loadWorkspaceResources,

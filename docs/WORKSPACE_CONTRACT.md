@@ -21,7 +21,7 @@ The data folder holds only the app's state, in `.riggverk/` (`managed-state.json
 
 Nothing creates the folder at launch. The first write that needs it (a state file, a personal doc) creates it lazily, owner-only (0700). A fresh profile has nothing to remove: the Workspace folder cell reads Up to date.
 
-Validation is read-only. It does not run workspace scripts, install files, or inspect credential-bearing state. Health checks that need the OpenCode generator run the bundled copy, not a script from the data folder. Runtime health (Claude, Codex, Cursor, OpenCode) and the sync fields of `get_status` compare the installed files with the bundle; an old copy in the data folder, edited or not, does not change them, and Codex, Cursor, Claude and OpenCode health need no data folder at all.
+Validation is read-only. It does not run workspace scripts, install files, or inspect credential-bearing state. Health checks that need the OpenCode generator run the bundled copy, not a script from the data folder. Runtime health (Claude, Codex, Cursor, OpenCode) compares the installed files with the bundle; an old copy in the data folder, edited or not, does not change them, and Codex, Cursor, Claude and OpenCode health need no data folder at all.
 
 ## Bundled resources
 

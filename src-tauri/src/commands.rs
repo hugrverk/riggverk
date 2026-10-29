@@ -74,7 +74,6 @@ pub use setup::{
     rollback_setup_transaction,
 };
 pub use skills::{get_effective_skill_loads, list_skills, read_skill};
-pub use status::get_status;
 pub use workspace::{
     get_workspace_diagnostics, open_default_workspace_folder, reset_active_workspace_path,
 };

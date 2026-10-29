@@ -80,7 +80,6 @@ import type {
   SkillLoadFlag,
   SkillReadFolder,
   SkillSummary,
-  StatusData,
   SurfaceInstallationStatus,
   TakeBundledPreview,
   UninstallPlanView,
@@ -1085,17 +1084,6 @@ function backupDetails(runId: string): BackupRunDetails {
 
 /* ---- status + diagnostics ---- */
 
-function statusData(): StatusData {
-  const enabled = new Set(settings.enabled_target_ids);
-  return {
-    repo_path: WORKSPACE,
-    enabled_rule_target_ids: TARGETS.filter(t => t.kind === "rules" && enabled.has(t.id)).map(t => t.id),
-    enabled_config_target_ids: TARGETS.filter(t => t.kind === "config" && enabled.has(t.id)).map(t => t.id),
-    enabled_agent_target_ids: TARGETS.filter(t => t.kind === "agents" && enabled.has(t.id)).map(t => t.id),
-    enabled_target_ids: [...enabled],
-  };
-}
-
 function diagnostics(): WorkspaceDiagnostics {
   const valid = scenario !== "error";
   const enabled = new Set(settings.enabled_target_ids);
@@ -1800,8 +1788,6 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
       return settings;
     case "get_agent_targets":
       return TARGETS;
-    case "get_status":
-      return scenario === "error" ? unavailable() : statusData();
     case "get_workspace_diagnostics":
       return diagnostics();
     case "get_installation_status":
