@@ -35,6 +35,7 @@ import { rulesFileName, rulesGates, rulesModelFor, rulesOverrideWarning, rulesSu
 import { harnessUiItems } from "../lib/shellSummary";
 import { skillLoadProblemCount, skillLoadRows, skillReadsRows, summarizeSkillLoads } from "../lib/skillLoadRows";
 import { READY_TO_INSTALL_LABEL, type UiItem, type UiState } from "../lib/uiState";
+import { tailStyle } from "../ui/gridTail";
 import { Kv, type KvItem } from "../ui/Kv";
 import { Page } from "../ui/Page";
 import { TButton } from "../ui/TButton";
@@ -55,11 +56,6 @@ const STATE_RANK: Partial<Record<UiState, number>> = { decide: 0, fix: 1 };
 
 function baseName(path: string): string {
   return path.slice(path.lastIndexOf("/") + 1);
-}
-
-/** Empty slots that finish the last row of single cells in the three-column grid, so the hairlines still close it. */
-function fillerCount(cells: number): number {
-  return (3 - (cells % 3)) % 3;
 }
 
 /**
@@ -324,7 +320,7 @@ export function HarnessPage({
     return hasDecision && (state === "ready" || state === "yours");
   };
 
-  const renderCell = (row: HarnessRowModel) => {
+  const renderCell = (row: HarnessRowModel, tail: boolean) => {
     const ui = stateOf(row);
     const state = ui?.state ?? null;
     const short = surfaceShortName(row.surface);
@@ -363,6 +359,7 @@ export function HarnessPage({
         stateLabel={state === "ready" && (row.state === "not_installed" || (isRules && rulesModel.kind === "absent")) ? READY_TO_INSTALL_LABEL : undefined}
         note={notes.length > 0 ? notes.join(" · ") : null}
         wide={wide}
+        tail={tail && !wide}
         active={active}
         onActivate={() => setActiveSurface(row.surface)}
         toggle={
@@ -463,12 +460,9 @@ export function HarnessPage({
         )}
 
         {appSettings ? (
-          <div className="hp-grid">
-            {wideCells.map(renderCell)}
-            {singleCells.map(renderCell)}
-            {Array.from({ length: fillerCount(singleCells.length) }, (_, index) => (
-              <div key={`fill-${index}`} className="hp-cell hp-fill" aria-hidden="true" />
-            ))}
+          <div className="hp-grid" style={tailStyle(singleCells.length)}>
+            {wideCells.map(row => renderCell(row, false))}
+            {singleCells.map((row, index) => renderCell(row, index === singleCells.length - 1))}
             <RuntimeCell
               verdict={verdict}
               rows={dataFolderOk ? runtimeRowsFor(runtime, skillLoadRows(skillLoads, harness)) : []}

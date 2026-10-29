@@ -137,6 +137,9 @@
 
 .hp-span3 { grid-column: 1 / -1; }
 
+/* The last single cell takes the slots that would stay empty in its row; --tail3/--tail2 come from the grid (gridTail.ts). */
+.hp-tail { grid-column: span var(--tail3, 1); }
+
 /* A cell with a decision in it: a bright top edge (a top inset, not the heavy selected-state bars). */
 .hp-cell[data-state="decide"] { box-shadow: inset 0 2px 0 var(--decide); }
 
@@ -587,14 +590,14 @@
 
 @container hp (max-width: 640px) {
   .hp-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  /* The fillers close a row of three; with two columns they would only add empty rows. */
-  .hp-fill { display: none; }
+  .hp-tail { grid-column: span var(--tail2, 1); }
   .hp-note-row { grid-template-columns: minmax(8ch, 110px) minmax(0, 1fr); }
   .hp-note-row .state-pill { grid-column: 2; justify-self: start; }
 }
 
 @container hp (max-width: 420px) {
   .hp-grid { grid-template-columns: minmax(0, 1fr); }
+  .hp-tail { grid-column: auto; }
 }
 
 /* Two choice cards side by side need room; the side-by-side diff keeps its two columns and wraps long lines. */
@@ -604,10 +607,10 @@
 
 @container hp (max-width: 720px) {
   [data-app-font-size="large"] .hp-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  [data-app-font-size="large"] .hp-fill { display: none; }
+  [data-app-font-size="large"] .hp-tail { grid-column: span var(--tail2, 1); }
 }
 
 @container hp (max-width: 800px) {
   [data-app-font-size="extra-large"] .hp-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  [data-app-font-size="extra-large"] .hp-fill { display: none; }
+  [data-app-font-size="extra-large"] .hp-tail { grid-column: span var(--tail2, 1); }
 }

@@ -18,7 +18,7 @@ export function WorthALookCell({ look, span = 1, onOpen }: WorthALookCellProps) 
   const labelId = useId();
   if (look.count === 0) return null;
   return (
-    <section className={cx("ov-cell", span === 3 && "ov-span3")} aria-labelledby={labelId}>
+    <section className={cx("ov-cell", span === 3 ? "ov-span3" : "ov-span1")} aria-labelledby={labelId}>
       <span id={labelId} className="ov-lbl">
         Worth a look · {look.count}
       </span>

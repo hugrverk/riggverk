@@ -28,6 +28,8 @@ export interface SurfaceCellProps {
   surface: string;
   /** A decision (or anything with detail and actions) takes the whole row. */
   wide?: boolean;
+  /** The last single cell of the grid: it spans the slots that would otherwise stay empty in its row. */
+  tail?: boolean;
   /** The keys act on this cell. */
   active?: boolean;
   /** Focus or a click landed in the cell: its surface becomes the one the page keys act on. */
@@ -52,6 +54,7 @@ export function SurfaceCell({
   note,
   surface,
   wide = false,
+  tail = false,
   active = false,
   onActivate,
   toggle,
@@ -72,7 +75,7 @@ export function SurfaceCell({
   );
   return (
     <article
-      className={cx("hp-cell", wide && "hp-span3")}
+      className={cx("hp-cell", wide && "hp-span3", tail && "hp-tail")}
       aria-labelledby={labelId}
       data-surface={surface}
       data-state={state ?? undefined}
