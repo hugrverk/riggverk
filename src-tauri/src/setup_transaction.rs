@@ -717,6 +717,11 @@ pub fn detect_surface_state_with(
                                     .flatten()
                             })
                             .or_else(|| {
+                                (p.artifact == ArtifactId::CodexConfig
+                                    && crate::commands::codex_python().is_none())
+                                .then(|| crate::commands::CODEX_PYTHON_REQUIRED.to_string())
+                            })
+                            .or_else(|| {
                                 (p.artifact == ArtifactId::CodexConfig)
                                     .then(|| {
                                         crate::codex_config_keep::conflict_reason(
@@ -2286,6 +2291,9 @@ pub fn plan_artifacts_for_surfaces_with(
                 }
                 if file.is_some_and(|file| file.kept.is_some()) {
                     (OperationKind::Manual, previous_state)
+                } else if codex_update_needs_python(&artifact, kind) {
+                    // The merge scripts need `tomllib`: held back at preview, not failed mid-apply.
+                    (OperationKind::Conflict, PreviousState::Conflict)
                 } else {
                     (kind, previous_state)
                 }
@@ -2396,6 +2404,14 @@ pub fn plan_artifacts_for_surfaces_with(
     // each group is kept).
     planned.sort_by_key(|operation| operation.kind == OperationKind::Remove);
     Ok(planned)
+}
+
+/// An update of the Codex config merges through the bundled Python scripts, which need a Python
+/// that can read TOML (3.11+). Without one the update cannot run.
+fn codex_update_needs_python(artifact: &ArtifactId, kind: OperationKind) -> bool {
+    *artifact == ArtifactId::CodexConfig
+        && kind == OperationKind::Update
+        && crate::commands::codex_python().is_none()
 }
 
 /// A skill or agent file in conflict the user could resolve, with whether they keep it. `None`
@@ -3418,7 +3434,16 @@ pub fn validate_update_target_unchanged(
     if !matches!(op.kind, OperationKind::Update) {
         return Ok(());
     }
-    rollback_restore_mode(op, workspace_root, home).map(|_| ())
+    let mode = rollback_restore_mode(op, workspace_root, home)?;
+    // Merging the Codex config back runs the bundled Python scripts: refused before anything is
+    // touched (and in the Undo preview) when no Python can read TOML.
+    if mode == RollbackRestoreMode::ManagedProjectionMerge
+        && op.artifact == ArtifactId::CodexConfig
+        && crate::commands::codex_python().is_none()
+    {
+        return Err(crate::commands::CODEX_PYTHON_REQUIRED.into());
+    }
+    Ok(())
 }
 
 pub fn validate_backup_for_rollback(

@@ -693,18 +693,9 @@ fn run_generator_check_with_timeout(
     // so no freshness check is possible.
     out.exit_code?;
     let passed = out.success;
-    let stderr = out.stderr.trim().to_string();
-    let stdout = out.stdout.trim().to_string();
+    // Fixed phrases: the generator's own output is never shown.
     let detail = if passed {
-        if !stdout.is_empty() {
-            stdout
-        } else {
-            "snapshot is current".into()
-        }
-    } else if !stderr.is_empty() {
-        stderr
-    } else if !stdout.is_empty() {
-        stdout
+        "snapshot is current".into()
     } else {
         "snapshot is stale (generator check failed)".into()
     };
@@ -3964,6 +3955,22 @@ mod tests {
             started.elapsed() < Duration::from_secs(10),
             "timeout must bound the wait"
         );
+    }
+
+    #[test]
+    fn test_generator_check_never_shows_the_generator_output() {
+        let ws = temp_root("gen-check-quiet");
+        write_marker_workspace(&ws);
+        let (gen_dir, script) = fake_generator(
+            "gen-check-quiet-script",
+            "sys.stdout.write('OUT-FAKE-SECRET')\nsys.stderr.write('ERR-FAKE-SECRET')\nsys.exit(1)\n",
+        );
+        let result = run_generator_check_with_timeout(&script, &ws, Duration::from_secs(30));
+        cleanup(&ws);
+        cleanup(&gen_dir);
+        let (status, detail) = result.expect("generator ran");
+        assert_eq!(status, "stale");
+        assert!(!detail.contains("FAKE-SECRET"), "{detail}");
     }
 
     #[cfg(unix)]

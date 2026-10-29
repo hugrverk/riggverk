@@ -13,10 +13,13 @@ mod process;
 pub(crate) mod retired_workspace_files;
 mod security_posture;
 pub(crate) mod setup;
+#[cfg(test)]
+pub(crate) use codex_runtime::with_codex_python;
 pub(crate) use codex_runtime::{
-    extract_managed_codex_config, is_app_shaped_legacy_profile, managed_codex_keys_match,
-    render_codex_config_for_apply, render_codex_config_managed_projection,
-    CREATE_ONLY_TOP_LEVEL_KEYS, LEGACY_TOP_LEVEL_PROFILE_VALUES,
+    codex_python, extract_managed_codex_config, is_app_shaped_legacy_profile,
+    managed_codex_keys_match, render_codex_config_for_apply,
+    render_codex_config_managed_projection, CODEX_PYTHON_REQUIRED, CREATE_ONLY_TOP_LEVEL_KEYS,
+    LEGACY_TOP_LEVEL_PROFILE_VALUES,
 };
 pub(crate) use content::personal_doc_count;
 pub(crate) use opencode_runtime::{
