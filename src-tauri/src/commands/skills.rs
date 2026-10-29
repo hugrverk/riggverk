@@ -28,12 +28,14 @@ fn skill_summary_from_path(
     group: String,
 ) -> SkillSummary {
     let content = std::fs::read_to_string(skill_md).unwrap_or_default();
-    let name = extract_frontmatter(&content, "name");
-    let desc = extract_frontmatter(&content, "description");
-    let category = extract_frontmatter(&content, "category");
-    let risk = extract_frontmatter(&content, "risk");
-    let targets = extract_frontmatter_list(&content, "targets");
-    let related = extract_frontmatter_list(&content, "related");
+    let fields = crate::skill_discovery::frontmatter_fields(&content).unwrap_or_default();
+    let field = |key: &str| fields.get(key).cloned().unwrap_or_default();
+    let name = field("name");
+    let desc = field("description");
+    let category = field("category");
+    let risk = field("risk");
+    let targets = split_list(&field("targets"));
+    let related = split_list(&field("related"));
     let rel = skill_md
         .strip_prefix(root)
         .unwrap_or(skill_md)
@@ -251,26 +253,7 @@ pub fn read_skill(id: String) -> Result<DocumentContent, String> {
     }
 }
 
-fn extract_frontmatter(content: &str, key: &str) -> String {
-    let prefix = format!("{}:", key);
-    for line in content.lines() {
-        if line.trim_start().starts_with(&prefix) {
-            return line
-                .trim_start()
-                .strip_prefix(&prefix)
-                .unwrap_or("")
-                .trim()
-                .to_string();
-        }
-    }
-    String::new()
-}
-
-fn extract_frontmatter_list(content: &str, key: &str) -> Vec<String> {
-    let raw = extract_frontmatter(content, key);
-    if raw.is_empty() {
-        return Vec::new();
-    }
+fn split_list(raw: &str) -> Vec<String> {
     raw.split(',')
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())

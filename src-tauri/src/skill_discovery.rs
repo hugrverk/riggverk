@@ -3,7 +3,7 @@
 //! Single owner for SKILL.md layout validation, frontmatter parsing, and
 //! harness target metadata used by setup, health checks, and artifact expansion.
 
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -83,23 +83,147 @@ fn scan_deeper_skill_md(dir: &Path, depth: usize) -> bool {
     false
 }
 
-fn extract_frontmatter(content: &str, key: &str) -> String {
-    let prefix = format!("{key}:");
-    for line in content.lines() {
-        if line.trim_start().starts_with(&prefix) {
-            return line
-                .trim_start()
-                .strip_prefix(&prefix)
-                .unwrap_or("")
-                .trim()
-                .to_string();
-        }
+/// The lines between a first line `---` and the next line `---`.
+fn frontmatter_lines(content: &str) -> Result<Vec<&str>, String> {
+    let mut lines = content.lines();
+    if lines.next().map(str::trim_end) != Some("---") {
+        return Err("missing frontmatter opening delimiter".to_string());
     }
-    String::new()
+    let mut block = Vec::new();
+    for line in lines {
+        if line.trim_end() == "---" {
+            return Ok(block);
+        }
+        block.push(line);
+    }
+    Err("missing frontmatter closing delimiter".to_string())
 }
 
-fn extract_frontmatter_list(content: &str, key: &str) -> Vec<String> {
-    let raw = extract_frontmatter(content, key);
+/// The top-level keys of a `SKILL.md` frontmatter and their scalar values, read the way a YAML
+/// harness reads them for the keys skills use: only unindented `key: value` lines count (a nested
+/// `metadata:` mapping is not the skill's name), one level of `"…"` or `'…'` quotes is removed,
+/// `|`, `|-`, `>` and `>-` block scalars are read, and indented lines after a plain value continue
+/// it. A key that is not a scalar (a nested mapping or list) reads as empty. A key given twice is
+/// an error: harnesses disagree on which one wins.
+pub(crate) fn frontmatter_fields(content: &str) -> Result<BTreeMap<String, String>, String> {
+    let lines = frontmatter_lines(content)?;
+    let mut fields = BTreeMap::new();
+    let mut index = 0;
+    while index < lines.len() {
+        let line = lines[index];
+        index += 1;
+        if line.starts_with(|c: char| c.is_whitespace() || c == '#' || c == '-') {
+            continue;
+        }
+        let Some((key, rest)) = split_key(line) else {
+            continue;
+        };
+        // The indented lines that belong to this key.
+        let start = index;
+        while index < lines.len() {
+            let next = lines[index];
+            if !next.trim().is_empty() && !next.starts_with(char::is_whitespace) {
+                break;
+            }
+            index += 1;
+        }
+        let continuation = &lines[start..index];
+        let value = scalar_value(rest, continuation)
+            .map_err(|reason| format!("frontmatter key {key}: {reason}"))?;
+        if fields.insert(key.to_string(), value).is_some() {
+            return Err(format!("frontmatter key {key} is given more than once"));
+        }
+    }
+    Ok(fields)
+}
+
+/// `key` and the rest of a `key: value` line; `None` for a line that is no mapping entry.
+fn split_key(line: &str) -> Option<(&str, &str)> {
+    let colon = line.find(':')?;
+    let (key, rest) = (&line[..colon], &line[colon + 1..]);
+    if key.trim().is_empty() || !(rest.is_empty() || rest.starts_with(char::is_whitespace)) {
+        return None;
+    }
+    Some((key.trim_end(), rest.trim()))
+}
+
+fn scalar_value(rest: &str, continuation: &[&str]) -> Result<String, String> {
+    let more = || {
+        continuation
+            .iter()
+            .map(|line| line.trim())
+            .filter(|line| !line.is_empty())
+    };
+    if let Some(style) = rest.strip_prefix(['|', '>']) {
+        let style = style.split(" #").next().unwrap_or("").trim();
+        if !matches!(style, "" | "-") {
+            return Err(format!("unsupported block scalar {rest:?}"));
+        }
+        let literal = rest.starts_with('|');
+        return Ok(block_scalar(continuation, literal));
+    }
+    if let Some(quote) = rest.chars().next().filter(|c| *c == '"' || *c == '\'') {
+        let rest = match rest.ends_with(quote) {
+            true => rest,
+            false => rest.split(" #").next().unwrap_or("").trim_end(),
+        };
+        let inner = rest
+            .strip_prefix(quote)
+            .and_then(|inner| inner.strip_suffix(quote))
+            .filter(|_| rest.len() >= 2 && more().next().is_none())
+            .ok_or_else(|| "a quoted value must close on its own line".to_string())?;
+        return Ok(if quote == '"' {
+            inner.replace("\\\"", "\"").replace("\\\\", "\\")
+        } else {
+            inner.replace("''", "'")
+        });
+    }
+    if rest.is_empty() {
+        // A nested mapping or list, or nothing at all: no scalar.
+        return Ok(String::new());
+    }
+    let plain = |text: &str| text.split(" #").next().unwrap_or("").trim().to_string();
+    let mut value = plain(rest);
+    for line in more() {
+        value.push(' ');
+        value.push_str(&plain(line));
+    }
+    Ok(value)
+}
+
+/// A `|` (lines kept) or `>` (lines folded into one) block scalar, trailing newlines stripped.
+fn block_scalar(lines: &[&str], literal: bool) -> String {
+    let indent = lines
+        .iter()
+        .filter(|line| !line.trim().is_empty())
+        .map(|line| line.len() - line.trim_start().len())
+        .min()
+        .unwrap_or(0);
+    let body: Vec<&str> = lines
+        .iter()
+        .map(|line| line.get(indent..).unwrap_or("").trim_end())
+        .collect();
+    let text = if literal {
+        body.join("\n")
+    } else {
+        let mut folded = String::new();
+        for line in body {
+            if line.is_empty() {
+                folded.push('\n');
+            } else {
+                if !folded.is_empty() && !folded.ends_with('\n') {
+                    folded.push(' ');
+                }
+                folded.push_str(line);
+            }
+        }
+        folded
+    };
+    text.trim().to_string()
+}
+
+fn extract_frontmatter_list(fields: &BTreeMap<String, String>, key: &str) -> Vec<String> {
+    let raw = fields.get(key).cloned().unwrap_or_default();
     if raw.is_empty() {
         return Vec::new();
     }
@@ -116,16 +240,6 @@ fn extract_frontmatter_list(content: &str, key: &str) -> Vec<String> {
         .map(|s| s.trim().trim_matches('"').trim_matches('\'').to_string())
         .filter(|s| !s.is_empty())
         .collect()
-}
-
-fn parse_frontmatter_body(content: &str) -> Result<&str, String> {
-    let rest = content
-        .strip_prefix("---")
-        .ok_or_else(|| "missing frontmatter opening delimiter".to_string())?;
-    let end = rest
-        .find("---")
-        .ok_or_else(|| "missing frontmatter closing delimiter".to_string())?;
-    Ok(&rest[..end])
 }
 
 /// Largest `SKILL.md` read for its metadata.
@@ -152,8 +266,8 @@ pub(crate) fn read_skill_md_capped(skill_md: &Path) -> Result<String, String> {
 /// The `name` a `SKILL.md` declares, when it can be read at all (a skill that fails validation
 /// still has a name worth keeping).
 pub(crate) fn declared_skill_name(skill_md: &Path) -> Option<String> {
-    let name = extract_frontmatter(&read_skill_md_capped(skill_md).ok()?, "name");
-    (!name.is_empty()).then_some(name)
+    let fields = frontmatter_fields(&read_skill_md_capped(skill_md).ok()?).ok()?;
+    fields.get("name").filter(|name| !name.is_empty()).cloned()
 }
 
 pub(crate) fn read_skill_metadata(
@@ -161,11 +275,11 @@ pub(crate) fn read_skill_metadata(
     fallback_name: &str,
 ) -> Result<(String, String, Vec<String>), String> {
     let content = read_skill_md_capped(skill_md)?;
-    parse_frontmatter_body(&content)
+    let fields = frontmatter_fields(&content)
         .map_err(|e| format!("invalid frontmatter in {}: {e}", skill_md.display()))?;
-    let name = extract_frontmatter(&content, "name");
-    let description = extract_frontmatter(&content, "description");
-    let targets = extract_frontmatter_list(&content, "targets");
+    let name = fields.get("name").cloned().unwrap_or_default();
+    let description = fields.get("description").cloned().unwrap_or_default();
+    let targets = extract_frontmatter_list(&fields, "targets");
     let name = if name.is_empty() {
         fallback_name.to_string()
     } else {
@@ -686,6 +800,101 @@ mod tests {
         let err = discover_skill_catalog(&root).unwrap_err();
         let _ = fs::remove_dir_all(&root);
         assert!(err.message().contains("frontmatter"));
+    }
+
+    fn field(content: &str, key: &str) -> Result<String, String> {
+        frontmatter_fields(content).map(|fields| fields.get(key).cloned().unwrap_or_default())
+    }
+
+    #[test]
+    fn only_top_level_frontmatter_keys_count() {
+        let nested =
+            "---\ndescription: d\nmetadata:\n  name: nested-helper\nname: tdd\n---\nname: body\n";
+        assert_eq!(field(nested, "name").unwrap(), "tdd");
+        assert_eq!(field(nested, "metadata").unwrap(), "");
+        let body_only = "---\ndescription: d\n---\nname: from-the-body\n";
+        assert_eq!(field(body_only, "name").unwrap(), "");
+        let crlf = "---\r\nname: crlf\r\ndescription: d\r\n---\r\n";
+        assert_eq!(field(crlf, "name").unwrap(), "crlf");
+    }
+
+    #[test]
+    fn quoted_frontmatter_values_lose_their_quotes() {
+        assert_eq!(
+            field("---\nname: \"quoted\"\n---\n", "name").unwrap(),
+            "quoted"
+        );
+        assert_eq!(
+            field("---\nname: 'single'\n---\n", "name").unwrap(),
+            "single"
+        );
+        assert_eq!(
+            field(
+                "---\ndescription: 'it''s \"fine\"' # note\n---\n",
+                "description"
+            )
+            .unwrap(),
+            "it's \"fine\""
+        );
+        assert_eq!(
+            field("---\nname: plain # a comment\n---\n", "name").unwrap(),
+            "plain"
+        );
+        assert!(field("---\nname: \"open\n---\n", "name").is_err());
+    }
+
+    #[test]
+    fn block_scalar_descriptions_are_read() {
+        let folded =
+            "---\ndescription: >-\n  the real description\n  continues\n\n  here\nname: x\n---\n";
+        assert_eq!(
+            field(folded, "description").unwrap(),
+            "the real description continues\nhere"
+        );
+        assert_eq!(field(folded, "name").unwrap(), "x");
+        let folded_clip = "---\ndescription: >\n  one\n  two\n---\n";
+        assert_eq!(field(folded_clip, "description").unwrap(), "one two");
+        let literal = "---\ndescription: |-\n  line one\n  line two\n---\n";
+        assert_eq!(field(literal, "description").unwrap(), "line one\nline two");
+        let literal_clip = "---\ndescription: |\n  only\n---\n";
+        assert_eq!(field(literal_clip, "description").unwrap(), "only");
+        let plain = "---\ndescription: a plain value\n  that continues\n---\n";
+        assert_eq!(
+            field(plain, "description").unwrap(),
+            "a plain value that continues"
+        );
+        assert!(field("---\ndescription: |+2\n  x\n---\n", "description").is_err());
+    }
+
+    #[test]
+    fn a_duplicate_top_level_name_is_refused() {
+        let err = field("---\nname: a\ndescription: d\nname: b\n---\n", "name").unwrap_err();
+        assert!(
+            err.contains("name") && err.contains("more than once"),
+            "{err}"
+        );
+        let root = temp_root("dup-key");
+        write_skill(
+            &root,
+            "skills/twice",
+            "---\nname: twice\ndescription: d\ntargets: claude\nname: other\n---\n",
+        );
+        let err = discover_skill_catalog(&root).unwrap_err();
+        let _ = fs::remove_dir_all(&root);
+        assert!(
+            err.message().contains("more than once"),
+            "{}",
+            err.message()
+        );
+    }
+
+    #[test]
+    fn a_closing_delimiter_must_be_its_own_line() {
+        assert!(field("---\nname: a---b\n", "name").is_err());
+        assert_eq!(
+            field("---\nname: a---b\ndescription: x --- y\n---\n", "name").unwrap(),
+            "a---b"
+        );
     }
 
     #[test]

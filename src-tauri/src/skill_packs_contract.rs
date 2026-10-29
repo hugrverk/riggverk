@@ -359,6 +359,63 @@ mod tests {
         assert_eq!(env.pending(), vec![]);
     }
 
+    /// The name and description are the ones a YAML harness reads, so a nested `name:` cannot
+    /// slip a bundled name past "bundle wins".
+    #[test]
+    fn pack_skill_frontmatter_is_read_like_yaml_top_level_keys() {
+        let env = Env::new("frontmatter");
+        let skills = env.pack("mine").join("skills");
+        for (folder, text) in [
+            (
+                "nested",
+                "---\ndescription: shadow try\ntargets: claude\nmetadata:\n  name: nested-helper\nname: tdd\n---\nbody\n",
+            ),
+            (
+                "quoted",
+                "---\nname: \"quoted\"\ndescription: 'a quoted name'\ntargets: claude\n---\nbody\n",
+            ),
+            (
+                "folded",
+                "---\nname: folded\ndescription: >-\n  the real description\n  continues\ntargets: claude\n---\nbody\n",
+            ),
+            (
+                "twice",
+                "---\nname: twice\ndescription: d\ntargets: claude\nname: tdd\n---\nbody\n",
+            ),
+        ] {
+            fs::create_dir_all(skills.join(folder)).expect("skill dir");
+            fs::write(skills.join(folder).join("SKILL.md"), text).expect("SKILL.md");
+        }
+        Env::tighten(&skills);
+
+        let sources = env.sources();
+        let by_folder = |folder: &str| {
+            sources.packs()[0]
+                .skills
+                .iter()
+                .find(|skill| skill.folder == folder)
+                .cloned()
+                .expect(folder)
+        };
+        let nested = by_folder("nested");
+        assert_eq!(
+            (nested.name.as_str(), nested.state),
+            ("tdd", PackSkillState::Shadowed)
+        );
+        let quoted = by_folder("quoted");
+        assert_eq!(
+            (quoted.name.as_str(), quoted.state),
+            ("quoted", PackSkillState::Active)
+        );
+        assert_eq!(quoted.description, "a quoted name");
+        let folded = by_folder("folded");
+        assert_eq!(folded.state, PackSkillState::Active);
+        assert_eq!(folded.description, "the real description continues");
+        let twice = by_folder("twice");
+        assert_eq!(twice.state, PackSkillState::Error);
+        assert!(twice.reason.contains("more than once"), "{}", twice.reason);
+    }
+
     #[test]
     fn two_packs_with_one_skill_name_fail_that_skill_only() {
         let env = Env::new("two-packs");
