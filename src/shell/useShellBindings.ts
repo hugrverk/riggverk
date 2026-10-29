@@ -3,7 +3,8 @@ import type { Binding } from "../keyboard/registry";
 import { useKeymap } from "../keyboard/useKeymap";
 import { isEditableEventTarget } from "../lib/isEditableEventTarget";
 import { useShellState } from "./ShellState";
-import { VIEW_DIGITS, type ViewDef } from "./views";
+import { HARNESS_LABELS } from "../lib/harnessInstallation";
+import { VIEW_DEFS, VIEW_DIGITS, type ViewDef } from "./views";
 
 interface ShellBindingsOptions {
   tabs: readonly ViewDef[];
@@ -16,10 +17,11 @@ interface ShellBindingsOptions {
 
 /**
  * The global key layer: the digits of the sidebar destinations (`VIEW_DIGITS`), `:` and Mod+k command line, `?` help,
- * Mod+, settings, Escape (leave a text field; otherwise dismiss the error line).
+ * Mod+, settings, Escape (leave a text field; otherwise dismiss the error line). The digit of an agent that is off
+ * does not navigate: it only says "<Agent> is off in Settings".
  */
 export function useShellBindings({ tabs, goTo, hasError, onDismissError }: ShellBindingsOptions): void {
-  const { openCommandLine, openHelp } = useShellState();
+  const { openCommandLine, openHelp, notify } = useShellState();
 
   const bindings: Binding[] = [
     ...tabs.flatMap((def): Binding[] => {
@@ -33,6 +35,21 @@ export function useShellBindings({ tabs, goTo, hasError, onDismissError }: Shell
           group: "Navigate",
           scope: "global",
           run: () => goTo(def.id),
+        },
+      ];
+    }),
+    ...VIEW_DEFS.flatMap((def): Binding[] => {
+      const digit = VIEW_DIGITS[def.id];
+      if (!digit || !def.harness || tabs.some(tab => tab.id === def.id)) return [];
+      const name = HARNESS_LABELS[def.harness];
+      return [
+        {
+          id: `shell.view.${digit}`,
+          keys: digit,
+          title: `${name} is off`,
+          group: "Navigate",
+          scope: "global",
+          run: () => notify(`${name} is off in Settings`),
         },
       ];
     }),

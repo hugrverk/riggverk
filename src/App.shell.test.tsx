@@ -200,8 +200,8 @@ describe("App shell", () => {
     const backend = installBackend({ enabled_harness_ids: ["codex", "opencode", "claude", "cursor", "pi"] });
     render(<App />);
     await within(nav()).findByRole("button", { name: "Pi" });
-    // Overview, Codex, OpenCode, Cursor, Claude, Pi, History, Library, Settings (then the dim "2 more agents" row).
-    expect(Array.from(nav().querySelectorAll("button.nav:not(.dim)")).map(item => item.getAttribute("aria-label"))).toEqual([
+    // Overview, Codex, OpenCode, Cursor, Claude, Pi, History, Library, Settings.
+    expect(Array.from(nav().querySelectorAll("button.nav")).map(item => item.getAttribute("aria-label"))).toEqual([
       "Overview", "Codex", "OpenCode", "Cursor", "Claude", "Pi", "History", "Library", "Settings",
     ]);
     // Pi has no digit (6 is History); it opens from the sidebar.

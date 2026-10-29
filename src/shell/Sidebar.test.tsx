@@ -6,7 +6,7 @@ import type { AppView } from "./views";
 afterEach(cleanup);
 
 function items(container: HTMLElement): Array<string | null> {
-  return Array.from(container.querySelectorAll("nav button.nav:not(.dim)")).map(button => button.getAttribute("aria-label"));
+  return Array.from(container.querySelectorAll("nav button.nav")).map(button => button.getAttribute("aria-label"));
 }
 
 function plain(props: Partial<Parameters<typeof Sidebar>[0]> = {}) {
@@ -19,7 +19,7 @@ describe("Sidebar", () => {
     expect(items(container)).toEqual(["Overview", "Codex", "OpenCode", "Cursor", "Claude", "History", "Library", "Settings"]);
     expect(Array.from(container.querySelectorAll(".nl")).map(label => label.textContent)).toEqual(["Agents", "Workspace"]);
     expect(within(screen.getByRole("group", { name: "Agents" })).getAllByRole("button").map(b => b.getAttribute("aria-label") ?? b.textContent)).toEqual([
-      "Codex", "OpenCode", "Cursor", "Claude", "3 more agents",
+      "Codex", "OpenCode", "Cursor", "Claude",
     ]);
     expect(within(screen.getByRole("group", { name: "Workspace" })).getAllByRole("button").map(b => b.getAttribute("aria-label"))).toEqual([
       "History", "Library", "Settings",
@@ -53,23 +53,17 @@ describe("Sidebar", () => {
   it("with every agent hidden, only Overview, History, Library and Settings remain", () => {
     const { container } = plain({ enabledHarnessIds: [] });
     expect(items(container)).toEqual(["Overview", "History", "Library", "Settings"]);
-    expect(screen.getByRole("button", { name: "7 more agents" })).not.toBeNull();
+    expect(screen.queryByText(/more agents?$/)).toBeNull();
+    // No agent is listed, so the empty Agents section is not drawn either.
+    expect(screen.queryByRole("group", { name: "Agents" })).toBeNull();
+    expect(container.querySelectorAll(".nl")).toHaveLength(1);
   });
 
-  it("folds disabled agents into one dim row that names them and leads to Settings", () => {
-    const onSwitchView = vi.fn<(view: AppView) => void>();
-    plain({ onSwitchView });
-    const more = screen.getByRole("button", { name: "3 more agents" });
-    expect(more.getAttribute("title")).toBe("Copilot, Pi and Kilo are off. Turn them on in Settings.");
-    expect(more.getAttribute("aria-keyshortcuts")).toBeNull();
-    fireEvent.click(more);
-    expect(onSwitchView).toHaveBeenLastCalledWith("settings");
-  });
-
-  it("says 'is off' for a single disabled agent", () => {
-    plain({ enabledHarnessIds: ["codex", "opencode", "cursor", "claude", "copilot", "pi"] });
-    const more = screen.getByRole("button", { name: "1 more agent" });
-    expect(more.getAttribute("title")).toBe("Kilo is off. Turn it on in Settings.");
+  it("does not list disabled agents or an 'N more agents' entry; they only show in the Overview flow map", () => {
+    const { container } = plain();
+    expect(screen.queryByRole("button", { name: /more agents?/ })).toBeNull();
+    for (const name of ["Copilot", "Pi", "Kilo"]) expect(screen.queryByRole("button", { name })).toBeNull();
+    expect(container.querySelector(".nav.dim")).toBeNull();
   });
 
   it("routes clicks to the right view", () => {

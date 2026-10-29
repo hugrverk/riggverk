@@ -59,10 +59,22 @@ describe("AppFrame", () => {
       press(document.body, "7");
       expect(onSwitchView).toHaveBeenLastCalledWith("library");
       onSwitchView.mockClear();
-      // OpenCode (3) is hidden and 9 belongs to nothing: both pass through untouched.
-      expect(press(document.body, "3")).toBe(true);
+      // OpenCode (3) is hidden: its digit navigates nowhere and only says so; 9 belongs to nothing and passes through.
+      press(document.body, "3");
+      expect(screen.getByText("OpenCode is off in Settings")).not.toBeNull();
       expect(press(document.body, "9")).toBe(true);
       expect(onSwitchView).not.toHaveBeenCalled();
+    });
+
+    it("says which agent is off for the digit of a disabled agent, and says nothing for an enabled one", () => {
+      const onSwitchView = vi.fn<(view: AppView) => void>();
+      renderInFrame(<Panes />, { onSwitchView, enabledHarnessIds: ["codex", "opencode", "cursor"] });
+      press(document.body, "3");
+      expect(screen.queryByText(/is off in Settings/)).toBeNull();
+      expect(onSwitchView).toHaveBeenLastCalledWith("opencode");
+      press(document.body, "5");
+      expect(screen.getByText("Claude is off in Settings")).not.toBeNull();
+      expect(onSwitchView).toHaveBeenCalledTimes(1);
     });
 
     it("keeps Library, Settings and History on their digits with all seven agents on; the optional agents have none", () => {

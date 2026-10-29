@@ -155,7 +155,7 @@ function HelpBody() {
           </section>
         </div>
         <p className="help-note">
-          The digits are fixed, so they do not move when an agent is turned off. Copilot, Pi and Kilo have no digit: open
+          The digits are fixed, so they do not move when an agent is turned off, and the digit of an agent that is off only says so. Copilot, Pi and Kilo have no digit: open
           them from the sidebar or with :copilot, :pi and :kilo.
         </p>
         <p className="foot">
