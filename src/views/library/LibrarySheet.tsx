@@ -152,6 +152,7 @@ export function LibrarySheet({
         className="lib-sheet"
         role="dialog"
         aria-modal="true"
+        data-keyscope="overlay"
         aria-labelledby={headingId}
         tabIndex={-1}
         onKeyDown={onKeyDown}

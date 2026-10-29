@@ -127,7 +127,7 @@ export function useLibraryKeys({
       keys: "Mod+s",
       title: "Save the open item",
       group: "Library",
-      scope: "editor",
+      scope: "overlay",
       inEditable: true,
       when: () => (latest.current && !latest.current.readOnly ? true : false),
       run: save,
@@ -137,7 +137,7 @@ export function useLibraryKeys({
       keys: "Escape",
       title: "Close the open item",
       group: "Library",
-      scope: "editor",
+      scope: "overlay",
       inEditable: true,
       run: () => {
         void requestClose();

@@ -549,6 +549,21 @@ describe("Library sheet", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   });
 
+  it("keeps the window's keys out of the sheet, whose own keys still work", async () => {
+    const onSwitchView = vi.fn();
+    renderInFrame(<Harness topic="agents" />, { view: "library", onSwitchView });
+    await screen.findByText(TOPIC_LOADED.agents!);
+    const sheet = await openSheet("verifier", "Read");
+    const close = within(sheet).getByRole("button", { name: "Close" });
+    close.focus();
+    fireEvent.keyDown(close, { key: "2" });
+    fireEvent.keyDown(close, { key: "?" });
+    expect(onSwitchView).not.toHaveBeenCalled();
+    expect(screen.queryByRole("dialog", { name: /keyboard/i })).toBeNull();
+    fireEvent.keyDown(close, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: /verifier/i })).toBeNull());
+  });
+
   it("keeps Tab inside the sheet", async () => {
     await renderLibrary({ topic: "agents" });
     const sheet = await openSheet("verifier", "Read");
