@@ -280,6 +280,17 @@ describe("AppFrame", () => {
       }
     });
 
+    it("sits below the view area as its own sibling, so the scrolling content ends above it", () => {
+      renderInFrame(<Panes />, { dock: running });
+      const dock = document.querySelector(".run-dock")!;
+      const viewArea = document.querySelector(".view-area")!;
+      expect(dock.parentElement).toBe(viewArea.parentElement);
+      expect(viewArea.compareDocumentPosition(dock) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(dock.contains(viewArea)).toBe(false);
+      expect(viewArea.querySelector(".run-panel")).toBeNull();
+      expect(dock.querySelector(".run-panel")).not.toBeNull();
+    });
+
     it("takes no room while nothing has run", () => {
       renderInFrame(<Panes />, { dock: <RunPanel wsRunning={null} wsLog={null} wsLogCompletedAt={null} /> });
       expect(screen.queryByRole("region", { name: "Run" })).toBeNull();
