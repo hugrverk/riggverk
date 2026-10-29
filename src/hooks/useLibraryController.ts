@@ -113,6 +113,9 @@ export function useLibraryController({
   const [rulesSaveResult, setRulesSaveResult] = useState<ActionResult | null>(null);
   const rulesSaveOpRef = useRef(createSaveOperationTracker());
 
+  /** Why the item being opened could not be read; the sheet shows it instead of loading for ever. */
+  const [itemLoadError, setItemLoadError] = useState<string | null>(null);
+
   const [librarySourceType, setLibrarySourceType] = useState<LibrarySourceType>("rules");
 
   const [agentSources, setAgentSources] = useState<AgentMetadataResponse[]>([]);
@@ -475,6 +478,7 @@ export function useLibraryController({
     if (surface === null) return;
     activeRulesSurfaceRef.current = surface;
     setActiveRulesSurface(surface);
+    setItemLoadError(null);
     const generation = workspaceLoadGenerationRef.current;
     try {
       const file = await invoke<RulesFileContent>("read_rules_file", { surface });
@@ -485,6 +489,7 @@ export function useLibraryController({
       if (!isWorkspaceLoadCurrent(generation)) return;
       if (activeRulesSurfaceRef.current !== surface) return;
       setError(`Read rules file: ${e}`);
+      setItemLoadError(`Read rules file: ${e}`);
     }
   }, [applyRulesFile, clearActiveRulesFile, confirmLeave, isWorkspaceLoadCurrent, setError, workspaceLoadGenerationRef]);
 
@@ -570,6 +575,7 @@ export function useLibraryController({
     if (id !== activeDoc?.id && !(await confirmLeave())) return;
     docSaveOpRef.current.invalidate();
     activeDocIdRef.current = id;
+    setItemLoadError(null);
     const generation = workspaceLoadGenerationRef.current;
     try {
       const doc = await invoke<DocumentContent>("read_doc", { id });
@@ -580,6 +586,7 @@ export function useLibraryController({
       if (!isWorkspaceLoadCurrent(generation)) return;
       if (activeDocIdRef.current !== id) return;
       setError(`Read doc: ${e}`);
+      setItemLoadError(`Read doc: ${e}`);
     }
   }, [activeDoc?.id, confirmLeave, isWorkspaceLoadCurrent, setError, workspaceLoadGenerationRef]);
 
@@ -683,6 +690,7 @@ export function useLibraryController({
   const selectAgent = useCallback(async (id: string) => {
     activeAgentIdRef.current = id;
     setActiveAgentId(id);
+    setItemLoadError(null);
     const generation = workspaceLoadGenerationRef.current;
     try {
       const content = await invoke<AgentSourceContent>("read_agent_source", { filename: id });
@@ -693,6 +701,7 @@ export function useLibraryController({
       if (!isWorkspaceLoadCurrent(generation)) return;
       if (activeAgentIdRef.current !== id) return;
       setError(`Read agent: ${e}`);
+      setItemLoadError(`Read agent: ${e}`);
     }
   }, [isWorkspaceLoadCurrent, setError, workspaceLoadGenerationRef]);
 
@@ -709,6 +718,7 @@ export function useLibraryController({
       if (!isWorkspaceLoadCurrent(generation)) return;
       if (configSourceLoadSeqRef.current !== loadSeq) return;
       setError(`Config: ${e}`);
+      setItemLoadError(`Config: ${e}`);
     }
   }, [activeConfigTargetId, isWorkspaceLoadCurrent, setError, workspaceLoadGenerationRef]);
 
@@ -736,16 +746,19 @@ export function useLibraryController({
       if (!isWorkspaceLoadCurrent(generation)) return;
       if (configSourceLoadSeqRef.current !== loadSeq) return;
       setError(`Config source: ${e}`);
+      setItemLoadError(`Config source: ${e}`);
     }
   }, [activeConfigTargetId, isWorkspaceLoadCurrent, setError, workspaceLoadGenerationRef]);
 
   const selectConfigTarget = useCallback((targetId: string) => {
+    setItemLoadError(null);
     setActiveConfigTargetId(targetId);
     setActiveConfigSourceType("base");
     setConfigEditorSourceContent(null);
   }, []);
 
   const selectConfigSourceType = useCallback((sourceType: string) => {
+    setItemLoadError(null);
     setActiveConfigSourceType(sourceType);
     setConfigEditorSourceContent(null);
   }, []);
@@ -771,6 +784,7 @@ export function useLibraryController({
     if (id !== activeSkillIdRef.current && !(await confirmLeave())) return;
     activeSkillIdRef.current = id;
     setActiveSkillId(id);
+    setItemLoadError(null);
     const generation = workspaceLoadGenerationRef.current;
     try {
       const content = await invoke<DocumentContent>("read_skill", { id });
@@ -782,6 +796,7 @@ export function useLibraryController({
       if (!isWorkspaceLoadCurrent(generation)) return;
       if (activeSkillIdRef.current !== id) return;
       setError(`Read skill: ${e}`);
+      setItemLoadError(`Read skill: ${e}`);
     }
   }, [confirmLeave, isWorkspaceLoadCurrent, setError, workspaceLoadGenerationRef]);
 
@@ -934,6 +949,7 @@ export function useLibraryController({
     confirmLeave,
     discardDrafts,
     libraryDirty,
+    itemLoadError,
     agentSources,
     activeAgentId,
     activeAgentContent,

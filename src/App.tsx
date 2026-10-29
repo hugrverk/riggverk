@@ -142,6 +142,7 @@ function AppShell() {
     setGuardedLibrarySourceType,
     confirmLeave,
     libraryDirty,
+    itemLoadError,
     agentSources,
     activeAgentId,
     activeAgentContent,
@@ -862,6 +863,7 @@ function AppShell() {
             showConfigs={configTargets.length > 0}
             onOpenHarnessView={harness => void switchView(harness)}
             onConfirmLeave={confirmLeave}
+            itemLoadError={itemLoadError}
           />
           </Suspense>
         )}
