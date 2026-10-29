@@ -7,7 +7,7 @@ import type { ApplyProgress, InstallAgent, SetupHistoryEntry } from "../../types
 import { StateMark, StatePill } from "../../ui/StatePill";
 import { TButton } from "../../ui/TButton";
 import { Receipt } from "../run/Receipt";
-import { AgentView, EdgeView, Heading, Label, RunningView, SourceView, type InspectorActions } from "./FlowInspectorViews";
+import { AgentView, EdgeView, Heading, Label, RunningView, runPhaseWord, SourceView, type InspectorActions } from "./FlowInspectorViews";
 
 export interface FlowInspectorRun {
   /** The task's label (`wsRunning`). */
@@ -117,7 +117,14 @@ export function FlowInspector(props: FlowInspectorProps) {
     view = { key: "home", body: <HomeView props={props} /> };
   }
   return (
-    <aside className="flow-insp" aria-live="polite" aria-label="Details">
+    // A polite live region reads a change of view out. While a task runs the file and the checklist change on every
+    // progress event, so the region goes quiet and a status of its own announces the phase only.
+    <aside className="flow-insp" aria-live={run ? "off" : "polite"} aria-label="Details">
+      {run && (
+        <span className="visually-hidden" role="status">
+          {`${run.label.charAt(0).toUpperCase()}${run.label.slice(1)}: ${runPhaseWord(run.progress)}`}
+        </span>
+      )}
       <div className="flow-body" key={view.key}>
         {view.body}
       </div>
