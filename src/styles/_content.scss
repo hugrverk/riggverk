@@ -115,41 +115,9 @@
   min-width: 0;
 }
 
-.copyable-block-fill,
-.copyable-block-terminal {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-height: 0;
-}
-
-.copyable-block-terminal {
-  margin: 0;
-}
-
-.copyable-block-terminal .copyable-block-content {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--inset);
-}
-
 .copyable-block .markdown-code {
   border: none;
   padding: 32px 40px 12px 14px;
-}
-
-.copyable-block-terminal .configs-code {
-  flex: 1;
-  min-height: 0;
-  margin: 0;
-  border: none;
-  border-radius: 0;
-  padding: 8px 40px 8px 14px;
 }
 
 .copy-btn {
