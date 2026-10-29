@@ -267,7 +267,7 @@ The one Claude setting it manages is attribution, only while the `claude_config`
 
 Cursor global agents, skills, and the named Playwright MCP entry are managed by native Rust operations. User Rules and Auto Review remain manual IDE settings. Project `.cursor/*`, project agents, project MCP, `.cursorignore`, and `AGENTS.md` are not written by the global setup flow.
 
-In `~/.cursor/mcp.json` the app sets only `mcpServers.playwright`; every other key and server keeps its value and place. As for the light tier, only the bundled entry template is scanned for credential-like literals: the user's other servers (which may hold tokens in `env`) are never scanned, shown or logged, and never make the merge fail.
+In `~/.cursor/mcp.json` the app sets only `mcpServers.playwright`; every other key and server keeps its value and place. As for the light tier, only the bundled entry template is scanned for credential-like literals: the user's other servers (which may hold tokens in `env`) are never scanned, shown or logged, and never make the merge fail. A file without the entry is merged into (update). A `playwright` entry that differs from the bundled one is the user's own unless the managed record proves the app wrote it and it is unchanged since: without that proof it is a conflict and stays as it is, the same classification as for Copilot, Pi and Kilo.
 
 ### GitHub Copilot, Pi and Kilo Code
 

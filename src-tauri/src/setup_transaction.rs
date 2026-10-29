@@ -1148,6 +1148,15 @@ fn harness_mcp_state(
     Some(crate::light_mcp::assess(spec, &dest, &expected))
 }
 
+/// Whether `~/.cursor/mcp.json` holds a `playwright` entry that differs from the app's (not one
+/// that is missing): the merge would replace it.
+fn cursor_mcp_entry_differs(artifact: &ArtifactId, bundled_root: &Path) -> bool {
+    *artifact == ArtifactId::CursorMcp
+        && crate::cursor_profile_paths::resolve_cursor_profile_paths().is_ok_and(|paths| {
+            crate::cursor_profile_ops::mcp_diff_status(bundled_root, &paths) == "diverged"
+        })
+}
+
 /// One MCP entry planned as an operation.
 struct McpPlan {
     state: Option<crate::light_mcp::EntryState>,
@@ -2262,10 +2271,13 @@ pub fn plan_artifacts_for_surfaces_with(
                 // Updates without proven ownership are preserved as conflicts,
                 // except mergeable configs (their merge rewrites only managed
                 // keys and preserves user-owned content by construction) and
-                // files that are byte-for-byte a version the app shipped.
+                // files that are byte-for-byte a version the app shipped. A
+                // differing Cursor `playwright` entry is the user's own: the
+                // merge would replace it, so it needs the record too.
                 let (kind, previous_state) = if managed_hash.is_none()
                     && matches!(kind, OperationKind::Update)
-                    && !matches!(previous_state, PreviousState::MergeableConfigFile)
+                    && (!matches!(previous_state, PreviousState::MergeableConfigFile)
+                        || cursor_mcp_entry_differs(&artifact, sources.bundle()))
                     && !installed_is_shipped_version(&artifact, workspace_root, sources, home)
                 {
                     (OperationKind::Conflict, PreviousState::Conflict)

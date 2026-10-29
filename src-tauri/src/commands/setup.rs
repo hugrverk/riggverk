@@ -5598,6 +5598,34 @@ mod tests {
         assert!(env.home.join(".claude/CLAUDE.md").is_file());
     }
 
+    /// A `playwright` entry of the user's own that differs from the app's, without a record that
+    /// the app wrote it, is a conflict and stays as it is (as for Copilot, Pi and Kilo).
+    #[test]
+    fn a_differing_cursor_playwright_entry_without_a_record_is_a_conflict() {
+        let env = TempSetupEnv::new("cursor-mcp-own-playwright");
+        let content = r#"{"mcpServers":{"playwright":{"command":"npx","args":["@playwright/mcp@latest","--headless"]}}}"#;
+        let path = seed_cursor_mcp(&env, content);
+
+        let planned = env.plan(&[SetupSurfaceId::CursorMcp]);
+        assert_eq!(planned.len(), 1, "{planned:?}");
+        assert_eq!(planned[0].kind, OperationKind::Conflict);
+        assert_eq!(
+            planned[0].previous_state,
+            setup_transaction::PreviousState::Conflict
+        );
+
+        let plan = preview_setup(vec!["cursor_mcp".into()]).expect("preview");
+        if !plan.is_blocked {
+            let _ = apply_setup(
+                vec!["cursor_mcp".into()],
+                true,
+                plan.plan_fingerprint.clone(),
+                plan.preview_token.clone(),
+            );
+        }
+        assert_eq!(fs::read_to_string(&path).unwrap(), content);
+    }
+
     #[test]
     fn cursor_mcp_apply_adds_only_playwright_and_keeps_the_other_servers() {
         let env = TempSetupEnv::new("cursor-mcp-partial-apply");
