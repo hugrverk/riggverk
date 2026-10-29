@@ -130,6 +130,36 @@ describe("App", () => {
     await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("no application knows how to open this"));
   });
 
+  describe("a saved change of the agent selection", () => {
+    async function openSettingsPage(backend: Backend) {
+      render(<App />);
+      await waitFor(() => expect(commandCount(backend, "get_settings")).toBeGreaterThanOrEqual(1));
+      fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+      return screen.findByRole("region", { name: "Settings" });
+    }
+
+    it("reads the runtime health again once the toggle is saved, not only when it is made", async () => {
+      const backend = installBackend();
+      const settings = await openSettingsPage(backend);
+      fireEvent.click(await within(settings).findByRole("switch", { name: "Copilot" }));
+      await waitFor(() => expect(commandCount(backend, "update_settings")).toBe(1));
+      const lastWrite = backend.commandLog.lastIndexOf("update_settings");
+      await waitFor(() => expect(backend.commandLog.lastIndexOf("get_light_runtime_health")).toBeGreaterThan(lastWrite));
+    });
+
+    it("holds Update all while the change is still waiting to be saved", async () => {
+      const backend = installBackend();
+      const settings = await openSettingsPage(backend);
+      fireEvent.click(await within(settings).findByRole("switch", { name: "Copilot" }));
+      // Inside the autosave debounce: nothing is written yet.
+      expect(commandCount(backend, "update_settings")).toBe(0);
+      const updateAll = screen.getByRole("button", { name: "Update all" });
+      expect(updateAll.getAttribute("aria-disabled")).toBe("true");
+      expect(updateAll.getAttribute("title")).toBe("Saving target changes…");
+      await waitFor(() => expect(commandCount(backend, "update_settings")).toBe(1));
+    });
+  });
+
   describe("workspace folder in Settings", () => {
     const originalShowModal = HTMLDialogElement.prototype.showModal;
     const originalClose = HTMLDialogElement.prototype.close;

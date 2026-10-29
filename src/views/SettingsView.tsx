@@ -17,15 +17,15 @@ import {
   APP_FONT_SIZE_LABELS,
   APP_FONT_SIZE_VALUES,
   DEFAULT_WORKSPACE_PATH,
-  contrastRatio,
-  hasPoorContrast,
   isValidThemeHex,
   themeAccentDefault,
   themeColorDefaults,
+  themeColorWarnings,
   type SettingsSaveStatus,
 } from "../lib/settingsDraft";
 import type { AppSettings } from "../types";
 import { INSTALL_AGENTS, type InstallAgent } from "../types";
+import { BindingButton } from "../ui/BindingButton";
 import { Pane } from "../ui/Pane";
 import { Switch } from "../ui/Switch";
 import { TButton } from "../ui/TButton";
@@ -480,16 +480,12 @@ export function SettingsView({
 
   const appearanceDefaults = themeColorDefaults(appSettings.appearance);
 
-  const contrastWarning = hasPoorContrast(
-    appSettings.foreground_color ?? (isValidThemeHex(foregroundDraft) ? foregroundDraft : null),
-    appSettings.background_color ?? (isValidThemeHex(backgroundDraft) ? backgroundDraft : null),
-  );
-
-  const contrastDetail = contrastWarning && isValidThemeHex(foregroundDraft) && isValidThemeHex(backgroundDraft)
-    ? `Contrast ratio ${contrastRatio(foregroundDraft, backgroundDraft).toFixed(1)}:1 is below 4.5:1.`
-    : contrastWarning
-      ? "Custom foreground and background may be hard to read."
-      : null;
+  const contrastWarnings = themeColorWarnings({
+    appearance: appSettings.appearance,
+    foreground: appSettings.foreground_color ?? (isValidThemeHex(foregroundDraft) ? foregroundDraft : null),
+    background: appSettings.background_color ?? (isValidThemeHex(backgroundDraft) ? backgroundDraft : null),
+    accent: appSettings.accent_color ?? (isValidThemeHex(accentDraft) ? accentDraft : null),
+  });
 
   const applyAccent = (value: string) => {
     setAccentTouched(true);
@@ -615,12 +611,19 @@ export function SettingsView({
             />
           </SettingRow>
         </SettingRows>
-        {contrastDetail && (
-          <p className="setting-note setting-warn" role="status">
-            <StateText tone="fail">{contrastDetail}</StateText>
-          </p>
+        {contrastWarnings.length > 0 && (
+          <div className="setting-note setting-warn" role="status">
+            {contrastWarnings.map(text => (
+              <p key={text}>
+                <StateText tone="fail">{text}</StateText>
+              </p>
+            ))}
+          </div>
         )}
         <p className="setting-note c-dim">Optional hex overrides; empty uses the theme default. Changes save automatically.</p>
+        <div className="tbtn-row setting-note setting-actions">
+          <BindingButton binding={bindings.find(binding => binding.id === "settings.reset")!} />
+        </div>
       </Pane>
       <Pane id="settings-app" title="App" label="App" className="pane-flat">
         <h3 className="sgroup">Startup</h3>
@@ -686,6 +689,9 @@ export function SettingsView({
               {settingsMsg && (
                 <div className={settingsMsg.ok ? "c-dim" : "c-fail"}>{settingsMsg.text}</div>
               )}
+            </div>
+            <div className="tbtn-row setting-actions">
+              <BindingButton binding={bindings.find(binding => binding.id === "settings.retry")!} />
             </div>
           </SettingRow>
         </SettingRows>

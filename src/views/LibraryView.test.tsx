@@ -39,6 +39,8 @@ interface Fixture {
   packListFails: boolean;
   /** A copy turns packListFails on. */
   packListFailsAfterCopy: boolean;
+  /** When set, read_doc of the bundled README fails with this message. */
+  readDocFails: string | null;
 }
 
 function skill(id: string, description: string, extra: Partial<SkillSummary> = {}): SkillSummary {
@@ -109,6 +111,7 @@ function freshFixture(): Fixture {
     holdCopy: null,
     packListFails: false,
     packListFailsAfterCopy: false,
+    readDocFails: null,
   };
 }
 
@@ -133,6 +136,7 @@ function installBackend() {
       case "list_docs":
         return Promise.resolve([...fixture.docs.values()].map(({ content: _content, ...summary }) => summary));
       case "read_doc":
+        if (fixture.readDocFails && args!.id === "README.md") return Promise.reject(new Error(fixture.readDocFails));
         return Promise.resolve(fixture.docs.get(args!.id as string));
       case "save_doc": {
         const doc = fixture.docs.get(args!.id as string)!;
@@ -303,6 +307,7 @@ function Harness({ showConfigs = true, onOpenHarnessView, withoutCopy = false, t
       dataFolderOk
       showConfigs={showConfigs}
       onOpenHarnessView={onOpenHarnessView}
+      itemLoadError={lib.itemLoadError}
       onConfirmLeave={lib.confirmLeave}
     />
   );
@@ -378,6 +383,18 @@ function callsTo(command: string): Array<Record<string, unknown>> {
 }
 
 // ---- tests ----
+
+describe("Library sheet when the item cannot be read", () => {
+  it("shows the read error in the sheet instead of a permanent Loading", async () => {
+    await renderLibrary();
+    await goToTopic("Docs");
+    fixture.readDocFails = "doc is gone";
+    const sheet = await openSheet("README", "Read");
+    const alert = await within(sheet).findByRole("alert");
+    expect(alert.textContent).toContain("doc is gone");
+    expect(within(sheet).queryByText("Loading…")).toBeNull();
+  });
+});
 
 describe("Library topics", () => {
   it("opens on Rules, lists the topic tabs and switches topic", async () => {
@@ -529,6 +546,21 @@ describe("Library sheet", () => {
     sheet = await openSheet("verifier", "Read");
     fireEvent.click(document.querySelector(".lib-sheet-back")!);
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  });
+
+  it("keeps the window's keys out of the sheet, whose own keys still work", async () => {
+    const onSwitchView = vi.fn();
+    renderInFrame(<Harness topic="agents" />, { view: "library", onSwitchView });
+    await screen.findByText(TOPIC_LOADED.agents!);
+    const sheet = await openSheet("verifier", "Read");
+    const close = within(sheet).getByRole("button", { name: "Close" });
+    close.focus();
+    fireEvent.keyDown(close, { key: "2" });
+    fireEvent.keyDown(close, { key: "?" });
+    expect(onSwitchView).not.toHaveBeenCalled();
+    expect(screen.queryByRole("dialog", { name: /keyboard/i })).toBeNull();
+    fireEvent.keyDown(close, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: /verifier/i })).toBeNull());
   });
 
   it("keeps Tab inside the sheet", async () => {

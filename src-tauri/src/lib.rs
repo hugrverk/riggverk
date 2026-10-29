@@ -189,6 +189,48 @@ pub fn run() {
             copy_skill_to_pack,
             save_pack_skill,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            if let tauri::RunEvent::ExitRequested { code, api, .. } = event {
+                let open_windows = app.webview_windows().len();
+                if should_route_exit_through_window(code, open_windows) {
+                    // Cmd+Q and the like: let the window's own close request run, so the UI can ask about unsaved
+                    // work. When it allows the close, the window is destroyed and the app exits as the last window.
+                    api.prevent_exit();
+                    if let Some(window) = app.get_webview_window("main") {
+                        if window.close().is_err() {
+                            app.exit(0);
+                        }
+                    }
+                }
+            }
+        });
+}
+
+/// Whether an exit request is the user quitting while a window is still open. Programmatic exits carry a code and
+/// must go through; so must the request that follows the last window being destroyed (no window left to ask).
+fn should_route_exit_through_window(code: Option<i32>, open_windows: usize) -> bool {
+    code.is_none() && open_windows > 0
+}
+
+#[cfg(test)]
+mod exit_routing_tests {
+    use super::should_route_exit_through_window;
+
+    #[test]
+    fn a_user_quit_with_a_window_open_goes_through_the_window() {
+        assert!(should_route_exit_through_window(None, 1));
+    }
+
+    #[test]
+    fn programmatic_exits_and_restarts_are_never_intercepted() {
+        assert!(!should_route_exit_through_window(Some(0), 1));
+        assert!(!should_route_exit_through_window(Some(i32::MAX), 1));
+    }
+
+    #[test]
+    fn the_exit_after_the_last_window_is_destroyed_goes_through() {
+        assert!(!should_route_exit_through_window(None, 0));
+    }
 }

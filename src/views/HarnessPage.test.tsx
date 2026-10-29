@@ -453,6 +453,26 @@ describe("OpenCodeView model override", () => {
     return { onModelUpdated };
   }
 
+  const originalShowModal = HTMLDialogElement.prototype.showModal;
+  const originalClose = HTMLDialogElement.prototype.close;
+  beforeEach(() => {
+    // jsdom has no native modal dialog; emulate open/close and the `close` event browsers fire.
+    HTMLDialogElement.prototype.showModal = vi.fn(function showModal(this: HTMLDialogElement) {
+      this.setAttribute("open", "");
+    });
+    HTMLDialogElement.prototype.close = vi.fn(function close(this: HTMLDialogElement) {
+      this.removeAttribute("open");
+      this.dispatchEvent(new Event("close"));
+    });
+  });
+  afterEach(() => {
+    HTMLDialogElement.prototype.showModal = originalShowModal;
+    HTMLDialogElement.prototype.close = originalClose;
+  });
+
+  /** The page's own buttons for the model keys, not the test-only key hints. */
+  const modelButton = (name: string) => within(screen.getByRole("region", { name: "Model selection" })).getByRole("button", { name });
+  const confirmReset = async () => fireEvent.click(within(await screen.findByRole("dialog", { name: "Reset the model override?" })).getByRole("button", { name: "Reset" }));
   const model = () => screen.getByLabelText("model") as HTMLSelectElement;
   const subagent = () => screen.getByLabelText("subagent model") as HTMLSelectElement;
   const critic = () => screen.getByLabelText("critic model") as HTMLSelectElement;
@@ -487,6 +507,60 @@ describe("OpenCodeView model override", () => {
     }));
     await waitFor(() => expect(onModelUpdated).toHaveBeenCalledTimes(1));
     expect(await within(detailPane).findByText("Saved model selection")).toBeTruthy();
+  });
+
+  it("offers Edit, Save, Reset and Reload as buttons, with the reasons the keys give", async () => {
+    backend({ initial: { ...BUNDLED, model: "openai/gpt-5", model_source: "override" } });
+    const { onModelUpdated } = renderOpenCode();
+    await waitFor(() => expect(model().value).toBe("openai/gpt-5"));
+    expect(modelButton("save model").getAttribute("aria-disabled")).toBe("true");
+    expect(modelButton("save model").getAttribute("title")).toBe("no unsaved change");
+
+    fireEvent.click(modelButton("edit model"));
+    expect(document.activeElement).toBe(model());
+
+    fireEvent.change(model(), { target: { value: "anthropic/claude-haiku-4-5" } });
+    expect(modelButton("save model").getAttribute("aria-disabled")).toBeNull();
+    fireEvent.click(modelButton("save model"));
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("update_opencode_model_selection", expect.objectContaining({ model: "anthropic/claude-haiku-4-5" })));
+    await waitFor(() => expect(onModelUpdated).toHaveBeenCalledTimes(1));
+
+    const listCalls = () => invokeMock.mock.calls.filter(([command]) => command === "list_available_opencode_models").length;
+    const before = listCalls();
+    fireEvent.click(modelButton("reload models"));
+    await waitFor(() => expect(listCalls()).toBe(before + 1));
+  });
+
+  it("asks before the Reset button drops the override, and keeps it on cancel", async () => {
+    backend({ initial: { ...BUNDLED, model: "openai/gpt-5", model_source: "override" } });
+    const { onModelUpdated } = renderOpenCode();
+    await waitFor(() => expect(model().value).toBe("openai/gpt-5"));
+    fireEvent.click(modelButton("reset model"));
+    fireEvent.click(within(await screen.findByRole("dialog", { name: "Reset the model override?" })).getByRole("button", { name: "cancel" }));
+    await act(async () => {});
+    expect(invokeMock).not.toHaveBeenCalledWith("reset_opencode_model_selection");
+    expect(model().value).toBe("openai/gpt-5");
+
+    fireEvent.click(modelButton("reset model"));
+    await confirmReset();
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("reset_opencode_model_selection"));
+    await waitFor(() => expect(onModelUpdated).toHaveBeenCalledTimes(1));
+  });
+
+  it("holds Update and Preview while model edits are unsaved, with the reason", async () => {
+    backend();
+    renderOpenCode();
+    await loaded();
+    const page = () => within(paneBody());
+    expect(page().getByRole("button", { name: /preview/i }).getAttribute("aria-disabled")).toBeNull();
+    fireEvent.change(model(), { target: { value: "openai/gpt-5" } });
+    for (const name of [/preview/i, /^(update|install)/i]) {
+      const button = page().getByRole("button", { name });
+      expect(button.getAttribute("aria-disabled")).toBe("true");
+      expect(button.getAttribute("title")).toBe("Save or discard the model change first");
+    }
+    fireEvent.change(model(), { target: { value: BUNDLED.model } });
+    expect(page().getByRole("button", { name: /preview/i }).getAttribute("aria-disabled")).toBeNull();
   });
 
   it("reloads the model list with R, leaving m to the rules file in the same pane", async () => {
@@ -646,6 +720,7 @@ describe("OpenCodeView model override", () => {
       act(() => body.focus());
       await waitFor(() => expect(hint(/reset model/).getAttribute("aria-disabled")).toBeNull());
       fireEvent.keyDown(body, { key: "x" });
+      await confirmReset();
       await waitFor(() => expect(critic().value).toBe(""));
       expect(model().value).toBe(BUNDLED.model);
       expect(subagent().value).toBe("");
@@ -748,6 +823,7 @@ describe("OpenCodeView model override", () => {
       expect(hint(/reset model/).getAttribute("aria-disabled")).toBeNull();
 
       fireEvent.keyDown(body, { key: "x" });
+      await confirmReset();
 
       await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("reset_opencode_model_selection"));
       await waitFor(() => expect(onModelUpdated).toHaveBeenCalledTimes(1));
@@ -768,6 +844,7 @@ describe("OpenCodeView model override", () => {
       const body = paneBody();
       act(() => body.focus());
       fireEvent.keyDown(body, { key: "x" });
+      await confirmReset();
       await waitFor(() => expect(model().value).toBe("anthropic/claude-sonnet-4-5"));
     });
 
@@ -794,6 +871,7 @@ describe("OpenCodeView model override", () => {
       const body = paneBody();
       act(() => body.focus());
       fireEvent.keyDown(body, { key: "x" });
+      await confirmReset();
       expect(await screen.findByText("failed to remove model override: denied")).toBeTruthy();
       expect(model().value).toBe("openai/gpt-5");
       expect(onModelUpdated).not.toHaveBeenCalled();

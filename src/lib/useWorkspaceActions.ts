@@ -42,28 +42,39 @@ export function useWorkspaceActions(opts: UseWorkspaceActionsOptions) {
     setWsRunning(opts.label);
     setError(null);
     try {
-      const result = await opts.task();
-      if (!isCurrent()) {
+      let result: T;
+      try {
+        result = await opts.task();
+        if (!isCurrent()) {
+          return null;
+        }
+        const actionResult = opts.toActionResult(result);
+        setWsLog(actionResult);
+        setWsLogCompletedAt(Date.now());
+        if (actionResult.success) setError(null);
+      } catch (e: unknown) {
+        if (!isCurrent()) return null;
+        const errStr = String(e);
+        setWsLog({
+          success: false,
+          action: opts.action,
+          stdout: "",
+          stderr: errStr.slice(0, 500),
+          exit_code: null,
+        });
+        setWsLogCompletedAt(Date.now());
         return null;
       }
-      const actionResult = opts.toActionResult(result);
-      setWsLog(actionResult);
-      setWsLogCompletedAt(Date.now());
-      if (actionResult.success) setError(null);
-      if (opts.refresh) await opts.refresh();
+      // The task is settled and its outcome is logged. A refresh that throws afterwards must not turn a write
+      // that happened into a failed run (callers read null as "nothing ran" and restore a review already consumed).
+      if (opts.refresh) {
+        try {
+          await opts.refresh();
+        } catch (e: unknown) {
+          if (isCurrent()) setError(`Could not refresh after the change: ${String(e).slice(0, 300)}`);
+        }
+      }
       return result;
-    } catch (e: unknown) {
-      if (!isCurrent()) return null;
-      const errStr = String(e);
-      setWsLog({
-        success: false,
-        action: opts.action,
-        stdout: "",
-        stderr: errStr.slice(0, 500),
-        exit_code: null,
-      });
-      setWsLogCompletedAt(Date.now());
-      return null;
     } finally {
       const remaining = MIN_RUNNING_MS - (performance.now() - startedAt);
       if (remaining > 0) await wait(remaining);

@@ -353,6 +353,25 @@
 
 .plan .note { color: var(--text-muted); }
 
+/* The pointer form of `d`: a quiet text button after the change word. */
+.plan .plan-more {
+  margin-left: 10px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 400;
+  text-transform: none;
+  text-decoration: underline;
+  text-decoration-color: var(--border-strong);
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.plan .plan-more:hover { color: var(--text); }
+.plan .plan-more:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+
 /* A conflict is the decision: raised ground, weight 600 and the filled square. */
 .plan tr.conf td { background: var(--decide-bg); }
 .plan tr.conf td.op { font-weight: 600; }

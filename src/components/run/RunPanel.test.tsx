@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { renderWithShell } from "../../test/renderWithShell";
@@ -83,6 +84,35 @@ describe("RunPanel", () => {
     renderPanel({ wsLog: OK, wsLogCompletedAt: Date.now(), rollbackTransactionId: "1710000000000", onRollback });
     fireEvent.click(within(panel()).getByRole("button", { name: "Undo last update…" }));
     expect(onRollback).toHaveBeenCalledTimes(1);
+  });
+
+  it("announces the outcome of a finished run as a status", () => {
+    renderPanel({ wsLog: OK, wsLogCompletedAt: Date.now() });
+    const status = within(panel()).getByRole("status");
+    expect(status.textContent).toContain("Done");
+    cleanup();
+    renderPanel({ wsLog: FAILED, wsLogCompletedAt: Date.now() });
+    expect(within(panel()).getByRole("status").textContent).toContain("Failed");
+  });
+
+  it("hands focus to the page's default pane when the result is dismissed", () => {
+    function Page() {
+      const [log, setLog] = useState<ActionResult | null>(OK);
+      return (
+        <>
+          <section data-pane-id="page" data-keyscope="pane" data-pane-default="" tabIndex={-1}>
+            <button type="button" data-pane-primary="">page</button>
+          </section>
+          <RunPanel wsRunning={null} wsLog={log} wsLogCompletedAt={Date.now()} onClear={() => setLog(null)} />
+        </>
+      );
+    }
+    renderWithShell(<Page />);
+    const dismiss = within(panel()).getByRole("button", { name: "Dismiss" });
+    dismiss.focus();
+    fireEvent.click(dismiss);
+    expect(screen.queryByRole("region", { name: "Run" })).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "page" }));
   });
 
   it("dismisses the finished result", () => {

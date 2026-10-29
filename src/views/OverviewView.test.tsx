@@ -804,6 +804,18 @@ describe("Overview run in the inspector", () => {
     });
   });
 
+  it("keeps the per-file text out of the live region and announces only the phase", () => {
+    const view = renderOverview({ wsRunning: "update all", wsProgress: progress("~/.claude/skills/handoff/SKILL.md"), agentTargets: TARGETS });
+    expect(inspector().getAttribute("aria-live")).toBe("off");
+    const status = within(inspector()).getByRole("status");
+    expect(status.textContent).toBe("Update all: Writing");
+    view.rerenderFrame(<OverviewView {...view.props} wsRunning="update all" wsProgress={progress("~/.claude/skills/tdd/SKILL.md", { done: 5 })} />);
+    // Another file of the same phase changes nothing that is announced.
+    expect(within(inspector()).getByRole("status").textContent).toBe("Update all: Writing");
+    view.rerenderFrame(<OverviewView {...view.props} wsRunning="update all" wsProgress={progress(null, { phase: "backup", done: 0 })} />);
+    expect(within(inspector()).getByRole("status").textContent).toBe("Update all: Backing up");
+  });
+
   it("marks the agent whose folder holds the file as live, with its curves and a sub-line", async () => {
     renderOverview({ wsRunning: "update all", wsProgress: progress("~/.claude/skills/handoff/SKILL.md"), agentTargets: TARGETS });
     await waitFor(() => expect(node("Claude").classList.contains("is-live")).toBe(true));

@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { version as APP_VERSION } from "../package.json";
 import { invokeOpen } from "./lib/invokeOpen";
 import { useConfirm } from "./components/ConfirmDialog";
+import { useCloseGuard } from "./hooks/useCloseGuard";
 import { useKeymap } from "./keyboard/useKeymap";
 import { useBackups } from "./lib/useBackups";
 import { decideCountsByHarness, updateAllDisabledReason } from "./lib/shellSummary";
@@ -141,6 +142,7 @@ function AppShell() {
     setGuardedLibrarySourceType,
     confirmLeave,
     libraryDirty,
+    itemLoadError,
     agentSources,
     activeAgentId,
     activeAgentContent,
@@ -246,6 +248,7 @@ function AppShell() {
     settingsSaveStatus,
     colorResetKey,
     loadSettings,
+    flushSettings,
     retrySaveSettings,
     resetSettings,
     setAppearance,
@@ -369,6 +372,20 @@ function AppShell() {
     loadWorkspaceDiagnostics,
     loadWorkspaceResources,
   ]);
+
+  // The runtime health reads the saved selection. A toggle loads it before its autosave has written, so once a
+  // changed selection is saved the health is read again.
+  // Closing the window with unsaved Library edits or a settings change inside its autosave delay asks first.
+  useCloseGuard({ hasUnsaved: () => libraryDirty || settingsDirty, confirmLeave, flushSettings });
+
+  const savedSelectionKey = savedSelection ? `${savedSelection.harnessIds.join(",")}|${savedSelection.targetIds.join(",")}` : null;
+  const healthSelectionRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (savedSelectionKey === null) return;
+    const previous = healthSelectionRef.current;
+    healthSelectionRef.current = savedSelectionKey;
+    if (previous !== null && previous !== savedSelectionKey) void loadEnabledHarnessHealth();
+  }, [savedSelectionKey, loadEnabledHarnessHealth]);
 
   const lastWorkspaceRefreshRef = useRef(0);
   const switchView = useCallback(async (v: View) => {
@@ -602,7 +619,13 @@ function AppShell() {
   }, [loadWorkspaceDiagnostics, loadWorkspaceResources, loadBackups, overview.refresh, skillLoads.refresh]);
 
   const checkedAt = useCheckedAt(overview);
-  const updateAllDisabled = updateAllDisabledReason(overview, { dataFolderOk, busyLabel: wsRunning, settingsSaving });
+  // A change waiting for its autosave blocks Update all as it blocks Update on the harness pages: a review built now
+  // would read the selection that is not saved yet.
+  const updateAllDisabled = updateAllDisabledReason(overview, {
+    dataFolderOk,
+    busyLabel: wsRunning,
+    settingsSaving: settingsSaveStatus === "saving" || settingsSaveStatus === "pending",
+  });
   const decideCounts = useMemo(
     () => decideCountsByHarness(overview, enabledHarnessIds, appSettings, dataFolderOk),
     [overview, enabledHarnessKey, appSettings, dataFolderOk],
@@ -853,6 +876,7 @@ function AppShell() {
             showConfigs={configTargets.length > 0}
             onOpenHarnessView={harness => void switchView(harness)}
             onConfirmLeave={confirmLeave}
+            itemLoadError={itemLoadError}
           />
           </Suspense>
         )}

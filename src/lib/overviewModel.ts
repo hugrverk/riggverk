@@ -197,6 +197,8 @@ export function overviewSummaryModel(input: {
       dataFolderOk,
       anyStatus: entries.some(entry => entry.status !== null),
       allNotInstalled,
+      failedChecks: entries.filter(entry => entry.error).length,
+      pendingChecks: entries.filter(entry => entry.loading && entry.status === null && !entry.error).length,
     }),
     // Only the first install is "ready to install"; a ready workspace item (old copies to remove) is not one.
     parts: summaryParts(counts, { installing: allNotInstalled && workspace.item.state !== "ready" }),
