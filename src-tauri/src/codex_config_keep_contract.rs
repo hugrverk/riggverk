@@ -148,6 +148,7 @@ mod tests {
                 identity,
                 hash,
                 surface: Some(SURFACE.to_string()),
+                role_models: Default::default(),
             });
             state.artifacts.sort_by(|a, b| a.identity.cmp(&b.identity));
             write_managed_state_atomic(&self.ws, &state).expect("write managed state");

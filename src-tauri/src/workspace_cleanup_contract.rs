@@ -227,6 +227,7 @@ mod tests {
             identity: crate::managed_state::workspace_file_identity(rel),
             hash: stable_digest::bytes(bytes),
             surface: None,
+            role_models: Default::default(),
         }
     }
 

@@ -4442,6 +4442,7 @@ mod tests {
                 identity: identity.clone(),
                 hash: crate::stable_digest::bytes(b"older shipped version"),
                 surface: None,
+                role_models: Default::default(),
             }],
         };
         let (kind, _) = detect_artifact_state(&artifact, &ws, &home);
@@ -4936,6 +4937,7 @@ mod tests {
                     identity: crate::managed_state::artifact_identity(artifact),
                     hash: crate::stable_digest::bytes(&source),
                     surface: None,
+                    role_models: Default::default(),
                 })
                 .collect(),
         };

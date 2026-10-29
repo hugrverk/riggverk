@@ -154,6 +154,7 @@ mod tests {
                     surface: serde_json::to_value(artifact.surface())
                         .ok()
                         .and_then(|value| value.as_str().map(str::to_string)),
+                    role_models: Default::default(),
                 });
             }
             state.artifacts.sort_by(|a, b| a.identity.cmp(&b.identity));
@@ -357,6 +358,7 @@ mod tests {
                 identity: artifact_identity(artifact),
                 hash: stable_digest::bytes(b"a stale recorded hash"),
                 surface: Some("skills".into()),
+                role_models: Default::default(),
             });
             write_managed_state_atomic(&env.ws, &state).expect("write state");
         }

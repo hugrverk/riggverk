@@ -5197,6 +5197,7 @@ mod tests {
                 identity: crate::managed_state::artifact_identity(artifact),
                 hash: crate::stable_digest::bytes(installed_by_app.as_bytes()),
                 surface: None,
+                role_models: Default::default(),
             });
         }
         // The user edits one skill the app once installed and has since retired.
@@ -5257,6 +5258,7 @@ mod tests {
                 identity: crate::managed_state::artifact_identity(artifact),
                 hash: crate::stable_digest::bytes(b"app copy"),
                 surface: None,
+                role_models: Default::default(),
             });
         }
         let edited_dest = edited.resolve_dest(&env.home, &env.ws).unwrap();
@@ -5338,6 +5340,7 @@ mod tests {
                 identity: crate::managed_state::artifact_identity(artifact),
                 hash: crate::stable_digest::bytes(b"app copy"),
                 surface: None,
+                role_models: Default::default(),
             });
         }
         let edited_dest = edited.resolve_dest(&env.home, &env.ws).unwrap();
