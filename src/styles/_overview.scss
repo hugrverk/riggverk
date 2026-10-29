@@ -6,8 +6,9 @@
                                  brightest ink in weight 600 on the raised surface. No state has an amber or ochre hue.
      .ov                         page + output strip; .ov-page is the page (data-pane-id="page"), scrolls on its own
      .ov-head                    the verdict (.ov-title) and the count row (.ov-sumrow > .ov-si, non-zero states only)
-     .ov-grid > .ov-cell         joined 1px hairline grid, radius 0; .ov-span2 / .ov-span3 widen a cell
-       .ov-agent                 one agent: .ov-ch (name button + pill), .ov-mini rows, .ov-note
+     .ov-flow                    the flow map beside its inspector (_flow.scss)
+     .ov-grid > .ov-cell         joined 1px hairline grid, radius 0, under the map: worth a look, agents that are off,
+                                 the workspace folder; .ov-span3 spans the row
        .ov-folder                the collapsed workspace-folder cell (.ov-fold button, .ov-fold-body)
 
    Containers, not media queries, decide the column count: the page is narrower than the window by the sidebar, and the
@@ -170,17 +171,7 @@
     box-shadow var(--dur-view) var(--ease);
 }
 
-.ov-span2 { grid-column: span 2; }
 .ov-span3 { grid-column: 1 / -1; }
-
-/* The last agent takes the slots that would stay empty in its row; --tail3/--tail2 come from the grid (gridTail.ts). */
-.ov-tail { grid-column: span var(--tail3, 1); }
-
-/* A cell with a decision in it: a bright top edge (a top inset, not the heavy selected-state bars). */
-.ov-agent[data-state="decide"] { box-shadow: inset 0 2px 0 var(--decide); }
-
-.ov-agent:hover { background: var(--bg-raised); }
-.ov-agent:has(.ov-open:focus-visible) { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
 
 .ov-lbl {
   font-family: var(--font-mono);
@@ -196,27 +187,6 @@
   justify-content: space-between;
   gap: 10px;
   min-width: 0;
-}
-
-/* The name is the cell's one button; its ::after stretches over the cell so the whole cell opens the page. */
-.ov-open {
-  min-width: 0;
-  min-height: 24px;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--text);
-  font: inherit;
-  font-size: calc(var(--fs) * 1.08);
-  font-weight: 600;
-  text-align: left;
-  cursor: pointer;
-}
-
-.ov-open::after {
-  content: "";
-  position: absolute;
-  inset: 0;
 }
 
 .ov-mini {
@@ -282,23 +252,6 @@
   color: var(--text-muted);
   overflow-wrap: anywhere;
 }
-
-/* Codex reads AGENTS.override.md instead of AGENTS.md: the base is silently off. Weight and a top edge, no hue. */
-.ov-alert {
-  padding: 8px 10px;
-  background: var(--bg-raised);
-  box-shadow: inset 0 2px 0 var(--decide);
-  font-size: calc(var(--fs) * 0.92);
-  line-height: 1.45;
-  overflow-wrap: anywhere;
-}
-
-.ov-alert b { font-weight: 600; }
-
-/* ---- last update ---- */
-
-/* The receipt itself (.receipt) is shared with the History page and styled in _run.scss. */
-.ov-cell > .tbtn { justify-self: start; margin-top: 4px; }
 
 /* ---- agents that are off ---- */
 
@@ -413,25 +366,9 @@
 @container ov (max-width: 640px) {
   .ov-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .ov-span3 { grid-column: 1 / -1; }
-  .ov-tail { grid-column: span var(--tail2, 1); }
-  /* Beside the two-column receipt the look cell would leave a slot empty: it takes the row. */
   .ov-span1 { grid-column: 1 / -1; }
 }
 
 @container ov (max-width: 420px) {
   .ov-grid { grid-template-columns: minmax(0, 1fr); }
-  .ov-span2 { grid-column: 1 / -1; }
-  .ov-tail { grid-column: auto; }
-}
-
-@container ov (max-width: 720px) {
-  [data-app-font-size="large"] .ov-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  [data-app-font-size="large"] .ov-tail { grid-column: span var(--tail2, 1); }
-  [data-app-font-size="large"] .ov-span1 { grid-column: 1 / -1; }
-}
-
-@container ov (max-width: 800px) {
-  [data-app-font-size="extra-large"] .ov-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  [data-app-font-size="extra-large"] .ov-tail { grid-column: span var(--tail2, 1); }
-  [data-app-font-size="extra-large"] .ov-span1 { grid-column: 1 / -1; }
 }

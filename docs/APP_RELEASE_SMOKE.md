@@ -40,7 +40,7 @@ The digit keys below are fixed: `1` Overview, `2`-`5` Codex, OpenCode, Cursor, C
 
 Run these on a profile with a few things to decide (edit `~/.claude/CLAUDE.md` inside its block, edit `~/.claude/skills/tdd/SKILL.md`, change `approvals_reviewer` in `~/.codex/config.toml` with `codex_config` on) and once on a fresh one.
 
-- [ ] **Overview**: the headline matches the counts under it (`Your setup works.`, `Nothing is set up yet.`, `Everything is set up.`); the summary row names the six states in words and omits a state with none; a card per enabled agent with its rows, a state pill with text and a badge that counts its decisions; a click on a card opens the page; **Worth a look** lists risky findings and says they are advice only; the line for agents that are off leads to Settings; the Workspace folder cell opens and closes with the keyboard
+- [ ] **Overview**: the headline matches the counts under it (`Your setup works.`, `Nothing is set up yet.`, `Everything is set up.`); the summary row names the six states in words and omits a state with none; a flow map with the sources (Riggverk base, your refinements, one node per pack) on the left and one node per agent on the right (a ring in its state's hue, the filled square for a decision, dimmed when off); selecting an agent, a source or a curve fills the inspector beside it (rows, receipt, actions; Open an agent opens its page) and Esc clears it; the inspector's home view holds any decision, Install everything on a fresh profile and the last update with Undo and History; a run is followed in the inspector and on the map; **Worth a look** lists risky findings and says they are advice only; the line for agents that are off leads to Settings; the Workspace folder cell opens and closes with the keyboard
 - [ ] **Check** reads again and says when (`checked HH:MM` in the sidebar foot) without writing; **Update all** opens the review of everything and is disabled with its reason when everything is current; `p` previews with no apply path
 - [ ] **Agent page, decisions**: the rules card, the files card and (Codex) the config card come first and span the width; each says what happened in words and has its buttons with their keys; a part that is off reads **Not managed**; the switch "Let Riggverk manage this" autosaves
 - [ ] **Compare**: the button toggles `aria-expanded`; the diff folds out under the card (side by side), writes nothing and asks for no token; Escape or `d` folds it away; under motion `subtle` and `off` it appears at once
@@ -108,7 +108,7 @@ Use the isolated `HOME`; install the skills and agents first, then edit `~/.clau
 - [ ] The backup of that transaction (backup folder, `setup/<run>/artifacts/skill-claude-tdd~SKILL.md`) holds your exact bytes; `z` restores them and the unit is a conflict again (not kept); if you edit the file again after take bundled, `z` leaves your edit and says so
 - [ ] Use Riggverk's version is disabled with its reason on a retired skill and while another task runs; after keeping or handing back with a review open, `y` is refused as stale and `r` previews again
 - [ ] Copy the bundled file over a kept file by hand, then run any Install: the choice for that file is gone (its next edit is a conflict, not silently kept)
-- [ ] The Overview card of the agent counts what needs your decision and opens its page; `:resolve diff tdd` does what Compare does and `:resolve bundled tdd` opens the same review as **Use Riggverk's version…**
+- [ ] The Overview inspector lists the agent's decision and opens its page; `:resolve diff tdd` does what Compare does and `:resolve bundled tdd` opens the same review as **Use Riggverk's version…**
 
 ## 6. Rollback and uninstall
 
@@ -194,7 +194,7 @@ Use a scratch profile or back up `~/.claude/settings.json` first.
 - [ ] `R` (and `:workspace reset`) on that folder opens a confirm that names the old folder and says its ownership records stay there; `n` or Escape changes nothing; `y` returns to the default path and status reloads; on the default folder `R` is disabled (`already the default workspace`)
 - [ ] `RIGGVERK_WORKSPACE_PATH` overrides the saved path, and `R` is then refused with a reason
 - [ ] Generator scripts run from the bundled copy: a modified `scripts/generate-opencode-config.py` in a saved custom workspace is not executed
-- [ ] Turn a single agent off: its sidebar item, page, Overview card, health calls, and agent-specific Library entries disappear and the other digits stay where they are
+- [ ] Turn a single agent off: its sidebar item, page, health calls, and agent-specific Library entries disappear, its Overview node stays but is dimmed (`off in Settings`, a dotted curve from the base only), and the other digits stay where they are
 - [ ] Isolated harness files stay byte-identical after disable; restart preserves the disabled state and target selections
 - [ ] Re-enable restores UI and health without installing
 - [ ] Disable every harness: workspace, library, and settings stay usable

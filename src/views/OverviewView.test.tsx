@@ -14,7 +14,7 @@ import {
   surfaceStatus,
   VALID_DIAGNOSTICS,
 } from "../test/pageFixtures";
-import type { ApplyProgress, CodexRuntimeHealth, FilesStatus, InstallAgent, SecurityPosture, SetupHistoryEntry } from "../types";
+import type { AgentTargetMeta, ApplyProgress, CodexRuntimeHealth, FilesStatus, InstallAgent, PackLibrary, SecurityPosture, SetupHistoryEntry } from "../types";
 import { OverviewView, type OverviewViewProps } from "./OverviewView";
 
 const invokeMock = vi.fn();
@@ -28,10 +28,35 @@ const originalClose = HTMLDialogElement.prototype.close;
 
 let postures: Partial<Record<InstallAgent, SecurityPosture>> = {};
 let history: SetupHistoryEntry[] = [];
+/** What the flow map's source reads answer; null leaves them failing, as without a workspace. */
+let sources: { skills: number; agents: number; rules: Array<{ surface: string; refinement_lines: number }>; packs: PackLibrary | null } | null = null;
+
+const PACKS: PackLibrary = {
+  folder: "~/packs",
+  packs: [
+    { name: "mine", state: "ok", reason: "", forgettable: false },
+    { name: "old-pack", state: "missing", reason: "the pack folder is gone", forgettable: true },
+  ],
+  skills: [
+    { id: "pack:mine/a", name: "a", description: "", pack: "mine", state: "active", reason: "", path: "" },
+    { id: "pack:mine/b", name: "b", description: "", pack: "mine", state: "active", reason: "", path: "" },
+    { id: "pack:old-pack/x", name: "x", description: "", pack: "old-pack", state: "missing", reason: "pack missing", path: "" },
+  ],
+  ignored: [],
+};
+
+const TARGETS: AgentTargetMeta[] = [
+  { id: "codex_rules", label: "codex rules", harness: "codex", kind: "rules", target_rel: ".codex/AGENTS.md", source_rel: "" },
+  { id: "claude_rules", label: "claude rules", harness: "claude", kind: "rules", target_rel: ".claude/CLAUDE.md", source_rel: "" },
+  { id: "claude_agents", label: "claude agents", harness: "claude", kind: "agents", target_rel: ".claude/agents", source_rel: "" },
+  { id: "opencode_rules", label: "opencode rules", harness: "opencode", kind: "rules", target_rel: ".config/opencode/AGENTS.md", source_rel: "" },
+  { id: "cursor_setup", label: "cursor", harness: "cursor", kind: "agents", target_rel: ".cursor/agents", source_rel: "" },
+];
 
 beforeEach(() => {
   postures = {};
   history = [];
+  sources = null;
   invokeMock.mockReset();
   invokeMock.mockImplementation(async (command: string, args?: { harness?: InstallAgent }) => {
     if (command === "get_security_posture") {
@@ -39,6 +64,12 @@ beforeEach(() => {
       if (posture) return posture;
     }
     if (command === "list_setup_history") return history;
+    if (sources && command === "list_skills") return Array.from({ length: sources.skills }, (_, index) => ({ id: `s${index}` }));
+    if (sources && command === "list_agent_metadata") {
+      return { agents: Array.from({ length: sources.agents }, (_, index) => ({ id: `a${index}`, exists: true })), warnings: [] };
+    }
+    if (sources && command === "list_rules_files") return sources.rules;
+    if (sources?.packs && command === "list_pack_skills") return sources.packs;
     throw new Error(`unexpected invoke ${command}`);
   });
   HTMLDialogElement.prototype.showModal = vi.fn(function showModal(this: HTMLDialogElement) {
@@ -121,8 +152,18 @@ function page() {
   return screen.getByRole("region", { name: "Overview" });
 }
 
-function cell(name: string) {
-  return within(page()).getByRole("button", { name }).closest("article")!;
+/** The flow map's SVG. */
+function map() {
+  return within(page()).getByRole("group", { name: "What flows from each source to each agent" }) as unknown as SVGSVGElement;
+}
+
+/** A node of the map, by the agent's or source's name. */
+function node(name: string) {
+  return within(map() as unknown as HTMLElement).getByRole("button", { name: new RegExp(`^${name},`) });
+}
+
+function inspector() {
+  return screen.getByRole("complementary", { name: "Details" });
 }
 
 /** A key hint of the focused page: hints live as a key hint, not in the page. */
@@ -170,82 +211,7 @@ describe("Overview header", () => {
   });
 });
 
-describe("Overview agent cells", () => {
-  it("has one cell per enabled agent with its state in a pill and in words, and the decision first among the signals", () => {
-    renderOverview();
-    const claude = cell("Claude");
-    expect(within(claude).getByText("1 to decide")).toBeTruthy();
-    expect(claude.getAttribute("data-state")).toBe("decide");
-    const rows = within(within(claude).getByRole("list", { name: "Claude surfaces" })).getAllByRole("listitem").map(row => row.textContent);
-    expect(rows).toEqual(["Rulesneeds decision", "Agentsup to date", "Skillsup to date", "Settingsnot managed"]);
-    expect(within(claude).getByText("Your file differs from every shipped version")).toBeTruthy();
-    expect(within(cell("Codex")).getByText("Up to date")).toBeTruthy();
-    expect(within(cell("OpenCode")).getByText("Update ready")).toBeTruthy();
-    expect(within(page()).queryByRole("button", { name: "Copilot" })).toBeNull();
-  });
-
-  it("opens an agent's page from its name", () => {
-    const { props: p } = renderOverview();
-    fireEvent.click(within(page()).getByRole("button", { name: "Codex" }));
-    expect(p.onNavigate).toHaveBeenCalledWith("codex");
-  });
-
-  it("tells a rules file the user manages as yours, not as current", () => {
-    const managed = installationStatus("current", [{ ...surfaceStatus("claude_rules", "current"), rules: { ...RULES_CONFLICT, user_managed: true } }]);
-    renderOverview({ overview: overviewOf({ workspace: OVERVIEW.entries.workspace!.status, claude: managed }), enabledHarnessIds: ["claude"] });
-    expect(within(cell("Claude")).getByText("Yours")).toBeTruthy();
-    expect(within(cell("Claude")).getByText("You manage this file; base updates are waiting")).toBeTruthy();
-  });
-
-  it("tells skill files in conflict as a decision on the agent that shows them", () => {
-    const files: FilesStatus = {
-      conflicts: 1,
-      kept: 0,
-      kept_updates: 0,
-      units: [
-        {
-          key: "skill:claude:tdd",
-          kind: "skill",
-          name: "tdd",
-          folder: "~/.claude/skills",
-          wanted: true,
-          state: "conflict",
-          reason: "edited",
-          bundle_changed: false,
-          read_by: ["Claude"],
-          files: [{ rel: "SKILL.md", state: "conflict", reason: "edited", bundle_changed: false }],
-          more_files: 0,
-        },
-      ],
-      more: 0,
-    };
-    const status = installationStatus("conflict", [{ ...surfaceStatus("skills", "conflict"), files }], { conflict_count: 1 });
-    renderOverview({ overview: overviewOf({ workspace: OVERVIEW.entries.workspace!.status, claude: status }), enabledHarnessIds: ["claude"] });
-    expect(within(cell("Claude")).getByText("1 to decide")).toBeTruthy();
-    expect(within(cell("Claude")).getByText("1 file you edited")).toBeTruthy();
-  });
-
-  it("warns on the Codex cell when AGENTS.override.md replaces AGENTS.md, and nowhere else", () => {
-    const health = {
-      checks: [{ id: "rules_override", label: "AGENTS.override.md replaces AGENTS.md", status: "warn", detail: "the Riggverk base block is not loaded until it is removed or emptied" }],
-    } as unknown as CodexRuntimeHealth;
-    renderOverview({ runtimeHealth: { codex: { harness: "codex", health } } });
-    expect(within(cell("Codex")).getByRole("alert").textContent).toContain("AGENTS.override.md replaces AGENTS.md");
-    expect(within(cell("Claude")).queryByRole("alert")).toBeNull();
-  });
-
-  it("adds a runtime sentence for an up to date agent whose runtime diverged", () => {
-    const diverged = { harness: "claude" as const, health: { rules_synced: false, agents_synced: true, skills_synced: true } as never };
-    const current = installationStatus("current", [surfaceStatus("claude_rules", "current"), surfaceStatus("claude_agents", "current"), surfaceStatus("skills", "current")]);
-    renderOverview({
-      overview: overviewOf({ workspace: OVERVIEW.entries.workspace!.status, claude: current }),
-      enabledHarnessIds: ["claude"],
-      runtimeHealth: { claude: diverged },
-    });
-    expect(within(cell("Claude")).getByText("Up to date")).toBeTruthy();
-    expect(within(cell("Claude")).getByText("Runtime check: diverged")).toBeTruthy();
-  });
-
+describe("Overview agents that are off", () => {
   it("lists the agents that are off and leads to Settings", () => {
     const { props: p } = renderOverview({ enabledHarnessIds: ["codex", "claude"] });
     const more = screen.getByRole("region", { name: "Agents that are off" });
@@ -278,6 +244,210 @@ describe("Overview worth a look", () => {
   });
 });
 
+describe("Overview flow map", () => {
+  it("has one node per agent with its state in the name, and the dimmed ones for agents that are off", () => {
+    renderOverview();
+    expect(within(map() as unknown as HTMLElement).getByRole("button", { name: "Claude, 1 to decide" })).toBeTruthy();
+    expect(within(map() as unknown as HTMLElement).getByRole("button", { name: "Codex, Up to date" })).toBeTruthy();
+    expect(within(map() as unknown as HTMLElement).getByRole("button", { name: "OpenCode, Update ready" })).toBeTruthy();
+    expect(within(map() as unknown as HTMLElement).getByRole("button", { name: "Copilot, off in Settings" })).toBeTruthy();
+  });
+
+  it("draws the decision as a filled square and every other state as a ring", () => {
+    renderOverview();
+    expect(node("Claude").querySelector(".flow-square")).not.toBeNull();
+    expect(node("Claude").querySelector(".flow-ring")).toBeNull();
+    expect(node("Codex").querySelector(".flow-ring")).not.toBeNull();
+    expect(node("Codex").querySelector(".flow-square")).toBeNull();
+  });
+
+  it("has a source for the base and for each pack, with a held pack named as such", async () => {
+    sources = { skills: 24, agents: 6, rules: [], packs: PACKS };
+    renderOverview();
+    expect(await within(map() as unknown as HTMLElement).findByRole("button", { name: "Riggverk base, base, 30 items" })).toBeTruthy();
+    expect(within(map() as unknown as HTMLElement).getByRole("button", { name: "mine, skill pack, 2 items" })).toBeTruthy();
+    expect(within(map() as unknown as HTMLElement).getByRole("button", { name: "old-pack, skill pack, 1 item, held" })).toBeTruthy();
+  });
+
+  it("selects with Enter and a click, and a second click clears it", () => {
+    renderOverview();
+    fireEvent.keyDown(node("Codex"), { key: "Enter" });
+    expect(within(inspector()).getByRole("heading", { name: "Codex" })).toBeTruthy();
+    expect(node("Codex").getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(node("Codex"));
+    expect(within(inspector()).getByRole("heading", { name: "Overview" })).toBeTruthy();
+  });
+
+  it("puts the count on a curve while a node is pointed at, and takes it away again", () => {
+    renderOverview();
+    expect(map().querySelectorAll(".flow-cnt")).toHaveLength(0);
+    fireEvent.mouseEnter(node("Claude"));
+    expect(map().querySelectorAll(".flow-cnt").length).toBeGreaterThan(0);
+    expect(map().classList.contains("has-hl")).toBe(true);
+    fireEvent.mouseLeave(node("Claude"));
+    expect(map().querySelectorAll(".flow-cnt")).toHaveLength(0);
+  });
+
+  it("selects a curve and shows what flows on it", async () => {
+    sources = { skills: 24, agents: 6, rules: [], packs: PACKS };
+    renderOverview();
+    await within(map() as unknown as HTMLElement).findByRole("button", { name: /^mine, skill pack/ });
+    const curve = map().querySelector('.flow-hit[aria-hidden="true"]')!;
+    expect(curve).not.toBeNull();
+    const hits = [...map().querySelectorAll(".flow-hit")];
+    // The first curve belongs to the base and the first agent that is on: Codex.
+    fireEvent.click(hits[0]!);
+    expect(within(inspector()).getByRole("heading", { name: "Riggverk base → Codex" })).toBeTruthy();
+    expect(within(inspector()).getByRole("list", { name: "Items on this curve" })).toBeTruthy();
+  });
+});
+
+describe("Overview inspector", () => {
+  it("shows the verdict pill and the hint when nothing is selected", () => {
+    renderOverview();
+    expect(within(inspector()).getByRole("heading", { name: "Overview" })).toBeTruthy();
+    expect(within(inspector()).getByText("1 to decide")).toBeTruthy();
+    expect(inspector().textContent).toContain("Esc clears the selection");
+    expect(inspector().getAttribute("aria-live")).toBe("polite");
+  });
+
+  it("offers a decision with a button that opens the agent's page, and no square anywhere else", () => {
+    const { props: p } = renderOverview();
+    const decision = within(inspector()).getByText("Claude · Rules").closest(".flow-dec") as HTMLElement;
+    expect(within(decision).getByText("Your file differs from every shipped version")).toBeTruthy();
+    fireEvent.click(within(decision).getByRole("button", { name: "Open Claude" }));
+    expect(p.onNavigate).toHaveBeenCalledWith("claude");
+    expect(decision.querySelector(".state-mark.is-decide")).not.toBeNull();
+  });
+
+  it("shows Install everything on a fresh profile, which does what Update all does", () => {
+    const fresh = installationStatus("not_installed", [surfaceStatus("codex_rules", "not_installed"), surfaceStatus("skills", "not_installed")]);
+    const { props: p } = renderOverview({ overview: overviewOf({ workspace: OVERVIEW.entries.workspace!.status, codex: fresh }), enabledHarnessIds: ["codex"] });
+    expect(within(inspector()).getByText("Ready to install")).toBeTruthy();
+    fireEvent.click(within(inspector()).getByRole("button", { name: "Install everything" }));
+    expect(p.install.open).toHaveBeenCalledWith("all", { scope: "start" });
+  });
+
+  it("does not offer Install everything once something is installed", () => {
+    renderOverview();
+    expect(within(inspector()).queryByRole("button", { name: "Install everything" })).toBeNull();
+  });
+
+  it("opens the Settings page for an agent that is off", () => {
+    const { props: p } = renderOverview();
+    fireEvent.click(node("Pi"));
+    expect(within(inspector()).getByText("Off in Settings. Nothing flows to it.")).toBeTruthy();
+    fireEvent.click(within(inspector()).getByRole("button", { name: "Open Settings" }));
+    expect(p.onNavigate).toHaveBeenCalledWith("settings");
+  });
+
+  it("shows an agent's rows with their state in words, and opens its page", () => {
+    const { props: p } = renderOverview();
+    fireEvent.click(node("Claude"));
+    const rows = within(within(inspector()).getByRole("list", { name: "Claude surfaces" })).getAllByRole("listitem").map(row => row.textContent);
+    expect(rows).toEqual(["Rulesneeds decision", "Agentsup to date", "Skillsup to date", "Settingsnot managed"]);
+    expect(within(inspector()).getByText("Your file differs from every shipped version", { exact: false })).toBeTruthy();
+    fireEvent.click(within(inspector()).getByRole("button", { name: "Open Claude" }));
+    expect(p.onNavigate).toHaveBeenCalledWith("claude");
+  });
+
+  it("counts skills and agents in an agent's rows where the Overview read them, and names who feeds it", async () => {
+    sources = { skills: 24, agents: 6, rules: [], packs: PACKS };
+    renderOverview();
+    await within(map() as unknown as HTMLElement).findByRole("button", { name: /^mine, skill pack/ });
+    fireEvent.click(node("Claude"));
+    const rows = within(within(inspector()).getByRole("list", { name: "Claude surfaces" })).getAllByRole("listitem").map(row => row.textContent);
+    expect(rows).toEqual(["Rulesneeds decision", "Agents6 agents · up to date", "Skills26 skills · up to date", "Settingsnot managed"]);
+    expect(within(inspector()).getByText("Riggverk base and mine")).toBeTruthy();
+  });
+
+  it("adds the runtime sentence and the Codex override warning to the agent they belong to", () => {
+    const health = {
+      checks: [{ id: "rules_override", label: "AGENTS.override.md replaces AGENTS.md", status: "warn", detail: "the Riggverk base block is not loaded until it is removed or emptied" }],
+    } as unknown as CodexRuntimeHealth;
+    renderOverview({ runtimeHealth: { codex: { harness: "codex", health } } });
+    fireEvent.click(node("Codex"));
+    expect(within(inspector()).getByRole("alert").textContent).toContain("AGENTS.override.md replaces AGENTS.md");
+    fireEvent.click(node("Claude"));
+    expect(within(inspector()).queryByRole("alert")).toBeNull();
+  });
+
+  it("tells a rules file the user manages as yours, not as current", () => {
+    const managed = installationStatus("current", [{ ...surfaceStatus("claude_rules", "current"), rules: { ...RULES_CONFLICT, user_managed: true } }]);
+    renderOverview({ overview: overviewOf({ workspace: OVERVIEW.entries.workspace!.status, claude: managed }), enabledHarnessIds: ["claude"] });
+    fireEvent.click(node("Claude"));
+    expect(within(inspector()).getByText("You manage this file; base updates are waiting", { exact: false })).toBeTruthy();
+    expect(within(inspector()).getByText("Yours")).toBeTruthy();
+  });
+
+  it("tells skill files in conflict as a decision on the agent that shows them", () => {
+    const files: FilesStatus = {
+      conflicts: 1,
+      kept: 0,
+      kept_updates: 0,
+      units: [
+        {
+          key: "skill:claude:tdd",
+          kind: "skill",
+          name: "tdd",
+          folder: "~/.claude/skills",
+          wanted: true,
+          state: "conflict",
+          reason: "edited",
+          bundle_changed: false,
+          read_by: ["Claude"],
+          files: [{ rel: "SKILL.md", state: "conflict", reason: "edited", bundle_changed: false }],
+          more_files: 0,
+        },
+      ],
+      more: 0,
+    };
+    const status = installationStatus("conflict", [{ ...surfaceStatus("skills", "conflict"), files }], { conflict_count: 1 });
+    renderOverview({ overview: overviewOf({ workspace: OVERVIEW.entries.workspace!.status, claude: status }), enabledHarnessIds: ["claude"] });
+    expect(node("Claude").querySelector(".flow-square")).not.toBeNull();
+    expect(within(inspector()).getByText("1 file you edited")).toBeTruthy();
+  });
+
+  it("shows a source: what it holds, what it reaches, and the way to the Library", async () => {
+    sources = { skills: 24, agents: 6, rules: [{ surface: "claude_rules", refinement_lines: 14 }], packs: PACKS };
+    const { props: p } = renderOverview();
+    fireEvent.click(await within(map() as unknown as HTMLElement).findByRole("button", { name: /^Riggverk base/ }));
+    expect(within(inspector()).getByRole("heading", { name: "Riggverk base" })).toBeTruthy();
+    const items = within(within(inspector()).getByRole("list", { name: "Riggverk base contents" })).getAllByRole("listitem").map(row => row.textContent);
+    expect(items).toEqual(["Skills24 skills", "Agents6 agents", "Rules1 rules file"]);
+    expect(within(inspector()).getByText("Codex, OpenCode, Cursor and Claude")).toBeTruthy();
+    fireEvent.click(within(inspector()).getByRole("button", { name: "Open in Library" }));
+    expect(p.onNavigate).toHaveBeenCalledWith("library");
+    fireEvent.click(within(map() as unknown as HTMLElement).getByRole("button", { name: /^Your refinements/ }));
+    expect(within(inspector()).getByText("Claude")).toBeTruthy();
+    expect(within(inspector()).getByText("14 lines")).toBeTruthy();
+  });
+
+  it("names a held pack and why", async () => {
+    sources = { skills: 24, agents: 6, rules: [], packs: PACKS };
+    renderOverview();
+    fireEvent.click(await within(map() as unknown as HTMLElement).findByRole("button", { name: /^old-pack/ }));
+    expect(within(inspector()).getByText("Held")).toBeTruthy();
+    expect(within(inspector()).getByText("the pack folder is gone")).toBeTruthy();
+  });
+
+  it("clears the selection with Escape, and Escape is not taken while nothing is selected", () => {
+    renderOverview();
+    press("Escape");
+    expect(within(inspector()).getByRole("heading", { name: "Overview" })).toBeTruthy();
+    fireEvent.click(node("Codex"));
+    expect(within(inspector()).getByRole("heading", { name: "Codex" })).toBeTruthy();
+    press("Escape");
+    expect(within(inspector()).getByRole("heading", { name: "Overview" })).toBeTruthy();
+  });
+
+  it("is not a tab trap: nodes are tab stops and the page itself is not", () => {
+    renderOverview();
+    expect(node("Claude").getAttribute("tabindex")).toBe("0");
+    expect(page().getAttribute("tabindex")).toBe("-1");
+  });
+});
+
 describe("Overview last update", () => {
   function entry(overrides: Partial<SetupHistoryEntry> = {}): SetupHistoryEntry {
     return {
@@ -297,37 +467,83 @@ describe("Overview last update", () => {
     };
   }
 
-  it("shows the receipt of the newest update from the history and offers Undo only where the backend does", async () => {
+  it("shows the receipt of the newest update from the history in the inspector and offers Undo only where the backend does", async () => {
     history = [entry()];
     const { props: p } = renderOverview();
-    const receipt = await screen.findByRole("region", { name: /^Last update · Codex/ });
-    expect(receipt.textContent).toContain("Changedcodex rules · 1 file");
-    expect(receipt.textContent).toContain("Left for youcursor agents · you edited it");
-    fireEvent.click(within(receipt).getByRole("button", { name: "Undo this update…" }));
+    const undo = await within(inspector()).findByRole("button", { name: "Undo this update…" });
+    expect(within(inspector()).getByText(/^Last update · Codex/)).toBeTruthy();
+    expect(inspector().textContent).toContain("Changedcodex rules · 1 file");
+    expect(inspector().textContent).toContain("Left for youcursor agents · you edited it");
+    fireEvent.click(undo);
     // Undo only names the transaction; the dry run and the confirm are the owner's.
     expect(p.onUndo).toHaveBeenCalledWith("1792663200000000000");
+  });
+
+  it("leads to the History page", async () => {
+    history = [entry()];
+    const { props: p } = renderOverview();
+    fireEvent.click(await within(inspector()).findByRole("button", { name: "History" }));
+    expect(p.onNavigate).toHaveBeenCalledWith("history");
   });
 
   it("offers no Undo for an update that is not the newest completed one, or is already undone", async () => {
     history = [entry({ status: "rolled_back", undoable: false })];
     renderOverview();
-    const receipt = await screen.findByRole("region", { name: /^Last update · Codex/ });
-    expect(within(receipt).getByText("Undone")).toBeTruthy();
-    expect(within(receipt).queryByRole("button", { name: /Undo/ })).toBeNull();
+    expect(await within(inspector()).findByText("Undone")).toBeTruthy();
+    expect(within(inspector()).queryByRole("button", { name: /Undo/ })).toBeNull();
   });
 
-  it("disables Undo with the reason while a task runs", async () => {
+  it("shows the task instead of the receipt while it runs, and the receipt again when it ends", async () => {
     history = [entry()];
-    renderOverview({ wsRunning: "update all" });
-    const undo = await screen.findByRole("button", { name: "Undo this update…" });
-    expect(undo.getAttribute("aria-disabled")).toBe("true");
-    expect(undo.getAttribute("title")).toBe("update all is running");
+    const view = renderOverview({ wsRunning: "update all" });
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("list_setup_history", expect.anything()));
+    expect(within(inspector()).queryByRole("button", { name: /Undo/ })).toBeNull();
+    view.rerenderFrame(<OverviewView {...view.props} wsRunning={null} />);
+    const undo = await within(inspector()).findByRole("button", { name: "Undo this update…" });
+    expect(undo.getAttribute("aria-disabled")).toBeNull();
   });
 
-  it("shows no cell without a history", async () => {
+  it("shows no receipt without a history", async () => {
     renderOverview();
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("list_setup_history", expect.anything()));
-    expect(screen.queryByRole("region", { name: /Last update/ })).toBeNull();
+    expect(inspector().textContent).not.toContain("Last update");
+  });
+
+  it("filters the receipt to the selected agent's surfaces and says when an agent was not part of it", async () => {
+    history = [
+      entry({
+        harnesses: ["codex", "claude"],
+        surfaces: ["codex_rules", "claude_rules"],
+        changes: [
+          { surface: "codex_rules", kind: "update", path: "~/.codex/AGENTS.md", applied: true, restored: false },
+          { surface: "claude_rules", kind: "update", path: "~/.claude/CLAUDE.md", applied: true, restored: false },
+        ],
+        receipt: { synced: ["claude_agents", "codex_agents"], left_for_you: [{ surface: "cursor_agents", reason: "conflict" }] },
+      }),
+    ];
+    const { props: p } = renderOverview();
+    await within(inspector()).findByRole("button", { name: "Undo this update…" });
+    fireEvent.click(node("Claude"));
+    const claude = inspector().textContent!;
+    expect(claude).toContain("Changedclaude rules · 1 file");
+    expect(claude).toContain("Checkedclaude agents · current");
+    expect(claude).not.toContain("codex");
+    expect(claude).not.toContain("cursor agents");
+    fireEvent.click(within(inspector()).getByRole("button", { name: "Undo this update…" }));
+    expect(p.onUndo).toHaveBeenCalledWith("1792663200000000000");
+    fireEvent.click(node("Cursor"));
+    expect(inspector().textContent).toContain("Left for youcursor agents · you edited it");
+    fireEvent.click(node("OpenCode"));
+    expect(within(inspector()).getByText("Not part of the last update.")).toBeTruthy();
+    expect(within(inspector()).queryByRole("button", { name: /Undo/ })).toBeNull();
+  });
+
+  it("puts a glow on the curves of the agents the update wrote", async () => {
+    history = [entry({ harnesses: ["claude"], changes: [{ surface: "claude_rules", kind: "update", path: "~/.claude/CLAUDE.md", applied: true, restored: false }] })];
+    renderOverview();
+    await waitFor(() => expect(map().querySelectorAll(".flow-glow").length).toBeGreaterThan(0));
+    const glowing = [...map().querySelectorAll(".flow-ln.has-glow")].map(line => line.getAttribute("data-agent"));
+    expect(new Set(glowing)).toEqual(new Set(["claude"]));
   });
 });
 
@@ -546,6 +762,107 @@ describe("Overview run panel", () => {
     expect(undo.getAttribute("aria-keyshortcuts")).toBe("z");
     fireEvent.click(undo);
     expect(onRollback).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("Overview run in the inspector", () => {
+  const progress = (file: string | null, overrides: Partial<ApplyProgress> = {}): ApplyProgress => ({
+    task: "apply_setup",
+    phase: "apply",
+    done: 4,
+    total: 7,
+    file,
+    ...overrides,
+  });
+  const originalLength = (SVGElement.prototype as unknown as { getTotalLength?: unknown }).getTotalLength;
+  const originalPoint = (SVGElement.prototype as unknown as { getPointAtLength?: unknown }).getPointAtLength;
+
+  beforeEach(() => {
+    const proto = SVGElement.prototype as unknown as Record<string, unknown>;
+    proto.getTotalLength = () => 100;
+    proto.getPointAtLength = () => ({ x: 1, y: 2 });
+  });
+
+  afterEach(() => {
+    const proto = SVGElement.prototype as unknown as Record<string, unknown>;
+    proto.getTotalLength = originalLength;
+    proto.getPointAtLength = originalPoint;
+    document.documentElement.removeAttribute("data-motion");
+    vi.restoreAllMocks();
+  });
+
+  it("follows the task: its name, progress, the file and the agents reached, instead of the selection", async () => {
+    renderOverview({ wsRunning: "update all", wsProgress: progress("~/.claude/skills/handoff/SKILL.md"), agentTargets: TARGETS });
+    const run = inspector();
+    expect(within(run).getByRole("heading", { name: "Update all" })).toBeTruthy();
+    expect(within(run).getByRole("progressbar").getAttribute("aria-valuetext")).toBe("4 of 7");
+    expect(within(run).getByText("~/.claude/skills/handoff/SKILL.md")).toBeTruthy();
+    await waitFor(() => {
+      const items = within(within(run).getByRole("list", { name: "Agents in this run" })).getAllByRole("listitem").map(item => item.textContent);
+      // The agents that were waiting for an update when it started, then the one whose file is being written.
+      expect(items).toEqual(["OpenCodewaiting", "Cursorwaiting", "Claude1 file"]);
+    });
+  });
+
+  it("marks the agent whose folder holds the file as live, with its curves and a sub-line", async () => {
+    renderOverview({ wsRunning: "update all", wsProgress: progress("~/.claude/skills/handoff/SKILL.md"), agentTargets: TARGETS });
+    await waitFor(() => expect(node("Claude").classList.contains("is-live")).toBe(true));
+    expect(node("Claude").textContent).toContain("writing 1 file");
+    expect(node("Codex").classList.contains("is-live")).toBe(false);
+    const live = [...map().querySelectorAll(".flow-ln.live")].map(line => line.getAttribute("data-agent"));
+    expect(new Set(live)).toEqual(new Set(["claude"]));
+  });
+
+  it("marks no agent for a file in a folder that belongs to none of them", async () => {
+    renderOverview({ wsRunning: "update all", wsProgress: progress("~/.agents/skills/tdd/SKILL.md"), agentTargets: TARGETS });
+    await within(inspector()).findByRole("progressbar");
+    expect(map().querySelector(".flow-agent.is-live")).toBeNull();
+  });
+
+  it("says only a phase word until the backend reports, and ignores clicks on the map", () => {
+    renderOverview({ wsRunning: "update all", wsProgress: null, agentTargets: TARGETS });
+    expect(within(inspector()).queryByRole("progressbar")).toBeNull();
+    expect(within(inspector()).getByText("working…")).toBeTruthy();
+    fireEvent.click(node("Codex"));
+    expect(within(inspector()).getByRole("heading", { name: "Update all" })).toBeTruthy();
+  });
+
+  it("runs dots along the live agent's curves while the run goes on, and removes them when it ends", async () => {
+    const frames: FrameRequestCallback[] = [];
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation(callback => frames.push(callback));
+    const cancel = vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => {});
+    const { unmount } = renderOverview({ wsRunning: "update all", wsProgress: progress("~/.claude/skills/handoff/SKILL.md"), agentTargets: TARGETS });
+    await waitFor(() => expect(map().querySelectorAll(".flow-pulse").length).toBeGreaterThan(0));
+    expect(map().querySelectorAll(".flow-pulse").length).toBe(map().querySelectorAll(".flow-ln[data-agent='claude']:not(.is-ghost)").length);
+    unmount();
+    expect(cancel).toHaveBeenCalled();
+    expect(document.querySelectorAll(".flow-pulse")).toHaveLength(0);
+  });
+
+  it("stops the dots when the task ends", async () => {
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation(() => 1);
+    vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => {});
+    const view = renderOverview({ wsRunning: "update all", wsProgress: progress("~/.claude/skills/handoff/SKILL.md"), agentTargets: TARGETS });
+    await waitFor(() => expect(map().querySelectorAll(".flow-pulse").length).toBeGreaterThan(0));
+    view.rerenderFrame(<OverviewView {...view.props} wsRunning={null} wsProgress={null} />);
+    await waitFor(() => expect(document.querySelectorAll(".flow-pulse")).toHaveLength(0));
+    expect(map().querySelector(".flow-agent.is-live")).toBeNull();
+  });
+
+  it("draws no dots and no draw-in when motion is off", async () => {
+    document.documentElement.setAttribute("data-motion", "off");
+    const raf = vi.spyOn(window, "requestAnimationFrame").mockImplementation(() => 1);
+    renderOverview({ wsRunning: "update all", wsProgress: progress("~/.claude/skills/handoff/SKILL.md"), agentTargets: TARGETS });
+    await waitFor(() => expect(node("Claude").classList.contains("is-live")).toBe(true));
+    expect(map().querySelectorAll(".flow-pulse")).toHaveLength(0);
+    expect(raf).not.toHaveBeenCalled();
+    expect(map().querySelectorAll(".flow-ln.draw")).toHaveLength(0);
+  });
+
+  it("starts no animation loop while idle", () => {
+    const raf = vi.spyOn(window, "requestAnimationFrame");
+    renderOverview({ agentTargets: TARGETS });
+    expect(raf).not.toHaveBeenCalled();
   });
 });
 
