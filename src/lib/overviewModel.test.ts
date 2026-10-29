@@ -68,6 +68,19 @@ describe("overviewSummaryModel headline and counts", () => {
       cursor: fresh(["cursor_agents", "skills", "cursor_mcp"]),
     });
     expect(summary.headline).toBe("Nothing is set up yet.");
+    // Install wording for the first install; the state stays `ready`.
+    expect(summary.parts.find(part => part.state === "ready")).toMatchObject({ count: 7, text: "7 ready to install" });
+    const badge = summary.cards.find(card => card.harness === "codex")!.badge;
+    expect(badge).toEqual({ state: "ready", text: "Ready to install" });
+  });
+
+  it("keeps update wording once something is installed", () => {
+    const summary = summaryFor({
+      workspace: WORKSPACE,
+      codex: installationStatus("update_available", [surfaceStatus("codex_rules", "update_available"), surfaceStatus("codex_agents", "current"), surfaceStatus("skills", "current")]),
+    });
+    expect(summary.parts.find(part => part.state === "ready")!.text).toMatch(/update/);
+    expect(summary.cards.find(card => card.harness === "codex")!.badge).toEqual({ state: "ready", text: "Update ready" });
   });
 
   it("says Checking while no status has arrived, and names an unusable folder", () => {

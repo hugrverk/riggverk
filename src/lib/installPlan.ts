@@ -191,6 +191,17 @@ export function countPlanRows(groups: readonly PlanGroup[]): PlanCounts {
   return counts;
 }
 
+/**
+ * The review title's request label once the plan is known: an "update <target>" whose plan only creates (nothing
+ * was installed there) reads "install <target>". It is wording only; the request and the apply action keep their label.
+ */
+export function installReviewLabel(label: string, counts: PlanCounts): string {
+  if (counts.create > 0 && counts.update === 0 && counts.remove === 0 && label.startsWith("update ")) {
+    return `install ${label.slice("update ".length)}`;
+  }
+  return label;
+}
+
 function plural(n: number, noun: string): string {
   return `${n} ${noun}${n === 1 ? "" : "s"}`;
 }

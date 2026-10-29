@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useState, type MutableRefObject } from "react";
 import { isLightAgent } from "../lib/harnessInstallation";
-import { isInvalidWorkspaceError } from "../lib/workspaceErrors";
+import { errorMessage, isInvalidWorkspaceError } from "../lib/workspaceErrors";
 import type {
   ClaudeRuntimeHealth,
   CodexRuntimeHealth,
@@ -42,7 +42,7 @@ export function useWorkspaceHealthController({
     } catch (e) {
       if (!isWorkspaceLoadCurrent(generation)) return;
       setStatus(null);
-      if (!isInvalidWorkspaceError(e)) setError(`Status error: ${e}`);
+      if (!isInvalidWorkspaceError(e)) setError(`Status error: ${errorMessage(e)}`);
     }
   }, [isWorkspaceLoadCurrent, setError, workspaceLoadGenerationRef]);
 
@@ -53,7 +53,7 @@ export function useWorkspaceHealthController({
       setWorkspaceDiagnostics(diagnostics);
     } catch (e) {
       if (!isWorkspaceLoadCurrent(generation)) return;
-      setError(`Workspace diagnostics: ${e}`);
+      setError(`Workspace diagnostics: ${errorMessage(e)}`);
     }
   }, [isWorkspaceLoadCurrent, setError, workspaceLoadGenerationRef]);
 
@@ -87,7 +87,7 @@ export function useWorkspaceHealthController({
     } catch (e) {
       if (!isWorkspaceLoadCurrent(generation)) return;
       setCursorProfileHealth(null);
-      if (!isInvalidWorkspaceError(e)) setError(`Cursor profile: ${e}`);
+      if (!isInvalidWorkspaceError(e)) setError(`Cursor profile: ${errorMessage(e)}`);
     }
   }, [isWorkspaceLoadCurrent, setError, workspaceLoadGenerationRef]);
 

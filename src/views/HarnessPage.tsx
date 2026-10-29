@@ -34,7 +34,7 @@ import { ROW_LABEL, ROW_ORDER } from "../lib/overviewModel";
 import { rulesFileName, rulesGates, rulesModelFor, rulesOverrideWarning, rulesSurfaceOf } from "../lib/rulesView";
 import { harnessUiItems } from "../lib/shellSummary";
 import { skillLoadProblemCount, skillLoadRows, skillReadsRows, summarizeSkillLoads } from "../lib/skillLoadRows";
-import type { UiItem, UiState } from "../lib/uiState";
+import { READY_TO_INSTALL_LABEL, type UiItem, type UiState } from "../lib/uiState";
 import { Kv, type KvItem } from "../ui/Kv";
 import { Page } from "../ui/Page";
 import { TButton } from "../ui/TButton";
@@ -360,6 +360,7 @@ export function HarnessPage({
         label={`${ROW_LABEL[short] ?? short}${row.path ? ` · ${row.path}` : ""}`}
         headline={headline}
         state={state}
+        stateLabel={state === "ready" && (row.state === "not_installed" || (isRules && rulesModel.kind === "absent")) ? READY_TO_INSTALL_LABEL : undefined}
         note={notes.length > 0 ? notes.join(" · ") : null}
         wide={wide}
         active={active}

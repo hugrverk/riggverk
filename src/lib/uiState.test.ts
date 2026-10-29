@@ -250,6 +250,11 @@ describe("summaryParts", () => {
     ]);
   });
 
+  it("reads ready as ready to install while nothing is installed", () => {
+    expect(summaryParts(counts({ ready: 10, off: 2 }), { installing: true }).map(part => part.text)).toEqual(["10 ready to install", "2 not managed"]);
+    expect(harnessBadge([item("codex_rules", "ready")], { installing: true })).toEqual({ state: "ready", text: "Ready to install" });
+  });
+
   it("is empty when every count is zero", () => {
     expect(summaryParts(counts())).toEqual([]);
   });

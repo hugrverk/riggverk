@@ -20,6 +20,8 @@ export interface SurfaceCellProps {
   /** The one bold line: the reason of a state, or what the surface is. */
   headline: string;
   state: UiState | null;
+  /** The pill's words when they differ from the state's own ("Ready to install" for a `ready` surface never installed). */
+  stateLabel?: string;
   /** A muted sentence under the headline. */
   note?: string | null;
   /** The surface id, for the page to find the cell. */
@@ -46,6 +48,7 @@ export function SurfaceCell({
   label,
   headline,
   state,
+  stateLabel,
   note,
   surface,
   wide = false,
@@ -82,7 +85,7 @@ export function SurfaceCell({
       </span>
       <div className="hp-ch">
         <b>{headline}</b>
-        {state && <StatePill state={state}>{UI_STATE_LABEL[state]}</StatePill>}
+        {state && <StatePill state={state}>{stateLabel ?? UI_STATE_LABEL[state]}</StatePill>}
       </div>
       {note && <p className="hp-why">{note}</p>}
       {!wide && setting}
