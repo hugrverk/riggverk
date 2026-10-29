@@ -24,7 +24,7 @@ export interface LibraryListProps<T> {
   onSelect: (key: string) => void | Promise<void>;
   /** Enter, double-click or `i` on a row: open it and move into it. */
   onActivate: (key: string) => void;
-  /** Label of the Enter hint in the status bar while the list has focus. */
+  /** Label of the Enter binding's hint while the list has focus. */
   activateHint?: string;
   filter?: PaneListFilter;
   empty?: ReactNode;

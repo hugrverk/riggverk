@@ -9,12 +9,11 @@ import {
   overviewOf,
   settingsOf,
   skillLoadsOf,
-  STATUS_DATA,
   surfaceStatus,
   CLEAN_CODEX,
   RISKY_CLAUDE,
 } from "../test/pageFixtures";
-import type { AgentTargetMeta, ApplyProgress, ClaudeRuntimeHealth, CodexRuntimeHealth, EffectiveSkillLoads, OpenCodeModelSelection, OpenCodeRuntimeHealth, SkillCopy } from "../types";
+import type { ActionResult, AgentTargetMeta, ApplyProgress, ClaudeRuntimeHealth, CodexRuntimeHealth, EffectiveSkillLoads, OpenCodeModelSelection, OpenCodeRuntimeHealth, SkillCopy } from "../types";
 import { ClaudeView } from "./ClaudeView";
 import { CodexView } from "./CodexView";
 import { CursorView } from "./CursorView";
@@ -28,19 +27,21 @@ vi.mock("@tauri-apps/api/core", () => ({
   invoke: (...args: unknown[]) => invokeMock(...args),
 }));
 
-const outputStripProps = vi.fn();
+const runPanelProps = vi.fn();
 
-// The real strip, with its props recorded: the pages must hand it the backend's progress.
-vi.mock("../components/OutputStrip", async importOriginal => {
-  const actual = await importOriginal<typeof import("../components/OutputStrip")>();
+// The real panel, with its props recorded: the pages must hand it the backend's progress.
+vi.mock("../components/run/RunPanel", async importOriginal => {
+  const actual = await importOriginal<typeof import("../components/run/RunPanel")>();
   return {
     ...actual,
-    OutputStrip: (stripProps: Parameters<typeof actual.OutputStrip>[0]) => {
-      outputStripProps(stripProps);
-      return <actual.OutputStrip {...stripProps} />;
+    RunPanel: (panelProps: Parameters<typeof actual.RunPanel>[0]) => {
+      runPanelProps(panelProps);
+      return <actual.RunPanel {...panelProps} />;
     },
   };
 });
+
+const APPLY_OK: ActionResult = { success: true, action: "apply_setup update codex", stdout: "applied 1 file", stderr: "", exit_code: 0 };
 
 const TARGETS: AgentTargetMeta[] = [
   { id: "codex_rules", label: "codex rules", harness: "codex", kind: "rules", target_rel: ".codex/AGENTS.md", source_rel: "templates/codex-rules.md" },
@@ -101,7 +102,6 @@ function props(overrides: Partial<HarnessViewProps> = {}): HarnessViewProps {
     wsLogCompletedAt: null,
     wsRunning: null,
     wsProgress: null,
-    status: STATUS_DATA,
     dataFolderOk: true,
     onClearOutput: vi.fn(),
     ...overrides,
@@ -126,13 +126,13 @@ function press(key: string, target: Element = surfaces()) {
   fireEvent.keyDown(target, { key });
 }
 
-function statusBar() {
-  return within(screen.getByLabelText("Status bar"));
+function keyHints() {
+  return within(screen.getByLabelText("Key hints"));
 }
 
-/** A key hint of the focused pane: hints live in the status bar, not in the panes. */
+/** A key hint of the focused pane: hints live as a key hint, not in the panes. */
 function hint(name: RegExp) {
-  return statusBar().getByRole("button", { name });
+  return keyHints().getByRole("button", { name });
 }
 
 /** The `dt` -> `dd` pairs of a page, runtime facts included. */
@@ -166,14 +166,16 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("HarnessPage", () => {
-  it("shows the name with a mono line under it, a grid of cells, and the output as a strip", () => {
-    renderCodex();
+  it("shows the name with a mono line under it, a grid of cells, and the run panel once a task has run", () => {
+    const { rerenderFrame, props: p } = renderCodex();
     const page = surfaces();
     expect(within(page).getByRole("heading", { name: "Codex" }).tagName).toBe("H4");
     // Where it lives, how many skills it loads and what the runtime says, in one line.
     expect(page.querySelector(".hp-sub")!.textContent).toBe("~/.codex · approval on-request · sandbox workspace-write");
     expect(page.querySelector(".hp-grid")).not.toBeNull();
-    expect(screen.getByRole("region", { name: "Output" })).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "Run" })).toBeNull();
+    rerenderFrame(<CodexView {...p} wsLog={APPLY_OK} wsLogCompletedAt={Date.now()} runtimeHealth={CODEX_HEALTH} />);
+    expect(screen.getByRole("region", { name: "Run" })).toBeTruthy();
   });
 
   it("is the page-level focus container: it takes focus on click, so the page keys keep working", () => {
@@ -240,12 +242,12 @@ describe("HarnessPage", () => {
     expect(p.onToggleTarget).toHaveBeenCalledWith("cursor_setup");
   });
 
-  it("moves focus to the output strip when an apply leaves a rollback transaction, so z works", () => {
-    const { rerenderFrame, props: p } = renderCodex();
+  it("moves focus to the run panel when an apply leaves a rollback transaction, so Undo is in reach", () => {
+    const { rerenderFrame, props: p } = renderCodex({ wsLog: APPLY_OK, wsLogCompletedAt: Date.now() });
     act(() => surfaces().focus());
     rerenderFrame(<CodexView {...p} rollbackTransactionId="tx-1" runtimeHealth={CODEX_HEALTH} />);
     expect(document.activeElement?.closest("[data-pane-id]")?.getAttribute("data-pane-id")).toBe("output");
-    fireEvent.keyDown(document.activeElement!, { key: "z" });
+    fireEvent.click(screen.getByRole("button", { name: "Undo last update…" }));
     expect(p.onRollback).toHaveBeenCalledTimes(1);
   });
 
@@ -338,13 +340,13 @@ describe("HarnessPage", () => {
     expect(surfaces().querySelector("[data-surface]")).toBeNull();
   });
 
-  it("shows the review in place of the page, with the strip, while it is open", () => {
+  it("shows the review in place of the page, with the run panel, while it is open", () => {
     const flow = flowOf([op("codex_rules", "update")], { label: "update codex", surfaces: ["codex_rules"] });
     const install = installScreenOf(flow, "codex");
-    renderCodex({ install });
+    renderCodex({ install, wsLog: APPLY_OK, wsLogCompletedAt: Date.now() });
     const review = screen.getByRole("region", { name: "Codex install review" });
     expect(review.className).toContain("review");
-    expect(within(review).getAllByRole("region").map(pane => pane.getAttribute("aria-label")).at(-1)).toBe("Output");
+    expect(within(review).getAllByRole("region").map(pane => pane.getAttribute("aria-label")).at(-1)).toBe("Run");
     expect(within(review).getAllByRole("region")).toHaveLength(2);
     expect(screen.getByRole("grid", { name: "Install plan" })).toBeTruthy();
     expect(screen.queryByRole("region", { name: "Codex" })).toBeNull();
@@ -531,7 +533,7 @@ describe("OpenCodeView model override", () => {
     expect(model().getAttribute("aria-invalid")).toBe("true");
     const detailPane = screen.getByRole("region", { name: "OpenCode" });
     act(() => detailPane.focus());
-    // The status bar follows focus on its own schedule; under a loaded test run it can lag a tick.
+    // The key hints follow focus on its own schedule; under a loaded test run it can lag a tick.
     await waitFor(() => expect(hint(/save model/).getAttribute("title")).toBe("Must be provider/model format"));
     expect(detailPane.textContent).toContain("opencode models: unavailable");
   });
@@ -868,7 +870,7 @@ describe("OpenCodeView model override", () => {
   });
 });
 
-describe("HarnessPage output strip progress", () => {
+describe("HarnessPage run panel progress", () => {
   const progress: ApplyProgress = {
     task: "apply_setup",
     phase: "apply",
@@ -877,16 +879,16 @@ describe("HarnessPage output strip progress", () => {
     file: "~/.codex/AGENTS.md",
   };
 
-  beforeEach(() => outputStripProps.mockClear());
+  beforeEach(() => runPanelProps.mockClear());
 
-  it("hands the backend's progress to the strip", () => {
+  it("hands the backend's progress to the run panel", () => {
     renderCodex({ wsRunning: "update codex", wsProgress: progress });
-    expect(outputStripProps).toHaveBeenLastCalledWith(expect.objectContaining({ progress }));
+    expect(runPanelProps).toHaveBeenLastCalledWith(expect.objectContaining({ progress }));
   });
 
   it("hands it null until the backend reports", () => {
     renderCodex({ wsRunning: "update codex", wsProgress: null });
-    expect(outputStripProps).toHaveBeenLastCalledWith(expect.objectContaining({ progress: null }));
+    expect(runPanelProps).toHaveBeenLastCalledWith(expect.objectContaining({ progress: null }));
   });
 });
 

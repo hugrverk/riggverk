@@ -44,10 +44,10 @@ describe("texts", () => {
 });
 
 describe("withKeptKeys", () => {
-  const CURRENT = { glyph: "ok", tone: "ok", label: "current" } as const;
+  const CURRENT = { tone: "ok", label: "current" } as const;
 
   it("counts the kept keys on the row and no longer reads as plainly current", () => {
-    expect(withKeptKeys(CURRENT, { kept: [REVIEWER], differing: [] })).toEqual({ glyph: "partial", tone: "warn", label: "current · you keep 1" });
+    expect(withKeptKeys(CURRENT, { kept: [REVIEWER], differing: [] })).toEqual({ tone: "warn", label: "current · you keep 1" });
     expect(withKeptKeys(CURRENT, { kept: [REVIEWER, SANDBOX], differing: [] }).label).toBe("current · you keep 2");
   });
 

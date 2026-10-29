@@ -198,6 +198,7 @@
 /* The name is the cell's one button; its ::after stretches over the cell so the whole cell opens the page. */
 .ov-open {
   min-width: 0;
+  min-height: 24px;
   padding: 0;
   border: 0;
   background: none;
@@ -328,6 +329,7 @@
   align-items: center;
   gap: 14px;
   width: 100%;
+  min-height: 24px;
   padding: 0;
   border: 0;
   background: none;

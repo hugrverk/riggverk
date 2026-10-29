@@ -13,7 +13,6 @@ import { useWorkspaceGeneration } from "./lib/useWorkspaceGeneration";
 import { useAppSettingsController } from "./hooks/useAppSettingsController";
 import { useApplyProgress } from "./hooks/useApplyProgress";
 import { useCheckedAt } from "./hooks/useCheckedAt";
-import { useScanOnSuccess } from "./hooks/useScanOnSuccess";
 import { useWhatsNewOnUpgrade } from "./hooks/useWhatsNewOnUpgrade";
 import { useWorkspaceReset } from "./hooks/useWorkspaceReset";
 import { workspaceTaskBlockedMessage } from "./lib/workspaceErrors";
@@ -69,7 +68,6 @@ function AppShell() {
   const { workspaceLoadGenerationRef, isWorkspaceLoadCurrent, beginWorkspaceLoadGeneration } = useWorkspaceGeneration();
 
   const {
-    status,
     workspaceDiagnostics,
     opencodeRuntimeHealth,
     codexRuntimeHealth,
@@ -140,6 +138,7 @@ function AppShell() {
     librarySourceType,
     setGuardedLibrarySourceType,
     isLibrarySourceDirty,
+    discardDrafts,
     libraryDirty,
     agentSources,
     activeAgentId,
@@ -225,8 +224,6 @@ function AppShell() {
   } = useWorkspaceActions({ setError });
 
   const wsProgress = useApplyProgress(wsRunning);
-  // A successful apply or rollback sweeps one line down the view area (full motion only).
-  useScanOnSuccess(wsRunning, wsLog);
 
   // Keep the backups chip current: on mount and whenever a workspace task (apply, uninstall, rollback) finishes.
   useEffect(() => {
@@ -387,6 +384,8 @@ function AppShell() {
       if (isLibraryDirty) {
         const ok = await confirm(LEAVE_DIRTY_MESSAGE);
         if (!ok) return;
+        // Leaving means discarding: the sidebar's Library marker goes with the drafts.
+        discardDrafts();
       }
     }
     setView(v);
@@ -405,7 +404,7 @@ function AppShell() {
     }
     else if (v === "library") loadLibraryView();
     else if (v === "settings" && !settingsDirty && !settingsSaving) { loadSettings(); }
-  }, [view, librarySourceType, isLibrarySourceDirty, settingsDirty, settingsSaving, loadLibraryView, loadWorkspaceDiagnostics, loadEnabledHarnessHealth, loadSettings, clearSettingsMsg, enabledHarnessKey]);
+  }, [view, librarySourceType, isLibrarySourceDirty, discardDrafts, settingsDirty, settingsSaving, loadLibraryView, loadWorkspaceDiagnostics, loadEnabledHarnessHealth, loadSettings, clearSettingsMsg, enabledHarnessKey]);
 
   useLandingView({ landingView: appSettings?.landing_view, currentView: view, navigate: switchView });
 
@@ -636,13 +635,12 @@ function AppShell() {
     [codexRuntimeHealth, opencodeRuntimeHealth, claudeRuntimeHealth, cursorProfileHealth, lightRuntimeHealth],
   );
 
-  // What the Overview and harness pages share: the output pane, the install review and the rollback path.
+  // What the Overview and harness pages share: the run panel, the install review and the rollback path.
   const pageProps = {
     wsLog,
     wsLogCompletedAt,
     wsRunning,
     wsProgress,
-    status,
     dataFolderOk,
     onClearOutput: resetTerminalOutput,
     overview,
@@ -725,16 +723,6 @@ function AppShell() {
         version={APP_VERSION}
         backupCount={backups.length}
         checkedAt={checkedAt}
-        // The launch sequence waits for the settings (the motion level is final then) and only tells what has loaded.
-        boot={
-          appSettings
-            ? {
-                version: APP_VERSION,
-                workspace: workspaceDiagnostics ? (workspaceDiagnostics.valid ? workspaceDiagnostics.resolved_path : null) : undefined,
-                backups: backups.length > 0 ? backups.length : undefined,
-              }
-            : undefined
-        }
       >
         {view === "start" && (
           <OverviewView

@@ -102,14 +102,13 @@ Isolated temp `HOME` and workspace path; exercises the Rust command handlers the
 
 Before sharing a build, run [APP_RELEASE_SMOKE.md](./APP_RELEASE_SMOKE.md) in the real Tauri app with an isolated `HOME`, `RIGGVERK_WORKSPACE_PATH`, and `RIGGVERK_BACKUP_DIR`. It covers, in order of risk:
 
-- Install review: `u`, plan table, `n` cancels with nothing written, `y` applies, target toggles gate the plan.
-- Conflicts and rules: Convert, Leave as is, diff.
-- Rollback (`z`) and uninstall with recovery.
-- Workspace picker in Settings.
-- Keyboard layer, tab order, help overlay, command line.
-- Library panes.
+- Install review: `u`, plan table, `n` cancels with nothing written, `y` applies, target switches gate the plan.
+- Decisions: Compare, Merge in updates, Keep mine, Use Riggverk's version and defaults.
+- Undo (`z`), History and uninstall with recovery.
+- Overview, agent pages, Library and Settings on both themes.
+- Keyboard layer, fixed digits, Tab order and focus ring, help overlay, command line.
 
-Tab order is workspace, codex, opencode, cursor, claude, library, settings.
+Sidebar order is Overview, the enabled agents, History, Library, Settings; the digits are `1`, `2`-`5`, `6`, `7`, `8`.
 
 ## Installing a local build
 

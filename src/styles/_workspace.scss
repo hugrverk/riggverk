@@ -1,61 +1,14 @@
 /* ═══════════════════════════════════════════════════════════════════════════════════
-   Workspace page, harness pages and the install review: layouts and the pieces the shared
-   primitives (_primitives.scss) do not cover. Panes are `section.pane` inside `.screen`.
+   Review screens and the uninstall cards: layouts and the pieces the shared primitives (_primitives.scss) do
+   not cover. Panes are `section.pane` inside `.screen`.
 
-     .screen.pair      master-detail: a list and its detail side by side, the output strip (.outstrip, one
-                       row, see _terminal.scss) under both
-     .screen.review    install and rules review: the plan takes the full width, the output strip under it
+     .screen.review    install, rules and conflict review: the plan takes the full width, the run panel under it
 
-   A pair needs no height (two side-by-side panes fit any window that fits one), so it stacks by width alone:
-   list, detail, strip in one column, and the screen scrolls. The thresholds scale with the text size
-   (medium 13px / large 15px / extra-large 17px).
    ═══════════════════════════════════════════════════════════════════════════════════ */
-
-/* A pair stacks as list, detail, strip in a flex column, not a grid: the screen's height is definite, so grid
-   rows would share it out and both panes would scroll inside a fraction of the window. Here each pane takes its
-   content height (at least the minimum, capped so a long detail still scrolls) and the screen scrolls past them. */
-@mixin stacked-pair($pane-min-height) {
-  display: flex;
-  flex-direction: column;
-  overflow-y: auto;
-
-  > * { flex: none; }
-
-  > .pane:not(.outstrip) {
-    min-height: $pane-min-height;
-    max-height: max(320px, 78vh);
-  }
-}
-
-/* The list column never drops below what the installed map needs (target names, six glyph columns and their
-   gaps: about 31 characters at any text size), so the map does not scroll sideways just above a stacking threshold. */
-.screen.pair {
-  grid-template-columns: minmax(calc(var(--fs) * 32), 2fr) minmax(0, 3fr);
-  grid-template-rows: minmax(0, 1fr) auto;
-}
-
-.screen.pair > .outstrip { grid-column: 1 / -1; }
 
 .screen.review {
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr) auto;
-}
-
-@media (max-width: 960px) {
-  .screen.pair { @include stacked-pair(260px); }
-}
-
-@media (max-width: 1100px) {
-  [data-app-font-size="large"] .screen.pair,
-  [data-app-font-size="extra-large"] .screen.pair {
-    @include stacked-pair(260px);
-  }
-}
-
-@media (max-width: 1250px) {
-  [data-app-font-size="extra-large"] .screen.pair {
-    @include stacked-pair(260px);
-  }
 }
 
 /* ---- pane content ---- */
@@ -65,37 +18,7 @@
   overflow-wrap: anywhere;
 }
 
-/* The detail pane's surface rows are plain text in the `.rows` layout, not a list to move in: no hover highlight. */
-.rows-static .row:hover { background: none; }
-
-/* Every key/value block of a detail pane shares one label column, so the values of consecutive blocks (surface
-   facts, rules file, runtime, verify) line up instead of each block sizing its own. 13ch fits the longest label
-   (`default agent`); a longer one still widens its own block. */
-.screen.pair .pane-body .kv {
-  grid-template-columns: minmax(13ch, max-content) minmax(0, 1fr);
-}
-
-/* ---- surface matrix ---- */
-
-.matrix-row { display: contents; }
-
-.matrix-grid .matrix-row > * {
-  height: var(--lh);
-  line-height: var(--lh);
-}
-
 /* The install, rules and conflict reviews (plan table, action bar, diff) are styled in _review.scss. */
-
-/* Codex reads AGENTS.override.md instead of AGENTS.md: the base is silently off, so this stays above the surfaces. */
-.rules-alert {
-  margin: 0 0 6px;
-  padding: 4px 10px 4px 7px;
-  border-left: 3px solid var(--warn);
-  background: var(--warn-bg);
-  overflow-wrap: anywhere;
-}
-
-.rules-alert b { color: var(--warn); font-weight: 600; }
 
 /* ---- uninstall and recovery ---- */
 

@@ -1,11 +1,9 @@
 import {
   surfacesForOverview,
   safeOperationCount,
-  type InstallationOverview,
   type OverviewEntry,
   type OverviewId,
 } from "../hooks/useInstallationOverview";
-import type { GlyphName } from "../ui/Glyph";
 import type { Tone } from "../ui/tone";
 import type {
   AgentTargetMeta,
@@ -17,11 +15,8 @@ import type {
 } from "../types";
 import {
   harnessSurfaceStates,
-  HARNESS_LABELS,
-  HARNESS_NAV_ORDER,
   TARGET_SURFACES,
   targetIdForSurface,
-  WORKSPACE_SURFACES,
   type SetupTargetId,
 } from "./harnessInstallation";
 
@@ -34,41 +29,20 @@ type EnabledSettings = Pick<AppSettings, "enabled_target_ids" | "enabled_harness
 export type SurfaceDisplayState = InstallationState | "off" | "unknown" | "user_managed";
 
 export interface StateDisplay {
-  glyph: GlyphName;
   tone: Tone;
   label: string;
 }
 
 const STATE_DISPLAY: Record<SurfaceDisplayState, StateDisplay> = {
-  current: { glyph: "ok", tone: "ok", label: "current" },
-  update_available: { glyph: "partial", tone: "warn", label: "update" },
-  not_installed: { glyph: "partial", tone: "warn", label: "not installed" },
-  conflict: { glyph: "fail", tone: "fail", label: "conflict" },
-  unavailable: { glyph: "none", tone: "dim", label: "unavailable" },
-  off: { glyph: "none", tone: "dim", label: "off" },
-  unknown: { glyph: "none", tone: "dim", label: "unknown" },
-  user_managed: { glyph: "partial", tone: "warn", label: "you manage" },
+  current: { tone: "ok", label: "current" },
+  update_available: { tone: "warn", label: "update" },
+  not_installed: { tone: "warn", label: "not installed" },
+  conflict: { tone: "fail", label: "conflict" },
+  unavailable: { tone: "dim", label: "unavailable" },
+  off: { tone: "dim", label: "off" },
+  unknown: { tone: "dim", label: "unknown" },
+  user_managed: { tone: "warn", label: "you manage" },
 };
-
-/**
- * One line per glyph of the installed map, shown in the `?` help instead of under the matrix. Glyph and tone
- * come from the same table as the cells, so the legend cannot drift from what the matrix draws.
- */
-export const MATRIX_LEGEND: readonly StateDisplay[] = [
-  STATE_DISPLAY.current,
-  { ...STATE_DISPLAY.update_available, label: "update / not installed" },
-  STATE_DISPLAY.conflict,
-  { ...STATE_DISPLAY.off, label: "off / n/a" },
-];
-
-export function overviewLabel(id: OverviewId): string {
-  return id === "workspace" ? "workspace" : HARNESS_LABELS[id].toLowerCase();
-}
-
-/** Workspace plus the enabled harnesses in tab order: the rows of the harness list and the matrix. */
-export function overviewTargets(enabledHarnessIds: readonly InstallAgent[]): OverviewId[] {
-  return ["workspace", ...HARNESS_NAV_ORDER.filter(harness => enabledHarnessIds.includes(harness))];
-}
 
 function plural(n: number, noun: string): string {
   return `${n} ${noun}${n === 1 ? "" : "s"}`;
@@ -231,47 +205,6 @@ export function harnessRowsFor(
       target,
       targetEnabled: targetId ? settings.enabled_target_ids.includes(targetId) : null,
       alsoSurfaces: gated.filter(surface => surface !== row.surface),
-    };
-  });
-}
-
-export const MATRIX_COLUMNS = ["config", "agents", "rules", "skills", "mcp", "bundle"] as const;
-export type MatrixColumn = (typeof MATRIX_COLUMNS)[number];
-
-export type MatrixCellState = SurfaceDisplayState | "na";
-
-export interface MatrixCellModel {
-  column: MatrixColumn;
-  state: MatrixCellState;
-  display: StateDisplay;
-}
-
-export interface MatrixRowModel {
-  id: OverviewId;
-  label: string;
-  cells: MatrixCellModel[];
-}
-
-const NOT_APPLICABLE: StateDisplay = { glyph: "none", tone: "dim", label: "n/a" };
-
-/** Every target (rows) against every surface kind (columns); "n/a" where the target has no such surface. */
-export function matrixModel(
-  overview: InstallationOverview | undefined,
-  targets: readonly OverviewId[],
-  settings: EnabledSettings | null,
-): MatrixRowModel[] {
-  return targets.map(id => {
-    const surfaces = id === "workspace" ? WORKSPACE_SURFACES : surfacesForOverview(id);
-    const rows = surfaceRowsFor(id, overview?.entries[id], settings);
-    return {
-      id,
-      label: overviewLabel(id),
-      cells: MATRIX_COLUMNS.map((column): MatrixCellModel => {
-        const surface = surfaces.find(candidate => surfaceShortName(candidate) === column);
-        if (!surface) return { column, state: "na", display: NOT_APPLICABLE };
-        const state = rows.find(row => row.surface === surface)?.state ?? "unknown";
-        return { column, state, display: STATE_DISPLAY[state] };
-      }),
     };
   });
 }

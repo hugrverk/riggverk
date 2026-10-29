@@ -39,7 +39,7 @@ export function isInlineRulesState(state: RulesReviewState): boolean {
 }
 
 export interface UseRulesFlowOptions {
-  /** The workspace task runner: action lock, output pane, minimum running time. */
+  /** The workspace task runner: action lock, run panel, minimum running time. */
   runWorkspaceTask: RunWorkspaceTask;
   /** Reload what a conversion may have changed on disk. */
   refresh: () => void | Promise<void>;

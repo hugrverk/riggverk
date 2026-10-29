@@ -104,7 +104,7 @@ export interface RulesModel {
   user_managed: boolean;
 }
 
-const MANAGED_DISPLAY: StateDisplay = { glyph: "partial", tone: "warn", label: "you manage" };
+const MANAGED_DISPLAY: StateDisplay = { tone: "warn", label: "you manage" };
 
 function reasonOf(rules: RulesStatus): string | null {
   if (!rules.conflict_reason) return null;

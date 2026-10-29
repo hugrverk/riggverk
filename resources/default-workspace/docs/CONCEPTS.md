@@ -13,7 +13,7 @@ The app ships a read-only bundle of docs, skills, templates, and scripts. Everyt
 - **Install to a harness**: bundle -> `~/.claude`, `~/.codex`, `~/.config/opencode`, `~/.cursor`.
 - **Library and health checks**: read the bundle inside the app, so every user sees the current text.
 
-There is no install to the data folder. Earlier releases copied the bundle there; the app no longer reads or updates those copies and removes them only through the reviewed update of the `workspace` row (`u` on it): a copy goes only when its bytes prove it is the app's, with a backup, and `z` restores it. An edited copy or any other file the app cannot prove is its own stays in place and is listed as a manual step, not a conflict. See [USING_THE_APP.md](USING_THE_APP.md#workspace-page).
+There is no install to the data folder. Earlier releases copied the bundle there; the app no longer reads or updates those copies and removes them only through the reviewed update of the workspace folder (Update all on the Overview, or `:update workspace`): a copy goes only when its bytes prove it is the app's, with a backup, and `z` restores it. An edited copy or any other file the app cannot prove is its own stays in place and is listed as a manual step, not a conflict. See [USING_THE_APP.md](USING_THE_APP.md#overview).
 
 The Library shows bundled files read-only; your own notes go in personal docs (`docs/context/`), which the bundle never ships. Editing a file in the data folder outside the app changes neither what the Library shows nor what Claude, Codex, OpenCode, or Cursor receive.
 
@@ -45,7 +45,7 @@ Config files hold tool settings such as permissions, models, and MCP servers. Th
 
 ## Targets and surfaces
 
-A **surface** is one installable group (for example `claude_rules`, `open_code_config`, `cursor_mcp`, `skills`, `workspace_bundle`). A **target** is a toggle that gates one or more surfaces: rules, agents, and config per harness, and `cursor_setup`. A target that is off is excluded from preview, apply, and status. Fresh settings enable every target except `codex_config`, `claude_config` and `kilo_mcp` (the light harnesses' `copilot_rules`, `pi_rules`, `kilo_rules`, `copilot_mcp`, and `pi_mcp` are on, and act once their harness is). Skills and the `workspace` row are never gated. Harness enablement (Settings) is separate: a disabled harness is hidden and cannot be written. Codex, OpenCode, Claude, and Cursor are on by default; Copilot, Pi, and Kilo (a rules file, a Playwright MCP entry, and the shared skills) are off until you turn them on.
+A **surface** is one installable group (for example `claude_rules`, `open_code_config`, `cursor_mcp`, `skills`, `workspace_bundle`). A **target** is a toggle that gates one or more surfaces: rules, agents, and config per harness, and `cursor_setup`. A target that is off is excluded from preview, apply, and status. Fresh settings enable every target except `codex_config`, `claude_config` and `kilo_mcp` (the light harnesses' `copilot_rules`, `pi_rules`, `kilo_rules`, `copilot_mcp`, and `pi_mcp` are on, and act once their harness is). Skills and the workspace folder are never gated. Harness enablement (Settings) is separate: a disabled harness is hidden and cannot be written. Codex, OpenCode, Claude, and Cursor are on by default; Copilot, Pi, and Kilo (a rules file, a Playwright MCP entry, and the shared skills) are off until you turn them on.
 
 ## Install review and transactions
 

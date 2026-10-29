@@ -11,7 +11,6 @@ import {
   overviewOf,
   RISKY_CLAUDE,
   settingsOf,
-  STATUS_DATA,
   surfaceStatus,
   VALID_DIAGNOSTICS,
 } from "../test/pageFixtures";
@@ -107,7 +106,6 @@ function props(overrides: Partial<OverviewViewProps> = {}): OverviewViewProps {
     wsLogCompletedAt: null,
     wsRunning: null,
     wsProgress: null,
-    status: STATUS_DATA,
     dataFolderOk: true,
     onClearOutput: vi.fn(),
     ...overrides,
@@ -127,9 +125,9 @@ function cell(name: string) {
   return within(page()).getByRole("button", { name }).closest("article")!;
 }
 
-/** A key hint of the focused page: hints live in the status bar, not in the page. */
+/** A key hint of the focused page: hints live as a key hint, not in the page. */
 function hint(name: RegExp) {
-  return within(screen.getByLabelText("Status bar")).getByRole("button", { name });
+  return within(screen.getByLabelText("Key hints")).getByRole("button", { name });
 }
 
 function press(key: string, init: KeyboardEventInit = {}) {

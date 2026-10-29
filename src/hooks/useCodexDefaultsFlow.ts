@@ -23,7 +23,7 @@ export type CodexDefaultsState =
 const IDLE: CodexDefaultsState = { status: "idle" };
 
 export interface UseCodexDefaultsFlowOptions {
-  /** The workspace task runner: action lock, output pane, minimum running time. */
+  /** The workspace task runner: action lock, run panel, minimum running time. */
   runWorkspaceTask: RunWorkspaceTask;
   /** Reload what the reset may have changed on disk. */
   refresh: () => void | Promise<void>;

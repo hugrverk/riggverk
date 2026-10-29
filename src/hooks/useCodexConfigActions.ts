@@ -16,7 +16,7 @@ export interface UseCodexConfigActionsOptions {
   blockedBy: string | null;
   /** The "use Riggverk defaults" review: `b` opens its preview. */
   defaults: CodexDefaultsFlow;
-  /** Panes whose focus offers `m` and `b` as status-bar hints. */
+  /** Panes whose focus offers `m` and `b` as key hints. */
   paneIds: readonly string[];
   /** Whether the key applies right now (the page's cursor is on the Codex config row). Default true. */
   active?: boolean;

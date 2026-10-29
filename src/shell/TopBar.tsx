@@ -21,7 +21,7 @@ export interface TopBarProps {
 export function TopBar({ viewLabel, onCheck, onUpdateAll, updateAllDisabled = false, checking = false }: TopBarProps) {
   const reasonId = useId();
   return (
-    <header className="bar topline" data-tauri-drag-region>
+    <header className="bar shell-chrome" data-tauri-drag-region>
       <span className="crumb" data-tauri-drag-region>
         Riggverk / {viewLabel}
       </span>

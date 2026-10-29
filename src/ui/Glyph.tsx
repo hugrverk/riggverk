@@ -1,17 +1,9 @@
 import { cx, toneClass, type Tone } from "./tone";
 
 export const GLYPHS = {
-  ok: "●",
-  partial: "◐",
   fail: "✗",
-  none: "·",
-  cursor: "▸",
   prompt: "❯",
   check: "✓",
-  add: "+",
-  change: "~",
-  remove: "−",
-  conflict: "!",
 } as const;
 
 export type GlyphName = keyof typeof GLYPHS;
@@ -25,7 +17,7 @@ interface GlyphProps {
 }
 
 /**
- * One fixed-width cell (`.g`) for symbols the monospace face lacks (▸ ● ◐ ✓ ✗ ❯). Never rely on the
+ * One fixed-width cell (`.g`) for the few symbols the monospace face lacks (✓ ✗ ❯): the error line and the log. Never rely on the
  * glyph or its colour alone: either pass `label` or render a text label next to it.
  */
 export function Glyph({ name, tone, label, className }: GlyphProps) {

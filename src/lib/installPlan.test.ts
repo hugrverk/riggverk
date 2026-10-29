@@ -57,10 +57,10 @@ describe("buildPlanGroups", () => {
     const groups = buildPlanGroups(MIXED);
     expect(groups.map(group => group.title)).toEqual(["claude rules", "claude agents", "skills", "cursor mcp"]);
     const skills = groups[2]!.rows;
-    expect(skills.map(row => [row.kind, row.glyph, row.label, row.file])).toEqual([
-      ["create", "add", "create", "skills/handoff/SKILL.md"],
-      ["update", "change", "update", "skills/frontend-design/SKILL.md"],
-      ["remove", "remove", "remove", "skills/zoom-in/SKILL.md"],
+    expect(skills.map(row => [row.kind, row.label, row.file])).toEqual([
+      ["create", "create", "skills/handoff/SKILL.md"],
+      ["update", "update", "skills/frontend-design/SKILL.md"],
+      ["remove", "remove", "skills/zoom-in/SKILL.md"],
     ]);
     expect(skills[2]!.note).toBe("no longer bundled, backed up");
   });
@@ -139,7 +139,7 @@ describe("buildPlanGroups", () => {
 
   it("marks conflicts with their description and keeps them out of the safe rows", () => {
     const conflict = planRows(buildPlanGroups(MIXED)).find(row => row.conflict)!;
-    expect(conflict).toMatchObject({ kind: "conflict", glyph: "conflict", label: "conflict", safe: false });
+    expect(conflict).toMatchObject({ kind: "conflict", label: "conflict", safe: false });
     expect(conflict.note).toBe("mcp.json was modified locally since install");
     expect(conflict.detail).toContain("mcp.json differs");
   });
@@ -157,9 +157,9 @@ describe("buildPlanGroups", () => {
     ]);
   });
 
-  it("lists manual steps with a warning glyph and the step as the reason", () => {
+  it("lists manual steps with the step as the reason", () => {
     const groups = buildPlanGroups(review([op("cursor_mcp", "manual", { manual_step: "Enable the Playwright MCP in Cursor" })], ["cursor_mcp"]));
-    expect(groups[0]!.rows[0]).toMatchObject({ kind: "manual", glyph: "conflict", label: "manual", note: "Enable the Playwright MCP in Cursor", safe: false });
+    expect(groups[0]!.rows[0]).toMatchObject({ kind: "manual", label: "manual", note: "Enable the Playwright MCP in Cursor", safe: false });
   });
 });
 

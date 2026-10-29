@@ -1,5 +1,5 @@
-/* ── output pane: `❯ command`, a status line, `── stdout ──`, then the text ──
-   Markup lives in components/TerminalOutput.tsx and OutputStrip.tsx. Glyphs sit in `.g` cells; nothing
+/* ── output: `❯ command`, a status line, `── stdout ──`, then the text ──
+   Markup lives in components/TerminalOutput.tsx (the run panel's Details). Glyphs sit in `.g` cells; nothing
    depends on white-space: pre outside the output text itself. */
 
 .out { padding: 0 10px; }
@@ -97,79 +97,6 @@
   transition: none;
 }
 
-/* ── output strip: one line under the page's panes, expands into the log ──
-   Markup lives in components/OutputStrip.tsx. `.outstrip` is a `.pane` (border, accent on :focus-within) with no
-   title notch, footer or padding of its own; the line is the pane's focus target, the log below it is `TerminalState`. */
-
-/* `.pane` lets a grid item shrink to nothing; the strip is one line plus its capped log and must keep that height
-   when a stacked page is taller than the window (the page scrolls instead). */
-.outstrip { min-height: auto; }
-
-/* The line is a row of siblings: the toggle button (the status text), the result's rollback button and the key that
-   toggles the log. Buttons never nest, so the toggle takes the row's left padding and the key its right one.
-   The toggle keeps the left padding, 16px glyph cell and gap of a list row, so the glyph and the command sit under
-   the rows' cursor cell and names in the panes above. */
-.outstrip-line {
-  display: flex;
-  flex: none;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  height: calc(var(--lh) + 6px);
-  white-space: nowrap;
-  overflow: hidden;
-}
-
-.outstrip-toggle {
-  display: flex;
-  flex: 1 1 auto;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  height: 100%;
-  padding: 0 0 0 8px;
-  border: 0;
-  background: none;
-  color: var(--text);
-  text-align: left;
-  white-space: nowrap;
-  overflow: hidden;
-  cursor: pointer;
-}
-
-.outstrip-toggle:focus-visible { outline-offset: -2px; }
-
-.outstrip-toggle > .g:first-child {
-  flex: none;
-  width: 16px;
-}
-
-.outstrip-line .tbtn { flex: none; }
-
-/* The command and what follows it share one ellipsis; the loader and `running` keep their size. */
-.outstrip-text {
-  flex: 0 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.outstrip-cmd {
-  font-weight: 500;
-  color: var(--text-heading);
-}
-
-.outstrip-toggle .terminal-activity { flex: none; margin-top: 0; }
-
-/* The key that toggles the log, pinned to the right edge. */
-.outstrip-affordance {
-  flex: none;
-  margin-left: auto;
-  padding-right: 10px;
-  color: var(--text-muted);
-  cursor: pointer;
-}
-
 /* ── progress: the bar, its count and file, the spinner and the clock ──
    Components in TerminalOutput.tsx. The file is the only part that shrinks; everything else keeps its size. */
 
@@ -206,36 +133,6 @@
 
 [data-motion="full"] .tail-line { animation: tail-in 160ms ease-out; }
 @keyframes tail-in { from { opacity: 0; transform: translateX(-4px); } }
-
-/* ── a result lands (full motion only): the check pops once and the border fades from ok to its resting colour.
-   The border is an overlay that fades, so only opacity and transform move. ── */
-[data-motion="full"] .outstrip.just-done::after {
-  content: "";
-  position: absolute;
-  inset: -1px;
-  border: 1px solid var(--ok);
-  pointer-events: none;
-  animation: outstrip-ok-fade 800ms ease-out both;
-}
-
-@keyframes outstrip-ok-fade {
-  0%, 45% { opacity: 1; }
-  100% { opacity: 0; }
-}
-
-[data-motion="full"] .outstrip.just-done .tick { animation: tick-pop 420ms cubic-bezier(0.2, 0.9, 0.3, 1.25); }
-@keyframes tick-pop { from { transform: scale(0.3); opacity: 0; } }
-
-/* No display here: the `hidden` attribute collapses it. Capped at about 12 lines; longer output scrolls. */
-.outstrip-log {
-  min-height: 0;
-  max-height: calc(var(--lh) * 12);
-  padding: 0 10px 6px;
-  border-top: 1px solid var(--border);
-  overflow: auto;
-}
-
-.outstrip-log:focus-visible { outline-offset: -2px; }
 
 @media (prefers-reduced-motion: reduce) {
   .tui-caret { animation: none; }

@@ -1,7 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ActionResult } from "../components/TerminalOutput";
 import { focusPaneById } from "../keyboard/focus";
-import { useStatusContext } from "../shell/ShellState";
 import { Pane } from "../ui/Pane";
 import type {
   AgentMetadataResponse,
@@ -185,7 +184,6 @@ export function LibraryView(props: LibraryViewProps) {
     wasEditing.current = editing;
   }, [editing]);
 
-  useStatusContext(activeSource.label);
   const { close } = useLibraryKeys({
     rootRef,
     textareaRef,
@@ -305,7 +303,7 @@ export function LibraryView(props: LibraryViewProps) {
       break;
   }
 
-  // Opening the form from `n` or its status-bar hint puts the cursor in its title field.
+  // Opening the form from `n` or its button puts the cursor in its title field.
   const createForm =
     sourceType === "docs" && props.showCreateDoc ? (
       <CreateDocForm

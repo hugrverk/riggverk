@@ -1,5 +1,4 @@
 import type { InstallFlowRequest, InstallReview } from "../hooks/useInstallFlow";
-import type { GlyphName } from "../ui/Glyph";
 import type { Tone } from "../ui/tone";
 import type { AppSettings, InstallAgent, PlannedOperation, SetupResult, SetupSurfaceId } from "../types";
 import { resolvePointer } from "./fileConflicts";
@@ -51,10 +50,7 @@ export interface PlanRow {
   id: string;
   surface: SetupSurfaceId;
   kind: PlanRowKind;
-  /** Op glyph (`+ ~ − !`); always paired with `label`, never the only cue. */
-  glyph: GlyphName;
   label: string;
-  tone: Tone;
   file: string;
   note: string;
   /** Lines shown when the row is expanded with `d`: the operation summary, conflict/manual text, detail lines. */
@@ -83,13 +79,14 @@ export interface PlanCounts {
   unchanged: number;
 }
 
-const KIND_STYLE: Record<PlanRowKind, { glyph: GlyphName; label: string; tone: Tone }> = {
-  create: { glyph: "add", label: "create", tone: "ok" },
-  update: { glyph: "change", label: "update", tone: "warn" },
-  remove: { glyph: "remove", label: "remove", tone: "fail" },
-  conflict: { glyph: "conflict", label: "conflict", tone: "fail" },
-  manual: { glyph: "conflict", label: "manual", tone: "warn" },
-  unavailable: { glyph: "none", label: "unavailable", tone: "dim" },
+/** The word that names each kind of row; the rows never rely on a mark or a colour alone. */
+const KIND_LABEL: Record<PlanRowKind, string> = {
+  create: "create",
+  update: "update",
+  remove: "remove",
+  conflict: "conflict",
+  manual: "manual",
+  unavailable: "unavailable",
 };
 
 /**
@@ -119,12 +116,11 @@ function rowFor(
   note: string,
   detail: string[],
 ): PlanRow {
-  const style = KIND_STYLE[kind];
   return {
     id: `${surface}:${index}`,
     surface,
     kind,
-    ...style,
+    label: KIND_LABEL[kind],
     file,
     note,
     detail,
@@ -141,7 +137,7 @@ function resolveLines(kind: PlanRowKind, surface: SetupSurfaceId): string[] {
 
 function rowsForOperation(op: PlannedOperation): PlanRow[] {
   const kind = op.kind as PlanRowKind;
-  if (!(kind in KIND_STYLE)) return [];
+  if (!(kind in KIND_LABEL)) return [];
   const baseDetail = [op.summary, op.conflict_description, op.manual_step];
   const lines = op.details ?? [];
   const safe = kind === "create" || kind === "update" || kind === "remove";

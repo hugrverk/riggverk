@@ -34,21 +34,6 @@ export function focusPanePrimary(pane: HTMLElement): boolean {
   return document.activeElement === target;
 }
 
-export type PaneDirection = "next" | "prev";
-
-/** Focuses the neighbouring pane in DOM order relative to the pane that holds focus. No wrap-around. */
-export function focusPane(direction: PaneDirection, root: ParentNode = document): boolean {
-  const panes = listPanes(root);
-  if (panes.length === 0) return false;
-  const current = paneOf(document.activeElement);
-  const index = current ? panes.indexOf(current) : -1;
-  let nextIndex: number;
-  if (index === -1) nextIndex = direction === "next" ? 0 : panes.length - 1;
-  else nextIndex = direction === "next" ? index + 1 : index - 1;
-  if (nextIndex < 0 || nextIndex >= panes.length) return false;
-  return focusPanePrimary(panes[nextIndex]!);
-}
-
 /** Focuses a pane by its `data-pane-id`. */
 export function focusPaneById(id: string, root: ParentNode = document): boolean {
   const pane = listPanes(root).find(candidate => candidate.dataset.paneId === id);

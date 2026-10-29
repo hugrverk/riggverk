@@ -3,6 +3,7 @@ import { render, type RenderOptions, type RenderResult } from "@testing-library/
 import type { Platform } from "../keyboard/keymap";
 import { AppFrame, type AppFrameProps } from "../shell/AppFrame";
 import { ShellProviders } from "../shell/ShellProviders";
+import { BindingHints } from "./BindingHints";
 
 export interface RenderWithShellOptions extends Omit<RenderOptions, "wrapper"> {
   /** Wrap in React.StrictMode (double-mounts effects) to prove registration is idempotent. */
@@ -36,20 +37,23 @@ export function renderWithShell(
 
 export type FrameProps = Partial<Omit<AppFrameProps, "children">>;
 
-/** The app's frame with sensible defaults, for tests that need top line, status bar and overlays. */
+/** The app's frame with sensible defaults, for tests that need the sidebar, top bar and overlays, plus the `BindingHints` probe. */
 export function TestFrame({ children, ...props }: FrameProps & { children?: ReactNode }) {
   return (
-    <AppFrame
-      view="start"
-      onSwitchView={() => {}}
-      libraryDirty={false}
-      settingsErrored={false}
-      error={null}
-      onDismissError={() => {}}
-      {...props}
-    >
-      {children}
-    </AppFrame>
+    <>
+      <AppFrame
+        view="start"
+        onSwitchView={() => {}}
+        libraryDirty={false}
+        settingsErrored={false}
+        error={null}
+        onDismissError={() => {}}
+        {...props}
+      >
+        {children}
+      </AppFrame>
+      <BindingHints />
+    </>
   );
 }
 

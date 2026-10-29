@@ -143,7 +143,7 @@ In the app, press `u` on a harness page and confirm with `y`. Skills are one glo
 
 ### Skill packs
 
-A pack is a folder of your own skills that Riggverk installs, updates and rolls back like the bundled ones. Put it in the data folder (`~/.config/riggverk/`, shown on the Workspace page):
+A pack is a folder of your own skills that Riggverk installs, updates and rolls back like the bundled ones. Put it in the data folder (`~/.config/riggverk/`, shown in the Workspace folder cell of the Overview):
 
 ```text
 ~/.config/riggverk/packs/<pack>/skills/<skill>/SKILL.md

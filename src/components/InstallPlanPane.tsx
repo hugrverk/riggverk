@@ -10,8 +10,8 @@ import {
   planRows,
   type PlanCounts,
 } from "../lib/installPlan";
-import { useConfirmMode, useStatusContext } from "../shell/ShellState";
-import { BindingButton } from "../ui/BindingActionKey";
+import { useConfirmMode } from "../shell/ShellState";
+import { BindingButton } from "../ui/BindingButton";
 import { Pane } from "../ui/Pane";
 import { cx } from "../ui/tone";
 import { ReviewFooter } from "./ReviewFooter";
@@ -65,13 +65,12 @@ function Counts({ counts }: { counts: PlanCounts }) {
  * Keys (focus inside the pane): `j`/`k` move, `d` details of the row, `c` next conflict, `y` apply (review
  * only, and only when there is something safe to apply), `n`/Esc cancel, `r` preview again after a stale or
  * expired preview. Enter never applies, not on the grid and not on the focused Apply button; the `y apply` hint in
- * the status bar and the Apply button are clickable and do the same as the key.
+ * the Apply button is clickable and does the same as the key.
  */
 export function InstallPlanPane({ flow, busyLabel, backupRoot, onApply }: InstallPlanPaneProps) {
   const { status, review, error, request } = flow;
   const open = status !== "idle";
   useConfirmMode(open);
-  useStatusContext(open ? "plan" : null);
 
   const tableRef = useRef<HTMLTableElement>(null);
   const tableId = useId();
@@ -93,7 +92,7 @@ export function InstallPlanPane({ flow, busyLabel, backupRoot, onApply }: Instal
     const active = document.activeElement;
     const pane = document.querySelector(`[data-pane-id="${INSTALL_PLAN_PANE_ID}"]`);
     const free =
-      !active || active === document.body || !active.isConnected || pane?.contains(active) === true || active.closest(".topline") !== null;
+      !active || active === document.body || !active.isConnected || pane?.contains(active) === true || active.closest(".shell-chrome") !== null;
     if (free) focusPaneById(INSTALL_PLAN_PANE_ID);
   }, [open, status]);
 

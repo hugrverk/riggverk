@@ -65,7 +65,7 @@ function focus(element: HTMLElement) {
 }
 
 function mode(): string {
-  return screen.getByLabelText("Status bar").querySelector(".mode")!.textContent!;
+  return screen.getByLabelText("Shell mode").textContent!;
 }
 
 function radios(group: string): HTMLElement[] {
@@ -76,9 +76,9 @@ function pane(name: string): HTMLElement {
   return screen.getByRole("region", { name });
 }
 
-/** Key hints of the focused pane live in the status bar. */
+/** Key hints of the focused pane live as a key hint. */
 function hints() {
-  return within(screen.getByLabelText("Status bar"));
+  return within(screen.getByLabelText("Key hints"));
 }
 
 /** Keeps the draft in state so radio selections re-render like they do under App. */
@@ -198,7 +198,7 @@ describe("SettingsView radio groups", () => {
     expect(screen.getByRole("switch", { name: "Codex" }).getAttribute("aria-checked")).toBe("true");
     const cursor = screen.getByRole("switch", { name: "Cursor" });
     expect(cursor.getAttribute("aria-checked")).toBe("false");
-    expect(cursor.textContent).toContain("Off");
+    expect(cursor.nextElementSibling!.textContent).toBe("Off");
     fireEvent.click(cursor);
     expect(props.onToggleHarness).toHaveBeenCalledWith("cursor");
   });
@@ -213,7 +213,7 @@ describe("SettingsView radio groups", () => {
     expect(boxes.map(box => box.getAttribute("aria-checked"))).toEqual(
       ["true", "true", "true", "true", "false", "false", "false"],
     );
-    for (const box of boxes.slice(4)) expect(box.textContent).toContain("Off");
+    for (const box of boxes.slice(4)) expect(box.nextElementSibling!.textContent).toBe("Off");
     fireEvent.click(screen.getByRole("switch", { name: "Pi" }));
     expect(props.onToggleHarness).toHaveBeenCalledWith("pi");
   });
@@ -302,7 +302,7 @@ describe("SettingsView keyboard navigation", () => {
     expect(document.activeElement).toBe(screen.getByLabelText("Accent hex code"));
   });
 
-  it("hints j and k in the status bar from both panes, clickable, and keeps pane footers free of key hints", () => {
+  it("hints j and k as a key hint from both panes, clickable, and keeps pane footers free of key hints", () => {
     renderSettings();
     focus(radios("Theme")[0]!);
     fireEvent.click(hints().getByRole("button", { name: "j next setting" }));
@@ -343,15 +343,6 @@ describe("SettingsView keyboard navigation", () => {
     focus(landing);
     press(landing, "k");
     expect(document.activeElement).toBe(landing);
-  });
-
-  it("h and l move between the two panes and land on their first setting", () => {
-    renderSettings();
-    focus(radios("Theme")[0]!);
-    press(document.activeElement!, "l");
-    expect(document.activeElement).toBe(radios("Landing page")[0]);
-    press(document.activeElement!, "h");
-    expect(document.activeElement).toBe(radios("Theme")[0]);
   });
 
   it("does not steal Enter or Space from the focused radio", () => {
@@ -566,7 +557,7 @@ describe("SettingsView workspace row", () => {
     await act(async () => {});
   });
 
-  it("reaches reset from the appearance pane, and hints it in the status bar", async () => {
+  it("reaches reset from the appearance pane, and hints it as a key hint", async () => {
     const onResetWorkspace = vi.fn(async () => null);
     const { rerenderFrame, props } = renderSettings({ onResetWorkspace });
 

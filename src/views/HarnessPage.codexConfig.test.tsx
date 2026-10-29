@@ -8,7 +8,6 @@ import {
   overviewOf,
   settingsOf,
   skillLoadsOf,
-  STATUS_DATA,
   surfaceStatus,
 } from "../test/pageFixtures";
 import type { ActionResult, AgentTargetMeta, CodexConfigDefaultsPreview, CodexConfigStatus, CodexRuntimeHealth, InstallationState, SetupResult } from "../types";
@@ -86,7 +85,6 @@ function props(overrides: Partial<HarnessViewProps> = {}): HarnessViewProps {
     wsLogCompletedAt: null,
     wsRunning: null,
     wsProgress: null,
-    status: STATUS_DATA,
     dataFolderOk: true,
     onClearOutput: vi.fn(),
     ...overrides,
@@ -145,11 +143,11 @@ function press(key: string) {
 
 function hint(name: RegExp) {
   if (!surfaces().contains(document.activeElement)) focusSurfaces();
-  return within(screen.getByLabelText("Status bar")).queryByRole("button", { name });
+  return within(screen.getByLabelText("Key hints")).queryByRole("button", { name });
 }
 
 function mode() {
-  return document.querySelector(".statusbar .mode")!.textContent;
+  return screen.getByLabelText("Shell mode").textContent;
 }
 
 function table() {
@@ -369,8 +367,8 @@ function review() {
   return screen.getByRole("region", { name: "Config review" });
 }
 
-function statusBar() {
-  return within(screen.getByLabelText("Status bar"));
+function keyHints() {
+  return within(screen.getByLabelText("Key hints"));
 }
 
 describe("use Riggverk defaults (b, y)", () => {
@@ -503,7 +501,7 @@ describe("use Riggverk defaults (b, y)", () => {
   it("waits for a running task before it applies", async () => {
     const { p, rerenderFrame } = await openPreview();
     rerenderFrame(<CodexView {...p} wsRunning="uninstall" runtimeHealth={health()} />);
-    const apply = statusBar().getByRole("button", { name: /apply/ });
+    const apply = keyHints().getByRole("button", { name: /apply/ });
     expect(apply.getAttribute("title")).toBe("uninstall is running");
     press("y");
     expect(invokeMock).not.toHaveBeenCalledWith("apply_codex_config_defaults", expect.anything());

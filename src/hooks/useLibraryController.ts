@@ -127,15 +127,29 @@ export function useLibraryController({
 
   const libraryDirty = docDirty || rulesDirty;
 
+  /**
+   * The user confirmed leaving with unsaved changes: both drafts go back to what is saved, so nothing stays marked
+   * as unsaved (the sidebar's Library dot) and nothing comes back when the Library is opened again.
+   */
+  const discardDrafts = useCallback(() => {
+    setDocDraft(activeDoc?.content ?? "");
+    setDocDirty(false);
+    setDocSaveResult(null);
+    setRulesDraft(activeRulesFile?.refinements ?? "");
+    setRulesDirty(false);
+    setRulesSaveResult(null);
+  }, [activeDoc, activeRulesFile]);
+
   const setGuardedLibrarySourceType = useCallback(async (type: LibrarySourceType) => {
     if (type === librarySourceType) return;
     if (isLibrarySourceDirty(librarySourceType)) {
       const ok = await confirm(LEAVE_DIRTY_MESSAGE);
       if (!ok) return;
+      discardDrafts();
     }
     setLibrarySourceType(type);
     if (type === "configs") fetchStatus();
-  }, [librarySourceType, isLibrarySourceDirty, fetchStatus, confirm]);
+  }, [librarySourceType, isLibrarySourceDirty, fetchStatus, confirm, discardDrafts]);
 
   const loadSkills = useCallback(async (generation = workspaceLoadGenerationRef.current) => {
     try {
@@ -757,6 +771,7 @@ export function useLibraryController({
     librarySourceType,
     setGuardedLibrarySourceType,
     isLibrarySourceDirty,
+    discardDrafts,
     libraryDirty,
     agentSources,
     activeAgentId,

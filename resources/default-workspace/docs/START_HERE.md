@@ -24,29 +24,28 @@ It does not:
 
 ## First install
 
-1. Start the app and press `1` (Workspace). On a fresh profile the `workspace` row says `current`: there is no copy of the bundle to install. The harness rows are what you install.
-2. Press `2`, `3`, `4`, or `5` for Codex, OpenCode, Cursor, or Claude. Check the targets on the left (Space toggles one).
-3. Press `u`. A plan table lists every file to create. Nothing is written yet.
-4. Press `d` to expand a row, `j` and `k` to move. `n` or Escape cancels.
-5. Press `y` to apply. A backup and a transaction are recorded first; the output pane shows the result.
+1. Start the app. The Overview says `Nothing is set up yet.` on a fresh profile: there is no copy of the bundle to install. The agents are what you install.
+2. Open an agent from the sidebar (`2`, `3`, `4` or `5` for Codex, OpenCode, Cursor or Claude). Each part has a switch, "Let Riggverk manage this", that decides whether it may be written.
+3. Click **Install** (or press `u`). A plan table lists every file to create. Nothing is written yet.
+4. Press `d` to expand a row. `n`, Escape or **Cancel** cancels.
+5. Click **Apply** (or press `y`). A backup and a transaction are recorded first; a line under the page shows the result, and History keeps it.
 
-`p` previews without any way to apply. `:update --all` reviews every enabled harness in one plan; `:preview --all` only looks.
+**Preview** (`p`) shows the plan without any way to apply. **Update all** in the top bar (or `:update --all`) reviews every enabled agent in one plan; `:preview --all` only looks. Enter never applies.
 
-If the `workspace` row says `N old copies to remove`, an earlier release copied the bundle into your data folder. `u` on that row reviews their removal: only copies the app can prove are its own, backed up, and `z` restores them. Edited files stay and are listed.
+If the Workspace folder cell on the Overview says `N old copies to remove`, an earlier release copied the bundle into your data folder. **Update all** (or `:update workspace`) reviews their removal: only copies the app can prove are its own, backed up, and `z` restores them. Edited files stay and are listed.
 
-Fresh settings enable every target except `codex_config`, which rewrites your Codex approval and sandbox settings, and `claude_config`, which sets `attribution.commit` and `attribution.pr` to `""` in `~/.claude/settings.json` to hide Claude Code's `Co-Authored-By` commit line and "Generated with Claude Code" PR line. Turn them on from the Codex and Claude pages when you want them.
+Fresh settings enable every target except `codex_config`, which rewrites your Codex approval and sandbox settings, and `claude_config`, which sets `attribution.commit` and `attribution.pr` to `""` in `~/.claude/settings.json` to hide Claude Code's `Co-Authored-By` commit line and "Generated with Claude Code" PR line. Turn them on with their switches on the Codex and Claude pages when you want them.
 
 ## Essential keys
 
 | Key | Action |
 | --- | --- |
-| `1`-`7` | Go to a tab (workspace, codex, opencode, cursor, claude, library, settings; copilot, pi and kilo follow claude once enabled) |
-| `h` `l` | Previous or next pane |
-| `j` `k` | Move in a list |
-| `u` | Review and apply an install or update |
+| `1`-`8` | Go to a page: Overview, Codex, OpenCode, Cursor, Claude, History, Library, Settings (the digits are fixed; Copilot, Pi and Kilo have none) |
+| `j` `k` | Move in a list (Library) |
+| `u` | Review and apply an install or update (on the Overview: Update all) |
 | `p` | Preview only |
 | `y` `n` | Apply or cancel in the review |
-| `z` | Roll back the last transaction (output pane) |
+| `z` | Undo the last update of this session |
 | `:` | Command line (`:help`, `:update codex`, `:rollback`) |
 | `?` | Every key and command |
 
@@ -54,7 +53,7 @@ The full list is in [USING_THE_APP.md](USING_THE_APP.md#keyboard-reference).
 
 ## When a file is a conflict
 
-A file that is yours, not the app's, is never overwritten. The plan shows it as `preserved, skipped`, and `y` applies only the safe rows. For a rules file (`CLAUDE.md`, `AGENTS.md`) you choose between **Convert**, **Leave as is**, and a diff. For anything else, move or delete your copy and install again. Details in [TROUBLESHOOTING.md](TROUBLESHOOTING.md#conflicts).
+A file that is yours, not the app's, is never overwritten. The plan shows it as `preserved, skipped`, and `y` applies only the safe rows. For a rules file (`CLAUDE.md`, `AGENTS.md`) the agent page shows a card with **Compare**, **Merge in updates…** and **Keep mine**. For skill and agent files you edited it offers **Compare**, **Use Riggverk's version…** and **Keep mine**. For anything else, move or delete your copy and install again. Details in [TROUBLESHOOTING.md](TROUBLESHOOTING.md#conflicts).
 
 ## Your own rules
 
@@ -63,7 +62,7 @@ Rules files hold the app's base between `BEGIN RIGGVERK BASE` and `END RIGGVERK 
 ## Where things are
 
 - Data folder: `~/.config/riggverk` (the app's state in `.riggverk/`, your personal docs in `docs/context/`; `RIGGVERK_WORKSPACE_PATH` overrides it).
-- Backups: `~/Library/Application Support/se.hugrverk.riggverk/backups` on macOS, `${XDG_CONFIG_HOME:-~/.config}/se.hugrverk.riggverk/backups` on Linux, `%APPDATA%\se.hugrverk.riggverk\backups` on Windows. `B` on the Workspace page opens the folder.
+- Backups: `~/Library/Application Support/se.hugrverk.riggverk/backups` on macOS, `${XDG_CONFIG_HOME:-~/.config}/se.hugrverk.riggverk/backups` on Linux, `%APPDATA%\se.hugrverk.riggverk\backups` on Windows. **Backups folder** (`B`) in the Workspace folder cell of the Overview opens it.
 - Settings file: `settings.json` in the app support folder, the parent of the default backups folder.
 
 ## Next

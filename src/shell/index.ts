@@ -8,11 +8,9 @@ export {
   useNotify,
   useShellMode,
   useShellState,
-  useStatusContext,
   type ShellMode,
   type ShellStateValue,
 } from "./ShellState";
-export { StatusBar, type StatusBarProps } from "./StatusBar";
 export { Sidebar, type SidebarProps } from "./Sidebar";
 export { Toast } from "./Toast";
 export { TopBar, type TopBarProps } from "./TopBar";

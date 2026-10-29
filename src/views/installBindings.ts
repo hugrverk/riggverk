@@ -4,7 +4,7 @@ import type { UpdateAction } from "../lib/installationView";
 interface InstallBindingOptions {
   /** Prefix of the binding ids ("start", "codex"); each pane gets its own suffix. */
   idPrefix: string;
-  /** The panes whose focus offers the actions as status-bar hints. */
+  /** The panes whose focus offers the actions as key hints. */
   paneIds: readonly string[];
   update: UpdateAction;
   /** Why a preview is off, or false. */
@@ -14,7 +14,7 @@ interface InstallBindingOptions {
   onRefresh?: () => void;
 }
 
-/** `u` update, `p` preview and `r` refresh, anchored to each of `paneIds` so every one of those panes hints them in the status bar. */
+/** `u` update, `p` preview and `r` refresh, anchored to each of `paneIds` so every one of those panes hints them. */
 export function installBindings({
   idPrefix,
   paneIds,

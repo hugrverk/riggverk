@@ -5,7 +5,7 @@
      .srows > .srow > dt.sl + dd.sc     label left, control right; `.srow-stack` puts the control under the label
      .seg > .seg-opt                    segmented control (role=radiogroup of role=radio buttons): the checked option is
                                         filled, bold and ringed
-     .sw                                switch (role=switch): square track, thumb right when on, "On"/"Off" beside it
+     .setting-switch                    an agent's switch (ui/Switch.tsx) with "On"/"Off" beside it
      .setting-color                     colour override: swatch, hex field, Default button
      .sv, .sv-mark                      a state word led by a hollow ring in its hue (autosave, rejected hex, reset result)
 
@@ -162,64 +162,26 @@
 
 .seg-opt:focus-visible { outline-offset: 1px; }
 
-/* ---- switch ---- */
+/* ---- agent switches ----
+   The switch itself is ui/Switch.tsx (.switch, _harness.scss); the word beside it repeats the state for the eye only. */
 
-.sw {
+.setting-switch {
   display: inline-flex;
   align-items: center;
   gap: 10px;
   min-height: 28px;
-  padding: 0;
-  border: 0;
-  background: none;
+}
+
+.sw-state {
+  min-width: 3ch;
   color: var(--text-muted);
   font-family: var(--font-mono);
   font-size: max(11px, calc(var(--fs) * 0.85));
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  cursor: pointer;
 }
 
-.sw-track {
-  position: relative;
-  flex: none;
-  width: 38px;
-  height: 20px;
-  box-shadow: inset 0 0 0 1px var(--border-strong);
-  transition:
-    background-color var(--dur-state) var(--ease),
-    box-shadow var(--dur-state) var(--ease);
-}
-
-.sw-track::after {
-  content: "";
-  position: absolute;
-  top: 4px;
-  left: 4px;
-  width: 12px;
-  height: 12px;
-  background: var(--text-muted);
-  transition:
-    transform var(--dur-state) var(--ease),
-    background-color var(--dur-state) var(--ease);
-}
-
-.sw[aria-checked="true"] { color: var(--text-heading); font-weight: 600; }
-
-.sw[aria-checked="true"] .sw-track {
-  background: var(--primary);
-  box-shadow: none;
-}
-
-.sw[aria-checked="true"] .sw-track::after {
-  background: var(--primary-fg);
-  transform: translateX(18px);
-}
-
-.sw:hover .sw-track { box-shadow: inset 0 0 0 1px var(--text-muted); }
-.sw[aria-checked="true"]:hover .sw-track { filter: brightness(1.08); box-shadow: none; }
-.sw:focus-visible { outline-offset: 3px; }
-.sw-state { min-width: 3ch; }
+.switch[aria-checked="true"] + .sw-state { color: var(--text-heading); font-weight: 600; }
 
 /* ---- colour overrides ---- */
 

@@ -69,7 +69,7 @@ describe("rulesModel", () => {
     // The planner leaves such a file alone, so the surface state is `current`.
     const m = model("current", { conflict_reason: "base_block_edited", user_managed: true });
     expect(m).toMatchObject({ kind: "managed", tone: "warn", headline: "base updates available, you manage this file", convertible: true, user_managed: true });
-    expect(m.display).toEqual({ glyph: "partial", tone: "warn", label: "you manage" });
+    expect(m.display).toEqual({ tone: "warn", label: "you manage" });
     expect(m.reason).toBe("the base block was edited");
   });
 

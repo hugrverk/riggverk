@@ -47,7 +47,7 @@ Everything before or after the block is yours and is kept byte-for-byte. Put you
 
 Resolving a conflict on the harness page: `d` shows the diff, `v` (**Convert**) writes the current base as the block and moves the sections you changed (or added) below the END marker, previewed and backed up, and `m` (**Leave as is**) records that you manage the file; the app then reports "base updates available, you manage this file" and does not write it until you convert. `:rules` does the same from the command line. A rollback of a block update restores only the previous block, so text you added afterwards stays.
 
-Codex reads `AGENTS.override.md` instead of `AGENTS.md` when it is non-empty, which silently drops the base. The Codex runtime pane warns about it.
+Codex reads `AGENTS.override.md` instead of `AGENTS.md` when it is non-empty, which silently drops the base. The Codex Runtime cell warns about it.
 
 Pi loads one context file per folder: `AGENTS.override.md`, else `AGENTS.md`, else `CLAUDE.md`. An `AGENTS.override.md` hides the block, and a new `AGENTS.md` would hide your `CLAUDE.md`, so the app refuses both and leaves the other file alone; remove, rename, or merge it first. Convert and Leave as is are not offered for these two. The folders the app creates for Pi's file are owner-only.
 

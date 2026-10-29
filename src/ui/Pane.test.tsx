@@ -1,10 +1,9 @@
 import { act, cleanup, fireEvent, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { focusDefaultPane, focusPane } from "../keyboard/focus";
+import { focusDefaultPane } from "../keyboard/focus";
 import type { Binding } from "../keyboard/registry";
 import { useKeymap } from "../keyboard/useKeymap";
 import { renderWithShell } from "../test/renderWithShell";
-import { ActionKey } from "./ActionKey";
 import { Glyph } from "./Glyph";
 import { Kv } from "./Kv";
 import { Pane } from "./Pane";
@@ -75,31 +74,8 @@ describe("Pane", () => {
     expect(document.activeElement).toBe(screen.getByRole("group", { name: "surfaces" }));
   });
 
-  it("focuses the next and previous pane in DOM order without wrapping", () => {
-    renderWithShell(<Panes />);
-    act(() => {
-      screen.getByRole("button", { name: "first" }).focus();
-    });
-    act(() => {
-      focusPane("next");
-    });
-    expect(document.activeElement).toBe(screen.getByRole("group", { name: "surfaces" }));
-    act(() => {
-      focusPane("next");
-    });
-    expect(document.activeElement).toBe(screen.getByRole("group", { name: "output" }));
-    act(() => {
-      focusPane("next");
-    });
-    expect(document.activeElement).toBe(screen.getByRole("group", { name: "output" }));
-    act(() => {
-      focusPane("prev");
-    });
-    expect(document.activeElement).toBe(screen.getByRole("group", { name: "surfaces" }));
-  });
-
   describe("binding hints", () => {
-    it("does not render hinted bindings in the pane: they live in the status bar", () => {
+    it("does not render hinted bindings in the pane: their owners offer the buttons", () => {
       const { container } = renderWithShell(
         <Panes
           bindings={[
@@ -128,26 +104,6 @@ describe("Pane", () => {
 });
 
 describe("ui primitives", () => {
-  it("ActionKey renders key caps plus label and never calls onClick while disabled", () => {
-    const onClick = vi.fn();
-    const { rerender } = renderWithShell(
-      <ActionKey keys={["g", "g"]} onClick={onClick}>
-        top
-      </ActionKey>,
-    );
-    const button = screen.getByRole("button", { name: /top/ });
-    expect(Array.from(button.querySelectorAll("kbd")).map(kbd => kbd.textContent)).toEqual(["g", "g"]);
-    fireEvent.click(button);
-    expect(onClick).toHaveBeenCalledTimes(1);
-    rerender(
-      <ActionKey keys={["g", "g"]} onClick={onClick} disabled="not now">
-        top
-      </ActionKey>,
-    );
-    fireEvent.click(screen.getByRole("button", { name: /top/ }));
-    expect(onClick).toHaveBeenCalledTimes(1);
-  });
-
   it("Kv renders dl/dt/dd rows with tone and wrap classes", () => {
     const { container } = renderWithShell(
       <Kv
@@ -169,12 +125,12 @@ describe("ui primitives", () => {
   it("Glyph is decorative without a label and an image with one", () => {
     const { container } = renderWithShell(
       <>
-        <Glyph name="ok" tone="ok" />
+        <Glyph name="check" tone="ok" />
         <Glyph name="fail" tone="fail" label="conflict" />
       </>,
     );
     const [decor, labelled] = Array.from(container.querySelectorAll(".g"));
-    expect(decor!.textContent).toBe("●");
+    expect(decor!.textContent).toBe("✓");
     expect(decor!.getAttribute("aria-hidden")).toBe("true");
     expect(decor!.className).toBe("g c-ok");
     expect(labelled!.textContent).toBe("✗");

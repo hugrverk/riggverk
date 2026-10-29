@@ -3,8 +3,8 @@ import { defaultsKeyList, type CodexDefaultsFlow } from "../hooks/useCodexDefaul
 import { focusDefaultPane, focusPaneById } from "../keyboard/focus";
 import type { Binding } from "../keyboard/registry";
 import { useKeymap } from "../keyboard/useKeymap";
-import { useConfirmMode, useStatusContext } from "../shell/ShellState";
-import { BindingButton } from "../ui/BindingActionKey";
+import { useConfirmMode } from "../shell/ShellState";
+import { BindingButton } from "../ui/BindingButton";
 import { Kv, type KvItem } from "../ui/Kv";
 import { Pane } from "../ui/Pane";
 import type { CodexConfigDefaultsPreview } from "../types";
@@ -73,7 +73,6 @@ export function CodexDefaultsPane({ flow, busyLabel, backupRoot, returnPaneId = 
   const { state } = flow;
   const open = state.status !== "idle";
   useConfirmMode(open);
-  useStatusContext(open ? "codex config" : null);
 
   // Take focus when the review appears, unless the user already moved somewhere deliberate.
   useEffect(() => {

@@ -29,7 +29,7 @@ interface LibraryKeysOptions {
   stopEdit: () => void;
 }
 
-/** Panes whose focus offers `o` as a status-bar hint (the key itself works anywhere in the library). */
+/** Panes whose focus offers `o` as a key hint (the key itself works anywhere in the library). */
 const OPEN_PANES = ["items", "editor"] as const;
 
 /**
@@ -105,7 +105,7 @@ export function useLibraryKeys({
     focusItemsSoon();
   };
 
-  // A save that finishes successfully is reported in the status bar too, for when focus is elsewhere.
+  // A save that finishes successfully is reported as a notice too, for when focus is elsewhere.
   const saving = entry?.saving ?? false;
   const wasSaving = useRef(false);
   useEffect(() => {

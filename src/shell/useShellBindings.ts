@@ -1,9 +1,9 @@
-import { blurToPane, focusPane } from "../keyboard/focus";
+import { blurToPane } from "../keyboard/focus";
 import type { Binding } from "../keyboard/registry";
 import { useKeymap } from "../keyboard/useKeymap";
 import { isEditableEventTarget } from "../lib/isEditableEventTarget";
 import { useShellState } from "./ShellState";
-import { MAX_NUMBERED_TABS, type ViewDef } from "./views";
+import { VIEW_DIGITS, type ViewDef } from "./views";
 
 interface ShellBindingsOptions {
   tabs: readonly ViewDef[];
@@ -15,37 +15,27 @@ interface ShellBindingsOptions {
 }
 
 /**
- * The global key layer: 1-9 positional tabs, h/l pane focus, `:` and Mod+k command line, `?` help,
+ * The global key layer: the digits of the sidebar destinations (`VIEW_DIGITS`), `:` and Mod+k command line, `?` help,
  * Mod+, settings, Escape (leave a text field; otherwise dismiss the error line).
  */
 export function useShellBindings({ tabs, goTo, hasError, onDismissError }: ShellBindingsOptions): void {
   const { openCommandLine, openHelp } = useShellState();
 
   const bindings: Binding[] = [
-    ...tabs.slice(0, MAX_NUMBERED_TABS).map((def, index): Binding => ({
-      id: `shell.view.${index + 1}`,
-      keys: String(index + 1),
-      title: `Go to ${def.label}`,
-      group: "Navigate",
-      scope: "global",
-      run: () => goTo(def.id),
-    })),
-    {
-      id: "shell.pane.prev",
-      keys: "h",
-      title: "Focus previous pane",
-      group: "Navigate",
-      scope: "global",
-      run: () => (focusPane("prev") ? undefined : false),
-    },
-    {
-      id: "shell.pane.next",
-      keys: "l",
-      title: "Focus next pane",
-      group: "Navigate",
-      scope: "global",
-      run: () => (focusPane("next") ? undefined : false),
-    },
+    ...tabs.flatMap((def): Binding[] => {
+      const digit = VIEW_DIGITS[def.id];
+      if (!digit) return [];
+      return [
+        {
+          id: `shell.view.${digit}`,
+          keys: digit,
+          title: `Go to ${def.label}`,
+          group: "Navigate",
+          scope: "global",
+          run: () => goTo(def.id),
+        },
+      ];
+    }),
     {
       id: "shell.settings",
       keys: "Mod+,",

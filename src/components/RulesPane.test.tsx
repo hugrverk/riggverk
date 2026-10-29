@@ -2,24 +2,10 @@ import { act, cleanup, fireEvent, screen, within } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { isInlineRulesState, type RulesFlow, type RulesReviewState } from "../hooks/useRulesFlow";
 import { renderInFrame } from "../test/renderWithShell";
-import type { RulesConversionPreview, RulesDiffView } from "../types";
+import type { RulesConversionPreview } from "../types";
 import { RulesPane } from "./RulesPane";
 
 afterEach(cleanup);
-
-const DIFF: RulesDiffView = {
-  surface: "codex_rules",
-  mode: "edits",
-  from_label: "shipped base sha256:abc",
-  to_label: "installed",
-  applicable: true,
-  note: null,
-  compared_base: null,
-  added: 1,
-  removed: 1,
-  truncated: true,
-  diff: "--- shipped base sha256:abc\n+++ installed\n@@ -1,1 +1,1 @@\n-old\n+new\n",
-};
 
 const PREVIEW: RulesConversionPreview = {
   surface: "codex_rules",
@@ -52,9 +38,9 @@ function flowOf(state: RulesReviewState): RulesFlow {
   };
 }
 
-function renderPane(state: RulesReviewState, options: { busyLabel?: string | null; canConvert?: boolean } = {}) {
+function renderPane(state: RulesReviewState, options: { busyLabel?: string | null } = {}) {
   const flow = flowOf(state);
-  renderInFrame(<RulesPane flow={flow} busyLabel={options.busyLabel ?? null} canConvert={options.canConvert ?? true} backupRoot="/tmp/backups" />);
+  renderInFrame(<RulesPane flow={flow} busyLabel={options.busyLabel ?? null} backupRoot="/tmp/backups" />);
   return flow;
 }
 
@@ -65,31 +51,17 @@ function press(key: string) {
 }
 
 describe("RulesPane", () => {
-  it("shows progress while a diff is computed, and offers no write", () => {
-    renderPane({ status: "loading", surface: "codex_rules", what: "diff" });
-    expect(screen.getAllByText(/computing the diff for codex rules/).length).toBeGreaterThan(0);
+  it("shows progress while the conversion preview is computed, and offers no write", () => {
+    renderPane({ status: "loading", surface: "codex_rules", what: "conversion" });
+    expect(screen.getAllByText(/computing the conversion preview for codex rules/).length).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: /apply/ })).toBeNull();
   });
 
-  it("shows a diff read-only: y does nothing, t and v are offered, n closes", () => {
-    const flow = renderPane({ status: "diff", surface: "codex_rules", diff: DIFF });
-    const pane = screen.getByRole("region", { name: "Rules review" });
-    expect(pane.textContent).toContain("The diff is cut at 64 KB");
-    expect(within(pane).queryByRole("button", { name: /apply/ })).toBeNull();
-    press("y");
-    expect(flow.apply).not.toHaveBeenCalled();
+  it("offers no diff or convert keys: the read-only diff is the Compare fold-out on the page", () => {
+    const flow = renderPane({ status: "conversion", surface: "codex_rules", preview: PREVIEW });
     press("t");
-    expect(flow.switchDiffMode).toHaveBeenCalledTimes(1);
     press("v");
-    expect(flow.openConversion).toHaveBeenCalledWith("codex_rules");
-    press("n");
-    expect(flow.close).toHaveBeenCalledTimes(1);
-  });
-
-  it("does not offer conversion from the diff when the file cannot be converted", () => {
-    const flow = renderPane({ status: "diff", surface: "codex_rules", diff: DIFF }, { canConvert: false });
-    expect(screen.queryByRole("button", { name: /convert/ })).toBeNull();
-    press("v");
+    expect(flow.switchDiffMode).not.toHaveBeenCalled();
     expect(flow.openConversion).not.toHaveBeenCalled();
   });
 
@@ -110,7 +82,7 @@ describe("RulesPane", () => {
 
   it("holds apply while another task runs and says why", () => {
     const flow = renderPane({ status: "conversion", surface: "codex_rules", preview: PREVIEW }, { busyLabel: "uninstall" });
-    const apply = within(screen.getByLabelText("Status bar")).getByRole("button", { name: /apply/ });
+    const apply = within(screen.getByRole("region", { name: "Rules review" }).querySelector<HTMLElement>(".pane-foot")!).getByRole("button", { name: "apply" });
     expect(apply.getAttribute("title")).toBe("uninstall is running");
     press("y");
     expect(flow.apply).not.toHaveBeenCalled();
@@ -139,9 +111,9 @@ describe("RulesPane", () => {
     expect(flow.retry).toHaveBeenCalledTimes(1);
   });
 
-  it("shows the CONFIRM mode while it is open", () => {
-    renderPane({ status: "diff", surface: "codex_rules", diff: DIFF });
-    expect(document.querySelector(".statusbar .mode")!.textContent).toBe("CONFIRM");
+  it("holds the shell in CONFIRM mode while it is open", () => {
+    renderPane({ status: "conversion", surface: "codex_rules", preview: PREVIEW });
+    expect(screen.getByLabelText("Shell mode").textContent).toBe("CONFIRM");
   });
 
   describe("confirm line buttons", () => {
@@ -170,14 +142,11 @@ describe("RulesPane", () => {
       expect(flow.apply).not.toHaveBeenCalled();
     });
 
-    it("state the consequences beside a conversion, and nothing beside a read-only diff", () => {
+    it("state the consequences beside a conversion", () => {
       renderPane({ status: "conversion", surface: "codex_rules", preview: PREVIEW });
       expect(confirmLine().getByText("Preview first")).toBeTruthy();
       expect(confirmLine().getByText("Backed up")).toBeTruthy();
       expect(confirmLine().getByText("Undo any time")).toBeTruthy();
-      cleanup();
-      renderPane({ status: "diff", surface: "codex_rules", diff: DIFF });
-      expect(screen.queryByText("Undo any time")).toBeNull();
     });
 
     it("hold apply for a running task or a preview without a token, with the reason", () => {
@@ -192,13 +161,6 @@ describe("RulesPane", () => {
       expect(held.getAttribute("title")).toBe("the preview has no token; open it again");
       fireEvent.click(held);
       expect(tokenless.apply).not.toHaveBeenCalled();
-    });
-
-    it("offer only close beside a read-only diff", () => {
-      const flow = renderPane({ status: "diff", surface: "codex_rules", diff: DIFF });
-      expect(confirmLine().queryByRole("button", { name: "apply" })).toBeNull();
-      fireEvent.click(confirmLine().getByRole("button", { name: "close" }));
-      expect(flow.close).toHaveBeenCalledTimes(1);
     });
 
     it("lock while the conversion is applied", () => {

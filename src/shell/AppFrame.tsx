@@ -3,12 +3,9 @@ import { focusDefaultPane } from "../keyboard/focus";
 import { DEFAULT_ENABLED_HARNESS_IDS } from "../lib/harnessInstallation";
 import type { InstallAgent } from "../types";
 import { Glyph } from "../ui/Glyph";
-import { Boot, type BootInfo } from "./Boot";
 import { CommandLine } from "./CommandLine";
 import { HelpOverlay } from "./HelpOverlay";
 import { Sidebar } from "./Sidebar";
-import { useShellState } from "./ShellState";
-import { StatusBar } from "./StatusBar";
 import { Toast } from "./Toast";
 import { TopBar } from "./TopBar";
 import { useShellBindings } from "./useShellBindings";
@@ -42,19 +39,13 @@ export interface AppFrameProps {
   backupCount?: number | null;
   /** When the installation status was last fetched, for the sidebar foot. */
   checkedAt?: Date | null;
-  /**
-   * What the launch sequence reports. Pass it once the settings are loaded, when the motion level is final;
-   * without it there is no boot.
-   */
-  boot?: BootInfo;
   /** The active view. */
   children: ReactNode;
 }
 
 /**
- * Layout of the shell: sidebar on the left; top bar, error line, view area and the slim status bar on the right;
- * the toast, the command-line, help and what's new overlays, and the global key layer. Must render inside
- * `ShellProviders`.
+ * Layout of the shell: sidebar on the left; top bar, error line and view area on the right; the toast, the
+ * command-line, help and what's new overlays, and the global key layer. Must render inside `ShellProviders`.
  */
 export function AppFrame({
   view,
@@ -72,11 +63,9 @@ export function AppFrame({
   version,
   backupCount,
   checkedAt,
-  boot,
   children,
 }: AppFrameProps) {
   const viewAreaRef = useRef<HTMLDivElement>(null);
-  const { bootRun } = useShellState();
   const tabs = visibleViews(enabledHarnessIds);
 
   /** Switching to the view you are already on re-focuses its default pane (the view effect only fires on change). */
@@ -89,12 +78,6 @@ export function AppFrame({
 
   useShellBindings({ tabs, goTo, hasError: error !== null, onDismissError });
   useViewFocus(view, viewAreaRef);
-
-  /** The overlay never takes focus; if nothing holds it once it is gone, the view's default pane does. */
-  const afterBoot = () => {
-    const active = document.activeElement;
-    if (!active || active === document.body) focusDefaultPane(viewAreaRef.current ?? document);
-  };
 
   return (
     <div className="app-shell">
@@ -135,13 +118,11 @@ export function AppFrame({
         <div className="view-area" ref={viewAreaRef}>
           {children}
         </div>
-        <StatusBar viewLabel={viewDef(view).label} />
       </div>
       <Toast />
       <CommandLine />
       <HelpOverlay />
       <WhatsNewOverlay />
-      {boot && <Boot info={{ harnesses: enabledHarnessIds, ...boot }} run={bootRun} onDone={afterBoot} />}
     </div>
   );
 }

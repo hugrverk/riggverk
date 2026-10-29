@@ -95,13 +95,13 @@ function cursorRow() {
   return grid().querySelector("tr[aria-selected='true']") as HTMLElement;
 }
 
-/** Key hints live in the status bar (the review pane has focus), not in the pane. */
+/** Key hints live as a key hint (the review pane has focus), not in the pane. */
 function bar() {
-  return within(screen.getByLabelText("Status bar"));
+  return within(screen.getByLabelText("Key hints"));
 }
 
 function modeText() {
-  return screen.getByLabelText("Status bar").querySelector(".mode")!.textContent;
+  return screen.getByLabelText("Shell mode").textContent;
 }
 
 beforeEach(() => {
@@ -169,7 +169,7 @@ describe("InstallPlanPane", () => {
     const pane = screen.getByRole("region", { name: "Install plan" });
     expect(within(pane).getByRole("status").textContent).toBe("apply 3 safe changes, skip 1 conflict?");
     expect(pane.querySelector(".bk")!.textContent).toContain("/tmp/backups");
-    // The question and its two bracket buttons share the footer row; the status bar repeats them as hints.
+    // The question and its two bracket buttons share the footer row; the key hints repeats them as hints.
     const footer = pane.querySelector(".pane-foot")!;
     expect(Array.from(footer.querySelectorAll("button.tbtn")).map(button => button.textContent)).toEqual(["yapply", "ncancel"]);
     expect(within(pane).getByRole("button", { name: "apply" }).classList.contains("tbtn-primary")).toBe(true);

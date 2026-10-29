@@ -41,7 +41,7 @@ export interface UseFileConflictActionsOptions {
   /** A rules review has taken the page's place (the inline rules diff does not count). */
   rulesOpen: boolean;
   flow: FileConflictFlow;
-  /** Panes whose focus offers `c`, `d` and `m` as status-bar hints. */
+  /** Panes whose focus offers `c`, `d` and `m` as key hints. */
   paneIds: readonly string[];
   /** The unit the keys act on (a key from the model), or null for the first. */
   markedKey: string | null;

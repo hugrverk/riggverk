@@ -1,5 +1,4 @@
 export * from "./keymap";
-export { echoOf, type EchoKey } from "./echo";
 export {
   SCOPE_PRECEDENCE,
   KeymapRegistry,
@@ -27,13 +26,11 @@ export { useKeymap, type UseKeymapOptions } from "./useKeymap";
 export {
   blurToPane,
   focusDefaultPane,
-  focusPane,
   focusPaneById,
   focusPanePrimary,
   listPanes,
   paneIdOf,
   paneOf,
-  type PaneDirection,
 } from "./focus";
 export {
   parseCommandLine,

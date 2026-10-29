@@ -2,7 +2,7 @@ import { useId } from "react";
 import { dirtyTabAriaLabel } from "../lib/editorGuards";
 import { DEFAULT_ENABLED_HARNESS_IDS, HARNESS_LABELS, HARNESS_NAV_ORDER } from "../lib/harnessInstallation";
 import type { InstallAgent } from "../types";
-import { MAX_NUMBERED_TABS, visibleViews, type AppView, type ViewDef } from "./views";
+import { VIEW_DIGITS, visibleViews, type AppView, type ViewDef } from "./views";
 
 export interface SidebarProps {
   view: AppView;
@@ -33,12 +33,12 @@ export function formatCheckedAt(date: Date): string {
 
 /**
  * 200px text sidebar: the brand row below the macOS traffic lights (the top 40px stay clear and drag the window),
- * Overview, the enabled agents, then History / Library / Settings. Item numbers are positional over the visible
- * destinations, so hiding an agent renumbers the items after it (the digit keys follow, `:codex` etc. stay
- * stable) and the numbers show only as `aria-keyshortcuts` and tooltip. The current item draws a 2px hairline
+ * Overview, the enabled agents, then History / Library / Settings. Each destination has a fixed digit key
+ * (`VIEW_DIGITS`: it does not move when an agent is turned off) that shows only as `aria-keyshortcuts` and tooltip.
+ * The current item draws a 2px hairline
  * (`::before`, scaleY). Markers: the count of decisions waiting per agent (read out as the item's description), a dot on Library (unsaved edits) and
  * Settings (failed autosave). Agents that are turned off collapse into one dim "N more agents" row leading to
- * Settings. The `topline` class is the focus hook the review panes use to tell that focus sits in the shell chrome.
+ * Settings. The `shell-chrome` class is the focus hook the review panes use to tell that focus sits in the shell chrome.
  */
 export function Sidebar({
   view,
@@ -53,17 +53,16 @@ export function Sidebar({
 }: SidebarProps) {
   const baseId = useId();
   const defs = visibleViews(enabledHarnessIds);
-  const numbered = defs.map((def, index) => ({ def, number: index + 1 }));
-  const overview = numbered.filter(({ def }) => def.id === "start");
-  const agents = numbered.filter(({ def }) => def.harness !== undefined);
-  const workspace = numbered.filter(({ def }) => def.id !== "start" && def.harness === undefined);
+  const overview = defs.filter(def => def.id === "start");
+  const agents = defs.filter(def => def.harness !== undefined);
+  const workspace = defs.filter(def => def.id !== "start" && def.harness === undefined);
   const disabledAgents = HARNESS_NAV_ORDER.filter(harness => !enabledHarnessIds.includes(harness));
 
-  const item = ({ def, number }: { def: ViewDef; number: number }) => {
+  const item = (def: ViewDef) => {
     const dirty = (def.id === "library" && libraryDirty) || (def.id === "settings" && settingsErrored);
     const decide = def.harness ? (decideCounts[def.harness] ?? 0) : 0;
     const decideId = `${baseId}-${def.id}-decide`;
-    const shortcut = number <= MAX_NUMBERED_TABS ? String(number) : undefined;
+    const shortcut = VIEW_DIGITS[def.id];
     return (
       <button
         key={def.id}
@@ -89,7 +88,7 @@ export function Sidebar({
   };
 
   return (
-    <aside className="side topline" data-tauri-drag-region>
+    <aside className="side shell-chrome" data-tauri-drag-region>
       <div className="brand" data-tauri-drag-region>
         <b data-tauri-drag-region>Riggverk</b>
         {version && <span data-tauri-drag-region>{version}</span>}

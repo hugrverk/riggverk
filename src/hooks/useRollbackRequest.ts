@@ -7,7 +7,7 @@ export interface UseRollbackRequestOptions {
   /** The transaction the last install or uninstall left, or null when there is nothing to roll back. */
   transactionId: string | null;
   confirm: (config: ConfirmConfig | string) => Promise<boolean>;
-  /** Marks a confirm as open so the status bar shows CONFIRM; returns the release function. */
+  /** Marks a confirm as open so the shell mode is CONFIRM; returns the release function. */
   beginConfirm: () => () => void;
   /** The existing rollback path (`rollback_setup_transaction` with `dryRun: false`). */
   runRollback: (transactionId: string) => Promise<unknown>;

@@ -15,7 +15,6 @@ import type {
   SecurityPosture,
   SetupPlan,
   SetupSurfaceId,
-  StatusData,
   SurfaceInstallationStatus,
   WorkspaceDiagnostics,
 } from "../types";
@@ -40,12 +39,6 @@ export const INVALID_DIAGNOSTICS: WorkspaceDiagnostics = {
   valid: false,
   error: "the folder is a symlink",
 };
-
-export const STATUS_DATA = {
-  repo_path: "/tmp/workspace",
-  enabled_rule_target_ids: ["codex_rules", "claude_rules", "opencode_rules"],
-  enabled_config_target_ids: ["opencode_config"],
-} as unknown as StatusData;
 
 export function surfaceStatus(surface: SetupSurfaceId, state: InstallationState, detail = `${state} detail`): SurfaceInstallationStatus {
   return { surface, label: surface, state, detail };

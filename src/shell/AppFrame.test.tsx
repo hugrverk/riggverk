@@ -36,11 +36,13 @@ function Panes({ withInput = false }: { withInput?: boolean }) {
 
 describe("AppFrame", () => {
   describe("view keys", () => {
-    it("1-9 navigate positionally through the visible tabs", () => {
+    it("the digits open fixed destinations: Overview 1, the central agents 2-5, History 6, Library 7, Settings 8", () => {
       const onSwitchView = vi.fn<(view: AppView) => void>();
       renderInFrame(<Panes />, { onSwitchView });
       press(document.body, "1");
       expect(onSwitchView).toHaveBeenLastCalledWith("start");
+      press(document.body, "2");
+      expect(onSwitchView).toHaveBeenLastCalledWith("codex");
       press(document.body, "3");
       expect(onSwitchView).toHaveBeenLastCalledWith("opencode");
       press(document.body, "6");
@@ -51,14 +53,34 @@ describe("AppFrame", () => {
       expect(onSwitchView).toHaveBeenLastCalledWith("settings");
     });
 
-    it("renumbers when a harness is hidden and ignores digits past the last tab", () => {
+    it("keeps the digits where they are when agents are hidden, and ignores the digit of a hidden agent", () => {
       const onSwitchView = vi.fn<(view: AppView) => void>();
       renderInFrame(<Panes />, { onSwitchView, enabledHarnessIds: ["codex", "cursor"] });
-      press(document.body, "3");
+      press(document.body, "4");
       expect(onSwitchView).toHaveBeenLastCalledWith("cursor");
+      press(document.body, "7");
+      expect(onSwitchView).toHaveBeenLastCalledWith("library");
       onSwitchView.mockClear();
-      const notPrevented = press(document.body, "9");
-      expect(notPrevented).toBe(true);
+      // OpenCode (3) is hidden and 9 belongs to nothing: both pass through untouched.
+      expect(press(document.body, "3")).toBe(true);
+      expect(press(document.body, "9")).toBe(true);
+      expect(onSwitchView).not.toHaveBeenCalled();
+    });
+
+    it("keeps Library, Settings and History on their digits with all seven agents on; the optional agents have none", () => {
+      const onSwitchView = vi.fn<(view: AppView) => void>();
+      renderInFrame(<Panes />, {
+        onSwitchView,
+        enabledHarnessIds: ["codex", "opencode", "cursor", "claude", "copilot", "pi", "kilo"],
+      });
+      press(document.body, "6");
+      expect(onSwitchView).toHaveBeenLastCalledWith("history");
+      press(document.body, "7");
+      expect(onSwitchView).toHaveBeenLastCalledWith("library");
+      press(document.body, "8");
+      expect(onSwitchView).toHaveBeenLastCalledWith("settings");
+      onSwitchView.mockClear();
+      expect(press(document.body, "9")).toBe(true);
       expect(onSwitchView).not.toHaveBeenCalled();
     });
 
@@ -92,17 +114,14 @@ describe("AppFrame", () => {
   });
 
   describe("pane focus", () => {
-    it("h and l move between panes in DOM order", () => {
+    it("h and l are not bound: panes are reached with Tab and the mouse", () => {
       renderInFrame(<Panes />);
-      act(() => screen.getByRole("listbox", { name: "Harnesses" }).focus());
-      press(document.activeElement!, "l");
-      expect(document.activeElement).toBe(screen.getByRole("group", { name: "surfaces" }));
-      press(document.activeElement!, "l");
-      expect(document.activeElement).toBe(screen.getByRole("group", { name: "output" }));
-      const atEnd = press(document.activeElement!, "l");
-      expect(atEnd).toBe(true);
-      press(document.activeElement!, "h");
-      expect(document.activeElement).toBe(screen.getByRole("group", { name: "surfaces" }));
+      const list = screen.getByRole("listbox", { name: "Harnesses" });
+      act(() => list.focus());
+      expect(press(list, "l")).toBe(true);
+      expect(document.activeElement).toBe(list);
+      expect(press(list, "h")).toBe(true);
+      expect(document.activeElement).toBe(list);
     });
 
     it("Escape in a text field returns focus to the pane's primary target", () => {
@@ -169,16 +188,9 @@ describe("AppFrame", () => {
       press(document.body, "?", { shiftKey: true });
       const help = screen.getByRole("dialog", { name: "Keyboard help" });
       press(help, "2");
-      press(help, "l");
       expect(onSwitchView).not.toHaveBeenCalled();
     });
 
-    it("the status bar's command and help hints are buttons that open the overlays", () => {
-      renderInFrame(<Panes />);
-      const status = screen.getByLabelText("Status bar");
-      fireEvent.click(within(status).getByRole("button", { name: /command/ }));
-      expect(screen.getByRole("dialog", { name: "Command line" })).not.toBeNull();
-    });
   });
 
   describe("error line", () => {
@@ -201,12 +213,12 @@ describe("AppFrame", () => {
     });
   });
 
-  it("lays out the sidebar beside the top bar, view area and status bar, with a toast", () => {
+  it("lays out the sidebar beside the top bar and the view area, with a toast and no status bar", () => {
     const { container } = renderInFrame(<Panes />);
     expect(container.querySelector(".app-shell > aside.side")).not.toBeNull();
     expect(container.querySelector(".app-shell > .main > header.bar")).not.toBeNull();
     expect(container.querySelector(".app-shell > .main > .view-area")).not.toBeNull();
-    expect(container.querySelector(".app-shell > .main > footer.statusbar")).not.toBeNull();
+    expect(container.querySelector("footer.statusbar")).toBeNull();
     expect(container.querySelector(".app-shell > .toast[role='status']")).not.toBeNull();
   });
 
@@ -245,7 +257,7 @@ describe("AppFrame", () => {
   });
 
   describe("toast", () => {
-    it("shows a notice from the shell instead of the status bar", () => {
+    it("shows a notice from the shell instead of the key hints", () => {
       function Notifier() {
         const { notify } = useShellState();
         return <button type="button" onClick={() => notify("Checking every agent again…")}>notify</button>;
@@ -253,7 +265,6 @@ describe("AppFrame", () => {
       renderInFrame(<Notifier />);
       fireEvent.click(screen.getByRole("button", { name: "notify" }));
       expect(screen.getAllByRole("status").some(node => node.textContent === "Checking every agent again…")).toBe(true);
-      expect(screen.getByLabelText("Status bar").textContent).not.toContain("Checking every agent");
     });
   });
 });

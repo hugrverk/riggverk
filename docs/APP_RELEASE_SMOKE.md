@@ -11,7 +11,7 @@ export RIGGVERK_BACKUP_DIR="$HOME/backups"
 npm run tauri dev        # or open the built bundle from this shell
 ```
 
-Tab keys below assume the default order: workspace, codex, opencode, cursor, claude, library, settings (`1`-`7`). Copilot, Pi and Kilo are off by default; once enabled their tabs follow Claude (copilot, pi, kilo) and Library and Settings move up (`1`-`9`, Settings has no digit with all seven on).
+The digit keys below are fixed: `1` Overview, `2`-`5` Codex, OpenCode, Cursor, Claude, `6` History, `7` Library, `8` Settings. Copilot, Pi and Kilo are off by default; once enabled they appear in the sidebar after Claude and have no digit (they open from the sidebar or with `:copilot`, `:pi`, `:kilo`). The page names (Overview, agent pages, History, Library, Settings) are the sidebar's.
 
 ## 1. Preflight
 
@@ -23,46 +23,61 @@ Tab keys below assume the default order: workspace, codex, opencode, cursor, cla
 
 ## 2. Launch and shell
 
-- [ ] First launch on a fresh profile shows the `workspace` row as `current` (nothing to remove), no generic error banner, no path chooser on the Workspace page
-- [ ] Workspace page shows `~/.config/riggverk` (or the isolated override)
-- [ ] Fresh profile: launching creates no `~/.config/riggverk`; harness rows are not gated; `u` on a harness installs it without the workspace and creates the folder owner-only (0700) holding only `.riggverk/`
-- [ ] Top line tabs match the order above; Mac traffic lights sit on the same 28px line
+- [ ] First launch on a fresh profile: the Overview says `Nothing is set up yet.`, the Workspace folder cell reads Up to date (nothing to remove), no generic error line, no path chooser anywhere
+- [ ] Expanding the Workspace folder cell shows `~/.config/riggverk` (or the isolated override)
+- [ ] Fresh profile: launching creates no `~/.config/riggverk`; agents are not gated; `u` on an agent page installs it without the workspace and creates the folder owner-only (0700) holding only `.riggverk/`
+- [ ] The sidebar lists Overview, the enabled agents, History, Library and Settings in that order; the Mac traffic lights sit clear of the brand row; the top bar and the sidebar drag the window; Check and Update all sit in the top bar
 - [ ] `?` opens the help overlay listing keys and commands; Escape closes it
 - [ ] `:` opens the command line; `:help`, `:codex`, `:theme toggle`, an unknown command (error, no crash)
 - [ ] `:whatsnew` opens the release notes (Escape closes); the first launch after an update shows them once, a fresh install does not
 - [ ] `Mod+k` opens the command line, `Mod+,` opens Settings, also from inside a text field
-- [ ] `1`-`7` switch tabs; `h` and `l` move between panes; `j`/`k`, `g g`/`G` move in lists; `/` filters a filterable list; Escape clears the filter
+- [ ] `1`-`8` open their fixed pages (the digit of a turned-off agent does nothing); `h` and `l` do nothing; `j`/`k`, `g g`/`G` move in the Library lists; `/` filters a filterable list; Escape clears the filter
 - [ ] Digits and letters typed into a text field are not treated as shortcuts; Escape leaves the field
-- [ ] Focus rings visible when tabbing; status bar hints match the focused pane
+- [ ] Tab goes sidebar, top bar, page, and the focus ring is visible on every stop; the actions of each page are visible buttons that show their key; there is no status bar
 - [ ] An error line is dismissed with Escape
+
+## 2b. The screens
+
+Run these on a profile with a few things to decide (edit `~/.claude/CLAUDE.md` inside its block, edit `~/.claude/skills/tdd/SKILL.md`, change `approvals_reviewer` in `~/.codex/config.toml` with `codex_config` on) and once on a fresh one.
+
+- [ ] **Overview**: the headline matches the counts under it (`Your setup works.`, `Nothing is set up yet.`, `Everything is set up.`); the summary row names the six states in words and omits a state with none; a card per enabled agent with its rows, a state pill with text and a badge that counts its decisions; a click on a card opens the page; **Worth a look** lists risky findings and says they are advice only; the line for agents that are off leads to Settings; the Workspace folder cell opens and closes with the keyboard
+- [ ] **Check** reads again and says when (`checked HH:MM` in the sidebar foot) without writing; **Update all** opens the review of everything and is disabled with its reason when everything is current; `p` previews with no apply path
+- [ ] **Agent page, decisions**: the rules card, the files card and (Codex) the config card come first and span the width; each says what happened in words and has its buttons with their keys; a part that is off reads **Not managed**; the switch "Let Riggverk manage this" autosaves
+- [ ] **Compare**: the button toggles `aria-expanded`; the diff folds out under the card (side by side), writes nothing and asks for no token; Escape or `d` folds it away; under motion `subtle` and `off` it appears at once
+- [ ] **Merge in updates…**, **Use Riggverk's version…** and **Use Riggverk defaults** each open a review first (the exact file, the files and backup name, or the exact keys); Enter does nothing, `y` or the Apply button applies, `n` cancels; the card becomes **Up to date** afterwards. **Keep mine** and **Hand back** ask first
+- [ ] **Use Riggverk defaults** (Codex, `approvals_reviewer` differing): the review lists the key with Riggverk's value and yours, nothing else; after `y` only that key in `config.toml` changed, the file has a backup, comments and other keys are untouched, and `z` restores the previous bytes; a preview made before an edit of `config.toml` is refused as stale
+- [ ] **History**: every update newest first with a pill (**Done**, **Undone**, **Failed**) in words; a row opens to its receipt (Changed, Checked, Left for you, Backup) and the newest is open; the list is the same after a restart; **Undo this update…** is offered on the newest completed update only, asks first (dry run, confirm), and the row then reads **Undone**; an empty profile says nothing has been updated yet
+- [ ] **Library packs**: a pack in `packs/<pack>/skills/` appears under Skills as `pack:<name>`, read-only, with its state; **Forget pack** asks first; a skill shadowed by a bundled one says so
+- [ ] **Settings**: Theme, Text size and Motion are segmented controls that autosave; colours take a hex with a contrast warning; each agent has a named switch; the landing page is Overview or Library; `R` asks before it resets the workspace folder
+- [ ] Both themes and the window at its minimum size: nothing overflows sideways at the largest text size, text stays readable, state words are never colour alone
 
 ## 3. Install review
 
-- [ ] Fresh state: the `workspace` row is `current` and `u` on it is disabled (`already current`); `u` on a harness row opens the plan table with create rows and a backup/rollback footer
+- [ ] Fresh state: the Overview says `Nothing is set up yet.`; **Update all** opens a plan with create rows for every enabled agent and a backup/rollback footer; `u` on an agent page does the same for that agent
 - [ ] `n` (and Escape) cancels; nothing was written (check the isolated workspace dir)
 - [ ] `p` shows the plan with no apply path; `n` closes it
 - [ ] `u` then `y` on a harness installs it: `.riggverk/managed-state.json` exists; no `.riggverk/workspace.json` is created and no bundle file (`docs/`, `skills/`, `templates/`, ...) appears in the data folder
-- [ ] The output strip under the panes opens by itself with the result; a second `u` reports `nothing to change`, no mutation
+- [ ] The run line under the page shows the progress while it runs, then **Done** with the time, **Undo last update…**, **Details** (the redacted log, with a Copy output button) and **Dismiss**; a second `u` reports `nothing to change`, no mutation
 - [ ] `d` expands a row's details; `c` jumps to the next conflict; `j`/`k` move rows
 - [ ] A modified installed harness file (for example `~/.claude/skills/tdd/SKILL.md`) appears as a conflict row (`preserved, skipped`), `y` applies only the safe rows, and the conflict file is unchanged
 - [ ] Moving the conflicting file away and installing again updates it
 - [ ] A stale plan (change the installed file between preview and `y`) fails with a re-preview prompt; `r` previews again
 - [ ] `:update codex`, `:update --all`, `:preview opencode` open the same review; `:update` without a target explains itself
 - [ ] Each page has exactly one install path (`u`); no per-surface mutation or duplicate skills install controls exist
-- [ ] Workspace page: `o` opens the workspace folder; `B` opens the backups folder; `r` refreshes
+- [ ] Overview: `o` and **Open folder** open the workspace folder; `B` and **Backups folder** open the backups folder; `r` and **Check** refresh
 
 ## 4. Target toggles
 
-- [ ] Codex page: Space toggles targets, the change autosaves (no Save button)
+- [ ] Codex page: the switches turn targets on and off (Space or Enter on a focused switch), the change autosaves (no Save button)
 - [ ] Fresh settings: every target is on except `codex_config`, `claude_config` and `kilo_mcp`
 - [ ] With `codex_config` off, a Codex plan has no config rows and `~/.codex/config.toml` is untouched
 - [ ] With `claude_config` off, the Claude page shows `config` as off ("Claude Code keeps its default commit and PR attribution") and `~/.claude/settings.json` is not opened or changed
 - [ ] Turning a target off hides its surface from the plan and the status shows it as `off`
 - [ ] Turning it on adds it back to the next preview
 - [ ] Legacy settings file without `target_defaults_version`: migration keeps targets that were enabled or already managed
-- [ ] The skills surface and the `workspace` row are never gated
+- [ ] The skills surface and the workspace folder are never gated
 
-## 5. Rules block, Convert, Leave as is
+## 5. Rules block, Merge in updates, Keep mine
 
 Use fixture files in the isolated `HOME` (`~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, `~/.config/opencode/AGENTS.md`).
 
@@ -70,37 +85,37 @@ Use fixture files in the isolated `HOME` (`~/.claude/CLAUDE.md`, `~/.codex/AGENT
 - [ ] Text added below the END marker survives an update; a base update reports `update_available` and how many refinement lines it keeps
 - [ ] Edited block: conflict `base_block_edited`, file unchanged by `y`
 - [ ] Pre-existing file without markers: conflict `legacy_diverged`; file identical to a shipped base is wrapped after a full backup
-- [ ] Harness page rules row: `d` shows the diff, `v` shows the conversion preview (exact resulting file) and asks to confirm, `m` leaves the file as is; `:rules` mirrors them
+- [ ] Agent page rules card: **Compare** (`d`) folds out the diff, **Merge in updates…** (`v`) shows the conversion preview (exact resulting file) and applies only on `y`, **Keep mine** (`m`) asks first and leaves the file as is; `:rules` mirrors them
 - [ ] Convert keeps changed `##` sections below the END marker and writes a backup under `setup/`
-- [ ] Leave as is changes the status to "base updates available, you manage this file" and writes `.riggverk/rules-preferences.json`; install no longer touches the file
+- [ ] Keep mine changes the state to Yours ("base updates available, you manage this file") and writes `.riggverk/rules-preferences.json`; install no longer touches the file
 - [ ] Malformed markers (duplicate, unpaired, reordered) refuse with zero mutation
 - [ ] Non-empty `AGENTS.override.md` next to Codex rules produces a Codex health warning
 
-## 5b. Skill and agent conflicts (diff, keep mine, hand back, take bundled)
+## 5b. Skill and agent conflicts (Compare, Keep mine, Hand back, Use Riggverk's version)
 
 Use the isolated `HOME`; install the skills and agents first, then edit `~/.claude/skills/tdd/SKILL.md` and `~/.claude/agents/verifier.md`.
 
-- [ ] The edited files are conflicts ("edited since Riggverk wrote it"); the Claude page lists `tdd` and `verifier` under "your files in conflict" with their folder and the harnesses that read it; the skills and agents rows say "N conflicts"
-- [ ] `d` on the skills row opens the diff of `tdd` (yours against bundled, `+`/`-` glyphs, read-only, nothing written); `]` and `[` move between units; `n` closes
+- [ ] The edited files are decisions ("edited since Riggverk wrote it"); the Claude page shows `tdd` and `verifier` on the skills and agents cards with their folder and the agents that read it, and the cards say how many files you edited
+- [ ] **Compare** on `tdd` folds out the diff (yours against bundled, read-only, nothing written); **Next file** (`c`) moves between files; Escape folds it away
 - [ ] A file that differs only in line endings says so; a binary file and a file with a private-key block show no text
-- [ ] `m` asks first; after confirming, the unit is "you manage", the surface no longer counts it as a conflict, `u` leaves the file untouched and `.riggverk/kept-files.json` names it; no backup is made
+- [ ] **Keep mine** (`m`) asks first; after confirming, the file reads "you manage", the card no longer counts it as a decision, `u` leaves the file untouched and `.riggverk/kept-files.json` names it; no backup is made
 - [ ] After the bundled file changes (a new release), the unit says "bundled update available"; the file is still not written
-- [ ] `m` on a kept unit hands it back at once and the file is a conflict again
-- [ ] A skill directory that is a symlink, or a directory where a file belongs, is a conflict with no `d` or `m`
-- [ ] Codex config on, one enforced key changed by hand (`approvals_reviewer = "auto_review"`): the row shows a conflict naming the key; `m` asks first, then the row reads "current · you keep 1", `config.toml` is untouched, `.riggverk/config-preferences.json` names the key, and `m` again hands it back
+- [ ] **Hand back** on a kept file hands it back at once and the file is a decision again
+- [ ] A skill directory that is a symlink, or a directory where a file belongs, is a conflict with no Compare or Keep mine
+- [ ] Codex config on, one enforced key changed by hand (`approvals_reviewer = "auto_review"`): the card shows the key with Riggverk's value and yours; **Keep mine** (`m`) asks first, then the cell reads "you keep 1", `config.toml` is untouched, `.riggverk/config-preferences.json` names the key, and **Hand back** returns it
 - [ ] A retired skill (not bundled) that you edited and kept survives `u` with all its files; uninstall leaves kept files and `kept-files.json`
-- [ ] Take bundled: edit `~/.claude/skills/tdd/SKILL.md` (and one more file of another skill, which you leave alone), press `b` on `tdd`. The review writes nothing and shows the files, the backup name (`artifacts/skill-claude-tdd~SKILL.md`), the diff and "your files are backed up first"; Enter does nothing; `n` cancels. After `y` the file equals the bundled one, the unit is gone from the list, the other conflict is untouched, other pending updates were not applied, and the choice to keep it (if it was kept) is gone
+- [ ] Take bundled: edit `~/.claude/skills/tdd/SKILL.md` (and one more file of another skill, which you leave alone), choose **Use Riggverk's version…** (`b`) on `tdd`. The review writes nothing and shows the files, the backup name (`artifacts/skill-claude-tdd~SKILL.md`), the diff and "your files are backed up first"; Enter does nothing; `n` cancels. After `y` the file equals the bundled one, the unit is gone from the list, the other conflict is untouched, other pending updates were not applied, and the choice to keep it (if it was kept) is gone
 - [ ] The backup of that transaction (backup folder, `setup/<run>/artifacts/skill-claude-tdd~SKILL.md`) holds your exact bytes; `z` restores them and the unit is a conflict again (not kept); if you edit the file again after take bundled, `z` leaves your edit and says so
-- [ ] Take bundled is disabled with its reason on a retired skill and while another task runs; after keeping or handing back with a review open, `y` is refused as stale and `r` previews again
+- [ ] Use Riggverk's version is disabled with its reason on a retired skill and while another task runs; after keeping or handing back with a review open, `y` is refused as stale and `r` previews again
 - [ ] Copy the bundled file over a kept file by hand, then run any Install: the choice for that file is gone (its next edit is a conflict, not silently kept)
-- [ ] The workspace page lists the harness with "you manage N" or "N in conflict" and points at the harness page; `:resolve diff tdd` does what `d` does and `:resolve bundled tdd` opens the same review as `b`
+- [ ] The Overview card of the agent counts what needs your decision and opens its page; `:resolve diff tdd` does what Compare does and `:resolve bundled tdd` opens the same review as **Use Riggverk's version…**
 
 ## 6. Rollback and uninstall
 
-- [ ] After `y`, the output strip shows the transaction and takes focus; `z` there (or `:rollback`) runs a dry run and a confirm, then restores the backed-up files
+- [ ] After `y`, the run line shows **Undo last update…** and takes focus; `z` or the button (or `:rollback`) runs a dry run and a confirm, then restores the backed-up files; the History row then reads **Undone**
 - [ ] `:rollback` with nothing to roll back says so
 - [ ] Backups exist under `setup/<transaction id>/` with `manifest.json`, `artifacts/`, `managed-state.previous.json` (dirs 0700, files 0600); Library saves of personal docs under `docs/custom_<slug>-<timestamp>/`, of rules refinements under `docs/rules-<surface>-<timestamp>/`
-- [ ] The workspace detail pane lists the backup run count and the root path; `B` there opens the folder
+- [ ] The Workspace folder cell lists the backup run count and the root path; **Backups folder** (`B`) opens the folder
 - [ ] **preview uninstall** classifies removable, preserved, and merge-managed artifacts; modified and unknown fixture files stay on disk after uninstall
 - [ ] Merge-managed rules files with user text outside the block are kept; a file with only an unedited block is removable
 - [ ] **uninstall everything** removes proven app-owned files (old workspace copies the app still owns included); the data folder, its `.riggverk/` state, `docs/context/` and your own files stay
@@ -130,11 +145,11 @@ cd - >/dev/null
 npm run tauri dev
 ```
 
-- [ ] Launch changes nothing: the `workspace` row reads `N old copies to remove`, and the files in the data folder are unchanged (rerun the `find` above, with `-not -path './.riggverk/*'`, into `$HOME/launch.sha` and `diff` it against `before.sha`)
-- [ ] `u` on the workspace row opens a review that lists the removals per top-level folder (for example `- skills/ (N old copies; backed up, z restores them)`) and `README.md` as left in place ("edited or not the app's: left in place"), with no conflict rows; `n` cancels and nothing changes
-- [ ] `u` then `y`: the data folder holds only `.riggverk/`, `docs/context/mine.md`, `notes.txt` and the edited `README.md`; emptied folders are gone; `.riggverk/` and `docs/context/` are untouched; the status pane shows `personal docs 1`, `ownership records present` and `left in place 1`
-- [ ] `z` (dry run, then confirm): every file is back byte for byte (rerun the `find` with `-not -path './.riggverk/*'` into `$HOME/after.sha`; it equals `before.sha`) and the previous ownership records are restored; the row reads `N old copies to remove` again
-- [ ] `u` then `y` again: the row reads `current` and `u` is off (`already current`); `p` previews nothing to apply, and the edited `README.md` is still listed as left in place
+- [ ] Launch changes nothing: the Workspace folder cell reads `N old copies to remove`, and the files in the data folder are unchanged (rerun the `find` above, with `-not -path './.riggverk/*'`, into `$HOME/launch.sha` and `diff` it against `before.sha`)
+- [ ] **Update all** (or `:update workspace`) opens a review that lists the removals per top-level folder (for example `- skills/ (N old copies; backed up, z restores them)`) and `README.md` as left in place ("edited or not the app's: left in place"), with no conflict rows; `n` cancels and nothing changes
+- [ ] `u` then `y`: the data folder holds only `.riggverk/`, `docs/context/mine.md`, `notes.txt` and the edited `README.md`; emptied folders are gone; `.riggverk/` and `docs/context/` are untouched; the Workspace folder cell shows `personal docs 1`, `ownership records present` and `left in place 1`
+- [ ] `z` (dry run, then confirm): every file is back byte for byte (rerun the `find` with `-not -path './.riggverk/*'` into `$HOME/after.sha`; it equals `before.sha`) and the previous ownership records are restored; the cell reads `N old copies to remove` again
+- [ ] `u` then `y` again: the cell reads Up to date and `u` is off (`already current`); `p` previews nothing to apply, and the edited `README.md` is still listed as left in place
 - [ ] A symlink in place of a copy, and a copy below a symlinked folder, are listed as left in place and untouched; a folder where a copy was is left in place too
 - [ ] **uninstall everything** on a freshly seeded profile removes the old copies the app still owns and keeps the data folder, `.riggverk/`, `docs/context/`, `notes.txt`; **Recover previous uninstall** is reachable
 - [ ] A seeded folder saved as the custom folder (Settings state from an earlier version) stays configured after the cleanup
@@ -154,7 +169,7 @@ npm run tauri dev
 
 Use a scratch profile or back up `~/.claude/settings.json` first.
 
-- [ ] Claude page, `config` row is off; Space turns it on, and the review of a missing file says `+ ~/.claude/settings.json (new file; hides commit and PR attribution)`
+- [ ] Claude page, the `config` cell is off (**Not managed**); its switch turns it on, and the review of a missing file says `+ ~/.claude/settings.json (new file; hides commit and PR attribution)`
 - [ ] Install writes `attribution.commit` and `attribution.pr` as `""`; a commit made by Claude Code in a scratch repo has no `Co-Authored-By` trailer, and a PR it opens has no "Generated with Claude Code" line
 - [ ] A file with `env`, `hooks` and `permissions` keeps all of them, in order, after Install; the row then reads current ("attribution hidden by Riggverk ...")
 - [ ] `z` after the Install restores the file as it was (or removes it, if the Install created it)
@@ -166,20 +181,20 @@ Use a scratch profile or back up `~/.claude/settings.json` first.
 ## 8. Settings, workspace folder, harness enablement
 
 - [ ] Fresh and legacy settings enable Codex, OpenCode, Claude, and Cursor; GitHub Copilot, Pi, and Kilo are listed after them and disabled
-- [ ] Enable Copilot, Pi, and Kilo: the Copilot, Pi and Kilo tabs appear after Claude; each page lists a `rules` row (target toggle on), the `skills` surface and an `mcp` row (toggle on for Copilot and Pi, **off** for Kilo), shows the CLI version (or "not on PATH" with its reason; an nvm-only install shows `· nvm`), the rules row, the `mcp playwright` row and the skills row; Kilo's review notes that `~/.claude/CLAUDE.md` stops being read; Install or Update then writes `~/.agents/skills`, the three rules files (`~/.copilot/copilot-instructions.md`, `~/.pi/agent/AGENTS.md` with owner-only folders, `~/.config/kilo/AGENTS.md`) and the Copilot and Pi MCP entries (`~/.copilot/mcp-config.json`, `~/.pi/agent/mcp.json`, both 0600 when new) and nothing else under `~/.copilot`, `~/.pi`, `~/.config/kilo`; with a Pi `AGENTS.override.md` or an `AGENTS.md`-less `CLAUDE.md` in `~/.pi/agent` the Pi rules row is a conflict and nothing is written; `:p` still previews and `:pi` opens the Pi page
+- [ ] Enable Copilot, Pi, and Kilo: the Copilot, Pi and Kilo items appear in the sidebar after Claude (no digit); each page lists a `rules` row (target toggle on), the `skills` surface and an `mcp` row (toggle on for Copilot and Pi, **off** for Kilo), shows the CLI version (or "not on PATH" with its reason; an nvm-only install shows `· nvm`), the rules row, the `mcp playwright` row and the skills row; Kilo's review notes that `~/.claude/CLAUDE.md` stops being read; Install or Update then writes `~/.agents/skills`, the three rules files (`~/.copilot/copilot-instructions.md`, `~/.pi/agent/AGENTS.md` with owner-only folders, `~/.config/kilo/AGENTS.md`) and the Copilot and Pi MCP entries (`~/.copilot/mcp-config.json`, `~/.pi/agent/mcp.json`, both 0600 when new) and nothing else under `~/.copilot`, `~/.pi`, `~/.config/kilo`; with a Pi `AGENTS.override.md` or an `AGENTS.md`-less `CLAUDE.md` in `~/.pi/agent` the Pi rules row is a conflict and nothing is written; `:p` still previews and `:pi` opens the Pi page
 - [ ] MCP entries of the light tier (isolated `HOME`; the CLIs are the owner's, the app runs none of these commands). Create: no file, Install writes a file holding only `playwright`. Merge: a file with another server (a fake token in its `env`), an unrelated top-level key and a different key order keeps all of it, with the entry appended; Rollback restores the file byte for byte, or after an edit elsewhere removes only the entry. Conflict: a file with a comment, a trailing comma or a byte order mark, an `mcpServers` that is an array, and a `playwright` entry of your own are each reported with a plain reason, nothing is written and no backup is made; the message shows no text of the file
 - [ ] Kilo MCP (`kilo_mcp` off by default): switch the target on; with no config file Install creates `kilo.jsonc`; with a `kilo.jsonc` holding only `$schema` (what Kilo writes on first run) the entry is added and `$schema` stays first; with only a `kilo.json` that one is written and no `kilo.jsonc` appears; with both, `kilo.jsonc` is written. A `~/.kilo/kilo.jsonc` or an `opencode.json` in the config folder makes the Kilo page warn that it wins over the entry. With `XDG_CONFIG_HOME` set to an absolute folder outside `HOME` the files are there and `~/.config/kilo` is untouched
 - [ ] Live check with the real CLIs, owner-run (not part of `release-check`): `copilot mcp get playwright` shows the entry with source User and the environment values masked; in VS Code the Copilot sessions list the server once. `pi mcp list` shows `playwright` connected with 22 tools and `exposure` `codemode`; add `"exposure": "direct"` to the entry by hand and the model sees the tools (the Pi page notes this). `kilo mcp list` shows `playwright`. In each, ask a session with a model to open a local page with the Playwright tool and confirm the system Chrome opens in a fresh profile, and that no `webmcp_*` tool is listed for a page that registers one (the Cursor and OpenCode entries pass the same `--browser chrome --isolated --no-webmcp` after `--config`; one launch from each settles that)
 - [ ] With Codex enabled and `CODEX_HOME` customised, Copilot and Pi read `unserved` with the warning, nothing is installed for them, and Kilo is served through `~/.claude/skills`
-- [ ] Appearance (dark, light, system), all four text sizes (`small`, `medium`, `large`, `extra-large`), and theme colors autosave; `r` in the appearance pane resets after a confirm
-- [ ] Motion `full` shows the launch sequence, apply progress (bar, file, spinner, elapsed), the success tick and scanline; `subtle` keeps only the progress indicators; `off` (or the OS reduced-motion preference) stops every animation
-- [ ] Landing page selection (`start`, `library`) persists and opens after app restart
+- [ ] Appearance (dark, light, system), all four text sizes (`small`, `medium`, `large`, `extra-large`), and theme colors autosave; `r` in the appearance section resets after a confirm
+- [ ] Motion `full` fades pages in, folds Compare out and shows apply progress (bar, file, elapsed); `subtle` keeps only short fades (nothing moves, no height animation); `off` (or the OS reduced-motion preference) stops every animation; there is no launch sequence and `:boot` does not exist
+- [ ] Landing page selection (Overview, Library) persists and opens after app restart
 - [ ] Settings has no folder chooser: no `choose…` action, no `c` hint, `c` does nothing, and `:workspace choose` is refused
 - [ ] With a custom folder saved by an earlier version (seeded in an isolated profile; it holds `.riggverk/`), Settings shows it as `custom folder` and the app keeps using it across a restart, also after the old copies in it are removed (see 6b)
 - [ ] `R` (and `:workspace reset`) on that folder opens a confirm that names the old folder and says its ownership records stay there; `n` or Escape changes nothing; `y` returns to the default path and status reloads; on the default folder `R` is disabled (`already the default workspace`)
 - [ ] `RIGGVERK_WORKSPACE_PATH` overrides the saved path, and `R` is then refused with a reason
 - [ ] Generator scripts run from the bundled copy: a modified `scripts/generate-opencode-config.py` in a saved custom workspace is not executed
-- [ ] Disable one harness: its tab, page, Workspace row, health calls, and harness-specific Library entries disappear and the tabs renumber
+- [ ] Turn a single agent off: its sidebar item, page, Overview card, health calls, and agent-specific Library entries disappear and the other digits stay where they are
 - [ ] Isolated harness files stay byte-identical after disable; restart preserves the disabled state and target selections
 - [ ] Re-enable restores UI and health without installing
 - [ ] Disable every harness: workspace, library, and settings stay usable
@@ -190,7 +205,7 @@ Use a scratch profile or back up `~/.claude/settings.json` first.
 ## 9. Library
 
 - [ ] Library shows the items list and one document pane (rendered by default); `[` `]` (and `<` `>`) switch among docs, rules, skills, agents, configs
-- [ ] On a personal doc (`docs/context/`, tagged "context"), `i` or Enter swaps the rendered document for its source; `Mod+s` and `:w` save; Escape returns to the rendered view; `h` returns to the list; `:q` asks before discarding edits; `:reset` discards them; `n` creates a doc; `o` opens it externally
+- [ ] On a personal doc (`docs/context/`, tagged "context"), `i` or Enter swaps the rendered document for its source; `Mod+s` and `:w` save; Escape returns to the rendered view; `:q` asks before discarding edits; `:reset` discards them; `n` creates a doc; `o` opens it externally
 - [ ] Bundled items (bundled docs, the Global Rules row, skills, agents, every config source) show "read-only" in the pane title and "bundled with the app: read-only here" in the footer; the `i`/Enter, `Mod+s` and `o` hints are disabled with that reason; `:w` refuses with it; no textarea ever opens
 - [ ] Docs: select, preview, personal doc edit, dirty state, save, reset, create form, Markdown table, fenced code, code copy; bundled docs show their path inside the bundle (`docs/START_HERE.md`), and no "Bundled docs need update" banner exists
 - [ ] Saving a personal doc over its existing file creates `docs/custom_<slug>-<timestamp>/` in the backup root; a symlinked doc or a linked `docs/context` folder is refused
@@ -225,23 +240,27 @@ Use a scratch profile or back up `~/.claude/settings.json` first.
 - Notes: ________
 
 ### Shell and keyboard layer
-- [ ] Tabs, help, command line, pane and list keys passed
+- [ ] Sidebar, top bar, fixed digits, Tab order and focus ring, help, command line, list keys passed
 - Notes: ________
 
 ### Install review and target toggles
 - [ ] Review, cancel, apply, conflicts, stale plan, toggles passed
 - Notes: ________
 
-### Rules (Convert, Leave as is, diff)
-- [ ] Block create/update, conflict, convert, leave-as-is passed
+### Rules (Compare, Merge in updates, Keep mine)
+- [ ] Block create/update, conflict, compare, merge, keep-mine passed
 - Notes: ________
 
-### Skill and agent conflicts (diff, keep mine, hand back, take bundled)
-- [ ] Conflict listing, diff, keep, hand back, take bundled and its rollback, blocked files passed
+### Skill and agent conflicts (Compare, Keep mine, Hand back, Use Riggverk's version)
+- [ ] Conflict listing, compare, keep, hand back, take bundled and its rollback, blocked files passed
 - Notes: ________
 
 ### Rollback and uninstall
 - [ ] Rollback, backup layout, uninstall preview, recovery passed
+- Notes: ________
+
+### New screens
+- [ ] Overview, agent pages with decisions and Compare, Use Riggverk defaults, History and Undo, Library packs, Settings passed
 - Notes: ________
 
 ### Cleanup of old workspace copies
@@ -257,7 +276,7 @@ Use a scratch profile or back up `~/.claude/settings.json` first.
 - Notes: ________
 
 ### Library
-- [ ] Panes, personal doc save and backup, rules refinements save and backup, bundled items read-only passed
+- [ ] Lists and document, personal doc save and backup, rules refinements save and backup, bundled items read-only passed
 - Notes: ________
 
 ### Skipped checks and residual risk

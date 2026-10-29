@@ -1,5 +1,5 @@
 /* ---- app shell ----
-   Frame classes (statusbar, error line, overlays' anchor) for src/shell/*; the sidebar, top bar and toast are in _frame.scss.
+   Frame classes (error line, overlays' anchor) for src/shell/*; the sidebar, top bar and toast are in _frame.scss.
    Pane/list/kv/kbd primitives live in _primitives.scss together with the class contract. */
 
 .app-shell {
@@ -9,66 +9,6 @@
   flex: 1;
   min-height: 0;
   height: 100%;
-}
-
-/* ---- status bar ---- */
-
-.statusbar {
-  display: flex;
-  align-items: center;
-  flex-shrink: 0;
-  height: var(--statusbar-height);
-  padding: 0 10px;
-  border-top: 1px solid var(--border);
-  background: var(--surface);
-  font-size: var(--fs-sm);
-  white-space: nowrap;
-  overflow: hidden;
-}
-
-.statusbar .ctx {
-  margin-right: 16px;
-  color: var(--text-muted);
-}
-
-/* One row tall: a hint that does not fit wraps onto a second, clipped row, so whole hints drop from the end
-   instead of being cut mid-word. `.hints-keep` (command, help) is outside it and never shrinks. */
-.statusbar .hints {
-  display: flex;
-  flex-wrap: wrap;
-  align-content: flex-start;
-  column-gap: 14px;
-  flex: 1 1 auto;
-  min-width: 0;
-  height: var(--statusbar-height);
-  overflow: hidden;
-}
-
-.statusbar .hints > * {
-  display: inline-flex;
-  align-items: center;
-  height: var(--statusbar-height);
-  color: var(--text-muted);
-  white-space: nowrap;
-}
-
-.statusbar .hints-keep {
-  display: flex;
-  flex-shrink: 0;
-  gap: 14px;
-  margin-left: 14px;
-}
-
-.statusbar .hints-keep > * { color: var(--text-muted); white-space: nowrap; }
-.statusbar .hints kbd,
-.statusbar .hints-keep kbd { margin-right: 4px; }
-.statusbar .hints .action-key kbd,
-.statusbar .hints-keep .action-key kbd { margin-right: 0; }
-
-.statusbar .chord {
-  margin-right: 14px;
-  color: var(--accent);
-  font-weight: 600;
 }
 
 /* ---- error line (role=alert under the top bar) ---- */
@@ -95,6 +35,8 @@
 
 .error-line-dismiss {
   flex-shrink: 0;
+  min-width: 24px;
+  min-height: 24px;
   padding: 0 4px;
   border: none;
   background: none;
@@ -119,29 +61,6 @@
   flex: 1;
   min-height: 0;
   min-width: 0;
-}
-
-/* A successful apply or rollback sweeps one accent line down the view area, once (hooks/useScanOnSuccess toggles
-   `.scan`). An overlay: it takes no space, ignores the pointer and the area clips it. Full motion only. */
-.view-area.scan { position: relative; }
-
-[data-motion="full"] .view-area.scan::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 5;
-  height: 48px;
-  border-bottom: 1px solid var(--accent);
-  background: linear-gradient(to bottom, transparent, rgba(var(--accent-rgb), 0.16));
-  pointer-events: none;
-  animation: view-scan 520ms ease-in-out both;
-}
-
-@keyframes view-scan {
-  from { transform: translateY(-48px); }
-  to { transform: translateY(100vh); }
 }
 
 .view-loading {
@@ -227,29 +146,3 @@
 }
 
 .btn-warn:hover:not(:disabled) { border-color: var(--warn); color: var(--warn); }
-
-/* ---- boot (launch overlay, Boot.tsx) ----
-   A once-per-launch sequence: full motion types a few lines, subtle fades the shell in (.veil), off never mounts it.
-   Opacity only. The caret is the terminal's .tui-caret, which blinks at 1 Hz. */
-
-.boot {
-  position: fixed;
-  inset: 0;
-  z-index: 50;
-  padding: 14px 12px;
-  background: var(--bg);
-  color: var(--text);
-  white-space: pre-wrap;
-  overflow: hidden;
-}
-
-/* In the app the native traffic lights sit in the top line's band; type the lines below it, not under the lights. */
-:root[data-tauri] .boot { padding-top: calc(var(--topline-height) + 14px); }
-
-.boot .ln { display: block; min-height: var(--lh); }
-.boot .k { color: var(--text-muted); }
-.boot .tui-caret { vertical-align: -0.15em; }
-.boot.veil { pointer-events: none; }
-.boot.out { animation: boot-out 200ms ease-out forwards; }
-
-@keyframes boot-out { to { opacity: 0; } }

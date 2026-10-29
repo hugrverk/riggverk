@@ -27,6 +27,7 @@ import {
 import type { AppSettings } from "../types";
 import { INSTALL_AGENTS, type InstallAgent } from "../types";
 import { Pane } from "../ui/Pane";
+import { Switch } from "../ui/Switch";
 import { TButton } from "../ui/TButton";
 import { cx } from "../ui/tone";
 
@@ -372,7 +373,7 @@ export function SettingsView({
   const colorsValid = accentValid && backgroundValid && foregroundValid;
   const showRetry = settingsSaveStatus === "error" && !!onRetrySave;
 
-  // The reset asks through the confirm dialog, which puts the status bar in CONFIRM mode itself.
+  // The reset asks through the confirm dialog, which puts the shell in CONFIRM mode itself.
   const runReset = useCallback(async () => {
     if (resetting) return;
     setResetting(true);
@@ -401,7 +402,7 @@ export function SettingsView({
   };
 
   // `R` works from both panes (the workspace row is in the app pane, but the appearance pane has the initial
-  // focus) and is hinted in the status bar from both.
+  // focus) and is offered from both.
   const workspaceBindings: Binding[] = SETTINGS_PANES.map(paneId => ({
     id: `settings.workspace.reset.${paneId}`,
     keys: "R",
@@ -440,7 +441,7 @@ export function SettingsView({
     },
   ];
   // Row movement is active anywhere inside the settings screen, in both panes; the rows are not a listbox, so
-  // the status bar's generic `j k move` hint does not apply and each pane hints the keys itself.
+  // a list's generic `j k move` hint does not apply and each pane hints the keys itself.
   const rowBindings: Binding[] = SETTINGS_PANES.flatMap(paneId =>
     (["next", "prev"] as const).map((direction): Binding => ({
       id: `settings.row.${direction}.${paneId}`,
@@ -641,19 +642,11 @@ export function SettingsView({
             const enabled = appSettings.enabled_harness_ids.includes(harness);
             return (
               <SettingRow key={harness} labelId={labelId(`harness-${harness}`)} label={HARNESS_LABELS[harness]}>
-                <div data-setting-row="">
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={enabled}
-                    aria-labelledby={labelId(`harness-${harness}`)}
-                    className="sw"
-                    onClick={() => onToggleHarness(harness)}
-                    data-setting-stop=""
-                  >
-                    <span className="sw-track" aria-hidden="true" />
-                    <span className="sw-state">{enabled ? "On" : "Off"}</span>
-                  </button>
+                <div className="setting-switch" data-setting-row="">
+                  <Switch label={HARNESS_LABELS[harness]} checked={enabled} onChange={() => onToggleHarness(harness)} />
+                  <span className="sw-state" aria-hidden="true">
+                    {enabled ? "On" : "Off"}
+                  </span>
                 </div>
               </SettingRow>
             );

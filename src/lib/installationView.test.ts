@@ -1,10 +1,8 @@
-import { describe, expect, it, vi } from "vitest";
-import type { InstallationOverview, OverviewEntry, OverviewId } from "../hooks/useInstallationOverview";
+import { describe, expect, it } from "vitest";
+import type { OverviewEntry, OverviewId } from "../hooks/useInstallationOverview";
 import type { AgentTargetMeta, InstallationState, InstallationStatus, SetupSurfaceId, SurfaceInstallationStatus } from "../types";
 import {
   harnessRowsFor,
-  matrixModel,
-  overviewTargets,
   previewDisabledFor,
   surfaceRowsFor,
   surfaceShortName,
@@ -106,7 +104,7 @@ describe("surfaceRowsFor", () => {
       ["codex_rules", "current"],
       ["skills", "update_available"],
     ]);
-    expect(codexRows[0]).toMatchObject({ targetId: "codex_config", display: { label: "off", glyph: "none" } });
+    expect(codexRows[0]).toMatchObject({ targetId: "codex_config", display: { label: "off", tone: "dim" } });
   });
 
   it("shows a rules file the user manages as 'you manage', not as current", () => {
@@ -116,8 +114,6 @@ describe("surfaceRowsFor", () => {
     };
     const rows = surfaceRowsFor("claude", entry("claude", status("current", [managed])), SETTINGS);
     expect(rows[0]).toMatchObject({ state: "user_managed", display: { label: "you manage", tone: "warn" } });
-    const matrix = matrixModel({ entries: { claude: entry("claude", status("current", [managed])) } } as unknown as InstallationOverview, ["claude"], SETTINGS);
-    expect(matrix[0]!.cells.find(cell => cell.column === "rules")).toMatchObject({ state: "user_managed" });
   });
 
   it("shows skill or agent files the user keeps as 'you manage' on a surface that is otherwise current", () => {
@@ -125,8 +121,6 @@ describe("surfaceRowsFor", () => {
     const keeps: SurfaceInstallationStatus = { ...surface("skills", "current"), files };
     const rows = surfaceRowsFor("claude", entry("claude", status("current", [keeps])), SETTINGS);
     expect(rows.find(row => row.surface === "skills")).toMatchObject({ state: "user_managed", display: { label: "you manage", tone: "warn" } });
-    const matrix = matrixModel({ entries: { claude: entry("claude", status("current", [keeps])) } } as unknown as InstallationOverview, ["claude"], SETTINGS);
-    expect(matrix[0]!.cells.find(cell => cell.column === "skills")).toMatchObject({ state: "user_managed" });
     // Anything but current keeps its own state: an update or a conflict is not hidden by files the user keeps.
     const updating: SurfaceInstallationStatus = { ...surface("skills", "update_available"), files };
     expect(surfaceRowsFor("claude", entry("claude", status("update_available", [updating])), SETTINGS).find(row => row.surface === "skills")!.state).toBe("update_available");
@@ -184,27 +178,10 @@ describe("harnessRowsFor", () => {
   });
 });
 
-describe("matrixModel", () => {
-  it("puts every target against every surface kind with n/a, off and state cells", () => {
-    const overview: InstallationOverview = {
-      entries: {
-        workspace: entry("workspace", status("current", [surface("workspace_bundle", "current")])),
-        codex: entry("codex", status("update_available", [surface("codex_rules", "update_available"), surface("skills", "current")])),
-      },
-      loading: false,
-      refresh: vi.fn(async () => {}),
-    };
-    const rows = matrixModel(overview, ["workspace", "codex"], SETTINGS);
-    const byColumn = (index: number) => Object.fromEntries(rows[index]!.cells.map(cell => [cell.column, cell.state]));
-    expect(byColumn(0)).toEqual({ config: "na", agents: "na", rules: "na", skills: "na", mcp: "na", bundle: "current" });
-    expect(byColumn(1)).toEqual({ config: "off", agents: "off", rules: "update_available", skills: "current", mcp: "na", bundle: "na" });
-    const rulesCell = rows[1]!.cells.find(cell => cell.column === "rules")!;
-    expect(rulesCell.display).toMatchObject({ glyph: "partial", label: "update", tone: "warn" });
-  });
-
-  it("orders targets as the workspace followed by the enabled harnesses in tab order", () => {
-    expect(overviewTargets(["claude", "codex"])).toEqual(["workspace", "codex", "claude"]);
+describe("surfaceShortName", () => {
+  it("names the kind of a surface", () => {
     expect(surfaceShortName("open_code_config")).toBe("config");
+    expect(surfaceShortName("claude_rules")).toBe("rules");
   });
 });
 

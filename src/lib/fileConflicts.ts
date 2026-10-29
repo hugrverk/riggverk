@@ -143,7 +143,7 @@ export function withFileConflicts(display: StateDisplay, model: FileConflictMode
     ...(model.kept > 0 ? [`you manage ${model.kept}`] : []),
   ];
   const tone: Tone = model.conflicts > 0 ? "fail" : display.tone === "ok" ? "warn" : display.tone;
-  return { glyph: model.conflicts > 0 ? "fail" : display.glyph === "ok" ? "partial" : display.glyph, tone, label: parts.join(" · ") };
+  return { tone, label: parts.join(" · ") };
 }
 
 /** Why an action cannot run now, or null. */

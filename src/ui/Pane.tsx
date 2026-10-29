@@ -9,7 +9,7 @@ export function usePaneId(): string | null {
 }
 
 export interface PaneProps {
-  /** Stable id: `data-pane-id`, and the `paneId` bindings use to show up in the status bar while this pane has focus. */
+  /** Stable id: `data-pane-id`, and the `paneId` bindings use to be active while this pane has focus. */
   id: string;
   title: ReactNode;
   /** Accessible name of the pane. Defaults to `title` when it is a string. */
@@ -18,7 +18,7 @@ export interface PaneProps {
   meta?: ReactNode;
   /**
    * Static footer content (a confirm line, a copy-path control, navigation text). Key hints do not belong
-   * here: bindings with `paneId === id` and a `hint` show up in the status bar while the pane has focus.
+   * here: bindings with `paneId === id` are active while the pane has focus; the owner renders their buttons.
    */
   footer?: ReactNode;
   /** The pane that `focusDefaultPane()` picks after a view switch. Default: the first pane in DOM order. */

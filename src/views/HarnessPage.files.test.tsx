@@ -9,7 +9,6 @@ import {
   overviewOf,
   settingsOf,
   skillLoadsOf,
-  STATUS_DATA,
   surfaceStatus,
 } from "../test/pageFixtures";
 import type {
@@ -170,7 +169,6 @@ function props(overrides: Partial<HarnessViewProps> = {}): HarnessViewProps & { 
     wsLogCompletedAt: null,
     wsRunning: null,
     wsProgress: null,
-    status: STATUS_DATA,
     dataFolderOk: true,
     onClearOutput: vi.fn(),
     ...overrides,
@@ -314,17 +312,17 @@ function fileLines() {
   return screen.queryByLabelText("Files in conflict or kept");
 }
 
-function statusBar() {
-  return within(screen.getByLabelText("Status bar"));
+function keyHints() {
+  return within(screen.getByLabelText("Key hints"));
 }
 
 function hint(name: RegExp) {
   if (!surfaces().contains(document.activeElement)) focusSurfaces();
-  return statusBar().queryByRole("button", { name });
+  return keyHints().queryByRole("button", { name });
 }
 
 function mode() {
-  return document.querySelector(".statusbar .mode")!.textContent;
+  return screen.getByLabelText("Shell mode").textContent;
 }
 
 function review() {
@@ -952,8 +950,8 @@ describe("take bundled (b, y)", () => {
     const { p } = await openPreview();
     press("Enter");
     expect(invokeMock).not.toHaveBeenCalledWith("apply_take_bundled", expect.anything());
-    // The review pane's hints reach the status bar once it has focus, which lags a tick on a loaded runner.
-    fireEvent.click(await statusBar().findByRole("button", { name: /apply/ }));
+    // The review pane's hints reach the key hints once it has focus, which lags a tick on a loaded runner.
+    fireEvent.click(await keyHints().findByRole("button", { name: /apply/ }));
     await waitFor(() => expect(p.onApplied).toHaveBeenCalledTimes(1));
   });
 
@@ -983,7 +981,7 @@ describe("take bundled (b, y)", () => {
     press("n");
     fireEvent.keyDown(document.body, { key: "Escape" });
     expect(review()).toBeTruthy();
-    expect(statusBar().queryByRole("button", { name: /cancel/ })?.getAttribute("title")).toBe("applying; it cannot be cancelled");
+    expect(keyHints().queryByRole("button", { name: /cancel/ })?.getAttribute("title")).toBe("applying; it cannot be cancelled");
     await act(async () => finish(APPLY_RESULT));
     await waitFor(() => expect(p.onApplied).toHaveBeenCalledTimes(1));
     expect(await screen.findByRole("region", { name: "Claude" })).toBeTruthy();
@@ -1032,7 +1030,7 @@ describe("take bundled (b, y)", () => {
   it("waits for a running task before it applies, and before it previews", async () => {
     const { p, rerenderFrame } = await openPreview();
     rerenderFrame(<ClaudeView {...p} wsRunning="uninstall" runtimeHealth={CLAUDE_HEALTH} />);
-    const apply = statusBar().getByRole("button", { name: /apply/ });
+    const apply = keyHints().getByRole("button", { name: /apply/ });
     expect(apply.getAttribute("title")).toBe("uninstall is running");
     press("y");
     expect(invokeMock).not.toHaveBeenCalledWith("apply_take_bundled", expect.anything());
@@ -1066,9 +1064,9 @@ describe("take bundled (b, y)", () => {
     press("b");
     await screen.findByLabelText("Take bundled summary");
     expect(invokeMock).toHaveBeenLastCalledWith("preview_take_bundled", { surface: "skills", units: ["skill:claude:tdd"] });
-    expect(statusBar().queryByRole("button", { name: /keep mine/ })).toBeNull();
-    expect(statusBar().queryByRole("button", { name: /take bundled/ })).toBeNull();
-    expect(await statusBar().findByRole("button", { name: /apply/ })).toBeTruthy();
+    expect(keyHints().queryByRole("button", { name: /keep mine/ })).toBeNull();
+    expect(keyHints().queryByRole("button", { name: /take bundled/ })).toBeNull();
+    expect(await keyHints().findByRole("button", { name: /apply/ })).toBeTruthy();
     // [ and ] would open another unit's diff: not in a preview that is about to be applied.
     press("]");
     expect(invokeMock).not.toHaveBeenCalledWith("preview_file_diff", expect.objectContaining({ unit: "skill:agents:security-audit" }));

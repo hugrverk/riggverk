@@ -213,14 +213,14 @@ describe("PaneList", () => {
       );
     }
 
-    it("offers / filter in the status bar for its pane, and the hint focuses the filter", () => {
+    it("offers / filter as a key hint for its pane, and the hint focuses the filter", () => {
       renderInFrame(
         <Pane id="harnesses" title="harnesses">
           <Filtered />
         </Pane>,
       );
       act(() => listbox().focus());
-      fireEvent.click(within(screen.getByLabelText("Status bar")).getByRole("button", { name: /filter/ }));
+      fireEvent.click(within(screen.getByLabelText("Key hints")).getByRole("button", { name: /filter/ }));
       expect(document.activeElement).toBe(screen.getByLabelText("Filter harnesses"));
     });
 
@@ -291,7 +291,7 @@ describe("PaneList", () => {
     expect(message.compareDocumentPosition(listbox()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it("shows an Enter hint in the status bar that activates the cursor row when clicked", () => {
+  it("shows an Enter hint as a key hint that activates the cursor row when clicked", () => {
     const onActivate = vi.fn();
     renderInFrame(
       <Pane id="harnesses" title="harnesses">
@@ -300,13 +300,13 @@ describe("PaneList", () => {
     );
     expect(within(screen.getByRole("region", { name: "harnesses" })).queryByRole("button")).toBeNull();
     act(() => listbox().focus());
-    const hint = within(screen.getByLabelText("Status bar")).getByRole("button", { name: /open/ });
+    const hint = within(screen.getByLabelText("Key hints")).getByRole("button", { name: /open/ });
     expect(hint.textContent).toContain("↵");
     fireEvent.click(hint);
     expect(onActivate).toHaveBeenCalledWith(ROWS[0]);
   });
 
-  it("shows a Space hint in the status bar when the list toggles, and toggles the cursor row when clicked", () => {
+  it("shows a Space hint as a key hint when the list toggles, and toggles the cursor row when clicked", () => {
     const onToggle = vi.fn();
     const { rerenderFrame } = renderInFrame(
       <Pane id="harnesses" title="harnesses">
@@ -314,7 +314,7 @@ describe("PaneList", () => {
       </Pane>,
     );
     act(() => listbox().focus());
-    const bar = within(screen.getByLabelText("Status bar"));
+    const bar = within(screen.getByLabelText("Key hints"));
     const hint = bar.getByRole("button", { name: /toggle target/ });
     expect(hint.textContent).toContain("space");
     fireEvent.click(hint);

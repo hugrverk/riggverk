@@ -2,14 +2,24 @@ import { Fragment, useEffect, useMemo, useRef, type KeyboardEvent as ReactKeyboa
 import { useCommandList, useKeymapEntries, usePlatform } from "../keyboard/context";
 import { formatKeys, type Platform } from "../keyboard/keymap";
 import { bindingGroup, evaluateWhen, type RegisteredBinding } from "../keyboard/registry";
-import { MATRIX_LEGEND } from "../lib/installationView";
-import { ActionKey } from "../ui/ActionKey";
-import { Glyph } from "../ui/Glyph";
+import { UI_STATE_LABEL, UI_STATE_SUMMARY_ORDER, type UiState } from "../lib/uiState";
 import { KeyCaps } from "../ui/Kbd";
+import { StatePill } from "../ui/StatePill";
+import { TButton } from "../ui/TButton";
 import { scrollHelpBox, trapTab, useRestoreFocus } from "./overlay";
 import { useShellState } from "./ShellState";
 
 const GROUP_ORDER = ["Navigate", "General", "Lists", "Pane", "Editor", "Overlay"];
+
+/** What each of the six states promises, one line each, in the order of the Overview's summary row. */
+const STATE_MEANING: Record<UiState, string> = {
+  ok: "Matches what Riggverk would write.",
+  ready: "Safe to update. Nothing is written until you review it.",
+  decide: "You edited it. Compare, then keep yours or take Riggverk's.",
+  yours: "You chose to manage it. Riggverk leaves it alone.",
+  fix: "Riggverk cannot write it safely. The page says why.",
+  off: "Turned off, or not available on this system.",
+};
 
 interface HelpLine {
   key: string;
@@ -57,7 +67,7 @@ export function groupBindings(entries: readonly RegisteredBinding[], platform: P
 
 /**
  * `?` overlay generated from the registries: every registered binding grouped by its `group`, then every
- * command. The keys cannot drift from what they do; the one static section is the installed-map glyph legend.
+ * command. The keys cannot drift from what they do; the static parts are the note on the sidebar digits and the legend of the six states.
  */
 export function HelpOverlay() {
   const { helpOpen } = useShellState();
@@ -130,24 +140,28 @@ function HelpBody() {
               </dl>
             </section>
           )}
-          <section aria-label="Installed map">
-            <h3 className="group">Installed map</h3>
-            <dl className="kv">
-              {MATRIX_LEGEND.map(entry => (
-                <Fragment key={entry.label}>
+          <section aria-label="States" className="help-states-section">
+            <h3 className="group">States</h3>
+            <dl className="kv help-states">
+              {UI_STATE_SUMMARY_ORDER.map(state => (
+                <Fragment key={state}>
                   <dt>
-                    <Glyph name={entry.glyph} tone={entry.tone} />
+                    <StatePill state={state}>{UI_STATE_LABEL[state]}</StatePill>
                   </dt>
-                  <dd>{entry.label}</dd>
+                  <dd>{STATE_MEANING[state]}</dd>
                 </Fragment>
               ))}
             </dl>
           </section>
         </div>
+        <p className="help-note">
+          The digits are fixed, so they do not move when an agent is turned off. Copilot, Pi and Kilo have no digit: open
+          them from the sidebar or with :copilot, :pi and :kilo.
+        </p>
         <p className="foot">
-          <ActionKey keys={["esc"]} onClick={closeHelp}>
+          <TButton keys={["esc"]} onClick={closeHelp}>
             close
-          </ActionKey>
+          </TButton>
         </p>
       </div>
     </div>

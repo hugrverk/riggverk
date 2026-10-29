@@ -8,7 +8,6 @@ import {
 import { HARNESS_NAV_ORDER } from "../lib/harnessInstallation";
 import type { InstallTarget } from "../lib/installPlan";
 import { WORKSPACE_FOLDER_UNUSABLE } from "../lib/installationView";
-import { currentMotion } from "../lib/motion";
 import { BUNDLED_RELEASES } from "../lib/releaseNotes";
 import { workspaceTaskBlockedMessage } from "../lib/workspaceErrors";
 import type { AppSettings, InstallAgent } from "../types";
@@ -75,7 +74,7 @@ function isDarkNow(): boolean {
  * y to apply), `rollback` asks after a dry run, `uninstall` opens the existing uninstall preview.
  */
 export function useAppCommands(deps: AppCommandDeps): void {
-  const { openHelp, openWhatsNew, notify, replayBoot } = useShellState();
+  const { openHelp, openWhatsNew, notify } = useShellState();
 
   const targets = () => updateTargets(deps.enabledHarnessIds);
   const busyReason = () => (deps.busyLabel ? `${deps.busyLabel} is running` : true);
@@ -190,14 +189,14 @@ export function useAppCommands(deps: AppCommandDeps): void {
     },
     {
       name: "clear",
-      summary: "clear the output pane",
+      summary: "clear the last run result",
       group: "App",
       enabled: busyReason,
       run: () => deps.clearOutput(),
     },
     {
       name: "copy",
-      summary: "copy the output to the clipboard",
+      summary: "copy the last run output (redacted) to the clipboard",
       group: "App",
       enabled: () => (deps.outputText ? true : "no output to copy"),
       run: async () => {
@@ -221,13 +220,6 @@ export function useAppCommands(deps: AppCommandDeps): void {
       group: "App",
       enabled: () => (BUNDLED_RELEASES.length > 0 ? true : "this build has no release notes"),
       run: () => openWhatsNew({ releases: BUNDLED_RELEASES }),
-    },
-    {
-      name: "boot",
-      summary: "replay the launch sequence",
-      group: "App",
-      enabled: () => (currentMotion() === "full" ? true : "the launch sequence needs motion: full"),
-      run: () => replayBoot(),
     },
     {
       name: "update",
