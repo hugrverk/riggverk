@@ -1,7 +1,26 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback } from "react";
 import type { ConfirmConfig } from "../components/ConfirmDialog";
-import type { SetupResult } from "../types";
+import { runTitle, updateTimeText } from "../lib/lastUpdate";
+import type { SetupHistoryEntry, SetupResult } from "../types";
+
+/** How far back the history is searched for the run being undone; the newest completed one is always near the top. */
+const HISTORY_LOOKUP_LIMIT = 50;
+
+/** "Updated Claude (22 Oct, 12:00)" from the run in the history; "the update" when the history cannot name it. */
+async function describeRun(transactionId: string): Promise<string> {
+  try {
+    const history = await invoke<SetupHistoryEntry[]>("list_setup_history", { limit: HISTORY_LOOKUP_LIMIT });
+    const entry = Array.isArray(history) ? history.find(candidate => candidate.transaction_id === transactionId) : undefined;
+    if (entry) {
+      const time = updateTimeText(entry);
+      return time ? `${runTitle(entry)} (${time})` : runTitle(entry);
+    }
+  } catch {
+    // The dialog still works without the name.
+  }
+  return "the update";
+}
 
 export interface UseRollbackRequestOptions {
   /** The transaction the last install or uninstall left, or null when there is nothing to roll back. */
@@ -13,8 +32,8 @@ export interface UseRollbackRequestOptions {
 }
 
 /**
- * `z` and `:rollback`: a dry run first, so the confirm shows what would be restored, then the existing
- * confirm dialog, then the rollback itself. A dry run that finds nothing to restore, or conflicts, never
+ * `z` and `:rollback`: a dry run first, so the confirm shows what would be restored (named by the run's title and
+ * time from the history, never by its id), then the existing confirm dialog, then the rollback itself. A dry run that finds nothing to restore, or conflicts, never
  * reaches the confirm.
  */
 export function useRollbackRequest({
@@ -38,9 +57,10 @@ export function useRollbackRequest({
       setError(`rollback: nothing can be restored for transaction ${target} (${dryRun.message})`);
       return;
     }
+    const count = dryRun.applied.length;
     const approved = await confirm({
       title: "Roll back",
-      message: `Restore the files of transaction ${target} from its backup? ${dryRun.message}`,
+      message: `Undo ${await describeRun(target)}? This restores ${count} ${count === 1 ? "item" : "items"} from the backup.`,
       confirmLabel: "roll back",
     });
     if (approved) await runRollback(target);
