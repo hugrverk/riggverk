@@ -64,6 +64,7 @@
 .flow-svg.has-hl .flow-ln.hl { opacity: 1; stroke: var(--text); }
 .flow-svg.has-hl .flow-ln.hl.live { stroke: var(--ready); }
 .flow-svg.has-hl .flow-ln.hl.is-fix { stroke: var(--fix); }
+.flow-svg.has-hl .flow-ln.hl.is-ghost { opacity: 0.5; }
 .flow-ln.sel { opacity: 1; stroke: var(--text); }
 
 .flow-hit {
@@ -220,6 +221,7 @@
 }
 
 .flow-dim { color: var(--text-muted); }
+.flow-notes { display: grid; gap: 4px; }
 
 .flow-rows {
   display: grid;

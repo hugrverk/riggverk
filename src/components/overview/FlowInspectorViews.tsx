@@ -115,11 +115,11 @@ export function AgentView({
         </p>
       )}
       {card.notes.length > 0 && (
-        <p className="flow-dim">
+        <div className="flow-dim flow-notes">
           {card.notes.map((note, index) => (
-            <span key={index}>{note} </span>
+            <p key={index}>{note}</p>
           ))}
-        </p>
+        </div>
       )}
       {feeding.length > 0 && (
         <div>
