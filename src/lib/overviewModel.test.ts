@@ -104,6 +104,23 @@ describe("overviewSummaryModel headline and counts", () => {
     expect(summary.failedChecks).toBe(1);
     expect(summary.cards.find(card => card.harness === "codex")!.rows.every(row => row.state === null)).toBe(true);
   });
+
+  it("does not say everything is set up while a check failed or is still loading", () => {
+    const current = (...surfaces: Parameters<typeof surfaceStatus>[0][]) =>
+      installationStatus("current", [...surfaces, "skills" as const].map(surface => surfaceStatus(surface, "current")));
+    const build = (entry: { status: InstallationStatus | null; loading: boolean; error: string | null }) => {
+      const overview = overviewOf({
+        workspace: WORKSPACE,
+        claude: current("claude_rules", "claude_agents"),
+        cursor: current("cursor_agents", "cursor_mcp"),
+      });
+      overview.entries.codex = { id: "codex", ...entry };
+      return overviewSummaryModel({ overview, settings: SETTINGS, enabledHarnessIds: HARNESSES, dataFolderOk: true, diagnostics: { error: null } });
+    };
+    expect(build({ status: null, loading: false, error: "boom" }).headline).toBe("Some agents could not be checked.");
+    expect(build({ status: null, loading: true, error: null }).headline).toBe("Checking your setup…");
+    expect(build({ status: current("codex_rules", "codex_agents"), loading: false, error: null }).headline).toBe("Everything is set up.");
+  });
 });
 
 describe("agentCardModel", () => {

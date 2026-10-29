@@ -279,6 +279,12 @@ describe("overviewHeadline", () => {
     expect(overviewHeadline(counts({ ok: 5, yours: 1, off: 2 }), ctx)).toBe("Everything is set up.");
   });
 
+  it("does not claim the all-clear while a check failed or is still loading", () => {
+    expect(overviewHeadline(counts({ ok: 4 }), { ...ctx, failedChecks: 1 })).toBe("Some agents could not be checked.");
+    expect(overviewHeadline(counts({ ok: 4 }), { ...ctx, pendingChecks: 1 })).toBe("Checking your setup…");
+    expect(overviewHeadline(counts({ ok: 4 }), { ...ctx, failedChecks: 0, pendingChecks: 0 })).toBe("Everything is set up.");
+  });
+
   it("says the setup works when something is left to do", () => {
     expect(overviewHeadline(counts({ ok: 3, ready: 1 }), ctx)).toBe("Your setup works.");
     expect(overviewHeadline(counts({ ok: 3, decide: 1 }), ctx)).toBe("Your setup works.");

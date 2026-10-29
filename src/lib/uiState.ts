@@ -230,6 +230,10 @@ export interface OverviewHeadlineContext {
   anyStatus: boolean;
   /** Every counted item is `ready` because it is not installed yet. */
   allNotInstalled: boolean;
+  /** Entries whose status could not be fetched. They are not counted, so the all-clear must not be claimed. */
+  failedChecks?: number;
+  /** Entries still waiting for their first status. They are not counted either. */
+  pendingChecks?: number;
 }
 
 /** The Overview headline. No coloured words, no counts: the summary row has them. */
@@ -237,7 +241,11 @@ export function overviewHeadline(t: Record<UiState, number>, ctx: OverviewHeadli
   if (!ctx.dataFolderOk) return "Riggverk can't use its folder.";
   if (!ctx.anyStatus) return "Checking your setup…";
   if (ctx.allNotInstalled) return "Nothing is set up yet.";
-  if (t.decide + t.fix + t.ready === 0) return "Everything is set up.";
+  if (t.decide + t.fix + t.ready === 0) {
+    if ((ctx.failedChecks ?? 0) > 0) return "Some agents could not be checked.";
+    if ((ctx.pendingChecks ?? 0) > 0) return "Checking your setup…";
+    return "Everything is set up.";
+  }
   return "Your setup works.";
 }
 
