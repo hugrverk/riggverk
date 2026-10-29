@@ -621,7 +621,7 @@ export function SettingsView({
           </div>
         )}
         <p className="setting-note c-dim">Optional hex overrides; empty uses the theme default. Changes save automatically.</p>
-        <div className="tbtn-row setting-actions">
+        <div className="tbtn-row setting-note setting-actions">
           <BindingButton binding={bindings.find(binding => binding.id === "settings.reset")!} />
         </div>
       </Pane>

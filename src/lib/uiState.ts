@@ -239,7 +239,10 @@ export interface OverviewHeadlineContext {
 /** The Overview headline. No coloured words, no counts: the summary row has them. */
 export function overviewHeadline(t: Record<UiState, number>, ctx: OverviewHeadlineContext): string {
   if (!ctx.dataFolderOk) return "Riggverk can't use its folder.";
-  if (!ctx.anyStatus) return "Checking your setup…";
+  if (!ctx.anyStatus) {
+    // No status at all: still checking, unless every check has already failed.
+    return (ctx.failedChecks ?? 0) > 0 && (ctx.pendingChecks ?? 0) === 0 ? "Some agents could not be checked." : "Checking your setup…";
+  }
   if (ctx.allNotInstalled) return "Nothing is set up yet.";
   if (t.decide + t.fix + t.ready === 0) {
     if ((ctx.failedChecks ?? 0) > 0) return "Some agents could not be checked.";

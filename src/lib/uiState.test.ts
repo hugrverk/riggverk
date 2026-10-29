@@ -271,6 +271,11 @@ describe("overviewHeadline", () => {
     expect(overviewHeadline(counts(), { ...ctx, anyStatus: false })).toBe("Checking your setup…");
   });
 
+  it("says the checks failed, not that it is checking, once every check has failed", () => {
+    expect(overviewHeadline(counts(), { ...ctx, anyStatus: false, failedChecks: 2 })).toBe("Some agents could not be checked.");
+    expect(overviewHeadline(counts(), { ...ctx, anyStatus: false, failedChecks: 1, pendingChecks: 1 })).toBe("Checking your setup…");
+  });
+
   it("says nothing is set up when everything is a fresh install", () => {
     expect(overviewHeadline(counts({ ready: 4 }), { ...ctx, allNotInstalled: true })).toBe("Nothing is set up yet.");
   });
