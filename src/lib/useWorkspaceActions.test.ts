@@ -53,4 +53,27 @@ describe("useWorkspaceActions", () => {
     expect(result.current.wsRunning).toBeNull();
     expect(result.current.wsLog).toEqual(okResult);
   });
+
+  it("returns the task result when only the refresh after it throws", async () => {
+    const setError = vi.fn();
+    const { result } = renderHook(() => useWorkspaceActions({ setError }));
+    let returned: ActionResult | null = null;
+    await act(async () => {
+      const handle = result.current.runWsTask({
+        label: "demo",
+        action: "demo",
+        task: async () => okResult,
+        toActionResult: r => r,
+        refresh: async () => {
+          throw new Error("refresh broke");
+        },
+      });
+      await vi.advanceTimersByTimeAsync(1000);
+      returned = await handle;
+    });
+    // The write succeeded: the log stays a success and the caller does not treat the run as "nothing ran".
+    expect(returned).toEqual(okResult);
+    expect(result.current.wsLog).toEqual(okResult);
+    expect(setError).toHaveBeenLastCalledWith(expect.stringContaining("refresh broke"));
+  });
 });
