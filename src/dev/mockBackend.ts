@@ -27,7 +27,7 @@
  */
 import { emit } from "@tauri-apps/api/event";
 import { mockIPC } from "@tauri-apps/api/mocks";
-import { isLightAgent } from "../lib/harnessInstallation";
+import { harnessForSurface, isLightAgent } from "../lib/harnessInstallation";
 import type {
   ActionResult,
   CodexConfigDefaultsPreview,
@@ -1022,11 +1022,39 @@ function setupPlan(surfaces: SetupSurfaceId[]): SetupPlan {
   };
 }
 
+/** The last install preview, like the backend's: apply needs its fingerprint and its one-time token, and spends them. */
+let setupPreview: { key: string; fingerprint: string; token: string } | null = null;
+/** What each install run changed, to put the surfaces back when it is undone. */
+const installSnapshots = new Map<string, Array<[SetupSurfaceId, InstallationState]>>();
+
+const surfacesKey = (surfaces: readonly SetupSurfaceId[]): string => [...surfaces].sort().join("+");
+
+function previewSetup(surfaces: SetupSurfaceId[]): SetupPlan {
+  const plan = setupPlan(surfaces);
+  setupPreview = plan.plan_fingerprint && plan.preview_token ? { key: surfacesKey(surfaces), fingerprint: plan.plan_fingerprint, token: plan.preview_token } : null;
+  return plan;
+}
+
+function checkSetupPreview(surfaces: SetupSurfaceId[], fingerprint: string | null, token: string | null): void {
+  if (!fingerprint) throw new Error("Plan fingerprint required. Re-run preview before applying.");
+  if (!token) throw new Error("Preview token required. Re-run preview before applying.");
+  if (!setupPreview || setupPreview.key !== surfacesKey(surfaces) || setupPreview.fingerprint !== fingerprint) {
+    throw new Error("Plan fingerprint mismatch: state changed after preview. Re-run preview before applying.");
+  }
+  if (setupPreview.token !== token) throw new Error("Preview token expired or already used. Re-run preview before applying.");
+  setupPreview = null;
+}
+
 function applyPlan(surfaces: SetupSurfaceId[]): SetupResult {
   const applied: string[] = [];
+  const operations = surfaces.map(plannedOperation);
+  const before: Array<[SetupSurfaceId, InstallationState]> = [];
+  const changes: SetupHistoryEntry["changes"] = [];
   for (const surface of surfaces) {
     const state = surfaceStates.get(surface);
     if (state === "not_installed" || state === "update_available") {
+      before.push([surface, state]);
+      changes.push({ surface, kind: state === "not_installed" ? "create" : "update", path: SURFACE_PATHS[surface], applied: true, restored: false });
       surfaceStates.set(surface, "current");
       applied.push(SURFACE_PATHS[surface]);
       if (surface === "open_code_config") {
@@ -1044,6 +1072,8 @@ function applyPlan(surfaces: SetupSurfaceId[]): SetupResult {
     targets: surfaces,
     file_count: applied.length,
   });
+  installSnapshots.set(lastTransactionId, before);
+  recordInstallRun(lastTransactionId, surfaces, changes, operations);
   return {
     success: true,
     transaction_id: lastTransactionId,
@@ -1053,6 +1083,39 @@ function applyPlan(surfaces: SetupSurfaceId[]): SetupResult {
     manual_steps: [],
     message: `applied ${applied.length} · preserved ${surfaces.length - applied.length} · failed 0 · transaction ${lastTransactionId} recorded`,
   };
+}
+
+/** A finished install run in the history, newest first; the offer to undo moves to it, like the backend's. */
+function recordInstallRun(id: string, surfaces: SetupSurfaceId[], changes: SetupHistoryEntry["changes"], operations: PlannedOperation[]): void {
+  const now = String(Date.now() * 1_000_000);
+  for (const entry of historyLog) {
+    entry.is_newest_completed = false;
+    entry.undoable = false;
+  }
+  const harnesses = [...new Set(changes.map(change => harnessForSurface(change.surface)).filter((harness): harness is InstallAgent => harness !== null))];
+  historyLog.unshift({
+    transaction_id: id,
+    created_at: now,
+    finished_at: now,
+    status: "applied",
+    surfaces,
+    harnesses,
+    changes,
+    operation_counts: {
+      create: changes.filter(change => change.kind === "create").length,
+      update: changes.filter(change => change.kind === "update").length,
+      remove: 0,
+    },
+    backup_files: changes.length,
+    is_newest_completed: true,
+    undoable: changes.length > 0,
+    receipt: {
+      synced: operations.filter(op => op.kind === "no_change").map(op => op.surface),
+      left_for_you: operations.flatMap((op): Array<{ surface: SetupSurfaceId; reason: "conflict" | "manual" }> =>
+        op.kind === "conflict" ? [{ surface: op.surface, reason: "conflict" }] : op.kind === "manual" ? [{ surface: op.surface, reason: "manual" }] : [],
+      ),
+    },
+  });
 }
 
 /* ---- backups ---- */
@@ -1809,9 +1872,10 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
       return scenario === "error" ? unavailable() : installationStatus(arg<SetupSurfaceId[]>(args, "surfaces"));
     case "preview_setup":
       await delay(200);
-      return setupPlan(arg<SetupSurfaceId[]>(args, "surfaces"));
+      return previewSetup(arg<SetupSurfaceId[]>(args, "surfaces"));
     case "apply_setup": {
       const surfaces = arg<SetupSurfaceId[]>(args, "surfaces");
+      checkSetupPreview(surfaces, arg<string | null>(args, "planFingerprint"), arg<string | null>(args, "previewToken"));
       const pending = surfaces.filter(surface => ["not_installed", "update_available"].includes(surfaceStates.get(surface) ?? ""));
       await emitProgress("apply_setup", pending.flatMap(surfaceFiles));
       return applyPlan(surfaces);
@@ -1894,9 +1958,14 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
             surfaceStates.set(surface, state);
           }
           rulesSnapshots.delete(id);
+        } else if (installSnapshots.has(id)) {
+          // An install run: put back exactly the surfaces it changed.
+          for (const [surface, state] of installSnapshots.get(id)!) surfaceStates.set(surface, state);
+          installSnapshots.delete(id);
         } else {
           for (const surface of ["claude_rules", "claude_agents", "skills"] as SetupSurfaceId[]) surfaceStates.set(surface, "update_available");
         }
+        markHistoryUndone(id);
         lastTransactionId = null;
       }
       const restored = ["~/.claude/CLAUDE.md", "~/.claude/agents/verifier.md"];
@@ -2057,7 +2126,6 @@ function setupHistory(limit: number): SetupHistoryEntry[] {
   if (!Number.isInteger(limit) || limit < 0 || limit > 0xffffffff) {
     throw new Error("limit must be an unsigned 32-bit integer");
   }
-  if (scenario === "fresh" || scenario === "empty") return [];
   return historyLog.slice(0, limit).map(entry => structuredClone(entry));
 }
 
@@ -2076,7 +2144,7 @@ function markHistoryUndone(transactionId: string): void {
   }
 }
 
-const historyLog: SetupHistoryEntry[] = [
+const historyLog: SetupHistoryEntry[] = scenario === "fresh" || scenario === "empty" ? [] : [
     {
       transaction_id: "1792663200000000000",
       created_at: "1792663200000000000", finished_at: "1792663202000000000",
