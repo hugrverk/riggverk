@@ -116,7 +116,9 @@ export function FlowMap({ model, selected, onSelect, live, liveFiles }: FlowMapP
       current?.type === "edge" && current.id === edge.id && "sel",
     );
 
-  const countedEdges = highlight ? model.edges.filter(edge => highlight.edges.has(edge.id) && edge.status !== "ghost") : [];
+  const sourceLabels = useMemo(() => Object.fromEntries(model.sources.map(source => [source.id, source.label])), [model.sources]);
+  const agentLabels = useMemo(() => Object.fromEntries(model.agents.map(agent => [agent.id, agent.label])), [model.agents]);
+  const countedEdges =highlight ? model.edges.filter(edge => highlight.edges.has(edge.id) && edge.status !== "ghost") : [];
 
   return (
     <div className="flow-map" ref={wrapRef} data-hl={highlight ? "" : undefined}>
@@ -145,7 +147,7 @@ export function FlowMap({ model, selected, onSelect, live, liveFiles }: FlowMapP
           .filter(edge => edge.status !== "ghost")
           .map(edge => (
             <path key={`hit:${edge.id}`} className="flow-hit" d={layout.curves[edge.id]!.d} aria-hidden="true" {...bind({ type: "edge", id: edge.id })}>
-              <title>{`${edge.source} → ${edge.agent}`}</title>
+              <title>{`${sourceLabels[edge.source]} → ${agentLabels[edge.agent]} · ${edge.total} ${edge.total === 1 ? "item" : "items"}`}</title>
             </path>
           ))}
 
