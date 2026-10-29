@@ -150,7 +150,7 @@ export function RulesEditor({ entry, mode, onMode, onOpenHarness }: RulesEditorP
         {mode === "diff" && (
           <>
             <p className="lib-dim">Your working copy against the file on disk. Save writes a backup first.</p>
-            <DiffView diff={diff} label="Refinements against disk" empty={endingsNote ?? "No difference against disk."} />
+            <DiffView diff={diff} labelled={false} label="Refinements against disk" empty={endingsNote ?? "No difference against disk."} />
           </>
         )}
       </div>

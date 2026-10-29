@@ -36,6 +36,17 @@ describe("parseUnifiedDiff", () => {
   it("returns nothing for an empty diff", () => {
     expect(parseUnifiedDiff("")).toEqual([]);
   });
+
+  it("does not take the first two lines of a diff without labels for labels", () => {
+    // A removed "-- x" and an added "++ y" read as "--- x" and "+++ y".
+    const diff = "--- x\n+++ y\n kept";
+    expect(parseUnifiedDiff(diff).map(line => line.kind)).toEqual(["file", "file", "context"]);
+    expect(parseUnifiedDiff(diff, false).map(line => [line.kind, line.mark, line.text])).toEqual([
+      ["remove", "-", "-- x"],
+      ["add", "+", "++ y"],
+      ["context", " ", "kept"],
+    ]);
+  });
 });
 
 describe("DiffView", () => {
@@ -81,6 +92,21 @@ describe("DiffView", () => {
   it("is read-only: no inputs or editable content", () => {
     const { container } = render(<DiffView diff={DIFF} label="Diff" />);
     expect(container.querySelector("input, textarea, [contenteditable]")).toBeNull();
+  });
+
+  it("says so for a diff made only of labels, in either layout", () => {
+    for (const layout of ["unified", "split"] as const) {
+      render(<DiffView diff={"--- a\n+++ b\n"} label="Diff" layout={layout} />);
+      expect(screen.getByRole("status").textContent).toBe("no differences");
+      expect(screen.queryByRole("group", { name: "Diff" })).toBeNull();
+      cleanup();
+    }
+  });
+
+  it("shows a label-less diff whose lines start with dashes as changes", () => {
+    render(<DiffView diff={"--- x\n+++ y"} labelled={false} label="Diff" />);
+    const lines = [...screen.getByRole("group", { name: "Diff" }).querySelectorAll(".diff-line")];
+    expect(lines.map(line => line.className)).toEqual(["diff-line remove", "diff-line add"]);
   });
 
   it("says so when both sides are equal", () => {
