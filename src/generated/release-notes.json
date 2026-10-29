@@ -1,6 +1,28 @@
 {
   "releases": [
     {
+      "version": "2026.10.10",
+      "sections": [
+        {
+          "title": "Fixes",
+          "items": [
+            "Keep role models the app cannot prove it wrote",
+            "Round-2 frontend audit fixes",
+            "Skill trust, frontmatter, release checks and content after audit",
+            "Cursor mcp scan, playwright conflicts and retired skill edits",
+            "Frontend audit fixes for guards, buttons, headline and a11y",
+            "Harden setup, codex config and library saves after the audit"
+          ]
+        },
+        {
+          "title": "Other",
+          "items": [
+            "Remove dead code and speed up health refresh after the audit"
+          ]
+        }
+      ]
+    },
+    {
       "version": "2026.10.9",
       "sections": [
         {
