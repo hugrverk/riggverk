@@ -1629,9 +1629,9 @@ mod tests {
         env.pack_skill("team", None, "team-skill", "# Team\n", &[]);
         let copied = copy_skill_to_pack("original".into(), "mine".into()).expect("copy");
         let path = env.packs().join("personal/skills/mine/SKILL.md");
-        let opened = read_pack_skill(copied.id.clone()).expect("read");
+        let opened = read_skill(copied.id.clone()).expect("read");
         let revision = opened.revision.expect("a personal skill has a revision");
-        assert!(read_pack_skill("pack:team/team-skill".into())
+        assert!(read_skill("pack:team/team-skill".into())
             .expect("read team")
             .revision
             .is_none());
@@ -1644,7 +1644,7 @@ mod tests {
         assert!(refused.contains("changed on disk"), "{refused}");
         assert_eq!(fs::read_to_string(&path).expect("unchanged"), elsewhere);
 
-        let reread = read_pack_skill(copied.id.clone()).expect("reload").revision;
+        let reread = read_skill(copied.id.clone()).expect("reload").revision;
         assert!(
             save_pack_skill(copied.id, mine.clone(), reread)
                 .expect("save after reload")
