@@ -416,6 +416,39 @@ mod tests {
         assert!(twice.reason.contains("more than once"), "{}", twice.reason);
     }
 
+    /// Dot folders are never read: a `.venv` (symlinks) or an `.archive` of old skills inside a
+    /// pack skill is skipped, not taken for nesting, and not installed.
+    #[test]
+    fn dot_folders_inside_a_pack_skill_are_skipped() {
+        let env = Env::new("dot-folders");
+        let dir = env.pack_skill("mine", None, "venvy", "body", &[("REFERENCE.md", "r\n")]);
+        fs::create_dir_all(dir.join(".venv/bin")).expect("venv");
+        #[cfg(unix)]
+        std::os::unix::fs::symlink("/usr/bin/python3", dir.join(".venv/bin/python"))
+            .expect("venv link");
+        fs::create_dir_all(dir.join(".archive/old")).expect("archive");
+        fs::write(
+            dir.join(".archive/old/SKILL.md"),
+            canonical_skill_text("old", "old"),
+        )
+        .expect("archived skill");
+
+        let sources = env.sources();
+        let skill = &sources.packs()[0].skills[0];
+        assert_eq!(
+            (skill.name.as_str(), skill.state),
+            ("venvy", PackSkillState::Active),
+            "{}",
+            skill.reason
+        );
+        let result = env.apply();
+        assert!(result.success, "install: {}", result.message);
+        let installed: Vec<String> = files_below(&env.root(SkillRoot::Claude).join("venvy"))
+            .into_keys()
+            .collect();
+        assert_eq!(installed, vec!["REFERENCE.md", "SKILL.md"]);
+    }
+
     #[test]
     fn two_packs_with_one_skill_name_fail_that_skill_only() {
         let env = Env::new("two-packs");

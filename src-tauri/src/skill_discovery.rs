@@ -44,11 +44,16 @@ impl std::fmt::Display for SkillDiscoveryError {
     }
 }
 
+/// Whether a `SKILL.md` sits more than one level below `dir`, or the tree cannot be told apart
+/// from one (a symlink, too deep, too many entries). Dot entries (`.git`, `.venv`) are never read
+/// or installed, so they are not walked either.
 pub(crate) fn has_deeper_skill_md(dir: &Path) -> bool {
-    scan_deeper_skill_md(dir, 0)
+    let mut seen = 0;
+    scan_deeper_skill_md(dir, 0, &mut seen)
 }
 
-fn scan_deeper_skill_md(dir: &Path, depth: usize) -> bool {
+fn scan_deeper_skill_md(dir: &Path, depth: usize, seen: &mut usize) -> bool {
+    /// Entries of the whole walk, not per folder.
     const MAX_ENTRIES: usize = 10_000;
     const MAX_DEPTH: usize = 20;
 
@@ -60,10 +65,12 @@ fn scan_deeper_skill_md(dir: &Path, depth: usize) -> bool {
         return false;
     };
 
-    let mut count = 0;
     for entry in entries.flatten() {
-        count += 1;
-        if count > MAX_ENTRIES {
+        if entry.file_name().to_string_lossy().starts_with('.') {
+            continue;
+        }
+        *seen += 1;
+        if *seen > MAX_ENTRIES {
             return true;
         }
         let path = entry.path();
@@ -76,7 +83,7 @@ fn scan_deeper_skill_md(dir: &Path, depth: usize) -> bool {
         if path.join("SKILL.md").is_file() {
             return true;
         }
-        if scan_deeper_skill_md(&path, depth + 1) {
+        if scan_deeper_skill_md(&path, depth + 1, seen) {
             return true;
         }
     }
@@ -925,6 +932,29 @@ mod tests {
             field("---\nname: a---b\ndescription: x --- y\n---\n", "name").unwrap(),
             "a---b"
         );
+    }
+
+    #[test]
+    fn the_nesting_walk_skips_dot_folders_and_is_bounded_in_total() {
+        let root = temp_root("deeper-walk");
+        fs::create_dir_all(root.join(".archive/old")).unwrap();
+        fs::write(root.join(".archive/old/SKILL.md"), "x").unwrap();
+        assert!(!has_deeper_skill_md(&root));
+        fs::create_dir_all(root.join("docs/nested")).unwrap();
+        fs::write(root.join("docs/nested/SKILL.md"), "x").unwrap();
+        assert!(has_deeper_skill_md(&root));
+        fs::remove_dir_all(root.join("docs")).unwrap();
+        // Under the cap in every folder, over it in total.
+        for folder in 0..3 {
+            let dir = root.join(format!("d{folder}"));
+            fs::create_dir_all(&dir).unwrap();
+            for file in 0..4_000 {
+                fs::write(dir.join(format!("f{file}")), "").unwrap();
+            }
+        }
+        let bounded = has_deeper_skill_md(&root);
+        let _ = fs::remove_dir_all(&root);
+        assert!(bounded, "12 000 entries in total is over the cap");
     }
 
     #[test]
