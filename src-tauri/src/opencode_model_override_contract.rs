@@ -759,42 +759,72 @@ fn reset_removes_an_override_file_that_no_longer_parses() {
     });
 }
 
+/// Points Install at an isolated workspace and backup folder under `home` and seeds the
+/// installed `opencode.json` with `installed`. Returns the config path.
+fn seed_real_config(home: &Path, installed: &serde_json::Value) -> PathBuf {
+    unsafe {
+        std::env::set_var("RIGGVERK_WORKSPACE_PATH", home.join("workspace"));
+        std::env::set_var("RIGGVERK_BACKUP_DIR", home.join("backups"));
+    }
+    let home = crate::agent_targets::home_dir().expect("resolved home");
+    let config_path = home.join(".config/opencode/opencode.json");
+    fs::create_dir_all(config_path.parent().expect("parent")).expect("config dir");
+    write_config(&config_path, installed);
+    config_path
+}
+
+fn write_config(path: &Path, config: &serde_json::Value) {
+    fs::write(path, config.to_string()).expect("write installed config");
+}
+
+fn read_config(path: &Path) -> serde_json::Value {
+    serde_json::from_str(&fs::read_to_string(path).expect("read installed config"))
+        .expect("parse installed config")
+}
+
+fn preview_config() -> crate::setup_lifecycle::SetupPlan {
+    crate::commands::preview_setup(vec!["open_code_config".into()]).expect("preview")
+}
+
+/// The plan for the OpenCode config holds no conflict and no pending change.
+fn assert_config_synced() {
+    let plan = preview_config();
+    assert!(plan.conflicts.is_empty(), "{:?}", plan.conflicts);
+    assert!(
+        plan.synced
+            .contains(&crate::setup_lifecycle::SetupSurfaceId::OpenCodeConfig),
+        "{}",
+        plan.summary
+    );
+}
+
+/// A real Install of the OpenCode config, through preview and apply.
+fn install_config(config_path: &Path) -> serde_json::Value {
+    let plan = preview_config();
+    assert!(plan.conflicts.is_empty(), "{:?}", plan.conflicts);
+    let result = crate::commands::apply_setup(
+        vec!["open_code_config".into()],
+        true,
+        plan.plan_fingerprint.clone(),
+        plan.preview_token.clone(),
+    )
+    .expect("apply");
+    assert!(result.success, "{}", result.message);
+    read_config(config_path)
+}
+
 #[test]
 fn a_real_install_pins_the_roles_and_the_next_one_removes_them_after_a_reset() {
     with_isolated_home("apply", |home| {
-        unsafe {
-            std::env::set_var("RIGGVERK_WORKSPACE_PATH", home.join("workspace"));
-            std::env::set_var("RIGGVERK_BACKUP_DIR", home.join("backups"));
-        }
-        let home = crate::agent_targets::home_dir().expect("resolved home");
-        let config_path = home.join(".config/opencode/opencode.json");
-        fs::create_dir_all(config_path.parent().expect("parent")).expect("config dir");
         let user_agent_keys = serde_json::json!({
             "repo-scout": {"description": "my scout"},
             "custom": {"model": "mine/custom"},
         });
-        fs::write(
-            &config_path,
-            serde_json::json!({"agent": user_agent_keys, "provider": {"mine": {}}}).to_string(),
-        )
-        .expect("seed installed config");
-
-        let install = || {
-            let plan =
-                crate::commands::preview_setup(vec!["open_code_config".into()]).expect("preview");
-            let result = crate::commands::apply_setup(
-                vec!["open_code_config".into()],
-                true,
-                plan.plan_fingerprint.clone(),
-                plan.preview_token.clone(),
-            )
-            .expect("apply");
-            assert!(result.success, "{}", result.message);
-            serde_json::from_str::<serde_json::Value>(
-                &fs::read_to_string(&config_path).expect("read installed config"),
-            )
-            .expect("parse installed config")
-        };
+        let config_path = seed_real_config(
+            home,
+            &serde_json::json!({"agent": user_agent_keys, "provider": {"mine": {}}}),
+        );
+        let install = || install_config(&config_path);
 
         crate::commands::update_opencode_model_selection(
             "main/large".to_string(),
@@ -832,5 +862,118 @@ fn a_real_install_pins_the_roles_and_the_next_one_removes_them_after_a_reset() {
             assert!(cleared["agent"].get(role).is_none(), "{role}");
         }
         assert_eq!(cleared["provider"], serde_json::json!({"mine": {}}));
+    });
+}
+
+#[test]
+fn a_user_role_model_without_an_override_survives_install_and_is_never_a_conflict() {
+    with_isolated_home("user-pin", |home| {
+        let config_path = seed_real_config(
+            home,
+            &serde_json::json!({
+                "agent": {
+                    "inspector": {"model": "mine/pin"},
+                    "sentinel": {"description": "mine", "model": "mine/sentinel"},
+                },
+                "provider": {"mine": {}},
+            }),
+        );
+
+        let first = install_config(&config_path);
+        assert_eq!(first["agent"]["inspector"]["model"], "mine/pin");
+        assert_eq!(first["agent"]["sentinel"]["model"], "mine/sentinel");
+        assert_eq!(first["agent"]["sentinel"]["description"], "mine");
+        assert_config_synced();
+
+        // The user changes and adds pins after the install: still theirs, still no conflict.
+        let mut edited = first.clone();
+        edited["agent"]["inspector"]["model"] = serde_json::json!("mine/other");
+        edited["agent"]["verifier"] = serde_json::json!({"model": "mine/verifier"});
+        write_config(&config_path, &edited);
+        assert_config_synced();
+
+        // A managed change elsewhere is applied without touching the pins.
+        crate::commands::update_opencode_model_selection(
+            "main/large".to_string(),
+            bundled_defaults().1,
+            None,
+            None,
+        )
+        .expect("save a main model override");
+        let updated = install_config(&config_path);
+        assert_eq!(updated["model"], "main/large");
+        assert_eq!(updated["agent"]["inspector"]["model"], "mine/other");
+        assert_eq!(updated["agent"]["sentinel"]["model"], "mine/sentinel");
+        assert_eq!(updated["agent"]["verifier"]["model"], "mine/verifier");
+        assert_config_synced();
+    });
+}
+
+#[test]
+fn an_app_pin_the_user_changes_after_clearing_the_override_stays_theirs() {
+    with_isolated_home("edited-pin", |home| {
+        let config_path = seed_real_config(home, &serde_json::json!({"provider": {"mine": {}}}));
+        crate::commands::update_opencode_model_selection(
+            "main/large".to_string(),
+            "main/small".to_string(),
+            Some("cheap/fast".to_string()),
+            None,
+        )
+        .expect("save override");
+        let pinned = install_config(&config_path);
+        for role in ROLES {
+            assert_eq!(pinned["agent"][role]["model"], "cheap/fast", "{role}");
+        }
+
+        crate::commands::reset_opencode_model_selection().expect("reset");
+        let mut edited = pinned.clone();
+        edited["agent"]["inspector"]["model"] = serde_json::json!("mine/own");
+        write_config(&config_path, &edited);
+
+        let cleared = install_config(&config_path);
+        assert_eq!(cleared["agent"]["inspector"]["model"], "mine/own");
+        for role in ["repo-scout", "sentinel", "verifier", "scribe"] {
+            assert!(cleared["agent"].get(role).is_none(), "{role}: {cleared}");
+        }
+        assert_eq!(cleared["provider"], serde_json::json!({"mine": {}}));
+        assert_config_synced();
+
+        // The value the app wrote once is no longer its own: typing it back keeps it too.
+        let mut retyped = cleared.clone();
+        retyped["agent"]["scribe"] = serde_json::json!({"model": "cheap/fast"});
+        write_config(&config_path, &retyped);
+        assert_config_synced();
+    });
+}
+
+#[test]
+fn pins_from_a_record_without_role_models_stay_after_a_reset_and_are_no_conflict() {
+    with_isolated_home("legacy-record", |home| {
+        let config_path = seed_real_config(home, &serde_json::json!({}));
+        crate::commands::update_opencode_model_selection(
+            "main/large".to_string(),
+            "main/small".to_string(),
+            Some("cheap/fast".to_string()),
+            None,
+        )
+        .expect("save override");
+        install_config(&config_path);
+
+        // A record as an older version kept it: no role models, so nothing is proven.
+        let workspace = home.join("workspace");
+        let mut state = crate::managed_state::read_managed_state(&workspace).expect("record");
+        for record in &mut state.artifacts {
+            record.role_models.clear();
+        }
+        crate::managed_state::write_managed_state_atomic(&workspace, &state).expect("write");
+
+        // The reset also returns the main models to the bundled default: an update, no conflict.
+        crate::commands::reset_opencode_model_selection().expect("reset");
+        let updated = install_config(&config_path);
+        assert_eq!(updated["model"], bundled_defaults().0);
+        for role in ROLES {
+            assert_eq!(updated["agent"][role]["model"], "cheap/fast", "{role}");
+        }
+        assert_config_synced();
     });
 }

@@ -989,9 +989,11 @@ fn apply_single_artifact(
         } else {
             serde_json::Value::Object(serde_json::Map::new())
         };
+        // A role model the app cannot prove it wrote is the user's: kept as it is.
+        let app = crate::commands::AppRoleModels::load(Some(workspace_root), home);
         let merged = crate::commands::merge_managed_opencode_config(
             &installed,
-            &crate::commands::extract_managed_opencode_config(&rendered),
+            &crate::commands::managed_opencode_install_projection(&installed, &rendered, &app),
         );
         crate::safe_filesystem::write_regular_file_atomic(
             &dest,

@@ -1660,7 +1660,12 @@ fn detect_config_artifact(
             Some(v) => v,
             None => return (OperationKind::Unavailable, PreviousState::Unavailable),
         };
-        if crate::commands::managed_opencode_keys_match(&installed_json, &rendered) {
+        // The user's own role models are theirs: no drift, and an install keeps them.
+        let app = crate::commands::AppRoleModels::load(Some(workspace_root), home);
+        if crate::commands::managed_opencode_keys_match(
+            &crate::commands::without_user_role_models(&installed_json, &app),
+            &rendered,
+        ) {
             (OperationKind::NoChange, PreviousState::MergeableConfigFile)
         } else {
             (OperationKind::Update, PreviousState::MergeableConfigFile)
@@ -2674,6 +2679,8 @@ fn refine_with_managed_hash<R: SourceRoot + ?Sized>(
         || crate::shipped_digests::is_shipped_version(artifact, sources, &installed)
         || legacy_whole_file_record_holds(artifact, workspace_root, home, expected)
         || codex_record_holds_beside_kept(artifact, workspace_root, sources, home, expected)
+        || (*artifact == ArtifactId::OpenCodeConfig
+            && crate::setup_fingerprint::opencode_record_holds(workspace_root, home, expected))
     {
         (OperationKind::Update, previous)
     } else {
@@ -3040,6 +3047,8 @@ pub fn artifact_matches_previous_backup_state(
                 crate::setup_fingerprint::artifact_installed_managed_digest_from_path(
                     &op.artifact,
                     &backup_path,
+                    workspace_root,
+                    home,
                 )?;
             let current_managed = crate::setup_fingerprint::artifact_installed_managed_digest(
                 &op.artifact,
@@ -4547,6 +4556,97 @@ mod tests {
             serde_json::to_string(&restored).unwrap(),
             serde_json::to_string(&expected).unwrap()
         );
+        for dir in [&home, &backups] {
+            let _ = fs::remove_dir_all(dir);
+        }
+    }
+
+    /// Rollback puts back the role models an apply changed, the user's own and the ones the app
+    /// recorded writing, and the backup check agrees with the restored file.
+    #[test]
+    fn managed_opencode_rollback_restores_role_models_and_matches_the_backup() {
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        let home = temp("opencode-role-rollback-home");
+        let backups = temp("opencode-role-rollback-backups");
+        fs::create_dir_all(home.join(".config/opencode")).unwrap();
+        crate::test_env::set_test_user_dirs(&home);
+        let ws = home.join("workspace");
+        let dest = home.join(".config/opencode/opencode.json");
+        fs::create_dir_all(backups.join("artifacts")).unwrap();
+        let op = ArtifactManifestOperation {
+            artifact: ArtifactId::OpenCodeConfig,
+            surface: SetupSurfaceId::OpenCodeConfig,
+            kind: OperationKind::Update,
+            previous_state: PreviousState::MergeableConfigFile,
+            rollback_action: RollbackAction::RestoreManagedConfigFile,
+            backup_rel: Some("artifacts/opencode-config".into()),
+            ..Default::default()
+        };
+        let record = |role_models: &[(&str, &str)]| {
+            let state = crate::managed_state::ManagedState {
+                schema_version: crate::managed_state::MANAGED_STATE_SCHEMA_VERSION,
+                bundled_version: crate::stable_digest::bytes(b"bundle"),
+                artifacts: vec![crate::managed_state::ManagedArtifactRecord {
+                    identity: crate::managed_state::artifact_identity(&ArtifactId::OpenCodeConfig),
+                    hash: crate::stable_digest::bytes(b"record"),
+                    surface: None,
+                    role_models: role_models
+                        .iter()
+                        .map(|(role, model)| (role.to_string(), model.to_string()))
+                        .collect(),
+                }],
+            };
+            crate::managed_state::write_managed_state_atomic(&ws, &state).unwrap();
+        };
+        let roll_back = |backup: &serde_json::Value, current: &serde_json::Value| {
+            fs::write(
+                backups.join("artifacts/opencode-config"),
+                serde_json::to_vec(backup).unwrap(),
+            )
+            .unwrap();
+            fs::write(&dest, serde_json::to_vec_pretty(current).unwrap()).unwrap();
+            assert!(!artifact_matches_previous_backup_state(&op, &backups, &home, &ws).unwrap());
+            restore_artifact_from_backup_with_mode(
+                &op,
+                &backups,
+                &home,
+                RollbackRestoreMode::ManagedProjectionMerge,
+                Some(&ws),
+            )
+            .unwrap();
+            assert!(artifact_matches_previous_backup_state(&op, &backups, &home, &ws).unwrap());
+            serde_json::from_slice::<serde_json::Value>(&fs::read(&dest).unwrap()).unwrap()
+        };
+
+        // An override pinned every role over the user's own inspector model.
+        crate::commands::update_opencode_model_selection(
+            "main/large".to_string(),
+            "main/small".to_string(),
+            Some("cheap/fast".to_string()),
+            None,
+        )
+        .unwrap();
+        record(&[]);
+        let backup = serde_json::json!({"agent": {"inspector": {"model": "mine/pin"}}});
+        let mut current = serde_json::json!({"agent": {}});
+        for role in ["repo-scout", "inspector", "sentinel", "verifier", "scribe"] {
+            current["agent"][role] = serde_json::json!({"model": "cheap/fast"});
+        }
+        assert_eq!(roll_back(&backup, &current), backup);
+
+        // After a reset an apply removed the scribe model the app recorded writing.
+        crate::commands::reset_opencode_model_selection().unwrap();
+        record(&[("scribe", "cheap/fast")]);
+        let backup = serde_json::json!({
+            "agent": {"scribe": {"model": "cheap/fast"}, "inspector": {"model": "mine/pin"}}
+        });
+        let current = serde_json::json!({"agent": {"inspector": {"model": "mine/pin"}}});
+        assert_eq!(
+            roll_back(&backup, &current)["agent"]["scribe"]["model"],
+            "cheap/fast"
+        );
+
         for dir in [&home, &backups] {
             let _ = fs::remove_dir_all(dir);
         }

@@ -306,6 +306,7 @@ pub fn next_state_from_operations<R: SourceRoot + ?Sized>(
         );
     }
     refresh_records_matching_source(&mut records, bundled_root, runtime_root, home);
+    record_opencode_role_models(&mut records, bundled_root, runtime_root, home);
     let mut artifacts: Vec<_> = records.into_values().collect();
     artifacts.sort_by(|a, b| a.identity.cmp(&b.identity));
     Ok(ManagedState {
@@ -354,6 +355,36 @@ fn refresh_records_matching_source<R: SourceRoot + ?Sized>(
         if matches_source {
             record.hash = installed;
         }
+    }
+}
+
+/// While the installed `opencode.json` is what an install makes of it, the role models it holds
+/// for the app are the ones the override pins: record those, and only those, as written by the
+/// app. A file that differs keeps the roles it had: what the app wrote is still unchanged there.
+fn record_opencode_role_models<R: SourceRoot + ?Sized>(
+    records: &mut HashMap<String, ManagedArtifactRecord>,
+    bundled_root: &R,
+    runtime_root: &Path,
+    home: &Path,
+) {
+    let artifact = ArtifactId::OpenCodeConfig;
+    let Some(record) = records.get_mut(&artifact_identity(&artifact)) else {
+        return;
+    };
+    let current =
+        setup_fingerprint::artifact_installed_managed_digest(&artifact, runtime_root, home)
+            .is_ok_and(|installed| {
+                installed != setup_fingerprint::ABSENT_DIGEST
+                    && setup_fingerprint::artifact_effective_source_digest(
+                        &artifact,
+                        bundled_root,
+                        runtime_root,
+                        home,
+                    )
+                    .is_ok_and(|source| source == installed)
+            });
+    if current {
+        record.role_models = crate::commands::pinned_role_models(home);
     }
 }
 

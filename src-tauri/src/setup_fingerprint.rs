@@ -10,6 +10,7 @@ use crate::artifact_registry::{ArtifactId, ArtifactKind};
 use crate::commands::cursor_profile::cursor_root;
 use crate::commands::{
     extract_managed_codex_config, extract_managed_opencode_config, render_expected_opencode_config,
+    with_recorded_role_models, without_user_role_models, AppRoleModels,
 };
 use crate::skill_sources::SourceRoot;
 pub const ABSENT_DIGEST: &str = crate::stable_digest::ABSENT;
@@ -333,10 +334,13 @@ pub(crate) fn read_user_config(path: &Path, what: &str) -> Result<String, String
     String::from_utf8(bytes).map_err(|_| format!("the {what} is not valid UTF-8"))
 }
 
-/// Hash managed content from an on-disk artifact path (backup or installed).
+/// Hash managed content from an on-disk artifact path (backup or installed). `workspace_root`
+/// and `home` say which role models of `opencode.json` are the app's (see [`AppRoleModels`]).
 pub fn artifact_installed_managed_digest_from_path(
     artifact: &ArtifactId,
     path: &Path,
+    workspace_root: &Path,
+    home: &Path,
 ) -> Result<String, String> {
     if artifact.is_rules_block() {
         // The block body when the file has one; a pre-block file or an
@@ -374,10 +378,13 @@ pub fn artifact_installed_managed_digest_from_path(
             if !path.is_file() {
                 return Ok(ABSENT_DIGEST.into());
             }
-            let installed_str = read_user_config(path, "OpenCode opencode.json")?;
-            let installed_json: serde_json::Value = serde_json::from_str(&installed_str)
-                .map_err(|_| "the OpenCode opencode.json is not valid JSON".to_string())?;
-            hash_json_value(&extract_managed_opencode_config(&installed_json))
+            let installed_json = read_opencode_config(path)?;
+            // The user's own role models are not the app's: they never count as drift.
+            let app = AppRoleModels::load(Some(workspace_root), home);
+            hash_json_value(&extract_managed_opencode_config(&without_user_role_models(
+                &installed_json,
+                &app,
+            )))
         }
         ArtifactKind::ConfigFile if artifact == &ArtifactId::CodexConfig => {
             if !path.is_file() {
@@ -429,9 +436,43 @@ pub fn artifact_installed_managed_digest(
     let dest = artifact.resolve_dest(home, workspace_root)?;
     if artifact == &ArtifactId::OpenCodePlaywrightMcp {
         let playwright_dest = opencode_playwright_mcp_dest(home);
-        return artifact_installed_managed_digest_from_path(artifact, &playwright_dest);
+        return artifact_installed_managed_digest_from_path(
+            artifact,
+            &playwright_dest,
+            workspace_root,
+            home,
+        );
     }
-    artifact_installed_managed_digest_from_path(artifact, &dest)
+    artifact_installed_managed_digest_from_path(artifact, &dest, workspace_root, home)
+}
+
+fn read_opencode_config(path: &Path) -> Result<serde_json::Value, String> {
+    let installed_str = read_user_config(path, "OpenCode opencode.json")?;
+    serde_json::from_str(&installed_str)
+        .map_err(|_| "the OpenCode opencode.json is not valid JSON".to_string())
+}
+
+/// Whether the record of `opencode.json` still holds for the installed file although its
+/// managed digest differs: a record from an older version digested every role model, and a role
+/// model the user changed after the override stopped pinning it is theirs now, not a change of
+/// what the app manages.
+pub(crate) fn opencode_record_holds(workspace_root: &Path, home: &Path, recorded: &str) -> bool {
+    let Some(installed) = ArtifactId::OpenCodeConfig
+        .resolve_dest(home, workspace_root)
+        .ok()
+        .and_then(|dest| read_opencode_config(&dest).ok())
+    else {
+        return false;
+    };
+    let app = AppRoleModels::load(Some(workspace_root), home);
+    let holds = |config: &serde_json::Value| {
+        hash_json_value(&extract_managed_opencode_config(config)).is_ok_and(|d| d == recorded)
+    };
+    holds(&installed)
+        || holds(&without_user_role_models(
+            &with_recorded_role_models(&installed, &app),
+            &app,
+        ))
 }
 
 /// Hash installed full-file or full-directory content for rollback safety.
@@ -711,15 +752,24 @@ mod tests {
             &toml_path,
             "model = \"x\"\n[mcp_servers.gh.env]\nGITHUB_TOKEN = \"FAKE-SECRET-VALUE-123\" oops\n",
         );
-        let err = artifact_installed_managed_digest_from_path(&ArtifactId::CodexConfig, &toml_path)
-            .unwrap_err();
+        let err = artifact_installed_managed_digest_from_path(
+            &ArtifactId::CodexConfig,
+            &toml_path,
+            &dir,
+            &dir,
+        )
+        .unwrap_err();
         assert!(!err.contains("FAKE-SECRET"), "{err}");
         assert_eq!(err, "the Codex config.toml is not valid TOML");
         let json_path = dir.join("opencode.json");
         write(&json_path, "{\"token\": \"FAKE-SECRET-VALUE-123\" oops}");
-        let err =
-            artifact_installed_managed_digest_from_path(&ArtifactId::OpenCodeConfig, &json_path)
-                .unwrap_err();
+        let err = artifact_installed_managed_digest_from_path(
+            &ArtifactId::OpenCodeConfig,
+            &json_path,
+            &dir,
+            &dir,
+        )
+        .unwrap_err();
         assert!(
             !err.contains("FAKE-SECRET") && !err.contains("line"),
             "{err}"
@@ -735,17 +785,26 @@ mod tests {
         }
         let toml_path = dir.join("config.toml");
         write(&toml_path, &big);
-        let err = artifact_installed_managed_digest_from_path(&ArtifactId::CodexConfig, &toml_path)
-            .unwrap_err();
+        let err = artifact_installed_managed_digest_from_path(
+            &ArtifactId::CodexConfig,
+            &toml_path,
+            &dir,
+            &dir,
+        )
+        .unwrap_err();
         assert_eq!(err, "the Codex config.toml is larger than 1 MiB");
         let json_path = dir.join("opencode.json");
         write(
             &json_path,
             &format!("{{\"a\": \"{}\"}}", "x".repeat(big.len())),
         );
-        let err =
-            artifact_installed_managed_digest_from_path(&ArtifactId::OpenCodeConfig, &json_path)
-                .unwrap_err();
+        let err = artifact_installed_managed_digest_from_path(
+            &ArtifactId::OpenCodeConfig,
+            &json_path,
+            &dir,
+            &dir,
+        )
+        .unwrap_err();
         assert_eq!(err, "the OpenCode opencode.json is larger than 1 MiB");
         let _ = fs::remove_dir_all(&dir);
     }
