@@ -390,7 +390,7 @@ UI = (
         "the Library document preview must have its scoped reading styles",
         ".lib-docs-markdown {",
     ),
-    # The shipped UI is offline-first: fonts are vendored and nothing loads from a remote origin.
+    # The shipped UI is offline-first: system font stacks only; nothing loads from a remote origin, fonts included.
     Rule(
         "remote-urls",
         "forbid",
@@ -399,7 +399,15 @@ UI = (
         "index.html and styles must not reference remote URLs",
         '@import url("https://fonts.example.com/inter.css");',
     ),
-    Rule("vendored-font", "require", r"@font-face", STYLES, "the vendored UI font must be declared with @font-face", "@font-face {"),
+    Rule(
+        "remote-font-face",
+        "forbid",
+        r"@font-face[^}]*url\(\s*[\"']?(?:https?:)?//",
+        STYLES,
+        "no remote fonts: use system font stacks (a local @font-face is allowed)",
+        "@font-face { src: url(//fonts.example.com/inter.woff2); }",
+        whole_file=True,
+    ),
     Rule(
         "reduced-motion",
         "require",

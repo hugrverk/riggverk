@@ -9,7 +9,7 @@
      .setting-color                     colour override: swatch, hex field, Default button
      .sv, .sv-mark                      a state word led by a hollow ring in its hue (autosave, rejected hex, reset result)
 
-   Radius 0, 1px hairlines, system sans for labels and values, IBM Plex Mono for section labels and hex codes, no ochre.
+   Radius 0, 1px hairlines, system sans for labels and values, the system mono (SF Mono) for section labels and hex codes, no ochre.
    Interactive states are weight, fill and rings, never colour alone. Motion is a short colour/transform fade, which
    `subtle` keeps as a fade and `off` removes (global rules in _tokens.scss). */
 
