@@ -158,6 +158,56 @@ describe("useAppSettingsController autosave", () => {
     expect(result.current.settingsSaveStatus).toBe("saved");
   });
 
+  it("flushSettings writes an edit that is still inside the autosave delay, and has nothing to do when clean", async () => {
+    mockInitialLoad();
+    const { result } = renderHook(() => useAppSettingsController(createDeps()));
+    await act(async () => {
+      await result.current.loadSettings();
+    });
+    invoke.mockImplementation((cmd: string, args?: { settings?: AppSettings }) => {
+      if (cmd === "update_settings") return Promise.resolve({ ...args?.settings, revision: 2 });
+      return Promise.reject(new Error(`unexpected invoke: ${cmd}`));
+    });
+    let flushed: boolean | null = null;
+    await act(async () => {
+      flushed = await result.current.flushSettings();
+    });
+    expect(flushed).toBe(true);
+    expect(invoke.mock.calls.filter(([cmd]) => cmd === "update_settings")).toHaveLength(0);
+
+    await act(async () => {
+      result.current.setAppFontSize("large");
+    });
+    // 100 ms in: the 600 ms delay has not fired.
+    await advance(100);
+    expect(invoke.mock.calls.filter(([cmd]) => cmd === "update_settings")).toHaveLength(0);
+    await act(async () => {
+      flushed = await result.current.flushSettings();
+    });
+    expect(flushed).toBe(true);
+    const updates = invoke.mock.calls.filter(([cmd]) => cmd === "update_settings");
+    expect(updates).toHaveLength(1);
+    expect(updates[0][1].settings.app_font_size).toBe("large");
+    expect(result.current.settingsSaveStatus).toBe("saved");
+  });
+
+  it("flushSettings says no when the write fails", async () => {
+    mockInitialLoad();
+    const { result } = renderHook(() => useAppSettingsController(createDeps()));
+    await act(async () => {
+      await result.current.loadSettings();
+    });
+    invoke.mockImplementation((cmd: string) => Promise.reject(new Error(`${cmd} failed`)));
+    await act(async () => {
+      result.current.setAppFontSize("large");
+    });
+    let flushed: boolean | null = null;
+    await act(async () => {
+      flushed = await result.current.flushSettings();
+    });
+    expect(flushed).toBe(false);
+  });
+
   it("advances the revision when the user keeps editing during an in-flight save", async () => {
     mockInitialLoad();
     const { result } = renderHook(() => useAppSettingsController(createDeps()));

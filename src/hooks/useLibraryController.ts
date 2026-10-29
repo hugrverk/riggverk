@@ -190,9 +190,9 @@ export function useLibraryController({
    * The one leave guard of the Library, for everything that would drop the open draft (another item, another topic,
    * closing the sheet, leaving the page). With nothing unsaved it says yes at once. Otherwise it asks:
    * Discard drops the draft, Save and continue writes it first, Keep editing stays. Resolves true when the caller may
-   * go on, and the draft is then already settled.
+   * go on, and the draft is then already settled. `confirmLabel` words the save answer for the way out ("Save and quit").
    */
-  const confirmLeave = useCallback(async (): Promise<boolean> => {
+  const confirmLeave = useCallback(async (confirmLabel = "Save and continue"): Promise<boolean> => {
     if (!docDirtyRef.current && !rulesDirtyRef.current && !skillDirtyRef.current) return true;
     const name = docDirtyRef.current ? activeDoc?.title : rulesDirtyRef.current ? activeRulesFile?.label : activeSkillContent?.title;
     const choice = await choose({
@@ -200,7 +200,7 @@ export function useLibraryController({
       message: `${name ?? "This item"} has changes you have not saved.`,
       alternateLabel: "Discard",
       cancelLabel: "Keep editing",
-      confirmLabel: "Save and continue",
+      confirmLabel,
     });
     if (choice === "cancel") return false;
     if (choice === "alternate") {

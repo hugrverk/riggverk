@@ -854,6 +854,15 @@ describe("useLibraryController leaving with unsaved changes", () => {
     expect(result.current.libraryDirty).toBe(false);
   });
 
+  it("words the save answer for the way out when the caller says so", async () => {
+    const result = await openEditedDoc();
+    choose.mockResolvedValue("cancel");
+    await act(async () => {
+      await result.current.confirmLeave("Save and quit");
+    });
+    expect(choose).toHaveBeenCalledWith(expect.objectContaining({ confirmLabel: "Save and quit", alternateLabel: "Discard", cancelLabel: "Keep editing" }));
+  });
+
   it("stays when the save of Save and continue fails", async () => {
     const result = await openEditedDoc();
     choose.mockResolvedValue("confirm");
