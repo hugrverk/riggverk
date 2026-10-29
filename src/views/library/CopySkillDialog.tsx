@@ -34,10 +34,15 @@ export function CopySkillDialog({ source, name, problem, error, creating, onChan
     inputRef.current?.select();
   }, []);
 
+  // The copy under way cannot be called off from here: closing would hide its outcome.
+  const close = () => {
+    if (!creating) onClose();
+  };
+
   const onKeyDown = (event: KeyboardEvent<HTMLDialogElement>) => {
     if (event.key !== "Escape" || event.nativeEvent.isComposing) return;
     event.preventDefault();
-    onClose();
+    close();
   };
 
   const submit = (event: FormEvent) => {
@@ -54,7 +59,7 @@ export function CopySkillDialog({ source, name, problem, error, creating, onChan
       onKeyDown={onKeyDown}
       onCancel={event => {
         event.preventDefault();
-        onClose();
+        close();
       }}
     >
       <form onSubmit={submit}>
@@ -85,7 +90,7 @@ export function CopySkillDialog({ source, name, problem, error, creating, onChan
         </div>
         <div className="app-modal-footer">
           <span className="tbtn-row">
-            <TButton keys={[]} onClick={onClose}>Cancel</TButton>
+            <TButton keys={[]} onClick={close} disabled={creating ? "creating the copy" : false}>Cancel</TButton>
             <button type="submit" className="tbtn tbtn-primary" aria-disabled={creating || name === "" || problem !== "" || undefined}>
               <span className="tbtn-label">{creating ? "Creating…" : "Create copy"}</span>
             </button>

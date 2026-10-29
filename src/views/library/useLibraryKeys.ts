@@ -177,7 +177,8 @@ export function useLibraryKeys({
   const onRootKeyDown = (event: ReactKeyboardEvent<HTMLElement>) => {
     if (event.defaultPrevented || event.altKey || event.shiftKey || !(event.metaKey || event.ctrlKey)) return;
     const key = event.key.toLowerCase();
-    if (sheetOpen || event.nativeEvent.isComposing) return;
+    // Not while a dialog is up: Mod+N typed in "New doc" must not start another one, and the sheet has its own keys.
+    if (sheetOpen || event.nativeEvent.isComposing || document.querySelector("dialog[open]")) return;
     if (key === "f") {
       event.preventDefault();
       focusSearch();

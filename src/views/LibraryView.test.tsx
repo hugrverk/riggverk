@@ -34,6 +34,11 @@ interface Fixture {
   personalSkills: Map<string, string>;
   /** When set, copy_skill_to_pack refuses with this reason. */
   refuseCopy: string | null;
+  /** When set, copy_skill_to_pack answers only once this promise settles. */
+  holdCopy: Promise<void> | null;
+  packListFails: boolean;
+  /** A copy turns packListFails on. */
+  packListFailsAfterCopy: boolean;
 }
 
 function skill(id: string, description: string, extra: Partial<SkillSummary> = {}): SkillSummary {
@@ -101,6 +106,9 @@ function freshFixture(): Fixture {
     },
     personalSkills: new Map([["pack:personal/my-notes", "---\nname: my-notes\n---\n\n# my-notes\n\nMy first text."]]),
     refuseCopy: null,
+    holdCopy: null,
+    packListFails: false,
+    packListFailsAfterCopy: false,
   };
 }
 
@@ -147,14 +155,17 @@ function installBackend() {
       case "list_skills":
         return Promise.resolve(BUNDLED_SKILLS);
       case "list_pack_skills":
-        return Promise.resolve(fixture.packs);
+        return fixture.packListFails ? Promise.reject(new Error("packs cannot be listed")) : Promise.resolve(fixture.packs);
       case "copy_skill_to_pack": {
         const newName = args!.newName as string;
         if (fixture.refuseCopy) return Promise.reject(fixture.refuseCopy);
         const id = `pack:personal/${newName}`;
         fixture.personalSkills.set(id, `---\nname: ${newName}\n---\n\n# ${newName}\n\nCopied from ${args!.name as string}.`);
         fixture.packs.skills.push({ id, name: newName, description: "A copy.", pack: "personal", state: "active", reason: "", path: `skills/${newName}/SKILL.md` });
-        return Promise.resolve({ id, name: newName, pack: "personal", path: `~/packs/personal/skills/${newName}/SKILL.md` });
+        const made = { id, name: newName, pack: "personal", path: `~/packs/personal/skills/${newName}/SKILL.md` };
+        // Listing the packs fails from here on, as in a copy made while the pack folder cannot be read.
+        if (fixture.packListFailsAfterCopy) fixture.packListFails = true;
+        return fixture.holdCopy ? fixture.holdCopy.then(() => made) : Promise.resolve(made);
       }
       case "save_pack_skill": {
         const id = args!.id as string;
@@ -801,6 +812,33 @@ describe("Library skills of your own", () => {
     expect(callsTo("save_pack_skill")).toEqual([]);
   });
 
+  it("opens a fresh copy for editing even when the pack list could not be read afterwards", async () => {
+    fixture.packListFailsAfterCopy = true;
+    await renderLibrary({ topic: "skills" });
+    const dialog = await openCopyDialog();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Create copy" }));
+    const sheet = await screen.findByRole("dialog", { name: /tdd-mine/ });
+    expect(await within(sheet).findByRole("textbox", { name: "Edit skill" })).toBeTruthy();
+    expect(within(sheet).queryByRole("button", { name: "Edit as my copy" })).toBeNull();
+  });
+
+  it("cannot be closed while the copy is being made", async () => {
+    let finish: () => void = () => {};
+    fixture.holdCopy = new Promise<void>(resolve => {
+      finish = resolve;
+    });
+    await renderLibrary({ topic: "skills" });
+    const dialog = await openCopyDialog();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Create copy" }));
+    await within(dialog).findByText("Creating…");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    expect(screen.getByRole("dialog", { name: "Edit as my copy" })).toBeTruthy();
+    await act(async () => finish());
+    expect(await screen.findByRole("dialog", { name: /tdd-mine/ })).toBeTruthy();
+    expect(screen.queryByRole("dialog", { name: "Edit as my copy" })).toBeNull();
+  });
+
   it("keeps the other pack skills read-only, with their reason", async () => {
     await renderLibrary({ topic: "skills" });
     fireEvent.click(within(rowOf("my-checklist")).getByRole("button", { name: "Read" }));
@@ -831,6 +869,19 @@ describe("Library new doc", () => {
     const textarea = await within(sheet).findByRole("textbox", { name: "Edit document" });
     expect((textarea as HTMLTextAreaElement).value).toBe("# Release ritual\n");
     expect(screen.queryByRole("dialog", { name: "New doc" })).toBeNull();
+  });
+
+  it("leaves the title alone when Mod+N is pressed inside the dialog", async () => {
+    await renderLibrary();
+    await goToTopic("Docs");
+    fireEvent.click(screen.getByRole("button", { name: "New doc" }));
+    const dialog = await screen.findByRole("dialog", { name: "New doc" });
+    const title = within(dialog).getByRole("textbox", { name: "Title" }) as HTMLInputElement;
+    fireEvent.change(title, { target: { value: "Release ritual" } });
+    fireEvent.keyDown(title, { key: "n", ctrlKey: true });
+    await act(async () => {});
+    expect(title.value).toBe("Release ritual");
+    expect(document.activeElement).toBe(title);
   });
 
   it("closes on Cancel without creating anything", async () => {

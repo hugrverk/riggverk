@@ -200,7 +200,7 @@ function skillEntry(props: LibraryViewProps, id: string): LibraryEntry | null {
   if (skill) {
     meta.push(...listItems("targets", skill.targets), ...listItems("related", skill.related));
   }
-  const fromPack = skill?.packState !== undefined;
+  const fromPack = skill?.packState !== undefined || content.id.startsWith("pack:");
   if (isPersonalSkill(content.id, skill)) {
     return {
       kind: "skill",

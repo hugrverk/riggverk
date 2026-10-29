@@ -324,6 +324,7 @@ export function LibraryView(props: LibraryViewProps) {
   };
 
   const closeCopy = () => {
+    if (copy?.busy) return;
     setCopy(null);
     const opener = copyOpenerRef.current;
     copyOpenerRef.current = null;
