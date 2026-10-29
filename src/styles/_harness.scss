@@ -57,6 +57,12 @@
   gap: 12px 24px;
 }
 
+/* The title block may shrink (its subline wraps) so the actions stay on the title line when they fit. */
+.hp-head > :first-child {
+  flex: 1 1 22rem;
+  min-width: 0;
+}
+
 .hp-title {
   margin: 0;
   max-width: 36ch;
@@ -85,6 +91,8 @@
   flex-wrap: wrap;
   gap: 8px;
   padding-top: 4px;
+  /* When they wrap below the subline, the row keeps the page rhythm before the alert or the grid. */
+  margin-bottom: 16px;
 }
 
 /* ---- notes above the grid ---- */
