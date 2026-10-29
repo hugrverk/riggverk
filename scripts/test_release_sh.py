@@ -8,6 +8,7 @@ and ditto, so nothing real is built, pushed or uploaded. A dry run must also lea
 from __future__ import annotations
 
 import datetime
+import json
 import os
 import re
 import shutil
@@ -88,6 +89,8 @@ class ReleaseShTests(unittest.TestCase):
         self.set_versions("0.1.0")
         self.python("scripts/generate-release-notes.py", "--write")
         (self.repo / "node_modules").mkdir()
+        # What npm ci records: the locked packages, as installed.
+        shutil.copy(self.repo / "package-lock.json", self.repo / "node_modules/.package-lock.json")
         (self.repo / ".git/info/exclude").write_text("node_modules\n")
         self.git("add", ".")
         self.git("commit", "-q", "-m", "root")
@@ -150,6 +153,10 @@ class ReleaseShTests(unittest.TestCase):
 
     def merge_release_pr(self, version: str) -> None:
         """What a merged release PR leaves on main: bumped files, the notes and the bundle."""
+        self.commit_release_branch(version)
+        self.merge_release_branch(version)
+
+    def commit_release_branch(self, version: str) -> None:
         self.set_versions(version)
         notes = self.python("scripts/release_tools.py", "draft-notes", "--version", version)
         (self.repo / "release-notes").mkdir()
@@ -159,6 +166,8 @@ class ReleaseShTests(unittest.TestCase):
         self.git("add", ".")
         self.git("commit", "-q", "-m", f"chore(release): {version}")
         self.git("switch", "-q", "main")
+
+    def merge_release_branch(self, version: str) -> None:
         self.git(
             "merge", "-q", "--no-ff", f"release/v{version}",
             "-m", f"Merge pull request #9 from o/release/v{version}", "-m", f"chore(release): {version}",
@@ -295,6 +304,50 @@ class ReleaseShTests(unittest.TestCase):
         self.assertEqual(refused.returncode, 1)
         self.assertIn("main does not end with the release PR", refused.stderr)
         self.assertEqual(allowed.returncode, 0, allowed.stderr)
+
+    def test_publish_refuses_a_pr_merged_between_the_release_commit_and_its_merge(self) -> None:
+        self.commit_release_branch(NEXT)
+        self.merge(10, "fix/meanwhile", "fix(app): merged while the release PR was open")
+        self.merge_release_branch(NEXT)
+
+        refused = self.release("publish", "--dry-run")
+        allowed = self.release("publish", "--dry-run", "--allow-newer")
+
+        self.assertEqual(refused.returncode, 1)
+        self.assertIn("main has changes merged after the release commit", refused.stderr)
+        self.assertIn("Merge pull request #10", refused.stderr)
+        self.assertEqual(allowed.returncode, 0, allowed.stderr)
+
+    def test_publish_refuses_a_release_branch_updated_from_main(self) -> None:
+        self.commit_release_branch(NEXT)
+        self.merge(10, "fix/meanwhile", "fix(app): merged while the release PR was open")
+        self.git("switch", "-q", f"release/v{NEXT}")
+        self.git("merge", "-q", "--no-ff", "main", "-m", "Merge remote-tracking branch 'origin/main' into HEAD")
+        self.git("switch", "-q", "main")
+        self.merge_release_branch(NEXT)
+
+        refused = self.release("publish", "--dry-run")
+
+        self.assertEqual(refused.returncode, 1)
+        self.assertIn("main has changes merged after the release commit", refused.stderr)
+
+    def test_publish_refuses_a_node_modules_that_is_not_the_lock(self) -> None:
+        self.merge_release_pr(NEXT)
+        hidden = self.repo / "node_modules/.package-lock.json"
+        locked = json.loads(hidden.read_text())
+        name = next(name for name, entry in locked["packages"].items() if name and not entry.get("optional"))
+        locked["packages"][name]["version"] = "0.0.0-stale"
+        hidden.write_text(json.dumps(locked))
+
+        stale = self.release("publish", "--dry-run")
+        hidden.unlink()
+        missing = self.release("publish", "--dry-run")
+
+        self.assertEqual(stale.returncode, 1)
+        self.assertIn(f"{name} is 0.0.0-stale", stale.stderr)
+        self.assertIn("node_modules is not what package-lock.json locks", stale.stderr)
+        self.assertEqual(missing.returncode, 1)
+        self.assertIn("node_modules has no .package-lock.json", missing.stderr)
 
     def test_publish_refuses_stale_bundled_notes(self) -> None:
         self.merge_release_pr(NEXT)

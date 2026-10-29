@@ -11,6 +11,7 @@ Usage (tags are read from stdin, one per line):
   python3 scripts/release_tools.py draft-notes --version VERSION [--base REV] [--head REV]
   python3 scripts/release_tools.py set-version VERSION
   python3 scripts/release_tools.py check-versions [--expect VERSION]
+  python3 scripts/release_tools.py check-node-modules
 """
 
 from __future__ import annotations
@@ -228,6 +229,38 @@ def check_versions(expect: str | None = None, root: Path = ROOT) -> str:
     return version
 
 
+def check_node_modules(root: Path = ROOT) -> None:
+    """Refuse a node_modules that is not what package-lock.json locks.
+
+    npm records what it installed in node_modules/.package-lock.json. Every locked package must be there at
+    its locked version, except optional ones npm skips on this platform, and nothing else may be.
+    """
+    hidden_path = root / "node_modules" / ".package-lock.json"
+    if not hidden_path.is_file():
+        raise ReleaseError("node_modules has no .package-lock.json; run npm ci")
+    locked = {
+        name: entry
+        for name, entry in json.loads((root / PACKAGE_LOCK).read_text(encoding="utf-8")).get("packages", {}).items()
+        if name
+    }
+    installed = {
+        name: entry
+        for name, entry in json.loads(hidden_path.read_text(encoding="utf-8")).get("packages", {}).items()
+        if name
+    }
+    problems = []
+    for name, entry in sorted(locked.items()):
+        if name not in installed:
+            if not (entry.get("optional") or entry.get("devOptional")):
+                problems.append(f"{name} is missing")
+        elif installed[name].get("version") != entry.get("version"):
+            problems.append(f"{name} is {installed[name].get('version')}, locked {entry.get('version')}")
+    problems.extend(f"{name} is not in the lock" for name in sorted(set(installed) - set(locked)))
+    if problems:
+        shown = "; ".join(problems[:5]) + (f"; and {len(problems) - 5} more" if len(problems) > 5 else "")
+        raise ReleaseError(f"node_modules does not match package-lock.json ({shown}); run npm ci")
+
+
 # ── CLI ──
 
 
@@ -251,6 +284,7 @@ def main() -> int:
     setter.add_argument("version")
     checker = sub.add_parser("check-versions")
     checker.add_argument("--expect")
+    sub.add_parser("check-node-modules")
     args = parser.parse_args()
 
     try:
@@ -267,6 +301,8 @@ def main() -> int:
             sys.stdout.write(draft_notes(args.version, pr_entries(git_log(args.base, args.head))))
         elif args.command == "set-version":
             set_version(args.version)
+        elif args.command == "check-node-modules":
+            check_node_modules()
         else:
             print(check_versions(args.expect))
     except (ReleaseError, ValueError) as error:
