@@ -969,7 +969,7 @@ fn apply_single_artifact(
             true,
         );
         if !result.success {
-            return Err(format!("Cursor MCP create failed: {}", result.stderr));
+            return Err(format!("Cursor MCP merge failed: {}", result.stderr));
         }
         return Ok(());
     }
@@ -5644,6 +5644,108 @@ mod tests {
             .keys()
             .map(String::as_str)
             .collect()
+    }
+
+    /// Only the entry the app inserts is scanned for credentials: another server of the user's
+    /// with a token in `env`, or any word holding `sk-`, neither fails the apply nor is changed.
+    #[test]
+    fn cursor_mcp_merge_never_scans_the_users_other_servers() {
+        for (label, content) in [
+            (
+                "token",
+                r#"{"mcpServers":{"github":{"command":"gh-mcp","env":{"GITHUB_TOKEN":"abc123"}}}}"#,
+            ),
+            (
+                "disk",
+                r#"{"mcpServers":{"fs":{"command":"fs-mcp","args":["--disk-cache"]}}}"#,
+            ),
+        ] {
+            let env = TempSetupEnv::new(&format!("cursor-mcp-user-{label}"));
+            let path = seed_cursor_mcp(&env, content);
+            let planned = env.plan(&[SetupSurfaceId::CursorMcp]);
+            assert_eq!(planned[0].kind, OperationKind::Update, "{label}");
+
+            let result = apply_cursor_mcp();
+            assert!(result.success, "{label}: {}", result.message);
+            let before: serde_json::Value = serde_json::from_str(content).unwrap();
+            let after: serde_json::Value =
+                serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+            let user_server = server_names(&before)[0];
+            assert_eq!(
+                after["mcpServers"][user_server], before["mcpServers"][user_server],
+                "{label}"
+            );
+            assert!(after["mcpServers"]["playwright"].is_object(), "{label}");
+        }
+    }
+
+    #[test]
+    fn a_user_server_with_a_token_does_not_roll_back_the_rest_of_the_install() {
+        let env = TempSetupEnv::new("cursor-mcp-user-token-whole");
+        seed_cursor_mcp(
+            &env,
+            r#"{"mcpServers":{"fs":{"command":"fs-mcp","args":["--disk-cache"]}}}"#,
+        );
+        let surfaces = vec!["claude_rules".to_string(), "cursor_mcp".to_string()];
+        let plan = preview_setup(surfaces.clone()).expect("preview");
+        let result = apply_setup(
+            surfaces,
+            true,
+            plan.plan_fingerprint.clone(),
+            plan.preview_token.clone(),
+        )
+        .expect("apply");
+        assert!(result.success, "{}", result.message);
+        assert!(env.home.join(".claude/CLAUDE.md").is_file());
+    }
+
+    /// A `playwright` entry of the user's own that differs from the app's, without a record that
+    /// the app wrote it, is a conflict and stays as it is (as for Copilot, Pi and Kilo).
+    #[test]
+    fn a_differing_cursor_playwright_entry_without_a_record_is_a_conflict() {
+        let env = TempSetupEnv::new("cursor-mcp-own-playwright");
+        let content = r#"{"mcpServers":{"playwright":{"command":"npx","args":["@playwright/mcp@latest","--headless"]}}}"#;
+        let path = seed_cursor_mcp(&env, content);
+
+        let planned = env.plan(&[SetupSurfaceId::CursorMcp]);
+        assert_eq!(planned.len(), 1, "{planned:?}");
+        assert_eq!(planned[0].kind, OperationKind::Conflict);
+        assert_eq!(
+            planned[0].previous_state,
+            setup_transaction::PreviousState::Conflict
+        );
+
+        let plan = preview_setup(vec!["cursor_mcp".into()]).expect("preview");
+        if !plan.is_blocked {
+            let _ = apply_setup(
+                vec!["cursor_mcp".into()],
+                true,
+                plan.plan_fingerprint.clone(),
+                plan.preview_token.clone(),
+            );
+        }
+        assert_eq!(fs::read_to_string(&path).unwrap(), content);
+    }
+
+    /// The transaction backs `mcp.json` up; the apply makes no second, untracked copy beside it.
+    #[test]
+    fn cursor_mcp_apply_backs_the_file_up_only_in_its_transaction() {
+        let env = TempSetupEnv::new("cursor-mcp-one-backup");
+        seed_cursor_mcp(&env, CURSOR_USER_MCP);
+
+        let result = apply_cursor_mcp();
+        assert!(result.success, "{}", result.message);
+
+        let root = backup_root().expect("backup root");
+        let runs: Vec<String> = fs::read_dir(&root)
+            .expect("backup root")
+            .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(runs, vec!["setup".to_string()], "{runs:?}");
+        let copies = fs::read_dir(env.setup_root().join(&result.transaction_id))
+            .expect("transaction backup")
+            .count();
+        assert!(copies > 0, "the transaction holds the backup");
     }
 
     #[test]
