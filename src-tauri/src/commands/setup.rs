@@ -2853,13 +2853,12 @@ pub fn apply_setup(
     let settings = crate::settings::load();
     let surface_ids = gate_requested_surfaces(surface_ids, &settings)?;
     if surface_ids.is_empty() {
-        // Every requested surface is target-disabled: nothing to apply.
-        let plan = crate::setup_lifecycle::empty_plan();
-        return Ok(apply_setup_plan_with_token(
-            &plan,
-            None,
-            &mut ProgressReporter::silent(),
-        ));
+        // Every reviewed surface was target-disabled after the preview. The fingerprint and token
+        // cannot be verified for an empty scope, so no result may claim they were.
+        return Err(
+            "Plan changed: every reviewed target is now disabled. Re-run preview before applying."
+                .to_string(),
+        );
     }
 
     // The first mutation takes the layout migration step before anything is read for the apply.
@@ -5564,13 +5563,18 @@ mod tests {
     }
 
     #[test]
-    fn apply_with_only_target_disabled_surfaces_is_a_no_op() {
+    fn apply_with_only_target_disabled_surfaces_asks_for_a_new_preview() {
         let env = TempSetupEnv::new("gate-apply");
         disable_targets(&["cursor_setup"]);
-        let result = apply_setup(vec!["cursor_mcp".into()], false, None, None)
-            .expect("apply must not fail for gated-out surfaces");
-        assert!(result.success);
-        assert!(result.applied.is_empty());
+        // Even with a fingerprint and token from an earlier preview: the reviewed scope is gone.
+        let err = apply_setup(
+            vec!["cursor_mcp".into()],
+            false,
+            Some("a".repeat(64)),
+            Some("token".into()),
+        )
+        .expect_err("a scope emptied by gating must not report a successful apply");
+        assert!(err.contains("Re-run preview"), "error: {err}");
         assert!(
             !env.home.join(".cursor").exists(),
             "a disabled target must not be written"

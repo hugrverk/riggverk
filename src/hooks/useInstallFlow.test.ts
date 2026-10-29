@@ -655,6 +655,7 @@ describe("classifyApplyError", () => {
     ["Plan fingerprint mismatch: state changed after preview. Re-run preview before applying.", "stale"],
     ["Plan fingerprint required. Re-run preview before applying.", "stale"],
     ["Preview token required. Re-run preview before applying.", "stale"],
+    ["Plan changed: every reviewed target is now disabled. Re-run preview before applying.", "stale"],
     ["preview token fingerprint mismatch", "stale"],
     ["preview token scope mismatch", "stale"],
     ["preview token expired", "expired"],
