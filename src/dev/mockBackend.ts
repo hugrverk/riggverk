@@ -2143,14 +2143,10 @@ async function handlePersonalPackWrites(cmd: string, args: Args): Promise<unknow
     personalPackDocuments.set(id, { id, title: name, path: skill.path, section: "pack:personal", source: "pack", content });
     return actionResult("save_pack_skill", true, previous?.content === content ? "unchanged" : "saved with backup");
   }
-  if (cmd === "read_pack_skill" || cmd === "read_skill") {
+  if (cmd === "read_skill") {
     const id = arg<string>(args, "id");
     const skill = packLibrary.skills.find(skill => skill.id === id);
     if (skill && personalPackDocuments.has(id)) return personalPackDocuments.get(id);
-    if (cmd === "read_pack_skill") {
-      if (!skill) throw new Error("unknown pack skill");
-      return handle("read_skill", args);
-    }
   }
   return handle(cmd, args);
 }

@@ -18,7 +18,7 @@ mod tests {
         apply_setup, apply_uninstall, preview_setup, preview_uninstall, rollback_setup_transaction,
         SetupResult,
     };
-    use crate::commands::{copy_skill_to_pack, read_pack_skill, save_pack_skill};
+    use crate::commands::{copy_skill_to_pack, read_skill, save_pack_skill};
     use crate::managed_state::{artifact_identity, read_managed_state};
     use crate::setup_lifecycle::{OperationKind, SetupPlan, SetupSurfaceId};
     use crate::setup_transaction::{plan_artifacts_for_surfaces, PlannedArtifact};
@@ -1564,7 +1564,7 @@ mod tests {
             content
         );
         assert_eq!(
-            read_pack_skill(copied.id.clone())
+            read_skill(copied.id.clone())
                 .expect("read after save")
                 .content,
             content

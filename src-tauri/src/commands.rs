@@ -58,9 +58,7 @@ pub use opencode_runtime::{
     get_opencode_runtime_health, list_available_opencode_models, read_opencode_model_selection,
     reset_opencode_model_selection, update_opencode_model_selection,
 };
-pub use packs::{
-    copy_skill_to_pack, forget_pack, list_pack_skills, read_pack_skill, save_pack_skill,
-};
+pub use packs::{copy_skill_to_pack, forget_pack, list_pack_skills, save_pack_skill};
 pub use rules::{
     apply_rules_conversion, preview_rules_conversion, preview_rules_diff, set_rules_user_managed,
 };
