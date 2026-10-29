@@ -580,7 +580,11 @@ export function useLibraryController({
     setDocSaving(true);
     setDocSaveResult(null);
     try {
-      const result = await invoke<ActionResult>("save_doc", { id: docId, content: docDraft });
+      const result = await invoke<ActionResult>("save_doc", {
+        id: docId,
+        content: docDraft,
+        expectedRevision: activeDoc.revision,
+      });
       if (!docSaveOpRef.current.isCurrent(saveOpId)) return false;
       if (!isWorkspaceLoadCurrent(generation)) return false;
       if (activeDocIdRef.current !== docId) return false;
@@ -598,16 +602,27 @@ export function useLibraryController({
       }
       return result.success;
     } catch (e) {
-      if (!docSaveOpRef.current.isCurrent(saveOpId)) return false;
-      if (!isWorkspaceLoadCurrent(generation)) return false;
-      if (activeDocIdRef.current !== docId) return false;
-      setDocSaveResult({
-        success: false,
-        action: "save_doc",
-        stdout: "",
-        stderr: String(e),
-        exit_code: null,
-      });
+      const isCurrent = () =>
+        docSaveOpRef.current.isCurrent(saveOpId) &&
+        isWorkspaceLoadCurrent(generation) &&
+        activeDocIdRef.current === docId;
+      const failed = (stderr: string) =>
+        setDocSaveResult({ success: false, action: "save_doc", stdout: "", stderr, exit_code: null });
+      if (!isCurrent()) return false;
+      const message = String(e);
+      if (!message.includes(RULES_CHANGED_ON_DISK)) {
+        failed(message);
+        return false;
+      }
+      // Changed elsewhere, as for rules: show the file as it is now and keep the draft, which a second save writes.
+      try {
+        const updated = await invoke<DocumentContent>("read_doc", { id: docId });
+        if (!isCurrent()) return false;
+        setActiveDoc(updated);
+        failed("changed on disk: reloaded, save again to overwrite");
+      } catch (reloadError) {
+        if (isCurrent()) failed(String(reloadError));
+      }
       return false;
     } finally {
       setDocSaving(false);
@@ -784,7 +799,11 @@ export function useLibraryController({
     setSkillSaving(true);
     setSkillSaveResult(null);
     try {
-      const result = await invoke<ActionResult>("save_pack_skill", { id: skill.id, content: skillDraft });
+      const result = await invoke<ActionResult>("save_pack_skill", {
+        id: skill.id,
+        content: skillDraft,
+        expectedRevision: skill.revision,
+      });
       if (!isCurrent()) return false;
       setSkillSaveResult(result);
       if (!result.success) return false;
@@ -799,7 +818,23 @@ export function useLibraryController({
       return true;
     } catch (e) {
       if (!isCurrent()) return false;
-      setSkillSaveResult({ success: false, action: "save_pack_skill", stdout: "", stderr: String(e), exit_code: null });
+      const failed = (stderr: string) =>
+        setSkillSaveResult({ success: false, action: "save_pack_skill", stdout: "", stderr, exit_code: null });
+      const message = String(e);
+      if (!message.includes(RULES_CHANGED_ON_DISK)) {
+        failed(message);
+        return false;
+      }
+      // Changed elsewhere, as for rules: show the file as it is now and keep the draft, which a second save writes.
+      try {
+        const updated = await invoke<DocumentContent>("read_skill", { id: skill.id });
+        if (!isCurrent()) return false;
+        activeSkillContentIdRef.current = updated.id;
+        setActiveSkillContent(updated);
+        failed("changed on disk: reloaded, save again to overwrite");
+      } catch (reloadError) {
+        if (isCurrent()) failed(String(reloadError));
+      }
       return false;
     } finally {
       setSkillSaving(false);

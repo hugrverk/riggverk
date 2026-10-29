@@ -1,5 +1,7 @@
 export interface DocumentContent {
   id: string; title: string; path: string; section: string; source: string; content: string;
+  /** Digest of `content` for an item the Library can save; the save sends it back and is refused once the file changed. */
+  revision?: string;
 }
 
 export interface DocSummary {

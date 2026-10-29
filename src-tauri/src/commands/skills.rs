@@ -245,6 +245,7 @@ pub fn read_skill(id: String) -> Result<DocumentContent, String> {
                 path: s.path.clone(),
                 source: "curated".into(),
                 content,
+                revision: None,
             })
         }
         None => Err(format!("unknown skill: {}", id)),

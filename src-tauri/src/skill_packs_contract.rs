@@ -1464,7 +1464,7 @@ mod tests {
         env.pack_skill("team", Some("group"), "taken", "# Taken\n", &[]);
         assert!(copy_skill_to_pack("original".into(), "taken".into()).is_err());
         assert_no_copy_or_staging(&env, "taken");
-        assert!(save_pack_skill("pack:team/taken".into(), "changed\n".into()).is_err());
+        assert!(save_pack_skill("pack:team/taken".into(), "changed\n".into(), None).is_err());
         let result = env.apply();
         assert!(result.success, "{}", result.message);
         fs::remove_dir_all(env.packs().join("team")).expect("missing team pack");
@@ -1553,7 +1553,7 @@ mod tests {
         let dir = env.packs().join("personal/skills/my-original");
         let before = fs::read_to_string(dir.join("SKILL.md")).expect("previous text");
         let content = canonical_skill_text("my-original", "# Edited\n");
-        let saved = save_pack_skill(copied.id.clone(), content.clone()).expect("save");
+        let saved = save_pack_skill(copied.id.clone(), content.clone(), None).expect("save");
         assert!(saved.success);
         assert_eq!(saved.action, "save_pack_skill");
         assert_eq!(saved.stdout, "saved with backup");
@@ -1610,7 +1610,7 @@ mod tests {
             );
         }
         assert_eq!(
-            save_pack_skill(copied.id, content)
+            save_pack_skill(copied.id, content, None)
                 .expect("unchanged")
                 .stdout,
             "unchanged"
@@ -1621,6 +1621,36 @@ mod tests {
             "unchanged saves make no backup"
         );
         assert_eq!(files_below(&dir).len(), 2, "no temporary file remains");
+    }
+
+    #[test]
+    fn library_save_refuses_a_personal_skill_changed_on_disk_since_it_was_read() {
+        let env = Env::personal_copy("save-revision");
+        env.pack_skill("team", None, "team-skill", "# Team\n", &[]);
+        let copied = copy_skill_to_pack("original".into(), "mine".into()).expect("copy");
+        let path = env.packs().join("personal/skills/mine/SKILL.md");
+        let opened = read_skill(copied.id.clone()).expect("read");
+        let revision = opened.revision.expect("a personal skill has a revision");
+        assert!(read_skill("pack:team/team-skill".into())
+            .expect("read team")
+            .revision
+            .is_none());
+
+        let elsewhere = canonical_skill_text("mine", "# Edited elsewhere\n");
+        fs::write(&path, &elsewhere).expect("outside edit");
+        let mine = canonical_skill_text("mine", "# Mine\n");
+        let refused = save_pack_skill(copied.id.clone(), mine.clone(), Some(revision))
+            .expect_err("changed on disk");
+        assert!(refused.contains("changed on disk"), "{refused}");
+        assert_eq!(fs::read_to_string(&path).expect("unchanged"), elsewhere);
+
+        let reread = read_skill(copied.id.clone()).expect("reload").revision;
+        assert!(
+            save_pack_skill(copied.id, mine.clone(), reread)
+                .expect("save after reload")
+                .success
+        );
+        assert_eq!(fs::read_to_string(&path).expect("saved"), mine);
     }
 
     #[test]
@@ -1640,11 +1670,11 @@ mod tests {
             "pack:personal/..\\mine",
         ] {
             assert!(
-                save_pack_skill(id.into(), "changed\n".into()).is_err(),
+                save_pack_skill(id.into(), "changed\n".into(), None).is_err(),
                 "{id}"
             );
         }
-        assert!(save_pack_skill(copied.id, "x".repeat(512 * 1024 + 1)).is_err());
+        assert!(save_pack_skill(copied.id, "x".repeat(512 * 1024 + 1), None).is_err());
         assert_eq!(files_below(&env.packs()), before);
         assert!(!env.base.join("backups").exists());
     }
@@ -1654,14 +1684,14 @@ mod tests {
         let env = Env::personal_copy("save-inactive");
         let shadowed = env.pack_skill("personal", None, "original", "# Shadowed\n", &[]);
         let before = fs::read(shadowed.join("SKILL.md")).expect("shadowed text");
-        assert!(save_pack_skill("pack:personal/original".into(), "changed".into()).is_err());
+        assert!(save_pack_skill("pack:personal/original".into(), "changed".into(), None).is_err());
         assert_eq!(
             fs::read(shadowed.join("SKILL.md")).expect("unchanged"),
             before
         );
         let copied = copy_skill_to_pack("original".into(), "mine".into()).expect("copy");
         env.pack_skill("team", None, "mine", "# Ambiguous\n", &[]);
-        assert!(save_pack_skill(copied.id.clone(), "changed".into()).is_err());
+        assert!(save_pack_skill(copied.id.clone(), "changed".into(), None).is_err());
         fs::remove_dir_all(env.packs().join("team")).expect("remove duplicate");
         let result = env.apply();
         assert!(result.success, "{}", result.message);
@@ -1670,14 +1700,14 @@ mod tests {
             "broken frontmatter\n",
         )
         .expect("break it");
-        assert!(save_pack_skill(copied.id.clone(), "changed".into()).is_err());
+        assert!(save_pack_skill(copied.id.clone(), "changed".into(), None).is_err());
         fs::remove_dir_all(env.packs().join("personal")).expect("missing personal pack");
         assert!(env
             .sources()
             .held()
             .iter()
             .any(|held| held.pack == "personal" && held.name == "mine"));
-        assert!(save_pack_skill(copied.id, "changed".into()).is_err());
+        assert!(save_pack_skill(copied.id, "changed".into(), None).is_err());
     }
 
     #[cfg(unix)]
@@ -1693,7 +1723,7 @@ mod tests {
             env.packs().join("personal/skills"),
         ] {
             set_mode(&dir, 0o777);
-            assert!(save_pack_skill(copied.id.clone(), "changed".into()).is_err());
+            assert!(save_pack_skill(copied.id.clone(), "changed".into(), None).is_err());
             assert!(copy_skill_to_pack("original".into(), "second".into()).is_err());
             assert_no_copy_or_staging(&env, "second");
             set_mode(&dir, 0o700);
@@ -1702,7 +1732,7 @@ mod tests {
         fs::write(&outside, &original).expect("outside file");
         fs::remove_file(&target).expect("remove target");
         std::os::unix::fs::symlink(&outside, &target).expect("target symlink");
-        assert!(save_pack_skill(copied.id, "changed".into()).is_err());
+        assert!(save_pack_skill(copied.id, "changed".into(), None).is_err());
         assert_eq!(fs::read(outside).expect("outside unchanged"), original);
         assert!(!env.base.join("backups").exists());
     }

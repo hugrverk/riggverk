@@ -717,6 +717,11 @@ pub fn detect_surface_state_with(
                                     .flatten()
                             })
                             .or_else(|| {
+                                (p.artifact == ArtifactId::CodexConfig
+                                    && crate::commands::codex_python().is_none())
+                                .then(|| crate::commands::CODEX_PYTHON_REQUIRED.to_string())
+                            })
+                            .or_else(|| {
                                 (p.artifact == ArtifactId::CodexConfig)
                                     .then(|| {
                                         crate::codex_config_keep::conflict_reason(
@@ -1594,10 +1599,11 @@ fn detect_config_artifact(
         return (OperationKind::Unavailable, PreviousState::Unavailable);
     }
     if artifact == &ArtifactId::CodexConfig {
-        let installed_str = match fs::read_to_string(dest) {
-            Ok(s) => s,
-            Err(_) => return (OperationKind::Conflict, PreviousState::Conflict),
-        };
+        let installed_str =
+            match crate::setup_fingerprint::read_user_config(dest, "Codex config.toml") {
+                Ok(s) => s,
+                Err(_) => return (OperationKind::Conflict, PreviousState::Conflict),
+            };
         let source_str = match fs::read_to_string(source) {
             Ok(s) => s,
             Err(_) => return (OperationKind::Unavailable, PreviousState::Unavailable),
@@ -1624,10 +1630,11 @@ fn detect_config_artifact(
             (OperationKind::Update, PreviousState::MergeableConfigFile)
         }
     } else if artifact == &ArtifactId::OpenCodeConfig {
-        let installed_str = match fs::read_to_string(dest) {
-            Ok(s) => s,
-            Err(_) => return (OperationKind::Conflict, PreviousState::Conflict),
-        };
+        let installed_str =
+            match crate::setup_fingerprint::read_user_config(dest, "OpenCode opencode.json") {
+                Ok(s) => s,
+                Err(_) => return (OperationKind::Conflict, PreviousState::Conflict),
+            };
         let source_str = match fs::read_to_string(source) {
             Ok(s) => s,
             Err(_) => return (OperationKind::Unavailable, PreviousState::Unavailable),
@@ -2286,6 +2293,9 @@ pub fn plan_artifacts_for_surfaces_with(
                 }
                 if file.is_some_and(|file| file.kept.is_some()) {
                     (OperationKind::Manual, previous_state)
+                } else if codex_update_needs_python(&artifact, kind) {
+                    // The merge scripts need `tomllib`: held back at preview, not failed mid-apply.
+                    (OperationKind::Conflict, PreviousState::Conflict)
                 } else {
                     (kind, previous_state)
                 }
@@ -2396,6 +2406,14 @@ pub fn plan_artifacts_for_surfaces_with(
     // each group is kept).
     planned.sort_by_key(|operation| operation.kind == OperationKind::Remove);
     Ok(planned)
+}
+
+/// An update of the Codex config merges through the bundled Python scripts, which need a Python
+/// that can read TOML (3.11+). Without one the update cannot run.
+fn codex_update_needs_python(artifact: &ArtifactId, kind: OperationKind) -> bool {
+    *artifact == ArtifactId::CodexConfig
+        && kind == OperationKind::Update
+        && crate::commands::codex_python().is_none()
 }
 
 /// A skill or agent file in conflict the user could resolve, with whether they keep it. `None`
@@ -2663,7 +2681,7 @@ fn codex_record_holds_beside_kept<R: SourceRoot + ?Sized>(
         return false;
     }
     let read = |path: PathBuf| {
-        fs::read_to_string(path)
+        crate::setup_fingerprint::read_user_config(&path, "Codex config.toml")
             .ok()
             .and_then(|raw| raw.parse::<toml::Value>().ok())
     };
@@ -3418,7 +3436,16 @@ pub fn validate_update_target_unchanged(
     if !matches!(op.kind, OperationKind::Update) {
         return Ok(());
     }
-    rollback_restore_mode(op, workspace_root, home).map(|_| ())
+    let mode = rollback_restore_mode(op, workspace_root, home)?;
+    // Merging the Codex config back runs the bundled Python scripts: refused before anything is
+    // touched (and in the Undo preview) when no Python can read TOML.
+    if mode == RollbackRestoreMode::ManagedProjectionMerge
+        && op.artifact == ArtifactId::CodexConfig
+        && crate::commands::codex_python().is_none()
+    {
+        return Err(crate::commands::CODEX_PYTHON_REQUIRED.into());
+    }
+    Ok(())
 }
 
 pub fn validate_backup_for_rollback(
@@ -3607,12 +3634,15 @@ fn restore_artifact_from_backup_with_mode(
                         let installed_str = fs::read_to_string(&dest)
                             .map_err(|e| format!("read installed opencode config: {e}"))?;
                         let installed_json: serde_json::Value =
-                            serde_json::from_str(&installed_str)
-                                .map_err(|e| format!("parse installed opencode json: {e}"))?;
+                            serde_json::from_str(&installed_str).map_err(|_| {
+                                "the OpenCode opencode.json is not valid JSON".to_string()
+                            })?;
                         let backup_str = fs::read_to_string(&backup_path)
                             .map_err(|e| format!("read backup opencode config: {e}"))?;
                         let backup_json: serde_json::Value = serde_json::from_str(&backup_str)
-                            .map_err(|e| format!("parse backup opencode json: {e}"))?;
+                            .map_err(|_| {
+                                "the backed-up opencode.json is not valid JSON".to_string()
+                            })?;
                         let merged = crate::commands::merge_managed_opencode_config(
                             &installed_json,
                             &crate::commands::extract_managed_opencode_config(&backup_json),
@@ -3665,11 +3695,13 @@ fn restore_artifact_from_backup_with_mode(
                             .map_err(|e| format!("read installed cursor mcp: {e}"))?;
                         let installed_json: serde_json::Value =
                             serde_json::from_str(&installed_str)
-                                .map_err(|e| format!("parse installed cursor mcp: {e}"))?;
+                                .map_err(|_| "the Cursor mcp.json is not valid JSON".to_string())?;
                         let backup_str = fs::read_to_string(&backup_path)
                             .map_err(|e| format!("read backup cursor mcp: {e}"))?;
                         let backup_json: serde_json::Value = serde_json::from_str(&backup_str)
-                            .map_err(|e| format!("parse backup cursor mcp: {e}"))?;
+                            .map_err(|_| {
+                                "the backed-up Cursor mcp.json is not valid JSON".to_string()
+                            })?;
                         let backup_projection = backup_json
                             .get("mcpServers")
                             .and_then(|v| v.get("playwright"))
