@@ -101,7 +101,7 @@ export function GroupView({ group, scope, onVerb, onGroupAction }: GroupViewProp
           </div>
         )}
         {group.rows.length > 0 ? (
-          <ul className="lib-rows">
+          <ul className="lib-rows" role="list">
             {group.rows.map(row => (
               <RowView key={row.key} row={row} scope={scope} onVerb={onVerb} />
             ))}

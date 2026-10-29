@@ -298,7 +298,7 @@ function AppShell() {
         && enabledHarnessIds.includes(target.harness)
       )
     ) {
-      setGuardedLibrarySourceType("docs");
+      setGuardedLibrarySourceType("rules");
     }
   }, [agentTargets, enabledHarnessKey, librarySourceType, setGuardedLibrarySourceType]);
 
