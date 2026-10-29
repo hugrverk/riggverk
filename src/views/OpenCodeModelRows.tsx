@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type RefObject } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { useConfirm } from "../components/ConfirmDialog";
 import { useKeymap } from "../keyboard/useKeymap";
 import type { Binding } from "../keyboard/registry";
+import { BindingButton } from "../ui/BindingButton";
 import { Kv, type KvItem } from "../ui/Kv";
 import { usePaneId } from "../ui/Pane";
 import type { ListAvailableModelsResult, OpenCodeModelSelection, OpenCodeModelSource, OpenCodeRuntimeHealth } from "../types";
@@ -12,6 +14,8 @@ interface OpenCodeModelRowsProps {
   health: Pick<OpenCodeRuntimeHealth, "config_status" | "config_diverged_keys"> | null;
   /** The saved selection changed; the owner reloads runtime health and the installation overview. */
   onModelUpdated: () => void;
+  /** The drafts differ from the saved selection: the page holds Update and Preview until they are saved or dropped. */
+  onUnsavedChange?: (unsaved: boolean) => void;
 }
 
 const FORMAT_ERROR = "Must be provider/model format";
@@ -170,8 +174,9 @@ function ModelField({ id, value, onChange, error, disabled, models, listed, empt
  * "leave as is" in the same pane, so the reload does not take it. The values are stored in app settings and
  * applied on the next OpenCode update; workspace templates are not edited.
  */
-export function OpenCodeModelRows({ dataFolderOk, health, onModelUpdated }: OpenCodeModelRowsProps) {
+export function OpenCodeModelRows({ dataFolderOk, health, onModelUpdated, onUnsavedChange }: OpenCodeModelRowsProps) {
   const paneId = usePaneId();
+  const confirm = useConfirm();
   const [available, setAvailable] = useState<ListAvailableModelsResult | null>(null);
   const [selection, setSelection] = useState<OpenCodeModelSelection | null>(null);
   const [draftModel, setDraftModel] = useState("");
@@ -246,6 +251,10 @@ export function OpenCodeModelRows({ dataFolderOk, health, onModelUpdated }: Open
   const smallError = draftSmall && !draftSmall.includes("/") ? FORMAT_ERROR : null;
   const subagentError = draftSubagent && !draftSubagent.includes("/") ? FORMAT_ERROR : null;
   const criticError = draftCritic && !draftCritic.includes("/") ? FORMAT_ERROR : null;
+  useEffect(() => {
+    onUnsavedChange?.(hasChanges);
+    return () => onUnsavedChange?.(false);
+  }, [hasChanges, onUnsavedChange]);
   const canSave = dataFolderOk && hasChanges && !modelError && !smallError && !subagentError && !criticError && !saving;
   const hasOverride = [selection?.model_source, selection?.small_model_source, selection?.subagent_source, selection?.critic_source].includes("override");
 
@@ -272,6 +281,13 @@ export function OpenCodeModelRows({ dataFolderOk, health, onModelUpdated }: Open
 
   const handleReset = useCallback(async () => {
     if (!dataFolderOk || !hasOverride || saving) return;
+    const ok = await confirm({
+      title: "Reset the model override?",
+      message: "This removes the saved model choices, custom provider/model values included, and goes back to the bundled defaults. Unsaved edits here are dropped too.",
+      confirmLabel: "Reset",
+      destructive: true,
+    });
+    if (!ok) return;
     setSaving(true);
     setNotice(null);
     try {
@@ -285,7 +301,7 @@ export function OpenCodeModelRows({ dataFolderOk, health, onModelUpdated }: Open
     } finally {
       setSaving(false);
     }
-  }, [dataFolderOk, hasOverride, saving, loadSelection, onModelUpdated]);
+  }, [confirm, dataFolderOk, hasOverride, saving, loadSelection, onModelUpdated]);
 
   useEffect(() => {
     if (!notice) return;
@@ -309,55 +325,54 @@ export function OpenCodeModelRows({ dataFolderOk, health, onModelUpdated }: Open
     [available],
   );
 
-  const bindings: Binding[] = paneId
-    ? [
-        {
-          id: "opencode.model.edit",
-          keys: "e",
-          title: "Edit the model override",
-          hint: "edit model",
-          group: "OpenCode model",
-          scope: "pane",
-          paneId,
-          when: () => dataFolderOk,
-          run: () => firstFieldRef.current?.focus(),
-        },
-        {
-          id: "opencode.model.save",
-          keys: "s",
-          title: "Save the model override",
-          hint: "save model",
-          group: "OpenCode model",
-          scope: "pane",
-          paneId,
-          when: () => (!dataFolderOk ? false : canSave ? true : modelError || smallError || subagentError || criticError || "no unsaved change"),
-          run: () => void handleSave(),
-        },
-        {
-          id: "opencode.model.reset",
-          keys: "x",
-          title: "Reset the model override to the bundled default",
-          hint: "reset model",
-          group: "OpenCode model",
-          scope: "pane",
-          paneId,
-          when: () => (!dataFolderOk ? false : saving ? "busy" : hasOverride ? true : "no override to reset"),
-          run: () => void handleReset(),
-        },
-        {
-          id: "opencode.model.refresh",
-          keys: "R",
-          title: "Reload the available models",
-          hint: "reload models",
-          group: "OpenCode model",
-          scope: "pane",
-          paneId,
-          when: () => (!dataFolderOk ? false : loadingModels || saving ? "busy" : true),
-          run: () => void loadModels(),
-        },
-      ]
-    : [];
-  useKeymap(bindings);
+  // The keys and the buttons below are the same bindings: a click runs exactly what the key does.
+  const bindings: Binding[] = [
+    {
+      id: "opencode.model.edit",
+      keys: "e",
+      title: "Edit the model override",
+      hint: "edit model",
+      group: "OpenCode model",
+      scope: "pane",
+      paneId: paneId ?? undefined,
+      when: () => dataFolderOk,
+      run: () => firstFieldRef.current?.focus(),
+    },
+    {
+      id: "opencode.model.save",
+      keys: "s",
+      title: "Save the model override",
+      hint: "save model",
+      group: "OpenCode model",
+      scope: "pane",
+      paneId: paneId ?? undefined,
+      when: () => (!dataFolderOk ? false : canSave ? true : modelError || smallError || subagentError || criticError || "no unsaved change"),
+      run: () => void handleSave(),
+    },
+    {
+      id: "opencode.model.reset",
+      keys: "x",
+      title: "Reset the model override to the bundled default",
+      hint: "reset model",
+      group: "OpenCode model",
+      scope: "pane",
+      paneId: paneId ?? undefined,
+      when: () => (!dataFolderOk ? false : saving ? "busy" : hasOverride ? true : "no override to reset"),
+      run: () => void handleReset(),
+    },
+    {
+      id: "opencode.model.refresh",
+      keys: "R",
+      title: "Reload the available models",
+      hint: "reload models",
+      group: "OpenCode model",
+      scope: "pane",
+      paneId: paneId ?? undefined,
+      when: () => (!dataFolderOk ? false : loadingModels || saving ? "busy" : true),
+      run: () => void loadModels(),
+    },
+  ];
+  useKeymap(paneId ? bindings : []);
 
   if (!dataFolderOk) return null;
 
@@ -412,6 +427,11 @@ export function OpenCodeModelRows({ dataFolderOk, health, onModelUpdated }: Open
     <section className="runtime-edit" aria-label="Model selection">
       <div className="group">model override</div>
       <Kv items={items} className="kv-edit" />
+      <div className="tbtn-row" role="group" aria-label="Model actions">
+        {bindings.map(binding => (
+          <BindingButton key={binding.id} binding={binding} variant={binding.id === "opencode.model.save" ? "primary" : undefined} />
+        ))}
+      </div>
       {modelWarning && <p className="c-warn runtime-note">{modelWarning}</p>}
       {notice && (
         <p className={notice.ok ? "c-ok runtime-note" : "c-warn runtime-note"} role="status">
