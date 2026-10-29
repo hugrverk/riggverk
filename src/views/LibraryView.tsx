@@ -221,6 +221,18 @@ export function LibraryView(props: LibraryViewProps) {
     hadSheet.current = sheet !== null;
   }, [sheet]);
 
+  // Switching topic replaces the rows, and focus on one of them goes with it: it lands on the selected tab, so the
+  // next key still reaches the Library.
+  const previousTopicId = useRef(topicId);
+  useEffect(() => {
+    if (previousTopicId.current === topicId) return;
+    previousTopicId.current = topicId;
+    const active = document.activeElement;
+    if (!active || active === document.body || !active.isConnected) {
+      rootRef.current?.querySelector<HTMLElement>('[role="tab"][tabindex="0"]')?.focus();
+    }
+  }, [topicId]);
+
   // A topic change from outside (`:library skills`) closes the sheet; opening a config from a search result does not.
   const previousTopic = useRef(sourceType);
   useEffect(() => {
@@ -386,18 +398,14 @@ export function LibraryView(props: LibraryViewProps) {
                 onClick={() => void chooseTopic(topic.id)}
               >
                 {topic.label}
-                {attention && (
-                  <>
-                    <i className={topic.id === "rules" ? "lib-sq" : "lib-ring"} aria-hidden="true" />
-                    <span id={noteId} className="visually-hidden">
-                      {topic.id === "rules" ? "Needs your decision" : "A pack needs attention"}
-                    </span>
-                  </>
-                )}
+                {attention && <i className={topic.id === "rules" ? "lib-sq" : "lib-ring"} aria-hidden="true" />}
               </button>
             );
           })}
         </div>
+        {/* What the marks on the tabs mean, for the tabs' accessible descriptions. */}
+        {rulesAttention && <span id={`${ids}-note-rules`} className="visually-hidden">Needs your decision</span>}
+        {packsAttention && <span id={`${ids}-note-packs`} className="visually-hidden">A pack needs attention</span>}
         <div
           className="lib-scroll"
           id={`${ids}-panel`}

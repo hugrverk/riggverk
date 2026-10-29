@@ -400,7 +400,7 @@ export function searchGroups(query: string, input: LibraryModelInput): { topic: 
     topic: topic.id,
     label: topic.label,
     groups: topicGroups(topic.id, input)
-      .map(group => ({ ...group, action: undefined, notes: undefined, rows: group.rows.filter(row => row.haystack.includes(q)) }))
+      .map(group => ({ ...group, action: undefined, notes: undefined, rows: group.rows.filter(row => row.haystack.includes(q)).map(row => ({ ...row, indent: false })) }))
       .filter(group => group.rows.length > 0),
   })).filter(section => section.groups.length > 0);
 }

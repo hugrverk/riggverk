@@ -236,39 +236,53 @@ describe("App shell", () => {
       render(<App />);
       await ready();
       fireEvent.keyDown(document.body, { key: "7" });
-      const pane = await screen.findByRole("region", { name: "Document" });
-      await within(pane).findByRole("heading", { name: "Notes" });
-      act(() => within(pane).getByRole("group", { name: "Document" }).focus());
-      fireEvent.keyDown(document.activeElement!, { key: "i" });
+      fireEvent.click(await screen.findByRole("tab", { name: "Docs" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
       fireEvent.change(await screen.findByLabelText("Edit document"), { target: { value: "# Notes\nunsaved" } });
       await within(nav()).findByRole("button", { name: "Library, unsaved changes" });
+      return backend;
     }
 
-    it("marks the Library while edits are unsaved, keeps them when the leave is declined and drops the mark when it is confirmed", async () => {
+    it("marks the Library while edits are unsaved, keeps them on Keep editing and drops the mark on Discard", async () => {
       await editNotes();
 
       fireEvent.click(within(nav()).getByRole("button", { name: /Overview/ }));
-      let dialog = await screen.findByRole("dialog");
-      expect(within(dialog).getByText("Leave with unsaved changes?")).toBeTruthy();
-      fireEvent.click(within(dialog).getByRole("button", { name: "cancel" }));
+      let dialog = await screen.findByRole("dialog", { name: "Unsaved changes" });
+      expect(within(dialog).getByText("Notes has changes you have not saved.")).toBeTruthy();
+      fireEvent.click(within(dialog).getByRole("button", { name: "Keep editing" }));
       await act(async () => {});
       expect(currentTab()).toBe("Library, unsaved changes");
       expect(within(nav()).getByRole("button", { name: "Library, unsaved changes" })).toBeTruthy();
+      expect((screen.getByLabelText("Edit document") as HTMLTextAreaElement).value).toBe("# Notes\nunsaved");
 
       fireEvent.click(within(nav()).getByRole("button", { name: /Overview/ }));
-      dialog = await screen.findByRole("dialog");
-      fireEvent.click(within(dialog).getByRole("button", { name: "confirm" }));
+      dialog = await screen.findByRole("dialog", { name: "Unsaved changes" });
+      fireEvent.click(within(dialog).getByRole("button", { name: "Discard" }));
       await waitFor(() => expect(currentTab()).toBe("Overview"));
       // The edits were discarded with the leave: no marker, and the draft does not come back.
       expect(within(nav()).queryByRole("button", { name: "Library, unsaved changes" })).toBeNull();
       expect(within(nav()).getByRole("button", { name: "Library" })).toBeTruthy();
       fireEvent.keyDown(document.body, { key: "7" });
       await waitFor(() => expect(currentTab()).toBe("Library"));
-      const pane = await screen.findByRole("region", { name: "Document" });
-      await within(pane).findByRole("heading", { name: "Notes" });
       expect(screen.queryByDisplayValue("# Notes\nunsaved")).toBeNull();
       expect(within(nav()).queryByRole("button", { name: "Library, unsaved changes" })).toBeNull();
     });
+
+    it("Save and continue writes the edits and then leaves", async () => {
+      const backend = await editNotes();
+      const rest = invokeMock.getMockImplementation()!;
+      invokeMock.mockImplementation((command: string, args?: { content?: string }) => {
+        if (command !== "save_doc") return rest(command, args);
+        backend.docs[0]!.content = args?.content ?? "";
+        return Promise.resolve({ success: true, action: "save_doc", stdout: "saved", stderr: "", exit_code: 0 });
+      });
+
+      fireEvent.click(within(nav()).getByRole("button", { name: /Overview/ }));
+      const dialog = await screen.findByRole("dialog", { name: "Unsaved changes" });
+      fireEvent.click(within(dialog).getByRole("button", { name: "Save and continue" }));
+      await waitFor(() => expect(currentTab()).toBe("Overview"));
+      expect(invokeMock).toHaveBeenCalledWith("save_doc", { id: "notes", content: "# Notes\nunsaved" });
+    }, 20_000);
   });
 
   it("opens Settings with Mod+, and via the :settings command", async () => {

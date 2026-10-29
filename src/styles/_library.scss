@@ -547,6 +547,10 @@
   font-size: max(12px, calc(var(--fs) - 1px));
 }
 
+/* The diff sits flush in the panel, not in a review card's margins. */
+.lib-rules-panel .diff { margin: 0; border: 0; }
+.lib-rules-panel .diff-empty { padding: 8px 0; }
+
 .lib-conflict { display: grid; gap: 12px; }
 
 .lib-conflict-card {

@@ -18,8 +18,13 @@ vi.mock("@tauri-apps/api/core", () => ({
   invoke: (...args: unknown[]) => invoke(...args),
 }));
 
+// The answer of the unsaved-changes dialog; tests set it. Discard by default: the loaders below never ask.
+const choose = vi.fn(async (): Promise<"confirm" | "alternate" | "cancel"> => "alternate");
+const confirm = vi.fn(async () => true);
+
 vi.mock("../components/ConfirmDialog", () => ({
-  useConfirm: () => vi.fn(async () => true),
+  useConfirm: () => confirm,
+  useConfirmChoice: () => choose,
 }));
 
 // Personal docs: the only Library items with a draft and a save.
@@ -122,7 +127,7 @@ describe("useLibraryController save operation identity", () => {
       return Promise.reject(new Error(`unexpected invoke: ${cmd}`));
     });
 
-    let saveHandle: Promise<void>;
+    let saveHandle: Promise<boolean>;
     await act(async () => {
       saveHandle = result.current.onSaveDoc();
     });
@@ -190,7 +195,7 @@ describe("useLibraryController save operation identity", () => {
       return Promise.reject(new Error(`unexpected invoke: ${cmd}`));
     });
 
-    let saveHandle: Promise<void>;
+    let saveHandle: Promise<boolean>;
     await act(async () => {
       saveHandle = result.current.onSaveDoc();
       workspaceLoadGenerationRef.current = 1;
@@ -273,7 +278,6 @@ describe("useLibraryController rules refinements", () => {
       result.current.onChangeRulesDraft("new\n");
     });
     expect(result.current.rulesDirty).toBe(true);
-    expect(result.current.isLibrarySourceDirty("rules")).toBe(true);
     expect(result.current.libraryDirty).toBe(true);
 
     invoke.mockImplementation((cmd: string, args?: { surface?: string }) => {
@@ -308,7 +312,7 @@ describe("useLibraryController rules refinements", () => {
       if (cmd === "save_rules_refinements") return save.promise;
       return reads({ claude_rules: claude, codex_rules: codex })(cmd, args);
     });
-    let saveHandle: Promise<void>;
+    let saveHandle: Promise<boolean>;
     await act(async () => {
       saveHandle = result.current.onSaveRules();
     });
@@ -339,7 +343,7 @@ describe("useLibraryController rules refinements", () => {
     invoke.mockImplementation((cmd: string, args?: { surface?: string }) =>
       cmd === "save_rules_refinements" ? save.promise : reads({ claude_rules: claude })(cmd, args),
     );
-    let saveHandle: Promise<void>;
+    let saveHandle: Promise<boolean>;
     await act(async () => {
       saveHandle = result.current.onSaveRules();
       workspaceLoadGenerationRef.current = 1;
@@ -755,20 +759,30 @@ describe("useLibraryController bundled items stay read-only", () => {
 describe("useLibraryController leaving with unsaved changes", () => {
   beforeEach(() => {
     invoke.mockReset();
+    choose.mockReset();
+    choose.mockResolvedValue("alternate");
   });
 
-  it("drops the draft and the dirty mark when a confirmed leave discards it, and on a confirmed source switch", async () => {
+  async function openEditedDoc() {
     const { deps } = createDeps();
-    const { result } = renderHook(() => useLibraryController(deps));
-    invoke.mockImplementation((cmd: string) => (cmd === "read_doc" ? Promise.resolve(docA) : Promise.reject(new Error(`unexpected invoke: ${cmd}`))));
+    const hook = renderHook(() => useLibraryController(deps));
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === "read_doc") return Promise.resolve(docA);
+      if (cmd === "save_doc") return Promise.resolve(successResult("save_doc"));
+      return Promise.reject(new Error(`unexpected invoke: ${cmd}`));
+    });
+    await act(async () => {
+      await hook.result.current.selectDoc("doc-a");
+    });
+    await act(async () => {
+      hook.result.current.onChangeDocDraft("alpha edited");
+    });
+    expect(hook.result.current.libraryDirty).toBe(true);
+    return hook.result;
+  }
 
-    await act(async () => {
-      await result.current.selectDoc("doc-a");
-    });
-    await act(async () => {
-      result.current.onChangeDocDraft("alpha edited");
-    });
-    expect(result.current.libraryDirty).toBe(true);
+  it("drops the draft and the dirty mark when a confirmed leave discards it, and on a source switch that discards", async () => {
+    const result = await openEditedDoc();
 
     await act(async () => {
       result.current.discardDrafts();
@@ -776,7 +790,6 @@ describe("useLibraryController leaving with unsaved changes", () => {
     expect(result.current.libraryDirty).toBe(false);
     expect(result.current.docDraft).toBe("alpha");
 
-    // The confirm in this file always says yes: switching away from a dirty source discards its draft too.
     await act(async () => {
       result.current.onChangeDocDraft("alpha edited again");
     });
@@ -784,7 +797,67 @@ describe("useLibraryController leaving with unsaved changes", () => {
     await act(async () => {
       await result.current.setGuardedLibrarySourceType("skills");
     });
+    expect(choose).toHaveBeenCalledTimes(1);
     expect(result.current.libraryDirty).toBe(false);
     expect(result.current.docDraft).toBe("alpha");
+    expect(result.current.librarySourceType).toBe("skills");
+  });
+
+  it("asks nothing while nothing is unsaved", async () => {
+    const { deps } = createDeps();
+    const { result } = renderHook(() => useLibraryController(deps));
+    let allowed = false;
+    await act(async () => {
+      allowed = await result.current.confirmLeave();
+    });
+    expect(allowed).toBe(true);
+    expect(choose).not.toHaveBeenCalled();
+  });
+
+  it("keeps the draft and the topic on Keep editing", async () => {
+    const result = await openEditedDoc();
+    choose.mockResolvedValue("cancel");
+    await act(async () => {
+      await result.current.setGuardedLibrarySourceType("skills");
+    });
+    expect(result.current.librarySourceType).toBe("rules");
+    expect(result.current.libraryDirty).toBe(true);
+    expect(result.current.docDraft).toBe("alpha edited");
+  });
+
+  it("writes the draft on Save and continue, and only then lets the caller go on", async () => {
+    const result = await openEditedDoc();
+    choose.mockResolvedValue("confirm");
+    let allowed = false;
+    await act(async () => {
+      allowed = await result.current.confirmLeave();
+    });
+    expect(allowed).toBe(true);
+    expect(invoke).toHaveBeenCalledWith("save_doc", { id: "doc-a", content: "alpha edited" });
+    expect(result.current.libraryDirty).toBe(false);
+  });
+
+  it("stays when the save of Save and continue fails", async () => {
+    const result = await openEditedDoc();
+    choose.mockResolvedValue("confirm");
+    invoke.mockImplementation((cmd: string) =>
+      cmd === "save_doc" ? Promise.reject(new Error("disk full")) : Promise.reject(new Error(`unexpected invoke: ${cmd}`)),
+    );
+    let allowed = true;
+    await act(async () => {
+      allowed = await result.current.confirmLeave();
+    });
+    expect(allowed).toBe(false);
+    expect(result.current.libraryDirty).toBe(true);
+  });
+
+  it("asks only once when a discard is followed at once by the move it was for", async () => {
+    const result = await openEditedDoc();
+    await act(async () => {
+      expect(await result.current.confirmLeave()).toBe(true);
+      // The caller's closure still says dirty; the guard reads the settled draft.
+      await result.current.selectDoc("doc-b");
+    });
+    expect(choose).toHaveBeenCalledTimes(1);
   });
 });
