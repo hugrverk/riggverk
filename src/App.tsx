@@ -409,11 +409,13 @@ function AppShell() {
   // Reload what an install or rollback may have changed on disk.
   const refreshAfterApply = useCallback(async () => {
     const gen = workspaceLoadGenerationRef.current;
+    // Health is not awaited: the runtime probes can take a second or more and only feed verdict
+    // lines, so they must not hold the install task lock. The generation guard drops stale answers.
+    void loadEnabledHarnessHealth(gen);
     await Promise.all([
       loadWorkspaceDiagnostics(gen),
       loadDocs(gen),
       fetchStatus(),
-      loadEnabledHarnessHealth(gen),
     ]);
   }, [loadWorkspaceDiagnostics, loadDocs, fetchStatus, loadEnabledHarnessHealth, workspaceLoadGenerationRef]);
 
@@ -449,10 +451,10 @@ function AppShell() {
       }),
       refresh: async () => {
         const gen = workspaceLoadGenerationRef.current;
+        void loadEnabledHarnessHealth(gen);
         await Promise.all([
           loadWorkspaceDiagnostics(gen),
           fetchStatus(),
-          loadEnabledHarnessHealth(gen),
         ]);
       },
     }).then(result => {
@@ -483,11 +485,11 @@ function AppShell() {
       }),
       refresh: async () => {
         const gen = workspaceLoadGenerationRef.current;
+        void loadEnabledHarnessHealth(gen);
         await Promise.all([
           loadWorkspaceDiagnostics(gen),
           loadDocs(gen),
           fetchStatus(),
-          loadEnabledHarnessHealth(gen),
         ]);
       },
     }).then((result) => {
