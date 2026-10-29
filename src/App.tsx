@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo, lazy, Suspense } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { version as APP_VERSION } from "../package.json";
-import { LEAVE_DIRTY_MESSAGE } from "./lib/editorGuards";
 import { invokeOpen } from "./lib/invokeOpen";
 import { useConfirm } from "./components/ConfirmDialog";
 import { useKeymap } from "./keyboard/useKeymap";
@@ -97,8 +96,6 @@ function AppShell() {
     forgetPack,
     activeSkillId,
     activeSkillContent,
-    skillSearch,
-    setSkillSearch,
     readSkill,
     docs,
     activeDoc,
@@ -106,8 +103,6 @@ function AppShell() {
     docDirty,
     docSaving,
     docSaveResult,
-    docMode,
-    setDocMode,
     showCreateDoc,
     createDocTitle,
     createDocSlug,
@@ -137,8 +132,7 @@ function AppShell() {
     onResetRules,
     librarySourceType,
     setGuardedLibrarySourceType,
-    isLibrarySourceDirty,
-    discardDrafts,
+    confirmLeave,
     libraryDirty,
     agentSources,
     activeAgentId,
@@ -380,13 +374,9 @@ function AppShell() {
     const requestedHarness = harnessForView(v);
     if (requestedHarness && !enabledHarnessIds.includes(requestedHarness)) v = "start";
     if (v !== view) {
-      const isLibraryDirty = view === "library" && isLibrarySourceDirty(librarySourceType);
-      if (isLibraryDirty) {
-        const ok = await confirm(LEAVE_DIRTY_MESSAGE);
-        if (!ok) return;
-        // Leaving means discarding: the sidebar's Library marker goes with the drafts.
-        discardDrafts();
-      }
+      // Leaving the Library asks about unsaved edits (discard, save and continue, or keep editing); a discard
+      // takes the sidebar's Library marker with the drafts.
+      if (view === "library" && !(await confirmLeave())) return;
     }
     setView(v);
     viewRef.current = v;
@@ -404,7 +394,7 @@ function AppShell() {
     }
     else if (v === "library") loadLibraryView();
     else if (v === "settings" && !settingsDirty && !settingsSaving) { loadSettings(); }
-  }, [view, librarySourceType, isLibrarySourceDirty, discardDrafts, settingsDirty, settingsSaving, loadLibraryView, loadWorkspaceDiagnostics, loadEnabledHarnessHealth, loadSettings, clearSettingsMsg, enabledHarnessKey]);
+  }, [view, confirmLeave, settingsDirty, settingsSaving, loadLibraryView, loadWorkspaceDiagnostics, loadEnabledHarnessHealth, loadSettings, clearSettingsMsg, enabledHarnessKey]);
 
   useLandingView({ landingView: appSettings?.landing_view, currentView: view, navigate: switchView });
 
@@ -803,8 +793,6 @@ function AppShell() {
             docDirty={docDirty}
             docSaving={docSaving}
             docSaveResult={docSaveResult}
-            docMode={docMode}
-            onSetDocMode={setDocMode}
             onChangeDocDraft={onChangeDocDraft}
             onSaveDoc={onSaveDoc}
             onResetDoc={onResetDoc}
@@ -834,17 +822,13 @@ function AppShell() {
             onResetRules={onResetRules}
             // Skills
             skills={visibleSkills}
-            activeSkillId={activeSkillId && visibleSkillIds.has(activeSkillId) ? activeSkillId : null}
             activeSkillContent={activeSkillId && visibleSkillIds.has(activeSkillId) ? activeSkillContent : null}
-            skillSearch={skillSearch}
-            onSetSkillSearch={setSkillSearch}
             onSelectSkillPreview={readSkill}
             packLibrary={packLibrary}
             packError={packError}
             onForgetPack={forgetPack}
             // Agents
             agentSources={visibleAgentSources}
-            activeAgentId={activeAgentId && visibleAgentIds.has(activeAgentId) ? activeAgentId : null}
             activeAgentContent={activeAgentId && visibleAgentIds.has(activeAgentId) ? activeAgentContent : null}
             onSelectAgent={selectAgent}
             // Configs
@@ -859,6 +843,8 @@ function AppShell() {
             // Common
             dataFolderOk={dataFolderOk}
             showConfigs={configTargets.length > 0}
+            onOpenHarnessView={harness => void switchView(harness)}
+            onConfirmLeave={confirmLeave}
           />
           </Suspense>
         )}

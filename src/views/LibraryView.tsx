@@ -1,7 +1,7 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import type { ActionResult } from "../components/TerminalOutput";
-import { focusPaneById } from "../keyboard/focus";
-import { Pane } from "../ui/Pane";
+import { redactTerminalOutput } from "../lib/redactTerminalOutput";
+import { useShellState } from "../shell/ShellState";
 import type {
   AgentMetadataResponse,
   AgentSourceContent,
@@ -9,54 +9,52 @@ import type {
   ConfigEditorSourceMeta,
   DocSummary,
   DocumentContent,
+  InstallAgent,
   PackLibrary,
   RulesFileContent,
   RulesFileSummary,
   RulesSurfaceId,
   SkillSummary,
 } from "../types";
-import { AgentItemList } from "./library/AgentItemList";
-import { ConfigItemList } from "./library/ConfigItemList";
-import { CreateDocForm } from "./library/CreateDocForm";
-import { DocItemList } from "./library/DocItemList";
-import { DocumentPane } from "./library/DocumentPane";
-import { buildEntry, emptyStateHint } from "./library/entry";
-import { PackNotice } from "./library/PackNotice";
-import { RULES_LIST_KEY, rulesFileKey, RulesItemList } from "./library/RulesItemList";
-import { SkillItemList } from "./library/SkillItemList";
-import { SourceSwitcher, type LibrarySourceTab } from "./library/SourceSwitcher";
+import { buildEntry } from "./library/entry";
+import { GroupView } from "./library/LibraryGroups";
+import { LibrarySheet } from "./library/LibrarySheet";
+import {
+  isRulesConflict,
+  LIBRARY_TOPICS,
+  packsNeedAttention,
+  searchGroups,
+  topicGroups,
+  type LibraryModelInput,
+  type LibraryRow,
+  type LibrarySourceType,
+  type OpenTarget,
+  type RowVerb,
+} from "./library/model";
+import { NewDocDialog } from "./library/NewDocDialog";
+import type { RulesMode } from "./library/RulesEditor";
 import { useLibraryKeys } from "./library/useLibraryKeys";
 
-export type LibrarySourceType = "docs" | "rules" | "skills" | "agents" | "configs";
+export type { LibrarySourceType } from "./library/model";
 
-const SOURCE_TYPES: { id: LibrarySourceType; label: string; title: string }[] = [
-  { id: "docs", label: "docs", title: "Docs" },
-  { id: "rules", label: "rules", title: "Rules" },
-  { id: "skills", label: "skills", title: "Skills" },
-  { id: "agents", label: "agents", title: "Runtime agents" },
-  { id: "configs", label: "configs", title: "Configs" },
-];
-
-/** A pending "open it for editing" request outlives the open item it waits for only this long. */
-const FOCUS_REQUEST_MS = 2000;
+type Maybe<T> = T | Promise<T>;
 
 export interface LibraryViewProps {
+  /** The topic on show (the tab). */
   sourceType: LibrarySourceType;
-  onSetSourceType: (type: LibrarySourceType) => void;
+  onSetSourceType: (type: LibrarySourceType) => Maybe<void>;
 
   // Docs: personal docs are editable, bundled docs read-only.
   docs: DocSummary[];
   activeDoc: DocumentContent | null;
-  onSelectDoc: (id: string) => void;
+  onSelectDoc: (id: string) => Maybe<void>;
   onOpenDoc: (id: string) => void;
   docDraft: string;
   docDirty: boolean;
   docSaving: boolean;
   docSaveResult: ActionResult | null;
-  docMode: "preview" | "edit";
-  onSetDocMode: (mode: "preview" | "edit") => void;
   onChangeDocDraft: (value: string) => void;
-  onSaveDoc: () => void;
+  onSaveDoc: () => unknown;
   onResetDoc: () => void;
   showCreateDoc: boolean;
   createDocTitle: string;
@@ -66,47 +64,42 @@ export interface LibraryViewProps {
   onSetShowCreateDoc: (show: boolean) => void;
   onSetCreateDocTitle: (value: string) => void;
   onSetCreateDocSlug: (value: string) => void;
-  onCreateDoc: () => void;
+  /** Creates the doc; resolves with its id when it was created, which then opens in the sheet. */
+  onCreateDoc: () => Maybe<string | null | void>;
 
   // Rules: the bundled base is read-only; in the user's own rules files the refinements below the managed
   // block are editable.
   agentTemplate: DocumentContent | null;
   agentTargets: AgentTargetMeta[];
   rulesFiles: RulesFileSummary[];
-  /** The open rules file; null while the bundled base row is open. */
+  /** The open rules file; null while the bundled base is open. */
   activeRulesSurface: RulesSurfaceId | null;
   activeRulesFile: RulesFileContent | null;
-  onSelectRulesFile: (surface: RulesSurfaceId | null) => void | Promise<void>;
+  onSelectRulesFile: (surface: RulesSurfaceId | null) => Maybe<void>;
   onOpenRulesFile: (surface: RulesSurfaceId) => void;
   rulesDraft: string;
   rulesDirty: boolean;
   rulesSaving: boolean;
   rulesSaveResult: ActionResult | null;
   onChangeRulesDraft: (value: string) => void;
-  onSaveRules: () => void;
+  onSaveRules: () => unknown;
   onResetRules: () => void;
 
-  // Skills, agents and configs are bundled with the app: read-only here, so they have no draft.
-
-  // Skills
+  // Skills, agents and configs are read-only here, so they have no draft.
   skills: SkillSummary[];
-  activeSkillId: string | null;
   activeSkillContent: DocumentContent | null;
-  skillSearch: string;
-  onSetSkillSearch: (value: string) => void;
-  onSelectSkillPreview: (id: string) => void;
-  /** Skill packs: those whose installed skills are kept while the pack cannot be read, and the way to forget one. */
+  onSelectSkillPreview: (id: string) => Maybe<void>;
+  /** A personal copy of a bundled skill. Without it the bundled rows and sheets offer no "Edit as my copy". */
+  onCopySkill?: (name: string) => void;
+  /** Skill packs: the packs, their problems and the way to forget one that cannot be read. */
   packLibrary?: PackLibrary | null;
   packError?: string | null;
   onForgetPack?: (name: string) => void;
 
-  // Agents
   agentSources: AgentMetadataResponse[];
-  activeAgentId: string | null;
   activeAgentContent: AgentSourceContent | null;
-  onSelectAgent: (id: string) => void;
+  onSelectAgent: (id: string) => Maybe<void>;
 
-  // Configs
   configTemplateContent: DocumentContent | null;
   activeConfigTargetId: string;
   configTargets: AgentTargetMeta[];
@@ -119,243 +112,359 @@ export interface LibraryViewProps {
   // Common
   dataFolderOk: boolean;
   showConfigs: boolean;
+  /** Goes to a harness page, where a rules conflict is decided. */
+  onOpenHarnessView?: (harness: InstallAgent) => void;
+  /**
+   * The app's leave guard for unsaved edits: resolves true when the caller may go on (nothing was unsaved, or the
+   * edits were discarded or saved), false for "Keep editing". Without it nothing is guarded.
+   */
+  onConfirmLeave?: () => Promise<boolean>;
 }
 
-function sourceCount(props: LibraryViewProps, type: LibrarySourceType): number | undefined {
-  const count = (() => {
-    switch (type) {
-      case "docs": return props.docs.length;
-      case "skills": return props.skills.length;
-      case "agents": return props.agentSources.length;
-      case "configs": return props.configTargets.length;
-      default: return 0;
-    }
-  })();
-  return count > 0 ? count : undefined;
+interface SheetState {
+  target: OpenTarget;
+  /** Shown in the header until the item has loaded. */
+  title: string;
 }
 
 /**
- * Library: [1] item list of the active source (with the source switcher), [2] the open item as one document
- * pane: the working copy rendered, or its source textarea while editing.
- *
- * The preview/edit mode props (`docMode`, ...) stay in the contract with the controller; the pane keeps its
- * own view/edit state (below), which resets with the open item, so they are not needed.
+ * Library, in the manner of System Settings: a search field, a row of topics, and the topic's items as grouped boxes
+ * of rows with their verbs. Opening an item drops a sheet over the content; edits stay in the controller's drafts
+ * and every way out of them goes through one guard (`onConfirmLeave`). Search crosses all topics.
  */
 export function LibraryView(props: LibraryViewProps) {
-  const { sourceType, onSetSourceType, dataFolderOk, showConfigs } = props;
-  const rootRef = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const [docSearch, setDocSearch] = useState("");
-  const [agentSearch, setAgentSearch] = useState("");
-  const [focusRequest, setFocusRequest] = useState<string | null>(null);
+  const { sourceType, dataFolderOk, showConfigs, onConfirmLeave } = props;
+  const rootRef = useRef<HTMLElement>(null);
+  const sheetRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const { notify } = useShellState();
+  const ids = useId();
 
-  const entry = buildEntry(props);
-  const followCursor = !(entry?.dirty ?? false);
+  const [query, setQuery] = useState("");
+  const [sheet, setSheet] = useState<SheetState | null>(null);
+  const [rulesMode, setRulesMode] = useState<RulesMode>("refinements");
+  /** The row (or group button) that opened the sheet, for focus to return to. */
+  const returnKeyRef = useRef<string | null>(null);
+  const newDocOpenerRef = useRef<Element | null>(null);
+  const searching = query.trim() !== "";
 
-  // Edit mode belongs to one open item: switching to another (or to none) returns to the rendered view.
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const entryId = entry?.id ?? null;
-  if (editingId !== null && editingId !== entryId) setEditingId(null);
-  const editing = entry !== null && !entry.readOnly && editingId === entry.id;
+  const confirmLeave = async (): Promise<boolean> => (onConfirmLeave ? onConfirmLeave() : true);
 
-  const sources: LibrarySourceTab[] = SOURCE_TYPES
-    .filter(source => source.id !== "configs" || showConfigs)
-    .map(source => ({ ...source, count: sourceCount(props, source.id) }));
-  const activeSource = SOURCE_TYPES.find(source => source.id === sourceType) ?? SOURCE_TYPES[0]!;
-  const activeCount = sourceCount(props, sourceType);
-
-  const startEdit = () => {
-    if (!entry || entry.readOnly) return;
-    // Already in edit mode (focus was elsewhere): there is no mode change for the effect below to follow.
-    if (textareaRef.current) textareaRef.current.focus();
-    else setEditingId(entry.id);
-  };
-  const stopEdit = () => setEditingId(null);
-
-  // Entering edit mode puts the cursor in the textarea; leaving it hands focus back to the rendered pane,
-  // unless focus already went somewhere on purpose (`:q` sends it to the list).
-  const wasEditing = useRef(false);
-  useLayoutEffect(() => {
-    if (editing) textareaRef.current?.focus();
-    else if (wasEditing.current) {
-      const active = document.activeElement;
-      if (!active || active === document.body) focusPaneById("editor", rootRef.current ?? document);
-    }
-    wasEditing.current = editing;
-  }, [editing]);
-
-  const { close } = useLibraryKeys({
-    rootRef,
-    textareaRef,
-    entry,
-    sourceType,
-    sourceIds: sources.map(source => source.id),
+  const input: LibraryModelInput = {
     dataFolderOk,
-    onSetSourceType,
-    showCreateDoc: props.showCreateDoc,
-    onSetShowCreateDoc: props.onSetShowCreateDoc,
-    startEdit,
-    stopEdit,
-  });
+    docs: props.docs,
+    agentTemplateLoaded: props.agentTemplate !== null,
+    rulesFiles: props.rulesFiles,
+    skills: props.skills,
+    agentSources: props.agentSources,
+    configTargets: props.configTargets,
+    configEditorSources: props.configEditorSources,
+    packLibrary: props.packLibrary ?? null,
+    packError: props.packError ?? null,
+    canCopySkill: props.onCopySkill !== undefined,
+    canForgetPack: props.onForgetPack !== undefined,
+    canOpenHarness: props.onOpenHarnessView !== undefined,
+  };
 
-  // Switching source replaces the list, which takes focus with it: put it back on the new list.
-  const previousSource = useRef(sourceType);
+  const topics = LIBRARY_TOPICS.filter(topic => topic.id !== "configs" || showConfigs);
+  const topicId = topics.some(topic => topic.id === sourceType) ? sourceType : topics[0]!.id;
+  const groups = searching ? [] : topicGroups(topicId, input);
+  const results = searching ? searchGroups(query, input).filter(section => section.topic !== "configs" || showConfigs) : [];
+
+  const entry = sheet ? buildEntry(props, sheet.target) : null;
+
+  // ---- the sheet ----
+
+  const openTarget = async (target: OpenTarget, title: string, returnKey: string | null) => {
+    if (!(await confirmLeave())) return;
+    returnKeyRef.current = returnKey;
+    setRulesMode("refinements");
+    setSheet({ target, title });
+    switch (target.kind) {
+      case "doc":
+        void props.onSelectDoc(target.id);
+        break;
+      case "rules":
+        void props.onSelectRulesFile(target.surface);
+        break;
+      case "base":
+        void props.onSelectRulesFile(null);
+        break;
+      case "skill":
+        void props.onSelectSkillPreview(target.id);
+        break;
+      case "agent":
+        void props.onSelectAgent(target.id);
+        break;
+      case "config":
+        if (props.activeConfigTargetId !== target.targetId) props.onSelectConfigTarget(target.targetId);
+        if (target.sourceId) props.onSelectConfigSource(target.sourceId);
+        break;
+    }
+  };
+
+  const requestClose = async () => {
+    if (!(await confirmLeave())) return;
+    setSheet(null);
+  };
+
+  // Closing hands focus back to the row that opened the sheet (or the selected tab when that row is gone).
+  const hadSheet = useRef(false);
+  useLayoutEffect(() => {
+    if (hadSheet.current && sheet === null) {
+      const root = rootRef.current;
+      const key = returnKeyRef.current;
+      const row = key ? Array.from(root?.querySelectorAll<HTMLElement>("[data-row-key]") ?? []).find(el => el.dataset.rowKey === key) : null;
+      const target = row?.querySelector<HTMLElement>("[data-row-primary]") ?? root?.querySelector<HTMLElement>('[role="tab"][tabindex="0"]');
+      target?.focus();
+    }
+    hadSheet.current = sheet !== null;
+  }, [sheet]);
+
+  // A topic change from outside (`:library skills`) closes the sheet; opening a config from a search result does not.
+  const previousTopic = useRef(sourceType);
   useEffect(() => {
-    if (previousSource.current === sourceType) return;
-    previousSource.current = sourceType;
-    const active = document.activeElement;
-    if (!active || active === document.body) focusPaneById("items", rootRef.current ?? document);
+    if (previousTopic.current === sourceType) return;
+    previousTopic.current = sourceType;
+    setSheet(null);
   }, [sourceType]);
 
-  // Enter on a row opens it and moves into it once that item has loaded: the textarea for an editable item,
-  // the rendered document for a read-only one.
-  const entryKey = entry?.listKey ?? null;
+  // A save that finishes is also a notice, for when the sheet has already closed (Save and continue).
+  const wasSaving = useRef({ doc: false, rules: false });
   useEffect(() => {
-    if (focusRequest === null) return;
-    if (entry && entryKey === focusRequest) {
-      if (entry.readOnly) focusPaneById("editor", rootRef.current ?? document);
-      else startEdit();
-      setFocusRequest(null);
-      return;
+    const before = wasSaving.current;
+    if (before.doc && !props.docSaving && props.docSaveResult?.success) {
+      notify(redactTerminalOutput(props.docSaveResult.stdout) || "saved", { tone: "ok" });
     }
-    const timer = setTimeout(() => setFocusRequest(null), FOCUS_REQUEST_MS);
-    return () => clearTimeout(timer);
-  }, [focusRequest, entryKey]);
+    if (before.rules && !props.rulesSaving && props.rulesSaveResult?.success) {
+      notify(redactTerminalOutput(props.rulesSaveResult.stdout) || "saved", { tone: "ok" });
+    }
+    wasSaving.current = { doc: props.docSaving, rules: props.rulesSaving };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.docSaving, props.rulesSaving]);
 
-  const onActivate = (key: string) => {
-    setFocusRequest(key);
+  // ---- topics and search ----
+
+  const focusSearch = () => {
+    searchRef.current?.focus();
+    searchRef.current?.select();
   };
 
-  let list: React.ReactNode;
-  switch (sourceType) {
-    case "docs":
-      list = (
-        <DocItemList
-          docs={props.docs}
-          activeKey={props.activeDoc?.id ?? null}
-          followCursor={followCursor}
-          onSelect={props.onSelectDoc}
-          onActivate={onActivate}
-          search={docSearch}
-          onSearchChange={setDocSearch}
-          activateHint={entry && !entry.readOnly ? "edit" : "read"}
-        />
-      );
-      break;
-    case "rules":
-      list = (
-        <RulesItemList
-          agentTemplate={props.agentTemplate}
-          rulesFiles={dataFolderOk ? props.rulesFiles : []}
-          activeKey={
-            props.activeRulesSurface !== null
-              ? rulesFileKey(props.activeRulesSurface)
-              : props.agentTemplate
-                ? RULES_LIST_KEY
-                : null
-          }
-          followCursor={followCursor}
-          onSelect={props.onSelectRulesFile}
-          onActivate={onActivate}
-          activateHint={entry && !entry.readOnly ? "edit" : "read"}
-        />
-      );
-      break;
-    case "skills":
-      list = (
-        <SkillItemList
-          skills={props.skills}
-          activeKey={props.activeSkillId}
-          followCursor={followCursor}
-          onSelect={props.onSelectSkillPreview}
-          onActivate={onActivate}
-          search={props.skillSearch}
-          onSearchChange={props.onSetSkillSearch}
-        />
-      );
-      break;
-    case "agents":
-      list = (
-        <AgentItemList
-          agents={props.agentSources}
-          activeKey={props.activeAgentId}
-          followCursor={followCursor}
-          onSelect={props.onSelectAgent}
-          onActivate={onActivate}
-          search={agentSearch}
-          onSearchChange={setAgentSearch}
-        />
-      );
-      break;
-    case "configs":
-      list = (
-        <ConfigItemList
-          configTargets={props.configTargets}
-          activeTargetId={props.activeConfigTargetId}
-          configEditorSources={props.configEditorSources}
-          activeSourceType={props.activeConfigSourceType}
-          followCursor={followCursor}
-          onSelectTarget={props.onSelectConfigTarget}
-          onSelectSource={props.onSelectConfigSource}
-          onActivate={onActivate}
-        />
-      );
-      break;
-  }
+  const chooseTopic = async (id: LibrarySourceType) => {
+    if (!(await confirmLeave())) return;
+    setQuery("");
+    setSheet(null);
+    await props.onSetSourceType(id);
+  };
 
-  // Opening the form from `n` or its button puts the cursor in its title field.
-  const createForm =
-    sourceType === "docs" && props.showCreateDoc ? (
-      <CreateDocForm
-        title={props.createDocTitle}
-        slug={props.createDocSlug}
-        error={props.createDocError}
-        creating={props.createDocCreating}
-        onSetShow={props.onSetShowCreateDoc}
-        onSetTitle={props.onSetCreateDocTitle}
-        onSetSlug={props.onSetCreateDocSlug}
-        onCreate={props.onCreateDoc}
-      />
-    ) : undefined;
+  const stepTopic = (delta: number) => {
+    const index = Math.max(0, topics.findIndex(topic => topic.id === topicId));
+    void chooseTopic(topics[(index + delta + topics.length) % topics.length]!.id);
+  };
+
+  const openNewDoc = async () => {
+    if (!(await confirmLeave())) return;
+    newDocOpenerRef.current = document.activeElement;
+    props.onSetCreateDocTitle("");
+    props.onSetCreateDocSlug("");
+    props.onSetShowCreateDoc(true);
+  };
+
+  const closeNewDoc = () => {
+    props.onSetShowCreateDoc(false);
+    const opener = newDocOpenerRef.current;
+    newDocOpenerRef.current = null;
+    if (opener instanceof HTMLElement && opener.isConnected) opener.focus();
+  };
+
+  const createDoc = async () => {
+    const id = await props.onCreateDoc();
+    if (typeof id !== "string") return;
+    newDocOpenerRef.current = null;
+    returnKeyRef.current = `docs/doc:${id}`;
+    setRulesMode("refinements");
+    setSheet({ target: { kind: "doc", id }, title: props.createDocTitle.trim() || "New doc" });
+  };
+
+  const { onRootKeyDown } = useLibraryKeys({
+    rootRef,
+    sheetRef,
+    sheetOpen: sheet !== null,
+    entry,
+    focusSearch,
+    stepTopic,
+    newDoc: dataFolderOk && sheet === null ? () => void openNewDoc() : null,
+    requestClose,
+  });
+
+  const runVerb = (scope: string) => (row: LibraryRow, verb: RowVerb) => {
+    const action = verb.action;
+    switch (action.type) {
+      case "open":
+        void openTarget(action.target, row.name, `${scope}/${row.key}`);
+        break;
+      case "harness":
+        props.onOpenHarnessView?.(action.harness);
+        break;
+      case "copy":
+        props.onCopySkill?.(action.skill);
+        break;
+      case "forget":
+        props.onForgetPack?.(action.pack);
+        break;
+    }
+  };
+
+  const onTabKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    const step = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
+    const edge = event.key === "Home" ? 0 : event.key === "End" ? topics.length - 1 : null;
+    if (!step && edge === null) return;
+    event.preventDefault();
+    const tabs = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('[role="tab"]'));
+    const current = Math.max(0, tabs.indexOf(document.activeElement as HTMLElement));
+    tabs[edge ?? (current + step + tabs.length) % tabs.length]?.focus();
+  };
+
+  const onSearchKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      if (query !== "") setQuery("");
+      else rootRef.current?.querySelector<HTMLElement>('[role="tab"][tabindex="0"]')?.focus();
+    } else if (event.key === "ArrowDown") {
+      event.preventDefault();
+      rootRef.current?.querySelector<HTMLElement>("[data-row-primary]")?.focus();
+    }
+  };
+
+  const rulesAttention = dataFolderOk && props.rulesFiles.some(isRulesConflict);
+  const packsAttention = packsNeedAttention(props.packLibrary ?? null, props.packError ?? null);
+  const selectedTab = searching ? null : topicId;
+  const focusTab = selectedTab ?? topics[0]!.id;
 
   return (
-    <div className="screen library" ref={rootRef}>
-      <Pane
-        id="items"
-        label="Library items"
-        title={activeSource.label}
-        meta={activeCount !== undefined ? `· ${activeCount}` : undefined}
-        defaultFocus
-        className="pane-flat lib-items"
-        bodyClassName="lib-list-body"
-      >
-        <SourceSwitcher
-          sources={sources}
-          activeId={sourceType}
-          onSelect={type => void onSetSourceType(type)}
-        />
-        {sourceType === "skills" && props.onForgetPack && (
-          <PackNotice
-            library={props.packLibrary ?? null}
-            error={props.packError ?? null}
-            onForgetPack={props.onForgetPack}
+    <section
+      ref={rootRef}
+      className="screen library"
+      data-pane-id="library"
+      data-pane-default=""
+      data-keyscope="pane"
+      aria-label="Library"
+      tabIndex={-1}
+      onKeyDown={onRootKeyDown}
+    >
+      <div className="lib-main" inert={sheet !== null}>
+        <div className="lib-top">
+          <input
+            ref={searchRef}
+            className="lib-search"
+            type="search"
+            value={query}
+            placeholder="Search all topics"
+            aria-label="Search all topics"
+            autoComplete="off"
+            spellCheck={false}
+            onChange={event => setQuery(event.target.value)}
+            onKeyDown={onSearchKeyDown}
           />
-        )}
-        {list}
-      </Pane>
+        </div>
+        <div className="lib-topics" role="tablist" aria-label="Library topics" onKeyDown={onTabKeyDown}>
+          {topics.map(topic => {
+            const attention = (topic.id === "rules" && rulesAttention) || (topic.id === "packs" && packsAttention);
+            const noteId = `${ids}-note-${topic.id}`;
+            return (
+              <button
+                key={topic.id}
+                type="button"
+                role="tab"
+                id={`${ids}-tab-${topic.id}`}
+                className="lib-tab"
+                aria-selected={selectedTab === topic.id}
+                aria-controls={`${ids}-panel`}
+                aria-describedby={attention ? noteId : undefined}
+                tabIndex={focusTab === topic.id ? 0 : -1}
+                data-pane-primary={focusTab === topic.id ? "" : undefined}
+                onClick={() => void chooseTopic(topic.id)}
+              >
+                {topic.label}
+                {attention && (
+                  <>
+                    <i className={topic.id === "rules" ? "lib-sq" : "lib-ring"} aria-hidden="true" />
+                    <span id={noteId} className="visually-hidden">
+                      {topic.id === "rules" ? "Needs your decision" : "A pack needs attention"}
+                    </span>
+                  </>
+                )}
+              </button>
+            );
+          })}
+        </div>
+        <div
+          className="lib-scroll"
+          id={`${ids}-panel`}
+          role={searching ? "region" : "tabpanel"}
+          aria-label={searching ? "Search results" : undefined}
+          aria-labelledby={searching ? undefined : `${ids}-tab-${topicId}`}
+        >
+          {searching ? (
+            results.length === 0 ? (
+              <p className="lib-empty" role="status">Nothing matches “{query.trim()}”.</p>
+            ) : (
+              results.map(section => (
+                <div key={section.topic} className="lib-section">
+                  <h2 className="lib-topic-head">{section.label}</h2>
+                  {section.groups.map(group => (
+                    <GroupView
+                      key={group.key}
+                      group={group}
+                      scope={section.topic}
+                      onVerb={runVerb(section.topic)}
+                      onGroupAction={() => {}}
+                    />
+                  ))}
+                </div>
+              ))
+            )
+          ) : (
+            groups.map(group => (
+              <GroupView
+                key={group.key}
+                group={group}
+                scope={topicId}
+                onVerb={runVerb(topicId)}
+                onGroupAction={() => void openNewDoc()}
+              />
+            ))
+          )}
+        </div>
+      </div>
 
-      <DocumentPane
-        entry={entry}
-        emptyHint={
-          sourceType === "configs" && props.activeConfigTargetId === "opencode_config"
-            ? "Loading config source…"
-            : emptyStateHint(sourceType)
-        }
-        editing={editing}
-        textareaRef={textareaRef}
-        top={createForm}
-        onClose={close}
-      />
-    </div>
+      {sheet && (
+        <LibrarySheet
+          title={sheet.title}
+          entry={entry}
+          sheetRef={sheetRef}
+          rulesMode={rulesMode}
+          onRulesMode={setRulesMode}
+          onRequestClose={() => void requestClose()}
+          onCopySkill={props.onCopySkill}
+          onOpenHarness={props.onOpenHarnessView}
+        />
+      )}
+
+      {props.showCreateDoc && (
+        <NewDocDialog
+          title={props.createDocTitle}
+          slug={props.createDocSlug}
+          error={props.createDocError}
+          creating={props.createDocCreating}
+          onChangeTitle={(title, slug) => {
+            props.onSetCreateDocTitle(title);
+            props.onSetCreateDocSlug(slug);
+          }}
+          onCreate={() => void createDoc()}
+          onClose={closeNewDoc}
+        />
+      )}
+    </section>
   );
 }

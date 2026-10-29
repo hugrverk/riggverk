@@ -27,6 +27,11 @@ export function rulesSurfaceOf(harness: InstallAgent): RulesSurfaceId | null {
   return RULES_SURFACE[harness] ?? null;
 }
 
+/** The harness whose rules file is `surface`: the page that decides a conflict in it. */
+export function harnessOfRulesSurface(surface: RulesSurfaceId): InstallAgent | null {
+  return RULES_HARNESSES.find(harness => RULES_SURFACE[harness] === surface) ?? null;
+}
+
 /** Harnesses that have a rules surface, in the order the command line offers them. */
 export const RULES_HARNESSES: readonly InstallAgent[] = ["codex", "opencode", "claude", "copilot", "pi", "kilo"];
 

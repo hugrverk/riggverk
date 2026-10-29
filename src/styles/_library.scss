@@ -1,32 +1,607 @@
-/* ── library view (Grafit 1A "Bläck") ──
-   Two columns joined by one hairline: [1] the item list (source tabs, filter, rows), [2] the open item (its metadata,
-   then the rendered document, or the source textarea while editing). The panes keep their keyboard contract
-   (`data-pane-id`, titles, footers); `.pane-flat` only restyles them as flat columns whose title is an in-flow header
-   row. Row, filter and key-cap markup is the shared primitives', restyled here under `.library`.
+/* ── library view (Grafit 1A "Bläck", System Settings style) ──
+   One column under the toolbar: a search field (top right), a row of topic tabs, and the topic's items as grouped
+   boxes. Opening an item drops a sheet over the content (an editor, or the rendered text of a read-only item); a
+   modal dialog for "New doc" and the unsaved-changes question come from the shared dialog (`dialog.app-modal`).
 
-     .pane-flat     a Pane without the notched border (shared with Settings, which adds its own card border)
-     .lib-items     list column; .lib-doc document column
-     .lib-flag      "modified": bright ink in weight 600 with the filled square (the decision signal)
+     .library               the view root; positions the sheet, so it covers the content and not the sidebar
+     .lib-top > .lib-search the search field
+     .lib-topics > .lib-tab the topic tabs (role=tablist / tab); .lib-sq the decision square, .lib-ring a pack that needs a fix
+     .lib-scroll            the scrolling content: .lib-group-wrap > .lib-group-head + .lib-group (a hairline box)
+       .lib-row             name, one-line description or mono path, .lib-tag, the state ring, .lib-verb buttons
+     .lib-sheet-back/-sheet the backdrop and the sheet; .lib-sheet-head, .lib-sheet-body, .lib-sheet-foot
+     .lib-decide / .lib-flag  "Needs your decision" and "Unsaved changes": bright ink, weight 600, a filled square
 
-   Radius 0, 1px hairlines, system sans for names and prose, the system mono (SF Mono) for labels, paths and values, no ochre. The
-   current row is shown by weight and a 2px bar that scales in (not a border: guard selected-left-border). */
+   Radius 0, 1px hairlines, system sans for names and prose, the system mono (SF Mono) only for paths, keys and the
+   text being edited, no ochre. States are hollow rings (`StateMark`); the decision is the one filled square. Motion is
+   the sheet dropping and the backdrop fading; `subtle` and `off` (and prefers-reduced-motion) drop it by the global
+   rules in _tokens.scss. `.pane-flat` is a Pane without the notched border and is shared with Settings. */
 
 .library {
-  grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
-  grid-template-rows: minmax(0, 1fr);
-  gap: 1px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
   padding: 0;
-  background: var(--border);
+  overflow: hidden;
+  background: var(--bg-panel);
+  font-family: var(--font-sans);
 }
 
-@media (max-width: 960px) {
-  .library {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: repeat(2, minmax(0, 1fr));
-  }
+.library:focus { outline: none; }
+
+.lib-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
 }
 
-/* ---- flat pane ---- */
+/* ---- search and topics ---- */
+
+.lib-top {
+  display: flex;
+  flex: none;
+  justify-content: flex-end;
+  padding: 12px 24px 0;
+}
+
+.lib-search {
+  width: 260px;
+  max-width: 100%;
+  min-height: 28px;
+  padding: 4px 10px;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--bg);
+  box-shadow: inset 0 0 0 1px var(--border);
+  color: var(--text);
+  font-size: max(12px, calc(var(--fs) - 0.5px));
+  transition: box-shadow var(--dur-state) var(--ease);
+}
+
+.lib-search:focus { box-shadow: inset 0 0 0 1px var(--border-strong); outline: none; }
+.lib-search:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+.lib-search::placeholder { color: var(--text-muted); }
+
+.lib-topics {
+  display: flex;
+  flex: none;
+  gap: 0 16px;
+  padding: 0 24px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  box-shadow: inset 0 -1px 0 var(--border);
+  font-family: var(--font-mono);
+  font-size: max(10px, calc(var(--fs) * 0.8));
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.lib-topics::-webkit-scrollbar { display: none; }
+
+.lib-tab {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  padding: 11px 0 9px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--text-muted);
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    color var(--dur-state) var(--ease),
+    border-color var(--dur-state) var(--ease);
+}
+
+.lib-tab:hover { color: var(--text); }
+.lib-tab[aria-selected="true"] { border-bottom-color: var(--text); color: var(--text-heading); font-weight: 600; }
+.lib-tab:focus-visible { outline-offset: -2px; }
+
+.lib-sq {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  background: var(--decide);
+}
+
+.lib-ring {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1.5px var(--fix);
+}
+
+/* ---- content ---- */
+
+.lib-scroll {
+  display: grid;
+  flex: 1;
+  align-content: start;
+  gap: 18px;
+  min-height: 0;
+  padding: 18px 24px 24px;
+  overflow-y: auto;
+}
+
+.lib-section { display: grid; gap: 18px; }
+
+.lib-topic-head {
+  margin: 4px 0 -6px;
+  padding: 0 2px;
+  color: var(--text-heading);
+  font-size: max(12px, calc(var(--fs) - 0.5px));
+  font-weight: 600;
+}
+
+.lib-group-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 2px 6px;
+  font-size: max(12px, calc(var(--fs) - 0.5px));
+}
+
+.lib-group-head h3 {
+  margin: 0;
+  color: var(--text-heading);
+  font-size: inherit;
+  font-weight: 600;
+}
+
+.lib-group-head > span {
+  flex: 1;
+  color: var(--text-muted);
+  text-align: right;
+}
+
+.lib-group {
+  background: var(--bg);
+  box-shadow: 0 0 0 1px var(--border);
+}
+
+.lib-rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lib-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 9px 14px;
+  border-top: 1px solid var(--border);
+  transition: background-color var(--dur-state) var(--ease);
+}
+
+.lib-row:first-child { border-top: 0; }
+.lib-row:hover { background: var(--bg-raised); }
+.lib-row.has-action { cursor: pointer; }
+.lib-row.is-indent { padding-left: 30px; }
+
+.lib-row-main { flex: 1; min-width: 0; }
+
+.lib-row-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.lib-row-name b {
+  overflow: hidden;
+  color: var(--text);
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lib-row-desc,
+.lib-row-path {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: max(12px, calc(var(--fs) - 1px));
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lib-row-path,
+.lib-path,
+.lib-mono {
+  font-family: var(--font-mono);
+  font-size: max(11px, calc(var(--fs) * 0.85));
+}
+
+.lib-row-end {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 12px;
+}
+
+.lib-state { display: inline-flex; align-items: center; }
+
+.lib-tag {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: max(10px, calc(var(--fs) * 0.77));
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.lib-tag.is-yours { color: var(--yours); }
+
+.lib-verb,
+.lib-quiet {
+  min-height: 24px;
+  padding: 2px 4px;
+  border: 0;
+  background: none;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: max(12px, calc(var(--fs) - 0.5px));
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color var(--dur-state) var(--ease);
+}
+
+.lib-verb:hover,
+.lib-quiet:hover { color: var(--text); }
+
+.lib-empty {
+  padding: 10px 14px;
+  color: var(--text-muted);
+  font-size: max(12px, calc(var(--fs) - 0.5px));
+}
+
+.lib-scroll > .lib-empty { padding: 8px 0; }
+
+.lib-notes { border-bottom: 1px solid var(--border); }
+
+.lib-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 9px 14px;
+  color: var(--text-muted);
+  font-size: max(12px, calc(var(--fs) - 0.5px));
+}
+
+.lib-note .state-mark { margin-top: 6px; }
+.lib-note b { color: var(--text); font-weight: 600; }
+
+/* The decision and the unsaved flag: the brightest ink in weight 600 with the one filled square. */
+.lib-decide {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 1px 8px;
+  background: var(--decide-bg);
+  color: var(--decide);
+  font-size: max(12px, calc(var(--fs) - 1px));
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.lib-decide::before {
+  content: "";
+  flex: none;
+  width: 6px;
+  height: 6px;
+  background: currentColor;
+}
+
+.lib-flag {
+  color: var(--text-heading);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.lib-flag::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 6px;
+  background: var(--decide);
+  vertical-align: 0.05em;
+}
+
+/* ---- sheet ---- */
+
+.lib-sheet-back {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  background: var(--backdrop);
+  animation: lib-fade 0.25s var(--ease) both;
+}
+
+.lib-sheet {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  z-index: 45;
+  display: flex;
+  flex-direction: column;
+  width: 700px;
+  max-width: calc(100% - 32px);
+  height: calc(100% - 28px);
+  padding: 18px 22px 0;
+  transform: translateX(-50%);
+  background: var(--bg-panel);
+  box-shadow: 0 0 0 1px var(--border), 0 30px 60px -20px rgba(0, 0, 0, 0.5);
+  animation: lib-drop var(--dur-view) var(--ease) both;
+}
+
+.lib-sheet:focus { outline: none; }
+
+@keyframes lib-fade { from { opacity: 0; } }
+
+@keyframes lib-drop {
+  from { opacity: 0; transform: translate(-50%, -14px); }
+}
+
+.lib-sheet-head {
+  display: flex;
+  flex: none;
+  align-items: flex-start;
+  gap: 14px;
+  padding-bottom: 12px;
+}
+
+.lib-sheet-title { flex: 1; min-width: 0; }
+
+.lib-sheet-title h2 {
+  margin: 0;
+  color: var(--text-heading);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.4;
+}
+
+.lib-path {
+  display: block;
+  margin-top: 2px;
+  overflow: hidden;
+  color: var(--text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lib-sheet-head > .lib-tag { padding-top: 4px; }
+
+.lib-sheet-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  padding: 0 0 16px;
+  overflow-y: auto;
+}
+
+.lib-sheet-body:focus-visible { outline-offset: 2px; }
+
+.lib-sheet-foot {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  padding: 10px 0 16px;
+  border-top: 1px solid var(--border);
+}
+
+.lib-foot-left {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 14px;
+  min-width: 0;
+  font-size: max(12px, calc(var(--fs) - 1px));
+}
+
+.lib-foot-right { display: flex; flex: none; gap: 8px; }
+
+.lib-dim { color: var(--text-muted); font-size: max(12px, calc(var(--fs) - 1px)); }
+.lib-fail { color: var(--fail); overflow-wrap: anywhere; }
+
+.lib-label {
+  display: block;
+  margin: 0 0 4px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: max(10px, calc(var(--fs) * 0.77));
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.lib-ro {
+  padding: 8px 12px;
+  background: var(--bg);
+  color: var(--text-muted);
+  font-size: max(12px, calc(var(--fs) - 1px));
+}
+
+.lib-copy-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.lib-pre {
+  margin: 0;
+  padding: 12px 14px;
+  overflow-wrap: anywhere;
+  background: var(--bg);
+  color: var(--text);
+  font-size: max(11px, calc(var(--fs) * 0.88));
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.lib-pre.is-dim { color: var(--text-muted); }
+.lib-pre:focus-visible { outline-offset: -2px; }
+
+.lib-textarea {
+  flex: 1;
+  width: 100%;
+  min-height: 150px;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--bg);
+  box-shadow: inset 0 0 0 1px var(--border);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: max(11px, calc(var(--fs) * 0.88));
+  line-height: 1.55;
+  resize: vertical;
+  tab-size: 2;
+  transition: box-shadow var(--dur-state) var(--ease);
+}
+
+.lib-textarea:focus { box-shadow: inset 0 0 0 1px var(--border-strong); outline: none; }
+.lib-textarea:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+
+/* ---- read-only items: metadata above the text ---- */
+
+.lib-meta .kv { padding: 0; }
+.lib-meta .kv dt { font-size: var(--fs-sm); }
+.lib-meta .kv dd { font-size: var(--fs-sm); }
+
+/* ---- rules ---- */
+
+.lib-rules { display: flex; flex: 1; flex-direction: column; gap: 12px; min-height: 0; }
+
+.lib-modes {
+  display: flex;
+  flex: none;
+  gap: 0 16px;
+  box-shadow: inset 0 -1px 0 var(--border);
+  font-family: var(--font-mono);
+  font-size: max(10px, calc(var(--fs) * 0.77));
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.lib-modes button {
+  padding: 8px 0 7px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--text-muted);
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    color var(--dur-state) var(--ease),
+    border-color var(--dur-state) var(--ease);
+}
+
+.lib-modes button:hover { color: var(--text); }
+.lib-modes button[aria-selected="true"] { border-bottom-color: var(--text); color: var(--text-heading); font-weight: 600; }
+.lib-modes button:focus-visible { outline-offset: -2px; }
+
+.lib-rules-panel { display: flex; flex: 1; flex-direction: column; gap: 12px; min-height: 0; }
+
+.lib-base {
+  border-left: 2px solid var(--border);
+  background: var(--bg);
+}
+
+.lib-base summary { padding: 8px 12px 6px; cursor: pointer; }
+.lib-base summary .lib-label { display: inline; margin: 0; }
+
+.lib-base pre {
+  max-height: 108px;
+  margin: 0;
+  padding: 6px 12px 10px;
+  overflow-y: auto;
+  background: none;
+  font-size: max(11px, calc(var(--fs) * 0.85));
+}
+
+.lib-hint {
+  padding: 6px 10px;
+  border-left: 2px solid var(--yours);
+  color: var(--text-muted);
+  font-size: max(12px, calc(var(--fs) - 1px));
+}
+
+.lib-conflict { display: grid; gap: 12px; }
+
+.lib-conflict-card {
+  display: grid;
+  gap: 8px;
+  max-width: 60ch;
+  padding: 12px 14px;
+  background: var(--bg);
+  color: var(--text-muted);
+}
+
+.lib-conflict-card p { margin: 0; color: var(--text); }
+.lib-conflict-card p.lib-dim { color: var(--text-muted); }
+.lib-conflict-card .lib-decide { justify-self: start; }
+
+/* ---- new doc ---- */
+
+.lib-newdoc-body { display: grid; gap: 4px; }
+
+.lib-input {
+  width: 100%;
+  min-height: 30px;
+  padding: 4px 10px;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--bg);
+  box-shadow: inset 0 0 0 1px var(--border);
+  color: var(--text);
+}
+
+.lib-input:focus { box-shadow: inset 0 0 0 1px var(--border-strong); outline: none; }
+.lib-input:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+.lib-input[aria-invalid="true"] { box-shadow: inset 0 0 0 1px var(--fix); }
+
+.lib-slug {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: max(11px, calc(var(--fs) * 0.85));
+}
+
+.lib-slug b { color: var(--text); font-weight: 600; }
+
+.lib-newdoc-error { margin: 4px 0 0; color: var(--fix); font-size: max(12px, calc(var(--fs) - 1px)); }
+
+@media (max-width: 760px) {
+  .lib-row { flex-wrap: wrap; }
+  .lib-row-end { flex-wrap: wrap; }
+}
+
+/* ---- rendered text (DocContent) ----
+   Base rules for the scoped reading surface, then the Bläck treatment of .markdown-body. The doubled class keeps
+   the Library rules ahead of the generic ones. */
+
+/* ---- flat pane (shared with Settings) ---- */
 
 .pane-flat {
   border: 0;
@@ -56,433 +631,6 @@
 .pane-flat > .pane-title b {
   font-weight: 600;
 }
-
-/* The list column's title ("docs · 12") repeats the source tabs right under it, so it is kept for assistive
-   technology and left out of the layout. The document column's title is the item's name, then its path. */
-.lib-items > .pane-title {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  overflow: hidden;
-  border: 0;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
-}
-
-.lib-doc > .pane-title b {
-  margin-right: 4px;
-  font-family: var(--font-sans);
-  font-size: calc(var(--fs) + 2px);
-  letter-spacing: -0.01em;
-}
-
-/* Unsaved edits: bright ink and a filled square, like the sidebar's marker. */
-.lib-flag {
-  color: var(--text-heading);
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.lib-flag::before {
-  content: "";
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  margin-right: 6px;
-  background: var(--decide);
-  vertical-align: 0.05em;
-}
-
-.library .pane-body {
-  padding: 0;
-}
-
-/* Calm text where a pane has nothing to list ("No docs found", "Select a document to preview"). */
-.library .pane-body > p,
-.lib-list-body > p {
-  padding: 14px 20px;
-  color: var(--text-muted);
-}
-
-.lib-doc > .pane-body {
-  padding: 22px 28px 28px;
-}
-
-/* ---- list column ---- */
-
-/* The switcher and the filter stay put; only the rows scroll. */
-.lib-list-body {
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.lib-list-body > * { flex-shrink: 0; }
-
-.lib-list-body > .rows {
-  flex: 0 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-}
-
-/* ---- source switcher ---- */
-
-/* One row: the tabs do not wrap (that orphaned the last one). They are tight enough to fit the list column at the
-   default size and scroll sideways, without a visible scrollbar, when a larger text size needs more room. The
-   hairline is an inset shadow because overflow would clip a tab's underline overlapping a real border. */
-.lib-sources {
-  display: flex;
-  flex-wrap: nowrap;
-  gap: 0 12px;
-  margin: 0;
-  padding: 0 20px;
-  overflow-x: auto;
-  overflow-y: hidden;
-  scrollbar-width: none;
-  box-shadow: inset 0 -1px 0 var(--border);
-  font-family: var(--font-mono);
-  font-size: max(10px, calc(var(--fs) * 0.8));
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.lib-sources::-webkit-scrollbar { display: none; }
-
-.lib-source {
-  flex: none;
-  white-space: nowrap;
-  padding: 10px 0 9px;
-  border: 0;
-  border-bottom: 2px solid transparent;
-  background: none;
-  color: var(--text-muted);
-  letter-spacing: inherit;
-  text-transform: inherit;
-  line-height: 1.4;
-  cursor: pointer;
-  transition:
-    color var(--dur-state) var(--ease),
-    border-color var(--dur-state) var(--ease);
-}
-
-.lib-source .c-dim { font-size: 0.9em; }
-
-.lib-source:hover { color: var(--text); }
-
-.lib-source[aria-current="true"] {
-  border-bottom-color: var(--text);
-  color: var(--text-heading);
-  font-weight: 600;
-}
-
-.lib-source:focus-visible { outline-offset: 2px; }
-
-/* ---- filter ---- */
-
-.library .filter {
-  margin: 0;
-  padding: 10px 20px;
-  border-bottom: 1px solid var(--border);
-}
-
-.library .filter input {
-  font-family: var(--font-sans);
-}
-
-/* ---- rows ---- */
-
-.library .rows {
-  padding: 6px 0 12px;
-}
-
-.library .row {
-  position: relative;
-  grid-auto-flow: column;
-  grid-template-columns: minmax(0, 1fr);
-  grid-auto-columns: auto;
-  gap: 0 12px;
-  height: auto;
-  min-height: 30px;
-  padding: 4px 20px;
-  color: var(--text-muted);
-  transition: background-color var(--dur-state) var(--ease), color var(--dur-state) var(--ease);
-}
-
-.library .row .cur { display: none; }
-
-.library .row .meta {
-  font-family: var(--font-mono);
-  font-size: max(11px, calc(var(--fs) * 0.85));
-}
-
-.library .row:hover { background: var(--bg-raised); color: var(--text); }
-.library .row[aria-selected="true"] { background: var(--bg-raised); color: var(--text); }
-.library .row[aria-selected="true"] .nm { color: var(--text-heading); font-weight: 600; }
-
-/* The cursor row: a 2px bar scales in at the left edge; with the list focused the row is tinted too. */
-.library .row::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 5px;
-  bottom: 5px;
-  width: 2px;
-  background: var(--text);
-  transform: scaleY(0);
-  transform-origin: top;
-  transition: transform var(--dur-nav) var(--ease);
-}
-
-.library .row[data-cursor]::before { transform: scaleY(1); }
-.library .rows:focus-visible .row[data-cursor] { background: var(--sel); color: var(--text-heading); }
-
-.library .group {
-  margin: 0;
-  padding: 16px 20px 6px;
-  color: var(--text-muted);
-  font-family: var(--font-mono);
-  font-size: max(10px, calc(var(--fs) * 0.77));
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-
-.library .group:first-child { padding-top: 10px; }
-
-/* ---- skill packs ---- */
-
-/* Packs whose installed skills are kept while the pack cannot be read; each row offers "Forget pack". A hollow
-   ring in the fix hue leads the pack's name, so the state is not colour alone: the words are in the row. */
-.lib-pack-note {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin: 0;
-  padding: 12px 20px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-inset);
-  font-size: var(--fs-sm);
-}
-
-.lib-pack-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 10px;
-}
-
-.lib-pack-row > :first-child {
-  font-family: var(--font-mono);
-  overflow-wrap: anywhere;
-}
-
-.lib-pack-row > :first-child::before {
-  content: "";
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  margin-right: 8px;
-  border-radius: 50%;
-  box-shadow: inset 0 0 0 1.5px var(--fix);
-  vertical-align: 0.02em;
-}
-
-.lib-pack-row > .c-dim {
-  flex: 1 1 14ch;
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.lib-pack-row .tbtn { min-height: 26px; padding: 0 10px; }
-
-/* ---- new-doc form (docs source) ---- */
-
-.docs-create-form {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  flex-shrink: 0;
-  margin-bottom: 22px;
-  padding: 14px 16px;
-  border: 1px solid var(--border);
-  background: var(--bg-inset);
-}
-
-.docs-create-label {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.docs-create-label span {
-  flex: none;
-  width: 6ch;
-  color: var(--text-muted);
-  font-family: var(--font-mono);
-  font-size: max(10px, calc(var(--fs) * 0.77));
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-
-.docs-create-input {
-  flex: 1;
-  min-width: 0;
-  height: calc(var(--lh) + 6px);
-  padding: 0 8px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius);
-  background: var(--bg);
-  color: var(--text);
-  outline: none;
-}
-
-.docs-create-input::placeholder { color: var(--text-muted); }
-.docs-create-input:focus { border-color: var(--accent); }
-
-.docs-create-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 4px;
-}
-
-.docs-create-hint {
-  margin-left: auto;
-  color: var(--text-muted);
-  font-family: var(--font-mono);
-  font-size: var(--fs-sm);
-}
-
-.docs-create-error {
-  color: var(--fail);
-  font-size: var(--fs-sm);
-  overflow-wrap: anywhere;
-}
-
-/* ---- document column ---- */
-
-/* The Copy path button sits in the pane footer as a small icon. */
-.pane-foot .lib-copy-path {
-  position: static;
-  align-self: center;
-  width: auto;
-  height: auto;
-  min-width: 24px;
-  min-height: 24px;
-  border: 0;
-  background: none;
-  color: var(--text-muted);
-}
-
-.pane-foot .lib-copy-path:hover { color: var(--accent); }
-.pane-foot .lib-copy-path.copy-btn-copied { color: var(--ok); }
-
-/* The footer is the document's action row: hairline buttons, then facts (why it is read-only, what is editable),
-   then the save result. */
-.lib-doc > .pane-foot {
-  align-items: center;
-  gap: 8px 16px;
-  padding: 10px 28px;
-  border-top: 1px solid var(--border);
-  background: var(--bg-raised);
-  color: var(--text-muted);
-  font-size: var(--fs-sm);
-}
-
-.lib-doc > .pane-foot > * { white-space: normal; }
-.lib-doc > .pane-foot .tbtn { white-space: nowrap; }
-
-
-/* Edit mode: the textarea fills the body and scrolls on its own. */
-
-.lib-doc > .lib-fill {
-  display: flex;
-  flex-direction: column;
-  padding: 0;
-  overflow: hidden;
-}
-
-.lib-fill > .docs-create-form,
-.lib-editor > .docs-create-form {
-  margin: 16px 28px 0;
-}
-
-.lib-editor {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  min-height: 0;
-}
-
-.lib-editor:focus { outline: none; }
-
-.lib-textarea {
-  flex: 1;
-  width: 100%;
-  min-height: 0;
-  padding: 22px 28px;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  color: var(--text);
-  font-family: var(--font-mono);
-  font-size: var(--fs);
-  line-height: 1.6;
-  caret-color: var(--accent);
-  resize: none;
-  tab-size: 2;
-  outline: none;
-}
-
-/* Rendered view: metadata block, then the document. The body itself scrolls. */
-
-.lib-meta {
-  margin-bottom: 22px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--border);
-}
-
-/* Read-only text above the editable part of the same file (a rules file's managed block): dimmed, not a control. */
-.lib-before {
-  margin-bottom: 22px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--border);
-  color: var(--text-muted);
-}
-
-.lib-before .markdown-body :is(h1, h2, h3, h4, strong) {
-  color: var(--text-muted);
-}
-
-.lib-meta .group,
-.lib-before .group {
-  padding: 0 0 8px;
-}
-
-/* Metadata rows: muted label, mono value, a hairline between rows. */
-.lib-meta .kv {
-  grid-template-columns: minmax(10ch, max-content) minmax(0, 1fr);
-  gap: 0 24px;
-  padding: 0;
-}
-
-.lib-meta .kv dt,
-.lib-meta .kv dd {
-  padding: 6px 0;
-  border-top: 1px solid var(--border);
-}
-
-.lib-meta .kv dt:first-of-type,
-.lib-meta .kv dd:first-of-type { border-top: 0; }
-
-.lib-meta .kv dd {
-  font-family: var(--font-mono);
-  font-size: var(--fs-sm);
-  overflow-wrap: anywhere;
-}
-
-/* Rendered working copy (DocContent): base rules for the scoped reading surface, then the Bläck treatment of
-   .markdown-body. The doubled class keeps the Library rules ahead of the generic ones. */
 
 .lib-docs-markdown {
   max-width: 72ch;
@@ -615,16 +763,3 @@
 
 .lib-docs-markdown .copyable-block { margin: 0 0 0.9em; }
 .lib-docs-markdown .copyable-block .markdown-code { padding-top: 10px; }
-
-/* ---- configs ---- */
-
-.configs-code {
-  margin: 0;
-  color: var(--text);
-  font-family: var(--font-mono);
-  font-size: var(--fs-sm);
-  line-height: 1.55;
-  white-space: pre;
-  overflow-x: auto;
-  background: transparent;
-}
