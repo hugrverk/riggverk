@@ -378,6 +378,17 @@ function AppShell() {
     loadWorkspaceResources,
   ]);
 
+  // The runtime health reads the saved selection. A toggle loads it before its autosave has written, so once a changed
+  // selection is saved the health is read again.
+  const savedSelectionKey = `${(appSettings?.enabled_target_ids ?? []).join(",")}|${enabledHarnessKey}`;
+  const healthSelectionRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!appSettings || settingsSaveStatus !== "saved") return;
+    const previous = healthSelectionRef.current;
+    healthSelectionRef.current = savedSelectionKey;
+    if (previous !== null && previous !== savedSelectionKey) void loadEnabledHarnessHealth();
+  }, [appSettings, settingsSaveStatus, savedSelectionKey, loadEnabledHarnessHealth]);
+
   const lastWorkspaceRefreshRef = useRef(0);
   const switchView = useCallback(async (v: View) => {
     const requestedHarness = harnessForView(v);
@@ -613,7 +624,13 @@ function AppShell() {
   }, [loadWorkspaceDiagnostics, loadWorkspaceResources, loadBackups, overview.refresh, skillLoads.refresh]);
 
   const checkedAt = useCheckedAt(overview);
-  const updateAllDisabled = updateAllDisabledReason(overview, { dataFolderOk, busyLabel: wsRunning, settingsSaving });
+  // A change waiting for its autosave blocks Update all as it blocks Update on the harness pages: a review built now
+  // would read the selection that is not saved yet.
+  const updateAllDisabled = updateAllDisabledReason(overview, {
+    dataFolderOk,
+    busyLabel: wsRunning,
+    settingsSaving: settingsSaveStatus === "saving" || settingsSaveStatus === "pending",
+  });
   const decideCounts = useMemo(
     () => decideCountsByHarness(overview, enabledHarnessIds, appSettings, dataFolderOk),
     [overview, enabledHarnessKey, appSettings, dataFolderOk],
