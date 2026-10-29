@@ -162,7 +162,7 @@ The history generators share one walk of every commit reachable from `HEAD` (and
 | shell command-string spawns in Rust | `check-shell-spawn.py` | no `sh -c` style process spawning in Rust |
 | source: identity, Tauri config, startup order | `check-source.py` | product name, legal files, stable env vars and markers, install paths, window size, the app data move runs first |
 | source: forbidden patterns and required markers | `check-source.py` | no shell command strings or remote skill installs in scripts and source; no project-target or page-scoped install actions; Codex skills folders; pinned Rust regression tests that replaced older source checks |
-| source: UI | `check-source.py` | offline-first UI (no remote URLs, vendored font), dev-only mock backend, selected-state design rules, typography plumbing |
+| source: UI | `check-source.py` | offline-first UI (no remote URLs or fonts, system font stacks), dev-only mock backend, selected-state design rules, typography plumbing |
 | public residue | `check-public-residue.py` | no name the project retired (today: the name from before the Riggverk rename, in every spelling) outside its allowlist: `LEGACY_*` constants, metadata history, release notes, `docs/RELEASE.md`, the upgrade contract tests, and lines or blocks marked `residue-allow`; `--list-allowed` prints the allowlist, and a later rename is one more entry in `RESIDUES` |
 | frontend typecheck, tests and build | `npm run typecheck`, `npm test`, `npm run build` | |
 | rust fmt, clippy, tests | `cargo fmt --check`, `cargo clippy -D warnings`, `cargo test` | |

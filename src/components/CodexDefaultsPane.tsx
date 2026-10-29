@@ -3,7 +3,6 @@ import { defaultsKeyList, type CodexDefaultsFlow } from "../hooks/useCodexDefaul
 import { focusDefaultPane, focusPaneById } from "../keyboard/focus";
 import type { Binding } from "../keyboard/registry";
 import { useKeymap } from "../keyboard/useKeymap";
-import { useConfirmMode } from "../shell/ShellState";
 import { BindingButton } from "../ui/BindingButton";
 import { Kv, type KvItem } from "../ui/Kv";
 import { Pane } from "../ui/Pane";
@@ -72,7 +71,6 @@ function PreviewBody({ preview }: { preview: CodexConfigDefaultsPreview }) {
 export function CodexDefaultsPane({ flow, busyLabel, backupRoot, returnPaneId = "page" }: CodexDefaultsPaneProps) {
   const { state } = flow;
   const open = state.status !== "idle";
-  useConfirmMode(open);
 
   // Take focus when the review appears, unless the user already moved somewhere deliberate.
   useEffect(() => {

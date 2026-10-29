@@ -24,16 +24,14 @@ function dryRun(overrides: Partial<SetupResult> = {}): SetupResult {
 }
 
 function setup(transactionId: string | null = "1710000000000", approved = true) {
-  const release = vi.fn();
   const options = {
     transactionId,
     confirm: vi.fn(async (_config: ConfirmConfig | string) => approved),
-    beginConfirm: vi.fn(() => release),
     runRollback: vi.fn(async () => true),
     setError: vi.fn(),
   };
   const { result } = renderHook(() => useRollbackRequest(options));
-  return { ...options, release, request: result.current };
+  return { ...options, request: result.current };
 }
 
 beforeEach(() => {
@@ -63,9 +61,6 @@ describe("useRollbackRequest", () => {
     );
     expect(t.confirm.mock.calls[0]![0]).toEqual(expect.objectContaining({ message: expect.stringContaining("1710000000000") }));
     expect(t.runRollback).toHaveBeenCalledWith("1710000000000");
-    // CONFIRM mode is held for exactly the length of the dialog.
-    expect(t.beginConfirm).toHaveBeenCalledTimes(1);
-    expect(t.release).toHaveBeenCalledTimes(1);
   });
 
   it("undoes a named transaction (the Overview's Undo, also after a restart) through the same dry run and confirm", async () => {
@@ -93,7 +88,6 @@ describe("useRollbackRequest", () => {
     const t = setup("1710000000000", false);
     await t.request();
     expect(t.runRollback).not.toHaveBeenCalled();
-    expect(t.release).toHaveBeenCalledTimes(1);
   });
 
   it("reports a dry run with conflicts or nothing to restore instead of asking", async () => {

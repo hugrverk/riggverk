@@ -12,8 +12,7 @@ interface ShellProvidersProps {
 }
 
 /**
- * Keymap + command registries, shell state (overlays, mode, notices) and the confirm dialog. Mount once above the
- * app shell. The confirm dialog sits inside the shell state so that every confirmation shows CONFIRM mode.
+ * Keymap + command registries, shell state (overlays, notices) and the confirm dialog. Mount once above the app shell.
  */
 export function ShellProviders({ children, platform, chordTimeoutMs }: ShellProvidersProps) {
   return (

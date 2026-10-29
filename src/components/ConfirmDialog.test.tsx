@@ -231,38 +231,37 @@ describe("ConfirmDialog", () => {
     expect(dialog.hasAttribute("open")).toBe(false);
   });
 
-  describe("shell mode", () => {
-    const mode = () => screen.getByLabelText("Shell mode").textContent;
+  describe("lifecycle", () => {
+    const dialogGone = () => vi.waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
 
-    it("shows CONFIRM while any confirmation is open and NORMAL again once it settles", async () => {
+    it("shows the dialog while a confirmation is open and removes it once it settles", async () => {
       const results: boolean[] = [];
       renderInFrame(<ConfirmProbe results={results} />);
-      expect(mode()).toBe("NORMAL");
+      expect(screen.queryByRole("dialog")).toBeNull();
 
       fireEvent.click(screen.getByRole("button", { name: "ask first" }));
       await screen.findByRole("dialog");
-      expect(mode()).toBe("CONFIRM");
       fireEvent.click(screen.getByRole("button", { name: "cancel" }));
-      await vi.waitFor(() => expect(mode()).toBe("NORMAL"));
+      await dialogGone();
 
       fireEvent.click(screen.getByRole("button", { name: "ask first" }));
       const cancel = await screen.findByRole("button", { name: "cancel" });
-      expect(mode()).toBe("CONFIRM");
+      expect(screen.getByRole("dialog")).toBeTruthy();
       fireEvent.keyDown(cancel, { key: "y" });
-      await vi.waitFor(() => expect(mode()).toBe("NORMAL"));
+      await dialogGone();
       expect(results).toEqual([false, true]);
     });
 
-    it("stays in CONFIRM when a second confirmation supersedes the first", async () => {
+    it("keeps one dialog when a second confirmation supersedes the first", async () => {
       renderInFrame(<ConfirmProbe results={[]} />);
       fireEvent.click(screen.getByRole("button", { name: "ask first" }));
       await screen.findByText("First?");
       fireEvent.click(screen.getByRole("button", { name: "ask second" }));
       await screen.findByText("Second?");
-      expect(mode()).toBe("CONFIRM");
+      expect(screen.getAllByRole("dialog")).toHaveLength(1);
 
       fireEvent.keyDown(screen.getByRole("button", { name: "cancel" }), { key: "n" });
-      await vi.waitFor(() => expect(mode()).toBe("NORMAL"));
+      await dialogGone();
     });
   });
 

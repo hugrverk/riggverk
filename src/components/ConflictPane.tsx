@@ -4,7 +4,6 @@ import { focusDefaultPane, focusPaneById } from "../keyboard/focus";
 import type { Binding } from "../keyboard/registry";
 import { useKeymap } from "../keyboard/useKeymap";
 import { redactDiffText } from "../lib/redactTerminalOutput";
-import { useConfirmMode } from "../shell/ShellState";
 import { BindingButton } from "../ui/BindingButton";
 import { Kv, type KvItem } from "../ui/Kv";
 import { Pane } from "../ui/Pane";
@@ -164,7 +163,6 @@ function BundledBody({ reviewed, unit }: { reviewed: TakeBundledUnit; unit: File
 export function ConflictPane({ flow, units, busyLabel, backupRoot, returnPaneId = "surfaces" }: ConflictPaneProps) {
   const { state } = flow;
   const open = state.status !== "idle";
-  useConfirmMode(open);
 
   // Take focus when the review appears, unless the user already moved somewhere deliberate.
   useEffect(() => {

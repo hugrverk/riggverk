@@ -9,6 +9,8 @@ export interface AgentCellProps {
   card: AgentCardModel;
   /** Codex only: AGENTS.override.md replaces AGENTS.md, so the base is silently off. */
   override?: RulesOverrideWarning | null;
+  /** The last agent of the grid: it spans the slots that would otherwise stay empty in its row. */
+  tail?: boolean;
   onOpen: (harness: InstallAgent) => void;
 }
 
@@ -17,13 +19,13 @@ export interface AgentCellProps {
  * target), the pill for its aggregate state, one row per surface with its state in words, and the sentence of the most
  * urgent row. A cell with a decision in it carries a bright top edge. Runtime health only ever adds a sentence here.
  */
-export function AgentCell({ card, override = null, onOpen }: AgentCellProps) {
+export function AgentCell({ card, override = null, tail = false, onOpen }: AgentCellProps) {
   const baseId = useId();
   const noteId = `${baseId}-note`;
   const pillId = `${baseId}-pill`;
   const describedBy = [card.badge ? pillId : null, card.notes.length > 0 ? noteId : null].filter(Boolean).join(" ") || undefined;
   return (
-    <article className="ov-cell ov-agent" data-state={card.badge?.state}>
+    <article className={cx("ov-cell", "ov-agent", tail && "ov-tail")} data-state={card.badge?.state}>
       <span className="ov-lbl">Agent</span>
       <div className="ov-ch">
         <button type="button" className="ov-open" aria-describedby={describedBy} onClick={() => onOpen(card.harness)}>

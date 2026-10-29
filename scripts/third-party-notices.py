@@ -144,7 +144,7 @@ def generate() -> str:
         "Check with `python3 scripts/third-party-notices.py --check`.\n\n"
         "This inventory records package-declared license metadata. Full license terms\n"
         "remain with the upstream packages. See [NOTICE.md](NOTICE.md) for bundled\n"
-        "skills and fonts.\n\n"
+        "skills.\n\n"
         "## Rust dependencies\n\n"
         "The locked Cargo dependency graph, including build and target-specific crates,\n"
         "excluding workspace members.\n\n"

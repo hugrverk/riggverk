@@ -296,10 +296,6 @@ function rulesPane() {
   return screen.getByRole("region", { name: "Rules review" });
 }
 
-function mode() {
-  return screen.getByLabelText("Shell mode").textContent;
-}
-
 describe("rules file in the detail pane", () => {
   it("shows layout and the refinement lines a base update keeps, as an update and not a conflict", () => {
     renderClaude(rules({ refinement_lines: 14 }), "update_available");
@@ -461,8 +457,7 @@ describe("Compare (d), inline", () => {
     // Compare never writes and needs no token: the one command it ran is the read-only diff.
     expect(invokeMock).toHaveBeenCalledTimes(1);
     expect(invokeMock).toHaveBeenCalledWith("preview_rules_diff", { surface: "claude_rules", mode: "update" });
-    // The page stays (inline), so there is no confirm mode and the cells and their keys are still there.
-    expect(mode()).toBe("NORMAL");
+    // The page stays (inline), so no review replaces it and the cells and their keys are still there.
     expect(screen.getByRole("region", { name: "Claude" })).toBeTruthy();
     expect(screen.queryByRole("region", { name: "Claude rules review" })).toBeNull();
     // Added lines carry a + in their own column, on the right; the diff has no way to write.
@@ -621,7 +616,7 @@ describe("rules conversion (v, y)", () => {
   it("previews the sections that move, the ones that return, the diff and the exact resulting file", async () => {
     await openPreview();
     expect(invokeMock).toHaveBeenCalledWith("preview_rules_conversion", { surface: "claude_rules" });
-    expect(mode()).toBe("CONFIRM");
+    expect(rulesPane()).toBeTruthy();
     const summary = screen.getByLabelText("Conversion summary").textContent!;
     expect(summary).toContain("a managed base block that was edited");
     expect(summary).toContain("1 section below the END marker: ## Communication");
@@ -657,7 +652,6 @@ describe("rules conversion (v, y)", () => {
     expect(log.stdout).toContain("transaction tx-rules-1 recorded · rollback available");
     // The review closes and the page's panes come back (after the apply settles; a loaded run can lag a tick).
     expect(await screen.findByRole("region", { name: "Claude" })).toBeTruthy();
-    await waitFor(() => expect(mode()).toBe("NORMAL"));
   });
 
   it("never applies on Enter, and y is also a button", async () => {
@@ -756,7 +750,6 @@ describe("leave as is (m)", () => {
     focusSurfaces();
     press("m");
     const dialog = await screen.findByRole("dialog");
-    expect(mode()).toBe("CONFIRM");
     expect(dialog.textContent).toContain("CLAUDE.md");
     expect(invokeMock).not.toHaveBeenCalled();
     fireEvent.click(within(dialog).getByRole("button", { name: "leave as is" }));
@@ -771,7 +764,7 @@ describe("leave as is (m)", () => {
     press("m");
     const dialog = await screen.findByRole("dialog");
     fireEvent.click(within(dialog).getByRole("button", { name: "cancel" }));
-    await waitFor(() => expect(mode()).toBe("NORMAL"));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(invokeMock).not.toHaveBeenCalled();
   });
 

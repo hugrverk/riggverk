@@ -5,7 +5,7 @@ Check with `python3 scripts/third-party-notices.py --check`.
 
 This inventory records package-declared license metadata. Full license terms
 remain with the upstream packages. See [NOTICE.md](NOTICE.md) for bundled
-skills and fonts.
+skills.
 
 ## Rust dependencies
 

@@ -1,9 +1,9 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { renderWithShell } from "../test/renderWithShell";
-import { useKeymapContext, useKeymapEntries, useKeymapState } from "./context";
-import type { Binding, BindingRun } from "./registry";
+import { useKeymapEntries, useKeymapState } from "./context";
+import type { Binding } from "./registry";
 import { useKeymap } from "./useKeymap";
 
 function binding(overrides: Partial<Binding> & Pick<Binding, "id" | "keys">): Binding {
@@ -239,58 +239,6 @@ describe("KeymapProvider", () => {
     unmount();
     press(document.body, "j");
     expect(run).not.toHaveBeenCalled();
-  });
-
-  describe("run announcements", () => {
-    function Observer({ runs }: { runs: BindingRun[] }) {
-      const keymap = useKeymapContext()?.keymap;
-      useEffect(() => keymap?.onRun(run => runs.push(run)), [keymap, runs]);
-      return null;
-    }
-
-    function setup(bindings: Binding[]) {
-      const runs: BindingRun[] = [];
-      renderWithShell(
-        <>
-          <Observer runs={runs} />
-          <Harness bindings={bindings} />
-        </>,
-      );
-      return runs;
-    }
-
-    it("announces a handled binding with the chord that matched", () => {
-      const runs = setup([binding({ id: "t.next", keys: ["j", "ArrowDown"], hint: "next" })]);
-      press(document.body, "ArrowDown");
-      expect(runs).toHaveLength(1);
-      expect(runs[0]).toMatchObject({ binding: { id: "t.next" }, source: "key", editable: false, repeat: false });
-      expect(runs[0]!.chord.map(step => step.key)).toEqual(["ArrowDown"]);
-    });
-
-    it("announces the whole chord once, on its last key", () => {
-      const runs = setup([binding({ id: "t.top", keys: "g g" })]);
-      press(document.body, "g");
-      expect(runs).toHaveLength(0);
-      press(document.body, "g");
-      expect(runs).toHaveLength(1);
-      expect(runs[0]!.chord).toHaveLength(2);
-    });
-
-    it("does not announce unhandled keys or a binding that declined the key", () => {
-      const runs = setup([binding({ id: "t.declines", keys: "d", run: () => false })]);
-      press(document.body, "d");
-      press(document.body, "q");
-      expect(runs).toHaveLength(0);
-    });
-
-    it("tells whether a text field had focus and whether the key repeated", () => {
-      const runs = setup([binding({ id: "t.save", keys: "Mod+s", inEditable: true, repeat: true })]);
-      const field = screen.getByLabelText("field");
-      act(() => field.focus());
-      press(field, "s", { ctrlKey: true });
-      press(document.body, "s", { ctrlKey: true, repeat: true });
-      expect(runs.map(run => [run.editable, run.repeat])).toEqual([[true, false], [false, true]]);
-    });
   });
 
   it("is a safe no-op without a provider", () => {

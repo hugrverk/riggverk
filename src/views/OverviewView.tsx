@@ -19,6 +19,7 @@ import { rulesOverrideWarning } from "../lib/rulesView";
 import { updateAllDisabledReason } from "../lib/shellSummary";
 import { DEFAULT_WORKSPACE_PATH } from "../lib/settingsDraft";
 import type { AppView } from "../shell/views";
+import { tailStyle } from "../ui/gridTail";
 import { Page } from "../ui/Page";
 import type { AppSettings, InstallAgent, WorkspaceDiagnostics } from "../types";
 import { installBindings } from "./installBindings";
@@ -49,14 +50,9 @@ export interface OverviewViewProps extends PageOutputProps, PageInstallProps {
   onUndo: (transactionId: string) => void;
 }
 
-/** Empty slots that finish the last row of agent cells in the three-column grid, so the hairlines still close it. */
-function fillerCount(cards: number): number {
-  return (3 - (cards % 3)) % 3;
-}
-
 /**
  * The first page: how the setup stands, in two lines (a short verdict, then the counts of the states that are not
- * zero), over a hairline grid with one cell per enabled agent, the receipt of the last update, anything worth a look
+ * zero), over a hairline grid with one cell per enabled agent (the last one fills out its row), the receipt of the last update, anything worth a look
  * in the agents' security settings, the agents that are off, and the workspace folder (collapsed, with Uninstall).
  * Cells open the agent's page; nothing here writes. `u` opens the review of every update (Update all), `p` the
  * read-only preview of it, `r` checks again, `o` and `B` open the folders; the review replaces the page while it is
@@ -197,12 +193,15 @@ export function OverviewView({
     <div className="ov">
       <Page label="Overview" className="ov-page">
         <OverviewHeader summary={summary} checkedAt={checkedAt} />
-        <div className="ov-grid">
-          {cards.map(card => (
-            <AgentCell key={card.harness} card={card} override={card.harness === "codex" ? codexOverride : null} onOpen={openAgent} />
-          ))}
-          {Array.from({ length: fillerCount(cards.length) }, (_, index) => (
-            <div key={`fill-${index}`} className="ov-cell ov-fill" aria-hidden="true" />
+        <div className="ov-grid" style={tailStyle(cards.length)}>
+          {cards.map((card, index) => (
+            <AgentCell
+              key={card.harness}
+              card={card}
+              override={card.harness === "codex" ? codexOverride : null}
+              tail={index === cards.length - 1}
+              onOpen={openAgent}
+            />
           ))}
           {lastUpdate && (
             <LastUpdateCell

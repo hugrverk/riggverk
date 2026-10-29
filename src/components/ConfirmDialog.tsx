@@ -9,7 +9,6 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
 } from "react";
-import { useConfirmMode } from "../shell/ShellState";
 import { TButton } from "../ui/TButton";
 
 export interface ConfirmConfig {
@@ -45,12 +44,10 @@ export function useConfirm() {
 
 /**
  * Wraps the app tree and provides the `confirm` function via `useConfirm()`.
- * Renders a single themed `<dialog>` at the root level. Mounted by `ShellProviders` inside the shell
- * state: the shell mode is CONFIRM while the dialog is open, for every caller.
+ * Renders a single themed `<dialog>` at the root level, mounted by `ShellProviders`.
  */
 export function ConfirmProvider({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
-  useConfirmMode(open);
   const [config, setConfig] = useState<ConfirmConfig | null>(null);
   const resolveRef = useRef<(value: boolean) => void>(() => {});
   const dialogRef = useRef<HTMLDialogElement>(null);

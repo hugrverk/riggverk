@@ -146,10 +146,6 @@ function hint(name: RegExp) {
   return within(screen.getByLabelText("Key hints")).queryByRole("button", { name });
 }
 
-function mode() {
-  return screen.getByLabelText("Shell mode").textContent;
-}
-
 function table() {
   return screen.getByRole("table", { name: "Managed Codex settings" });
 }
@@ -246,7 +242,6 @@ describe("keep mine (m)", () => {
     focusSurfaces();
     press("m");
     const dialog = await screen.findByRole("dialog");
-    expect(mode()).toBe("CONFIRM");
     expect(dialog.textContent).toContain("approvals_reviewer = auto_review");
     expect(dialog.textContent).toContain("other managed keys keep following Riggverk");
     expect(invokeMock).not.toHaveBeenCalled();
@@ -263,7 +258,7 @@ describe("keep mine (m)", () => {
     press("m");
     const dialog = await screen.findByRole("dialog");
     fireEvent.click(within(dialog).getByRole("button", { name: "cancel" }));
-    await waitFor(() => expect(mode()).toBe("NORMAL"));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(invokeMock).not.toHaveBeenCalled();
   });
 
@@ -384,7 +379,7 @@ describe("use Riggverk defaults (b, y)", () => {
     await openPreview();
     expect(invokeMock).toHaveBeenCalledWith("preview_codex_config_defaults");
     expect(invokeMock).not.toHaveBeenCalledWith("apply_codex_config_defaults", expect.anything());
-    expect(mode()).toBe("CONFIRM");
+    expect(review()).toBeTruthy();
     // The review takes the page's place, like the other reviews.
     expect(screen.queryByRole("region", { name: "Codex" })).toBeNull();
     expect(screen.getByLabelText("Keys set to Riggverk's values").textContent).toContain("approvals_reviewerauto_review → user");
@@ -431,7 +426,6 @@ describe("use Riggverk defaults (b, y)", () => {
     expect(log.stdout).toContain("transaction tx-codex-1 recorded · rollback available");
     // The review closes and the page comes back.
     expect(await screen.findByRole("region", { name: "Codex" })).toBeTruthy();
-    await waitFor(() => expect(mode()).toBe("NORMAL"));
   });
 
   it("never applies on Enter, and y is also a button", async () => {
@@ -450,7 +444,6 @@ describe("use Riggverk defaults (b, y)", () => {
     press("n");
     expect(invokeMock).not.toHaveBeenCalledWith("apply_codex_config_defaults", expect.anything());
     expect(await screen.findByRole("region", { name: "Codex" })).toBeTruthy();
-    expect(mode()).toBe("NORMAL");
     fireEvent.click(within(surfaceRow("config")).getByRole("button", { name: "Use Riggverk defaults" }));
     await screen.findByLabelText("Keys set to Riggverk's values");
     fireEvent.keyDown(document.body, { key: "Escape" });

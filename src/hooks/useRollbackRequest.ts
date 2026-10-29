@@ -7,8 +7,6 @@ export interface UseRollbackRequestOptions {
   /** The transaction the last install or uninstall left, or null when there is nothing to roll back. */
   transactionId: string | null;
   confirm: (config: ConfirmConfig | string) => Promise<boolean>;
-  /** Marks a confirm as open so the shell mode is CONFIRM; returns the release function. */
-  beginConfirm: () => () => void;
   /** The existing rollback path (`rollback_setup_transaction` with `dryRun: false`). */
   runRollback: (transactionId: string) => Promise<unknown>;
   setError: (message: string | null) => void;
@@ -22,7 +20,6 @@ export interface UseRollbackRequestOptions {
 export function useRollbackRequest({
   transactionId,
   confirm,
-  beginConfirm,
   runRollback,
   setError,
 }: UseRollbackRequestOptions): (undoTransactionId?: string) => Promise<void> {
@@ -41,17 +38,11 @@ export function useRollbackRequest({
       setError(`rollback: nothing can be restored for transaction ${target} (${dryRun.message})`);
       return;
     }
-    const release = beginConfirm();
-    let approved = false;
-    try {
-      approved = await confirm({
-        title: "Roll back",
-        message: `Restore the files of transaction ${target} from its backup? ${dryRun.message}`,
-        confirmLabel: "roll back",
-      });
-    } finally {
-      release();
-    }
+    const approved = await confirm({
+      title: "Roll back",
+      message: `Restore the files of transaction ${target} from its backup? ${dryRun.message}`,
+      confirmLabel: "roll back",
+    });
     if (approved) await runRollback(target);
-  }, [transactionId, confirm, beginConfirm, runRollback, setError]);
+  }, [transactionId, confirm, runRollback, setError]);
 }

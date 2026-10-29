@@ -49,7 +49,7 @@ export function useCodexConfigActions({
   reload,
 }: UseCodexConfigActionsOptions): CodexConfigActions {
   const confirm = useConfirm();
-  const { beginConfirm, notify } = useShellState();
+  const { notify } = useShellState();
   const [error, setError] = useState<string | null>(null);
   const gates = codexConfigGates(model, { dataFolderOk, busyLabel, blockedBy });
 
@@ -57,13 +57,11 @@ export function useCodexConfigActions({
     async (kept: boolean) => {
       if (!model) return;
       if (kept) {
-        const release = beginConfirm();
-        let approved = false;
-        try {
-          approved = await confirm({ title: "Keep mine", message: keepMessage(model.differing), confirmLabel: "keep mine" });
-        } finally {
-          release();
-        }
+        const approved = await confirm({
+          title: "Keep mine",
+          message: keepMessage(model.differing),
+          confirmLabel: "keep mine",
+        });
         if (!approved) return;
       }
       try {
@@ -80,7 +78,7 @@ export function useCodexConfigActions({
         setError(e instanceof Error ? e.message : String(e));
       }
     },
-    [model, confirm, beginConfirm, notify, reload],
+    [model, confirm, notify, reload],
   );
 
   // `m` is one key with two meanings: keep what differs, or hand back what is kept.

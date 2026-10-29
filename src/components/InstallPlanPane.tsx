@@ -11,7 +11,6 @@ import {
   planRows,
   type PlanCounts,
 } from "../lib/installPlan";
-import { useConfirmMode } from "../shell/ShellState";
 import { BindingButton } from "../ui/BindingButton";
 import { Pane } from "../ui/Pane";
 import { cx } from "../ui/tone";
@@ -71,7 +70,6 @@ function Counts({ counts }: { counts: PlanCounts }) {
 export function InstallPlanPane({ flow, busyLabel, backupRoot, onApply }: InstallPlanPaneProps) {
   const { status, review, error, request } = flow;
   const open = status !== "idle";
-  useConfirmMode(open);
 
   const tableRef = useRef<HTMLTableElement>(null);
   const tableId = useId();

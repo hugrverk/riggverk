@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ReleaseNotes } from "../lib/releaseNotes";
 import { renderInFrame } from "../test/renderWithShell";
 import { Pane } from "../ui/Pane";
-import { useShellMode, useShellState } from "./ShellState";
+import { useShellState } from "./ShellState";
 
 afterEach(cleanup);
 
@@ -20,13 +20,11 @@ const RELEASES: ReleaseNotes[] = [
 
 function Opener({ onClose }: { onClose?: () => void }) {
   const { openWhatsNew } = useShellState();
-  const mode = useShellMode();
   return (
     <Pane id="main" title="main" scrollable>
       <button type="button" onClick={() => openWhatsNew({ releases: RELEASES, onClose })}>
         show notes
       </button>
-      <output aria-label="mode">{mode}</output>
     </Pane>
   );
 }
@@ -65,16 +63,14 @@ describe("WhatsNewOverlay", () => {
     expect(dialog.querySelector(".help-box p.foot")).not.toBeNull();
   });
 
-  it("takes focus, shows HELP mode, and gives focus back on close", () => {
+  it("takes focus and gives focus back on close", () => {
     const { trigger, dialog } = open();
     expect(document.activeElement).toBe(dialog);
-    expect(screen.getByLabelText("mode").textContent).toBe("HELP");
 
     fireEvent.keyDown(dialog, { key: "Escape" });
 
     expect(screen.queryByRole("dialog", { name: "What's new" })).toBeNull();
     expect(document.activeElement).toBe(trigger);
-    expect(screen.getByLabelText("mode").textContent).toBe("NORMAL");
   });
 
   it("closes with Escape, q, its close button and a backdrop click, running onClose once each time", () => {
