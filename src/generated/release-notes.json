@@ -1,6 +1,17 @@
 {
   "releases": [
     {
+      "version": "2026.10.8",
+      "sections": [
+        {
+          "title": "Other",
+          "items": [
+            "UI follow-ups: system mono, grid tail cells, dead shell state"
+          ]
+        }
+      ]
+    },
+    {
       "version": "2026.10.7",
       "sections": [
         {
