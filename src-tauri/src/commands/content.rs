@@ -305,6 +305,7 @@ fn read_custom_doc(root: &Path, slug: &str) -> Result<DocumentContent, String> {
         path: rel,
         section: "Context".to_string(),
         source: "custom".to_string(),
+        revision: Some(text_revision(&content)),
         content,
     })
 }
@@ -326,6 +327,15 @@ pub struct DocumentContent {
     pub section: String,
     pub source: String,
     pub content: String,
+    /// Digest of `content`, for an item the Library can save (a personal doc or personal pack
+    /// skill): the save sends it back and is refused when the file changed on disk since.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub revision: Option<String>,
+}
+
+/// The revision of an editable item's text, as [`DocumentContent::revision`] carries it.
+pub(super) fn text_revision(text: &str) -> String {
+    crate::stable_digest::bytes(text.as_bytes())
 }
 
 /// Bundled docs come from the app's bundle and need no workspace; personal docs come from the data
@@ -384,8 +394,9 @@ fn read_curated_doc(bundle_root: &Path, id: &str) -> Result<DocumentContent, Str
         title,
         section,
         path: rel_path.to_string(),
-        source: "curated".to_string(),
+        source: "curated".into(),
         content,
+        revision: None,
     })
 }
 
@@ -416,6 +427,10 @@ fn personal_doc_open_path(root: &Path, id: &str) -> Result<PathBuf, String> {
 }
 
 pub(super) const MAX_DOC_SIZE: usize = 512 * 1024;
+/// A save whose expected revision no longer matches the file. Says "changed on disk", which the
+/// Library looks for to offer a reload, as for rules files.
+pub(super) const DOC_CHANGED_ON_DISK: &str =
+    "the file changed on disk since it was opened: reload it";
 /// A doc that grew past [`MAX_DOC_SIZE`] outside the app is never loaded whole.
 pub(super) const DOC_TOO_LARGE: &str =
     "the doc on disk is larger than 512 KB; open it in your editor instead";
@@ -531,10 +546,23 @@ fn write_workspace_file(root: &Path, path: &Path, content: &str) -> Result<(), S
         .map_err(|e| format!("write error: {e}"))
 }
 
+#[cfg(test)]
 fn save_doc_at_root(
     root: &Path,
     id: &str,
     content: &str,
+    custom_backup_root: Option<&Path>,
+) -> Result<ActionResult, String> {
+    save_doc_checked(root, id, content, None, custom_backup_root)
+}
+
+/// Saves a personal doc. With `expected_revision` (the revision the editor loaded) the save is
+/// refused when the file changed on disk since.
+fn save_doc_checked(
+    root: &Path,
+    id: &str,
+    content: &str,
+    expected_revision: Option<&str>,
     custom_backup_root: Option<&Path>,
 ) -> Result<ActionResult, String> {
     let slug = writable_slug(id)?;
@@ -553,6 +581,9 @@ fn save_doc_at_root(
     }
 
     let existing = read_doc_text(&target_path)?;
+    if expected_revision.is_some_and(|expected| expected != text_revision(&existing)) {
+        return Err(DOC_CHANGED_ON_DISK.to_string());
+    }
     if existing == content {
         return Ok(ActionResult::new(
             true,
@@ -578,11 +609,15 @@ fn save_doc_at_root(
 }
 
 #[tauri::command(async)]
-pub fn save_doc(id: String, content: String) -> Result<ActionResult, String> {
+pub fn save_doc(
+    id: String,
+    content: String,
+    expected_revision: Option<String>,
+) -> Result<ActionResult, String> {
     // Writes files an apply may also write: wait for a running mutation instead of interleaving.
     let _mutation = crate::mutation_lock::acquire()?;
     let root = workspace_root_for_write()?;
-    save_doc_at_root(&root, &id, &content, None)
+    save_doc_checked(&root, &id, &content, expected_revision.as_deref(), None)
 }
 
 fn create_doc_at_root(
@@ -632,6 +667,7 @@ fn create_doc_at_root(
         path: rel,
         section: "Context".to_string(),
         source: "custom".to_string(),
+        revision: Some(text_revision(&initial_content)),
         content: initial_content,
     })
 }
@@ -1392,6 +1428,47 @@ mod tests {
     }
 
     #[test]
+    fn a_doc_changed_on_disk_since_it_was_read_is_refused() {
+        let root = temp_root("doc-revision");
+        write_file(&root, "docs/context/notes.md", "# Notes\nfirst\n");
+        let backups = root.join("backups");
+        let opened = read_custom_doc(&root, "notes").unwrap();
+        let revision = opened
+            .revision
+            .clone()
+            .expect("a personal doc has a revision");
+        write_file(
+            &root,
+            "docs/context/notes.md",
+            "# Notes\nedited elsewhere\n",
+        );
+
+        let refused = save_doc_checked(
+            &root,
+            "custom:notes",
+            "# Notes\nmine\n",
+            Some(&revision),
+            Some(&backups),
+        );
+        let after_refusal = fs::read_to_string(root.join("docs/context/notes.md")).unwrap();
+        let reread = read_custom_doc(&root, "notes").unwrap().revision.unwrap();
+        let saved = save_doc_checked(
+            &root,
+            "custom:notes",
+            "# Notes\nmine\n",
+            Some(&reread),
+            Some(&backups),
+        );
+        let after_save = fs::read_to_string(root.join("docs/context/notes.md")).unwrap();
+        cleanup(&root);
+
+        assert_eq!(refused.err().as_deref(), Some(DOC_CHANGED_ON_DISK));
+        assert_eq!(after_refusal, "# Notes\nedited elsewhere\n");
+        assert!(saved.expect("save after reload").success);
+        assert_eq!(after_save, "# Notes\nmine\n");
+    }
+
+    #[test]
     fn a_doc_grown_past_the_cap_on_disk_is_refused_on_read_and_save() {
         let root = temp_root("doc-grown");
         let huge = "a".repeat(MAX_DOC_SIZE + 1);
@@ -1770,6 +1847,7 @@ fn read_agent_template_at_root(bundle_root: &Path) -> Result<DocumentContent, St
         path: "templates/global-agent-rules.md".into(),
         source: "curated".into(),
         content,
+        revision: None,
     })
 }
 
@@ -1796,6 +1874,7 @@ fn read_config_template_at_root(
         path: target.source_rel.to_string(),
         source: "curated".into(),
         content,
+        revision: None,
     })
 }
 
@@ -1824,6 +1903,7 @@ fn read_opencode_config_source_at_root(
         path: source.rel_path.to_string(),
         source: "curated".into(),
         content,
+        revision: None,
     })
 }
 
