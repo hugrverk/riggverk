@@ -240,20 +240,21 @@ export function LibraryView(props: LibraryViewProps) {
   }, [sheet]);
 
   // Forgetting a pack removes its row, and the focus on it goes with it: it moves to the row that took its place (or
-  // the one before it, or the selected tab when no row is left) instead of dropping to the page. It checks after every
-  // render while a forget is pending, so it does not depend on which prop carries the new pack list.
+  // the one before it, or the selected tab when no row is left) instead of dropping to the page. It runs once the
+  // forget has finished (`forgotten` ticks after the new pack list is in), not on the prop, which a caller may mutate.
   const forgetFocusIndex = useRef<number | null>(null);
+  const [forgotten, setForgotten] = useState(0);
   useEffect(() => {
     const index = forgetFocusIndex.current;
     if (index === null) return;
+    forgetFocusIndex.current = null;
     const active = document.activeElement;
     // Focus still on something live (a dialog that is closing counts as gone) stays where it is.
     if (active && active !== document.body && active.isConnected && !active.closest("dialog:not([open])")) return;
-    forgetFocusIndex.current = null;
     const rows = Array.from(rootRef.current?.querySelectorAll<HTMLElement>("[data-row-key]") ?? []);
     const target = rows[Math.min(index, rows.length - 1)]?.querySelector<HTMLElement>("[data-row-primary]") ?? rootRef.current?.querySelector<HTMLElement>('[role="tab"][tabindex="0"]');
     target?.focus();
-  });
+  }, [forgotten]);
 
   // Switching topic replaces the rows, and focus on one of them goes with it: it lands on the selected tab, so the
   // next key still reaches the Library. Focus on a tab follows the selection too.
@@ -391,8 +392,9 @@ export function LibraryView(props: LibraryViewProps) {
       case "forget": {
         const rows = Array.from(rootRef.current?.querySelectorAll<HTMLElement>("[data-row-key]") ?? []);
         forgetFocusIndex.current = Math.max(0, rows.findIndex(el => el.dataset.rowKey === `${scope}/${row.key}`));
-        void Promise.resolve(props.onForgetPack?.(action.pack)).then(forgotten => {
-          if (forgotten !== true) forgetFocusIndex.current = null;
+        void Promise.resolve(props.onForgetPack?.(action.pack)).then(done => {
+          if (done === true) setForgotten(count => count + 1);
+          else forgetFocusIndex.current = null;
         });
         break;
       }
