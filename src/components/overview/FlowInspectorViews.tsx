@@ -161,8 +161,8 @@ export function OffGroupView({ agents, actions }: { agents: FlowAgent[]; actions
   return (
     <>
       <Heading>{agents.length} off</Heading>
-      <p className="flow-dim">Off in Settings. Nothing flows to it.</p>
-      <ul className="flow-rows" aria-label="Agents off">
+      <p className="flow-dim">Off in Settings. Nothing flows to {agents.length === 1 ? "it" : "them"}.</p>
+      <ul className="flow-rows flow-off-list" aria-label="Agents off">
         {agents.map(agent => <li key={agent.id}><span><AgentIcon harness={agent.id} state="off" decorative /> {agent.label}</span></li>)}
       </ul>
       <div className="flow-acts"><TButton keys={[]} onClick={() => actions.onNavigate("settings")}>Open Settings</TButton></div>

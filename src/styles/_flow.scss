@@ -381,3 +381,9 @@
 
 .flow-off-group,
 .flow-off-group * { transition: none; animation: none; }
+
+.flow-off-list span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+}

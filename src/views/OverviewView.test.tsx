@@ -402,7 +402,7 @@ describe("Overview inspector", () => {
     const list = within(inspector()).getByRole("list", { name: "Agents off" });
     expect(within(list).getAllByRole("listitem").map(item => item.textContent?.trim())).toEqual(["Copilot", "Pi", "Kilo", "Antigravity", "Grok"]);
     expect(list.querySelectorAll("svg.agent-glyph")).toHaveLength(5);
-    expect(within(inspector()).getByText("Off in Settings. Nothing flows to it.")).toBeTruthy();
+    expect(within(inspector()).getByText("Off in Settings. Nothing flows to them.")).toBeTruthy();
     fireEvent.click(within(inspector()).getByRole("button", { name: "Open Settings" }));
     expect(p.onNavigate).toHaveBeenCalledWith("settings");
   });
