@@ -10,6 +10,7 @@ export type AppView =
   | "copilot"
   | "pi"
   | "kilo"
+  | "antigravity"
   | "grok"
   | "history"
   | "library"
@@ -53,8 +54,9 @@ export function visibleViews(enabledHarnessIds: readonly InstallAgent[]): ViewDe
 /**
  * The digit key of each destination. The digits are fixed, not positional: they do not move when an agent is turned
  * off or on, and the most-used destinations always have one. Overview is 1, the four central agents 2-5, then
- * History 6, Library 7 and Settings 8. The optional agents (Copilot, Pi, Kilo, Grok) have none: they open from the sidebar
- * or with `:copilot`, `:pi`, `:kilo`, `:grok`. The digit of an agent that is turned off does nothing. `Mod+,` also opens Settings.
+ * History 6, Library 7 and Settings 8. The optional agents (Copilot, Pi, Kilo, Antigravity, Grok) have none: they open
+ * from the sidebar or with `:copilot`, `:pi`, `:kilo`, `:antigravity`, `:grok`. The digit of an agent that is turned off
+ * does nothing. `Mod+,` also opens Settings.
  */
 export const VIEW_DIGITS: Readonly<Partial<Record<AppView, string>>> = {
   start: "1",

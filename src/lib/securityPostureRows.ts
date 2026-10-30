@@ -101,6 +101,10 @@ const COPY: Record<FindingCode, Copy> = {
     "Riggverk reads no Grok permission setting and writes only the Playwright entry of ~/.grok/config.toml · run Grok in a container or VM for unattended runs",
   ),
   config_only: fixed("not checked", "project and managed config, profiles, command-line flags and aliases"),
+  antigravity_not_covered: fixed(
+    "controls",
+    "Riggverk reads no Antigravity setting and writes none · terminal and review policies are set in the app and agy",
+  ),
 };
 
 function verdictOf(posture: SecurityPosture): PostureVerdict {

@@ -24,9 +24,10 @@ describe("defaultSettings", () => {
     ]);
   });
 
-  it("enables every rules, agents, config and MCP target except codex_config and kilo_mcp", () => {
+  it("enables every rules, agents, config and MCP target except codex_config, kilo_mcp and antigravity_mcp", () => {
     expect(defaultSettings().enabled_target_ids).toBe(DEFAULT_TARGET_IDS);
     expect([...DEFAULT_TARGET_IDS].sort()).toEqual([
+      "antigravity_rules",
       "claude_agents",
       "claude_rules",
       "codex_agents",
@@ -43,6 +44,7 @@ describe("defaultSettings", () => {
     ]);
     expect(DEFAULT_TARGET_IDS).not.toContain("codex_config");
     expect(DEFAULT_TARGET_IDS).not.toContain("kilo_mcp");
+    expect(DEFAULT_TARGET_IDS).not.toContain("antigravity_mcp");
   });
 });
 

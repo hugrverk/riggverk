@@ -62,6 +62,23 @@
         "shadowed_by_home": [".kilo/kilo.json", ".kilo/kilo.jsonc"]
       }
     },
+    "antigravity": {
+      "label": "Antigravity",
+      "cli": { "program": "agy" },
+      "rules": {
+        "adapter": "antigravity",
+        "target_rel": ".gemini/AGENTS.md",
+        "default_enabled": true,
+        "max_file_bytes": 24000
+      },
+      "mcp": {
+        "target_rel": ".gemini/config/mcp_config.json",
+        "root_key": "mcpServers",
+        "entry_key": "playwright",
+        "template": "templates/mcp/antigravity.playwright.json",
+        "default_enabled": false
+      }
+    },
     "grok": {
       "label": "Grok",
       "cli": { "program": "grok" },

@@ -529,6 +529,9 @@ fn rules_detail(
             "another context file in this folder would be hidden by a new one, nothing written"
                 .to_string(),
         ),
+        RulesPlan::Conflict(RulesConflict::ExceedsHarnessLimit) => {
+            Some("the file would pass the size limit of the harness, nothing written".to_string())
+        }
     }
 }
 

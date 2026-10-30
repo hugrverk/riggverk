@@ -6,7 +6,7 @@ import { cx } from "./tone";
 /**
  * Flat, monochrome agent icons. The vector paths are from Lobe Icons (@lobehub/icons-static-svg 1.101.0, MIT,
  * (c) LobeHub, https://github.com/lobehub/lobe-icons): the Claude star, the OpenAI blossom for Codex, Cursor, GitHub
- * Copilot, OpenCode, Pi, Kilo Code and Grok. The marks belong to their owners and are used only to name the tool each one
+ * Copilot, OpenCode, Pi, Kilo Code, Google Antigravity and Grok. The marks belong to their owners and are used only to name the tool each one
  * stands for (see NOTICE.md). Only the path data is embedded.
  *
  * Every glyph is drawn in a 24 x 24 box, filled with `currentColor` (even-odd, as in the source files), so one colour
@@ -37,6 +37,9 @@ const PATHS: Record<InstallAgent, readonly string[]> = {
   ],
   kilo: [
     "M0 0v24h24V0H0zm22.222 22.222H1.778V1.778h20.444v20.444zm-7.555-4.964h2.222v1.778h-2.794L12.89 17.83v-2.794h1.778v2.222zm4 0h-1.778v-2.222h-2.222v-1.778h2.793l1.207 1.207v2.793zm-7.556-2.591H9.333v-1.778h1.778v1.778zm-5.778-1.778h1.778v4h4v1.778H6.54L5.333 17.46V12.89zm13.334-3.556v1.778h-5.778V9.333h1.987V7.111h-1.987V5.333h2.558l1.206 1.207v2.793h2.014zm-11.556-2h2.222l1.778 1.778v2H9.333v-2H7.111v2H5.333V5.333h1.778v2zm4 0H9.333v-2h1.778v2z",
+  ],
+  antigravity: [
+    "M21.751 22.607c1.34 1.005 3.35.335 1.508-1.508C17.73 15.74 18.904 1 12.037 1 5.17 1 6.342 15.74.815 21.1c-2.01 2.009.167 2.511 1.507 1.506 5.192-3.517 4.857-9.714 9.715-9.714 4.857 0 4.522 6.197 9.714 9.715z",
   ],
   grok: [
     "M9.27 15.29l7.978-5.897c.391-.29.95-.177 1.137.272.98 2.369.542 5.215-1.41 7.169-1.951 1.954-4.667 2.382-7.149 1.406l-2.711 1.257c3.889 2.661 8.611 2.003 11.562-.953 2.341-2.344 3.066-5.539 2.388-8.42l.006.007c-.983-4.232.242-5.924 2.75-9.383.06-.082.12-.164.179-.248l-3.301 3.305v-.01L9.267 15.292M7.623 16.723c-2.792-2.67-2.31-6.801.071-9.184 1.761-1.763 4.647-2.483 7.166-1.425l2.705-1.25a7.808 7.808 0 00-1.829-1A8.975 8.975 0 005.984 5.83c-2.533 2.536-3.33 6.436-1.962 9.764 1.022 2.487-.653 4.246-2.34 6.022-.599.63-1.199 1.259-1.682 1.925l7.62-6.815",

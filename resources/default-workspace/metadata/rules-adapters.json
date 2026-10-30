@@ -31,6 +31,10 @@
     "kilo": {
       "appendix": "templates/rules/kilo.md",
       "output": "templates/sync/kilo-rules.md"
+    },
+    "antigravity": {
+      "appendix": "templates/rules/antigravity.md",
+      "output": "templates/sync/antigravity-rules.md"
     }
   }
 }

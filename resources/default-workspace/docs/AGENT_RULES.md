@@ -16,8 +16,9 @@ Installed rule targets:
 | GitHub Copilot | `~/.copilot/copilot-instructions.md` |
 | Pi | `~/.pi/agent/AGENTS.md` |
 | Kilo Code | `$XDG_CONFIG_HOME/kilo/AGENTS.md` (default `~/.config/kilo/AGENTS.md`) |
+| Google Antigravity | `~/.gemini/AGENTS.md` |
 
-Copilot, Pi, and Kilo are the opt-in light tier: their rules targets (`copilot_rules`, `pi_rules`, `kilo_rules`) act once the harness is enabled in Settings.
+Copilot, Pi, Kilo, and Antigravity are the opt-in light tier: their rules targets (`copilot_rules`, `pi_rules`, `kilo_rules`, `antigravity_rules`) act once the harness is enabled in Settings. Antigravity reads at most 24,000 bytes of its rules file, so Riggverk writes nothing that would pass that; `~/.gemini/GEMINI.md`, shared with the Gemini CLI, is never touched.
 
 Cursor User Rules are version-controlled separately in `templates/cursor/user-rules.md` and copied manually into Cursor Settings. Riggverk does not write undocumented Cursor rule state.
 
@@ -118,7 +119,7 @@ Cursor includes:
 
 Cursor global setup also manages the canonical skill catalog and the named Playwright MCP entry. User Rules, Auto Review, general permissions, and project `.cursor/*` remain manual or project-owned.
 
-GitHub Copilot, Pi, and Kilo (the opt-in light tier) get the named Playwright MCP entry in their own MCP file as well: `~/.copilot/mcp-config.json`, `~/.pi/agent/mcp.json`, and `kilo.jsonc` (else `kilo.json`) in Kilo's config folder. Targets `copilot_mcp` and `pi_mcp` are on by default; `kilo_mcp` is off until you switch it on, because Kilo's main config file may hold provider keys. The app edits strict JSON only and changes only that entry: a file with comments or a trailing comma, or an entry named `playwright` that is yours, is left as is.
+GitHub Copilot, Pi, Kilo, and Antigravity (the opt-in light tier) get the named Playwright MCP entry in their own MCP file as well: `~/.copilot/mcp-config.json`, `~/.pi/agent/mcp.json`, `kilo.jsonc` (else `kilo.json`) in Kilo's config folder, and `~/.gemini/config/mcp_config.json`. Targets `copilot_mcp` and `pi_mcp` are on by default; `kilo_mcp` is off until you switch it on, because Kilo's main config file may hold provider keys, and so is `antigravity_mcp`. The app edits strict JSON only and changes only that entry: a file with comments or a trailing comma, or an entry named `playwright` that is yours, is left as is.
 
 ## Changing the shared rules and agents
 

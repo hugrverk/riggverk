@@ -33,7 +33,7 @@ beforeAll(async () => {
   await import("./mockBackend");
 });
 
-const LIGHT_RULES = ["copilot_rules", "pi_rules", "kilo_rules"] as const;
+const LIGHT_RULES = ["copilot_rules", "pi_rules", "kilo_rules", "antigravity_rules"] as const;
 
 describe("mock backend: the light harnesses' rules files", () => {
   it("lists a rules target per light harness, on by default, and counts them in the diagnostics", async () => {
@@ -42,6 +42,7 @@ describe("mock backend: the light harnesses' rules files", () => {
       { id: "copilot_rules", label: "copilot rules", harness: "copilot", kind: "rules", target_rel: ".copilot/copilot-instructions.md", source_rel: "templates/sync/copilot-rules.md" },
       { id: "pi_rules", label: "pi rules", harness: "pi", kind: "rules", target_rel: ".pi/agent/AGENTS.md", source_rel: "templates/sync/pi-rules.md" },
       { id: "kilo_rules", label: "kilo rules", harness: "kilo", kind: "rules", target_rel: ".config/kilo/AGENTS.md", source_rel: "templates/sync/kilo-rules.md" },
+      { id: "antigravity_rules", label: "antigravity rules", harness: "antigravity", kind: "rules", target_rel: ".gemini/AGENTS.md", source_rel: "templates/sync/antigravity-rules.md" },
     ]);
     const { settings } = await invoke<{ settings: { enabled_target_ids: string[]; enabled_harness_ids: string[] } }>("get_settings");
     for (const id of LIGHT_RULES) expect(settings.enabled_target_ids).toContain(id);
@@ -61,6 +62,17 @@ describe("mock backend: the light harnesses' rules files", () => {
       detail: "an override file in the same folder masks this file, left as is",
     });
     expect(by.kilo_rules).toMatchObject({ state: "update_available" });
+    expect(by.antigravity_rules).toMatchObject({
+      state: "conflict",
+      rules: { conflict_reason: "exceeds_harness_limit" },
+      detail: "the file would pass the size limit of the harness, nothing written",
+    });
+  });
+
+  it("refuses to convert a file that would pass Antigravity's size limit", async () => {
+    const preview = await invoke<RulesConversionPreview>("preview_rules_conversion", { surface: "antigravity_rules" });
+    expect(preview.applicable).toBe(false);
+    expect(preview.reason).toContain("size limit");
   });
 
   it("refuses to convert a masked file and says why", async () => {
@@ -97,18 +109,20 @@ describe("mock backend: the light harnesses' rules files", () => {
 });
 
 describe("mock backend: the light harnesses' Playwright MCP entries", () => {
-  it("lists an MCP target per light harness, on by default except Kilo's and Grok's", async () => {
+  it("lists an MCP target per light harness, on by default except the ones of Kilo, Antigravity and Grok", async () => {
     const targets = await invoke<AgentTargetMeta[]>("get_agent_targets");
     expect(targets.filter(target => target.kind === "mcp")).toEqual([
       { id: "copilot_mcp", label: "copilot mcp", harness: "copilot", kind: "mcp", target_rel: ".copilot/mcp-config.json", source_rel: "templates/mcp/copilot.playwright.json" },
       { id: "pi_mcp", label: "pi mcp", harness: "pi", kind: "mcp", target_rel: ".pi/agent/mcp.json", source_rel: "templates/mcp/pi.playwright.json" },
       { id: "kilo_mcp", label: "kilo mcp", harness: "kilo", kind: "mcp", target_rel: ".config/kilo/kilo.jsonc", source_rel: "templates/mcp/kilo.playwright.json" },
+      { id: "antigravity_mcp", label: "antigravity mcp", harness: "antigravity", kind: "mcp", target_rel: ".gemini/config/mcp_config.json", source_rel: "templates/mcp/antigravity.playwright.json" },
       { id: "grok_mcp", label: "grok mcp", harness: "grok", kind: "mcp", target_rel: ".grok/config.toml", source_rel: "templates/mcp/grok.playwright.json" },
     ]);
     const { settings } = await invoke<{ settings: { enabled_target_ids: string[] } }>("get_settings");
     expect(settings.enabled_target_ids).toContain("copilot_mcp");
     expect(settings.enabled_target_ids).toContain("pi_mcp");
     expect(settings.enabled_target_ids).not.toContain("kilo_mcp");
+    expect(settings.enabled_target_ids).not.toContain("antigravity_mcp");
     expect(settings.enabled_target_ids).not.toContain("grok_mcp");
   });
 
@@ -131,6 +145,11 @@ describe("mock backend: the light harnesses' Playwright MCP entries", () => {
 
     const kilo = await invoke<LightRuntimeHealth>("get_light_runtime_health", { harness: "kilo" });
     expect(kilo.mcp).toMatchObject({ status: "off", path: "~/.config/kilo/kilo.jsonc" });
+
+    const antigravity = await invoke<LightRuntimeHealth>("get_light_runtime_health", { harness: "antigravity" });
+    expect(antigravity.mcp).toMatchObject({ status: "off", path: "~/.gemini/config/mcp_config.json" });
+    expect(antigravity.cli).toMatchObject({ status: "found", detail: "Antigravity 1.2.0" });
+    expect(antigravity.skills.roots).toEqual(["~/.gemini/config/skills", "~/.gemini/antigravity-cli/skills"]);
   });
 });
 

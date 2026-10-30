@@ -236,6 +236,7 @@ function healthRows({ harness, health }: HarnessRuntimeHealth): KvItem[] {
     case "copilot":
     case "pi":
     case "kilo":
+    case "antigravity": return lightRows(health);
     case "grok": return lightRows(health);
   }
 }

@@ -29,7 +29,7 @@ export function useWorkspaceHealthController({
   const [codexRuntimeHealth, setCodexRuntimeHealth] = useState<CodexRuntimeHealth | null>(null);
   const [cursorProfileHealth, setCursorProfileHealth] = useState<CursorProfileHealth | null>(null);
   const [claudeRuntimeHealth, setClaudeRuntimeHealth] = useState<ClaudeRuntimeHealth | null>(null);
-  // Copilot, Pi and Kilo share one command and one page; a harness that is off has no entry.
+  // Copilot, Pi, Kilo and Antigravity share one command and one page; a harness that is off has no entry.
   const [lightRuntimeHealth, setLightRuntimeHealth] = useState<Partial<Record<LightAgent, LightRuntimeHealth | null>>>({});
 
   const loadWorkspaceDiagnostics = useCallback(async (generation = workspaceLoadGenerationRef.current) => {

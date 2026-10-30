@@ -37,7 +37,12 @@ mod tests {
     use crate::setup_transaction::{self, PreviousState, RollbackAction};
     use crate::test_env::{guard, set_test_user_dirs};
 
-    const LIGHT: [HarnessId; 3] = [HarnessId::Copilot, HarnessId::Pi, HarnessId::Kilo];
+    const LIGHT: [HarnessId; 4] = [
+        HarnessId::Copilot,
+        HarnessId::Pi,
+        HarnessId::Kilo,
+        HarnessId::Antigravity,
+    ];
     const OLD_BASE: &str = "# Old base\n\n## Priority\n- be careful\n";
     const PREFIX: &str = "# My notes\n\nAlways answer in Swedish.\n\n";
     const SUFFIX: &str = "\n## My refinements\n- prefer small diffs\n- no emoji\n";
@@ -344,7 +349,7 @@ mod tests {
         assert_eq!(mode(&env.home.join(".pi/agent")), 0o700);
         drop(env);
 
-        for harness in [HarnessId::Copilot, HarnessId::Kilo] {
+        for harness in [HarnessId::Copilot, HarnessId::Kilo, HarnessId::Antigravity] {
             let env = Env::new("modes", harness);
             assert!(env.apply().success);
             let folder = env.dest().parent().unwrap().to_path_buf();
@@ -696,9 +701,132 @@ mod tests {
         assert_eq!(fs::read_to_string(&peer).unwrap(), "my pi context");
     }
 
+    // ── Antigravity: ~/.gemini/AGENTS.md, at most 24,000 bytes ──
+
+    /// Refinements that bring a file holding a block of `body` to at most `total` bytes (and
+    /// less than one line short of it).
+    fn padding_to(body: &str, total: usize) -> String {
+        let used = crate::rules_block::render_new(body).len();
+        let line = "- keep answers short and check the diff before you commit\n";
+        let mut suffix = String::from("\n## Mine\n");
+        while used + suffix.len() + line.len() <= total {
+            suffix.push_str(line);
+        }
+        suffix
+    }
+
     #[test]
-    fn copilot_and_kilo_have_no_masking_or_peer_files() {
-        for harness in [HarnessId::Copilot, HarnessId::Kilo] {
+    fn antigravity_writes_agents_md_and_never_touches_gemini_md() {
+        let env = Env::new("antigravity-gemini", HarnessId::Antigravity);
+        assert_eq!(env.dest(), env.home.join(".gemini/AGENTS.md"));
+        let gemini = env.home.join(".gemini/GEMINI.md");
+        fs::create_dir_all(gemini.parent().unwrap()).unwrap();
+        fs::write(&gemini, "my gemini cli rules\n").unwrap();
+        assert_eq!(env.plan().kind, OperationKind::Create);
+        assert!(env.apply().success);
+        assert_eq!(env.read(), crate::rules_block::render_new(&env.source()));
+        assert_eq!(
+            fs::read_to_string(&gemini).unwrap(),
+            "my gemini cli rules\n"
+        );
+        assert_eq!(
+            rules_of(HarnessId::Antigravity).max_file_bytes,
+            Some(24_000)
+        );
+    }
+
+    #[test]
+    fn an_antigravity_update_that_would_pass_24000_bytes_is_a_conflict_with_zero_mutation() {
+        let env = Env::new("antigravity-limit", HarnessId::Antigravity);
+        let source = env.source();
+        // The old block is shorter than the new one, so the same refinements fit today and
+        // would not after the update.
+        let suffix = padding_to(OLD_BASE, 24_000);
+        let content = format!("{}{suffix}", block(OLD_BASE));
+        assert!(content.len() <= 24_000);
+        env.write(&content);
+        env.record(&body_digest(OLD_BASE));
+        let planned = env.plan();
+        assert_eq!(planned.kind, OperationKind::Conflict);
+        assert_eq!(
+            planned.rules.unwrap().plan,
+            RulesPlan::Conflict(RulesConflict::ExceedsHarnessLimit)
+        );
+        let status = env.status();
+        assert_eq!(status.state, InstallationState::Conflict);
+        assert_eq!(
+            status.surfaces[0].rules.as_ref().unwrap().conflict_reason,
+            Some(RulesConflict::ExceedsHarnessLimit)
+        );
+        assert!(
+            status.surfaces[0].detail.contains("size limit"),
+            "{}",
+            status.surfaces[0].detail
+        );
+        env.assert_refused(Some(&content));
+
+        // Shorter refinements fit again and the update goes through.
+        let short = format!("{}{SUFFIX}", block(OLD_BASE));
+        env.write(&short);
+        assert_eq!(env.plan().kind, OperationKind::Update);
+        assert!(env.apply().success);
+        assert_eq!(
+            env.read(),
+            format!("{}{SUFFIX}", block(&source)),
+            "the user's text is kept byte for byte"
+        );
+    }
+
+    #[test]
+    fn the_same_file_is_written_for_a_harness_without_a_limit() {
+        let env = Env::new("no-limit", HarnessId::Pi);
+        let content = format!("{}{}", block(OLD_BASE), padding_to(OLD_BASE, 30_000));
+        env.write(&content);
+        env.record(&body_digest(OLD_BASE));
+        assert_eq!(env.plan().kind, OperationKind::Update);
+    }
+
+    #[test]
+    fn antigravity_refinements_and_conversions_past_the_limit_are_refused() {
+        let env = Env::new("antigravity-refinements", HarnessId::Antigravity);
+        let source = env.source();
+        assert!(env.apply().success);
+        let read = crate::commands::read_rules_file(env.wire()).expect("read");
+        let revision = read.revision.expect("revision");
+        let too_long = padding_to(&source, 24_100);
+        let before = env.read();
+        let error = crate::commands::save_rules_refinements(env.wire(), too_long, revision.clone())
+            .unwrap_err();
+        assert!(error.contains("size limit"), "{error}");
+        assert_eq!(env.read(), before, "nothing written");
+        let fits =
+            crate::commands::save_rules_refinements(env.wire(), SUFFIX.to_string(), revision)
+                .expect("save");
+        assert!(fits.success);
+
+        // A hand-written file that the conversion would grow past the limit.
+        let mut legacy = String::from("# My rules\n\n");
+        while legacy.len() < 23_000 {
+            legacy.push_str("- answer in Swedish and keep the diff small\n");
+        }
+        env.write(&legacy);
+        let preview = preview_rules_conversion(env.wire()).unwrap();
+        assert!(!preview.applicable);
+        assert!(
+            preview
+                .reason
+                .as_deref()
+                .unwrap_or("")
+                .contains("size limit"),
+            "{:?}",
+            preview.reason
+        );
+        assert_eq!(env.read(), legacy);
+    }
+
+    #[test]
+    fn copilot_kilo_and_antigravity_have_no_masking_or_peer_files() {
+        for harness in [HarnessId::Copilot, HarnessId::Kilo, HarnessId::Antigravity] {
             let env = Env::new("not-pi", harness);
             for name in ["AGENTS.override.md", "CLAUDE.md", "AGENTS.md"] {
                 let path = env.sibling(name);
@@ -867,11 +995,11 @@ mod tests {
     // ── Several surfaces in one transaction ──
 
     #[test]
-    fn the_three_rules_files_are_one_transaction_with_distinct_backups() {
+    fn the_light_rules_files_are_one_transaction_with_distinct_backups() {
         let env = Env::new("together", HarnessId::Copilot);
         let wires: Vec<String> = LIGHT.iter().map(|harness| wire(*harness)).collect();
         let plan = preview_setup(wires.clone()).unwrap();
-        assert_eq!(plan.operations.len(), 3);
+        assert_eq!(plan.operations.len(), LIGHT.len());
         let result = apply_setup(wires, false, plan.plan_fingerprint, plan.preview_token).unwrap();
         assert!(result.success, "{}", result.message);
         for harness in LIGHT {
@@ -1089,6 +1217,7 @@ mod tests {
         fn enable_everything() {
             let mut targets = crate::agent_targets::default_enabled_ids();
             targets.push("kilo_mcp".to_string());
+            targets.push("antigravity_mcp".to_string());
             targets.push("grok_mcp".to_string());
             let settings = crate::settings::AppSettings {
                 enabled_harness_ids: HarnessId::ALL.to_vec(),
@@ -1347,8 +1476,8 @@ mod tests {
                 assert_eq!(target.source_rel, mcp.template_rel);
                 assert_eq!(
                     crate::agent_targets::default_enabled_ids().contains(&mcp.target_id),
-                    harness != HarnessId::Kilo,
-                    "every MCP target is on by default but Kilo's, whose config file may hold provider keys"
+                    !matches!(harness, HarnessId::Kilo | HarnessId::Antigravity),
+                    "every MCP target is on by default but Kilo's, whose config file may hold provider keys, and Antigravity's"
                 );
                 let identity = artifact_identity(&mcp_artifact(harness));
                 assert_eq!(
@@ -1986,13 +2115,15 @@ mod tests {
         // ── Gating ──
 
         #[test]
-        fn kilos_mcp_target_is_off_in_a_fresh_profile_and_the_others_are_on() {
+        fn the_kilo_and_antigravity_mcp_targets_are_off_in_a_fresh_profile_and_the_others_are_on() {
             // Every harness on, every target at its default.
             let env = Env::new("mcp-defaults", HarnessId::Kilo);
-            // Kilo's entry is dropped silently: nothing is planned, nothing is written.
-            let plan = preview_setup(vec!["kilo_mcp".into()]).unwrap();
-            assert!(plan.operations.is_empty() && !plan.has_pending_changes);
-            assert!(!spec_of(HarnessId::Kilo).resolve_dest(&env.home).exists());
+            // Their entries are dropped silently: nothing is planned, nothing is written.
+            for harness in [HarnessId::Kilo, HarnessId::Antigravity] {
+                let plan = preview_setup(vec![mcp_wire(harness)]).unwrap();
+                assert!(plan.operations.is_empty() && !plan.has_pending_changes);
+                assert!(!spec_of(harness).resolve_dest(&env.home).exists());
+            }
             for harness in [HarnessId::Copilot, HarnessId::Pi] {
                 let plan = preview_setup(vec![mcp_wire(harness)]).unwrap();
                 assert_eq!(plan.operations.len(), 1, "{}", harness.as_str());
@@ -2283,7 +2414,7 @@ mod tests {
             );
             drop(pi);
 
-            for harness in [HarnessId::Copilot, HarnessId::Kilo] {
+            for harness in [HarnessId::Copilot, HarnessId::Kilo, HarnessId::Antigravity] {
                 let env = mcp_env("health-no-note", harness);
                 assert!(
                     env.health_mcp()
@@ -2393,6 +2524,14 @@ mod tests {
             assert_eq!(pi["args"], copilot["args"]);
             assert_eq!(pi["env"], copilot["env"]);
             assert_eq!(copilot["args"].as_array().unwrap()[0], "-y");
+
+            // Antigravity's stdio entry: command, args and env (its documented keys), nothing
+            // the other harnesses add.
+            let antigravity = bundled_json("templates/mcp/antigravity.playwright.json");
+            assert_eq!(keys(&antigravity), ["args", "command", "env"]);
+            assert_eq!(antigravity["command"], "npx");
+            assert_eq!(antigravity["args"], copilot["args"]);
+            assert_eq!(antigravity["env"], copilot["env"]);
         }
 
         #[test]

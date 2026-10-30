@@ -756,7 +756,8 @@ pub fn expand_surface<R: SourceRoot + ?Sized>(
         SetupSurfaceId::CursorMcp => Ok(vec![ArtifactId::CursorMcp]),
         light @ (SetupSurfaceId::CopilotRules
         | SetupSurfaceId::PiRules
-        | SetupSurfaceId::KiloRules) => light
+        | SetupSurfaceId::KiloRules
+        | SetupSurfaceId::AntigravityRules) => light
             .harness()
             .and_then(LightHarnessId::new)
             .map(|harness| vec![ArtifactId::HarnessRules(harness)])
@@ -764,6 +765,7 @@ pub fn expand_surface<R: SourceRoot + ?Sized>(
         light @ (SetupSurfaceId::CopilotMcp
         | SetupSurfaceId::PiMcp
         | SetupSurfaceId::KiloMcp
+        | SetupSurfaceId::AntigravityMcp
         | SetupSurfaceId::GrokMcp) => light
             .harness()
             .and_then(LightHarnessId::new)
@@ -1660,6 +1662,11 @@ mod tests {
             ),
             (HarnessId::Pi, ".pi/agent/AGENTS.md", "pi-rules.md"),
             (HarnessId::Kilo, ".config/kilo/AGENTS.md", "kilo-rules.md"),
+            (
+                HarnessId::Antigravity,
+                ".gemini/AGENTS.md",
+                "antigravity-rules.md",
+            ),
         ];
         assert_eq!(
             cases.len(),
@@ -1716,6 +1723,11 @@ mod tests {
                 HarnessId::Kilo,
                 ".config/kilo/kilo.jsonc",
                 "kilo.playwright.json",
+            ),
+            (
+                HarnessId::Antigravity,
+                ".gemini/config/mcp_config.json",
+                "antigravity.playwright.json",
             ),
             (HarnessId::Grok, ".grok/config.toml", "grok.playwright.json"),
         ];

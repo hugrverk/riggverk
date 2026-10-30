@@ -68,6 +68,10 @@ pub enum SetupSurfaceId {
     PiMcp,
     /// The Playwright entry of Kilo's config (`kilo.jsonc`, else `kilo.json`, in the config folder)
     KiloMcp,
+    /// Google Antigravity global rules (`~/.gemini/AGENTS.md`)
+    AntigravityRules,
+    /// The Playwright entry of Antigravity's MCP file (`~/.gemini/config/mcp_config.json`)
+    AntigravityMcp,
     /// The Playwright entry of Grok Build's config (`~/.grok/config.toml`)
     GrokMcp,
     /// Installed runtime workspace bundled files
@@ -95,6 +99,8 @@ impl SetupSurfaceId {
         SetupSurfaceId::CopilotMcp,
         SetupSurfaceId::PiMcp,
         SetupSurfaceId::KiloMcp,
+        SetupSurfaceId::AntigravityRules,
+        SetupSurfaceId::AntigravityMcp,
         SetupSurfaceId::GrokMcp,
         SetupSurfaceId::WorkspaceBundle,
     ];
@@ -124,6 +130,8 @@ impl SetupSurfaceId {
             SetupSurfaceId::CopilotMcp => "Copilot MCP",
             SetupSurfaceId::PiMcp => "Pi MCP",
             SetupSurfaceId::KiloMcp => "Kilo MCP",
+            SetupSurfaceId::AntigravityRules => "Antigravity Rules",
+            SetupSurfaceId::AntigravityMcp => "Antigravity MCP",
             SetupSurfaceId::GrokMcp => "Grok MCP",
             SetupSurfaceId::WorkspaceBundle => "Workspace Resources",
         }
@@ -157,6 +165,7 @@ impl SetupSurfaceId {
             HarnessId::Copilot => Some(SetupSurfaceId::CopilotRules),
             HarnessId::Pi => Some(SetupSurfaceId::PiRules),
             HarnessId::Kilo => Some(SetupSurfaceId::KiloRules),
+            HarnessId::Antigravity => Some(SetupSurfaceId::AntigravityRules),
             // Grok Build reads Claude Code's rules file: it has no rules surface of its own.
             HarnessId::Grok => None,
             HarnessId::Codex | HarnessId::OpenCode | HarnessId::Claude | HarnessId::Cursor => None,
@@ -169,6 +178,7 @@ impl SetupSurfaceId {
             HarnessId::Copilot => Some(SetupSurfaceId::CopilotMcp),
             HarnessId::Pi => Some(SetupSurfaceId::PiMcp),
             HarnessId::Kilo => Some(SetupSurfaceId::KiloMcp),
+            HarnessId::Antigravity => Some(SetupSurfaceId::AntigravityMcp),
             HarnessId::Grok => Some(SetupSurfaceId::GrokMcp),
             HarnessId::Codex | HarnessId::OpenCode | HarnessId::Claude | HarnessId::Cursor => None,
         }
@@ -190,6 +200,9 @@ impl SetupSurfaceId {
             SetupSurfaceId::CopilotRules | SetupSurfaceId::CopilotMcp => Some(HarnessId::Copilot),
             SetupSurfaceId::PiRules | SetupSurfaceId::PiMcp => Some(HarnessId::Pi),
             SetupSurfaceId::KiloRules | SetupSurfaceId::KiloMcp => Some(HarnessId::Kilo),
+            SetupSurfaceId::AntigravityRules | SetupSurfaceId::AntigravityMcp => {
+                Some(HarnessId::Antigravity)
+            }
             SetupSurfaceId::GrokMcp => Some(HarnessId::Grok),
             SetupSurfaceId::Skills
             | SetupSurfaceId::ClaudeSkills

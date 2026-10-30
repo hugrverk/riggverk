@@ -1,5 +1,5 @@
 //! The managed Playwright entry in the MCP file of a light harness (GitHub Copilot, Pi, Kilo,
-//! Grok Build).
+//! Antigravity, Grok Build).
 //!
 //! The app owns one key of each file, `<root_key>.<entry_key>` (`mcpServers.playwright`,
 //! `mcp.playwright`, `mcp_servers.playwright`); everything else belongs to the user.

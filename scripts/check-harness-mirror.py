@@ -4,7 +4,7 @@
 The app keeps one list of harnesses in several places that no compiler connects:
 
   Rust   `HarnessId` (agent_targets.rs): the variants, `ALL`, `DEFAULT_ON`, `as_str`, `is_light`
-  Rust   the skill read folders and load flags (skill_roots.rs, skill_loads.rs), the setup surfaces
+  Rust   the skill read folders, install roots and load flags (skill_roots.rs, skill_loads.rs), the setup surfaces
          (setup_lifecycle.rs) and the target registry (agent_targets.rs `targets()`)
   JSON   resources/default-workspace/metadata/light-harnesses.json: the light tier's label, CLI,
          rules file and MCP entry; its rules adapter lives in metadata/rules-adapters.json and
@@ -284,6 +284,13 @@ def check_harness_ids(root: Path) -> list[str]:
     same_set("ReadFolder::ALL", "ALL", folders_all, "the enum", folders)
     folders_wire = [serde_name(name, folder_rename) for name in folders]
     same_set("SkillReadFolder", "SkillReadFolder", ts_union(types, "SkillReadFolder", TS_TYPES), "ReadFolder", folders_wire)
+    # Every folder the app installs into is one a harness reads, under the same wire name, so the UI can name it
+    # (Antigravity's two folders are install roots of their own).
+    install_roots, root_rename = rust_enum(roots, "SkillRoot", RUST_ROOTS)
+    same_set("SkillRoot::ALL", "ALL", rust_const_list(roots, "SkillRoot", "ALL", RUST_ROOTS), "the enum", install_roots)
+    unread = [serde_name(name, root_rename) for name in install_roots if serde_name(name, root_rename) not in folders_wire]
+    if unread:
+        raise Mismatch(f"SkillRoot: {unread} are install roots without a ReadFolder of the same name, so no page can name them")
     flags, flag_rename = rust_enum(read(RUST_LOADS), "SkillLoadFlag", RUST_LOADS)
     flags_wire = [serde_name(name, flag_rename) for name in flags]
     same_set("SkillLoadFlag", "SkillLoadFlag", ts_union(types, "SkillLoadFlag", TS_TYPES), "the Rust flags", flags_wire)

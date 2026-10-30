@@ -112,18 +112,19 @@ describe("rules surfaces", () => {
     expect(rulesSurfaceOf("copilot")).toBe("copilot_rules");
     expect(rulesSurfaceOf("pi")).toBe("pi_rules");
     expect(rulesSurfaceOf("kilo")).toBe("kilo_rules");
+    expect(rulesSurfaceOf("antigravity")).toBe("antigravity_rules");
     expect(rulesSurfaceOf("cursor")).toBeNull();
   });
 
   it("offers the rules command for every harness that has a rules surface", () => {
-    expect([...RULES_HARNESSES]).toEqual(["codex", "opencode", "claude", "copilot", "pi", "kilo"]);
+    expect([...RULES_HARNESSES]).toEqual(["codex", "opencode", "claude", "copilot", "pi", "kilo", "antigravity"]);
     for (const harness of RULES_HARNESSES) expect(rulesSurfaceOf(harness)).not.toBeNull();
   });
 
   it("names the file each harness's rules surface writes", () => {
     expect(rulesFileName("claude")).toBe("CLAUDE.md");
     expect(rulesFileName("copilot")).toBe("copilot-instructions.md");
-    for (const harness of ["codex", "opencode", "pi", "kilo"] as const) expect(rulesFileName(harness)).toBe("AGENTS.md");
+    for (const harness of ["codex", "opencode", "pi", "kilo", "antigravity"] as const) expect(rulesFileName(harness)).toBe("AGENTS.md");
   });
 
   it("reads the block details from the installation status", () => {

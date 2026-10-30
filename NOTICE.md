@@ -53,4 +53,4 @@ Path: `resources/default-workspace/skills/security-audit/`. Copyright (c) 2025-2
 
 ## Lobe Icons
 
-The vector paths of the agent icons in `src/ui/agentIcons.tsx` (Claude, Codex, Cursor, GitHub Copilot, OpenCode, Pi, Kilo Code and Grok) come from [Lobe Icons](https://github.com/lobehub/lobe-icons) (`@lobehub/icons-static-svg` 1.101.0), (c) LobeHub, licensed under the MIT License. The marks themselves belong to their owners and are used only to name the tool each icon stands for; Riggverk is not affiliated with or endorsed by them.
+The vector paths of the agent icons in `src/ui/agentIcons.tsx` (Claude, Codex, Cursor, GitHub Copilot, OpenCode, Pi, Kilo Code, Google Antigravity and Grok) come from [Lobe Icons](https://github.com/lobehub/lobe-icons) (`@lobehub/icons-static-svg` 1.101.0), (c) LobeHub, licensed under the MIT License. The marks themselves belong to their owners and are used only to name the tool each icon stands for; Riggverk is not affiliated with or endorsed by them.

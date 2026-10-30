@@ -34,6 +34,7 @@ const LEVELS: Record<FindingCode, PostureLevel> = {
   pi_not_covered: "not_covered",
   grok_not_covered: "not_covered",
   config_only: "not_covered",
+  antigravity_not_covered: "not_covered",
 };
 
 const finding = (code: FindingCode, extra: Partial<PostureFinding> = {}): PostureFinding => ({

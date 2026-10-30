@@ -55,7 +55,7 @@ pub struct AppSettings {
 
 /// Bump when the default set of enabled targets changes in a way that existing
 /// settings files must be migrated for, and add the new targets to [`TARGETS_ADDED_IN`].
-pub const TARGET_DEFAULTS_VERSION: u32 = 3;
+pub const TARGET_DEFAULTS_VERSION: u32 = 4;
 
 /// The targets each defaults version added, and nothing else. A file written under an older
 /// version gains the targets of the later versions and keeps every toggle it has: re-applying the
@@ -63,10 +63,12 @@ pub const TARGET_DEFAULTS_VERSION: u32 = 3;
 ///
 /// Version 1 is the first to gate Install by target (`migrate_target_defaults` handles the files
 /// below it by moving them to the full default set); version 2 added the light tier's rules and
-/// version 3 its MCP entries (`kilo_mcp` is off by default, so it is not added).
+/// version 3 its MCP entries (`kilo_mcp` is off by default, so it is not added); version 4 added
+/// Antigravity's rules (`antigravity_mcp` is off by default).
 const TARGETS_ADDED_IN: &[(u32, &[&str])] = &[
     (2, &["copilot_rules", "pi_rules", "kilo_rules"]),
     (3, &["copilot_mcp", "pi_mcp"]),
+    (4, &["antigravity_rules"]),
 ];
 
 impl Default for AppSettings {
@@ -1392,13 +1394,15 @@ mod tests {
     }
 
     /// The rules and MCP surfaces of the light tier, which is off until a harness is enabled.
-    const LIGHT_SURFACES: [crate::setup_lifecycle::SetupSurfaceId; 7] = [
+    const LIGHT_SURFACES: [crate::setup_lifecycle::SetupSurfaceId; 9] = [
         crate::setup_lifecycle::SetupSurfaceId::CopilotRules,
         crate::setup_lifecycle::SetupSurfaceId::PiRules,
         crate::setup_lifecycle::SetupSurfaceId::KiloRules,
         crate::setup_lifecycle::SetupSurfaceId::CopilotMcp,
         crate::setup_lifecycle::SetupSurfaceId::PiMcp,
         crate::setup_lifecycle::SetupSurfaceId::KiloMcp,
+        crate::setup_lifecycle::SetupSurfaceId::AntigravityRules,
+        crate::setup_lifecycle::SetupSurfaceId::AntigravityMcp,
         crate::setup_lifecycle::SetupSurfaceId::GrokMcp,
     ];
 
@@ -1411,8 +1415,8 @@ mod tests {
             enabled_setup_surfaces(&AppSettings::default()),
             surfaces_without(&excluded)
         );
-        // With every harness enabled, only the Codex and Claude config surfaces and Kilo's and
-        // Grok's MCP entries (all off by default as targets) stay out.
+        // With every harness enabled, only the Codex and Claude config surfaces and the MCP entries
+        // of Kilo, Antigravity and Grok (all off by default as targets) stay out.
         let all = AppSettings {
             enabled_harness_ids: agent_targets::HarnessId::ALL.to_vec(),
             ..AppSettings::default()
@@ -1423,6 +1427,7 @@ mod tests {
                 SetupSurfaceId::CodexConfig,
                 SetupSurfaceId::ClaudeConfig,
                 SetupSurfaceId::KiloMcp,
+                SetupSurfaceId::AntigravityMcp,
                 SetupSurfaceId::GrokMcp
             ])
         );
@@ -1735,8 +1740,9 @@ mod tests {
                     "pi_rules",
                     "pi_mcp",
                     "kilo_rules",
+                    "antigravity_rules",
                 ],
-                "registry order; claude_agents and opencode_rules stay off, kilo_mcp is not a default"
+                "registry order; claude_agents and opencode_rules stay off, kilo_mcp and antigravity_mcp are not defaults"
             );
             assert_eq!(migrated.revision, 1, "the migration is persisted");
             assert_eq!(
@@ -1758,7 +1764,8 @@ mod tests {
                     "copilot_mcp",
                     "pi_rules",
                     "pi_mcp",
-                    "kilo_rules"
+                    "kilo_rules",
+                    "antigravity_rules"
                 ]
             );
         });
@@ -1782,7 +1789,8 @@ mod tests {
                     "cursor_setup",
                     "copilot_mcp",
                     "pi_mcp",
-                    "kilo_rules"
+                    "kilo_rules",
+                    "antigravity_rules"
                 ],
                 "copilot_rules stays off, kilo_mcp is not added"
             );
@@ -1792,6 +1800,30 @@ mod tests {
                 migrated.enabled_target_ids,
                 "and runs once"
             );
+        });
+    }
+
+    #[test]
+    fn a_version_3_file_gains_only_the_antigravity_rules_and_keeps_its_toggles() {
+        use crate::agent_targets::HarnessId;
+        with_temp_home(|dir| {
+            // The user switched `pi_mcp` off and `kilo_mcp` on.
+            write_settings_file(
+                dir,
+                &settings_json_at_version(3, &["codex_rules", "kilo_rules", "kilo_mcp"]),
+            );
+            let migrated = get_settings_snapshot().expect("snapshot").settings;
+            assert_eq!(migrated.target_defaults_version, TARGET_DEFAULTS_VERSION);
+            assert_eq!(
+                migrated.enabled_target_ids,
+                ["codex_rules", "kilo_rules", "kilo_mcp", "antigravity_rules"],
+                "pi_mcp stays off, antigravity_mcp is not added"
+            );
+            // The harness itself stays off, so nothing of it is planned.
+            assert!(!harness_enabled(&migrated, HarnessId::Antigravity));
+            let surfaces = enabled_setup_surfaces(&migrated);
+            assert!(!surfaces.contains(&crate::setup_lifecycle::SetupSurfaceId::AntigravityRules));
+            assert!(!surfaces.contains(&crate::setup_lifecycle::SetupSurfaceId::AntigravityMcp));
         });
     }
 
