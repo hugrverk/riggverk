@@ -1593,6 +1593,10 @@ fn run_planned_artifacts(
         });
         manifest.operations[operation_index].apply_status =
             setup_transaction::ApplyStatus::InFlight;
+        // Durable before the write, so a crash before the post-apply digests are saved still
+        // leaves proof of what the app wrote.
+        manifest.operations[operation_index].expected_full_digest =
+            setup_transaction::expected_apply_full_digest(p, &ws_root, &home, &roots.sources);
         if let Err(e) = persist_setup_manifest(
             &manifest_path,
             &mut manifest,
@@ -4802,6 +4806,125 @@ mod tests {
             setup_transaction::TransactionStatus::RollbackFailed
         );
         let _ = fs::remove_dir_all(&base);
+    }
+
+    /// Rewrites a finished transaction as a crash after its last write and before its post-apply
+    /// digests were saved would have left it. `keep_expected` keeps the digest recorded before the
+    /// write; without it the manifest reads as one from an older version.
+    fn mark_crashed_before_digests(env: &TempSetupEnv, transaction_id: &str, keep_expected: bool) {
+        let path = env.setup_root().join(transaction_id).join("manifest.json");
+        let mut manifest: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&path).expect("manifest")).expect("json");
+        manifest["transaction_status"] = serde_json::json!("applying");
+        for op in manifest["operations"].as_array_mut().expect("operations") {
+            let op = op.as_object_mut().expect("operation");
+            assert!(op.contains_key("expected_full_digest"), "{op:?}");
+            op.insert("apply_status".into(), serde_json::json!("in_flight"));
+            op.insert("validation_status".into(), serde_json::json!("pending"));
+            op.remove("post_apply_digest");
+            op.remove("post_apply_full_digest");
+            if !keep_expected {
+                op.remove("expected_full_digest");
+            }
+        }
+        fs::write(&path, manifest.to_string()).expect("write manifest");
+    }
+
+    /// Applies the Codex rules file into an empty Codex folder: the apply creates it.
+    fn apply_created_codex_rules(env: &TempSetupEnv) -> (String, PathBuf) {
+        let planned = env.plan(&[SetupSurfaceId::CodexRules]);
+        let rules = planned
+            .iter()
+            .find(|p| p.artifact == ArtifactId::CodexRules)
+            .expect("codex rules planned");
+        assert_eq!(
+            rules.rollback_action,
+            setup_transaction::RollbackAction::RemoveCreatedFile
+        );
+        let result =
+            apply_planned_artifacts(&planned, vec![], None, &mut ProgressReporter::silent());
+        assert!(result.success, "apply: {}", result.message);
+        (result.transaction_id, env.home.join(".codex/AGENTS.md"))
+    }
+
+    #[test]
+    fn reconcile_keeps_user_additions_to_a_file_created_before_a_crash() {
+        for keep_expected in [true, false] {
+            let env = TempSetupEnv::new("crash-created-additions");
+            let (transaction_id, rules) = apply_created_codex_rules(&env);
+            mark_crashed_before_digests(&env, &transaction_id, keep_expected);
+            // The user adds their own text around the block before the next launch.
+            let mut text = fs::read_to_string(&rules).expect("rules");
+            text.push_str("\nMy own notes\n");
+            fs::write(&rules, &text).expect("user addition");
+
+            reconcile_interrupted_setup_transactions(&env.ws, &env.home)
+                .expect("a kept file must not block setup");
+
+            assert_eq!(
+                fs::read_to_string(&rules).expect("the created file is kept"),
+                text,
+                "keep_expected={keep_expected}"
+            );
+            let manifest: ArtifactTransactionManifest = serde_json::from_str(
+                &fs::read_to_string(
+                    env.setup_root()
+                        .join(&transaction_id)
+                        .join("manifest.json"),
+                )
+                .expect("manifest"),
+            )
+            .expect("parse");
+            assert_eq!(
+                manifest.transaction_status,
+                setup_transaction::TransactionStatus::RollbackFailed
+            );
+        }
+    }
+
+    #[test]
+    fn reconcile_removes_a_file_created_before_a_crash_when_it_is_exactly_the_output() {
+        let env = TempSetupEnv::new("crash-created-untouched");
+        let (transaction_id, rules) = apply_created_codex_rules(&env);
+        mark_crashed_before_digests(&env, &transaction_id, true);
+
+        reconcile_interrupted_setup_transactions(&env.ws, &env.home).expect("reconcile");
+
+        assert!(!rules.exists(), "the file the app created is removed");
+    }
+
+    #[test]
+    fn the_digest_recorded_before_each_write_is_the_written_file() {
+        let env = TempSetupEnv::new("expected-digest");
+        // A rules file to merge into, beside files created from nothing.
+        fs::create_dir_all(env.home.join(".config/opencode")).expect("opencode folder");
+        fs::write(env.home.join(".config/opencode/AGENTS.md"), "My rules\n").expect("rules");
+        let planned = env.plan(&[
+            SetupSurfaceId::CodexRules,
+            SetupSurfaceId::OpenCodeRules,
+            SetupSurfaceId::CodexAgents,
+        ]);
+        let result =
+            apply_planned_artifacts(&planned, vec![], None, &mut ProgressReporter::silent());
+        assert!(result.success, "apply: {}", result.message);
+        let manifest: ArtifactTransactionManifest = serde_json::from_str(
+            &fs::read_to_string(
+                env.setup_root()
+                    .join(&result.transaction_id)
+                    .join("manifest.json"),
+            )
+            .expect("manifest"),
+        )
+        .expect("parse");
+        assert!(manifest.operations.len() > 2);
+        for op in &manifest.operations {
+            assert!(op.expected_full_digest.is_some(), "{:?}", op.artifact);
+            assert_eq!(
+                op.expected_full_digest, op.post_apply_full_digest,
+                "{:?}",
+                op.artifact
+            );
+        }
     }
 
     /// Marks a seeded transaction as completed, keeping only operations on `artifacts`.

@@ -144,6 +144,12 @@ pub struct ArtifactManifestOperation {
     /// Full-file or full-directory digest recorded after successful apply validation.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub post_apply_full_digest: Option<String>,
+    /// Full-file digest of what the apply is about to write ([`crate::setup_fingerprint::ABSENT_DIGEST`]
+    /// for a removal), recorded before the mutation. When the app stops before the post-apply
+    /// digests are saved, it is the only proof of which content the app wrote. Absent in older
+    /// manifests and where the output is not known in advance (see [`expected_apply_full_digest`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expected_full_digest: Option<String>,
 }
 
 impl Default for ArtifactManifestOperation {
@@ -160,6 +166,7 @@ impl Default for ArtifactManifestOperation {
             rollback_status: RollbackStatus::Pending,
             post_apply_digest: None,
             post_apply_full_digest: None,
+            expected_full_digest: None,
         }
     }
 }
@@ -2949,6 +2956,76 @@ pub fn validate_transaction_rollback_status_combo(
     Ok(())
 }
 
+/// The full digest of what applying `planned` writes, rendered from the same inputs the write
+/// reads, just before it. Recorded in the manifest before the mutation (see
+/// [`ArtifactManifestOperation::expected_full_digest`]). `None` where the output is not known in
+/// advance: a folder copy, the Cursor MCP merge (a script), the merge of an existing Codex config
+/// (Python) and the OpenCode config merge. Recovery then needs other proof and fails closed.
+pub fn expected_apply_full_digest(
+    planned: &PlannedArtifact,
+    workspace_root: &Path,
+    home: &Path,
+    sources: &SkillSources,
+) -> Option<String> {
+    let digest = |text: String| Some(crate::stable_digest::bytes(text.as_bytes()));
+    if matches!(planned.kind, OperationKind::Remove) {
+        return Some(crate::setup_fingerprint::ABSENT_DIGEST.to_string());
+    }
+    if let Some(rewrite) = &planned.rules_rewrite {
+        return digest(rewrite.content.clone());
+    }
+    let artifact = &planned.artifact;
+    let dest = artifact.resolve_dest(home, workspace_root).ok()?;
+    if artifact == &ArtifactId::ClaudeSettings {
+        return crate::claude_settings::render_install(&dest)
+            .ok()
+            .and_then(digest);
+    }
+    let source = artifact.resolve_source(sources)?;
+    if source.is_dir() {
+        return None;
+    }
+    if artifact.is_rules_block() {
+        let text = fs::read_to_string(&source).ok()?;
+        if !dest.exists() {
+            return digest(crate::rules_block::render_new(&text));
+        }
+        let installed = fs::read(&dest).ok()?;
+        return digest(match crate::rules_block::parse_bytes(&installed).ok()? {
+            Some(file) => file.render_with_body(&text),
+            None => crate::rules_block::render_new(&text),
+        });
+    }
+    match artifact {
+        ArtifactId::HarnessMcp(harness) => {
+            let spec = harness.mcp()?;
+            let bundled = crate::setup_roots::bundled_root_for(workspace_root).ok()?;
+            let entry = crate::light_mcp::expected_entry(spec, &bundled, home).ok()?;
+            let document = crate::light_mcp::read(&dest, spec).ok()?;
+            crate::light_mcp::render(spec, document, entry)
+                .ok()
+                .and_then(digest)
+        }
+        ArtifactId::OpenCodeTui => crate::opencode_tui::render_install(&source, &dest)
+            .ok()
+            .and_then(digest),
+        ArtifactId::CursorMcp | ArtifactId::OpenCodeConfig => None,
+        ArtifactId::CodexConfig if dest.is_file() => None,
+        // Everything else is a plain copy of its source.
+        _ => crate::stable_digest::file(&source).ok(),
+    }
+}
+
+/// Whether the managed digest of `artifact` covers every byte of the file, so a match with the
+/// source proves the whole file is the app's.
+fn managed_digest_covers_whole_file(artifact: &ArtifactId) -> bool {
+    !artifact.is_rules_block()
+        && matches!(
+            artifact_kind(artifact),
+            ArtifactKind::SkillFile | ArtifactKind::AgentFile | ArtifactKind::RulesFile
+        )
+}
+
 pub fn artifact_matches_post_apply_state(
     op: &ArtifactManifestOperation,
     workspace_root: &Path,
@@ -2956,7 +3033,7 @@ pub fn artifact_matches_post_apply_state(
 ) -> Result<bool, String> {
     let Some(expected_full) = op.post_apply_full_digest.as_deref() else {
         // Apply was interrupted before digests were recorded.
-        return artifact_matches_unrecorded_apply_output(op, workspace_root, home);
+        return Ok(unrecorded_apply_restore_mode(op, workspace_root, home)?.is_some());
     };
     let current_full = crate::setup_fingerprint::artifact_installed_full_digest(
         &op.artifact,
@@ -2996,11 +3073,45 @@ fn recorded_form_managed_digest(
     crate::setup_fingerprint::artifact_installed_managed_digest(&op.artifact, workspace_root, home)
 }
 
-/// Whether the artifact currently holds what this operation would have
-/// written. Used for operations whose post-apply digests were never recorded
-/// (apply failed or was interrupted mid-operation), where the planned content
-/// is the only proof the app produced the current state.
-fn artifact_matches_unrecorded_apply_output(
+/// How to undo an operation whose post-apply digests were never recorded (apply failed or was
+/// interrupted mid-operation), or `None` when nothing proves the app produced the current content.
+///
+/// The digest recorded before the write proves the whole file. Without it, a merge-managed config
+/// restores only its managed projection, and only while that is the current source's; replacing or
+/// removing a whole file needs a digest that covers the whole file, so a file the user may have
+/// added to (a created `settings.json`, an MCP file, a rules file) is kept.
+fn unrecorded_apply_restore_mode(
+    op: &ArtifactManifestOperation,
+    workspace_root: &Path,
+    home: &Path,
+) -> Result<Option<RollbackRestoreMode>, String> {
+    let current_full = crate::setup_fingerprint::artifact_installed_full_digest(
+        &op.artifact,
+        workspace_root,
+        home,
+    )?;
+    if op.expected_full_digest.as_deref() == Some(current_full.as_str()) {
+        return Ok(Some(RollbackRestoreMode::FullBackup));
+    }
+    if matches!(op.rollback_action, RollbackAction::RestoreManagedConfigFile) {
+        return Ok(artifact_matches_current_source_output(op, workspace_root, home)?
+            .then_some(RollbackRestoreMode::ManagedProjectionMerge));
+    }
+    if matches!(op.kind, OperationKind::Remove) {
+        // A removal writes nothing: an absent file is all of its output.
+        return Ok((current_full == crate::setup_fingerprint::ABSENT_DIGEST)
+            .then_some(RollbackRestoreMode::FullBackup));
+    }
+    if op.expected_full_digest.is_some() || !managed_digest_covers_whole_file(&op.artifact) {
+        return Ok(None);
+    }
+    Ok(artifact_matches_current_source_output(op, workspace_root, home)?
+        .then_some(RollbackRestoreMode::FullBackup))
+}
+
+/// Whether the managed projection of the artifact is what the current source makes of it: the
+/// planned content, read again, for an operation that recorded no digest of its output.
+fn artifact_matches_current_source_output(
     op: &ArtifactManifestOperation,
     workspace_root: &Path,
     home: &Path,
@@ -3010,9 +3121,6 @@ fn artifact_matches_unrecorded_apply_output(
         workspace_root,
         home,
     )?;
-    if matches!(op.kind, OperationKind::Remove) {
-        return Ok(current == crate::setup_fingerprint::ABSENT_DIGEST);
-    }
     let expected = SkillSources::for_workspace(workspace_root).and_then(|bundled| {
         crate::setup_fingerprint::artifact_effective_source_digest(
             &op.artifact,
@@ -3603,19 +3711,10 @@ fn automatic_restore_mode(
     if op.post_apply_digest.is_some() && op.post_apply_full_digest.is_some() {
         return rollback_restore_mode(op, workspace_root, home).map(Some);
     }
-    if artifact_matches_unrecorded_apply_output(op, workspace_root, home)? {
-        // Without a recorded full digest the file may carry user edits outside
-        // the managed keys, so merge-managed configs restore only their managed
-        // projection.
-        return Ok(Some(
-            if matches!(op.rollback_action, RollbackAction::RestoreManagedConfigFile) {
-                RollbackRestoreMode::ManagedProjectionMerge
-            } else {
-                RollbackRestoreMode::FullBackup
-            },
-        ));
+    match unrecorded_apply_restore_mode(op, workspace_root, home)? {
+        Some(mode) => Ok(Some(mode)),
+        None => Err(CHANGED_SINCE_APPLY.into()),
     }
-    Err(CHANGED_SINCE_APPLY.into())
 }
 
 pub fn restore_artifact_from_backup_for_explicit_rollback(
@@ -4393,12 +4492,30 @@ mod tests {
     }
 
     #[test]
-    fn automatic_restore_restores_planned_content_and_skips_original() {
+    fn automatic_restore_keeps_a_rules_file_the_whole_of_which_nothing_proves() {
         let _guard = crate::test_env::guard::lock();
         let bundled = crate::setup_roots::bundled_root().unwrap();
         let source = fs::read_to_string(bundled.join("templates/sync/codex-rules.md")).unwrap();
+        // An older manifest: no digest recorded before the write. The managed block matching the
+        // source says nothing about the text around it, so the file is not replaced.
         let (op, backup_dir, home, ws) =
+            automatic_restore_fixture("auto-unproven", "original", &source);
+        let err = restore_artifact_from_backup(&op, &backup_dir, &home, &ws).unwrap_err();
+        assert_eq!(err, CHANGED_SINCE_APPLY);
+        assert_eq!(
+            fs::read_to_string(home.join(".codex/AGENTS.md")).unwrap(),
+            source
+        );
+    }
+
+    #[test]
+    fn automatic_restore_restores_recorded_output_and_skips_original() {
+        let _guard = crate::test_env::guard::lock();
+        let bundled = crate::setup_roots::bundled_root().unwrap();
+        let source = fs::read_to_string(bundled.join("templates/sync/codex-rules.md")).unwrap();
+        let (mut op, backup_dir, home, ws) =
             automatic_restore_fixture("auto-planned", "original", &source);
+        op.expected_full_digest = Some(crate::stable_digest::bytes(source.as_bytes()));
         restore_artifact_from_backup(&op, &backup_dir, &home, &ws).expect("restore");
         assert_eq!(
             fs::read_to_string(home.join(".codex/AGENTS.md")).unwrap(),
