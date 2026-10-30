@@ -1,6 +1,19 @@
 {
   "releases": [
     {
+      "version": "2026.10.12",
+      "sections": [
+        {
+          "title": "Fixes",
+          "items": [
+            "Make crash recovery, rollback and undo fail closed",
+            "Guard apply against stale scope, skill key quoting and racing edits",
+            "Keep unsaved edits across save, refresh and settings load"
+          ]
+        }
+      ]
+    },
+    {
       "version": "2026.10.11",
       "sections": [
         {
