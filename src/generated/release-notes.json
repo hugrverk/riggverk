@@ -1,6 +1,25 @@
 {
   "releases": [
     {
+      "version": "2026.10.12",
+      "sections": [
+        {
+          "title": "Fixes",
+          "items": [
+            "Text typed while Save and quit or Save and continue runs is no longer lost: the editor stays open and asks again",
+            "A Library refresh that fails, or a list that no longer shows the open item, keeps your unsaved document, skill or rules draft",
+            "A slow settings load no longer overwrites a change you just made",
+            "An update whose every reviewed target was switched off after the preview now asks for a new preview instead of reporting an apply that never happened",
+            "A skill can no longer take a bundled skill's name by quoting the key (`\"name\": tdd`)",
+            "An update stops and leaves the file alone when a skill or agent file is edited elsewhere while the update runs",
+            "After a crash in the middle of an update, recovery only removes or replaces a file it can prove it wrote; a file you added to since is kept as a conflict",
+            "Undo after such a crash works even when the source changed since, and a retried rollback also restores the pack and ownership records instead of reporting success",
+            "Undoing an earlier update keeps a pack you chose to forget after it"
+          ]
+        }
+      ]
+    },
+    {
       "version": "2026.10.11",
       "sections": [
         {
