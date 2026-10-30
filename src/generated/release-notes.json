@@ -1,6 +1,17 @@
 {
   "releases": [
     {
+      "version": "2026.10.15",
+      "sections": [
+        {
+          "title": "New",
+          "items": [
+            "Collapse off agents into one node"
+          ]
+        }
+      ]
+    },
+    {
       "version": "2026.10.14",
       "sections": [
         {
