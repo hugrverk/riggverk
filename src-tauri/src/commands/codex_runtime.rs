@@ -345,6 +345,7 @@ pub(crate) fn render_codex_config_managed_projection(
     let (ok, legacy_stdout, _legacy_stderr, _legacy_code) = super::process::run_cmd(
         &python,
         &[
+            "-I",
             &legacy_script_str,
             &dest_str,
             &managed_source_str,
@@ -372,6 +373,7 @@ pub(crate) fn render_codex_config_managed_projection(
         let (routing_ok, _routing_stdout, _routing_stderr, _routing_code) = super::process::run_cmd(
             &python,
             &[
+                "-I",
                 &routing_script_str,
                 &temp_config_str,
                 &managed_source_str,
