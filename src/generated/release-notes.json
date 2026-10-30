@@ -1,6 +1,18 @@
 {
   "releases": [
     {
+      "version": "2026.10.14",
+      "sections": [
+        {
+          "title": "New",
+          "items": [
+            "Grok Build (xAI's `grok`) is a new light harness, off until you switch it on in Settings. It reads the skills Riggverk already installs, so it adds no new folder, and it takes your rules from the managed block in `~/.claude/CLAUDE.md` while Claude Code is on. Its page says where its rules come from. The Playwright MCP entry in `~/.grok/config.toml` is off by default; when on, it is written as one table and every other byte of the file is kept",
+            "Google Antigravity is a new light harness, off until you switch it on in Settings. It gets the managed rules block in `~/.gemini/AGENTS.md` (`GEMINI.md` is never touched), which stays within Antigravity's 24,000-byte limit or is refused. It also gets the Playwright MCP entry in `~/.gemini/config/mcp_config.json`, off by default. Its skills go in two folders of its own, `~/.gemini/config/skills` for the app and IDE and `~/.gemini/antigravity-cli/skills` for `agy`, which are emptied of Riggverk's copies again when you switch it off"
+          ]
+        }
+      ]
+    },
+    {
       "version": "2026.10.13",
       "sections": [
         {
