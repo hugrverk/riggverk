@@ -385,6 +385,22 @@ fn restore_previous_managed_state(
     Ok(())
 }
 
+/// Puts the managed state and `pack-skills.json` back as they were before the transaction. Both
+/// writes replace the whole file, so a retry after a failure repeats them safely. A newer completed
+/// transaction owns the managed state now; restoring this transaction's snapshot would erase its
+/// ownership records.
+fn restore_auxiliary_records(
+    manifest: &ArtifactTransactionManifest,
+    backup_dir: &Path,
+    workspace_root: &Path,
+) -> Result<(), String> {
+    if newer_completed_transaction(backup_dir, &manifest.workspace_key)?.is_some() {
+        return Ok(());
+    }
+    restore_previous_managed_state(manifest, backup_dir, workspace_root)?;
+    crate::skill_sources::restore_record(workspace_root, backup_dir)
+}
+
 /// Outcome of one persisted rollback pass.
 struct RollbackRun {
     rolled_back: Vec<String>,
@@ -595,16 +611,7 @@ fn run_persisted_rollback(
     }
     progress.report(ApplyPhase::Apply, total, Some(total), || None);
 
-    // A newer completed transaction owns the managed state now; restoring this
-    // transaction's snapshot would erase its ownership records.
-    let managed_state_restore =
-        match newer_completed_transaction(backup_dir, &manifest.workspace_key) {
-            Ok(Some(_)) => Ok(()),
-            Ok(None) => restore_previous_managed_state(manifest, backup_dir, workspace_root)
-                .and_then(|()| crate::skill_sources::restore_record(workspace_root, backup_dir)),
-            Err(e) => Err(e),
-        };
-    if let Err(error) = managed_state_restore {
+    if let Err(error) = restore_auxiliary_records(manifest, backup_dir, workspace_root) {
         errors.push(error);
         manifest.transaction_status = setup_transaction::TransactionStatus::RollbackFailed;
         let _ = persist_setup_manifest(
@@ -2141,7 +2148,45 @@ pub fn rollback_transaction(
                     ),
                 };
             }
+            let _mutation_guard =
+                match crate::setup_mutation_guard::try_acquire_setup_mutation_guard() {
+                    Ok(guard) => guard,
+                    Err(e) => {
+                        return SetupResult {
+                            success: false,
+                            transaction_id: transaction_id.to_string(),
+                            applied: vec![],
+                            failed: vec![e.clone()],
+                            rolled_back: vec![],
+                            manual_steps: vec![],
+                            message: e,
+                        };
+                    }
+                };
             let mut manifest_mut = manifest;
+            // Every artifact is back, but the records may not be: the pass that ended
+            // rollback-failed may have failed only on them, so they are restored again first.
+            if let Err(error) = restore_auxiliary_records(&manifest_mut, &backup_dir, &ws_root) {
+                let mut failed = vec![error];
+                if let Err(persist_err) = persist_setup_manifest(
+                    &manifest_path,
+                    &mut manifest_mut,
+                    setup_transaction::TransactionStatus::RollbackFailed,
+                    &backup_dir,
+                ) {
+                    failed.push(persist_err);
+                }
+                return SetupResult {
+                    success: false,
+                    transaction_id: transaction_id.to_string(),
+                    applied: vec![],
+                    failed,
+                    rolled_back: plan.already_restored,
+                    manual_steps: vec![],
+                    message: "Rollback could not restore the managed state or the pack skills list"
+                        .to_string(),
+                };
+            }
             if let Some(persist_err) =
                 finalize_persisted_rollback(&manifest_path, &mut manifest_mut, &backup_dir)
             {
@@ -4566,6 +4611,75 @@ mod tests {
         assert_eq!(
             final_manifest.transaction_status,
             setup_transaction::TransactionStatus::RolledBack
+        );
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn retrying_a_rollback_that_failed_only_on_the_pack_record_restores_the_record() {
+        let _guard = guard::lock();
+        let _restore = guard::EnvRestore::capture();
+        let (base, _home, ws, txn_id) = rollback_test_fixture();
+        let backup_dir = seed_two_artifact_transaction(&txn_id);
+        let record = crate::workspace_layout::state_file(
+            &ws,
+            crate::skill_sources::PACK_SKILLS_FILE,
+        );
+        fs::create_dir_all(record.parent().unwrap()).unwrap();
+        fs::write(&record, "written by the transaction").unwrap();
+        // The snapshot cannot be read at first: the rollback restores every artifact, then
+        // fails on the record.
+        let snapshot = backup_dir.join("pack-skills.previous.json");
+        std::os::unix::fs::symlink(base.join("elsewhere"), &snapshot).unwrap();
+        let first = rollback_transaction(&txn_id, false, &mut ProgressReporter::silent());
+        assert!(!first.success);
+        let manifest = read_manifest(&txn_id);
+        assert_eq!(
+            manifest.transaction_status,
+            setup_transaction::TransactionStatus::RollbackFailed
+        );
+        assert!(manifest
+            .operations
+            .iter()
+            .all(|op| op.rollback_status == setup_transaction::RollbackStatus::Restored));
+
+        fs::remove_file(&snapshot).unwrap();
+        fs::write(&snapshot, "before the transaction").unwrap();
+        let retry = rollback_transaction(&txn_id, false, &mut ProgressReporter::silent());
+
+        assert!(retry.success, "{} {:?}", retry.message, retry.failed);
+        assert_eq!(
+            fs::read_to_string(&record).unwrap(),
+            "before the transaction"
+        );
+        assert_eq!(
+            read_manifest(&txn_id).transaction_status,
+            setup_transaction::TransactionStatus::RolledBack
+        );
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_rollback_retry_that_still_cannot_restore_the_records_stays_rollback_failed() {
+        let _guard = guard::lock();
+        let _restore = guard::EnvRestore::capture();
+        let (base, _home, _ws, txn_id) = rollback_test_fixture();
+        let backup_dir = seed_two_artifact_transaction(&txn_id);
+        std::os::unix::fs::symlink(
+            base.join("elsewhere"),
+            backup_dir.join("pack-skills.previous.json"),
+        )
+        .unwrap();
+        assert!(!rollback_transaction(&txn_id, false, &mut ProgressReporter::silent()).success);
+
+        let retry = rollback_transaction(&txn_id, false, &mut ProgressReporter::silent());
+
+        assert!(!retry.success);
+        assert_eq!(
+            read_manifest(&txn_id).transaction_status,
+            setup_transaction::TransactionStatus::RollbackFailed
         );
         let _ = fs::remove_dir_all(&base);
     }
