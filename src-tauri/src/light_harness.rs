@@ -933,7 +933,7 @@ mod tests {
     }
 
     fn rules_of(key: &str) -> &'static LightRules {
-        &descriptor(
+        descriptor(
             HarnessId::ALL
                 .iter()
                 .copied()
