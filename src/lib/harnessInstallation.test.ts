@@ -28,7 +28,7 @@ import {
 
 type EnabledSettings = Pick<AppSettings, "enabled_target_ids" | "enabled_harness_ids">;
 
-/** Backend defaults: the four central harnesses, every target except codex_config, claude_config and kilo_mcp. */
+/** Backend defaults: the four central harnesses, every target except codex_config, claude_config, kilo_mcp and antigravity_mcp. */
 function defaults(overrides: Partial<EnabledSettings> = {}): EnabledSettings {
   return {
     enabled_target_ids: [...DEFAULT_ENABLED_TARGET_IDS],
@@ -42,7 +42,16 @@ const ALL_SURFACES: SetupSurfaceId[] = [
 ];
 
 /** The rules and MCP surfaces of the light tier, which only an enabled light harness offers. */
-const LIGHT_SURFACES: SetupSurfaceId[] = ["copilot_rules", "pi_rules", "kilo_rules", "copilot_mcp", "pi_mcp", "kilo_mcp"];
+const LIGHT_SURFACES: SetupSurfaceId[] = [
+  "copilot_rules",
+  "pi_rules",
+  "kilo_rules",
+  "copilot_mcp",
+  "pi_mcp",
+  "kilo_mcp",
+  "antigravity_rules",
+  "antigravity_mcp",
+];
 
 describe("harnessInstallation", () => {
   it("maps each harness to setup surfaces", () => {
@@ -97,6 +106,8 @@ describe("target to surface mapping", () => {
       pi_mcp: ["pi_mcp"],
       kilo_rules: ["kilo_rules"],
       kilo_mcp: ["kilo_mcp"],
+      antigravity_rules: ["antigravity_rules"],
+      antigravity_mcp: ["antigravity_mcp"],
     });
   });
 
@@ -119,12 +130,13 @@ describe("target to surface mapping", () => {
     expect(harnessForSurface("workspace_bundle")).toBeNull();
   });
 
-  it("defaults every target on except codex_config, claude_config and kilo_mcp", () => {
+  it("defaults every target on except codex_config, claude_config, kilo_mcp and antigravity_mcp", () => {
     expect(DEFAULT_ENABLED_TARGET_IDS).not.toContain("codex_config");
     expect(DEFAULT_ENABLED_TARGET_IDS).not.toContain("claude_config");
     expect(DEFAULT_ENABLED_TARGET_IDS).not.toContain("kilo_mcp");
+    expect(DEFAULT_ENABLED_TARGET_IDS).not.toContain("antigravity_mcp");
     const expected = (Object.keys(TARGET_SURFACES) as SetupTargetId[]).filter(
-      (id) => id !== "codex_config" && id !== "claude_config" && id !== "kilo_mcp",
+      (id) => id !== "codex_config" && id !== "claude_config" && id !== "kilo_mcp" && id !== "antigravity_mcp",
     );
     expect([...DEFAULT_ENABLED_TARGET_IDS].sort()).toEqual(expected.sort());
   });
@@ -209,18 +221,19 @@ describe("target-filtered surfaces", () => {
   });
 });
 
-describe("the light tier (Copilot, Pi, Kilo)", () => {
+describe("the light tier (Copilot, Pi, Kilo, Antigravity)", () => {
   it("is off by default: the defaults are the four central harnesses, as the backend's HarnessId::DEFAULT_ON", () => {
     expect([...DEFAULT_ENABLED_HARNESS_IDS]).toEqual(["codex", "opencode", "claude", "cursor"]);
     expect([...DEFAULT_ENABLED_HARNESS_IDS]).toEqual([...CENTRAL_AGENTS]);
     expect([...INSTALL_AGENTS]).toEqual([...CENTRAL_AGENTS, ...LIGHT_AGENTS]);
-    expect([...LIGHT_AGENTS]).toEqual(["copilot", "pi", "kilo"]);
+    expect([...LIGHT_AGENTS]).toEqual(["copilot", "pi", "kilo", "antigravity"]);
   });
 
   it("follows Claude in the tab order, preserving the preceding tab numbers", () => {
-    expect(HARNESS_NAV_ORDER).toEqual(["codex", "opencode", "cursor", "claude", "copilot", "pi", "kilo"]);
+    expect(HARNESS_NAV_ORDER).toEqual(["codex", "opencode", "cursor", "claude", "copilot", "pi", "kilo", "antigravity"]);
     expect([...HARNESS_NAV_ORDER].sort()).toEqual([...INSTALL_AGENTS].sort());
     expect(HARNESS_LABELS.copilot).toBe("Copilot");
+    expect(HARNESS_LABELS.antigravity).toBe("Antigravity");
     expect(Object.keys(HARNESS_LABELS).sort()).toEqual([...INSTALL_AGENTS].sort());
   });
 
@@ -240,8 +253,8 @@ describe("the light tier (Copilot, Pi, Kilo)", () => {
       expect(HARNESS_SURFACES[harness]).toEqual([rules, "skills", mcp]);
       expect(harnessForSurface(rules)).toBe(harness);
       expect(harnessForSurface(mcp)).toBe(harness);
-      // Kilo's MCP target starts off: it edits Kilo's main config file.
-      const mcpOn = harness !== "kilo";
+      // Kilo's MCP target starts off (it edits Kilo's main config file), and so does Antigravity's.
+      const mcpOn = harness !== "kilo" && harness !== "antigravity";
       const on = defaults({ enabled_harness_ids: [harness] });
       expect(enabledSurfacesForHarness(harness, on)).toEqual(mcpOn ? [rules, "skills", mcp] : [rules, "skills"]);
       expect(harnessSurfaceStates(harness, on)).toEqual([
@@ -265,10 +278,17 @@ describe("the light tier (Copilot, Pi, Kilo)", () => {
     }
   });
 
-  it("defaults the light targets on, Kilo's MCP target aside, and puts them after cursor_setup, as the backend registry does", () => {
+  it("defaults the light targets on, the MCP targets of Kilo and Antigravity aside, and puts them after cursor_setup, as the backend registry does", () => {
     for (const harness of LIGHT_AGENTS) expect(DEFAULT_ENABLED_TARGET_IDS).toContain(`${harness}_rules`);
     for (const harness of ["copilot", "pi"] as const) expect(DEFAULT_ENABLED_TARGET_IDS).toContain(`${harness}_mcp`);
-    expect(DEFAULT_ENABLED_TARGET_IDS.slice(-5)).toEqual(["copilot_rules", "copilot_mcp", "pi_rules", "pi_mcp", "kilo_rules"]);
+    expect(DEFAULT_ENABLED_TARGET_IDS.slice(-6)).toEqual([
+      "copilot_rules",
+      "copilot_mcp",
+      "pi_rules",
+      "pi_mcp",
+      "kilo_rules",
+      "antigravity_rules",
+    ]);
   });
 
   it("adds only the surfaces of the enabled light harnesses to an update-all request", () => {
@@ -280,10 +300,22 @@ describe("the light tier (Copilot, Pi, Kilo)", () => {
       "pi_rules",
       "pi_mcp",
       "kilo_rules",
+      "antigravity_rules",
     ]);
     expect(enabledSetupSurfaces(defaults({ enabled_harness_ids: ["pi"] }))).toEqual(["workspace_bundle", "pi_rules", "skills", "pi_mcp"]);
     // Kilo's entry joins the request once its target is switched on.
     const kiloMcp = defaults({ enabled_harness_ids: ["kilo"], enabled_target_ids: [...DEFAULT_ENABLED_TARGET_IDS, "kilo_mcp"] });
     expect(enabledSetupSurfaces(kiloMcp)).toEqual(["workspace_bundle", "kilo_rules", "skills", "kilo_mcp"]);
+    // So does Antigravity's.
+    expect(enabledSetupSurfaces(defaults({ enabled_harness_ids: ["antigravity"] }))).toEqual([
+      "workspace_bundle",
+      "antigravity_rules",
+      "skills",
+    ]);
+    const antigravityMcp = defaults({
+      enabled_harness_ids: ["antigravity"],
+      enabled_target_ids: [...DEFAULT_ENABLED_TARGET_IDS, "antigravity_mcp"],
+    });
+    expect(enabledSetupSurfaces(antigravityMcp)).toEqual(["workspace_bundle", "antigravity_rules", "skills", "antigravity_mcp"]);
   });
 });

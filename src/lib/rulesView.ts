@@ -21,6 +21,7 @@ const RULES_SURFACE: Partial<Record<InstallAgent, RulesSurfaceId>> = {
   copilot: "copilot_rules",
   pi: "pi_rules",
   kilo: "kilo_rules",
+  antigravity: "antigravity_rules",
 };
 
 export function rulesSurfaceOf(harness: InstallAgent): RulesSurfaceId | null {
@@ -33,7 +34,7 @@ export function harnessOfRulesSurface(surface: RulesSurfaceId): InstallAgent | n
 }
 
 /** Harnesses that have a rules surface, in the order the command line offers them. */
-export const RULES_HARNESSES: readonly InstallAgent[] = ["codex", "opencode", "claude", "copilot", "pi", "kilo"];
+export const RULES_HARNESSES: readonly InstallAgent[] = ["codex", "opencode", "claude", "copilot", "pi", "kilo", "antigravity"];
 
 export const LAYOUT_TEXT: Record<RulesLayout, string> = {
   absent: "no file yet",
@@ -48,6 +49,7 @@ export const CONFLICT_TEXT: Record<RulesConflictReason, string> = {
   malformed_markers: "the base block markers are malformed",
   masked_by_override: "another file in the folder masks this one, so the harness never reads it",
   peer_context_file: "the harness reads another context file in the folder, which a new file would hide",
+  exceeds_harness_limit: "the file would pass the size the harness reads (24,000 bytes for Antigravity)",
 };
 
 const MALFORMED_TEXT: Record<RulesMalformedReason, string> = {
@@ -150,14 +152,20 @@ export function rulesModel(surface: RulesSurfaceId, state: InstallationState, ru
       diffDisabled,
     };
   }
-  if (rules.conflict_reason === "masked_by_override" || rules.conflict_reason === "peer_context_file") {
+  if (
+    rules.conflict_reason === "masked_by_override" ||
+    rules.conflict_reason === "peer_context_file" ||
+    rules.conflict_reason === "exceeds_harness_limit"
+  ) {
     return {
       ...base,
       kind: "blocked",
       headline:
         rules.conflict_reason === "masked_by_override"
           ? "masked by another file: left as is"
-          : "another context file would be hidden: nothing written",
+          : rules.conflict_reason === "peer_context_file"
+            ? "another context file would be hidden: nothing written"
+            : "too large for the harness: shorten your refinements, nothing written",
       tone: "fail",
       display: null,
       diffMode,

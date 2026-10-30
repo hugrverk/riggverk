@@ -199,19 +199,21 @@ describe("SettingsView radio groups", () => {
     expect(props.onToggleHarness).toHaveBeenCalledWith("cursor");
   });
 
-  it("offers Copilot, Pi and Kilo after the four central harnesses, off by default", () => {
+  it("offers Copilot, Pi, Kilo and Antigravity after the four central harnesses, off by default", () => {
     const { props } = renderSettings();
-    const harnesses = ["Codex", "OpenCode", "Claude", "Cursor", "Copilot", "Pi", "Kilo"];
+    const harnesses = ["Codex", "OpenCode", "Claude", "Cursor", "Copilot", "Pi", "Kilo", "Antigravity"];
     const boxes = harnesses.map(name => screen.getByRole("switch", { name }));
     boxes.slice(1).forEach((box, index) => {
       expect(boxes[index]!.compareDocumentPosition(box) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
     expect(boxes.map(box => box.getAttribute("aria-checked"))).toEqual(
-      ["true", "true", "true", "true", "false", "false", "false"],
+      ["true", "true", "true", "true", "false", "false", "false", "false"],
     );
     for (const box of boxes.slice(4)) expect(box.nextElementSibling!.textContent).toBe("Off");
     fireEvent.click(screen.getByRole("switch", { name: "Pi" }));
     expect(props.onToggleHarness).toHaveBeenCalledWith("pi");
+    fireEvent.click(screen.getByRole("switch", { name: "Antigravity" }));
+    expect(props.onToggleHarness).toHaveBeenCalledWith("antigravity");
   });
 });
 
@@ -660,7 +662,7 @@ describe("SettingsView workspace row", () => {
     const reset = within(workspaceRow()).getByRole("button", { name: /reset to default/ });
     focus(radios("Landing page")[0]!);
     // Landing page, agent switches, then the workspace action.
-    for (let step = 0; step < 8; step += 1) press(document.activeElement!, "j");
+    for (let step = 0; step < 9; step += 1) press(document.activeElement!, "j");
     expect(document.activeElement).toBe(reset);
     press(document.activeElement!, "k");
     expect(document.activeElement).not.toBe(reset);

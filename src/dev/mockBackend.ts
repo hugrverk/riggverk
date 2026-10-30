@@ -18,8 +18,8 @@
  *   error     status/diagnostics calls fail (exercises the error line); the workspace is not valid, so the
  *             Library still lists the bundled items but no personal doc
  *   empty     valid workspace with no docs, skills or agents (the empty states of the lists; the real bundle is never empty)
- * `&theme=light|dark|system` sets the persisted appearance. Copilot, Pi and Kilo are off until Settings turns
- * them on; `&light=unserved` leaves Copilot and Pi without a skills folder (an isolated Codex home).
+ * `&theme=light|dark|system` sets the persisted appearance. Copilot, Pi, Kilo and Antigravity are off until Settings
+ * turns them on; `&light=unserved` leaves Copilot and Pi without a skills folder (an isolated Codex home).
  * `&pace=slow` slows the progress events of a task down, so a run can be watched.
  *
  * Mutating commands update in-memory state so install/rollback/save flows round-trip. Apply, uninstall and
@@ -127,6 +127,8 @@ const TARGETS: AgentTargetMeta[] = [
   { id: "pi_mcp", label: "pi mcp", harness: "pi", kind: "mcp", target_rel: ".pi/agent/mcp.json", source_rel: "templates/mcp/pi.playwright.json" },
   { id: "kilo_rules", label: "kilo rules", harness: "kilo", kind: "rules", target_rel: ".config/kilo/AGENTS.md", source_rel: "templates/sync/kilo-rules.md" },
   { id: "kilo_mcp", label: "kilo mcp", harness: "kilo", kind: "mcp", target_rel: ".config/kilo/kilo.jsonc", source_rel: "templates/mcp/kilo.playwright.json" },
+  { id: "antigravity_rules", label: "antigravity rules", harness: "antigravity", kind: "rules", target_rel: ".gemini/AGENTS.md", source_rel: "templates/sync/antigravity-rules.md" },
+  { id: "antigravity_mcp", label: "antigravity mcp", harness: "antigravity", kind: "mcp", target_rel: ".gemini/config/mcp_config.json", source_rel: "templates/mcp/antigravity.playwright.json" },
 ];
 
 let settings: AppSettings = {
@@ -135,7 +137,11 @@ let settings: AppSettings = {
   workspace_path: null,
   // The conflict scenario turns the Codex config on: it shows the enforced key the user can keep.
   enabled_target_ids: TARGETS.map(t => t.id).filter(
-    id => (id !== "codex_config" || scenario === "conflict") && id !== "claude_config" && id !== "kilo_mcp",
+    id =>
+      (id !== "codex_config" || scenario === "conflict") &&
+      id !== "claude_config" &&
+      id !== "kilo_mcp" &&
+      id !== "antigravity_mcp",
   ),
   enabled_harness_ids: ["codex", "opencode", "claude", "cursor"],
   accent_color: null,
@@ -167,6 +173,8 @@ const SURFACE_LABELS: Record<SetupSurfaceId, string> = {
   copilot_mcp: "Copilot MCP",
   pi_mcp: "Pi MCP",
   kilo_mcp: "Kilo MCP",
+  antigravity_rules: "Antigravity rules",
+  antigravity_mcp: "Antigravity MCP",
   workspace_bundle: "Workspace bundle",
 };
 
@@ -189,11 +197,13 @@ const SURFACE_PATHS: Record<SetupSurfaceId, string> = {
   copilot_mcp: "~/.copilot/mcp-config.json",
   pi_mcp: "~/.pi/agent/mcp.json",
   kilo_mcp: "~/.config/kilo/kilo.jsonc",
+  antigravity_rules: "~/.gemini/AGENTS.md",
+  antigravity_mcp: "~/.gemini/config/mcp_config.json",
   workspace_bundle: "~/.config/riggverk",
 };
 
 const ALL_SURFACES = Object.keys(SURFACE_LABELS) as SetupSurfaceId[];
-const LIGHT_MCP_SURFACES = ["copilot_mcp", "pi_mcp", "kilo_mcp"] as const;
+const LIGHT_MCP_SURFACES = ["copilot_mcp", "pi_mcp", "kilo_mcp", "antigravity_mcp"] as const;
 
 function initialSurfaceStates(): Map<SetupSurfaceId, InstallationState> {
   const states = new Map<SetupSurfaceId, InstallationState>();
@@ -240,7 +250,15 @@ let transactionSeq = 0;
 
 /* ---- rules files (managed base block) ---- */
 
-const RULES_SURFACES: RulesSurfaceId[] = ["claude_rules", "codex_rules", "open_code_rules", "copilot_rules", "pi_rules", "kilo_rules"];
+const RULES_SURFACES: RulesSurfaceId[] = [
+  "claude_rules",
+  "codex_rules",
+  "open_code_rules",
+  "copilot_rules",
+  "pi_rules",
+  "kilo_rules",
+  "antigravity_rules",
+];
 
 function isRulesSurface(surface: SetupSurfaceId): surface is RulesSurfaceId {
   return (RULES_SURFACES as SetupSurfaceId[]).includes(surface);
@@ -273,6 +291,8 @@ const RULES_VARIANTS: Record<string, RulesVariant> = {
   masked: { state: "conflict", file: { layout: "block", refinement_lines: 0, conflict_reason: "masked_by_override", user_managed: false } },
   /** Pi: a `CLAUDE.md` and no `AGENTS.md`. */
   peer: { state: "conflict", file: { layout: "absent", refinement_lines: 0, conflict_reason: "peer_context_file", user_managed: false } },
+  /** Antigravity: the update would pass the 24,000 bytes it reads of one rules file. */
+  too_large: { state: "conflict", file: { layout: "block", refinement_lines: 310, conflict_reason: "exceeds_harness_limit", user_managed: false } },
 };
 
 const rulesFiles = new Map<RulesSurfaceId, RulesStatus>();
@@ -294,6 +314,7 @@ function seedRules() {
       set("copilot_rules", RULES_VARIANTS.absent!);
       set("pi_rules", RULES_VARIANTS.masked!);
       set("kilo_rules", RULES_VARIANTS.update!);
+      set("antigravity_rules", RULES_VARIANTS.too_large!);
       break;
     case "empty":
       for (const surface of RULES_SURFACES) set(surface, RULES_VARIANTS.current!);
@@ -303,7 +324,9 @@ function seedRules() {
       set("codex_rules", RULES_VARIANTS.current!);
       set("open_code_rules", { state: "update_available", file: { layout: "block", refinement_lines: 0, user_managed: false } });
       // The light harnesses are off until Settings turns them on; once on, nothing is installed yet.
-      for (const surface of ["copilot_rules", "pi_rules", "kilo_rules"] as const) set(surface, RULES_VARIANTS.absent!);
+      for (const surface of ["copilot_rules", "pi_rules", "kilo_rules", "antigravity_rules"] as const) {
+        set(surface, RULES_VARIANTS.absent!);
+      }
       break;
   }
 }
@@ -321,6 +344,7 @@ function rulesDetail(file: RulesStatus, state: InstallationState): string {
     case "malformed_markers": return `base block markers are malformed (${MALFORMED_TEXT[file.malformed_reason ?? "missing_end"]}), left as is`;
     case "masked_by_override": return "an override file in the same folder masks this file, left as is";
     case "peer_context_file": return "another context file in this folder would be hidden by a new one, nothing written";
+    case "exceeds_harness_limit": return "the file would pass the size limit of the harness, nothing written";
   }
   if (state === "update_available") return `base update available${kept}`;
   if (state === "not_installed") return "not installed";
@@ -440,6 +464,7 @@ function mockRulesConversion(surface: RulesSurfaceId): RulesConversionPreview {
   if (file.layout === "malformed") return refused("the base block markers are malformed; fix or remove them by hand first");
   if (file.conflict_reason === "masked_by_override") return refused("another file in the same folder masks this one, so the harness never reads it; remove or rename that file first");
   if (file.conflict_reason === "peer_context_file") return refused("the harness reads another context file in this folder; add the base to that file by hand or move it first");
+  if (file.conflict_reason === "exceeds_harness_limit") return refused("the file would pass the size limit of the harness; shorten your text below the END marker first");
   if (!file || !convertible(file)) return refused("this file is managed by the base block already; use the regular update");
   const edited = file.layout === "block";
   rulesPreviewSeq += 1;
@@ -1291,18 +1316,19 @@ function claudeHealth(): ClaudeRuntimeHealth {
 }
 
 /**
- * Copilot, Pi and Kilo. The CLI differs per harness so every row shows once: Copilot is on PATH, Pi is not found,
- * Kilo is found in nvm. `&light=unserved` leaves Copilot and Pi without a skills folder (Codex isolated).
+ * Copilot, Pi, Kilo and Antigravity. The CLI differs per harness so every row shows once: Copilot is on PATH, Pi is
+ * not found, Kilo is found in nvm, agy is on PATH. `&light=unserved` leaves Copilot and Pi without a skills folder
+ * (Codex isolated); Kilo and Antigravity stay served.
  */
 function lightHealth(harness: LightAgent): LightRuntimeHealth {
-  const unserved = params.get("light") === "unserved" && harness !== "kilo";
+  const unserved = params.get("light") === "unserved" && (harness === "copilot" || harness === "pi");
   const state = scenario === "fresh" ? "not_installed" : (surfaceStates.get("skills") ?? "not_installed");
   const expected = scenario === "empty" ? 0 : skills.length;
   const status = unserved
     ? "unserved"
     : state === "current" ? "synced" : state === "update_available" ? "partial" : state === "conflict" ? "diverged" : "missing";
   const synced = status === "synced" ? expected : status === "partial" ? Math.max(expected - 3, 0) : 0;
-  const label = harness === "copilot" ? "Copilot" : harness === "pi" ? "Pi" : "Kilo";
+  const label = { copilot: "Copilot", pi: "Pi", kilo: "Kilo", antigravity: "Antigravity" }[harness];
   const rulesSurface = `${harness}_rules` as RulesSurfaceId;
   const rulesState = surfaceStates.get(rulesSurface) ?? "not_installed";
   const rulesFile = rulesFiles.get(rulesSurface);
@@ -1333,7 +1359,9 @@ function lightHealth(harness: LightAgent): LightRuntimeHealth {
       ? { status: "found", version: "1.0.98", source: "path", detail: "Copilot 1.0.98" }
       : harness === "pi"
         ? { status: "missing", version: null, source: null, detail: "pi is not on PATH; Riggverk does not read your shell profile, so start it from a shell where pi runs" }
-        : { status: "found", version: "7.8.12", source: "nvm", detail: "Kilo 7.8.12 (found in nvm v24.14.0, not on PATH)" };
+        : harness === "kilo"
+          ? { status: "found", version: "7.8.12", source: "nvm", detail: "Kilo 7.8.12 (found in nvm v24.14.0, not on PATH)" }
+          : { status: "found", version: "1.2.0", source: "path", detail: "Antigravity 1.2.0" };
   const mcpSurface = `${harness}_mcp` as (typeof LIGHT_MCP_SURFACES)[number];
   const mcpState = surfaceStates.get(mcpSurface) ?? "not_installed";
   const mcpOn = settings.enabled_target_ids.includes(mcpSurface);
@@ -1359,7 +1387,18 @@ function lightHealth(harness: LightAgent): LightRuntimeHealth {
     cli,
     rules,
     mcp,
-    skills: { status, synced, expected, roots: unserved ? [] : harness === "kilo" ? ["~/.claude/skills", "~/.agents/skills"] : ["~/.agents/skills"] },
+    skills: {
+      status,
+      synced,
+      expected,
+      roots: unserved
+        ? []
+        : harness === "kilo"
+          ? ["~/.claude/skills", "~/.agents/skills"]
+          : harness === "antigravity"
+            ? ["~/.gemini/config/skills", "~/.gemini/antigravity-cli/skills"]
+            : ["~/.agents/skills"],
+    },
     warnings: [
       ...(unserved ? [`No skills are installed for ${label}: it reads ~/.agents/skills, and a customised CODEX_HOME keeps Codex out of that folder.`] : []),
       ...rulesWarnings,
@@ -1619,7 +1658,10 @@ async function emitProgress(task: string, files: string[], options: { backup?: b
 
 /* ---- effective skill loads ---- */
 
-/** Copilot, Pi and Kilo list their folders by precedence: the first one holding a name wins. */
+/**
+ * Copilot, Pi and Kilo list their folders by precedence: the first one holding a name wins. Antigravity's App and IDE
+ * read the first of its two, its CLI the second.
+ */
 const SKILL_READ_FOLDERS: Record<InstallAgent, SkillReadFolder[]> = {
   claude: ["claude"],
   codex: ["agents", "codex_home"],
@@ -1628,6 +1670,7 @@ const SKILL_READ_FOLDERS: Record<InstallAgent, SkillReadFolder[]> = {
   copilot: ["copilot", "agents"],
   pi: ["pi_agent", "agents"],
   kilo: ["kilo", "agents", "claude"],
+  antigravity: ["antigravity_app", "antigravity_cli"],
 };
 
 const SKILL_FOLDER_PATHS: Record<SkillReadFolder, string> = {
@@ -1640,6 +1683,8 @@ const SKILL_FOLDER_PATHS: Record<SkillReadFolder, string> = {
   copilot: "~/.copilot/skills",
   pi_agent: "~/.pi/agent/skills",
   kilo: "~/.kilo/skills",
+  antigravity_app: "~/.gemini/config/skills",
+  antigravity_cli: "~/.gemini/antigravity-cli/skills",
 };
 
 /** The folders skills are installed into for these harnesses (default Codex home), as the backend picks them. */
@@ -1648,7 +1693,12 @@ function installedSkillFolders(enabled: readonly InstallAgent[]): SkillReadFolde
   // Copilot and Pi read ~/.agents/skills only; OpenCode, Cursor and Kilo are served by it unless Claude is on.
   const agents =
     on("codex") || on("copilot") || on("pi") || ((on("opencode") || on("cursor") || on("kilo")) && !on("claude"));
-  return [...(on("claude") ? ["claude" as const] : []), ...(agents ? ["agents" as const] : [])];
+  return [
+    ...(on("claude") ? ["claude" as const] : []),
+    ...(agents ? ["agents" as const] : []),
+    // Antigravity reads neither shared folder: its own two are installed while it is on.
+    ...(on("antigravity") ? ["antigravity_app" as const, "antigravity_cli" as const] : []),
+  ];
 }
 
 /** A 12-digit pseudo hash: equal seeds give equal hashes. */
@@ -1779,6 +1829,7 @@ function posture(harness: InstallAgent): SecurityPosture {
     kilo: "kilo.jsonc",
     copilot: "",
     pi: "",
+    antigravity: "",
   }[harness];
   const state = scenario === "fresh" ? "missing" : "read";
   const risky = scenario === "conflict";
@@ -1829,6 +1880,8 @@ function posture(harness: InstallAgent): SecurityPosture {
       return { harness, sources: [], findings: [finding("copilot_not_covered", "not_covered")] };
     case "pi":
       return { harness, sources: [], findings: [finding("pi_not_covered", "not_covered")] };
+    case "antigravity":
+      return { harness, sources: [], findings: [finding("antigravity_not_covered", "not_covered")] };
   }
 }
 
