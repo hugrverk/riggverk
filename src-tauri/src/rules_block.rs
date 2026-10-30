@@ -444,6 +444,9 @@ pub enum RulesConflict {
     /// The harness reads one context file per folder, there is another one and no rules file yet:
     /// creating the rules file would hide the user's file (Pi: `CLAUDE.md`).
     PeerContextFile,
+    /// The file the app would write is larger than the harness reads (Antigravity: 24,000 bytes
+    /// per file), so nothing is written.
+    ExceedsHarnessLimit,
 }
 
 impl RulesConflict {
@@ -455,6 +458,9 @@ impl RulesConflict {
             Self::MaskedByOverride => "an override file in the same folder masks this file",
             Self::PeerContextFile => {
                 "another context file in the same folder would be hidden by a new one"
+            }
+            Self::ExceedsHarnessLimit => {
+                "the file would pass the size limit of the harness, which would not read all of it"
             }
         }
     }

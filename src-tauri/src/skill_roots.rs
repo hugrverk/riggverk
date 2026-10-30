@@ -28,17 +28,26 @@ pub enum SkillRoot {
     OpenCode,
     /// The skills folder of the Cursor profile (`CURSOR_SKILLS_PATH` when set): older versions only
     Cursor,
+    /// `~/.gemini/config/skills`: read by the Antigravity App and IDE only. Installed into only
+    /// while Antigravity is enabled (the one light harness with folders of its own, see
+    /// [`install_roots`]).
+    AntigravityApp,
+    /// `~/.gemini/antigravity-cli/skills`: read by the Antigravity CLI (`agy`) only, under the
+    /// same rule.
+    AntigravityCli,
 }
 
 impl SkillRoot {
     /// Every root an artifact can name. Uninstall and adoption of old installs look at all of
     /// them; planning looks at the roots of a [`SkillScope`].
-    pub const ALL: [SkillRoot; 5] = [
+    pub const ALL: [SkillRoot; 7] = [
         SkillRoot::Claude,
         SkillRoot::Agents,
         SkillRoot::CodexHome,
         SkillRoot::OpenCode,
         SkillRoot::Cursor,
+        SkillRoot::AntigravityApp,
+        SkillRoot::AntigravityCli,
     ];
 
     /// Short name used in backup identifiers and labels.
@@ -49,6 +58,8 @@ impl SkillRoot {
             SkillRoot::CodexHome => "codex-home",
             SkillRoot::OpenCode => "opencode",
             SkillRoot::Cursor => "cursor",
+            SkillRoot::AntigravityApp => "antigravity-app",
+            SkillRoot::AntigravityCli => "antigravity-cli",
         }
     }
 
@@ -72,6 +83,8 @@ impl SkillRoot {
                 }
             }
             SkillRoot::Cursor => "~/.cursor/skills",
+            SkillRoot::AntigravityApp => "~/.gemini/config/skills",
+            SkillRoot::AntigravityCli => "~/.gemini/antigravity-cli/skills",
         }
     }
 
@@ -99,6 +112,10 @@ impl SkillRoot {
                 Some(path) => Ok(path),
                 None => Ok(crate::cursor_profile_paths::resolve_cursor_profile_paths()?.skills),
             },
+            // Fixed below the home folder: no environment variable moves them (none is
+            // documented), so the app writes nowhere but the two folders Antigravity reads.
+            SkillRoot::AntigravityApp => Ok(home.join(".gemini/config/skills")),
+            SkillRoot::AntigravityCli => Ok(home.join(".gemini/antigravity-cli/skills")),
         }
     }
 }
@@ -119,8 +136,8 @@ fn override_dir(variable: &str, home: &Path) -> Option<PathBuf> {
 }
 
 /// A folder some harness reads skills from. A superset of [`SkillRoot`]: `DotCodex` is read by
-/// Cursor, and the light harnesses each have a folder of their own (`Copilot`, `PiAgent`,
-/// `Kilo`); the app never installs into any of them.
+/// Cursor, and Copilot, Pi and Kilo each have a folder of their own (`Copilot`, `PiAgent`,
+/// `Kilo`); the app never installs into any of them. Antigravity's two folders are install roots.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ReadFolder {
@@ -137,10 +154,14 @@ pub enum ReadFolder {
     PiAgent,
     /// `~/.kilo/skills`: private to Kilo
     Kilo,
+    /// `~/.gemini/config/skills`: the Antigravity App and IDE (an install root)
+    AntigravityApp,
+    /// `~/.gemini/antigravity-cli/skills`: the Antigravity CLI (an install root)
+    AntigravityCli,
 }
 
 impl ReadFolder {
-    pub const ALL: [ReadFolder; 9] = [
+    pub const ALL: [ReadFolder; 11] = [
         ReadFolder::Claude,
         ReadFolder::Agents,
         ReadFolder::CodexHome,
@@ -150,6 +171,8 @@ impl ReadFolder {
         ReadFolder::Copilot,
         ReadFolder::PiAgent,
         ReadFolder::Kilo,
+        ReadFolder::AntigravityApp,
+        ReadFolder::AntigravityCli,
     ];
 
     /// The install root that is this folder, when the app can install into it.
@@ -160,6 +183,8 @@ impl ReadFolder {
             ReadFolder::CodexHome => Some(SkillRoot::CodexHome),
             ReadFolder::OpenCode => Some(SkillRoot::OpenCode),
             ReadFolder::Cursor => Some(SkillRoot::Cursor),
+            ReadFolder::AntigravityApp => Some(SkillRoot::AntigravityApp),
+            ReadFolder::AntigravityCli => Some(SkillRoot::AntigravityCli),
             ReadFolder::DotCodex | ReadFolder::Copilot | ReadFolder::PiAgent | ReadFolder::Kilo => {
                 None
             }
@@ -189,6 +214,9 @@ impl ReadFolder {
 /// - Copilot CLI reads `~/.agents/skills` and its own `~/.copilot/skills`, not `~/.claude/skills`.
 /// - Pi reads `~/.agents/skills` and `<agent dir>/skills`, not `~/.claude/skills`.
 /// - Kilo reads `~/.claude/skills` and `~/.agents/skills` by default, and `~/.kilo/skills`.
+/// - Antigravity reads neither shared folder: the App and IDE read `~/.gemini/config/skills`, the
+///   CLI `~/.gemini/antigravity-cli/skills`. Each surface reads one folder, so the order carries
+///   no precedence.
 pub fn readers(harness: HarnessId) -> &'static [ReadFolder] {
     match harness {
         HarnessId::Claude => &[ReadFolder::Claude],
@@ -203,6 +231,7 @@ pub fn readers(harness: HarnessId) -> &'static [ReadFolder] {
         HarnessId::Copilot => &[ReadFolder::Copilot, ReadFolder::Agents],
         HarnessId::Pi => &[ReadFolder::PiAgent, ReadFolder::Agents],
         HarnessId::Kilo => &[ReadFolder::Kilo, ReadFolder::Agents, ReadFolder::Claude],
+        HarnessId::Antigravity => &[ReadFolder::AntigravityApp, ReadFolder::AntigravityCli],
     }
 }
 
@@ -236,6 +265,10 @@ pub fn codex_home_is_custom(home: &Path) -> bool {
 /// 4. Copilot or Pi enabled, which read `~/.agents/skills` and no other shared folder:
 ///    `~/.agents/skills`, unless Codex is enabled with a customised home. Isolation wins there:
 ///    the harness is then [`unserved`].
+/// 5. Antigravity enabled, which reads no shared folder: its two own folders,
+///    `~/.gemini/config/skills` (App and IDE) and `~/.gemini/antigravity-cli/skills` (CLI). No
+///    other harness reads them, so they never change what another harness loads. This is the one
+///    exception to "the light tier adds no install folder" (`docs/WORKSPACE_CONTRACT.md`).
 ///
 /// Every enabled harness then reads at least one installed root, except an [`unserved`] one; Codex
 /// never reads two, and with a customised `CODEX_HOME` Codex reads no installed copy outside
@@ -268,6 +301,10 @@ pub fn install_roots(enabled: &[HarnessId], codex_custom: bool) -> Vec<SkillRoot
         && !(on(HarnessId::Codex) && codex_custom)
     {
         roots.push(SkillRoot::Agents);
+    }
+    if on(HarnessId::Antigravity) {
+        roots.push(SkillRoot::AntigravityApp);
+        roots.push(SkillRoot::AntigravityCli);
     }
     roots.sort_by_key(|root| {
         SkillRoot::ALL
@@ -390,6 +427,10 @@ mod tests {
     const P: HarnessId = HarnessId::Copilot;
     const I: HarnessId = HarnessId::Pi;
     const K: HarnessId = HarnessId::Kilo;
+    /// Antigravity, the one light harness with install folders of its own.
+    const A: HarnessId = HarnessId::Antigravity;
+    const ANTIGRAVITY_ROOTS: [SkillRoot; 2] =
+        [SkillRoot::AntigravityApp, SkillRoot::AntigravityCli];
 
     /// All 15 non-empty subsets of the four harnesses.
     fn subsets() -> Vec<Vec<HarnessId>> {
@@ -421,6 +462,8 @@ mod tests {
             (SkillRoot::CodexHome, "codex_home"),
             (SkillRoot::OpenCode, "open_code"),
             (SkillRoot::Cursor, "cursor"),
+            (SkillRoot::AntigravityApp, "antigravity_app"),
+            (SkillRoot::AntigravityCli, "antigravity_cli"),
         ] {
             assert_eq!(serde_json::to_string(&root).unwrap(), format!("\"{name}\""));
         }
@@ -574,10 +617,24 @@ mod tests {
             readers(K),
             &[ReadFolder::Kilo, ReadFolder::Agents, ReadFolder::Claude]
         );
+        // Antigravity reads neither shared folder: the App and IDE read ~/.gemini/config/skills,
+        // the CLI ~/.gemini/antigravity-cli/skills; both are install roots.
+        assert_eq!(
+            readers(A),
+            &[ReadFolder::AntigravityApp, ReadFolder::AntigravityCli]
+        );
+        assert_eq!(
+            ReadFolder::AntigravityApp.root(),
+            Some(SkillRoot::AntigravityApp)
+        );
+        assert_eq!(
+            ReadFolder::AntigravityCli.root(),
+            Some(SkillRoot::AntigravityCli)
+        );
         for harness in [P, I, K] {
             assert!(resolves_duplicates_by_folder_order(harness));
         }
-        for harness in [C, X, O, U] {
+        for harness in [C, X, O, U, A] {
             assert!(!resolves_duplicates_by_folder_order(harness));
         }
     }
@@ -610,9 +667,11 @@ mod tests {
     }
 
     #[test]
-    fn the_light_tier_adds_no_install_root() {
-        // Worst-case transactions are bounded by the roots; the light tier shares the existing ones.
-        assert_eq!(SkillRoot::ALL.len(), 5);
+    fn the_light_tier_adds_install_roots_for_antigravity_only() {
+        // Worst-case transactions are bounded by the roots. Copilot, Pi and Kilo share the
+        // existing ones; Antigravity reads no shared folder, so it adds its two own and nothing
+        // else (the owner-approved exception in docs/WORKSPACE_CONTRACT.md).
+        assert_eq!(SkillRoot::ALL.len(), 7);
         assert_eq!(
             SkillRoot::ALL
                 .iter()
@@ -620,13 +679,44 @@ mod tests {
                     .iter()
                     .any(|folder| folder.root() == Some(**root)))
                 .count(),
-            5
+            7
+        );
+        for harness in HarnessId::ALL {
+            let own: Vec<SkillRoot> = readers(*harness)
+                .iter()
+                .filter_map(|folder| folder.root())
+                .filter(|root| ANTIGRAVITY_ROOTS.contains(root))
+                .collect();
+            if *harness == A {
+                assert_eq!(own, ANTIGRAVITY_ROOTS);
+            } else {
+                assert!(own.is_empty(), "{harness:?} reads an Antigravity folder");
+            }
+        }
+        let home = Path::new("/home/someone");
+        assert_eq!(
+            SkillRoot::AntigravityApp.path(home).unwrap(),
+            home.join(".gemini/config/skills")
+        );
+        assert_eq!(
+            SkillRoot::AntigravityCli.path(home).unwrap(),
+            home.join(".gemini/antigravity-cli/skills")
+        );
+        assert_eq!(
+            SkillRoot::AntigravityApp.display(),
+            "~/.gemini/config/skills"
+        );
+        assert_eq!(
+            SkillRoot::AntigravityCli.display(),
+            "~/.gemini/antigravity-cli/skills"
         );
     }
 
     #[test]
     fn install_roots_for_the_light_tier_follow_the_table() {
-        use SkillRoot::{Agents as F2, Claude as F1, CodexHome as F3};
+        use SkillRoot::{
+            Agents as F2, AntigravityApp as G1, AntigravityCli as G2, Claude as F1, CodexHome as F3,
+        };
         // (enabled, default CODEX_HOME, custom CODEX_HOME, unserved with a custom CODEX_HOME)
         #[allow(clippy::type_complexity)]
         let table: Vec<(
@@ -652,6 +742,17 @@ mod tests {
                 vec![C, X, O, U, P, I, K],
                 vec![F1, F2],
                 vec![F1, F3],
+                vec![P, I],
+            ),
+            (vec![A], vec![G1, G2], vec![G1, G2], vec![]),
+            (vec![C, A], vec![F1, G1, G2], vec![F1, G1, G2], vec![]),
+            (vec![X, A], vec![F2, G1, G2], vec![F3, G1, G2], vec![]),
+            (vec![P, A], vec![F2, G1, G2], vec![F2, G1, G2], vec![]),
+            (vec![X, P, A], vec![F2, G1, G2], vec![F3, G1, G2], vec![P]),
+            (
+                vec![C, X, O, U, P, I, K, A],
+                vec![F1, F2, G1, G2],
+                vec![F1, F3, G1, G2],
                 vec![P, I],
             ),
         ];
@@ -736,7 +837,8 @@ mod tests {
                 // rules 1 and 2 give for Claude and Codex, every root is the only one some
                 // harness reads.
                 for root in roots {
-                    let mandated = (*root == SkillRoot::Claude && on(C))
+                    let mandated = (ANTIGRAVITY_ROOTS.contains(root) && on(A))
+                        || (*root == SkillRoot::Claude && on(C))
                         || (on(X)
                             && *root
                                 == if custom {
@@ -748,34 +850,63 @@ mod tests {
                     assert!(mandated || needed, "I4 {label}: {root:?} in {roots:?}");
                 }
 
-                // I5: how many installed copies a harness can see.
+                // I5: how many installed copies a harness can see. Antigravity sees two, one per
+                // surface: the App reads one folder and the CLI the other.
                 for harness in subset {
                     let most = match harness {
-                        HarnessId::OpenCode | HarnessId::Cursor | HarnessId::Kilo => 2,
+                        HarnessId::OpenCode
+                        | HarnessId::Cursor
+                        | HarnessId::Kilo
+                        | HarnessId::Antigravity => 2,
                         _ => 1,
                     };
                     assert!(read(*harness).len() <= most, "I5 {label}: {harness:?}");
                 }
+                if on(A) {
+                    assert_eq!(read(A), ANTIGRAVITY_ROOTS, "I5 {label}");
+                }
 
-                // I6: only the roots that existed before the light tier are ever chosen.
+                // I6: only the roots that existed before the light tier are ever chosen, plus
+                // Antigravity's two, exactly while it is enabled.
                 assert!(
                     roots.iter().all(|root| matches!(
                         root,
                         SkillRoot::Claude | SkillRoot::Agents | SkillRoot::CodexHome
-                    )),
+                    ) || (on(A) && ANTIGRAVITY_ROOTS.contains(root))),
                     "I6 {label}"
                 );
+                for root in ANTIGRAVITY_ROOTS {
+                    assert_eq!(roots.contains(&root), on(A), "I6 {label}: {root:?}");
+                }
+
+                // I7: Antigravity changes nothing for the other harnesses: the roots of the
+                // subset without it are the roots with it, minus its own two.
+                let others: Vec<HarnessId> = subset
+                    .iter()
+                    .copied()
+                    .filter(|harness| *harness != A)
+                    .collect();
+                let without: Vec<SkillRoot> = roots
+                    .iter()
+                    .copied()
+                    .filter(|root| !ANTIGRAVITY_ROOTS.contains(root))
+                    .collect();
+                assert_eq!(install_roots(&others, custom), without, "I7 {label}");
             }
         }
     }
 
     #[test]
     fn enabling_a_light_harness_never_takes_an_install_root_away() {
-        // It adds at most one root, the one the light harness itself needs.
+        // Copilot, Pi and Kilo add at most one root, the one the light harness itself needs;
+        // Antigravity adds exactly its own two.
         for custom in [false, true] {
-            for subset in subsets() {
+            for subset in all_subsets() {
                 let before = install_roots(&subset, custom);
-                for light in [P, I, K] {
+                for light in [P, I, K, A] {
+                    if subset.contains(&light) {
+                        continue;
+                    }
                     let mut with = subset.clone();
                     with.push(light);
                     let after = install_roots(&with, custom);
@@ -786,7 +917,12 @@ mod tests {
                             name(&subset)
                         );
                     }
-                    assert!(after.len() <= before.len() + 1);
+                    if light == A {
+                        assert_eq!(after.len(), before.len() + 2);
+                        assert!(ANTIGRAVITY_ROOTS.iter().all(|root| after.contains(root)));
+                    } else {
+                        assert!(after.len() <= before.len() + 1);
+                    }
                 }
             }
         }

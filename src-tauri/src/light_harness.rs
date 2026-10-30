@@ -1,4 +1,4 @@
-//! The light tier: GitHub Copilot, Pi and Kilo Code.
+//! The light tier: GitHub Copilot, Pi, Kilo Code and Google Antigravity.
 //!
 //! A light harness gets the shared skills (through the folders it reads, see
 //! [`crate::skill_roots`]), one managed rules block, one managed Playwright MCP entry and a
@@ -29,6 +29,8 @@ const MAX_FILE_NAMES: usize = 8;
 const MAX_NOTES: usize = 3;
 const MAX_NOTE_CHARS: usize = 240;
 const MAX_KEY_CHARS: usize = 32;
+/// The smallest `rules.max_file_bytes`: a limit below the bundled base would refuse every write.
+const MIN_RULES_FILE_BYTES: u64 = 16 * 1024;
 /// Where the entry templates live in the bundle.
 const MCP_TEMPLATE_DIR: &str = "templates/mcp/";
 /// Where the generated rules bases live in the bundle (`scripts/generate-agent-rules.py`).
@@ -110,6 +112,9 @@ struct RawRules {
     /// exists (it loads one global file: this one first).
     #[serde(default)]
     shadows: Option<String>,
+    /// The largest file the harness reads in full; the app writes no rules file above it.
+    #[serde(default)]
+    max_file_bytes: Option<u64>,
 }
 
 #[derive(Deserialize)]
@@ -208,6 +213,8 @@ pub struct LightRules {
     pub peer_files: Vec<String>,
     /// `~/...` of the file the harness stops reading while the rules file exists.
     pub shadows: Option<String>,
+    /// The largest file the harness reads in full (Antigravity: 24,000 bytes per rules file).
+    pub max_file_bytes: Option<u64>,
     /// The setup surface that owns the file.
     pub surface: SetupSurfaceId,
 }
@@ -328,6 +335,13 @@ impl LightRules {
     /// absent).
     pub fn peer_context_files(&self, dest: &Path) -> Vec<&str> {
         self.files_next_to(dest, &self.peer_files)
+    }
+
+    /// Whether a rules file of `len` bytes is one the harness reads in full. A file the app would
+    /// write past the limit is a conflict ([`RulesConflict::ExceedsHarnessLimit`]).
+    pub fn fits(&self, len: usize) -> bool {
+        self.max_file_bytes
+            .is_none_or(|max| u64::try_from(len).is_ok_and(|len| len <= max))
     }
 
     /// Whether another file in the rules file's folder keeps the harness from reading the block:
@@ -565,6 +579,13 @@ fn parse_rules(id: HarnessId, raw: RawRules) -> Result<LightRules, String> {
         }
         Some(_) => return Err(format!("{key}: rules.shadows is not a plain relative path")),
     };
+    if raw.max_file_bytes.is_some_and(|max| {
+        !(MIN_RULES_FILE_BYTES..=crate::rules_block::MAX_RULES_FILE_BYTES).contains(&max)
+    }) {
+        return Err(format!(
+            "{key}: rules.max_file_bytes must be between {MIN_RULES_FILE_BYTES} and the largest rules file the app reads"
+        ));
+    }
     let surface =
         SetupSurfaceId::light_rules(id).ok_or_else(|| format!("{key}: no rules surface"))?;
     Ok(LightRules {
@@ -580,6 +601,7 @@ fn parse_rules(id: HarnessId, raw: RawRules) -> Result<LightRules, String> {
         masked_by,
         peer_files,
         shadows,
+        max_file_bytes: raw.max_file_bytes,
         surface,
     })
 }
@@ -891,6 +913,7 @@ mod tests {
                 (HarnessId::Copilot, "Copilot", "copilot"),
                 (HarnessId::Pi, "Pi", "pi"),
                 (HarnessId::Kilo, "Kilo", "kilo"),
+                (HarnessId::Antigravity, "Antigravity", "agy"),
             ]
         );
         assert_eq!(light_harnesses(), harnesses.as_slice());
@@ -947,14 +970,29 @@ mod tests {
                     true,
                     SetupSurfaceId::KiloRules
                 ),
+                (
+                    "antigravity_rules",
+                    ".gemini/AGENTS.md",
+                    "AGENTS.md",
+                    "templates/sync/antigravity-rules.md",
+                    false,
+                    false,
+                    true,
+                    SetupSurfaceId::AntigravityRules
+                ),
             ]
         );
+        // Antigravity reads at most 24,000 bytes of a rules file; the others have no limit.
+        assert_eq!(rules_of("antigravity").max_file_bytes, Some(24_000));
+        for key in ["copilot", "pi", "kilo"] {
+            assert_eq!(rules_of(key).max_file_bytes, None, "{key}");
+        }
         assert_eq!(rules_of("pi").masked_by, ["AGENTS.override.md"]);
         assert_eq!(
             rules_of("pi").peer_files,
             ["CLAUDE.md", "CLAUDE.MD", "AGENTS.MD"]
         );
-        for key in ["copilot", "kilo"] {
+        for key in ["copilot", "kilo", "antigravity"] {
             assert!(rules_of(key).masked_by.is_empty(), "{key}");
             assert!(rules_of(key).peer_files.is_empty(), "{key}");
         }
@@ -1177,6 +1215,39 @@ mod tests {
     }
 
     #[test]
+    fn a_rules_size_limit_fits_the_bundled_base_and_the_files_the_app_reads() {
+        for max in [
+            0u64,
+            1,
+            16 * 1024 - 1,
+            crate::rules_block::MAX_RULES_FILE_BYTES + 1,
+        ] {
+            let mut value = valid();
+            value["harnesses"]["antigravity"]["rules"]["max_file_bytes"] = serde_json::json!(max);
+            assert!(parse_value(&value).is_err(), "{max}");
+        }
+        for bad in [serde_json::json!(-1), serde_json::json!("24000")] {
+            let mut value = valid();
+            value["harnesses"]["antigravity"]["rules"]["max_file_bytes"] = bad.clone();
+            assert!(parse_value(&value).is_err(), "{bad}");
+        }
+        let antigravity = rules_of("antigravity");
+        assert!(antigravity.fits(0));
+        assert!(antigravity.fits(24_000));
+        assert!(!antigravity.fits(24_001));
+        assert!(rules_of("pi").fits(10 * 1024 * 1024), "no limit");
+        // The bundled base, rendered as a new file, fits with room for refinements.
+        let source = std::fs::read_to_string(
+            Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../resources/default-workspace")
+                .join(&antigravity.source_rel),
+        )
+        .expect("bundled base");
+        let rendered = crate::rules_block::render_new(&source);
+        assert!(rendered.len() * 2 < 24_000, "{} bytes", rendered.len());
+    }
+
+    #[test]
     fn invalid_json_gives_an_error_not_a_panic() {
         assert!(parse("").is_err());
         assert!(parse("{").is_err());
@@ -1390,8 +1461,22 @@ mod tests {
                     false,
                     SetupSurfaceId::KiloMcp
                 ),
+                (
+                    "antigravity_mcp",
+                    ".gemini/config/mcp_config.json",
+                    vec![],
+                    "mcpServers",
+                    "playwright",
+                    "templates/mcp/antigravity.playwright.json",
+                    false,
+                    false,
+                    false,
+                    SetupSurfaceId::AntigravityMcp
+                ),
             ]
         );
+        assert!(mcp_of("antigravity").notes.is_empty());
+        assert!(mcp_of("antigravity").shadowed_by_siblings.is_empty());
         assert_eq!(
             mcp_for_target("kilo_mcp").map(|harness| harness.id),
             Some(HarnessId::Kilo)

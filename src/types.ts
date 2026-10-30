@@ -46,7 +46,7 @@ export interface AgentSourceContent {
 export const CENTRAL_AGENTS = ["codex", "opencode", "claude", "cursor"] as const;
 
 /** The light tier: skills reach and runtime health. Off by default. Mirrors `light-harnesses.json`. */
-export const LIGHT_AGENTS = ["copilot", "pi", "kilo"] as const;
+export const LIGHT_AGENTS = ["copilot", "pi", "kilo", "antigravity"] as const;
 
 /** Every harness, in the backend's `HarnessId::ALL` order. */
 export const INSTALL_AGENTS = [...CENTRAL_AGENTS, ...LIGHT_AGENTS] as const;
@@ -245,22 +245,25 @@ export type RulesSurfaceId =
   | "open_code_rules"
   | "copilot_rules"
   | "pi_rules"
-  | "kilo_rules";
+  | "kilo_rules"
+  | "antigravity_rules";
 
 /** `absent` (no file), `block` (managed markers), `legacy` (no markers) or `malformed` (markers cannot be split). */
 export type RulesLayout = "absent" | "block" | "legacy" | "malformed";
 
 /**
- * Why the app leaves a rules file alone. The last two are not about the file itself: another file in its folder
- * keeps the harness from reading it (`masked_by_override`), or the harness reads another file there and a new
- * one would hide it (`peer_context_file`).
+ * Why the app leaves a rules file alone. `masked_by_override` and `peer_context_file` are not about the file itself:
+ * another file in its folder keeps the harness from reading it, or the harness reads another file there and a new
+ * one would hide it. `exceeds_harness_limit`: the file the app would write is larger than the harness reads
+ * (Antigravity: 24,000 bytes).
  */
 export type RulesConflictReason =
   | "base_block_edited"
   | "legacy_diverged"
   | "malformed_markers"
   | "masked_by_override"
-  | "peer_context_file";
+  | "peer_context_file"
+  | "exceeds_harness_limit";
 
 export type RulesMalformedReason =
   | "not_utf8"
@@ -365,7 +368,9 @@ export interface InstallationStatus {
 /**
  * A skills folder a harness reads; `dot_codex` is the literal `~/.codex/skills`, whatever `CODEX_HOME` says.
  * `copilot`, `pi_agent` and `kilo` are the private folders of the light harnesses (`~/.copilot/skills`,
- * `~/.pi/agent/skills`, `~/.kilo/skills`); the app never installs into them.
+ * `~/.pi/agent/skills`, `~/.kilo/skills`); the app never installs into them. `antigravity_app`
+ * (`~/.gemini/config/skills`) and `antigravity_cli` (`~/.gemini/antigravity-cli/skills`) are Antigravity's
+ * own folders, which the app installs into while Antigravity is on.
  */
 export type SkillReadFolder =
   | "claude"
@@ -376,7 +381,9 @@ export type SkillReadFolder =
   | "cursor"
   | "copilot"
   | "pi_agent"
-  | "kilo";
+  | "kilo"
+  | "antigravity_app"
+  | "antigravity_cli";
 
 export type SkillLoadFlag =
   | "plain_mention_ambiguous"
@@ -752,7 +759,7 @@ export interface LightMcpHealth {
   detail: string;
 }
 
-/** Runtime health of Copilot, Pi and Kilo (`get_light_runtime_health`). */
+/** Runtime health of Copilot, Pi, Kilo and Antigravity (`get_light_runtime_health`). */
 export interface LightRuntimeHealth {
   harness: LightAgent;
   /** The skills status; once the skills are fine, the rules status, then the MCP status (each unless its target is off). */
@@ -801,7 +808,8 @@ export type FindingCode =
   | "kilo_no_rules"
   | "copilot_not_covered"
   | "pi_not_covered"
-  | "config_only";
+  | "config_only"
+  | "antigravity_not_covered";
 
 export interface PostureFinding {
   code: FindingCode;
@@ -851,6 +859,8 @@ export type SetupSurfaceId =
   | "copilot_mcp"
   | "pi_mcp"
   | "kilo_mcp"
+  | "antigravity_rules"
+  | "antigravity_mcp"
   | "workspace_bundle";
 
 export type OperationKind =

@@ -28,6 +28,8 @@ const PATHS: Record<SkillReadFolder, string> = {
   copilot: "~/.copilot/skills",
   pi_agent: "~/.pi/agent/skills",
   kilo: "~/.kilo/skills",
+  antigravity_app: "~/.gemini/config/skills",
+  antigravity_cli: "~/.gemini/antigravity-cli/skills",
 };
 
 function copy(folder: SkillReadFolder, name: string, extra: Partial<SkillCopy> = {}): SkillCopy {

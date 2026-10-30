@@ -1137,7 +1137,37 @@ fn assess_rules(
             assessment.plan = crate::rules_block::RulesPlan::Conflict(conflict);
         }
     }
+    // A harness that reads only so many bytes of the file (Antigravity) would miss the end of a
+    // longer one: the app then writes nothing.
+    if let ArtifactId::HarnessRules(harness) = artifact {
+        let written = rendered_rules(assessment.plan, installed.as_deref(), &source_text);
+        if let (Some(rules), Some(written)) = (harness.rules(), written) {
+            if !rules.fits(written.len()) {
+                assessment.plan =
+                    crate::rules_block::RulesPlan::Conflict(RulesConflict::ExceedsHarnessLimit);
+            }
+        }
+    }
     Some(assessment)
+}
+
+/// The file a writing rules plan produces; `None` for a plan that writes nothing.
+fn rendered_rules(
+    plan: crate::rules_block::RulesPlan,
+    installed: Option<&[u8]>,
+    source_text: &str,
+) -> Option<String> {
+    use crate::rules_block::RulesPlan;
+    match plan {
+        RulesPlan::Create | RulesPlan::WrapLegacy => {
+            Some(crate::rules_block::render_new(source_text))
+        }
+        RulesPlan::UpdateBlock => crate::rules_block::parse_bytes(installed?)
+            .ok()
+            .flatten()
+            .map(|file| file.render_with_body(source_text)),
+        RulesPlan::NoChange | RulesPlan::Conflict(_) => None,
+    }
 }
 
 /// The state of the managed entry in the MCP file of a light harness. `None` when the
@@ -2673,7 +2703,7 @@ pub(crate) fn harness_name(harness: crate::agent_targets::HarnessId) -> &'static
         HarnessId::Codex => "Codex",
         HarnessId::OpenCode => "OpenCode",
         HarnessId::Cursor => "Cursor",
-        HarnessId::Copilot | HarnessId::Pi | HarnessId::Kilo => {
+        HarnessId::Copilot | HarnessId::Pi | HarnessId::Kilo | HarnessId::Antigravity => {
             crate::light_harness::display_name(harness)
         }
     }

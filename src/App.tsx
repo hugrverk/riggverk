@@ -181,6 +181,7 @@ function AppShell() {
       copilot: generation => loadLightRuntimeHealth("copilot", generation),
       pi: generation => loadLightRuntimeHealth("pi", generation),
       kilo: generation => loadLightRuntimeHealth("kilo", generation),
+      antigravity: generation => loadLightRuntimeHealth("antigravity", generation),
     };
     await Promise.all(harnesses.map(harness => loaders[harness](generation).catch(() => {})));
   }, [
@@ -645,6 +646,7 @@ function AppShell() {
       copilot: { harness: "copilot", health: lightRuntimeHealth.copilot ?? null },
       pi: { harness: "pi", health: lightRuntimeHealth.pi ?? null },
       kilo: { harness: "kilo", health: lightRuntimeHealth.kilo ?? null },
+      antigravity: { harness: "antigravity", health: lightRuntimeHealth.antigravity ?? null },
     }),
     [codexRuntimeHealth, opencodeRuntimeHealth, claudeRuntimeHealth, cursorProfileHealth, lightRuntimeHealth],
   );

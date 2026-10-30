@@ -28,7 +28,7 @@ afterEach(() => {
   cleanup();
 });
 
-const LABELS: Record<LightAgent, string> = { copilot: "Copilot", pi: "Pi", kilo: "Kilo" };
+const LABELS: Record<LightAgent, string> = { copilot: "Copilot", pi: "Pi", kilo: "Kilo", antigravity: "Antigravity" };
 
 const LIGHT_TARGETS: AgentTargetMeta[] = [
   { id: "copilot_rules", label: "copilot rules", harness: "copilot", kind: "rules", target_rel: ".copilot/copilot-instructions.md", source_rel: "templates/sync/copilot-rules.md" },
@@ -37,6 +37,8 @@ const LIGHT_TARGETS: AgentTargetMeta[] = [
   { id: "pi_mcp", label: "pi mcp", harness: "pi", kind: "mcp", target_rel: ".pi/agent/mcp.json", source_rel: "templates/mcp/pi.playwright.json" },
   { id: "kilo_rules", label: "kilo rules", harness: "kilo", kind: "rules", target_rel: ".config/kilo/AGENTS.md", source_rel: "templates/sync/kilo-rules.md" },
   { id: "kilo_mcp", label: "kilo mcp", harness: "kilo", kind: "mcp", target_rel: ".config/kilo/kilo.jsonc", source_rel: "templates/mcp/kilo.playwright.json" },
+  { id: "antigravity_rules", label: "antigravity rules", harness: "antigravity", kind: "rules", target_rel: ".gemini/AGENTS.md", source_rel: "templates/sync/antigravity-rules.md" },
+  { id: "antigravity_mcp", label: "antigravity mcp", harness: "antigravity", kind: "mcp", target_rel: ".gemini/config/mcp_config.json", source_rel: "templates/mcp/antigravity.playwright.json" },
 ];
 
 const rulesSurface = (harness: LightAgent) => `${harness}_rules` as SetupSurfaceId;
@@ -129,8 +131,9 @@ describe("LightHarnessView", () => {
     expect(cells[1]!.querySelector(".hp-lbl")!.textContent).toBe("Skills");
     expect(within(cells[1]!).queryByRole("switch")).toBeNull();
     expect(cells[2]!.querySelector(".hp-lbl")!.textContent).toBe(`MCP · ${mcpTarget.target_rel}`);
-    // Kilo's MCP entry edits its main config file: its target starts off.
-    expect(within(cells[2]!).getByRole("switch").getAttribute("aria-checked")).toBe(harness === "kilo" ? "false" : "true");
+    // Kilo's MCP entry edits its main config file, and Antigravity's is opt-in too: their targets start off.
+    const mcpOff = harness === "kilo" || harness === "antigravity";
+    expect(within(cells[2]!).getByRole("switch").getAttribute("aria-checked")).toBe(mcpOff ? "false" : "true");
     expect(within(page).getByRole("heading", { name: label })).toBeTruthy();
   });
 
@@ -316,6 +319,28 @@ describe("LightHarnessView", () => {
     } satisfies EffectiveSkillLoads);
     renderLight("kilo", health({ harness: "kilo" }), { skillLoads });
     expect(facts(cell(detail("Kilo"), "skills")).reads).toBe("~/.kilo/skills (missing), ~/.agents/skills, ~/.claude/skills");
+  });
+
+  it("names Antigravity's two own folders, the App's and the CLI's, in the skills cell", () => {
+    const skillLoads = skillLoadsOf({
+      harnesses: [{
+        harness: "antigravity",
+        folders: [
+          { folder: "antigravity_app", path: "~/.gemini/config/skills", exists: true },
+          { folder: "antigravity_cli", path: "~/.gemini/antigravity-cli/skills", exists: false },
+        ],
+        skills: [],
+      }],
+      foreign_duplicates: [],
+    } satisfies EffectiveSkillLoads);
+    renderLight("antigravity", health({
+      harness: "antigravity",
+      cli: { status: "found", version: "1.2.0", source: "path", detail: "Antigravity 1.2.0" },
+      skills: { status: "partial", synced: 17, expected: 34, roots: ["~/.gemini/config/skills", "~/.gemini/antigravity-cli/skills"] },
+    }), { skillLoads });
+    const antigravity = detail("Antigravity");
+    expect(facts(cell(antigravity, "skills")).reads).toBe("~/.gemini/config/skills, ~/.gemini/antigravity-cli/skills (missing)");
+    expect(facts(antigravity).cli).toBe("1.2.0");
   });
 
   it("opens the install review for this harness with u and a read-only preview with p", () => {
