@@ -1,6 +1,17 @@
 {
   "releases": [
     {
+      "version": "2026.10.13",
+      "sections": [
+        {
+          "title": "Fixes",
+          "items": [
+            "Harden doc listing and Python helpers"
+          ]
+        }
+      ]
+    },
+    {
       "version": "2026.10.12",
       "sections": [
         {
