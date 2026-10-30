@@ -6,7 +6,7 @@
         {
           "title": "New",
           "items": [
-            "Collapse off agents into one node"
+            "The Overview's flow map stays short however many agents Riggverk knows: the agents that are off share one node at the bottom (\"6 off\", with their icons), and selecting it lists them with a way to Settings. Agents that are on keep their own rows and curves"
           ]
         }
       ]
