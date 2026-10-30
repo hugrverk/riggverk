@@ -770,7 +770,7 @@ fn bundled_generator_script() -> Result<PathBuf, String> {
     }
 }
 
-/// `python3 <script> --root <workspace> <mode>`, run with the script's own folder as working directory
+/// `python3 -I <script> --root <workspace> <mode>`, run with the script's own folder as working directory
 /// so nothing in the workspace is picked up as a working-directory side input.
 fn run_generator(
     script: &Path,
@@ -783,7 +783,7 @@ fn run_generator(
     let cwd = script.parent().unwrap_or(script);
     Ok(run_cmd_bounded(
         "python3",
-        &[&script_str, "--root", &root_str, mode],
+        &["-I", &script_str, "--root", &root_str, mode],
         cwd,
         BoundedCmdOptions {
             timeout: Some(timeout),

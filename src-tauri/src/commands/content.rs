@@ -261,7 +261,9 @@ pub(crate) fn personal_doc_count(root: &Path) -> usize {
 
 fn list_custom_docs(root: &Path) -> Vec<(String, String, String, PathBuf)> {
     let context_dir = personal_docs_dir(root);
-    if !context_dir.is_dir() {
+    if crate::path_safety::reject_symlink_parent_chain(&context_dir, root, "personal docs").is_err()
+        || !std::fs::symlink_metadata(&context_dir).is_ok_and(|metadata| metadata.is_dir())
+    {
         return vec![];
     }
     let mut docs: Vec<(String, String, String, PathBuf)> = Vec::new();
@@ -1160,6 +1162,28 @@ mod tests {
         cleanup(&root);
         let err = result.expect_err("symlinked custom doc must be refused");
         assert!(err.contains("symlink"), "{err}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn list_custom_docs_skips_symlinked_context_directory() {
+        let root = temp_root("list-custom-context-symlink");
+        let outside = temp_root("list-custom-context-outside");
+        write_file(&outside, "a.md", "# Secret\n");
+        fs::create_dir_all(root.join("docs")).unwrap();
+        std::os::unix::fs::symlink(&outside, root.join("docs/context")).unwrap();
+
+        let linked = list_custom_docs(&root);
+        fs::remove_file(root.join("docs/context")).unwrap();
+        write_file(&root, "docs/context/a.md", "# Secret\n");
+        let normal = list_custom_docs(&root);
+
+        cleanup(&root);
+        cleanup(&outside);
+        assert!(linked.is_empty());
+        assert_eq!(normal.len(), 1);
+        assert_eq!(normal[0].0, "custom:a");
+        assert_eq!(normal[0].2, "Secret");
     }
 
     #[cfg(unix)]
