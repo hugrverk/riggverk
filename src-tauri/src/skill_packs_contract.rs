@@ -1442,6 +1442,38 @@ mod tests {
         );
     }
 
+    #[test]
+    fn undoing_an_earlier_install_keeps_a_pack_forgotten_after_it() {
+        let env = Env::new("undo-keeps-forget");
+        installed_pack(&env);
+        env.pack_skill("theirs", None, "their-tool", "from another pack", &[]);
+        let later = env.apply();
+        assert!(later.success, "install: {}", later.message);
+        let their_skill = env.root(SkillRoot::Claude).join("their-tool/SKILL.md");
+        assert!(their_skill.is_file());
+
+        // The first pack goes and the user forgets it; then the later install is undone.
+        fs::remove_dir_all(env.packs().join("mine")).expect("remove pack");
+        assert_eq!(
+            crate::commands::forget_pack("mine".to_string()).expect("forget"),
+            1
+        );
+        let undone = rollback_setup_transaction(later.transaction_id, false).expect("rollback");
+        assert!(undone.success, "rollback: {}", undone.message);
+
+        assert!(!their_skill.exists(), "the later install is undone");
+        assert_eq!(
+            env.recorded_packs()["forgotten"],
+            serde_json::json!(["mine"]),
+            "the choice made after it stays"
+        );
+        assert!(env.sources().held().is_empty());
+        assert_eq!(
+            env.kind(&file_of(SkillRoot::Claude, "my-checklist", "SKILL.md")),
+            Some(OperationKind::Remove)
+        );
+    }
+
     fn read_packs(env: &Env) -> serde_json::Map<String, serde_json::Value> {
         env.recorded_packs()["packs"]
             .as_object()
