@@ -28,7 +28,7 @@ afterEach(() => {
   cleanup();
 });
 
-const LABELS: Record<LightAgent, string> = { copilot: "Copilot", pi: "Pi", kilo: "Kilo" };
+const LABELS: Record<LightAgent, string> = { copilot: "Copilot", pi: "Pi", kilo: "Kilo", grok: "Grok" };
 
 const LIGHT_TARGETS: AgentTargetMeta[] = [
   { id: "copilot_rules", label: "copilot rules", harness: "copilot", kind: "rules", target_rel: ".copilot/copilot-instructions.md", source_rel: "templates/sync/copilot-rules.md" },
@@ -37,6 +37,7 @@ const LIGHT_TARGETS: AgentTargetMeta[] = [
   { id: "pi_mcp", label: "pi mcp", harness: "pi", kind: "mcp", target_rel: ".pi/agent/mcp.json", source_rel: "templates/mcp/pi.playwright.json" },
   { id: "kilo_rules", label: "kilo rules", harness: "kilo", kind: "rules", target_rel: ".config/kilo/AGENTS.md", source_rel: "templates/sync/kilo-rules.md" },
   { id: "kilo_mcp", label: "kilo mcp", harness: "kilo", kind: "mcp", target_rel: ".config/kilo/kilo.jsonc", source_rel: "templates/mcp/kilo.playwright.json" },
+  { id: "grok_mcp", label: "grok mcp", harness: "grok", kind: "mcp", target_rel: ".grok/config.toml", source_rel: "templates/mcp/grok.playwright.json" },
 ];
 
 const rulesSurface = (harness: LightAgent) => `${harness}_rules` as SetupSurfaceId;
@@ -116,7 +117,7 @@ function facts(root: HTMLElement): Record<string, string> {
 }
 
 describe("LightHarnessView", () => {
-  it.each(LIGHT_AGENTS)("renders the %s page with a rules cell and an MCP cell that have a target switch and a skills cell that has none", harness => {
+  it.each(LIGHT_AGENTS.filter(harness => harness !== "grok"))("renders the %s page with a rules cell and an MCP cell that have a target switch and a skills cell that has none", harness => {
     renderLight(harness, null);
     const label = LABELS[harness];
     const page = screen.getByRole("region", { name: label });
@@ -132,6 +133,41 @@ describe("LightHarnessView", () => {
     // Kilo's MCP entry edits its main config file: its target starts off.
     expect(within(cells[2]!).getByRole("switch").getAttribute("aria-checked")).toBe(harness === "kilo" ? "false" : "true");
     expect(within(page).getByRole("heading", { name: label })).toBeTruthy();
+  });
+
+  it("renders the Grok page with a skills cell and an MCP cell that starts off, and says where its rules come from", () => {
+    const grokHealth = (rules: LightRuntimeHealth["rules"]) =>
+      health({
+        harness: "grok",
+        cli: { status: "found", version: "0.4.2", source: "path", detail: "Grok 0.4.2" },
+        rules,
+        mcp: { status: "off", path: "~/.grok/config.toml", playwright_version: null, detail: "switched off in Settings" },
+        skills: { status: "synced", synced: 17, expected: 17, roots: ["~/.claude/skills", "~/.agents/skills"] },
+      });
+    const overview = overviewOf({
+      grok: installationStatus("current", [surfaceStatus("skills", "current"), surfaceStatus("grok_mcp", "not_installed", "no file yet")]),
+    });
+    const shared = {
+      status: "shared",
+      path: "~/.claude/CLAUDE.md",
+      refinement_lines: 0,
+      user_managed: false,
+      conflict_reason: null,
+      detail: "Grok reads the managed block in ~/.claude/CLAUDE.md, installed for Claude Code",
+    };
+    renderLight("grok", grokHealth(shared), { overview });
+    const page = detail("Grok");
+    const cells = Array.from(page.querySelectorAll<HTMLElement>("[data-surface]"));
+    expect(cells.map(item => item.dataset.surface)).toEqual(["skills", "grok_mcp"]);
+    expect(cells[1]!.querySelector(".hp-lbl")!.textContent).toBe("MCP · .grok/config.toml");
+    expect(within(cells[1]!).getByRole("switch").getAttribute("aria-checked")).toBe("false");
+    expect(facts(page).rules).toBe(`shared · ${shared.detail}`);
+    expect(verdictOf(page)).toBe("synced");
+    cleanup();
+
+    const none = { ...shared, status: "none", detail: "No rules are installed for Grok: it reads ~/.claude/CLAUDE.md, which gets the managed block only while Claude Code and its rules are on" };
+    renderLight("grok", grokHealth(none), { overview });
+    expect(facts(detail("Grok")).rules).toBe(`none · ${none.detail}`);
   });
 
   it("shows the CLI version, the rules file, the Playwright entry and the skills of a synced harness", () => {

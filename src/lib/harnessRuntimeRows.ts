@@ -178,6 +178,9 @@ function lightCliRow(cli: LightCliHealth): KvItem {
 /** The rules file: its status, and what the backend says about it unless that adds nothing. */
 function lightRulesRow(rules: LightRulesHealth): KvItem {
   if (rules.status === "off") return { label: "rules", value: "off · target switched off in Settings", tone: "dim" };
+  // A harness that reads Claude Code's rules file instead of its own (Grok): where its rules come from, or that none do.
+  if (rules.status === "shared") return { label: "rules", value: `shared · ${rules.detail}`, tone: "ok", wrap: true };
+  if (rules.status === "none") return { label: "rules", value: `none · ${rules.detail}`, tone: "dim", wrap: true };
   const extra = rules.status === "missing" || rules.detail === "installed and current" || !rules.detail ? "" : ` · ${rules.detail}`;
   return { label: "rules", value: `${runtimeChipLabel(rules.status).toLowerCase()}${extra}`, tone: toneOf(rules.status), wrap: extra !== "" };
 }
@@ -232,7 +235,8 @@ function healthRows({ harness, health }: HarnessRuntimeHealth): KvItem[] {
     case "claude": return claudeRows(health);
     case "copilot":
     case "pi":
-    case "kilo": return lightRows(health);
+    case "kilo":
+    case "grok": return lightRows(health);
   }
 }
 

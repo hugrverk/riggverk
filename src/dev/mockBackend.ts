@@ -18,7 +18,7 @@
  *   error     status/diagnostics calls fail (exercises the error line); the workspace is not valid, so the
  *             Library still lists the bundled items but no personal doc
  *   empty     valid workspace with no docs, skills or agents (the empty states of the lists; the real bundle is never empty)
- * `&theme=light|dark|system` sets the persisted appearance. Copilot, Pi and Kilo are off until Settings turns
+ * `&theme=light|dark|system` sets the persisted appearance. Copilot, Pi, Kilo and Grok are off until Settings turns
  * them on; `&light=unserved` leaves Copilot and Pi without a skills folder (an isolated Codex home).
  * `&pace=slow` slows the progress events of a task down, so a run can be watched.
  *
@@ -127,6 +127,7 @@ const TARGETS: AgentTargetMeta[] = [
   { id: "pi_mcp", label: "pi mcp", harness: "pi", kind: "mcp", target_rel: ".pi/agent/mcp.json", source_rel: "templates/mcp/pi.playwright.json" },
   { id: "kilo_rules", label: "kilo rules", harness: "kilo", kind: "rules", target_rel: ".config/kilo/AGENTS.md", source_rel: "templates/sync/kilo-rules.md" },
   { id: "kilo_mcp", label: "kilo mcp", harness: "kilo", kind: "mcp", target_rel: ".config/kilo/kilo.jsonc", source_rel: "templates/mcp/kilo.playwright.json" },
+  { id: "grok_mcp", label: "grok mcp", harness: "grok", kind: "mcp", target_rel: ".grok/config.toml", source_rel: "templates/mcp/grok.playwright.json" },
 ];
 
 let settings: AppSettings = {
@@ -135,7 +136,7 @@ let settings: AppSettings = {
   workspace_path: null,
   // The conflict scenario turns the Codex config on: it shows the enforced key the user can keep.
   enabled_target_ids: TARGETS.map(t => t.id).filter(
-    id => (id !== "codex_config" || scenario === "conflict") && id !== "claude_config" && id !== "kilo_mcp",
+    id => (id !== "codex_config" || scenario === "conflict") && id !== "claude_config" && id !== "kilo_mcp" && id !== "grok_mcp",
   ),
   enabled_harness_ids: ["codex", "opencode", "claude", "cursor"],
   accent_color: null,
@@ -167,6 +168,7 @@ const SURFACE_LABELS: Record<SetupSurfaceId, string> = {
   copilot_mcp: "Copilot MCP",
   pi_mcp: "Pi MCP",
   kilo_mcp: "Kilo MCP",
+  grok_mcp: "Grok MCP",
   workspace_bundle: "Workspace bundle",
 };
 
@@ -189,11 +191,12 @@ const SURFACE_PATHS: Record<SetupSurfaceId, string> = {
   copilot_mcp: "~/.copilot/mcp-config.json",
   pi_mcp: "~/.pi/agent/mcp.json",
   kilo_mcp: "~/.config/kilo/kilo.jsonc",
+  grok_mcp: "~/.grok/config.toml",
   workspace_bundle: "~/.config/riggverk",
 };
 
 const ALL_SURFACES = Object.keys(SURFACE_LABELS) as SetupSurfaceId[];
-const LIGHT_MCP_SURFACES = ["copilot_mcp", "pi_mcp", "kilo_mcp"] as const;
+const LIGHT_MCP_SURFACES = ["copilot_mcp", "pi_mcp", "kilo_mcp", "grok_mcp"] as const;
 
 function initialSurfaceStates(): Map<SetupSurfaceId, InstallationState> {
   const states = new Map<SetupSurfaceId, InstallationState>();
@@ -1291,18 +1294,47 @@ function claudeHealth(): ClaudeRuntimeHealth {
 }
 
 /**
- * Copilot, Pi and Kilo. The CLI differs per harness so every row shows once: Copilot is on PATH, Pi is not found,
- * Kilo is found in nvm. `&light=unserved` leaves Copilot and Pi without a skills folder (Codex isolated).
+ * Copilot, Pi, Kilo and Grok. The CLI differs per harness so every row shows once: Copilot and Grok are on PATH, Pi
+ * is not found, Kilo is found in nvm. `&light=unserved` leaves Copilot and Pi without a skills folder (Codex isolated).
+ * Grok has no rules file of its own: it reads Claude Code's.
  */
 function lightHealth(harness: LightAgent): LightRuntimeHealth {
-  const unserved = params.get("light") === "unserved" && harness !== "kilo";
+  if (harness === "grok") return grokHealth(lightHealthWithRules(harness));
+  return lightHealthWithRules(harness);
+}
+
+/** Grok reads `~/.claude/CLAUDE.md`: the rules row says whether Claude Code's managed block is there. */
+function grokHealth(base: LightRuntimeHealth): LightRuntimeHealth {
+  const shared = settings.enabled_harness_ids.includes("claude") && settings.enabled_target_ids.includes("claude_rules");
+  const rules: LightRuntimeHealth["rules"] = {
+    status: shared ? "shared" : "none",
+    path: "~/.claude/CLAUDE.md",
+    refinement_lines: 0,
+    user_managed: false,
+    conflict_reason: null,
+    detail: shared
+      ? "Grok reads the managed block in ~/.claude/CLAUDE.md, installed for Claude Code"
+      : "No rules are installed for Grok: it reads ~/.claude/CLAUDE.md, which gets the managed block only while Claude Code and its rules are on",
+  };
+  const overall = base.skills.status !== "synced" ? base.skills.status : base.mcp.status !== "off" && base.mcp.status !== "synced" ? base.mcp.status : "synced";
+  return {
+    ...base,
+    rules,
+    status: overall,
+    warnings: base.warnings.filter(warning => !warning.includes("rules")),
+    next_action: overall === "synced" ? "No runtime action needed." : "Run Install or Update on the Grok page.",
+  };
+}
+
+function lightHealthWithRules(harness: LightAgent): LightRuntimeHealth {
+  const unserved = params.get("light") === "unserved" && harness !== "kilo" && harness !== "grok";
   const state = scenario === "fresh" ? "not_installed" : (surfaceStates.get("skills") ?? "not_installed");
   const expected = scenario === "empty" ? 0 : skills.length;
   const status = unserved
     ? "unserved"
     : state === "current" ? "synced" : state === "update_available" ? "partial" : state === "conflict" ? "diverged" : "missing";
   const synced = status === "synced" ? expected : status === "partial" ? Math.max(expected - 3, 0) : 0;
-  const label = harness === "copilot" ? "Copilot" : harness === "pi" ? "Pi" : "Kilo";
+  const label = harness === "copilot" ? "Copilot" : harness === "pi" ? "Pi" : harness === "kilo" ? "Kilo" : "Grok";
   const rulesSurface = `${harness}_rules` as RulesSurfaceId;
   const rulesState = surfaceStates.get(rulesSurface) ?? "not_installed";
   const rulesFile = rulesFiles.get(rulesSurface);
@@ -1333,7 +1365,9 @@ function lightHealth(harness: LightAgent): LightRuntimeHealth {
       ? { status: "found", version: "1.0.98", source: "path", detail: "Copilot 1.0.98" }
       : harness === "pi"
         ? { status: "missing", version: null, source: null, detail: "pi is not on PATH; Riggverk does not read your shell profile, so start it from a shell where pi runs" }
-        : { status: "found", version: "7.8.12", source: "nvm", detail: "Kilo 7.8.12 (found in nvm v24.14.0, not on PATH)" };
+        : harness === "grok"
+          ? { status: "found", version: "0.4.2", source: "path", detail: "Grok 0.4.2" }
+          : { status: "found", version: "7.8.12", source: "nvm", detail: "Kilo 7.8.12 (found in nvm v24.14.0, not on PATH)" };
   const mcpSurface = `${harness}_mcp` as (typeof LIGHT_MCP_SURFACES)[number];
   const mcpState = surfaceStates.get(mcpSurface) ?? "not_installed";
   const mcpOn = settings.enabled_target_ids.includes(mcpSurface);
@@ -1359,7 +1393,7 @@ function lightHealth(harness: LightAgent): LightRuntimeHealth {
     cli,
     rules,
     mcp,
-    skills: { status, synced, expected, roots: unserved ? [] : harness === "kilo" ? ["~/.claude/skills", "~/.agents/skills"] : ["~/.agents/skills"] },
+    skills: { status, synced, expected, roots: unserved ? [] : harness === "kilo" || harness === "grok" ? ["~/.claude/skills", "~/.agents/skills"] : ["~/.agents/skills"] },
     warnings: [
       ...(unserved ? [`No skills are installed for ${label}: it reads ~/.agents/skills, and a customised CODEX_HOME keeps Codex out of that folder.`] : []),
       ...rulesWarnings,
@@ -1619,7 +1653,7 @@ async function emitProgress(task: string, files: string[], options: { backup?: b
 
 /* ---- effective skill loads ---- */
 
-/** Copilot, Pi and Kilo list their folders by precedence: the first one holding a name wins. */
+/** Copilot, Pi, Kilo and Grok list their folders by precedence: the first one holding a name wins. */
 const SKILL_READ_FOLDERS: Record<InstallAgent, SkillReadFolder[]> = {
   claude: ["claude"],
   codex: ["agents", "codex_home"],
@@ -1628,6 +1662,7 @@ const SKILL_READ_FOLDERS: Record<InstallAgent, SkillReadFolder[]> = {
   copilot: ["copilot", "agents"],
   pi: ["pi_agent", "agents"],
   kilo: ["kilo", "agents", "claude"],
+  grok: ["grok", "agents", "claude"],
 };
 
 const SKILL_FOLDER_PATHS: Record<SkillReadFolder, string> = {
@@ -1640,14 +1675,15 @@ const SKILL_FOLDER_PATHS: Record<SkillReadFolder, string> = {
   copilot: "~/.copilot/skills",
   pi_agent: "~/.pi/agent/skills",
   kilo: "~/.kilo/skills",
+  grok: "~/.grok/skills",
 };
 
 /** The folders skills are installed into for these harnesses (default Codex home), as the backend picks them. */
 function installedSkillFolders(enabled: readonly InstallAgent[]): SkillReadFolder[] {
   const on = (harness: InstallAgent) => enabled.includes(harness);
-  // Copilot and Pi read ~/.agents/skills only; OpenCode, Cursor and Kilo are served by it unless Claude is on.
+  // Copilot and Pi read ~/.agents/skills only; OpenCode, Cursor, Kilo and Grok are served by it unless Claude is on.
   const agents =
-    on("codex") || on("copilot") || on("pi") || ((on("opencode") || on("cursor") || on("kilo")) && !on("claude"));
+    on("codex") || on("copilot") || on("pi") || ((on("opencode") || on("cursor") || on("kilo") || on("grok")) && !on("claude"));
   return [...(on("claude") ? ["claude" as const] : []), ...(agents ? ["agents" as const] : [])];
 }
 
@@ -1779,6 +1815,7 @@ function posture(harness: InstallAgent): SecurityPosture {
     kilo: "kilo.jsonc",
     copilot: "",
     pi: "",
+    grok: "",
   }[harness];
   const state = scenario === "fresh" ? "missing" : "read";
   const risky = scenario === "conflict";
@@ -1829,6 +1866,8 @@ function posture(harness: InstallAgent): SecurityPosture {
       return { harness, sources: [], findings: [finding("copilot_not_covered", "not_covered")] };
     case "pi":
       return { harness, sources: [], findings: [finding("pi_not_covered", "not_covered")] };
+    case "grok":
+      return { harness, sources: [], findings: [finding("grok_not_covered", "not_covered")] };
   }
 }
 

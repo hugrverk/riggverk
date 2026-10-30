@@ -97,17 +97,19 @@ describe("mock backend: the light harnesses' rules files", () => {
 });
 
 describe("mock backend: the light harnesses' Playwright MCP entries", () => {
-  it("lists an MCP target per light harness, on by default except Kilo's", async () => {
+  it("lists an MCP target per light harness, on by default except Kilo's and Grok's", async () => {
     const targets = await invoke<AgentTargetMeta[]>("get_agent_targets");
     expect(targets.filter(target => target.kind === "mcp")).toEqual([
       { id: "copilot_mcp", label: "copilot mcp", harness: "copilot", kind: "mcp", target_rel: ".copilot/mcp-config.json", source_rel: "templates/mcp/copilot.playwright.json" },
       { id: "pi_mcp", label: "pi mcp", harness: "pi", kind: "mcp", target_rel: ".pi/agent/mcp.json", source_rel: "templates/mcp/pi.playwright.json" },
       { id: "kilo_mcp", label: "kilo mcp", harness: "kilo", kind: "mcp", target_rel: ".config/kilo/kilo.jsonc", source_rel: "templates/mcp/kilo.playwright.json" },
+      { id: "grok_mcp", label: "grok mcp", harness: "grok", kind: "mcp", target_rel: ".grok/config.toml", source_rel: "templates/mcp/grok.playwright.json" },
     ]);
     const { settings } = await invoke<{ settings: { enabled_target_ids: string[] } }>("get_settings");
     expect(settings.enabled_target_ids).toContain("copilot_mcp");
     expect(settings.enabled_target_ids).toContain("pi_mcp");
     expect(settings.enabled_target_ids).not.toContain("kilo_mcp");
+    expect(settings.enabled_target_ids).not.toContain("grok_mcp");
   });
 
   it("reports a file the app does not edit, with its reason, in the conflict scenario", async () => {

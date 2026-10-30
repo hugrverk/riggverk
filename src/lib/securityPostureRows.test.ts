@@ -32,6 +32,7 @@ const LEVELS: Record<FindingCode, PostureLevel> = {
   kilo_no_rules: "advice",
   copilot_not_covered: "not_covered",
   pi_not_covered: "not_covered",
+  grok_not_covered: "not_covered",
   config_only: "not_covered",
 };
 

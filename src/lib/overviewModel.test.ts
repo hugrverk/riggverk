@@ -185,7 +185,7 @@ describe("worthALook", () => {
 
 describe("small helpers", () => {
   it("lists the agents that are off in sidebar order and writes them out", () => {
-    expect(disabledHarnesses(["codex", "claude", "opencode"])).toEqual(["cursor", "copilot", "pi", "kilo"]);
+    expect(disabledHarnesses(["codex", "claude", "opencode"])).toEqual(["cursor", "copilot", "pi", "kilo", "grok"]);
     expect(listText(["Cursor", "Copilot", "Pi", "Kilo"])).toBe("Cursor, Copilot, Pi and Kilo");
     expect(listText(["Kilo"])).toBe("Kilo");
   });

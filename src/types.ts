@@ -46,7 +46,7 @@ export interface AgentSourceContent {
 export const CENTRAL_AGENTS = ["codex", "opencode", "claude", "cursor"] as const;
 
 /** The light tier: skills reach and runtime health. Off by default. Mirrors `light-harnesses.json`. */
-export const LIGHT_AGENTS = ["copilot", "pi", "kilo"] as const;
+export const LIGHT_AGENTS = ["copilot", "pi", "kilo", "grok"] as const;
 
 /** Every harness, in the backend's `HarnessId::ALL` order. */
 export const INSTALL_AGENTS = [...CENTRAL_AGENTS, ...LIGHT_AGENTS] as const;
@@ -364,8 +364,8 @@ export interface InstallationStatus {
 
 /**
  * A skills folder a harness reads; `dot_codex` is the literal `~/.codex/skills`, whatever `CODEX_HOME` says.
- * `copilot`, `pi_agent` and `kilo` are the private folders of the light harnesses (`~/.copilot/skills`,
- * `~/.pi/agent/skills`, `~/.kilo/skills`); the app never installs into them.
+ * `copilot`, `pi_agent`, `kilo` and `grok` are the private folders of the light harnesses (`~/.copilot/skills`,
+ * `~/.pi/agent/skills`, `~/.kilo/skills`, `~/.grok/skills`); the app never installs into them.
  */
 export type SkillReadFolder =
   | "claude"
@@ -376,7 +376,8 @@ export type SkillReadFolder =
   | "cursor"
   | "copilot"
   | "pi_agent"
-  | "kilo";
+  | "kilo"
+  | "grok";
 
 export type SkillLoadFlag =
   | "plain_mention_ambiguous"
@@ -724,7 +725,11 @@ export interface LightSkillsHealth {
 }
 
 export interface LightRulesHealth {
-  /** `synced`, `stale` (a base update waits), `missing`, `diverged` (a conflict), `off` (target switched off) or `unknown`. */
+  /**
+   * `synced`, `stale` (a base update waits), `missing`, `diverged` (a conflict), `off` (target switched off) or `unknown`.
+   * A harness that reads Claude Code's rules file instead of its own (Grok) is `shared` while the app manages that file,
+   * else `none`.
+   */
   status: string;
   /** The rules file as people know it (`~/.pi/agent/AGENTS.md`). */
   path: string;
@@ -752,7 +757,7 @@ export interface LightMcpHealth {
   detail: string;
 }
 
-/** Runtime health of Copilot, Pi and Kilo (`get_light_runtime_health`). */
+/** Runtime health of Copilot, Pi, Kilo and Grok (`get_light_runtime_health`). */
 export interface LightRuntimeHealth {
   harness: LightAgent;
   /** The skills status; once the skills are fine, the rules status, then the MCP status (each unless its target is off). */
@@ -801,6 +806,7 @@ export type FindingCode =
   | "kilo_no_rules"
   | "copilot_not_covered"
   | "pi_not_covered"
+  | "grok_not_covered"
   | "config_only";
 
 export interface PostureFinding {
@@ -851,6 +857,7 @@ export type SetupSurfaceId =
   | "copilot_mcp"
   | "pi_mcp"
   | "kilo_mcp"
+  | "grok_mcp"
   | "workspace_bundle";
 
 export type OperationKind =

@@ -212,13 +212,13 @@ describe("Overview agents that are off", () => {
   it("lists the agents that are off and leads to Settings", () => {
     const { props: p } = renderOverview({ enabledHarnessIds: ["codex", "claude"] });
     const more = screen.getByRole("region", { name: "Agents that are off" });
-    expect(more.textContent).toContain("OpenCode, Cursor, Copilot, Pi and Kilo are off.");
+    expect(more.textContent).toContain("OpenCode, Cursor, Copilot, Pi, Kilo and Grok are off.");
     fireEvent.click(within(more).getByRole("button", { name: "Add agents…" }));
     expect(p.onNavigate).toHaveBeenCalledWith("settings");
   });
 
   it("shows no such row when every agent is on", () => {
-    renderOverview({ enabledHarnessIds: ["codex", "opencode", "cursor", "claude", "copilot", "pi", "kilo"] });
+    renderOverview({ enabledHarnessIds: ["codex", "opencode", "cursor", "claude", "copilot", "pi", "kilo", "grok"] });
     expect(screen.queryByRole("region", { name: "Agents that are off" })).toBeNull();
   });
 });
