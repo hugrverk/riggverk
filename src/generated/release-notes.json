@@ -1,6 +1,24 @@
 {
   "releases": [
     {
+      "version": "2026.10.14",
+      "sections": [
+        {
+          "title": "New",
+          "items": [
+            "Add Grok Build as a light harness",
+            "Add Google Antigravity as a light harness"
+          ]
+        },
+        {
+          "title": "Other",
+          "items": [
+            "Give Library flows more time on a loaded machine"
+          ]
+        }
+      ]
+    },
+    {
       "version": "2026.10.13",
       "sections": [
         {
