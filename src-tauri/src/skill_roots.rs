@@ -158,10 +158,12 @@ pub enum ReadFolder {
     AntigravityApp,
     /// `~/.gemini/antigravity-cli/skills`: the Antigravity CLI (an install root)
     AntigravityCli,
+    /// `~/.grok/skills`: private to Grok Build (`GROK_HOME` moves the real one)
+    Grok,
 }
 
 impl ReadFolder {
-    pub const ALL: [ReadFolder; 11] = [
+    pub const ALL: [ReadFolder; 12] = [
         ReadFolder::Claude,
         ReadFolder::Agents,
         ReadFolder::CodexHome,
@@ -173,6 +175,7 @@ impl ReadFolder {
         ReadFolder::Kilo,
         ReadFolder::AntigravityApp,
         ReadFolder::AntigravityCli,
+        ReadFolder::Grok,
     ];
 
     /// The install root that is this folder, when the app can install into it.
@@ -185,9 +188,11 @@ impl ReadFolder {
             ReadFolder::Cursor => Some(SkillRoot::Cursor),
             ReadFolder::AntigravityApp => Some(SkillRoot::AntigravityApp),
             ReadFolder::AntigravityCli => Some(SkillRoot::AntigravityCli),
-            ReadFolder::DotCodex | ReadFolder::Copilot | ReadFolder::PiAgent | ReadFolder::Kilo => {
-                None
-            }
+            ReadFolder::DotCodex
+            | ReadFolder::Copilot
+            | ReadFolder::PiAgent
+            | ReadFolder::Kilo
+            | ReadFolder::Grok => None,
         }
     }
 
@@ -199,6 +204,7 @@ impl ReadFolder {
             ReadFolder::Copilot => Some(home.join(".copilot/skills")),
             ReadFolder::PiAgent => Some(home.join(".pi/agent/skills")),
             ReadFolder::Kilo => Some(home.join(".kilo/skills")),
+            ReadFolder::Grok => Some(home.join(".grok/skills")),
             _ => None,
         }
     }
@@ -207,9 +213,11 @@ impl ReadFolder {
 /// The folders a harness reads personal (global) skills from. `$CODEX_HOME/skills` is deprecated
 /// for Codex but still read (`.system` below it is Codex's own and never touched).
 ///
-/// For Copilot, Pi and Kilo the order is their precedence for one skill name, highest first: the
-/// first folder holding a name wins and hides the others (checked against Copilot CLI 1.0.98, Pi
-/// 1.3.0 and Kilo 7.8.12). The other harnesses' order carries no such meaning.
+/// For Copilot, Pi, Kilo and Grok the order is their precedence for one skill name, highest first:
+/// the first folder holding a name wins and hides the others (checked against Copilot CLI 1.0.98,
+/// Pi 1.3.0 and Kilo 7.8.12). Grok Build's user guide (`08-skills`) documents a dedupe by name
+/// with a priority; its order here, own folder first, is not checked against a Grok build. The
+/// other harnesses' order carries no such meaning.
 ///
 /// - Copilot CLI reads `~/.agents/skills` and its own `~/.copilot/skills`, not `~/.claude/skills`.
 /// - Pi reads `~/.agents/skills` and `<agent dir>/skills`, not `~/.claude/skills`.
@@ -217,6 +225,8 @@ impl ReadFolder {
 /// - Antigravity reads neither shared folder: the App and IDE read `~/.gemini/config/skills`, the
 ///   CLI `~/.gemini/antigravity-cli/skills`. Each surface reads one folder, so the order carries
 ///   no precedence.
+/// - Grok Build reads `~/.grok/skills`, `~/.agents/skills` and (Claude compatibility, on by
+///   default) `~/.claude/skills`.
 pub fn readers(harness: HarnessId) -> &'static [ReadFolder] {
     match harness {
         HarnessId::Claude => &[ReadFolder::Claude],
@@ -232,6 +242,7 @@ pub fn readers(harness: HarnessId) -> &'static [ReadFolder] {
         HarnessId::Pi => &[ReadFolder::PiAgent, ReadFolder::Agents],
         HarnessId::Kilo => &[ReadFolder::Kilo, ReadFolder::Agents, ReadFolder::Claude],
         HarnessId::Antigravity => &[ReadFolder::AntigravityApp, ReadFolder::AntigravityCli],
+        HarnessId::Grok => &[ReadFolder::Grok, ReadFolder::Agents, ReadFolder::Claude],
     }
 }
 
@@ -241,7 +252,7 @@ pub fn readers(harness: HarnessId) -> &'static [ReadFolder] {
 pub fn resolves_duplicates_by_folder_order(harness: HarnessId) -> bool {
     matches!(
         harness,
-        HarnessId::Copilot | HarnessId::Pi | HarnessId::Kilo
+        HarnessId::Copilot | HarnessId::Pi | HarnessId::Kilo | HarnessId::Grok
     )
 }
 
@@ -259,7 +270,7 @@ pub fn codex_home_is_custom(home: &Path) -> bool {
 ///
 /// 1. Claude enabled: `~/.claude/skills`.
 /// 2. Codex enabled: `$CODEX_HOME/skills` with a customised `CODEX_HOME`, else `~/.agents/skills`.
-/// 3. OpenCode, Cursor or Kilo enabled while neither `~/.claude/skills` nor `~/.agents/skills` is
+/// 3. OpenCode, Cursor, Kilo or Grok enabled while neither `~/.claude/skills` nor `~/.agents/skills` is
 ///    in the set: `~/.claude/skills` when Codex is enabled with a customised home (so Codex never
 ///    reads an installed copy outside its isolated home), else `~/.agents/skills`.
 /// 4. Copilot or Pi enabled, which read `~/.agents/skills` and no other shared folder:
@@ -286,7 +297,10 @@ pub fn install_roots(enabled: &[HarnessId], codex_custom: bool) -> Vec<SkillRoot
             SkillRoot::Agents
         });
     }
-    if (on(HarnessId::OpenCode) || on(HarnessId::Cursor) || on(HarnessId::Kilo))
+    if (on(HarnessId::OpenCode)
+        || on(HarnessId::Cursor)
+        || on(HarnessId::Kilo)
+        || on(HarnessId::Grok))
         && !roots.contains(&SkillRoot::Claude)
         && !roots.contains(&SkillRoot::Agents)
     {
@@ -431,6 +445,7 @@ mod tests {
     const A: HarnessId = HarnessId::Antigravity;
     const ANTIGRAVITY_ROOTS: [SkillRoot; 2] =
         [SkillRoot::AntigravityApp, SkillRoot::AntigravityCli];
+    const G: HarnessId = HarnessId::Grok;
 
     /// All 15 non-empty subsets of the four harnesses.
     fn subsets() -> Vec<Vec<HarnessId>> {
@@ -631,7 +646,13 @@ mod tests {
             ReadFolder::AntigravityCli.root(),
             Some(SkillRoot::AntigravityCli)
         );
-        for harness in [P, I, K] {
+        // Grok Build (user guide, skills page): ~/.grok/skills, ~/.agents/skills and, with its
+        // Claude compatibility (on by default), ~/.claude/skills.
+        assert_eq!(
+            readers(G),
+            &[ReadFolder::Grok, ReadFolder::Agents, ReadFolder::Claude]
+        );
+        for harness in [P, I, K, G] {
             assert!(resolves_duplicates_by_folder_order(harness));
         }
         for harness in [C, X, O, U, A] {
@@ -654,10 +675,12 @@ mod tests {
         assert_eq!(fixed(ReadFolder::Copilot), home.join(".copilot/skills"));
         assert_eq!(fixed(ReadFolder::PiAgent), home.join(".pi/agent/skills"));
         assert_eq!(fixed(ReadFolder::Kilo), home.join(".kilo/skills"));
+        assert_eq!(fixed(ReadFolder::Grok), home.join(".grok/skills"));
         for (folder, name) in [
             (ReadFolder::Copilot, "copilot"),
             (ReadFolder::PiAgent, "pi_agent"),
             (ReadFolder::Kilo, "kilo"),
+            (ReadFolder::Grok, "grok"),
         ] {
             assert_eq!(
                 serde_json::to_string(&folder).unwrap(),
@@ -732,6 +755,10 @@ mod tests {
             (vec![C, P], vec![F1, F2], vec![F1, F2], vec![]),
             (vec![C, K], vec![F1], vec![F1], vec![]),
             (vec![P, I, K], vec![F2], vec![F2], vec![]),
+            (vec![G], vec![F2], vec![F2], vec![]),
+            (vec![C, G], vec![F1], vec![F1], vec![]),
+            (vec![X, G], vec![F2], vec![F3, F1], vec![]),
+            (vec![X, P, G], vec![F2], vec![F3, F1], vec![P]),
             (vec![X, I], vec![F2], vec![F3], vec![I]),
             (vec![X, P], vec![F2], vec![F3], vec![P]),
             (vec![X, K], vec![F2], vec![F3, F1], vec![]),
@@ -739,7 +766,7 @@ mod tests {
             (vec![X, O, I], vec![F2], vec![F3, F1], vec![I]),
             (vec![X, P, I, K], vec![F2], vec![F3, F1], vec![P, I]),
             (
-                vec![C, X, O, U, P, I, K],
+                vec![C, X, O, U, P, I, K, G],
                 vec![F1, F2],
                 vec![F1, F3],
                 vec![P, I],
@@ -857,7 +884,8 @@ mod tests {
                         HarnessId::OpenCode
                         | HarnessId::Cursor
                         | HarnessId::Kilo
-                        | HarnessId::Antigravity => 2,
+                        | HarnessId::Antigravity
+                        | HarnessId::Grok => 2,
                         _ => 1,
                     };
                     assert!(read(*harness).len() <= most, "I5 {label}: {harness:?}");
@@ -898,12 +926,12 @@ mod tests {
 
     #[test]
     fn enabling_a_light_harness_never_takes_an_install_root_away() {
-        // Copilot, Pi and Kilo add at most one root, the one the light harness itself needs;
-        // Antigravity adds exactly its own two.
+        // Copilot, Pi, Kilo and Grok add at most one root, the one the light harness itself
+        // needs; Antigravity adds exactly its own two.
         for custom in [false, true] {
             for subset in all_subsets() {
                 let before = install_roots(&subset, custom);
-                for light in [P, I, K, A] {
+                for light in [P, I, K, A, G] {
                     if subset.contains(&light) {
                         continue;
                     }

@@ -117,6 +117,7 @@ describe("buildFlowModel sources and reach", () => {
       ["pi", "off"],
       ["kilo", "off"],
       ["antigravity", "off"],
+      ["grok", "off"],
     ]);
     expect(model.agents.find(agent => agent.id === "opencode")!.sub).toBe("off in Settings");
   });

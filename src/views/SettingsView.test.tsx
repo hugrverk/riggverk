@@ -662,7 +662,7 @@ describe("SettingsView workspace row", () => {
     const reset = within(workspaceRow()).getByRole("button", { name: /reset to default/ });
     focus(radios("Landing page")[0]!);
     // Landing page, agent switches, then the workspace action.
-    for (let step = 0; step < 9; step += 1) press(document.activeElement!, "j");
+    for (let step = 0; step < 10; step += 1) press(document.activeElement!, "j");
     expect(document.activeElement).toBe(reset);
     press(document.activeElement!, "k");
     expect(document.activeElement).not.toBe(reset);

@@ -2725,18 +2725,19 @@ fn attach_rules_details(plan: &mut SetupPlan, home: &Path) {
         .iter_mut()
         .filter(|op| op.kind == OperationKind::Create)
     {
-        let Some(harness) = op
+        let Some((harness, rules)) = op
             .surface
             .harness()
             .and_then(crate::light_harness::descriptor)
-            .filter(|harness| harness.rules.surface == op.surface)
+            .and_then(|harness| harness.rules.as_ref().map(|rules| (harness, rules)))
+            .filter(|(_, rules)| rules.surface == op.surface)
         else {
             continue;
         };
-        if let Some(shadowed) = &harness.rules.shadows {
+        if let Some(shadowed) = &rules.shadows {
             op.details.push(format!(
                 "+ {} ({} stops reading {shadowed} while this file exists)",
-                harness.rules.display_path(home),
+                rules.display_path(home),
                 harness.label
             ));
         }

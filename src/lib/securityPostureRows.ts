@@ -96,6 +96,10 @@ const COPY: Record<FindingCode, Copy> = {
     "Riggverk reads no Copilot setting · --allow-all-tools, --yolo and /yolo apply per session and cannot be seen; GitHub suggests a VM or container for unattended runs",
   ),
   pi_not_covered: fixed("controls", "Riggverk reads no Pi setting and writes none · run Pi in a container or VM"),
+  grok_not_covered: fixed(
+    "controls",
+    "Riggverk reads no Grok permission setting and writes only the Playwright entry of ~/.grok/config.toml · run Grok in a container or VM for unattended runs",
+  ),
   config_only: fixed("not checked", "project and managed config, profiles, command-line flags and aliases"),
   antigravity_not_covered: fixed(
     "controls",

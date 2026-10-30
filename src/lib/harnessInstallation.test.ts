@@ -28,7 +28,7 @@ import {
 
 type EnabledSettings = Pick<AppSettings, "enabled_target_ids" | "enabled_harness_ids">;
 
-/** Backend defaults: the four central harnesses, every target except codex_config, claude_config, kilo_mcp and antigravity_mcp. */
+/** Backend defaults: the four central harnesses, every target except codex_config, claude_config and the MCP targets of Kilo, Antigravity and Grok. */
 function defaults(overrides: Partial<EnabledSettings> = {}): EnabledSettings {
   return {
     enabled_target_ids: [...DEFAULT_ENABLED_TARGET_IDS],
@@ -51,6 +51,7 @@ const LIGHT_SURFACES: SetupSurfaceId[] = [
   "kilo_mcp",
   "antigravity_rules",
   "antigravity_mcp",
+  "grok_mcp",
 ];
 
 describe("harnessInstallation", () => {
@@ -108,6 +109,7 @@ describe("target to surface mapping", () => {
       kilo_mcp: ["kilo_mcp"],
       antigravity_rules: ["antigravity_rules"],
       antigravity_mcp: ["antigravity_mcp"],
+      grok_mcp: ["grok_mcp"],
     });
   });
 
@@ -130,14 +132,10 @@ describe("target to surface mapping", () => {
     expect(harnessForSurface("workspace_bundle")).toBeNull();
   });
 
-  it("defaults every target on except codex_config, claude_config, kilo_mcp and antigravity_mcp", () => {
-    expect(DEFAULT_ENABLED_TARGET_IDS).not.toContain("codex_config");
-    expect(DEFAULT_ENABLED_TARGET_IDS).not.toContain("claude_config");
-    expect(DEFAULT_ENABLED_TARGET_IDS).not.toContain("kilo_mcp");
-    expect(DEFAULT_ENABLED_TARGET_IDS).not.toContain("antigravity_mcp");
-    const expected = (Object.keys(TARGET_SURFACES) as SetupTargetId[]).filter(
-      (id) => id !== "codex_config" && id !== "claude_config" && id !== "kilo_mcp" && id !== "antigravity_mcp",
-    );
+  it("defaults every target on except codex_config, claude_config, kilo_mcp, antigravity_mcp and grok_mcp", () => {
+    const off = ["codex_config", "claude_config", "kilo_mcp", "antigravity_mcp", "grok_mcp"];
+    for (const id of off) expect(DEFAULT_ENABLED_TARGET_IDS).not.toContain(id);
+    const expected = (Object.keys(TARGET_SURFACES) as SetupTargetId[]).filter((id) => !off.includes(id));
     expect([...DEFAULT_ENABLED_TARGET_IDS].sort()).toEqual(expected.sort());
   });
 });
@@ -221,16 +219,16 @@ describe("target-filtered surfaces", () => {
   });
 });
 
-describe("the light tier (Copilot, Pi, Kilo, Antigravity)", () => {
+describe("the light tier (Copilot, Pi, Kilo, Antigravity, Grok)", () => {
   it("is off by default: the defaults are the four central harnesses, as the backend's HarnessId::DEFAULT_ON", () => {
     expect([...DEFAULT_ENABLED_HARNESS_IDS]).toEqual(["codex", "opencode", "claude", "cursor"]);
     expect([...DEFAULT_ENABLED_HARNESS_IDS]).toEqual([...CENTRAL_AGENTS]);
     expect([...INSTALL_AGENTS]).toEqual([...CENTRAL_AGENTS, ...LIGHT_AGENTS]);
-    expect([...LIGHT_AGENTS]).toEqual(["copilot", "pi", "kilo", "antigravity"]);
+    expect([...LIGHT_AGENTS]).toEqual(["copilot", "pi", "kilo", "antigravity", "grok"]);
   });
 
   it("follows Claude in the tab order, preserving the preceding tab numbers", () => {
-    expect(HARNESS_NAV_ORDER).toEqual(["codex", "opencode", "cursor", "claude", "copilot", "pi", "kilo", "antigravity"]);
+    expect(HARNESS_NAV_ORDER).toEqual(["codex", "opencode", "cursor", "claude", "copilot", "pi", "kilo", "antigravity", "grok"]);
     expect([...HARNESS_NAV_ORDER].sort()).toEqual([...INSTALL_AGENTS].sort());
     expect(HARNESS_LABELS.copilot).toBe("Copilot");
     expect(HARNESS_LABELS.antigravity).toBe("Antigravity");
@@ -246,8 +244,22 @@ describe("the light tier (Copilot, Pi, Kilo, Antigravity)", () => {
     for (const other of ["start", "library", "settings", "copilots", ""]) expect(harnessForView(other)).toBeNull();
   });
 
+  it("offers Grok only the skills and its MCP entry: it reads Claude Code's rules file, and its MCP target starts off", () => {
+    expect(HARNESS_SURFACES.grok).toEqual(["skills", "grok_mcp"]);
+    expect(harnessForSurface("grok_mcp")).toBe("grok");
+    expect(targetIdForSurface("grok_mcp")).toBe("grok_mcp");
+    const on = defaults({ enabled_harness_ids: ["grok"] });
+    expect(enabledSurfacesForHarness("grok", on)).toEqual(["skills"]);
+    expect(harnessSurfaceStates("grok", on)).toEqual([
+      { surface: "skills", enabled: true, targetId: null },
+      { surface: "grok_mcp", enabled: false, targetId: "grok_mcp" },
+    ]);
+    const mcpOn = defaults({ enabled_harness_ids: ["grok"], enabled_target_ids: [...DEFAULT_ENABLED_TARGET_IDS, "grok_mcp"] });
+    expect(enabledSetupSurfaces(mcpOn)).toEqual(["workspace_bundle", "skills", "grok_mcp"]);
+  });
+
   it("offers its rules file and its MCP entry, each gated by the harness's own target, and the shared skills surface", () => {
-    for (const harness of LIGHT_AGENTS) {
+    for (const harness of LIGHT_AGENTS.filter((harness) => harness !== "grok")) {
       const rules = `${harness}_rules` as SetupSurfaceId;
       const mcp = `${harness}_mcp` as SetupSurfaceId;
       expect(HARNESS_SURFACES[harness]).toEqual([rules, "skills", mcp]);
@@ -278,8 +290,8 @@ describe("the light tier (Copilot, Pi, Kilo, Antigravity)", () => {
     }
   });
 
-  it("defaults the light targets on, the MCP targets of Kilo and Antigravity aside, and puts them after cursor_setup, as the backend registry does", () => {
-    for (const harness of LIGHT_AGENTS) expect(DEFAULT_ENABLED_TARGET_IDS).toContain(`${harness}_rules`);
+  it("defaults the light targets on, the MCP targets of Kilo, Antigravity and Grok aside, and puts them after cursor_setup, as the backend registry does", () => {
+    for (const harness of LIGHT_AGENTS.filter((harness) => harness !== "grok")) expect(DEFAULT_ENABLED_TARGET_IDS).toContain(`${harness}_rules`);
     for (const harness of ["copilot", "pi"] as const) expect(DEFAULT_ENABLED_TARGET_IDS).toContain(`${harness}_mcp`);
     expect(DEFAULT_ENABLED_TARGET_IDS.slice(-6)).toEqual([
       "copilot_rules",

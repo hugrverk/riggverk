@@ -72,6 +72,8 @@ pub enum SetupSurfaceId {
     AntigravityRules,
     /// The Playwright entry of Antigravity's MCP file (`~/.gemini/config/mcp_config.json`)
     AntigravityMcp,
+    /// The Playwright entry of Grok Build's config (`~/.grok/config.toml`)
+    GrokMcp,
     /// Installed runtime workspace bundled files
     WorkspaceBundle,
 }
@@ -99,6 +101,7 @@ impl SetupSurfaceId {
         SetupSurfaceId::KiloMcp,
         SetupSurfaceId::AntigravityRules,
         SetupSurfaceId::AntigravityMcp,
+        SetupSurfaceId::GrokMcp,
         SetupSurfaceId::WorkspaceBundle,
     ];
 
@@ -129,6 +132,7 @@ impl SetupSurfaceId {
             SetupSurfaceId::KiloMcp => "Kilo MCP",
             SetupSurfaceId::AntigravityRules => "Antigravity Rules",
             SetupSurfaceId::AntigravityMcp => "Antigravity MCP",
+            SetupSurfaceId::GrokMcp => "Grok MCP",
             SetupSurfaceId::WorkspaceBundle => "Workspace Resources",
         }
     }
@@ -162,6 +166,8 @@ impl SetupSurfaceId {
             HarnessId::Pi => Some(SetupSurfaceId::PiRules),
             HarnessId::Kilo => Some(SetupSurfaceId::KiloRules),
             HarnessId::Antigravity => Some(SetupSurfaceId::AntigravityRules),
+            // Grok Build reads Claude Code's rules file: it has no rules surface of its own.
+            HarnessId::Grok => None,
             HarnessId::Codex | HarnessId::OpenCode | HarnessId::Claude | HarnessId::Cursor => None,
         }
     }
@@ -173,6 +179,7 @@ impl SetupSurfaceId {
             HarnessId::Pi => Some(SetupSurfaceId::PiMcp),
             HarnessId::Kilo => Some(SetupSurfaceId::KiloMcp),
             HarnessId::Antigravity => Some(SetupSurfaceId::AntigravityMcp),
+            HarnessId::Grok => Some(SetupSurfaceId::GrokMcp),
             HarnessId::Codex | HarnessId::OpenCode | HarnessId::Claude | HarnessId::Cursor => None,
         }
     }
@@ -196,6 +203,7 @@ impl SetupSurfaceId {
             SetupSurfaceId::AntigravityRules | SetupSurfaceId::AntigravityMcp => {
                 Some(HarnessId::Antigravity)
             }
+            SetupSurfaceId::GrokMcp => Some(HarnessId::Grok),
             SetupSurfaceId::Skills
             | SetupSurfaceId::ClaudeSkills
             | SetupSurfaceId::OpenCodeSkills

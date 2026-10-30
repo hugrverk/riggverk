@@ -220,6 +220,7 @@ PIN_ENTRIES: dict[str, tuple[str, ...]] = {
     "templates/mcp/pi.playwright.json": ("args",),
     "templates/mcp/kilo.playwright.json": ("command",),
     "templates/mcp/antigravity.playwright.json": ("args",),
+    "templates/mcp/grok.playwright.json": ("args",),
 }
 PIN_TEMPLATES = tuple(PIN_ENTRIES)
 PIN_OUTSIDE_DOCS = ("README.md", "docs/*.md")

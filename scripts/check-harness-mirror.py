@@ -310,11 +310,13 @@ def check_harness_ids(root: Path) -> list[str]:
     # The registry is the literal rows of `targets()` plus, per light harness in descriptor order, its
     # `<harness>_rules` row and its `<harness>_mcp` row, both derived from the descriptor.
     registry = re.findall(r'^\s*id:\s*"(\w+)"', rust_fn_body(targets, "pub fn targets()", RUST_TARGETS), flags=re.MULTILINE)
+    # A harness that reads a central harness's rules file (`shared_rules`) has no rules row.
     for key in keys:
         entry = harnesses[key]
-        if not isinstance(entry.get("rules"), dict) or not isinstance(entry.get("mcp"), dict):
-            raise Mismatch(f"{DESCRIPTOR}: {key} needs a rules and an mcp section")
-        registry += [f"{key}_rules", f"{key}_mcp"]
+        has_rules = isinstance(entry.get("rules"), dict)
+        if has_rules == ("shared_rules" in entry) or not isinstance(entry.get("mcp"), dict):
+            raise Mismatch(f"{DESCRIPTOR}: {key} needs a rules section or shared_rules (not both) and an mcp section")
+        registry += ([f"{key}_rules"] if has_rules else []) + [f"{key}_mcp"]
     target_union = ts_union(install, "SetupTargetId", TS_INSTALL)
     same_set("SetupTargetId", "SetupTargetId", target_union, "targets()", registry)
     same_sequence(
@@ -336,6 +338,13 @@ def check_harness_ids(root: Path) -> list[str]:
     rules_harnesses = ts_array(rules_ts, "RULES_HARNESSES", TS_RULES)
     for key in light_ts:
         rules = harnesses[key].get("rules")
+        if "shared_rules" in harnesses[key]:
+            shared = harnesses[key]["shared_rules"]
+            if shared not in wire_default:
+                raise Mismatch(f"{DESCRIPTOR}: {key} shared_rules must name a central harness, not {shared!r}")
+            if key in rules_harnesses or key in rules_surface or f"{key}_rules" in rules_union:
+                raise Mismatch(f"{TS_RULES}/{TS_TYPES}: {key} reads {shared}'s rules and must have no rules surface of its own")
+            continue
         if not isinstance(rules, dict):
             raise Mismatch(f"{DESCRIPTOR}: {key} has no rules section")
         adapter, target_rel = rules.get("adapter"), rules.get("target_rel")
@@ -388,7 +397,7 @@ def check_harness_ids(root: Path) -> list[str]:
             raise Mismatch(f"TARGET_SURFACES.{target} must gate exactly {surface}")
         if not mcp["default_enabled"]:
             expected_disabled.add(target)
-        if not harnesses[key]["rules"].get("default_enabled", True):
+        if not harnesses[key].get("rules", {}).get("default_enabled", True):
             expected_disabled.add(f"{key}_rules")
     same_set("DEFAULT_DISABLED_TARGET_IDS", "DEFAULT_DISABLED_TARGET_IDS", disabled_ts, "the targets that start off", sorted(expected_disabled))
 

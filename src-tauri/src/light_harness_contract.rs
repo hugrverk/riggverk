@@ -51,9 +51,11 @@ mod tests {
         "# My rules\n\nAlways answer in Swedish.\n\n## Style\n- prefer small diffs\n- no emoji\n\n## Tools\n- use rg for search\n";
 
     fn rules_of(harness: HarnessId) -> &'static LightRules {
-        &light_harness::descriptor(harness)
+        light_harness::descriptor(harness)
             .expect("light harness")
             .rules
+            .as_ref()
+            .expect("a rules file of its own")
     }
 
     fn artifact_of(harness: HarnessId) -> ArtifactId {
@@ -1216,6 +1218,7 @@ mod tests {
             let mut targets = crate::agent_targets::default_enabled_ids();
             targets.push("kilo_mcp".to_string());
             targets.push("antigravity_mcp".to_string());
+            targets.push("grok_mcp".to_string());
             let settings = crate::settings::AppSettings {
                 enabled_harness_ids: HarnessId::ALL.to_vec(),
                 enabled_target_ids: crate::agent_targets::normalize_enabled_ids(&targets),
@@ -2614,6 +2617,307 @@ mod tests {
                 );
             }
             let _ = fs::remove_dir_all(dir);
+        }
+
+        // ═════════════════════════════════════════════════════════════════════════════════════
+        // Grok Build: one table of a TOML file that may hold api keys, edited in place
+        // ═════════════════════════════════════════════════════════════════════════════════════
+
+        mod grok {
+            use super::*;
+
+            const GROK: HarnessId = HarnessId::Grok;
+
+            /// A config of the user's: an api key with a comment, a model, another server with a
+            /// token, a telemetry key and a trailing comment, in uneven formatting.
+            fn user_toml() -> String {
+                format!(
+                    "# Grok Build\napi_key = \"{SECRET}\"   # personal\n\n[models]\ndefault  =  'grok-4'\n\n[mcp_servers.{PRIVATE_NAME}]\ncommand = \"npx\"\nargs = [ \"-y\",  \"private\" ]\nenv = {{ TOKEN = \"{SECRET}\" }}\n\n[telemetry]\nevents_api_key = '{SECRET}'\n# end\n"
+                )
+            }
+
+            fn text(env: &M) -> String {
+                String::from_utf8(env.bytes()).unwrap()
+            }
+
+            /// The file with the managed table (and the blank line before it) cut out.
+            fn without_entry(text: &str) -> String {
+                let start = text
+                    .find("\n[mcp_servers.playwright]")
+                    .expect("managed header");
+                let end = text[start + 1..]
+                    .find("\n[")
+                    .map_or(text.len(), |offset| start + 1 + offset);
+                format!("{}{}", &text[..start], &text[end..])
+            }
+
+            fn entry_of(env: &M) -> Option<Value> {
+                crate::light_mcp::read(&env.dest(), env.spec())
+                    .unwrap()
+                    .and_then(|document| document.entry(env.spec()).cloned())
+            }
+
+            #[test]
+            fn grok_mcp_is_off_by_default_and_the_file_is_the_toml_config() {
+                let env = Env::new("grok-defaults", GROK);
+                assert!(
+                    !crate::agent_targets::default_enabled_ids().contains(&"grok_mcp".to_string())
+                );
+                assert!(!HarnessId::DEFAULT_ON.contains(&GROK));
+                let plan = preview_setup(vec!["grok_mcp".into()]).unwrap();
+                assert!(plan.operations.is_empty() && !plan.has_pending_changes);
+                let spec = spec_of(GROK);
+                assert_eq!(
+                    spec.resolve_dest(&env.home),
+                    env.home.join(".grok/config.toml")
+                );
+                assert_eq!(spec.display_path(&env.home), "~/.grok/config.toml");
+                assert_eq!(spec.allowlist_root(&env.home), env.home);
+                assert!(!spec.resolve_dest(&env.home).exists());
+                // No rules target, surface or artifact exists for Grok.
+                assert!(!crate::agent_targets::targets()
+                    .iter()
+                    .any(|target| target.id == "grok_rules"));
+                assert_eq!(SetupSurfaceId::light_rules(GROK), None);
+                assert_eq!(
+                    serde_json::to_value(spec.surface).unwrap(),
+                    json!("grok_mcp")
+                );
+                assert_eq!(
+                    setup_transaction::artifact_backup_rel(&mcp_artifact(GROK)),
+                    "grok-mcp"
+                );
+            }
+
+            #[test]
+            fn a_missing_config_is_created_owner_only_with_only_the_table() {
+                let env = mcp_env("grok-create", GROK);
+                assert_eq!(env.plan_mcp().kind, OperationKind::Create);
+                let result = env.apply_mcp();
+                assert!(result.success, "{}", result.message);
+                assert!(text(&env).starts_with("[mcp_servers.playwright]\ncommand = \"npx\"\n"));
+                assert_eq!(entry_of(&env), Some(env.expected()));
+                assert_eq!(env.plan_mcp().kind, OperationKind::NoChange);
+                assert_eq!(env.status_mcp().state, InstallationState::Current);
+                assert_eq!(env.recorded_mcp(), Some(env.entry_digest()));
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::PermissionsExt;
+                    let mode = fs::metadata(env.dest()).unwrap().permissions().mode() & 0o777;
+                    assert_eq!(mode, 0o600);
+                }
+                let rolled = rollback_setup_transaction(result.transaction_id, false).unwrap();
+                assert!(rolled.success, "{}", rolled.message);
+                assert!(!env.dest().exists());
+            }
+
+            #[test]
+            fn an_existing_config_gains_one_table_and_keeps_every_other_byte() {
+                let env = mcp_env("grok-merge", GROK);
+                let before = user_toml();
+                env.put(&before);
+                let planned = env.plan_mcp();
+                assert_eq!(planned.kind, OperationKind::Update);
+                assert_eq!(planned.mcp, Some(EntryState::EntryMissing));
+                let result = env.apply_mcp();
+                assert!(result.success, "{}", result.message);
+                let after = text(&env);
+                assert_eq!(
+                    without_entry(&after),
+                    before,
+                    "api key, comments and layout stay"
+                );
+                assert_eq!(entry_of(&env), Some(env.expected()));
+                assert_eq!(env.plan_mcp().kind, OperationKind::NoChange);
+
+                // A rollback with no later edit puts the exact bytes back.
+                let rolled = rollback_setup_transaction(result.transaction_id, false).unwrap();
+                assert!(rolled.success, "{}", rolled.message);
+                assert_eq!(text(&env), before);
+            }
+
+            #[test]
+            fn a_rollback_after_later_edits_takes_out_only_the_table() {
+                let env = mcp_env("grok-rollback", GROK);
+                let before = user_toml();
+                env.put(&before);
+                let result = env.apply_mcp();
+                assert!(result.success, "{}", result.message);
+                // Grok's /settings changes the model after the apply.
+                env.put(text(&env).replace("'grok-4'", "'grok-5'"));
+                let rolled = rollback_setup_transaction(result.transaction_id, false).unwrap();
+                assert!(rolled.success, "{}", rolled.message);
+                assert_eq!(text(&env), before.replace("'grok-4'", "'grok-5'"));
+            }
+
+            #[test]
+            fn a_differing_entry_without_a_record_is_the_users_and_stays_untouched() {
+                let env = mcp_env("grok-differs", GROK);
+                let content = format!(
+                    "{}\n[mcp_servers.playwright]\ncommand = \"my-own-playwright\"\n",
+                    user_toml()
+                );
+                env.put(&content);
+                let planned = env.plan_mcp();
+                assert_eq!(planned.kind, OperationKind::Conflict);
+                assert_eq!(planned.mcp, Some(EntryState::Differs));
+                env.assert_refused(content.as_bytes());
+                let said = env.everything_said();
+                for hidden in [SECRET, PRIVATE_NAME, "my-own-playwright", "api_key"] {
+                    assert!(!said.contains(hidden), "{hidden}: {said}");
+                }
+            }
+
+            #[test]
+            fn an_older_entry_the_app_wrote_is_updated_in_place() {
+                let env = mcp_env("grok-update", GROK);
+                let older = "# Riggverk's entry\n[mcp_servers.playwright]\ncommand = \"npx\"\nargs = [\"-y\", \"@playwright/mcp@0.0.1\"]\n\n[telemetry]\nenabled = false\n";
+                env.put(older);
+                env.record_mcp(&env.entry_digest());
+                let planned = env.plan_mcp();
+                assert_eq!(planned.kind, OperationKind::Update);
+                assert_eq!(planned.mcp, Some(EntryState::Differs));
+                assert_eq!(env.health_mcp().mcp.status, "stale");
+                let result = env.apply_mcp();
+                assert!(result.success, "{}", result.message);
+                let after = text(&env);
+                assert!(
+                    after.starts_with("# Riggverk's entry\n[mcp_servers.playwright]\n"),
+                    "{after}"
+                );
+                assert!(
+                    after.ends_with("\n[telemetry]\nenabled = false\n"),
+                    "{after}"
+                );
+                assert_eq!(entry_of(&env), Some(env.expected()));
+                let rolled = rollback_setup_transaction(result.transaction_id, false).unwrap();
+                assert!(rolled.success, "{}", rolled.message);
+                assert_eq!(text(&env), older);
+            }
+
+            #[test]
+            fn toml_the_app_cannot_edit_in_place_is_refused_with_zero_mutation_and_no_file_text() {
+                for (name, content, refusal) in [
+                    (
+                        "invalid",
+                        format!("api_key = \"{SECRET}\"\nbroken = "),
+                        Refusal::NotToml,
+                    ),
+                    (
+                        "not a table",
+                        format!("api_key = \"{SECRET}\"\nmcp_servers = \"{PRIVATE_NAME}\"\n"),
+                        Refusal::KeyNotTable,
+                    ),
+                    (
+                        "inline servers",
+                        format!(
+                            "mcp_servers = {{ {PRIVATE_NAME} = {{ command = \"{SECRET}\" }} }}\n"
+                        ),
+                        Refusal::TomlLayout,
+                    ),
+                    (
+                        "inline entry",
+                        format!("[mcp_servers]\nplaywright = {{ command = \"{SECRET}\" }}\n"),
+                        Refusal::TomlLayout,
+                    ),
+                    (
+                        "crlf",
+                        format!("api_key = \"{SECRET}\"\r\n"),
+                        Refusal::TomlLayout,
+                    ),
+                ] {
+                    let env = mcp_env("grok-refused", GROK);
+                    env.put(&content);
+                    let planned = env.plan_mcp();
+                    assert_eq!(planned.kind, OperationKind::Conflict, "{name}");
+                    assert_eq!(planned.mcp, Some(EntryState::Refused(refusal)), "{name}");
+                    let detail = env.status_mcp().surfaces[0].detail.clone();
+                    assert!(detail.contains(refusal.message()), "{name}: {detail}");
+                    assert!(detail.contains("plain TOML tables"), "{name}: {detail}");
+                    env.assert_refused(content.as_bytes());
+                    let said = env.everything_said();
+                    for hidden in [SECRET, PRIVATE_NAME, "sk-live", "api_key"] {
+                        assert!(!said.contains(hidden), "{name} {hidden}: {said}");
+                    }
+                    assert_eq!(env.health_mcp().mcp.status, "invalid", "{name}");
+                }
+            }
+
+            #[test]
+            fn the_fingerprint_follows_the_entry_not_the_rest_of_the_file() {
+                let env = mcp_env("grok-fingerprint", GROK);
+                let fingerprint = |env: &M| {
+                    let planned = setup_transaction::plan_artifacts_for_surfaces(
+                        &[env.surface()],
+                        &env.ws,
+                        &env.home,
+                    )
+                    .unwrap();
+                    setup_transaction::compute_plan_fingerprint(
+                        &env.ws,
+                        &[env.surface()],
+                        &planned,
+                        &env.home,
+                    )
+                    .unwrap()
+                };
+                env.put(user_toml());
+                let base = fingerprint(&env);
+                env.put(user_toml().replace("'grok-4'", "'grok-5'"));
+                assert_eq!(fingerprint(&env), base, "an unrelated key");
+                env.put(format!(
+                    "{}\n[mcp_servers.playwright]\ncommand = \"mine\"\n",
+                    user_toml()
+                ));
+                assert_ne!(fingerprint(&env), base, "an entry of the user's own");
+            }
+
+            #[test]
+            fn the_health_names_the_shared_rules_the_config_and_grok_home() {
+                let env = mcp_env("grok-health", GROK);
+                let health = env.health_mcp();
+                assert_eq!(health.rules.status, "shared");
+                assert_eq!(health.rules.path, "~/.claude/CLAUDE.md");
+                assert!(
+                    health.rules.detail.contains("Claude Code"),
+                    "{}",
+                    health.rules.detail
+                );
+                assert_eq!(health.mcp.path, "~/.grok/config.toml");
+                assert_eq!(health.mcp.status, "missing");
+                assert!(health.cli.detail.contains("grok"), "{}", health.cli.detail);
+                assert_eq!(
+                    health.skills.roots,
+                    ["~/.claude/skills", "~/.agents/skills"]
+                );
+
+                // Without Claude Code's rules, none are installed for Grok, and the overall
+                // status does not count that as something to fix.
+                let mut settings = crate::settings::load();
+                settings
+                    .enabled_target_ids
+                    .retain(|id| id != "claude_rules");
+                crate::settings::save_with_revision_check(settings, None).unwrap();
+                let none = env.health_mcp();
+                assert_eq!(none.rules.status, "none");
+                assert!(none
+                    .rules
+                    .detail
+                    .starts_with("No rules are installed for Grok"));
+
+                std::env::set_var("GROK_HOME", env.base.join("elsewhere"));
+                let moved = env.health_mcp();
+                assert!(
+                    moved
+                        .warnings
+                        .iter()
+                        .any(|warning| warning.starts_with("GROK_HOME is set")
+                            && warning.contains("~/.grok/config.toml")),
+                    "{:?}",
+                    moved.warnings
+                );
+                std::env::remove_var("GROK_HOME");
+            }
         }
     }
 }

@@ -1394,7 +1394,7 @@ mod tests {
     }
 
     /// The rules and MCP surfaces of the light tier, which is off until a harness is enabled.
-    const LIGHT_SURFACES: [crate::setup_lifecycle::SetupSurfaceId; 8] = [
+    const LIGHT_SURFACES: [crate::setup_lifecycle::SetupSurfaceId; 9] = [
         crate::setup_lifecycle::SetupSurfaceId::CopilotRules,
         crate::setup_lifecycle::SetupSurfaceId::PiRules,
         crate::setup_lifecycle::SetupSurfaceId::KiloRules,
@@ -1403,6 +1403,7 @@ mod tests {
         crate::setup_lifecycle::SetupSurfaceId::KiloMcp,
         crate::setup_lifecycle::SetupSurfaceId::AntigravityRules,
         crate::setup_lifecycle::SetupSurfaceId::AntigravityMcp,
+        crate::setup_lifecycle::SetupSurfaceId::GrokMcp,
     ];
 
     #[test]
@@ -1415,7 +1416,7 @@ mod tests {
             surfaces_without(&excluded)
         );
         // With every harness enabled, only the Codex and Claude config surfaces and the MCP entries
-        // of Kilo and Antigravity (all off by default as targets) stay out.
+        // of Kilo, Antigravity and Grok (all off by default as targets) stay out.
         let all = AppSettings {
             enabled_harness_ids: agent_targets::HarnessId::ALL.to_vec(),
             ..AppSettings::default()
@@ -1426,7 +1427,8 @@ mod tests {
                 SetupSurfaceId::CodexConfig,
                 SetupSurfaceId::ClaudeConfig,
                 SetupSurfaceId::KiloMcp,
-                SetupSurfaceId::AntigravityMcp
+                SetupSurfaceId::AntigravityMcp,
+                SetupSurfaceId::GrokMcp
             ])
         );
     }

@@ -78,6 +78,19 @@
         "template": "templates/mcp/antigravity.playwright.json",
         "default_enabled": false
       }
+    },
+    "grok": {
+      "label": "Grok",
+      "cli": { "program": "grok" },
+      "shared_rules": "claude",
+      "mcp": {
+        "target_rel": ".grok/config.toml",
+        "format": "toml",
+        "root_key": "mcp_servers",
+        "entry_key": "playwright",
+        "template": "templates/mcp/grok.playwright.json",
+        "default_enabled": false
+      }
     }
   }
 }

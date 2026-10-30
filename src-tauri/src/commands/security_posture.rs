@@ -106,6 +106,7 @@ pub enum FindingCode {
     KiloNoRules,
     CopilotNotCovered,
     PiNotCovered,
+    GrokNotCovered,
     ConfigOnly,
     AntigravityNotCovered,
 }
@@ -135,6 +136,7 @@ impl FindingCode {
             | CursorRunMode
             | CopilotNotCovered
             | PiNotCovered
+            | GrokNotCovered
             | ConfigOnly
             | AntigravityNotCovered => PostureLevel::NotCovered,
         }
@@ -572,10 +574,11 @@ pub fn compute(harness: HarnessId, inputs: &Inputs) -> SecurityPosture {
         HarnessId::Copilot => out.add(FindingCode::CopilotNotCovered, None, None),
         HarnessId::Pi => out.add(FindingCode::PiNotCovered, None, None),
         HarnessId::Antigravity => out.add(FindingCode::AntigravityNotCovered, None, None),
+        HarnessId::Grok => out.add(FindingCode::GrokNotCovered, None, None),
     }
     if !matches!(
         harness,
-        HarnessId::Copilot | HarnessId::Pi | HarnessId::Antigravity
+        HarnessId::Copilot | HarnessId::Pi | HarnessId::Antigravity | HarnessId::Grok
     ) {
         out.add(FindingCode::ConfigOnly, None, None);
     }
@@ -685,7 +688,7 @@ mod tests {
         serde_json::to_string(posture).expect("serialize")
     }
 
-    const ALL_CODES: [FindingCode; 30] = [
+    const ALL_CODES: [FindingCode; 31] = [
         FindingCode::ClaudeBypassDisabled,
         FindingCode::ClaudeBypassDefault,
         FindingCode::ClaudeBypassAvailable,
@@ -714,6 +717,7 @@ mod tests {
         FindingCode::KiloNoRules,
         FindingCode::CopilotNotCovered,
         FindingCode::PiNotCovered,
+        FindingCode::GrokNotCovered,
         FindingCode::ConfigOnly,
         FindingCode::AntigravityNotCovered,
     ];
@@ -952,7 +956,7 @@ mod tests {
     }
 
     #[test]
-    fn copilot_and_pi_are_static_and_read_nothing() {
+    fn copilot_pi_and_grok_are_static_and_read_nothing() {
         let f = Fixture::new("static");
         let p = f.posture(HarnessId::Copilot);
         assert!(p.sources.is_empty());
@@ -963,6 +967,9 @@ mod tests {
         let p = f.posture(HarnessId::Antigravity);
         assert!(p.sources.is_empty());
         assert_eq!(codes(&p), vec![FindingCode::AntigravityNotCovered]);
+        let p = f.posture(HarnessId::Grok);
+        assert!(p.sources.is_empty());
+        assert_eq!(codes(&p), vec![FindingCode::GrokNotCovered]);
     }
 
     #[test]

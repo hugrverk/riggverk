@@ -12,7 +12,8 @@ import {
 /**
  * Every surface of a harness, regardless of target toggles. Use `enabledSurfacesForHarness` to install.
  * `skills` is listed for every harness but belongs to none: one global surface installs into the folders
- * all the enabled harnesses read. The light harnesses (Copilot, Pi, Kilo, Antigravity) add one rules file and one MCP entry each.
+ * all the enabled harnesses read. The light harnesses (Copilot, Pi, Kilo, Antigravity) add one rules file and one MCP entry each;
+ * Grok reads Claude Code's rules file, so it adds only its MCP entry.
  */
 export const HARNESS_SURFACES: Record<InstallAgent, SetupSurfaceId[]> = {
   codex: ["codex_config", "codex_agents", "codex_rules", "skills"],
@@ -23,6 +24,7 @@ export const HARNESS_SURFACES: Record<InstallAgent, SetupSurfaceId[]> = {
   pi: ["pi_rules", "skills", "pi_mcp"],
   kilo: ["kilo_rules", "skills", "kilo_mcp"],
   antigravity: ["antigravity_rules", "skills", "antigravity_mcp"],
+  grok: ["skills", "grok_mcp"],
 };
 
 /** Surfaces shown on every harness page that belong to no single harness. */
@@ -46,7 +48,8 @@ export type SetupTargetId =
   | "kilo_rules"
   | "kilo_mcp"
   | "antigravity_rules"
-  | "antigravity_mcp";
+  | "antigravity_mcp"
+  | "grok_mcp";
 
 /**
  * Surfaces gated by each target toggle. Mirrors `agent_targets::target_surfaces` in the backend.
@@ -71,14 +74,16 @@ export const TARGET_SURFACES: Record<SetupTargetId, readonly SetupSurfaceId[]> =
   kilo_mcp: ["kilo_mcp"],
   antigravity_rules: ["antigravity_rules"],
   antigravity_mcp: ["antigravity_mcp"],
+  grok_mcp: ["grok_mcp"],
 };
 
 /**
  * Targets that start OFF: `codex_config` rewrites the user's Codex approval/sandbox posture, `claude_config` changes
  * how Claude Code attributes commits and pull requests in `~/.claude/settings.json`, `kilo_mcp` edits Kilo's main
- * config file, which may hold provider keys, and `antigravity_mcp` is opt-in like Kilo's.
+ * config file, which may hold provider keys, `antigravity_mcp` is opt-in like Kilo's, and `grok_mcp` edits
+ * `~/.grok/config.toml`, which may hold `api_key`.
  */
-const DEFAULT_DISABLED_TARGET_IDS: readonly SetupTargetId[] = ["codex_config", "claude_config", "kilo_mcp", "antigravity_mcp"];
+const DEFAULT_DISABLED_TARGET_IDS: readonly SetupTargetId[] = ["codex_config", "claude_config", "kilo_mcp", "antigravity_mcp", "grok_mcp"];
 
 /** Target ids in backend registry order (`agent_targets::targets`), which settings normalize to. */
 const TARGET_IDS_REGISTRY_ORDER: readonly SetupTargetId[] = [
@@ -100,6 +105,7 @@ const TARGET_IDS_REGISTRY_ORDER: readonly SetupTargetId[] = [
   "kilo_mcp",
   "antigravity_rules",
   "antigravity_mcp",
+  "grok_mcp",
 ];
 
 /** Mirrors `agent_targets::default_enabled_ids`. */
@@ -166,15 +172,16 @@ export const HARNESS_LABELS: Record<InstallAgent, string> = {
   pi: "Pi",
   kilo: "Kilo",
   antigravity: "Antigravity",
+  grok: "Grok",
 };
 
 /** Tab order of the harness pages. The light tier comes after Claude, so tabs 1-5 keep their numbers. */
-export const HARNESS_NAV_ORDER: InstallAgent[] = ["codex", "opencode", "cursor", "claude", "copilot", "pi", "kilo", "antigravity"];
+export const HARNESS_NAV_ORDER: InstallAgent[] = ["codex", "opencode", "cursor", "claude", "copilot", "pi", "kilo", "antigravity", "grok"];
 
 /** The harnesses on for a fresh install and for a settings file that names none. Mirrors `HarnessId::DEFAULT_ON`. */
 export const DEFAULT_ENABLED_HARNESS_IDS: readonly InstallAgent[] = CENTRAL_AGENTS;
 
-/** Whether `harness` is in the light tier (Copilot, Pi, Kilo, Antigravity): one shared page, health loaded by `get_light_runtime_health`. */
+/** Whether `harness` is in the light tier (Copilot, Pi, Kilo, Antigravity, Grok): one shared page, health loaded by `get_light_runtime_health`. */
 export function isLightAgent(harness: InstallAgent): harness is LightAgent {
   return (LIGHT_AGENTS as readonly string[]).includes(harness);
 }

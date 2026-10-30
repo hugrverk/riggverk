@@ -1,8 +1,8 @@
-//! The light tier: GitHub Copilot, Pi, Kilo Code and Google Antigravity.
+//! The light tier: GitHub Copilot, Pi, Kilo Code, Google Antigravity and Grok Build.
 //!
 //! A light harness gets the shared skills (through the folders it reads, see
-//! [`crate::skill_roots`]), one managed rules block, one managed Playwright MCP entry and a
-//! runtime health row set. Install facts
+//! [`crate::skill_roots`]), one managed rules block (or none of its own, when it reads a central
+//! harness's rules file), one managed Playwright MCP entry and a runtime health row set. Install facts
 //! that are data live in
 //! `resources/default-workspace/metadata/light-harnesses.json`. That file is embedded at build time
 //! and never read from the runtime workspace, so nothing the user edits can redirect what the app
@@ -76,7 +76,13 @@ struct RawDescriptor {
 struct RawHarness {
     label: String,
     cli: RawCli,
-    rules: RawRules,
+    /// The harness's own rules file. Exactly one of `rules` and `shared_rules` is set.
+    #[serde(default)]
+    rules: Option<RawRules>,
+    /// A central harness whose managed rules file this harness reads instead (`claude`): the app
+    /// writes no rules file for it.
+    #[serde(default)]
+    shared_rules: Option<String>,
     mcp: RawMcp,
 }
 
@@ -122,6 +128,9 @@ struct RawRules {
 struct RawMcp {
     /// The MCP file below the home directory (below `.config/` when `xdg_config_home`).
     target_rel: String,
+    /// `json` (the default: strict JSON) or `toml` (edited in place, see [`crate::light_mcp`]).
+    #[serde(default)]
+    format: McpFormat,
     /// Other files the harness reads as well, in the order the app prefers them when the file
     /// above does not exist.
     #[serde(default)]
@@ -158,10 +167,24 @@ pub struct LightHarness {
     pub label: String,
     /// The CLI program name looked up on `PATH`; the only call made to it is `--version`.
     pub cli_program: String,
-    /// The managed rules block.
-    pub rules: LightRules,
+    /// The managed rules block; `None` for a harness that reads [`Self::shared_rules`] instead.
+    pub rules: Option<LightRules>,
+    /// The central harness whose managed rules file this harness reads; it has no rules surface
+    /// of its own. Set exactly when `rules` is `None`.
+    pub shared_rules: Option<HarnessId>,
     /// The managed Playwright MCP entry.
     pub mcp: LightMcp,
+}
+
+/// How an MCP file is read and written.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum McpFormat {
+    /// Strict JSON, rewritten whole with the user's keys kept.
+    #[default]
+    Json,
+    /// TOML, edited in place: only the managed table changes.
+    Toml,
 }
 
 /// The managed MCP entry of a light harness: which file holds it, under which keys, and what the
@@ -180,6 +203,7 @@ pub struct LightMcp {
     pub alt_target_rel: Vec<String>,
     pub root_key: String,
     pub entry_key: String,
+    pub format: McpFormat,
     pub default_enabled: bool,
     pub xdg_config_home: bool,
     pub private_dir: bool,
@@ -248,13 +272,15 @@ impl LightHarnessId {
         descriptor(self.0)
     }
 
-    /// The rules block of the harness, with the same caveat as [`Self::descriptor`].
+    /// The rules block of the harness: `None` for one that reads a central harness's rules file,
+    /// and with the same caveat as [`Self::descriptor`].
     pub fn rules(self) -> Option<&'static LightRules> {
-        self.descriptor().map(|harness| &harness.rules)
+        self.descriptor().and_then(|harness| harness.rules.as_ref())
     }
 
-    /// The setup surface that owns the harness's rules file. `parse` refuses a descriptor for a
-    /// light harness that has none, so the fallback is unreachable in a build whose tests pass.
+    /// The setup surface that owns the harness's rules file. `parse` pairs every rules section
+    /// with a rules surface, and only a harness with one is named by a rules artifact, so the
+    /// fallback is unreachable in a build whose tests pass.
     pub fn rules_surface(self) -> SetupSurfaceId {
         SetupSurfaceId::light_rules(self.0).unwrap_or(SetupSurfaceId::WorkspaceBundle)
     }
@@ -624,17 +650,19 @@ fn is_plain_note(note: &str) -> bool {
         && note.chars().all(|c| c.is_ascii_graphic() || c == ' ')
 }
 
-/// A relative path of a JSON file inside a folder of the harness (`<folder>/<name>.json[c]`) that
-/// is neither a file the app never writes nor inside the folder of a central harness.
-fn parse_mcp_file(key: &str, field: &str, rel: &str) -> Result<(), String> {
+/// A relative path of a file of `format` inside a folder of the harness (`<folder>/<name>.json[c]`,
+/// `<folder>/<name>.toml`) that is neither a file the app never writes nor inside the folder of a
+/// central harness.
+fn parse_mcp_file(key: &str, field: &str, rel: &str, format: McpFormat) -> Result<(), String> {
     let parts: Vec<&str> = rel.split('/').collect();
     let file = parts.last().copied().unwrap_or_default();
-    if !is_plain_rel(rel)
-        || parts.len() < 2
-        || !(file.ends_with(".json") || file.ends_with(".jsonc"))
-    {
+    let typed = match format {
+        McpFormat::Json => file.ends_with(".json") || file.ends_with(".jsonc"),
+        McpFormat::Toml => file.ends_with(".toml"),
+    };
+    if !is_plain_rel(rel) || parts.len() < 2 || !typed {
         return Err(format!(
-            "{key}: mcp.{field} must be a JSON file inside a folder of the harness"
+            "{key}: mcp.{field} must be a file of its format inside a folder of the harness"
         ));
     }
     if DENIED_FILE_NAMES.contains(&file)
@@ -659,7 +687,7 @@ fn parse_mcp_file(key: &str, field: &str, rel: &str) -> Result<(), String> {
 
 fn parse_mcp(id: HarnessId, raw: RawMcp) -> Result<LightMcp, String> {
     let key = id.as_str();
-    parse_mcp_file(key, "target_rel", &raw.target_rel)?;
+    parse_mcp_file(key, "target_rel", &raw.target_rel, raw.format)?;
     let folder = raw
         .target_rel
         .rsplit_once('/')
@@ -671,7 +699,7 @@ fn parse_mcp(id: HarnessId, raw: RawMcp) -> Result<LightMcp, String> {
     }
     let mut files = vec![raw.target_rel.as_str()];
     for rel in &raw.alt_target_rel {
-        parse_mcp_file(key, "alt_target_rel", rel)?;
+        parse_mcp_file(key, "alt_target_rel", rel, raw.format)?;
         if rel.rsplit_once('/').map(|(alt_folder, _)| alt_folder) != Some(folder)
             || files.contains(&rel.as_str())
         {
@@ -746,6 +774,7 @@ fn parse_mcp(id: HarnessId, raw: RawMcp) -> Result<LightMcp, String> {
         alt_target_rel: raw.alt_target_rel,
         root_key: raw.root_key,
         entry_key: raw.entry_key,
+        format: raw.format,
         default_enabled: raw.default_enabled,
         xdg_config_home: raw.xdg_config_home,
         private_dir: raw.private_dir,
@@ -754,6 +783,41 @@ fn parse_mcp(id: HarnessId, raw: RawMcp) -> Result<LightMcp, String> {
         notes: raw.notes,
         surface,
     })
+}
+
+/// The rules file of a central harness that a light harness reads instead of a file of its own.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SharedRulesFile {
+    pub harness: HarnessId,
+    /// The settings toggle of the file.
+    pub target_id: &'static str,
+    /// The file as people know it.
+    pub path: &'static str,
+    /// The harness's name in messages.
+    pub label: &'static str,
+}
+
+/// The central rules files a light harness can share. Only Claude Code's so far: Grok Build reads
+/// `~/.claude/CLAUDE.md` with its Claude compatibility, which is on by default.
+const SHARED_RULES: &[SharedRulesFile] = &[SharedRulesFile {
+    harness: HarnessId::Claude,
+    target_id: "claude_rules",
+    path: "~/.claude/CLAUDE.md",
+    label: "Claude Code",
+}];
+
+/// The central harness `shared_rules` names.
+fn parse_shared_rules(key: &str, shared: &str) -> Result<HarnessId, String> {
+    SHARED_RULES
+        .iter()
+        .map(|file| file.harness)
+        .find(|id| id.as_str() == shared)
+        .ok_or_else(|| format!("{key}: shared_rules does not name a central harness with rules"))
+}
+
+/// The rules file of `central`, when a light harness can share it.
+pub fn shared_rules_file(central: HarnessId) -> Option<&'static SharedRulesFile> {
+    SHARED_RULES.iter().find(|file| file.harness == central)
 }
 
 /// Parses and validates a descriptor. The result has one entry per light [`HarnessId`], in
@@ -782,13 +846,26 @@ fn parse(text: &str) -> Result<Vec<LightHarness>, String> {
         if !is_bare_program_name(&harness.cli.program) {
             return Err(format!("{key}: cli.program is not a bare program name"));
         }
+        let (rules, shared_rules) = match (harness.rules, harness.shared_rules) {
+            (Some(rules), None) => (Some(parse_rules(id, rules)?), None),
+            (None, Some(shared)) => (None, Some(parse_shared_rules(&key, &shared)?)),
+            _ => {
+                return Err(format!(
+                    "{key}: exactly one of rules and shared_rules must be set"
+                ))
+            }
+        };
+        if rules.is_none() && SetupSurfaceId::light_rules(id).is_some() {
+            return Err(format!("{key}: a harness with a rules surface needs rules"));
+        }
         by_id.insert(
             id.as_str(),
             LightHarness {
                 id,
                 label: harness.label,
                 cli_program: harness.cli.program,
-                rules: parse_rules(id, harness.rules)?,
+                rules,
+                shared_rules,
                 mcp: parse_mcp(id, harness.mcp)?,
             },
         );
@@ -809,13 +886,14 @@ fn parse(text: &str) -> Result<Vec<LightHarness>, String> {
     let mut adapters = HashSet::new();
     let mut templates = HashSet::new();
     for harness in &ordered {
-        if !files.insert(harness.rules.target_rel.as_str())
-            || !adapters.insert(harness.rules.adapter.as_str())
-        {
-            return Err(format!(
-                "{}: rules.target_rel or rules.adapter is used by another harness",
-                harness.id.as_str()
-            ));
+        if let Some(rules) = &harness.rules {
+            if !files.insert(rules.target_rel.as_str()) || !adapters.insert(rules.adapter.as_str())
+            {
+                return Err(format!(
+                    "{}: rules.target_rel or rules.adapter is used by another harness",
+                    harness.id.as_str()
+                ));
+            }
         }
         let mcp = &harness.mcp;
         if !templates.insert(mcp.template_rel.as_str())
@@ -849,11 +927,12 @@ pub fn display_name(id: HarnessId) -> &'static str {
     descriptor(id).map_or(id.as_str(), |harness| harness.label.as_str())
 }
 
-/// The light harness whose rules toggle is `target_id`.
-pub fn rules_for_target(target_id: &str) -> Option<&'static LightHarness> {
+/// The rules block whose toggle is `target_id`.
+pub fn rules_for_target(target_id: &str) -> Option<&'static LightRules> {
     light_harnesses()
         .iter()
-        .find(|harness| harness.rules.target_id == target_id)
+        .filter_map(|harness| harness.rules.as_ref())
+        .find(|rules| rules.target_id == target_id)
 }
 
 /// The light harness whose MCP toggle is `target_id`.
@@ -876,7 +955,7 @@ mod tests {
     }
 
     fn rules_of(key: &str) -> &'static LightRules {
-        &descriptor(
+        descriptor(
             HarnessId::ALL
                 .iter()
                 .copied()
@@ -885,6 +964,8 @@ mod tests {
         )
         .expect("light harness")
         .rules
+        .as_ref()
+        .expect("own rules")
     }
 
     fn temp(label: &str) -> PathBuf {
@@ -914,6 +995,7 @@ mod tests {
                 (HarnessId::Pi, "Pi", "pi"),
                 (HarnessId::Kilo, "Kilo", "kilo"),
                 (HarnessId::Antigravity, "Antigravity", "agy"),
+                (HarnessId::Grok, "Grok", "grok"),
             ]
         );
         assert_eq!(light_harnesses(), harnesses.as_slice());
@@ -923,8 +1005,8 @@ mod tests {
     fn the_embedded_rules_sections_pin_every_target_the_app_writes() {
         let summary: Vec<_> = light_harnesses()
             .iter()
-            .map(|harness| {
-                let rules = &harness.rules;
+            .filter_map(|harness| harness.rules.as_ref())
+            .map(|rules| {
                 (
                     rules.target_id.as_str(),
                     rules.target_rel.as_str(),
@@ -1007,20 +1089,71 @@ mod tests {
         let resources =
             Path::new(env!("CARGO_MANIFEST_DIR")).join("../resources/default-workspace");
         for harness in light_harnesses() {
-            let entry = &adapters["harnesses"][&harness.rules.adapter];
+            let Some(rules) = &harness.rules else {
+                continue;
+            };
+            let entry = &adapters["harnesses"][&rules.adapter];
             assert_eq!(
                 entry["output"],
-                serde_json::json!(harness.rules.source_rel),
+                serde_json::json!(rules.source_rel),
                 "{}",
                 harness.id.as_str()
             );
             let appendix = entry["appendix"].as_str().expect("appendix path");
             assert!(resources.join(appendix).is_file(), "{appendix}");
             assert!(
-                resources.join(&harness.rules.source_rel).is_file(),
+                resources.join(&rules.source_rel).is_file(),
                 "{}",
-                harness.rules.source_rel
+                rules.source_rel
             );
+        }
+    }
+
+    #[test]
+    fn grok_reads_claude_codes_rules_file_and_has_no_rules_of_its_own() {
+        let grok = descriptor(HarnessId::Grok).expect("light harness");
+        assert_eq!(grok.rules, None);
+        assert_eq!(grok.shared_rules, Some(HarnessId::Claude));
+        assert_eq!(SetupSurfaceId::light_rules(HarnessId::Grok), None);
+        let file = shared_rules_file(HarnessId::Claude).expect("Claude's rules file");
+        assert_eq!(
+            (file.target_id, file.path, file.label),
+            ("claude_rules", "~/.claude/CLAUDE.md", "Claude Code")
+        );
+        let grok_id = LightHarnessId::new(HarnessId::Grok).expect("light");
+        assert!(grok_id.rules().is_none());
+        assert!(rules_for_target("grok_rules").is_none());
+        // Every harness with rules still has them.
+        for id in [HarnessId::Copilot, HarnessId::Pi, HarnessId::Kilo] {
+            let harness = descriptor(id).expect("light harness");
+            assert!(harness.rules.is_some() && harness.shared_rules.is_none());
+        }
+    }
+
+    #[test]
+    fn rules_and_shared_rules_are_exclusive_and_shared_rules_names_a_known_file() {
+        // Both, or neither.
+        let mut value = valid();
+        value["harnesses"]["grok"]["rules"] = valid()["harnesses"]["pi"]["rules"].clone();
+        assert!(parse_value(&value).unwrap_err().contains("exactly one"));
+        let mut value = valid();
+        value["harnesses"]["grok"]
+            .as_object_mut()
+            .unwrap()
+            .remove("shared_rules");
+        assert!(parse_value(&value).unwrap_err().contains("exactly one"));
+        // A harness with a rules surface cannot give its rules away.
+        let mut value = valid();
+        value["harnesses"]["pi"]
+            .as_object_mut()
+            .unwrap()
+            .remove("rules");
+        value["harnesses"]["pi"]["shared_rules"] = serde_json::json!("claude");
+        assert!(parse_value(&value).unwrap_err().contains("rules surface"));
+        for shared in ["codex", "cursor", "kilo", "grok", "Claude", "", "../claude"] {
+            let mut value = valid();
+            value["harnesses"]["grok"]["shared_rules"] = serde_json::json!(shared);
+            assert!(parse_value(&value).is_err(), "{shared:?}");
         }
     }
 
@@ -1032,8 +1165,8 @@ mod tests {
         assert_eq!(display_name(HarnessId::Copilot), "Copilot");
         assert_eq!(display_name(HarnessId::Claude), "claude");
         assert_eq!(
-            rules_for_target("pi_rules").map(|harness| harness.id),
-            Some(HarnessId::Pi)
+            rules_for_target("pi_rules").map(|rules| rules.surface),
+            Some(SetupSurfaceId::PiRules)
         );
         assert!(rules_for_target("claude_rules").is_none());
     }
@@ -1159,7 +1292,7 @@ mod tests {
         let mut value = valid();
         value["harnesses"]["pi"]["rules"]["target_rel"] = serde_json::json!(".pi/agent/RULES.md");
         let pi = &parse_value(&value).expect("another plain file")[1];
-        assert_eq!(pi.rules.file_label, "RULES.md");
+        assert_eq!(pi.rules.as_ref().unwrap().file_label, "RULES.md");
     }
 
     #[test]
@@ -1473,10 +1606,26 @@ mod tests {
                     false,
                     SetupSurfaceId::AntigravityMcp
                 ),
+                (
+                    "grok_mcp",
+                    ".grok/config.toml",
+                    vec![],
+                    "mcp_servers",
+                    "playwright",
+                    "templates/mcp/grok.playwright.json",
+                    false,
+                    false,
+                    false,
+                    SetupSurfaceId::GrokMcp
+                ),
             ]
         );
         assert!(mcp_of("antigravity").notes.is_empty());
         assert!(mcp_of("antigravity").shadowed_by_siblings.is_empty());
+        assert_eq!(mcp_of("grok").format, McpFormat::Toml);
+        for key in ["copilot", "pi", "kilo", "antigravity"] {
+            assert_eq!(mcp_of(key).format, McpFormat::Json, "{key}");
+        }
         assert_eq!(
             mcp_for_target("kilo_mcp").map(|harness| harness.id),
             Some(HarnessId::Kilo)
@@ -1550,6 +1699,35 @@ mod tests {
             value["harnesses"]["pi"]["mcp"]["target_rel"] = serde_json::json!(rel);
             assert!(parse_value(&value).is_ok(), "{rel:?}");
         }
+    }
+
+    #[test]
+    fn a_toml_mcp_file_must_be_a_toml_file_the_app_may_write() {
+        for rel in [
+            ".grok/config.json",
+            ".grok/mcp.json",
+            ".grok/config",
+            "config.toml",
+            ".codex/config.toml",
+            ".grok/session-state/config.toml",
+            "../config.toml",
+        ] {
+            let mut value = valid();
+            value["harnesses"]["grok"]["mcp"]["target_rel"] = serde_json::json!(rel);
+            assert!(parse_value(&value).is_err(), "{rel:?}");
+        }
+        // A JSON harness cannot name a TOML file, and the format is a closed set.
+        let mut value = valid();
+        value["harnesses"]["pi"]["mcp"]["target_rel"] = serde_json::json!(".pi/agent/mcp.toml");
+        assert!(parse_value(&value).is_err());
+        let mut value = valid();
+        value["harnesses"]["grok"]["mcp"]["format"] = serde_json::json!("yaml");
+        assert!(parse_value(&value).is_err());
+        // The template stays a JSON file of the bundle.
+        let mut value = valid();
+        value["harnesses"]["grok"]["mcp"]["template"] =
+            serde_json::json!("templates/mcp/grok.playwright.toml");
+        assert!(parse_value(&value).is_err());
     }
 
     #[test]
