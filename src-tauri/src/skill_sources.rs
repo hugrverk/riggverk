@@ -1195,6 +1195,10 @@ pub fn snapshot_record(workspace_root: &Path, backup_dir: &Path) -> Result<(), S
 
 /// Puts `pack-skills.json` back as [`snapshot_record`] saved it. A transaction without a snapshot
 /// (made by an earlier version) restores nothing.
+///
+/// A pack forgotten since (outside any transaction) stays forgotten when the snapshot still
+/// records it: an undo of an earlier install must not take that choice back. A pack the snapshot
+/// does not record has nothing left to forget.
 pub fn restore_record(workspace_root: &Path, backup_dir: &Path) -> Result<(), String> {
     let path = record_path(workspace_root);
     let saved = backup_dir.join(RECORD_BACKUP);
@@ -1202,7 +1206,24 @@ pub fn restore_record(workspace_root: &Path, backup_dir: &Path) -> Result<(), St
         return Err("refusing a symlinked pack skills backup".to_string());
     }
     if saved.is_file() {
-        let raw = fs::read(&saved).map_err(|e| format!("read pack skills backup: {e}"))?;
+        let mut raw = fs::read(&saved).map_err(|e| format!("read pack skills backup: {e}"))?;
+        if let (Stored::Usable(live), Ok(mut document)) = (
+            read_stored(workspace_root),
+            serde_json::from_slice::<RecordDocument>(&raw),
+        ) {
+            let later: Vec<String> = live
+                .forgotten
+                .into_iter()
+                .filter(|pack| {
+                    document.packs.contains_key(pack) && !document.forgotten.contains(pack)
+                })
+                .collect();
+            if document.schema_version == SCHEMA_VERSION && !later.is_empty() {
+                document.forgotten.extend(later);
+                raw = serde_json::to_vec_pretty(&document)
+                    .map_err(|error| format!("serialize pack skills: {error}"))?;
+            }
+        }
         crate::managed_state::ensure_data_folder(workspace_root)?;
         return crate::safe_filesystem::write_regular_file_atomic(&path, &raw, workspace_root)
             .map_err(|e| format!("restore pack skills: {e}"));

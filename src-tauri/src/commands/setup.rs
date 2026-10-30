@@ -385,6 +385,22 @@ fn restore_previous_managed_state(
     Ok(())
 }
 
+/// Puts the managed state and `pack-skills.json` back as they were before the transaction. Both
+/// writes replace the whole file, so a retry after a failure repeats them safely. A newer completed
+/// transaction owns the managed state now; restoring this transaction's snapshot would erase its
+/// ownership records.
+fn restore_auxiliary_records(
+    manifest: &ArtifactTransactionManifest,
+    backup_dir: &Path,
+    workspace_root: &Path,
+) -> Result<(), String> {
+    if newer_completed_transaction(backup_dir, &manifest.workspace_key)?.is_some() {
+        return Ok(());
+    }
+    restore_previous_managed_state(manifest, backup_dir, workspace_root)?;
+    crate::skill_sources::restore_record(workspace_root, backup_dir)
+}
+
 /// Outcome of one persisted rollback pass.
 struct RollbackRun {
     rolled_back: Vec<String>,
@@ -595,16 +611,7 @@ fn run_persisted_rollback(
     }
     progress.report(ApplyPhase::Apply, total, Some(total), || None);
 
-    // A newer completed transaction owns the managed state now; restoring this
-    // transaction's snapshot would erase its ownership records.
-    let managed_state_restore =
-        match newer_completed_transaction(backup_dir, &manifest.workspace_key) {
-            Ok(Some(_)) => Ok(()),
-            Ok(None) => restore_previous_managed_state(manifest, backup_dir, workspace_root)
-                .and_then(|()| crate::skill_sources::restore_record(workspace_root, backup_dir)),
-            Err(e) => Err(e),
-        };
-    if let Err(error) = managed_state_restore {
+    if let Err(error) = restore_auxiliary_records(manifest, backup_dir, workspace_root) {
         errors.push(error);
         manifest.transaction_status = setup_transaction::TransactionStatus::RollbackFailed;
         let _ = persist_setup_manifest(
@@ -1622,6 +1629,10 @@ fn run_planned_artifacts(
         });
         manifest.operations[operation_index].apply_status =
             setup_transaction::ApplyStatus::InFlight;
+        // Durable before the write, so a crash before the post-apply digests are saved still
+        // leaves proof of what the app wrote.
+        manifest.operations[operation_index].expected_full_digest =
+            setup_transaction::expected_apply_full_digest(p, &ws_root, &home, &roots.sources);
         if let Err(e) = persist_setup_manifest(
             &manifest_path,
             &mut manifest,
@@ -2174,7 +2185,45 @@ pub fn rollback_transaction(
                     ),
                 };
             }
+            let _mutation_guard =
+                match crate::setup_mutation_guard::try_acquire_setup_mutation_guard() {
+                    Ok(guard) => guard,
+                    Err(e) => {
+                        return SetupResult {
+                            success: false,
+                            transaction_id: transaction_id.to_string(),
+                            applied: vec![],
+                            failed: vec![e.clone()],
+                            rolled_back: vec![],
+                            manual_steps: vec![],
+                            message: e,
+                        };
+                    }
+                };
             let mut manifest_mut = manifest;
+            // Every artifact is back, but the records may not be: the pass that ended
+            // rollback-failed may have failed only on them, so they are restored again first.
+            if let Err(error) = restore_auxiliary_records(&manifest_mut, &backup_dir, &ws_root) {
+                let mut failed = vec![error];
+                if let Err(persist_err) = persist_setup_manifest(
+                    &manifest_path,
+                    &mut manifest_mut,
+                    setup_transaction::TransactionStatus::RollbackFailed,
+                    &backup_dir,
+                ) {
+                    failed.push(persist_err);
+                }
+                return SetupResult {
+                    success: false,
+                    transaction_id: transaction_id.to_string(),
+                    applied: vec![],
+                    failed,
+                    rolled_back: plan.already_restored,
+                    manual_steps: vec![],
+                    message: "Rollback could not restore the managed state or the pack skills list"
+                        .to_string(),
+                };
+            }
             if let Some(persist_err) =
                 finalize_persisted_rollback(&manifest_path, &mut manifest_mut, &backup_dir)
             {
@@ -4602,6 +4651,73 @@ mod tests {
         let _ = fs::remove_dir_all(&base);
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn retrying_a_rollback_that_failed_only_on_the_pack_record_restores_the_record() {
+        let _guard = guard::lock();
+        let _restore = guard::EnvRestore::capture();
+        let (base, _home, ws, txn_id) = rollback_test_fixture();
+        let backup_dir = seed_two_artifact_transaction(&txn_id);
+        let record =
+            crate::workspace_layout::state_file(&ws, crate::skill_sources::PACK_SKILLS_FILE);
+        fs::create_dir_all(record.parent().unwrap()).unwrap();
+        fs::write(&record, "written by the transaction").unwrap();
+        // The snapshot cannot be read at first: the rollback restores every artifact, then
+        // fails on the record.
+        let snapshot = backup_dir.join("pack-skills.previous.json");
+        std::os::unix::fs::symlink(base.join("elsewhere"), &snapshot).unwrap();
+        let first = rollback_transaction(&txn_id, false, &mut ProgressReporter::silent());
+        assert!(!first.success);
+        let manifest = read_manifest(&txn_id);
+        assert_eq!(
+            manifest.transaction_status,
+            setup_transaction::TransactionStatus::RollbackFailed
+        );
+        assert!(manifest
+            .operations
+            .iter()
+            .all(|op| op.rollback_status == setup_transaction::RollbackStatus::Restored));
+
+        fs::remove_file(&snapshot).unwrap();
+        fs::write(&snapshot, "before the transaction").unwrap();
+        let retry = rollback_transaction(&txn_id, false, &mut ProgressReporter::silent());
+
+        assert!(retry.success, "{} {:?}", retry.message, retry.failed);
+        assert_eq!(
+            fs::read_to_string(&record).unwrap(),
+            "before the transaction"
+        );
+        assert_eq!(
+            read_manifest(&txn_id).transaction_status,
+            setup_transaction::TransactionStatus::RolledBack
+        );
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_rollback_retry_that_still_cannot_restore_the_records_stays_rollback_failed() {
+        let _guard = guard::lock();
+        let _restore = guard::EnvRestore::capture();
+        let (base, _home, _ws, txn_id) = rollback_test_fixture();
+        let backup_dir = seed_two_artifact_transaction(&txn_id);
+        std::os::unix::fs::symlink(
+            base.join("elsewhere"),
+            backup_dir.join("pack-skills.previous.json"),
+        )
+        .unwrap();
+        assert!(!rollback_transaction(&txn_id, false, &mut ProgressReporter::silent()).success);
+
+        let retry = rollback_transaction(&txn_id, false, &mut ProgressReporter::silent());
+
+        assert!(!retry.success);
+        assert_eq!(
+            read_manifest(&txn_id).transaction_status,
+            setup_transaction::TransactionStatus::RollbackFailed
+        );
+        let _ = fs::remove_dir_all(&base);
+    }
+
     #[test]
     fn dry_run_in_flight_performs_zero_manifest_writes() {
         let _guard = guard::lock();
@@ -4838,6 +4954,155 @@ mod tests {
             setup_transaction::TransactionStatus::RollbackFailed
         );
         let _ = fs::remove_dir_all(&base);
+    }
+
+    /// Rewrites a finished transaction as a crash after its last write and before its post-apply
+    /// digests were saved would have left it. `keep_expected` keeps the digest recorded before the
+    /// write; without it the manifest reads as one from an older version.
+    fn mark_crashed_before_digests(env: &TempSetupEnv, transaction_id: &str, keep_expected: bool) {
+        let path = env.setup_root().join(transaction_id).join("manifest.json");
+        let mut manifest: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&path).expect("manifest")).expect("json");
+        manifest["transaction_status"] = serde_json::json!("applying");
+        for op in manifest["operations"].as_array_mut().expect("operations") {
+            let op = op.as_object_mut().expect("operation");
+            assert!(op.contains_key("expected_full_digest"), "{op:?}");
+            op.insert("apply_status".into(), serde_json::json!("in_flight"));
+            op.insert("validation_status".into(), serde_json::json!("pending"));
+            op.remove("post_apply_digest");
+            op.remove("post_apply_full_digest");
+            if !keep_expected {
+                op.remove("expected_full_digest");
+            }
+        }
+        fs::write(&path, manifest.to_string()).expect("write manifest");
+    }
+
+    /// Applies the Codex rules file into an empty Codex folder: the apply creates it.
+    fn apply_created_codex_rules(env: &TempSetupEnv) -> (String, PathBuf) {
+        let planned = env.plan(&[SetupSurfaceId::CodexRules]);
+        let rules = planned
+            .iter()
+            .find(|p| p.artifact == ArtifactId::CodexRules)
+            .expect("codex rules planned");
+        assert_eq!(
+            rules.rollback_action,
+            setup_transaction::RollbackAction::RemoveCreatedFile
+        );
+        let result =
+            apply_planned_artifacts(&planned, vec![], None, &mut ProgressReporter::silent());
+        assert!(result.success, "apply: {}", result.message);
+        (result.transaction_id, env.home.join(".codex/AGENTS.md"))
+    }
+
+    #[test]
+    fn reconcile_keeps_user_additions_to_a_file_created_before_a_crash() {
+        for keep_expected in [true, false] {
+            let env = TempSetupEnv::new("crash-created-additions");
+            let (transaction_id, rules) = apply_created_codex_rules(&env);
+            mark_crashed_before_digests(&env, &transaction_id, keep_expected);
+            // The user adds their own text around the block before the next launch.
+            let mut text = fs::read_to_string(&rules).expect("rules");
+            text.push_str("\nMy own notes\n");
+            fs::write(&rules, &text).expect("user addition");
+
+            reconcile_interrupted_setup_transactions(&env.ws, &env.home)
+                .expect("a kept file must not block setup");
+
+            assert_eq!(
+                fs::read_to_string(&rules).expect("the created file is kept"),
+                text,
+                "keep_expected={keep_expected}"
+            );
+            let manifest: ArtifactTransactionManifest = serde_json::from_str(
+                &fs::read_to_string(env.setup_root().join(&transaction_id).join("manifest.json"))
+                    .expect("manifest"),
+            )
+            .expect("parse");
+            assert_eq!(
+                manifest.transaction_status,
+                setup_transaction::TransactionStatus::RollbackFailed
+            );
+        }
+    }
+
+    #[test]
+    fn reconcile_removes_a_file_created_before_a_crash_when_it_is_exactly_the_output() {
+        let env = TempSetupEnv::new("crash-created-untouched");
+        let (transaction_id, rules) = apply_created_codex_rules(&env);
+        mark_crashed_before_digests(&env, &transaction_id, true);
+
+        reconcile_interrupted_setup_transactions(&env.ws, &env.home).expect("reconcile");
+
+        assert!(!rules.exists(), "the file the app created is removed");
+    }
+
+    #[test]
+    fn explicit_rollback_of_a_crashed_apply_removes_the_file_once_it_is_the_output_again() {
+        let env = TempSetupEnv::new("crash-explicit-rollback");
+        let (transaction_id, rules) = apply_created_codex_rules(&env);
+        mark_crashed_before_digests(&env, &transaction_id, true);
+        let output = fs::read_to_string(&rules).expect("rules");
+        // The reconcile keeps the file while the user's addition is in it.
+        fs::write(&rules, format!("{output}\nMy own notes\n")).expect("user addition");
+        reconcile_interrupted_setup_transactions(&env.ws, &env.home).expect("reconcile");
+        assert!(rules.is_file());
+
+        // The user takes the addition out again and asks for the undo.
+        fs::write(&rules, &output).expect("addition removed");
+        let result = rollback_transaction(&transaction_id, false, &mut ProgressReporter::silent());
+
+        assert!(result.success, "{} {:?}", result.message, result.failed);
+        assert!(!rules.exists(), "the file the app created is removed");
+    }
+
+    #[test]
+    fn the_digest_recorded_before_each_write_is_the_written_file() {
+        let env = TempSetupEnv::new("expected-digest");
+        let mut settings = crate::settings::load();
+        settings
+            .enabled_target_ids
+            .push("claude_config".to_string());
+        crate::settings::save_with_revision_check(settings, None).expect("settings");
+        // A settings.json to merge into, beside files created from nothing.
+        fs::create_dir_all(env.home.join(".claude")).expect("claude folder");
+        fs::write(
+            env.home.join(".claude/settings.json"),
+            "{\n  \"model\": \"opus\"\n}\n",
+        )
+        .expect("settings.json");
+        let planned = env.plan(&[
+            SetupSurfaceId::CodexRules,
+            SetupSurfaceId::ClaudeConfig,
+            SetupSurfaceId::CodexAgents,
+        ]);
+        let kinds: Vec<_> = planned.iter().map(|p| (&p.artifact, p.kind)).collect();
+        assert!(
+            kinds.contains(&(&ArtifactId::ClaudeSettings, OperationKind::Update)),
+            "{kinds:?}"
+        );
+        assert!(kinds.contains(&(&ArtifactId::CodexRules, OperationKind::Create)));
+        let result =
+            apply_planned_artifacts(&planned, vec![], None, &mut ProgressReporter::silent());
+        assert!(result.success, "apply: {}", result.message);
+        let manifest: ArtifactTransactionManifest = serde_json::from_str(
+            &fs::read_to_string(
+                env.setup_root()
+                    .join(&result.transaction_id)
+                    .join("manifest.json"),
+            )
+            .expect("manifest"),
+        )
+        .expect("parse");
+        assert!(manifest.operations.len() > 2);
+        for op in &manifest.operations {
+            assert!(op.expected_full_digest.is_some(), "{:?}", op.artifact);
+            assert_eq!(
+                op.expected_full_digest, op.post_apply_full_digest,
+                "{:?}",
+                op.artifact
+            );
+        }
     }
 
     /// Marks a seeded transaction as completed, keeping only operations on `artifacts`.
