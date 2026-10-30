@@ -64,6 +64,7 @@ export interface FlowEdge {
 export interface FlowModel {
   sources: FlowSource[];
   agents: FlowAgent[];
+  offGroup: { agents: FlowAgent[] } | null;
   edges: FlowEdge[];
 }
 
@@ -230,7 +231,10 @@ export function buildFlowModel(input: {
   lastUpdate: SetupHistoryEntry | null;
 }): FlowModel {
   const { cards, sources: data, personalDocs, lastUpdate } = input;
-  const agents = HARNESS_NAV_ORDER.map(harness => flowAgent(harness, cards.find(card => card.harness === harness)));
+  const allAgents = HARNESS_NAV_ORDER.map(harness => flowAgent(harness, cards.find(card => card.harness === harness)));
+  const agents = allAgents.filter(agent => agent.status !== "off");
+  const offAgents = allAgents.filter(agent => agent.status === "off");
+  const offGroup = offAgents.length ? { agents: offAgents } : null;
   const active = agents.filter(agent => agent.status === "active");
   const written = agentsWritten(lastUpdate);
 
@@ -298,12 +302,12 @@ export function buildFlowModel(input: {
     }
   }
 
-  return { sources, agents, edges };
+  return { sources, agents, offGroup, edges };
 }
 
 /* ---- selection and highlight ---- */
 
-export type FlowRef = { type: "source" | "agent" | "edge"; id: string };
+export type FlowRef = { type: "source" | "agent" | "edge" | "off"; id: string };
 
 export function sameRef(a: FlowRef | null, b: FlowRef | null): boolean {
   return a === b || (!!a && !!b && a.type === b.type && a.id === b.id);
@@ -313,7 +317,9 @@ export function sameRef(a: FlowRef | null, b: FlowRef | null): boolean {
 export function resolveRef(model: FlowModel, ref: FlowRef | null): FlowRef | null {
   if (!ref) return null;
   const found =
-    ref.type === "source"
+    ref.type === "off"
+      ? ref.id === "off" && model.offGroup !== null
+      : ref.type === "source"
       ? model.sources.some(source => source.id === ref.id)
       : ref.type === "agent"
         ? model.agents.some(agent => agent.id === ref.id)
@@ -325,6 +331,7 @@ export interface FlowHighlight {
   sources: ReadonlySet<string>;
   agents: ReadonlySet<InstallAgent>;
   edges: ReadonlySet<string>;
+  off: boolean;
 }
 
 /** What lights up for a node or a curve: the node itself, its curves and the nodes at their other ends. */
@@ -338,7 +345,10 @@ export function highlightOf(model: FlowModel, ref: FlowRef | null): FlowHighligh
     sources.add(edge.source);
     agents.add(edge.agent);
   };
-  if (ref.type === "edge") {
+  const off = !!model.offGroup && (ref.type === "off" || (ref.type === "source" && ref.id === BASE_SOURCE_ID));
+  if (ref.type === "off") {
+    sources.add(BASE_SOURCE_ID);
+  } else if (ref.type === "edge") {
     const edge = model.edges.find(entry => entry.id === ref.id);
     if (edge) take(edge);
   } else {
@@ -346,7 +356,7 @@ export function highlightOf(model: FlowModel, ref: FlowRef | null): FlowHighligh
     else agents.add(ref.id as InstallAgent);
     for (const edge of model.edges) if (edge.source === ref.id || edge.agent === ref.id) take(edge);
   }
-  return { sources, agents, edges };
+  return { sources, agents, edges, off };
 }
 
 /** The agents a source reaches, by their curves; ghost curves do not count. */

@@ -107,27 +107,27 @@ describe("buildFlowModel sources and reach", () => {
     expect(model.sources[0]!.items.map(item => [item.key, item.n])).toEqual([["skills", 24], ["agents", 6], ["rules", 2]]);
   });
 
-  it("lists every agent, with the ones that are off dimmed", () => {
-    expect(model.agents.map(agent => [agent.id, agent.status])).toEqual([
-      ["codex", "active"],
-      ["opencode", "off"],
-      ["cursor", "active"],
-      ["claude", "active"],
-      ["copilot", "off"],
-      ["pi", "off"],
-      ["kilo", "off"],
-      ["antigravity", "off"],
-      ["grok", "off"],
-    ]);
-    expect(model.agents.find(agent => agent.id === "opencode")!.sub).toBe("off in Settings");
+  it("groups off agents in model order and removes their individual curves", () => {
+    expect(model.agents.map(agent => agent.id)).toEqual(["codex", "cursor", "claude"]);
+    expect(model.offGroup?.agents.map(agent => agent.id)).toEqual(["opencode", "copilot", "pi", "kilo", "antigravity", "grok"]);
+    expect(model.edges.filter(candidate => candidate.status === "ghost")).toHaveLength(0);
+    expect(resolveRef(model, { type: "agent", id: "pi" })).toBeNull();
   });
 
-  it("reaches every enabled agent from the base, and an agent that is off only by a ghost curve", () => {
+  it("omits the group when all harnesses are enabled", () => {
+    const harnesses: InstallAgent[] = ["codex", "opencode", "cursor", "claude", "copilot", "pi", "kilo", "antigravity", "grok"];
+    const all = buildFlowModel({ cards: cardsFor(CURRENT, harnesses), sources: SOURCES, personalDocs: null, lastUpdate: null });
+    expect(all.offGroup).toBeNull();
+    expect(resolveRef(all, { type: "off", id: "off" })).toBeNull();
+  });
+
+  it("highlights the group and base together", () => {
+    expect(highlightOf(model, { type: "off", id: "off" })).toMatchObject({ off: true, sources: new Set(["base"]) });
+    expect(highlightOf(model, { type: "source", id: "base" })?.off).toBe(true);
+  });
+
+  it("reaches enabled agents from the base", () => {
     expect(agentsReachedBy(model, "base").map(agent => agent.id)).toEqual(["codex", "cursor", "claude"]);
-    expect(edge(model, "base", "opencode")?.status).toBe("ghost");
-    // Only the base has a ghost curve: no pack or refinements reach an agent that is off.
-    expect(model.edges.filter(candidate => candidate.status === "ghost").every(candidate => candidate.source === "base")).toBe(true);
-    expect(edge(model, "pack:mine", "opencode")).toBeUndefined();
   });
 
   it("sends your refinements only to the agents whose rules file has some, with the line count", () => {

@@ -16,6 +16,8 @@ export interface FlowLayout {
   sourceY: Record<string, number>;
   agentY: Partial<Record<InstallAgent, number>>;
   curves: Record<string, FlowCurve>;
+  offY: number | null;
+  offCurve: FlowCurve | null;
 }
 
 export interface FlowCurve {
@@ -50,9 +52,10 @@ function centred(count: number, row: number, height: number): number[] {
 export function flowLayout(model: FlowModel, measured: number): FlowLayout {
   const width = Math.min(MAX_MAP_WIDTH, Math.max(MIN_MAP_WIDTH, Math.round(measured)));
   const sourceRow = model.sources.length > 5 ? 38 : 56;
-  const height = Math.max(model.agents.length * AGENT_ROW, model.sources.length * sourceRow) + PAD * 2;
+  const agentCount = model.agents.length + (model.offGroup ? 1 : 0);
+  const height = Math.max(agentCount * AGENT_ROW, model.sources.length * sourceRow) + PAD * 2;
   const sourceYs = centred(model.sources.length, sourceRow, height);
-  const agentYs = centred(model.agents.length, AGENT_ROW, height);
+  const agentYs = centred(agentCount, AGENT_ROW, height);
   const sourceY: Record<string, number> = {};
   model.sources.forEach((source, index) => (sourceY[source.id] = sourceYs[index]!));
   const agentY: Partial<Record<InstallAgent, number>> = {};
@@ -63,5 +66,7 @@ export function flowLayout(model: FlowModel, measured: number): FlowLayout {
   for (const edge of model.edges) {
     curves[edge.id] = cubic(sourceDot + 8, sourceY[edge.source]!, agentX, agentY[edge.agent]!);
   }
-  return { width, height, labelEnd: LABEL_END, sourceDot, agentX, agentIcon: agentX + AGENT_ICON_INSET, agentText: agentX + AGENT_TEXT_INSET, sourceY, agentY, curves };
+  const offY = model.offGroup ? agentYs[model.agents.length]! : null;
+  const offCurve = offY !== null ? cubic(sourceDot + 8, sourceY.base!, agentX, offY) : null;
+  return { offY, offCurve, width, height, labelEnd: LABEL_END, sourceDot, agentX, agentIcon: agentX + AGENT_ICON_INSET, agentText: agentX + AGENT_TEXT_INSET, sourceY, agentY, curves };
 }
