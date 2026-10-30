@@ -3094,8 +3094,10 @@ fn unrecorded_apply_restore_mode(
         return Ok(Some(RollbackRestoreMode::FullBackup));
     }
     if matches!(op.rollback_action, RollbackAction::RestoreManagedConfigFile) {
-        return Ok(artifact_matches_current_source_output(op, workspace_root, home)?
-            .then_some(RollbackRestoreMode::ManagedProjectionMerge));
+        return Ok(
+            artifact_matches_current_source_output(op, workspace_root, home)?
+                .then_some(RollbackRestoreMode::ManagedProjectionMerge),
+        );
     }
     if matches!(op.kind, OperationKind::Remove) {
         // A removal writes nothing: an absent file is all of its output.
@@ -3105,8 +3107,10 @@ fn unrecorded_apply_restore_mode(
     if op.expected_full_digest.is_some() || !managed_digest_covers_whole_file(&op.artifact) {
         return Ok(None);
     }
-    Ok(artifact_matches_current_source_output(op, workspace_root, home)?
-        .then_some(RollbackRestoreMode::FullBackup))
+    Ok(
+        artifact_matches_current_source_output(op, workspace_root, home)?
+            .then_some(RollbackRestoreMode::FullBackup),
+    )
 }
 
 /// Whether the managed projection of the artifact is what the current source makes of it: the

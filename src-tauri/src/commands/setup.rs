@@ -4622,10 +4622,8 @@ mod tests {
         let _restore = guard::EnvRestore::capture();
         let (base, _home, ws, txn_id) = rollback_test_fixture();
         let backup_dir = seed_two_artifact_transaction(&txn_id);
-        let record = crate::workspace_layout::state_file(
-            &ws,
-            crate::skill_sources::PACK_SKILLS_FILE,
-        );
+        let record =
+            crate::workspace_layout::state_file(&ws, crate::skill_sources::PACK_SKILLS_FILE);
         fs::create_dir_all(record.parent().unwrap()).unwrap();
         fs::write(&record, "written by the transaction").unwrap();
         // The snapshot cannot be read at first: the rollback restores every artifact, then
@@ -4981,12 +4979,8 @@ mod tests {
                 "keep_expected={keep_expected}"
             );
             let manifest: ArtifactTransactionManifest = serde_json::from_str(
-                &fs::read_to_string(
-                    env.setup_root()
-                        .join(&transaction_id)
-                        .join("manifest.json"),
-                )
-                .expect("manifest"),
+                &fs::read_to_string(env.setup_root().join(&transaction_id).join("manifest.json"))
+                    .expect("manifest"),
             )
             .expect("parse");
             assert_eq!(
