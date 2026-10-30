@@ -188,7 +188,7 @@ export function useLibraryController({
    * The one leave guard of the Library, for everything that would drop the open draft (another item, another topic,
    * closing the sheet, leaving the page). With nothing unsaved it says yes at once. Otherwise it asks:
    * Discard drops the draft, Save and continue writes it first, Keep editing stays. Resolves true when the caller may
-   * go on, and the draft is then already settled. `confirmLabel` words the save answer for the way out ("Save and quit").
+   * go on, and the draft is then already settled (text typed while Save and continue ran keeps the caller here). `confirmLabel` words the save answer for the way out ("Save and quit").
    */
   const confirmLeave = useCallback(async (confirmLabel = "Save and continue"): Promise<boolean> => {
     if (!docDirtyRef.current && !rulesDirtyRef.current && !skillDirtyRef.current) return true;
@@ -213,6 +213,8 @@ export function useLibraryController({
       else if (rulesDirtyRef.current) setRulesSaveResult(result => (result && !result.success ? result : failed));
       else if (skillDirtyRef.current) setSkillSaveResult(result => (result && !result.success ? result : failed));
     }
+    // Text typed while the save ran is still unsaved: leaving now would drop it, so the caller stays and may ask again.
+    if (saved && (docDirtyRef.current || rulesDirtyRef.current || skillDirtyRef.current)) return false;
     return saved;
   }, [activeDoc?.title, activeRulesFile?.label, activeSkillContent?.title, choose, discardDrafts]);
 
@@ -239,6 +241,9 @@ export function useLibraryController({
       setPackError(packFailure);
       setSkills(loaded);
       setSkillsLoaded(true);
+      // A list that lacks the open skill (its pack failed to list) never takes an unsaved draft away.
+      const openId = activeSkillIdRef.current;
+      if (skillDirtyRef.current && openId && !loaded.some(s => s.id === openId)) return;
       if (loaded.length > 0) {
         const persistedId = activeSkillIdRef.current;
         const stillExists = persistedId && loaded.some(s => s.id === persistedId);
@@ -270,12 +275,15 @@ export function useLibraryController({
       }
     } catch (e) {
       if (!isWorkspaceLoadCurrent(generation)) return;
-      setSkills([]);
-      setSkillsLoaded(true);
-      activeSkillIdRef.current = null;
-      activeSkillContentIdRef.current = null;
-      setActiveSkillId(null);
-      setActiveSkillContent(null);
+      // A failed refresh reports the error but keeps the open skill while it has an unsaved draft.
+      if (!skillDirtyRef.current) {
+        setSkills([]);
+        setSkillsLoaded(true);
+        activeSkillIdRef.current = null;
+        activeSkillContentIdRef.current = null;
+        setActiveSkillId(null);
+        setActiveSkillContent(null);
+      }
       if (!isInvalidWorkspaceError(e)) setError(`Skills: ${e}`);
     }
   }, [isInvalidWorkspaceError, isWorkspaceLoadCurrent, setError, workspaceLoadGenerationRef]);
@@ -285,6 +293,9 @@ export function useLibraryController({
       const list = await invoke<DocSummary[]>("list_docs");
       if (!isWorkspaceLoadCurrent(generation)) return;
       setDocs(list);
+      // A list that lacks the open doc never takes an unsaved draft away.
+      const openId = activeDocIdRef.current;
+      if (docDirtyRef.current && openId && !list.some(d => d.id === openId)) return;
       if (list.length === 0) {
         activeDocIdRef.current = null;
         setActiveDoc(null);
@@ -306,8 +317,11 @@ export function useLibraryController({
       }
     } catch (e) {
       if (!isWorkspaceLoadCurrent(generation)) return;
-      setDocs([]);
-      setActiveDoc(null);
+      // A failed refresh reports the error but keeps the open doc while it has an unsaved draft.
+      if (!docDirtyRef.current) {
+        setDocs([]);
+        setActiveDoc(null);
+      }
       if (!isInvalidWorkspaceError(e)) setError(`Docs: ${e}`);
     }
   }, [isInvalidWorkspaceError, isWorkspaceLoadCurrent, setError, workspaceLoadGenerationRef]);
@@ -402,7 +416,7 @@ export function useLibraryController({
       if (surface === null) return;
       // Its harness or rules target was switched off: back to the bundled base.
       if (!list.some(file => file.surface === surface)) {
-        clearActiveRulesFile();
+        if (!rulesDirtyRef.current) clearActiveRulesFile();
         return;
       }
       // Unsaved refinements keep the revision they were opened with, so a save still notices an outside change.

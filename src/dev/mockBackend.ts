@@ -2189,6 +2189,31 @@ function validPersonalSkillName(name: string): boolean {
   return name.match(/^[a-z0-9][a-z0-9-]{0,63}$/)?.[0] === name;
 }
 
+const VALID_SKILL_AGENTS = ["codex", "opencode", "claude", "cursor"];
+
+/** The refusals of the backend's `check_skill_text`, in its words: a save that would break the skill is refused. */
+function checkPersonalSkillText(content: string, name: string): void {
+  const lines = content.split(/\r?\n/);
+  if (lines[0]?.trimEnd() !== "---") throw new Error("The frontmatter cannot be read: missing frontmatter opening delimiter.");
+  const end = lines.findIndex((line, index) => index > 0 && line.trimEnd() === "---");
+  if (end < 0) throw new Error("The frontmatter cannot be read: missing frontmatter closing delimiter.");
+  const fields = new Map<string, string>();
+  for (const line of lines.slice(1, end)) {
+    const match = /^([^\s#-][^:]*):(.*)$/.exec(line);
+    if (match) fields.set(match[1].trim(), match[2].trim().replace(/^(["'])(.*)\1$/, "$2"));
+  }
+  if ((fields.get("name") || name) !== name) throw new Error(`The name in the frontmatter must stay ${name}.`);
+  if (!fields.get("description")) throw new Error("The description in the frontmatter cannot be empty.");
+  const targets = (fields.get("targets") ?? "")
+    .replace(/^\[|\]$/g, "")
+    .split(",")
+    .map(target => target.trim().replace(/^["']|["']$/g, ""))
+    .filter(Boolean);
+  if (targets.length === 0 || targets.some(target => !VALID_SKILL_AGENTS.includes(target))) {
+    throw new Error(`The targets in the frontmatter must list harnesses from: ${VALID_SKILL_AGENTS.join(", ")}.`);
+  }
+}
+
 async function handlePersonalPackWrites(cmd: string, args: Args): Promise<unknown> {
   if (cmd === "copy_skill_to_pack") {
     if (!workspaceIsValid()) return unavailable();
@@ -2222,6 +2247,7 @@ async function handlePersonalPackWrites(cmd: string, args: Args): Promise<unknow
     const pack = packLibrary.packs.find(pack => pack.name === "personal");
     const skill = packLibrary.skills.find(skill => skill.id === id && skill.pack === "personal" && skill.state === "active");
     if (pack?.state !== "ok" || !skill) throw new Error("personal skill does not exist or is not active");
+    checkPersonalSkillText(content, name);
     const previous = personalPackDocuments.get(id);
     if (previous) requireTextRevision(args, previous.content);
     personalPackDocuments.set(id, { id, title: name, path: skill.path, section: "pack:personal", source: "pack", content });

@@ -102,12 +102,24 @@ export function useAppSettingsController({
     return "saved";
   }, [settingsAutoSaveError, settingsSaving, settingsDirty]);
 
+  const loadGenerationRef = useRef(0);
   const loadSettings = useCallback(async () => {
+    // A read that finishes after a newer read began, or after the settings changed here (an edit or a write), is stale.
+    const loadGeneration = ++loadGenerationRef.current;
+    const startedFrom = appSettingsRef.current;
+    const startedRevision = settingsRevisionRef.current;
     try {
       const [settingsResponse, targets] = await Promise.all([
         invoke<GetSettingsResponse>("get_settings"),
         invoke<AgentTargetMeta[]>("get_agent_targets"),
       ]);
+      if (
+        loadGenerationRef.current !== loadGeneration ||
+        appSettingsRef.current !== startedFrom ||
+        settingsRevisionRef.current !== startedRevision
+      ) {
+        return;
+      }
       const settings = settingsResponse.settings;
       if (appliedWorkspacePathRef.current === undefined) {
         appliedWorkspacePathRef.current = settings.workspace_path ?? null;

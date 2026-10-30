@@ -239,6 +239,20 @@ describe("mock backend: the Library edits only personal docs", () => {
     expect(created).toMatchObject({ id: "custom:mine", source: "custom", section: "Context" });
   });
 
+  it("refuses a personal skill save that would break the skill, in the backend's words", async () => {
+    const [bundled] = await invoke<SkillSummary[]>("list_skills");
+    await invoke("copy_skill_to_pack", { name: bundled!.name, newName: "mock-copy" });
+    const id = "pack:personal/mock-copy";
+    const opened = await invoke<DocumentContent>("read_skill", { id });
+    const save = (content: string) => invoke<ActionResult>("save_pack_skill", { id, content, expectedRevision: opened.revision });
+    await expect(save("no frontmatter")).rejects.toThrow("The frontmatter cannot be read");
+    await expect(save("---\nname: other\ndescription: d\ntargets: codex\n---\n")).rejects.toThrow("must stay mock-copy");
+    await expect(save("---\nname: mock-copy\ndescription:\ntargets: codex\n---\n")).rejects.toThrow("description in the frontmatter cannot be empty");
+    await expect(save("---\nname: mock-copy\ndescription: d\n---\n")).rejects.toThrow("targets in the frontmatter must list harnesses");
+    await expect(save("---\nname: mock-copy\ndescription: d\ntargets: [codex, nope]\n---\n")).rejects.toThrow("targets in the frontmatter must list harnesses");
+    expect(await save("---\nname: mock-copy\ndescription: d\ntargets: [codex, claude]\n---\nbody\n")).toMatchObject({ success: true });
+  });
+
   it("refuses a personal doc save whose revision is no longer the file's, like the backend", async () => {
     const opened = await invoke<DocumentContent>("read_doc", { id: "custom:project-notes" });
     expect(opened.revision).toEqual(expect.any(String));
