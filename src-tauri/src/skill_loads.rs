@@ -168,6 +168,7 @@ impl FolderPaths {
                 (ReadFolder::Copilot, ".copilot/skills"),
                 (ReadFolder::PiAgent, ".pi/agent/skills"),
                 (ReadFolder::Kilo, ".kilo/skills"),
+                (ReadFolder::Grok, ".grok/skills"),
             ]
             .into_iter()
             .map(|(folder, rel)| (folder, home.join(rel)))
@@ -471,7 +472,7 @@ fn flags_for(harness: HarnessId, copies: &[SkillCopy]) -> Vec<SkillLoadFlag> {
         }
         HarnessId::Cursor => vec![SkillLoadFlag::PossibleDuplicate],
         HarnessId::Claude => Vec::new(),
-        HarnessId::Copilot | HarnessId::Pi | HarnessId::Kilo => {
+        HarnessId::Copilot | HarnessId::Pi | HarnessId::Kilo | HarnessId::Grok => {
             let same = copies.windows(2).all(|pair| pair[0].hash == pair[1].hash);
             vec![if same {
                 SkillLoadFlag::DuplicateIdentical

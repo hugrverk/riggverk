@@ -707,7 +707,7 @@ pub fn detect_surface_state_with(
                     .filter(|p| p.kind == OperationKind::Conflict)
                     .find_map(|p| {
                         p.mcp
-                            .and_then(|state| state.conflict_reason(mcp_entry_key(&p.artifact)))
+                            .and_then(|state| mcp_conflict_reason(state, &p.artifact))
                             .or_else(|| {
                                 (p.artifact == ArtifactId::OpenCodeTui)
                                     .then(|| tui_conflict_reason(workspace_root, home))
@@ -1244,6 +1244,18 @@ pub(crate) fn mcp_entry_key(artifact: &ArtifactId) -> &'static str {
     }
 }
 
+/// Why the MCP file of `artifact` is left alone in `state`, for messages: fixed phrases only.
+pub(crate) fn mcp_conflict_reason(
+    state: crate::light_mcp::EntryState,
+    artifact: &ArtifactId,
+) -> Option<String> {
+    let format = match artifact {
+        ArtifactId::HarnessMcp(harness) => harness.mcp().map(|mcp| mcp.format),
+        _ => None,
+    };
+    state.conflict_reason(mcp_entry_key(artifact), format.unwrap_or_default())
+}
+
 /// Re-checks, at apply time, that an MCP file may still be written: the plan came from an
 /// earlier read, and a file the app does not edit, or an entry of the user's own, must never be
 /// replaced.
@@ -1272,7 +1284,7 @@ pub fn ensure_mcp_apply_allowed(
         (OperationKind::Conflict, state) => Err(format!(
             "refusing to change the MCP file: {}",
             state
-                .and_then(|state| state.conflict_reason(mcp_entry_key(artifact)))
+                .and_then(|state| mcp_conflict_reason(state, artifact))
                 .unwrap_or_else(|| "it has a conflict".to_string())
         )),
         _ => Ok(()),
@@ -2673,7 +2685,7 @@ pub(crate) fn harness_name(harness: crate::agent_targets::HarnessId) -> &'static
         HarnessId::Codex => "Codex",
         HarnessId::OpenCode => "OpenCode",
         HarnessId::Cursor => "Cursor",
-        HarnessId::Copilot | HarnessId::Pi | HarnessId::Kilo => {
+        HarnessId::Copilot | HarnessId::Pi | HarnessId::Kilo | HarnessId::Grok => {
             crate::light_harness::display_name(harness)
         }
     }

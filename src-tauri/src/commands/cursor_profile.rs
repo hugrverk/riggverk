@@ -714,6 +714,7 @@ mod tests {
             ("copilot", "templates/mcp/copilot.playwright.json"),
             ("pi", "templates/mcp/pi.playwright.json"),
             ("kilo", "templates/mcp/kilo.playwright.json"),
+            ("grok", "templates/mcp/grok.playwright.json"),
         ] {
             rendered.push((
                 name,

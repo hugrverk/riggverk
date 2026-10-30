@@ -63,7 +63,8 @@ pub struct LightSkillsHealth {
 pub struct LightRulesHealth {
     /// `synced`, `stale` (a base update is waiting), `missing` (no file yet), `diverged` (a
     /// conflict the app leaves alone), `off` (the rules target is switched off in Settings) or
-    /// `unknown`.
+    /// `unknown`. A harness that reads a central harness's rules file instead of its own (Grok
+    /// reads `~/.claude/CLAUDE.md`) is `shared` while the app manages that file, else `none`.
     pub status: String,
     /// The rules file as people know it (`~/.pi/agent/AGENTS.md`).
     pub path: String,
@@ -334,7 +335,9 @@ fn inspect_skills(
 /// What the harness's rules file looks like: the same planner the harness page and Install use,
 /// reduced to a status and the surface's own detail line.
 fn inspect_rules(harness: &LightHarness, inputs: &Inputs) -> LightRulesHealth {
-    let rules = &harness.rules;
+    let Some(rules) = &harness.rules else {
+        return shared_rules(harness, inputs);
+    };
     let path = rules.display_path(inputs.home);
     let health = |status: &str, detail: &str| LightRulesHealth {
         status: status.into(),
@@ -381,6 +384,38 @@ fn inspect_rules(harness: &LightHarness, inputs: &Inputs) -> LightRulesHealth {
     }
 }
 
+/// The rules row of a harness without a rules file of its own: it reads a central harness's file
+/// (Grok Build reads `~/.claude/CLAUDE.md`). `shared` while the app manages that file, else
+/// `none`. The file itself is not read here: its own page and health check it.
+fn shared_rules(harness: &LightHarness, inputs: &Inputs) -> LightRulesHealth {
+    let (path, central) = harness
+        .shared_rules
+        .and_then(light_harness::shared_rules_file)
+        .map_or(("", ""), |file| (file.path, file.label));
+    let label = &harness.label;
+    // Claude Code's file is the only one a light harness shares (`light_harness::SHARED_RULES`).
+    let managed = harness.shared_rules == Some(HarnessId::Claude) && inputs.claude_rules_managed;
+    let (status, detail) = if managed {
+        (
+            "shared",
+            format!("{label} reads the managed block in {path}, installed for {central}"),
+        )
+    } else {
+        (
+            "none",
+            format!("No rules are installed for {label}: it reads {path}, which gets the managed block only while {central} and its rules are on"),
+        )
+    };
+    LightRulesHealth {
+        status: status.into(),
+        path: path.into(),
+        refinement_lines: 0,
+        user_managed: false,
+        conflict_reason: None,
+        detail,
+    }
+}
+
 // ── MCP ──
 
 /// What the harness's MCP file holds of the managed entry: the planner the harness page and
@@ -420,13 +455,14 @@ fn inspect_mcp(harness: &LightHarness, inputs: &Inputs) -> LightMcpHealth {
             "missing",
             format!("the file has no {key} entry; it will be added and your other servers stay"),
         ),
-        (OperationKind::Conflict, Some(state @ EntryState::Refused(_))) => {
-            ("invalid", state.conflict_reason(key).unwrap_or_default())
-        }
+        (OperationKind::Conflict, Some(state @ EntryState::Refused(_))) => (
+            "invalid",
+            state.conflict_reason(key, mcp.format).unwrap_or_default(),
+        ),
         (OperationKind::Conflict, state) => (
             "diverged",
             state
-                .and_then(|state| state.conflict_reason(key))
+                .and_then(|state| state.conflict_reason(key, mcp.format))
                 .unwrap_or_else(|| "the entry is left as is".to_string()),
         ),
         _ => ("unknown", "the MCP file could not be checked".to_string()),
@@ -468,11 +504,10 @@ fn rules_warnings(
     inputs: &Inputs,
 ) -> Vec<String> {
     let mut warnings = Vec::new();
-    if rules.status == "off" {
+    let Some(spec) = harness.rules.as_ref().filter(|_| rules.status != "off") else {
         return warnings;
-    }
+    };
     let label = &harness.label;
-    let spec = &harness.rules;
     let dest = spec.resolve_dest(inputs.home);
     let folder = folder_of(&rules.path);
     let masking = spec.masking_files(&dest);
@@ -531,8 +566,15 @@ fn relocating_variable(harness: HarnessId) -> Option<&'static str> {
     match harness {
         HarnessId::Copilot => Some("COPILOT_HOME"),
         HarnessId::Pi => Some("PI_CODING_AGENT_DIR"),
+        HarnessId::Grok => Some("GROK_HOME"),
         _ => None,
     }
+}
+
+/// Whether a rules status counts toward the overall status: not while the target is off, and not
+/// for a harness that reads another harness's rules file (`shared`, `none`).
+fn rules_counted(rules: &LightRulesHealth) -> bool {
+    !matches!(rules.status.as_str(), "off" | "shared" | "none")
 }
 
 /// The overall status: the skills', or the rules' once the skills are fine and the rules target
@@ -544,7 +586,7 @@ fn overall_status(
 ) -> String {
     if skills.status != "synced" {
         skills.status.clone()
-    } else if rules.status != "off" && rules.status != "synced" {
+    } else if rules_counted(rules) && rules.status != "synced" {
         rules.status.clone()
     } else if mcp.status != "off" && mcp.status != "synced" {
         mcp.status.clone()
@@ -590,7 +632,8 @@ struct Inputs<'a> {
     rules_on: bool,
     /// The harness's MCP target is switched on in Settings.
     mcp_on: bool,
-    /// Claude is enabled and its rules target is on (Copilot's VS Code note depends on it).
+    /// Claude is enabled and its rules target is on (Copilot's VS Code note and Grok's rules row
+    /// depend on it).
     claude_rules_managed: bool,
 }
 
@@ -620,9 +663,15 @@ fn compute_health(harness: &LightHarness, inputs: &Inputs) -> LightRuntimeHealth
     }
     if let Some(variable) = relocating_variable(harness.id) {
         if inputs.set_variables.contains(&variable) {
+            // The harness's own file: its rules file, else (rules shared with a central
+            // harness) its MCP file.
+            let path = if harness.rules.is_some() {
+                &rules.path
+            } else {
+                &mcp.path
+            };
             warnings.push(format!(
                 "{variable} is set in Riggverk's environment; Riggverk writes {path} anyway, which {label} reads only without it.",
-                path = rules.path,
                 label = harness.label
             ));
         }
@@ -665,7 +714,7 @@ pub fn get_light_runtime_health(harness: HarnessId) -> Result<LightRuntimeHealth
     let target_on = |target: &str| loaded.enabled_target_ids.iter().any(|id| id == target);
     let claude_rules_managed =
         settings::harness_enabled(&loaded, HarnessId::Claude) && target_on("claude_rules");
-    let set_variables: Vec<&str> = ["COPILOT_HOME", "PI_CODING_AGENT_DIR"]
+    let set_variables: Vec<&str> = ["COPILOT_HOME", "PI_CODING_AGENT_DIR", "GROK_HOME"]
         .into_iter()
         .filter(|name| std::env::var_os(name).is_some_and(|value| !value.is_empty()))
         .collect();
@@ -681,7 +730,10 @@ pub fn get_light_runtime_health(harness: HarnessId) -> Result<LightRuntimeHealth
             set_variables: &set_variables,
             version_timeout: VERSION_TIMEOUT,
             workspace_root: workspace_root.as_deref(),
-            rules_on: target_on(&descriptor.rules.target_id),
+            rules_on: descriptor
+                .rules
+                .as_ref()
+                .is_some_and(|rules| target_on(&rules.target_id)),
             mcp_on: target_on(&descriptor.mcp.target_id),
             claude_rules_managed,
         },

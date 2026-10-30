@@ -290,9 +290,8 @@ fn surface_status(
     let detail = own
         .iter()
         .find_map(|p| {
-            p.mcp.and_then(|state| {
-                mcp_detail(state, p.kind, setup_transaction::mcp_entry_key(&p.artifact))
-            })
+            p.mcp
+                .and_then(|state| mcp_detail(state, p.kind, &p.artifact))
         })
         .unwrap_or(detail);
     let detail = own
@@ -393,9 +392,10 @@ fn files_detail(
 fn mcp_detail(
     state: crate::light_mcp::EntryState,
     kind: OperationKind,
-    entry_key: &str,
+    artifact: &crate::artifact_registry::ArtifactId,
 ) -> Option<String> {
     use crate::light_mcp::EntryState;
+    let entry_key = setup_transaction::mcp_entry_key(artifact);
     match (state, kind) {
         (EntryState::EntryMissing, OperationKind::Update) => Some(format!(
             "the {entry_key} entry will be added; your other servers stay"
@@ -403,7 +403,7 @@ fn mcp_detail(
         (EntryState::Differs, OperationKind::Update) => {
             Some(format!("update available for the {entry_key} entry"))
         }
-        (_, OperationKind::Conflict) => state.conflict_reason(entry_key),
+        (_, OperationKind::Conflict) => setup_transaction::mcp_conflict_reason(state, artifact),
         _ => None,
     }
 }

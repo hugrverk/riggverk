@@ -106,6 +106,7 @@ pub enum FindingCode {
     KiloNoRules,
     CopilotNotCovered,
     PiNotCovered,
+    GrokNotCovered,
     ConfigOnly,
 }
 
@@ -130,9 +131,8 @@ impl FindingCode {
             | CodexTrustedProjects
             | OpencodeDenyRulesMissing
             | KiloNoRules => PostureLevel::Advice,
-            ClaudeConfigDirSet | CursorRunMode | CopilotNotCovered | PiNotCovered | ConfigOnly => {
-                PostureLevel::NotCovered
-            }
+            ClaudeConfigDirSet | CursorRunMode | CopilotNotCovered | PiNotCovered
+            | GrokNotCovered | ConfigOnly => PostureLevel::NotCovered,
         }
     }
 }
@@ -567,8 +567,12 @@ pub fn compute(harness: HarnessId, inputs: &Inputs) -> SecurityPosture {
         HarnessId::Kilo => kilo(inputs, &mut out),
         HarnessId::Copilot => out.add(FindingCode::CopilotNotCovered, None, None),
         HarnessId::Pi => out.add(FindingCode::PiNotCovered, None, None),
+        HarnessId::Grok => out.add(FindingCode::GrokNotCovered, None, None),
     }
-    if !matches!(harness, HarnessId::Copilot | HarnessId::Pi) {
+    if !matches!(
+        harness,
+        HarnessId::Copilot | HarnessId::Pi | HarnessId::Grok
+    ) {
         out.add(FindingCode::ConfigOnly, None, None);
     }
     SecurityPosture {
@@ -677,7 +681,7 @@ mod tests {
         serde_json::to_string(posture).expect("serialize")
     }
 
-    const ALL_CODES: [FindingCode; 29] = [
+    const ALL_CODES: [FindingCode; 30] = [
         FindingCode::ClaudeBypassDisabled,
         FindingCode::ClaudeBypassDefault,
         FindingCode::ClaudeBypassAvailable,
@@ -706,6 +710,7 @@ mod tests {
         FindingCode::KiloNoRules,
         FindingCode::CopilotNotCovered,
         FindingCode::PiNotCovered,
+        FindingCode::GrokNotCovered,
         FindingCode::ConfigOnly,
     ];
 
@@ -943,7 +948,7 @@ mod tests {
     }
 
     #[test]
-    fn copilot_and_pi_are_static_and_read_nothing() {
+    fn copilot_pi_and_grok_are_static_and_read_nothing() {
         let f = Fixture::new("static");
         let p = f.posture(HarnessId::Copilot);
         assert!(p.sources.is_empty());
@@ -951,6 +956,9 @@ mod tests {
         let p = f.posture(HarnessId::Pi);
         assert!(p.sources.is_empty());
         assert_eq!(codes(&p), vec![FindingCode::PiNotCovered]);
+        let p = f.posture(HarnessId::Grok);
+        assert!(p.sources.is_empty());
+        assert_eq!(codes(&p), vec![FindingCode::GrokNotCovered]);
     }
 
     #[test]

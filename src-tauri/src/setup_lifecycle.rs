@@ -68,6 +68,8 @@ pub enum SetupSurfaceId {
     PiMcp,
     /// The Playwright entry of Kilo's config (`kilo.jsonc`, else `kilo.json`, in the config folder)
     KiloMcp,
+    /// The Playwright entry of Grok Build's config (`~/.grok/config.toml`)
+    GrokMcp,
     /// Installed runtime workspace bundled files
     WorkspaceBundle,
 }
@@ -93,6 +95,7 @@ impl SetupSurfaceId {
         SetupSurfaceId::CopilotMcp,
         SetupSurfaceId::PiMcp,
         SetupSurfaceId::KiloMcp,
+        SetupSurfaceId::GrokMcp,
         SetupSurfaceId::WorkspaceBundle,
     ];
 
@@ -121,6 +124,7 @@ impl SetupSurfaceId {
             SetupSurfaceId::CopilotMcp => "Copilot MCP",
             SetupSurfaceId::PiMcp => "Pi MCP",
             SetupSurfaceId::KiloMcp => "Kilo MCP",
+            SetupSurfaceId::GrokMcp => "Grok MCP",
             SetupSurfaceId::WorkspaceBundle => "Workspace Resources",
         }
     }
@@ -153,6 +157,8 @@ impl SetupSurfaceId {
             HarnessId::Copilot => Some(SetupSurfaceId::CopilotRules),
             HarnessId::Pi => Some(SetupSurfaceId::PiRules),
             HarnessId::Kilo => Some(SetupSurfaceId::KiloRules),
+            // Grok Build reads Claude Code's rules file: it has no rules surface of its own.
+            HarnessId::Grok => None,
             HarnessId::Codex | HarnessId::OpenCode | HarnessId::Claude | HarnessId::Cursor => None,
         }
     }
@@ -163,6 +169,7 @@ impl SetupSurfaceId {
             HarnessId::Copilot => Some(SetupSurfaceId::CopilotMcp),
             HarnessId::Pi => Some(SetupSurfaceId::PiMcp),
             HarnessId::Kilo => Some(SetupSurfaceId::KiloMcp),
+            HarnessId::Grok => Some(SetupSurfaceId::GrokMcp),
             HarnessId::Codex | HarnessId::OpenCode | HarnessId::Claude | HarnessId::Cursor => None,
         }
     }
@@ -183,6 +190,7 @@ impl SetupSurfaceId {
             SetupSurfaceId::CopilotRules | SetupSurfaceId::CopilotMcp => Some(HarnessId::Copilot),
             SetupSurfaceId::PiRules | SetupSurfaceId::PiMcp => Some(HarnessId::Pi),
             SetupSurfaceId::KiloRules | SetupSurfaceId::KiloMcp => Some(HarnessId::Kilo),
+            SetupSurfaceId::GrokMcp => Some(HarnessId::Grok),
             SetupSurfaceId::Skills
             | SetupSurfaceId::ClaudeSkills
             | SetupSurfaceId::OpenCodeSkills

@@ -10,10 +10,11 @@ pub enum HarnessId {
     OpenCode,
     Claude,
     Cursor,
-    /// The light tier (`light_harness`): GitHub Copilot, Pi and Kilo Code.
+    /// The light tier (`light_harness`): GitHub Copilot, Pi, Kilo Code and Grok Build.
     Copilot,
     Pi,
     Kilo,
+    Grok,
 }
 
 impl HarnessId {
@@ -25,6 +26,7 @@ impl HarnessId {
         HarnessId::Copilot,
         HarnessId::Pi,
         HarnessId::Kilo,
+        HarnessId::Grok,
     ];
 
     /// The harnesses enabled on a fresh install, and for a settings file that names none. The
@@ -45,13 +47,17 @@ impl HarnessId {
             HarnessId::Copilot => "copilot",
             HarnessId::Pi => "pi",
             HarnessId::Kilo => "kilo",
+            HarnessId::Grok => "grok",
         }
     }
 
     /// Whether the harness is in the light tier: skills reach and runtime health, described by
     /// `metadata/light-harnesses.json`.
     pub fn is_light(self) -> bool {
-        matches!(self, HarnessId::Copilot | HarnessId::Pi | HarnessId::Kilo)
+        matches!(
+            self,
+            HarnessId::Copilot | HarnessId::Pi | HarnessId::Kilo | HarnessId::Grok
+        )
     }
 }
 
@@ -170,17 +176,19 @@ pub fn targets() -> Vec<AgentSyncTarget> {
             source_rel: "templates/cursor/agents",
         },
     ];
-    // The light tier's rows come from the descriptor, in its order: per harness the rules file,
-    // then the MCP entry.
+    // The light tier's rows come from the descriptor, in its order: per harness the rules file
+    // (unless it reads a central harness's), then the MCP entry.
     for harness in crate::light_harness::light_harnesses() {
-        all.push(AgentSyncTarget {
-            id: &harness.rules.target_id,
-            label: &harness.rules.target_label,
-            harness: harness.id,
-            kind: TargetKind::Rules,
-            target_rel: &harness.rules.target_rel,
-            source_rel: &harness.rules.source_rel,
-        });
+        if let Some(rules) = &harness.rules {
+            all.push(AgentSyncTarget {
+                id: &rules.target_id,
+                label: &rules.target_label,
+                harness: harness.id,
+                kind: TargetKind::Rules,
+                target_rel: &rules.target_rel,
+                source_rel: &rules.source_rel,
+            });
+        }
         all.push(AgentSyncTarget {
             id: &harness.mcp.target_id,
             label: &harness.mcp.target_label,
@@ -240,7 +248,7 @@ const DEFAULT_DISABLED_TARGET_IDS: &[&str] = &["codex_config", "claude_config"];
 fn default_disabled(target_id: &str) -> bool {
     DEFAULT_DISABLED_TARGET_IDS.contains(&target_id)
         || crate::light_harness::rules_for_target(target_id)
-            .is_some_and(|harness| !harness.rules.default_enabled)
+            .is_some_and(|rules| !rules.default_enabled)
         || crate::light_harness::mcp_for_target(target_id)
             .is_some_and(|harness| !harness.mcp.default_enabled)
 }
@@ -269,7 +277,7 @@ pub fn target_surfaces(target_id: &str) -> &'static [SetupSurfaceId] {
         "claude_config" => &[SetupSurfaceId::ClaudeConfig],
         "cursor_setup" => &[SetupSurfaceId::CursorAgents, SetupSurfaceId::CursorMcp],
         other => crate::light_harness::rules_for_target(other)
-            .map(|harness| std::slice::from_ref(&harness.rules.surface))
+            .map(|rules| std::slice::from_ref(&rules.surface))
             .or_else(|| {
                 crate::light_harness::mcp_for_target(other)
                     .map(|harness| std::slice::from_ref(&harness.mcp.surface))
@@ -429,7 +437,12 @@ mod tests {
         let mut expected: Vec<String> = targets()
             .iter()
             .map(|t| t.id.to_string())
-            .filter(|id| id != "codex_config" && id != "claude_config" && id != "kilo_mcp")
+            .filter(|id| {
+                id != "codex_config"
+                    && id != "claude_config"
+                    && id != "kilo_mcp"
+                    && id != "grok_mcp"
+            })
             .collect();
         let mut actual = default_enabled_ids();
         expected.sort();
@@ -608,10 +621,11 @@ mod tests {
             "pi_mcp",
             "kilo_rules",
             "kilo_mcp",
+            "grok_mcp",
         ]
         .into_iter()
         .collect();
-        assert_eq!(ids, expected, "targets() must contain exactly 16 known IDs");
+        assert_eq!(ids, expected, "targets() must contain exactly 17 known IDs");
     }
 
     #[test]
@@ -619,19 +633,22 @@ mod tests {
         let all = targets();
         let ids: Vec<&str> = all.iter().map(|t| t.id).collect();
         assert_eq!(
-            &ids[ids.len() - 6..],
+            &ids[ids.len() - 7..],
             [
                 "copilot_rules",
                 "copilot_mcp",
                 "pi_rules",
                 "pi_mcp",
                 "kilo_rules",
-                "kilo_mcp"
+                "kilo_mcp",
+                "grok_mcp"
             ],
-            "descriptor order, per harness the rules file and then the MCP entry, after cursor_setup"
+            "descriptor order, per harness the rules file (Grok has none) and then the MCP entry, after cursor_setup"
         );
-        assert_eq!(ids[ids.len() - 7], "cursor_setup");
-        assert_eq!(ids[ids.len() - 8], "claude_config");
+        assert_eq!(ids[ids.len() - 8], "cursor_setup");
+        assert_eq!(ids[ids.len() - 9], "claude_config");
+        assert!(!default_enabled_ids().contains(&"grok_mcp".to_string()));
+        assert_eq!(target_surfaces("grok_mcp"), [SetupSurfaceId::GrokMcp]);
         let pi = all.iter().find(|t| t.id == "pi_rules").expect("pi_rules");
         assert_eq!(pi.harness, HarnessId::Pi);
         assert!(matches!(pi.kind, TargetKind::Rules));
@@ -722,7 +739,7 @@ mod tests {
         let names: Vec<&str> = HarnessId::ALL.iter().map(|id| id.as_str()).collect();
         assert_eq!(
             names,
-            ["codex", "opencode", "claude", "cursor", "copilot", "pi", "kilo"]
+            ["codex", "opencode", "claude", "cursor", "copilot", "pi", "kilo", "grok"]
         );
         for id in HarnessId::ALL {
             assert_eq!(

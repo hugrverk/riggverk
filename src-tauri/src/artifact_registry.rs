@@ -601,13 +601,17 @@ impl ArtifactId {
     }
 }
 
-/// The rules block of `harness`; an error only when the embedded descriptor is invalid.
+/// The rules block of `harness`; an error when the harness has no rules file of its own (Grok reads
+/// Claude Code's, so no plan names one) or the embedded descriptor is invalid.
 fn light_rules(
     harness: LightHarnessId,
 ) -> Result<&'static crate::light_harness::LightRules, String> {
-    harness
-        .rules()
-        .ok_or_else(|| "the light harness descriptor is unavailable".to_string())
+    harness.rules().ok_or_else(|| {
+        format!(
+            "{} has no rules file of its own",
+            harness.harness().as_str()
+        )
+    })
 }
 
 /// The MCP entry of `harness`; an error only when the embedded descriptor is invalid.
@@ -757,13 +761,14 @@ pub fn expand_surface<R: SourceRoot + ?Sized>(
             .and_then(LightHarnessId::new)
             .map(|harness| vec![ArtifactId::HarnessRules(harness)])
             .ok_or_else(|| "light rules surface without a light harness".to_string()),
-        light @ (SetupSurfaceId::CopilotMcp | SetupSurfaceId::PiMcp | SetupSurfaceId::KiloMcp) => {
-            light
-                .harness()
-                .and_then(LightHarnessId::new)
-                .map(|harness| vec![ArtifactId::HarnessMcp(harness)])
-                .ok_or_else(|| "light MCP surface without a light harness".to_string())
-        }
+        light @ (SetupSurfaceId::CopilotMcp
+        | SetupSurfaceId::PiMcp
+        | SetupSurfaceId::KiloMcp
+        | SetupSurfaceId::GrokMcp) => light
+            .harness()
+            .and_then(LightHarnessId::new)
+            .map(|harness| vec![ArtifactId::HarnessMcp(harness)])
+            .ok_or_else(|| "light MCP surface without a light harness".to_string()),
         // The app no longer keeps a copy of the bundle in the workspace folder: the surface wants
         // nothing, and the copies earlier releases left there are stale removals.
         SetupSurfaceId::WorkspaceBundle => Ok(Vec::new()),
@@ -795,6 +800,7 @@ pub fn reject_broad_artifact_root(path: &Path) -> Result<(), String> {
             format!("{home_norm}/.pi/agent"),
             format!("{home_norm}/.kilo"),
             format!("{home_norm}/.config/kilo"),
+            format!("{home_norm}/.grok"),
         ];
         // Kilo's and OpenCode's config folders move with XDG_CONFIG_HOME.
         if let Some(xdg) = std::env::var("XDG_CONFIG_HOME")
@@ -1657,9 +1663,16 @@ mod tests {
         ];
         assert_eq!(
             cases.len(),
-            crate::light_harness::light_harnesses().len(),
-            "a new light harness needs a case here"
+            crate::light_harness::light_harnesses()
+                .iter()
+                .filter(|harness| harness.rules.is_some())
+                .count(),
+            "a new light harness with a rules file needs a case here"
         );
+        // Grok reads Claude Code's rules file: a rules artifact for it resolves nowhere.
+        let grok = light(HarnessId::Grok);
+        assert!(grok.resolve_dest(&home, &ws).is_err());
+        assert!(grok.allowlist_root(&home, &ws).is_err());
         for (harness, dest, source) in cases {
             let artifact = light(harness);
             assert_eq!(artifact.resolve_dest(&home, &ws).unwrap(), home.join(dest));
@@ -1704,6 +1717,7 @@ mod tests {
                 ".config/kilo/kilo.jsonc",
                 "kilo.playwright.json",
             ),
+            (HarnessId::Grok, ".grok/config.toml", "grok.playwright.json"),
         ];
         assert_eq!(
             cases.len(),
@@ -1796,6 +1810,7 @@ mod tests {
             ".pi/agent",
             ".kilo",
             ".config/kilo",
+            ".grok",
             ".claude",
             ".config/opencode",
         ] {
@@ -1813,6 +1828,7 @@ mod tests {
             ".copilot/copilot-instructions.md",
             ".pi/agent/AGENTS.md",
             ".config/kilo/AGENTS.md",
+            ".grok/config.toml",
         ] {
             assert!(reject_broad_artifact_root(&home.join(rel)).is_ok(), "{rel}");
         }

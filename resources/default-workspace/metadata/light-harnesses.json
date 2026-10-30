@@ -61,6 +61,19 @@
         "shadowed_by_siblings": ["opencode.json", "opencode.jsonc"],
         "shadowed_by_home": [".kilo/kilo.json", ".kilo/kilo.jsonc"]
       }
+    },
+    "grok": {
+      "label": "Grok",
+      "cli": { "program": "grok" },
+      "shared_rules": "claude",
+      "mcp": {
+        "target_rel": ".grok/config.toml",
+        "format": "toml",
+        "root_key": "mcp_servers",
+        "entry_key": "playwright",
+        "template": "templates/mcp/grok.playwright.json",
+        "default_enabled": false
+      }
     }
   }
 }
