@@ -242,12 +242,12 @@ describe("Overview worth a look", () => {
 });
 
 describe("Overview flow map", () => {
-  it("has one node per agent with its state in the name, and the dimmed ones for agents that are off", () => {
+  it("keeps enabled agents and groups agents that are off", () => {
     renderOverview();
     expect(within(map() as unknown as HTMLElement).getByRole("button", { name: "Claude, 1 to decide" })).toBeTruthy();
     expect(within(map() as unknown as HTMLElement).getByRole("button", { name: "Codex, Up to date" })).toBeTruthy();
     expect(within(map() as unknown as HTMLElement).getByRole("button", { name: "OpenCode, Update ready" })).toBeTruthy();
-    expect(within(map() as unknown as HTMLElement).getByRole("button", { name: "Copilot, off in Settings" })).toBeTruthy();
+    expect(within(map() as unknown as HTMLElement).getByRole("button", { name: "5 agents off: Copilot, Pi, Kilo, Antigravity, Grok" })).toBeTruthy();
   });
 
   it("draws the decision as a filled square and every other state as a ring", () => {
@@ -260,7 +260,7 @@ describe("Overview flow map", () => {
 
   it("puts a monochrome icon before every agent name, the state as a badge on its corner, not a ring beside the name", () => {
     renderOverview();
-    for (const name of ["Claude", "Codex", "OpenCode", "Copilot", "Pi", "Kilo"]) {
+    for (const name of ["Claude", "Codex", "OpenCode"]) {
       const agent = node(name);
       expect(agent.querySelectorAll("svg.agent-glyph"), name).toHaveLength(1);
       // The badge sits on the icon's bottom-right corner: inside the icon's box, right and below its centre.
@@ -283,13 +283,16 @@ describe("Overview flow map", () => {
     expect(node("Codex").querySelector("svg.agent-glyph text")).toBeNull();
   });
 
-  it("keeps the state in the accessible name of each node, with a dashed badge for the agents that are off", () => {
+  it("names the off group, uses a dashed ring and draws one base ghost curve", () => {
     renderOverview();
-    expect(node("Pi").getAttribute("aria-label")).toBe("Pi, off in Settings");
-    expect(node("Pi").classList.contains("is-dim")).toBe(true);
-    expect(node("Pi").querySelector(".flow-ring")).not.toBeNull();
+    const group = within(map() as unknown as HTMLElement).getByRole("button", { name: "5 agents off: Copilot, Pi, Kilo, Antigravity, Grok" });
+    expect(group.classList.contains("is-dim")).toBe(true);
+    expect(group.querySelector(".flow-ring")).not.toBeNull();
+    expect(group.querySelectorAll("svg.agent-glyph")).toHaveLength(5);
+    const curves = map().querySelectorAll('.flow-ln.is-ghost');
+    expect(curves).toHaveLength(1);
+    expect(curves[0]!.getAttribute("data-source")).toBe("base");
     expect(node("Claude").getAttribute("aria-label")).toBe("Claude, 1 to decide");
-    // The icons are decorative inside a node that already has a name.
     expect(node("Claude").querySelector("svg.agent-glyph")!.getAttribute("aria-hidden")).toBe("true");
   });
 
@@ -300,8 +303,6 @@ describe("Overview flow map", () => {
     expect(header.querySelector(".agent-icon svg.agent-glyph")).not.toBeNull();
     expect(header.querySelector(".agent-badge.is-decide")).not.toBeNull();
     expect(header.textContent).toBe("Claude");
-    fireEvent.click(node("Pi"));
-    expect(inspector().querySelector(".flow-h .agent-badge.is-off")).not.toBeNull();
   });
 
   it("has a source for the base and for each pack, with a held pack named as such", async () => {
@@ -394,7 +395,13 @@ describe("Overview inspector", () => {
 
   it("opens the Settings page for an agent that is off", () => {
     const { props: p } = renderOverview();
-    fireEvent.click(node("Pi"));
+    const group = within(map() as unknown as HTMLElement).getByRole("button", { name: /^5 agents off:/ });
+    fireEvent.keyDown(group, { key: " " });
+    expect(group.getAttribute("aria-pressed")).toBe("true");
+    expect(within(inspector()).getByRole("heading", { name: "5 off" })).toBeTruthy();
+    const list = within(inspector()).getByRole("list", { name: "Agents off" });
+    expect(within(list).getAllByRole("listitem").map(item => item.textContent?.trim())).toEqual(["Copilot", "Pi", "Kilo", "Antigravity", "Grok"]);
+    expect(list.querySelectorAll("svg.agent-glyph")).toHaveLength(5);
     expect(within(inspector()).getByText("Off in Settings. Nothing flows to it.")).toBeTruthy();
     fireEvent.click(within(inspector()).getByRole("button", { name: "Open Settings" }));
     expect(p.onNavigate).toHaveBeenCalledWith("settings");

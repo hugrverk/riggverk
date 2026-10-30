@@ -7,7 +7,7 @@ import type { ApplyProgress, InstallAgent, SetupHistoryEntry } from "../../types
 import { StateMark, StatePill } from "../../ui/StatePill";
 import { TButton } from "../../ui/TButton";
 import { Receipt } from "../run/Receipt";
-import { AgentView, EdgeView, Heading, Label, RunningView, runPhaseWord, SourceView, type InspectorActions } from "./FlowInspectorViews";
+import { AgentView, EdgeView, Heading, Label, OffGroupView, RunningView, runPhaseWord, SourceView, type InspectorActions } from "./FlowInspectorViews";
 
 export interface FlowInspectorRun {
   /** The task's label (`wsRunning`). */
@@ -125,6 +125,8 @@ export function FlowInspector(props: FlowInspectorProps) {
   let view: { key: string; body: ReactNode };
   if (run) {
     view = { key: "run", body: <RunningView label={run.label} progress={run.progress} trace={run.trace} startAgents={run.startAgents} /> };
+  } else if (selected?.type === "off") {
+    view = { key: "off", body: <OffGroupView agents={model.offGroup!.agents} actions={props} /> };
   } else if (selected?.type === "agent") {
     const agent = model.agents.find(entry => entry.id === selected.id)!;
     view = {

@@ -17,6 +17,7 @@ function model(sourceCount: number, edges: Array<[string, string]> = []): FlowMo
   return {
     sources,
     agents,
+    offGroup: null,
     edges: edges.map(([source, agent]): FlowEdge => ({ id: `${source}>${agent}`, source, agent: agent as FlowAgent["id"], items: [], total: 1, status: "ok", glow: false })),
   };
 }
@@ -42,6 +43,21 @@ describe("flowLayout", () => {
     expect(new Set(ys).size).toBe(7);
     const middle = (ys[0]! + ys[6]!) / 2;
     expect((layout.sourceY.s0! + layout.sourceY.s1!) / 2).toBeCloseTo(middle, 5);
+  });
+
+  it("uses one last row and one base curve for the off group", () => {
+    const input = model(1);
+    input.sources[0]!.id = "base";
+    input.offGroup = { agents: input.agents.slice(2) };
+    input.agents = input.agents.slice(0, 2);
+    const layout = flowLayout(input, 600);
+    expect(layout.height).toBe(160);
+    expect(layout.offY).toBe(124);
+    expect(layout.offCurve!.d).toMatch(`M${layout.sourceDot + 8},${layout.sourceY.base}`);
+    expect(layout.offCurve!.d.endsWith(`${layout.agentX},124`)).toBe(true);
+    input.offGroup = null;
+    expect(flowLayout(input, 600).height).toBe(116);
+    expect(flowLayout(input, 600).offCurve).toBeNull();
   });
 
   it("grows only as far as the taller column needs", () => {

@@ -134,6 +134,7 @@ export function FlowMap({ model, selected, onSelect, live, liveFiles }: FlowMapP
         role="group"
         aria-label="What flows from each source to each agent"
       >
+        {layout.offCurve && <path className={cx("flow-ln", "is-ghost", highlight?.off && "hl")} d={layout.offCurve.d} data-source="base" data-group="off" />}
         {model.edges.map(edge => edge.glow && <path key={`glow:${edge.id}`} className="flow-glow" d={layout.curves[edge.id]!.d} />)}
         {model.edges.map((edge, index) => (
           <path
@@ -191,6 +192,22 @@ export function FlowMap({ model, selected, onSelect, live, liveFiles }: FlowMapP
             props={bindNode({ type: "agent", id: agent.id })}
           />
         ))}
+
+        {model.offGroup && layout.offY !== null && (() => {
+          const agents = model.offGroup.agents;
+          const ref: FlowRef = { type: "off", id: "off" };
+          const y = layout.offY;
+          return (
+            <g className={cx("flow-agent", "flow-off-group", "is-off", "is-dim", highlight?.off && "hl", sameRef(current, ref) && "sel")}
+              aria-label={`${agents.length} ${agents.length === 1 ? "agent" : "agents"} off: ${agents.map(agent => agent.label).join(", ")}`}
+              {...bindNode(ref)}>
+              <rect className="flow-node-hit" x={layout.agentX} y={y - 19} width={AGENT_HIT_WIDTH} height={38} />
+              <circle className="flow-ring" cx={layout.agentIcon + 8} cy={y} r={7} />
+              <text className="flow-name" x={layout.agentText} y={y}>{agents.length} off</text>
+              {agents.map((agent, index) => <AgentGlyph key={agent.id} harness={agent.id} x={layout.agentText + index * 15} y={y + 5} size={12} />)}
+            </g>
+          );
+        })()}
 
         {countedEdges.map(edge => (
           <text key={`cnt:${edge.id}`} className="flow-cnt" x={layout.curves[edge.id]!.mx} y={layout.curves[edge.id]!.my + 3.5} textAnchor="middle">
