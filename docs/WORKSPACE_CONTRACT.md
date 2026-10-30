@@ -99,7 +99,7 @@ Skills are one global surface (`skills`) for all harnesses, installed into the f
 - GitHub Copilot (the CLI; checked against 1.0.98): `~/.copilot/skills` and `~/.agents/skills`. It does not read `~/.claude/skills`. VS Code's Copilot also reads `~/.claude/skills`, so with both folders installed it lists each skill twice.
 - Pi (checked against 1.3.0): the `skills` folder of its agent dir (`~/.pi/agent/skills`) and `~/.agents/skills`. It does not read `~/.claude/skills`.
 - Kilo Code (checked against 7.8.12): `~/.claude/skills` and `~/.agents/skills` by default, and `~/.kilo/skills`. `KILO_DISABLE_EXTERNAL_SKILLS=true` drops the first two, `KILO_DISABLE_CLAUDE_CODE_SKILLS=true` only `~/.claude/skills`.
-- Grok Build (from its user guide, `08-skills`; not checked against a build): `~/.grok/skills`, `~/.agents/skills` and, with its Claude compatibility (on by default), `~/.claude/skills`, deduplicated by name. The app lists them in that order as Grok's precedence.
+- Grok Build (from the skills page of its user guide; not checked against a build): `~/.grok/skills`, `~/.agents/skills` and, with its Claude compatibility (on by default), `~/.claude/skills`, deduplicated by name. The app lists them in that order as Grok's precedence.
 
 `~/.copilot/skills`, `~/.pi/agent/skills`, `~/.kilo/skills` and `~/.grok/skills` belong to those harnesses and the app never installs into them; they are only read, to show which copy a harness loads. They are fixed paths: `COPILOT_HOME`, `PI_CODING_AGENT_DIR` and `GROK_HOME`, which move the real folders, are not followed (the health says so when one is set in the app's environment).
 
