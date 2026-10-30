@@ -1,6 +1,19 @@
 {
   "releases": [
     {
+      "version": "2026.10.16",
+      "sections": [
+        {
+          "title": "New",
+          "items": [
+            "New skill `status-report`: ask your agent for a status report (or \"lägesrapport\") and it builds one self-contained HTML page of what happened, what is in progress and what comes next in the repository. Every line cites its source (git, GitHub, CI or a doc), claims without evidence are marked, and what could not be checked is listed. A check stops a report with secrets, uncited items, dates outside the period or external scripts. The report reads in Swedish or English, on a phone, printed and without JavaScript",
+            "The Kretsverket status report is now a profile on top of `status-report`",
+            "One update may now hold up to 2048 file operations, so a first update with every agent switched on still fits"
+          ]
+        }
+      ]
+    },
+    {
       "version": "2026.10.15",
       "sections": [
         {
