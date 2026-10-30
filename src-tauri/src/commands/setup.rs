@@ -901,6 +901,35 @@ fn apply_claude_settings(dest: &Path, root: &Path) -> Result<(), String> {
     .map_err(|e| format!("write settings.json {}: {e}", dest.display()))
 }
 
+/// A skill or agent file is replaced or removed only while it still holds what the backup holds
+/// (or is still absent when nothing was backed up). Otherwise someone edited it after the backup,
+/// and the write would lose that edit, since an undo restores the older backup. Other artifacts
+/// merge into the user's file and are not checked. The few instructions between this check and
+/// the write stay open to a racing writer.
+fn ensure_unchanged_since_backup(
+    artifact: &crate::artifact_registry::ArtifactId,
+    backup_rel: Option<&str>,
+    backup_dir: &Path,
+    workspace_root: &Path,
+    home: &Path,
+) -> Result<(), String> {
+    if !crate::kept_files::is_keepable(artifact) {
+        return Ok(());
+    }
+    let backed_up = match backup_rel {
+        Some(rel) => crate::stable_digest::file(&backup_dir.join(rel))?,
+        None => crate::setup_fingerprint::ABSENT_DIGEST.to_string(),
+    };
+    let current =
+        crate::setup_fingerprint::artifact_installed_full_digest(artifact, workspace_root, home)?;
+    if current != backed_up {
+        return Err(
+            "file changed during apply; nothing was overwritten, preview again".to_string(),
+        );
+    }
+    Ok(())
+}
+
 fn apply_single_artifact(
     artifact: &crate::artifact_registry::ArtifactId,
     workspace_root: &Path,
@@ -1613,7 +1642,15 @@ fn run_planned_artifacts(
             });
         }
 
-        let mutation = if matches!(p.kind, OperationKind::Remove) {
+        let mutation = if let Err(e) = ensure_unchanged_since_backup(
+            &p.artifact,
+            manifest.operations[operation_index].backup_rel.as_deref(),
+            &backup_dir,
+            &ws_root,
+            &home,
+        ) {
+            Err(e)
+        } else if matches!(p.kind, OperationKind::Remove) {
             remove_single_artifact(&p.artifact, &ws_root, &home)
         } else {
             apply_single_artifact(
@@ -2853,13 +2890,12 @@ pub fn apply_setup(
     let settings = crate::settings::load();
     let surface_ids = gate_requested_surfaces(surface_ids, &settings)?;
     if surface_ids.is_empty() {
-        // Every requested surface is target-disabled: nothing to apply.
-        let plan = crate::setup_lifecycle::empty_plan();
-        return Ok(apply_setup_plan_with_token(
-            &plan,
-            None,
-            &mut ProgressReporter::silent(),
-        ));
+        // Every reviewed surface was target-disabled after the preview. The fingerprint and token
+        // cannot be verified for an empty scope, so no result may claim they were.
+        return Err(
+            "Plan changed: every reviewed target is now disabled. Re-run preview before applying."
+                .to_string(),
+        );
     }
 
     // The first mutation takes the layout migration step before anything is read for the apply.
@@ -5564,13 +5600,58 @@ mod tests {
     }
 
     #[test]
-    fn apply_with_only_target_disabled_surfaces_is_a_no_op() {
+    fn a_skill_or_agent_file_edited_after_the_backup_is_not_overwritten() {
+        let env = TempSetupEnv::new("unchanged-since-backup");
+        let agent =
+            ArtifactId::ClaudeAgent(crate::artifact_registry::AgentName::new("inspector").unwrap());
+        let dest = agent.resolve_dest(&env.home, &env.ws).expect("dest");
+        fs::create_dir_all(dest.parent().unwrap()).expect("agents dir");
+        fs::write(&dest, "backed up\n").expect("installed");
+        let backup_dir = env.base.join("backup");
+        let rel = setup_transaction::backup_artifact(&agent, &backup_dir, &env.home, &env.ws)
+            .expect("backup")
+            .expect("backed up");
+        let check =
+            || ensure_unchanged_since_backup(&agent, Some(&rel), &backup_dir, &env.ws, &env.home);
+        check().expect("untouched since the backup");
+
+        fs::write(&dest, "edited by the user\n").expect("external edit");
+        let err = check().expect_err("an edit after the backup must stop the write");
+        assert!(err.contains("changed during apply"), "{err}");
+        assert_eq!(fs::read_to_string(&dest).unwrap(), "edited by the user\n");
+
+        // Nothing was backed up: a file that appeared since is the user's too.
+        let err = ensure_unchanged_since_backup(&agent, None, &backup_dir, &env.ws, &env.home)
+            .expect_err("a file created after the backup must stop the write");
+        assert!(err.contains("changed during apply"), "{err}");
+        fs::remove_file(&dest).expect("remove");
+        ensure_unchanged_since_backup(&agent, None, &backup_dir, &env.ws, &env.home)
+            .expect("still absent");
+
+        // Merged config files are not skill or agent files and keep their own flows.
+        ensure_unchanged_since_backup(
+            &ArtifactId::ClaudeRules,
+            None,
+            &backup_dir,
+            &env.ws,
+            &env.home,
+        )
+        .expect("not a skill or agent file");
+    }
+
+    #[test]
+    fn apply_with_only_target_disabled_surfaces_asks_for_a_new_preview() {
         let env = TempSetupEnv::new("gate-apply");
         disable_targets(&["cursor_setup"]);
-        let result = apply_setup(vec!["cursor_mcp".into()], false, None, None)
-            .expect("apply must not fail for gated-out surfaces");
-        assert!(result.success);
-        assert!(result.applied.is_empty());
+        // Even with a fingerprint and token from an earlier preview: the reviewed scope is gone.
+        let err = apply_setup(
+            vec!["cursor_mcp".into()],
+            false,
+            Some("a".repeat(64)),
+            Some("token".into()),
+        )
+        .expect_err("a scope emptied by gating must not report a successful apply");
+        assert!(err.contains("Re-run preview"), "error: {err}");
         assert!(
             !env.home.join(".cursor").exists(),
             "a disabled target must not be written"

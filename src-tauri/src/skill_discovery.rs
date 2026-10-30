@@ -125,6 +125,8 @@ pub(crate) fn frontmatter_fields(content: &str) -> Result<BTreeMap<String, Strin
         let Some((key, rest)) = split_key(line) else {
             continue;
         };
+        let key = unquote_key(key)?;
+        let key = key.as_str();
         // The indented lines that belong to this key.
         let start = index;
         while index < lines.len() {
@@ -152,6 +154,20 @@ fn split_key(line: &str) -> Option<(&str, &str)> {
         return None;
     }
     Some((key.trim_end(), rest.trim()))
+}
+
+/// A quoted top-level key reads as its unquoted text (`"name": tdd` is the key `name`). Escapes in
+/// a quoted key are rejected: a key must not be able to spell `name` indirectly.
+fn unquote_key(key: &str) -> Result<String, String> {
+    let Some(quote) = key.chars().next().filter(|c| *c == '"' || *c == '\'') else {
+        return Ok(key.to_string());
+    };
+    let inner = key
+        .strip_prefix(quote)
+        .and_then(|inner| inner.strip_suffix(quote))
+        .filter(|inner| key.len() >= 2 && !inner.contains([quote, '\\']))
+        .ok_or_else(|| format!("unsupported quoted frontmatter key {key}"))?;
+    Ok(inner.to_string())
 }
 
 fn scalar_value(rest: &str, continuation: &[&str]) -> Result<String, String> {
@@ -893,6 +909,22 @@ mod tests {
             "plain"
         );
         assert!(field("---\nname: \"open\n---\n", "name").is_err());
+    }
+
+    #[test]
+    fn quoted_frontmatter_keys_lose_their_quotes() {
+        assert_eq!(
+            field("---\n\"name\": tdd\ndescription: d\n---\n", "name").unwrap(),
+            "tdd"
+        );
+        assert_eq!(
+            field("---\n'name': tdd\ndescription: d\n---\n", "name").unwrap(),
+            "tdd"
+        );
+        // A quoted key repeating a plain key is still a duplicate.
+        assert!(field("---\nname: a\n\"name\": b\n---\n", "name").is_err());
+        // Escapes could spell `name` indirectly.
+        assert!(field("---\n\"na\\u006de\": tdd\n---\n", "name").is_err());
     }
 
     #[test]
