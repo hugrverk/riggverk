@@ -1,4 +1,4 @@
-//! The managed Playwright entry in the MCP file of a light harness (GitHub Copilot, Pi, Kilo).
+//! The managed Playwright entry in the MCP file of a light harness (Copilot, Pi, Kilo, Antigravity).
 //!
 //! The app owns one key of each file, `<root_key>.<entry_key>` (`mcpServers.playwright`,
 //! `mcp.playwright`); everything else belongs to the user. The file is read and written as strict

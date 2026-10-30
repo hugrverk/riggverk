@@ -752,18 +752,20 @@ pub fn expand_surface<R: SourceRoot + ?Sized>(
         SetupSurfaceId::CursorMcp => Ok(vec![ArtifactId::CursorMcp]),
         light @ (SetupSurfaceId::CopilotRules
         | SetupSurfaceId::PiRules
-        | SetupSurfaceId::KiloRules) => light
+        | SetupSurfaceId::KiloRules
+        | SetupSurfaceId::AntigravityRules) => light
             .harness()
             .and_then(LightHarnessId::new)
             .map(|harness| vec![ArtifactId::HarnessRules(harness)])
             .ok_or_else(|| "light rules surface without a light harness".to_string()),
-        light @ (SetupSurfaceId::CopilotMcp | SetupSurfaceId::PiMcp | SetupSurfaceId::KiloMcp) => {
-            light
-                .harness()
-                .and_then(LightHarnessId::new)
-                .map(|harness| vec![ArtifactId::HarnessMcp(harness)])
-                .ok_or_else(|| "light MCP surface without a light harness".to_string())
-        }
+        light @ (SetupSurfaceId::CopilotMcp
+        | SetupSurfaceId::PiMcp
+        | SetupSurfaceId::KiloMcp
+        | SetupSurfaceId::AntigravityMcp) => light
+            .harness()
+            .and_then(LightHarnessId::new)
+            .map(|harness| vec![ArtifactId::HarnessMcp(harness)])
+            .ok_or_else(|| "light MCP surface without a light harness".to_string()),
         // The app no longer keeps a copy of the bundle in the workspace folder: the surface wants
         // nothing, and the copies earlier releases left there are stale removals.
         SetupSurfaceId::WorkspaceBundle => Ok(Vec::new()),
@@ -1654,6 +1656,11 @@ mod tests {
             ),
             (HarnessId::Pi, ".pi/agent/AGENTS.md", "pi-rules.md"),
             (HarnessId::Kilo, ".config/kilo/AGENTS.md", "kilo-rules.md"),
+            (
+                HarnessId::Antigravity,
+                ".gemini/AGENTS.md",
+                "antigravity-rules.md",
+            ),
         ];
         assert_eq!(
             cases.len(),
@@ -1703,6 +1710,11 @@ mod tests {
                 HarnessId::Kilo,
                 ".config/kilo/kilo.jsonc",
                 "kilo.playwright.json",
+            ),
+            (
+                HarnessId::Antigravity,
+                ".gemini/config/mcp_config.json",
+                "antigravity.playwright.json",
             ),
         ];
         assert_eq!(

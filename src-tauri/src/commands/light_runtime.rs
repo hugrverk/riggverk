@@ -1,4 +1,4 @@
-//! Runtime health of the light harnesses (GitHub Copilot, Pi, Kilo Code), read only.
+//! Runtime health of the light harnesses (GitHub Copilot, Pi, Kilo Code, Antigravity), read only.
 //!
 //! What it looks at: the harness CLI's version, whether the managed rules block is in the harness's
 //! rules file, whether the managed Playwright entry is in its MCP file (the entry only: the user's
@@ -800,10 +800,12 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn pi_and_kilo_print_a_bare_version() {
+    fn pi_kilo_and_agy_print_a_version_that_is_read() {
         for (id, program, output, expected) in [
             (HarnessId::Pi, "pi", "1.3.0", "1.3.0"),
             (HarnessId::Kilo, "kilo", "7.8.12", "7.8.12"),
+            // Antigravity's CLI is agy; its exact output is not pinned, a bare version is read.
+            (HarnessId::Antigravity, "agy", "1.2.0", "1.2.0"),
         ] {
             let bin = Bin::new(program);
             bin.add(program, &format!("echo {output}"));
@@ -1083,6 +1085,34 @@ mod tests {
         );
         assert_eq!(
             fixture.skills(HarnessId::Pi, Some(&on), false).status,
+            "synced"
+        );
+    }
+
+    #[test]
+    fn antigravity_reads_its_two_own_folders_and_no_shared_one() {
+        let fixture = Skills::new("skills-antigravity");
+        fixture.install(".claude/skills", &["alpha", "beta"]);
+        fixture.install(".agents/skills", &["alpha", "beta"]);
+        for custom in [false, true] {
+            let on = [HarnessId::Claude, HarnessId::Codex];
+            let skills = fixture.skills(HarnessId::Antigravity, Some(&on), custom);
+            assert_eq!(
+                skills.roots,
+                [
+                    "~/.gemini/config/skills",
+                    "~/.gemini/antigravity-cli/skills"
+                ],
+                "the App and IDE folder, then the CLI folder (custom: {custom})"
+            );
+            assert_eq!(skills.status, "missing", "the shared folders do not count");
+        }
+        fixture.install(".gemini/config/skills", &["alpha", "beta"]);
+        let partial = fixture.skills(HarnessId::Antigravity, None, false);
+        assert_ne!(partial.status, "synced", "the CLI folder is still empty");
+        fixture.install(".gemini/antigravity-cli/skills", &["alpha", "beta"]);
+        assert_eq!(
+            fixture.skills(HarnessId::Antigravity, None, false).status,
             "synced"
         );
     }

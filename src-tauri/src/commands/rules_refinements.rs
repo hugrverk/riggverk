@@ -337,6 +337,15 @@ fn save_refinements_at(
     if rendered.len() as u64 > rules_block::MAX_RULES_FILE_BYTES {
         return Err(refused(MalformedReason::TooLarge.message()));
     }
+    // Nor would a harness with a smaller limit read all of it (Antigravity).
+    if let ArtifactId::HarnessRules(harness) = artifact {
+        if harness
+            .rules()
+            .is_some_and(|rules| !rules.fits(rendered.len()))
+        {
+            return Err(refused(super::rules::EXCEEDS_LIMIT_REASON));
+        }
+    }
     let backup_path =
         super::content::doc_backup_path(&format!("rules-{}", surface_key(surface)), &dest, None)?;
     super::content::write_doc_backup(&backup_path, text)?;

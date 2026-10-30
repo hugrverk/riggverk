@@ -2621,7 +2621,9 @@
       "digests": [
         "sha256:1cefba11fb5b21b7fd392b21c7e80e9963e677329d329c30cda32756134b35c5",
         "sha256:3467f3e795a8fec49386ebe01eb89777d511285e6d56afaff6963ded74865bb9",
-        "sha256:4baf69c9effda49d4cb0e5bffdc6a8e08c1d685cf9fc6310a5b7c9d6e65dca34"
+        "sha256:4baf69c9effda49d4cb0e5bffdc6a8e08c1d685cf9fc6310a5b7c9d6e65dca34",
+        "sha256:6b243702eed0d70c1b29d46805568226cfc7b95fe453207696d4843b1d25cf16",
+        "sha256:f518bee283702e57ec1f4868e04fd1e20e7cf05d41167ab89f94198486efaf32"
       ],
       "action": "update"
     },

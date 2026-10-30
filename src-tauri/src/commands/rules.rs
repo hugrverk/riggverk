@@ -21,6 +21,10 @@ use crate::rules_diff;
 use crate::setup_lifecycle::SetupSurfaceId;
 use crate::setup_transaction::{self, RulesContext, RulesRewrite};
 
+/// Why a rules file is not written: it would pass what the harness reads (Antigravity).
+pub(super) const EXCEEDS_LIMIT_REASON: &str =
+    "the file would pass the size limit of the harness; shorten your text below the END marker first";
+
 pub(super) fn user_home() -> Result<PathBuf, String> {
     crate::platform_paths::resolve_user_home(
         &crate::platform_paths::PlatformEnv::from_process_env(),
@@ -45,13 +49,14 @@ pub(super) fn enabled_rules_artifact(surface_id: SetupSurfaceId) -> Result<Artif
         SetupSurfaceId::ClaudeRules => ArtifactId::ClaudeRules,
         SetupSurfaceId::CodexRules => ArtifactId::CodexRules,
         SetupSurfaceId::OpenCodeRules => ArtifactId::OpenCodeRules,
-        SetupSurfaceId::CopilotRules | SetupSurfaceId::PiRules | SetupSurfaceId::KiloRules => {
-            surface_id
-                .harness()
-                .and_then(LightHarnessId::new)
-                .map(ArtifactId::HarnessRules)
-                .ok_or_else(not_rules)?
-        }
+        SetupSurfaceId::CopilotRules
+        | SetupSurfaceId::PiRules
+        | SetupSurfaceId::KiloRules
+        | SetupSurfaceId::AntigravityRules => surface_id
+            .harness()
+            .and_then(LightHarnessId::new)
+            .map(ArtifactId::HarnessRules)
+            .ok_or_else(not_rules)?,
         _ => return Err(not_rules()),
     };
     let settings = crate::settings::load();
@@ -397,6 +402,9 @@ fn plan_conversion(
             RulesPlan::Conflict(RulesConflict::PeerContextFile) => {
                 "the harness reads another context file in this folder; add the base to that file by hand or move it first".to_string()
             }
+            RulesPlan::Conflict(RulesConflict::ExceedsHarnessLimit) => {
+                EXCEEDS_LIMIT_REASON.to_string()
+            }
             _ => {
                 "this file is managed by the base block already; use the regular update".to_string()
             }
@@ -414,6 +422,14 @@ fn plan_conversion(
         file_label(artifact),
     )
     .map_err(|message| Box::new(refused(surface, message)))?;
+    if let ArtifactId::HarnessRules(harness) = artifact {
+        if harness
+            .rules()
+            .is_some_and(|rules| !rules.fits(converted.result.len()))
+        {
+            return Err(Box::new(refused(surface, EXCEEDS_LIMIT_REASON)));
+        }
+    }
     let operation = setup_transaction::conversion_operation(
         artifact,
         context.assessment,

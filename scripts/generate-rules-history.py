@@ -39,6 +39,7 @@ HARNESS_RULES = {
     "copilot": "templates/sync/copilot-rules.md",
     "pi": "templates/sync/pi-rules.md",
     "kilo": "templates/sync/kilo-rules.md",
+    "antigravity": "templates/sync/antigravity-rules.md",
 }
 INDEX_NAME = "index.json"
 BASE_PATH = re.compile(r"^([a-z0-9-]+)/([0-9a-f]{64})\.md$")

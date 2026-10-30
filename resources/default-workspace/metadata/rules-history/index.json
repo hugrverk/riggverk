@@ -1,5 +1,8 @@
 {
   "harnesses": {
+    "antigravity": [
+      "sha256:356e2ae840b29b6aa617ca905f2ed6161aa8557616f2d2ec139fcfe60d7a245d"
+    ],
     "claude": [
       "sha256:14b20eaed9c061e52fc54811ebac81d429a9c9e64ce46e8a5fa71fbc41360fb0",
       "sha256:2c745fad3f28c4f98c9f5d164a4bf6fe0a12ec30703d66c38d547be9385a2c4b",

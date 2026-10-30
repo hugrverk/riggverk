@@ -801,7 +801,8 @@ export type FindingCode =
   | "kilo_no_rules"
   | "copilot_not_covered"
   | "pi_not_covered"
-  | "config_only";
+  | "config_only"
+  | "antigravity_not_covered";
 
 export interface PostureFinding {
   code: FindingCode;

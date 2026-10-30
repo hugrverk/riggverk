@@ -68,6 +68,10 @@ pub enum SetupSurfaceId {
     PiMcp,
     /// The Playwright entry of Kilo's config (`kilo.jsonc`, else `kilo.json`, in the config folder)
     KiloMcp,
+    /// Google Antigravity global rules (`~/.gemini/AGENTS.md`)
+    AntigravityRules,
+    /// The Playwright entry of Antigravity's MCP file (`~/.gemini/config/mcp_config.json`)
+    AntigravityMcp,
     /// Installed runtime workspace bundled files
     WorkspaceBundle,
 }
@@ -93,6 +97,8 @@ impl SetupSurfaceId {
         SetupSurfaceId::CopilotMcp,
         SetupSurfaceId::PiMcp,
         SetupSurfaceId::KiloMcp,
+        SetupSurfaceId::AntigravityRules,
+        SetupSurfaceId::AntigravityMcp,
         SetupSurfaceId::WorkspaceBundle,
     ];
 
@@ -121,6 +127,8 @@ impl SetupSurfaceId {
             SetupSurfaceId::CopilotMcp => "Copilot MCP",
             SetupSurfaceId::PiMcp => "Pi MCP",
             SetupSurfaceId::KiloMcp => "Kilo MCP",
+            SetupSurfaceId::AntigravityRules => "Antigravity Rules",
+            SetupSurfaceId::AntigravityMcp => "Antigravity MCP",
             SetupSurfaceId::WorkspaceBundle => "Workspace Resources",
         }
     }
@@ -153,6 +161,7 @@ impl SetupSurfaceId {
             HarnessId::Copilot => Some(SetupSurfaceId::CopilotRules),
             HarnessId::Pi => Some(SetupSurfaceId::PiRules),
             HarnessId::Kilo => Some(SetupSurfaceId::KiloRules),
+            HarnessId::Antigravity => Some(SetupSurfaceId::AntigravityRules),
             HarnessId::Codex | HarnessId::OpenCode | HarnessId::Claude | HarnessId::Cursor => None,
         }
     }
@@ -163,6 +172,7 @@ impl SetupSurfaceId {
             HarnessId::Copilot => Some(SetupSurfaceId::CopilotMcp),
             HarnessId::Pi => Some(SetupSurfaceId::PiMcp),
             HarnessId::Kilo => Some(SetupSurfaceId::KiloMcp),
+            HarnessId::Antigravity => Some(SetupSurfaceId::AntigravityMcp),
             HarnessId::Codex | HarnessId::OpenCode | HarnessId::Claude | HarnessId::Cursor => None,
         }
     }
@@ -183,6 +193,9 @@ impl SetupSurfaceId {
             SetupSurfaceId::CopilotRules | SetupSurfaceId::CopilotMcp => Some(HarnessId::Copilot),
             SetupSurfaceId::PiRules | SetupSurfaceId::PiMcp => Some(HarnessId::Pi),
             SetupSurfaceId::KiloRules | SetupSurfaceId::KiloMcp => Some(HarnessId::Kilo),
+            SetupSurfaceId::AntigravityRules | SetupSurfaceId::AntigravityMcp => {
+                Some(HarnessId::Antigravity)
+            }
             SetupSurfaceId::Skills
             | SetupSurfaceId::ClaudeSkills
             | SetupSurfaceId::OpenCodeSkills

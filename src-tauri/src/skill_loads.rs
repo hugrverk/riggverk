@@ -168,6 +168,8 @@ impl FolderPaths {
                 (ReadFolder::Copilot, ".copilot/skills"),
                 (ReadFolder::PiAgent, ".pi/agent/skills"),
                 (ReadFolder::Kilo, ".kilo/skills"),
+                (ReadFolder::AntigravityApp, ".gemini/config/skills"),
+                (ReadFolder::AntigravityCli, ".gemini/antigravity-cli/skills"),
             ]
             .into_iter()
             .map(|(folder, rel)| (folder, home.join(rel)))
@@ -456,6 +458,11 @@ fn flags_for(harness: HarnessId, copies: &[SkillCopy]) -> Vec<SkillLoadFlag> {
     if copies.len() < 2 {
         return Vec::new();
     }
+    // Antigravity's App and CLI each read one folder: one copy per folder is one copy per
+    // surface, not a duplicate.
+    if harness == HarnessId::Antigravity && one_per_folder(copies) {
+        return Vec::new();
+    }
     if copies.iter().any(|copy| copy.owner == Owner::Foreign) {
         return vec![SkillLoadFlag::ForeignCopy];
     }
@@ -470,7 +477,7 @@ fn flags_for(harness: HarnessId, copies: &[SkillCopy]) -> Vec<SkillLoadFlag> {
             }]
         }
         HarnessId::Cursor => vec![SkillLoadFlag::PossibleDuplicate],
-        HarnessId::Claude => Vec::new(),
+        HarnessId::Claude | HarnessId::Antigravity => Vec::new(),
         HarnessId::Copilot | HarnessId::Pi | HarnessId::Kilo => {
             let same = copies.windows(2).all(|pair| pair[0].hash == pair[1].hash);
             vec![if same {
@@ -480,6 +487,15 @@ fn flags_for(harness: HarnessId, copies: &[SkillCopy]) -> Vec<SkillLoadFlag> {
             }]
         }
     }
+}
+
+/// Whether no two copies sit in one folder.
+fn one_per_folder(copies: &[SkillCopy]) -> bool {
+    copies.iter().enumerate().all(|(index, copy)| {
+        copies[..index]
+            .iter()
+            .all(|other| other.folder != copy.folder)
+    })
 }
 
 /// Index of the copy `harness` loads, when it can be told. A single copy is the one. A harness
@@ -943,6 +959,37 @@ mod tests {
             [ReadFolder::Agents, ReadFolder::Claude]
         );
         assert_eq!(alpha.winner, Some(0));
+    }
+
+    #[test]
+    fn antigravity_loads_one_copy_per_surface_from_its_own_folders_only() {
+        let fixture = Fixture::new("antigravity");
+        let (older, _guard) = shipped_alpha_v1();
+        // The shared folders hold a copy too; Antigravity reads neither.
+        fixture.skill(".claude/skills", "alpha", &fixture.current("alpha"));
+        fixture.skill(".agents/skills", "alpha", &fixture.current("alpha"));
+        fixture.skill(".gemini/config/skills", "alpha", &fixture.current("alpha"));
+        fixture.skill(".gemini/antigravity-cli/skills", "alpha", &older);
+        let a = HarnessId::Antigravity;
+        let loads = fixture.loads(&[a]);
+        let harness = of(&loads, a);
+        assert_eq!(
+            harness
+                .folders
+                .iter()
+                .map(|info| info.folder)
+                .collect::<Vec<_>>(),
+            [ReadFolder::AntigravityApp, ReadFolder::AntigravityCli]
+        );
+        let alpha = skill(harness, "alpha");
+        assert_eq!(
+            copy_folders(alpha),
+            [ReadFolder::AntigravityApp, ReadFolder::AntigravityCli]
+        );
+        // The App loads one and the CLI the other: no duplicate, and no single winner.
+        assert!(alpha.flags.is_empty(), "{:?}", alpha.flags);
+        assert_eq!(alpha.winner, None);
+        assert_eq!(alpha.copies[0].path, "~/.gemini/config/skills/alpha");
     }
 
     #[test]

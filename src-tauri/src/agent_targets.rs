@@ -10,10 +10,11 @@ pub enum HarnessId {
     OpenCode,
     Claude,
     Cursor,
-    /// The light tier (`light_harness`): GitHub Copilot, Pi and Kilo Code.
+    /// The light tier (`light_harness`): GitHub Copilot, Pi, Kilo Code and Google Antigravity.
     Copilot,
     Pi,
     Kilo,
+    Antigravity,
 }
 
 impl HarnessId {
@@ -25,6 +26,7 @@ impl HarnessId {
         HarnessId::Copilot,
         HarnessId::Pi,
         HarnessId::Kilo,
+        HarnessId::Antigravity,
     ];
 
     /// The harnesses enabled on a fresh install, and for a settings file that names none. The
@@ -45,13 +47,17 @@ impl HarnessId {
             HarnessId::Copilot => "copilot",
             HarnessId::Pi => "pi",
             HarnessId::Kilo => "kilo",
+            HarnessId::Antigravity => "antigravity",
         }
     }
 
     /// Whether the harness is in the light tier: skills reach and runtime health, described by
     /// `metadata/light-harnesses.json`.
     pub fn is_light(self) -> bool {
-        matches!(self, HarnessId::Copilot | HarnessId::Pi | HarnessId::Kilo)
+        matches!(
+            self,
+            HarnessId::Copilot | HarnessId::Pi | HarnessId::Kilo | HarnessId::Antigravity
+        )
     }
 }
 
@@ -429,7 +435,12 @@ mod tests {
         let mut expected: Vec<String> = targets()
             .iter()
             .map(|t| t.id.to_string())
-            .filter(|id| id != "codex_config" && id != "claude_config" && id != "kilo_mcp")
+            .filter(|id| {
+                !matches!(
+                    id.as_str(),
+                    "codex_config" | "claude_config" | "kilo_mcp" | "antigravity_mcp"
+                )
+            })
             .collect();
         let mut actual = default_enabled_ids();
         expected.sort();
@@ -452,6 +463,10 @@ mod tests {
         assert!(
             !actual.contains(&"kilo_mcp".to_string()),
             "Kilo's config file is credentials-adjacent: its MCP entry is opt-in"
+        );
+        assert!(
+            !actual.contains(&"antigravity_mcp".to_string()),
+            "Antigravity's MCP entry is opt-in"
         );
     }
 
@@ -608,10 +623,12 @@ mod tests {
             "pi_mcp",
             "kilo_rules",
             "kilo_mcp",
+            "antigravity_rules",
+            "antigravity_mcp",
         ]
         .into_iter()
         .collect();
-        assert_eq!(ids, expected, "targets() must contain exactly 16 known IDs");
+        assert_eq!(ids, expected, "targets() must contain exactly 18 known IDs");
     }
 
     #[test]
@@ -619,19 +636,21 @@ mod tests {
         let all = targets();
         let ids: Vec<&str> = all.iter().map(|t| t.id).collect();
         assert_eq!(
-            &ids[ids.len() - 6..],
+            &ids[ids.len() - 8..],
             [
                 "copilot_rules",
                 "copilot_mcp",
                 "pi_rules",
                 "pi_mcp",
                 "kilo_rules",
-                "kilo_mcp"
+                "kilo_mcp",
+                "antigravity_rules",
+                "antigravity_mcp"
             ],
             "descriptor order, per harness the rules file and then the MCP entry, after cursor_setup"
         );
-        assert_eq!(ids[ids.len() - 7], "cursor_setup");
-        assert_eq!(ids[ids.len() - 8], "claude_config");
+        assert_eq!(ids[ids.len() - 9], "cursor_setup");
+        assert_eq!(ids[ids.len() - 10], "claude_config");
         let pi = all.iter().find(|t| t.id == "pi_rules").expect("pi_rules");
         assert_eq!(pi.harness, HarnessId::Pi);
         assert!(matches!(pi.kind, TargetKind::Rules));
@@ -646,13 +665,14 @@ mod tests {
         let rules: Vec<&str> = rule_targets().iter().map(|t| t.id).collect();
         assert_eq!(
             rules.len(),
-            6,
-            "the three central and the three light rules targets"
+            7,
+            "the three central and the four light rules targets"
         );
         for id in [
             "copilot_rules",
             "pi_rules",
             "kilo_rules",
+            "antigravity_rules",
             "copilot_mcp",
             "pi_mcp",
         ] {
@@ -669,6 +689,26 @@ mod tests {
         assert_eq!(kilo_mcp.source_rel, "templates/mcp/kilo.playwright.json");
         assert_eq!(target_surfaces("kilo_mcp"), [SetupSurfaceId::KiloMcp]);
         assert_eq!(surface_target_id(SetupSurfaceId::PiMcp), Some("pi_mcp"));
+        assert!(!default_enabled_ids().contains(&"antigravity_mcp".to_string()));
+        let antigravity_mcp = all
+            .iter()
+            .find(|t| t.id == "antigravity_mcp")
+            .expect("antigravity_mcp");
+        assert_eq!(antigravity_mcp.harness, HarnessId::Antigravity);
+        assert!(matches!(antigravity_mcp.kind, TargetKind::Mcp));
+        assert_eq!(antigravity_mcp.target_rel, ".gemini/config/mcp_config.json");
+        assert_eq!(
+            antigravity_mcp.source_rel,
+            "templates/mcp/antigravity.playwright.json"
+        );
+        assert_eq!(
+            target_surfaces("antigravity_mcp"),
+            [SetupSurfaceId::AntigravityMcp]
+        );
+        assert_eq!(
+            target_surfaces("antigravity_rules"),
+            [SetupSurfaceId::AntigravityRules]
+        );
         assert_eq!(
             serde_json::to_value(TargetKind::Mcp).unwrap(),
             serde_json::json!("mcp")
@@ -722,7 +762,16 @@ mod tests {
         let names: Vec<&str> = HarnessId::ALL.iter().map(|id| id.as_str()).collect();
         assert_eq!(
             names,
-            ["codex", "opencode", "claude", "cursor", "copilot", "pi", "kilo"]
+            [
+                "codex",
+                "opencode",
+                "claude",
+                "cursor",
+                "copilot",
+                "pi",
+                "kilo",
+                "antigravity"
+            ]
         );
         for id in HarnessId::ALL {
             assert_eq!(
