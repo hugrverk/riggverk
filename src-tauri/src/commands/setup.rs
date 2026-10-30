@@ -5023,14 +5023,29 @@ mod tests {
     #[test]
     fn the_digest_recorded_before_each_write_is_the_written_file() {
         let env = TempSetupEnv::new("expected-digest");
-        // A rules file to merge into, beside files created from nothing.
-        fs::create_dir_all(env.home.join(".config/opencode")).expect("opencode folder");
-        fs::write(env.home.join(".config/opencode/AGENTS.md"), "My rules\n").expect("rules");
+        let mut settings = crate::settings::load();
+        settings
+            .enabled_target_ids
+            .push("claude_config".to_string());
+        crate::settings::save_with_revision_check(settings, None).expect("settings");
+        // A settings.json to merge into, beside files created from nothing.
+        fs::create_dir_all(env.home.join(".claude")).expect("claude folder");
+        fs::write(
+            env.home.join(".claude/settings.json"),
+            "{\n  \"model\": \"opus\"\n}\n",
+        )
+        .expect("settings.json");
         let planned = env.plan(&[
             SetupSurfaceId::CodexRules,
-            SetupSurfaceId::OpenCodeRules,
+            SetupSurfaceId::ClaudeConfig,
             SetupSurfaceId::CodexAgents,
         ]);
+        let kinds: Vec<_> = planned.iter().map(|p| (&p.artifact, p.kind)).collect();
+        assert!(
+            kinds.contains(&(&ArtifactId::ClaudeSettings, OperationKind::Update)),
+            "{kinds:?}"
+        );
+        assert!(kinds.contains(&(&ArtifactId::CodexRules, OperationKind::Create)));
         let result =
             apply_planned_artifacts(&planned, vec![], None, &mut ProgressReporter::silent());
         assert!(result.success, "apply: {}", result.message);
