@@ -59,7 +59,7 @@ class CheckHarnessMirrorTests(unittest.TestCase):
     def test_the_repository_agrees(self) -> None:
         result = self.run_check()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn("7 harnesses (4 central, 3 light)", result.stdout)
+        self.assertIn("8 harnesses (4 central, 4 light)", result.stdout)
 
     def test_a_missing_input_is_reported(self) -> None:
         (self.tree / mirror.TS_VIEWS).unlink()
@@ -68,11 +68,11 @@ class CheckHarnessMirrorTests(unittest.TestCase):
     # Rust ids
 
     def test_a_rust_variant_missing_from_all(self) -> None:
-        self.edit(mirror.RUST_TARGETS, "        HarnessId::Pi,\n        HarnessId::Kilo,\n    ];\n\n    /// The harnesses enabled", "        HarnessId::Kilo,\n    ];\n\n    /// The harnesses enabled")
+        self.edit(mirror.RUST_TARGETS, "        HarnessId::Kilo,\n        HarnessId::Antigravity,\n    ];\n\n    /// The harnesses enabled", "        HarnessId::Kilo,\n    ];\n\n    /// The harnesses enabled")
         self.assert_fails("HarnessId::ALL")
 
     def test_a_rust_variant_the_ui_does_not_know(self) -> None:
-        self.edit(mirror.RUST_TARGETS, "    Kilo,\n}", "    Kilo,\n    Extra,\n}")
+        self.edit(mirror.RUST_TARGETS, "    Antigravity,\n}", "    Antigravity,\n    Extra,\n}")
         self.assert_fails("HarnessId::ALL")
 
     def test_a_wire_name_that_serde_would_not_write(self) -> None:
@@ -90,7 +90,7 @@ class CheckHarnessMirrorTests(unittest.TestCase):
     # TypeScript lists
 
     def test_a_harness_missing_from_the_typescript_lists(self) -> None:
-        self.edit(mirror.TS_TYPES, '"copilot", "pi", "kilo"', '"copilot", "pi"')
+        self.edit(mirror.TS_TYPES, '"copilot", "pi", "kilo", "antigravity"', '"copilot", "pi", "kilo"')
         self.assert_fails("INSTALL_AGENTS")
 
     def test_a_central_list_that_is_missing_a_harness_changes_the_whole_list(self) -> None:
@@ -110,14 +110,14 @@ class CheckHarnessMirrorTests(unittest.TestCase):
         self.assert_fails("DEFAULT_ENABLED_HARNESS_IDS")
 
     def test_a_tab_missing_for_a_harness(self) -> None:
-        self.edit(mirror.TS_INSTALL, '"copilot", "pi", "kilo"];', '"copilot", "pi"];')
+        self.edit(mirror.TS_INSTALL, '"copilot", "pi", "kilo", "antigravity"];', '"copilot", "pi", "kilo"];')
         self.assert_fails("HARNESS_NAV_ORDER")
 
     def test_light_tabs_must_follow_the_central_ones(self) -> None:
         self.edit(
             mirror.TS_INSTALL,
-            '["codex", "opencode", "cursor", "claude", "copilot", "pi", "kilo"]',
-            '["copilot", "codex", "opencode", "cursor", "claude", "pi", "kilo"]',
+            '["codex", "opencode", "cursor", "claude", "copilot", "pi", "kilo", "antigravity"]',
+            '["copilot", "codex", "opencode", "cursor", "claude", "pi", "kilo", "antigravity"]',
         )
         self.assert_fails("the light tier must follow")
 
@@ -161,7 +161,7 @@ class CheckHarnessMirrorTests(unittest.TestCase):
     # Skills reach, surfaces and targets
 
     def test_a_skill_folder_the_ui_does_not_know(self) -> None:
-        self.edit(mirror.TS_TYPES, '  | "kilo";', '  | "kilo_x";')
+        self.edit(mirror.TS_TYPES, '  | "antigravity_cli";', '  | "antigravity_x";')
         self.assert_fails("SkillReadFolder")
 
     def test_a_load_flag_the_ui_does_not_know(self) -> None:
@@ -169,8 +169,21 @@ class CheckHarnessMirrorTests(unittest.TestCase):
         self.assert_fails("SkillLoadFlag")
 
     def test_a_rust_folder_missing_from_all(self) -> None:
-        self.edit(mirror.RUST_ROOTS, "        ReadFolder::Kilo,\n    ];", "    ];")
+        self.edit(mirror.RUST_ROOTS, "        ReadFolder::AntigravityCli,\n    ];", "    ];")
         self.assert_fails("ReadFolder::ALL")
+
+    def test_an_install_root_no_read_folder_names(self) -> None:
+        self.edit(mirror.RUST_ROOTS, "    AntigravityCli,\n}\n\nimpl SkillRoot", "    AntigravityCli,\n    Extra,\n}\n\nimpl SkillRoot")
+        self.edit(mirror.RUST_ROOTS, "        SkillRoot::AntigravityCli,\n    ];", "        SkillRoot::AntigravityCli,\n        SkillRoot::Extra,\n    ];")
+        self.assert_fails("SkillRoot: ['extra'] are install roots without a ReadFolder")
+
+    def test_an_install_root_missing_from_all(self) -> None:
+        self.edit(mirror.RUST_ROOTS, "        SkillRoot::AntigravityCli,\n    ];", "    ];")
+        self.assert_fails("SkillRoot::ALL")
+
+    def test_antigravitys_folders_the_ui_does_not_know(self) -> None:
+        self.edit(mirror.TS_TYPES, '  | "antigravity_app"\n', "")
+        self.assert_fails("SkillReadFolder")
 
     def test_a_surface_only_one_side_knows(self) -> None:
         self.edit(mirror.TS_TYPES, '  | "workspace_bundle";', '  | "workspace_bundle"\n  | "kilo_extra";')
@@ -199,7 +212,7 @@ class CheckHarnessMirrorTests(unittest.TestCase):
     # The rules file of each light harness
 
     def test_a_rules_surface_the_ui_does_not_know(self) -> None:
-        self.edit(mirror.TS_TYPES, '  | "pi_rules"\n  | "kilo_rules";', '  | "kilo_rules";')
+        self.edit(mirror.TS_TYPES, '  | "pi_rules"\n  | "kilo_rules"\n', '  | "kilo_rules"\n')
         self.assert_fails("RulesSurfaceId has no pi_rules")
 
     def test_a_harness_the_rules_view_does_not_map(self) -> None:
@@ -207,7 +220,7 @@ class CheckHarnessMirrorTests(unittest.TestCase):
         self.assert_fails("RULES_SURFACE")
 
     def test_a_harness_the_rules_command_does_not_offer(self) -> None:
-        self.edit(mirror.TS_RULES, '"claude", "copilot", "pi", "kilo"]', '"claude", "pi", "kilo"]')
+        self.edit(mirror.TS_RULES, '"claude", "copilot", "pi", "kilo", "antigravity"]', '"claude", "pi", "kilo", "antigravity"]')
         self.assert_fails("RULES_HARNESSES has no copilot")
 
     def test_a_rules_file_name_the_ui_would_get_wrong(self) -> None:
@@ -253,15 +266,15 @@ class CheckHarnessMirrorTests(unittest.TestCase):
         self.assert_fails("TargetKind::Mcp")
 
     def test_a_target_the_ui_starts_on_that_the_descriptor_starts_off(self) -> None:
-        self.edit(mirror.TS_INSTALL, '["codex_config", "claude_config", "kilo_mcp"]', '["codex_config", "claude_config"]')
+        self.edit(mirror.TS_INSTALL, '["codex_config", "claude_config", "kilo_mcp", "antigravity_mcp"]', '["codex_config", "claude_config", "antigravity_mcp"]')
         self.assert_fails("DEFAULT_DISABLED_TARGET_IDS")
 
     def test_claude_config_must_start_off_in_the_ui(self) -> None:
-        self.edit(mirror.TS_INSTALL, '["codex_config", "claude_config", "kilo_mcp"]', '["codex_config", "kilo_mcp"]')
+        self.edit(mirror.TS_INSTALL, '["codex_config", "claude_config", "kilo_mcp", "antigravity_mcp"]', '["codex_config", "kilo_mcp", "antigravity_mcp"]')
         self.assert_fails("DEFAULT_DISABLED_TARGET_IDS")
 
     def test_a_target_the_ui_starts_off_that_the_descriptor_starts_on(self) -> None:
-        self.edit(mirror.TS_INSTALL, '["codex_config", "claude_config", "kilo_mcp"]', '["codex_config", "claude_config", "kilo_mcp", "pi_mcp"]')
+        self.edit(mirror.TS_INSTALL, '["codex_config", "claude_config", "kilo_mcp", "antigravity_mcp"]', '["codex_config", "claude_config", "kilo_mcp", "antigravity_mcp", "pi_mcp"]')
         self.assert_fails("DEFAULT_DISABLED_TARGET_IDS")
 
     def test_a_descriptor_default_the_ui_does_not_follow(self) -> None:
