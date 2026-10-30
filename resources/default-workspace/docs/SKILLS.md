@@ -47,7 +47,7 @@ Grouped source: `skills/kretsverket/<skill>/SKILL.md`.
 | `kretsverket-file-compatibility` | `.krets` / `.kretsym` persistence, parsing, migrations, defaults, and untrusted imports. |
 | `kretsverket-symbol-system` | Symbol Editor sandbox, definitions, instances, imports, nested symbols, anchors, and placed-instance updates. |
 | `kretsverket-electrical-drawing` | Wire semantics, terminal bindings, crossings, references, and drawing-versus-netlist boundaries. |
-| `kretsverket-status-report` | A Swedish one-file HTML lägesrapport (progress, what remains, release, open decisions) built from the bundled template with fresh facts from `origin/main`. Ships `assets/report-template.html` and `scripts/verify-report.mjs`. |
+| `kretsverket-status-report` | Kretsverket profile of `status-report`: the Swedish one-file HTML lägesrapport from Kretsverket's `origin/main` docs (current state, roadmap, known gaps, decisions), rendered and verified with `status-report`'s template and scripts. |
 
 ## Routing boundaries
 
