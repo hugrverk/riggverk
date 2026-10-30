@@ -4894,6 +4894,25 @@ mod tests {
     }
 
     #[test]
+    fn explicit_rollback_of_a_crashed_apply_removes_the_file_once_it_is_the_output_again() {
+        let env = TempSetupEnv::new("crash-explicit-rollback");
+        let (transaction_id, rules) = apply_created_codex_rules(&env);
+        mark_crashed_before_digests(&env, &transaction_id, true);
+        let output = fs::read_to_string(&rules).expect("rules");
+        // The reconcile keeps the file while the user's addition is in it.
+        fs::write(&rules, format!("{output}\nMy own notes\n")).expect("user addition");
+        reconcile_interrupted_setup_transactions(&env.ws, &env.home).expect("reconcile");
+        assert!(rules.is_file());
+
+        // The user takes the addition out again and asks for the undo.
+        fs::write(&rules, &output).expect("addition removed");
+        let result = rollback_transaction(&transaction_id, false, &mut ProgressReporter::silent());
+
+        assert!(result.success, "{} {:?}", result.message, result.failed);
+        assert!(!rules.exists(), "the file the app created is removed");
+    }
+
+    #[test]
     fn the_digest_recorded_before_each_write_is_the_written_file() {
         let env = TempSetupEnv::new("expected-digest");
         // A rules file to merge into, beside files created from nothing.

@@ -3543,6 +3543,22 @@ fn rollback_restore_mode(
     workspace_root: &Path,
     home: &Path,
 ) -> Result<RollbackRestoreMode, String> {
+    if op.post_apply_full_digest.is_none() {
+        if let Some(expected_full) = op.expected_full_digest.as_deref() {
+            // The app stopped before it saved the post-apply digests: the digest recorded before
+            // the write proves the content, and only as a whole.
+            let current_full = crate::setup_fingerprint::artifact_installed_full_digest(
+                &op.artifact,
+                workspace_root,
+                home,
+            )?;
+            return if current_full == expected_full {
+                Ok(RollbackRestoreMode::FullBackup)
+            } else {
+                Err(CHANGED_SINCE_APPLY.into())
+            };
+        }
+    }
     artifact_unchanged_since_apply(op, workspace_root, home)?;
     let expected_full = op
         .post_apply_full_digest
@@ -3576,9 +3592,12 @@ pub fn validate_create_target_unchanged(
     if !matches!(op.kind, OperationKind::Create) {
         return Ok(());
     }
+    // Without post-apply digests (the app stopped before saving them), the digest recorded before
+    // the write is the proof.
     let expected_full = op
         .post_apply_full_digest
         .as_deref()
+        .or(op.expected_full_digest.as_deref())
         .ok_or_else(|| "missing post-apply full digest".to_string())?;
     let current_full = crate::setup_fingerprint::artifact_installed_full_digest(
         &op.artifact,
@@ -4545,6 +4564,35 @@ mod tests {
         let err = restore_artifact_from_backup(&op, &backup_dir, &home, &ws).unwrap_err();
         assert_eq!(err, CHANGED_SINCE_APPLY);
         assert_eq!(fs::read_to_string(&dest).unwrap(), "edited later");
+    }
+
+    #[test]
+    fn rollback_after_a_crash_uses_the_digest_recorded_before_the_write() {
+        let _guard = crate::test_env::guard::lock();
+        // What the app wrote is no longer what the source makes (the source changed since), and
+        // no post-apply digest was saved: only the digest recorded before the write proves it.
+        let (mut op, backup_dir, home, ws) =
+            automatic_restore_fixture("crash-proof", "original", "written by an older source");
+        let dest = home.join(".codex/AGENTS.md");
+        op.expected_full_digest = Some(crate::stable_digest::bytes(b"written by an older source"));
+        validate_update_target_unchanged(&op, &ws, &home).expect("explicit preflight");
+        restore_artifact_from_backup_for_explicit_rollback(&op, &backup_dir, &home, &ws)
+            .expect("explicit rollback");
+        assert_eq!(fs::read_to_string(&dest).unwrap(), "original");
+
+        fs::write(&dest, "written by an older source").unwrap();
+        restore_artifact_from_backup(&op, &backup_dir, &home, &ws).expect("automatic rollback");
+        assert_eq!(fs::read_to_string(&dest).unwrap(), "original");
+
+        // Anything else is kept, by both.
+        fs::write(&dest, "edited after the crash").unwrap();
+        for result in [
+            restore_artifact_from_backup_for_explicit_rollback(&op, &backup_dir, &home, &ws),
+            restore_artifact_from_backup(&op, &backup_dir, &home, &ws),
+        ] {
+            assert_eq!(result.unwrap_err(), CHANGED_SINCE_APPLY);
+        }
+        assert_eq!(fs::read_to_string(&dest).unwrap(), "edited after the crash");
     }
 
     #[test]
