@@ -1,6 +1,17 @@
 {
   "releases": [
     {
+      "version": "2026.10.16",
+      "sections": [
+        {
+          "title": "New",
+          "items": [
+            "Add status-report skill and Kretsverket profile"
+          ]
+        }
+      ]
+    },
+    {
       "version": "2026.10.15",
       "sections": [
         {
