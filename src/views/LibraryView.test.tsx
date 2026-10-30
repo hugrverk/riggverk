@@ -15,10 +15,11 @@ import type {
 } from "../types";
 import { LibraryView } from "./LibraryView";
 
-// These tests drive the real controller through a whole sheet flow; under a loaded machine (parallel gates) a flow
-// can pass 5 s. The longer limit only matters when the machine is slow; a real hang still fails.
-vi.setConfig({ testTimeout: 20_000 });
-configure({ asyncUtilTimeout: 5_000 });
+// These tests drive the real controller through a whole sheet flow, and role queries with names are slow in jsdom.
+// Under a loaded machine (the release gate builds Rust alongside) a single wait has passed 5 s. The longer limits only
+// matter when the machine is slow; a real hang still fails.
+vi.setConfig({ testTimeout: 40_000 });
+configure({ asyncUtilTimeout: 15_000 });
 
 const invoke = vi.fn();
 
