@@ -1,0 +1,245 @@
+{
+  "schema": 1,
+  "project": {
+    "name": "Riggverk",
+    "tagline": "Lokal miljöhanterare för kodagenter: en gemensam uppsättning regler, skills, agenter och MCP för alla harnesses.",
+    "repo": "hugrverk/riggverk",
+    "version": "2026.10.15",
+    "language": "sv"
+  },
+  "generated": "2026-10-30T17:50:00+01:00",
+  "period": { "from": "2026-10-16", "to": "2026-10-30", "label": "Senaste två veckorna" },
+  "health": {
+    "state": "on-track",
+    "summary": "15 releaser på två veckor och inga öppna PR:er. GitHub-CI är avstängt, så den lokala release-checken är enda grinden.",
+    "cite": ["gh-releases", "gh-prs", "gh-ci"]
+  },
+  "metrics": [
+    {
+      "label": "Releaser",
+      "value": 15,
+      "delta": "+15",
+      "trend": [0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 2, 3, 5, 4],
+      "cite": ["gh-releases"]
+    },
+    {
+      "label": "Mergade PR:er",
+      "value": 119,
+      "delta": "+111",
+      "trend": [1, 0, 24, 23, 0, 0, 0, 0, 0, 0, 0, 13, 25, 21, 12],
+      "cite": ["gh-prs"]
+    },
+    {
+      "label": "Commits",
+      "value": 407,
+      "delta": "+131",
+      "trend": [1, 0, 90, 40, 0, 0, 0, 0, 0, 0, 0, 32, 79, 128, 37],
+      "cite": ["git-log"]
+    },
+    {
+      "label": "Nya harnesses",
+      "value": 5,
+      "cite": ["release-notes"]
+    },
+    {
+      "label": "Öppna PR:er",
+      "value": 0,
+      "cite": ["gh-prs"]
+    }
+  ],
+  "happened": [
+    {
+      "date": "2026-10-30",
+      "title": "Avstängda agenter samlas i en nod i flödeskartan",
+      "kind": "release",
+      "ref": "v2026.10.15 · #138",
+      "detail": "Översiktens flödeskarta håller sig kort hur många agenter Riggverk än känner till.",
+      "cite": ["release-notes", "gh-prs"]
+    },
+    {
+      "date": "2026-10-30",
+      "title": "Grok Build och Google Antigravity som lätta harnesses",
+      "kind": "feature",
+      "ref": "#134 · #135",
+      "detail": "Båda är avstängda tills de slås på i Inställningar. Grok läser de skills som redan installeras; Antigravity får egna skills-mappar.",
+      "cite": ["release-notes", "gh-prs"]
+    },
+    {
+      "date": "2026-10-30",
+      "title": "Säkerhetsgranskning åtgärdad",
+      "kind": "security",
+      "ref": "#132",
+      "detail": "Dokumentlistan följer inte längre en utbytt symlänk, och Python-hjälparna körs i isolerat läge.",
+      "cite": ["release-notes", "gh-prs"]
+    },
+    {
+      "date": "2026-10-30",
+      "title": "Terra-granskningen: återställning, rollback och ångra felar säkert",
+      "kind": "fix",
+      "ref": "#128 · #129 · #130",
+      "detail": "Osparade ändringar överlever spara, uppdatering och långsam inläsning; en krasch mitt i en uppdatering tar bara bort filer appen bevisligen skrev.",
+      "cite": ["release-notes", "gh-prs"]
+    },
+    {
+      "date": "2026-10-29",
+      "title": "Två granskningsrundor: setup, Codex-config och Library",
+      "kind": "fix",
+      "ref": "#118–#124",
+      "detail": "Härdad setup och sparning, Cursors mcp.json med token stoppar inte längre installationen, egna OpenCode-modeller lämnas orörda.",
+      "cite": ["release-notes", "gh-prs"]
+    },
+    {
+      "date": "2026-10-29",
+      "title": "Flödeskarta på översikten och nytt Library",
+      "kind": "feature",
+      "ref": "#114 · #115",
+      "detail": "Kartan visar hur bas, egna förfiningar och skill packs flödar till varje agent. Library är uppdelat i ämnen som Systeminställningar.",
+      "cite": ["release-notes", "gh-prs"]
+    },
+    {
+      "date": "2026-10-29",
+      "title": "Nytt utseende med sidomeny, historik och skill packs",
+      "kind": "release",
+      "ref": "v2026.10.7",
+      "detail": "Terminalvyerna är borta. Översikten svarar på om uppsättningen fungerar, och historiken listar varje uppdatering med Ångra.",
+      "cite": ["release-notes", "gh-releases"]
+    },
+    {
+      "date": "2026-10-28",
+      "title": "Förberedelser för öppen källkod",
+      "kind": "chore",
+      "ref": "#91 · #95",
+      "detail": "MIT-metadata, genererade beroendenotiser, CONTRIBUTING och SECURITY.",
+      "cite": ["gh-prs", "git-log"]
+    },
+    {
+      "date": "2026-10-28",
+      "title": "Riggverks namn överallt",
+      "kind": "feature",
+      "ref": "#92 · v2026.10.6",
+      "detail": "Datamappen flyttar till ~/.config/riggverk och markörerna i regelfilerna heter BEGIN RIGGVERK BASE.",
+      "cite": ["release-notes", "gh-prs"]
+    },
+    {
+      "date": "2026-10-27",
+      "title": "Adversariella skills: review, test och implementation v2",
+      "kind": "feature",
+      "ref": "#69 · #71 · #72",
+      "detail": "En fristående kritiker granskar, skriver frysta tester eller utmanar implementationen; varje fynd bär ett bevis.",
+      "cite": ["release-notes", "gh-prs"]
+    },
+    {
+      "date": "2026-10-19",
+      "title": "Riggverk 2026.10.1, första releasen under det nya namnet",
+      "kind": "release",
+      "ref": "v2026.10.1",
+      "detail": "Copilot, Pi och Kilo kom som valfria harnesses, och varje skill installeras som en delad SKILL.md.",
+      "cite": ["release-notes", "gh-releases"]
+    },
+    {
+      "date": "2026-10-18",
+      "title": "Projektet byter namn till Riggverk",
+      "kind": "chore",
+      "ref": "#37",
+      "cite": ["gh-prs"]
+    }
+  ],
+  "happening": [
+    {
+      "title": "Statusrapport som skill i kitet",
+      "owner": "Skilldesigner och visuell designer (agenter)",
+      "status": "active",
+      "progress": 0.2,
+      "progress_basis": "1 av 5 leveranser i briefen klar",
+      "ref": "SHARED.md",
+      "note": "Den visuella designern tar fram tre förslag; ägaren väljer ett.",
+      "cite": ["brief"]
+    },
+    {
+      "title": "Muse Code som harness",
+      "status": "blocked",
+      "ref": "nya-harnesses.md",
+      "note": "Väntar tills regelsökvägen och dubbletthanteringen av skills är verifierade lokalt.",
+      "cite": ["harness-research"]
+    }
+  ],
+  "next": [
+    {
+      "title": "Riggverk som öppen källkod",
+      "when": "2026-11",
+      "confidence": "medium",
+      "depends_on": ["Repot är privat i dag", "GitHub-CI är avstängt"],
+      "cite": ["brief", "gh-repo", "gh-ci"]
+    },
+    {
+      "title": "Ägaren väljer design för statusrapporten",
+      "confidence": "high",
+      "depends_on": ["Tre visuella förslag"],
+      "cite": ["brief"]
+    },
+    {
+      "title": "Muse Code som lätt harness",
+      "confidence": "low",
+      "depends_on": ["Verifierad regelsökväg", "Verifierad dubbletthantering av skills"],
+      "cite": ["harness-research"]
+    }
+  ],
+  "risks": [
+    {
+      "title": "GitHub-CI är avstängt sedan 2026-10-18",
+      "severity": "medium",
+      "detail": "Båda arbetsflödena är manuellt avstängda och de senaste körningarna misslyckades.",
+      "mitigation": "Den lokala ./scripts/release-check.sh är grinden före varje release.",
+      "cite": ["gh-ci", "release-doc"]
+    },
+    {
+      "title": "Hög releasetakt",
+      "severity": "low",
+      "detail": "Nio releaser på knappt två dygn (2026.10.7–2026.10.15) ger kort tid att upptäcka fel mellan dem.",
+      "mitigation": "Varje release går genom release-checken och kan ångras per uppdatering i appen.",
+      "cite": ["gh-releases", "release-doc"]
+    },
+    {
+      "title": "macOS-appen är inte notariserad",
+      "severity": "low",
+      "detail": "Första starten stoppas av macOS och kräver Öppna ändå i Integritet och säkerhet.",
+      "mitigation": "Varje releasenotis beskriver steget.",
+      "cite": ["release-notes"]
+    }
+  ],
+  "decisions": [
+    {
+      "date": "2026-10-30",
+      "title": "Antigravity får egna skills-mappar",
+      "why": "Antigravity läser inte de befintliga skills-rötterna; mapparna töms igen när harnessen stängs av.",
+      "cite": ["release-notes", "harness-research"]
+    },
+    {
+      "date": "2026-10-29",
+      "title": "Codex-config kräver Python 3.11 eller nyare",
+      "why": "Pythonversionen som följer med macOS kan inte läsa alla giltiga config.toml.",
+      "cite": ["release-notes"]
+    },
+    {
+      "date": "2026-10-29",
+      "title": "Flödeskarta ersätter agentrutnätet",
+      "why": "Visar varifrån varje agents regler och skills kommer och vad som väntar på beslut.",
+      "cite": ["release-notes", "gh-prs"]
+    }
+  ],
+  "sources": [
+    { "id": "git-log", "label": "git log origin/main", "kind": "git", "at": "2026-10-30T17:48:00+01:00" },
+    { "id": "gh-releases", "label": "gh release list --repo hugrverk/riggverk", "kind": "github", "at": "2026-10-30T17:48:00+01:00" },
+    { "id": "gh-prs", "label": "gh pr list (merged och open)", "kind": "github", "at": "2026-10-30T17:48:00+01:00" },
+    { "id": "gh-ci", "label": "gh workflow list, gh run list", "kind": "ci", "at": "2026-10-30T17:48:00+01:00" },
+    { "id": "gh-repo", "label": "gh repo view (synlighet och licens)", "kind": "github", "at": "2026-10-30T17:48:00+01:00" },
+    { "id": "release-notes", "label": "release-notes/2026.10.1–2026.10.15.md", "kind": "file", "at": "2026-10-30T17:48:00+01:00" },
+    { "id": "release-doc", "label": "docs/RELEASE.md", "kind": "file", "at": "2026-10-30T17:48:00+01:00" },
+    { "id": "harness-research", "label": ".claude/research/nya-harnesses.md (lokal, ej versionerad)", "kind": "file", "at": "2026-10-30T17:48:00+01:00" },
+    { "id": "brief", "label": "Ägarens brief för statusrapporten", "kind": "stated", "at": "2026-10-30T17:44:00+01:00" }
+  ],
+  "gaps": [
+    "Inga testsiffror: ingen CI-körning efter 2026-10-18 och ingen release-check-logg lästes.",
+    "Planer efter 2026-10-30 finns bara i ägarens brief och lokala anteckningar, inte i repot."
+  ]
+}

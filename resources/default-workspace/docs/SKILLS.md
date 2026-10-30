@@ -27,6 +27,7 @@ Do not duplicate full `SKILL.md` content here. This file is an index for choosin
 | `screenshot-review` | Reviewing supplied UI screenshots before implementation or for responsive/layout critique. |
 | `security-audit` | An explicit full codebase security audit or pen test: Cloudflare's six-phase workflow with independent verification and validated `findings.json`. Vendored (MIT); companion files and validators install next to its `SKILL.md`. |
 | `security-review` | Reviewing auth, authorization, input, secrets, uploads, API endpoints, payments, shell execution, or sensitive data. |
+| `status-report` | A one-file HTML status report for any repository: what happened, what is in progress and what comes next, with every item citing git, GitHub, CI or doc evidence. Ships `report.schema.json`, `assets/report-template.html` and `scripts/render-report.mjs` and `scripts/verify-report.mjs`. |
 | `tdd` | Using a narrow red-green-refactor loop for behavior changes, fixes, regressions, and tests. |
 | `zoom-out` | Explaining unfamiliar code in broader system context before editing. |
 
@@ -46,7 +47,7 @@ Grouped source: `skills/kretsverket/<skill>/SKILL.md`.
 | `kretsverket-file-compatibility` | `.krets` / `.kretsym` persistence, parsing, migrations, defaults, and untrusted imports. |
 | `kretsverket-symbol-system` | Symbol Editor sandbox, definitions, instances, imports, nested symbols, anchors, and placed-instance updates. |
 | `kretsverket-electrical-drawing` | Wire semantics, terminal bindings, crossings, references, and drawing-versus-netlist boundaries. |
-| `kretsverket-status-report` | A Swedish one-file HTML lägesrapport (progress, what remains, release, open decisions) built from the bundled template with fresh facts from `origin/main`. Ships `assets/report-template.html` and `scripts/verify-report.mjs`. |
+| `kretsverket-status-report` | Kretsverket profile of `status-report`: the Swedish one-file HTML lägesrapport from Kretsverket's `origin/main` docs (current state, roadmap, known gaps, decisions), rendered and verified with `status-report`'s template and scripts. |
 
 ## Routing boundaries
 
@@ -64,6 +65,7 @@ Grouped source: `skills/kretsverket/<skill>/SKILL.md`.
 | `handoff` / `release-check` | Handoff compacts session state; release-check validates merge/deploy readiness. |
 | `security-review` / `security-audit` | Security-review checks a change or answers a focused question in the current context; security-audit runs a full multi-agent audit of a whole codebase only when one is explicitly asked for. |
 | `security-review` / `sentinel` (agent) | Skill guides the review in the current context; where the harness has the sentinel agent (OpenCode, Claude), it performs an independent read-only review of a finished diff, otherwise the review stays inline. |
+| `status-report` / `kretsverket-status-report` | Status-report owns the workflow, data contract, render and verify for any repo; kretsverket-status-report is its profile with Kretsverket's sources, sections and Swedish tone. |
 | `retro` / `context-budget` | Retro mines one named session for environment fixes; context-budget audits instruction surfaces without a session. |
 | `zoom-out` / repo-scout (agent) | Zoom-out explains code context in chat; repo-scout agent maps unfamiliar repos read-only before implementation. |
 | Kretsverket quartet | `kretsverket-editor-change` (editor layers), `kretsverket-file-compatibility` (persistence), `kretsverket-symbol-system` (symbols), `kretsverket-electrical-drawing` (wiring semantics)—kept separate because triggers and invariants differ. |
@@ -85,6 +87,7 @@ Grouped source: `skills/kretsverket/<skill>/SKILL.md`.
 - Kretsverket lägesrapport or statusrapport: `kretsverket-status-report`.
 - Prototyping before implementation: `prototype`; add `frontend-design` for UI prototypes.
 - Pausing, executor reports, or context transfer: `handoff`; add `context-budget` for large reports.
+- Project status report, statusrapport or lägesrapport: `status-report`.
 - Release readiness: `release-check`.
 - Docs, rules, or prompt consolidation: `context-budget`; add `implementation-plan` for explicit maps.
 - Session retrospective: `retro`, only when the user invokes `/retro` (it is not routed by the rules).
@@ -115,7 +118,7 @@ The `description` is the only selection signal Codex, OpenCode, and Cursor see, 
 
 ## Supporting files
 
-Files next to a `SKILL.md` (references, schemas, templates, scripts) install with the skill, at the same relative paths, so a skill can say "read `HUNTING.md`" or "run `scripts/verify-report.mjs`" and mean the file next to it. `security-audit` carries its reference files, `kretsverket-status-report` carries `assets/report-template.html` and `scripts/verify-report.mjs`, and `adversarial-implementation` carries `adversarial-roles.md` (how roles are chosen) and `critic-recipes.md` (CLI recipes for external critics), which other adversarial skills such as `adversarial-test` read from there.
+Files next to a `SKILL.md` (references, schemas, templates, scripts) install with the skill, at the same relative paths, so a skill can say "read `HUNTING.md`" or "run `scripts/verify-report.mjs`" and mean the file next to it. `security-audit` carries its reference files, `status-report` carries its schema, template and `scripts/render-report.mjs` and `scripts/verify-report.mjs`, and `adversarial-implementation` carries `adversarial-roles.md` (how roles are chosen) and `critic-recipes.md` (CLI recipes for external critics), which other adversarial skills such as `adversarial-test` read from there.
 
 Rules for the files in a skill directory in the bundle: regular files only (no symlinks), names of letters, digits, `.`, `_` and `-` that do not start with a dot, at most four path levels, at most 64 files and 2 MiB in total, at most 1 MiB per file, and no `SKILL.md` below the skill's own. Dot files are ignored. A skill that breaks a rule installs nothing until it is fixed. Write paths in a skill relative to its directory; never point a skill at the workspace folder, since the installed copy lives in a skills folder.
 

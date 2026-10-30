@@ -1,0 +1,187 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "status-report/report.schema.json",
+  "title": "Project status report",
+  "description": "Data contract for one status report. Every item cites at least one entry in sources. Uses only $ref to $defs, type, const, enum, required, properties, additionalProperties, items, minItems, maxItems, minimum, maximum, minLength, maxLength and pattern, so verify-report.mjs can check it without dependencies.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "project", "generated", "period", "health", "happened", "happening", "next", "sources"],
+  "properties": {
+    "schema": { "const": 1 },
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "language"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "tagline": { "type": "string", "maxLength": 200, "description": "Optional. First sentence of the README or the repo description." },
+        "repo": { "type": "string", "maxLength": 120, "description": "Optional. owner/name or the folder name. Never a URL with credentials." },
+        "version": { "type": "string", "maxLength": 40, "description": "Optional. Latest tag or the manifest version on the default branch." },
+        "language": { "type": "string", "pattern": "^[a-z]{2}(-[A-Z]{2})?$", "description": "BCP 47 language of the copy, e.g. sv or en. Follows the user." }
+      }
+    },
+    "generated": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(:\\d{2})?(Z|[+-]\\d{2}:\\d{2})$" },
+    "period": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from", "to"],
+      "properties": {
+        "from": { "$ref": "#/$defs/date" },
+        "to": { "$ref": "#/$defs/date" },
+        "label": { "type": "string", "maxLength": 60, "description": "Optional. Human label such as 'Senaste två veckorna'." }
+      }
+    },
+    "health": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "summary", "cite"],
+      "properties": {
+        "state": { "enum": ["on-track", "at-risk", "blocked"] },
+        "summary": { "type": "string", "minLength": 1, "maxLength": 240 },
+        "cite": { "$ref": "#/$defs/cite" }
+      }
+    },
+    "metrics": {
+      "type": "array",
+      "maxItems": 6,
+      "description": "Optional. Counts derived from git, gh or files; never estimates.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["label", "value", "cite"],
+        "properties": {
+          "label": { "type": "string", "minLength": 1, "maxLength": 40 },
+          "value": { "type": "number" },
+          "unit": { "type": "string", "maxLength": 12, "description": "Optional, e.g. % or h." },
+          "delta": { "type": "string", "pattern": "^(\\+|-|±)\\d+([.,]\\d+)?%?$", "description": "Optional. Change against the previous period of equal length." },
+          "trend": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 60,
+            "items": { "type": "number", "minimum": 0 },
+            "description": "Optional. Equal slices of the period, oldest first."
+          },
+          "cite": { "$ref": "#/$defs/cite" }
+        }
+      }
+    },
+    "happened": {
+      "type": "array",
+      "maxItems": 20,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["date", "title", "kind", "cite"],
+        "properties": {
+          "date": { "$ref": "#/$defs/date" },
+          "title": { "$ref": "#/$defs/title" },
+          "kind": { "enum": ["release", "feature", "fix", "security", "docs", "chore", "decision"] },
+          "ref": { "$ref": "#/$defs/ref" },
+          "detail": { "$ref": "#/$defs/text" },
+          "cite": { "$ref": "#/$defs/cite" }
+        }
+      }
+    },
+    "happening": {
+      "type": "array",
+      "maxItems": 12,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["title", "status", "cite"],
+        "properties": {
+          "title": { "$ref": "#/$defs/title" },
+          "status": { "enum": ["active", "review", "blocked"] },
+          "owner": { "type": "string", "maxLength": 80, "description": "Optional. A handle or role, never an email address." },
+          "progress": { "type": "number", "minimum": 0, "maximum": 1, "description": "Optional. Only with progress_basis." },
+          "progress_basis": { "type": "string", "maxLength": 80, "description": "Required with progress: the count it comes from, e.g. '3 of 5 checklist items'." },
+          "ref": { "$ref": "#/$defs/ref" },
+          "note": { "$ref": "#/$defs/text" },
+          "cite": { "$ref": "#/$defs/cite" }
+        }
+      }
+    },
+    "next": {
+      "type": "array",
+      "maxItems": 12,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["title", "confidence", "cite"],
+        "properties": {
+          "title": { "$ref": "#/$defs/title" },
+          "when": { "type": "string", "pattern": "^\\d{4}(-Q[1-4]|-(0[1-9]|1[0-2])(-(0[1-9]|[12]\\d|3[01]))?)?$", "description": "Optional. YYYY, YYYY-Qn, YYYY-MM or YYYY-MM-DD, only when a source states it." },
+          "confidence": { "enum": ["high", "medium", "low"] },
+          "depends_on": { "type": "array", "maxItems": 5, "items": { "type": "string", "maxLength": 80 } },
+          "note": { "$ref": "#/$defs/text" },
+          "cite": { "$ref": "#/$defs/cite" }
+        }
+      }
+    },
+    "risks": {
+      "type": "array",
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["title", "severity", "cite"],
+        "properties": {
+          "title": { "$ref": "#/$defs/title" },
+          "severity": { "enum": ["high", "medium", "low"] },
+          "detail": { "$ref": "#/$defs/text" },
+          "mitigation": { "$ref": "#/$defs/text" },
+          "cite": { "$ref": "#/$defs/cite" }
+        }
+      }
+    },
+    "decisions": {
+      "type": "array",
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["date", "title", "why", "cite"],
+        "properties": {
+          "date": { "$ref": "#/$defs/date" },
+          "title": { "$ref": "#/$defs/title" },
+          "why": { "$ref": "#/$defs/text" },
+          "cite": { "$ref": "#/$defs/cite" }
+        }
+      }
+    },
+    "sources": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 30,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "label", "kind", "at"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,39}$" },
+          "label": { "type": "string", "minLength": 1, "maxLength": 120, "description": "The command or repo-relative path, never a raw URL with a query string." },
+          "kind": { "enum": ["git", "github", "ci", "file", "stated"], "description": "stated = the user or a brief said so; the template marks items citing only stated sources as claimed." },
+          "at": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}(T\\d{2}:\\d{2}(:\\d{2})?(Z|[+-]\\d{2}:\\d{2}))?$" }
+        }
+      }
+    },
+    "gaps": {
+      "type": "array",
+      "maxItems": 8,
+      "description": "Optional. What could not be checked and why, e.g. no gh, no network, no CI.",
+      "items": { "type": "string", "minLength": 1, "maxLength": 200 }
+    }
+  },
+  "$defs": {
+    "date": { "type": "string", "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$" },
+    "title": { "type": "string", "minLength": 1, "maxLength": 100 },
+    "text": { "type": "string", "maxLength": 300 },
+    "ref": { "type": "string", "maxLength": 60, "description": "Optional. PR, issue, tag, short SHA or file name as plain text." },
+    "cite": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 6,
+      "items": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,39}$" }
+    }
+  }
+}

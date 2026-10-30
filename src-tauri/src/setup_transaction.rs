@@ -29,11 +29,13 @@ pub const ARTIFACT_MANIFEST_SCHEMA_VERSION: u32 = 5;
 /// the count, and a damaged or hand-made manifest must not be able to ask for an unbounded amount.
 /// A plan over the limit fails before the first write, so an upgrade that does not fit is one the
 /// user can never apply: the limit has to cover the largest legitimate first upgrade with room
-/// to spare. That is a profile from before the shared skill files with all central harnesses
-/// enabled: the whole bundle, retired adapters and their manifest, skills in the wanted folders,
-/// the app's older copies in other folders (including removed skills), and agent, rules and
-/// config files, tested in `skill_folders_contract`.
-pub(crate) const MAX_MANIFEST_OPERATIONS: usize = 1024;
+/// to spare. That is a profile from before the shared skill files with every harness enabled
+/// (nine, Antigravity with two skill folders of its own): the whole bundle, retired adapters and
+/// their manifest, skills in every wanted folder, the app's older copies in other folders
+/// (including removed skills), and agent, rules and config files, tested in
+/// `skill_folders_contract` with half again as margin for future skills. Real plans do not grow
+/// with the limit; only that extreme profile pays the quadratic cost.
+pub(crate) const MAX_MANIFEST_OPERATIONS: usize = 2048;
 
 /// Error reported when rollback finds user changes made after apply. Callers
 /// compare against it to tell a preserved user edit from a real failure.
