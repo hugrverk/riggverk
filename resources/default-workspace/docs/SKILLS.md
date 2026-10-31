@@ -98,19 +98,40 @@ Grouped source: `skills/kretsverket/<skill>/SKILL.md`.
 
 ## Skill Metadata
 
-Each `SKILL.md` frontmatter has `name` and `description` plus these fields:
+Bundled `SKILL.md` frontmatter follows the [Agent Skills spec](https://agentskills.io/specification): `name`, `description`, `license: MIT`, optional `compatibility` and `allowed-tools`, and Riggverk's own fields under `metadata:` as plain string values:
 
-- `category` — functional area or `kretsverket`.
-- `risk` — low, medium, or high.
-- `targets` — comma-separated supported tools: codex, opencode, claude, cursor.
-- `related` — comma-separated related skill names; the routing check verifies each name exists.
+```yaml
+---
+name: browser-qa
+description: Verifies frontend changes in a real browser ... Use when ...
+license: MIT
+compatibility: Needs browser automation, such as the Playwright MCP server Riggverk installs or the Playwright CLI (npx playwright).
+metadata:
+  category: frontend
+  risk: medium
+  targets: codex, opencode, claude, cursor, copilot, pi, kilo, antigravity, grok
+  related: screenshot-review, accessibility-review, frontend-design
+---
+```
+
+- `license` — `MIT` on every bundled skill, so the license travels with a copy taken out of the bundle. Third-party credits are in the repository's `NOTICE.md`.
+- `compatibility` — only where a skill needs something beyond reading and editing files: subagents or another agent CLI (`adversarial-*`, full `security-audit`), browser automation (`browser-qa`), `gh` and Node.js (`status-report`, `kretsverket-status-report`).
+- `metadata.category` — functional area or `kretsverket`.
+- `metadata.risk` — low, medium, or high.
+- `metadata.targets` — comma-separated harnesses that get the skill. Every harness reads the skills folders Riggverk installs into, so bundled skills list all nine: codex, opencode, claude, cursor, copilot, pi, kilo, antigravity, grok.
+- `metadata.related` — comma-separated related skill names; the routing check verifies each name exists.
+- `metadata.source` — upstream work a skill adapts or draws on (see `NOTICE.md`).
 - `disable-model-invocation` — optional `true` for user-invoked skills (currently `retro`). Claude Code and Cursor then hide the skill from the model; Codex and OpenCode ignore the flag, so such a skill must not be referenced in routing bullets and its description says it is user-invoked.
 
 The `adversarial-*` skills keep model invocation so plain words can start them, but each run spends several agents, so the routing check also keeps them out of routing bullets.
 
-Claude-only frontmatter keys sit directly in the skill's frontmatter: `context`, `agent`, `background`, and `allowed-tools` (for example `release-check` runs in a forked `verifier` context on Claude Code, and `handoff` and `release-check` pre-approve the read-only commands behind their `!` state injection). Codex and OpenCode ignore them. A skill that sets one also carries a `### Claude Code` notes section (see below).
+Claude-only frontmatter keys sit directly in the skill's frontmatter, because Claude Code reads them only there: `context`, `agent`, `background`, `disable-model-invocation`, and `allowed-tools` (for example `release-check` runs in a forked `verifier` context on Claude Code, and `handoff` and `release-check` pre-approve the read-only commands behind their `!` state injection). Codex and OpenCode ignore them. A skill that sets one of `context`, `agent`, `background` or `allowed-tools` also carries a `### Claude Code` notes section (see below).
 
-`targets` is validated metadata and selects nothing: skills folders are shared between harnesses, so every bundled skill is installed into every folder that is wanted, flat as `<skills-folder>/<name>/`, with its `SKILL.md` and every supporting file in it. Other metadata fields are operator guidance only. `category`, `risk`, `targets` and `related` are top-level keys outside the Agent Skills spec: the harnesses Riggverk installs into ignore unknown keys, but a strict validator (a skill upload to claude.ai or the Skills API, `skills-ref validate`) may refuse them, so remove them from a copy you upload elsewhere.
+The spec allows `allowed-tools` (experimental). The other four are outside it, and a strict validator (`skills-ref validate`, a skill upload to claude.ai or the Skills API) refuses them: today that is `retro` (`disable-model-invocation`) and `release-check` (`context`, `agent`, `background`). They stay because moving them under `metadata:` would turn the behaviour off; remove them from a copy you upload elsewhere. Every other bundled skill passes a strict validator, and `scripts/check-skill-routing.py` refuses any other top-level key in a bundled skill.
+
+Packs and personal skills may keep `category`, `risk`, `targets` and `related` at the top level, as older releases wrote them; the app reads both layouts. When a file sets a key in both places, the non-empty `metadata.<key>` wins. A Library save writes the text as you typed it and never moves keys between the layouts.
+
+`targets` is validated metadata and selects nothing: skills folders are shared between harnesses, so every bundled skill is installed into every folder that is wanted, flat as `<skills-folder>/<name>/`, with its `SKILL.md` and every supporting file in it. A pack or personal skill must name at least one harness from the nine. Other metadata fields are operator guidance only.
 
 ## Description standard
 
@@ -132,7 +153,7 @@ Text that only one harness should act on goes at the end of the file under `## H
 
 Claude Code runs `!` followed by a backtick-quoted command (and a fence opened with three backticks and `!`) when the skill loads. Other harnesses show that text literally. It is therefore allowed only inside `### Claude Code`, with a one-sentence plain-text preface saying that other harnesses should run the commands themselves (see `handoff` and `release-check`).
 
-In the source repository `python3 scripts/check-skill-routing.py` validates every `SKILL.md`: frontmatter and names, the notes structure and order, injection syntax only under `### Claude Code`, Claude-only frontmatter keys only with Claude notes, and LF line endings without a BOM.
+In the source repository `python3 scripts/check-skill-routing.py` validates every `SKILL.md`: frontmatter and names, spec-valid top-level keys (plus the documented Claude keys), `license` and `metadata`, the notes structure and order, injection syntax only under `### Claude Code`, Claude-only frontmatter keys only with Claude notes, and LF line endings without a BOM.
 
 ## Agent Metadata
 
@@ -153,7 +174,7 @@ A pack is a folder of your own skills that Riggverk installs, updates and rolls 
 ~/.config/riggverk/packs/<pack>/skills/<group>/<skill>/SKILL.md
 ```
 
-The pack name is lowercase letters, digits and hyphens. A `git clone` into `packs/` works, and `git pull` plus Install updates it; keep the folder writable by you only (`chmod go-w`). The skill format is the bundle's: `SKILL.md` with `name`, `description` and `targets`, supporting files beside it, no symlinks. Only top-level frontmatter keys count, read as YAML reads them (quotes, `|` and `>` block scalars); a key given twice, or supporting files whose names differ only in case, refuse the skill. Dot entries (`.git`, `.venv`) are skipped and never installed. Packs add skills, and a pack may add routing lines for its own skills to the rules (below); they cannot change anything else in the rules, nor agents or configs.
+The pack name is lowercase letters, digits and hyphens. A `git clone` into `packs/` works, and `git pull` plus Install updates it; keep the folder writable by you only (`chmod go-w`). The skill format is the bundle's: `SKILL.md` with `name`, `description` and `targets` (under `metadata:` or, as older packs have it, at the top level), supporting files beside it, no symlinks. `name` and `description` count only at the top level, and keys are read as YAML reads them (quotes, `|` and `>` block scalars); a key given twice, or supporting files whose names differ only in case, refuse the skill. Dot entries (`.git`, `.venv`) are skipped and never installed. Packs add skills, and a pack may add routing lines for its own skills to the rules (below); they cannot change anything else in the rules, nor agents or configs.
 
 A pack may also hold `routing.md`: up to 30 lines like the base's "Skill routing" lines, each a `- ` bullet that names one or more of the pack's own skills in backticks, for example ``- Canvas or editor work: `my-canvas-change`.`` The next Install shows them in the rules files under `## Pack skill routing`, with a diff, before anything is written. A line that names a bundled skill or another pack's skill, or holds markup, a heading or a code fence, keeps the whole file out, and the Library's Packs view says which line.
 

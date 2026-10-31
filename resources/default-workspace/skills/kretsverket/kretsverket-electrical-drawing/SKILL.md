@@ -1,10 +1,12 @@
 ---
 name: kretsverket-electrical-drawing
 description: Protects Kretsverket wire semantics, terminal bindings, junctions and crossings, cross-sheet references, and transforms, keeping drawing data separate from any netlist. Use when Kretsverket work touches wires, connection points, references, or BOM and Dellista derivation.
-category: kretsverket
-risk: high
-targets: codex, opencode, claude, cursor
-related: kretsverket-editor-change, kretsverket-symbol-system, tdd, minimal-implementation
+license: MIT
+metadata:
+  category: kretsverket
+  risk: high
+  targets: codex, opencode, claude, cursor, copilot, pi, kilo, antigravity, grok
+  related: kretsverket-editor-change, kretsverket-symbol-system, tdd, minimal-implementation
 ---
 
 # Kretsverket Electrical Drawing

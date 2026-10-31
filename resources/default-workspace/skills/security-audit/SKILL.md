@@ -1,10 +1,14 @@
 ---
 name: security-audit
 description: Runs Cloudflare's six-phase defensive security audit of a whole codebase with independent verification and validated machine-readable findings. Use when someone explicitly asks to security-audit or pen-test a codebase, or wants a full end-to-end security review or audit report.
-category: security
-risk: high
-targets: codex, opencode, claude, cursor
-related: security-review, release-check
+license: MIT
+compatibility: Full audit mode needs subagents, and Node.js for the bundled validators.
+metadata:
+  category: security
+  risk: high
+  targets: codex, opencode, claude, cursor, copilot, pi, kilo, antigravity, grok
+  related: security-review, release-check
+  source: https://github.com/cloudflare/security-audit-skill (MIT, vendored, see UPSTREAM.md)
 ---
 
 # Security Audit

@@ -31,6 +31,16 @@ def build_tree(dest: Path) -> None:
     shutil.copy2(ROOT / bootstrap, dest / bootstrap)
 
 
+def load_checker(tree: Path):
+    """Import the checker copied into `tree` as a module, without running main()."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("check_skill_routing", tree / "scripts/check-skill-routing.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def run(tree: Path, script: str, *args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, f"scripts/{script}", *args],
@@ -147,8 +157,44 @@ class CheckSkillRoutingTests(unittest.TestCase):
         self.assert_fails("must be the last '##' section")
 
     def test_claude_only_frontmatter_needs_claude_notes(self) -> None:
-        self.edit(self.skill("tdd"), "category: ", "allowed-tools: Bash(ls *)\ncategory: ")
+        self.edit(self.skill("tdd"), "license: MIT\n", "license: MIT\nallowed-tools: Bash(ls *)\n")
         self.assert_fails("Claude-only frontmatter")
+
+    def test_riggverk_key_at_the_top_level_of_a_bundled_skill_fails(self) -> None:
+        self.edit(self.skill("tdd"), "  category: testing\n", "")
+        self.edit(self.skill("tdd"), "license: MIT\n", "license: MIT\ncategory: testing\n")
+        self.assert_fails("top-level frontmatter keys ['category'] are outside the Agent Skills spec")
+
+    def test_unknown_top_level_key_fails(self) -> None:
+        self.edit(self.skill("tdd"), "license: MIT\n", "license: MIT\nversion: 2\n")
+        self.assert_fails("top-level frontmatter keys ['version'] are outside the Agent Skills spec")
+
+    def test_missing_license_fails(self) -> None:
+        self.edit(self.skill("tdd"), "license: MIT\n", "")
+        self.assert_fails("bundled skills declare 'license: MIT'")
+
+    def test_unknown_or_missing_metadata_key_fails(self) -> None:
+        self.edit(self.skill("tdd"), "  risk: low\n", "  owner: me\n")
+        self.assert_fails("unknown ['owner'], missing ['risk']")
+
+    def test_duplicate_metadata_key_fails(self) -> None:
+        self.edit(self.skill("tdd"), "  risk: low\n", "  risk: low\n  risk: high\n")
+        self.assert_fails("duplicate metadata keys ['risk']")
+
+    def test_long_compatibility_fails(self) -> None:
+        self.edit(self.skill("browser-qa"), "compatibility: Needs", "compatibility: " + "x" * 500 + " Needs")
+        self.assert_fails("compatibility must be one safe plain YAML line")
+
+    def test_targets_must_name_every_harness(self) -> None:
+        self.edit(self.skill("tdd"), ", antigravity, grok\n", ", antigravity\n")
+        self.assert_fails("missing targets: ['grok']")
+
+    def test_metadata_wins_over_a_top_level_key_like_in_the_app(self) -> None:
+        checker = load_checker(self.tree)
+        frontmatter = "name: x\ndescription: d\nrisk: high\nmetadata:\n  risk: low\n  related: a, b\n"
+        self.assertEqual(checker.skill_fields(frontmatter)["risk"], "low")
+        self.assertEqual(checker.skill_fields(frontmatter)["related"], "a, b")
+        self.assertEqual(checker.skill_fields("name: x\nrisk: high\n")["risk"], "high")
 
     def test_duplicate_frontmatter_key_fails(self) -> None:
         self.edit(self.skill("release-check"), "agent: verifier\n", "agent: verifier\nagent: other\n")
@@ -223,7 +269,7 @@ class CheckSkillRoutingTests(unittest.TestCase):
 
     def test_user_invoked_flag_on_routed_skill_fails(self) -> None:
         # zoom-out is routed by the global rules; hiding it from the model would be a contradiction.
-        self.edit(self.skill("zoom-out"), "category: architecture", "disable-model-invocation: true\ncategory: architecture")
+        self.edit(self.skill("zoom-out"), "license: MIT\n", "license: MIT\ndisable-model-invocation: true\n")
         self.assert_fails("names user-invoked skill `zoom-out`")
 
     def test_adversarial_skill_in_routing_bullet_fails(self) -> None:

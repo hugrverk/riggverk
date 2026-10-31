@@ -1,10 +1,12 @@
 ---
 name: kretsverket-file-compatibility
 description: Protects Kretsverket .krets and .kretsym persistence (parsing, defaults, migrations, round trips, untrusted imports) with no silent data loss. Use when a Kretsverket change alters saved fields, file versions, import handling, or load and save code.
-category: kretsverket
-risk: high
-targets: codex, opencode, claude, cursor
-related: security-review, tdd, release-check, minimal-implementation
+license: MIT
+metadata:
+  category: kretsverket
+  risk: high
+  targets: codex, opencode, claude, cursor, copilot, pi, kilo, antigravity, grok
+  related: security-review, tdd, release-check, minimal-implementation
 ---
 
 # Kretsverket File Compatibility

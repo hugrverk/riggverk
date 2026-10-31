@@ -1,10 +1,14 @@
 ---
 name: adversarial-review
 description: A fresh read-only critic attacks an existing diff or a plan; the lead keeps only findings it proves and fixes nothing. Use when the user explicitly asks for an adversarial review ("kör en adversarial review", "granska planen adversariellt"), never unasked. Not for routine reviews (/code-review).
-category: review
-risk: medium
-targets: codex, opencode, claude, cursor
-related: adversarial-implementation, minimal-implementation, security-review
+license: MIT
+compatibility: Needs subagents, or Codex, Claude Code or OpenCode as a critic CLI; with neither it stops, since a self-review is not adversarial. Reads adversarial-roles.md and critic-recipes.md from the adversarial-implementation skill.
+metadata:
+  category: review
+  risk: medium
+  targets: codex, opencode, claude, cursor, copilot, pi, kilo, antigravity, grok
+  related: adversarial-implementation, minimal-implementation, security-review
+  source: https://github.com/raddue/crucible (red-team, MIT) and https://github.com/dementev-dev/adversarial-review (Apache-2.0)
 ---
 
 # Adversarial Review
@@ -138,6 +142,8 @@ End with one ledger line in the user's language:
 Ledger: Review done in 1 round; changes requested; findings 2 accepted, 1 rejected, 3 unproven, 1 pre-existing; critic codex/gpt-6.1-sol (default).
 Ledger: Granskning klar efter 1 runda; ändringar krävs; fynd 2 accepterade, 1 avvisat, 3 obevisade, 1 befintligt sedan tidigare; kritiker codex/gpt-6.1-sol (standard).
 ```
+
+Background: the fresh critic, the steel-man finding format and the Fatal, Significant and Minor severities come from crucible's red-team skill (MIT); the read-only critic and the accept, re-scope or reject adjudication from dementev-dev/adversarial-review (Apache-2.0). Plan mode, the Pre-existing check against the base and the proof rule are this skill's own.
 
 ## Harness notes
 

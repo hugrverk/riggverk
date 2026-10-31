@@ -28,7 +28,7 @@ fn skill_summary_from_path(
     group: String,
 ) -> SkillSummary {
     let content = std::fs::read_to_string(skill_md).unwrap_or_default();
-    let fields = crate::skill_discovery::frontmatter_fields(&content).unwrap_or_default();
+    let fields = crate::skill_discovery::skill_fields(&content).unwrap_or_default();
     let field = |key: &str| fields.get(key).cloned().unwrap_or_default();
     let name = field("name");
     let desc = field("description");
@@ -578,6 +578,29 @@ mod tests {
         // whitespace trimmed, empty entries removed
         assert_eq!(s.targets, vec!["codex", "opencode", "claude", "cursor"]);
         assert_eq!(s.related, vec!["diagnose", "release-check"]);
+    }
+
+    /// The Library shows the same metadata for a skill in the spec layout (`metadata:`) as for one
+    /// with the older top-level keys.
+    #[test]
+    fn spec_metadata_layout_reads_like_top_level_keys() {
+        let root = temp_root("meta-spec-layout");
+        let path = root.join("skills/frontend-design/SKILL.md");
+        fs::create_dir_all(path.parent().expect("parent")).expect("create skill parent");
+        fs::write(
+            &path,
+            "---\nname: frontend-design\ndescription: test skill\nlicense: MIT\nmetadata:\n  category: frontend\n  risk: medium\n  targets: codex, opencode, claude, cursor\n  related: screenshot-review, browser-qa\n---\n",
+        )
+        .expect("write skill");
+
+        let skills = discover_skills(&root).expect("discover skills");
+        let _ = fs::remove_dir_all(&root);
+
+        let s = &skills[0];
+        assert_eq!(s.category, "frontend");
+        assert_eq!(s.risk, "medium");
+        assert_eq!(s.targets, vec!["codex", "opencode", "claude", "cursor"]);
+        assert_eq!(s.related, vec!["screenshot-review", "browser-qa"]);
     }
 
     #[test]

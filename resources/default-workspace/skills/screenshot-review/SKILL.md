@@ -1,10 +1,12 @@
 ---
 name: screenshot-review
 description: Diagnoses supplied UI screenshots for hierarchy, spacing, overflow, alignment, and responsive risks and returns a ranked patch plan without editing files. Use when the user shares screenshots or images of a UI to critique. Not for live-browser verification (browser-qa).
-category: frontend
-risk: low
-targets: codex, opencode, claude, cursor
-related: frontend-design, browser-qa, accessibility-review
+license: MIT
+metadata:
+  category: frontend
+  risk: low
+  targets: codex, opencode, claude, cursor, copilot, pi, kilo, antigravity, grok
+  related: frontend-design, browser-qa, accessibility-review
 ---
 
 # Screenshot Review

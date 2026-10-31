@@ -1,14 +1,16 @@
 ---
 name: release-check
 description: Runs a pre-merge or pre-deploy gate with the repo's canonical release script, git state, build and test, migration and env risk, smoke routes, rollback plan, and a go/no-go verdict. Use when asked whether a branch is ready to merge, release, or deploy.
-category: workflow
-risk: medium
-targets: codex, opencode, claude, cursor
-related: security-review, database-migrations
+license: MIT
 context: fork
 agent: verifier
 background: false
 allowed-tools: Bash(git status *) Bash(git log *) Bash(git diff *) Bash(head *) Bash(tail *)
+metadata:
+  category: workflow
+  risk: medium
+  targets: codex, opencode, claude, cursor, copilot, pi, kilo, antigravity, grok
+  related: security-review, database-migrations
 ---
 
 # Release Check

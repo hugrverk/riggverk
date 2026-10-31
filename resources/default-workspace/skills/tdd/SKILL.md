@@ -1,10 +1,13 @@
 ---
 name: tdd
 description: Drives one specified behavior at a time through a red → green → refactor loop using public interfaces and the repo's test style. Use when expected behavior is already known and a feature, fix, or regression test should be written test-first. Not for unknown root causes (diagnose).
-category: testing
-risk: low
-targets: codex, opencode, claude, cursor
-related: diagnose, implementation-plan
+license: MIT
+metadata:
+  category: testing
+  risk: low
+  targets: codex, opencode, claude, cursor, copilot, pi, kilo, antigravity, grok
+  related: diagnose, implementation-plan
+  source: https://github.com/mattpocock/skills (tdd, MIT)
 ---
 
 # TDD

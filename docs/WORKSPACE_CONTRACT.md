@@ -80,6 +80,8 @@ Any deeper `SKILL.md` is invalid. Validators scan descendants only to detect ill
 
 Skill names from frontmatter must be globally unique across root-level and grouped sources.
 
+Frontmatter layouts: bundled skills follow the Agent Skills spec, with `category`, `risk`, `targets` and `related` under `metadata:` (plus the Claude Code keys listed in `docs/SKILLS.md`). Bundle, pack and personal skills are read in that layout and in the older one with those keys at the top level; a non-empty `metadata.<key>` wins over a top-level `<key>`, and a `metadata:` block that cannot be read is ignored. `name` and `description` count only at the top level. `targets` must name at least one harness id from `HarnessId::ALL` and filters nothing. Library saves write the given text unchanged, so a skill keeps its layout.
+
 ## Installed skill layout
 
 Source grouping never changes harness installation layout. Every supported skill installs flat, as a whole directory: its `SKILL.md` and every supporting file next to it, at the same relative paths as in the bundle:

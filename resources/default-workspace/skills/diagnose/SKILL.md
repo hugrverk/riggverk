@@ -1,10 +1,13 @@
 ---
 name: diagnose
 description: Finds root cause for bugs, failures, flakes, slowness, or regressions by building a red-capable feedback loop, then reproduce → minimise → hypothesise → instrument → fix. Use when the cause is unknown, before editing code. Not for test-first work on specified behavior (tdd).
-category: diagnosis
-risk: medium
-targets: codex, opencode, claude, cursor
-related: tdd
+license: MIT
+metadata:
+  category: diagnosis
+  risk: medium
+  targets: codex, opencode, claude, cursor, copilot, pi, kilo, antigravity, grok
+  related: tdd
+  source: https://github.com/mattpocock/skills (diagnosing-bugs, MIT)
 ---
 
 # Diagnose

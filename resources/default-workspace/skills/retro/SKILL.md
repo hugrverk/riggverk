@@ -1,11 +1,14 @@
 ---
 name: retro
 description: Reviews a coding session the user names (default the current conversation) and proposes ranked improvements to the agent environment, not the code. Use when the user invokes /retro to improve navigation, checks, rules, or tool economy. Proposals only; applies nothing.
+license: MIT
 disable-model-invocation: true
-category: workflow
-risk: low
-targets: codex, opencode, claude, cursor
-related: context-budget
+metadata:
+  category: workflow
+  risk: low
+  targets: codex, opencode, claude, cursor, copilot, pi, kilo, antigravity, grok
+  related: context-budget
+  source: https://github.com/mattpocock/skills (retro, MIT)
 ---
 
 # Retro

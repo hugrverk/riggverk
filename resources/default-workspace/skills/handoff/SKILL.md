@@ -1,11 +1,14 @@
 ---
 name: handoff
 description: Turns a session or an executor or subagent report into a compact, redacted handoff with verified versus claimed state, changed files, risks, and the single safest next action. Use when pausing work, transferring context, reviewing another agent's report, or nearing the context limit.
-category: workflow
-risk: low
-targets: codex, opencode, claude, cursor
-related: diagnose, implementation-plan, release-check
+license: MIT
 allowed-tools: Bash(git status *) Bash(git log *) Bash(git diff *) Bash(head *) Bash(tail *)
+metadata:
+  category: workflow
+  risk: low
+  targets: codex, opencode, claude, cursor, copilot, pi, kilo, antigravity, grok
+  related: diagnose, implementation-plan, release-check
+  source: https://github.com/mattpocock/skills (handoff, MIT)
 ---
 
 # Handoff

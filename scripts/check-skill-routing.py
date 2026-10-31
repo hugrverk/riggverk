@@ -21,7 +21,21 @@ AGENTS_METADATA = WS_ROOT / "metadata/agents.json"
 AGENT_ADAPTERS_MANIFEST = WS_ROOT / "metadata/agent-adapters.json"
 CLAUDE_AGENT_HEADERS = WS_ROOT / "templates/claude/agents"
 
-ALL_HARNESSES = {"codex", "opencode", "claude", "cursor"}
+# Every harness reads the skills folders Riggverk installs into, so every bundled skill targets all.
+ALL_HARNESSES = {"codex", "opencode", "claude", "cursor", "copilot", "pi", "kilo", "antigravity", "grok"}
+
+# Top-level frontmatter keys of the Agent Skills spec (agentskills.io/specification; the
+# ALLOWED_FIELDS of the skills-ref validator).
+SPEC_KEYS = ("name", "description", "license", "compatibility", "metadata", "allowed-tools")
+# Claude Code keys outside the spec that bundled skills keep for their behaviour (Claude Code reads
+# them only at the top level). A strict validator flags them; docs/SKILLS.md says which and why.
+CLAUDE_EXTENSION_KEYS = ("context", "agent", "background", "disable-model-invocation")
+# Keys Riggverk reads that the spec keeps under `metadata:`. Packs and personal skills may still set
+# them at the top level (the app reads both, `metadata.<key>` winning); bundled skills may not.
+RIGGVERK_METADATA_KEYS = ("category", "risk", "targets", "related")
+BUNDLED_METADATA_KEYS = (*RIGGVERK_METADATA_KEYS, "source")
+BUNDLED_LICENSE = "MIT"
+COMPATIBILITY_MAX_CHARS = 500
 
 # Harness-specific text lives in the canonical SKILL.md under `## Harness notes`, one `###`
 # subsection per harness in this fixed order. Every harness installs the same bytes.
@@ -133,6 +147,36 @@ def parse_fields(frontmatter: str) -> dict[str, str]:
     return fields
 
 
+def metadata_block(frontmatter: str) -> str:
+    """The top-level `metadata:` block mapping, dedented; empty without one."""
+    lines = frontmatter.splitlines()
+    for index, line in enumerate(lines):
+        if line.rstrip() == "metadata:":
+            block = []
+            for nested in lines[index + 1:]:
+                if nested.strip() and nested[:1] not in (" ", "\t"):
+                    break
+                block.append(nested)
+            indent = min((len(n) - len(n.lstrip()) for n in block if n.strip()), default=0)
+            return "\n".join(n[indent:] for n in block)
+    return ""
+
+
+def parse_metadata(frontmatter: str) -> dict[str, str]:
+    """`key: value` lines of the top-level `metadata:` block mapping; empty without one."""
+    return parse_fields(metadata_block(frontmatter))
+
+
+def skill_fields(frontmatter: str) -> dict[str, str]:
+    """Top-level fields, with the Riggverk keys taken from `metadata:` when set there (as the app reads them)."""
+    fields = parse_fields(frontmatter)
+    metadata = parse_metadata(frontmatter)
+    for key in RIGGVERK_METADATA_KEYS:
+        if metadata.get(key):
+            fields[key] = metadata[key]
+    return fields
+
+
 def read_skill_text(path: Path) -> str:
     """Read a canonical SKILL.md, refusing a BOM or CR line endings.
 
@@ -152,7 +196,7 @@ def parse_frontmatter(path: Path) -> dict[str, str]:
     match = FRONTMATTER_RE.search(text)
     if not match:
         fail(f"{path}: missing YAML frontmatter")
-    return parse_fields(match.group(1))
+    return skill_fields(match.group(1))
 
 
 def split_list(raw: str) -> list[str]:
@@ -407,6 +451,38 @@ def validate_harness_notes(path: Path, frontmatter: str, body: list[str]) -> Non
         fail(f"{rel(path)}: Claude injection syntax is not allowed in the frontmatter")
 
 
+def plain_scalar_safe(value: str) -> bool:
+    return not (": " in value or " #" in value or value.endswith(":") or value[:1] in PLAIN_SCALAR_BAD_START)
+
+
+def validate_spec_frontmatter(path: Path, frontmatter: str) -> None:
+    """A bundled skill stays valid under the Agent Skills spec, apart from the documented Claude keys."""
+    allowed = (*SPEC_KEYS, *CLAUDE_EXTENSION_KEYS)
+    unexpected = sorted(set(frontmatter_keys(frontmatter)) - set(allowed))
+    if unexpected:
+        fail(
+            f"{rel(path)}: top-level frontmatter keys {unexpected} are outside the Agent Skills spec; "
+            f"put Riggverk keys under 'metadata:' (allowed at the top level: {list(allowed)})"
+        )
+    fields = parse_fields(frontmatter)
+    if fields.get("license") != BUNDLED_LICENSE:
+        fail(f"{rel(path)}: bundled skills declare 'license: {BUNDLED_LICENSE}'")
+    compatibility = fields.get("compatibility")
+    if compatibility is not None and (len(compatibility) > COMPATIBILITY_MAX_CHARS or not plain_scalar_safe(compatibility)):
+        fail(f"{rel(path)}: compatibility must be one safe plain YAML line of at most {COMPATIBILITY_MAX_CHARS} chars")
+    nested_keys = frontmatter_keys(metadata_block(frontmatter))
+    if len(nested_keys) != len(set(nested_keys)):
+        fail(f"{rel(path)}: duplicate metadata keys {sorted({k for k in nested_keys if nested_keys.count(k) > 1})}")
+    metadata = parse_metadata(frontmatter)
+    unknown = sorted(set(metadata) - set(BUNDLED_METADATA_KEYS))
+    missing = sorted(set(("category", "risk", "targets")) - set(metadata))
+    if unknown or missing:
+        fail(f"{rel(path)}: metadata keys must be from {list(BUNDLED_METADATA_KEYS)} and include category, risk and targets (unknown {unknown}, missing {missing})")
+    for key, value in metadata.items():
+        if not value or not plain_scalar_safe(value):
+            fail(f"{rel(path)}: metadata.{key} must be a non-empty string on one safe plain YAML line")
+
+
 def validate_canonical_skill_files(discovered: dict[str, Path]) -> None:
     """Every harness installs the canonical SKILL.md byte for byte, so it must be clean as written."""
     for retired in RETIRED_ADAPTER_PATHS:
@@ -425,6 +501,7 @@ def validate_canonical_skill_files(discovered: dict[str, Path]) -> None:
         duplicated = sorted({key for key in keys if keys.count(key) > 1})
         if duplicated:
             fail(f"{rel(path)}: duplicate frontmatter keys {duplicated}")
+        validate_spec_frontmatter(path, frontmatter)
         validate_harness_notes(path, frontmatter, body)
 
 

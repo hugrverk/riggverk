@@ -1,10 +1,12 @@
 ---
 name: minimal-implementation
 description: Implements the smallest complete change that fits existing ownership, then runs a simplification pass and the narrowest falsifying check. Use when the direction is clear and code must change. Plan first with implementation-plan when slices are undefined.
-category: implementation
-risk: low
-targets: codex, opencode, claude, cursor
-related: implementation-plan, diagnose, tdd
+license: MIT
+metadata:
+  category: implementation
+  risk: low
+  targets: codex, opencode, claude, cursor, copilot, pi, kilo, antigravity, grok
+  related: implementation-plan, diagnose, tdd
 ---
 
 # Minimal Implementation

@@ -28,6 +28,7 @@
 import { emit } from "@tauri-apps/api/event";
 import { mockIPC } from "@tauri-apps/api/mocks";
 import { harnessForSurface, isLightAgent } from "../lib/harnessInstallation";
+import { INSTALL_AGENTS } from "../types";
 import type {
   ActionResult,
   CodexConfigDefaultsPreview,
@@ -1478,7 +1479,7 @@ const skills: SkillSummary[] = scenario === "empty"
     group,
     category,
     risk,
-    targets: ["codex", "opencode", "claude", "cursor"],
+    targets: [...INSTALL_AGENTS],
     related: ["implementation-plan", "diagnose"].filter(r => r !== id),
   }));
 
@@ -1509,9 +1510,11 @@ function skillContent(id: string): string {
     "---",
     `name: ${id}`,
     `description: Use for ${id.replace(/-/g, " ")} work. Keep the change small, verifiable and inside existing ownership.`,
-    "category: implementation",
-    "risk: low",
-    "targets: codex, opencode, claude, cursor",
+    "license: MIT",
+    "metadata:",
+    "  category: implementation",
+    "  risk: low",
+    `  targets: ${INSTALL_AGENTS.join(", ")}`,
     "---",
     "",
     `# ${title}`,
@@ -2290,7 +2293,19 @@ function validPersonalSkillName(name: string): boolean {
   return name.match(/^[a-z0-9][a-z0-9-]{0,63}$/)?.[0] === name;
 }
 
-const VALID_SKILL_AGENTS = ["codex", "opencode", "claude", "cursor"];
+const VALID_SKILL_AGENTS: readonly string[] = INSTALL_AGENTS;
+/** Keys the backend reads from `metadata:` (spec layout) or the top level (older layout); `metadata` wins. */
+const RIGGVERK_METADATA_KEYS = ["category", "risk", "targets", "related"];
+
+/** `key: value` lines of a block mapping whose keys start at column 0, one level of quotes removed. */
+function mappingFields(lines: string[]): Map<string, string> {
+  const fields = new Map<string, string>();
+  for (const line of lines) {
+    const match = /^([^\s#-][^:]*):(.*)$/.exec(line);
+    if (match) fields.set(match[1].trim(), match[2].trim().replace(/^(["'])(.*)\1$/, "$2"));
+  }
+  return fields;
+}
 
 /** The refusals of the backend's `check_skill_text`, in its words: a save that would break the skill is refused. */
 function checkPersonalSkillText(content: string, name: string): void {
@@ -2298,10 +2313,21 @@ function checkPersonalSkillText(content: string, name: string): void {
   if (lines[0]?.trimEnd() !== "---") throw new Error("The frontmatter cannot be read: missing frontmatter opening delimiter.");
   const end = lines.findIndex((line, index) => index > 0 && line.trimEnd() === "---");
   if (end < 0) throw new Error("The frontmatter cannot be read: missing frontmatter closing delimiter.");
-  const fields = new Map<string, string>();
-  for (const line of lines.slice(1, end)) {
-    const match = /^([^\s#-][^:]*):(.*)$/.exec(line);
-    if (match) fields.set(match[1].trim(), match[2].trim().replace(/^(["'])(.*)\1$/, "$2"));
+  const frontmatter = lines.slice(1, end);
+  const fields = mappingFields(frontmatter);
+  const start = frontmatter.findIndex(line => line.trimEnd() === "metadata:");
+  if (start >= 0) {
+    const block: string[] = [];
+    for (const line of frontmatter.slice(start + 1)) {
+      if (line.trim() && !/^\s/.test(line)) break;
+      block.push(line);
+    }
+    const indent = Math.min(...block.filter(line => line.trim()).map(line => line.length - line.trimStart().length));
+    const metadata = mappingFields(block.map(line => line.slice(Number.isFinite(indent) ? indent : 0)));
+    for (const key of RIGGVERK_METADATA_KEYS) {
+      const value = metadata.get(key);
+      if (value) fields.set(key, value);
+    }
   }
   if ((fields.get("name") || name) !== name) throw new Error(`The name in the frontmatter must stay ${name}.`);
   if (!fields.get("description")) throw new Error("The description in the frontmatter cannot be empty.");

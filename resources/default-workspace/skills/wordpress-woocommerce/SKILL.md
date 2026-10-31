@@ -1,10 +1,12 @@
 ---
 name: wordpress-woocommerce
 description: Implements and reviews WordPress and WooCommerce changes (themes, template overrides, hooks and filters, plugins, REST/AJAX, cart, checkout, product UI) with sanitize, escape, nonce, and capability discipline. Use when the repository contains WordPress or WooCommerce code.
-category: commerce
-risk: high
-targets: codex, opencode, claude, cursor
-related: security-review, browser-qa, accessibility-review
+license: MIT
+metadata:
+  category: commerce
+  risk: high
+  targets: codex, opencode, claude, cursor, copilot, pi, kilo, antigravity, grok
+  related: security-review, browser-qa, accessibility-review
 ---
 
 # WordPress WooCommerce

@@ -1,11 +1,14 @@
 ---
 name: status-report
 description: Builds a one-file HTML status report of what happened, what is in progress and what comes next in any repository, from cited git, GitHub, CI and doc evidence. Use when asked for a status report, statusrapport, lägesrapport, sprint or weekly summary. Not for Kretsverket (kretsverket-status-report).
-category: workflow
-risk: low
-targets: codex, opencode, claude, cursor
-related: handoff, release-check, browser-qa
+license: MIT
+compatibility: Needs git, an authenticated gh CLI and Node.js for the bundled render and verify scripts; the browser check uses Playwright when it resolves.
 allowed-tools: Bash(git log *) Bash(git tag *) Bash(git show *) Bash(gh pr list *) Bash(gh release list *) Bash(gh run list *)
+metadata:
+  category: workflow
+  risk: low
+  targets: codex, opencode, claude, cursor, copilot, pi, kilo, antigravity, grok
+  related: handoff, release-check, browser-qa
 ---
 
 # Status Report

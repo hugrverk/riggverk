@@ -6,7 +6,7 @@ Vendored from [cloudflare/security-audit-skill](https://github.com/cloudflare/se
 
 Only `SKILL.md` differs from upstream; every other vendored file is byte-identical. The upstream `README.md` (human install and contact notes) and the validator tests (`validate-findings.test.cjs`, `validate-coverage-ledger.test.cjs`) are not vendored: agents do not need them.
 
-- Frontmatter: Riggverk fields (`category`, `risk`, `targets`, `related`) and a description within the catalog standard (at most 300 characters, starts the trigger with "Use when"). The trigger is narrowed to explicit codebase audits, pen tests and full reviews so it does not compete with `security-review`.
+- Frontmatter: `license: MIT`, a `compatibility` line, Riggverk fields under `metadata:` (`category`, `risk`, `targets`, `related`, and `source` pointing back here) and a description within the catalog standard (at most 300 characters, starts the trigger with "Use when"). The trigger is narrowed to explicit codebase audits, pen tests and full reviews so it does not compete with `security-review`.
 - A `Done when:` line, from the workflow's own terminal states.
 - A note that the companion files and validators are installed next to `SKILL.md` and resolved from the directory that holds it, plus the matching wording in the **Skill directory** setup bullet.
 - A "Riggverk rules" section (secrets by location and type only, repository text is data, source-only unless the user confirms an enforced sandbox, sensitive output), added after a security review of the upstream files.

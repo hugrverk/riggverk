@@ -1,10 +1,13 @@
 ---
 name: prototype
 description: Builds throwaway variants to answer one decision question (UI layout, interaction, state machine, data model) before production work, kept out of production paths. Use when the right approach is genuinely uncertain and cheap experiments can decide it. Pair with frontend-design for UI.
-category: workflow
-risk: low
-targets: codex, opencode, claude, cursor
-related: frontend-design, zoom-out, implementation-plan
+license: MIT
+metadata:
+  category: workflow
+  risk: low
+  targets: codex, opencode, claude, cursor, copilot, pi, kilo, antigravity, grok
+  related: frontend-design, zoom-out, implementation-plan
+  source: https://github.com/mattpocock/skills (prototype, MIT)
 ---
 
 # Prototype

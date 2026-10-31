@@ -1,10 +1,12 @@
 ---
 name: security-review
 description: Reviews changed code for realistic security risks in authn/authz, input handling, injection, secrets, uploads, SSRF, CSRF/XSS, webhooks, dependencies, and local-agent shell or file access. Use when a change touches auth, user input, endpoints, payments, uploads, shell execution, or sensitive data.
-category: security
-risk: high
-targets: codex, opencode, claude, cursor
-related: diagnose, release-check
+license: MIT
+metadata:
+  category: security
+  risk: high
+  targets: codex, opencode, claude, cursor, copilot, pi, kilo, antigravity, grok
+  related: diagnose, release-check
 ---
 
 # Security Review
