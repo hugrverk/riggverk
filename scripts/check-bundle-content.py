@@ -323,7 +323,7 @@ def pin_warnings(root: Path, today: date | None = None) -> list[str]:
 
 
 # --- opencode-defaults / tui-defaults --------------------------------------------------------
-OPENCODE_LITERALS = {"model": "opencode-go/glm-5.2", "lsp": True, "autoupdate": "notify", "snapshot": True}
+OPENCODE_LITERALS = {"lsp": True, "autoupdate": "notify", "snapshot": True}
 TUI_DEFAULTS = {
     "theme": "system",
     "diff_style": "auto",
@@ -331,8 +331,6 @@ TUI_DEFAULTS = {
     "leader_timeout": 2000,
     "scroll_acceleration.enabled": True,
 }
-DOCUMENTED_SMALL_MODEL = re.compile(r"The bundled `small_model` is `([^`]+)`")
-
 
 def _load_json(root: Path, rel: str, errors: list[str]) -> dict | None:
     try:
@@ -361,15 +359,14 @@ def opencode_defaults(root: Path, files: list[str]) -> list[str]:
     for key, expected in OPENCODE_LITERALS.items():
         if config.get(key) != expected:
             errors.append(f"templates/opencode.json {key} must be {expected!r}, found {config.get(key)!r}")
-    doc = root / BUNDLE / "docs/OPENCODE_CONFIG.md"
-    documented = DOCUMENTED_SMALL_MODEL.search(doc.read_text(encoding="utf-8")) if doc.is_file() else None
-    if not documented:
-        errors.append("docs/OPENCODE_CONFIG.md must name the bundled small_model (The bundled `small_model` is `...`)")
-    elif config.get("small_model") != documented.group(1):
-        errors.append(
-            f"templates/opencode.json small_model {config.get('small_model')!r} differs from the "
-            f"documented {documented.group(1)!r} in docs/OPENCODE_CONFIG.md"
-        )
+    for key in ("model", "small_model"):
+        if key in config:
+            errors.append(f"templates/opencode.json must not set {key}")
+    base = _load_json(root, "templates/opencode.base.json", errors)
+    if base is not None:
+        for key in ("model", "small_model"):
+            if key in base:
+                errors.append(f"templates/opencode.base.json must not set {key}")
     return errors
 
 

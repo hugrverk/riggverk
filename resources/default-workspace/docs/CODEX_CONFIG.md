@@ -6,7 +6,7 @@ The workspace supports Codex rules, native TOML agents, skills, and a managed co
 
 Files:
 
-- `config.toml` is the canonical global template. Managed keys: `approval_policy`, `approvals_reviewer`, `sandbox_mode`, `apps._default.approvals_reviewer`, `apps._default.default_tools_approval_mode`. Create-only keys: `model`, `model_reasoning_effort`. Codex 0.134+ removed the legacy top-level `profile = "..."` selector and `[profiles.*]` tables; profiles now live in separate `$CODEX_HOME/<name>.config.toml` overlays selected with `--profile`.
+- `config.toml` is the canonical global template. Managed keys: `approval_policy`, `approvals_reviewer`, `sandbox_mode`, `apps._default.approvals_reviewer`, `apps._default.default_tools_approval_mode`. Riggverk sets no model; your agent's own default applies. Codex 0.134+ removed the legacy top-level `profile = "..."` selector and `[profiles.*]` tables; profiles now live in separate `$CODEX_HOME/<name>.config.toml` overlays selected with `--profile`.
 - `mcp/` contains optional MCP snippets. Review before use.
 
 ## What Install does
@@ -15,7 +15,7 @@ In the app, the config is the `codex_config` target on the Codex page. It is **o
 
 - The five managed keys follow the template (currently `on-request`, reviewer `user`, `workspace-write`, prompt-based app tool approvals).
 - **Keep mine.** If you set one of the five on purpose (say `approvals_reviewer = "auto_review"`), the config row shows a conflict or an update. Press `m` on the row: Riggverk asks, then records your value for every managed key that differs in `.riggverk/config-preferences.json`. Those keys then count as current for as long as the value stays as it is, and an update never writes them; the other managed keys keep following the template. Change the value again and the key is managed again; press `m` once more (with nothing differing) to hand every kept key back. Riggverk never writes `config.toml` to do this.
-- `model` and `model_reasoning_effort` are written only when the file has no value for them (template: `gpt-6.1-sol`, `xhigh`). Afterwards they are yours: never overwritten, never reported as drift. Change the model in your own config.
+- `model` and `model_reasoning_effort` are yours: never written, overwritten, or reported as drift. Riggverk sets no model; your agent's own default applies.
 - Personality, MCP entries, unrelated tables, comments (including same-line comments on managed keys), and unknown keys are preserved. Ambiguous TOML is refused with nothing written.
 - App-shaped legacy `profile = "safe"` selectors and `[profiles.safe]` / `[profiles.workspace-write]` tables are removed during migration only, while they still hold app-shipped values. Other profiles are untouched.
 

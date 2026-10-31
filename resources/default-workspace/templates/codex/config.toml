@@ -6,12 +6,6 @@
 # overlays selected with `--profile`. The managed defaults are plain
 # top-level keys plus app default approval-reviewer settings.
 #
-# `model` and `model_reasoning_effort` are create-only: they are written only
-# when config.toml has no value for them. Afterwards they belong to the user
-# and are never overwritten or flagged as drift.
-
-model = "gpt-6.1-sol"
-model_reasoning_effort = "xhigh"
 approval_policy = "on-request"
 approvals_reviewer = "user"
 sandbox_mode = "workspace-write"

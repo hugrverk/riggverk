@@ -1017,14 +1017,14 @@ fn apply_single_artifact(
             .map_err(|e| format!("parse opencode template json: {e}"))?;
         let rendered = crate::commands::render_expected_opencode_config(&template_json, home)
             .ok_or_else(|| "cannot render opencode config".to_string())?;
-        let installed = if dest.is_file() {
-            let content = fs::read_to_string(&dest)
-                .map_err(|e| format!("read opencode config {}: {e}", dest.display()))?;
-            serde_json::from_str(&content)
-                .map_err(|_| "the OpenCode opencode.json is not valid JSON".to_string())?
+        let content = if dest.is_file() {
+            fs::read_to_string(&dest)
+                .map_err(|e| format!("read opencode config {}: {e}", dest.display()))?
         } else {
-            serde_json::Value::Object(serde_json::Map::new())
+            "{}".to_string()
         };
+        let installed = serde_json::from_str(&content)
+            .map_err(|_| "the OpenCode opencode.json is not valid JSON".to_string())?;
         // A role model the app cannot prove it wrote is the user's: kept as it is.
         let app = crate::commands::AppRoleModels::load(Some(workspace_root), home);
         let merged = crate::commands::merge_managed_opencode_config(
@@ -1033,10 +1033,7 @@ fn apply_single_artifact(
         );
         crate::safe_filesystem::write_regular_file_atomic(
             &dest,
-            (serde_json::to_string_pretty(&merged)
-                .map_err(|e| format!("serialize opencode config: {e}"))?
-                + "\n")
-                .as_bytes(),
+            crate::commands::serialize_opencode_preserving_models(&content, &merged)?.as_bytes(),
             &root,
         )
         .map_err(|e| format!("write opencode config {}: {e}", dest.display()))?;
@@ -5779,7 +5776,8 @@ mod tests {
             crate::commands::managed_opencode_keys_match(&installed, &rendered),
             "managed keys must be applied"
         );
-        assert_ne!(installed["model"], user_config["model"]);
+        assert_eq!(installed["model"], user_config["model"]);
+        assert_eq!(installed["small_model"], user_config["small_model"]);
 
         // Nothing the UI receives, nor the ownership record, carries the user's secrets.
         let state_file = fs::read_to_string(crate::managed_state::managed_state_path(&env.ws))
