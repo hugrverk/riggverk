@@ -1,6 +1,18 @@
 use std::path::{Path, PathBuf};
 
-pub const VALID_SKILL_AGENTS: &[&str] = &["codex", "opencode", "claude", "cursor"];
+/// The harness ids a skill's `targets` may name: every harness, in `HarnessId::ALL` order, since
+/// every one of them reads the skills folders Riggverk installs into.
+pub const VALID_SKILL_AGENTS: &[&str] = &[
+    "codex",
+    "opencode",
+    "claude",
+    "cursor",
+    "copilot",
+    "pi",
+    "kilo",
+    "antigravity",
+    "grok",
+];
 
 pub fn validate_skill_name(name: &str, source: &str) -> Result<(), String> {
     if name.is_empty() {
@@ -59,6 +71,15 @@ pub fn codex_legacy_skills_dest(home: &Path) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn skill_targets_are_every_harness() {
+        let ids: Vec<&str> = crate::agent_targets::HarnessId::ALL
+            .iter()
+            .map(|harness| harness.as_str())
+            .collect();
+        assert_eq!(VALID_SKILL_AGENTS, ids.as_slice());
+    }
 
     #[test]
     fn codex_skills_folder_follows_codex_home_and_the_skills_path_override() {

@@ -274,6 +274,27 @@ describe("mock backend: the Library edits only personal docs", () => {
     expect(await save("---\nname: mock-copy\ndescription: d\ntargets: [codex, claude]\n---\nbody\n")).toMatchObject({ success: true });
   });
 
+  it("saves a personal skill in the older top-level layout, the spec layout or both, byte for byte", async () => {
+    const [bundled] = await invoke<SkillSummary[]>("list_skills");
+    await invoke("copy_skill_to_pack", { name: bundled!.name, newName: "layout-copy" });
+    const id = "pack:personal/layout-copy";
+    for (const content of [
+      "---\nname: layout-copy\ndescription: d\ncategory: testing\ntargets: codex, claude\n---\nbody\n",
+      "---\nname: layout-copy\ndescription: d\nlicense: MIT\nmetadata:\n  category: testing\n  targets: codex, pi\n---\nbody\n",
+      "---\nname: layout-copy\ndescription: d\ntargets: nope\nmetadata:\n  targets: grok\n---\nbody\n",
+    ]) {
+      const opened = await invoke<DocumentContent>("read_skill", { id });
+      expect(await invoke<ActionResult>("save_pack_skill", { id, content, expectedRevision: opened.revision })).toMatchObject({ success: true });
+      expect((await invoke<DocumentContent>("read_skill", { id })).content).toBe(content);
+    }
+    const opened = await invoke<DocumentContent>("read_skill", { id });
+    await expect(invoke("save_pack_skill", {
+      id,
+      content: "---\nname: layout-copy\ndescription: d\ntargets: codex\nmetadata:\n  targets: nope\n---\n",
+      expectedRevision: opened.revision,
+    })).rejects.toThrow("targets in the frontmatter must list harnesses");
+  });
+
   it("refuses a personal doc save whose revision is no longer the file's, like the backend", async () => {
     const opened = await invoke<DocumentContent>("read_doc", { id: "custom:project-notes" });
     expect(opened.revision).toEqual(expect.any(String));

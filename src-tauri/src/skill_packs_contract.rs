@@ -416,6 +416,52 @@ mod tests {
         assert!(twice.reason.contains("more than once"), "{}", twice.reason);
     }
 
+    /// The older top-level layout, the Agent Skills spec layout (`metadata:`) and a mix of both.
+    const LAYOUTS: [(&str, &str); 3] = [
+        (
+            "legacy",
+            "---\nname: legacy\ndescription: older layout\ncategory: x\nrisk: low\ntargets: codex, opencode, claude, cursor\nrelated: tdd\n---\nbody\n",
+        ),
+        (
+            "spec",
+            "---\nname: spec\ndescription: spec layout\nlicense: MIT\nmetadata:\n  category: x\n  risk: low\n  targets: codex, opencode, claude, cursor, pi\n---\nbody\n",
+        ),
+        (
+            "mixed",
+            "---\nname: mixed\ndescription: both layouts\ntargets: nope\nmetadata:\n  targets: claude, grok\n---\nbody\n",
+        ),
+    ];
+
+    /// Packs written before the spec layout keep their top-level keys: every layout loads and
+    /// installs byte for byte, and in a mixed file `metadata.targets` is the one validated.
+    #[test]
+    fn pack_skills_in_the_older_and_the_spec_frontmatter_layout_install() {
+        let env = Env::new("layouts");
+        let skills = env.pack("mine").join("skills");
+        for (folder, text) in LAYOUTS {
+            fs::create_dir_all(skills.join(folder)).expect("skill dir");
+            fs::write(skills.join(folder).join("SKILL.md"), text).expect("SKILL.md");
+        }
+        Env::tighten(&skills);
+        let sources = env.sources();
+        for (folder, _) in LAYOUTS {
+            let skill = sources.packs()[0]
+                .skills
+                .iter()
+                .find(|skill| skill.folder == folder)
+                .expect(folder);
+            assert_eq!(skill.state, PackSkillState::Active, "{folder}: {}", skill.reason);
+        }
+        let result = env.apply();
+        assert!(result.success, "install: {}", result.message);
+        for (folder, text) in LAYOUTS {
+            for root in [SkillRoot::Claude, SkillRoot::Agents] {
+                let installed = env.root(root).join(folder).join("SKILL.md");
+                assert_eq!(fs::read_to_string(installed).expect(folder), text);
+            }
+        }
+    }
+
     /// On a case-insensitive volume `Notes.md` and `notes.md` are one file: a case-only rename is
     /// an update of the installed file, never a conflict plus a removal that deletes it.
     #[test]
@@ -1891,6 +1937,26 @@ mod tests {
             None
         )
         .is_ok());
+    }
+
+    /// A Library save writes the text as given: a personal skill keeps the layout it is in, and
+    /// one in the older top-level layout still saves.
+    #[test]
+    fn library_save_keeps_either_frontmatter_layout_byte_for_byte() {
+        let env = Env::personal_copy("save-layouts");
+        let copied = copy_skill_to_pack("original".into(), "my-original".into()).expect("copy");
+        let skill_md = env.packs().join("personal/skills/my-original/SKILL.md");
+        for (_, text) in LAYOUTS {
+            let content = text.replacen(
+                text.lines().nth(1).expect("name line"),
+                "name: my-original",
+                1,
+            );
+            save_pack_skill(copied.id.clone(), content.clone(), None).expect("save");
+            assert_eq!(fs::read_to_string(&skill_md).expect("saved"), content);
+        }
+        let result = env.apply();
+        assert!(result.success, "install: {}", result.message);
     }
 
     #[test]

@@ -1,6 +1,6 @@
-import type { InstallAgent } from "../types";
+import { INSTALL_AGENTS, type InstallAgent } from "../types";
 
-const KNOWN_HARNESSES = new Set<InstallAgent>(["codex", "opencode", "claude", "cursor"]);
+const KNOWN_HARNESSES = new Set<InstallAgent>(INSTALL_AGENTS);
 
 export function filterVisibleMetadataTargets(
   targets: string[],

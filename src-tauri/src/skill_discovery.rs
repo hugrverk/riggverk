@@ -113,8 +113,29 @@ fn frontmatter_lines(content: &str) -> Result<Vec<&str>, String> {
 /// it. A key that is not a scalar (a nested mapping or list) reads as empty. A key given twice is
 /// an error: harnesses disagree on which one wins.
 pub(crate) fn frontmatter_fields(content: &str) -> Result<BTreeMap<String, String>, String> {
-    let lines = frontmatter_lines(content)?;
+    scalar_fields(&frontmatter_lines(content)?)
+}
+
+/// The scalar entries of a block mapping whose keys start at column 0 (see [`frontmatter_fields`]).
+fn scalar_fields(lines: &[&str]) -> Result<BTreeMap<String, String>, String> {
     let mut fields = BTreeMap::new();
+    read_mapping(lines, |key, rest, continuation| {
+        let value = scalar_value(rest, continuation)
+            .map_err(|reason| format!("frontmatter key {key}: {reason}"))?;
+        if fields.insert(key.to_string(), value).is_some() {
+            return Err(format!("frontmatter key {key} is given more than once"));
+        }
+        Ok(())
+    })?;
+    Ok(fields)
+}
+
+/// Calls `entry` with the key, the text after the colon and the indented lines that belong to it,
+/// for every unindented `key: value` line of `lines`.
+fn read_mapping<'a>(
+    lines: &[&'a str],
+    mut entry: impl FnMut(&str, &str, &[&'a str]) -> Result<(), String>,
+) -> Result<(), String> {
     let mut index = 0;
     while index < lines.len() {
         let line = lines[index];
@@ -126,8 +147,6 @@ pub(crate) fn frontmatter_fields(content: &str) -> Result<BTreeMap<String, Strin
             continue;
         };
         let key = unquote_key(key)?;
-        let key = key.as_str();
-        // The indented lines that belong to this key.
         let start = index;
         while index < lines.len() {
             let next = lines[index];
@@ -136,11 +155,53 @@ pub(crate) fn frontmatter_fields(content: &str) -> Result<BTreeMap<String, Strin
             }
             index += 1;
         }
-        let continuation = &lines[start..index];
-        let value = scalar_value(rest, continuation)
-            .map_err(|reason| format!("frontmatter key {key}: {reason}"))?;
-        if fields.insert(key.to_string(), value).is_some() {
-            return Err(format!("frontmatter key {key} is given more than once"));
+        entry(&key, rest, &lines[start..index])?;
+    }
+    Ok(())
+}
+
+/// The scalar entries of the frontmatter's `metadata:` block mapping, which the Agent Skills spec
+/// defines as string keys to string values. Its entries are read like top-level keys. Empty when
+/// there is no `metadata:` key or it holds no block mapping (a flow mapping, a list, a scalar).
+fn frontmatter_metadata(content: &str) -> Result<BTreeMap<String, String>, String> {
+    let lines = frontmatter_lines(content)?;
+    let mut block: Option<Vec<&str>> = None;
+    read_mapping(&lines, |key, rest, continuation| {
+        if key == "metadata" && (rest.is_empty() || rest.starts_with('#')) {
+            block = Some(continuation.to_vec());
+        }
+        Ok(())
+    })?;
+    let Some(block) = block else {
+        return Ok(BTreeMap::new());
+    };
+    let indent = block
+        .iter()
+        .filter(|line| !line.trim().is_empty())
+        .map(|line| line.len() - line.trim_start().len())
+        .min()
+        .unwrap_or(0);
+    let dedented: Vec<&str> = block
+        .iter()
+        .map(|line| line.get(indent..).unwrap_or(""))
+        .collect();
+    scalar_fields(&dedented).map_err(|e| format!("metadata: {e}"))
+}
+
+/// Keys Riggverk reads that the Agent Skills spec keeps under `metadata:`. Bundled skills set them
+/// there; older packs and personal skills set them at the top level, and both layouts are read.
+pub(crate) const RIGGVERK_METADATA_KEYS: [&str; 4] = ["category", "risk", "targets", "related"];
+
+/// The frontmatter as the app reads a skill: the top-level keys of [`frontmatter_fields`], with
+/// each of [`RIGGVERK_METADATA_KEYS`] taken from `metadata:` when it is set there and not empty.
+/// So `metadata.<key>` wins over a top-level `<key>` in a file that has both. A `metadata:` block
+/// that cannot be read is ignored (it was never read before), so the top-level keys still count.
+pub(crate) fn skill_fields(content: &str) -> Result<BTreeMap<String, String>, String> {
+    let mut fields = frontmatter_fields(content)?;
+    let metadata = frontmatter_metadata(content).unwrap_or_default();
+    for key in RIGGVERK_METADATA_KEYS {
+        if let Some(value) = metadata.get(key).filter(|value| !value.is_empty()) {
+            fields.insert(key.to_string(), value.clone());
         }
     }
     Ok(fields)
@@ -298,7 +359,7 @@ pub(crate) fn declared_skill_name(skill_md: &Path) -> Option<String> {
 /// since a skill that does not load can no longer be edited in the app.
 pub(crate) fn check_skill_text(content: &str, name: &str, folder: &str) -> Result<(), String> {
     let fields =
-        frontmatter_fields(content).map_err(|e| format!("The frontmatter cannot be read: {e}."))?;
+        skill_fields(content).map_err(|e| format!("The frontmatter cannot be read: {e}."))?;
     let declared = fields
         .get("name")
         .filter(|declared| !declared.is_empty())
@@ -328,7 +389,7 @@ pub(crate) fn read_skill_metadata(
     fallback_name: &str,
 ) -> Result<(String, String, Vec<String>), String> {
     let content = read_skill_md_capped(skill_md)?;
-    let fields = frontmatter_fields(&content)
+    let fields = skill_fields(&content)
         .map_err(|e| format!("invalid frontmatter in {}: {e}", skill_md.display()))?;
     let name = fields.get("name").cloned().unwrap_or_default();
     let description = fields.get("description").cloned().unwrap_or_default();
@@ -754,12 +815,12 @@ mod tests {
     }
 
     #[test]
-    fn all_four_targets_required_for_bundled_catalog() {
-        let root = temp_root("four");
+    fn every_harness_target_required_for_bundled_catalog() {
+        let root = temp_root("every");
         write_skill(
             &root,
             "skills/diagnose",
-            &skill_body("diagnose", ALL_TARGETS),
+            &skill_body("diagnose", &VALID_SKILL_AGENTS.join(", ")),
         );
         let catalog = discover_skill_catalog(&root).expect("discover");
         validate_bundled_catalog_all_targets(&catalog).expect("bundled targets");
@@ -948,6 +1009,80 @@ mod tests {
             "a plain value that continues"
         );
         assert!(field("---\ndescription: |+2\n  x\n---\n", "description").is_err());
+    }
+
+    const LEGACY_LAYOUT: &str = "---\nname: tdd\ndescription: d\ncategory: testing\nrisk: low\ntargets: codex, claude\nrelated: diagnose\n---\n# tdd\n";
+    const SPEC_LAYOUT: &str = "---\nname: tdd\ndescription: d\nlicense: MIT\nmetadata:\n  category: testing\n  risk: low\n  targets: codex, claude\n  related: diagnose\n---\n# tdd\n";
+    const MIXED_LAYOUT: &str = "---\nname: tdd\ndescription: d\ncategory: testing\nrisk: low\nmetadata:\n  targets: codex, claude\n  related: diagnose\n---\n# tdd\n";
+
+    fn riggverk_keys(content: &str) -> Vec<(String, String)> {
+        let fields = skill_fields(content).expect("fields");
+        RIGGVERK_METADATA_KEYS
+            .iter()
+            .map(|key| (key.to_string(), fields.get(*key).cloned().unwrap_or_default()))
+            .collect()
+    }
+
+    #[test]
+    fn legacy_spec_and_mixed_metadata_layouts_read_the_same() {
+        let legacy = riggverk_keys(LEGACY_LAYOUT);
+        assert_eq!(
+            legacy,
+            vec![
+                ("category".to_string(), "testing".to_string()),
+                ("risk".to_string(), "low".to_string()),
+                ("targets".to_string(), "codex, claude".to_string()),
+                ("related".to_string(), "diagnose".to_string()),
+            ]
+        );
+        assert_eq!(riggverk_keys(SPEC_LAYOUT), legacy);
+        assert_eq!(riggverk_keys(MIXED_LAYOUT), legacy);
+        for content in [LEGACY_LAYOUT, SPEC_LAYOUT, MIXED_LAYOUT] {
+            check_skill_text(content, "tdd", "tdd").expect("valid in every layout");
+            let root = temp_root("layouts");
+            write_skill(&root, "skills/tdd", content);
+            let catalog = discover_skill_catalog(&root).expect("discover");
+            let _ = fs::remove_dir_all(&root);
+            assert_eq!(catalog[0].targets, vec!["codex", "claude"]);
+        }
+    }
+
+    #[test]
+    fn metadata_wins_over_a_top_level_key_and_only_for_the_riggverk_keys() {
+        let both = "---\nname: tdd\ndescription: top\nrisk: high\ntargets: codex\nmetadata:\n  name: other\n  description: nested\n  risk: low\n  targets: claude, pi\n  category: \n---\n";
+        let fields = skill_fields(both).expect("fields");
+        assert_eq!(fields["name"], "tdd");
+        assert_eq!(fields["description"], "top");
+        assert_eq!(fields["risk"], "low");
+        assert_eq!(fields["targets"], "claude, pi");
+        assert!(!fields.contains_key("category"), "an empty metadata value adds nothing");
+        // The top-level reader is unchanged: the nested block is not a scalar.
+        assert_eq!(field(both, "metadata").unwrap(), "");
+        assert_eq!(field(both, "targets").unwrap(), "codex");
+    }
+
+    #[test]
+    fn a_metadata_block_that_cannot_be_read_falls_back_to_the_top_level_keys() {
+        for metadata in [
+            "metadata:\n  targets: claude\n  targets: pi\n",
+            "metadata: {targets: pi}\n",
+            "metadata:\n  - targets\n",
+        ] {
+            let content = format!("---\nname: x\ndescription: d\ntargets: codex\n{metadata}---\n");
+            assert_eq!(skill_fields(&content).expect("fields")["targets"], "codex", "{metadata}");
+        }
+        let quoted = "---\nname: x\ndescription: d\nmetadata:\n  # a comment\n  'targets': \"codex, grok\"\n  risk: >-\n    folded\n    risk\n---\n";
+        let fields = skill_fields(quoted).expect("fields");
+        assert_eq!(fields["targets"], "codex, grok");
+        assert_eq!(fields["risk"], "folded risk");
+    }
+
+    #[test]
+    fn every_harness_is_a_valid_target() {
+        let all = VALID_SKILL_AGENTS.join(", ");
+        check_skill_text(&skill_body("x", &all), "x", "x").expect("every harness");
+        let err = check_skill_text(&skill_body("x", "gemini"), "x", "x").unwrap_err();
+        assert!(err.starts_with("The targets in the frontmatter"), "{err}");
     }
 
     #[test]

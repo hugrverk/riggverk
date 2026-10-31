@@ -10,6 +10,11 @@ describe("filterVisibleMetadataTargets", () => {
     expect(filterVisibleMetadataTargets(["codex", "claude"], ["codex"])).toEqual(["codex"]);
   });
 
+  it("treats the light harnesses as harnesses, not as generic values", () => {
+    expect(filterVisibleMetadataTargets(["claude", "pi", "grok"], ["claude", "pi"])).toEqual(["claude", "pi"]);
+    expect(filterVisibleMetadataTargets(["grok"], ["claude"])).toBeNull();
+  });
+
   it("keeps generic and unknown metadata values", () => {
     expect(filterVisibleMetadataTargets([], [])).toEqual([]);
     expect(filterVisibleMetadataTargets(["custom"], [])).toEqual(["custom"]);
