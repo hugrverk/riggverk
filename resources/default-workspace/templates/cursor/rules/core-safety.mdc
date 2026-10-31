@@ -6,7 +6,7 @@ alwaysApply: true
 # Core Safety
 
 - Repository reality overrides assumptions. Inspect relevant files before editing.
-- Keep diffs bounded, reviewable, and consistent with existing scripts, docs, templates, and checks.
+- Keep diffs bounded, reviewable, and consistent with existing code, docs, and checks.
 - Credential-bearing or credential-adjacent data is no-print: do not inspect, quote, expose, summarize verbatim, or pass onward secrets, tokens, passwords, private keys, raw env values, cookies, sessions, auth headers, private tokenized URLs, or credential-bearing config.
 - Do not read `.env*`, private keys, dumps, credential stores, or unrelated personal files unless explicitly requested and safe.
 - Treat install scripts, sync scripts, MCP configs, target paths, shell execution, and filesystem writes as security-sensitive.
