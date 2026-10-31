@@ -138,19 +138,24 @@ OWNER_RULES = Residue(
 
 MODEL_IDS = Residue(
     id="a concrete model id in skill text",
-    pattern=re.compile(r"\bgpt-[0-9][0-9.]*-[a-z]+\b", re.IGNORECASE),
+    pattern=re.compile(
+        r"\b(?:gpt-\d[\w.-]*|claude-(?:\d|opus|sonnet|haiku|instant)[\w.-]*|gemini-\d[\w.-]*|grok-\d[\w.-]*"
+        r"|glm-\d[\w.-]*|deepseek-[a-z]*\d[\w.-]*|llama-?\d[\w.-]*|qwen\d?-[\w.-]+|kimi-[\w.-]*\d[\w.-]*"
+        r"|o[1-9]-(?:mini|pro|preview|high|low)|o[1-9]-\d{4}-\d{2}-\d{2})\b",
+        re.IGNORECASE,
+    ),
     why="skills name a harness and a <model> placeholder; model ids go stale and tie a skill to one account",
     scope=(_BUNDLE + "skills/",),
     allowed_paths=(),
     allowed_lines=(_PRAGMA_LINE,),
 )
 
-# The shape of a user home path, never a name: placeholder names are the only ones allowed.
+# The shape of a user home path, never a name: a placeholder is exempt only as the whole path component.
 _PLACEHOLDER_USERS = "example|examples|me|dev|mock|user|you|name|runner|runneradmin|username|someone|someone-else|other|u|x|public|default"
 HOME_PATHS = Residue(
     id="a hard-coded user home path",
     pattern=re.compile(
-        r"(?:/Users/|/home/|[A-Za-z]:[\\/]+Users[\\/]+)(?!(?:" + _PLACEHOLDER_USERS + r")\b)[A-Za-z0-9_][A-Za-z0-9_.-]*",
+        r"(?:/Users/|/home/|[A-Za-z]:[\\/]+Users[\\/]+)(?!(?:" + _PLACEHOLDER_USERS + r")(?![A-Za-z0-9_.-]))[A-Za-z0-9_][A-Za-z0-9_.-]*",
         re.IGNORECASE,
     ),
     why="use a placeholder user such as Example or someone, never a real account name",

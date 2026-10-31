@@ -148,8 +148,17 @@ class ResidueGuardTests(unittest.TestCase):
         self.assertEqual(self.scan({"resources/default-workspace/skills/a/SKILL.md": "The artkit and smartkey words.\n"}), [])
 
     def test_a_model_id_in_skill_text_fails(self) -> None:
-        found = self.scan({"resources/default-workspace/skills/a/SKILL.md": "critic=codex/gpt-6.1-terra\n"})
-        self.assertEqual(len(found), 1, found)
+        skill = "resources/default-workspace/skills/a/SKILL.md"
+        ids = (
+            "gpt-6.1-terra", "gpt-5.1", "gpt-4o", "gpt-5.1-codex", "claude-opus-4-6", "claude-3-5-sonnet-20241022",
+            "claude-sonnet-4", "gemini-2.5-pro", "o3-mini", "o1-preview", "grok-4", "glm-5.2", "deepseek-v4.1-flash",
+        )
+        for model in ids:
+            with self.subTest(model=model):
+                self.assertEqual(len(self.scan({skill: f"critic=codex/{model}.\n"})), 1, model)
+        for text in ("Use claude-code or the claude subagent.", "gpt is a family; gemini and grok too.", "see o3 and o-ring", "the gpt-image tool"):
+            with self.subTest(text=text):
+                self.assertEqual(self.scan({skill: text + "\n"}), [], text)
         self.assertEqual(self.scan({"resources/default-workspace/skills/a/SKILL.md": "critic=codex/<model>\n"}), [])
         self.assertEqual(self.scan({"resources/default-workspace/docs/CODEX_CONFIG.md": "model gpt-6.1-terra\n"}), [])
 
@@ -160,6 +169,12 @@ class ResidueGuardTests(unittest.TestCase):
                 self.assertEqual(len(self.scan({"src/a.ts": text + "\n"})), 1)
         placeholders = users + "example/x /home/someone/y C:/Users/Example/z\n"
         self.assertEqual(self.scan({"src/a.ts": placeholders}), [])
+        for text in (users + "dev-actual/x", users + "example-bob/x", "/home/" + "me.real/x", users + "user1/x", "C:\\" + "Users\\Example-Bob\\x"):
+            with self.subTest(text=text):
+                self.assertEqual(len(self.scan({"src/a.ts": text + "\n"})), 1, text)
+        for text in (users + "dev", users + "Example/", "/home/u/.ssh", users + "me\""):
+            with self.subTest(text=text):
+                self.assertEqual(self.scan({"src/a.ts": text + "\n"}), [], text)
 
     def test_the_allowlist_gives_a_reason_for_every_entry(self) -> None:
         for residue in guard.RESIDUES:
