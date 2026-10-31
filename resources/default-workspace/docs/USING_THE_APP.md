@@ -35,7 +35,7 @@ Keys fire only when no text field has focus; Escape leaves a field. `Mod` is Cmd
 | Files card | `c` `d` `b` `m` | Next file, Compare, Use Riggverk's version, Keep mine or Hand back |
 | Codex config card | `m` `b` | Keep mine or Hand back, Use Riggverk defaults |
 | A switch | Space, Enter | Turn "Let Riggverk manage this" on or off (autosaves) |
-| OpenCode model | `e` `s` `x` `R` | Edit the model override, save it, reset it to the bundled default, reload models |
+| OpenCode model | `e` `s` `x` `R` | Edit the model override, save it, clear it, reload models |
 | Reviews | `y` | Apply the reviewed plan |
 | | `n`, Escape | Cancel |
 | | `d` | Expand or fold the row's details (install review) |
@@ -103,7 +103,7 @@ A decision cell says what happened in a sentence and offers the ways out as butt
 
 - **Rules file** (a managed block that was edited, or a file that differs from every shipped version): **Compare** (`d`) folds a read-only side-by-side diff out under the card (your file against the closest shipped version; **Show the update instead** (`t`) switches it); it writes nothing and needs no token. **Merge in updates…** (`v`) opens a review with the exact file that would be written, then `y`. **Keep mine** (`m`) asks first, then Riggverk leaves the file alone until you hand it back (**Hand back**).
 - **Skill and agent files you edited**: a row per file with its folder and why it differs, each with **Compare** (the same fold-out), **Use Riggverk's version…** (`b`, a review with the files, the backup name and the diff; `y` applies, your files are backed up first) and **Keep mine** or **Hand back** (`m`, asks first). **Next file** (`c`) moves to the next one.
-- **Codex config**: a table of the managed keys (Riggverk's value and yours), **Keep mine** (`m`, asks first) and **Use Riggverk defaults** (`b`): a review with the exact key changes, then `y` writes only the keys that differ, with a backup. `model` and `model_reasoning_effort` are yours after the first install and are never compared.
+- **Codex config**: a table of the managed keys (Riggverk's value and yours), **Keep mine** (`m`, asks first) and **Use Riggverk defaults** (`b`): a review with the exact key changes, then `y` writes only the keys that differ, with a backup. `model` and `model_reasoning_effort` are yours and are never compared. Riggverk sets no model; your agent's own default applies.
 
 A plan is bound to the installed state it saw; every write goes through a review with its own fingerprint and one-time token, and only `y` (or the Apply button) applies.
 
@@ -113,7 +113,7 @@ The runtime facts also say which skill copies the agent will load, read from the
 
 **Safety notes** ends the page with an **Advice only** tag: which permission and sandbox keys the agent's global config sets, as `Worth a look`, `Set`, `Tip` or `Not checked` rows. It reads config only, in memory, and never writes; project config, profiles and command-line flags are not checked. See [SECURITY_BASELINE.md](SECURITY_BASELINE.md).
 
-OpenCode also has a **Model** cell: the override for `model`, `small model` and an optional `subagent model` (the models of the read-only subagents; unset, they use the main model). `e` edits it, `s` saves it to the app-level override file, and the next OpenCode install writes it into the installed config. Each row says `source: override | bundled default` and `state: applied | pending apply (u to update)`. `x` deletes the override and returns every row to the bundled default; the next install applies that and removes the subagent entries (see [OPENCODE_CONFIG.md](OPENCODE_CONFIG.md)).
+OpenCode also has a **Model** cell: the override for `model`, `small model` and an optional `subagent model` (the models of the read-only subagents; unset, they use the main model). `e` edits it, `s` saves it to the app-level override file, and the next OpenCode install writes it into the installed config. Each row says `source: override | bundled default` and `state: applied | pending apply (u to update)`. `x` deletes the override; the next install preserves existing main model values and removes app-owned subagent entries (see [OPENCODE_CONFIG.md](OPENCODE_CONFIG.md)).
 
 ## Install review
 

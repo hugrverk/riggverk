@@ -61,7 +61,7 @@ Press `z` or click **Undo last update…** in the line under the page (or `:roll
 
 1. Codex page, turn `codex_config` on with its switch.
 2. `p` to see which keys differ, then `u`, `y`. A key you changed by hand shows as a decision: **Keep mine**, or **Use Riggverk defaults** (a review of the exact key changes first).
-3. The app keeps `approval_policy`, `approvals_reviewer`, `sandbox_mode`, and `apps._default.*` aligned with the template. `model` and `model_reasoning_effort` are written once, only when your config has none (default `gpt-6.1-sol`, `xhigh`), then stay yours. Personality, MCP entries, other tables, and comments are preserved; ambiguous TOML is refused with nothing written.
+3. The app keeps `approval_policy`, `approvals_reviewer`, `sandbox_mode`, and `apps._default.*` aligned with the template. Riggverk sets no model; your agent's own default applies. Existing `model` and `model_reasoning_effort` values stay yours. Personality, MCP entries, other tables, and comments are preserved; ambiguous TOML is refused with nothing written.
 4. If Codex ignores your rules, check for a non-empty `AGENTS.override.md` in the Codex home; Codex reads it instead of `AGENTS.md`. The Codex page warns about it.
 
 ## Add a skill of your own

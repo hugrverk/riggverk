@@ -98,7 +98,14 @@ mod tests {
                     }
                 })
                 .collect();
-            self.write(&(replaced.join("\n") + "\n"));
+            let mut output = replaced.join("\n") + "\n";
+            if !text
+                .lines()
+                .any(|line| line.trim_start().starts_with(&format!("{key} =")))
+            {
+                output = format!("{key} = \"{value}\"\n{output}");
+            }
+            self.write(&output);
         }
 
         fn kind(&self) -> OperationKind {

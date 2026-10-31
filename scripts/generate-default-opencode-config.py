@@ -52,7 +52,7 @@ def load_json(path, label):
 # opencode.base.json follow them; "permission" is generated from the policy.
 BASE_KEY_ORDER = [
     "$schema", "share", "autoupdate", "snapshot",
-    "model", "small_model", "default_agent",
+    "default_agent",
     "provider", "mcp", "lsp", "compaction", "watcher",
 ]
 

@@ -3883,16 +3883,36 @@ fn restore_artifact_from_backup_with_mode(
                             .map_err(|_| {
                                 "the backed-up opencode.json is not valid JSON".to_string()
                             })?;
+                        let template_path = crate::setup_roots::bundled_root_for(ws_root)?
+                            .join("templates/opencode.json");
+                        let template: serde_json::Value = serde_json::from_str(
+                            &fs::read_to_string(template_path)
+                                .map_err(|_| "cannot read opencode template")?,
+                        )
+                        .map_err(|_| "invalid opencode template")?;
+                        let expected =
+                            crate::commands::render_expected_opencode_config(&template, home)
+                                .ok_or("cannot render opencode template")?;
+                        let mut projection =
+                            crate::commands::extract_managed_opencode_config(&backup_json);
+                        if let Some(object) = projection.as_object_mut() {
+                            for key in ["model", "small_model"] {
+                                if expected.get(key).is_none() {
+                                    object.shift_remove(key);
+                                }
+                            }
+                        }
                         let merged = crate::commands::merge_managed_opencode_config(
                             &installed_json,
-                            &crate::commands::extract_managed_opencode_config(&backup_json),
+                            &projection,
                         );
                         crate::safe_filesystem::write_regular_file_atomic(
                             &dest,
-                            (serde_json::to_string_pretty(&merged)
-                                .map_err(|e| format!("serialize opencode config: {e}"))?
-                                + "\n")
-                                .as_bytes(),
+                            crate::commands::serialize_opencode_preserving_models(
+                                &installed_str,
+                                &merged,
+                            )?
+                            .as_bytes(),
                             allowlist_root,
                         )
                         .map_err(|e| format!("write opencode config: {e}"))?;
@@ -4781,6 +4801,7 @@ mod tests {
         current["user_after_apply"] = serde_json::json!({"keep":true});
         current["last_user_key"] = serde_json::json!("keep last");
         let mut expected = backup.clone();
+        expected["model"] = current["model"].clone();
         expected["theme"] = current["theme"].clone();
         expected["agent"]["inspector"]["prompt"] = current["agent"]["inspector"]["prompt"].clone();
         expected["user_after_apply"] = current["user_after_apply"].clone();
@@ -4789,7 +4810,10 @@ mod tests {
         fs::create_dir_all(&ws).unwrap();
         fs::create_dir_all(backups.join("artifacts")).unwrap();
         let dest = home.join(".config/opencode/opencode.json");
-        fs::write(&dest, serde_json::to_vec_pretty(&current).unwrap()).unwrap();
+        let current_text = serde_json::to_string_pretty(&current)
+            .unwrap()
+            .replace("new/main", r"new/\u006dain");
+        fs::write(&dest, current_text).unwrap();
         fs::write(
             backups.join("artifacts/opencode-config"),
             serde_json::to_vec(&backup).unwrap(),
@@ -4814,6 +4838,9 @@ mod tests {
         .unwrap();
         let restored: serde_json::Value =
             serde_json::from_slice(&fs::read(&dest).unwrap()).unwrap();
+        assert!(fs::read_to_string(&dest)
+            .unwrap()
+            .contains(r"new/\u006dain"));
         // String comparison checks the order of every retained user object as well as values.
         assert_eq!(
             serde_json::to_string(&restored).unwrap(),

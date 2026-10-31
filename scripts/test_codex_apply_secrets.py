@@ -85,8 +85,7 @@ class CodexApplySecretsTests(unittest.TestCase):
     def test_managed_defaults_apply(self) -> None:
         for key in ("approval_policy", "sandbox_mode"):
             self.assertEqual(self.result.get(key), self.template[key], key)
-        # An absent create-only key is seeded from the template.
-        self.assertEqual(self.result.get("model_reasoning_effort"), self.template["model_reasoning_effort"])
+        self.assertNotIn("model_reasoning_effort", self.result)
 
     def test_user_values_survive(self) -> None:
         self.assertEqual(self.result.get("model"), "gpt-4")  # create-only key the user set
@@ -97,6 +96,35 @@ class CodexApplySecretsTests(unittest.TestCase):
     def test_legacy_profile_selector_removed_and_custom_profile_kept(self) -> None:
         self.assertNotIn("profile", self.result)
         self.assertEqual(self.result.get("profiles", {}).get("safe", {}).get("model"), "gpt-4")
+
+
+class CodexNoModelDefaultsTests(unittest.TestCase):
+    def test_fresh_install_has_no_model_keys(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "config.toml"
+            result = subprocess.run([sys.executable, str(WS_SCRIPTS / "ensure-codex-routing-defaults.py"), str(target), str(TEMPLATE), "--apply"], capture_output=True)
+            self.assertEqual(result.returncode, 0)
+            parsed = tomllib.loads(target.read_text(encoding="utf-8"))
+            self.assertNotIn("model", parsed)
+            self.assertNotIn("model_reasoning_effort", parsed)
+
+    def test_fresh_and_existing_configs_do_not_seed_or_change_models(self) -> None:
+        script = WS_SCRIPTS / "ensure-codex-routing-defaults.py"
+        for prefix in ("", 'model = "gpt-6.1-sol" # previous seed\nmodel_reasoning_effort = "xhigh"\n',
+                       "model = 'my/model' # keep formatting\nmodel_reasoning_effort = 'low'\n"):
+            with self.subTest(prefix=prefix), tempfile.TemporaryDirectory() as tmp:
+                target = Path(tmp) / "config.toml"
+                target.write_text(prefix + TEMPLATE.read_text(encoding="utf-8"), encoding="utf-8")
+                before = target.read_bytes()
+                match = subprocess.run([sys.executable, str(script), str(target), str(TEMPLATE), "--managed-match"], capture_output=True)
+                self.assertEqual(match.returncode, 0)
+                result = subprocess.run([sys.executable, str(script), str(target), str(TEMPLATE), "--apply", "--backup-dir", str(Path(tmp) / "backup")], capture_output=True)
+                self.assertEqual(result.returncode, 0)
+                self.assertEqual(target.read_bytes(), before)
+                parsed = tomllib.loads(target.read_text(encoding="utf-8"))
+                if not prefix:
+                    self.assertNotIn("model", parsed)
+                    self.assertNotIn("model_reasoning_effort", parsed)
 
 
 if __name__ == "__main__":
