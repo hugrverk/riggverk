@@ -11,11 +11,13 @@ Do not duplicate full `SKILL.md` content here. This file is an index for choosin
 | `adversarial-implementation` | Only when the user explicitly asks for it, in plain words ("run an adversarial implementation", "have a critic review it"; in Swedish "kör adversarial") or with `/adversarial-implementation`; it is kept out of the routing rules: an adversarial, critic-reviewed or two-agent implementation. A delegated implementer works against a fresh read-only critic chosen by capability first; only findings whose proof the lead re-runs count, the judging tests are frozen, and a deletion-only round ends the loop. Roles work with no setup and change with one phrase in chat or an `Adversarial roles:` line below END in the rules. |
 | `adversarial-review` | Only on an explicit request (`/adversarial-review`, or plain language such as "run an adversarial review" or "review the plan adversarially"; in Swedish "kör en adversarial review"): a fresh read-only critic chosen by capability attacks an existing diff, or a plan in plan mode, and only findings whose proof the lead re-runs are reported, in Fatal, Significant, Minor and Pre-existing buckets. It fixes nothing and offers a re-review of later changes at most once. Roles work as in `adversarial-implementation`. |
 | `adversarial-test` | Only when the user explicitly asks for it, in plain words ("write adversarial tests", "let an adversary write the tests"; in Swedish "skriv adversariella tester") or with `/adversarial-test`; it is kept out of the routing rules: a fresh read-only adversary, chosen by capability first, proposes failing tests tied to the acceptance criteria. The lead keeps only tests it ran and saw fail for the stated reason, freezes them, and the implementer changes production code only or reports `BLOCKED`. At most two rounds; only tests that protect a criterion stay. Roles as for `adversarial-implementation`. |
+| `agents-md` | Creating or refreshing a repository's `AGENTS.md` from commands that actually ran, the real layout and sourced invariants, with an optional `CLAUDE.md` that only holds `@AGENTS.md`. Writes only on request, after showing the diff. Ships `assets/AGENTS.template.md`. |
 | `accessibility-review` | Reviewing UI for WCAG 2.2 AA risks, semantics, controls, keyboard, focus, labels, contrast, and responsive usability. |
 | `browser-qa` | Verifying frontend changes with live browser checks, route smoke tests, interactions, responsive checks, console/network review, and evidence. |
 | `context-budget` | Reducing duplicated rules, docs, prompts, skills, and token overhead without removing essential safety guidance. |
 | `current-docs` | Checking official/current docs for version-specific APIs, SDKs, CLIs, config, hooks, or platform behavior. |
 | `database-migrations` | Planning or reviewing schema/data changes with migration, rollback, and DB push reporting. |
+| `delegate` | Handing a well-specified mechanical or parallel slice to another installed agent CLI (`codex exec`, `claude -p`, `opencode run`) or a subagent, only when the user wants other agents used. Each slice runs in its own git worktree with a self-contained brief, a time budget and the user's configured model; the lead reviews the branch like a PR, re-runs every check itself and integrates by merge or cherry-pick. Ships `delegate-recipes.md` (preflight, timeout, environment and write confinement per CLI). |
 | `diagnose` | Debugging bugs, failures, flakes, slowness, and regressions with a red-capable feedback loop and falsifiable hypotheses. |
 | `frontend-design` | Designing or improving frontend UI across repositories with coherent aesthetic direction, accessibility, and verification. |
 | `handoff` | Reviewing executor evidence or compacting paused work into a trustworthy handoff with verified state and next action. |
@@ -43,10 +45,13 @@ Domain skills for a team's own projects and stack are not bundled: keep them in 
 | `adversarial-implementation` / `adversarial-review` | Adversarial-implementation writes a change through a critic loop; adversarial-review attacks work that already exists, or a plan, and fixes nothing. "Have a critic review it" (in Swedish "låt en kritiker granska") about finished work or a plan means adversarial-review. |
 | `adversarial-review` / `/code-review` | `/code-review` (or the `inspector` agent) is the routine review; adversarial-review runs a fresh critic from another route and reports only findings the lead proved, only when the user asks for it. |
 | `tdd` / `adversarial-test` | TDD has the current agent write each test and then the code; adversarial-test has a separate adversary write the tests and a separate implementer fix the code against them frozen, only when the user explicitly asks for it. |
+| `delegate` / `adversarial-implementation` | Delegate hands a slice to another agent and the lead reviews and verifies it once; adversarial-implementation adds a fresh hostile critic every round and runs only when the user asks for it. |
+| `delegate` / `handoff` | Delegate runs another agent on a slice and verifies its branch; handoff compacts state or reviews a report another agent already produced. |
 | `implementation-plan` / `minimal-implementation` | Plan defines slices; minimal-implementation executes one bounded patch. |
 | `frontend-design` / `screenshot-review` | Screenshot-review diagnoses static images; frontend-design chooses direction and implements. |
 | `frontend-design` / `accessibility-review` | Frontend-design includes baseline a11y during implementation; accessibility-review is a specialist audit. |
 | `frontend-design` / `browser-qa` | Frontend-design owns visual direction; browser-qa supplies runtime verification evidence. |
+| `agents-md` / global rules | `agents-md` writes a repository's own `AGENTS.md` from verified facts; it never edits or repeats the user's global rules, which the project file complements. |
 | `handoff` / `release-check` | Handoff compacts session state; release-check validates merge/deploy readiness. |
 | `pr-workflow` / `release-check` | Pr-workflow commits, pushes and opens the PR, and runs the repo's gate before the push; release-check owns the go/no-go verdict on merge or deploy readiness. |
 | `security-review` / `security-audit` | Security-review checks a change or answers a focused question in the current context; security-audit runs a full multi-agent audit of a whole codebase only when one is explicitly asked for. |
@@ -68,6 +73,7 @@ Domain skills for a team's own projects and stack are not bundled: keep them in 
 - Project status report or weekly summary: `status-report`.
 - Commit, push and open or update a PR: `pr-workflow`; add `release-check` before the push.
 - Release readiness: `release-check`.
+- Onboarding agents to a repo, or a missing or stale `AGENTS.md`: `agents-md`.
 - Docs, rules, or prompt consolidation: `context-budget`; add `implementation-plan` for explicit maps.
 - Session retrospective: `retro`, only when the user invokes `/retro` or `$retro` (it is not routed by the rules).
 - Adversarial implementation: `adversarial-implementation`, only when the user asks for it (it is not routed by the rules).
