@@ -1,6 +1,24 @@
 {
   "releases": [
     {
+      "version": "2026.10.17",
+      "sections": [
+        {
+          "title": "New",
+          "items": [
+            "A skill pack can add routing lines for its own skills: a `routing.md` in the pack folder, up to 30 bullet lines that name the pack's skills. The next Update shows them in every agent's rules under \"Pack skill routing\", with a diff, and Undo takes them back. A line that names another skill or holds markup keeps the whole file out, and Library, Packs says which line"
+          ]
+        },
+        {
+          "title": "Changes",
+          "items": [
+            "The bundled skills follow the Agent Skills format: their category, risk, targets and related skills sit under `metadata:`, each carries `license: MIT`, and skills that need subagents, Playwright, `gh` or Node say so in `compatibility`. Packs and your own skills in the older layout keep working unchanged",
+            "NOTICE credits the projects whose methods the adversarial skills build on, and the ones that inspired others"
+          ]
+        }
+      ]
+    },
+    {
       "version": "2026.10.16",
       "sections": [
         {
