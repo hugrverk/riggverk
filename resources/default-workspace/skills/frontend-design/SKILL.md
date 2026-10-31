@@ -35,7 +35,7 @@ Before proposing a direction, inspect repository reality:
 
 - design tokens, typography, spacing, color, and component ownership
 - relevant routes, layouts, and content patterns
-- product language (including Swedish user-facing copy where applicable)
+- product language and the language of existing user-facing copy
 - screenshots or live UI when available
 - existing motion, density, and state handling
 
@@ -43,7 +43,7 @@ Preserve a mature product design system when one exists. Do not fall back to gen
 
 ## Design thesis
 
-Write one sentence that states purpose, audience, tone, and density. Example: *calm operational workspace for solo developers — dense, legible, low ceremony.*
+Write one sentence that states purpose, audience, tone, and density. Example: *calm operational workspace for small teams of developers — dense, legible, low ceremony.*
 
 Then choose one coherent design thesis: the overall character the interface should express (for example restrained industrial, editorial, soft utility, or focused dashboard). Execute that thesis consistently; do not mix unrelated aesthetics in one slice.
 
@@ -110,7 +110,7 @@ Before reporting done, confirm the result is recognizable, usable, and intention
 - Do not require animation, decorative backgrounds, or non-system fonts by default.
 - Do not add dependencies or heavy animation libraries without clear value.
 - Do not claim visual quality without checking the rendered result.
-- Keep maintenance and solo-developer cost visible in tradeoffs.
+- Keep maintenance cost visible in tradeoffs.
 
 ## Harness notes
 

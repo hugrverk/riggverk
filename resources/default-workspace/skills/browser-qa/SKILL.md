@@ -29,7 +29,7 @@ Done when: each affected route loaded without unclassified console errors or fai
 ## Process
 
 1. Identify target routes, entry points, and critical flows affected by the change.
-2. Before starting a local dev server, check whether the required local URL or port already responds. Reuse an existing server when possible; do not start duplicates. Kretsverket may use `http://localhost:1420/`.
+2. Before starting a local dev server, check whether the required local URL or port already responds. Reuse an existing server when possible; do not start duplicates.
 3. If you start a dev server, record enough command, PID, session, and port detail to stop only the server you started. You own cleanup for servers you start.
 4. Run smoke tests in an actual browser or available browser automation:
    - Page loads.
