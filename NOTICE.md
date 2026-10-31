@@ -115,6 +115,10 @@ The bundled `security-audit` skill is vendored from [cloudflare/security-audit-s
 
 Path: `resources/default-workspace/skills/security-audit/`. Copyright (c) 2025-2026 Cloudflare, Inc. Licensed under MIT; the full [license](resources/default-workspace/skills/security-audit/LICENSE) accompanies the vendored files. Local adaptations are described in `UPSTREAM.md`.
 
+## openai/skills gh-fix-ci
+
+`ci-triage` draws on the `gh-fix-ci` skill of [openai/skills](https://github.com/openai/skills) (`skills/.curated/gh-fix-ci/SKILL.md`, read at commit `49f948faa9258a0c61caceaf225e179651397431`), licensed under the [Apache License, Version 2.0](https://www.apache.org/licenses/LICENSE-2.0). Used: checking gh authentication first, finding failed checks with `gh pr checks --json`, reporting a check that is not a GitHub Actions run by its link only, and reading a job's own log when the run is still in progress. Changes: the text is Riggverk's own; the failure classes, the local reproduction, the hand-off to `diagnose`, the redaction rules and the approval-gated rerun are not in that work. No files of that work are included.
+
 ## Acknowledgements
 
 These skills share an idea with public work but no text, structure or distinctive method taken from it:

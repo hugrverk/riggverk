@@ -141,6 +141,13 @@ def removed_skill_names() -> set[str]:
 
 
 REMOVED_SKILLS = removed_skill_names()
+# A removed name counts only as a whole skill name: `triage` is stale, while a current skill whose
+# name merely contains it (`ci-triage`) is not.
+REMOVED_SKILL_RES = {name: re.compile(rf"(?<![a-z0-9-]){re.escape(name)}(?![a-z0-9-])") for name in REMOVED_SKILLS}
+
+
+def removed_skills_in(text: str) -> list[str]:
+    return sorted(name for name, pattern in REMOVED_SKILL_RES.items() if pattern.search(text))
 
 
 def parse_fields(frontmatter: str) -> dict[str, str]:
@@ -629,9 +636,8 @@ def validate_routing_sources(discovered: set[str]) -> None:
                 fail(f"{source}: stale skills folder claim: found '{claim}'")
         if source.name == "codex.md" and "~/.agents/skills" not in text:
             fail(f"{source}: the Codex rules must name ~/.agents/skills as the Codex skills folder")
-        for removed in REMOVED_SKILLS:
-            if removed in text:
-                fail(f"{source}: references removed skill {removed}")
+        for removed in removed_skills_in(text):
+            fail(f"{source}: references removed skill {removed}")
         if source.name == "SKILLS.md":
             rows = re.findall(r"^\|\s*`([a-z][a-z0-9-]*)`\s*\|", text, re.MULTILINE)
             catalog = set(rows)
@@ -675,7 +681,7 @@ def scan_repo_for_removed_skills() -> None:
         except (UnicodeDecodeError, OSError):
             continue
         rel_posix = rel(path)
-        for removed in REMOVED_SKILLS:
+        for removed in removed_skills_in(text):
             # Allow removed names only in:
             # 1. Deprecated metadata files
             if rel_posix == "resources/default-workspace/metadata/deprecated-skills.json":
@@ -685,8 +691,7 @@ def scan_repo_for_removed_skills() -> None:
             # 2. This checker script itself (parses the removed names)
             if rel_posix == "scripts/check-skill-routing.py":
                 continue
-            if removed in text:
-                fail(f"{rel_posix}: references removed skill {removed} outside migration fixtures")
+            fail(f"{rel_posix}: references removed skill {removed} outside migration fixtures")
 
 
 def main() -> None:

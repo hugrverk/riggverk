@@ -351,6 +351,14 @@ class CheckSkillRoutingTests(unittest.TestCase):
         agent.write_text(agent.read_text(encoding="utf-8") + f"\n# see {removed}\n", encoding="utf-8")
         self.assert_fails(f"removed skill {removed}")
 
+    def test_skill_name_containing_a_removed_name_passes(self) -> None:
+        removed = "tri" + "age"  # built at runtime so this file is not itself a stale reference
+        self.append(self.tree / WS / "templates/global-agent-rules.md", f"\nSee `ci-{removed}`.\n")
+        result = run(self.tree, "check-skill-routing.py")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.append(self.tree / WS / "templates/global-agent-rules.md", f"\nSee `{removed}`.\n")
+        self.assert_fails(f"references removed skill {removed}")
+
     def test_removed_skill_in_git_ignored_file_passes(self) -> None:
         removed = "grill" + "-me"
         subprocess.run(["git", "init", "-q"], cwd=self.tree, check=True)
