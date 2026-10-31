@@ -105,33 +105,13 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
+## superpowers dispatching-parallel-agents and using-git-worktrees
+
+`delegate` draws on two skills of [obra/superpowers](https://github.com/obra/superpowers) at commit `2ce8aa15d05bd57213e6f746f953aafb7ded7a8b`: from `skills/dispatching-parallel-agents/SKILL.md`, one agent per independent slice with no shared files or state, a focused, self-contained brief with explicit constraints and expected output, and checking the returned work for conflicts before running the full suite; from `skills/using-git-worktrees/SKILL.md`, preferring the harness's native worktree tool over `git worktree add`, and a clean baseline run in the new worktree before work starts. The wording is Riggverk's; the CLI recipes, write confinement and the PR-style review are Riggverk's own. Same MIT license and copyright as in the superpowers writing-plans entry above.
+
 ## superpowers receiving-code-review
 
-`review-response` adapts the method of `skills/receiving-code-review/SKILL.md` in [obra/superpowers](https://github.com/obra/superpowers) at commit `2ce8aa15d05bd57213e6f746f953aafb7ded7a8b`. Used: verify each point against the codebase before implementing it, no performative agreement or gratitude in replies, clarify unclear items before implementing related ones, the "is it actually used" check before building requested scope, fixing blocking issues first, pushing back with technical evidence, a one-line correction when pushback was wrong, and replying inside the review thread. The wording is Riggverk's; the fix, push back and ask verdicts, one commit per theme, and approval before posting are Riggverk's own.
-
-License of the original work:
-
-MIT License
-
-Copyright (c) 2025 Jesse Vincent
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+`review-response` adapts the method of `skills/receiving-code-review/SKILL.md` in [obra/superpowers](https://github.com/obra/superpowers) at commit `2ce8aa15d05bd57213e6f746f953aafb7ded7a8b`. Used: verify each point against the codebase before implementing it, no performative agreement or gratitude in replies, clarify unclear items before implementing related ones, the "is it actually used" check before building requested scope, fixing blocking issues first, pushing back with technical evidence, a one-line correction when pushback was wrong, and replying inside the review thread. The wording is Riggverk's; the fix, push back and ask verdicts, one commit per theme, and approval before posting are Riggverk's own. Same MIT license and copyright as in the superpowers writing-plans entry above.
 
 ## openai/skills gh-address-comments
 
