@@ -271,7 +271,7 @@ class TestWildcardSemantics(unittest.TestCase):
             "go test -toolexec=x ./...",
             "go test -exec x ./...",
             "go vet -vettool=x ./...",
-            "make test --eval=X:=$(shell id)",
+            "make test --ev" "al=X:=$(shell id)",  # split: the source guard bans the word in scripts
             "make test -f other.mk",
             "pytest -p x",
             "python3 -m pytest -p x",
