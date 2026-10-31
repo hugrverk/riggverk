@@ -338,7 +338,8 @@ mod tests {
         assert!(setup_transaction::ensure_rules_apply_allowed(
             &ArtifactId::ClaudeRules,
             &env.ws,
-            &env.home
+            &env.home,
+            &crate::skill_sources::SkillSources::for_workspace(&env.ws).unwrap()
         )
         .is_err());
         let plan = preview_setup(vec!["claude_rules".into()]).unwrap();
@@ -445,7 +446,8 @@ mod tests {
         assert!(setup_transaction::ensure_rules_apply_allowed(
             &ArtifactId::ClaudeRules,
             &env.ws,
-            &env.home
+            &env.home,
+            &crate::skill_sources::SkillSources::for_workspace(&env.ws).unwrap()
         )
         .is_err());
         assert!(apply_setup(vec!["claude_rules".into()], false, None, None).is_err());
@@ -493,7 +495,8 @@ mod tests {
             assert!(setup_transaction::ensure_rules_apply_allowed(
                 &ArtifactId::ClaudeRules,
                 &env.ws,
-                &env.home
+                &env.home,
+                &crate::skill_sources::SkillSources::for_workspace(&env.ws).unwrap()
             )
             .is_err());
             let plan = preview_setup(vec!["claude_rules".into()]).unwrap();

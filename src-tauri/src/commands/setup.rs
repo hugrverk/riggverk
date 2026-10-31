@@ -779,10 +779,10 @@ fn remove_empty_migration_parents(path: &Path, workspace_root: &Path) -> Result<
 /// replaced by a file holding only the block.
 fn apply_rules_artifact(
     artifact: &crate::artifact_registry::ArtifactId,
-    source: &Path,
     dest: &Path,
     workspace_root: &Path,
     home: &Path,
+    sources: &crate::skill_sources::SkillSources,
     rewrite: Option<&setup_transaction::RulesRewrite>,
 ) -> Result<(), String> {
     let root = artifact.allowlist_root(home, workspace_root)?;
@@ -811,7 +811,7 @@ fn apply_rules_artifact(
         )
         .map_err(|e| format!("write rules file {}: {e}", dest.display()));
     }
-    setup_transaction::ensure_rules_apply_allowed(artifact, workspace_root, home)?;
+    setup_transaction::ensure_rules_apply_allowed(artifact, workspace_root, home, sources)?;
     // A harness that keeps its folder owner-only (Pi makes its agent folder 0700) gets the
     // folders the app creates for the file the same way.
     if let crate::artifact_registry::ArtifactId::HarnessRules(harness) = artifact {
@@ -823,8 +823,8 @@ fn apply_rules_artifact(
                 .map_err(|e| format!("create {}: {e}", folder.display()))?;
         }
     }
-    let source_text = fs::read_to_string(source)
-        .map_err(|e| format!("read rules source {}: {e}", source.display()))?;
+    // The bundled base with the packs' routing, from the same sources the plan was made from.
+    let source_text = crate::pack_routing::rules_source_text(artifact, sources)?;
     let rendered = if dest.exists() {
         let installed =
             fs::read(dest).map_err(|e| format!("read rules file {}: {e}", dest.display()))?;
@@ -984,10 +984,10 @@ fn apply_single_artifact(
     if artifact.is_rules_block() {
         return apply_rules_artifact(
             artifact,
-            &source,
             &dest,
             workspace_root,
             home,
+            sources,
             rules_rewrite,
         );
     }

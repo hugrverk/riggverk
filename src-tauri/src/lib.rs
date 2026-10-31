@@ -23,6 +23,7 @@ mod managed_state;
 mod mutation_lock;
 mod opencode_precedence;
 mod opencode_tui;
+mod pack_routing;
 mod path_safety;
 mod path_utils;
 mod platform_paths;
@@ -77,6 +78,8 @@ mod opencode_precedence_contract;
 mod opencode_tui_contract;
 #[cfg(test)]
 mod opencode_xdg_contract;
+#[cfg(test)]
+mod pack_routing_contract;
 #[cfg(test)]
 mod rules_block_contract;
 #[cfg(test)]

@@ -1,8 +1,9 @@
 //! Where the skills of an install come from: the bundle and the user's skill packs.
 //!
 //! A pack is a folder of the user's own skills, `<workspace>/packs/<pack>/skills/<skill>/SKILL.md`
-//! (one optional group level, as in the bundle). Packs add to the catalog and nothing else: rules,
-//! agents and configs are read from the bundle only. A skill is still identified by its root, name
+//! (one optional group level, as in the bundle). Packs add to the catalog, plus optional routing
+//! lines for their own skills (`routing.md`, see [`crate::pack_routing`]) that the rules source
+//! splices into the managed block; rules, agents and configs are otherwise read from the bundle. A skill is still identified by its root, name
 //! and relative path, so ownership, backups and rollback work as for a bundled skill; only the
 //! place its source is read from differs.
 //!
@@ -23,6 +24,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use crate::pack_routing::PackRouting;
 use crate::skill_discovery::DiscoveredSkill;
 
 /// Folder of the packs inside the data folder. Never `skills/`: that path belongs to the cleanup
@@ -71,6 +73,11 @@ pub trait SourceRoot {
     fn skill_md(&self, name: &str) -> PathBuf;
     /// Directory of the skill called `name`, with the same fallback.
     fn skill_dir(&self, name: &str) -> PathBuf;
+    /// The rendered routing section the packs add to the rules block (see
+    /// [`crate::pack_routing`]); empty without packs, which leaves every rules source as bundled.
+    fn pack_routing(&self) -> &str {
+        ""
+    }
 }
 
 /// The bundle alone. For code that reads an artifact which is no skill (rules, agents, configs,
@@ -177,6 +184,8 @@ pub struct PackReport {
     /// Set when the whole pack is refused: none of its skills is read.
     pub refused: Option<String>,
     pub skills: Vec<PackSkillReport>,
+    /// Its `routing.md`; [`PackRouting::None`] for a refused pack, which is not read.
+    pub routing: PackRouting,
 }
 
 /// A recorded pack skill the catalog lacks. It is kept as it is installed.
@@ -209,6 +218,8 @@ pub struct SkillSources {
     held: Vec<HeldSkill>,
     /// Why `pack-skills.json` cannot be used, when it exists and cannot.
     record_problem: Option<String>,
+    /// The routing section of the packs, rendered once (see [`crate::pack_routing`]).
+    routing_section: String,
 }
 
 impl SourceRoot for SkillSources {
@@ -227,6 +238,9 @@ impl SourceRoot for SkillSources {
         self.find(name)
             .map(|skill| skill.skill.source_dir.clone())
             .unwrap_or_else(|| self.bundled.join("skills").join(name))
+    }
+    fn pack_routing(&self) -> &str {
+        &self.routing_section
     }
 }
 
@@ -271,6 +285,7 @@ impl SkillSources {
             ignored: Vec::new(),
             held: Vec::new(),
             record_problem: None,
+            routing_section: String::new(),
         }
     }
 
@@ -318,6 +333,16 @@ impl SkillSources {
         }
         let by_name = index_by_name(&catalog);
         let (held, record_problem) = compute_held(workspace_root, &packs, &catalog);
+        // A bundle that does not load plans nothing, so its packs route nothing either.
+        let routing_section = if catalog.is_ok() {
+            crate::pack_routing::render_section(
+                packs
+                    .iter()
+                    .map(|pack| (pack.name.as_str(), pack.routing.lines())),
+            )
+        } else {
+            String::new()
+        };
         Self {
             bundled,
             workspace_root: workspace_root.to_path_buf(),
@@ -327,6 +352,7 @@ impl SkillSources {
             ignored,
             held,
             record_problem,
+            routing_section,
         }
     }
 
@@ -531,6 +557,7 @@ fn scan_packs(
                 name: pack,
                 refused: Some(reason),
                 skills: Vec::new(),
+                routing: PackRouting::None,
             }),
             Ok(candidates) => {
                 let mut skills = Vec::new();
@@ -538,10 +565,19 @@ fn scan_packs(
                     skills.push(report_candidate(&pack, candidate, bundle_names, &claims));
                 }
                 skills.sort_by(|a, b| a.name.cmp(&b.name));
+                // Only the pack's own active skills may be routed to: a held skill is not in the
+                // catalog, so it is not active either.
+                let own: BTreeSet<&str> = skills
+                    .iter()
+                    .filter(|skill| skill.state == PackSkillState::Active)
+                    .map(|skill| skill.name.as_str())
+                    .collect();
+                let routing = crate::pack_routing::read(&dir.join(&pack), &own);
                 reports.push(PackReport {
                     name: pack,
                     refused: None,
                     skills,
+                    routing,
                 });
             }
         }
