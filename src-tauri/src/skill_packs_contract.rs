@@ -450,7 +450,12 @@ mod tests {
                 .iter()
                 .find(|skill| skill.folder == folder)
                 .expect(folder);
-            assert_eq!(skill.state, PackSkillState::Active, "{folder}: {}", skill.reason);
+            assert_eq!(
+                skill.state,
+                PackSkillState::Active,
+                "{folder}: {}",
+                skill.reason
+            );
         }
         let result = env.apply();
         assert!(result.success, "install: {}", result.message);

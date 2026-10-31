@@ -1019,7 +1019,12 @@ mod tests {
         let fields = skill_fields(content).expect("fields");
         RIGGVERK_METADATA_KEYS
             .iter()
-            .map(|key| (key.to_string(), fields.get(*key).cloned().unwrap_or_default()))
+            .map(|key| {
+                (
+                    key.to_string(),
+                    fields.get(*key).cloned().unwrap_or_default(),
+                )
+            })
             .collect()
     }
 
@@ -1055,7 +1060,10 @@ mod tests {
         assert_eq!(fields["description"], "top");
         assert_eq!(fields["risk"], "low");
         assert_eq!(fields["targets"], "claude, pi");
-        assert!(!fields.contains_key("category"), "an empty metadata value adds nothing");
+        assert!(
+            !fields.contains_key("category"),
+            "an empty metadata value adds nothing"
+        );
         // The top-level reader is unchanged: the nested block is not a scalar.
         assert_eq!(field(both, "metadata").unwrap(), "");
         assert_eq!(field(both, "targets").unwrap(), "codex");
@@ -1069,7 +1077,11 @@ mod tests {
             "metadata:\n  - targets\n",
         ] {
             let content = format!("---\nname: x\ndescription: d\ntargets: codex\n{metadata}---\n");
-            assert_eq!(skill_fields(&content).expect("fields")["targets"], "codex", "{metadata}");
+            assert_eq!(
+                skill_fields(&content).expect("fields")["targets"],
+                "codex",
+                "{metadata}"
+            );
         }
         let quoted = "---\nname: x\ndescription: d\nmetadata:\n  # a comment\n  'targets': \"codex, grok\"\n  risk: >-\n    folded\n    risk\n---\n";
         let fields = skill_fields(quoted).expect("fields");
