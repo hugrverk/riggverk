@@ -206,6 +206,12 @@
       "sha256:f95b371d66f1e2fb72e69be132443433f0298334ebe13f69d5eae81a40919dff",
       "sha256:fb44c2a81c431af3137d15044cf4e2c3faa6218754ea4c45863625a4e2a5c071"
     ],
+    "skills/agents-md/SKILL.md": [
+      "sha256:6ce97c7a90decce1f6987b45d6ea6ae1ca26c24cfaa41005a04c25f1b9a8c0c8"
+    ],
+    "skills/agents-md/assets/AGENTS.template.md": [
+      "sha256:ad924f92ee293a7c445b207118e20e61b28aeeee3e877698886a6215f60fb27c"
+    ],
     "skills/browser-qa/SKILL.md": [
       "sha256:1746af0204c1d398d2a65d1aaff458a479dd457b2687762981f053a5c3cfdcf3",
       "sha256:30d52c06c27b4a01ae178cda2afbe8bda2ecc6493dd3f1a9c9c74ffcd2898022",
