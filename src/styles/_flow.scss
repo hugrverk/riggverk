@@ -18,7 +18,8 @@
 
 .ov-flow {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 266px;
+  /* The inspector takes a quarter of a wide page, between its old fixed width and a readable line. */
+  grid-template-columns: minmax(0, 1fr) clamp(266px, 24%, 380px);
   gap: 0 22px;
   align-items: start;
   margin: 4px 0 24px;
@@ -111,13 +112,13 @@
 .flow-svg.has-hl .flow-agent:not(.hl) { opacity: 0.35; }
 
 .flow-name {
-  font-size: var(--fs);
+  font-size: calc(var(--fs) * var(--flow-scale, 1));
   font-weight: 600;
   fill: var(--text);
 }
 
 .flow-sub {
-  font-size: calc(var(--fs) * 0.85);
+  font-size: calc(var(--fs) * 0.85 * var(--flow-scale, 1));
   fill: var(--text-muted);
   font-variant-numeric: tabular-nums;
 }
@@ -167,7 +168,7 @@
 
 .flow-cnt {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: calc(10px * var(--flow-scale, 1));
   fill: var(--text);
   paint-order: stroke;
   stroke: var(--bg);

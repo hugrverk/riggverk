@@ -7,6 +7,7 @@ import {
   buildFlowModel,
   decisionsOf,
   EMPTY_TRACE,
+  expandOffGroup,
   highlightOf,
   homePill,
   lineWeight,
@@ -119,6 +120,38 @@ describe("buildFlowModel sources and reach", () => {
     const all = buildFlowModel({ cards: cardsFor(CURRENT, harnesses), sources: SOURCES, personalDocs: null, lastUpdate: null });
     expect(all.offGroup).toBeNull();
     expect(resolveRef(all, { type: "off", id: "off" })).toBeNull();
+  });
+
+  it("gives every agent that is off a dimmed row of its own and a ghost curve from the base when expanded", () => {
+    const expanded = expandOffGroup(model);
+    expect(expanded.offGroup).toBeNull();
+    // The agents that are on keep their rows; those that are off follow, in sidebar order.
+    expect(expanded.agents.map(agent => [agent.id, agent.status])).toEqual([
+      ["codex", "active"],
+      ["cursor", "active"],
+      ["claude", "active"],
+      ["opencode", "off"],
+      ["copilot", "off"],
+      ["pi", "off"],
+      ["kilo", "off"],
+      ["antigravity", "off"],
+      ["grok", "off"],
+    ]);
+    expect(expanded.agents.find(agent => agent.id === "pi")!.sub).toBe("off in Settings");
+    const ghosts = expanded.edges.filter(candidate => candidate.status === "ghost");
+    expect(ghosts.map(candidate => candidate.agent)).toEqual(["opencode", "copilot", "pi", "kilo", "antigravity", "grok"]);
+    expect(ghosts.every(candidate => candidate.source === "base" && candidate.total > 0 && !candidate.glow)).toBe(true);
+    // A ghost carries nothing: the base still reaches only the agents that are on.
+    expect(agentsReachedBy(expanded, "base").map(agent => agent.id)).toEqual(["codex", "cursor", "claude"]);
+    expect(resolveRef(expanded, { type: "agent", id: "pi" })).toEqual({ type: "agent", id: "pi" });
+    expect(resolveRef(expanded, { type: "off", id: "off" })).toBeNull();
+    expect(highlightOf(expanded, { type: "source", id: "base" })?.off).toBe(false);
+  });
+
+  it("leaves a map with no agent off as it is", () => {
+    const harnesses: InstallAgent[] = ["codex", "opencode", "cursor", "claude", "copilot", "pi", "kilo", "antigravity", "grok"];
+    const all = buildFlowModel({ cards: cardsFor(CURRENT, harnesses), sources: SOURCES, personalDocs: null, lastUpdate: null });
+    expect(expandOffGroup(all)).toBe(all);
   });
 
   it("highlights the group and base together", () => {

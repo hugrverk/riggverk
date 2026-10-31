@@ -1,4 +1,4 @@
-import type { MouseEvent, ReactNode } from "react";
+import type { MouseEvent, ReactNode, Ref } from "react";
 import { PaneContext } from "./Pane";
 
 /** `data-pane-id` of a page: bindings with `paneId: "page"` apply while focus is anywhere inside it. */
@@ -9,6 +9,7 @@ export interface PageProps {
   label: string;
   className?: string;
   children: ReactNode;
+  ref?: Ref<HTMLElement>;
 }
 
 /** A click on dead space, or on a button that keeps focus where it was, must not leave the keys without a home. */
@@ -23,10 +24,11 @@ function keepFocusInside(event: MouseEvent<HTMLElement>) {
  * work wherever focus sits inside it. It is not a stop in the tab order; the controls inside are. The context hands the
  * id to components that register their own page keys (`usePaneId`).
  */
-export function Page({ label, className, children }: PageProps) {
+export function Page({ label, className, children, ref }: PageProps) {
   return (
     <PaneContext.Provider value={PAGE_PANE_ID}>
       <section
+        ref={ref}
         className={className}
         aria-label={label}
         data-pane-id={PAGE_PANE_ID}

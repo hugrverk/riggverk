@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
-import { flowLayout } from "../../lib/flowLayout";
+import { flowLayout, type FlowLayout } from "../../lib/flowLayout";
 import {
   highlightOf,
   lineWeight,
@@ -25,11 +25,11 @@ export interface FlowMapProps {
   /** The agent whose file the running task is writing, and how many files of it are written so far. */
   live: InstallAgent | null;
   liveFiles: number;
+  /** The height the map may grow into (`useFlowRoom`); 0 keeps it as tall as its rows need. */
+  room?: number;
 }
 
 const FALLBACK_WIDTH = 480;
-const AGENT_HIT_WIDTH = 176;
-const ICON_SIZE = 16;
 const BADGE_SIZE = 8;
 
 /** The width of an element, kept current. Without a ResizeObserver (a test renderer) it stays at the fallback. */
@@ -74,12 +74,14 @@ function keyActivates(event: KeyboardEvent, activate: () => void) {
  * counts on them; Enter or a click selects (the inspector then shows it); curves draw in once, when the map first
  * appears. The agent a run is writing is marked live and gets travelling dots. Nodes are real tab stops with
  * `role="button"`; the curves are for the pointer, and everything they say is in the inspector of their two ends.
+ * The map is as wide as its column and grows into the height it is given (`room`): its rows open up and, past the old
+ * fixed size, its text and nodes grow a little (`flowLayout`).
  */
-export function FlowMap({ model, selected, onSelect, live, liveFiles }: FlowMapProps) {
+export function FlowMap({ model, selected, onSelect, live, liveFiles, room = 0 }: FlowMapProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const width = useElementWidth(wrapRef);
-  const layout = useMemo(() => flowLayout(model, width), [model, width]);
+  const layout = useMemo(() => flowLayout(model, width, room), [model, width, room]);
   const motion = useMotion();
   // Curves draw in when the map first appears and not on later renders: decided once.
   const [intro] = useState(() => motion === "full");
@@ -90,7 +92,7 @@ export function FlowMap({ model, selected, onSelect, live, liveFiles }: FlowMapP
   const active = resolveRef(model, pointed) ?? resolveRef(model, focused) ?? current;
   const highlight = useMemo(() => highlightOf(model, active), [model, active]);
 
-  const pulseSignature = model.edges.map(edge => edge.id).join(",") + `@${layout.width}`;
+  const pulseSignature = model.edges.map(edge => edge.id).join(",") + `@${layout.width}x${layout.height}`;
   useFlowPulses(svgRef, live, motion === "full", pulseSignature);
 
   const bind = (ref: FlowRef) => ({
@@ -121,7 +123,7 @@ export function FlowMap({ model, selected, onSelect, live, liveFiles }: FlowMapP
 
   const sourceLabels = useMemo(() => Object.fromEntries(model.sources.map(source => [source.id, source.label])), [model.sources]);
   const agentLabels = useMemo(() => Object.fromEntries(model.agents.map(agent => [agent.id, agent.label])), [model.agents]);
-  const countedEdges =highlight ? model.edges.filter(edge => highlight.edges.has(edge.id) && edge.status !== "ghost") : [];
+  const countedEdges = highlight ? model.edges.filter(edge => highlight.edges.has(edge.id) && edge.status !== "ghost") : [];
 
   return (
     <div className="flow-map" ref={wrapRef} data-hl={highlight ? "" : undefined}>
@@ -131,6 +133,7 @@ export function FlowMap({ model, selected, onSelect, live, liveFiles }: FlowMapP
         viewBox={`0 0 ${layout.width} ${layout.height}`}
         width={layout.width}
         height={layout.height}
+        style={{ "--flow-scale": layout.scale } as CSSProperties}
         role="group"
         aria-label="What flows from each source to each agent"
       >
@@ -165,12 +168,12 @@ export function FlowMap({ model, selected, onSelect, live, liveFiles }: FlowMapP
               aria-label={sourceDescription(source)}
               {...bindNode(ref)}
             >
-              <rect className="flow-node-hit" x={0} y={y - 19} width={layout.sourceDot + 14} height={38} />
-              <circle className="flow-ring" cx={layout.sourceDot} cy={y} r={3.5} />
+              <rect className="flow-node-hit" x={0} y={y - layout.hitHeight / 2} width={layout.sourceDot + 14 * layout.scale} height={layout.hitHeight} />
+              <circle className="flow-ring" cx={layout.sourceDot} cy={y} r={3.5 * layout.scale} />
               <text className="flow-name" x={layout.labelEnd} y={y} textAnchor="end">
                 {truncate(source.label, 20)}
               </text>
-              <text className="flow-sub" x={layout.labelEnd} y={y + 14} textAnchor="end">
+              <text className="flow-sub" x={layout.labelEnd} y={y + layout.subDy} textAnchor="end">
                 {source.state === "fix" ? "held" : source.total > 0 ? `${source.total} ${source.total === 1 ? "item" : "items"}` : "nothing yet"}
               </text>
             </g>
@@ -182,9 +185,7 @@ export function FlowMap({ model, selected, onSelect, live, liveFiles }: FlowMapP
             key={agent.id}
             agent={agent}
             y={layout.agentY[agent.id]!}
-            x={layout.agentX}
-            icon={layout.agentIcon}
-            text={layout.agentText}
+            layout={layout}
             live={live === agent.id}
             liveFiles={liveFiles}
             highlighted={!!highlight?.agents.has(agent.id)}
@@ -201,10 +202,12 @@ export function FlowMap({ model, selected, onSelect, live, liveFiles }: FlowMapP
             <g className={cx("flow-agent", "flow-off-group", "is-off", "is-dim", highlight?.off && "hl", sameRef(current, ref) && "sel")}
               aria-label={`${agents.length} ${agents.length === 1 ? "agent" : "agents"} off: ${agents.map(agent => agent.label).join(", ")}`}
               {...bindNode(ref)}>
-              <rect className="flow-node-hit" x={layout.agentX} y={y - 19} width={AGENT_HIT_WIDTH} height={38} />
-              <circle className="flow-ring" cx={layout.agentIcon + 8} cy={y} r={7} />
+              <rect className="flow-node-hit" x={layout.agentX} y={y - layout.hitHeight / 2} width={layout.agentWidth} height={layout.hitHeight} />
+              <circle className="flow-ring" cx={layout.agentIcon + layout.iconSize / 2} cy={y} r={7 * layout.scale} />
               <text className="flow-name" x={layout.agentText} y={y}>{agents.length} off</text>
-              {agents.map((agent, index) => <AgentGlyph key={agent.id} harness={agent.id} x={layout.agentText + index * 15} y={y + 5} size={12} />)}
+              {agents.map((agent, index) => (
+                <AgentGlyph key={agent.id} harness={agent.id} x={layout.agentText + index * 15 * layout.scale} y={y + 5 * layout.scale} size={12 * layout.scale} />
+              ))}
             </g>
           );
         })()}
@@ -221,10 +224,8 @@ export function FlowMap({ model, selected, onSelect, live, liveFiles }: FlowMapP
 
 function AgentNode({
   agent,
-  x,
   y,
-  icon,
-  text,
+  layout,
   live,
   liveFiles,
   highlighted,
@@ -232,10 +233,8 @@ function AgentNode({
   props,
 }: {
   agent: FlowAgent;
-  x: number;
   y: number;
-  icon: number;
-  text: number;
+  layout: FlowLayout;
   live: boolean;
   liveFiles: number;
   highlighted: boolean;
@@ -244,24 +243,25 @@ function AgentNode({
 }) {
   const state = agent.status === "active" ? (agent.state ?? "off") : agent.status;
   const sub = live ? `writing ${liveFiles} ${liveFiles === 1 ? "file" : "files"}` : agent.sub;
+  const { agentIcon: icon, iconSize: size } = layout;
   return (
     <g
       className={cx("flow-agent", `is-${state}`, agent.status !== "active" && "is-dim", live && "is-live", highlighted && "hl", selected && "sel")}
       aria-label={`${agent.label}, ${agent.status === "active" ? agent.pillText : agent.sub}`}
       {...props}
     >
-      <rect className="flow-node-hit" x={x} y={y - 19} width={AGENT_HIT_WIDTH} height={38} />
-      <AgentGlyph harness={agent.id} x={icon} y={y - ICON_SIZE / 2} size={ICON_SIZE} />
+      <rect className="flow-node-hit" x={layout.agentX} y={y - layout.hitHeight / 2} width={layout.agentWidth} height={layout.hitHeight} />
+      <AgentGlyph harness={agent.id} x={icon} y={y - size / 2} size={size} />
       {/* The state is a badge on the icon's bottom-right corner: a hollow ring, the filled square for a decision. */}
       {agent.decision ? (
-        <rect className="flow-square" x={icon + ICON_SIZE - BADGE_SIZE / 2 - 1} y={y + ICON_SIZE / 2 - BADGE_SIZE / 2 - 1} width={BADGE_SIZE} height={BADGE_SIZE} />
+        <rect className="flow-square" x={icon + size - BADGE_SIZE / 2 - 1} y={y + size / 2 - BADGE_SIZE / 2 - 1} width={BADGE_SIZE} height={BADGE_SIZE} />
       ) : (
-        <circle className="flow-ring" cx={icon + ICON_SIZE - 1} cy={y + ICON_SIZE / 2 - 1} r={BADGE_SIZE / 2 - 0.5} />
+        <circle className="flow-ring" cx={icon + size - 1} cy={y + size / 2 - 1} r={BADGE_SIZE / 2 - 0.5} />
       )}
-      <text className="flow-name" x={text} y={y}>
+      <text className="flow-name" x={layout.agentText} y={y}>
         {agent.label}
       </text>
-      <text className="flow-sub" x={text} y={y + 14}>
+      <text className="flow-sub" x={layout.agentText} y={y + layout.subDy}>
         {sub}
       </text>
     </g>
