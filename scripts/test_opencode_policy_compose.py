@@ -258,13 +258,40 @@ class TestWildcardSemantics(unittest.TestCase):
             for manager in ("npm", "pnpm", "yarn", "bun")
             for script in ("test", "lint", "typecheck", "build", "verify")
         ] + [f"cargo {command}" for command in ("fmt", "check", "clippy", "test")]
-        commands += [f"ddev exec npm run {script}" for script in ("test", "lint", "build", "verify")]
         for permission in permissions:
             for command in commands:
                 with self.subTest(command=command):
                     self.assertEqual(effective_bash_action(permission, command), "allow")
                     self.assertEqual(effective_bash_action(permission, command + " -- --flag"), "allow")
                     self.assertNotEqual(effective_bash_action(permission, command + "-and-deploy"), "allow")
+
+    def test_non_js_verification_is_exact_and_option_variants_ask(self) -> None:
+        exact = ["pytest", "pytest -q", "python3 -m pytest", "go test ./...", "go vet ./...", "make test", "make lint", "make check"]
+        risky = [
+            "go test -toolexec=x ./...",
+            "go test -exec x ./...",
+            "go vet -vettool=x ./...",
+            "make test --ev" "al=X:=$(shell id)",  # split: the source guard bans the word in scripts
+            "make test -f other.mk",
+            "pytest -p x",
+            "python3 -m pytest -p x",
+            "pytest -c other.ini",
+        ]
+        permissions = [build_base_permission(load_policy()), compose_role_permission(load_role("architect"))]
+        for permission in permissions:
+            for command in exact:
+                with self.subTest(command=command):
+                    self.assertEqual(effective_bash_action(permission, command), "allow")
+            for command in risky:
+                with self.subTest(command=command):
+                    self.assertEqual(effective_bash_action(permission, command), "ask")
+        verifier = compose_role_permission(load_role("verifier"))
+        for command in exact:
+            with self.subTest(role="verifier", command=command):
+                self.assertEqual(effective_bash_action(verifier, command), "allow")
+        for command in risky:
+            with self.subTest(role="verifier", command=command):
+                self.assertNotEqual(effective_bash_action(verifier, command), "allow")
 
     def test_findlast_precedence(self) -> None:
         perm = {

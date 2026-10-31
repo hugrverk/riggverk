@@ -1,6 +1,6 @@
 ---
 name: adversarial-review
-description: A fresh read-only critic attacks an existing diff or a plan; the lead keeps only findings it proves and fixes nothing. Use when the user explicitly asks for an adversarial review ("kör en adversarial review", "granska planen adversariellt"), never unasked. Not for routine reviews (/code-review).
+description: A fresh read-only critic attacks an existing diff or a plan; the lead keeps only findings it proves and fixes nothing. Use when the user explicitly asks for an adversarial review ("run an adversarial review", "have a critic review the plan"), never unasked. Not for routine reviews (/code-review).
 license: MIT
 compatibility: Needs subagents, or Codex, Claude Code or OpenCode as a critic CLI; with neither it stops, since a self-review is not adversarial. Reads adversarial-roles.md and critic-recipes.md from the adversarial-implementation skill.
 metadata:
@@ -15,7 +15,7 @@ metadata:
 
 A fresh critic that never learns who wrote the work tries to break it; you, the lead, keep only what you can prove. Evidence is the currency: a finding counts when its failing test or command reproduces or its requirement is quoted word for word, never because the critic sounds sure. The skill finds, verifies and reports. It fixes nothing.
 
-Run it only when the user explicitly asks for an adversarial, hostile or critic review ("kör en adversarial review", "låt en kritiker granska", "granska planen adversariellt", `/adversarial-review`). For a routine review use `/code-review` on Claude Code or the `inspector` agent elsewhere, and never start this skill on your own. To have new work written under a critic, use `adversarial-implementation` instead.
+Run it only when the user explicitly asks for an adversarial, hostile or critic review ("run an adversarial review", "have a critic review the diff", "review the plan adversarially", `/adversarial-review`; in Swedish for example "kör en adversarial review", "granska planen adversariellt"). For a routine review use `/code-review` on Claude Code or the `inspector` agent elsewhere, and never start this skill on your own. To have new work written under a critic, use `adversarial-implementation` instead.
 
 Done when: the verified findings, each with its proof result and verdict, are reported with the start and ledger lines, the user's tree is as you found it, and the user has been offered the next step; or the run stopped because no critic route works, and the report says so.
 
@@ -31,8 +31,7 @@ Resolve the critic with the shared convention in `../adversarial-implementation/
 Never ask the user to configure anything first. Before the critic runs, print the start line in the user's language, for example:
 
 ```text
-Roller: kritiker=codex/gpt-6.1-sol (standard: annan familj, jämförbar förmåga, preflight ok); läge: diff mot main. Byt: skriv "kritiker: claude" eller lägg en rad "Adversarial roles: critic=claude" under END i dina regler.
-Roles: critic=codex/gpt-6.1-sol (default: other family, comparable, preflight ok); mode: diff against main. Change: say "critic: claude", or add "Adversarial roles: critic=claude" below END in your rules.
+Roles: critic=codex/<model> (default: other family, comparable, preflight ok); mode: diff against main. Change: say "critic: claude", or add "Adversarial roles: critic=claude" below END in your rules.
 ```
 
 When a route fails, say which and why in one line and take the next candidate. With no way to start a fresh critic at all, say so and stop: a self-review in this context is not adversarial and must not be reported as one.
@@ -139,8 +138,7 @@ Lead with the verdict, then the findings by bucket: Fatal, Significant, Minor (u
 End with one ledger line in the user's language:
 
 ```text
-Ledger: Review done in 1 round; changes requested; findings 2 accepted, 1 rejected, 3 unproven, 1 pre-existing; critic codex/gpt-6.1-sol (default).
-Ledger: Granskning klar efter 1 runda; ändringar krävs; fynd 2 accepterade, 1 avvisat, 3 obevisade, 1 befintligt sedan tidigare; kritiker codex/gpt-6.1-sol (standard).
+Ledger: Review done in 1 round; changes requested; findings 2 accepted, 1 rejected, 3 unproven, 1 pre-existing; critic codex/<model> (default).
 ```
 
 Background: the fresh critic, the steel-man finding format and the Fatal, Significant and Minor severities come from crucible's red-team skill (MIT); the read-only critic and the accept, re-scope or reject adjudication from dementev-dev/adversarial-review (Apache-2.0). Plan mode, the Pre-existing check against the base and the proof rule are this skill's own.

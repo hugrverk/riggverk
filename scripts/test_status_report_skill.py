@@ -54,22 +54,22 @@ class StatusReportSkillTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("PASS", result.stdout)
         page = html.read_text(encoding="utf-8")
-        self.assertIn('<html lang="sv"', page)
-        self.assertIn("Ej kontrollerat", page)
-        self.assertIn("uppgivet", page)
-        self.assertNotIn("{{", page)
-
-    def test_english_labels_follow_the_language(self) -> None:
-        report = copy.deepcopy(self.sample)
-        report["project"]["language"] = "en"
-        data, html = self.render(report, "en")
-        result = self.verify(data, html)
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        page = html.read_text(encoding="utf-8")
         self.assertIn('<html lang="en"', page)
         for label in ("Happened", "In progress", "Not checked", "Status: on track"):
             self.assertIn(label, page)
         self.assertNotIn("Lägesrapport", page)
+        self.assertNotIn("{{", page)
+
+    def test_swedish_labels_follow_the_language(self) -> None:
+        report = copy.deepcopy(self.sample)
+        report["project"]["language"] = "sv"
+        data, html = self.render(report, "sv")
+        result = self.verify(data, html)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        page = html.read_text(encoding="utf-8")
+        self.assertIn('<html lang="sv"', page)
+        for label in ("Ej kontrollerat", "uppgivet", "Lägesrapport"):
+            self.assertIn(label, page)
 
     def test_secret_pattern_fails_without_printing_it(self) -> None:
         report = copy.deepcopy(self.sample)

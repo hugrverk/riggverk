@@ -1,6 +1,6 @@
 ---
 name: adversarial-test
-description: A fresh adversary writes failing tests tied to the acceptance criteria; the lead qualifies and freezes them, and the implementer fixes production code only or reports BLOCKED. Use when the user explicitly asks for adversarial tests ("skriv adversariella tester"), never unasked.
+description: A fresh adversary writes failing tests tied to the acceptance criteria; the lead qualifies and freezes them, and the implementer fixes production code only or reports BLOCKED. Use when the user explicitly asks for adversarial tests ("write adversarial tests"), never unasked.
 license: MIT
 compatibility: Needs subagents, or Codex, Claude Code or OpenCode as a critic CLI; with neither it stops, since a self-review is not adversarial. Reads adversarial-roles.md and critic-recipes.md from the adversarial-implementation skill.
 metadata:
@@ -14,7 +14,7 @@ metadata:
 
 One agent writes the tests, another writes the code, and neither grades its own work. A fresh adversary tries to break the change with failing tests tied to the acceptance criteria; you, the lead, keep only the tests you ran and saw fail for the stated reason, freeze them, and let the implementer change production code only. Test quality decides whether this helps: weak or over-mocked tests make the result worse, so a test that has not qualified never gates anything. The loop costs several times a plain change.
 
-**Explicit request only.** Run this skill only when the user asks for it in their own words, for example "write adversarial tests", "let an adversary write the tests", "skriv adversariella tester", "låt en motståndare skriva tester", or `/adversarial-test`. Never pick it on your own, and never because a task merely mentions tests; that is `tdd`.
+**Explicit request only.** Run this skill only when the user asks for it in their own words, for example "write adversarial tests", "let an adversary write the tests", or `/adversarial-test` (in Swedish, for example "skriv adversariella tester"). Never pick it on your own, and never because a task merely mentions tests; that is `tdd`.
 
 Done when: an adversary round produced no new qualified failing test, or two rounds ran; the lead's own run of the test command is green, every kept test is byte for byte what qualified, and only tests that protect a criterion remain. Or the loop stopped at Escalated and is reported as such.
 
@@ -26,14 +26,14 @@ Done when: an adversary round produced no new qualified failing test, or two rou
 
 ## Choose the roles
 
-Resolve `adversary` and `implementer` with the shared convention in `../adversarial-implementation/adversarial-roles.md`: chat ("adversary: codex", "motståndare: claude"), then `roles.json` next to this file, then the `Adversarial roles:` line below END in the rules (`Adversarial roles: adversary=codex/gpt-6.1-sol`), then the default. The default adversary follows the same capability rule as the default critic there. Never ask the user to configure anything first.
+Resolve `adversary` and `implementer` with the shared convention in `../adversarial-implementation/adversarial-roles.md`: chat ("adversary: codex", "adversary: claude"), then `roles.json` next to this file, then the `Adversarial roles:` line below END in the rules (`Adversarial roles: adversary=codex/<model>`), then the default. The default adversary follows the same capability rule as the default critic there. Never ask the user to configure anything first.
 
 External adversaries are Codex, Claude Code and OpenCode, run with the read-only recipes in `../adversarial-implementation/critic-recipes.md` (preflight, flags, timeout, environment, failure modes), with the adversary brief as `brief.md`. In-harness adversaries are in the Harness notes. If those two files are missing, say so in the start line and use a fresh in-harness subagent. When a route fails, say which and why in one line and take the next candidate. With no way to delegate the adversary, say so and stop: tests you write yourself are not adversarial and must not be reported as such.
 
 Before round 1, print the start line from `adversarial-roles.md` in the user's language, for example:
 
 ```text
-Roller: motståndare=codex/gpt-6.1-sol (standard: annan familj, jämförbar förmåga, preflight ok), implementerare=claude-subagent (standard). Varför: den som skriver testerna ska inte skriva koden. Byt: skriv "motståndare: claude" eller lägg "Adversarial roles: adversary=claude" under END i dina regler.
+Roles: adversary=codex/<model> (default: other family, comparable, preflight ok), implementer=claude subagent (default). Why: whoever writes the tests must not write the code. Change: say "adversary: claude", or add "Adversarial roles: adversary=claude" below END in your rules.
 ```
 
 ## Before round 1
@@ -128,8 +128,7 @@ Use the workspace final report (Changed, Verified, Not verified, Risk, Next) and
 End with one ledger line in the user's language, after the report:
 
 ```text
-Ledger: Done after 2 rounds (no new qualified test); tests 5 proposed, 3 qualified, 2 discarded, 2 kept; BLOCKED 1 (test discarded); adversary codex/gpt-6.1-sol (default).
-Ledger: Klar efter 2 rundor (inget nytt kvalificerat test); tester 5 föreslagna, 3 kvalificerade, 2 kasserade, 2 behållna; BLOCKED 1 (testet kasserat); motståndare codex/gpt-6.1-sol (standard).
+Ledger: Done after 2 rounds (no new qualified test); tests 5 proposed, 3 qualified, 2 discarded, 2 kept; BLOCKED 1 (test discarded); adversary codex/<model> (default).
 ```
 
 Background: the split between a test agent and a repair agent, with qualified tests frozen, follows ExecCritic (Tao et al. 2026), where weak generated tests lowered resolve rates and strong ones raised them; the explicit `BLOCKED` path follows ImpossibleBench (Zhong et al. 2025), where an abort option cut test gaming sharply.
@@ -138,7 +137,7 @@ Background: the split between a test agent and a repair agent, with qualified te
 
 ### Claude Code
 
-- Implementer: one `general-purpose` subagent, continued between rounds (SendMessage) so it keeps its context. With `implementer=codex`, delegate through the "Codex delegation" section of your rules instead and check the path guard the same way.
+- Implementer: one `general-purpose` subagent, continued between rounds (SendMessage) so it keeps its context. With `implementer=codex`, run `codex exec -s workspace-write` non-interactively instead (brief on stdin, `-o` for the final message, in the background) and check the path guard the same way.
 - Adversary, other family: Codex with the recipe in `../adversarial-implementation/critic-recipes.md`. If Claude Code's sandbox is on, Codex cannot start its own sandbox inside it; run that one command outside the sandbox with the user's approval, or fall back.
 - Adversary, same family: a fresh `inspector` subagent per round, on the strongest model you have. It has no shell; the pasted diff and the file paths are all it needs.
 

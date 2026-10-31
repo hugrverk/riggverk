@@ -130,6 +130,60 @@ class ResidueGuardTests(unittest.TestCase):
         }
         self.assertEqual(self.scan(files), [])
 
+    def test_swedish_in_a_skill_description_fails_but_not_in_the_body(self) -> None:
+        skill = "resources/default-workspace/skills/demo/SKILL.md"
+        found = self.scan({skill: "---\nname: demo\ndescription: Use when asked (\"kör demo\").\n---\n"})
+        self.assertEqual(len(found), 1, found)
+        self.assertTrue(found[0].startswith(f"{skill}:3:"), found)
+        self.assertEqual(self.scan({skill: "---\nname: demo\ndescription: Use when asked.\n---\nSwedish: \"kör demo\".\n"}), [])
+        self.assertEqual(self.scan({"docs/NOTES.md": "description: kör\n"}), [])
+
+    def test_owner_specific_rules_text_fails_outside_the_history(self) -> None:
+        for text in ("Prefer rtk for reads.", "Codex is cheap, so delegate.", "Never while a GPT computer-use agent runs."):
+            with self.subTest(text=text):
+                found = self.scan({"resources/default-workspace/templates/rules/claude.md": text + "\n"})
+                self.assertEqual(len(found), 1, found)
+        history = {"resources/default-workspace/metadata/rules-history/claude/x.md": "Prefer rtk for reads.\n"}
+        self.assertEqual(self.scan(history), [])
+        self.assertEqual(self.scan({"resources/default-workspace/skills/a/SKILL.md": "The artkit and smartkey words.\n"}), [])
+
+    def test_a_model_id_in_skill_text_fails(self) -> None:
+        skill = "resources/default-workspace/skills/a/SKILL.md"
+        ids = (
+            "gpt-6.1-terra", "gpt-5.1", "gpt-4o", "gpt-5.1-codex", "claude-opus-4-6", "claude-3-5-sonnet-20241022",
+            "claude-sonnet-4", "gemini-2.5-pro", "o3-mini", "o1-preview", "grok-4", "glm-5.2", "deepseek-v4.1-flash",
+        )
+        for model in ids:
+            with self.subTest(model=model):
+                self.assertEqual(len(self.scan({skill: f"critic=codex/{model}.\n"})), 1, model)
+        for text in ("Use claude-code or the claude subagent.", "gpt is a family; gemini and grok too.", "see o3 and o-ring", "the gpt-image tool"):
+            with self.subTest(text=text):
+                self.assertEqual(self.scan({skill: text + "\n"}), [], text)
+        self.assertEqual(self.scan({"resources/default-workspace/skills/a/SKILL.md": "critic=codex/<model>\n"}), [])
+        self.assertEqual(self.scan({"resources/default-workspace/docs/CODEX_CONFIG.md": "model gpt-6.1-terra\n"}), [])
+
+    def test_a_real_looking_home_path_fails_and_placeholders_pass(self) -> None:
+        users = "/Users/"  # split so this file holds no path of its own
+        for text in (users + "jane/project", "C:\\" + "Users\\jane\\app", "/home/" + "jane/x"):
+            with self.subTest(text=text):
+                self.assertEqual(len(self.scan({"src/a.ts": text + "\n"})), 1)
+        placeholders = users + "example/x /home/someone/y C:/Users/Example/z\n"
+        self.assertEqual(self.scan({"src/a.ts": placeholders}), [])
+        for text in (users + "dev-actual/x", users + "example-bob/x", "/home/" + "me.real/x", users + "user1/x", "C:\\" + "Users\\Example-Bob\\x"):
+            with self.subTest(text=text):
+                self.assertEqual(len(self.scan({"src/a.ts": text + "\n"})), 1, text)
+        for text in (users + "dev", users + "Example/", "/home/u/.ssh", users + "me\""):
+            with self.subTest(text=text):
+                self.assertEqual(self.scan({"src/a.ts": text + "\n"}), [], text)
+
+    def test_team_pack_content_fails_in_the_bundle_but_not_in_the_history_or_elsewhere(self) -> None:
+        bundle = "resources/default-workspace/templates/rules/cursor.md"
+        for text in ("Open Krets" "verket.", "Served on http://localhost:1" "420/.", "Use wordpress" "-woocommerce."):
+            with self.subTest(text=text):
+                self.assertEqual(len(self.scan({bundle: text + "\n"})), 1, text)
+        history = "resources/default-workspace/metadata/rules-history/claude/x.md"
+        self.assertEqual(self.scan({history: "Krets" "verket\n", "docs/RELEASE.md": "http://localhost:1" "420/\n"}), [])
+
     def test_the_allowlist_gives_a_reason_for_every_entry(self) -> None:
         for residue in guard.RESIDUES:
             for allowed in residue.allowed_paths:

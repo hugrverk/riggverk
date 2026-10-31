@@ -685,8 +685,9 @@ mod tests {
     const OWNER_RECORD: &str =
         "sha256:834d664d4cd827917edce6dbd1c51d0b26077f945f7705dd81750caef4c4fd4f";
 
-    /// The owner's file: a shipped base with one line of "Codex delegation"
-    /// edited by hand, and a managed record for an older shipped template.
+    /// A refined file: a shipped base from the bundled history, with one line of
+    /// its former "Codex delegation" section edited by hand, and a managed
+    /// record for an older shipped template.
     fn owner_state(env: &Env) -> String {
         let base = shipped_base("claude", OWNER_BASE);
         let refined = base.replace("`gpt-5.6-sol` at `high`", "`gpt-6.1-sol` at `xhigh`");

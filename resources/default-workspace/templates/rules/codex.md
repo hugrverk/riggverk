@@ -9,6 +9,4 @@
 ## Codex command handling
 Default to concise shell inspection. Before running a command that may emit large output, rewrite it to a bounded form such as `COMMAND 2>&1 | head -c 4000`.
 
-If `rtk` is installed and the command is inspection-only, prefer the RTK equivalent. If exact output is required, do not use RTK.
-
 Avoid repeated full test/typecheck/build loops after tiny edits. Use the lightest falsifying check during iteration, then run the broader relevant verification once before final report.

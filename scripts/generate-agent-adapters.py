@@ -188,7 +188,7 @@ def _validate_markdown_frontmatter(
         if not tools:
             errors.append(f"{rel}: Claude agent '{role_name}' must declare an explicit non-empty 'tools:' list")
 
-        # Subagents pin a cost-appropriate model (keeps judgment in the main thread).
+        # Subagents pin an explicit model (keeps judgment in the main thread).
         model = fields.get("model", "")
         if model not in CLAUDE_AGENT_MODELS:
             errors.append(

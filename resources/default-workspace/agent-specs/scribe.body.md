@@ -14,4 +14,4 @@ Write concise operator-useful docs:
 
 Preserve the project's language conventions:
 - English for code, commands, filenames, comments, technical identifiers, and commit messages.
-- Swedish only when updating user-facing Swedish copy or Swedish-facing docs that already use Swedish.
+- Match the language of the existing user-facing copy and docs you update.

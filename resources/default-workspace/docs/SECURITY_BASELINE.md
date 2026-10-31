@@ -25,7 +25,7 @@ The `security` group on a harness page reads a few named keys of that harness's 
 - Review `.claude/`, `.codex/`, `.cursor/`, `.mcp.json` and `.vscode/` in pull requests like code. Project config can run commands or widen permissions before you approve anything.
 - Keep production credentials out of the agent's shell. Use separate, short-lived, narrowly scoped tokens, fetched for one command and not exported into the environment.
 - Use bypass, yolo or run-everything modes only inside an isolated environment you can throw away.
-- Treat anything an agent reads from the web, a ticket or a dependency as untrusted text that can carry instructions.
+- Treat anything an agent reads from the web, a ticket, a pull request comment, an MCP server or a dependency as untrusted text that can carry instructions. The shared base rules tell agents to treat it as data and to surface embedded instructions to you.
 
 ## What the posture check sees
 

@@ -1,6 +1,6 @@
 ---
 name: status-report
-description: Builds a one-file HTML status report of what happened, what is in progress and what comes next in any repository, from cited git, GitHub, CI and doc evidence. Use when asked for a status report, statusrapport, lägesrapport, sprint or weekly summary. Not for Kretsverket (kretsverket-status-report).
+description: Builds a one-file HTML status report of what happened, what is in progress and what comes next in any repository, from cited git, GitHub, CI and doc evidence. Use when asked for a status report or a sprint or weekly summary.
 license: MIT
 compatibility: Needs git, an authenticated gh CLI and Node.js for the bundled render and verify scripts; the browser check uses Playwright when it resolves.
 allowed-tools: Bash(git log *) Bash(git tag *) Bash(git show *) Bash(gh pr list *) Bash(gh release list *) Bash(gh run list *)
@@ -13,7 +13,7 @@ metadata:
 
 # Status Report
 
-Produces one self-contained HTML file that shows a developer, lead or stakeholder what happened, what is happening and what comes next in a project during a period, with every statement backed by cited evidence. Not for release notes, PR descriptions or a short status reply in chat.
+Produces one self-contained HTML file that shows a developer, lead or stakeholder what happened, what is happening and what comes next in a project during a period, with every statement backed by cited evidence. Not for release notes, PR descriptions or a short status reply in chat. Swedish requests such as "statusrapport" or "lägesrapport" mean this skill.
 
 Done when: `report.json` and the HTML pass `verify-report.mjs`, the file is outside version control, and the user has the path plus a three-line summary that names the gaps.
 
