@@ -22,7 +22,7 @@ Do not duplicate full `SKILL.md` content here. This file is an index for choosin
 | `implementation-plan` | Creating small verifiable implementation slices with exact files, steps, commands, and risks. |
 | `minimal-implementation` | Implementing or refactoring with the smallest complete diff that fits existing ownership. |
 | `prototype` | Validating throwaway UI variants, state-machine/data-model checks, and interaction experiments before production implementation. |
-| `retro` | User-invoked only (`/retro`): reviewing a named coding session and proposing ranked, evidence-traced improvements to steering files, checks, and tooling. Proposals only. |
+| `retro` | User-invoked only (`/retro`, `$retro` in Codex): reviewing a named coding session and proposing ranked, evidence-traced improvements to steering files, checks, and tooling. Proposals only. |
 | `release-check` | Running pre-merge or pre-deploy readiness checks, including tests, migrations, env risk, smoke routes, and rollback. |
 | `screenshot-review` | Reviewing supplied UI screenshots before implementation or for responsive/layout critique. |
 | `security-audit` | An explicit full codebase security audit or pen test: Cloudflare's six-phase workflow with independent verification and validated `findings.json`. Vendored (MIT); companion files and validators install next to its `SKILL.md`. |
@@ -90,7 +90,7 @@ Grouped source: `skills/kretsverket/<skill>/SKILL.md`.
 - Project status report, statusrapport or lägesrapport: `status-report`.
 - Release readiness: `release-check`.
 - Docs, rules, or prompt consolidation: `context-budget`; add `implementation-plan` for explicit maps.
-- Session retrospective: `retro`, only when the user invokes `/retro` (it is not routed by the rules).
+- Session retrospective: `retro`, only when the user invokes `/retro` or `$retro` (it is not routed by the rules).
 - Adversarial implementation: `adversarial-implementation`, only when the user asks for it (it is not routed by the rules).
 - Adversarial review of a diff or plan: `adversarial-review`, only when the user explicitly asks for it (it is not routed by the rules).
 - Adversarial tests: `adversarial-test`, only when the user explicitly asks for adversarial tests (it is not routed by the rules).
@@ -121,7 +121,7 @@ metadata:
 - `metadata.targets` — comma-separated harnesses that get the skill. Every harness reads the skills folders Riggverk installs into, so bundled skills list all nine: codex, opencode, claude, cursor, copilot, pi, kilo, antigravity, grok.
 - `metadata.related` — comma-separated related skill names; the routing check verifies each name exists.
 - `metadata.source` — upstream work a skill adapts or draws on (see `NOTICE.md`).
-- `disable-model-invocation` — optional `true` for user-invoked skills (currently `retro`). Claude Code and Cursor then hide the skill from the model; Codex and OpenCode ignore the flag, so such a skill must not be referenced in routing bullets and its description says it is user-invoked.
+- `disable-model-invocation` — optional `true` for user-invoked skills (currently `retro`). Claude Code and Cursor then hide the skill from the model; Codex, OpenCode and the light harnesses ignore the flag, so such a skill must not be referenced in routing bullets, its description says it runs only on an explicit request and names the invocation (`/retro`, `$retro` in Codex), and its body repeats the rule.
 
 The `adversarial-*` skills keep model invocation so plain words can start them, but each run spends several agents, so the routing check also keeps them out of routing bullets.
 
@@ -139,7 +139,7 @@ The `description` is the only selection signal Codex, OpenCode, and Cursor see, 
 
 ## Supporting files
 
-Files next to a `SKILL.md` (references, schemas, templates, scripts) install with the skill, at the same relative paths, so a skill can say "read `HUNTING.md`" or "run `scripts/verify-report.mjs`" and mean the file next to it. `security-audit` carries its reference files, `status-report` carries its schema, template and `scripts/render-report.mjs` and `scripts/verify-report.mjs`, and `adversarial-implementation` carries `adversarial-roles.md` (how roles are chosen) and `critic-recipes.md` (CLI recipes for external critics), which other adversarial skills such as `adversarial-test` read from there.
+Files next to a `SKILL.md` (references, schemas, templates, scripts) install with the skill, at the same relative paths, so a skill can say "read `HUNTING.md`" or "run `scripts/verify-report.mjs`" and mean the file next to it. `security-audit` carries its reference files, `status-report` carries its schema, template and `scripts/render-report.mjs` and `scripts/verify-report.mjs`, `browser-qa` carries `playwright-cli.md` (its route when no browser tool is available), and each `adversarial-*` skill carries its own identical copy of `adversarial-roles.md` (how roles are chosen) and `critic-recipes.md` (CLI recipes for external critics). A skill is installed on its own, so it never reads another skill's files; `scripts/check-skill-routing.py` fails on a `../other-skill/` or `skills/other-skill/` reference and on adversarial copies that differ.
 
 Rules for the files in a skill directory in the bundle: regular files only (no symlinks), names of letters, digits, `.`, `_` and `-` that do not start with a dot, at most four path levels, at most 64 files and 2 MiB in total, at most 1 MiB per file, and no `SKILL.md` below the skill's own. Dot files are ignored. A skill that breaks a rule installs nothing until it is fixed. Write paths in a skill relative to its directory; never point a skill at the workspace folder, since the installed copy lives in a skills folder.
 
@@ -149,9 +149,9 @@ Each file is owned on its own. An update rewrites only the files that differ, a 
 
 `skills/**/SKILL.md` is the only source. Managed setup copies it byte for byte into every skills folder it installs into, so a skill that two harnesses both read is the same file in both places. There are no generated per-harness copies: `templates/skills/` and `metadata/skill-adapters.json` no longer exist.
 
-Text that only one harness should act on goes at the end of the file under `## Harness notes`, one `###` subsection per harness in this fixed order, only for the harnesses that have notes: `### Claude Code`, `### Codex`, `### OpenCode`, `### Cursor`. Every harness reads the whole file, so write each note so it is clearly meant for that harness. Keep notes short; harness-wide guidance lives in `templates/rules/<harness>.md`, not in a skill.
+Text that only one harness should act on goes at the end of the file under `## Harness notes`, one `###` subsection per harness in this fixed order, only for the harnesses that have notes: `### Claude Code`, `### Codex`, `### OpenCode`, `### Cursor`, `### Light harnesses` (Copilot, Pi, Kilo, Antigravity and Grok together). Every harness reads the whole file, so write each note so it is clearly meant for that harness. Keep notes short and add a light-harness note only where behaviour differs, for example where a skill needs a subagent or a browser tool those harnesses may lack; harness-wide guidance lives in `templates/rules/<harness>.md`, not in a skill.
 
-Claude Code runs `!` followed by a backtick-quoted command (and a fence opened with three backticks and `!`) when the skill loads. Other harnesses show that text literally. It is therefore allowed only inside `### Claude Code`, with a one-sentence plain-text preface saying that other harnesses should run the commands themselves (see `handoff` and `release-check`).
+Claude Code runs `!` followed by a backtick-quoted command (and a fence opened with three backticks and `!`) when the skill loads. Other harnesses show that text literally. It is therefore allowed only inside `### Claude Code`, with a one-sentence plain-text preface saying that other harnesses should run the commands themselves (see `handoff` and `release-check`). The skill's `## Process` must already name those commands as plain steps, so the injection only saves a step on Claude Code and no other harness depends on it. The same holds for the Claude-only frontmatter keys: a harness that ignores `context`, `agent`, `background` or `allowed-tools` runs the skill inline with the same steps.
 
 In the source repository `python3 scripts/check-skill-routing.py` validates every `SKILL.md`: frontmatter and names, spec-valid top-level keys (plus the documented Claude keys), `license` and `metadata`, the notes structure and order, injection syntax only under `### Claude Code`, Claude-only frontmatter keys only with Claude notes, and LF line endings without a BOM.
 
