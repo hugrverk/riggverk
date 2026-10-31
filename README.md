@@ -205,4 +205,19 @@ cargo test --manifest-path src-tauri/Cargo.toml
 
 `release-check.sh` runs the apply smokes in temporary `HOME` directories; it never touches the real home. UI, dialogs, filesystem actions, and native harness setup still need the manual Tauri smoke in `docs/APP_RELEASE_SMOKE.md`.
 
+## Credits
+
+Several bundled skills adapt methods from open skill collections. The wording is Riggverk's; the ideas are theirs. [NOTICE.md](./NOTICE.md) has the exact sources, commits and licenses, and each adapted skill names its upstream in `metadata.source`.
+
+| Source | Used in | License |
+|---|---|---|
+| [Matt Pocock's skills](https://github.com/mattpocock/skills) | `diagnose`, `tdd`, `prototype`, `handoff`, `context-budget`, `retro`; the idea behind `zoom-out` | MIT |
+| [obra/superpowers](https://github.com/obra/superpowers) | `implementation-plan`, `delegate`, `review-response` | MIT |
+| [raddue/crucible](https://github.com/raddue/crucible) | the fresh-critic loop in the adversarial skills | MIT |
+| [dementev-dev/adversarial-review](https://github.com/dementev-dev/adversarial-review) | the read-only critic and its adjudication | Apache-2.0 |
+| [openai/skills](https://github.com/openai/skills) | `ci-triage`, `review-response` | Apache-2.0 |
+| [cloudflare/security-audit-skill](https://github.com/cloudflare/security-audit-skill) | `security-audit` (vendored) | MIT |
+| [anthropics/skills](https://github.com/anthropics/skills) | the framing behind `frontend-design` | Apache-2.0 |
+| [Lobe Icons](https://github.com/lobehub/lobe-icons) | the agent icons; the marks belong to their owners, and Riggverk is not affiliated with or endorsed by them | MIT |
+
 See [NOTICE.md](./NOTICE.md) for third-party license information.
