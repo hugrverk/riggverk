@@ -143,6 +143,8 @@ Ledger: Review done in 1 round; changes requested; findings 2 accepted, 1 reject
 Ledger: Granskning klar efter 1 runda; ändringar krävs; fynd 2 accepterade, 1 avvisat, 3 obevisade, 1 befintligt sedan tidigare; kritiker codex/gpt-6.1-sol (standard).
 ```
 
+Background: the fresh critic, the steel-man finding format and the Fatal, Significant and Minor severities come from crucible's red-team skill (MIT); the read-only critic and the accept, re-scope or reject adjudication from dementev-dev/adversarial-review (Apache-2.0). Plan mode, the Pre-existing check against the base and the proof rule are this skill's own.
+
 ## Harness notes
 
 ### Claude Code
