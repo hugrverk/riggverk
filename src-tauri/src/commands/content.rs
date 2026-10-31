@@ -380,8 +380,34 @@ fn list_docs_from(bundle_root: &Path, data_folder: Option<&Path>) -> Vec<DocSumm
 pub fn read_doc(id: String) -> Result<DocumentContent, String> {
     match id.strip_prefix("custom:") {
         Some(slug) => read_custom_doc(&workspace_root()?, slug),
-        None => read_curated_doc(&bundled_library_root()?, &id),
+        None => {
+            let bundle = bundled_library_root()?;
+            let doc = read_curated_doc(&bundle, &id)?;
+            Ok(if doc.id == CURSOR_USER_RULES_DOC {
+                with_pack_routing(doc, &bundle)
+            } else {
+                doc
+            })
+        }
     }
+}
+
+/// The Cursor User Rules the user copies by hand: they carry the packs' routing like the rules
+/// files Install writes.
+const CURSOR_USER_RULES_DOC: &str = "templates/cursor/user-rules.md";
+
+/// `doc`, a bundled rules text, with the routing of the data folder's packs spliced in as Install
+/// does (see `pack_routing`). Without a usable data folder or packs it is returned as it is.
+fn with_pack_routing(mut doc: DocumentContent, bundle_root: &Path) -> DocumentContent {
+    if let Ok(data_folder) = workspace_root() {
+        let sources =
+            crate::skill_sources::SkillSources::new(bundle_root.to_path_buf(), &data_folder);
+        doc.content = crate::pack_routing::splice(
+            &doc.content,
+            crate::skill_sources::SourceRoot::pack_routing(&sources),
+        );
+    }
+    doc
 }
 
 /// A bundled doc, read from `bundle_root`. Its `path` is relative to the bundle.
@@ -1857,7 +1883,8 @@ mod tests {
 
 #[tauri::command]
 pub fn read_agent_template() -> Result<DocumentContent, String> {
-    read_agent_template_at_root(&bundled_library_root()?)
+    let bundle = bundled_library_root()?;
+    read_agent_template_at_root(&bundle).map(|doc| with_pack_routing(doc, &bundle))
 }
 
 /// The bundled rules base, read from `bundle_root`.

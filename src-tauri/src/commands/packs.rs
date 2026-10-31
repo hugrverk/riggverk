@@ -49,6 +49,11 @@ pub struct PackSummary {
     pub(crate) reason: String,
     /// Whether "Forget pack" applies: its installed skills are held and it provides none.
     pub(crate) forgettable: bool,
+    /// The lines its `routing.md` adds to the managed rules block; empty when it adds none.
+    pub(crate) routing: Vec<String>,
+    /// Why its `routing.md` is not used, as a whole (a fixed phrase); `None` when it is or there is
+    /// none.
+    pub(crate) routing_problem: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -91,6 +96,8 @@ fn library(sources: &SkillSources, folder: String) -> PackLibrary {
             .to_string(),
             reason: pack.refused.clone().unwrap_or_default(),
             forgettable: held_here && !any_active,
+            routing: pack.routing.lines().to_vec(),
+            routing_problem: pack.routing.problem().map(str::to_string),
         });
         for skill in &pack.skills {
             skills.push(PackSkillSummary {
@@ -130,6 +137,8 @@ fn library(sources: &SkillSources, folder: String) -> PackLibrary {
                 state: "missing".to_string(),
                 reason: "the pack folder is gone".to_string(),
                 forgettable: true,
+                routing: Vec::new(),
+                routing_problem: None,
             });
         }
         let already_listed = skills

@@ -1482,19 +1482,23 @@ const skills: SkillSummary[] = scenario === "empty"
     related: ["implementation-plan", "diagnose"].filter(r => r !== id),
   }));
 
-// Skill packs: one pack that loads, one whose folder is gone while its skill stays installed.
+// Skill packs: one pack that loads and routes to its skill in the rules, one whose folder is gone while its skill
+// stays installed, and one whose `routing.md` is refused as a whole.
+const MINE_ROUTING = ["- Release checklists: `my-checklist`."];
 const packLibrary: PackLibrary = scenario === "empty" || scenario === "fresh"
   ? { folder: "~/.config/riggverk/packs", packs: [], skills: [], ignored: [] }
   : {
     folder: "~/.config/riggverk/packs",
     packs: [
-      { name: "mine", state: "ok", reason: "", forgettable: false },
-      { name: "old-pack", state: "missing", reason: "the pack folder is gone", forgettable: true },
+      { name: "mine", state: "ok", reason: "", forgettable: false, routing: MINE_ROUTING, routing_problem: null },
+      { name: "old-pack", state: "missing", reason: "the pack folder is gone", forgettable: true, routing: [], routing_problem: null },
+      { name: "team", state: "ok", reason: "", forgettable: false, routing: [], routing_problem: "routing.md is not used: line 2 names a skill that is not an active skill of this pack" },
     ],
     skills: [
       { id: "pack:mine/my-checklist", name: "my-checklist", description: "A checklist kept in the pack.", pack: "mine", state: "active", reason: "", path: "skills/my-checklist/SKILL.md" },
       { id: "pack:mine/tdd", name: "tdd", description: "A pack skill named like a bundled one.", pack: "mine", state: "shadowed", reason: "the bundle ships a skill with this name; the bundle's version is used", path: "skills/tdd/SKILL.md" },
       { id: "pack:old-pack/old-skill", name: "old-skill", description: "", pack: "old-pack", state: "missing", reason: "pack missing", path: "" },
+      { id: "pack:team/team-review", name: "team-review", description: "A review checklist the team shares.", pack: "team", state: "active", reason: "", path: "skills/team-review/SKILL.md" },
     ],
     ignored: [],
   };
@@ -1603,7 +1607,11 @@ const agentTemplate: DocumentContent = {
   path: "templates/global-agent-rules.md",
   section: "",
   source: "curated",
-  content: "# Global Agent Rules\n\n## Priority\nRepository reality overrides assumptions. Explicit user instructions override these defaults.\n\n## Communication\nBe direct, dense, technical, and concise.\n\n## Verification\nNever claim done without evidence.\n",
+  content: "# Global Agent Rules\n\n## Priority\nRepository reality overrides assumptions. Explicit user instructions override these defaults.\n\n## Communication\nBe direct, dense, technical, and concise.\n\n## Verification\nNever claim done without evidence.\n"
+    // Like the backend: the routing of the packs follows the base (here at its end: the mock base has no routing section).
+    + (packLibrary.packs.some(pack => pack.routing?.length)
+      ? `\n## Pack skill routing\nRouting from the skill packs in your data folder. Each line names only skills of its own pack.\n${packLibrary.packs.filter(pack => pack.routing?.length).map(pack => `### ${pack.name} pack\n${pack.routing!.join("\n")}\n`).join("")}`
+      : ""),
 };
 
 const configSources: ConfigEditorSourceMeta[] = [
@@ -2321,7 +2329,7 @@ async function handlePersonalPackWrites(cmd: string, args: Args): Promise<unknow
     const id = `pack:personal/${newName}`;
     const path = `skills/${newName}/SKILL.md`;
     if (!packLibrary.packs.some(pack => pack.name === "personal")) {
-      packLibrary.packs.push({ name: "personal", state: "ok", reason: "", forgettable: false });
+      packLibrary.packs.push({ name: "personal", state: "ok", reason: "", forgettable: false, routing: [], routing_problem: null });
     }
     packLibrary.skills.push({ id, name: newName, description: source.description, pack: "personal", state: "active", reason: "", path });
     const sourceContent = skillContent(source.id);

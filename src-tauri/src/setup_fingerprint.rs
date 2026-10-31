@@ -247,10 +247,9 @@ pub fn artifact_source_digest<R: SourceRoot + ?Sized>(
 ) -> Result<String, String> {
     let workspace_root = sources.bundle();
     if artifact.is_rules_block() {
-        let source = require_source_path(artifact, sources)?;
-        crate::path_safety::reject_symlink(&source, "rules source")?;
-        let bytes = fs::read(&source).map_err(|e| format!("read {}: {e}", source.display()))?;
-        return crate::rules_block::source_digest(&bytes);
+        // The bundled base with the packs' routing: what an install puts into the block.
+        let text = crate::pack_routing::rules_source_text(artifact, sources)?;
+        return Ok(crate::rules_block::body_digest(&text));
     }
     match artifact_kind(artifact) {
         ArtifactKind::RulesFile | ArtifactKind::AgentFile

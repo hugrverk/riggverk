@@ -977,7 +977,10 @@ pub fn detect_artifact_state_with(
     if artifact.is_rules_block() {
         // Without a managed record only the exact outcomes are known: absent,
         // or a block that already carries the current base.
-        return match assess_rules(artifact, &dest, &source, None) {
+        let assessment = crate::pack_routing::rules_source_text(artifact, sources)
+            .ok()
+            .and_then(|source_text| assess_rules(artifact, &dest, &source_text, None));
+        return match assessment {
             Some(assessment) => rules_outcome(assessment.plan),
             None => (OperationKind::Unavailable, PreviousState::Unavailable),
         };
@@ -1096,16 +1099,15 @@ fn skill_destination_blocked(
     false
 }
 
-/// Classify a rules artifact's installed file against its bundled source.
-/// `None` means the source cannot be read.
+/// Classify a rules artifact's installed file against its source text (the bundled base with the
+/// packs' routing, see [`crate::pack_routing::rules_source_text`]).
 fn assess_rules(
     artifact: &ArtifactId,
     dest: &Path,
-    source: &Path,
+    source_text: &str,
     managed_hash: Option<&str>,
 ) -> Option<crate::rules_block::RulesAssessment> {
     use crate::rules_block::{MalformedReason, RulesAssessment, RulesConflict, RulesLayout};
-    let source_text = fs::read_to_string(source).ok()?;
     let unusable = |reason| {
         Some(RulesAssessment {
             plan: crate::rules_block::RulesPlan::Conflict(RulesConflict::MalformedMarkers),
@@ -1125,12 +1127,10 @@ fn assess_rules(
         },
         Err(_) => None,
     };
-    let mut assessment = crate::rules_block::assess(
-        installed.as_deref(),
-        &source_text,
-        managed_hash,
-        &|digest| crate::managed_bootstrap::approved_rules_base_digest(artifact, digest),
-    );
+    let mut assessment =
+        crate::rules_block::assess(installed.as_deref(), source_text, managed_hash, &|digest| {
+            crate::managed_bootstrap::approved_rules_base_digest(artifact, digest)
+        });
     // A file in the same folder can keep the harness from reading the block at all; writing
     // would then change nothing the harness sees (a masking override) or hide the user's own
     // context file (a peer), so the plan is a conflict whatever the file itself holds.
@@ -1142,7 +1142,7 @@ fn assess_rules(
     // A harness that reads only so many bytes of the file (Antigravity) would miss the end of a
     // longer one: the app then writes nothing.
     if let ArtifactId::HarnessRules(harness) = artifact {
-        let written = rendered_rules(assessment.plan, installed.as_deref(), &source_text);
+        let written = rendered_rules(assessment.plan, installed.as_deref(), source_text);
         if let (Some(rules), Some(written)) = (harness.rules(), written) {
             if !rules.fits(written.len()) {
                 assessment.plan =
@@ -1330,17 +1330,17 @@ fn plan_rules_artifact(
     workspace_root: &Path,
     home: &Path,
     managed_hash: Option<&str>,
+    sources: &SkillSources,
 ) -> Option<crate::rules_block::RulesAssessment> {
     if !artifact.is_rules_block() {
         return None;
     }
     let dest = artifact.resolve_dest(home, workspace_root).ok()?;
-    let bundled_root = crate::setup_roots::bundled_root_for(workspace_root).ok()?;
-    let source = artifact.resolve_bundle_source(&bundled_root)?;
-    if reject_symlink(&dest, "destination").is_err() || reject_symlink(&source, "source").is_err() {
+    if reject_symlink(&dest, "destination").is_err() {
         return None;
     }
-    assess_rules(artifact, &dest, &source, managed_hash)
+    let source_text = crate::pack_routing::rules_source_text(artifact, sources).ok()?;
+    assess_rules(artifact, &dest, &source_text, managed_hash)
 }
 
 /// Conflicts the user may resolve by converting the file onto the base block.
@@ -1374,13 +1374,17 @@ pub fn rules_context(
     let records = records_with_bootstrap(workspace_root, home, managed.as_ref());
     let identity = crate::managed_state::artifact_identity(artifact);
     let managed_hash = managed_hash_for(&identity, &records);
-    let assessment = plan_rules_artifact(artifact, workspace_root, home, managed_hash.as_deref())
-        .ok_or_else(|| "rules source or destination is unavailable".to_string())?;
-    let bundled_root = crate::setup_roots::bundled_root_for(workspace_root)?;
-    let source = artifact
-        .resolve_bundle_source(&bundled_root)
-        .ok_or_else(|| "rules source is unavailable".to_string())?;
-    let source_text = fs::read_to_string(&source).map_err(|e| format!("read rules source: {e}"))?;
+    let sources = SkillSources::for_workspace(workspace_root)?;
+    let assessment = plan_rules_artifact(
+        artifact,
+        workspace_root,
+        home,
+        managed_hash.as_deref(),
+        &sources,
+    )
+    .ok_or_else(|| "rules source or destination is unavailable".to_string())?;
+    let bundled_root = sources.bundle().to_path_buf();
+    let source_text = crate::pack_routing::rules_source_text(artifact, &sources)?;
     let dest = artifact.resolve_dest(home, workspace_root)?;
     let installed = match fs::symlink_metadata(&dest) {
         Ok(meta) if meta.len() > crate::rules_block::MAX_RULES_FILE_BYTES => {
@@ -1616,13 +1620,20 @@ pub fn ensure_rules_apply_allowed(
     artifact: &ArtifactId,
     workspace_root: &Path,
     home: &Path,
+    sources: &SkillSources,
 ) -> Result<(), String> {
     let managed = crate::managed_state::read_managed_state(workspace_root);
     let records = records_with_bootstrap(workspace_root, home, managed.as_ref());
     let identity = crate::managed_state::artifact_identity(artifact);
     let managed_hash = managed_hash_for(&identity, &records);
-    let assessment = plan_rules_artifact(artifact, workspace_root, home, managed_hash.as_deref())
-        .ok_or_else(|| "rules source or destination is unavailable".to_string())?;
+    let assessment = plan_rules_artifact(
+        artifact,
+        workspace_root,
+        home,
+        managed_hash.as_deref(),
+        sources,
+    )
+    .ok_or_else(|| "rules source or destination is unavailable".to_string())?;
     match assessment.plan {
         crate::rules_block::RulesPlan::Conflict(conflict) => Err(format!(
             "refusing to change rules file: {}",
@@ -2324,7 +2335,13 @@ pub fn plan_artifacts_for_surfaces_with(
         let surface = artifact.surface();
         let identity = crate::managed_state::artifact_identity(&artifact);
         let managed_hash = managed_hash_for_artifact(&artifact, &identity, &records);
-        let rules = plan_rules_artifact(&artifact, workspace_root, home, managed_hash.as_deref());
+        let rules = plan_rules_artifact(
+            &artifact,
+            workspace_root,
+            home,
+            managed_hash.as_deref(),
+            sources,
+        );
         let mcp = plan_mcp_artifact(
             &artifact,
             workspace_root,
@@ -3032,7 +3049,7 @@ pub fn expected_apply_full_digest(
         return None;
     }
     if artifact.is_rules_block() {
-        let text = fs::read_to_string(&source).ok()?;
+        let text = crate::pack_routing::rules_source_text(artifact, sources).ok()?;
         if !dest.exists() {
             return digest(crate::rules_block::render_new(&text));
         }

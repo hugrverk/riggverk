@@ -956,6 +956,10 @@ export interface PackEntry {
   reason: string;
   /** "Forget pack" applies: its installed skills are held and it provides none. */
   forgettable: boolean;
+  /** The lines its `routing.md` adds to the managed rules block (`## Pack skill routing`); empty when none. */
+  routing?: string[];
+  /** Why its `routing.md` is not used, as a whole (a fixed phrase); null when it is used or there is none. */
+  routing_problem?: string | null;
 }
 
 export interface PackLibrary {
