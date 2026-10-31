@@ -268,6 +268,12 @@
       "sha256:cb68b01c0da3c7eff86ab03cc6a23ece316a72d817a9bd1c407a4088217af013",
       "sha256:d95a7d2752cde24373379b2367e779ce31c440155c75d858d03ca38587b800d6"
     ],
+    "skills/delegate/SKILL.md": [
+      "sha256:4cffc4eb01b195bff5a4ecd05a16dabb35b0323591771800a4c8c6b483bbbaf8"
+    ],
+    "skills/delegate/delegate-recipes.md": [
+      "sha256:978a5806bdd037656d83d435b4eafba6e2fbcc361131a8a89d7ac23d04af6fc3"
+    ],
     "skills/dependency-evaluation/SKILL.md": [
       "sha256:270a48d2edc996abcffd4c81012c61492d0484401810a7324eb46344b48398fd",
       "sha256:6e0d70dbb6be3515ee33d1cfe4b7baf9611414a6c5cf9eec6a64422064fc4b01",
