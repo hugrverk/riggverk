@@ -11,6 +11,7 @@ import type {
   LightRuntimeHealth,
   OpenCodeModelSelection,
   OpenCodeRuntimeHealth,
+  PackLibrary,
   RulesConversionPreview,
   RulesDiffView,
   RulesFileContent,
@@ -223,6 +224,19 @@ describe("mock backend: skill and agent files in conflict or kept", () => {
       ["agent:verifier", "conflict"],
       ["agent:sentinel", "conflict"],
     ]);
+  });
+});
+
+describe("mock backend: pack routing", () => {
+  it("lists the routing lines a pack adds, a pack whose routing.md is not used, and the routing in the base", async () => {
+    const library = await invoke<PackLibrary>("list_pack_skills");
+    const mine = library.packs.find(pack => pack.name === "mine")!;
+    expect(mine.routing).toEqual(["- Release checklists: `my-checklist`."]);
+    expect(mine.routing_problem).toBeNull();
+    expect(library.packs.find(pack => pack.name === "team")!.routing_problem).toMatch(/^routing\.md is not used: /);
+    const template = await invoke<DocumentContent>("read_agent_template");
+    expect(template.content).toContain("## Pack skill routing\n");
+    expect(template.content).toContain("### mine pack\n- Release checklists: `my-checklist`.\n");
   });
 });
 
