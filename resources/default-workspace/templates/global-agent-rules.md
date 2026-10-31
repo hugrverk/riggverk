@@ -27,6 +27,7 @@ Do not trade away correctness, security, or final verification quality to save t
 Use skills as routing and workflow guidance, not boilerplate. Select only task-relevant skills; usually 1-3. Do not paste full skill contents unless needed. Translate skill expectations into concrete actions, acceptance criteria, verification, and reporting; skill names alone are not enough. Prefer a repository's own `docs/SKILLS.md` for the full catalog when that file exists; do not go looking for it otherwise.
 - Code implementation and refactoring: `minimal-implementation`.
 - Bugs, regressions, flakes, or slowness: `diagnose`; add `tdd` for a focused regression test.
+- Red CI runs or failing PR checks: `ci-triage`, which hands root cause to `diagnose`.
 - Unfamiliar or architectural code: `zoom-out`; add `implementation-plan` before non-trivial edits.
 - Multi-step work: `implementation-plan`; add `context-budget` for broad or noisy work.
 - Mechanical or parallel slices handed to another agent CLI or subagent, only when the user wants other agents used: `delegate`.
@@ -38,6 +39,7 @@ Use skills as routing and workflow guidance, not boilerplate. Select only task-r
 - Release readiness: `release-check`.
 - Creating or refreshing a repository's `AGENTS.md` (and its `CLAUDE.md` pointer): `agents-md`.
 - Executor reports, paused work, or context transfer: `handoff`.
+- Committing, pushing, or opening or updating a PR: `pr-workflow`; add `release-check` before the push.
 
 ## Task flow
 For non-trivial tasks, start with a short plan. Non-trivial means 3+ meaningful steps, multiple approaches, architectural impact, unclear requirements, cross-file behavior, frontend/design judgment, or security/deployment/database/release risk.

@@ -14,6 +14,7 @@ Do not duplicate full `SKILL.md` content here. This file is an index for choosin
 | `agents-md` | Creating or refreshing a repository's `AGENTS.md` from commands that actually ran, the real layout and sourced invariants, with an optional `CLAUDE.md` that only holds `@AGENTS.md`. Writes only on request, after showing the diff. Ships `assets/AGENTS.template.md`. |
 | `accessibility-review` | Reviewing UI for WCAG 2.2 AA risks, semantics, controls, keyboard, focus, labels, contrast, and responsive usability. |
 | `browser-qa` | Verifying frontend changes with live browser checks, route smoke tests, interactions, responsive checks, console/network review, and evidence. |
+| `ci-triage` | A red CI run or failing PR checks: reads the failed job logs with `gh run view --log-failed` (bounded, secrets never printed), classifies each failure as code, flaky test, environment or infra, reproduces it with the repo's own command, then hands root cause to `diagnose`. Reruns only infra failures, with the user's ok. Works from a pasted log without gh. |
 | `context-budget` | Reducing duplicated rules, docs, prompts, skills, and token overhead without removing essential safety guidance. |
 | `current-docs` | Checking official/current docs for version-specific APIs, SDKs, CLIs, config, hooks, or platform behavior. |
 | `database-migrations` | Planning or reviewing schema/data changes with migration, rollback, and DB push reporting. |
@@ -23,6 +24,7 @@ Do not duplicate full `SKILL.md` content here. This file is an index for choosin
 | `handoff` | Reviewing executor evidence or compacting paused work into a trustworthy handoff with verified state and next action. |
 | `implementation-plan` | Creating small verifiable implementation slices with exact files, steps, commands, and risks. |
 | `minimal-implementation` | Implementing or refactoring with the smallest complete diff that fits existing ownership. |
+| `pr-workflow` | Turning finished work into logical commits that follow the repo's own convention, running the gate, pushing a branch and opening or updating a PR with gh. Never force-pushes; each commit, push and PR step needs an explicit ok. Ships `assets/pr-body.template.md`. |
 | `prototype` | Validating throwaway UI variants, state-machine/data-model checks, and interaction experiments before production implementation. |
 | `retro` | User-invoked only (`/retro`, `$retro` in Codex): reviewing a named coding session and proposing ranked, evidence-traced improvements to steering files, checks, and tooling. Proposals only. |
 | `review-response` | Working through review comments on a PR (fetched with `gh api` or pasted): verifies each claim against the code, sorts it into fix, push back with evidence, or ask, commits one theme at a time, and drafts one reply per thread without performative agreement. Posts replies only after explicit approval and never resolves threads. |
@@ -40,6 +42,7 @@ Domain skills for a team's own projects and stack are not bundled: keep them in 
 
 | Pair | Distinct roles |
 | --- | --- |
+| `ci-triage` / `diagnose` | Ci-triage turns a red CI run into a classified failure and a local reproduction; diagnose finds the root cause from that loop. |
 | `diagnose` / `tdd` | Diagnose finds root cause; TDD locks behavior with a narrow test once the contract is clear. |
 | `minimal-implementation` / `adversarial-implementation` | Minimal-implementation is one bounded patch by the current agent; adversarial-implementation runs that patch through a separate implementer and a fresh hostile critic per round, only when the user asks for it. |
 | `adversarial-implementation` / `adversarial-review` | Adversarial-implementation writes a change through a critic loop; adversarial-review attacks work that already exists, or a plan, and fixes nothing. "Have a critic review it" (in Swedish "låt en kritiker granska") about finished work or a plan means adversarial-review. |
@@ -53,6 +56,7 @@ Domain skills for a team's own projects and stack are not bundled: keep them in 
 | `frontend-design` / `browser-qa` | Frontend-design owns visual direction; browser-qa supplies runtime verification evidence. |
 | `agents-md` / global rules | `agents-md` writes a repository's own `AGENTS.md` from verified facts; it never edits or repeats the user's global rules, which the project file complements. |
 | `handoff` / `release-check` | Handoff compacts session state; release-check validates merge/deploy readiness. |
+| `pr-workflow` / `release-check` | Pr-workflow commits, pushes and opens the PR, and runs the repo's gate before the push; release-check owns the go/no-go verdict on merge or deploy readiness. |
 | `security-review` / `security-audit` | Security-review checks a change or answers a focused question in the current context; security-audit runs a full multi-agent audit of a whole codebase only when one is explicitly asked for. |
 | `security-review` / `sentinel` (agent) | Skill guides the review in the current context; where the harness has the sentinel agent (OpenCode, Claude), it performs an independent read-only review of a finished diff, otherwise the review stays inline. |
 | `retro` / `context-budget` | Retro mines one named session for environment fixes; context-budget audits instruction surfaces without a session. |
@@ -62,6 +66,7 @@ Domain skills for a team's own projects and stack are not bundled: keep them in 
 ## Common Combinations
 
 - Bugs or regressions: `diagnose`; add `tdd` when a narrow regression test is useful.
+- Red CI run or failing PR checks: `ci-triage`, then `diagnose` for root cause.
 - Code implementation: `minimal-implementation`; add `implementation-plan` for larger slices.
 - Unfamiliar code: `zoom-out`, then `implementation-plan` if edits are needed.
 - Frontend implementation: `frontend-design`; add `browser-qa` for runtime verification and `accessibility-review` for UI risk.
@@ -71,6 +76,7 @@ Domain skills for a team's own projects and stack are not bundled: keep them in 
 - Prototyping before implementation: `prototype`; add `frontend-design` for UI prototypes.
 - Pausing, executor reports, or context transfer: `handoff`; add `context-budget` for large reports.
 - Project status report or weekly summary: `status-report`.
+- Commit, push and open or update a PR: `pr-workflow`; add `release-check` before the push.
 - Release readiness: `release-check`.
 - Onboarding agents to a repo, or a missing or stale `AGENTS.md`: `agents-md`.
 - Docs, rules, or prompt consolidation: `context-budget`; add `implementation-plan` for explicit maps.
