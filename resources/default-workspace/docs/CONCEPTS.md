@@ -41,7 +41,7 @@ Rules define default behavior for coding agents. The source is `templates/global
 
 ## Tool configuration
 
-Config files hold tool settings such as permissions, models, and MCP servers. The app merges only allowlisted keys and preserves everything else: OpenCode via `templates/opencode.json`, `templates/tui.json`, and `templates/playwright-mcp.config.json`; Codex via `templates/codex/config.toml`. Codex `model` and `model_reasoning_effort` are written only when your config has none; after that they are yours. See [OPENCODE_CONFIG.md](OPENCODE_CONFIG.md) and [CODEX_CONFIG.md](CODEX_CONFIG.md).
+Config files hold tool settings such as permissions, models, and MCP servers. The app merges only allowlisted keys and preserves everything else: OpenCode via `templates/opencode.json`, `templates/tui.json`, and `templates/playwright-mcp.config.json`; Codex via `templates/codex/config.toml`. Riggverk sets no Codex model; Codex's own default applies. Existing Codex `model` and `model_reasoning_effort` values stay yours. See [OPENCODE_CONFIG.md](OPENCODE_CONFIG.md) and [CODEX_CONFIG.md](CODEX_CONFIG.md).
 
 ## Targets and surfaces
 

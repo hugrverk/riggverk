@@ -28,7 +28,7 @@
 | Playwright MCP config | `~/.config/playwright-mcp/config.json` (or `PLAYWRIGHT_MCP_CONFIG_PATH`) | Rendered from `templates/playwright-mcp.config.json`. |
 | OpenCode agents | `agents/` in OpenCode's config folder | |
 | OpenCode rules | `AGENTS.md` in OpenCode's config folder | Managed block merge. |
-| Codex config | `$CODEX_HOME/config.toml` (default `~/.codex/config.toml`) | Allowlisted keys only; `model` and `model_reasoning_effort` create-only. Target `codex_config`, off by default. A value you set on one of the five enforced keys is replaced only by the explicit "use Riggverk's defaults" transaction (below). |
+| Codex config | `$CODEX_HOME/config.toml` (default `~/.codex/config.toml`) | Allowlisted keys only; `model` and `model_reasoning_effort` user-owned and not seeded. Target `codex_config`, off by default. A value you set on one of the five enforced keys is replaced only by the explicit "use Riggverk's defaults" transaction (below). |
 | Codex agents | `$CODEX_HOME/agents/` | |
 | Codex rules | `$CODEX_HOME/AGENTS.md` | Managed block merge. |
 | Claude rules | `~/.claude/CLAUDE.md` | Managed block merge. |
