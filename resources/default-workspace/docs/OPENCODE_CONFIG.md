@@ -45,7 +45,7 @@ The runtime OpenCode configuration is `templates/opencode.json`. This is a **gen
 
 The maintainable source files are:
 
-- **`templates/opencode.base.json`** — non-permission config (model, provider, watcher, compaction, etc.)
+- **`templates/opencode.base.json`** — non-permission config (provider, watcher, compaction, etc.)
 - **`templates/opencode.policy.json`** — permission policy in a compact grouped format
 
 To regenerate the snapshot after changing a source file:
@@ -65,7 +65,6 @@ Python 3 must be on `PATH`.
 The template defines:
 
 - Share settings (recommended: disabled)
-- Model selection via `model` and `small_model`
 - Default primary agent via `default_agent`
 - Playwright MCP through on-demand `npx` with a pinned package version, user-local MCP config, and shared browser cache (not `@latest`)
 - `lsp: true` (built-in language servers, see "Language servers (LSP)"); `formatter` is omitted, so formatters stay off
@@ -110,7 +109,7 @@ OpenCode agent definitions live at `agents/*.md` in the workspace. The bundled a
 
 `architect` is the primary agent. `inspector` and `verifier` are subagents you can run directly: type `@inspector` or `@verifier` in the prompt. `repo-scout`, `sentinel` and `scribe` are `hidden: true`, which removes them from `@` autocomplete; the architect still delegates to them. Hiding only affects the menu, not what the model may delegate to.
 
-`templates/opencode.json` defines global `model`, `small_model`, and `default_agent`. The bundled `small_model` is `opencode-go/deepseek-v4.1-flash` (the earlier `deepseek-v4-flash` is no longer listed by `opencode models opencode-go`). Agents are model-agnostic by default — model selection is centralized in `templates/opencode.json`, and the bundled agent files carry no `model`. The exceptions are the optional subagent and critic model overrides (see "App-level model override"): they pin roles through managed `agent.<role>.model` entries in the installed `opencode.json`, never in the agent files.
+`templates/opencode.json` defines `default_agent` and no model. Riggverk sets no model; your agent's own default applies. Existing `model` and `small_model` values stay yours, including values written by earlier releases. Optional saved model overrides can explicitly set them or pin subagent and critic roles; bundled agent files carry no model.
 
 ## Permission model
 
@@ -197,7 +196,7 @@ Older versions owned `tui.json` as a whole file. A file that is still exactly wh
 
 ## Managed-key merge
 
-Install does **not** overwrite the entire installed `opencode.json`. It merges only the keys listed in `metadata/opencode-managed-keys.json` (model, `lsp`, permissions, the `permission` block of the built-in `plan` and `explore` agents, `agent.<role>.model` of the subagents while a subagent or critic model override is set or the app recorded writing it, Playwright MCP, compaction, watcher, and related settings). User `provider` blocks, non-Playwright MCP servers and other `agent` entries and keys are preserved. Managed keys are reset to the bundled values on every update, so keep your own settings in unmanaged keys.
+Install does **not** overwrite the entire installed `opencode.json`. It merges only the keys listed in `metadata/opencode-managed-keys.json` (`lsp`, permissions, the `permission` block of the built-in `plan` and `explore` agents, `agent.<role>.model` of the subagents while a subagent or critic model override is set or the app recorded writing it, Playwright MCP, compaction, watcher, and related settings). User `provider` blocks, non-Playwright MCP servers and other `agent` entries and keys are preserved. Managed keys are reset to the bundled values on every update. `model` and `small_model` are unmanaged unless a saved override explicitly sets them; when absent from the rendered template they are preserved and do not cause drift.
 
 A managed key or sub-entry absent from the bundled render is removed from the installed config. Empty MCP and agent containers are removed only when that removal empties them. Unrelated user fields and their order are preserved. Managed-projection rollback applies the same rule against the backup: it restores prior managed values and removes managed entries added by the update, while keeping later user edits.
 
@@ -220,16 +219,16 @@ The OpenCode page has a model override in its Model cell. It holds four values:
 
 `critic model` (optional, stored as `critic_model`) is used by the adversarial skills' critic (`inspector`). It pins only `agent.inspector.model`, taking precedence over the subagent model; the other roles keep their subagent model. There is no bundled critic default: unset, inspector follows the subagent model or inherits the main model. Clearing it restores that fallback on the next install. It uses the same `provider/model` validation, model list, source/state display and reset as the other rows.
 
-Keys in the cell: `e` edit, `s` save, `x` reset to the bundled default, `R` reload the model list (read with the arguments of the installed OpenCode major).
+Keys in the cell: `e` edit, `s` save, `x` clear the overrides, `R` reload the model list (read with the arguments of the installed OpenCode major).
 
 ### Source, state and reset
 
 Each value has a line under it:
 
-- `source: override | bundled default`. `override` means the app-level file below holds the value. `bundled default` means the bundled `opencode.base.json` value, or inheritance for the subagent and critic models. Workspace template edits do not change these defaults. Each value has its own source: only a value you changed is an override.
-- `state: applied | pending apply (u to update)`. The saved override (or the bundled default) is compared with the installed `opencode.json`: `pending apply` means an install (`u`, then `y`) would still change that value. The subagent row checks its role entries, excluding inspector while a critic override is set; the critic row checks inspector. The state is left out while runtime health is not loaded.
-- Saving (`s`) stores only the values that differ from the current bundled default. A `model` or `small model` equal to it is left out of the file and keeps following the template, so a later change of the bundled default (a model that is no longer listed, say) reaches you with the next install. Setting a value back to the bundled default and saving drops it from the file again. When nothing is left, the file is deleted instead of being written empty. Saving only a new subagent model therefore leaves `model` and `small model` on the bundled default.
-- `x` deletes the override file in one step and returns all four rows to the bundled default or inheritance (unsaved edits are dropped too). The installed config keeps its values until the next install, which writes the bundled models and removes the managed role models. `x` is offered only while an override exists.
+- `source: override | bundled default`. `override` means the app-level file holds a choice. `bundled default` means no override: the main model fields are empty, and the subagent and critic inherit.
+- `state: applied | pending apply (u to update)`. An explicit override is compared with the installed config. A model with no override is unmanaged and does not cause drift. The subagent row checks its role entries, excluding inspector while a critic override is set; the critic row checks inspector.
+- Saving (`s`) stores nonempty choices. Empty main model fields leave existing installed values alone. When nothing is selected, the override file is deleted.
+- `x` deletes the override file and clears unsaved edits. The next install removes the app-owned role pins; existing global model values stay in the installed config.
 
 The options of each field are grouped by provider (`<optgroup>`). A value that `opencode models` does not list (a provider that is not signed in, a removed model, a typed custom one) stays selectable but is marked `(not in opencode models)`; nothing is marked while the list is unavailable or incomplete. For a custom provider choose `custom provider/model…`, which turns the field into a text input (Esc returns to the list). The text input is also used while no model list is available.
 
@@ -243,11 +242,11 @@ A saved selection is stored in an app-level override file:
 | Linux | `${XDG_CONFIG_HOME:-~/.config}/se.hugrverk.riggverk/opencode-model-selection.json` |
 | Windows | `%APPDATA%\se.hugrverk.riggverk\opencode-model-selection.json` |
 
-This file is **not** part of the workspace templates. It is an app-preference file stored outside the workspace source tree. It does not affect `templates/opencode.base.json` or `templates/opencode.json`. It holds `schema_version` and, only for the values you chose, `model`, `small_model`, `subagent_model` and `critic_model`. A file written by an earlier app version has both `model` and `small_model` and no `subagent_model`: it reads as two explicit overrides (and "inherit" for the subagents) and keeps applying both until you change them back to the bundled default or press `x`. A missing `critic_model` preserves the earlier inspector behavior. A value that is not `provider/model` is ignored on its own; the others still apply.
+This file is **not** part of the workspace templates. It is an app-preference file stored outside the workspace source tree. It does not affect `templates/opencode.base.json` or `templates/opencode.json`. It holds `schema_version` and, only for the values you chose, `model`, `small_model`, `subagent_model` and `critic_model`. A file written by an earlier app version has both `model` and `small_model` and no `subagent_model`: it reads as two explicit overrides (and "inherit" for the subagents) and keeps applying both until you clear them or press `x`. A missing `critic_model` preserves the earlier inspector behavior. A value that is not `provider/model` is ignored on its own; the others still apply.
 
 The override takes effect on the next OpenCode install (`u`, `y`). The installed `~/.config/opencode/opencode.json` receives the `model`, `small_model` and subagent entries the override file holds; every other value comes from the template. Workspace templates are not mutated.
 
-A main or small model the override does not hold is read from the bundled `templates/opencode.base.json` (or the built-in defaults) as the source of truth for model selection.
+A main or small model the override does not hold is unmanaged; OpenCode uses the installed config value if present, otherwise its own default.
 
 ### Subagent model
 
@@ -268,7 +267,7 @@ Press `x` in the Model cell, then install again (`u`, `y`). Deleting the file by
 | macOS | `rm "$HOME/Library/Application Support/se.hugrverk.riggverk/opencode-model-selection.json"` |
 | Linux | `rm "${XDG_CONFIG_HOME:-$HOME/.config}/se.hugrverk.riggverk/opencode-model-selection.json"` |
 
-The override is safe to delete; the app falls back to workspace template defaults.
+The override is safe to delete; existing global model values remain yours, and role overrides return to inheritance.
 
 ## Customization
 

@@ -380,10 +380,21 @@ pub fn artifact_installed_managed_digest_from_path(
             let installed_json = read_opencode_config(path)?;
             // The user's own role models are not the app's: they never count as drift.
             let app = AppRoleModels::load(Some(workspace_root), home);
-            hash_json_value(&extract_managed_opencode_config(&without_user_role_models(
-                &installed_json,
-                &app,
-            )))
+            let template_path = crate::setup_roots::bundled_root_for(workspace_root)?
+                .join("templates/opencode.json");
+            let template = read_opencode_config(&template_path)?;
+            let expected = render_expected_opencode_config(&template, home)
+                .ok_or_else(|| "cannot render expected opencode config".to_string())?;
+            let mut projection =
+                extract_managed_opencode_config(&without_user_role_models(&installed_json, &app));
+            if let Some(object) = projection.as_object_mut() {
+                for key in ["model", "small_model"] {
+                    if expected.get(key).is_none() {
+                        object.shift_remove(key);
+                    }
+                }
+            }
+            hash_json_value(&projection)
         }
         ArtifactKind::ConfigFile if artifact == &ArtifactId::CodexConfig => {
             if !path.is_file() {
@@ -467,11 +478,38 @@ pub(crate) fn opencode_record_holds(workspace_root: &Path, home: &Path, recorded
     let holds = |config: &serde_json::Value| {
         hash_json_value(&extract_managed_opencode_config(config)).is_ok_and(|d| d == recorded)
     };
-    holds(&installed)
-        || holds(&without_user_role_models(
-            &with_recorded_role_models(&installed, &app),
-            &app,
-        ))
+    let normalized = without_user_role_models(&with_recorded_role_models(&installed, &app), &app);
+    if holds(&installed) || holds(&normalized) {
+        return true;
+    }
+    // Older records included the two shipped defaults. Reconstruct only absent-from-template
+    // keys, so changing a now-user-owned model does not make an unrelated update conflict.
+    let expected = crate::setup_roots::bundled_root_for(workspace_root)
+        .ok()
+        .and_then(|root| read_opencode_config(&root.join("templates/opencode.json")).ok())
+        .and_then(|template| render_expected_opencode_config(&template, home));
+    let Some(expected) = expected else {
+        return false;
+    };
+    let legacy = [
+        ("model", "opencode-go/glm-5.2"),
+        ("small_model", "opencode-go/deepseek-v4.1-flash"),
+    ];
+    for mask in 1..4 {
+        let mut candidate = normalized.clone();
+        let Some(object) = candidate.as_object_mut() else {
+            return false;
+        };
+        for (index, (key, value)) in legacy.iter().enumerate() {
+            if mask & (1 << index) != 0 && expected.get(*key).is_none() {
+                object.insert((*key).into(), serde_json::Value::String((*value).into()));
+            }
+        }
+        if holds(&candidate) {
+            return true;
+        }
+    }
+    false
 }
 
 /// Hash installed full-file or full-directory content for rollback safety.
@@ -680,7 +718,27 @@ mod tests {
     }
 
     #[test]
-    fn fingerprint_changes_when_opencode_managed_key_changes() {
+    fn opencode_legacy_default_record_holds_after_user_changes_unmanaged_models() {
+        let _env = crate::test_env::guard::default_xdg_config_home();
+        let home = temp("oc-legacy-model-home");
+        let ws = temp("oc-legacy-model-ws");
+        let original = serde_json::json!({"model":"opencode-go/glm-5.2", "small_model":"opencode-go/deepseek-v4.1-flash", "lsp":true});
+        let recorded = hash_json_value(&extract_managed_opencode_config(&original)).unwrap();
+        let path = home.join(".config/opencode/opencode.json");
+        write(
+            &path,
+            r#"{"model":"mine/new","small_model":"mine/small","lsp":true}"#,
+        );
+        assert!(opencode_record_holds(&ws, &home, &recorded));
+        write(
+            &path,
+            r#"{"model":"mine/new","small_model":"mine/small","lsp":false}"#,
+        );
+        assert!(!opencode_record_holds(&ws, &home, &recorded));
+    }
+
+    #[test]
+    fn fingerprint_ignores_unmanaged_opencode_model_changes() {
         let _env = crate::test_env::guard::default_xdg_config_home();
         let home = temp("oc-managed-home");
         let ws = temp("oc-managed-ws");
@@ -708,7 +766,7 @@ mod tests {
             &home,
         )
         .unwrap();
-        assert_ne!(fp1, fp2);
+        assert_eq!(fp1, fp2);
     }
 
     #[test]

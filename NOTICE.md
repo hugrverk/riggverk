@@ -6,7 +6,7 @@ Original author:
 Matt Pocock
 
 Adaptations:
-uxsmedjan
+Hugrverk
 
 Adapted material and bundled skills it informs:
 
