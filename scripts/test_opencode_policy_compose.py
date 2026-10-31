@@ -258,7 +258,7 @@ class TestWildcardSemantics(unittest.TestCase):
             for manager in ("npm", "pnpm", "yarn", "bun")
             for script in ("test", "lint", "typecheck", "build", "verify")
         ] + [f"cargo {command}" for command in ("fmt", "check", "clippy", "test")]
-        commands += [f"ddev exec npm run {script}" for script in ("test", "lint", "build", "verify")]
+        commands += ["pytest", "python3 -m pytest", "go test", "go vet", "make test", "make lint", "make check"]
         for permission in permissions:
             for command in commands:
                 with self.subTest(command=command):
