@@ -1,10 +1,14 @@
 ---
 name: adversarial-review
 description: A fresh read-only critic attacks an existing diff or a plan; the lead keeps only findings it proves and fixes nothing. Use when the user explicitly asks for an adversarial review ("kör en adversarial review", "granska planen adversariellt"), never unasked. Not for routine reviews (/code-review).
-category: review
-risk: medium
-targets: codex, opencode, claude, cursor
-related: adversarial-implementation, minimal-implementation, security-review
+license: MIT
+compatibility: Needs subagents, or Codex, Claude Code or OpenCode as a critic CLI; with neither it stops, since a self-review is not adversarial. Reads adversarial-roles.md and critic-recipes.md from the adversarial-implementation skill.
+metadata:
+  category: review
+  risk: medium
+  targets: codex, opencode, claude, cursor, copilot, pi, kilo, antigravity, grok
+  related: adversarial-implementation, minimal-implementation, security-review
+  source: https://github.com/raddue/crucible (red-team, MIT) and https://github.com/dementev-dev/adversarial-review (Apache-2.0)
 ---
 
 # Adversarial Review

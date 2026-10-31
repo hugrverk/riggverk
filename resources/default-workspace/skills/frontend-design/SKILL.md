@@ -1,10 +1,12 @@
 ---
 name: frontend-design
 description: Chooses and implements visual direction for web and product UI, preserving an existing design system or committing to one coherent direction for greenfield work. Use when building or restyling screens, layouts, or components. Not for screenshot-only critique, accessibility audits, or runtime QA.
-category: frontend
-risk: medium
-targets: codex, opencode, claude, cursor
-related: screenshot-review, browser-qa, accessibility-review, prototype
+license: MIT
+metadata:
+  category: frontend
+  risk: medium
+  targets: codex, opencode, claude, cursor, copilot, pi, kilo, antigravity, grok
+  related: screenshot-review, browser-qa, accessibility-review, prototype
 ---
 
 # Frontend Design

@@ -1,10 +1,13 @@
 ---
 name: kretsverket-status-report
 description: Kretsverket profile of status-report for the Swedish lägesrapport, adding Kretsverket's origin/main docs, sections and plain tone. Use when someone asks for a lägesrapport, statusrapport, how far Kretsverket has come, or what remains before release.
-category: kretsverket
-risk: low
-targets: codex, opencode, claude, cursor
-related: status-report, browser-qa, handoff
+license: MIT
+compatibility: Needs git, an authenticated gh CLI, Node.js and the status-report skill.
+metadata:
+  category: kretsverket
+  risk: low
+  targets: codex, opencode, claude, cursor, copilot, pi, kilo, antigravity, grok
+  related: status-report, browser-qa, handoff
 ---
 
 # Kretsverket Status Report

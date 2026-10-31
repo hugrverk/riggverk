@@ -1,10 +1,13 @@
 ---
 name: implementation-plan
 description: Breaks multi-step or cross-file work into small, independently verifiable slices with exact files, steps, commands, and risks, without editing code. Use when changes span several files or layers, migrations, or unclear scope. Execute slices with minimal-implementation.
-category: planning
-risk: low
-targets: codex, opencode, claude, cursor
-related: context-budget
+license: MIT
+metadata:
+  category: planning
+  risk: low
+  targets: codex, opencode, claude, cursor, copilot, pi, kilo, antigravity, grok
+  related: context-budget
+  source: https://github.com/obra/superpowers (writing-plans, MIT)
 ---
 
 # Implementation Plan

@@ -1,10 +1,12 @@
 ---
 name: kretsverket-editor-change
 description: Guards Kretsverket editor changes that cross layers (types, state, canvas, keyboard, selection, rendering, undo, persistence, export) with an explicit impact matrix. Use when a Kretsverket change touches more than one editor layer or the canvas.
-category: kretsverket
-risk: high
-targets: codex, opencode, claude, cursor
-related: diagnose, tdd, implementation-plan, browser-qa, minimal-implementation
+license: MIT
+metadata:
+  category: kretsverket
+  risk: high
+  targets: codex, opencode, claude, cursor, copilot, pi, kilo, antigravity, grok
+  related: diagnose, tdd, implementation-plan, browser-qa, minimal-implementation
 ---
 
 # Kretsverket Editor Change

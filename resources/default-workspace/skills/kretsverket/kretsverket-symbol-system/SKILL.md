@@ -1,10 +1,12 @@
 ---
 name: kretsverket-symbol-system
 description: Protects Kretsverket Symbol Editor behavior, covering sandbox editing, definitions versus placed instances, imports, nested symbols, anchors, and connection points. Use when Kretsverket work touches symbols, the Symbol Editor, or .kretsym imports.
-category: kretsverket
-risk: high
-targets: codex, opencode, claude, cursor
-related: kretsverket-editor-change, kretsverket-file-compatibility, browser-qa, minimal-implementation
+license: MIT
+metadata:
+  category: kretsverket
+  risk: high
+  targets: codex, opencode, claude, cursor, copilot, pi, kilo, antigravity, grok
+  related: kretsverket-editor-change, kretsverket-file-compatibility, browser-qa, minimal-implementation
 ---
 
 # Kretsverket Symbol System

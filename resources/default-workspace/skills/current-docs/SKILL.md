@@ -1,9 +1,11 @@
 ---
 name: current-docs
 description: Checks official, version-matched documentation before relying on recalled API, SDK, CLI, config, hook, or platform behavior. Use when a decision depends on a specific version, an error suggests a renamed or removed option, or a dependency or tool is added or upgraded.
-category: docs
-risk: low
-targets: codex, opencode, claude, cursor
+license: MIT
+metadata:
+  category: docs
+  risk: low
+  targets: codex, opencode, claude, cursor, copilot, pi, kilo, antigravity, grok
 ---
 
 # Current Docs

@@ -1,10 +1,12 @@
 ---
 name: accessibility-review
 description: Audits UI code or a running app for WCAG 2.2 AA risks in semantics, names, keyboard, focus, labels, contrast, and reflow. Use when an accessibility review is requested or custom controls, modals, menus, live status, or dynamic validation change. Not for visual direction (frontend-design).
-category: accessibility
-risk: low
-targets: codex, opencode, claude, cursor
-related: frontend-design, browser-qa
+license: MIT
+metadata:
+  category: accessibility
+  risk: low
+  targets: codex, opencode, claude, cursor, copilot, pi, kilo, antigravity, grok
+  related: frontend-design, browser-qa
 ---
 
 # Accessibility Review

@@ -1,10 +1,13 @@
 ---
 name: context-budget
 description: Audits always-loaded and on-demand agent instructions (rules, skill descriptions and bodies, agent prompts, tool config) for token cost, duplication, and contradictions, and proposes small safe cuts. Use when adding skills or rules, or when instructions feel bloated, repetitive, or conflicting.
-category: workflow
-risk: low
-targets: codex, opencode, claude, cursor
-related: implementation-plan
+license: MIT
+metadata:
+  category: workflow
+  risk: low
+  targets: codex, opencode, claude, cursor, copilot, pi, kilo, antigravity, grok
+  related: implementation-plan
+  source: https://github.com/mattpocock/skills (writing-for-agents, MIT)
 ---
 
 # Context Budget

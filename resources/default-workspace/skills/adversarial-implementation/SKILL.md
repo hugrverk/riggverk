@@ -1,10 +1,14 @@
 ---
 name: adversarial-implementation
 description: Runs a delegated implementer against a fresh read-only critic chosen by capability, keeps only findings the lead proves, then a deletion-only round. Use when the user explicitly asks for an adversarial or critic-reviewed implementation ("kör adversarial", "låt en kritiker granska"), never unasked.
-category: implementation
-risk: medium
-targets: codex, opencode, claude, cursor
-related: minimal-implementation, implementation-plan, security-review, tdd
+license: MIT
+compatibility: Needs subagents, or Codex, Claude Code or OpenCode as a critic CLI; with neither it stops, since a self-review is not adversarial.
+metadata:
+  category: implementation
+  risk: medium
+  targets: codex, opencode, claude, cursor, copilot, pi, kilo, antigravity, grok
+  related: minimal-implementation, implementation-plan, security-review, tdd
+  source: https://github.com/raddue/crucible (red-team, MIT) and https://github.com/dementev-dev/adversarial-review (Apache-2.0)
 ---
 
 # Adversarial Implementation

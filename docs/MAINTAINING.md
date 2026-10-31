@@ -69,7 +69,7 @@ Each recipe lists the files to touch, the command, and what fails if you forget.
 
 ### Add or remove a skill
 
-- Add: create `skills/<name>/SKILL.md` (or `skills/<category>/<name>/SKILL.md`), add a row to `docs/SKILLS.md` in the bundle, and mention it in the routing rules if agents should pick it on their own. Nothing is listed anywhere else: the list of workspace copies is frozen and a new skill is read from the bundle. `check-skill-routing.py` fails on a skill without a `SKILLS.md` row (and on a row without a skill).
+- Add: create `skills/<name>/SKILL.md` (or `skills/<category>/<name>/SKILL.md`) with spec-valid frontmatter (`license: MIT`, Riggverk fields under `metadata:`, see "Skill Metadata" in the bundle's `docs/SKILLS.md`; `metadata.source` and a `NOTICE.md` entry when it adapts public work), add a row to `docs/SKILLS.md` in the bundle, and mention it in the routing rules if agents should pick it on their own. Nothing is listed anywhere else: the list of workspace copies is frozen and a new skill is read from the bundle. `check-skill-routing.py` fails on a skill without a `SKILLS.md` row (and on a row without a skill).
 - Remove: delete the folder and its `SKILLS.md` row, add every file of it that the frozen list names to `RETIRED_FROM_BUNDLE` (see "Add, rename or delete a bundled file"), add the name to `REMOVED_SKILL_NAMES` in `src-tauri/src/managed_bootstrap.rs`, then `generate.py write`. The `pre-manifest-ownership` generator reads the history: a skill that once shipped and is gone without being listed in `REMOVED_SKILL_NAMES` fails `generate.py check`, so a skill cannot disappear by accident. `check-skill-routing.py` fails if the removed name is still mentioned anywhere outside the migration fixtures.
 
 ### Change or add an agent
@@ -87,7 +87,7 @@ Each recipe lists the files to touch, the command, and what fails if you forget.
 
 ### Add or change a harness
 
-The harness list lives in several places no compiler connects: `HarnessId` and the target registry in Rust (`src-tauri/src/agent_targets.rs`, `skill_roots.rs`, `skill_loads.rs`, `setup_lifecycle.rs`), `metadata/light-harnesses.json` and `metadata/rules-adapters.json` in the bundle, the rules and MCP templates, and the TypeScript tables (`src/types.ts`, `src/lib/harnessInstallation.ts`, `src/lib/rulesView.ts`, `src/shell/views.ts`, `src/App.tsx`). `python3 scripts/check-harness-mirror.py` names the first mismatch of each kind; `check-managed-installation-contract.py` requires each harness view to render exactly one `HarnessPage`.
+The harness list lives in several places no compiler connects: `HarnessId` and the target registry in Rust (`src-tauri/src/agent_targets.rs`, `skill_roots.rs`, `skill_loads.rs`, `setup_lifecycle.rs`), `metadata/light-harnesses.json` and `metadata/rules-adapters.json` in the bundle, the rules and MCP templates, and the TypeScript tables (`src/types.ts`, `src/lib/harnessInstallation.ts`, `src/lib/rulesView.ts`, `src/shell/views.ts`, `src/App.tsx`), plus the skill target ids (`VALID_SKILL_AGENTS` in `agent_skill_targets.rs`, `ALL_HARNESSES` in `scripts/check-skill-routing.py` and `metadata.targets` of every bundled skill). `python3 scripts/check-harness-mirror.py` names the first mismatch of each kind; `check-managed-installation-contract.py` requires each harness view to render exactly one `HarnessPage`.
 
 ### Add or change a posture check
 

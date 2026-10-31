@@ -1,10 +1,13 @@
 ---
 name: adversarial-test
 description: A fresh adversary writes failing tests tied to the acceptance criteria; the lead qualifies and freezes them, and the implementer fixes production code only or reports BLOCKED. Use when the user explicitly asks for adversarial tests ("skriv adversariella tester"), never unasked.
-category: testing
-risk: medium
-targets: codex, opencode, claude, cursor
-related: tdd, adversarial-implementation, minimal-implementation
+license: MIT
+compatibility: Needs subagents, or Codex, Claude Code or OpenCode as a critic CLI; with neither it stops, since a self-review is not adversarial. Reads adversarial-roles.md and critic-recipes.md from the adversarial-implementation skill.
+metadata:
+  category: testing
+  risk: medium
+  targets: codex, opencode, claude, cursor, copilot, pi, kilo, antigravity, grok
+  related: tdd, adversarial-implementation, minimal-implementation
 ---
 
 # Adversarial Test

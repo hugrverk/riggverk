@@ -1,10 +1,13 @@
 ---
 name: browser-qa
 description: Verifies frontend changes in a real browser or automation with route smoke, critical interactions, two or more viewports, console and network checks, and dev-server lifecycle. Use when a user-facing UI change needs proof that it works. Not for critiquing supplied screenshots (screenshot-review).
-category: frontend
-risk: medium
-targets: codex, opencode, claude, cursor
-related: screenshot-review, accessibility-review, frontend-design
+license: MIT
+compatibility: Needs browser automation, such as the Playwright MCP server Riggverk installs or the Playwright CLI (npx playwright).
+metadata:
+  category: frontend
+  risk: medium
+  targets: codex, opencode, claude, cursor, copilot, pi, kilo, antigravity, grok
+  related: screenshot-review, accessibility-review, frontend-design
 ---
 
 # Browser QA
