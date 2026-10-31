@@ -38,6 +38,7 @@ Use skills as routing and workflow guidance, not boilerplate. Select only task-r
 - Release readiness: `release-check`.
 - Creating or refreshing a repository's `AGENTS.md` (and its `CLAUDE.md` pointer): `agents-md`.
 - Executor reports, paused work, or context transfer: `handoff`.
+- Committing, pushing, or opening or updating a PR: `pr-workflow`; add `release-check` before the push.
 
 ## Task flow
 For non-trivial tasks, start with a short plan. Non-trivial means 3+ meaningful steps, multiple approaches, architectural impact, unclear requirements, cross-file behavior, frontend/design judgment, or security/deployment/database/release risk.
