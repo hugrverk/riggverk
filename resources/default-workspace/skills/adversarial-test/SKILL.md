@@ -159,4 +159,4 @@ Background: the split between a test agent and a repair agent, with qualified te
 
 ### Light harnesses
 
-- Copilot, Pi, Kilo, Antigravity and Grok have no verified in-harness adversary route. Use Codex, Claude Code or OpenCode through bash with the recipes in `critic-recipes.md` when one is installed and its preflight passes; otherwise say so and stop.
+- Copilot, Pi, Kilo, Antigravity and Grok have no verified in-harness adversary or implementer route. Use Codex, Claude Code or OpenCode through bash with the recipes in `critic-recipes.md` as the adversary when one is installed and its preflight passes; it stays read-only. The OpenCode degraded mode applies: you implement the production changes yourself (`implementer=lead, degraded`), bound by the frozen tests and the path guard. With no external adversary, say the skill is unsupported here and stop.

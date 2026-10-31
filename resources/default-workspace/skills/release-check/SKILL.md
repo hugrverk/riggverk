@@ -21,7 +21,7 @@ Done when: every required check is run or listed with a reason, blockers are sep
 
 ## Process
 
-1. Discover the repo's canonical release gate (`./scripts/release-check.sh`, `npm run verify`, CI workflow, Makefile target) and prefer running it over composing an ad-hoc list.
+1. Discover the repo's canonical release gate (`./scripts/release-check.sh`, `npm run verify`, CI workflow, Makefile target) and prefer running it over composing an ad-hoc list. Keep its exit status when you bound its output: a pipe such as `gate | tail` reports the status of `tail`, which is 0 even when the gate failed. Write the output to a file and read the status first (`gate >"$LOG" 2>&1; echo "exit $?"; tail -c 4000 "$LOG"`, with `LOG` from `mktemp`), or run the pipe under `set -o pipefail` in bash or zsh. The gate's own exit code, not the last line it printed, decides pass or fail.
 2. Inspect branch, git status, recent commits, and diff summary: run `git status --short --branch`, `git log --oneline -10` and `git diff --stat`, each piped through `head -c 2000`. Skip this outside a git repository and say so.
 3. Identify changed areas and risk level.
 4. Check whether migrations, env changes, credentials, scheduled jobs, webhooks, or data backfills are involved.
@@ -43,6 +43,7 @@ Done when: every required check is run or listed with a reason, blockers are sep
 
 ## Guardrails
 
+- A gate whose exit status you did not capture counts as not run.
 - Do not say ready unless required checks passed or gaps are explicit. Verdict is no-go if any required check failed, or was not run without a stated, accepted reason.
 - Do not inspect secrets.
 - Do not hide unverified manual checks.
@@ -65,7 +66,7 @@ Repository state when this check loaded (reuse it for step 2 instead of running 
 
 ### Codex
 
-- No forked verifier exists here; run the gate in the current session and bound its output (`| tail -c 4000`).
+- No forked verifier exists here; run the gate in the current session and bound its output as step 1 describes, keeping the exit status.
 
 ### OpenCode
 
