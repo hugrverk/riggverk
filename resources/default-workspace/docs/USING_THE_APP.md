@@ -35,7 +35,7 @@ Keys fire only when no text field has focus; Escape leaves a field. `Mod` is Cmd
 | Files card | `c` `d` `b` `m` | Next file, Compare, Use Riggverk's version, Keep mine or Hand back |
 | Codex config card | `m` `b` | Keep mine or Hand back, Use Riggverk defaults |
 | A switch | Space, Enter | Turn "Let Riggverk manage this" on or off (autosaves) |
-| OpenCode model | `e` `s` `x` `R` | Edit the model override, save it, reset it to the bundled default, reload models |
+| OpenCode model | `e` `s` `x` `R` | Edit the model override, save it, clear it, reload models |
 | Reviews | `y` | Apply the reviewed plan |
 | | `n`, Escape | Cancel |
 | | `d` | Expand or fold the row's details (install review) |
@@ -113,7 +113,7 @@ The runtime facts also say which skill copies the agent will load, read from the
 
 **Safety notes** ends the page with an **Advice only** tag: which permission and sandbox keys the agent's global config sets, as `Worth a look`, `Set`, `Tip` or `Not checked` rows. It reads config only, in memory, and never writes; project config, profiles and command-line flags are not checked. See [SECURITY_BASELINE.md](SECURITY_BASELINE.md).
 
-OpenCode also has a **Model** cell: the override for `model`, `small model` and an optional `subagent model` (the models of the read-only subagents; unset, they use the main model). `e` edits it, `s` saves it to the app-level override file, and the next OpenCode install writes it into the installed config. Each row says `source: override | bundled default` and `state: applied | pending apply (u to update)`. `x` deletes the override and returns every row to the bundled default; the next install applies that and removes the subagent entries (see [OPENCODE_CONFIG.md](OPENCODE_CONFIG.md)).
+OpenCode also has a **Model** cell: the override for `model`, `small model` and an optional `subagent model` (the models of the read-only subagents; unset, they use the main model). `e` edits it, `s` saves it to the app-level override file, and the next OpenCode install writes it into the installed config. Each row says `source: override | bundled default` and `state: applied | pending apply (u to update)`. `x` deletes the override; the next install preserves existing main model values and removes app-owned subagent entries (see [OPENCODE_CONFIG.md](OPENCODE_CONFIG.md)).
 
 ## Install review
 

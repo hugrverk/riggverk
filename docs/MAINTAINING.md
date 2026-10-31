@@ -107,9 +107,9 @@ The code lives in `src-tauri/src/commands/security_posture.rs`, the phrases in `
 
 ### Change the OpenCode policy or models
 
-- Permissions: `resources/default-workspace/templates/opencode.policy.json`. Non-permission settings (models, LSP, autoupdate): `templates/opencode.base.json`. Then `python3 scripts/generate.py write` (the snapshot and the agent adapters both change).
+- Permissions: `resources/default-workspace/templates/opencode.policy.json`. Non-permission settings (LSP, autoupdate): `templates/opencode.base.json`. Then `python3 scripts/generate.py write` (the snapshot and the agent adapters both change).
 - `validate_opencode_permissions.py` checks the composed permissions semantically, including a floor of secret file names that every role must refuse to read or print; removing one from the policy fails there.
-- A new `small_model`: also update the sentence "The bundled `small_model` is ..." in the bundled `docs/OPENCODE_CONFIG.md` (`check-bundle-content.py` group `opencode-defaults` compares them). A new `model`, or another `lsp`, `autoupdate` or `snapshot` value: update `OPENCODE_LITERALS` in `scripts/check-bundle-content.py`. TUI defaults: `TUI_DEFAULTS` in the same file.
+- Do not add bundled `model` or `small_model` values; `opencode-defaults` checks both templates. Update `OPENCODE_LITERALS` for `lsp`, `autoupdate`, or `snapshot` changes. TUI defaults: `TUI_DEFAULTS` in the same file.
 
 ### Merge main or a long-lived branch
 

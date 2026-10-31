@@ -591,6 +591,20 @@ describe("OpenCodeView model override", () => {
   });
 
   describe("subagent model", () => {
+    it("saves a role override while leaving both main model fields empty", async () => {
+      backend({ initial: { ...BUNDLED, model: "", small_model: "" } });
+      renderOpenCode();
+      await waitFor(() => expect(model().tagName).toBe("SELECT"));
+      expect(model().value).toBe("");
+      expect(model().selectedOptions[0].textContent).toBe("agent default or existing config");
+      fireEvent.change(subagent(), { target: { value: "openai/gpt-5" } });
+      const body = paneBody();
+      act(() => body.focus());
+      fireEvent.keyDown(body, { key: "s" });
+      await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("update_opencode_model_selection", {
+        model: "", smallModel: "", subagentModel: "openai/gpt-5", criticModel: null,
+      }));
+    });
     it("is optional: it starts as inherit, and picking a model saves it with the other two", async () => {
       backend();
       const { onModelUpdated } = renderOpenCode();

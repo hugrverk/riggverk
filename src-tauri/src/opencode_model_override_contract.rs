@@ -185,7 +185,6 @@ fn update_model_selection_rejects_malformed_ids_without_touching_saved_override(
             ("good/mod el", "good/small"),
             ("good/model", "good/sm\nall"),
             ("justmodel", "good/small"),
-            ("", "good/small"),
         ] {
             assert!(
                 crate::commands::update_opencode_model_selection(
@@ -349,7 +348,7 @@ fn values_equal_to_the_bundled_default_are_not_stored() {
 #[test]
 fn an_old_file_with_both_main_models_still_applies_both_as_explicit_overrides() {
     with_isolated_home("old-file", |home| {
-        let (default_model, _) = bundled_defaults();
+        let default_model = "opencode-go/glm-5.2".to_string();
         let path = stored_override_path();
         fs::create_dir_all(path.parent().expect("parent")).expect("create app support dir");
         // What every earlier app version wrote: both models, no subagent model. The first equals
@@ -388,7 +387,7 @@ fn an_old_file_with_both_main_models_still_applies_both_as_explicit_overrides() 
         .expect("save with a subagent model");
         assert_eq!(
             stored_keys(),
-            ["schema_version", "small_model", "subagent_model"]
+            ["model", "schema_version", "small_model", "subagent_model"]
         );
         assert_eq!(read_stored_override()["small_model"], "old/small");
     });
@@ -467,7 +466,7 @@ fn a_malformed_subagent_model_is_rejected_without_touching_the_saved_override() 
 fn critic_model_is_an_independent_optional_override_with_no_bundled_default() {
     with_isolated_home("critic-store", |_home| {
         let (model, small) = bundled_defaults();
-        for critic in ["  local/org/strong \n", model.as_str()] {
+        for critic in ["  local/org/strong \n", "other/model"] {
             let message = crate::commands::update_opencode_model_selection(
                 model.clone(),
                 small.clone(),
@@ -814,6 +813,51 @@ fn install_config(config_path: &Path) -> serde_json::Value {
 }
 
 #[test]
+fn unowned_global_models_keep_their_bytes_and_never_cause_drift() {
+    with_isolated_home("global-user-model", |home| {
+        let path = seed_real_config(home, &serde_json::json!({}));
+        // Escapes are semantically ordinary characters but must survive an unrelated update.
+        let original = r#"{"model":"opencode-go/\u0067lm-5.2","small_model":"custom/\u006dain"}"#;
+        fs::write(&path, original).unwrap();
+        let first = install_config(&path);
+        assert_eq!(first["model"], "opencode-go/glm-5.2");
+        let bytes = fs::read_to_string(&path).unwrap();
+        assert!(bytes.contains(r#""opencode-go/\u0067lm-5.2""#));
+        assert!(bytes.contains(r#""custom/\u006dain""#));
+        assert_config_synced();
+        let before = fs::read(&path).unwrap();
+        assert_config_synced();
+        assert_eq!(fs::read(&path).unwrap(), before);
+
+        // Explicit role overrides still install without changing either global model token.
+        crate::commands::update_opencode_model_selection(
+            String::new(),
+            String::new(),
+            Some("role/model".into()),
+            None,
+        )
+        .unwrap();
+        let updated = install_config(&path);
+        assert_eq!(updated["agent"]["inspector"]["model"], "role/model");
+        let bytes = fs::read_to_string(&path).unwrap();
+        assert!(bytes.contains(r#""opencode-go/\u0067lm-5.2""#));
+        assert!(bytes.contains(r#""custom/\u006dain""#));
+        assert_config_synced();
+    });
+}
+
+#[test]
+fn fresh_opencode_config_does_not_seed_global_models() {
+    with_isolated_home("global-fresh", |home| {
+        let path = seed_real_config(home, &serde_json::json!({}));
+        let config = install_config(&path);
+        assert!(config.get("model").is_none());
+        assert!(config.get("small_model").is_none());
+        assert_config_synced();
+    });
+}
+
+#[test]
 fn a_real_install_pins_the_roles_and_the_next_one_removes_them_after_a_reset() {
     with_isolated_home("apply", |home| {
         let user_agent_keys = serde_json::json!({
@@ -850,7 +894,7 @@ fn a_real_install_pins_the_roles_and_the_next_one_removes_them_after_a_reset() {
 
         crate::commands::reset_opencode_model_selection().expect("reset");
         let cleared = install();
-        assert_ne!(cleared["model"], "main/large");
+        assert_eq!(cleared["model"], "main/large");
         assert!(!cleared.to_string().contains("cheap/fast"), "{cleared}");
         assert!(!cleared.to_string().contains("strong/critic"), "{cleared}");
         assert_eq!(
@@ -967,10 +1011,11 @@ fn pins_from_a_record_without_role_models_stay_after_a_reset_and_are_no_conflict
         }
         crate::managed_state::write_managed_state_atomic(&workspace, &state).expect("write");
 
-        // The reset also returns the main models to the bundled default: an update, no conflict.
+        // The reset leaves both globals and unproven pins untouched, with no update.
         crate::commands::reset_opencode_model_selection().expect("reset");
-        let updated = install_config(&config_path);
-        assert_eq!(updated["model"], bundled_defaults().0);
+        assert_config_synced();
+        let updated = read_config(&config_path);
+        assert_eq!(updated["model"], "main/large");
         for role in ROLES {
             assert_eq!(updated["agent"][role]["model"], "cheap/fast", "{role}");
         }
