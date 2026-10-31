@@ -18,7 +18,7 @@ and where history is recorded:
 
 The later residues guard cleaned text from coming back, each scoped to the files it concerns:
 Swedish in skill descriptions, owner-specific tool and delegation lines in the bundled rules,
-model ids in skill text, and hard-coded user home paths. They name no person: the home-path
+model ids in skill text, hard-coded user home paths, and team-pack content in the bundle. They name no person: the home-path
 residue matches the shape of a path, with a short list of placeholder names.
 
 Adding a residue later is one more entry in RESIDUES with its own scope and allowlist. For
@@ -118,12 +118,16 @@ SWEDISH_TRIGGERS = Residue(
     pattern=re.compile(r"^description:.*(?:[åäöÅÄÖ]|\b(?:kör|låt|skriv|granska|statusrapport|lägesrapport)\b)"),
     why="skill descriptions use English trigger phrases; keep Swedish examples in the skill body",
     scope=(_BUNDLE + "skills/*/SKILL.md",),
-    allowed_paths=(
-        Allowed(
-            _BUNDLE + "skills/kretsverket/",
-            "moves to the team pack in the Kretsverket slice; delete this entry when it lands",
-        ),
-    ),
+    allowed_paths=(),
+    allowed_lines=(_PRAGMA_LINE,),
+)
+
+TEAM_PACK_CONTENT = Residue(
+    id="team-pack content in the bundled workspace",
+    pattern=re.compile(r"kretsverket|\.kretsym?\b|localhost:1420|wordpress-woocommerce", re.IGNORECASE),
+    why="Kretsverket and WordPress content lives in the private team pack, not in the public bundle",
+    scope=(_BUNDLE,),
+    allowed_paths=(_BUNDLE_HISTORY,),
     allowed_lines=(_PRAGMA_LINE,),
 )
 
@@ -163,7 +167,7 @@ HOME_PATHS = Residue(
     allowed_lines=(_PRAGMA_LINE,),
 )
 
-RESIDUES = (RENAMED_AWAY, SWEDISH_TRIGGERS, OWNER_RULES, MODEL_IDS, HOME_PATHS)
+RESIDUES = (RENAMED_AWAY, SWEDISH_TRIGGERS, OWNER_RULES, MODEL_IDS, HOME_PATHS, TEAM_PACK_CONTENT)
 
 
 def allowed_path(residue: Residue, rel: str) -> Allowed | None:

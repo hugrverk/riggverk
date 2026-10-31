@@ -176,6 +176,14 @@ class ResidueGuardTests(unittest.TestCase):
             with self.subTest(text=text):
                 self.assertEqual(self.scan({"src/a.ts": text + "\n"}), [], text)
 
+    def test_team_pack_content_fails_in_the_bundle_but_not_in_the_history_or_elsewhere(self) -> None:
+        bundle = "resources/default-workspace/templates/rules/cursor.md"
+        for text in ("Open Krets" "verket.", "Served on http://localhost:1" "420/.", "Use wordpress" "-woocommerce."):
+            with self.subTest(text=text):
+                self.assertEqual(len(self.scan({bundle: text + "\n"})), 1, text)
+        history = "resources/default-workspace/metadata/rules-history/claude/x.md"
+        self.assertEqual(self.scan({history: "Krets" "verket\n", "docs/RELEASE.md": "http://localhost:1" "420/\n"}), [])
+
     def test_the_allowlist_gives_a_reason_for_every_entry(self) -> None:
         for residue in guard.RESIDUES:
             for allowed in residue.allowed_paths:
