@@ -92,18 +92,15 @@ fn expected_agent_count(bundled_root: &Path) -> usize {
 /// Check whether the installed Claude rules carry the bundled base: the
 /// managed block body matches the template (the user's text around it is not
 /// compared), or a pre-block file equals the template exactly.
-fn check_rules_synced(home: &Path, bundled_root: &Path) -> bool {
+fn check_rules_synced(home: &Path, bundled_root: &Path, workspace_root: Option<&Path>) -> bool {
     let target = home.join(".claude/CLAUDE.md");
-    let source = bundled_root.join("templates/sync/claude-rules.md");
-    if !target.is_file() || !source.is_file() {
-        return false;
-    }
-    match (std::fs::read(&target), std::fs::read(&source)) {
-        (Ok(installed), Ok(source)) => {
-            crate::rules_block::installed_matches_source(&installed, &source)
-        }
-        _ => false,
-    }
+    target.is_file()
+        && crate::pack_routing::health_rules_synced(
+            &crate::artifact_registry::ArtifactId::ClaudeRules,
+            &target,
+            bundled_root,
+            workspace_root,
+        )
 }
 
 /// Check whether the bundled Claude agents match the installed ones.
@@ -179,7 +176,8 @@ fn compute_health_with_bundle(
     workspace_root: Option<&Path>,
     home: &Path,
 ) -> ClaudeRuntimeHealth {
-    let rules_synced = bundled_root.is_some_and(|root| check_rules_synced(home, root));
+    let rules_synced =
+        bundled_root.is_some_and(|root| check_rules_synced(home, root, workspace_root));
     let agents_synced = bundled_root.is_some_and(|root| check_agents_synced(home, root));
     let skills = claude_skills(bundled_root, workspace_root, home);
     let skills_synced = skills.is_some_and(|status| status.is_synced());

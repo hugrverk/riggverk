@@ -852,17 +852,30 @@ fn playwright_mcp_version_of(config: &serde_json::Value) -> Option<String> {
 
 /// Global `AGENTS.md` against the bundled rules. Informational: it does not change the overall
 /// status, which the install overview already reports per surface.
-fn opencode_rules_status(source: &Path, installed: &Path) -> String {
-    let Ok(source) = std::fs::read(source) else {
+fn opencode_rules_status(
+    bundled_root: Option<&Path>,
+    installed: &Path,
+    workspace_root: Option<&Path>,
+) -> String {
+    let Some(bundle) =
+        bundled_root.filter(|bundle| bundle.join("templates/sync/opencode-rules.md").is_file())
+    else {
         return "unknown".into();
     };
     match std::fs::read(installed) {
-        Ok(installed) if crate::rules_block::installed_matches_source(&installed, &source) => {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => "missing",
+        Err(_) => "unknown",
+        Ok(_)
+            if crate::pack_routing::health_rules_synced(
+                &crate::artifact_registry::ArtifactId::OpenCodeRules,
+                installed,
+                bundle,
+                workspace_root,
+            ) =>
+        {
             "synced"
         }
         Ok(_) => "diverged",
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => "missing",
-        Err(_) => "unknown",
     }
     .into()
 }
@@ -1424,10 +1437,8 @@ fn compute_health_in(
         );
     }
 
-    let rules_status = opencode_rules_status(
-        &source_path("templates/sync/opencode-rules.md"),
-        &config_dir.join("AGENTS.md"),
-    );
+    let rules_status =
+        opencode_rules_status(bundled_root, &config_dir.join("AGENTS.md"), workspace_root);
 
     // Bundled agents check
     let bundled_agents = list_bundled_agents(&agents_source_dir);

@@ -233,7 +233,8 @@ mod tests {
             assert!(setup_transaction::ensure_rules_apply_allowed(
                 &self.artifact(),
                 &self.ws,
-                &self.home
+                &self.home,
+                &crate::skill_sources::SkillSources::for_workspace(&self.ws).unwrap()
             )
             .is_err());
             let plan = preview_setup(vec![self.wire()]).unwrap();

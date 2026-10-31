@@ -288,6 +288,20 @@ function packRows(input: LibraryModelInput): LibraryRow[] {
     for (const skill of input.skills.filter(candidate => candidate.group === packGroup(pack.name))) {
       rows.push(skillRow(skill, { canCopySkill: false }, true));
     }
+    const routing = pack.routing ?? [];
+    if (routing.length > 0) {
+      rows.push({
+        key: `pack:${pack.name}:routing`,
+        name: "routing.md",
+        indent: true,
+        desc: routing.join(" · "),
+        note: `${routing.length} ${routing.length === 1 ? "line" : "lines"} in the rules block`,
+        tag: { kind: "pack", label: packGroup(pack.name) },
+        state: { state: "ok", label: "Routed" },
+        verbs: [],
+        haystack: haystack("routing.md", "routing", "rules", pack.name, ...routing),
+      });
+    }
   }
   return rows;
 }

@@ -485,6 +485,19 @@ describe("Library topics", () => {
     expect(within(rowOf("Codex config")).getByRole("button", { name: "View" })).toBeTruthy();
   });
 
+  it("shows the routing lines a pack adds to the rules, and why a pack's routing.md is not used", async () => {
+    fixture.packs.packs[0] = { ...fixture.packs.packs[0]!, routing: ["- Checklists: `my-checklist`.", "- Reviews: `my-checklist` first."] };
+    fixture.packs.packs[1] = { ...fixture.packs.packs[1]!, routing: [], routing_problem: "routing.md is not used: line 1 names no skill in backticks" };
+    await renderLibrary();
+    await goToTopic("Packs");
+    const routing = rowOf("routing.md");
+    expect(within(routing).getByText("2 lines in the rules block")).toBeTruthy();
+    expect(within(routing).getByText("- Checklists: `my-checklist`. · - Reviews: `my-checklist` first.")).toBeTruthy();
+    const problems = screen.getByRole("group", { name: "Skill pack problems" });
+    expect(problems.textContent).toContain("pack:personal · routing.md is not used: line 1 names no skill in backticks");
+    expect(screen.getAllByText("routing.md")).toHaveLength(1);
+  });
+
   it("says No packs with the packs folder when there are none", async () => {
     fixture.packs = { folder: "~/.config/riggverk/packs", packs: [], skills: [], ignored: [] };
     await renderLibrary();

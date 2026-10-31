@@ -64,6 +64,9 @@ export function packNoticeLines(library: PackLibrary | null, error: string | nul
     if (pack.state === "refused" && !pack.forgettable) {
       lines.push({ key: `refused:${pack.name}`, label: packGroup(pack.name), text: `refused: ${pack.reason}` });
     }
+    if (pack.routing_problem) {
+      lines.push({ key: `routing:${pack.name}`, label: packGroup(pack.name), text: pack.routing_problem });
+    }
   }
   for (const entry of library.ignored) {
     lines.push({ key: `ignored:${entry.name}`, label: `${library.folder}/${entry.name}`, text: `ignored: ${entry.reason}` });

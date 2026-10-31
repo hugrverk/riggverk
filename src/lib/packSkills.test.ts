@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { PackLibrary } from "../types";
-import { packGroup, packSkillSummaries } from "./packSkills";
+import { packGroup, packNoticeLines, packSkillSummaries } from "./packSkills";
 
 const library: PackLibrary = {
   folder: "~/.config/riggverk/packs",
@@ -27,5 +27,18 @@ describe("pack skills in the Library", () => {
 
   it("has no rows without a library", () => {
     expect(packSkillSummaries(null)).toEqual([]);
+  });
+
+  it("tells why a pack's routing.md is not used, and nothing for a pack whose routing applies", () => {
+    const routed: PackLibrary = {
+      ...library,
+      packs: [
+        { ...library.packs[0]!, routing: ["- A: `a`."], routing_problem: null },
+        { ...library.packs[1]!, routing: [], routing_problem: "routing.md is not used: it is a symlink" },
+      ],
+    };
+    expect(packNoticeLines(routed, null)).toEqual([
+      { key: "routing:gone", label: packGroup("gone"), text: "routing.md is not used: it is a symlink" },
+    ]);
   });
 });

@@ -310,13 +310,6 @@ pub fn body_digest(body: &str) -> String {
     stable_digest::bytes(canonical_body(body).as_bytes())
 }
 
-/// Digest of a source file's body, as installed into a block.
-pub fn source_digest(source: &[u8]) -> Result<String, String> {
-    std::str::from_utf8(source)
-        .map(body_digest)
-        .map_err(|_| "rules source is not valid UTF-8".to_string())
-}
-
 /// The managed digest of an installed rules file: its block body when it has
 /// one, otherwise (legacy or unparsable) the digest of the whole file.
 pub fn installed_managed_digest(bytes: &[u8]) -> String {

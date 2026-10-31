@@ -487,13 +487,14 @@ fn compute_health_with_bundle(
     } else if !rules_installed_path.is_file() {
         has_warn = true;
         "missing".into()
-    } else if std::fs::read(&rules_source_path)
-        .ok()
-        .zip(std::fs::read(&rules_installed_path).ok())
-        .is_some_and(|(source, installed)| {
-            crate::rules_block::installed_matches_source(&installed, &source)
-        })
-    {
+    } else if bundled_root.is_some_and(|bundle| {
+        crate::pack_routing::health_rules_synced(
+            &crate::artifact_registry::ArtifactId::CodexRules,
+            &rules_installed_path,
+            bundle,
+            workspace_root,
+        )
+    }) {
         "synced".into()
     } else {
         has_warn = true;
