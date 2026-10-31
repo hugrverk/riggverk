@@ -25,6 +25,7 @@
   overflow-x: hidden;
   overflow-y: auto;
   padding: 26px 28px 40px;
+  padding-inline: max(var(--page-gutter), calc((100% - var(--list-max)) / 2));
   font-family: var(--font-sans);
   font-size: var(--fs);
 }

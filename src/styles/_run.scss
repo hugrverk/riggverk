@@ -40,6 +40,7 @@
 .run-dock {
   flex: none;
   padding: var(--sp-3) 28px;
+  padding-inline: var(--page-inline);
   border-top: 1px solid var(--border);
   background: var(--bg-panel);
 }
