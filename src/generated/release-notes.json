@@ -1,6 +1,25 @@
 {
   "releases": [
     {
+      "version": "2026.10.18",
+      "sections": [
+        {
+          "title": "Fixes",
+          "items": [
+            "Portability fixes for release-check, handoff, retro, docs, browser QA, adversarial",
+            "Drop owner-specific defaults before open source"
+          ]
+        },
+        {
+          "title": "Other",
+          "items": [
+            "Generalise shared text and add two rule lines",
+            "Move Kretsverket and WordPress content to team pack"
+          ]
+        }
+      ]
+    },
+    {
       "version": "2026.10.17",
       "sections": [
         {
