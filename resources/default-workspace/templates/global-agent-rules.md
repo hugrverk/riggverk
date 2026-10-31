@@ -29,6 +29,7 @@ Use skills as routing and workflow guidance, not boilerplate. Select only task-r
 - Bugs, regressions, flakes, or slowness: `diagnose`; add `tdd` for a focused regression test.
 - Unfamiliar or architectural code: `zoom-out`; add `implementation-plan` before non-trivial edits.
 - Multi-step work: `implementation-plan`; add `context-budget` for broad or noisy work.
+- Mechanical or parallel slices handed to another agent CLI or subagent, only when the user wants other agents used: `delegate`.
 - Frontend: `frontend-design`; add `screenshot-review`, `browser-qa`, `accessibility-review`, or `prototype` as needed.
 - Security, auth, permissions, uploads, shell, or sensitive data: `security-review`.
 - Database or persisted data changes: `database-migrations`; add `security-review` where access control or sensitive data is involved.
