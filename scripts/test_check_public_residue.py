@@ -130,6 +130,37 @@ class ResidueGuardTests(unittest.TestCase):
         }
         self.assertEqual(self.scan(files), [])
 
+    def test_swedish_in_a_skill_description_fails_but_not_in_the_body(self) -> None:
+        skill = "resources/default-workspace/skills/demo/SKILL.md"
+        found = self.scan({skill: "---\nname: demo\ndescription: Use when asked (\"kör demo\").\n---\n"})
+        self.assertEqual(len(found), 1, found)
+        self.assertTrue(found[0].startswith(f"{skill}:3:"), found)
+        self.assertEqual(self.scan({skill: "---\nname: demo\ndescription: Use when asked.\n---\nSwedish: \"kör demo\".\n"}), [])
+        self.assertEqual(self.scan({"docs/NOTES.md": "description: kör\n"}), [])
+
+    def test_owner_specific_rules_text_fails_outside_the_history(self) -> None:
+        for text in ("Prefer rtk for reads.", "Codex is cheap, so delegate.", "Never while a GPT computer-use agent runs."):
+            with self.subTest(text=text):
+                found = self.scan({"resources/default-workspace/templates/rules/claude.md": text + "\n"})
+                self.assertEqual(len(found), 1, found)
+        history = {"resources/default-workspace/metadata/rules-history/claude/x.md": "Prefer rtk for reads.\n"}
+        self.assertEqual(self.scan(history), [])
+        self.assertEqual(self.scan({"resources/default-workspace/skills/a/SKILL.md": "The artkit and smartkey words.\n"}), [])
+
+    def test_a_model_id_in_skill_text_fails(self) -> None:
+        found = self.scan({"resources/default-workspace/skills/a/SKILL.md": "critic=codex/gpt-6.1-terra\n"})
+        self.assertEqual(len(found), 1, found)
+        self.assertEqual(self.scan({"resources/default-workspace/skills/a/SKILL.md": "critic=codex/<model>\n"}), [])
+        self.assertEqual(self.scan({"resources/default-workspace/docs/CODEX_CONFIG.md": "model gpt-6.1-terra\n"}), [])
+
+    def test_a_real_looking_home_path_fails_and_placeholders_pass(self) -> None:
+        users = "/Users/"  # split so this file holds no path of its own
+        for text in (users + "jane/project", "C:\\" + "Users\\jane\\app", "/home/" + "jane/x"):
+            with self.subTest(text=text):
+                self.assertEqual(len(self.scan({"src/a.ts": text + "\n"})), 1)
+        placeholders = users + "example/x /home/someone/y C:/Users/Example/z\n"
+        self.assertEqual(self.scan({"src/a.ts": placeholders}), [])
+
     def test_the_allowlist_gives_a_reason_for_every_entry(self) -> None:
         for residue in guard.RESIDUES:
             for allowed in residue.allowed_paths:
