@@ -241,13 +241,13 @@ mod tests {
             "~/.agents/skills holds the same files"
         );
 
-        let report_source = skills.join("kretsverket/kretsverket-status-report");
+        let report_source = skills.join("status-report");
         let report = files_below(&report_source);
         for nested in ["assets/report-template.html", "scripts/verify-report.mjs"] {
             assert!(report.contains_key(nested), "{nested} ships with the skill");
         }
         assert_eq!(
-            files_below(&claude.join("kretsverket-status-report")),
+            files_below(&claude.join("status-report")),
             report,
             "the skill installs flat under its name, nested directories included"
         );
@@ -492,7 +492,7 @@ mod tests {
             !claude.join("tdd").exists(),
             "an emptied skill directory is removed"
         );
-        assert!(!claude.join("kretsverket-status-report").exists());
+        assert!(!claude.join("status-report").exists());
         assert!(claude.join("my-own-skill/SKILL.md").is_file());
     }
 
@@ -715,14 +715,14 @@ mod tests {
         let claude = env.root(SkillRoot::Claude);
         // A directory where HUNTING.md belongs, and a file where assets/ belongs.
         fs::create_dir_all(claude.join("security-audit/HUNTING.md")).expect("dir in the way");
-        fs::create_dir_all(claude.join("kretsverket-status-report")).expect("skill dir");
-        fs::write(claude.join("kretsverket-status-report/assets"), "a file").expect("file");
+        fs::create_dir_all(claude.join("status-report")).expect("skill dir");
+        fs::write(claude.join("status-report/assets"), "a file").expect("file");
 
         let surfaces = [SetupSurfaceId::Skills];
         let hunting = skill_file(SkillRoot::Claude, "security-audit", "HUNTING.md");
         let template = skill_file(
             SkillRoot::Claude,
-            "kretsverket-status-report",
+            "status-report",
             "assets/report-template.html",
         );
         let sibling = skill_file(SkillRoot::Claude, "security-audit", "LICENSE");
@@ -734,6 +734,6 @@ mod tests {
         assert!(result.success, "apply: {}", result.message);
         assert!(claude.join("security-audit/LICENSE").is_file());
         assert!(claude.join("security-audit/HUNTING.md").is_dir());
-        assert!(claude.join("kretsverket-status-report/assets").is_file());
+        assert!(claude.join("status-report/assets").is_file());
     }
 }

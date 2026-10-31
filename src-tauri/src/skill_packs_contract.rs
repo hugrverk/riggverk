@@ -150,18 +150,36 @@ mod tests {
             crate::setup_roots::bundled_root().expect("bundled root")
         }
 
-        /// Ships a copy of the bundle without the named entries below `skills/`, from now on.
-        fn ship_bundle_without(&mut self, removed: &[&str]) -> PathBuf {
+        /// Ships a copy of the bundle with `MOVED_GROUP` added below `skills/`, from now on: the
+        /// release before its skills moved into a pack. Returns the group's source folder.
+        fn ship_bundle_with_moved_group(&mut self) -> PathBuf {
             // The override is dropped first, so the copy is made from the real bundle.
             self._bundle = None;
             let bundle = self.base.join("bundle");
             let _ = fs::remove_dir_all(&bundle);
             copy_tree(&Self::real_bundle(), &bundle);
-            for rel in removed {
-                fs::remove_dir_all(bundle.join("skills").join(rel)).expect("remove from copy");
+            let group = bundle.join("skills").join(MOVED_GROUP);
+            for (name, files) in MOVED_SKILLS {
+                let dir = group.join(name);
+                fs::create_dir_all(&dir).expect("moved skill dir");
+                fs::write(
+                    dir.join("SKILL.md"),
+                    canonical_skill_text(name, "shipped by the bundle"),
+                )
+                .expect("SKILL.md");
+                for (rel, text) in files.iter() {
+                    let path = dir.join(rel);
+                    fs::create_dir_all(path.parent().expect("parent")).expect("support dir");
+                    fs::write(path, text).expect("support file");
+                }
             }
-            self._bundle = Some(crate::setup_roots::test_bundle::set(bundle.clone()));
-            bundle
+            self._bundle = Some(crate::setup_roots::test_bundle::set(bundle));
+            group
+        }
+
+        /// Ships the real bundle again, from now on: the release that dropped the group.
+        fn ship_real_bundle(&mut self) {
+            self._bundle = None;
         }
 
         fn packs(&self) -> PathBuf {
@@ -289,28 +307,64 @@ mod tests {
 
     // ── Moving a skill from the bundle into a pack ──
 
-    #[test]
-    fn a_skill_group_moved_byte_for_byte_from_the_bundle_into_a_pack_plans_and_writes_nothing() {
-        let mut env = Env::new("moved");
+    /// A grouped pair of skills an earlier release bundled, with nested supporting files: the
+    /// shape of the domain skills that left the bundle for a team pack.
+    const MOVED_GROUP: &str = "team";
+    const MOVED_SKILLS: [(&str, &[(&str, &str)]); 2] = [
+        (
+            "team-report",
+            &[
+                ("assets/report-template.html", "<html>template</html>\n"),
+                ("scripts/verify-report.mjs", "export const ok = true;\n"),
+            ],
+        ),
+        ("team-change", &[]),
+    ];
+
+    /// Every installed file of the moved skills, in both skills folders.
+    fn moved_files(env: &Env) -> BTreeMap<String, Vec<u8>> {
+        let mut out = BTreeMap::new();
+        for root in [SkillRoot::Claude, SkillRoot::Agents] {
+            for (name, _) in MOVED_SKILLS {
+                for (rel, bytes) in files_below(&env.root(root).join(name)) {
+                    out.insert(format!("{root:?}/{name}/{rel}"), bytes);
+                }
+            }
+        }
+        out
+    }
+
+    /// Installs the release that bundled the group, then ships the one that dropped it.
+    fn installed_from_the_bundle(label: &str) -> (Env, PathBuf, BTreeMap<String, Vec<u8>>) {
+        let mut env = Env::new(label);
+        let group = env.ship_bundle_with_moved_group();
         let result = env.apply();
         assert!(result.success, "install: {}", result.message);
+        let installed = moved_files(&env);
+        assert_eq!(
+            installed.len(),
+            8,
+            "four files in two folders: {installed:?}"
+        );
+        env.ship_real_bundle();
+        (env, group, installed)
+    }
+
+    #[test]
+    fn a_skill_group_moved_byte_for_byte_from_the_bundle_into_a_pack_plans_and_writes_nothing() {
+        let (env, group, _) = installed_from_the_bundle("moved");
         let installed = env.footprint();
         let report = file_of(
             SkillRoot::Claude,
-            "kretsverket-status-report",
+            "team-report",
             "assets/report-template.html",
         );
         assert!(env.path(&report).is_file(), "the nested file is installed");
 
-        // The next release ships without the group; the user keeps it in a pack, byte for byte.
-        let bundle = Env::real_bundle();
-        env.ship_bundle_without(&["kretsverket"]);
+        // The user keeps the group in a pack, byte for byte.
         env.pack("mine");
-        copy_tree(
-            &bundle.join("skills/kretsverket"),
-            &env.packs().join("mine/skills/kretsverket"),
-        );
-        set_mode(&env.packs().join("mine"), 0o755);
+        copy_tree(&group, &env.packs().join("mine/skills").join(MOVED_GROUP));
+        Env::tighten(&env.packs().join("mine/skills"));
 
         assert_eq!(env.pending(), vec![], "nothing to create, update or remove");
         assert_eq!(env.kind(&report), Some(OperationKind::NoChange));
