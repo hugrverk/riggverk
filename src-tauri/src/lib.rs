@@ -48,6 +48,7 @@ mod skill_sources;
 #[cfg(test)]
 mod skills_install;
 mod stable_digest;
+mod window_placement;
 mod workspace_layout;
 
 #[cfg(test)]
@@ -120,6 +121,14 @@ use tauri::Manager;
 pub fn run() {
     executable_resolver::extend_path_with_tool_dirs();
     tauri::Builder::default()
+        // Restores the main window's size, position and maximized state when it is created (hidden); setup shows it.
+        // Its own setup reads `.window-state.json` before the app data move below. No build before the plugin wrote
+        // that file, so the move can never bring one in, and the read creates nothing.
+        .plugin(
+            tauri_plugin_window_state::Builder::new()
+                .with_state_flags(window_placement::STATE_FLAGS)
+                .build(),
+        )
         .setup(|app| {
             // First: nothing may read or write the data directory before this.
             app_data_migration::run_at_startup()?;
@@ -129,6 +138,7 @@ pub fn run() {
                 .map_err(|e| format!("resolve bundled workspace: {e}"))?;
             setup_roots::initialize(bundled)?;
             apply_progress::install(app.handle().clone());
+            window_placement::place_and_show(app);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

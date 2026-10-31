@@ -95,6 +95,11 @@ class SourceTests(unittest.TestCase):
         self.edit("src-tauri/tauri.conf.json", '"width": 1280', '"width": 1440')
         self.assertIn("1280x800", sg.tauri_conf(self.tree)[0])
 
+    def test_main_window_starts_hidden(self) -> None:
+        self.copy("src-tauri/tauri.conf.json")
+        self.edit("src-tauri/tauri.conf.json", '"visible": false,', "")
+        self.assertIn("hidden", sg.tauri_conf(self.tree)[0])
+
     def test_startup_order(self) -> None:
         self.copy("src-tauri/src/lib.rs")
         self.assertEqual(sg.startup_order(self.tree), [])

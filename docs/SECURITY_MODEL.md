@@ -22,6 +22,7 @@
 | Pack skills | `<workspace>/.riggverk/pack-skills.json` | Which installed skills came from which skill pack, and which packs the user forgot: pack names and skill names, no file content. Written atomically through `safe_filesystem` after a successful transaction (merged with what it held) and by Forget pack; a copy goes into each transaction's backup folder and a rollback puts it back. It decides nothing about ownership; it only keeps an installed pack skill from being retired while its pack cannot be read. A file the app cannot parse, or of another schema, is never rewritten, and every installed skill the catalog lacks is kept until it is fixed. |
 | App settings | `settings.json` in the app support dir | Autosaved. A corrupt file is renamed aside and defaults load. Not backed up. |
 | OpenCode model override | `opencode-model-selection.json` in the app support dir | Non-secret model preference. Not backed up. |
+| Window state | `.window-state.json` in the app support dir | Written by `tauri-plugin-window-state` when the app quits: the main window's size and position in pixels and whether it was maximized, nothing else. Read at launch to reopen the window where it was; without it, or when its display is gone, the window opens maximized (`src-tauri/src/window_placement.rs`). Not backed up. |
 | Backups | `backups/` in the app support dir (or `RIGGVERK_BACKUP_DIR`) | Layout below. |
 | OpenCode config | `opencode.json` in OpenCode's config folder (`$XDG_CONFIG_HOME/opencode`, default `~/.config/opencode`) | Managed-key merge. The folder follows `XDG_CONFIG_HOME` as OpenCode does on every OS; a relative value is ignored, and a folder outside the home directory is the allowlisted root of the OpenCode files. When the variable changes, the files at the old folder are neither updated nor removed. `OPENCODE_CONFIG_DIR` is reported, never written. |
 | OpenCode TUI config | `tui.json` in OpenCode's config folder | Managed-key merge (`tui_top_level` in `metadata/opencode-managed-keys.json`); strict JSON only, a file with comments or invalid JSON is refused unchanged. |
@@ -87,7 +88,7 @@ It sees global config only. Project and managed config, profiles, command-line f
 
 ## Backups
 
-Existing files that Install, uninstall, or a Library save would overwrite or remove are backed up first. Files that do not exist yet, the app's own `settings.json`, and the model override have no backup.
+Existing files that Install, uninstall, or a Library save would overwrite or remove are backed up first. Files that do not exist yet, the app's own `settings.json`, the window state, and the model override have no backup.
 
 | Writer | Location under the backup root |
 |--------|--------------------------------|
