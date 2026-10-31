@@ -105,6 +105,10 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
+## superpowers dispatching-parallel-agents and using-git-worktrees
+
+`delegate` draws on two skills of [obra/superpowers](https://github.com/obra/superpowers) at commit `2ce8aa15d05bd57213e6f746f953aafb7ded7a8b`: from `skills/dispatching-parallel-agents/SKILL.md`, one agent per independent slice with no shared files or state, a focused, self-contained brief with explicit constraints and expected output, and checking the returned work for conflicts before running the full suite; from `skills/using-git-worktrees/SKILL.md`, preferring the harness's native worktree tool over `git worktree add`, and a clean baseline run in the new worktree before work starts. The wording is Riggverk's; the CLI recipes, write confinement and the PR-style review are Riggverk's own. Same MIT license and copyright as in the superpowers writing-plans entry above.
+
 ## Cloudflare security-audit-skill
 
 The bundled `security-audit` skill is vendored from [cloudflare/security-audit-skill](https://github.com/cloudflare/security-audit-skill) at commit `c1c8a8c1471069fb0e188eeaff69b8e8db6564a8`, as recorded in [UPSTREAM.md](resources/default-workspace/skills/security-audit/UPSTREAM.md).

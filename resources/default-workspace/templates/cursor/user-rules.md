@@ -48,11 +48,13 @@ Use skills as routing and workflow guidance, not boilerplate. Select only task-r
 - Red CI runs or failing PR checks: `ci-triage`, which hands root cause to `diagnose`.
 - Unfamiliar or architectural code: `zoom-out`; add `implementation-plan` before non-trivial edits.
 - Multi-step work: `implementation-plan`; add `context-budget` for broad or noisy work.
+- Mechanical or parallel slices handed to another agent CLI or subagent, only when the user wants other agents used: `delegate`.
 - Frontend: `frontend-design`; add `screenshot-review`, `browser-qa`, `accessibility-review`, or `prototype` as needed.
 - Security, auth, permissions, uploads, shell, or sensitive data: `security-review`.
 - Database or persisted data changes: `database-migrations`; add `security-review` where access control or sensitive data is involved.
 - Fast-moving APIs, SDKs, CLIs, frameworks, or dependencies: `current-docs`; add `security-review` when trusted surface expands.
 - Release readiness: `release-check`.
+- Creating or refreshing a repository's `AGENTS.md` (and its `CLAUDE.md` pointer): `agents-md`.
 - Executor reports, paused work, or context transfer: `handoff`.
 
 ## Task flow
