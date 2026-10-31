@@ -142,6 +142,8 @@ interface SheetState {
   target: OpenTarget;
   /** Shown in the header until the item has loaded. */
   title: string;
+  /** The topic that was on show when the sheet opened: a later topic change from outside closes it, an earlier one does not. */
+  topic: LibrarySourceType;
 }
 
 /**
@@ -199,7 +201,7 @@ export function LibraryView(props: LibraryViewProps) {
     if (!(await confirmLeave())) return;
     returnKeyRef.current = returnKey;
     setRulesMode("refinements");
-    setSheet({ target, title });
+    setSheet({ target, title, topic: sourceType });
     switch (target.kind) {
       case "doc":
         void props.onSelectDoc(target.id);
@@ -271,11 +273,12 @@ export function LibraryView(props: LibraryViewProps) {
   }, [topicId]);
 
   // A topic change from outside (`:library skills`) closes the sheet; opening a config from a search result does not.
+  // This runs after the commit, so a sheet opened in the meantime (it already carries the new topic) must survive it.
   const previousTopic = useRef(sourceType);
   useEffect(() => {
     if (previousTopic.current === sourceType) return;
     previousTopic.current = sourceType;
-    setSheet(null);
+    setSheet(current => (current && current.topic !== sourceType ? null : current));
   }, [sourceType]);
 
   // A save that finishes is also a notice, for when the sheet has already closed (Save and continue).
@@ -335,7 +338,7 @@ export function LibraryView(props: LibraryViewProps) {
     newDocOpenerRef.current = null;
     returnKeyRef.current = `docs/doc:${id}`;
     setRulesMode("refinements");
-    setSheet({ target: { kind: "doc", id }, title: props.createDocTitle.trim() || "New doc" });
+    setSheet({ target: { kind: "doc", id }, title: props.createDocTitle.trim() || "New doc", topic: sourceType });
   };
 
   const openCopy = (source: string) => {
