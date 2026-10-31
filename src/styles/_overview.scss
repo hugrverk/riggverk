@@ -139,6 +139,7 @@
   overflow-x: hidden;
   overflow-y: auto;
   padding: 26px 28px 40px;
+  padding-inline: var(--page-inline);
   container: ov / inline-size;
   font-family: var(--font-sans);
   font-size: var(--fs);

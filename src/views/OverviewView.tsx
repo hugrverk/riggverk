@@ -5,6 +5,7 @@ import { MoreAgentsRow } from "../components/overview/MoreAgentsRow";
 import { OverviewHeader } from "../components/overview/OverviewHeader";
 import { WorkspaceFolderCell } from "../components/overview/WorkspaceFolderCell";
 import { WorthALookCell } from "../components/overview/WorthALookCell";
+import { useFlowRoom } from "../components/overview/useFlowRoom";
 import { InstallPlanPane } from "../components/InstallPlanPane";
 import { useFlowSources } from "../hooks/useFlowSources";
 import { useLastUpdate } from "../hooks/useLastUpdate";
@@ -12,7 +13,8 @@ import { usePostureOverview } from "../hooks/usePostureOverview";
 import { useRunTrace } from "../hooks/useRunTrace";
 import type { Binding } from "../keyboard/registry";
 import { useKeymap } from "../keyboard/useKeymap";
-import { buildFlowModel, decisionsOf, fixesOf, nothingInstalled, sameRef, type FlowRef, type HarnessHomes } from "../lib/flowModel";
+import { offRowsFit } from "../lib/flowLayout";
+import { buildFlowModel, decisionsOf, expandOffGroup, fixesOf, nothingInstalled, sameRef, type FlowRef, type HarnessHomes } from "../lib/flowModel";
 import { harnessHomePath } from "../lib/harnessHeader";
 import { HARNESS_NAV_ORDER } from "../lib/harnessInstallation";
 import type { HarnessRuntimeHealth } from "../lib/harnessRuntimeRows";
@@ -127,10 +129,14 @@ export function OverviewView({
   });
   const dataFolder =
     overview.entries.workspace?.status?.surfaces.find(row => row.surface === "workspace_bundle")?.data_folder ?? null;
-  const flow = useMemo(
+  const built = useMemo(
     () => buildFlowModel({ cards: summary.cards, sources: flowSources, personalDocs: dataFolder?.personal_docs ?? null, lastUpdate }),
     [summary.cards, flowSources, dataFolder?.personal_docs, lastUpdate],
   );
+  // With the height for it, the agents that are off get rows of their own; the map and the inspector share that model.
+  const { room, pageRef, flowRef } = useFlowRoom();
+  const expanded = offRowsFit(built, room);
+  const flow = useMemo(() => (expanded ? expandOffGroup(built) : built), [built, expanded]);
   const homes = useMemo(() => {
     const found: HarnessHomes = {};
     for (const harness of HARNESS_NAV_ORDER) {
@@ -219,15 +225,16 @@ export function OverviewView({
 
   return (
     <div className="ov">
-      <Page label="Overview" className="ov-page">
+      <Page label="Overview" className="ov-page" ref={pageRef}>
         <OverviewHeader summary={summary} checkedAt={checkedAt} />
-        <div className="ov-flow">
+        <div className="ov-flow" ref={flowRef}>
           <FlowMap
             model={flow}
             selected={selected}
             onSelect={select}
             live={busy ? trace.current : null}
             liveFiles={trace.current ? (trace.counts[trace.current] ?? 0) : 0}
+            room={room}
           />
           <FlowInspector
             model={flow}

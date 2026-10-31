@@ -72,6 +72,12 @@
   --lh: calc(var(--fs) * 1.54);
   --font-size-heading: 1rem;
   --traffic-light-reserve: 80px;
+  /* On a large window a page's content stops growing at --page-max and stays centred: its side padding is
+     --page-inline, the gutter or half of what is left over. Lists of rows read best narrower: --list-max. */
+  --page-gutter: 28px;
+  --page-max: 1760px;
+  --list-max: 1200px;
+  --page-inline: max(var(--page-gutter), calc((100% - var(--page-max)) / 2));
   --dur-view: 0.32s;
   --dur-nav: 0.4s;
   --dur-fold: 0.45s;

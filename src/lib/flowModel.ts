@@ -64,7 +64,11 @@ export interface FlowEdge {
 export interface FlowModel {
   sources: FlowSource[];
   agents: FlowAgent[];
-  offGroup: { agents: FlowAgent[] } | null;
+  /**
+   * The agents that are off, drawn as one node with one ghost curve from the base while the map is short of room.
+   * `edges` holds the ghost curve each would get as a row of its own (`expandOffGroup`).
+   */
+  offGroup: { agents: FlowAgent[]; edges: FlowEdge[] } | null;
   edges: FlowEdge[];
 }
 
@@ -234,7 +238,6 @@ export function buildFlowModel(input: {
   const allAgents = HARNESS_NAV_ORDER.map(harness => flowAgent(harness, cards.find(card => card.harness === harness)));
   const agents = allAgents.filter(agent => agent.status !== "off");
   const offAgents = allAgents.filter(agent => agent.status === "off");
-  const offGroup = offAgents.length ? { agents: offAgents } : null;
   const active = agents.filter(agent => agent.status === "active");
   const written = agentsWritten(lastUpdate);
 
@@ -267,6 +270,13 @@ export function buildFlowModel(input: {
     const items = baseItemsFor(managedSurfaces(agent.status === "active" ? agent.card : null, agent.id), data);
     push({ source: BASE_SOURCE_ID, agent: agent.id, items, status: agent.status === "active" ? flowStatus(agent) : "ghost" });
   }
+  // The agents that are off: a ghost curve each, kept aside for when they get rows of their own.
+  const offEdges = offAgents.flatMap((agent): FlowEdge[] => {
+    const items = baseItemsFor(managedSurfaces(null, agent.id), data);
+    const total = sum(items);
+    return total > 0 ? [{ id: edgeId(BASE_SOURCE_ID, agent.id), source: BASE_SOURCE_ID, agent: agent.id, items, total, status: "ghost", glow: false }] : [];
+  });
+  const offGroup = offAgents.length ? { agents: offAgents, edges: offEdges } : null;
 
   // Your refinements: the lines you keep below the managed block reach the agents whose rules file has some.
   const refined = (data?.rulesFiles ?? []).filter(file => file.refinement_lines > 0);
@@ -303,6 +313,15 @@ export function buildFlowModel(input: {
   }
 
   return { sources, agents, offGroup, edges };
+}
+
+/**
+ * The map with every agent that is off in a dimmed row of its own, after the agents that are on, each with its ghost
+ * curve from the base: what the map shows when it has the room (`offRowsFit`). The agents that are on keep their rows.
+ */
+export function expandOffGroup(model: FlowModel): FlowModel {
+  if (!model.offGroup) return model;
+  return { ...model, agents: [...model.agents, ...model.offGroup.agents], edges: [...model.edges, ...model.offGroup.edges], offGroup: null };
 }
 
 /* ---- selection and highlight ---- */

@@ -3,7 +3,8 @@
 
 Groups:
   identity       product name Riggverk; legal files; stable technical identifiers and paths
-  tauri-conf     bundled workspace resource; main window size; no maximize at startup
+  tauri-conf     bundled workspace resource; main window size, hidden until placed; remembered window state,
+                 never fullscreen
   startup-order  the app data move runs first in the Tauri setup closure
   forbidden      no shell command strings, eval or remote skill installs in scripts and source;
                  no project-target or page-scoped install actions; rendered OpenCode compares
@@ -150,15 +151,27 @@ TAURI_CONF_RULES = (
         '"../resources/default-workspace/": "default-workspace/"',
     ),
     Rule(
-        "no-maximize",
-        "forbid",
-        r"window\.maximize\(\)",
+        "window-state",
+        "require",
+        r"tauri_plugin_window_state::Builder::new\(\)\s*\.with_state_flags\(window_placement::STATE_FLAGS\)",
         ("src-tauri/src/lib.rs",),
-        "Tauri startup must not maximize the main window",
-        "window.maximize().ok();",
+        "the main window's size, position and maximized state must be remembered by tauri-plugin-window-state, "
+        "with the flags of window_placement (never fullscreen or visibility)",
+        "tauri_plugin_window_state::Builder::new().with_state_flags(window_placement::STATE_FLAGS)",
+        whole_file=True,
+    ),
+    Rule(
+        "no-fullscreen",
+        "forbid",
+        r"set_fullscreen\(true\)|StateFlags::FULLSCREEN|StateFlags::all\(\)",
+        ("src-tauri/src/",),
+        "the main window opens maximized at most, never in macOS fullscreen",
+        "window.set_fullscreen(true).ok();",
+        exclude=("src-tauri/src/window_placement.rs",),
     ),
 )
-MAIN_WINDOW = {"width": 1280, "height": 800, "center": True}
+# The default (unmaximized) size, hidden until window_placement has placed it, so it never flashes at this size first.
+MAIN_WINDOW = {"width": 1280, "height": 800, "center": True, "visible": False}
 
 
 def tauri_conf(root: Path) -> list[str]:
@@ -168,7 +181,7 @@ def tauri_conf(root: Path) -> list[str]:
         return [f"main-window: cannot read app.windows[0] from src-tauri/tauri.conf.json: {exc!r}"]
     actual = {key: window.get(key) for key in MAIN_WINDOW}
     if actual != MAIN_WINDOW:
-        return [f"main-window: the main window must open centered at 1280x800, found {actual}"]
+        return [f"main-window: the main window must be created hidden, centered at 1280x800, found {actual}"]
     return []
 
 
