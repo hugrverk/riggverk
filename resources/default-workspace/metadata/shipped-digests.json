@@ -236,6 +236,11 @@
       "sha256:8414397511db898da9c2279a3257f6f47a873ea20b9061bdf6f0e843322804e7",
       "sha256:c247b243d16f61c4417e600707567b823de369e7ecb9d1fe5273c62424516dd9"
     ],
+    "skills/ci-triage/SKILL.md": [
+      "sha256:1f51f47885c7d957eeaa19dd7bca2177d3562d1c1911bea1e0312865f919ac14",
+      "sha256:280215d2f8fc737095fb8c2d8a2c04e501acc4451aee53b0809297df5ce1cf07",
+      "sha256:53f8bbd5e81aad908229f1aae35188b50728cfd4863b7447cd1395a18e7f3b5a"
+    ],
     "skills/context-budget/SKILL.md": [
       "sha256:1c4014a0cde8038051d766c643426e7598ff97ffdcb13d90b4b357ff383b0143",
       "sha256:224477c7c6dfe048ef5053df9b6a9c241de44069dd179043cbf0b5f8c30edc4b",
@@ -379,6 +384,13 @@
       "sha256:1f6557d9a8a014e7ed6914e152fc47b30845bbb79462d68ab56cc0ce20a0382c",
       "sha256:89f3839942fa5da82a132eaba2fd0de762999e04ba960d2a9760d316846086cb"
     ],
+    "skills/pr-workflow/SKILL.md": [
+      "sha256:1fa0bc086a24195dd61ece99400730ecdea122c5fbacad41c42874c52f9cf28a",
+      "sha256:a763ccd195d73a322f776964b5894c846b773fc84eec2a57de3f08096bdfd1ce"
+    ],
+    "skills/pr-workflow/assets/pr-body.template.md": [
+      "sha256:b9ddbb943e011cc13fd40b83838df78cc2438d5fbe1b63825c4b6845e4721e62"
+    ],
     "skills/prototype/SKILL.md": [
       "sha256:0fcfddc60fe815dbb41248085d9084d58e81ac29f997631ae94aaeb1ae6b7484",
       "sha256:44ee9ea4a8301dfe08596db4aed7cacfb674a89227b4b86793ea8b86d2879442",
@@ -405,7 +417,8 @@
     "skills/release-notes/SKILL.md": [
       "sha256:662c884e0f4496ecac87207acf0330e59bc917dd1106931e62f4b32256ea9dd0",
       "sha256:6f2b9a555dd9b1d66ed05c60084f8329292de305d644020257a6a82228b27957",
-      "sha256:9f2bf4f7c2d48d293b1653b3fc51f2d1061d8cbc4a7eb29e0a89553af617227d"
+      "sha256:9f2bf4f7c2d48d293b1653b3fc51f2d1061d8cbc4a7eb29e0a89553af617227d",
+      "sha256:a7f822e9fb83a975ac6e0c353717e2897f0cb0ac976a5fd0ba26b96b17bc6513"
     ],
     "skills/retro/SKILL.md": [
       "sha256:6a9eab05a9a22e848b2260f988aadcc5fd912f2cb79e35d3d71ee2d9b245ef41",
