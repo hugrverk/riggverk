@@ -144,6 +144,27 @@ class CheckSkillRoutingTests(unittest.TestCase):
         self.append(self.skill("browser-qa").parent / "playwright-cli.md", "\nRead skills/tdd/SKILL.md first.\n")
         self.assert_fails("references the files of skill 'tdd'")
 
+    def test_sibling_reference_in_a_supporting_script_fails(self) -> None:
+        for filename, text in (
+            ("helper.cjs", 'const shared = require("../tdd/helper.cjs");\n'),
+            ("view.html", '<script src="../diagnose/app.js"></script>\n'),
+        ):
+            with self.subTest(filename=filename):
+                path = self.skill("browser-qa").parent / filename
+                path.write_text(text, encoding="utf-8")
+                self.assert_fails("references the files of skill")
+                path.unlink()
+
+    def test_skills_path_inside_an_external_url_is_not_a_sibling_reference(self) -> None:
+        self.append(self.skill("browser-qa").parent / "playwright-cli.md", "\nSee https://example.com/skills/tdd/SKILL.md and https://example.com/a/../diagnose/x.\n")
+        result = run(self.tree, "check-skill-routing.py")
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_binary_supporting_file_is_ignored(self) -> None:
+        (self.skill("browser-qa").parent / "image.bin").write_bytes(b"\xff\xfe../tdd/\x00")
+        result = run(self.tree, "check-skill-routing.py")
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_adversarial_skill_reading_the_implementation_skill_fails(self) -> None:
         self.append(self.skill("adversarial-test"), "\nRecipes: `../adversarial-implementation/critic-recipes.md`.\n")
         self.assert_fails("references the files of skill 'adversarial-implementation'")
@@ -363,6 +384,21 @@ class PortableSkillBodyTests(unittest.TestCase):
         self.assertIn("$retro", description)
         self.assertIn("## Invocation", text)
 
+    def test_release_check_keeps_the_gate_exit_status(self) -> None:
+        body = self.body_before_notes("release-check")
+        self.assertIn("pipefail", body)
+        self.assertIn("exit status", body)
+
+    def test_playwright_cli_route_is_bounded_and_pinned_to_the_local_install(self) -> None:
+        text = (ROOT / WS / "skills/browser-qa/playwright-cli.md").read_text(encoding="utf-8")
+        self.assertNotIn("npx playwright install", text)
+        self.assertNotIn("npx playwright screenshot", text)
+        self.assertIn("node_modules/.bin/playwright", text)
+        self.assertIn("MAX_BYTES", text)
+        self.assertIn("MAX_EVENTS", text)
+        self.assertIn("u.host", text)  # userinfo is dropped by printing protocol and host only
+        self.assertNotIn("m.text()}", text)  # no raw console text in a template string
+
     def test_current_docs_has_a_fallback_without_web_tools(self) -> None:
         body = self.body_before_notes("current-docs")
         self.assertIn("llms.txt", body)
@@ -371,7 +407,7 @@ class PortableSkillBodyTests(unittest.TestCase):
     def test_browser_qa_points_at_its_playwright_cli_route(self) -> None:
         folder = ROOT / WS / "skills/browser-qa"
         self.assertIn("playwright-cli.md", self.body_before_notes("browser-qa"))
-        self.assertIn("npx playwright install", (folder / "playwright-cli.md").read_text(encoding="utf-8"))
+        self.assertIn('playwright" install chromium', (folder / "playwright-cli.md").read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

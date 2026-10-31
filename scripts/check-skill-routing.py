@@ -67,7 +67,7 @@ PLAIN_SCALAR_BAD_START = "\"'[]{}>|*&!%@`#"
 SHARED_REFERENCE_FAMILIES = {
     "adversarial-": ("adversarial-roles.md", "critic-recipes.md"),
 }
-SIBLING_REFERENCE_SUFFIXES = (".md", ".mjs", ".js", ".json", ".txt", ".sh", ".py")
+URL_RE = re.compile(r"https?://\S+", re.IGNORECASE)
 
 STATIC_ROUTING_SOURCES = [
     WS_ROOT / "docs/SKILLS.md",
@@ -520,11 +520,17 @@ def validate_no_sibling_references(discovered: dict[str, Path]) -> None:
         siblings = [other for other in names if other != name]
         pattern = re.compile(r"(?<![\w.-])(?:\.\./|skills/)(" + "|".join(re.escape(s) for s in siblings) + r")/")
         for file in sorted(skill_md.parent.rglob("*")):
-            if not file.is_file() or file.is_symlink() or file.suffix not in SIBLING_REFERENCE_SUFFIXES:
+            if not file.is_file() or file.is_symlink():
                 continue
-            for number, line in enumerate(file.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
-                match = pattern.search(line)
-                if match:
+            try:
+                text = file.read_text(encoding="utf-8")
+            except UnicodeDecodeError:
+                continue  # binary file
+            for number, line in enumerate(text.splitlines(), 1):
+                urls = [url.span() for url in URL_RE.finditer(line)]
+                for match in pattern.finditer(line):
+                    if any(start <= match.start() < end for start, end in urls):
+                        continue  # a path inside an external URL is not a skill reference
                     fail(
                         f"{rel(file)}:{number}: references the files of skill {match.group(1)!r}; "
                         "a skill is installed on its own, so give it its own copy"
