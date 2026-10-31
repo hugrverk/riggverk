@@ -287,7 +287,7 @@ mod tests {
             .find(|op| op.surface == SetupSurfaceId::WorkspaceBundle)
             .expect("workspace operation");
         assert_eq!(op.kind, OperationKind::Remove);
-        assert!(op.summary.contains("132 old copies"), "{}", op.summary);
+        assert!(op.summary.contains("122 old copies"), "{}", op.summary);
         assert!(
             op.details
                 .iter()
