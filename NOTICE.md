@@ -109,6 +109,14 @@ SOFTWARE.
 
 `delegate` draws on two skills of [obra/superpowers](https://github.com/obra/superpowers) at commit `2ce8aa15d05bd57213e6f746f953aafb7ded7a8b`: from `skills/dispatching-parallel-agents/SKILL.md`, one agent per independent slice with no shared files or state, a focused, self-contained brief with explicit constraints and expected output, and checking the returned work for conflicts before running the full suite; from `skills/using-git-worktrees/SKILL.md`, preferring the harness's native worktree tool over `git worktree add`, and a clean baseline run in the new worktree before work starts. The wording is Riggverk's; the CLI recipes, write confinement and the PR-style review are Riggverk's own. Same MIT license and copyright as in the superpowers writing-plans entry above.
 
+## superpowers receiving-code-review
+
+`review-response` adapts the method of `skills/receiving-code-review/SKILL.md` in [obra/superpowers](https://github.com/obra/superpowers) at commit `2ce8aa15d05bd57213e6f746f953aafb7ded7a8b`. Used: verify each point against the codebase before implementing it, no performative agreement or gratitude in replies, clarify unclear items before implementing related ones, the "is it actually used" check before building requested scope, fixing blocking issues first, pushing back with technical evidence, a one-line correction when pushback was wrong, and replying inside the review thread. The wording is Riggverk's; the fix, push back and ask verdicts, one commit per theme, and approval before posting are Riggverk's own. Same MIT license and copyright as in the superpowers writing-plans entry above.
+
+## openai/skills gh-address-comments
+
+`review-response` also draws on the `gh-address-comments` skill of [openai/skills](https://github.com/openai/skills) (`skills/.curated/gh-address-comments/SKILL.md`, read at commit `49f948faa9258a0c61caceaf225e179651397431`), licensed under the [Apache License, Version 2.0](https://www.apache.org/licenses/LICENSE-2.0). Used: finding the open PR of the current branch with gh, numbering every review thread and comment with a short summary of the fix it needs, and letting the user choose which items to address before changing code. Changes: the text is Riggverk's own, threads are read with the GitHub GraphQL API instead of a bundled script, and each item is verified and sorted before the user chooses. No files of that work are included.
+
 ## Cloudflare security-audit-skill
 
 The bundled `security-audit` skill is vendored from [cloudflare/security-audit-skill](https://github.com/cloudflare/security-audit-skill) at commit `c1c8a8c1471069fb0e188eeaff69b8e8db6564a8`, as recorded in [UPSTREAM.md](resources/default-workspace/skills/security-audit/UPSTREAM.md).

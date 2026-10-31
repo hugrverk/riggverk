@@ -425,6 +425,11 @@
       "sha256:776fc331b53ef022c1a7b7255d9d9c07dd3dfd68a5f9ab63dcbbe1f5ed3ece27",
       "sha256:c3ff6297bd1645b85ae9375c2f22813b9aa97a9542f6e04d493860111cd4ea76"
     ],
+    "skills/review-response/SKILL.md": [
+      "sha256:3f48f0b5825f34b8952b2d6cacbfd85e30730bdcc445c56ecebfd4e15f816a13",
+      "sha256:9d6a00aeaa8a44063146c50b22af3dcf50d418fc7c72ccdab0ec46d7717d2545",
+      "sha256:eca711ea878af45b4d0125cfbf4cb47b31c41e4ce8a8992f2207aea3fac9f5b7"
+    ],
     "skills/screenshot-review/SKILL.md": [
       "sha256:01caeed63aa3ab50ab0437b79ad868d810066f07dbcb66f2d5112678209f1dc0",
       "sha256:0e56eefa258c27afdb0a72ef4b1f6eb0d649949ae13725107c247c120b2e1728",

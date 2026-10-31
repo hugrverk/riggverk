@@ -27,6 +27,7 @@ Do not duplicate full `SKILL.md` content here. This file is an index for choosin
 | `pr-workflow` | Turning finished work into logical commits that follow the repo's own convention, running the gate, pushing a branch and opening or updating a PR with gh. Never force-pushes; each commit, push and PR step needs an explicit ok. Ships `assets/pr-body.template.md`. |
 | `prototype` | Validating throwaway UI variants, state-machine/data-model checks, and interaction experiments before production implementation. |
 | `retro` | User-invoked only (`/retro`, `$retro` in Codex): reviewing a named coding session and proposing ranked, evidence-traced improvements to steering files, checks, and tooling. Proposals only. |
+| `review-response` | Working through review comments on a PR (fetched with `gh api` or pasted): verifies each claim against the code, sorts it into fix, push back with evidence, or ask, commits one theme at a time, and drafts one reply per thread without performative agreement. Posts replies only after explicit approval and never resolves threads. |
 | `release-check` | Running pre-merge or pre-deploy readiness checks, including tests, migrations, env risk, smoke routes, and rollback. |
 | `release-notes` | Drafting user-facing release notes or a changelog section from commits and merged PRs since the last tag, in the project's own format and language: breaking changes first, internal chores excluded with reasons, human curation required. Writes into the repo's notes file only when asked, after showing the diff. |
 | `screenshot-review` | Reviewing supplied UI screenshots before implementation or for responsive/layout critique. |
@@ -62,6 +63,7 @@ Domain skills for a team's own projects and stack are not bundled: keep them in 
 | `security-review` / `sentinel` (agent) | Skill guides the review in the current context; where the harness has the sentinel agent (OpenCode, Claude), it performs an independent read-only review of a finished diff, otherwise the review stays inline. |
 | `retro` / `context-budget` | Retro mines one named session for environment fixes; context-budget audits instruction surfaces without a session. |
 | `zoom-out` / repo-scout (agent) | Zoom-out explains code context in chat; repo-scout agent maps unfamiliar repos read-only before implementation. |
+| `review-response` / `/code-review` | `/code-review` (or the `inspector` agent) reviews a diff; review-response answers someone else's review of the user's PR, claim by claim. |
 
 ## Common Combinations
 
@@ -86,6 +88,7 @@ Domain skills for a team's own projects and stack are not bundled: keep them in 
 - Adversarial review of a diff or plan: `adversarial-review`, only when the user explicitly asks for it (it is not routed by the rules).
 - Adversarial tests: `adversarial-test`, only when the user explicitly asks for adversarial tests (it is not routed by the rules).
 - Review passes: Claude Code uses the built-in `/code-review` and `/simplify`; other harnesses use the `inspector` agent.
+- Review comments on the user's PR: `review-response`; add `minimal-implementation` for the fixes.
 
 ## Skill Metadata
 
