@@ -1331,8 +1331,11 @@ mod tests {
         assert_eq!(counts.get("security-audit"), Some(&19));
         assert_eq!(counts.get("kretsverket-status-report"), Some(&2));
         assert_eq!(counts.get("adversarial-implementation"), Some(&2));
+        assert_eq!(counts.get("adversarial-review"), Some(&2));
+        assert_eq!(counts.get("adversarial-test"), Some(&2));
+        assert_eq!(counts.get("browser-qa"), Some(&1));
         assert_eq!(counts.get("status-report"), Some(&4));
-        assert_eq!(counts.len(), 4, "{counts:?}");
+        assert_eq!(counts.len(), 7, "{counts:?}");
         assert_eq!(
             canonical_skill_dir(&repo, "kretsverket-status-report"),
             repo.join("skills/kretsverket/kretsverket-status-report")
