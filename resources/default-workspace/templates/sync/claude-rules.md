@@ -27,6 +27,7 @@ Do not trade away correctness, security, or final verification quality to save t
 Use skills as routing and workflow guidance, not boilerplate. Select only task-relevant skills; usually 1-3. Do not paste full skill contents unless needed. Translate skill expectations into concrete actions, acceptance criteria, verification, and reporting; skill names alone are not enough. Prefer a repository's own `docs/SKILLS.md` for the full catalog when that file exists; do not go looking for it otherwise.
 - Code implementation and refactoring: `minimal-implementation`.
 - Bugs, regressions, flakes, or slowness: `diagnose`; add `tdd` for a focused regression test.
+- Red CI runs or failing PR checks: `ci-triage`, which hands root cause to `diagnose`.
 - Unfamiliar or architectural code: `zoom-out`; add `implementation-plan` before non-trivial edits.
 - Multi-step work: `implementation-plan`; add `context-budget` for broad or noisy work.
 - Frontend: `frontend-design`; add `screenshot-review`, `browser-qa`, `accessibility-review`, or `prototype` as needed.

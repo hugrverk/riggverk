@@ -13,6 +13,7 @@ Do not duplicate full `SKILL.md` content here. This file is an index for choosin
 | `adversarial-test` | Only when the user explicitly asks for it, in plain words ("write adversarial tests", "let an adversary write the tests"; in Swedish "skriv adversariella tester") or with `/adversarial-test`; it is kept out of the routing rules: a fresh read-only adversary, chosen by capability first, proposes failing tests tied to the acceptance criteria. The lead keeps only tests it ran and saw fail for the stated reason, freezes them, and the implementer changes production code only or reports `BLOCKED`. At most two rounds; only tests that protect a criterion stay. Roles as for `adversarial-implementation`. |
 | `accessibility-review` | Reviewing UI for WCAG 2.2 AA risks, semantics, controls, keyboard, focus, labels, contrast, and responsive usability. |
 | `browser-qa` | Verifying frontend changes with live browser checks, route smoke tests, interactions, responsive checks, console/network review, and evidence. |
+| `ci-triage` | A red CI run or failing PR checks: reads the failed job logs with `gh run view --log-failed` (bounded, secrets never printed), classifies each failure as code, flaky test, environment or infra, reproduces it with the repo's own command, then hands root cause to `diagnose`. Reruns only infra failures, with the user's ok. Works from a pasted log without gh. |
 | `context-budget` | Reducing duplicated rules, docs, prompts, skills, and token overhead without removing essential safety guidance. |
 | `current-docs` | Checking official/current docs for version-specific APIs, SDKs, CLIs, config, hooks, or platform behavior. |
 | `database-migrations` | Planning or reviewing schema/data changes with migration, rollback, and DB push reporting. |
@@ -37,6 +38,7 @@ Domain skills for a team's own projects and stack are not bundled: keep them in 
 
 | Pair | Distinct roles |
 | --- | --- |
+| `ci-triage` / `diagnose` | Ci-triage turns a red CI run into a classified failure and a local reproduction; diagnose finds the root cause from that loop. |
 | `diagnose` / `tdd` | Diagnose finds root cause; TDD locks behavior with a narrow test once the contract is clear. |
 | `minimal-implementation` / `adversarial-implementation` | Minimal-implementation is one bounded patch by the current agent; adversarial-implementation runs that patch through a separate implementer and a fresh hostile critic per round, only when the user asks for it. |
 | `adversarial-implementation` / `adversarial-review` | Adversarial-implementation writes a change through a critic loop; adversarial-review attacks work that already exists, or a plan, and fixes nothing. "Have a critic review it" (in Swedish "låt en kritiker granska") about finished work or a plan means adversarial-review. |
@@ -55,6 +57,7 @@ Domain skills for a team's own projects and stack are not bundled: keep them in 
 ## Common Combinations
 
 - Bugs or regressions: `diagnose`; add `tdd` when a narrow regression test is useful.
+- Red CI run or failing PR checks: `ci-triage`, then `diagnose` for root cause.
 - Code implementation: `minimal-implementation`; add `implementation-plan` for larger slices.
 - Unfamiliar code: `zoom-out`, then `implementation-plan` if edits are needed.
 - Frontend implementation: `frontend-design`; add `browser-qa` for runtime verification and `accessibility-review` for UI risk.
