@@ -16,6 +16,7 @@ Do not duplicate full `SKILL.md` content here. This file is an index for choosin
 | `context-budget` | Reducing duplicated rules, docs, prompts, skills, and token overhead without removing essential safety guidance. |
 | `current-docs` | Checking official/current docs for version-specific APIs, SDKs, CLIs, config, hooks, or platform behavior. |
 | `database-migrations` | Planning or reviewing schema/data changes with migration, rollback, and DB push reporting. |
+| `delegate` | Handing a well-specified mechanical or parallel slice to another installed agent CLI (`codex exec`, `claude -p`, `opencode run`) or a subagent, only when the user wants other agents used. Each slice runs in its own git worktree with a self-contained brief, a time budget and the user's configured model; the lead reviews the branch like a PR, re-runs every check itself and integrates by merge or cherry-pick. Ships `delegate-recipes.md` (preflight, timeout, environment and write confinement per CLI). |
 | `diagnose` | Debugging bugs, failures, flakes, slowness, and regressions with a red-capable feedback loop and falsifiable hypotheses. |
 | `frontend-design` | Designing or improving frontend UI across repositories with coherent aesthetic direction, accessibility, and verification. |
 | `handoff` | Reviewing executor evidence or compacting paused work into a trustworthy handoff with verified state and next action. |
@@ -42,6 +43,8 @@ Domain skills for a team's own projects and stack are not bundled: keep them in 
 | `adversarial-implementation` / `adversarial-review` | Adversarial-implementation writes a change through a critic loop; adversarial-review attacks work that already exists, or a plan, and fixes nothing. "Have a critic review it" (in Swedish "låt en kritiker granska") about finished work or a plan means adversarial-review. |
 | `adversarial-review` / `/code-review` | `/code-review` (or the `inspector` agent) is the routine review; adversarial-review runs a fresh critic from another route and reports only findings the lead proved, only when the user asks for it. |
 | `tdd` / `adversarial-test` | TDD has the current agent write each test and then the code; adversarial-test has a separate adversary write the tests and a separate implementer fix the code against them frozen, only when the user explicitly asks for it. |
+| `delegate` / `adversarial-implementation` | Delegate hands a slice to another agent and the lead reviews and verifies it once; adversarial-implementation adds a fresh hostile critic every round and runs only when the user asks for it. |
+| `delegate` / `handoff` | Delegate runs another agent on a slice and verifies its branch; handoff compacts state or reviews a report another agent already produced. |
 | `implementation-plan` / `minimal-implementation` | Plan defines slices; minimal-implementation executes one bounded patch. |
 | `frontend-design` / `screenshot-review` | Screenshot-review diagnoses static images; frontend-design chooses direction and implements. |
 | `frontend-design` / `accessibility-review` | Frontend-design includes baseline a11y during implementation; accessibility-review is a specialist audit. |
