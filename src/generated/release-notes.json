@@ -6,18 +6,33 @@
         {
           "title": "New",
           "items": [
-            "Add review-response skill",
-            "Add release-notes skill",
-            "Add ci-triage skill",
-            "Add pr-workflow skill",
-            "Add delegate skill",
-            "Add agents-md skill"
+            "Six skills for the work around the code. Every one of them writes in your repository, commits, pushes or posts only when you ask for that step, and shows you the change first.",
+            "`pr-workflow` turns finished work into clean commits and a pull request. It:",
+            "follows your repository's own conventions;",
+            "runs the gate before the push and writes the PR text from the diff;",
+            "never force-pushes",
+            "`review-response` works through review comments on a PR. It:",
+            "checks each point against the code before acting, then sorts it into fix, push back with evidence, or ask;",
+            "drafts one reply per thread and posts only the replies you approve",
+            "`ci-triage` reads the failed logs of a red CI run without printing secrets. It:",
+            "classifies the failure as code, flaky test, environment or infrastructure;",
+            "reproduces it locally and hands the cause to `diagnose`;",
+            "reruns a job only on your explicit yes",
+            "`release-notes` drafts notes or a changelog section from the merged PRs since the last tag, in your project's own format and language",
+            "`agents-md` creates or refreshes a repository's `AGENTS.md` from commands it has actually run, plus an optional `CLAUDE.md` pointer, so every agent shares one file",
+            "`delegate` hands a well-specified slice to another installed agent, such as Codex, Claude Code or OpenCode, in its own git worktree. It then reviews the result like a pull request and runs every check again. It runs only when you want other agents used"
           ]
         },
         {
           "title": "Fixes",
           "items": [
-            "Keep a sheet opened right after a topic switch"
+            "In the Library, an item you open right after switching topics no longer closes again on a busy machine"
+          ]
+        },
+        {
+          "title": "Changes",
+          "items": [
+            "README credits the skill collections that some bundled skills adapt, with links and licenses"
           ]
         }
       ]
