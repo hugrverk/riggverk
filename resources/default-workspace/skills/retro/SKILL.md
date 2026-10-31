@@ -1,6 +1,6 @@
 ---
 name: retro
-description: Reviews a coding session the user names (default the current conversation) and proposes ranked improvements to the agent environment, not the code. Use when the user invokes /retro to improve navigation, checks, rules, or tool economy. Proposals only; applies nothing.
+description: Reviews one coding session and proposes ranked improvements to the agent environment, not the code. Use when the user explicitly asks for a retro (/retro, or $retro in Codex), never on your own. Proposals only; applies nothing.
 license: MIT
 disable-model-invocation: true
 metadata:
@@ -16,6 +16,10 @@ metadata:
 Improve the agent's environment (steering files, checks, tooling, information access) from evidence in one session. Do not touch the code the session was about.
 
 Done when: ranked proposals are presented, each traced to a session moment, and nothing has been applied.
+
+## Invocation
+
+Run only when the user asks for a retro by name (`/retro`, `$retro` in Codex, or the words "retro" or "retrospective"). Claude Code and Cursor honour `disable-model-invocation` and hide this skill from the model; Codex, OpenCode and the light harnesses ignore it, so there the rule is yours to keep: never start it because a session went badly or ended.
 
 ## Scope
 

@@ -49,7 +49,8 @@ Done when: each affected route loaded without unclassified console errors or fai
    - Obvious contrast, heading, landmark, and semantic issues.
 8. Capture screenshots or traces where useful for layout, regression evidence, or failure diagnosis.
 9. Stop any dev server you started before the final report. If cleanup cannot be completed safely, report exact port/process status and risk.
-10. Keep the run bounded; list untested flows instead of pretending coverage is complete.
+10. No browser tool in the session (the Playwright MCP server is off by default in some harnesses)? Use the Playwright CLI route in `playwright-cli.md` next to this file instead of skipping the browser run.
+11. Keep the run bounded; list untested flows instead of pretending coverage is complete.
 
 ## Output
 
@@ -67,7 +68,7 @@ Done when: each affected route loaded without unclassified console errors or fai
 
 - Do not rely only on a screenshot for interaction claims.
 - Do not hide console or network failures; classify whether they block the task.
-- Do not require a specific browser MCP or tool; use available local tooling.
+- Do not require a specific browser MCP or tool; use available local tooling, down to the Playwright CLI.
 - Do not claim browser smoke completed without reporting dev server lifecycle status.
 
 ## Harness notes
@@ -76,9 +77,13 @@ Done when: each affected route loaded without unclassified console errors or fai
 
 - When the Claude Code Browser pane tools are available, prefer them: `preview_start` (a `.claude/launch.json` entry or a URL) to launch or attach, `navigate` plus `read_page`/`find` for structure, `read_console_messages` and `read_network_requests` for failures, `resize_window` presets for responsive checks, and screenshots as evidence.
 - Attach to an already-running dev server with a url-only launch entry instead of starting a duplicate.
-- Without browser tooling, fall back to available automation (Playwright, curl smoke) and state what could not be exercised.
+- Without browser tooling, use the Playwright CLI route in `playwright-cli.md` and state what could not be exercised.
 
 ### Codex
 
 - Prefer Playwright, browser tools, appshots, screenshots, CDP inspection, or computer-use tools according to what is available in the session.
 - Capture concise evidence: route, viewport, interaction, console or network findings, and screenshot path when visual proof matters.
+
+### Light harnesses
+
+- The Playwright MCP entry is off unless the harness is enabled in Riggverk and the server is running in that session. If no browser tool is listed, do not claim browser verification: follow `playwright-cli.md`.

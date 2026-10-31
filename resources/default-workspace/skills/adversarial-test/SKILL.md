@@ -2,7 +2,7 @@
 name: adversarial-test
 description: A fresh adversary writes failing tests tied to the acceptance criteria; the lead qualifies and freezes them, and the implementer fixes production code only or reports BLOCKED. Use when the user explicitly asks for adversarial tests ("write adversarial tests"), never unasked.
 license: MIT
-compatibility: Needs subagents, or Codex, Claude Code or OpenCode as a critic CLI; with neither it stops, since a self-review is not adversarial. Reads adversarial-roles.md and critic-recipes.md from the adversarial-implementation skill.
+compatibility: Needs subagents, or Codex, Claude Code or OpenCode as a critic CLI; with neither it stops, since a self-review is not adversarial.
 metadata:
   category: testing
   risk: medium
@@ -26,9 +26,9 @@ Done when: an adversary round produced no new qualified failing test, or two rou
 
 ## Choose the roles
 
-Resolve `adversary` and `implementer` with the shared convention in `../adversarial-implementation/adversarial-roles.md`: chat ("adversary: codex", "adversary: claude"), then `roles.json` next to this file, then the `Adversarial roles:` line below END in the rules (`Adversarial roles: adversary=codex/<model>`), then the default. The default adversary follows the same capability rule as the default critic there. Never ask the user to configure anything first.
+Resolve `adversary` and `implementer` with the shared convention in `adversarial-roles.md` next to this file: chat ("adversary: codex", "adversary: claude"), then `roles.json` next to this file, then the `Adversarial roles:` line below END in the rules (`Adversarial roles: adversary=codex/<model>`), then the default. The default adversary follows the same capability rule as the default critic there. Never ask the user to configure anything first.
 
-External adversaries are Codex, Claude Code and OpenCode, run with the read-only recipes in `../adversarial-implementation/critic-recipes.md` (preflight, flags, timeout, environment, failure modes), with the adversary brief as `brief.md`. In-harness adversaries are in the Harness notes. If those two files are missing, say so in the start line and use a fresh in-harness subagent. When a route fails, say which and why in one line and take the next candidate. With no way to delegate the adversary, say so and stop: tests you write yourself are not adversarial and must not be reported as such.
+External adversaries are Codex, Claude Code and OpenCode, run with the read-only recipes in `critic-recipes.md` next to this file (preflight, flags, timeout, environment, failure modes), with the adversary brief as `brief.md`. In-harness adversaries are in the Harness notes. If those two files are missing, say so in the start line and use a fresh in-harness subagent. When a route fails, say which and why in one line and take the next candidate. With no way to delegate the adversary, say so and stop: tests you write yourself are not adversarial and must not be reported as such.
 
 Before round 1, print the start line from `adversarial-roles.md` in the user's language, for example:
 
@@ -138,20 +138,24 @@ Background: the split between a test agent and a repair agent, with qualified te
 ### Claude Code
 
 - Implementer: one `general-purpose` subagent, continued between rounds (SendMessage) so it keeps its context. With `implementer=codex`, run `codex exec -s workspace-write` non-interactively instead (brief on stdin, `-o` for the final message, in the background) and check the path guard the same way.
-- Adversary, other family: Codex with the recipe in `../adversarial-implementation/critic-recipes.md`. If Claude Code's sandbox is on, Codex cannot start its own sandbox inside it; run that one command outside the sandbox with the user's approval, or fall back.
+- Adversary, other family: Codex with the recipe in `critic-recipes.md` next to this file. If Claude Code's sandbox is on, Codex cannot start its own sandbox inside it; run that one command outside the sandbox with the user's approval, or fall back.
 - Adversary, same family: a fresh `inspector` subagent per round, on the strongest model you have. It has no shell; the pasted diff and the file paths are all it needs.
 
 ### Codex
 
 - Implementer: one write-capable subagent for the whole loop, continued between rounds.
-- Adversary, other family: Claude Code with the recipe in `../adversarial-implementation/critic-recipes.md`. Your sandbox blocks network and hides the login keychain, so request escalated permissions for that command (one approval per round), or fall back.
+- Adversary, other family: Claude Code with the recipe in `critic-recipes.md` next to this file. Your sandbox blocks network and hides the login keychain, so request escalated permissions for that command (one approval per round), or fall back.
 - Adversary, same family: a fresh `inspector` agent (read-only sandbox) per round.
 
 ### OpenCode
 
 - Degraded mode: you implement the production changes yourself; say so in the start line (`implementer=lead, degraded`). The adversary stays a separate fresh agent, and the frozen tests and the path guard bind you as they would bind an implementer.
-- Adversary: a fresh `inspector` task per round, on the critic model set on Riggverk's OpenCode page when one is set; or Codex or Claude Code through bash with the recipes in `../adversarial-implementation/critic-recipes.md`.
+- Adversary: a fresh `inspector` task per round, on the critic model set on Riggverk's OpenCode page when one is set; or Codex or Claude Code through bash with the recipes in `critic-recipes.md` next to this file.
 
 ### Cursor
 
 - Use Cursor's own subagents only: a fresh `inspector` (read-only) per round as the adversary, and a write-capable subagent as the implementer if your Cursor version has one; otherwise run the OpenCode degraded mode. External adversary CLIs are not offered from Cursor.
+
+### Light harnesses
+
+- Copilot, Pi, Kilo, Antigravity and Grok have no verified in-harness adversary or implementer route. Use Codex, Claude Code or OpenCode through bash with the recipes in `critic-recipes.md` as the adversary when one is installed and its preflight passes; it stays read-only. The OpenCode degraded mode applies: you implement the production changes yourself (`implementer=lead, degraded`), bound by the frozen tests and the path guard. With no external adversary, say the skill is unsupported here and stop.

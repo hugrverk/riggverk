@@ -2,7 +2,7 @@
 name: adversarial-review
 description: A fresh read-only critic attacks an existing diff or a plan; the lead keeps only findings it proves and fixes nothing. Use when the user explicitly asks for an adversarial review ("run an adversarial review", "have a critic review the plan"), never unasked. Not for routine reviews (/code-review).
 license: MIT
-compatibility: Needs subagents, or Codex, Claude Code or OpenCode as a critic CLI; with neither it stops, since a self-review is not adversarial. Reads adversarial-roles.md and critic-recipes.md from the adversarial-implementation skill.
+compatibility: Needs subagents, or Codex, Claude Code or OpenCode as a critic CLI; with neither it stops, since a self-review is not adversarial.
 metadata:
   category: review
   risk: medium
@@ -26,7 +26,7 @@ Done when: the verified findings, each with its proof result and verdict, are re
 
 ## Choose the critic
 
-Resolve the critic with the shared convention in `../adversarial-implementation/adversarial-roles.md` (installed next to this skill's folder): chat, then `roles.json` in this skill's own folder, then the `Adversarial roles:` line below END in the user's rules, then the default. This skill has no implementer, so an `implementer` value is ignored; where that file compares the critic with the implementer, compare it with the author of the change (your own model when unknown). Run external critics (Codex, Claude Code, OpenCode) with `../adversarial-implementation/critic-recipes.md`; in-harness critics are in the Harness notes. Cursor criticises only through its own subagents; Copilot, Pi and Kilo are not offered.
+Resolve the critic with the shared convention in `adversarial-roles.md` in this skill's folder: chat, then `roles.json` next to it, then the `Adversarial roles:` line below END in the user's rules, then the default. This skill has no implementer, so an `implementer` value is ignored; where that file compares the critic with the implementer, compare it with the author of the change (your own model when unknown). Run external critics (Codex, Claude Code, OpenCode) with `critic-recipes.md` in this skill's folder; in-harness critics are in the Harness notes. Cursor criticises only through its own subagents; Copilot, Pi and Kilo are not offered.
 
 Never ask the user to configure anything first. Before the critic runs, print the start line in the user's language, for example:
 
@@ -148,19 +148,23 @@ Background: the fresh critic, the steel-man finding format and the Fatal, Signif
 ### Claude Code
 
 - Routine reviews stay with the built-in `/code-review`; use this skill only on an explicit request.
-- Critic, other family: Codex with the recipe in `../adversarial-implementation/critic-recipes.md`. If Claude Code's sandbox is on, Codex cannot start its own sandbox inside it (`sandbox_apply: Operation not permitted`); run that one command outside the sandbox with the user's approval, or fall back.
+- Critic, other family: Codex with the recipe in `critic-recipes.md` next to this file. If Claude Code's sandbox is on, Codex cannot start its own sandbox inside it (`sandbox_apply: Operation not permitted`); run that one command outside the sandbox with the user's approval, or fall back.
 - Critic, same family: a fresh `inspector` subagent, with the model set to the strongest you have (your rules allow this for the critic only). It has no shell; the pasted diff is all it needs.
 
 ### Codex
 
-- Critic, other family: Claude Code with the recipe in `../adversarial-implementation/critic-recipes.md`. Your sandbox blocks network and hides the login keychain, so request escalated permissions for that command, or fall back.
+- Critic, other family: Claude Code with the recipe in `critic-recipes.md` next to this file. Your sandbox blocks network and hides the login keychain, so request escalated permissions for that command, or fall back.
 - Critic, same family: a fresh `inspector` agent (read-only sandbox). Use this skill's brief, not the built-in review prompt.
 
 ### OpenCode
 
 - Critic, same harness: a fresh `inspector` task. It runs on the critic model set on Riggverk's OpenCode page (critic model row) when one is set, otherwise on the subagent or default model; if that is weaker than the author's model, set a stronger one there or use an external critic.
-- Critic, other harness: Codex or Claude Code through bash with the recipes in `../adversarial-implementation/critic-recipes.md`; bash asks for approval once per run.
+- Critic, other harness: Codex or Claude Code through bash with the recipes in `critic-recipes.md` next to this file; bash asks for approval once per run.
 
 ### Cursor
 
 - Use Cursor's own subagents only: a fresh `inspector` (read-only) is the critic. External critic CLIs are not offered from Cursor.
+
+### Light harnesses
+
+- Copilot, Pi, Kilo, Antigravity and Grok have no verified in-harness critic route. Use Codex, Claude Code or OpenCode through bash with the recipes in `critic-recipes.md` when one is installed and its preflight passes; otherwise say so and stop.

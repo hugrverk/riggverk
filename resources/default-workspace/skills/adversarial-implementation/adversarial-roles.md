@@ -1,6 +1,6 @@
 # Adversarial roles
 
-How every adversarial skill decides who implements and who criticises. It works with no setup: the defaults run on the first try, and the user changes a role in one short phrase. Other adversarial skills read this file at `../adversarial-implementation/adversarial-roles.md`, relative to their own directory.
+How every adversarial skill decides who implements and who criticises. It works with no setup: the defaults run on the first try, and the user changes a role in one short phrase. Every adversarial skill carries an identical copy of this file in its own folder, so none reads another skill's folder; `scripts/check-skill-routing.py` fails when the copies differ.
 
 ## Roles
 

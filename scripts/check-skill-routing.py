@@ -40,7 +40,8 @@ COMPATIBILITY_MAX_CHARS = 500
 # Harness-specific text lives in the canonical SKILL.md under `## Harness notes`, one `###`
 # subsection per harness in this fixed order. Every harness installs the same bytes.
 HARNESS_NOTES_HEADING = "## Harness notes"
-HARNESS_NOTES_SECTIONS = ("Claude Code", "Codex", "OpenCode", "Cursor")
+# "Light harnesses" covers Copilot, Pi, Kilo, Antigravity and Grok, whose notes are rarely needed.
+HARNESS_NOTES_SECTIONS = ("Claude Code", "Codex", "OpenCode", "Cursor", "Light harnesses")
 CLAUDE_NOTES_HEADING = "### Claude Code"
 # Frontmatter keys only Claude Code acts on; Codex and OpenCode ignore them.
 CLAUDE_ONLY_KEYS = ("context", "agent", "background", "allowed-tools")
@@ -60,6 +61,13 @@ DESCRIPTION_TRIGGER = "Use when"
 DONE_WHEN_RE = re.compile(r"^Done when: \S", re.MULTILINE)
 BLOCK_SCALAR_RE = re.compile(r"^[>|][+-]?\d*$")
 PLAIN_SCALAR_BAD_START = "\"'[]{}>|*&!%@`#"
+
+# A skill is installed on its own, so it may not read another skill's files. Skills that share a
+# reference carry identical copies of it; these are the files that must match across a family.
+SHARED_REFERENCE_FAMILIES = {
+    "adversarial-": ("adversarial-roles.md", "critic-recipes.md"),
+}
+URL_RE = re.compile(r"https?://\S+", re.IGNORECASE)
 
 STATIC_ROUTING_SOURCES = [
     WS_ROOT / "docs/SKILLS.md",
@@ -505,6 +513,45 @@ def validate_canonical_skill_files(discovered: dict[str, Path]) -> None:
         validate_harness_notes(path, frontmatter, body)
 
 
+def validate_no_sibling_references(discovered: dict[str, Path]) -> None:
+    """A skill's files never point into another skill's folder (`../other-skill/...`)."""
+    names = sorted(discovered, key=len, reverse=True)
+    for name, skill_md in discovered.items():
+        siblings = [other for other in names if other != name]
+        pattern = re.compile(r"(?<![\w.-])(?:\.\./|skills/)(" + "|".join(re.escape(s) for s in siblings) + r")/")
+        for file in sorted(skill_md.parent.rglob("*")):
+            if not file.is_file() or file.is_symlink():
+                continue
+            try:
+                text = file.read_text(encoding="utf-8")
+            except UnicodeDecodeError:
+                continue  # binary file
+            for number, line in enumerate(text.splitlines(), 1):
+                urls = [url.span() for url in URL_RE.finditer(line)]
+                for match in pattern.finditer(line):
+                    if any(start <= match.start() < end for start, end in urls):
+                        continue  # a path inside an external URL is not a skill reference
+                    fail(
+                        f"{rel(file)}:{number}: references the files of skill {match.group(1)!r}; "
+                        "a skill is installed on its own, so give it its own copy"
+                    )
+
+
+def validate_shared_reference_copies(discovered: dict[str, Path]) -> None:
+    """Skills of a family carry byte-identical copies of their shared reference files."""
+    for prefix, filenames in SHARED_REFERENCE_FAMILIES.items():
+        family = {name: path.parent for name, path in discovered.items() if name.startswith(prefix)}
+        for filename in filenames:
+            copies: dict[str, bytes] = {}
+            for name, folder in family.items():
+                target = folder / filename
+                if not target.is_file():
+                    fail(f"{rel(target)}: missing; every {prefix}* skill carries its own copy of {filename}")
+                copies[name] = target.read_bytes()
+            if len(set(copies.values())) > 1:
+                fail(f"{filename}: copies differ across {sorted(copies)}; edit one and copy it to the others")
+
+
 # Phrases of the retired model, one skills folder per harness (Codex in $CODEX_HOME/skills, Cursor
 # in ~/.cursor/skills, ~/.agents/skills as an "old" Codex location).
 STALE_SKILL_FOLDER_CLAIMS = [
@@ -650,6 +697,8 @@ def main() -> None:
     validate_related(discovered_map)
     validate_descriptions(discovered_map)
     validate_canonical_skill_files(discovered_map)
+    validate_no_sibling_references(discovered_map)
+    validate_shared_reference_copies(discovered_map)
     validate_routing_sources(discovered)
     validate_user_invoked_routing(discovered_map)
     validate_agent_metadata(discovered_map)
