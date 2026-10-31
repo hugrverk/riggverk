@@ -28,6 +28,7 @@ Do not duplicate full `SKILL.md` content here. This file is an index for choosin
 | `prototype` | Validating throwaway UI variants, state-machine/data-model checks, and interaction experiments before production implementation. |
 | `retro` | User-invoked only (`/retro`, `$retro` in Codex): reviewing a named coding session and proposing ranked, evidence-traced improvements to steering files, checks, and tooling. Proposals only. |
 | `release-check` | Running pre-merge or pre-deploy readiness checks, including tests, migrations, env risk, smoke routes, and rollback. |
+| `release-notes` | Drafting user-facing release notes or a changelog section from commits and merged PRs since the last tag, in the project's own format and language: breaking changes first, internal chores excluded with reasons, human curation required. Writes into the repo's notes file only when asked, after showing the diff. |
 | `screenshot-review` | Reviewing supplied UI screenshots before implementation or for responsive/layout critique. |
 | `security-audit` | An explicit full codebase security audit or pen test: Cloudflare's six-phase workflow with independent verification and validated `findings.json`. Vendored (MIT); companion files and validators install next to its `SKILL.md`. |
 | `security-review` | Reviewing auth, authorization, input, secrets, uploads, API endpoints, payments, shell execution, or sensitive data. |
@@ -56,6 +57,7 @@ Domain skills for a team's own projects and stack are not bundled: keep them in 
 | `agents-md` / global rules | `agents-md` writes a repository's own `AGENTS.md` from verified facts; it never edits or repeats the user's global rules, which the project file complements. |
 | `handoff` / `release-check` | Handoff compacts session state; release-check validates merge/deploy readiness. |
 | `pr-workflow` / `release-check` | Pr-workflow commits, pushes and opens the PR, and runs the repo's gate before the push; release-check owns the go/no-go verdict on merge or deploy readiness. |
+| `release-notes` / `release-check` | Release-notes drafts what changed for users; release-check decides whether the branch is ready to ship. |
 | `security-review` / `security-audit` | Security-review checks a change or answers a focused question in the current context; security-audit runs a full multi-agent audit of a whole codebase only when one is explicitly asked for. |
 | `security-review` / `sentinel` (agent) | Skill guides the review in the current context; where the harness has the sentinel agent (OpenCode, Claude), it performs an independent read-only review of a finished diff, otherwise the review stays inline. |
 | `retro` / `context-budget` | Retro mines one named session for environment fixes; context-budget audits instruction surfaces without a session. |
@@ -77,6 +79,7 @@ Domain skills for a team's own projects and stack are not bundled: keep them in 
 - Commit, push and open or update a PR: `pr-workflow`; add `release-check` before the push.
 - Release readiness: `release-check`.
 - Onboarding agents to a repo, or a missing or stale `AGENTS.md`: `agents-md`.
+- Release notes or a changelog section: `release-notes`; add `release-check` for the gate.
 - Docs, rules, or prompt consolidation: `context-budget`; add `implementation-plan` for explicit maps.
 - Session retrospective: `retro`, only when the user invokes `/retro` or `$retro` (it is not routed by the rules).
 - Adversarial implementation: `adversarial-implementation`, only when the user asks for it (it is not routed by the rules).
