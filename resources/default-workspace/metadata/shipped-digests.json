@@ -390,6 +390,11 @@
       "sha256:ef6e8b45c9dfaf2b5dd0f47b1042d1ebc8a743869ca3fb95bb4a95ecd0ea157e",
       "sha256:fcde3a3f23117d2ced4e9bab26b3984ee5f88e3fb3b88b06c28d41379f3399f5"
     ],
+    "skills/release-notes/SKILL.md": [
+      "sha256:662c884e0f4496ecac87207acf0330e59bc917dd1106931e62f4b32256ea9dd0",
+      "sha256:6f2b9a555dd9b1d66ed05c60084f8329292de305d644020257a6a82228b27957",
+      "sha256:9f2bf4f7c2d48d293b1653b3fc51f2d1061d8cbc4a7eb29e0a89553af617227d"
+    ],
     "skills/retro/SKILL.md": [
       "sha256:6a9eab05a9a22e848b2260f988aadcc5fd912f2cb79e35d3d71ee2d9b245ef41",
       "sha256:776fc331b53ef022c1a7b7255d9d9c07dd3dfd68a5f9ab63dcbbe1f5ed3ece27",

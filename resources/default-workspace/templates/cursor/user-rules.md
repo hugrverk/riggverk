@@ -52,6 +52,7 @@ Use skills as routing and workflow guidance, not boilerplate. Select only task-r
 - Database or persisted data changes: `database-migrations`; add `security-review` where access control or sensitive data is involved.
 - Fast-moving APIs, SDKs, CLIs, frameworks, or dependencies: `current-docs`; add `security-review` when trusted surface expands.
 - Release readiness: `release-check`.
+- Release notes or a changelog section: `release-notes`.
 - Executor reports, paused work, or context transfer: `handoff`.
 
 ## Task flow
