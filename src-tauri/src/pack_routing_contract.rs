@@ -293,6 +293,19 @@ mod tests {
             .expect("pack");
         assert_eq!(pack.routing.len(), 2);
         assert_eq!(pack.routing_problem, None);
+
+        // The Library's base template and the Cursor User Rules the user copies carry it too.
+        let template = crate::commands::read_agent_template().expect("template");
+        assert!(template.content.contains(&expected_section()));
+        let cursor = crate::commands::read_doc("templates/cursor/user-rules.md".into())
+            .expect("cursor user rules");
+        let cursor_base = fs::read_to_string(bundle().join("templates/cursor/user-rules.md"))
+            .expect("bundled cursor rules");
+        assert_eq!(
+            cursor.content,
+            crate::pack_routing::splice(&cursor_base, &expected_section())
+        );
+        assert_ne!(cursor.content, cursor_base);
     }
 
     // ── Invalid routing ──
