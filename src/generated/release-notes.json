@@ -1,6 +1,23 @@
 {
   "releases": [
     {
+      "version": "2026.10.17",
+      "sections": [
+        {
+          "title": "New",
+          "items": [
+            "Let skill packs contribute routing lines"
+          ]
+        },
+        {
+          "title": "Other",
+          "items": [
+            "Make skill frontmatter spec-valid and credit upstream work"
+          ]
+        }
+      ]
+    },
+    {
       "version": "2026.10.16",
       "sections": [
         {
