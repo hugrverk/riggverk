@@ -17,7 +17,7 @@ Done when: a fresh agent could execute the next action without reading the sessi
 
 ## Process
 
-1. Extract the goal, current state, changed files, commands run, results, blockers, and stated risks.
+1. Extract the goal, current state, changed files, commands run, results, blockers, and stated risks. In a git repository, start from `git status --short`, `git log --oneline -8` and `git diff --stat`, each piped through `head -c 2000`, instead of recalling them.
 2. Separate verified facts from unsupported claims, assumptions, and checks not run. A line without a cited command, file, or diff belongs under Not verified.
 3. Decide the safest next action:
    - accept
@@ -45,7 +45,9 @@ Do not invent verification, hide uncertainty, repeat long source material, or de
 
 ### Claude Code
 
-Claude Code runs the commands below when the skill loads; in other harnesses they appear as plain text, so run them yourself.
+- The `allowed-tools` frontmatter key is Claude Code only: it pre-approves the read-only git commands. Other harnesses ignore it and ask or allow as configured.
+
+Claude Code runs the commands below when the skill loads. Other harnesses show them as plain text and run the commands of step 1 themselves.
 
 Repository state captured when this skill loaded:
 
@@ -53,4 +55,4 @@ Repository state captured when this skill loaded:
 - Recent commits: !`git log --oneline -8 2>/dev/null | head -c 800`
 - Diff stat: !`git diff --stat 2>/dev/null | tail -4`
 
-Use this as starting evidence for Verified/Not verified instead of re-deriving it.
+Use this as starting evidence for Verified/Not verified instead of running step 1 again.
