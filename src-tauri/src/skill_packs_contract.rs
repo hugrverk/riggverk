@@ -377,6 +377,104 @@ mod tests {
         assert_eq!(env.footprint(), installed, "zero writes");
     }
 
+    /// The pack's copy differs from the last bundled one: one Update installs the pack's files,
+    /// with no conflict and nothing removed, and rolling it back restores the bundled copies.
+    #[test]
+    fn a_pack_with_newer_copies_of_moved_skills_takes_over_in_one_update_and_rolls_back() {
+        let (env, group, installed) = installed_from_the_bundle("moved-newer");
+        let pack_group = env.packs().join("mine/skills").join(MOVED_GROUP);
+        env.pack("mine");
+        copy_tree(&group, &pack_group);
+        let pack_md = canonical_skill_text("team-report", "kept in the team pack");
+        fs::write(pack_group.join("team-report/SKILL.md"), &pack_md).expect("pack SKILL.md");
+        fs::write(pack_group.join("team-report/assets/logo.svg"), "<svg/>\n").expect("new file");
+        Env::tighten(&env.packs().join("mine/skills"));
+
+        let mut pending = env.pending();
+        pending.sort_by_key(|(artifact, _)| artifact_identity(artifact));
+        let mut expected = Vec::new();
+        for root in [SkillRoot::Claude, SkillRoot::Agents] {
+            expected.push((
+                file_of(root, "team-report", "SKILL.md"),
+                OperationKind::Update,
+            ));
+            expected.push((
+                file_of(root, "team-report", "assets/logo.svg"),
+                OperationKind::Create,
+            ));
+        }
+        expected.sort_by_key(|(artifact, _)| artifact_identity(artifact));
+        assert_eq!(
+            pending, expected,
+            "only the pack's changes, no conflict or removal"
+        );
+
+        let result = env.apply();
+        assert!(result.success, "update: {}", result.message);
+        for root in [SkillRoot::Claude, SkillRoot::Agents] {
+            assert_eq!(
+                files_below(&env.root(root).join("team-report")),
+                files_below(&pack_group.join("team-report")),
+                "{root:?} holds the pack's copy"
+            );
+            assert_eq!(
+                files_below(&env.root(root).join("team-change")),
+                files_below(&pack_group.join("team-change")),
+            );
+        }
+        assert_eq!(env.pending(), vec![]);
+        assert_eq!(
+            env.recorded_packs()["packs"]["mine"],
+            serde_json::json!(["team-change", "team-report"])
+        );
+
+        let rolled = rollback_setup_transaction(result.transaction_id, false).expect("rollback");
+        assert!(rolled.success, "rollback: {}", rolled.message);
+        assert_eq!(moved_files(&env), installed, "the bundled copies are back");
+    }
+
+    /// Without the pack the moved skills are retired like any skill the bundle dropped: the
+    /// app's copies are removed with a backup, and a skill the user edited is kept whole.
+    #[test]
+    fn without_the_pack_moved_skills_are_retired_with_a_backup_and_an_edited_one_is_kept() {
+        let (env, _, installed) = installed_from_the_bundle("moved-no-pack");
+        let edited = file_of(SkillRoot::Claude, "team-change", "SKILL.md");
+        let mine = b"my own notes on the team change\n";
+        fs::write(env.path(&edited), mine).expect("edit");
+
+        let kinds: BTreeMap<String, OperationKind> = env
+            .pending()
+            .into_iter()
+            .map(|(artifact, kind)| (artifact_identity(&artifact), kind))
+            .collect();
+        assert_eq!(
+            kinds.get(&artifact_identity(&edited)),
+            Some(&OperationKind::Conflict)
+        );
+        let removals = kinds
+            .values()
+            .filter(|kind| **kind == OperationKind::Remove)
+            .count();
+        assert_eq!(removals, 7, "every other file is removed: {kinds:?}");
+
+        let result = env.apply();
+        assert!(result.success, "retire: {}", result.message);
+        assert_eq!(fs::read(env.path(&edited)).expect("kept"), mine);
+        assert!(!env.root(SkillRoot::Claude).join("team-report").exists());
+        assert!(!env.root(SkillRoot::Agents).join("team-report").exists());
+        assert!(!env.root(SkillRoot::Agents).join("team-change").exists());
+
+        let rolled = rollback_setup_transaction(result.transaction_id, false).expect("rollback");
+        assert!(rolled.success, "rollback: {}", rolled.message);
+        let mut expected = installed;
+        expected.insert("Claude/team-change/SKILL.md".to_string(), mine.to_vec());
+        assert_eq!(
+            moved_files(&env),
+            expected,
+            "the backup restored every removed file"
+        );
+    }
+
     // ── Name collisions ──
 
     #[test]
