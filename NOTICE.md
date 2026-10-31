@@ -105,6 +105,38 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
+## superpowers receiving-code-review
+
+`review-response` adapts the method of `skills/receiving-code-review/SKILL.md` in [obra/superpowers](https://github.com/obra/superpowers) at commit `2ce8aa15d05bd57213e6f746f953aafb7ded7a8b`. Used: verify each point against the codebase before implementing it, no performative agreement or gratitude in replies, clarify unclear items before implementing related ones, the "is it actually used" check before building requested scope, fixing blocking issues first, pushing back with technical evidence, a one-line correction when pushback was wrong, and replying inside the review thread. The wording is Riggverk's; the fix, push back and ask verdicts, one commit per theme, and approval before posting are Riggverk's own.
+
+License of the original work:
+
+MIT License
+
+Copyright (c) 2025 Jesse Vincent
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+## openai/skills gh-address-comments
+
+`review-response` also draws on the `gh-address-comments` skill of [openai/skills](https://github.com/openai/skills) (`skills/.curated/gh-address-comments/SKILL.md`, read at commit `49f948faa9258a0c61caceaf225e179651397431`), licensed under the [Apache License, Version 2.0](https://www.apache.org/licenses/LICENSE-2.0). Used: finding the open PR of the current branch with gh, numbering every review thread and comment with a short summary of the fix it needs, and letting the user choose which items to address before changing code. Changes: the text is Riggverk's own, threads are read with the GitHub GraphQL API instead of a bundled script, and each item is verified and sorted before the user chooses. No files of that work are included.
+
 ## Cloudflare security-audit-skill
 
 The bundled `security-audit` skill is vendored from [cloudflare/security-audit-skill](https://github.com/cloudflare/security-audit-skill) at commit `c1c8a8c1471069fb0e188eeaff69b8e8db6564a8`, as recorded in [UPSTREAM.md](resources/default-workspace/skills/security-audit/UPSTREAM.md).
