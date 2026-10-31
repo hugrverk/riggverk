@@ -1331,12 +1331,13 @@ mod tests {
             .filter(|(_, count)| *count > 0)
             .collect();
         assert_eq!(counts.get("security-audit"), Some(&19));
+        assert_eq!(counts.get("agents-md"), Some(&1));
         assert_eq!(counts.get("adversarial-implementation"), Some(&2));
         assert_eq!(counts.get("adversarial-review"), Some(&2));
         assert_eq!(counts.get("adversarial-test"), Some(&2));
         assert_eq!(counts.get("browser-qa"), Some(&1));
         assert_eq!(counts.get("status-report"), Some(&4));
-        assert_eq!(counts.len(), 6, "{counts:?}");
+        assert_eq!(counts.len(), 7, "{counts:?}");
         assert_eq!(
             canonical_skill_dir(&repo, "security-audit"),
             repo.join("skills/security-audit")
