@@ -283,7 +283,7 @@ export function OpenCodeModelRows({ dataFolderOk, health, onModelUpdated, onUnsa
     if (!dataFolderOk || !hasOverride || saving) return;
     const ok = await confirm({
       title: "Reset the model override?",
-      message: "This removes the saved model choices, custom provider/model values included, and goes back to the bundled defaults. Unsaved edits here are dropped too.",
+      message: "This removes the saved model choices, custom provider/model values included, and clears the overrides; existing main model values stay in your config. Unsaved edits here are dropped too.",
       confirmLabel: "Reset",
       destructive: true,
     });
@@ -352,7 +352,7 @@ export function OpenCodeModelRows({ dataFolderOk, health, onModelUpdated, onUnsa
     {
       id: "opencode.model.reset",
       keys: "x",
-      title: "Reset the model override to the bundled default",
+      title: "Reset the model override",
       hint: "reset model",
       group: "OpenCode model",
       scope: "pane",
@@ -400,10 +400,10 @@ export function OpenCodeModelRows({ dataFolderOk, health, onModelUpdated, onUnsa
     source ? [{ label: "", value: <SourceLine source={source} state={state} />, tone: "dim" as const, wrap: true, id: `${id}-source` }] : [];
 
   const items: KvItem[] = [
-    { label: <label htmlFor={modelId}>model</label>, value: field(modelId, draftModel, setDraftModel, modelError, { fieldRef: firstFieldRef }), id: "model" },
+    { label: <label htmlFor={modelId}>model</label>, value: field(modelId, draftModel, setDraftModel, modelError, { fieldRef: firstFieldRef, emptyLabel: "agent default or existing config" }), id: "model" },
     ...errorRow(modelId, modelError),
     ...sourceRow("model", selection?.model_source, modelState),
-    { label: <label htmlFor={smallModelId}>small model</label>, value: field(smallModelId, draftSmall, setDraftSmall, smallError), id: "small" },
+    { label: <label htmlFor={smallModelId}>small model</label>, value: field(smallModelId, draftSmall, setDraftSmall, smallError, { emptyLabel: "agent default or existing config" }), id: "small" },
     ...errorRow(smallModelId, smallError),
     ...sourceRow("small", selection?.small_model_source, smallState),
     {
@@ -440,7 +440,7 @@ export function OpenCodeModelRows({ dataFolderOk, health, onModelUpdated, onUnsa
       )}
       <p className="c-dim runtime-note">
         Stored in app settings and applied on the next OpenCode update; workspace templates are not edited. Saving stores only the values you
-        changed: one equal to the bundled default keeps following it. The subagent model pins repo-scout, inspector, sentinel, verifier and
+        choose: an empty main model leaves the installed value alone. Riggverk sets no model; your agent’s own default applies. The subagent model pins repo-scout, inspector, sentinel, verifier and
         scribe; unset, they use the main model. The critic model takes precedence for inspector only.
       </p>
     </section>

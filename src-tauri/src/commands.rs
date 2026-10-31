@@ -25,8 +25,8 @@ pub(crate) use content::personal_doc_count;
 pub(crate) use opencode_runtime::{
     extract_managed_opencode_config, managed_opencode_install_projection,
     managed_opencode_keys_match, merge_managed_opencode_config, pinned_role_models,
-    render_expected_opencode_config, with_recorded_role_models, without_user_role_models,
-    AppRoleModels,
+    render_expected_opencode_config, serialize_opencode_preserving_models,
+    with_recorded_role_models, without_user_role_models, AppRoleModels,
 };
 pub(crate) use status::file_eq;
 pub(crate) use workspace::configured_workspace_path;

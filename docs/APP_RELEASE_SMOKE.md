@@ -158,7 +158,7 @@ npm run tauri dev
 ## 7. Codex 0.134+ migration
 
 - [ ] `approval_policy`, `approvals_reviewer`, `sandbox_mode`, and `apps._default.*` apply correctly with `codex_config` on
-- [ ] `model` and `model_reasoning_effort` are written only when the file has none; an existing value is never changed or reported as drift
+- [ ] `model` and `model_reasoning_effort` are never seeded; an existing value is never changed or reported as drift
 - [ ] App-shaped legacy `profile = "safe"` / `"workspace-write"` selectors and `[profiles.*]` tables are removed while still app-shipped
 - [ ] Custom profiles, unrelated keys, MCP entries, personality, comments, and same-line inline comments remain
 - [ ] Ambiguous managed lines refuse safely with zero mutation
@@ -272,7 +272,7 @@ Use a scratch profile or back up `~/.claude/settings.json` first.
 - Notes: ________
 
 ### Codex migration
-- [ ] Managed fields, create-only model, legacy profile cleanup passed
+- [ ] Managed fields, user-owned model, legacy profile cleanup passed
 - Notes: ________
 
 ### Settings and workspace folder

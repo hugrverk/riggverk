@@ -151,10 +151,9 @@ class BundleTests(unittest.TestCase):
         self.edit("templates/tui.json", '"mouse": true', '"mouse": false')
         self.assertFails("tui-defaults", "mouse must be True")
 
-    def test_small_model_must_match_the_docs(self) -> None:
-        config = json.loads((self.tree / WS / "templates/opencode.json").read_text(encoding="utf-8"))
-        self.edit("templates/opencode.json", f'"small_model": "{config["small_model"]}"', '"small_model": "other/model"')
-        self.assertFails("opencode-defaults", "differs from the documented")
+    def test_models_must_not_be_bundled(self) -> None:
+        self.edit("templates/opencode.json", '"snapshot": true', '"model": "other/model", "snapshot": true')
+        self.assertFails("opencode-defaults", "must not set model")
 
     def test_invalid_json(self) -> None:
         (self.tree / WS / "templates/broken.json").write_text('{"a": NaN}\n')

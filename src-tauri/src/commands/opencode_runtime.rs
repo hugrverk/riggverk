@@ -470,6 +470,9 @@ pub(crate) fn differing_managed_opencode_keys(
      -> Option<serde_json::Value> { config.get(group)?.get(name).cloned() };
     let mut keys = Vec::new();
     for key in MANAGED_TOP_LEVEL_KEYS {
+        if matches!(*key, "model" | "small_model") && rendered.get(*key).is_none() {
+            continue;
+        }
         if differs(
             installed.get(*key),
             rendered.get(*key),
@@ -515,6 +518,86 @@ pub(crate) fn managed_opencode_keys_match(
     differing_managed_opencode_keys(installed, rendered).is_empty()
 }
 
+/// Serialize a merged config while retaining the original bytes of unchanged model values.
+/// Both inputs have already been parsed as strict JSON. Duplicate keys use the last value,
+/// matching serde_json's object semantics.
+pub(crate) fn serialize_opencode_preserving_models(
+    original: &str,
+    merged: &serde_json::Value,
+) -> Result<String, String> {
+    fn spans(text: &str) -> Result<std::collections::HashMap<String, (usize, usize)>, String> {
+        let bytes = text.as_bytes();
+        let mut i = 0;
+        let skip = |i: &mut usize| {
+            while *i < bytes.len() && bytes[*i].is_ascii_whitespace() {
+                *i += 1;
+            }
+        };
+        skip(&mut i);
+        if bytes.get(i) != Some(&b'{') {
+            return Err("config is not an object".into());
+        }
+        i += 1;
+        let mut found = std::collections::HashMap::new();
+        loop {
+            skip(&mut i);
+            if bytes.get(i) == Some(&b'}') {
+                break;
+            }
+            let mut keys = serde_json::Deserializer::from_str(&text[i..]).into_iter::<String>();
+            let key = keys
+                .next()
+                .ok_or("missing JSON key")?
+                .map_err(|_| "invalid JSON key")?;
+            i += keys.byte_offset();
+            skip(&mut i);
+            if bytes.get(i) != Some(&b':') {
+                return Err("missing JSON colon".into());
+            }
+            i += 1;
+            skip(&mut i);
+            let start = i;
+            let mut values =
+                serde_json::Deserializer::from_str(&text[i..]).into_iter::<serde_json::Value>();
+            values
+                .next()
+                .ok_or("missing JSON value")?
+                .map_err(|_| "invalid JSON value")?;
+            i += values.byte_offset();
+            if matches!(key.as_str(), "model" | "small_model") {
+                found.insert(key, (start, i));
+            }
+            skip(&mut i);
+            match bytes.get(i) {
+                Some(b',') => i += 1,
+                Some(b'}') => break,
+                _ => return Err("invalid JSON object".into()),
+            }
+        }
+        Ok(found)
+    }
+    let mut rendered =
+        serde_json::to_string_pretty(merged).map_err(|_| "serialize opencode config")?;
+    let originals = spans(original)?;
+    let destinations = spans(&rendered)?;
+    let mut replacements = Vec::new();
+    for (key, (start, end)) in originals {
+        if let Some(&(new_start, new_end)) = destinations.get(&key) {
+            let old: serde_json::Value =
+                serde_json::from_str(&original[start..end]).map_err(|_| "invalid model value")?;
+            if merged.get(&key) == Some(&old) {
+                replacements.push((new_start, new_end, &original[start..end]));
+            }
+        }
+    }
+    replacements.sort_by_key(|(start, _, _)| std::cmp::Reverse(*start));
+    for (start, end, raw) in replacements {
+        rendered.replace_range(start..end, raw);
+    }
+    rendered.push('\n');
+    Ok(rendered)
+}
+
 /// Align the managed projection with `managed`, removing absent entries and preserving user fields
 /// and their order. The same operation restores the backup projection on rollback.
 pub(crate) fn merge_managed_opencode_config(
@@ -531,7 +614,7 @@ pub(crate) fn merge_managed_opencode_config(
     for key in MANAGED_TOP_LEVEL_KEYS {
         if let Some(value) = managed_obj.get(*key) {
             target.insert((*key).to_string(), value.clone());
-        } else {
+        } else if !matches!(*key, "model" | "small_model") {
             target.shift_remove(*key);
         }
     }
@@ -1546,8 +1629,19 @@ fn compute_health_in(
 
     // OpenCode merges `config.json` and `opencode.jsonc` from the same folder with
     // `opencode.json`; one that sets managed keys means OpenCode does not run the team's values.
-    let sibling_files =
-        opencode_precedence::sibling_configs(config_dir, managed_opencode_key_names);
+    let expected = template_json
+        .as_ref()
+        .and_then(|template| render_expected_opencode_config(template, home_dir));
+    let sibling_files = opencode_precedence::sibling_configs(config_dir, |config| {
+        let mut names = managed_opencode_key_names(config);
+        names.retain(|name| {
+            !matches!(name.as_str(), "model" | "small_model")
+                || expected
+                    .as_ref()
+                    .is_some_and(|value| value.get(name).is_some())
+        });
+        names
+    });
     let only_siblings_diverge = !has_fail && !has_warn && !sibling_files.is_empty();
     for sibling in &sibling_files {
         let warning = opencode_precedence::sibling_warning(sibling);
@@ -2107,8 +2201,8 @@ pub struct OpenCodeModelSelection {
     pub critic_source: String,
 }
 
-const DEFAULT_MODEL: &str = "opencode-go/glm-5.2";
-const DEFAULT_SMALL_MODEL: &str = "opencode-go/deepseek-v4.1-flash";
+const DEFAULT_MODEL: &str = "";
+const DEFAULT_SMALL_MODEL: &str = "";
 
 /// The values the user chose. A value that is `None` is not an override: `model` and `small_model`
 /// follow the bundled default (so a later change of that default still reaches the user), and the
@@ -2342,8 +2436,7 @@ fn run_models_listing(
     Ok(ListAvailableModelsResult { models, warning })
 }
 
-/// The bundled `model` and `small_model`: bundled `templates/opencode.base.json`, else the
-/// hardcoded defaults.
+/// Values in the bundled template, or empty when it does not select models.
 fn bundled_model_defaults() -> Result<(String, String), String> {
     let fallback = || (DEFAULT_MODEL.to_string(), DEFAULT_SMALL_MODEL.to_string());
     let base_path = crate::setup_roots::bundled_root()?.join("templates/opencode.base.json");
@@ -2370,8 +2463,7 @@ fn bundled_model_defaults() -> Result<(String, String), String> {
 
 /// Read the current main, small, subagent and critic models, each with its source.
 /// A value comes from the app-level override file when that holds it, else from the bundled
-/// `templates/opencode.base.json`, else from the hardcoded defaults. The template has no subagent
-/// or critic model: without an override the subagents inherit `model`.
+/// `templates/opencode.base.json`, else empty. Without a role override the subagents inherit `model`.
 #[tauri::command]
 pub fn read_opencode_model_selection() -> Result<OpenCodeModelSelection, String> {
     let model_override = read_stored_opencode_model_override().unwrap_or_default();
@@ -2426,8 +2518,16 @@ pub fn update_opencode_model_selection(
     // Writes files an apply may also write: wait for a running mutation instead of interleaving.
     let _mutation = crate::mutation_lock::acquire()?;
     // Validate inputs; persist the trimmed values.
-    let model = validate_model_id(&model)?;
-    let small_model = validate_model_id(&small_model)?;
+    let model = if model.trim().is_empty() {
+        String::new()
+    } else {
+        validate_model_id(&model)?
+    };
+    let small_model = if small_model.trim().is_empty() {
+        String::new()
+    } else {
+        validate_model_id(&small_model)?
+    };
     let subagent_model = match subagent_model.as_deref().map(str::trim) {
         None | Some("") => None,
         Some(id) => Some(validate_model_id(id)?),
@@ -2473,7 +2573,7 @@ pub fn update_opencode_model_selection(
         None => ", inspector follows the subagent model or inherits the model".to_string(),
     };
     let default_note = if follows_default {
-        " A value equal to the bundled default is not stored and keeps following it."
+        " An empty model is not stored; the installed value stays unchanged."
     } else {
         ""
     };
@@ -2528,7 +2628,7 @@ fn write_model_override_file(
 }
 
 /// Delete the app-level override file, so the next Install/Update applies the bundled defaults
-/// and removes the subagent `agent.<role>.model` entries. Removing an absent file succeeds.
+/// and removes the app-owned subagent `agent.<role>.model` entries. Removing an absent file succeeds.
 ///
 /// One `remove_file` is the whole reset: there is no state in which only part of the override
 /// is gone. Installed `opencode.json` is not touched until the next Install/Update.
@@ -2538,7 +2638,7 @@ pub fn reset_opencode_model_selection() -> Result<String, String> {
     let override_path = opencode_model_selection_path()?;
     match std::fs::remove_file(&override_path) {
         Ok(()) => Ok(
-            "Model override removed. Run Install/Update to apply the bundled defaults.".to_string(),
+            "Model override removed. Run Install/Update to clear managed role models.".to_string(),
         ),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
             Ok("No model override to remove.".to_string())
@@ -2705,8 +2805,8 @@ mod tests {
         assert_eq!(
             (selection.model, selection.small_model),
             (
-                base["model"].as_str().unwrap().to_string(),
-                base["small_model"].as_str().unwrap().to_string()
+                base["model"].as_str().unwrap_or("").to_string(),
+                base["small_model"].as_str().unwrap_or("").to_string()
             )
         );
 
@@ -2771,16 +2871,8 @@ mod tests {
             );
         }
         // Files at `~/.config/opencode`, which OpenCode does not read now, are not looked at.
-        write_file(
-            &home,
-            ".config/opencode/opencode.json",
-            r#"{"model":"old/place"}"#,
-        );
-        write_file(
-            &home,
-            ".config/opencode/config.json",
-            r#"{"model":"old/place"}"#,
-        );
+        write_file(&home, ".config/opencode/opencode.json", r#"{"lsp":false}"#);
+        write_file(&home, ".config/opencode/config.json", r#"{"lsp":false}"#);
 
         let health = super::compute_health(&home, None);
         assert_eq!(health.status, "synced", "{:?}", health.checks);
@@ -2808,6 +2900,11 @@ mod tests {
 
         // A sibling beside the installed file is found in the same folder.
         write_file(&xdg, "opencode/opencode.jsonc", r#"{"model":"mine/other"}"#);
+        assert!(super::compute_health(&home, None)
+            .config_precedence
+            .sibling_files
+            .is_empty());
+        write_file(&xdg, "opencode/opencode.jsonc", r#"{"lsp":false}"#);
         let siblings = super::compute_health(&home, None)
             .config_precedence
             .sibling_files;
@@ -4235,7 +4332,15 @@ mod tests {
         assert!(managed_opencode_keys_match(&reparsed, &managed));
         assert_eq!(
             json_keys(&reparsed),
-            ["theme", "mcp", "agent", "model", "provider", "keybinds"]
+            [
+                "theme",
+                "mcp",
+                "agent",
+                "model",
+                "provider",
+                "keybinds",
+                "small_model"
+            ]
         );
         assert_eq!(json_keys(&reparsed["mcp"]), ["first", "middle", "last"]);
         assert_eq!(
@@ -4387,8 +4492,8 @@ mod tests {
     fn test_fallback_model_constants_match_the_bundled_base_template() {
         let base: serde_json::Value =
             serde_json::from_str(&bundled_template("opencode.base.json")).expect("base template");
-        assert_eq!(base["model"], DEFAULT_MODEL);
-        assert_eq!(base["small_model"], DEFAULT_SMALL_MODEL);
+        assert!(base.get("model").is_none());
+        assert!(base.get("small_model").is_none());
     }
 
     #[test]
