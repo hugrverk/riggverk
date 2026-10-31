@@ -233,13 +233,15 @@
       "cargo check *",
       "cargo clippy *",
       "cargo test *",
-      "pytest *",
-      "python3 -m pytest *",
-      "go test *",
-      "go vet *",
-      "make test *",
-      "make lint *",
-      "make check *"
+      "pytest",
+      "pytest -q",
+      "python3 -m pytest",
+      "python3 -m pytest -q",
+      "go test ./...",
+      "go vet ./...",
+      "make test",
+      "make lint",
+      "make check"
     ],
     "ask": [
       "grep *",
@@ -319,7 +321,6 @@
       "find *-ok*",
       "find *-fprint*",
       "find *-fls*",
-      "go test *-exec*",
       "git commit*--amend*"
     ],
     "deny": [
@@ -553,7 +554,9 @@
         "cargo clippy",
         "cargo test",
         "pytest",
+        "pytest -q",
         "python3 -m pytest",
+        "python3 -m pytest -q",
         "go test ./...",
         "go vet ./...",
         "make test",

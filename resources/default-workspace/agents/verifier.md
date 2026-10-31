@@ -182,7 +182,9 @@ permission:
     "cargo clippy": allow
     "cargo test": allow
     "pytest": allow
+    "pytest -q": allow
     "python3 -m pytest": allow
+    "python3 -m pytest -q": allow
     "go test ./...": allow
     "go vet ./...": allow
     "make test": allow

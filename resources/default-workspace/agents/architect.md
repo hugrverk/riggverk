@@ -192,13 +192,15 @@ permission:
     "cargo check *": allow
     "cargo clippy *": allow
     "cargo test *": allow
-    "pytest *": allow
-    "python3 -m pytest *": allow
-    "go test *": allow
-    "go vet *": allow
-    "make test *": allow
-    "make lint *": allow
-    "make check *": allow
+    "pytest": allow
+    "pytest -q": allow
+    "python3 -m pytest": allow
+    "python3 -m pytest -q": allow
+    "go test ./...": allow
+    "go vet ./...": allow
+    "make test": allow
+    "make lint": allow
+    "make check": allow
     "grep *": ask
     "rg *": ask
     "git grep*": ask
@@ -276,7 +278,6 @@ permission:
     "find *-ok*": ask
     "find *-fprint*": ask
     "find *-fls*": ask
-    "go test *-exec*": ask
     "git commit*--amend*": ask
     "git push --force*": deny
     "git push -f*": deny
