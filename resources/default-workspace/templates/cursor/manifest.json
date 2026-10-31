@@ -23,8 +23,6 @@
     "core-safety.mdc",
     "prompt-contract.mdc",
     "repo-workflow.mdc",
-    "wordpress-woocommerce.mdc",
-    "nextjs-supabase.mdc",
     "frontend-design.mdc",
     "release-check.mdc"
   ],

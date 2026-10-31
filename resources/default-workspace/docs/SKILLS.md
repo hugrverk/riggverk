@@ -31,23 +31,7 @@ Do not duplicate full `SKILL.md` content here. This file is an index for choosin
 | `tdd` | Using a narrow red-green-refactor loop for behavior changes, fixes, regressions, and tests. |
 | `zoom-out` | Explaining unfamiliar code in broader system context before editing. |
 
-## Shared Domain Skill
-
-| Skill | Use When |
-| --- | --- |
-| `wordpress-woocommerce` | Working on WordPress/WooCommerce themes, templates, hooks, filters, plugins, REST/AJAX, checkout/cart/product UI, security, i18n, and frontend integration. |
-
-## Kretsverket Skills
-
-Grouped source: `skills/kretsverket/<skill>/SKILL.md`.
-
-| Skill | Use When |
-| --- | --- |
-| `kretsverket-editor-change` | Changes cross Kretsverket editor layers: types, state, canvas, keyboard, selection, rendering, undo, persistence, export. |
-| `kretsverket-file-compatibility` | `.krets` / `.kretsym` persistence, parsing, migrations, defaults, and untrusted imports. |
-| `kretsverket-symbol-system` | Symbol Editor sandbox, definitions, instances, imports, nested symbols, anchors, and placed-instance updates. |
-| `kretsverket-electrical-drawing` | Wire semantics, terminal bindings, crossings, references, and drawing-versus-netlist boundaries. |
-| `kretsverket-status-report` | Kretsverket profile of `status-report`: the Swedish one-file HTML lägesrapport from Kretsverket's `origin/main` docs (current state, roadmap, known gaps, decisions), rendered and verified with `status-report`'s template and scripts. |
+Domain skills for a team's own projects and stack are not bundled: keep them in a skill pack (see Skill packs below), which can also carry their routing lines.
 
 ## Routing boundaries
 
@@ -65,10 +49,8 @@ Grouped source: `skills/kretsverket/<skill>/SKILL.md`.
 | `handoff` / `release-check` | Handoff compacts session state; release-check validates merge/deploy readiness. |
 | `security-review` / `security-audit` | Security-review checks a change or answers a focused question in the current context; security-audit runs a full multi-agent audit of a whole codebase only when one is explicitly asked for. |
 | `security-review` / `sentinel` (agent) | Skill guides the review in the current context; where the harness has the sentinel agent (OpenCode, Claude), it performs an independent read-only review of a finished diff, otherwise the review stays inline. |
-| `status-report` / `kretsverket-status-report` | Status-report owns the workflow, data contract, render and verify for any repo; kretsverket-status-report is its profile with Kretsverket's sources, sections and Swedish tone. |
 | `retro` / `context-budget` | Retro mines one named session for environment fixes; context-budget audits instruction surfaces without a session. |
 | `zoom-out` / repo-scout (agent) | Zoom-out explains code context in chat; repo-scout agent maps unfamiliar repos read-only before implementation. |
-| Kretsverket quartet | `kretsverket-editor-change` (editor layers), `kretsverket-file-compatibility` (persistence), `kretsverket-symbol-system` (symbols), `kretsverket-electrical-drawing` (wiring semantics)—kept separate because triggers and invariants differ. |
 
 ## Common Combinations
 
@@ -79,12 +61,6 @@ Grouped source: `skills/kretsverket/<skill>/SKILL.md`.
 - Screenshot-driven UI: `screenshot-review`, then `frontend-design`.
 - Security-sensitive changes: `security-review`; add `database-migrations` for schema/data work.
 - Full codebase security audit or pen test: `security-audit`.
-- WooCommerce work: `wordpress-woocommerce` plus generic implementation, QA, accessibility, security, or release skills as relevant.
-- Kretsverket editor or canvas: `kretsverket-editor-change`.
-- Kretsverket persistence or files: `kretsverket-file-compatibility`.
-- Kretsverket symbols: `kretsverket-symbol-system`.
-- Kretsverket electrical drawing: `kretsverket-electrical-drawing`.
-- Kretsverket lägesrapport or statusrapport: `kretsverket-status-report`.
 - Prototyping before implementation: `prototype`; add `frontend-design` for UI prototypes.
 - Pausing, executor reports, or context transfer: `handoff`; add `context-budget` for large reports.
 - Project status report, statusrapport or lägesrapport: `status-report`.
@@ -115,8 +91,8 @@ metadata:
 ```
 
 - `license` — `MIT` on every bundled skill, so the license travels with a copy taken out of the bundle. Third-party credits are in the repository's `NOTICE.md`.
-- `compatibility` — only where a skill needs something beyond reading and editing files: subagents or another agent CLI (`adversarial-*`, full `security-audit`), browser automation (`browser-qa`), `gh` and Node.js (`status-report`, `kretsverket-status-report`).
-- `metadata.category` — functional area or `kretsverket`.
+- `compatibility` — only where a skill needs something beyond reading and editing files: subagents or another agent CLI (`adversarial-*`, full `security-audit`), browser automation (`browser-qa`), `gh` and Node.js (`status-report`).
+- `metadata.category` — functional area.
 - `metadata.risk` — low, medium, or high.
 - `metadata.targets` — comma-separated harnesses that get the skill. Every harness reads the skills folders Riggverk installs into, so bundled skills list all nine: codex, opencode, claude, cursor, copilot, pi, kilo, antigravity, grok.
 - `metadata.related` — comma-separated related skill names; the routing check verifies each name exists.

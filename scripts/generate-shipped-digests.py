@@ -19,7 +19,7 @@ file became the install source the app shipped one generated adapter per harness
 stay provable under the legacy keys templates/skills/<harness>/<name>/SKILL.md, which only the
 repository history still holds (the source keys in shipped_digests.rs name the same four
 harnesses). A skill's supporting files (skills/security-audit/HUNTING.md,
-skills/kretsverket/kretsverket-status-report/assets/report-template.html) are installed next to
+skills/status-report/assets/report-template.html) are installed next to
 its SKILL.md and each has one source, so each is keyed by its own bundle-relative path. Each list
 holds every committed version of that path plus the working-tree version.
 Retired skills and agents are included so stale removal can prove ownership. Digests use the

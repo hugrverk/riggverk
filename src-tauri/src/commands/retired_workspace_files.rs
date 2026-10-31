@@ -179,6 +179,18 @@ pub(crate) const RETIRED_FROM_BUNDLE: &[&str] = &[
     "scripts/install-skills.sh",
     "templates/prompts/masterprompt.md",
     "templates/prompts/standard-prompt.md",
+    // Moved to a private team pack after 2026.10.17: the Kretsverket and WordPress skills and the
+    // Cursor stack rules.
+    "skills/kretsverket/kretsverket-editor-change/SKILL.md",
+    "skills/kretsverket/kretsverket-electrical-drawing/SKILL.md",
+    "skills/kretsverket/kretsverket-file-compatibility/SKILL.md",
+    "skills/kretsverket/kretsverket-status-report/SKILL.md",
+    "skills/kretsverket/kretsverket-status-report/assets/report-template.html",
+    "skills/kretsverket/kretsverket-status-report/scripts/verify-report.mjs",
+    "skills/kretsverket/kretsverket-symbol-system/SKILL.md",
+    "skills/wordpress-woocommerce/SKILL.md",
+    "templates/cursor/rules/nextjs-supabase.mdc",
+    "templates/cursor/rules/wordpress-woocommerce.mdc",
 ];
 
 /// The marker followed by the frozen list: every path the `WorkspaceBundle` surface installs and

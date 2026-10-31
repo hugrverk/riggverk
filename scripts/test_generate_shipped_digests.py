@@ -60,14 +60,14 @@ class ShippedDigestsGeneratorTests(unittest.TestCase):
     def test_generic_and_deprecated_skills_share_a_logical_key(self) -> None:
         for rel in (
             "skills/tdd/SKILL.md",
-            "skills/kretsverket/kretsverket-symbol-system/SKILL.md",
+            "skills/some-group/some-skill/SKILL.md",
             "metadata/deprecated-skills/tdd/SKILL.md",
         ):
             key = self.generator.source_key(rel)
             self.assertRegex(key, r"^skills/[a-z0-9-]+/SKILL\.md$")
         self.assertEqual(
-            self.generator.source_key("skills/kretsverket/kretsverket-symbol-system/SKILL.md"),
-            "skills/kretsverket-symbol-system/SKILL.md",
+            self.generator.source_key("skills/some-group/some-skill/SKILL.md"),
+            "skills/some-skill/SKILL.md",
         )
 
     def test_skill_supporting_files_keep_their_own_path_as_key(self) -> None:
@@ -75,8 +75,8 @@ class ShippedDigestsGeneratorTests(unittest.TestCase):
             "skills/security-audit/HUNTING.md",
             "skills/security-audit/LICENSE",
             "skills/security-audit/validate-findings.cjs",
-            "skills/kretsverket/kretsverket-status-report/assets/report-template.html",
-            "skills/kretsverket/kretsverket-status-report/scripts/verify-report.mjs",
+            "skills/status-report/assets/report-template.html",
+            "skills/status-report/scripts/verify-report.mjs",
             "skills/some-skill/a/b/c/d.txt",
             "skills/some-group/some-skill/a/b/c/d.txt",
         ):
@@ -156,7 +156,7 @@ class ShippedDigestsGeneratorTests(unittest.TestCase):
         for key in (
             "skills/security-audit/HUNTING.md",
             "skills/security-audit/validate-coverage-ledger.cjs",
-            "skills/kretsverket/kretsverket-status-report/assets/report-template.html",
+            "skills/status-report/assets/report-template.html",
         ):
             self.assertIn(key, sources, "bundled supporting files must be provable")
         for harness in self.generator.HARNESSES:
