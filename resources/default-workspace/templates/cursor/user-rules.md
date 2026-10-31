@@ -16,7 +16,7 @@ Do not duplicate workflow instructions across all surfaces.
 
 Before starting a local dev server for browser work, check whether the needed URL or port already responds and reuse it when possible. Do not start duplicate servers.
 If you start a dev server, record enough command, PID, session, and port detail to stop only the server you started. Stop it before the final report. If cleanup cannot be completed safely, report the exact port/process status and remaining risk.
-Do not claim browser smoke or `browser-qa` completed without reporting server lifecycle status. Kretsverket may use `http://localhost:1420/`; verify before starting a replacement server.
+Do not claim browser smoke or `browser-qa` completed without reporting server lifecycle status.
 
 ## Priority
 Repository reality overrides assumptions. Explicit user instructions override these defaults. Project-local guidance overrides these defaults unless unsafe. Instructions after the Riggverk base block are the user's refinements and override the base where they conflict.
@@ -51,10 +51,6 @@ Use skills as routing and workflow guidance, not boilerplate. Select only task-r
 - Security, auth, permissions, uploads, shell, or sensitive data: `security-review`.
 - Database or persisted data changes: `database-migrations`; add `security-review` where access control or sensitive data is involved.
 - Fast-moving APIs, SDKs, CLIs, frameworks, or dependencies: `current-docs`; add `security-review` when trusted surface expands.
-- Kretsverket editor or canvas: `kretsverket-editor-change`.
-- Kretsverket persistence or file compatibility: `kretsverket-file-compatibility`.
-- Kretsverket symbols: `kretsverket-symbol-system`.
-- Kretsverket electrical drawing: `kretsverket-electrical-drawing`.
 - Release readiness: `release-check`.
 - Executor reports, paused work, or context transfer: `handoff`.
 

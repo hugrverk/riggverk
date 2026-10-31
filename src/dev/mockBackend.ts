@@ -1463,7 +1463,6 @@ const SKILL_ROWS: Array<[string, string, string, string]> = [
   ["prototype", "workflow · diagnosis", "workflow", "low"],
   ["security-review", "security · data · domain", "security", "high"],
   ["database-migrations", "security · data · domain", "data", "high"],
-  ["wordpress-woocommerce", "security · data · domain", "domain", "high"],
   ["current-docs", "security · data · domain", "research", "low"],
   ["zoom-out", "security · data · domain", "research", "low"],
   ["retro", "workflow · diagnosis", "workflow", "low"],

@@ -314,37 +314,23 @@ mod tests {
     #[test]
     fn grouped_skill_layout_is_listed() {
         let root = temp_root("grouped-skills");
-        write_skill(
-            &root,
-            "skills/kretsverket/kretsverket-editor-change",
-            "kretsverket-editor-change",
-        );
+        write_skill(&root, "skills/domain/domain-change", "domain-change");
 
         let skills = discover_skills(&root).expect("discover skills");
         let _ = fs::remove_dir_all(&root);
 
         assert_eq!(skills.len(), 1);
-        assert_eq!(
-            skills[0].id,
-            "workspace/kretsverket/kretsverket-editor-change"
-        );
-        assert_eq!(skills[0].name, "kretsverket-editor-change");
-        assert_eq!(skills[0].group, "kretsverket");
-        assert_eq!(
-            skills[0].path,
-            "skills/kretsverket/kretsverket-editor-change/SKILL.md"
-        );
+        assert_eq!(skills[0].id, "workspace/domain/domain-change");
+        assert_eq!(skills[0].name, "domain-change");
+        assert_eq!(skills[0].group, "domain");
+        assert_eq!(skills[0].path, "skills/domain/domain-change/SKILL.md");
     }
 
     #[test]
     fn mixed_root_and_grouped_discovery() {
         let root = temp_root("mixed-skills");
         write_skill(&root, "skills/diagnose", "diagnose");
-        write_skill(
-            &root,
-            "skills/kretsverket/kretsverket-editor-change",
-            "kretsverket-editor-change",
-        );
+        write_skill(&root, "skills/domain/domain-change", "domain-change");
 
         let skills = discover_skills(&root).expect("discover skills");
         let _ = fs::remove_dir_all(&root);
@@ -352,8 +338,8 @@ mod tests {
         assert_eq!(skills.len(), 2);
         assert_eq!(skills[0].name, "diagnose");
         assert_eq!(skills[0].group, "");
-        assert_eq!(skills[1].name, "kretsverket-editor-change");
-        assert_eq!(skills[1].group, "kretsverket");
+        assert_eq!(skills[1].name, "domain-change");
+        assert_eq!(skills[1].group, "domain");
     }
 
     #[test]
@@ -398,16 +384,12 @@ mod tests {
     #[test]
     fn grouped_skill_open_and_read_paths_resolve() {
         let root = temp_root("grouped-open");
-        write_skill(
-            &root,
-            "skills/kretsverket/kretsverket-editor-change",
-            "kretsverket-editor-change",
-        );
+        write_skill(&root, "skills/domain/domain-change", "domain-change");
 
         let skills = discover_skills(&root).expect("discover skills");
         let found = skills
             .iter()
-            .find(|s| s.id == "workspace/kretsverket/kretsverket-editor-change")
+            .find(|s| s.id == "workspace/domain/domain-change")
             .expect("grouped skill id exists");
         let path = root.join(&found.path);
         let exists = path.is_file();

@@ -33,10 +33,6 @@ Use skills as routing and workflow guidance, not boilerplate. Select only task-r
 - Security, auth, permissions, uploads, shell, or sensitive data: `security-review`.
 - Database or persisted data changes: `database-migrations`; add `security-review` where access control or sensitive data is involved.
 - Fast-moving APIs, SDKs, CLIs, frameworks, or dependencies: `current-docs`; add `security-review` when trusted surface expands.
-- Kretsverket editor or canvas: `kretsverket-editor-change`.
-- Kretsverket persistence or file compatibility: `kretsverket-file-compatibility`.
-- Kretsverket symbols: `kretsverket-symbol-system`.
-- Kretsverket electrical drawing: `kretsverket-electrical-drawing`.
 - Release readiness: `release-check`.
 - Executor reports, paused work, or context transfer: `handoff`.
 
