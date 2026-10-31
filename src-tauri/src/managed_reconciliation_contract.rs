@@ -1778,9 +1778,9 @@ mod tests {
         String::from_utf8(output.stdout).expect("utf-8 rules")
     }
 
-    /// The state the owner's `~/.claude/CLAUDE.md` is in: the managed record
-    /// holds an old shipped template, and the file is a newer shipped base with
-    /// one line of "Codex delegation" edited by hand.
+    /// A refined `~/.claude/CLAUDE.md`: the managed record holds an old shipped
+    /// template, and the file is a newer shipped base (from git history) with
+    /// one line of its former "Codex delegation" section edited by hand.
     #[test]
     fn owner_refined_claude_rules_are_a_legacy_conflict_and_stay_untouched() {
         let _guard = guard::lock();

@@ -90,20 +90,20 @@ mod tests {
 
     #[test]
     fn windows_path_becomes_forward_slash_for_bash() {
-        let path = Path::new(r"C:\Users\me\.cursor\mcp.json");
+        let path = Path::new(r"C:\Users\Example\.cursor\mcp.json");
         assert_eq!(
             path_arg_for_bash(path).expect("bash path"),
-            "C:/Users/me/.cursor/mcp.json"
+            "C:/Users/Example/.cursor/mcp.json"
         );
     }
 
     #[test]
     fn path_with_spaces_stays_single_bash_argument_string() {
-        let path = Path::new(r"C:\Users\me\My Workspace\generate-opencode-config.py");
+        let path = Path::new(r"C:\Users\Example\My Workspace\generate-opencode-config.py");
         let bash_path = path_arg_for_bash(path).expect("bash path");
         assert_eq!(
             bash_path,
-            "C:/Users/me/My Workspace/generate-opencode-config.py"
+            "C:/Users/Example/My Workspace/generate-opencode-config.py"
         );
         assert!(bash_path.contains(' '));
         assert!(!bash_path.starts_with(r"\\?\"));

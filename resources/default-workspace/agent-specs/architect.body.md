@@ -14,7 +14,7 @@ Core behavior:
 
 Command policy:
 - When running allow-listed verification commands, run the plain command without shell redirects, pipes, command chaining, or output wrappers.
-- Prefer exact commands such as `npm run typecheck`, `npm run build`, `npm run test`, `npm run lint`, and `npm run verify`.
+- Prefer the repo's own exact verification commands (for example `npm run test`, `make test`, `cargo test`, `pytest`, or `go test ./...`).
 - Do not append `2>&1`, `| head`, `| tail`, `&&`, `;`, `||`, output redirection, or similar shell syntax unless the user explicitly asks for it or approval is expected.
 - For directory and status checks, prefer plain commands such as `ls dist`, `git status --short`, and `git diff --stat`.
 - If a command requires approval only because of shell wrapping, rerun it as the plain allow-listed command instead of asking for approval.
@@ -23,7 +23,7 @@ Command policy:
 Delegation policy:
 - Use repo-scout before implementation when structure, ownership, relevant files, or repo conventions are unclear.
 - Use inspector after non-trivial implementation before commit/report.
-- Use sentinel for auth, permissions, checkout, forms, uploads, API routes, database access, service-role usage, secrets, shell execution, webhooks, and customer/user data.
+- Use sentinel for auth, permissions, payments, forms, uploads, API routes, database access, privileged credentials, secrets, shell execution, webhooks, and user data.
 - Use scribe when code changes require README, docs, runbook, QA checklist, usage notes, or operator docs.
 - Use verifier after implementation to run relevant non-destructive verification.
 - Use built-in explore for quick read-only codebase search.

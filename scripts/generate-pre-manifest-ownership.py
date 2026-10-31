@@ -48,6 +48,18 @@ HISTORICAL_SKILL_FILES = (
 # Removed skills that no tagged build shipped, so no installation holds them: sync-agent-rules was
 # added in c0b6e8d and removed a day later in 19b4040 (app-v0.1.0 predates both, v0.1.0-alpha has both).
 NEVER_RELEASED_SKILLS = ("sync-agent-rules",)
+# Skills dropped from the bundle after managed records existed, moved to a team pack after
+# 2026.10.17. An installed copy is retired through its managed record, or adopted by a pack that
+# ships the same name, so they take no removed-skill identity; their committed `skill:` entries stay
+# (append-only) and still prove a pre-manifest copy for a pack that ships the skill.
+RETIRED_AFTER_MANIFEST = (
+    "kretsverket-editor-change",
+    "kretsverket-electrical-drawing",
+    "kretsverket-file-compatibility",
+    "kretsverket-status-report",
+    "kretsverket-symbol-system",
+    "wordpress-woocommerce",
+)
 
 
 def digest(raw: bytes) -> str:
@@ -88,7 +100,9 @@ def unregistered_removed_skills(
             match = pattern.match(rel)
             if match:
                 shipped.add(match.group(1))
-    return sorted(shipped - set(current) - set(removed) - set(NEVER_RELEASED_SKILLS))
+    return sorted(
+        shipped - set(current) - set(removed) - set(NEVER_RELEASED_SKILLS) - set(RETIRED_AFTER_MANIFEST)
+    )
 
 
 class HistoricalDigests:

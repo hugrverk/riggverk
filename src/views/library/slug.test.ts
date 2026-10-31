@@ -3,7 +3,7 @@ import { docSlug } from "./slug";
 
 describe("docSlug", () => {
   it("makes a file name of a title", () => {
-    expect(docSlug("Kretsverket release notes")).toBe("kretsverket-release-notes");
+    expect(docSlug("Project release notes")).toBe("project-release-notes");
     expect(docSlug("  Släpp  &  Vänta! ")).toBe("slapp-vanta");
   });
 

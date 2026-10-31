@@ -788,14 +788,16 @@ mod tests {
         let root = temp_root("grouped");
         write_skill(
             &root,
-            "skills/kretsverket/kretsverket-editor-change",
-            &skill_body("kretsverket-editor-change", ALL_TARGETS),
+            "skills/domain/domain-change",
+            &skill_body("domain-change", ALL_TARGETS),
         );
         let catalog = discover_skill_catalog(&root).expect("discover");
+        let dir = canonical_skill_dir(&root, "domain-change");
         let _ = fs::remove_dir_all(&root);
         assert_eq!(catalog.len(), 1);
-        assert_eq!(catalog[0].name, "kretsverket-editor-change");
-        assert_eq!(catalog[0].group, "kretsverket");
+        assert_eq!(catalog[0].name, "domain-change");
+        assert_eq!(catalog[0].group, "domain");
+        assert_eq!(dir, root.join("skills/domain/domain-change"));
     }
 
     #[test]
@@ -1329,17 +1331,12 @@ mod tests {
             .filter(|(_, count)| *count > 0)
             .collect();
         assert_eq!(counts.get("security-audit"), Some(&19));
-        assert_eq!(counts.get("kretsverket-status-report"), Some(&2));
         assert_eq!(counts.get("adversarial-implementation"), Some(&2));
         assert_eq!(counts.get("adversarial-review"), Some(&2));
         assert_eq!(counts.get("adversarial-test"), Some(&2));
         assert_eq!(counts.get("browser-qa"), Some(&1));
         assert_eq!(counts.get("status-report"), Some(&4));
-        assert_eq!(counts.len(), 7, "{counts:?}");
-        assert_eq!(
-            canonical_skill_dir(&repo, "kretsverket-status-report"),
-            repo.join("skills/kretsverket/kretsverket-status-report")
-        );
+        assert_eq!(counts.len(), 6, "{counts:?}");
         assert_eq!(
             canonical_skill_dir(&repo, "security-audit"),
             repo.join("skills/security-audit")

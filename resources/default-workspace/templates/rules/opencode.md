@@ -7,4 +7,4 @@
 
 ## OpenCode command output
 
-This overrides the byte-cap rule above for allow-listed commands: the architect runs allow-listed verification and status commands (`npm run build`, `npm run test`, `npm run lint`, `npm run typecheck`, `npm run verify`, `git status --short`, `git diff --stat`, `ls`) plain, with no pipes, redirects, or wrappers, because shell wrapping triggers permission prompts. The byte-cap rule applies to every command outside the allow-list.
+This overrides the byte-cap rule above for allow-listed commands: the architect runs allow-listed verification and status commands (the repo's own build, test, lint, and typecheck commands, `git status --short`, `git diff --stat`, `ls`) plain, with no pipes, redirects, or wrappers, because shell wrapping triggers permission prompts. The byte-cap rule applies to every command outside the allow-list.

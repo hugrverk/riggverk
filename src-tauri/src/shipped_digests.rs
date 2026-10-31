@@ -408,20 +408,31 @@ mod tests {
         }
 
         // A grouped skill is keyed by the path it has in the bundle.
-        let grouped = "skills/kretsverket/kretsverket-status-report/assets/report-template.html";
+        let grouped_root = std::env::temp_dir().join(format!(
+            "aw-shipped-grouped-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let skill_dir = grouped_root.join("skills/domain/domain-report");
+        std::fs::create_dir_all(skill_dir.join("assets")).expect("grouped skill dir");
+        std::fs::write(
+            skill_dir.join("SKILL.md"),
+            "---\nname: domain-report\n---\n",
+        )
+        .expect("SKILL.md");
+        std::fs::write(skill_dir.join("assets/page.html"), "<html>\n").expect("asset");
+        let grouped = "skills/domain/domain-report/assets/page.html";
         let _inject = test_override::inject(&test_override::json_for(
             grouped,
             std::slice::from_ref(&shipped),
         ));
-        assert!(is_shipped_version(
-            &skill_file(
-                SkillRoot::OpenCode,
-                "kretsverket-status-report",
-                "assets/report-template.html"
-            ),
-            &root,
-            &shipped
-        ));
+        let proven = is_shipped_version(
+            &skill_file(SkillRoot::OpenCode, "domain-report", "assets/page.html"),
+            &grouped_root,
+            &shipped,
+        );
+        let _ = std::fs::remove_dir_all(&grouped_root);
+        assert!(proven);
     }
 
     #[test]
@@ -439,9 +450,9 @@ mod tests {
                 "skills/security-audit/validate-findings.cjs",
             ),
             (
-                "kretsverket-status-report",
+                "status-report",
                 "scripts/verify-report.mjs",
-                "skills/kretsverket/kretsverket-status-report/scripts/verify-report.mjs",
+                "skills/status-report/scripts/verify-report.mjs",
             ),
         ] {
             let installed = crate::stable_digest::file(&root.join(source)).expect("hash source");

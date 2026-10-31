@@ -8,9 +8,9 @@ Do not duplicate full `SKILL.md` content here. This file is an index for choosin
 
 | Skill | Use When |
 | --- | --- |
-| `adversarial-implementation` | Only when the user explicitly asks for it, in plain words ("kör adversarial", "låt en kritiker granska") or with `/adversarial-implementation`; it is kept out of the routing rules: an adversarial, critic-reviewed or two-agent implementation. A delegated implementer works against a fresh read-only critic chosen by capability first; only findings whose proof the lead re-runs count, the judging tests are frozen, and a deletion-only round ends the loop. Roles work with no setup and change with one phrase in chat or an `Adversarial roles:` line below END in the rules. |
-| `adversarial-review` | Only on an explicit request (`/adversarial-review`, or plain language such as "kör en adversarial review" or "granska planen adversariellt"): a fresh read-only critic chosen by capability attacks an existing diff, or a plan in plan mode, and only findings whose proof the lead re-runs are reported, in Fatal, Significant, Minor and Pre-existing buckets. It fixes nothing and offers a re-review of later changes at most once. Roles work as in `adversarial-implementation`. |
-| `adversarial-test` | Only when the user explicitly asks for it, in plain words ("skriv adversariella tester", "låt en motståndare skriva tester") or with `/adversarial-test`; it is kept out of the routing rules: a fresh read-only adversary, chosen by capability first, proposes failing tests tied to the acceptance criteria. The lead keeps only tests it ran and saw fail for the stated reason, freezes them, and the implementer changes production code only or reports `BLOCKED`. At most two rounds; only tests that protect a criterion stay. Roles as for `adversarial-implementation`. |
+| `adversarial-implementation` | Only when the user explicitly asks for it, in plain words ("run an adversarial implementation", "have a critic review it"; in Swedish "kör adversarial") or with `/adversarial-implementation`; it is kept out of the routing rules: an adversarial, critic-reviewed or two-agent implementation. A delegated implementer works against a fresh read-only critic chosen by capability first; only findings whose proof the lead re-runs count, the judging tests are frozen, and a deletion-only round ends the loop. Roles work with no setup and change with one phrase in chat or an `Adversarial roles:` line below END in the rules. |
+| `adversarial-review` | Only on an explicit request (`/adversarial-review`, or plain language such as "run an adversarial review" or "review the plan adversarially"; in Swedish "kör en adversarial review"): a fresh read-only critic chosen by capability attacks an existing diff, or a plan in plan mode, and only findings whose proof the lead re-runs are reported, in Fatal, Significant, Minor and Pre-existing buckets. It fixes nothing and offers a re-review of later changes at most once. Roles work as in `adversarial-implementation`. |
+| `adversarial-test` | Only when the user explicitly asks for it, in plain words ("write adversarial tests", "let an adversary write the tests"; in Swedish "skriv adversariella tester") or with `/adversarial-test`; it is kept out of the routing rules: a fresh read-only adversary, chosen by capability first, proposes failing tests tied to the acceptance criteria. The lead keeps only tests it ran and saw fail for the stated reason, freezes them, and the implementer changes production code only or reports `BLOCKED`. At most two rounds; only tests that protect a criterion stay. Roles as for `adversarial-implementation`. |
 | `accessibility-review` | Reviewing UI for WCAG 2.2 AA risks, semantics, controls, keyboard, focus, labels, contrast, and responsive usability. |
 | `browser-qa` | Verifying frontend changes with live browser checks, route smoke tests, interactions, responsive checks, console/network review, and evidence. |
 | `context-budget` | Reducing duplicated rules, docs, prompts, skills, and token overhead without removing essential safety guidance. |
@@ -31,23 +31,7 @@ Do not duplicate full `SKILL.md` content here. This file is an index for choosin
 | `tdd` | Using a narrow red-green-refactor loop for behavior changes, fixes, regressions, and tests. |
 | `zoom-out` | Explaining unfamiliar code in broader system context before editing. |
 
-## Shared Domain Skill
-
-| Skill | Use When |
-| --- | --- |
-| `wordpress-woocommerce` | Working on WordPress/WooCommerce themes, templates, hooks, filters, plugins, REST/AJAX, checkout/cart/product UI, security, i18n, and frontend integration. |
-
-## Kretsverket Skills
-
-Grouped source: `skills/kretsverket/<skill>/SKILL.md`.
-
-| Skill | Use When |
-| --- | --- |
-| `kretsverket-editor-change` | Changes cross Kretsverket editor layers: types, state, canvas, keyboard, selection, rendering, undo, persistence, export. |
-| `kretsverket-file-compatibility` | `.krets` / `.kretsym` persistence, parsing, migrations, defaults, and untrusted imports. |
-| `kretsverket-symbol-system` | Symbol Editor sandbox, definitions, instances, imports, nested symbols, anchors, and placed-instance updates. |
-| `kretsverket-electrical-drawing` | Wire semantics, terminal bindings, crossings, references, and drawing-versus-netlist boundaries. |
-| `kretsverket-status-report` | Kretsverket profile of `status-report`: the Swedish one-file HTML lägesrapport from Kretsverket's `origin/main` docs (current state, roadmap, known gaps, decisions), rendered and verified with `status-report`'s template and scripts. |
+Domain skills for a team's own projects and stack are not bundled: keep them in a skill pack (see Skill packs below), which can also carry their routing lines.
 
 ## Routing boundaries
 
@@ -55,7 +39,7 @@ Grouped source: `skills/kretsverket/<skill>/SKILL.md`.
 | --- | --- |
 | `diagnose` / `tdd` | Diagnose finds root cause; TDD locks behavior with a narrow test once the contract is clear. |
 | `minimal-implementation` / `adversarial-implementation` | Minimal-implementation is one bounded patch by the current agent; adversarial-implementation runs that patch through a separate implementer and a fresh hostile critic per round, only when the user asks for it. |
-| `adversarial-implementation` / `adversarial-review` | Adversarial-implementation writes a change through a critic loop; adversarial-review attacks work that already exists, or a plan, and fixes nothing. "Låt en kritiker granska" about finished work or a plan means adversarial-review. |
+| `adversarial-implementation` / `adversarial-review` | Adversarial-implementation writes a change through a critic loop; adversarial-review attacks work that already exists, or a plan, and fixes nothing. "Have a critic review it" (in Swedish "låt en kritiker granska") about finished work or a plan means adversarial-review. |
 | `adversarial-review` / `/code-review` | `/code-review` (or the `inspector` agent) is the routine review; adversarial-review runs a fresh critic from another route and reports only findings the lead proved, only when the user asks for it. |
 | `tdd` / `adversarial-test` | TDD has the current agent write each test and then the code; adversarial-test has a separate adversary write the tests and a separate implementer fix the code against them frozen, only when the user explicitly asks for it. |
 | `implementation-plan` / `minimal-implementation` | Plan defines slices; minimal-implementation executes one bounded patch. |
@@ -65,10 +49,8 @@ Grouped source: `skills/kretsverket/<skill>/SKILL.md`.
 | `handoff` / `release-check` | Handoff compacts session state; release-check validates merge/deploy readiness. |
 | `security-review` / `security-audit` | Security-review checks a change or answers a focused question in the current context; security-audit runs a full multi-agent audit of a whole codebase only when one is explicitly asked for. |
 | `security-review` / `sentinel` (agent) | Skill guides the review in the current context; where the harness has the sentinel agent (OpenCode, Claude), it performs an independent read-only review of a finished diff, otherwise the review stays inline. |
-| `status-report` / `kretsverket-status-report` | Status-report owns the workflow, data contract, render and verify for any repo; kretsverket-status-report is its profile with Kretsverket's sources, sections and Swedish tone. |
 | `retro` / `context-budget` | Retro mines one named session for environment fixes; context-budget audits instruction surfaces without a session. |
 | `zoom-out` / repo-scout (agent) | Zoom-out explains code context in chat; repo-scout agent maps unfamiliar repos read-only before implementation. |
-| Kretsverket quartet | `kretsverket-editor-change` (editor layers), `kretsverket-file-compatibility` (persistence), `kretsverket-symbol-system` (symbols), `kretsverket-electrical-drawing` (wiring semantics)—kept separate because triggers and invariants differ. |
 
 ## Common Combinations
 
@@ -79,15 +61,9 @@ Grouped source: `skills/kretsverket/<skill>/SKILL.md`.
 - Screenshot-driven UI: `screenshot-review`, then `frontend-design`.
 - Security-sensitive changes: `security-review`; add `database-migrations` for schema/data work.
 - Full codebase security audit or pen test: `security-audit`.
-- WooCommerce work: `wordpress-woocommerce` plus generic implementation, QA, accessibility, security, or release skills as relevant.
-- Kretsverket editor or canvas: `kretsverket-editor-change`.
-- Kretsverket persistence or files: `kretsverket-file-compatibility`.
-- Kretsverket symbols: `kretsverket-symbol-system`.
-- Kretsverket electrical drawing: `kretsverket-electrical-drawing`.
-- Kretsverket lägesrapport or statusrapport: `kretsverket-status-report`.
 - Prototyping before implementation: `prototype`; add `frontend-design` for UI prototypes.
 - Pausing, executor reports, or context transfer: `handoff`; add `context-budget` for large reports.
-- Project status report, statusrapport or lägesrapport: `status-report`.
+- Project status report or weekly summary: `status-report`.
 - Release readiness: `release-check`.
 - Docs, rules, or prompt consolidation: `context-budget`; add `implementation-plan` for explicit maps.
 - Session retrospective: `retro`, only when the user invokes `/retro` or `$retro` (it is not routed by the rules).
@@ -115,8 +91,8 @@ metadata:
 ```
 
 - `license` — `MIT` on every bundled skill, so the license travels with a copy taken out of the bundle. Third-party credits are in the repository's `NOTICE.md`.
-- `compatibility` — only where a skill needs something beyond reading and editing files: subagents or another agent CLI (`adversarial-*`, full `security-audit`), browser automation (`browser-qa`), `gh` and Node.js (`status-report`, `kretsverket-status-report`).
-- `metadata.category` — functional area or `kretsverket`.
+- `compatibility` — only where a skill needs something beyond reading and editing files: subagents or another agent CLI (`adversarial-*`, full `security-audit`), browser automation (`browser-qa`), `gh` and Node.js (`status-report`).
+- `metadata.category` — functional area.
 - `metadata.risk` — low, medium, or high.
 - `metadata.targets` — comma-separated harnesses that get the skill. Every harness reads the skills folders Riggverk installs into, so bundled skills list all nine: codex, opencode, claude, cursor, copilot, pi, kilo, antigravity, grok.
 - `metadata.related` — comma-separated related skill names; the routing check verifies each name exists.

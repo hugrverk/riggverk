@@ -1,6 +1,6 @@
 ---
 name: adversarial-implementation
-description: Runs a delegated implementer against a fresh read-only critic chosen by capability, keeps only findings the lead proves, then a deletion-only round. Use when the user explicitly asks for an adversarial or critic-reviewed implementation ("kör adversarial", "låt en kritiker granska"), never unasked.
+description: Runs a delegated implementer against a fresh read-only critic chosen by capability, keeps only findings the lead proves, then a deletion-only round. Use when the user explicitly asks for an adversarial or critic-reviewed implementation, never unasked.
 license: MIT
 compatibility: Needs subagents, or Codex, Claude Code or OpenCode as a critic CLI; with neither it stops, since a self-review is not adversarial.
 metadata:
@@ -27,7 +27,7 @@ Done when: a fresh critic returned `VERDICT: APPROVE`, the simplification round 
 
 Resolve each role with the shared convention in `adversarial-roles.md` next to this file. In short, the first match wins:
 
-1. what the user said in chat ("critic: claude", "använd Codex som kritiker");
+1. what the user said in chat ("critic: claude", "use Codex as the critic"; in Swedish "kritiker: claude");
 2. `roles.json` next to this file, if present;
 3. an `Adversarial roles:` line in the user's rules, below the END marker;
 4. the default: the implementer on your harness's own path (Harness notes); the critic on the strongest route that passes its preflight, another family only at comparable capability, else a fresh read-only subagent of your own harness.
@@ -145,7 +145,7 @@ Background: the fresh-critic loop, steel-man protocol and score-based stagnation
 
 ### Claude Code
 
-- Implementer: one `general-purpose` subagent, continued between rounds (SendMessage) so it keeps its context. With `implementer=codex`, delegate through the "Codex delegation" section of your rules instead and review the diff the same way.
+- Implementer: one `general-purpose` subagent, continued between rounds (SendMessage) so it keeps its context. With `implementer=codex`, run `codex exec -s workspace-write` non-interactively instead (brief on stdin, `-o` for the final message, in the background) and review the diff the same way.
 - Critic, other family: Codex with the recipe in `critic-recipes.md`. If Claude Code's sandbox is on, Codex cannot start its own sandbox inside it (`sandbox_apply: Operation not permitted`); run that one command outside the sandbox with the user's approval, or fall back.
 - Critic, same family: a fresh `inspector` subagent per round, with the model set to the strongest you have (your rules allow this for the critic only). It has no shell; the pasted diff is all it needs.
 

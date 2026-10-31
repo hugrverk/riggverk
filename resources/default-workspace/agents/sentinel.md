@@ -1,6 +1,6 @@
 ---
 name: sentinel
-description: Use automatically for auth, permissions, uploads, forms, checkout, account pages, API routes, server actions, database access, Supabase RLS, service-role usage, secrets, shell execution, webhooks, dependency changes, and user/customer data. Read-only security review.
+description: Use automatically for auth, permissions, uploads, forms, payments, account pages, API routes, server actions, database access and row-level security, privileged credentials, secrets, shell execution, webhooks, dependency changes, and user data. Read-only security review.
 mode: subagent
 temperature: 0.1
 steps: 45
@@ -1713,8 +1713,8 @@ Check:
 - Input validation and output escaping.
 - File upload and path traversal risk.
 - Shell command execution.
-- Database, RLS, storage, and service-role risk.
-- Checkout, account, order, customer-data, and PII risk.
+- Database, row-level security, storage, and privileged-credential risk.
+- Account, payment, order, customer-data, and PII risk.
 - Unsafe redirects, webhooks, nonce/CSRF issues, and permission checks.
 - Dangerous dependency, config, migration, or deployment changes.
 - Any path that could leak credentials, tokens, cookies, private keys, or sensitive config.

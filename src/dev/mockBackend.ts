@@ -407,7 +407,7 @@ function mockRulesDiff(surface: RulesSurfaceId, mode: RulesDiffMode): RulesDiffV
         " ",
         " ## Communication",
         "-Be direct, dense, technical, and concise. Respond in the user's language. Use English for code, comments, identifiers, commits, filenames, docs, and agent prompts.",
-        "+Be direct and concise. Respond in the user's language, and in Swedish for Swedish user-facing copy.",
+        "+Be direct and concise. Respond in the user's language, and match the language of existing user-facing copy.",
         "+Prefer short answers; no praise or filler.",
         " ",
         " ## Security",
@@ -445,8 +445,8 @@ function mockRulesDiff(surface: RulesSurfaceId, mode: RulesDiffMode): RulesDiffV
 
 function conversionResult(file: RulesStatus): string {
   const refinements = file.layout === "block"
-    ? ["", "## Communication", "Be direct and concise. Respond in the user's language, and in Swedish for Swedish user-facing copy.", "Prefer short answers; no praise or filler.", "", "## My refinements", "Never run destructive git commands without asking first."]
-    : ["", "## Communication", "Be direct and concise. Swedish copy for Swedish user-facing text.", "", "## Local tooling", "Use rtk for inspection-style commands.", "Prefer small diffs."];
+    ? ["", "## Communication", "Be direct and concise. Respond in the user's language, and match the language of existing user-facing copy.", "Prefer short answers; no praise or filler.", "", "## My refinements", "Never run destructive git commands without asking first."]
+    : ["", "## Communication", "Be direct and concise. Match the language of existing user-facing text.", "", "## Local tooling", "Use the project's task runner for builds and tests.", "Prefer small diffs."];
   return [
     "<!-- BEGIN RIGGVERK BASE: managed by Riggverk; edits inside are replaced on update; add refinements below END -->",
     ...RULES_BASE_LINES,
@@ -543,7 +543,7 @@ const DEFAULT_REFINEMENTS = [
   "",
   "## My refinements",
   "",
-  "- Answer in Swedish when I write Swedish.",
+  "- Answer in the language I write in.",
   "- Prefer small, reviewable diffs.",
   "- Never run destructive git commands without asking first.",
   "",
@@ -1463,7 +1463,6 @@ const SKILL_ROWS: Array<[string, string, string, string]> = [
   ["prototype", "workflow · diagnosis", "workflow", "low"],
   ["security-review", "security · data · domain", "security", "high"],
   ["database-migrations", "security · data · domain", "data", "high"],
-  ["wordpress-woocommerce", "security · data · domain", "domain", "high"],
   ["current-docs", "security · data · domain", "research", "low"],
   ["zoom-out", "security · data · domain", "research", "low"],
   ["retro", "workflow · diagnosis", "workflow", "low"],

@@ -15,13 +15,13 @@ Verification is never a role choice: the lead runs it. A `verifier` value anywhe
 
 For each role on its own, the first source that sets it wins:
 
-1. **Chat.** What the user says in this conversation, in Swedish or English, for this run only. Examples: "critic: claude", "critic=codex/gpt-6.1-sol", "use Codex as the critic", "kritiker: claude", "använd Codex som kritiker", "implementer: opencode", "implementerare: codex", "adversary: codex", "motståndare: claude".
+1. **Chat.** What the user says in this conversation, in any language, for this run only. Examples: "critic: claude", "critic=codex/<model>", "use Codex as the critic", "implementer: opencode", "adversary: codex"; a Swedish "kritiker: claude" works the same way.
 2. **`roles.json`** in the running skill's own directory (next to its `SKILL.md`), if present. Riggverk does not ship it yet; a later release writes it from a picker. Shape:
 
    ```json
    {
      "schema_version": 1,
-     "critic": { "harness": "codex", "model": "gpt-6.1-sol" },
+     "critic": { "harness": "codex", "model": "example-model" },
      "implementer": { "harness": "lead" }
    }
    ```
@@ -54,8 +54,7 @@ Never ask the user to configure anything before the first run. A failed prefligh
 Before the first round, print exactly one line in the user's language: each role with its route and model, where it came from (`default`, `chat`, `roles.json` or `rules`), and how to change it. Add a few words when a source was ignored or a route failed.
 
 ```text
-Roles: implementer=claude subagent (default), critic=codex/gpt-6.1-sol (default: other family, comparable, preflight ok). Change: say "critic: claude", or add "Adversarial roles: critic=claude" below END in your rules.
-Roller: implementerare=claude-subagent (standard), kritiker=codex/gpt-6.1-sol (standard: annan familj, jämförbar förmåga, preflight ok). Byt: skriv "kritiker: claude" eller lägg en rad "Adversarial roles: critic=claude" under END i dina regler.
+Roles: implementer=claude subagent (default), critic=codex/<model> (default: other family, comparable, preflight ok). Change: say "critic: claude", or add "Adversarial roles: critic=claude" below END in your rules.
 ```
 
 ## Ledger line
@@ -63,6 +62,5 @@ Roller: implementerare=claude-subagent (standard), kritiker=codex/gpt-6.1-sol (s
 At the end, print one line in the user's language, after the report: terminal state and rounds, findings accepted, rejected and unproven, the critic route and model with its source, and what the simplification round removed (omit it in skills without one).
 
 ```text
-Ledger: Approved after 2 rounds; findings 3 accepted, 1 rejected, 2 unproven; critic codex/gpt-6.1-sol (default); simplification -6 lines.
-Ledger: Godkänd efter 2 rundor; fynd 3 accepterade, 1 avvisat, 2 obevisade; kritiker codex/gpt-6.1-sol (standard); förenkling -6 rader.
+Ledger: Approved after 2 rounds; findings 3 accepted, 1 rejected, 2 unproven; critic codex/<model> (default); simplification -6 lines.
 ```

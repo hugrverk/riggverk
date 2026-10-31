@@ -18,8 +18,8 @@ Check:
 - Input validation and output escaping.
 - File upload and path traversal risk.
 - Shell command execution.
-- Database, RLS, storage, and service-role risk.
-- Checkout, account, order, customer-data, and PII risk.
+- Database, row-level security, storage, and privileged-credential risk.
+- Account, payment, order, customer-data, and PII risk.
 - Unsafe redirects, webhooks, nonce/CSRF issues, and permission checks.
 - Dangerous dependency, config, migration, or deployment changes.
 - Any path that could expose sensitive configuration or authentication material.

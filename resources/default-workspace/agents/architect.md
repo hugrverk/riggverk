@@ -188,18 +188,19 @@ permission:
     "yarn run typecheck *": allow
     "yarn run build *": allow
     "yarn run verify *": allow
-    "ddev start*": allow
-    "ddev describe*": allow
-    "ddev status*": allow
-    "ddev exec npm test*": allow
-    "ddev exec npm run test *": allow
-    "ddev exec npm run lint *": allow
-    "ddev exec npm run build *": allow
-    "ddev exec npm run verify *": allow
     "cargo fmt *": allow
     "cargo check *": allow
     "cargo clippy *": allow
     "cargo test *": allow
+    "pytest": allow
+    "pytest -q": allow
+    "python3 -m pytest": allow
+    "python3 -m pytest -q": allow
+    "go test ./...": allow
+    "go vet ./...": allow
+    "make test": allow
+    "make lint": allow
+    "make check": allow
     "grep *": ask
     "rg *": ask
     "git grep*": ask
@@ -220,7 +221,6 @@ permission:
     "npm run start*": ask
     "npm run deploy*": ask
     "npm run db*": ask
-    "npm run supabase*": ask
     "npm run migrate*": ask
     "npm run migration*": ask
     "npm run seed*": ask
@@ -229,7 +229,6 @@ permission:
     "pnpm start*": ask
     "pnpm deploy*": ask
     "pnpm db*": ask
-    "pnpm supabase*": ask
     "pnpm migrate*": ask
     "pnpm migration*": ask
     "pnpm seed*": ask
@@ -238,7 +237,6 @@ permission:
     "bun start*": ask
     "bun deploy*": ask
     "bun db*": ask
-    "bun supabase*": ask
     "bun migrate*": ask
     "bun migration*": ask
     "bun seed*": ask
@@ -247,7 +245,6 @@ permission:
     "yarn start*": ask
     "yarn deploy*": ask
     "yarn db*": ask
-    "yarn supabase*": ask
     "yarn migrate*": ask
     "yarn migration*": ask
     "yarn seed*": ask
@@ -1756,7 +1753,6 @@ permission:
     "e2e/**": allow
     "docs/**": allow
     "scripts/**": allow
-    "wordpress/wp-content/themes/**": allow
     "*.md": allow
     "*.ts": allow
     "*.tsx": allow
@@ -1893,7 +1889,7 @@ Core behavior:
 
 Command policy:
 - When running allow-listed verification commands, run the plain command without shell redirects, pipes, command chaining, or output wrappers.
-- Prefer exact commands such as `npm run typecheck`, `npm run build`, `npm run test`, `npm run lint`, and `npm run verify`.
+- Prefer the repo's own exact verification commands (for example `npm run test`, `make test`, `cargo test`, `pytest`, or `go test ./...`).
 - Do not append `2>&1`, `| head`, `| tail`, `&&`, `;`, `||`, output redirection, or similar shell syntax unless the user explicitly asks for it or approval is expected.
 - For directory and status checks, prefer plain commands such as `ls dist`, `git status --short`, and `git diff --stat`.
 - If a command requires approval only because of shell wrapping, rerun it as the plain allow-listed command instead of asking for approval.
@@ -1902,7 +1898,7 @@ Command policy:
 Delegation policy:
 - Use repo-scout before implementation when structure, ownership, relevant files, or repo conventions are unclear.
 - Use inspector after non-trivial implementation before commit/report.
-- Use sentinel for auth, permissions, checkout, forms, uploads, API routes, database access, service-role usage, secrets, shell execution, webhooks, and customer/user data.
+- Use sentinel for auth, permissions, payments, forms, uploads, API routes, database access, privileged credentials, secrets, shell execution, webhooks, and user data.
 - Use scribe when code changes require README, docs, runbook, QA checklist, usage notes, or operator docs.
 - Use verifier after implementation to run relevant non-destructive verification.
 - Use built-in explore for quick read-only codebase search.
