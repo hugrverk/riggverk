@@ -56,6 +56,7 @@ Use skills as routing and workflow guidance, not boilerplate. Select only task-r
 - Fast-moving APIs, SDKs, CLIs, frameworks, or dependencies: `current-docs`; add `security-review` when trusted surface expands.
 - Release readiness: `release-check`.
 - Creating or refreshing a repository's `AGENTS.md` (and its `CLAUDE.md` pointer): `agents-md`.
+- Release notes or a changelog section: `release-notes`.
 - Executor reports, paused work, or context transfer: `handoff`.
 - Committing, pushing, or opening or updating a PR: `pr-workflow`; add `release-check` before the push.
 
