@@ -143,7 +143,8 @@ permission:
     "*": ask
     "pwd": allow
     "ls*": allow
-    "tree*": allow
+    "tree": allow
+    "tree *": allow
     "find *": allow
     "git status*": allow
     "git diff*": allow
@@ -160,7 +161,9 @@ permission:
     "git ls-files*": allow
     "git add*": allow
     "git commit*": allow
-    "git fetch*": allow
+    "git fetch": allow
+    "git fetch origin": allow
+    "git fetch upstream": allow
     "mkdir *": allow
     "mkdir -p *": allow
     "touch *": allow
@@ -215,6 +218,19 @@ permission:
     "git rebase*": ask
     "git stash*": ask
     "git tag*": ask
+    "git difftool*": ask
+    "git diff*--output*": ask
+    "git log*--output*": ask
+    "git show*--output*": ask
+    "git diff*--ext-diff*": ask
+    "git log*--ext-diff*": ask
+    "git show*--ext-diff*": ask
+    "git diff*--textconv*": ask
+    "git log*--textconv*": ask
+    "git show*--textconv*": ask
+    "git diff*--no-index*": ask
+    "tree -*": ask
+    "tree * -*": ask
     "cp *": ask
     "mv *": ask
     "npm run dev*": ask
