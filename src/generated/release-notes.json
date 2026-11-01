@@ -1,6 +1,33 @@
 {
   "releases": [
     {
+      "version": "2026.11.6",
+      "sections": [
+        {
+          "title": "New",
+          "items": [
+            "Import a skill you found. In Library → Packs, choose Import skill… and drop or paste a folder, a `SKILL.md` or a folder of several skills (#178):",
+            "Riggverk first shows the whole `SKILL.md` and flags what lets a skill act without asking: `allowed-tools`, `hooks`, `!` commands, scripts and hidden Unicode.",
+            "The skill goes into its own read-only pack, `imported`, with a record of where it came from. Your agents get it at the next Update all.",
+            "You can import again with a diff, remove it (a backup is kept), undo, or Edit as my copy.",
+            "A pack skill without `targets` now counts for all agents, so skills from GitHub work as they are.",
+            "Update all shows what will happen before you apply (#177):",
+            "Count tiles sum up what will be created, updated, removed, skipped and left alone.",
+            "A small flow map shows what is written to each agent, with the plan grouped by agent beside it.",
+            "While applying, the map follows the run. When it is done, a receipt lists any steps left to you, with Undo."
+          ]
+        },
+        {
+          "title": "Fixes",
+          "items": [
+            "Light mode: a saved custom background no longer stays dark when macOS switches to light. Custom colours apply only where they fit the theme shown, and Settings says when one is not used",
+            "The app icon has a light variant for light appearance on macOS 26",
+            "The version moved to the sidebar foot, and the window buttons sit further from the edge, in line with the top bar"
+          ]
+        }
+      ]
+    },
+    {
       "version": "2026.11.5",
       "sections": [
         {
