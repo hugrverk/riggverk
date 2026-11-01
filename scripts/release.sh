@@ -327,7 +327,8 @@ app_bundle="${CARGO_TARGET_DIR:-$repo_root/src-tauri/target}/release/bundle/maco
 
 build_app() {
   rm -rf "$app_bundle"
-  npm run tauri build -- --bundles app -- --locked
+  # actool (the Icon Composer icon) fails with "Bad file descriptor" when stdin is closed, as in a background job or CI.
+  npm run tauri build -- --bundles app -- --locked </dev/null
   [ -d "$app_bundle" ] || fail "the build did not produce $app_bundle"
   local built
   built="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app_bundle/Contents/Info.plist")"
