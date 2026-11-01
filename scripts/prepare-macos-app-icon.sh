@@ -152,9 +152,30 @@ if ! /usr/libexec/PlistBuddy -c 'Print :CFBundleIconFile' src-tauri/Info.plist |
   exit 1
 fi
 
-if ! /usr/libexec/PlistBuddy -c 'Print :CFBundleIconName' src-tauri/Info.plist | grep -Fxq 'Riggverk'; then
-  printf 'FAIL: src-tauri/Info.plist must set CFBundleIconName to Riggverk\n' >&2
+# macOS 26+ reads the appearance-aware icon (light, dark, tinted) from Assets.car, which the Tauri bundler compiles
+# with actool from the Icon Composer document listed in bundle.icon and names in CFBundleIconName itself. A
+# CFBundleIconName in our Info.plist would override that name and hide the catalog icon; Riggverk.icns above stays the
+# CFBundleIconFile fallback for older macOS.
+if /usr/libexec/PlistBuddy -c 'Print :CFBundleIconName' src-tauri/Info.plist >/dev/null 2>&1; then
+  printf 'FAIL: src-tauri/Info.plist must not set CFBundleIconName; the bundler sets it for Assets.car\n' >&2
   exit 1
 fi
 
-printf 'macOS nested dark app icon prepared\n'
+icon_document="src-tauri/macos/Riggverk.icon"
+python3 - "$icon_source" "$icon_document/Assets/rune.svg" "$icon_document/icon.json" <<'PY'
+import json
+import re
+import sys
+
+source, rune, manifest = (open(path, encoding="utf-8").read() for path in sys.argv[1:4])
+pattern = r'<g transform="[^"]+"><path fill="#[0-9a-fA-F]{6}" d="[^"]+"/></g>'
+expected = re.search(pattern, source)
+actual = re.search(pattern, rune)
+if not expected or not actual or expected.group(0) != actual.group(0):
+    raise SystemExit("FAIL: Riggverk.icon/Assets/rune.svg must carry the rune group of assets/icon-source.svg unchanged")
+appearances = [spec.get("appearance") for spec in json.loads(manifest).get("fill-specializations", [])]
+if None not in appearances or "dark" not in appearances:
+    raise SystemExit("FAIL: Riggverk.icon/icon.json must specialise the tile fill for the default and dark appearances")
+PY
+
+printf 'macOS app icon prepared (icns fallback, Icon Composer document checked)\n'

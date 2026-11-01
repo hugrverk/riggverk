@@ -21,6 +21,7 @@ import {
   themeAccentDefault,
   themeColorDefaults,
   themeColorWarnings,
+  useSystemPrefersLight,
   type SettingsSaveStatus,
 } from "../lib/settingsDraft";
 import type { AppSettings } from "../types";
@@ -330,6 +331,8 @@ export function SettingsView({
   const ids = useId();
   // The OS preference beats the setting (lib/motion), so the row says when it is the one in charge.
   const systemReducesMotion = useSystemReducedMotion();
+  // Under the system theme the colour defaults and warnings follow the OS appearance: re-render when it switches.
+  useSystemPrefersLight();
   const screenRef = useRef<HTMLElement>(null);
   const labelId = (key: string) => `${ids}-${key}`;
   const [accentDraft, setAccentDraft] = useState(appSettings?.accent_color ?? "");
