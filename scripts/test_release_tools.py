@@ -357,6 +357,17 @@ class UpdaterTests(unittest.TestCase):
             with self.subTest(change=change), self.assertRaises(tools.ReleaseError):
                 self.config({**ON, **change})
 
+    def test_an_updater_in_the_macos_config_is_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "src-tauri").mkdir()
+            (root / "src-tauri/tauri.conf.json").write_text(json.dumps({"plugins": {}}), encoding="utf-8")
+            (root / "src-tauri/tauri.macos.conf.json").write_text(
+                json.dumps({"plugins": {"updater": ON}}), encoding="utf-8"
+            )
+            with self.assertRaises(tools.ReleaseError):
+                tools.updater_config(root)
+
     def test_the_manifest_points_every_mac_at_the_universal_archive(self) -> None:
         notes = (
             "# Riggverk 2026.11.7\n\n## New\n\n- A thing (#1)\n\n## Other\n\n<!-- chores -->\n- Bump (#2)\n\n"

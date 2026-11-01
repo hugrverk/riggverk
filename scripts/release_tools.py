@@ -282,6 +282,10 @@ def updater_config(root: Path = ROOT) -> str | None:
     and no `dangerous*` switch. Anything else is an error, never a weaker updater.
     """
     conf = json.loads((root / TAURI_CONF).read_text(encoding="utf-8"))
+    # Tauri merges the macOS file over this one; an updater there would escape the checks below and the key check.
+    macos_conf = root / TAURI_CONF.replace("tauri.conf.json", "tauri.macos.conf.json")
+    if macos_conf.exists() and "updater" in json.loads(macos_conf.read_text(encoding="utf-8")).get("plugins", {}):
+        raise ReleaseError("plugins.updater belongs in tauri.conf.json, not tauri.macos.conf.json")
     updater = conf.get("plugins", {}).get("updater")
     if updater is None:
         return None
@@ -321,7 +325,7 @@ def minisign_key_id(encoded: str, what: str) -> bytes:
 
 def check_signature_key(signature: str, pubkey: str) -> None:
     """The updater signature must come from the key whose public half the app trusts, or every installed copy would
-    refuse the update."""
+    refuse the update. Comparing key ids catches the wrong key in the environment; it is not a signature check."""
     if minisign_key_id(signature, "signature") != minisign_key_id(pubkey, "public key"):
         raise ReleaseError(
             "the updater signature was not made with the key in plugins.updater (check TAURI_SIGNING_PRIVATE_KEY)"
