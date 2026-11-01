@@ -244,14 +244,48 @@ pub(crate) fn valid_spec_skill_name(name: &str) -> bool {
         && crate::skill_sources::valid_pack_name(name)
 }
 
-fn read_capped(path: &Path, cap: u64) -> Result<Vec<u8>, String> {
-    // Only a regular file is opened: a pipe would block the open.
-    if !fs::symlink_metadata(path).is_ok_and(|meta| meta.is_file()) {
-        return Err("a file of the skill is not a regular file".to_string());
+/// `open(2)` flags: never follow a link in the last component, never block (a pipe would).
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+const OPEN_FLAGS: i32 = 0x0100 | 0x0004; // O_NOFOLLOW | O_NONBLOCK
+#[cfg(any(target_os = "linux", target_os = "android"))]
+const OPEN_FLAGS: i32 = 0o400000 | 0o4000; // O_NOFOLLOW | O_NONBLOCK
+#[cfg(all(
+    unix,
+    not(any(
+        target_os = "macos",
+        target_os = "ios",
+        target_os = "linux",
+        target_os = "android"
+    ))
+))]
+const OPEN_FLAGS: i32 = 0;
+
+/// Opens `path` for reading without following a link at it and without blocking, and returns the
+/// handle with the metadata of what was opened (`fstat`): only a regular file with one link passes,
+/// so what is read is what the metadata describes.
+fn open_regular(path: &Path) -> Result<(fs::File, fs::Metadata), String> {
+    let mut options = fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(OPEN_FLAGS);
     }
+    let handle = options.open(path).map_err(|_| "cannot open".to_string())?;
+    let meta = handle
+        .metadata()
+        .map_err(|_| "cannot inspect".to_string())?;
+    if !meta.is_file() || link_count(&meta) != 1 {
+        return Err("not a regular file".to_string());
+    }
+    Ok((handle, meta))
+}
+
+fn read_capped(path: &Path, cap: u64) -> Result<Vec<u8>, String> {
     let mut bytes = Vec::new();
-    fs::File::open(path)
-        .map_err(|_| "cannot open a file of the skill".to_string())?
+    open_regular(path)
+        .map_err(|_| "a file of the skill is not a regular file".to_string())?
+        .0
         .take(cap + 1)
         .read_to_end(&mut bytes)
         .map_err(|_| "cannot read a file of the skill".to_string())?;
@@ -592,9 +626,9 @@ fn add_file(scan: &mut Scan, rel: &str, path: &Path, meta: &fs::Metadata) {
 /// a link or another file, or grown) between the scan and the copy.
 fn read_source(file: &SourceFile) -> Result<Vec<u8>, String> {
     let changed = || format!("{}: changed while it was read; import again", file.rel);
-    let handle = fs::File::open(&file.path).map_err(|_| format!("{}: cannot be read", file.rel))?;
-    let meta = handle.metadata().map_err(|_| changed())?;
-    if !meta.is_file() || identity(&meta) != file.identity {
+    // A link, a pipe or another file swapped in since the scan is refused on the opened handle.
+    let (handle, meta) = open_regular(&file.path).map_err(|_| changed())?;
+    if identity(&meta) != file.identity {
         return Err(changed());
     }
     let mut bytes = Vec::new();
@@ -1786,4 +1820,88 @@ pub fn undo_last_import() -> Result<String, String> {
         EventAction::Replace => format!("{name} is back as it was before it was imported again"),
         _ => format!("{name} is back in pack:imported"),
     })
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+
+    fn dir(label: &str) -> PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!("aw-import-open-{label}-{nanos}"));
+        fs::create_dir_all(&dir).expect("dir");
+        dir
+    }
+
+    fn scanned(path: &Path) -> SourceFile {
+        let meta = fs::symlink_metadata(path).expect("lstat");
+        SourceFile {
+            rel: "a.md".to_string(),
+            path: path.to_path_buf(),
+            size: meta.len(),
+            executable: false,
+            identity: identity(&meta),
+        }
+    }
+
+    #[test]
+    fn a_scanned_file_swapped_for_a_link_to_the_same_inode_is_refused() {
+        let dir = dir("link");
+        let real = dir.join("real.md");
+        fs::write(&real, "text\n").expect("file");
+        let path = dir.join("a.md");
+        fs::rename(&real, &path).expect("move");
+        let file = scanned(&path);
+        assert_eq!(read_source(&file).expect("unchanged"), b"text\n");
+        // The same inode, reached through a link now: the open does not follow it.
+        fs::rename(&path, &real).expect("move back");
+        std::os::unix::fs::symlink(&real, &path).expect("link");
+        assert!(read_source(&file)
+            .unwrap_err()
+            .contains("changed while it was read"));
+        assert!(read_capped(&path, 1024).is_err());
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn a_scanned_file_swapped_for_a_pipe_is_refused_without_blocking() {
+        let dir = dir("fifo");
+        let path = dir.join("a.md");
+        fs::write(&path, "text\n").expect("file");
+        let file = scanned(&path);
+        fs::remove_file(&path).expect("remove");
+        let made = std::process::Command::new("mkfifo")
+            .arg(&path)
+            .status()
+            .expect("mkfifo");
+        assert!(made.success());
+        // Without a writer, a blocking open of a pipe never returns; this one does, and refuses.
+        assert!(read_source(&file)
+            .unwrap_err()
+            .contains("changed while it was read"));
+        assert!(read_capped(&path, 1024).is_err());
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn a_scanned_file_that_gained_a_hard_link_or_was_replaced_is_refused() {
+        let dir = dir("hard");
+        let path = dir.join("a.md");
+        fs::write(&path, "text\n").expect("file");
+        let file = scanned(&path);
+        fs::hard_link(&path, dir.join("other.md")).expect("hard link");
+        assert!(read_source(&file).is_err(), "two links");
+        fs::remove_file(dir.join("other.md")).expect("unlink");
+        fs::remove_file(&path).expect("remove");
+        fs::write(&path, "text\n").expect("another file, same bytes");
+        let replaced = read_source(&file);
+        // A new inode is refused; a file system that reuses the inode number still passes the size.
+        if fs::symlink_metadata(&path).map(|m| identity(&m)).ok() != Some(file.identity) {
+            assert!(replaced.is_err());
+        }
+        let _ = fs::remove_dir_all(dir);
+    }
 }
