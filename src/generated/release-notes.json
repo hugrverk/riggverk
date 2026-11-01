@@ -1,6 +1,17 @@
 {
   "releases": [
     {
+      "version": "2026.11.4",
+      "sections": [
+        {
+          "title": "Fixes",
+          "items": [
+            "Quit (Cmd+Q) now asks about unsaved work first. Before, it closed Riggverk at once and an unsaved Library edit was lost. A minimized window comes back to ask. Quit from the Dock is still not asked about"
+          ]
+        }
+      ]
+    },
+    {
       "version": "2026.11.3",
       "sections": [
         {
