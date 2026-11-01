@@ -1,6 +1,25 @@
 {
   "releases": [
     {
+      "version": "2026.11.6",
+      "sections": [
+        {
+          "title": "New",
+          "items": [
+            "Import skills into an app-owned pack after a preview",
+            "Show Update all as a flow map beside the plan"
+          ]
+        },
+        {
+          "title": "Fixes",
+          "items": [
+            "Fix light mode and add a light app icon",
+            "Move the version to the sidebar foot, centre traffic lights"
+          ]
+        }
+      ]
+    },
+    {
       "version": "2026.11.5",
       "sections": [
         {
