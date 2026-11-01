@@ -3440,6 +3440,27 @@ pub fn check_transaction_folder_trusted(backup_dir: &Path) -> Result<(), String>
     Ok(())
 }
 
+/// Refuses a backup someone other than the user could have written before it is restored: the
+/// file, or the folder and everything below it, must be no link, owned by the current user and not
+/// writable by its group or by everyone (Unix). Nothing authenticates the backed-up bytes, so this
+/// is what keeps another local user from choosing what a rollback writes. Read access is not
+/// checked: releases before v2026.10.1 left backups 0644 and folders 0755, which still restore.
+pub fn check_backup_trusted(backup: &Path) -> Result<(), String> {
+    const WHAT: &str = "the setup backup";
+    let meta = fs::symlink_metadata(backup).map_err(|_| format!("cannot inspect {WHAT}"))?;
+    if meta.file_type().is_symlink() {
+        return Err(format!("refusing {WHAT}: it is a link"));
+    }
+    crate::skill_sources::check_trusted(&meta, WHAT)?;
+    if meta.is_dir() {
+        for entry in fs::read_dir(backup).map_err(|_| format!("cannot inspect {WHAT}"))? {
+            let entry = entry.map_err(|_| format!("cannot inspect {WHAT}"))?;
+            check_backup_trusted(&entry.path())?;
+        }
+    }
+    Ok(())
+}
+
 pub fn persist_manifest_atomic(
     path: &Path,
     manifest: &ArtifactTransactionManifest,
@@ -3815,6 +3836,7 @@ pub fn validate_backup_for_rollback(
         return Err("backup missing".into());
     }
     reject_symlink(&backup_path, "rollback backup")?;
+    check_backup_trusted(&backup_path)?;
     if backup_path.is_dir() {
         scan_backup_tree_no_symlinks(&backup_path)?;
     } else if !backup_path.is_file() {
@@ -3934,6 +3956,7 @@ fn restore_artifact_from_backup_with_mode(
                 return Err("backup missing".into());
             }
             reject_symlink(&backup_path, "backup")?;
+            check_backup_trusted(&backup_path)?;
             // The copy replaces the destination atomically; removing it first
             // would lose the file if the copy then fails.
             crate::safe_filesystem::copy_regular_file_no_symlinks(
@@ -3954,6 +3977,7 @@ fn restore_artifact_from_backup_with_mode(
                 return Err("backup missing".into());
             }
             reject_symlink(&backup_path, "backup")?;
+            check_backup_trusted(&backup_path)?;
             match mode {
                 RollbackRestoreMode::FullBackup => {
                     crate::safe_filesystem::copy_regular_file_no_symlinks(
@@ -4814,6 +4838,88 @@ mod tests {
             fs::read_to_string(home.join(".codex/AGENTS.md")).unwrap(),
             "original"
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_backup_file_others_can_write_is_never_restored() {
+        use std::os::unix::fs::PermissionsExt;
+        let _guard = crate::test_env::guard::lock();
+        let bundled = crate::setup_roots::bundled_root().unwrap();
+        let source = fs::read_to_string(bundled.join("templates/sync/codex-rules.md")).unwrap();
+        let (mut op, backup_dir, home, ws) =
+            automatic_restore_fixture("auto-shared-backup", "original", &source);
+        op.expected_full_digest = Some(crate::stable_digest::bytes(source.as_bytes()));
+        let backup = backup_dir.join("artifacts/codex-rules");
+        let dest = home.join(".codex/AGENTS.md");
+        let set_mode = |path: &Path, mode: u32| {
+            fs::set_permissions(path, fs::Permissions::from_mode(mode)).unwrap()
+        };
+
+        set_mode(&backup, 0o666);
+        let refused = "refusing the setup backup: it is writable by its group or by everyone; \
+                       run chmod go-w on it";
+        assert_eq!(
+            restore_artifact_from_backup(&op, &backup_dir, &home, &ws).unwrap_err(),
+            refused
+        );
+        assert_eq!(
+            restore_artifact_from_backup_for_explicit_rollback(&op, &backup_dir, &home, &ws)
+                .unwrap_err(),
+            refused
+        );
+        assert_eq!(
+            validate_backup_for_rollback(&op, &backup_dir).unwrap_err(),
+            refused
+        );
+        assert_eq!(
+            fs::read_to_string(&dest).unwrap(),
+            source,
+            "nothing restored"
+        );
+
+        // Owner-only, as this version writes it, or 0644 as releases before v2026.10.1 left it.
+        for mode in [0o600, 0o644] {
+            fs::write(&dest, &source).unwrap();
+            set_mode(&backup, mode);
+            validate_backup_for_rollback(&op, &backup_dir).expect("trusted backup");
+            restore_artifact_from_backup(&op, &backup_dir, &home, &ws).expect("restore");
+            assert_eq!(fs::read_to_string(&dest).unwrap(), "original");
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_folder_backup_is_trusted_only_when_nothing_below_it_is_shared() {
+        use std::os::unix::fs::PermissionsExt;
+        let base = temp("shared-backup-tree");
+        let tree = base.join("txn/artifacts/skill");
+        fs::create_dir_all(tree.join("nested")).unwrap();
+        fs::write(tree.join("SKILL.md"), "skill").unwrap();
+        fs::write(tree.join("nested/notes.md"), "notes").unwrap();
+        let op = ArtifactManifestOperation {
+            rollback_action: RollbackAction::RestoreFile,
+            backup_rel: Some("artifacts/skill".into()),
+            ..Default::default()
+        };
+        let backup_dir = base.join("txn");
+        let set_mode = |path: &Path, mode: u32| {
+            fs::set_permissions(path, fs::Permissions::from_mode(mode)).unwrap()
+        };
+        for path in [tree.clone(), tree.join("nested")] {
+            set_mode(&path, 0o755);
+        }
+        validate_backup_for_rollback(&op, &backup_dir).expect("0755 folders, 0644 files");
+        set_mode(&tree.join("nested/notes.md"), 0o666);
+        assert!(validate_backup_for_rollback(&op, &backup_dir)
+            .unwrap_err()
+            .starts_with("refusing the setup backup: it is writable"));
+        set_mode(&tree.join("nested/notes.md"), 0o600);
+        set_mode(&tree.join("nested"), 0o777);
+        assert!(validate_backup_for_rollback(&op, &backup_dir)
+            .unwrap_err()
+            .starts_with("refusing the setup backup: it is writable"));
+        let _ = fs::remove_dir_all(&base);
     }
 
     #[test]
