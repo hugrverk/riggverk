@@ -29,7 +29,8 @@ const MAX_REFINEMENTS_BYTES: usize = 512 * 1024;
 const ABSENT_REASON: &str = "no file yet: install rules from the harness page first";
 const LEGACY_REASON: &str = "no base block: convert or install first (harness page, v)";
 const LINK_REASON: &str =
-    "the file is a link; the app does not write through links: open it (o) and edit where it lives";
+    "the file is a link; the app does not write through or open links: edit it where it lives";
+const OUTSIDE_REASON: &str = "the rules file resolves outside its allowed folder";
 const NOT_A_FILE_REASON: &str = "the path is not a regular file";
 const CHANGED_REASON: &str = "the file changed on disk since it was opened: reload it";
 
@@ -360,17 +361,27 @@ fn save_refinements_at(
     ))
 }
 
-/// The file `o` opens. A link is allowed: it is the user's own file and the OS follows it to where it
-/// lives (the app itself never writes through one).
+/// The file `o` opens, resolved: a regular file inside the allowlist root with no link at it or in
+/// a folder between it and the root. `open` follows a link to whatever it points at, an app or a
+/// `.command` script included, so a link is refused as a save refuses it.
 fn open_path(artifact: &ArtifactId, ws_root: &Path, home: &Path) -> Result<PathBuf, String> {
     let dest = artifact.resolve_dest(home, ws_root)?;
     let root = artifact.allowlist_root(home, ws_root)?;
     crate::path_safety::reject_path_escape(&dest, &root, "rules file")?;
-    match fs::metadata(&dest) {
-        Ok(meta) if meta.is_file() => Ok(dest),
-        Ok(_) => Err(NOT_A_FILE_REASON.to_string()),
-        Err(_) => Err(ABSENT_REASON.to_string()),
+    if behind_a_link(&dest, &root) {
+        return Err(LINK_REASON.to_string());
     }
+    match fs::symlink_metadata(&dest) {
+        Ok(meta) if meta.is_file() => {}
+        Ok(_) => return Err(NOT_A_FILE_REASON.to_string()),
+        Err(_) => return Err(ABSENT_REASON.to_string()),
+    }
+    let resolved = fs::canonicalize(&dest).map_err(|_| ABSENT_REASON.to_string())?;
+    let resolved_root = fs::canonicalize(&root).map_err(|_| OUTSIDE_REASON.to_string())?;
+    if !resolved.starts_with(&resolved_root) {
+        return Err(OUTSIDE_REASON.to_string());
+    }
+    Ok(resolved)
 }
 
 /// Read-only: the rules file of every enabled rules surface, with what the Library may do with it.
@@ -799,11 +810,11 @@ mod tests {
             "is a link",
         );
         assert_eq!(fs::read_to_string(&real).unwrap(), original);
-        // `o` still hands the user's own file to the OS, which follows the link.
+        // `o` does not hand a link to the OS either: `open` would follow it anywhere.
         let ws = setup_workspace_target_path().unwrap();
         assert_eq!(
-            open_path(&ArtifactId::ClaudeRules, &ws, &env.home).unwrap(),
-            env.claude()
+            open_path(&ArtifactId::ClaudeRules, &ws, &env.home).unwrap_err(),
+            LINK_REASON
         );
 
         // A folder above the file is a link.
@@ -817,6 +828,10 @@ mod tests {
             "is a link",
         );
         assert_eq!(fs::read_to_string(&real).unwrap(), original);
+        assert_eq!(
+            open_path(&ArtifactId::ClaudeRules, &ws, &env.home).unwrap_err(),
+            LINK_REASON
+        );
     }
 
     #[test]
@@ -920,5 +935,13 @@ mod tests {
         fs::create_dir_all(env.claude()).unwrap();
         let error = open_path(&ArtifactId::ClaudeRules, &ws, &env.home).unwrap_err();
         assert!(error.contains("not a regular file"), "{error}");
+
+        // A regular file is handed to the OS by its resolved path.
+        fs::remove_dir(env.claude()).unwrap();
+        env.write(&env.claude(), b"# rules\n");
+        assert_eq!(
+            open_path(&ArtifactId::ClaudeRules, &ws, &env.home).unwrap(),
+            fs::canonicalize(env.claude()).unwrap()
+        );
     }
 }
