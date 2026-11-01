@@ -2606,21 +2606,75 @@ fn keep_stale_units_whole(planned: &mut [PlannedArtifact]) {
     }
 }
 
+/// A pack skill whose `SKILL.md` sets keys the harness acts on by itself, for the review.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FlaggedSkill {
+    pub pack: String,
+    pub keys: Vec<crate::skill_discovery::PrivilegedKey>,
+}
+
+/// The pack skills of the catalog that set any of
+/// [`crate::skill_discovery::PRIVILEGED_SKILL_KEYS`], by name. Bundled skills are not listed: the
+/// bundle's keys are reviewed where it is built.
+pub fn flagged_pack_skills<R: SourceRoot + ?Sized>(
+    sources: &R,
+) -> std::collections::BTreeMap<String, FlaggedSkill> {
+    sources
+        .catalog()
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|entry| {
+            let pack = entry.pack?;
+            let keys = crate::skill_discovery::read_privileged_keys(&entry.skill.skill_md_path);
+            (!keys.is_empty()).then_some((entry.skill.name, FlaggedSkill { pack, keys }))
+        })
+        .collect()
+}
+
+/// The longest value of a privileged key a review line carries; the Library shows it whole.
+const REVIEW_KEY_VALUE_CHARS: usize = 200;
+
+/// The note of a flagged skill's review line: `pack team; allowed-tools: Bash(git *) [grants tool
+/// access without asking]; model: opus`.
+fn flagged_note(flagged: &FlaggedSkill) -> String {
+    let mut parts = vec![format!("pack {}", flagged.pack)];
+    for key in &flagged.keys {
+        let mut value: String = key.value.chars().take(REVIEW_KEY_VALUE_CHARS).collect();
+        if value.len() < key.value.len() {
+            value.push_str("… (whole value in the Library)");
+        }
+        let note = if key.note.is_empty() {
+            String::new()
+        } else {
+            format!(" [{}]", key.note)
+        };
+        parts.push(format!("{}: {value}{note}", key.key));
+    }
+    parts.join("; ")
+}
+
 /// Review lines for the skills surface, one per folder and kind, in the shape the review table
 /// reads (`+ file (note)`):
 ///
 /// ```text
 /// + ~/.agents/skills (N skills, M files)
 /// ~ ~/.claude/skills (N skills, M files)
+/// + ~/.claude/skills/deploy (pack team; allowed-tools: Bash(git *) [grants tool access without asking])
 /// - $CODEX_HOME/skills (N skills, owned copies)
 /// ! ~/.cursor/skills/tdd (edited, kept)
 /// = ~/.claude/skills/diagnose (you manage; bundled update available)
 /// ```
 ///
-/// Creations, updates and removals are summarised per folder; every skill that stays because it
-/// was edited or is in the way gets its own line, with the harnesses that read both that copy
-/// and the installed one. `=` marks a skill with a file the user keeps.
-pub fn skill_plan_details(planned: &[PlannedArtifact], scope: &SkillScope) -> Vec<String> {
+/// Creations, updates and removals are summarised per folder, except a pack skill in `flagged`
+/// (it sets keys the harness acts on without asking), which gets a line of its own in each folder
+/// it is written to, naming those keys and their values. Every skill that stays because it was
+/// edited or is in the way gets its own line, with the harnesses that read both that copy and the
+/// installed one. `=` marks a skill with a file the user keeps.
+pub fn skill_plan_details(
+    planned: &[PlannedArtifact],
+    scope: &SkillScope,
+    flagged: &std::collections::BTreeMap<String, FlaggedSkill>,
+) -> Vec<String> {
     use std::collections::{BTreeMap, BTreeSet};
     let count = |n: usize, noun: &str| format!("{n} {noun}{}", if n == 1 { "" } else { "s" });
     let mut lines = Vec::new();
@@ -2630,26 +2684,33 @@ pub fn skill_plan_details(planned: &[PlannedArtifact], scope: &SkillScope) -> Ve
         ("-", OperationKind::Remove, true),
     ] {
         for root in crate::skill_roots::SkillRoot::ALL {
-            let files: Vec<_> = planned
+            let (own_line, files): (Vec<_>, Vec<_>) = planned
                 .iter()
                 .filter(|operation| operation.kind == kind)
                 .filter_map(|operation| operation.artifact.as_skill_file())
                 .filter(|file| file.root == root)
-                .collect();
-            if files.is_empty() {
-                continue;
+                .partition(|file| !owned && flagged.contains_key(file.skill.as_str()));
+            if !files.is_empty() {
+                let skills: BTreeSet<_> = files.iter().map(|file| file.skill.as_str()).collect();
+                let tail = if owned {
+                    "owned copies".to_string()
+                } else {
+                    count(files.len(), "file")
+                };
+                lines.push(format!(
+                    "{sign} {} ({}, {tail})",
+                    root.display(),
+                    count(skills.len(), "skill")
+                ));
             }
-            let skills: BTreeSet<_> = files.iter().map(|file| file.skill.as_str()).collect();
-            let tail = if owned {
-                "owned copies".to_string()
-            } else {
-                count(files.len(), "file")
-            };
-            lines.push(format!(
-                "{sign} {} ({}, {tail})",
-                root.display(),
-                count(skills.len(), "skill")
-            ));
+            let own_skills: BTreeSet<_> = own_line.iter().map(|file| file.skill.as_str()).collect();
+            for skill in own_skills {
+                lines.push(format!(
+                    "{sign} {}/{skill} ({})",
+                    root.display(),
+                    flagged_note(&flagged[skill])
+                ));
+            }
         }
     }
     // The skills that stay as they are, per folder and name: edited ones (conflicts) and the ones
@@ -4442,6 +4503,69 @@ mod tests {
             .expect_err("relative CODEX_HOME must be rejected");
         assert!(err.contains("CODEX_HOME must be an absolute path"), "{err}");
         let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn a_flagged_pack_skill_gets_its_own_review_line_naming_its_keys() {
+        use crate::artifact_registry::{SkillName, SkillRelPath};
+        use crate::skill_discovery::PrivilegedKey;
+        use crate::skill_roots::SkillRoot;
+        let file = |skill: &str, rel: &str, kind: OperationKind| PlannedArtifact {
+            artifact: ArtifactId::skill_file(
+                SkillRoot::Claude,
+                SkillName::new(skill).unwrap(),
+                SkillRelPath::new(rel).unwrap(),
+            ),
+            surface: SetupSurfaceId::Skills,
+            kind,
+            previous_state: PreviousState::Absent,
+            rollback_action: RollbackAction::RemoveCreatedFile,
+            rules: None,
+            rules_rewrite: None,
+            mcp: None,
+            file: None,
+            overwrite: None,
+        };
+        let planned = [
+            file("tdd", "SKILL.md", OperationKind::Create),
+            file("deploy", "SKILL.md", OperationKind::Create),
+            file("deploy", "notes.md", OperationKind::Create),
+        ];
+        let long = "x".repeat(250);
+        let flagged = std::collections::BTreeMap::from([(
+            "deploy".to_string(),
+            FlaggedSkill {
+                pack: "team".to_string(),
+                keys: vec![
+                    PrivilegedKey {
+                        key: "allowed-tools".to_string(),
+                        value: "Bash(git *)".to_string(),
+                        note: "grants tool access without asking".to_string(),
+                    },
+                    PrivilegedKey {
+                        key: "model".to_string(),
+                        value: long,
+                        note: String::new(),
+                    },
+                ],
+            },
+        )]);
+        let lines = skill_plan_details(&planned, &SkillScope::all(), &flagged);
+        assert_eq!(
+            lines,
+            [
+                "+ ~/.claude/skills (1 skill, 1 file)".to_string(),
+                format!(
+                    "+ ~/.claude/skills/deploy (pack team; allowed-tools: Bash(git *) [grants tool \
+                     access without asking]; model: {}… (whole value in the Library))",
+                    "x".repeat(200)
+                ),
+            ]
+        );
+        assert_eq!(
+            skill_plan_details(&planned, &SkillScope::all(), &Default::default()),
+            ["+ ~/.claude/skills (2 skills, 3 files)"]
+        );
     }
 
     #[cfg(unix)]

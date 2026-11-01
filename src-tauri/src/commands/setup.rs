@@ -2788,7 +2788,8 @@ fn attach_skill_details(
     ) else {
         return;
     };
-    let details = setup_transaction::skill_plan_details(&planned, &scope);
+    let flagged = setup_transaction::flagged_pack_skills(sources);
+    let details = setup_transaction::skill_plan_details(&planned, &scope, &flagged);
     for op in plan
         .operations
         .iter_mut()

@@ -196,6 +196,16 @@ function skillEntry(props: LibraryViewProps, id: string): LibraryEntry | null {
       meta.push({ label: "state", value: PACK_STATE_LABEL[skill.packState], tone: "warn" });
       if (skill.packReason) meta.push({ label: "why", value: skill.packReason, wrap: true });
     }
+    // The rendered body leaves the frontmatter out, and Install copies it byte for byte: name what acts without asking.
+    skill.privileged?.forEach((key, index) =>
+      meta.push({
+        id: `privileged-${index}`,
+        label: key.key,
+        value: key.note ? `${key.value} · ${key.note}` : key.value,
+        tone: key.note ? "warn" : undefined,
+        wrap: true,
+      }),
+    );
   }
   if (skill) {
     meta.push(...listItems("targets", skill.targets), ...listItems("related", skill.related));

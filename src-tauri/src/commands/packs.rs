@@ -39,6 +39,9 @@ pub struct PackSkillSummary {
     pub(crate) reason: String,
     /// Path of the `SKILL.md` below the pack folder; empty when there is none to show.
     pub(crate) path: String,
+    /// Frontmatter keys the harness acts on by itself (`allowed-tools`, `hooks`, ...), as written.
+    /// The Library hides the frontmatter of a pack skill, so these are listed on their own.
+    pub(crate) privileged: Vec<crate::skill_discovery::PrivilegedKey>,
 }
 
 #[derive(Serialize)]
@@ -113,6 +116,10 @@ fn library(sources: &SkillSources, folder: String) -> PackLibrary {
                 .to_string(),
                 reason: skill.reason.clone(),
                 path: skill.relative_path.clone(),
+                privileged: skill
+                    .skill_md_path()
+                    .map(crate::skill_discovery::read_privileged_keys)
+                    .unwrap_or_default(),
             });
         }
     }
@@ -128,6 +135,7 @@ fn library(sources: &SkillSources, folder: String) -> PackLibrary {
                 state: "missing".to_string(),
                 reason: held.reason.clone(),
                 path: String::new(),
+                privileged: Vec::new(),
             });
             continue;
         }
@@ -153,6 +161,7 @@ fn library(sources: &SkillSources, folder: String) -> PackLibrary {
                 state: "missing".to_string(),
                 reason: held.reason.clone(),
                 path: String::new(),
+                privileged: Vec::new(),
             });
         } else if held.state == HeldState::Error {
             // The pack lists it as an error already; say that the installed copy is kept.

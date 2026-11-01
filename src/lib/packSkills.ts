@@ -36,6 +36,7 @@ function toSummary(skill: PackSkillEntry): SkillSummary {
     related: [],
     packState: skill.state,
     packReason: skill.reason,
+    privileged: skill.privileged ?? [],
   };
 }
 
