@@ -2383,22 +2383,25 @@ fn list_models_with_executable(
     run_models_listing(program, program, version.as_ref(), timeout)
 }
 
-/// `opencode models` with the arguments of `version`, from a neutral working directory.
-/// `shown` names the executable in error text.
+/// `opencode models` with the arguments of `version`, from a fresh probe folder without project
+/// config. `shown` names the executable in error text.
 fn run_models_listing(
     program: &str,
     shown: &str,
     version: Option<&CliVersion>,
     timeout: Duration,
 ) -> Result<ListAvailableModelsResult, String> {
+    let cwd = opencode_cli::ProbeDir::create()
+        .map_err(|e| format!("could not create a private folder to run opencode models in: {e}"))?;
     let result = run_cmd_bounded(
         program,
         opencode_cli::models_args(version),
-        &opencode_cli::neutral_cwd(),
+        cwd.path(),
         BoundedCmdOptions {
             timeout: Some(timeout),
             stdout_cap: OPENCODE_MODELS_STDOUT_CAP,
             stderr_cap: 64 * 1024,
+            extra_env: opencode_cli::project_config_off(),
             ..BoundedCmdOptions::default()
         },
     );

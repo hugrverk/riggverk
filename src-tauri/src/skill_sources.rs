@@ -1242,6 +1242,9 @@ pub fn restore_record(workspace_root: &Path, backup_dir: &Path) -> Result<(), St
         return Err("refusing a symlinked pack skills backup".to_string());
     }
     if saved.is_file() {
+        let meta = fs::metadata(&saved)
+            .map_err(|_| "cannot inspect the pack skills backup".to_string())?;
+        check_trusted(&meta, "the pack skills backup")?;
         let mut raw = fs::read(&saved).map_err(|e| format!("read pack skills backup: {e}"))?;
         if let (Stored::Usable(live), Ok(mut document)) = (
             read_stored(workspace_root),

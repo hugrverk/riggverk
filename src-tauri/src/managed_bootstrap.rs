@@ -21,7 +21,6 @@ pub const REMOVED_SKILL_NAMES: &[&str] = &[
     "agent-report-review",
     "caveman",
     "dependency-evaluation",
-    "grill-me",
     "grill-with-docs",
     "improve-codebase-architecture",
     "nextjs-product-slice",
@@ -191,6 +190,8 @@ pub(crate) fn approved_rules_base_digest(artifact: &ArtifactId, digest: &str) ->
 pub fn bootstrap_metadata_dir_entries(workspace_root: &Path) -> Vec<String> {
     REMOVED_SKILL_NAMES
         .iter()
+        .copied()
+        .chain(std::iter::once("grill-me"))
         .map(|name| format!("metadata/deprecated-skills/{name}/SKILL.md"))
         .filter(|rel| workspace_root.join(rel).is_file())
         .collect()
@@ -605,7 +606,7 @@ mod tests {
                 SkillRoot::Claude,
                 name("grill-me")
             )),
-            Some(("removed-skill:grill-me".to_string(), "harness-skill"))
+            Some(("skill:grill-me".to_string(), "harness-skill"))
         );
         // Supporting files were never installed before this version.
         assert_eq!(

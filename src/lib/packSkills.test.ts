@@ -23,6 +23,13 @@ describe("pack skills in the Library", () => {
       ["pack:gone/b", "pack:gone", "missing"],
     ]);
     expect(rows[1]?.packReason).toBe("pack missing");
+    expect(rows.map(row => row.privileged)).toEqual([[], []]);
+  });
+
+  it("carries the frontmatter keys a pack skill acts on without asking", () => {
+    const key = { key: "allowed-tools", value: "Bash(git *)", note: "grants tool access without asking" };
+    const rows = packSkillSummaries({ ...library, skills: [{ ...library.skills[0]!, privileged: [key] }] });
+    expect(rows[0]?.privileged).toEqual([key]);
   });
 
   it("has no rows without a library", () => {

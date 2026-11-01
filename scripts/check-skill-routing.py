@@ -346,7 +346,7 @@ ON_REQUEST_PREFIX = "adversarial-"
 
 
 def validate_user_invoked_routing(discovered: dict[str, Path]) -> None:
-    """Rules must not route to skills the model is not allowed to invoke, or to on-request skills."""
+    """Reject automatic routes to user-invoked and on-request skills."""
     user_invoked = user_invoked_skills(discovered)
     on_request = {name for name in discovered if name.startswith(ON_REQUEST_PREFIX)}
     if not user_invoked and not on_request:

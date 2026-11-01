@@ -322,7 +322,8 @@
     "skills/grill-me/SKILL.md": [
       "sha256:1b88f70e463777a67940b9d1de29857e1b4f0077474b4d6433a3dfa89b99abd6",
       "sha256:8f21bae9924f67c5f1f11a9b07d20dfd308a8ebde69a20d64229c70a48d970f8",
-      "sha256:9efdea8c83d388540ce840148077d473baef194b72a2be64436d3179d21fdcc8"
+      "sha256:9efdea8c83d388540ce840148077d473baef194b72a2be64436d3179d21fdcc8",
+      "sha256:edd0ba8c366cbfd326491f7fab72f6f2ea49d9b5f3715e10907b65e517d70464"
     ],
     "skills/grill-with-docs/SKILL.md": [
       "sha256:3a4e568413fb28860d9a8f677600d24ac60b3cdcb02989e434fae76458893b8f",
@@ -504,6 +505,7 @@
     ],
     "skills/security-audit/UPSTREAM.md": [
       "sha256:2cdabf172f6f29ffc6403ebfe826e6eb7fc3e2cc090661b2f8a35f5af7c1a606",
+      "sha256:5b50bf332a2fb2c4e4bdd61041107f7e462143cbb64287264b09f77afa223d46",
       "sha256:6760bd357684cb45c6ea28a6189170d48fc7510a39b4b0fcd1e7002c8fbb1b52",
       "sha256:67d9179b15cbaf5751c6acbc92f7edd2dfa279708997297bed5c9bd407dd2e91",
       "sha256:c72c14f5ffa32cc5b382859bc95c722de2ee8fd2fefd2aa6d501a59bd567deac",

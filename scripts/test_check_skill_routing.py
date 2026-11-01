@@ -95,7 +95,9 @@ class CheckSkillRoutingTests(unittest.TestCase):
         name = "fixture-skill"
         dest = self.tree / WS / "skills" / name / "SKILL.md"
         dest.parent.mkdir()
-        dest.write_text(source.replace("name: tdd", f"name: {name}", 1), encoding="utf-8")
+        source = source.replace("name: tdd", f"name: {name}", 1)
+        source = "\n".join("description: Use when testing a fixture." if line.startswith("description:") else line for line in source.split("\n"))
+        dest.write_text(source, encoding="utf-8")
         self.append(self.tree / WS / "docs/SKILLS.md", f"\n| `{name}` | Fixture. |\n")
         result = run(self.tree, "check-skill-routing.py")
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -360,7 +362,7 @@ class CheckSkillRoutingTests(unittest.TestCase):
 
     def test_removed_skill_in_toml_agent_fails(self) -> None:
         agent = self.tree / WS / "templates/codex/agents/inspector.toml"
-        removed = "grill" + "-me"  # built at runtime so this file is not itself a stale reference
+        removed = "cave" + "man"  # built at runtime so this file is not itself a stale reference
         agent.write_text(agent.read_text(encoding="utf-8") + f"\n# see {removed}\n", encoding="utf-8")
         self.assert_fails(f"removed skill {removed}")
 
@@ -373,7 +375,7 @@ class CheckSkillRoutingTests(unittest.TestCase):
         self.assert_fails(f"references removed skill {removed}")
 
     def test_removed_skill_in_git_ignored_file_passes(self) -> None:
-        removed = "grill" + "-me"
+        removed = "cave" + "man"
         subprocess.run(["git", "init", "-q"], cwd=self.tree, check=True)
         (self.tree / ".git/info/exclude").write_text("notes/\n", encoding="utf-8")
         (self.tree / "notes").mkdir()
