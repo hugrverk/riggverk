@@ -6,7 +6,9 @@
         {
           "title": "Fixes",
           "items": [
-            "Clearer undo and plan wording, mock in step with the app"
+            "Undo says what it does: files the update created are removed, the others come back from the backup. The confirm and the History receipt now name both",
+            "History calls a run that only created files \"Installed\"",
+            "In the update review, a new file's details say what Undo does with it, and the plan no longer reads \"previewing preview\" while it is computed"
           ]
         }
       ]
