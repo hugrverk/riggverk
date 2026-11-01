@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Checks scripts/release.sh --dry-run and its refusals in a throwaway repository.
 
-The repository gets a bare local origin, a few merged pull requests, and stand-ins for gh, npm, cargo, codesign
-and ditto, so nothing real is built, pushed or uploaded. A dry run must also leave the repository untouched.
+The repository gets a bare local origin, a few merged pull requests, and stand-ins for gh, npm, cargo, rustup,
+codesign, ditto, hdiutil and lipo, so nothing real is built, pushed or uploaded. A dry run must also leave the repository untouched.
 """
 
 from __future__ import annotations
@@ -50,6 +50,10 @@ case "$1 $2" in
 esac
 """
 
+RUSTUP_STUB = """#!/usr/bin/env bash
+printf '%s\\n' aarch64-apple-darwin ${RUSTUP_STUB_TARGETS-x86_64-apple-darwin}
+"""
+
 today = datetime.date.today()
 NEXT = f"{today.year}.{today.month}.1"
 
@@ -64,8 +68,9 @@ class ReleaseShTests(unittest.TestCase):
         self.gh_log = base / "gh.log"
         bin_dir = base / "bin"
         bin_dir.mkdir()
-        for name in ("npm", "cargo", "codesign", "ditto"):
+        for name in ("npm", "cargo", "codesign", "ditto", "hdiutil", "lipo"):
             self.stub(bin_dir / name, "#!/usr/bin/env bash\nexit 0\n")
+        self.stub(bin_dir / "rustup", RUSTUP_STUB)
         self.stub(bin_dir / "gh", GH_STUB)
         (bin_dir / "python3").symlink_to(sys.executable)
         self.env = {
@@ -270,16 +275,26 @@ class ReleaseShTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn(f"app version: {NEXT}", result.stdout)
         self.assertIn("main ends with the merge of the release PR", result.stdout)
-        self.assertIn("npm run tauri build -- --bundles app", result.stdout)
-        self.assertIn("codesign --force --deep --sign -", result.stdout)
+        self.assertIn("npm run tauri build -- --target universal-apple-darwin --bundles app,dmg", result.stdout)
+        self.assertIn("codesign --verify --deep --strict", result.stdout)
+        self.assertNotIn("codesign --force", result.stdout)
+        self.assertIn(f"release/Riggverk-v{NEXT}-macOS.dmg, then hdiutil verify", result.stdout)
         self.assertIn(
-            f"gh release create v{NEXT} release/Riggverk-v{NEXT}-macOS.zip --title 'Riggverk {NEXT}' "
-            f"--notes-file release-notes/{NEXT}.md --verify-tag",
+            f"gh release create v{NEXT} release/Riggverk-v{NEXT}-macOS.dmg release/Riggverk-v{NEXT}-macOS.zip "
+            f"release/SHA256SUMS --title 'Riggverk {NEXT}' --notes-file release-notes/{NEXT}.md --verify-tag",
             result.stdout,
         )
         self.assertEqual(self.snapshot(), before)
         self.assertNotIn("release create", self.gh_calls())
         self.assertNotIn(f"v{NEXT}", self.git("ls-remote", "--tags", "origin"))
+
+    def test_publish_needs_both_rust_targets_for_the_universal_build(self) -> None:
+        self.merge_release_pr(NEXT)
+
+        result = self.release("publish", "--dry-run", RUSTUP_STUB_TARGETS="")
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("rustup target add x86_64-apple-darwin", result.stderr)
 
     def test_publish_refuses_an_existing_tag_or_release(self) -> None:
         self.merge_release_pr(NEXT)

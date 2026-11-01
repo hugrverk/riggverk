@@ -154,6 +154,15 @@ python3 scripts/check-source.py --group ui
 step "public residue: no retired name outside the allowlist"
 python3 scripts/check-public-residue.py
 
+step "macOS app icon and disk image art"
+# The build renders them from assets/icon-source.svg (beforeBundleCommand); render them here too, so a broken
+# renderer or a disk image layout that no longer matches tauri.macos.conf.json fails before a release.
+if [ "$(uname -s)" = "Darwin" ]; then
+  bash scripts/prepare-macos-app-icon.sh
+else
+  printf '  skipped: needs macOS (swift, iconutil, tiffutil)\n'
+fi
+
 step "frontend typecheck"
 npm run typecheck
 

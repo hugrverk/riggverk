@@ -129,6 +129,8 @@ class DraftNotesTests(unittest.TestCase):
         notes = tools.draft_notes("2026.10.1", [(1, "feat(app): add a thing")])
         self.assertEqual(notes.count("Open Anyway"), 1)
         self.assertIn("Riggverk-v2026.10.1-macOS.zip", notes)
+        self.assertIn("Riggverk-v2026.10.1-macOS.dmg", notes)
+        self.assertIn("SHA256SUMS", notes)
 
     def test_pr_entries_read_merge_and_squash_commits(self) -> None:
         def record(subject: str, body: str = "") -> str:

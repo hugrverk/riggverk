@@ -100,6 +100,13 @@ class SourceTests(unittest.TestCase):
         self.edit("src-tauri/tauri.conf.json", '"visible": false,', "")
         self.assertIn("hidden", sg.tauri_conf(self.tree)[0])
 
+    def test_macos_window_repeats_the_main_window(self) -> None:
+        self.copy("src-tauri/tauri.conf.json")
+        self.copy("src-tauri/tauri.macos.conf.json")
+        self.assertEqual(sg.tauri_conf(self.tree), [])
+        self.edit("src-tauri/tauri.macos.conf.json", '"minWidth": 980', '"minWidth": 900')
+        self.assertIn("must repeat", sg.tauri_conf(self.tree)[0])
+
     def test_startup_order(self) -> None:
         self.copy("src-tauri/src/lib.rs")
         self.assertEqual(sg.startup_order(self.tree), [])

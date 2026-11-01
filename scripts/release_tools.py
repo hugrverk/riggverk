@@ -39,9 +39,11 @@ PACKAGE_LOCK = "package-lock.json"
 CRATE_NAME = "riggverk"
 
 INSTALL_NOTE = (
-    "Unzip `Riggverk-v{version}-macOS.zip`, move `Riggverk.app` to `/Applications` and open it. "
-    "Riggverk is ad hoc signed and not notarized, so macOS stops the first launch: open System Settings, "
-    "Privacy & Security, and choose Open Anyway next to the message about Riggverk."
+    "Open `Riggverk-v{version}-macOS.dmg`, drag Riggverk to Applications and open it from there (or unzip "
+    "`Riggverk-v{version}-macOS.zip` and move `Riggverk.app` to `/Applications`). One app runs on Apple silicon "
+    "and Intel Macs. Riggverk is ad hoc signed and not notarized, so macOS stops the first launch: open System "
+    "Settings, Privacy & Security, and choose Open Anyway next to the message about Riggverk. `SHA256SUMS` lists "
+    "the checksums of both downloads (`shasum -a 256 -c SHA256SUMS --ignore-missing`)."
 )
 OTHER_COMMENT = (
     "<!-- Chores, refactors and docs. Delete this section to keep them out of the notes and the in-app what's new. -->"

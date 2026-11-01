@@ -1,0 +1,50 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "app": {
+    "windows": [
+      {
+        "title": "Riggverk",
+        "width": 1280,
+        "height": 800,
+        "resizable": true,
+        "visible": false,
+        "minWidth": 980,
+        "minHeight": 620,
+        "center": true,
+        "decorations": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "trafficLightPosition": {
+          "x": 20,
+          "y": 29
+        }
+      }
+    ]
+  },
+  "bundle": {
+    "macOS": {
+      "files": {
+        "Resources/Riggverk.icns": "macos/Riggverk.icns"
+      },
+      "infoPlist": "Info.plist",
+      "minimumSystemVersion": "10.14",
+      "signingIdentity": "-",
+      "hardenedRuntime": false,
+      "dmg": {
+        "background": "macos/dmg/background.tiff",
+        "windowSize": {
+          "width": 660,
+          "height": 400
+        },
+        "appPosition": {
+          "x": 180,
+          "y": 170
+        },
+        "applicationFolderPosition": {
+          "x": 480,
+          "y": 170
+        }
+      }
+    }
+  }
+}
