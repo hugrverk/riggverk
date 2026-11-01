@@ -251,19 +251,29 @@ class TestWildcardSemantics(unittest.TestCase):
         self.assertTrue(wildcard_match("git status --porcelain", "git status *"))
         self.assertFalse(wildcard_match("git statusify", "git status *"))
 
-    def test_verification_allows_stop_at_the_command_boundary(self) -> None:
+    def test_verification_allows_are_fixed_forms_with_arguments_only_after_a_double_dash(self) -> None:
         permissions = [build_base_permission(load_policy()), compose_role_permission(load_role("architect"))]
         commands = [
             f"{manager} run {script}"
-            for manager in ("npm", "pnpm", "yarn", "bun")
+            for manager in ("npm", "pnpm", "yarn")
             for script in ("test", "lint", "typecheck", "build", "verify")
-        ] + [f"cargo {command}" for command in ("fmt", "check", "clippy", "test")]
+        ] + [f"{manager} test" for manager in ("npm", "pnpm", "yarn")]
+        bun = [f"bun run {script}" for script in ("test", "lint", "typecheck", "build", "verify")] + ["bun test"]
+        cargo = ["cargo fmt", "cargo check", "cargo clippy", "cargo test"]
         for permission in permissions:
-            for command in commands:
+            for command in commands + bun + cargo:
                 with self.subTest(command=command):
                     self.assertEqual(effective_bash_action(permission, command), "allow")
-                    self.assertEqual(effective_bash_action(permission, command + " -- --flag"), "allow")
                     self.assertNotEqual(effective_bash_action(permission, command + "-and-deploy"), "allow")
+                    # An option before `--` can swap the program (`--script-shell`, `--config`).
+                    self.assertEqual(effective_bash_action(permission, command + " --script-shell=./x.sh"), "ask")
+                    self.assertEqual(effective_bash_action(permission, command + " ''--script-shell=./x.sh"), "ask")
+            for command in commands + ["cargo test"]:
+                with self.subTest(command=command + " -- --flag"):
+                    self.assertEqual(effective_bash_action(permission, command + " -- --flag"), "allow")
+            for command in bun + ["cargo fmt", "cargo check", "cargo clippy"]:
+                with self.subTest(command=command + " -- --flag"):
+                    self.assertEqual(effective_bash_action(permission, command + " -- --flag"), "ask")
 
     def test_non_js_verification_is_exact_and_option_variants_ask(self) -> None:
         exact = ["pytest", "pytest -q", "python3 -m pytest", "go test ./...", "go vet ./...", "make test", "make lint", "make check"]
@@ -838,7 +848,7 @@ class TestSecretPathSpellings(unittest.TestCase):
             ("git grep mcp.json", "ask", "ask"),
             # names only, or a mention that is not a file operand
             ("ls ~/.ssh", "allow", "deny"),
-            ("find . -name .env", "allow", "deny"),
+            ("find . -name .env", "ask", "deny"),
             ("git status", "allow", "allow"),
             ('grep -r "id_rsa" docs/', "ask", "ask"),
             ("grep -r id_rsa docs/", "ask", "ask"),

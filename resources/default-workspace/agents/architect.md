@@ -142,14 +142,13 @@ permission:
   bash:
     "*": ask
     "pwd": allow
-    "ls*": allow
+    "ls *": allow
     "tree": allow
     "tree -a": allow
     "tree -d": allow
     "tree -L ?": allow
     "tree -a -L ?": allow
     "tree -d -L ?": allow
-    "find *": allow
     "git status*": allow
     "git diff": allow
     "git diff --stat": allow
@@ -190,42 +189,79 @@ permission:
     "git branch -vv": allow
     "git rev-parse*": allow
     "git ls-files*": allow
-    "git add*": allow
-    "git commit*": allow
+    "git add *": allow
+    "git commit *": allow
     "git fetch": allow
     "git fetch origin": allow
     "git fetch upstream": allow
     "mkdir *": allow
     "mkdir -p *": allow
     "touch *": allow
-    "npm test*": allow
-    "npm run test *": allow
-    "npm run lint *": allow
-    "npm run typecheck *": allow
-    "npm run build *": allow
-    "npm run verify *": allow
-    "pnpm test*": allow
-    "pnpm run test *": allow
-    "pnpm run lint *": allow
-    "pnpm run typecheck *": allow
-    "pnpm run build *": allow
-    "pnpm run verify *": allow
-    "bun test*": allow
-    "bun run test *": allow
-    "bun run lint *": allow
-    "bun run typecheck *": allow
-    "bun run build *": allow
-    "bun run verify *": allow
-    "yarn test*": allow
-    "yarn run test *": allow
-    "yarn run lint *": allow
-    "yarn run typecheck *": allow
-    "yarn run build *": allow
-    "yarn run verify *": allow
-    "cargo fmt *": allow
-    "cargo check *": allow
-    "cargo clippy *": allow
-    "cargo test *": allow
+    "npm test": allow
+    "npm test -- *": allow
+    "npm run test": allow
+    "npm run test -- *": allow
+    "npm run lint": allow
+    "npm run lint -- *": allow
+    "npm run typecheck": allow
+    "npm run typecheck -- *": allow
+    "npm run build": allow
+    "npm run build -- *": allow
+    "npm run verify": allow
+    "npm run verify -- *": allow
+    "pnpm test": allow
+    "pnpm test -- *": allow
+    "pnpm run test": allow
+    "pnpm run test -- *": allow
+    "pnpm run lint": allow
+    "pnpm run lint -- *": allow
+    "pnpm run typecheck": allow
+    "pnpm run typecheck -- *": allow
+    "pnpm run build": allow
+    "pnpm run build -- *": allow
+    "pnpm run verify": allow
+    "pnpm run verify -- *": allow
+    "yarn test": allow
+    "yarn test -- *": allow
+    "yarn run test": allow
+    "yarn run test -- *": allow
+    "yarn run lint": allow
+    "yarn run lint -- *": allow
+    "yarn run typecheck": allow
+    "yarn run typecheck -- *": allow
+    "yarn run build": allow
+    "yarn run build -- *": allow
+    "yarn run verify": allow
+    "yarn run verify -- *": allow
+    "bun test": allow
+    "bun run test": allow
+    "bun run lint": allow
+    "bun run typecheck": allow
+    "bun run build": allow
+    "bun run verify": allow
+    "cargo fmt": allow
+    "cargo fmt --check": allow
+    "cargo fmt --all": allow
+    "cargo fmt --all --check": allow
+    "cargo fmt --all -- --check": allow
+    "cargo check": allow
+    "cargo check --workspace": allow
+    "cargo check --all-targets": allow
+    "cargo check --workspace --all-targets": allow
+    "cargo clippy": allow
+    "cargo clippy --workspace": allow
+    "cargo clippy --all-targets": allow
+    "cargo clippy --workspace --all-targets": allow
+    "cargo clippy -- -D warnings": allow
+    "cargo clippy --all-targets -- -D warnings": allow
+    "cargo clippy --workspace --all-targets -- -D warnings": allow
+    "cargo test": allow
+    "cargo test -- *": allow
+    "cargo test --workspace": allow
+    "cargo test --workspace -- *": allow
+    "cargo test --lib": allow
+    "cargo test --lib -- *": allow
+    "cargo test --all-targets": allow
     "pytest": allow
     "pytest -q": allow
     "python3 -m pytest": allow
@@ -307,11 +343,6 @@ permission:
     "tail *": ask
     "sed *": ask
     "git grep *": ask
-    "find *-delete*": ask
-    "find *-exec*": ask
-    "find *-ok*": ask
-    "find *-fprint*": ask
-    "find *-fls*": ask
     "git commit*--amend*": ask
     "git push --force*": deny
     "git push -f*": deny
