@@ -89,6 +89,7 @@ export function HarnessPage({
   wsRunning,
   wsProgress,
   dataFolderOk,
+  onUndo,
 }: HarnessPageProps) {
   const label = HARNESS_LABELS[harness];
   const entry = overview.entries[harness];
@@ -238,6 +239,7 @@ export function HarnessPage({
           onApply={install.apply}
           done={install.done}
           onDismiss={install.dismiss}
+          onUndo={onUndo}
           progress={wsProgress}
         />
       </section>

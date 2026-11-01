@@ -439,14 +439,16 @@ export function InstallPlanPane({
 
   const noteBackup = reviewing && !readOnly && review?.canApply === true;
   const transaction = done?.result.transaction_id || null;
+  const undoable = done !== null && !!onUndo && transaction !== null && done.result.applied.length > 0;
   const footer = (
     <ReviewFooter
       question={question}
       backup={done ? { root: backupRoot, transaction } : noteBackup && { root: backupRoot }}
-      facts={done ? ["Backed up", "Undo any time", "History keeps this run"] : undefined}
+      // Undo is promised only where the card offers it.
+      facts={done ? (undoable ? ["Backed up", "Undo any time", "History keeps this run"] : ["Backed up", "History keeps this run"]) : undefined}
     >
-      {done && onUndo && transaction && done.result.applied.length > 0 && (
-        <TButton keys={["z"]} shortcut="z" onClick={() => onUndo(transaction)}>
+      {undoable && (
+        <TButton keys={["z"]} shortcut="z" onClick={() => onUndo?.(transaction!)}>
           Undo this update…
         </TButton>
       )}

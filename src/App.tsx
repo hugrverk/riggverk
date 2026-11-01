@@ -676,6 +676,7 @@ function AppShell() {
     agentTargets: visibleAgentTargets,
     settingsSaveStatus,
     onToggleTarget: toggleTarget,
+    onUndo: (transactionId: string) => void requestRollback(transactionId),
   };
 
   const outputText = useMemo(() => {
