@@ -1,6 +1,27 @@
 {
   "releases": [
     {
+      "version": "2026.11.1",
+      "sections": [
+        {
+          "title": "New",
+          "items": [
+            "Add grill-me",
+            "Use the Riggverk rune as the app icon",
+            "Open maximized, remember the window, grow the flow map"
+          ]
+        },
+        {
+          "title": "Fixes",
+          "items": [
+            "Narrow skill allow-lists, OpenCode git policy, delegate and critic recipes",
+            "Security audit app findings (C1, F3, F8, F9, rules open)",
+            "Harden the release supply chain"
+          ]
+        }
+      ]
+    },
+    {
       "version": "2026.10.19",
       "sections": [
         {
