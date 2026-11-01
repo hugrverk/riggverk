@@ -6,7 +6,7 @@
         {
           "title": "Fixes",
           "items": [
-            "Route Cmd+Q through the unsaved-changes guard"
+            "Quit (Cmd+Q) now asks about unsaved work first. Before, it closed Riggverk at once and an unsaved Library edit was lost. A minimized window comes back to ask. Quit from the Dock is still not asked about"
           ]
         }
       ]
