@@ -2,7 +2,6 @@
 name: handoff
 description: Turns a session or an executor or subagent report into a compact, redacted handoff with verified versus claimed state, changed files, risks, and the single safest next action. Use when pausing work, transferring context, reviewing another agent's report, or nearing the context limit.
 license: MIT
-allowed-tools: Bash(git status *) Bash(git log *) Bash(git diff *) Bash(head *) Bash(tail *)
 metadata:
   category: workflow
   risk: low
@@ -44,8 +43,6 @@ Do not invent verification, hide uncertainty, repeat long source material, or de
 ## Harness notes
 
 ### Claude Code
-
-- The `allowed-tools` frontmatter key is Claude Code only: it pre-approves the read-only git commands. Other harnesses ignore it and ask or allow as configured.
 
 Claude Code runs the commands below when the skill loads. Other harnesses show them as plain text and run the commands of step 1 themselves.
 

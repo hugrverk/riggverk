@@ -1,23 +1,24 @@
 #!/usr/bin/env node
 // Verifies a status report. Node 18+, no dependencies; the browser pass is optional.
-//   node verify-report.mjs <report.json> [<report.html>] [--no-browser] [--require-browser]
+//   node verify-report.mjs <report.json> [<report.html>] [--no-browser] [--require-browser] [--playwright-dir=<dir>]
 // Data:  schema, cited sources resolve, dates inside the period, health matches the risks,
 //        progress has a basis, no secret, e-mail or home-path patterns.
 // HTML:  no external requests (Google Fonts excepted), no unrendered tags, every item title in the
 //        markup without JavaScript, embedded JSON equals report.json, reduced-motion and print rules.
-// Browser (when `playwright` resolves from the current directory): 1280 and 390 px, JavaScript
+// Browser (only when --playwright-dir=<dir> names a directory the user approved, holding node_modules/playwright;
+//        `playwright` is never resolved from the current directory or the repository): 1280 and 390 px, JavaScript
 //        off and on, no overflow, no page errors, no network beyond file:/data:/fonts, every title
 //        visible, and no endless animation under prefers-reduced-motion.
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, realpathSync } from "node:fs";
 import { createRequire } from "node:module";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const args = process.argv.slice(2);
 const flags = new Set(args.filter(a => a.startsWith("--")));
 const [jsonPath, htmlPath] = args.filter(a => !a.startsWith("--"));
 if (!jsonPath) {
-  console.error("usage: node verify-report.mjs <report.json> [<report.html>] [--no-browser] [--require-browser]");
+  console.error("usage: node verify-report.mjs <report.json> [<report.html>] [--no-browser] [--require-browser] [--playwright-dir=<dir>]");
   process.exit(2);
 }
 const here = dirname(fileURLToPath(import.meta.url));
@@ -204,10 +205,23 @@ if (htmlPath) {
   if (!flags.has("--no-browser")) await browserPass(htmlPath, titles);
 }
 
+// Playwright is third-party code that runs with the user's rights, so it loads only from the install
+// the user approved (--playwright-dir=<dir>, its own node_modules and no parent's), never from the
+// current directory, which may be the repository being reported on.
+function playwrightDir() {
+  const flag = args.find(a => a.startsWith("--playwright-dir="));
+  return flag ? resolve(flag.slice("--playwright-dir=".length)) : null;
+}
+
 async function loadPlaywright() {
+  const given = playwrightDir();
+  if (!given) return null;
   try {
-    const require = createRequire(join(process.cwd(), "noop.js"));
-    const mod = await import(pathToFileURL(require.resolve("playwright")).href);
+    const dir = realpathSync(given);
+    const require = createRequire(join(dir, "noop.js"));
+    const entry = require.resolve("playwright", { paths: [dir] });
+    if (!entry.startsWith(join(dir, "node_modules") + sep)) return null;
+    const mod = await import(pathToFileURL(entry).href);
     return mod.chromium ? mod : mod.default;
   } catch {
     return null;
@@ -217,7 +231,7 @@ async function loadPlaywright() {
 async function browserPass(file, expectedTitles) {
   const playwright = await loadPlaywright();
   if (!playwright) {
-    const msg = "browser pass skipped: playwright does not resolve from the current directory";
+    const msg = "browser pass skipped: no --playwright-dir=<dir> with node_modules/playwright (it is never taken from the current directory)";
     if (flags.has("--require-browser")) fail(msg);
     else console.log(`SKIP ${msg}`);
     return;

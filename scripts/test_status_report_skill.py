@@ -28,7 +28,7 @@ class StatusReportSkillTest(unittest.TestCase):
         self.sample = json.loads(SAMPLE.read_text(encoding="utf-8"))
 
     def node(self, script: Path, *args: str) -> subprocess.CompletedProcess[str]:
-        # cwd is the temp dir, so `playwright` never resolves and the browser pass is skipped.
+        # No --playwright-dir, so the browser pass is skipped whatever the current directory holds.
         return subprocess.run(
             [NODE, str(script), *args], cwd=self.tmp, capture_output=True, text=True, timeout=60, check=False
         )
@@ -97,6 +97,44 @@ class StatusReportSkillTest(unittest.TestCase):
         page = html.read_text(encoding="utf-8")
         html.write_text(page.replace("</head>", '<script src="https://cdn.example.com/x.js"></script></head>'), encoding="utf-8")
         self.assert_fails(self.verify(data, html), "loads https://cdn.example.com/x.js")
+
+    def fake_playwright(self, root: Path, marker: Path) -> None:
+        package = root / "node_modules/playwright"
+        package.mkdir(parents=True)
+        (package / "package.json").write_text('{"name":"playwright","main":"index.js"}', encoding="utf-8")
+        (package / "index.js").write_text(
+            f"require('fs').writeFileSync({json.dumps(str(marker))}, 'imported');\n"
+            "module.exports = { chromium: { launch: async () => { throw new Error('no browser'); } } };\n",
+            encoding="utf-8",
+        )
+
+    def test_browser_pass_never_imports_playwright_from_the_current_directory(self) -> None:
+        marker = self.tmp / "imported-from-cwd"
+        self.fake_playwright(self.tmp, marker)
+        data, html = self.render(self.sample)
+        result = self.node(VERIFY, str(data), str(html))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("SKIP browser pass skipped", result.stdout)
+        self.assertFalse(marker.exists(), "a playwright package in the current directory was imported")
+
+    def test_browser_pass_loads_playwright_only_from_the_given_directory(self) -> None:
+        approved = self.tmp / "approved"
+        marker = self.tmp / "imported-from-approved"
+        self.fake_playwright(approved, marker)
+        data, html = self.render(self.sample)
+        result = self.node(VERIFY, str(data), str(html), f"--playwright-dir={approved}")
+        self.assertTrue(marker.exists(), result.stdout + result.stderr)
+        self.assertIn("Chromium did not start", result.stdout)
+
+    def test_playwright_dir_does_not_reach_a_parent_node_modules(self) -> None:
+        marker = self.tmp / "imported-from-parent"
+        self.fake_playwright(self.tmp, marker)
+        child = self.tmp / "child"
+        child.mkdir()
+        data, html = self.render(self.sample)
+        result = self.node(VERIFY, str(data), str(html), f"--playwright-dir={child}")
+        self.assertFalse(marker.exists(), "a parent directory's playwright was imported")
+        self.assertIn("SKIP browser pass skipped", result.stdout)
 
 
 if __name__ == "__main__":

@@ -3,7 +3,7 @@ name: release-notes
 description: Drafts user-facing release notes or a changelog section from commits and merged PRs since the last tag, in the project's own format and language. Use when preparing a release or asked what changed since a version. Not for the go/no-go gate (release-check).
 license: MIT
 compatibility: Needs git. Reads PR titles and labels with an authenticated gh CLI when present; without it the draft rests on commit subjects.
-allowed-tools: Bash(git log *) Bash(git tag *) Bash(git describe *) Bash(git show *) Bash(gh pr list *) Bash(gh pr view *) Bash(gh release view *)
+allowed-tools: Bash(git tag --list *) Bash(git tag --merged *) Bash(git describe *) Bash(gh pr list *) Bash(gh pr view *) Bash(gh release view *)
 metadata:
   category: workflow
   risk: low
@@ -97,7 +97,7 @@ Say plainly that the draft needs human curation before it ships.
 
 ### Claude Code
 
-- The `allowed-tools` frontmatter key is Claude Code only: it pre-approves the read-only git and gh commands above. Other harnesses ignore it and ask or allow as configured.
+- The `allowed-tools` frontmatter key is Claude Code only: it pre-approves only tag listing, `git describe` and read-only gh commands. `git log` and `git show` are left to Claude Code's own read-only handling, because a pre-approved prefix would also allow `--output=<file>`. Other harnesses ignore it and ask or allow as configured.
 
 ### Light harnesses
 

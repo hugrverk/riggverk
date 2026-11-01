@@ -251,19 +251,29 @@ class TestWildcardSemantics(unittest.TestCase):
         self.assertTrue(wildcard_match("git status --porcelain", "git status *"))
         self.assertFalse(wildcard_match("git statusify", "git status *"))
 
-    def test_verification_allows_stop_at_the_command_boundary(self) -> None:
+    def test_verification_allows_are_fixed_forms_with_arguments_only_after_a_double_dash(self) -> None:
         permissions = [build_base_permission(load_policy()), compose_role_permission(load_role("architect"))]
         commands = [
             f"{manager} run {script}"
-            for manager in ("npm", "pnpm", "yarn", "bun")
+            for manager in ("npm", "pnpm", "yarn")
             for script in ("test", "lint", "typecheck", "build", "verify")
-        ] + [f"cargo {command}" for command in ("fmt", "check", "clippy", "test")]
+        ] + [f"{manager} test" for manager in ("npm", "pnpm", "yarn")]
+        bun = [f"bun run {script}" for script in ("test", "lint", "typecheck", "build", "verify")] + ["bun test"]
+        cargo = ["cargo fmt", "cargo check", "cargo clippy", "cargo test"]
         for permission in permissions:
-            for command in commands:
+            for command in commands + bun + cargo:
                 with self.subTest(command=command):
                     self.assertEqual(effective_bash_action(permission, command), "allow")
-                    self.assertEqual(effective_bash_action(permission, command + " -- --flag"), "allow")
                     self.assertNotEqual(effective_bash_action(permission, command + "-and-deploy"), "allow")
+                    # An option before `--` can swap the program (`--script-shell`, `--config`).
+                    self.assertEqual(effective_bash_action(permission, command + " --script-shell=./x.sh"), "ask")
+                    self.assertEqual(effective_bash_action(permission, command + " ''--script-shell=./x.sh"), "ask")
+            for command in commands + ["cargo test"]:
+                with self.subTest(command=command + " -- --flag"):
+                    self.assertEqual(effective_bash_action(permission, command + " -- --flag"), "allow")
+            for command in bun + ["cargo fmt", "cargo check", "cargo clippy"]:
+                with self.subTest(command=command + " -- --flag"):
+                    self.assertEqual(effective_bash_action(permission, command + " -- --flag"), "ask")
 
     def test_non_js_verification_is_exact_and_option_variants_ask(self) -> None:
         exact = ["pytest", "pytest -q", "python3 -m pytest", "go test ./...", "go vet ./...", "make test", "make lint", "make check"]
@@ -417,9 +427,32 @@ class TestArchitect(unittest.TestCase):
     def test_implementation_edit_allowed(self) -> None:
         self.assertTrue(edit_is_allowed(self.perm, "src/App.tsx"))
 
-    def test_git_commit_allowed(self) -> None:
-        self.assertTrue(bash_is_allowed(self.perm, "git add ."))
-        self.assertTrue(bash_is_allowed(self.perm, "git commit -m test"))
+    def test_git_add_and_commit_ask(self) -> None:
+        for command in ("git add .", "git add -f .env", "git commit -m test", "git commit --allow-empty --file=.env"):
+            with self.subTest(command=command):
+                self.assertEqual(effective_bash_action(self.perm, command), "ask")
+
+    def test_declarations_reach_no_rule_so_the_command_after_them_decides(self) -> None:
+        # Known limit, pinned so the docs cannot claim more. OpenCode 1.19.5 asks only about `command`
+        # nodes (`descendantsOfType("command")` in the shell tool's `collect`), and tree-sitter-bash
+        # parses `export`, `declare`, `typeset`, `readonly`, `local` and `unset` as other node types.
+        # An environment change the policy cannot see can therefore steer the next allowed command.
+        for command in (
+            "export GIT_CONFIG_PARAMETERS=\"'core.fsmonitor=/tmp/x'\"; git status",
+            "export GIT_EXTERNAL_DIFF=/tmp/x; git diff",
+            "declare -x GIT_SSH_COMMAND=/tmp/x; git fetch",
+            "export PATH=/tmp/bin:$PATH; ls",
+        ):
+            with self.subTest(command=command):
+                self.assertEqual(effective_bash_action(self.perm, command), "allow")
+                self.assertEqual(len(shell_command_patterns(command)), 1)
+        for command in ("export AA=1", "declare -x AA=1", "typeset -x AA=1", "readonly AA=1", "local AA=1", "unset AA"):
+            with self.subTest(command=command):
+                self.assertEqual(shell_command_patterns(command), [])
+        # What is a command is checked: the prefix form, `env`, `alias`, `source`, `.` and `set`.
+        for command in ("AA=1 git status", "env AA=1 git status", "alias git=x", "source x.sh", ". x.sh", "ev" "al git status", "set -a"):
+            with self.subTest(command=command):
+                self.assertEqual(effective_bash_action(self.perm, command), "ask")
 
     def test_delegation_allowed(self) -> None:
         task = self.perm.get("task", {})
@@ -455,6 +488,50 @@ class TestArchitect(unittest.TestCase):
         guard = next(i for i, (pattern, _) in enumerate(bash) if pattern == "*>*")
         late_allows = [pattern for pattern, action in bash[guard + 1 :] if action == "allow"]
         self.assertEqual(late_allows, [])
+
+    def test_git_and_tree_allows_are_fixed_forms_without_a_star(self) -> None:
+        # A `*` allow cannot be made safe: OpenCode matches the source text, so shell quoting hides a
+        # guarded option (`--out''put`), and its matcher reads a backslash as `/`.
+        for pattern, action in self.perm["bash"].items():
+            if action == "allow" and pattern.startswith(("git diff", "git log", "git show", "git fetch", "git difftool", "tree")):
+                with self.subTest(pattern=pattern):
+                    self.assertNotIn("*", pattern)
+
+    def test_delegate_recipe_opencode_agent_has_no_quoting_bypass(self) -> None:
+        import re
+
+        recipes = REPO_ROOT / "resources" / "default-workspace" / "skills" / "delegate" / "delegate-recipes.md"
+        match = re.search(r"OPENCODE_CONFIG_CONTENT='(\{.*?\})' \\\n", recipes.read_text(encoding="utf-8"))
+        self.assertIsNotNone(match)
+        perm = json.loads(match.group(1))["agent"]["riggverk-delegate"]["permission"]
+        perm["bash"]["npm test"] = perm["bash"].pop("<check command>")
+        cases = [
+            ("git status", "allow"),
+            ("git diff", "allow"),
+            ("git diff --stat", "allow"),
+            ("git add src/a.ts", "allow"),
+            ("git commit -m x", "allow"),
+            ("npm test", "allow"),
+            ("git add -f .env", "deny"),
+            ("git add --force .env", "deny"),
+            ("git add src/a.ts -f", "deny"),
+            ("git commit --allow-empty --file=.env", "deny"),
+            ("git commit --allow-empty -F .env", "deny"),
+            ("git add -''f .env", "allow"),  # residual: quoting hides the option from any literal deny
+            ("export GIT_CONFIG_COUNT=0; git status", "allow"),  # residual: `export` is not checked
+            ("git diff --output=x", "deny"),
+            ("git diff --out''put=x", "deny"),
+            ('git diff --out"put"=x', "deny"),
+            ("git diff --out\\put=x", "deny"),
+            ("git diff $'--output'=x", "deny"),
+            ("git diff /dev/null .env", "deny"),
+            ("git difftool", "deny"),
+            ("git config core.fsmonitor ./hook", "deny"),
+            ("git push", "deny"),
+        ]
+        for command, expected in cases:
+            with self.subTest(command=command):
+                self.assertEqual(effective_bash_action(perm, command), expected)
 
     def test_read_denies_credential_config(self) -> None:
         for path, expected in READ_ACTIONS:
@@ -801,7 +878,7 @@ class TestSecretPathSpellings(unittest.TestCase):
             ("git grep mcp.json", "ask", "ask"),
             # names only, or a mention that is not a file operand
             ("ls ~/.ssh", "allow", "deny"),
-            ("find . -name .env", "allow", "deny"),
+            ("find . -name .env", "ask", "deny"),
             ("git status", "allow", "allow"),
             ('grep -r "id_rsa" docs/', "ask", "ask"),
             ("grep -r id_rsa docs/", "ask", "ask"),

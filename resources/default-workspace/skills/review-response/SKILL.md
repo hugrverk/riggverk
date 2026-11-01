@@ -3,7 +3,7 @@ name: review-response
 description: Works through PR review comments by verifying each claim against the code, then fixing, pushing back with evidence or asking, and drafting one reply per thread. Use when a PR has review comments or the user pastes reviewer feedback. Not for reviewing a diff yourself.
 license: MIT
 compatibility: Uses an authenticated gh CLI, with jq when installed, to read review threads and to post replies the user approved; without it, works from a pasted review.
-allowed-tools: Bash(gh pr view *) Bash(gh pr diff *) Bash(git log *) Bash(git diff *) Bash(git show *) Bash(head *) Bash(jq *)
+allowed-tools: Bash(gh pr view *) Bash(gh pr diff *)
 metadata:
   category: workflow
   risk: medium
@@ -140,7 +140,7 @@ One reply per thread, in the thread, in the language of the PR.
 
 ### Claude Code
 
-- The `allowed-tools` frontmatter key is Claude Code only: it pre-approves the read-only gh and git commands. `gh api` is left out because it can also post. Other harnesses ignore the key and ask or allow as configured.
+- The `allowed-tools` frontmatter key is Claude Code only: it pre-approves `gh pr view` and `gh pr diff`. `gh api` is left out because it can also post, and `jq`, `git log`, `git diff` and `git show` are left out because a pre-approved prefix would also allow `jq -n env` or `--output=<file>`. Other harnesses ignore the key and ask or allow as configured.
 
 ### Light harnesses
 
