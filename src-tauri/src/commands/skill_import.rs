@@ -950,6 +950,20 @@ fn sources_for(root: &Path) -> Result<SkillSources, String> {
 
 // ── Preview ──
 
+/// The source root the user chose, resolved once: links in the folders above it are followed (as the
+/// user named them; macOS's `/tmp` is one), a link at the root itself or anywhere below it is not.
+fn resolve_root(path: &Path) -> Result<PathBuf, String> {
+    let name = path
+        .file_name()
+        .ok_or_else(|| "not a file or a folder".to_string())?;
+    let parent = path
+        .parent()
+        .ok_or_else(|| "not a file or a folder".to_string())?
+        .canonicalize()
+        .map_err(|_| "cannot be read".to_string())?;
+    Ok(parent.join(name))
+}
+
 /// A path as typed or dropped: absolute, or `~/...`.
 fn source_path(raw: &str, home: &Path) -> Result<PathBuf, String> {
     let raw = raw.trim();
@@ -1003,18 +1017,20 @@ pub fn preview_skill_import(paths: Vec<String>) -> Result<SkillImportPreview, St
         crate::agent_targets::home_dir().map_err(|_| "home folder is unavailable".to_string())?;
     let sources = sources_for(&root)?;
     let names = taken_names(&sources)?;
+    let shown_home = home.canonicalize().unwrap_or_else(|_| home.clone());
 
     let mut problems = Vec::new();
     let mut found: Vec<Found> = Vec::new();
     for raw in &paths {
-        let path = match source_path(raw, &home) {
+        let path = match source_path(raw, &home).and_then(|path| resolve_root(&path)) {
             Ok(path) => path,
             Err(problem) => {
                 problems.push(format!("{raw}: {problem}"));
                 continue;
             }
         };
-        let shown = crate::skill_loads::display_path(&path, &home);
+        // The resolved path is what the preview shows and the record keeps.
+        let shown = crate::skill_loads::display_path(&path, &shown_home);
         let canonical = |p: &Path| p.canonicalize().unwrap_or_else(|_| p.to_path_buf());
         if canonical(&path).starts_with(canonical(&crate::skill_sources::packs_dir(&root)))
             || canonical(&path).starts_with(canonical(&crate::workspace_layout::state_dir(&root)))
@@ -1040,7 +1056,7 @@ pub fn preview_skill_import(paths: Vec<String>) -> Result<SkillImportPreview, St
     let stage = staging.join(format!(".new-{}", nonce()?));
     create_private_dir(&stage)?;
 
-    let result = stage_candidates(&root, &home, &names, &found, &stage);
+    let result = stage_candidates(&root, &shown_home, &names, &found, &stage);
     let (candidates, staged) = match result {
         Ok(done) => done,
         Err(error) => {

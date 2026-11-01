@@ -278,6 +278,54 @@ mod tests {
         assert!(!env.home.join("ran").exists(), "nothing of the skill ran");
     }
 
+    /// The folders above the chosen source are resolved (macOS's `/tmp` is a link), and the preview
+    /// names the resolved path; a link at the source itself or below it is refused.
+    #[cfg(unix)]
+    #[test]
+    fn links_above_the_source_are_resolved_and_links_at_or_below_it_refused() {
+        let env = Env::new("links");
+        let source = env.source("release-notes-plus", &[("SKILL.md", SPEC)]);
+        let via = env.base.join("via");
+        std::os::unix::fs::symlink(env.home.join("Downloads"), &via).expect("ancestor link");
+        let shown = preview(&[&via.join("release-notes-plus")]);
+        assert_eq!(
+            shown["candidates"][0]["source"],
+            "~/Downloads/release-notes-plus"
+        );
+        assert_eq!(shown["candidates"][0]["problems"], serde_json::json!([]));
+        commit(&shown, &["0"]).expect("import through a linked ancestor");
+        assert_eq!(
+            env.record()["skills"]["release-notes-plus"]["source"],
+            "~/Downloads/release-notes-plus"
+        );
+
+        let root_link = env.home.join("Downloads/linked-root");
+        std::os::unix::fs::symlink(&source, &root_link).expect("root link");
+        let shown = preview(&[&root_link]);
+        assert!(shown["candidates"]
+            .as_array()
+            .expect("candidates")
+            .is_empty());
+        assert!(
+            shown["problems"].to_string().contains("is a link"),
+            "{shown}"
+        );
+
+        let child = env.source(
+            "child-link",
+            &[("SKILL.md", "---\nname: child-link\ndescription: d\n---\n")],
+        );
+        std::os::unix::fs::symlink(&source, child.join("refs")).expect("child link");
+        let shown = preview(&[&child]);
+        assert!(
+            shown["candidates"][0]["problems"]
+                .to_string()
+                .contains("refs: is a link"),
+            "{shown}"
+        );
+        assert!(shown["token"].is_null());
+    }
+
     #[test]
     fn a_loose_skill_md_and_a_folder_of_skills_import_only_what_is_picked() {
         let env = Env::new("sources");
