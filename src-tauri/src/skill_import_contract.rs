@@ -537,6 +537,27 @@ mod tests {
             "---\nname: my-tdd\ndescription: Mine.\n---\n# Mine\n"
         );
         assert_eq!(env.record()["skills"]["my-tdd"]["renamed_from"], "tdd");
+        // What was written is what the dialog derives from the previewed text and the new name.
+        let previewed = shown["candidates"][0]["skill_md"]
+            .as_str()
+            .expect("previewed");
+        assert_eq!(
+            fs::read_to_string(env.imported().join("my-tdd/SKILL.md")).expect("renamed"),
+            crate::commands::renamed_skill_md(previewed, "my-tdd").expect("derived")
+        );
+        // A SKILL.md whose name cannot be rewritten by its name: line alone is not renamed.
+        let quoted = env.source(
+            "quoted",
+            &[("SKILL.md", "---\n\"name\": quoted\ndescription: d\n---\n")],
+        );
+        let shown = preview(&[&quoted]);
+        let error = commit_skill_import(
+            shown["token"].as_str().expect("token").into(),
+            vec!["0".into()],
+            BTreeMap::from([("0".to_string(), "quoted-two".to_string())]),
+        )
+        .expect_err("not renamed");
+        assert!(error.contains("no plain name"), "{error}");
 
         let team = env.ws.join("packs/team/skills/shared");
         fs::create_dir_all(&team).expect("team pack");

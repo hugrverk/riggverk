@@ -81,6 +81,11 @@ describe("ImportSkillDialog", () => {
     fireEvent.click(importButton);
     expect(onCommit).not.toHaveBeenCalled();
     fireEvent.change(rename, { target: { value: "my-tdd" } });
+    // The dialog shows the SKILL.md that will be written: the name line changed, nothing else.
+    const diff = screen.getByRole("group", { name: "SKILL.md of tdd as it will be written" });
+    expect(diff.textContent).toContain("name: git-context");
+    expect(diff.textContent).toContain("name: my-tdd");
+    expect(screen.getByLabelText("SKILL.md of tdd").textContent).toBe(HOSTILE.replace("name: git-context", "name: my-tdd"));
     fireEvent.click(screen.getByRole("button", { name: "Import" }));
     await waitFor(() => expect(onDone).toHaveBeenCalled());
     expect(onCommit).toHaveBeenCalledWith("t2", ["0"], { "0": "my-tdd" });

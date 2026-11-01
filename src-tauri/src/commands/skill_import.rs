@@ -856,6 +856,57 @@ fn changes(
     out
 }
 
+// ── Renaming ──
+
+/// `text` with its one top-level `name:` frontmatter line replaced by `name: <name>` (line ending
+/// kept) and nothing else changed: what an import under another name writes. The dialog computes
+/// the same text (`renamedSkillMd` in `skillImport.ts`) and shows it before Import. `Err` when there
+/// is no such line to rewrite. The result is checked: one line differs, and the frontmatter reads
+/// the same but for the name.
+pub(crate) fn renamed_skill_md(text: &str, name: &str) -> Result<String, String> {
+    let no_line = || "SKILL.md has no plain name: line to rewrite".to_string();
+    let mut lines = text.split_inclusive('\n');
+    let opening = lines.next().ok_or_else(no_line)?;
+    if opening.trim_end() != "---" {
+        return Err(no_line());
+    }
+    let mut out = opening.to_string();
+    let mut done = false;
+    for line in lines {
+        let bare = line.trim_end_matches(['\r', '\n']);
+        if !done && bare.trim_end() == "---" {
+            return Err(no_line());
+        }
+        if !done && bare.starts_with("name:") {
+            out.push_str(&format!("name: {name}"));
+            out.push_str(&line[bare.len()..]);
+            done = true;
+        } else {
+            out.push_str(line);
+        }
+    }
+    if !done {
+        return Err(no_line());
+    }
+    let changed = text
+        .split_inclusive('\n')
+        .zip(out.split_inclusive('\n'))
+        .filter(|(a, b)| a != b)
+        .count();
+    let mut before = crate::skill_discovery::skill_fields(text).map_err(|_| no_line())?;
+    let mut after = crate::skill_discovery::skill_fields(&out).map_err(|_| no_line())?;
+    let renamed = after.remove("name");
+    before.remove("name");
+    if changed > 1
+        || text.split_inclusive('\n').count() != out.split_inclusive('\n').count()
+        || renamed.as_deref() != Some(name)
+        || before != after
+    {
+        return Err("SKILL.md cannot be renamed by its name: line alone".to_string());
+    }
+    Ok(out)
+}
+
 // ── Packs and folders ──
 
 fn imported_pack_dir(root: &Path) -> PathBuf {
@@ -1621,9 +1672,10 @@ fn commit_staged(
                     "an imported skill is named {final_name} already; choose another name"
                 ));
             }
+            // The bytes the dialog showed: the verified staged text with its `name:` line rewritten.
             let text = std::str::from_utf8(&files["SKILL.md"])
                 .map_err(|_| "SKILL.md is not UTF-8 text".to_string())?;
-            let renamed = super::packs::rename_skill_frontmatter(text, &final_name)?;
+            let renamed = renamed_skill_md(text, &final_name)?;
             files.insert("SKILL.md".to_string(), renamed.into_bytes());
         }
         plan.push((
@@ -1836,6 +1888,31 @@ pub fn undo_last_import() -> Result<String, String> {
         EventAction::Replace => format!("{name} is back as it was before it was imported again"),
         _ => format!("{name} is back in pack:imported"),
     })
+}
+
+#[cfg(test)]
+mod rename_tests {
+    use super::renamed_skill_md;
+
+    #[test]
+    fn a_rename_rewrites_the_top_level_name_line_only_and_keeps_line_endings() {
+        let text = "---\r\nname: tdd\r\ndescription: d\r\nhooks:\r\n  name: nested\r\n---\r\nname: body\r\n";
+        assert_eq!(
+            renamed_skill_md(text, "my-tdd").expect("renamed"),
+            "---\r\nname: my-tdd\r\ndescription: d\r\nhooks:\r\n  name: nested\r\n---\r\nname: body\r\n"
+        );
+    }
+
+    #[test]
+    fn a_skill_md_without_a_plain_name_line_is_not_renamed() {
+        for text in [
+            "no frontmatter\n",
+            "---\ndescription: d\n---\nname: body\n",
+            "---\n\"name\": tdd\ndescription: d\n---\n",
+        ] {
+            assert!(renamed_skill_md(text, "x").is_err(), "{text}");
+        }
+    }
 }
 
 #[cfg(all(test, unix))]

@@ -91,3 +91,22 @@ export function provenanceText(provenance: ImportProvenance): string {
   const day = Number.isNaN(date.getTime()) ? "" : ` on ${date.toISOString().slice(0, 10)}`;
   return `imported from ${provenance.source}${day}`;
 }
+
+/**
+ * What an import under another name writes: `text` with its one top-level `name:` frontmatter line replaced by
+ * `name: <name>` (line ending kept), nothing else changed; null when there is no such line. The same rewrite as the
+ * backend's `renamed_skill_md`, which re-derives these bytes from the previewed text at Import and refuses any other.
+ */
+export function renamedSkillMd(text: string, name: string): string | null {
+  const lines = text.match(/[^\n]*\n|[^\n]+$/g) ?? [];
+  if (lines[0]?.trimEnd() !== "---") return null;
+  for (let index = 1; index < lines.length; index++) {
+    const line = lines[index]!;
+    const bare = line.replace(/[\r\n]+$/, "");
+    if (bare.trimEnd() === "---") return null;
+    if (bare.startsWith("name:")) {
+      return [...lines.slice(0, index), `name: ${name}${line.slice(bare.length)}`, ...lines.slice(index + 1)].join("");
+    }
+  }
+  return null;
+}

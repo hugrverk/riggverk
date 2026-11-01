@@ -669,7 +669,8 @@ dialog.app-modal.lib-import { width: min(760px, calc(100vw - 32px)); }
 .lib-import-body .lib-import-changes > p.lib-label { margin: var(--sp-3) 0 var(--sp-1); }
 .lib-import-changes, .lib-import-change { display: grid; gap: var(--sp-1); }
 .lib-import-body .lib-import-change + .lib-import-change { margin-top: var(--sp-2); }
-.lib-import-change .diff { margin: 0; }
+.lib-import-change .diff,
+.lib-import-rename .diff { margin: 0; }
 
 .lib-import-raw {
   max-height: 320px;

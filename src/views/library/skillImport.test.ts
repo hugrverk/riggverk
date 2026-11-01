@@ -10,6 +10,7 @@ import {
   importNameProblem,
   orderedFlags,
   provenanceText,
+  renamedSkillMd,
   suggestedImportName,
 } from "./skillImport";
 
@@ -115,5 +116,20 @@ describe("the Library model of imports", () => {
     const [group] = topicGroups("packs", input({ canImportSkill: false }));
     expect(group?.action).toBeUndefined();
     expect(group?.rows.find(r => r.name === "pdf-tools")?.verbs.map(v => v.label)).toEqual(["Read"]);
+  });
+});
+
+describe("renamedSkillMd", () => {
+  // The fixtures of the backend's `rename_tests`: both sides must write the same bytes.
+  it("rewrites the top-level name line only and keeps line endings", () => {
+    const text = "---\r\nname: tdd\r\ndescription: d\r\nhooks:\r\n  name: nested\r\n---\r\nname: body\r\n";
+    expect(renamedSkillMd(text, "my-tdd")).toBe("---\r\nname: my-tdd\r\ndescription: d\r\nhooks:\r\n  name: nested\r\n---\r\nname: body\r\n");
+    expect(renamedSkillMd("---\nname: tdd\ndescription: Mine.\n---\n# Mine\n", "my-tdd")).toBe("---\nname: my-tdd\ndescription: Mine.\n---\n# Mine\n");
+  });
+
+  it("has nothing to rewrite without a plain name line", () => {
+    for (const text of ["no frontmatter\n", "---\ndescription: d\n---\nname: body\n", '---\n"name": tdd\ndescription: d\n---\n']) {
+      expect(renamedSkillMd(text, "x")).toBeNull();
+    }
   });
 });

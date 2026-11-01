@@ -12,8 +12,10 @@ import {
   importNameProblem,
   importStatus,
   orderedFlags,
+  renamedSkillMd,
   suggestedImportName,
 } from "./skillImport";
+import { unifiedLineDiff } from "../../lib/lineDiff";
 
 /** Paths dropped onto the window; `seq` tells two drops of the same paths apart. */
 export interface DroppedPaths {
@@ -105,8 +107,12 @@ export function ImportSkillDialog({ dropped, dragging, skills, packsFolder, onPr
 
   const candidates = preview?.candidates ?? [];
   const nameOf = (candidate: ImportCandidate) => renames[candidate.key] ?? candidate.name;
-  const problemOf = (candidate: ImportCandidate) =>
-    candidate.collision === "bundled" || renames[candidate.key] !== undefined ? importNameProblem(nameOf(candidate), candidate, skills) : "";
+  const problemOf = (candidate: ImportCandidate) => {
+    if (candidate.collision !== "bundled" && renames[candidate.key] === undefined) return "";
+    const problem = importNameProblem(nameOf(candidate), candidate, skills);
+    if (problem || nameOf(candidate) === candidate.name) return problem;
+    return renamedSkillMd(candidate.skill_md, nameOf(candidate)) === null ? "This SKILL.md has no plain name: line to rewrite, so it cannot be imported under another name." : "";
+  };
   const picked = candidates.filter(candidate => selected.has(candidate.key) && canImport(candidate));
   const blocked = picked.some(candidate => problemOf(candidate) !== "");
   const ready = preview?.token != null && picked.length > 0 && !blocked && busy === null;
@@ -243,6 +249,9 @@ function CandidateView({ candidate, open, checked, name, nameProblem, disabled, 
   const importable = canImport(candidate);
   const flags = orderedFlags(candidate.flags);
   const renaming = candidate.collision === "bundled";
+  // Under another name the SKILL.md that is written differs from the source by its name: line: show that text.
+  const renamed = name !== candidate.name && !nameProblem ? renamedSkillMd(candidate.skill_md, name) : null;
+  const written = renamed ?? candidate.skill_md;
   return (
     <section className="lib-import-candidate" aria-labelledby={`${id}-name`}>
       <div className="lib-import-head">
@@ -292,6 +301,9 @@ function CandidateView({ candidate, open, checked, name, nameProblem, disabled, 
           <p id={`${id}-rename-note`} className={nameProblem ? "lib-newdoc-error" : "lib-dim"}>
             {nameProblem || `The bundled ${candidate.name} keeps its name; the name in this SKILL.md is changed to the one above.`}
           </p>
+          {renamed !== null && (
+            <DiffView diff={unifiedLineDiff(candidate.skill_md, renamed)} labelled={false} label={`SKILL.md of ${candidate.name} as it will be written`} />
+          )}
         </div>
       )}
       {candidate.files.length > 0 && (
@@ -335,8 +347,8 @@ function CandidateView({ candidate, open, checked, name, nameProblem, disabled, 
           )}
           {candidate.skill_md && (
             <>
-              <p className="lib-label">SKILL.md, as it is</p>
-              <pre className="lib-import-raw" tabIndex={0} aria-label={`SKILL.md of ${candidate.name}`}>{candidate.skill_md}</pre>
+              <p className="lib-label">{renamed !== null ? `SKILL.md, as it will be written (as ${name})` : "SKILL.md, as it is"}</p>
+              <pre className="lib-import-raw" tabIndex={0} aria-label={`SKILL.md of ${candidate.name}`}>{written}</pre>
             </>
           )}
         </details>

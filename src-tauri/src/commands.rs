@@ -77,6 +77,8 @@ pub use setup::{
     apply_setup, apply_uninstall, get_installation_status, preview_setup, preview_uninstall,
     rollback_setup_transaction,
 };
+#[cfg(test)]
+pub(crate) use skill_import::renamed_skill_md;
 pub use skill_import::{
     commit_skill_import, preview_skill_import, remove_imported_skill, undo_last_import,
 };
