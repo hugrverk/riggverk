@@ -1,6 +1,17 @@
 {
   "releases": [
     {
+      "version": "2026.11.4",
+      "sections": [
+        {
+          "title": "Fixes",
+          "items": [
+            "Route Cmd+Q through the unsaved-changes guard"
+          ]
+        }
+      ]
+    },
+    {
       "version": "2026.11.3",
       "sections": [
         {
