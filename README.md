@@ -33,7 +33,7 @@ The workspace folder lives at `~/.config/riggverk` unless a custom folder saved 
 
 ## Install
 
-Releases are zips on GitHub Releases: unzip `Riggverk-v<version>-macOS.zip`, move `Riggverk.app` to `/Applications` and open it. The app is ad hoc signed and not notarized, so macOS stops the first launch: open System Settings, Privacy & Security, and choose Open Anyway next to the message about Riggverk. Riggverk replaces the app's earlier build under its previous name; moving over from it (settings and backups carry over) is described in `docs/RELEASE.md`.
+Releases are on GitHub Releases as a disk image and a zip of the same universal app (Apple silicon and Intel): open `Riggverk-v<version>-macOS.dmg` and drag Riggverk to Applications (or unzip `Riggverk-v<version>-macOS.zip` and move `Riggverk.app` to `/Applications`), then open it. `SHA256SUMS` lists their checksums. The app is ad hoc signed and not notarized, so macOS stops the first launch: open System Settings, Privacy & Security, and choose Open Anyway next to the message about Riggverk. Riggverk replaces the app's earlier build under its previous name; moving over from it (settings and backups carry over) is described in `docs/RELEASE.md`.
 
 ## Development
 

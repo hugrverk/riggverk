@@ -24,11 +24,17 @@ This local check is the gate: run it before merging and before a release. GitHub
 
 ## Cutting a release
 
-Releases are local: the flow does not use GitHub Actions. A release is a zip on GitHub Releases, built, ad hoc signed and uploaded from a maintainer's Mac by two commands.
+Releases are local: the flow does not use GitHub Actions. A release is a disk image, a zip of the same app and a `SHA256SUMS` file on GitHub Releases, built, ad hoc signed and uploaded from a maintainer's Mac by two commands. The app is universal: one bundle runs on Apple silicon and Intel Macs.
 
 Versions are CalVer `YYYY.M.N`, which is valid semver: the year, the month without a leading zero, and a counter inside that month that starts at 1 (`2026.10.1`, `2026.10.2`, `2026.11.1`). Tags are `v<version>`. Other tags (`app-v0.1.0`, `v0.1.0-rc.1`) are ignored. The next version is computed from the tags and today's date, so the counter restarts when the month changes.
 
-Needs: a Mac (`codesign`, `ditto`), `python3` 3.11 or newer first on `PATH` (`scripts/release.sh` stops with a message otherwise), `gh` logged in, Rust, and `npm ci` done.
+Needs: a Mac (`codesign`, `ditto`, `hdiutil`, `lipo`), `python3` 3.11 or newer first on `PATH` (`scripts/release.sh` stops with a message otherwise), `gh` logged in, Rust through `rustup` with both Mac targets, and `npm ci` done:
+
+```bash
+rustup target add aarch64-apple-darwin x86_64-apple-darwin   # once; publish stops when one is missing
+```
+
+The disk image's window layout is set through Finder, so the first `publish` (or any `tauri build` of the disk image) asks once to let the terminal control Finder; allow it, or turn it on in System Settings, Privacy & Security, Automation.
 
 ### 1. Prepare
 
@@ -70,9 +76,18 @@ Merge the pull request, then on `main` (pulled, nothing else merged in between):
 ./scripts/release.sh publish
 ```
 
-`publish` checks that the version files agree, that it is newer than the latest release, that `release-notes/<version>.md` exists and the bundled notes match it, that neither the tag nor the GitHub release exists, that `node_modules` is what `package-lock.json` locks (`node_modules/.package-lock.json`; run `npm ci` otherwise), and that `main` ends with the release pull request and nothing landed on `main` after the release commit, whether merged meanwhile or brought into the release branch by updating it from `main` (`--allow-newer` skips the two `main` checks; use it only when you know the notes cover what was merged since). Then it builds with `npm run tauri build -- --bundles app -- --locked`, checks the bundle reports the version, ad hoc signs it (`codesign --force --deep --sign -`) and verifies the signature, zips it with `ditto -c -k --keepParent` as `release/Riggverk-v<version>-macOS.zip` (checking that the signature survives the zip), creates the annotated tag `v<version>`, pushes it and runs `gh release create v<version> <zip> --notes-file release-notes/<version>.md`. The zip is the only upload. It prints the release URL. It does not rerun `release-check.sh`; `prepare` did.
+`publish` checks that the version files agree, that it is newer than the latest release, that `release-notes/<version>.md` exists and the bundled notes match it, that neither the tag nor the GitHub release exists, that `node_modules` is what `package-lock.json` locks (`node_modules/.package-lock.json`; run `npm ci` otherwise), and that `main` ends with the release pull request and nothing landed on `main` after the release commit, whether merged meanwhile or brought into the release branch by updating it from `main` (`--allow-newer` skips the two `main` checks; use it only when you know the notes cover what was merged since). Then it builds with `npm run tauri build -- --target universal-apple-darwin --bundles app,dmg -- --locked` (stdin from `/dev/null`, and an `actool` shim first on `PATH` that gives the real `actool` `/dev/null` too: the Tauri CLI hands its children a pipe as stdin, on which `actool` fails with "Bad file descriptor"), checks the bundle reports the version and that its binary holds both `arm64` and `x86_64` (`lipo -archs`), and verifies the ad hoc signature the bundler made (`signingIdentity: "-"` in `src-tauri/tauri.macos.conf.json`; `codesign --verify --deep --strict`, `Signature=adhoc`). The app is signed before the disk image is made and never re-signed, so the zip and the disk image carry the same bytes. Then it:
 
-The app is not notarized (there is no Apple Developer ID yet). On first launch macOS says it cannot verify the app: open System Settings, Privacy & Security, and choose Open Anyway. The **Install** section of every release says so.
+- zips the app with `ditto -c -k --keepParent` as `release/Riggverk-v<version>-macOS.zip` and checks that the signature survives the zip;
+- puts the Riggverk volume icon on the bundler's disk image (the bundler cannot take one) and writes it as `release/Riggverk-v<version>-macOS.dmg`, then runs `hdiutil verify`, mounts it read-only and checks the app's signature and architectures, the Applications link and the volume icon;
+- writes `release/SHA256SUMS` (`shasum -a 256` of the disk image and the zip);
+- creates the annotated tag `v<version>`, pushes it and runs `gh release create v<version> <dmg> <zip> SHA256SUMS --notes-file release-notes/<version>.md`.
+
+It prints the release URL. It does not rerun `release-check.sh`; `prepare` did.
+
+The disk image art (a 660x400 graphite window with its @2x, the rune and wordmark top left, one silver arrow from the app to Applications, and the volume icon: the rune on a square graphite plate) is rendered from `assets/icon-source.svg` by `scripts/render-macos-rune-icons.swift` through `scripts/prepare-macos-app-icon.sh`, the build's `beforeBundleCommand`, into the ignored `src-tauri/macos/dmg/`. `release-check.sh` renders it too and checks the layout in `tauri.macos.conf.json` against it.
+
+The app is not notarized (there is no Apple Developer ID yet). Users open the disk image and drag Riggverk to Applications (or unzip the zip and move the app there). On first launch macOS says it cannot verify the app: open System Settings, Privacy & Security, and choose Open Anyway. The **Install** section of every release says so, and names `SHA256SUMS` for checking a download (`shasum -a 256 -c SHA256SUMS --ignore-missing` in the download folder).
 
 ### Rollback
 
@@ -115,7 +130,7 @@ Sidebar order is Overview, the enabled agents, History, Library, Settings; the d
 The app bundle is `Riggverk.app` (executable `riggverk`, identifier `se.hugrverk.riggverk`). Earlier builds were named `Agent Workspace.app` with a different identifier, so installing Riggverk is not an in-place overwrite: macOS treats it as a separate app. Nothing stops both from running at the same time, so never leave both installed, and quit the old one before the first launch of Riggverk (it moves the app data, see [App data move](#app-data-move)).
 
 1. Quit the old app (`Agent Workspace`) if it is running.
-2. Build: `npm run tauri build` (`npm run tauri build -- --bundles app -- --locked` skips the disk image).
+2. Build: `npm run tauri build -- --bundles app -- --locked` (this Mac's architecture only; add `--target universal-apple-darwin` for the universal app, which lands under `src-tauri/target/universal-apple-darwin/release/bundle/`). With `--bundles app,dmg` the bundler also makes a disk image with the Riggverk background but its default volume icon; only `release.sh publish` adds the Riggverk one.
 3. Install: `ditto "src-tauri/target/release/bundle/macos/Riggverk.app" /Applications/Riggverk.app`.
 4. Launch Riggverk. Check that the Overview and Settings still show your workspace and settings.
 5. Move `/Applications/Agent Workspace.app` to the Trash, then re-pin the Dock item.

@@ -21,13 +21,7 @@
         "minWidth": 980,
         "minHeight": 620,
         "center": true,
-        "decorations": true,
-        "titleBarStyle": "Overlay",
-        "hiddenTitle": true,
-        "trafficLightPosition": {
-          "x": 20,
-          "y": 29
-        }
+        "decorations": true
       }
     ],
     "security": {
@@ -46,13 +40,6 @@
       "icons/128x128@2x.png",
       "icons/icon.ico",
       "macos/Riggverk.icon"
-    ],
-    "macOS": {
-      "files": {
-        "Resources/Riggverk.icns": "macos/Riggverk.icns"
-      },
-      "infoPlist": "Info.plist",
-      "minimumSystemVersion": "10.14"
-    }
+    ]
   }
 }

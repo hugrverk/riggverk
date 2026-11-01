@@ -147,6 +147,37 @@ if [ ! -s "$output_icon" ]; then
   exit 1
 fi
 
+# The disk image art (bundle.macOS.dmg in tauri.macos.conf.json and the volume icon release.sh puts on the
+# disk image): a 660x400 background with its @2x in one HiDPI TIFF, and the volume icon as an icns.
+dmg_dir="src-tauri/macos/dmg"
+mkdir -p "$dmg_dir" "$work_dir/volume.iconset"
+for size in 16 32 128 256 512; do
+  cp "$rendered_dir/volume-${size}.png" "$work_dir/volume.iconset/icon_${size}x${size}.png"
+  cp "$rendered_dir/volume-$((size * 2)).png" "$work_dir/volume.iconset/icon_${size}x${size}@2x.png"
+done
+iconutil -c icns -o "$dmg_dir/VolumeIcon.icns" "$work_dir/volume.iconset"
+tiffutil -cathidpicheck "$rendered_dir/dmg-background.png" "$rendered_dir/dmg-background@2x.png" \
+  -out "$dmg_dir/background.tiff" >/dev/null
+python3 - "$dmg_dir" src-tauri/tauri.macos.conf.json <<'PY'
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+dmg_dir, conf = Path(sys.argv[1]), Path(sys.argv[2])
+dmg = json.loads(conf.read_text(encoding="utf-8"))["bundle"]["macOS"]["dmg"]
+if Path("src-tauri", dmg["background"]) != dmg_dir / "background.tiff":
+    raise SystemExit(f"FAIL: {conf} must take the disk image background from {dmg_dir}/background.tiff")
+if dmg["windowSize"] != {"width": 660, "height": 400}:
+    raise SystemExit(f"FAIL: {conf} must size the disk image window 660x400, as the background is drawn")
+if dmg["appPosition"] != {"x": 180, "y": 170} or dmg["applicationFolderPosition"] != {"x": 480, "y": 170}:
+    raise SystemExit(f"FAIL: {conf} must place the icons at (180,170) and (480,170), where the arrow points")
+info = subprocess.run(["tiffutil", "-info", str(dmg_dir / "background.tiff")], capture_output=True, text=True).stdout
+for size in ("660 x 400", "1320 x 800"):
+    if size not in info.replace("Image Width: ", "").replace(" Image Length: ", " x "):
+        raise SystemExit(f"FAIL: background.tiff has no {size} image")
+PY
+
 if ! /usr/libexec/PlistBuddy -c 'Print :CFBundleIconFile' src-tauri/Info.plist | grep -Fxq 'Riggverk'; then
   printf 'FAIL: src-tauri/Info.plist must set CFBundleIconFile to Riggverk\n' >&2
   exit 1
@@ -178,4 +209,4 @@ if None not in appearances or "dark" not in appearances:
     raise SystemExit("FAIL: Riggverk.icon/icon.json must specialise the tile fill for the default and dark appearances")
 PY
 
-printf 'macOS app icon prepared (icns fallback, Icon Composer document checked)\n'
+printf 'macOS app icon prepared (icns fallback, Icon Composer document checked), disk image art rendered\n'

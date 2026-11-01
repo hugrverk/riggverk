@@ -12,7 +12,7 @@
 }
 
 /* ---- sidebar ----
-   200px. padding-top keeps the top 52px free for the macOS traffic lights (set in tauri.conf.json: centred on the top bar line),
+   200px. padding-top keeps the top 52px free for the macOS traffic lights (set in tauri.macos.conf.json: centred on the top bar line),
    and the whole column drags the window; the nav and its buttons do not. */
 
 .side {

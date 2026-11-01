@@ -3,8 +3,8 @@
 
 Groups:
   identity       product name Riggverk; legal files; stable technical identifiers and paths
-  tauri-conf     bundled workspace resource; main window size, hidden until placed; remembered window state,
-                 never fullscreen
+  tauri-conf     bundled workspace resource; main window size, hidden until placed, the same on macOS; remembered
+                 window state, never fullscreen
   startup-order  the app data move runs first in the Tauri setup closure
   forbidden      no shell command strings, eval or remote skill installs in scripts and source;
                  no project-target or page-scoped install actions; rendered OpenCode compares
@@ -172,6 +172,9 @@ TAURI_CONF_RULES = (
 )
 # The default (unmaximized) size, hidden until window_placement has placed it, so it never flashes at this size first.
 MAIN_WINDOW = {"width": 1280, "height": 800, "center": True, "visible": False}
+# tauri.macos.conf.json is merged as a JSON merge patch, which replaces arrays: it repeats the main window and may
+# differ from it only by the overlay title bar and the traffic lights.
+MACOS_WINDOW_KEYS = {"titleBarStyle", "hiddenTitle", "trafficLightPosition"}
 
 
 def tauri_conf(root: Path) -> list[str]:
@@ -182,6 +185,19 @@ def tauri_conf(root: Path) -> list[str]:
     actual = {key: window.get(key) for key in MAIN_WINDOW}
     if actual != MAIN_WINDOW:
         return [f"main-window: the main window must be created hidden, centered at 1280x800, found {actual}"]
+    macos_conf = root / "src-tauri/tauri.macos.conf.json"
+    if not macos_conf.exists():
+        return []
+    try:
+        macos_windows = json.loads(macos_conf.read_text(encoding="utf-8"))["app"]["windows"]
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        return [f"main-window: cannot read app.windows from src-tauri/tauri.macos.conf.json: {exc!r}"]
+    shared = [{key: value for key, value in w.items() if key not in MACOS_WINDOW_KEYS} for w in macos_windows]
+    if shared != [window]:
+        return [
+            "main-window: the main window in tauri.macos.conf.json must repeat tauri.conf.json's and add only "
+            f"{', '.join(sorted(MACOS_WINDOW_KEYS))}"
+        ]
     return []
 
 

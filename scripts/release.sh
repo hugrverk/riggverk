@@ -2,7 +2,7 @@
 # Local macOS release flow (no CI). See docs/RELEASE.md.
 #
 #   scripts/release.sh prepare [--dry-run] [--since REV]   next CalVer version, notes draft, bump, release check, PR
-#   scripts/release.sh publish [--dry-run] [--allow-newer] build, ad hoc sign, zip, tag and GitHub release
+#   scripts/release.sh publish [--dry-run] [--allow-newer] universal build, dmg, zip, SHA256SUMS, tag and GitHub release
 #
 # --dry-run runs the read-only checks (and git fetch) and prints what a real run would do; it changes nothing.
 set -euo pipefail
@@ -19,6 +19,7 @@ branch=""
 version=""
 notes_file=""
 tmp_dir=""
+dmg_mount=""
 
 step() {
   printf '\n==> %s\n' "$1"
@@ -312,6 +313,9 @@ cmd_prepare() {
 cleanup_publish() {
   local status=$?
   trap - EXIT
+  if [ -n "$dmg_mount" ]; then
+    hdiutil detach -quiet -force "$dmg_mount" || true
+  fi
   if [ -n "$tmp_dir" ] && [ -d "$tmp_dir" ]; then
     rm -rf "$tmp_dir"
   fi
@@ -323,29 +327,68 @@ cleanup_publish() {
   exit "$status"
 }
 
-app_bundle="${CARGO_TARGET_DIR:-$repo_root/src-tauri/target}/release/bundle/macos/Riggverk.app"
+# One universal (arm64 + x86_64) build; rustup must have both targets (see docs/RELEASE.md).
+build_target="universal-apple-darwin"
+bundle_dir="${CARGO_TARGET_DIR:-$repo_root/src-tauri/target}/$build_target/release/bundle"
+app_bundle="$bundle_dir/macos/Riggverk.app"
+volume_icon="src-tauri/macos/dmg/VolumeIcon.icns"
+built_dmg=""
+
+require_universal_targets() {
+  local installed target
+  installed="$(rustup target list --installed 2>/dev/null)" || {
+    problem "rustup is required for the universal build"
+    return 0
+  }
+  for target in aarch64-apple-darwin x86_64-apple-darwin; do
+    printf '%s\n' "$installed" | grep -qx "$target" || problem "the Rust target $target is missing (rustup target add $target)"
+  done
+}
+
+# The binary must hold both architectures.
+check_universal() {
+  local archs
+  archs=" $(lipo -archs "$1/Contents/MacOS/riggverk") "
+  case "$archs" in *" arm64 "*) ;; *) fail "$1 has no arm64 slice (lipo:$archs)" ;; esac
+  case "$archs" in *" x86_64 "*) ;; *) fail "$1 has no x86_64 slice (lipo:$archs)" ;; esac
+}
+
+# The bundler signs ad hoc (signingIdentity "-" in tauri.macos.conf.json) before it makes the disk image, so the
+# app, the zip and the disk image carry the same signature; re-signing here would change the bytes after the fact.
+check_signature() {
+  local details
+  codesign --verify --deep --strict "$1"
+  details="$(codesign --display --verbose=2 "$1" 2>&1)"
+  case "$details" in
+    *"Signature=adhoc"*) ;;
+    *) fail "$1 is not ad hoc signed" ;;
+  esac
+}
 
 build_app() {
-  rm -rf "$app_bundle"
-  # actool (the Icon Composer icon) fails with "Bad file descriptor" when stdin is closed, as in a background job or CI.
-  npm run tauri build -- --bundles app -- --locked </dev/null
+  local built dmgs shim_dir="$tmp_dir/bin"
+  rm -rf "$bundle_dir/macos" "$bundle_dir/dmg"
+  # actool (the Icon Composer icon) fails with "Bad file descriptor" when stdin is closed, as in a background job or CI,
+  # and also when its stdin is the pipe the Tauri CLI (node) hands its children even with </dev/null below. The bundler
+  # runs `actool` from PATH, so a shim first on PATH gives the real one /dev/null.
+  mkdir -p "$shim_dir"
+  printf '#!/bin/sh\nexec xcrun actool "$@" </dev/null\n' >"$shim_dir/actool"
+  chmod +x "$shim_dir/actool"
+  # The disk image layout is set through Finder: the terminal needs Automation permission for Finder once.
+  PATH="$shim_dir:$PATH" npm run tauri build -- --target "$build_target" --bundles app,dmg -- --locked </dev/null
   [ -d "$app_bundle" ] || fail "the build did not produce $app_bundle"
-  local built
   built="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app_bundle/Contents/Info.plist")"
   [ "$built" = "$version" ] || fail "the bundle reports version $built, expected $version"
-  info "built Riggverk.app $built"
+  dmgs=("$bundle_dir"/dmg/*.dmg)
+  [ "${#dmgs[@]}" -eq 1 ] && [ -f "${dmgs[0]}" ] || fail "the build did not produce one disk image in $bundle_dir/dmg"
+  built_dmg="${dmgs[0]}"
+  check_universal "$app_bundle"
+  info "built universal Riggverk.app $built and $(basename "$built_dmg")"
 }
 
 sign_app() {
-  local details
-  codesign --force --deep --sign - "$app_bundle"
-  codesign --verify --deep --strict "$app_bundle"
-  details="$(codesign --display --verbose=2 "$app_bundle" 2>&1)"
-  case "$details" in
-    *"Signature=adhoc"*) ;;
-    *) fail "the bundle is not ad hoc signed" ;;
-  esac
-  info "ad hoc signed and verified"
+  check_signature "$app_bundle"
+  info "ad hoc signed by the bundler and verified"
 }
 
 zip_app() {
@@ -358,7 +401,46 @@ zip_app() {
   mkdir -p "$check_dir"
   ditto -x -k "$zip_file" "$check_dir"
   codesign --verify --deep --strict "$check_dir/Riggverk.app"
-  info "$zip_file ($(du -h "$zip_file" | cut -f1)), sha256 $(shasum -a 256 "$zip_file" | cut -d' ' -f1)"
+  info "$zip_file ($(du -h "$zip_file" | cut -f1))"
+}
+
+# mount_dmg -readonly|-readwrite IMAGE
+mount_dmg() {
+  dmg_mount="$tmp_dir/mount"
+  mkdir -p "$dmg_mount"
+  hdiutil attach -quiet -nobrowse -noautoopen "$1" -mountpoint "$dmg_mount" "$2"
+}
+
+unmount_dmg() {
+  hdiutil detach -quiet "$dmg_mount"
+  dmg_mount=""
+}
+
+# The bundler's disk image (background, icon positions, Applications link) gets the Riggverk volume icon, which the
+# bundler cannot take, and is compressed again.
+dmg_app() {
+  local writable="$tmp_dir/writable.dmg"
+  [ -s "$volume_icon" ] || fail "$volume_icon is missing (the build's beforeBundleCommand renders it)"
+  hdiutil convert -quiet "$built_dmg" -format UDRW -o "$writable"
+  mount_dmg -readwrite "$writable"
+  cp "$volume_icon" "$dmg_mount/.VolumeIcon.icns"
+  unmount_dmg
+  rm -f "$dmg_file"
+  hdiutil convert -quiet "$writable" -format UDZO -imagekey zlib-level=9 -o "$dmg_file"
+
+  hdiutil verify -quiet "$dmg_file"
+  mount_dmg -readonly "$dmg_file"
+  check_signature "$dmg_mount/Riggverk.app"
+  check_universal "$dmg_mount/Riggverk.app"
+  [ -L "$dmg_mount/Applications" ] || fail "$dmg_file has no Applications link"
+  cmp -s "$volume_icon" "$dmg_mount/.VolumeIcon.icns" || fail "$dmg_file does not carry the Riggverk volume icon"
+  unmount_dmg
+  info "$dmg_file ($(du -h "$dmg_file" | cut -f1)), verified, mounted and checked"
+}
+
+write_checksums() {
+  (cd "$(dirname "$sums_file")" && shasum -a 256 "$(basename "$dmg_file")" "$(basename "$zip_file")") >"$sums_file"
+  sed 's/^/  /' "$sums_file"
 }
 
 create_release() {
@@ -366,7 +448,8 @@ create_release() {
   git tag -a "v$version" -m "Riggverk $version"
   stage="tagged"
   git push --quiet origin "refs/tags/v$version"
-  url="$(gh release create "v$version" "$zip_file" --title "Riggverk $version" --notes-file "$notes_file" --verify-tag)"
+  url="$(gh release create "v$version" "$dmg_file" "$zip_file" "$sums_file" --title "Riggverk $version" \
+    --notes-file "$notes_file" --verify-tag)"
   stage="released"
   printf '\nReleased: %s\n' "$url"
 }
@@ -405,7 +488,8 @@ cmd_publish() {
 
   step "preflight"
   require_python
-  require_tools git gh npm codesign ditto
+  require_tools git gh npm codesign ditto hdiutil lipo shasum
+  require_universal_targets
   require_gh_login
   # The build uses whatever is installed; it must be what the tag's lock says.
   if python3 scripts/release_tools.py check-node-modules; then
@@ -454,13 +538,17 @@ cmd_publish() {
   fi
 
   zip_file="release/Riggverk-v${version:-VERSION}-macOS.zip"
+  dmg_file="release/Riggverk-v${version:-VERSION}-macOS.dmg"
+  sums_file="release/SHA256SUMS"
   if [ "$dry_run" -eq 1 ]; then
     step "release"
-    would "build: npm run tauri build -- --bundles app -- --locked (expects $app_bundle)"
-    would "ad hoc sign and verify: codesign --force --deep --sign - $app_bundle"
+    would "build: npm run tauri build -- --target $build_target --bundles app,dmg -- --locked (expects $app_bundle, universal)"
+    would "verify the bundler's ad hoc signature: codesign --verify --deep --strict $app_bundle"
     would "zip: ditto -c -k --keepParent $app_bundle $zip_file, then verify the signature inside the zip"
+    would "disk image: add the volume icon to the bundler's disk image as $dmg_file, then hdiutil verify, mount and check the app"
+    would "checksums: shasum -a 256 of the disk image and the zip into $sums_file"
     would "tag: git tag -a v${version:-VERSION} -m 'Riggverk ${version:-VERSION}', then git push origin refs/tags/v${version:-VERSION}"
-    would "release: gh release create v${version:-VERSION} $zip_file --title 'Riggverk ${version:-VERSION}' --notes-file ${notes_file:-release-notes/VERSION.md} --verify-tag"
+    would "release: gh release create v${version:-VERSION} $dmg_file $zip_file $sums_file --title 'Riggverk ${version:-VERSION}' --notes-file ${notes_file:-release-notes/VERSION.md} --verify-tag"
     finish_dry_run
     return
   fi
@@ -475,6 +563,10 @@ cmd_publish() {
   sign_app
   step "zip"
   zip_app
+  step "disk image"
+  dmg_app
+  step "checksums"
+  write_checksums
   step "tag and GitHub release"
   create_release
 }
