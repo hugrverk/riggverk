@@ -593,6 +593,8 @@
 }
 
 .plan-progress p,
+.plan-done h3 { margin: 0; }
+
 /* What a successful run still left to the user: weight and the decision's top edge, never colour alone. */
 .plan-left {
   display: grid;
@@ -604,8 +606,6 @@
 
 .plan-left b { font-weight: 600; color: var(--text-heading); }
 .plan-left ul { margin: 0; padding-left: 16px; overflow-wrap: anywhere; }
-
-.plan-done h3 { margin: 0; }
 .plan-progress b { color: var(--text); font-weight: 500; }
 
 .plan-track { display: block; height: 3px; background: var(--border); }
