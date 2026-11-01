@@ -116,8 +116,9 @@ describe("Sidebar", () => {
     const { container } = plain({ version: "2026.10.5", backupCount: 19, checkedAt: new Date(2026, 9, 28, 15, 42) });
     const side = container.querySelector("aside.side")!;
     expect(side.hasAttribute("data-tauri-drag-region")).toBe(true);
-    expect(side.querySelector(".brand")!.textContent).toBe("Riggverk2026.10.5");
-    expect(side.querySelector(".foot")!.textContent).toBe("19 backupschecked 15:42");
+    // The version sits in the foot, so the brand row is only the mark and the name.
+    expect(side.querySelector(".brand")!.textContent).toBe("Riggverk");
+    expect(side.querySelector(".foot")!.textContent).toBe("2026.10.5" + "19 backupschecked 15:42");
   });
 
   it("words the foot for one backup, and omits what is not known yet", () => {
