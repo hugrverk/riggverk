@@ -7,19 +7,40 @@ import type { SetupHistoryEntry, SetupResult } from "../types";
 /** How far back the history is searched for the run being undone; the newest completed one is always near the top. */
 const HISTORY_LOOKUP_LIMIT = 50;
 
-/** "Updated Claude (22 Oct, 12:00)" from the run in the history; "the update" when the history cannot name it. */
-async function describeRun(transactionId: string): Promise<string> {
+/** The run in the history, or undefined when the history cannot be read or does not list it. */
+async function findRun(transactionId: string): Promise<SetupHistoryEntry | undefined> {
   try {
     const history = await invoke<SetupHistoryEntry[]>("list_setup_history", { limit: HISTORY_LOOKUP_LIMIT });
-    const entry = Array.isArray(history) ? history.find(candidate => candidate.transaction_id === transactionId) : undefined;
-    if (entry) {
-      const time = updateTimeText(entry);
-      return time ? `${runTitle(entry)} (${time})` : runTitle(entry);
-    }
+    return Array.isArray(history) ? history.find(candidate => candidate.transaction_id === transactionId) : undefined;
   } catch {
     // The dialog still works without the name.
+    return undefined;
   }
-  return "the update";
+}
+
+/** "Updated Claude (22 Oct, 12:00)" from the run in the history; "the update" when the history cannot name it. */
+function describeRun(entry: SetupHistoryEntry | undefined): string {
+  if (!entry) return "the update";
+  const time = updateTimeText(entry);
+  return time ? `${runTitle(entry)} (${time})` : runTitle(entry);
+}
+
+function items(count: number, noun: string): string {
+  return `${count} ${noun}${count === 1 ? "" : "s"}`;
+}
+
+/**
+ * What the undo does to the `count` items of the dry run: files the run created are removed, the rest come back from
+ * the backup. Without the run's recorded changes every item counts as restored.
+ */
+function undoEffect(count: number, entry: SetupHistoryEntry | undefined): string {
+  const created = entry
+    ? Math.min(count, entry.changes.filter(change => change.applied && !change.restored && change.kind === "create").length)
+    : 0;
+  const restored = count - created;
+  if (created === 0) return `This restores ${items(restored, "item")} from the backup.`;
+  if (restored === 0) return `This removes the ${items(created, "file")} it created.`;
+  return `This removes the ${items(created, "file")} it created and restores ${items(restored, "item")} from the backup.`;
 }
 
 export interface UseRollbackRequestOptions {
@@ -57,10 +78,10 @@ export function useRollbackRequest({
       setError(`rollback: nothing can be restored for transaction ${target} (${dryRun.message})`);
       return;
     }
-    const count = dryRun.applied.length;
+    const entry = await findRun(target);
     const approved = await confirm({
       title: "Roll back",
-      message: `Undo ${await describeRun(target)}? This restores ${count} ${count === 1 ? "item" : "items"} from the backup.`,
+      message: `Undo ${describeRun(entry)}? ${undoEffect(dryRun.applied.length, entry)}`,
       confirmLabel: "roll back",
     });
     if (approved) await runRollback(target);

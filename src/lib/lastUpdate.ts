@@ -37,6 +37,16 @@ export function updateAgentsText(entry: Pick<SetupHistoryEntry, "harnesses">): s
   return names.length === 0 ? null : listText(names);
 }
 
+/** What an undo did to the run's changes: the files it had created were removed, the others restored from the backup. */
+function undoneLines(restored: SetupHistoryEntry["changes"]): ReceiptLine[] {
+  const created = restored.filter(change => change.kind === "create").length;
+  const fromBackup = restored.length - created;
+  const lines: ReceiptLine[] = [];
+  if (created > 0) lines.push({ label: "Removed", value: `${plural(created, "file")} it had created` });
+  if (fromBackup > 0) lines.push({ label: "Restored", value: `${plural(fromBackup, "file")} from the backup` });
+  return lines;
+}
+
 function unique<T>(values: readonly T[]): T[] {
   return [...new Set(values)];
 }
@@ -54,9 +64,7 @@ export function receiptLines(entry: SetupHistoryEntry, backupCount: number | nul
     const surfaces = unique(changed.map(change => change.surface)).map(surfaceTitle).join(", ");
     lines.push({ label: "Changed", value: `${surfaces} · ${plural(changed.length, "file")}` });
   }
-  if (restored.length > 0) {
-    lines.push({ label: "Restored", value: `${plural(restored.length, "file")} from the backup` });
-  }
+  lines.push(...undoneLines(restored));
   if (entry.receipt) {
     if (entry.receipt.synced.length > 0) {
       lines.push({ label: "Checked", value: `${unique(entry.receipt.synced).map(surfaceTitle).join(", ")} · current` });
@@ -95,14 +103,16 @@ function runSubject(entry: SetupHistoryEntry): string {
 }
 
 /**
- * "Updated Codex", "Removed files" or, for a run that stopped, "Update of Codex". Only the recorded changes decide
- * the verb: a run whose applied changes were all removals says "Removed"; everything else says "Updated".
+ * "Updated Codex", "Installed Codex", "Removed files" or, for a run that stopped, "Update of Codex". Only the recorded
+ * changes decide the verb: a run whose applied changes were all removals says "Removed", all creations "Installed";
+ * everything else says "Updated".
  */
 export function runTitle(entry: SetupHistoryEntry): string {
   const subject = runSubject(entry);
   if (entry.status === "failed") return `Update of ${subject}`;
   const applied = entry.changes.filter(change => change.applied);
-  const verb = applied.length > 0 && applied.every(change => change.kind === "remove") ? "Removed" : "Updated";
+  const all = (kind: string) => applied.length > 0 && applied.every(change => change.kind === kind);
+  const verb = all("remove") ? "Removed" : all("create") ? "Installed" : "Updated";
   return `${verb} ${subject}`;
 }
 
@@ -145,7 +155,7 @@ export function agentReceipt(entry: SetupHistoryEntry, harness: InstallAgent): {
   if (changed.length > 0) {
     lines.push({ label: "Changed", value: `${unique(changed.map(change => change.surface)).map(surfaceTitle).join(", ")} · ${plural(changed.length, "file")}` });
   }
-  if (restored.length > 0) lines.push({ label: "Restored", value: `${plural(restored.length, "file")} from the backup` });
+  lines.push(...undoneLines(restored));
   if (synced.length > 0) lines.push({ label: "Checked", value: `${synced.map(surfaceTitle).join(", ")} · current` });
   if (left.length > 0) {
     lines.push({

@@ -520,6 +520,13 @@ describe("mock backend: keep mine for the Codex config", () => {
     expect(result.success).toBe(true);
     expect(await configRow()).toMatchObject({ state: "current" });
     expect((await configRow()).codex_config).toBeUndefined();
+    // Like the backend, the run is in the history.
+    expect((await invoke<SetupHistoryEntry[]>("list_setup_history"))[0]).toMatchObject({
+      transaction_id: result.transaction_id,
+      status: "applied",
+      surfaces: ["codex_config"],
+      changes: [{ surface: "codex_config", kind: "update", path: "~/.codex/config.toml", applied: true, restored: false }],
+    });
     // Nothing differs now, and the proof is spent.
     await expect(invoke("preview_codex_config_defaults")).rejects.toThrow("nothing to reset");
     await expect(
@@ -529,11 +536,19 @@ describe("mock backend: keep mine for the Codex config", () => {
     const rolled = await invoke<SetupResult>("rollback_setup_transaction", { transactionId: result.transaction_id, dryRun: false });
     expect(rolled.success).toBe(true);
     expect(await configRow()).toMatchObject({ state: "conflict", codex_config: { differing: [{ key: "approvals_reviewer", value: "auto_review" }] } });
+    expect((await invoke<SetupHistoryEntry[]>("list_setup_history"))[0]).toMatchObject({ transaction_id: result.transaction_id, status: "rolled_back" });
   });
 });
 
 
 describe("mock backend: setup history", () => {
+  // The tests above write runs of their own into the history; these read the seeded one.
+  beforeAll(async () => {
+    vi.resetModules();
+    window.history.replaceState(null, "", "/?mock=conflict");
+    await import("./mockBackend");
+  });
+
   it("returns receipt-shaped entries newest first with Undo only on the newest completed run", async () => {
     const history = await invoke<SetupHistoryEntry[]>("list_setup_history");
     expect(history).toHaveLength(3);
