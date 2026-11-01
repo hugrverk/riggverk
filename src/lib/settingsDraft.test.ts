@@ -11,6 +11,7 @@ import {
   normalizeAppFontSize,
   themeAccentDefault,
   themeColorDefaults,
+  themeColorsInForce,
   themeColorWarnings,
 } from "./settingsDraft";
 
@@ -87,11 +88,113 @@ describe("applyThemeSettings", () => {
   it("sets a readable inverse foreground for a custom accent and clears it otherwise", () => {
     applyThemeSettings({ ...defaultSettings(), accent_color: "#ffe066" });
     expect(document.documentElement.style.getPropertyValue("--inv-fg")).toBe("#111111");
-    applyThemeSettings({ ...defaultSettings(), accent_color: "#0b5fa5" });
+    applyThemeSettings({ ...defaultSettings(), appearance: "light", accent_color: "#0b5fa5" });
     expect(document.documentElement.style.getPropertyValue("--inv-fg")).toBe("#ffffff");
     applyThemeSettings({ ...defaultSettings(), accent_color: null });
     expect(document.documentElement.style.getPropertyValue("--inv-fg")).toBe("");
     expect(document.documentElement.style.getPropertyValue("--accent")).toBe("");
+  });
+});
+
+describe("custom colours on the theme in force", () => {
+  /** A controllable `(prefers-color-scheme: light)` query, like macOS switching appearance under the webview. */
+  function fakeColorScheme(light: boolean) {
+    const listeners = new Set<() => void>();
+    const state = { light };
+    const original = window.matchMedia;
+    window.matchMedia = ((query: string) => ({
+      get matches() { return query.includes("light") ? state.light : !state.light; },
+      media: query,
+      addEventListener: (_: string, listener: () => void) => listeners.add(listener),
+      removeEventListener: (_: string, listener: () => void) => listeners.delete(listener),
+    })) as unknown as typeof window.matchMedia;
+    return {
+      switchTo(next: boolean) { state.light = next; listeners.forEach(listener => listener()); },
+      restore() { window.matchMedia = original; },
+    };
+  }
+  const style = (name: string) => document.documentElement.style.getPropertyValue(name);
+  // The owner's saved set: chosen on a dark Mac, then macOS switched to light under the system theme.
+  const darkChoices = { accent_color: "#aaaaaa", background_color: "#212121", foreground_color: "#eeeeee" };
+
+  it("keeps colours that fit the theme and drops those from the opposite one", () => {
+    expect(themeColorsInForce({ ...defaultSettings(), appearance: "dark", ...darkChoices }))
+      .toEqual({ accent: "#aaaaaa", background: "#212121", foreground: "#eeeeee" });
+    expect(themeColorsInForce({ ...defaultSettings(), appearance: "light", ...darkChoices }))
+      .toEqual({ accent: null, background: null, foreground: null });
+    expect(themeColorsInForce({ ...defaultSettings(), appearance: "light", background_color: "#fafafa", foreground_color: "#222222", accent_color: "#0b5fa5" }))
+      .toEqual({ accent: "#0b5fa5", background: "#fafafa", foreground: "#222222" });
+  });
+
+  it("keeps a foreground that reads at 4.5:1 on the background shown, whatever its lightness class", () => {
+    expect(themeColorsInForce({ ...defaultSettings(), appearance: "dark", background_color: "#000000", foreground_color: "#757575" }).foreground)
+      .toBe("#757575");
+    expect(themeColorsInForce({ ...defaultSettings(), appearance: "light", background_color: "#ffffff", foreground_color: "#767676" }).foreground)
+      .toBe("#767676");
+    expect(themeColorsInForce({ ...defaultSettings(), appearance: "dark", background_color: "#000000", foreground_color: "#6a6a6a" }).foreground)
+      .toBeNull();
+  });
+
+  it("does not pin a dark background under the light theme", () => {
+    applyThemeSettings({ ...defaultSettings(), appearance: "light", ...darkChoices });
+    expect(document.documentElement.getAttribute("data-theme")).toBe("light");
+    expect(style("--bg")).toBe("");
+    expect(style("--text")).toBe("");
+    expect(style("--accent")).toBe("");
+  });
+
+  it("re-applies the system theme's colours when macOS switches appearance", () => {
+    const scheme = fakeColorScheme(false);
+    try {
+      applyThemeSettings({ ...defaultSettings(), appearance: "system", ...darkChoices });
+      expect(style("--bg")).toBe("#212121");
+      expect(style("--accent")).toBe("#aaaaaa");
+      scheme.switchTo(true);
+      expect(style("--bg")).toBe("");
+      expect(style("--text")).toBe("");
+      expect(style("--accent")).toBe("");
+      scheme.switchTo(false);
+      expect(style("--bg")).toBe("#212121");
+      // A later apply replaces the watcher: an explicit theme no longer follows the OS.
+      applyThemeSettings({ ...defaultSettings(), appearance: "dark", ...darkChoices });
+      scheme.switchTo(true);
+      expect(style("--bg")).toBe("#212121");
+    } finally {
+      scheme.restore();
+      applyThemeSettings(defaultSettings());
+    }
+  });
+
+  it("follows macOS through the legacy addListener API when addEventListener is missing", () => {
+    const listeners = new Set<() => void>();
+    let light = false;
+    const original = window.matchMedia;
+    window.matchMedia = ((query: string) => ({
+      get matches() { return query.includes("light") ? light : !light; },
+      media: query,
+      addListener: (listener: () => void) => listeners.add(listener),
+      removeListener: (listener: () => void) => listeners.delete(listener),
+    })) as unknown as typeof window.matchMedia;
+    try {
+      applyThemeSettings({ ...defaultSettings(), appearance: "system", ...darkChoices });
+      expect(style("--bg")).toBe("#212121");
+      expect(listeners.size).toBe(1);
+      light = true;
+      listeners.forEach(listener => listener());
+      expect(style("--bg")).toBe("");
+      applyThemeSettings({ ...defaultSettings(), appearance: "dark", ...darkChoices });
+      expect(listeners.size).toBe(0);
+    } finally {
+      window.matchMedia = original;
+      applyThemeSettings(defaultSettings());
+    }
+  });
+
+  it("says which saved colours the theme does not use", () => {
+    const warnings = themeColorWarnings({ appearance: "light", foreground: "#eeeeee", background: "#212121", accent: "#aaaaaa" }).join(" ");
+    expect(warnings).toContain("background is dark on the light theme, so it is not used");
+    expect(warnings).toContain("below 4.5:1, so the theme text colour is used");
+    expect(warnings).toContain("the theme accent is used");
   });
 });
 
@@ -176,7 +279,7 @@ describe("themeColorWarnings", () => {
 
   it("warns when a custom background is the opposite luminance class of the theme", () => {
     const warnings = themeColorWarnings({ appearance: "dark", foreground: "#111111", background: "#ffffff", accent: null });
-    expect(warnings.join(" ")).toContain("light on the dark theme");
+    expect(warnings.join(" ")).toContain("light on the dark theme, so it is not used");
   });
 
   it("warns when the fixed muted and status inks do not read on a same-class background", () => {

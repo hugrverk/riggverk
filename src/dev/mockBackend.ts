@@ -18,7 +18,8 @@
  *   error     status/diagnostics calls fail (exercises the error line); the workspace is not valid, so the
  *             Library still lists the bundled items but no personal doc
  *   empty     valid workspace with no docs, skills or agents (the empty states of the lists; the real bundle is never empty)
- * `&theme=light|dark|system` sets the persisted appearance. Copilot, Pi, Kilo, Antigravity and Grok are off until Settings
+ * `&theme=light|dark|system` sets the persisted appearance; `&bg=212121&fg=e6e6e8&accent=aaaaaa` (hex without `#`) set
+ * saved custom colours. Copilot, Pi, Kilo, Antigravity and Grok are off until Settings
  * turns them on; `&light=unserved` leaves Copilot and Pi without a skills folder (an isolated Codex home).
  * `&pace=slow` slows the progress events of a task down, so a run can be watched.
  *
@@ -105,6 +106,10 @@ const progressPace = params.get("pace") === "slow" ? 10 : 1;
 const themeParam = params.get("theme");
 const appearance: AppSettings["appearance"] =
   themeParam === "light" || themeParam === "dark" || themeParam === "system" ? themeParam : "dark";
+const colorParam = (key: string): string | null => {
+  const value = params.get(key);
+  return value && /^[0-9a-fA-F]{6}$/.test(value) ? `#${value.toLowerCase()}` : null;
+};
 
 const HOME = "/Users/mock";
 const WORKSPACE = `${HOME}/.config/riggverk`;
@@ -152,9 +157,9 @@ let settings: AppSettings = {
       id !== "grok_mcp",
   ),
   enabled_harness_ids: ["codex", "opencode", "claude", "cursor"],
-  accent_color: null,
-  background_color: null,
-  foreground_color: null,
+  accent_color: colorParam("accent"),
+  background_color: colorParam("bg"),
+  foreground_color: colorParam("fg"),
   motion: "full",
   landing_view: "start",
   revision: 3,

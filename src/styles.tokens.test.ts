@@ -104,8 +104,9 @@ describe("motion tokens", () => {
 
 describe("applyThemeSettings heading color override", () => {
   it("changes heading color without changing heading font size token", () => {
-    applyThemeSettings({ ...defaultSettings(), foreground_color: "#336699" });
-    expect(document.documentElement.style.getPropertyValue("--text-heading")).toBe("#336699");
+    // A light ink: the default dark theme only takes a foreground that reads on it.
+    applyThemeSettings({ ...defaultSettings(), foreground_color: "#a8c4e0" });
+    expect(document.documentElement.style.getPropertyValue("--text-heading")).toBe("#a8c4e0");
     const fontSizeHeading = rootBlockDeclarations().get("--font-size-heading");
     expect(fontSizeHeading).toMatch(/rem$/);
     expect(document.documentElement.style.getPropertyValue("--font-size-heading")).toBe("");
