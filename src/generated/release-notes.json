@@ -1,6 +1,17 @@
 {
   "releases": [
     {
+      "version": "2026.11.3",
+      "sections": [
+        {
+          "title": "New",
+          "items": [
+            "Use the silver accent in the status report template"
+          ]
+        }
+      ]
+    },
+    {
       "version": "2026.11.2",
       "sections": [
         {
