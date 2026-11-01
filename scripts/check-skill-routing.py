@@ -30,6 +30,19 @@ SPEC_KEYS = ("name", "description", "license", "compatibility", "metadata", "all
 # Claude Code keys outside the spec that bundled skills keep for their behaviour (Claude Code reads
 # them only at the top level). A strict validator flags them; docs/SKILLS.md says which and why.
 CLAUDE_EXTENSION_KEYS = ("context", "agent", "background", "disable-model-invocation")
+# `allowed-tools` pre-approves a prefix: `Bash(git config *)` also runs `git config core.fsmonitor <cmd>`,
+# `Bash(git log *)` also writes `--output=<file>`, `Bash(jq *)` also reads the environment. Commands
+# with such a write, exec or secret-printing form may be pre-approved only as these exact rules; the
+# built-in read-only handling of Claude Code covers the rest without a prompt.
+RISKY_ALLOWED_TOOL_PREFIXES = (
+    "git config", "git remote", "git branch", "git tag", "git log", "git diff", "git show", "git fetch",
+    "gh auth", "gh api", "jq", "head", "tail", "find", "tree",
+)
+SAFE_RISKY_ALLOWED_TOOLS = {
+    "git config --get *", "git remote -v", "git branch --show-current",
+    "git tag --list *", "git tag --merged *", "gh auth status",
+}
+ALLOWED_TOOL_RULE_RE = re.compile(r"Bash\(([^)]*)\)")
 # Keys Riggverk reads that the spec keeps under `metadata:`. Packs and personal skills may still set
 # them at the top level (the app reads both, `metadata.<key>` winning); bundled skills may not.
 RIGGVERK_METADATA_KEYS = ("category", "risk", "targets", "related")
@@ -470,6 +483,18 @@ def plain_scalar_safe(value: str) -> bool:
     return not (": " in value or " #" in value or value.endswith(":") or value[:1] in PLAIN_SCALAR_BAD_START)
 
 
+def validate_allowed_tools(path: Path, value: str) -> None:
+    """A bundled skill may not pre-approve a prefix that can write, run code or print a secret."""
+    for command in ALLOWED_TOOL_RULE_RE.findall(value):
+        command = command.strip()
+        risky = any(command == prefix or command.startswith(prefix + " ") for prefix in RISKY_ALLOWED_TOOL_PREFIXES)
+        if risky and command not in SAFE_RISKY_ALLOWED_TOOLS:
+            fail(
+                f"{rel(path)}: allowed-tools pre-approves 'Bash({command})', a prefix that can write, run code or "
+                f"print secrets; use one of {sorted(SAFE_RISKY_ALLOWED_TOOLS)} or leave it to the permission prompt"
+            )
+
+
 def validate_spec_frontmatter(path: Path, frontmatter: str) -> None:
     """A bundled skill stays valid under the Agent Skills spec, apart from the documented Claude keys."""
     allowed = (*SPEC_KEYS, *CLAUDE_EXTENSION_KEYS)
@@ -480,6 +505,7 @@ def validate_spec_frontmatter(path: Path, frontmatter: str) -> None:
             f"put Riggverk keys under 'metadata:' (allowed at the top level: {list(allowed)})"
         )
     fields = parse_fields(frontmatter)
+    validate_allowed_tools(path, fields.get("allowed-tools", ""))
     if fields.get("license") != BUNDLED_LICENSE:
         fail(f"{rel(path)}: bundled skills declare 'license: {BUNDLED_LICENSE}'")
     compatibility = fields.get("compatibility")

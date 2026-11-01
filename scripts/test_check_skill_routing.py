@@ -208,6 +208,19 @@ class CheckSkillRoutingTests(unittest.TestCase):
         self.edit(self.skill("tdd"), "license: MIT\n", "license: MIT\nallowed-tools: Bash(ls *)\n")
         self.assert_fails("Claude-only frontmatter")
 
+    def test_risky_allowed_tools_prefix_fails(self) -> None:
+        path = self.skill("pr-workflow")
+        original = path.read_text(encoding="utf-8")
+        for rule in ("git config *", "git log *", "git remote *", "git tag *", "gh auth status *", "jq *", "head *"):
+            with self.subTest(rule=rule):
+                path.write_text(original.replace("allowed-tools: ", f"allowed-tools: Bash({rule}) ", 1), encoding="utf-8")
+                self.assert_fails("pre-approves")
+
+    def test_exact_read_only_allowed_tools_pass(self) -> None:
+        self.edit(self.skill("pr-workflow"), "allowed-tools: ", "allowed-tools: Bash(git tag --list *) Bash(gh auth status) ")
+        result = run(self.tree, "check-skill-routing.py")
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_riggverk_key_at_the_top_level_of_a_bundled_skill_fails(self) -> None:
         self.edit(self.skill("tdd"), "  category: testing\n", "")
         self.edit(self.skill("tdd"), "license: MIT\n", "license: MIT\ncategory: testing\n")

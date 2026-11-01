@@ -3,7 +3,7 @@ name: status-report
 description: Builds a one-file HTML status report of what happened, what is in progress and what comes next in any repository, from cited git, GitHub, CI and doc evidence. Use when asked for a status report or a sprint or weekly summary.
 license: MIT
 compatibility: Needs git, an authenticated gh CLI and Node.js for the bundled render and verify scripts; the browser check uses Playwright when it resolves.
-allowed-tools: Bash(git log *) Bash(git tag *) Bash(git show *) Bash(gh pr list *) Bash(gh release list *) Bash(gh run list *)
+allowed-tools: Bash(git tag --list *) Bash(gh pr list *) Bash(gh release list *) Bash(gh run list *)
 metadata:
   category: workflow
   risk: low
@@ -37,7 +37,7 @@ Done when: `report.json` and the HTML pass `verify-report.mjs`, the file is outs
 Read each source once with bounded output, and record each command or file with the time read as a `sources` entry.
 
 - Commits: `git log origin/<default> --since='<from> 00:00' --until='<to> 23:59:59' --no-merges --format='%h%x09%ad%x09%s' --date=short`; per-day counts with `--format=%ad --date=short`.
-- Tags: `git tag --sort=-creatordate --format='%(refname:short)%09%(creatordate:short)'`.
+- Tags: `git tag --list --sort=-creatordate --format='%(refname:short)%09%(creatordate:short)'`.
 - Releases: `gh release list --limit 50 --json tagName,name,publishedAt,isDraft`.
 - PRs: `gh pr list --state merged --search "merged:<from>..<to>" --limit 200 --json number,title,mergedAt,labels`, and `--state open --json number,title,isDraft,reviewDecision`.
 - Issues and milestones: `gh issue list --state open --json number,title,labels,milestone`, `gh api repos/{owner}/{repo}/milestones`.
@@ -110,5 +110,5 @@ All copy in `report.json` is in the user's language, and `project.language` foll
 Claude Code runs the commands below when the skill loads; in other harnesses they appear as plain text, so run them yourself.
 
 - Default branch: !`git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null`
-- Latest tags: !`git tag --sort=-creatordate 2>/dev/null | head -5`
+- Latest tags: !`git tag --list --sort=-creatordate 2>/dev/null | head -5`
 - Recent commits: !`git log --oneline -10 2>/dev/null | head -c 800`

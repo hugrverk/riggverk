@@ -5,7 +5,6 @@ license: MIT
 context: fork
 agent: verifier
 background: false
-allowed-tools: Bash(git status *) Bash(git log *) Bash(git diff *) Bash(head *) Bash(tail *)
 metadata:
   category: workflow
   risk: medium
@@ -53,7 +52,7 @@ Done when: every required check is run or listed with a reason, blockers are sep
 
 ### Claude Code
 
-- The `context: fork`, `agent: verifier`, `background` and `allowed-tools` frontmatter keys are Claude Code only. Other harnesses ignore them and run this skill inline in the current session with the same steps, so nothing above depends on them.
+- The `context: fork`, `agent: verifier` and `background` frontmatter keys are Claude Code only. Other harnesses ignore them and run this skill inline in the current session with the same steps, so nothing above depends on them.
 - It runs in a forked verifier context; report the full gate result back, not a summary of intent.
 
 Claude Code runs the commands below when the skill loads. Other harnesses show them as plain text and run the commands of step 2 themselves.
