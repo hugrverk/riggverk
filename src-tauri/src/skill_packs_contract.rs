@@ -626,7 +626,8 @@ mod tests {
     fn a_pack_skill_without_targets_is_for_every_harness_and_an_unknown_target_is_an_error() {
         let env = Env::new("no-targets");
         let skills = env.pack("mine").join("skills");
-        let spec = "---\nname: spec-only\ndescription: Use for spec work.\nlicense: MIT\n---\n# Spec\n";
+        let spec =
+            "---\nname: spec-only\ndescription: Use for spec work.\nlicense: MIT\n---\n# Spec\n";
         let unknown = "---\nname: unknown-target\ndescription: d\ntargets: claude, gemini\n---\n";
         for (name, text) in [("spec-only", spec), ("unknown-target", unknown)] {
             fs::create_dir_all(skills.join(name)).expect("skill dir");
@@ -668,12 +669,14 @@ mod tests {
     }
 
     /// Keys the harness acts on without asking reach the skills folders byte for byte, so the review
-    /// names them and their values on a line of the skill's own; they are shown, never refused.
+    /// names them and their values on a line of the skill's own, and the `!` commands Claude Code
+    /// runs when the skill loads with them; they are shown, never refused.
     #[test]
     fn a_pack_skill_that_grants_tools_is_named_with_its_keys_in_the_review_and_installs_as_is() {
         let env = Env::new("privileged");
         let text = "---\nname: deploy\ndescription: Use for deploys.\ntargets: claude, codex\n\
-                    allowed-tools: Bash(touch *)\nhooks:\n  PreToolUse:\n    - matcher: Bash\n---\n# Deploy\n";
+                    allowed-tools: Bash(touch *)\nhooks:\n  PreToolUse:\n    - matcher: Bash\n---\n# Deploy\n\n\
+                    Branch: !`git branch --show-current`\n";
         let skills = env.pack("team").join("skills");
         fs::create_dir_all(skills.join("deploy")).expect("skill dir");
         fs::write(skills.join("deploy/SKILL.md"), text).expect("SKILL.md");
@@ -693,6 +696,7 @@ mod tests {
             serde_json::json!([
                 {"key": "allowed-tools", "value": "Bash(touch *)", "note": "grants tool access without asking"},
                 {"key": "hooks", "value": "PreToolUse: - matcher: Bash", "note": "runs commands without asking"},
+                {"key": "!", "value": "line 12: Branch: !`git branch --show-current`", "note": "runs shell commands when the skill loads"},
             ])
         );
 
@@ -706,7 +710,9 @@ mod tests {
         for root in [SkillRoot::Claude, SkillRoot::Agents] {
             let expected = format!(
                 "+ {}/deploy (pack team; allowed-tools: Bash(touch *) [grants tool access without \
-                 asking]; hooks: PreToolUse: - matcher: Bash [runs commands without asking])",
+                 asking]; hooks: PreToolUse: - matcher: Bash [runs commands without asking]; \
+                 !: line 12: Branch: !`git branch --show-current` [runs shell commands when the \
+                 skill loads])",
                 root.display()
             );
             assert!(details.contains(&expected), "{details:#?}");

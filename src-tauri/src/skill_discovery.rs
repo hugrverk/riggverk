@@ -409,7 +409,8 @@ pub struct PrivilegedKey {
 }
 
 /// The [`PRIVILEGED_SKILL_KEYS`] a `SKILL.md` text sets at the top level of its frontmatter, in
-/// file order. Empty when the frontmatter cannot be read: such a skill does not load at all.
+/// file order, then its `!` command lines under [`SHELL_COMMAND_KEY`]. Empty when the frontmatter
+/// cannot be read: such a skill does not load at all.
 pub(crate) fn privileged_keys(content: &str) -> Vec<PrivilegedKey> {
     let Ok(lines) = frontmatter_lines(content) else {
         return Vec::new();
@@ -433,6 +434,40 @@ pub(crate) fn privileged_keys(content: &str) -> Vec<PrivilegedKey> {
         }
         Ok(())
     });
+    let commands = shell_command_lines(content);
+    if !commands.is_empty() {
+        found.push(PrivilegedKey {
+            key: SHELL_COMMAND_KEY.to_string(),
+            value: commands.join("; "),
+            note: "runs shell commands when the skill loads".to_string(),
+        });
+    }
+    found
+}
+
+/// The entry [`privileged_keys`] adds for `!` commands in the body, under this key. Claude Code runs
+/// `` !`command` `` (and a ```` ```! ```` block) as a shell command when the skill loads, before the
+/// model sees the text, so a pack skill that has one is flagged like a key that acts without asking.
+pub(crate) const SHELL_COMMAND_KEY: &str = "!";
+
+/// The body lines (after the frontmatter) that hold a `!` command, as `line N: text`, whitespace
+/// collapsed. Inline code that only mentions the syntax counts too: a flag too many is harmless.
+fn shell_command_lines(content: &str) -> Vec<String> {
+    let mut closed = false;
+    let mut found = Vec::new();
+    for (index, line) in content.lines().enumerate() {
+        if index == 0 {
+            continue;
+        }
+        if !closed {
+            closed = line.trim_end() == "---";
+            continue;
+        }
+        if line.contains("!`") || line.trim_start().starts_with("```!") {
+            let text = line.split_whitespace().collect::<Vec<_>>().join(" ");
+            found.push(format!("line {}: {text}", index + 1));
+        }
+    }
     found
 }
 
@@ -832,6 +867,31 @@ mod tests {
                 ),
                 ("context", "fork", ""),
             ]
+        );
+    }
+
+    #[test]
+    fn shell_command_lines_of_the_body_are_listed_under_the_bang_key() {
+        let text = [
+            "---",
+            "name: demo",
+            "description: \"Says !`not-the-body` here\"",
+            "---",
+            "# Demo",
+            "Branch:   !`git branch --show-current`",
+            "```!",
+            "ls -la",
+            "```",
+            "No command here!",
+        ]
+        .join("\n");
+        assert_eq!(
+            privileged_keys(&text),
+            [PrivilegedKey {
+                key: SHELL_COMMAND_KEY.to_string(),
+                value: "line 6: Branch: !`git branch --show-current`; line 7: ```!".to_string(),
+                note: "runs shell commands when the skill loads".to_string(),
+            }]
         );
     }
 
