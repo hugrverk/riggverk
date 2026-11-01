@@ -2,6 +2,7 @@ mod agent_discovery;
 mod agent_skill_targets;
 mod agent_targets;
 mod app_data_migration;
+mod app_menu;
 mod apply_progress;
 mod artifact_registry;
 mod claude_settings;
@@ -129,6 +130,9 @@ pub fn run() {
                 .with_state_flags(window_placement::STATE_FLAGS)
                 .build(),
         )
+        // Quit (Cmd+Q) closes the window so the close guard can ask about unsaved work first; see app_menu.
+        .menu(app_menu::build)
+        .on_menu_event(app_menu::on_event)
         .setup(|app| {
             // First: nothing may read or write the data directory before this.
             app_data_migration::run_at_startup()?;
