@@ -317,11 +317,6 @@ class CheckSkillRoutingTests(unittest.TestCase):
         self.edit(self.tree / WS / "templates/rules/claude.md", "## Claude harness\n", "## Claude harness\n\n- Retrospectives: `retro`.\n")
         self.assert_fails("names user-invoked skill `retro`")
 
-    def test_grill_me_route_requires_explicit_request(self) -> None:
-        rules = self.tree / WS / "templates/global-agent-rules.md"
-        self.edit(rules, "only when the user asks: `grill-me`", "automatically: `grill-me`")
-        self.assert_fails("names user-invoked skill `grill-me`")
-
     def test_user_invoked_flag_on_routed_skill_fails(self) -> None:
         # zoom-out is routed by the global rules; hiding it from the model would be a contradiction.
         self.edit(self.skill("zoom-out"), "license: MIT\n", "license: MIT\ndisable-model-invocation: true\n")

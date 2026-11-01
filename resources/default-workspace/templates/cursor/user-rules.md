@@ -48,7 +48,6 @@ Use skills as routing and workflow guidance, not boilerplate. Select only task-r
 - Red CI runs or failing PR checks: `ci-triage`, which hands root cause to `diagnose`.
 - Unfamiliar or architectural code: `zoom-out`; add `implementation-plan` before non-trivial edits.
 - Multi-step work: `implementation-plan`; add `context-budget` for broad or noisy work.
-- Sharpening a loose idea, plan or design by interview, only when the user asks: `grill-me`.
 - Mechanical or parallel slices handed to another agent CLI or subagent, only when the user wants other agents used: `delegate`.
 - PR review comments or pasted reviewer feedback: `review-response`.
 - Frontend: `frontend-design`; add `screenshot-review`, `browser-qa`, `accessibility-review`, or `prototype` as needed.

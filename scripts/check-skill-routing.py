@@ -345,8 +345,6 @@ def validate_user_invoked_routing(discovered: dict[str, Path]) -> None:
             if not line.lstrip().startswith("- "):
                 continue
             for token in BACKTICK_NAME_RE.findall(line):
-                if token == "grill-me" and line.strip() == "- Sharpening a loose idea, plan or design by interview, only when the user asks: `grill-me`.":
-                    continue
                 if token in user_invoked:
                     fail(f"{rel(source)}:{number}: routing bullet names user-invoked skill `{token}` (disable-model-invocation)")
                 elif token in on_request:
