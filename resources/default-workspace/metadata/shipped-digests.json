@@ -547,7 +547,8 @@
       "sha256:fb7373067b23bdfef4ac385e56338971f0ce9fa5049d03485b27fdc34cd3b1ba"
     ],
     "skills/status-report/assets/report-template.html": [
-      "sha256:175a8d8509f0b0d92dd1047c03d90ebf9188640f5ebeb255f8adb2a814ace69f"
+      "sha256:175a8d8509f0b0d92dd1047c03d90ebf9188640f5ebeb255f8adb2a814ace69f",
+      "sha256:17d2c936b5d0b53f1225c93d6d327b9a7a128aff925fdcaa8b3ae58a24a9c714"
     ],
     "skills/status-report/report.schema.json": [
       "sha256:db442106bee7a5c889867a4a64510ccf9c5c9969fe32ef246861669eb0a91d59"
