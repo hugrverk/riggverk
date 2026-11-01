@@ -112,7 +112,7 @@ export function themeColorDefaults(appearance: AppSettings["appearance"]): {
  * Accent when no override is set. Mirrors `--accent` in _tokens.scss (the dark `:root` block and the paper
  * `[data-theme="light"]` block); settingsDraft.test.ts fails when they drift apart.
  */
-const ACCENT_DEFAULTS = { dark: "#7d9cc4", light: "#3f6ea8" } as const;
+const ACCENT_DEFAULTS = { dark: "#b8bcc4", light: "#50555e" } as const;
 
 export function themeAccentDefault(appearance: AppSettings["appearance"]): string {
   if (appearance === "light") return ACCENT_DEFAULTS.light;
@@ -138,8 +138,8 @@ export function hasPoorContrast(foreground: string | null, background: string | 
  * `--fail`, `--yours` and `--off` in _tokens.scss (dark `:root` block and the paper `[data-theme="light"]` block).
  */
 const FIXED_INKS = {
-  dark: ["#9b9ba0", "#86b48f", "#cf8e85", "#a9aec4"],
-  light: ["#68686d", "#2f7a47", "#b0493e", "#5a6184"],
+  dark: ["#9b9ba0", "#86b48f", "#cf8e85", "#b0a4d6"],
+  light: ["#68686d", "#2f7a47", "#b0493e", "#6a5a9e"],
 } as const;
 
 /** Luminance where black and white text have equal contrast; above it a background reads as light. */

@@ -9,13 +9,14 @@
    sets data-theme=dark|light|system). --bg-panel/--bg-inset derive from --bg via
    color-mix so the custom background setting re-tints every surface; --surface/--inset
    are aliases for them. Semantic colours: --ok (success, green) is distinct from --accent
-   (interactive, blue). --inv-bg/--inv-fg are the inverse pair for the active tab and the
+   (interactive, silver). --inv-bg/--inv-fg are the inverse pair for the active tab and the
    mode badge; applyThemeSettings overrides --inv-fg when a custom accent is set.
    Contrast is asserted by src/styles.palette.test.ts (4.5:1 text, 3:1 strong borders). */
 
-/* Grafit 1A "Bläck": graphite neutrals, one muted blue (--accent/--ready), no warm hues. The
+/* Grafit 1A "Bläck": graphite neutrals, one silver accent (--accent/--ready/--primary) that matches the rune
+   mark, a lavender --yours to tell it apart from ready, no warm hues. The
    decision signal is the brightest ink (--decide) in weight 600 on a raised surface; every other
-   state is a hollow ring in its own hue. --warn (the ready blue) tints the warn button and an invalid
+   state is a hollow ring in its own hue. --warn (the ready silver) tints the warn button and an invalid
    field's border, --dirty is the unsaved-changes marker; neither is a warm colour. */
 
 :root {
@@ -31,28 +32,28 @@
   --text: #e6e6e8;
   --text-muted: #9b9ba0;
   --text-heading: #e6e6e8;
-  --accent-rgb: 125, 156, 196;
-  --accent: #7d9cc4;
+  --accent-rgb: 184, 188, 196;
+  --accent: #b8bcc4;
   --active-bg: rgba(var(--accent-rgb), 0.10);
   --active-border: rgba(var(--accent-rgb), 0.24);
   --sel: rgba(var(--accent-rgb), 0.16);
   --focus-ring: var(--accent);
   --inv-bg: var(--accent);
-  --inv-fg: #0b1220;
+  --inv-fg: #1e1e20;
   --ok: #86b48f;
   --ok-bg: rgba(134, 180, 143, 0.12);
   --ready: var(--accent);
-  --yours: #a9aec4;
+  --yours: #b0a4d6;
   --fail: #cf8e85;
   --fail-bg: rgba(207, 142, 133, 0.12);
   --fix: var(--fail);
   --off: #9b9ba0;
   --decide: var(--text);
   --decide-bg: var(--bg-raised);
-  --primary: #4e75a8;
-  --primary-fg: #ffffff;
+  --primary: #b8bcc4;
+  --primary-fg: #1e1e20;
   --warn: var(--ready);
-  --warn-bg: rgba(125, 156, 196, 0.12);
+  --warn-bg: rgba(184, 188, 196, 0.12);
   --dirty: var(--decide);
   --backdrop: rgba(0, 0, 0, 0.55);
   --radius: 0;
@@ -96,18 +97,19 @@
   --text: #1d1d1f;
   --text-muted: #68686d;
   --text-heading: #1d1d1f;
-  --accent-rgb: 63, 110, 168;
-  --accent: #3f6ea8;
+  --accent-rgb: 80, 85, 94;
+  --accent: #50555e;
   --sel: rgba(var(--accent-rgb), 0.14);
   --inv-fg: #ffffff;
   --ok: #2f7a47;
   --ok-bg: rgba(47, 122, 71, 0.10);
-  --yours: #5a6184;
+  --yours: #6a5a9e;
   --fail: #b0493e;
   --fail-bg: rgba(176, 73, 62, 0.10);
   --off: #6b6b70;
-  --primary: #3f6ea8;
-  --warn-bg: rgba(63, 110, 168, 0.12);
+  --primary: #50555e;
+  --primary-fg: #ffffff;
+  --warn-bg: rgba(80, 85, 94, 0.12);
   --backdrop: rgba(30, 30, 28, 0.35);
 }
 
@@ -123,18 +125,19 @@
     --text: #1d1d1f;
     --text-muted: #68686d;
     --text-heading: #1d1d1f;
-    --accent-rgb: 63, 110, 168;
-    --accent: #3f6ea8;
+    --accent-rgb: 80, 85, 94;
+    --accent: #50555e;
     --sel: rgba(var(--accent-rgb), 0.14);
     --inv-fg: #ffffff;
     --ok: #2f7a47;
     --ok-bg: rgba(47, 122, 71, 0.10);
-    --yours: #5a6184;
+    --yours: #6a5a9e;
     --fail: #b0493e;
     --fail-bg: rgba(176, 73, 62, 0.10);
     --off: #6b6b70;
-    --primary: #3f6ea8;
-    --warn-bg: rgba(63, 110, 168, 0.12);
+    --primary: #50555e;
+    --primary-fg: #ffffff;
+    --warn-bg: rgba(80, 85, 94, 0.12);
     --backdrop: rgba(30, 30, 28, 0.35);
   }
 }

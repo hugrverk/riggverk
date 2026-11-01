@@ -10,7 +10,7 @@ export interface TButtonProps {
   disabled?: boolean | string;
   /** aria-keyshortcuts value, when the key is a single step. */
   shortcut?: string;
-  /** `primary`: the muted blue fill. `danger`: hairline button with `--fix` text, never a red fill. Default: a hairline button. */
+  /** `primary`: the silver fill. `danger`: hairline button with `--fix` text, never a red fill. Default: a hairline button. */
   variant?: "primary" | "danger";
   className?: string;
   /** The button opens and closes a region (a Compare fold-out): its state. Renders `aria-expanded`. */
@@ -22,7 +22,7 @@ export interface TButtonProps {
 }
 
 /**
- * A real `<button>` in the Bläck button style: primary is the muted blue fill, the default is a hairline button,
+ * A real `<button>` in the Bläck button style: primary is the silver fill, the default is a hairline button,
  * `danger` a hairline button with `--fix` text. The key cap sits inside as a quiet chip; the accessible name is the
  * label (the cap is aria-hidden and `aria-keyshortcuts` carries the key). CSS capitalises the label's first letter,
  * so the name stays what the caller passed. Use it where the answer has to sit next to the question: a review's
