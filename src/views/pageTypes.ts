@@ -44,4 +44,6 @@ export interface HarnessViewProps extends PageOutputProps, PageInstallProps, Pag
   agentTargets: AgentTargetMeta[];
   settingsSaveStatus: SettingsSaveStatus;
   onToggleTarget: (id: string) => void;
+  /** Undo the update a review just applied: a dry run, a confirm, then the rollback. Without it the done review offers no Undo. */
+  onUndo?: (transactionId: string) => void;
 }

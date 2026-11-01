@@ -33,7 +33,7 @@ const FALLBACK_WIDTH = 480;
 const BADGE_SIZE = 8;
 
 /** The width of an element, kept current. Without a ResizeObserver (a test renderer) it stays at the fallback. */
-function useElementWidth(ref: { current: HTMLElement | null }): number {
+export function useElementWidth(ref: { current: HTMLElement | null }): number {
   const [width, setWidth] = useState(FALLBACK_WIDTH);
   useEffect(() => {
     const element = ref.current;

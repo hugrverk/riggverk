@@ -208,6 +208,59 @@ describe("useInstallScreen", () => {
     expect(result.current.flow.status).toBe("idle");
   });
 
+  it("keeps a successful apply on its page as the done state until it is dismissed, the page is left or another task starts", async () => {
+    mockBackend(planOf([op("claude_rules", "update")]));
+    const h = harness("claude");
+    let running: string | null = null;
+    const { result, rerender } = renderHook(() => useInstallScreen({ ...h.options, running }));
+    const applyOnce = async () => {
+      await act(async () => {
+        await result.current.open("claude");
+      });
+      await act(async () => {
+        result.current.apply();
+      });
+      await waitFor(() => expect(result.current.done).not.toBeNull());
+    };
+
+    await applyOnce();
+    expect(result.current.flow.status).toBe("idle");
+    expect(result.current.done!.result).toEqual(RESULT);
+    expect(result.current.done!.review.request.label).toBe("update claude");
+    expect(result.current.isOpenOn("claude")).toBe(true);
+    act(() => result.current.dismiss());
+    expect(result.current.isOpenOn("claude")).toBe(false);
+
+    // An Undo (any task that starts after it) closes it.
+    await applyOnce();
+    running = "rollback";
+    rerender();
+    expect(result.current.done).toBeNull();
+    running = null;
+    rerender();
+
+    // So does leaving the page.
+    await applyOnce();
+    h.views.current = "start";
+    rerender();
+    expect(result.current.done).toBeNull();
+  });
+
+  it("has no done state after a failed apply: the review closes and the run panel reports it", async () => {
+    mockBackend(planOf([op("claude_rules", "update")]), { ...RESULT, success: false, applied: [], failed: ["write failed"], rolled_back: ["ClaudeRules"] });
+    const h = harness("claude");
+    const { result } = renderHook(() => useInstallScreen(h.options));
+    await act(async () => {
+      await result.current.open("claude");
+    });
+    await act(async () => {
+      result.current.apply();
+    });
+    await waitFor(() => expect(h.results).toHaveLength(1));
+    expect(result.current.done).toBeNull();
+    expect(result.current.isOpenOn("claude")).toBe(false);
+  });
+
   it("does nothing when the plan has nothing safe to apply", async () => {
     mockBackend(planOf([op("skills", "conflict")]));
     const h = harness("claude");
