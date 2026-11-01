@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import re
 import shutil
 import sys
@@ -16,6 +17,7 @@ import tempfile
 import unittest
 from datetime import date, timedelta
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parent.parent
 SCRIPTS = ROOT / "scripts"
@@ -197,11 +199,27 @@ class BundleTests(unittest.TestCase):
     def test_private_context_file_dir_and_name(self) -> None:
         (self.tree / WS / "docs/USER_CONTEXT.md").write_text("notes\n")
         (self.tree / WS / "private-context").mkdir()
-        self.edit("docs/CONCEPTS.md", "\n", f"\nThanks {bc.PRIVATE_NAMES[0]}.\n")
-        failures = self.failures("boundary")
+        (self.tree / bc.PRIVATE_NAMES_DEFAULT).write_text("# people\nExamplename\n\nSecret Project\n")
+        self.edit("docs/CONCEPTS.md", "\n", "\nThanks Examplename.\n")
+        with mock.patch.dict(os.environ, clear=False) as env:
+            env.pop(bc.PRIVATE_NAMES_ENV, None)
+            failures = self.failures("boundary")
         self.assertTrue(any("private context file" in failure for failure in failures), failures)
         self.assertTrue(any("private context directory" in failure for failure in failures), failures)
         self.assertTrue(any(failure.startswith("[boundary] private-names:") for failure in failures), failures)
+
+    def test_private_names_come_only_from_the_local_list(self) -> None:
+        self.edit("docs/CONCEPTS.md", "\n", "\nThanks Examplename and Secret Project.\n")
+        names = Path(self._tmp.name) / "names.txt"
+        with mock.patch.dict(os.environ, clear=False) as env:
+            env.pop(bc.PRIVATE_NAMES_ENV, None)
+            self.assertEqual(self.failures("boundary"), [])
+            env[bc.PRIVATE_NAMES_ENV] = str(names)
+            self.assertFails("boundary", "names a private-names list that does not exist")
+            names.write_text("Secret Project\n")
+            self.assertFails("boundary", "private-names:")
+            names.write_text("Examplenam\n")  # a prefix of a planted word is not a match
+            self.assertEqual(self.failures("boundary"), [])
 
     def test_ignored_files_on_disk_are_scanned(self) -> None:
         # The app bundles the directory as it is on disk, so a gitignored file still ships.
