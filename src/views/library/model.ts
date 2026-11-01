@@ -1,9 +1,10 @@
 import { displayPath } from "../../lib/displayPath";
 import { isPersonalDoc } from "../../lib/libraryDirtyGuards";
-import { isPersonalSkill, packGroup, packNoticeLines, type PackNoticeLine } from "../../lib/packSkills";
+import { IMPORTED_PACK, isImportedSkill, isPersonalSkill, packGroup, packNoticeLines, type PackNoticeLine } from "../../lib/packSkills";
 import { harnessOfRulesSurface } from "../../lib/rulesView";
 import { HARNESS_LABELS } from "../../lib/harnessInstallation";
 import type { UiState } from "../../lib/uiState";
+import { provenanceText } from "./skillImport";
 import type {
   AgentMetadataResponse,
   AgentTargetMeta,
@@ -53,8 +54,11 @@ export type RowAction =
   | { type: "open"; target: OpenTarget }
   /** Opens the page of a harness (the conflict is decided there). */
   | { type: "harness"; harness: InstallAgent }
+  /** "Edit as my copy": `skill` is a bundled skill's name or an imported skill's id. */
   | { type: "copy"; skill: string }
-  | { type: "forget"; pack: string };
+  | { type: "forget"; pack: string }
+  | { type: "remove-import"; name: string }
+  | { type: "undo-import" };
 
 export interface RowVerb {
   label: string;
@@ -81,13 +85,15 @@ export interface LibraryRow {
   haystack: string;
 }
 
+export type GroupActionId = "new-doc" | "import-skill";
+
 export interface LibraryGroup {
   key: string;
   label: string;
   /** Muted words after the label. */
   hint?: string;
   /** A button in the group header. */
-  action?: { label: string; id: "new-doc" };
+  action?: { label: string; id: GroupActionId };
   rows: LibraryRow[];
   /** Shown instead of the rows while there are none (never in search results). */
   empty?: string;
@@ -114,6 +120,8 @@ export interface LibraryModelInput {
   canForgetPack: boolean;
   /** A rules conflict offers "Open <harness> view ›". */
   canOpenHarness: boolean;
+  /** The Packs group offers "Import skill…", and imported skills "Remove import" and "Undo import". */
+  canImportSkill: boolean;
 }
 
 const SHADOWED_TEXT = "A bundled skill has this name, so the bundle wins. Rename it in the pack to use it.";
@@ -179,7 +187,9 @@ function docRow(doc: DocSummary): LibraryRow {
   };
 }
 
-function skillRow(skill: SkillSummary, input: Pick<LibraryModelInput, "canCopySkill">, indent = false): LibraryRow {
+type SkillRowInput = Pick<LibraryModelInput, "canCopySkill" | "canImportSkill" | "packLibrary">;
+
+function skillRow(skill: SkillSummary, input: SkillRowInput, indent = false): LibraryRow {
   const target: OpenTarget = { kind: "skill", id: skill.id };
   const verbs: RowVerb[] = [{ label: "Read", action: { type: "open", target } }];
   const common = { key: targetKey(target), name: skill.name, indent };
@@ -194,9 +204,24 @@ function skillRow(skill: SkillSummary, input: Pick<LibraryModelInput, "canCopySk
     };
   }
   const personal = isPersonalSkill(skill.id, skill);
+  const imported = isImportedSkill(skill.id, skill);
   const tag = { kind: personal ? ("yours" as const) : ("pack" as const), label: skill.group || "pack" };
   if (personal) verbs[0] = { label: "Edit", action: { type: "open", target } };
-  const base = { ...common, tag, verbs, haystack: haystack(skill.name, skill.description, skill.group, "skill", personal ? "yours" : "pack") };
+  if (imported && input.canImportSkill) {
+    // Read-only: changed as a personal copy, taken out with a backup, or the last import taken back.
+    if (input.canCopySkill) verbs.push({ label: "Edit as my copy", action: { type: "copy", skill: skill.id } });
+    verbs.push({ label: "Remove import", action: { type: "remove-import", name: skill.name } });
+    const undo = input.packLibrary?.undo_import;
+    if (undo && undo.action !== "remove" && undo.name === skill.name) verbs.push({ label: "Undo import", action: { type: "undo-import" } });
+  }
+  const origin = skill.provenance ? provenanceText(skill.provenance) : undefined;
+  const base = {
+    ...common,
+    tag,
+    verbs,
+    note: origin,
+    haystack: haystack(skill.name, skill.description, skill.group, "skill", personal ? "yours" : "pack", skill.provenance?.source),
+  };
   if (skill.packState === "active") {
     return { ...base, desc: skill.description, state: { state: "ok", label: "Active" } };
   }
@@ -273,20 +298,26 @@ function packRows(input: LibraryModelInput): LibraryRow[] {
   for (const pack of library.packs) {
     const forgettable = pack.forgettable;
     const attention = pack.state !== "ok";
+    const undo = library.undo_import;
+    // An undone removal has no skill row left to carry its verb: the imported pack's row does.
+    const undoRemove = pack.name === IMPORTED_PACK && input.canImportSkill && undo?.action === "remove";
     rows.push({
       key: `pack:${pack.name}`,
       name: pack.name,
-      desc: attention ? pack.reason || PACK_FOLDER_UNREADABLE : undefined,
       path: attention ? undefined : `${library.folder}/${pack.name}`,
       tag: { kind: "pack", label: "pack" },
       state: attention
         ? { state: "fix", label: pack.state === "missing" ? "Pack missing" : "Needs a fix" }
         : { state: "ok", label: "Loads" },
-      verbs: forgettable && input.canForgetPack ? [{ label: "Forget pack", action: { type: "forget", pack: pack.name } }] : [],
+      desc: attention ? pack.reason || PACK_FOLDER_UNREADABLE : undefined,
+      verbs: [
+        ...(forgettable && input.canForgetPack ? [{ label: "Forget pack", action: { type: "forget", pack: pack.name } as RowAction }] : []),
+        ...(undoRemove && undo ? [{ label: `Undo remove of ${undo.name}`, action: { type: "undo-import" } as RowAction }] : []),
+      ],
       haystack: haystack(pack.name, packGroup(pack.name), library.folder, "pack", pack.reason),
     });
     for (const skill of input.skills.filter(candidate => candidate.group === packGroup(pack.name))) {
-      rows.push(skillRow(skill, { canCopySkill: false }, true));
+      rows.push(skillRow(skill, input, true));
     }
     const routing = pack.routing ?? [];
     if (routing.length > 0) {
@@ -398,6 +429,7 @@ export function topicGroups(topic: LibrarySourceType, input: LibraryModelInput):
           key: "packs",
           label: "Skill packs",
           hint: "the bundle wins on a name collision",
+          action: input.canImportSkill && input.dataFolderOk ? { label: "Import skill…", id: "import-skill" } : undefined,
           rows: packRows(input),
           notes: packNoticeLines(input.packLibrary, input.packError),
           empty: "No packs",

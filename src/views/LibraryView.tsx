@@ -14,8 +14,11 @@ import type {
   RulesFileContent,
   RulesFileSummary,
   RulesSurfaceId,
+  SkillImportPreview,
+  SkillImportResult,
   SkillSummary,
 } from "../types";
+import { IMPORTED_SKILL_PREFIX } from "../lib/packSkills";
 import { buildEntry } from "./library/entry";
 import { GroupView } from "./library/LibraryGroups";
 import { LibrarySheet } from "./library/LibrarySheet";
@@ -32,6 +35,9 @@ import {
   type RowVerb,
 } from "./library/model";
 import { CopySkillDialog } from "./library/CopySkillDialog";
+import { ImportSkillDialog, type DroppedPaths } from "./library/ImportSkillDialog";
+import { importDoneText } from "./library/skillImport";
+import { useDroppedPaths } from "./library/useDroppedPaths";
 import { NewDocDialog } from "./library/NewDocDialog";
 import type { RulesMode } from "./library/RulesEditor";
 import { skillCopyProblem, suggestedCopyName } from "./library/skillCopy";
@@ -110,6 +116,15 @@ export interface LibraryViewProps {
   packError?: string | null;
   /** Resolves true once the pack is forgotten; its row is then gone and focus moves to the next one. */
   onForgetPack?: (name: string) => void | boolean | Promise<boolean | void>;
+  /**
+   * Skill import: preview copies the dropped or given paths into private staging; commit publishes the previewed
+   * copy into pack:imported and lists the packs again. Without them there is no "Import skill…".
+   */
+  onPreviewImport?: (paths: string[]) => Promise<SkillImportPreview>;
+  onCommitImport?: (token: string, selection: string[], renames: Record<string, string>) => Promise<SkillImportResult>;
+  /** Asks first; resolves with the notice once done, or null when the user said no or it failed. */
+  onRemoveImport?: (name: string) => Promise<string | null>;
+  onUndoImport?: () => Promise<string | null>;
 
   agentSources: AgentMetadataResponse[];
   activeAgentContent: AgentSourceContent | null;
@@ -168,6 +183,11 @@ export function LibraryView(props: LibraryViewProps) {
   const copyOpenerRef = useRef<Element | null>(null);
   /** The "Edit as my copy" dialog: the bundled skill, the name typed, the backend's refusal, and a copy under way. */
   const [copy, setCopy] = useState<{ source: string; name: string; error: string | null; busy: boolean } | null>(null);
+  /** The "Import skill…" dialog, with the paths a drop opened it with. */
+  const [importing, setImporting] = useState<{ dropped: DroppedPaths | null } | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const importOpenerRef = useRef<Element | null>(null);
+  const dropSeq = useRef(0);
   const searching = query.trim() !== "";
 
   const confirmLeave = async (): Promise<boolean> => (onConfirmLeave ? onConfirmLeave() : true);
@@ -186,6 +206,7 @@ export function LibraryView(props: LibraryViewProps) {
     canCopySkill: props.onCopySkill !== undefined,
     canForgetPack: props.onForgetPack !== undefined,
     canOpenHarness: props.onOpenHarnessView !== undefined,
+    canImportSkill: props.onPreviewImport !== undefined && props.onCommitImport !== undefined,
   };
 
   const topics = LIBRARY_TOPICS.filter(topic => topic.id !== "configs" || showConfigs);
@@ -341,9 +362,41 @@ export function LibraryView(props: LibraryViewProps) {
     setSheet({ target: { kind: "doc", id }, title: props.createDocTitle.trim() || "New doc", topic: sourceType });
   };
 
+  /** `source` is a bundled skill's name or an imported skill's id (`pack:imported/<name>`). */
   const openCopy = (source: string) => {
     copyOpenerRef.current = document.activeElement;
-    setCopy({ source, name: suggestedCopyName(source), error: null, busy: false });
+    setCopy({ source, name: suggestedCopyName(source.replace(IMPORTED_SKILL_PREFIX, "")), error: null, busy: false });
+  };
+
+  const openImport = (dropped: DroppedPaths | null = null) => {
+    importOpenerRef.current = document.activeElement;
+    setImporting({ dropped });
+  };
+
+  const closeImport = () => {
+    setImporting(null);
+    const opener = importOpenerRef.current;
+    importOpenerRef.current = null;
+    if (opener instanceof HTMLElement && opener.isConnected) opener.focus();
+  };
+
+  // Paths dropped onto the window while the Packs topic (or the import dialog) is on show are previewed for import.
+  const importAvailable = input.canImportSkill && dataFolderOk;
+  const dropTarget = importAvailable && (importing !== null || (topicId === "packs" && !searching && sheet === null && copy === null && !props.showCreateDoc));
+  useDroppedPaths(
+    dropTarget,
+    paths => {
+      const dropped = { paths, seq: ++dropSeq.current };
+      if (importing) setImporting({ dropped });
+      else openImport(dropped);
+    },
+    setDragging,
+  );
+
+  const runImportVerb = (run: (() => Promise<string | null>) | undefined) => {
+    void run?.().then(message => {
+      if (message) notify(message, { tone: "ok" });
+    });
   };
 
   const closeCopy = () => {
@@ -393,6 +446,14 @@ export function LibraryView(props: LibraryViewProps) {
         break;
       case "copy":
         openCopy(action.skill);
+        break;
+      case "remove-import": {
+        const name = action.name;
+        runImportVerb(props.onRemoveImport && (() => props.onRemoveImport!(name)));
+        break;
+      }
+      case "undo-import":
+        runImportVerb(props.onUndoImport);
         break;
       case "forget": {
         const rows = Array.from(rootRef.current?.querySelectorAll<HTMLElement>("[data-row-key]") ?? []);
@@ -485,6 +546,9 @@ export function LibraryView(props: LibraryViewProps) {
         {/* What the marks on the tabs mean, for the tabs' accessible descriptions. */}
         {rulesAttention && <span id={`${ids}-note-rules`} className="visually-hidden">Needs your decision</span>}
         {packsAttention && <span id={`${ids}-note-packs`} className="visually-hidden">A pack needs attention</span>}
+        {dragging && !importing && (
+          <p className="lib-drop-cue" role="status">Drop to preview the import into pack:imported</p>
+        )}
         <div
           className="lib-scroll"
           id={`${ids}-panel`}
@@ -518,7 +582,7 @@ export function LibraryView(props: LibraryViewProps) {
                 group={group}
                 scope={topicId}
                 onVerb={runVerb(topicId)}
-                onGroupAction={() => void openNewDoc()}
+                onGroupAction={id => (id === "import-skill" ? openImport() : void openNewDoc())}
               />
             ))
           )}
@@ -541,7 +605,8 @@ export function LibraryView(props: LibraryViewProps) {
 
       {copy && (
         <CopySkillDialog
-          source={copy.source}
+          source={copy.source.replace(IMPORTED_SKILL_PREFIX, "")}
+          origin={copy.source.startsWith(IMPORTED_SKILL_PREFIX) ? "imported" : "bundled"}
           name={copy.name}
           problem={skillCopyProblem(copy.name, props.skills)}
           error={copy.error}
@@ -549,6 +614,22 @@ export function LibraryView(props: LibraryViewProps) {
           onChangeName={name => setCopy({ ...copy, name, error: null })}
           onCreate={() => void createCopy()}
           onClose={closeCopy}
+        />
+      )}
+
+      {importing && props.onPreviewImport && props.onCommitImport && (
+        <ImportSkillDialog
+          dropped={importing.dropped}
+          dragging={dragging}
+          skills={props.skills}
+          packsFolder={props.packLibrary?.folder ?? "~/.config/riggverk/packs"}
+          onPreview={props.onPreviewImport}
+          onCommit={props.onCommitImport}
+          onDone={result => {
+            closeImport();
+            notify(importDoneText(result), { tone: "ok" });
+          }}
+          onClose={closeImport}
         />
       )}
 

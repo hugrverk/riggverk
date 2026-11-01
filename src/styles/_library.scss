@@ -613,6 +613,87 @@
 
 .lib-newdoc-error { margin: 0; color: var(--fix); font-size: max(12px, calc(var(--fs) - 1px)); }
 
+/* ---- import skill ----
+   The wider modal: the drop zone and the path, then one box per skill found with its flags first, its files, the diff
+   against the import in place and its SKILL.md as plain mono text (never rendered). */
+
+dialog.app-modal.lib-import { width: min(760px, calc(100vw - 32px)); }
+
+.lib-import-body { display: grid; gap: var(--sp-2); }
+.app-modal-body.lib-import-body p { margin: 0; }
+
+.lib-import-drop {
+  padding: var(--sp-4);
+  border: 1px dashed var(--border-strong);
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.lib-import-drop.is-over { border-style: solid; background: var(--active-bg); color: var(--text); }
+
+.lib-import-path { display: flex; align-items: center; gap: var(--sp-2); }
+.lib-import-path .lib-input { flex: 1; min-width: 0; }
+
+.lib-import-candidates { display: grid; gap: var(--sp-3); min-width: 0; margin: 0; padding: 0; border: 0; }
+
+.lib-import-candidate { display: grid; gap: var(--sp-1); min-width: 0; padding: var(--sp-3); background: var(--bg); }
+
+.lib-import-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); }
+.lib-import-name { color: var(--text-heading); font-weight: 600; }
+
+.app-modal-body ul.lib-import-flags,
+.app-modal-body ul.lib-import-problems,
+.app-modal-body ul.lib-import-files {
+  display: grid;
+  gap: 2px;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  overflow: visible;
+  color: var(--text);
+  list-style: none;
+  overflow-wrap: anywhere;
+}
+
+.app-modal-body ul.lib-import-problems { color: var(--fix); }
+.lib-import-flags li { display: flex; align-items: baseline; gap: var(--sp-2); }
+.lib-import-flags b { font-weight: 600; }
+.lib-import-files li { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+
+.lib-import-rename { display: grid; gap: var(--sp-1); }
+
+.lib-import-details { display: grid; gap: var(--sp-2); }
+.lib-import-details > summary { color: var(--text-muted); cursor: pointer; }
+.lib-import-details[open] > summary { margin-bottom: var(--sp-2); }
+.lib-import-changes, .lib-import-change { display: grid; gap: var(--sp-1); }
+.lib-import-change .diff { margin: 0; }
+
+.lib-import-raw {
+  max-height: 320px;
+  margin: 0;
+  padding: var(--sp-3);
+  overflow: auto;
+  background: var(--bg-inset);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.lib-import-raw:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+
+.lib-import-dest { color: var(--text-heading); font-weight: 600; }
+
+.lib-drop-cue {
+  margin: 0 var(--page-inline) var(--sp-2);
+  padding: var(--sp-3);
+  border: 1px dashed var(--border-strong);
+  background: var(--active-bg);
+  color: var(--text);
+  text-align: center;
+}
+
 @media (max-width: 760px) {
   .lib-row { flex-wrap: wrap; }
   .lib-row-end { flex-wrap: wrap; }
