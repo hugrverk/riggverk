@@ -6,7 +6,7 @@ In short: be respectful and constructive, assume good intent, and keep criticism
 
 ## Reporting
 
-Report unacceptable behavior privately to the maintainers at hej@hugrverk.se. Do not use public issues for it. Reports are read by the maintainers only and handled confidentially.
+Report unacceptable behavior privately through GitHub: on the comment, issue or pull request, choose **Report content → Report to repository admins**. For anything that is not tied to one item, contact a maintainer through their GitHub profile. Do not use public issues for it. Reports are read by the maintainers only and handled confidentially.
 
 Security vulnerabilities are not conduct reports: follow [SECURITY.md](SECURITY.md).
 
