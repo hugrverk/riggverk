@@ -213,7 +213,19 @@ export function OverviewView({
   if (showPlan) {
     return (
       <section className="screen review" aria-label="Workspace install review">
-        <InstallPlanPane flow={install.flow} busyLabel={wsRunning} backupRoot={backupRoot} onApply={install.apply} />
+        <InstallPlanPane
+          flow={install.flow}
+          busyLabel={wsRunning}
+          backupRoot={backupRoot}
+          onApply={install.apply}
+          done={install.done}
+          onDismiss={install.dismiss}
+          onUndo={onUndo}
+          progress={wsProgress}
+          trace={trace}
+          flowBase={built}
+          onOpenAgent={onNavigate}
+        />
       </section>
     );
   }

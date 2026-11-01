@@ -449,6 +449,7 @@ function AppShell() {
     runWorkspaceTask: runWsTask,
     refresh: refreshAfterApply,
     onApplied,
+    running: wsRunning,
   });
 
   const runWorkspaceUninstall = useCallback((planFingerprint: string, previewToken: string) => {

@@ -33,6 +33,16 @@ export interface UseInstallScreenOptions {
   refresh: () => void | Promise<void>;
   /** A run that wrote files finished successfully (rollback candidate, stale recovery cleanup). */
   onApplied: (result: SetupResult) => void;
+  /** The workspace task in flight (`wsRunning`): another task starting (an Undo) closes the done card. */
+  running?: string | null;
+}
+
+/** A successful apply, kept on its page as the review's done state until it is dismissed. */
+export interface InstallDone {
+  review: InstallReview;
+  result: SetupResult;
+  /** When the apply returned (ms). */
+  at: number;
 }
 
 export interface InstallOpenOptions {
@@ -54,12 +64,18 @@ export interface InstallScreen {
   open: (target: InstallTarget, options?: InstallOpenOptions) => Promise<void>;
   /** Applies the reviewed plan through the workspace task runner so the run panel shows the run. */
   apply: () => void;
+  /**
+   * The apply that just succeeded: the review stays on its page in its done state (the map in sync, the receipt, Undo)
+   * until it is dismissed, the page is left, another review opens or another workspace task starts.
+   */
+  done: InstallDone | null;
+  dismiss: () => void;
 }
 
 /**
  * The install review as a sub-state of the Start and harness pages: one `useInstallFlow` for the app, the
  * page it belongs to, and the apply wrapper that reports into the run panel. Leaving the page cancels a
- * review that has not been applied.
+ * review that has not been applied, and closes the done state of one that was.
  */
 export function useInstallScreen({
   view,
@@ -69,9 +85,11 @@ export function useInstallScreen({
   runWorkspaceTask,
   refresh,
   onApplied,
+  running = null,
 }: UseInstallScreenOptions): InstallScreen {
   const flow = useInstallFlow();
   const [scope, setScope] = useState<InstallScope | null>(null);
+  const [done, setDone] = useState<InstallDone | null>(null);
   const flowRef = useRef(flow);
   flowRef.current = flow;
 
@@ -79,7 +97,17 @@ export function useInstallScreen({
     if (scope === null || view === scope) return;
     const { status, cancel } = flowRef.current;
     if (status === "previewing" || status === "review" || status === "error") cancel();
+    setDone(null);
   }, [view, scope, flow.status]);
+
+  // The apply's own task is running before its done state exists; a task that starts after it (Undo) ends it.
+  const wasRunning = useRef(running !== null);
+  useEffect(() => {
+    if (running !== null && !wasRunning.current) setDone(null);
+    wasRunning.current = running !== null;
+  }, [running]);
+
+  const dismiss = useCallback(() => setDone(null), []);
 
   const open = useCallback(
     async (target: InstallTarget, { readOnly, scope: requestedScope }: InstallOpenOptions = {}) => {
@@ -93,6 +121,7 @@ export function useInstallScreen({
         if (getView() !== nextScope) return;
       }
       setScope(nextScope);
+      setDone(null);
       await flowRef.current.start(installRequestFor(target, settings, { readOnly }));
     },
     [settings, getView, switchView],
@@ -105,7 +134,12 @@ export function useInstallScreen({
     void runWorkspaceTask<{ review: InstallReview; result: SetupResult | null }>({
       label: review.request.label,
       action: "apply_setup",
-      task: async () => ({ review, result: await flowRef.current.apply() }),
+      task: async () => {
+        const result = await flowRef.current.apply();
+        // Set with the flow's own return to idle, so the card goes from applying to done without closing in between.
+        if (result?.success) setDone({ review, result, at: Date.now() });
+        return { review, result };
+      },
       toActionResult: ({ review: reviewed, result }) => {
         const action = `apply_setup ${reviewed.request.label}`;
         // The flow keeps the rejection (stale fingerprint, expired token) and shows it in the plan pane.
@@ -127,9 +161,9 @@ export function useInstallScreen({
   }, [runWorkspaceTask, refresh, onApplied]);
 
   const isOpenOn = useCallback(
-    (page: AppView) => scope === page && flow.status !== "idle",
-    [scope, flow.status],
+    (page: AppView) => scope === page && (flow.status !== "idle" || done !== null),
+    [scope, flow.status, done],
   );
 
-  return { flow, scope, isOpenOn, open, apply };
+  return { flow, scope, isOpenOn, open, apply, done, dismiss };
 }

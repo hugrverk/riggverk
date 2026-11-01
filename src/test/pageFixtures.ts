@@ -119,6 +119,8 @@ export function installScreenOf(flow: InstallFlow = flowOf(), openOn: AppView | 
     isOpenOn: (view: AppView) => openOn === view && flow.status !== "idle",
     open: vi.fn(async () => {}),
     apply: vi.fn(),
+    done: null,
+    dismiss: vi.fn(),
   };
 }
 
