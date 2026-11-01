@@ -230,8 +230,6 @@
       "git branch -vv",
       "git rev-parse*",
       "git ls-files*",
-      "git add *",
-      "git commit *",
       "git fetch",
       "git fetch origin",
       "git fetch upstream",
@@ -385,8 +383,7 @@
       "head *",
       "tail *",
       "sed *",
-      "git grep *",
-      "git commit*--amend*"
+      "git grep *"
     ],
     "deny": [
       "git push --force*",

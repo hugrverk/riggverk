@@ -189,8 +189,6 @@ permission:
     "git branch -vv": allow
     "git rev-parse*": allow
     "git ls-files*": allow
-    "git add *": allow
-    "git commit *": allow
     "git fetch": allow
     "git fetch origin": allow
     "git fetch upstream": allow
@@ -343,7 +341,6 @@ permission:
     "tail *": ask
     "sed *": ask
     "git grep *": ask
-    "git commit*--amend*": ask
     "git push --force*": deny
     "git push -f*": deny
     "git reset --hard*": deny

@@ -66,7 +66,7 @@ cd "$T/wt" && perl -e 'alarm shift; exec @ARGV or die "exec: $!"' 1800 \
   env -u ANTHROPIC_API_KEY -u OPENAI_API_KEY -u CODEX_API_KEY \
     GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/dev/null \
   claude -p --safe-mode --strict-mcp-config --permission-mode acceptEdits --permission-prompts none \
-    --disallowedTools 'Agent Task WebFetch WebSearch Edit(<check script>) Edit(package.json) Edit(.husky/**) Edit(.githooks/**) Bash(git difftool *) Bash(git config *)' \
+    --disallowedTools 'Agent Task WebFetch WebSearch Edit(<check script>) Edit(package.json) Edit(.husky/**) Edit(.githooks/**) Bash(git difftool *) Bash(git config *) Bash(git add -f *) Bash(git add --force *) Bash(git commit * --file*) Bash(git commit * -F *)' \
     --allowedTools 'Bash(git add *) Bash(git commit *) Bash(git status) Bash(git diff) Bash(git diff --stat) Bash(<check command>)' \
     --output-format json [--model '<model>'] [--max-budget-usd <n>] \
     < "$T/brief.md" > "$T/out.json" 2> "$T/run.err"
@@ -88,7 +88,7 @@ Preflight and run, in one command so the two variables stay set. The preflight w
 
 ```sh
 cd "$T/wt" \
-&& export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/dev/null OPENCODE_DISABLE_PROJECT_CONFIG=1 OPENCODE_CONFIG_CONTENT='{"agent":{"riggverk-delegate":{"mode":"primary","description":"Delegated implementer","permission":{"edit":{"*":"allow","<check script>":"deny","package.json":"deny",".husky/**":"deny",".githooks/**":"deny"},"bash":{"*":"deny","git add *":"allow","git commit *":"allow","git status":"allow","git diff":"allow","git diff --stat":"allow","git diff --cached":"allow","<check command>":"allow"},"task":"deny","webfetch":"deny","websearch":"deny","skill":"deny","codesearch":"deny","external_directory":"deny","*_*":"deny"}}}}' \
+&& export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/dev/null OPENCODE_DISABLE_PROJECT_CONFIG=1 OPENCODE_CONFIG_CONTENT='{"agent":{"riggverk-delegate":{"mode":"primary","description":"Delegated implementer","permission":{"edit":{"*":"allow","<check script>":"deny","package.json":"deny",".husky/**":"deny",".githooks/**":"deny"},"bash":{"*":"deny","git add *":"allow","git add -f*":"deny","git add --force*":"deny","git add * -f*":"deny","git add * --force*":"deny","git commit *":"allow","git commit*--file*":"deny","git commit* -F*":"deny","git status":"allow","git diff":"allow","git diff --stat":"allow","git diff --cached":"allow","<check command>":"allow"},"task":"deny","webfetch":"deny","websearch":"deny","skill":"deny","codesearch":"deny","external_directory":"deny","*_*":"deny"}}}}' \
 && opencode debug agent riggverk-delegate --pure > "$T/agent.json" 2>/dev/null \
 && perl -MJSON::PP -0777 -ne '$t = decode_json($_)->{tools}; @x = grep { $t->{$_} && !/^(invalid|read|glob|grep|list|edit|write|patch|bash|todowrite)$/ } sort keys %$t; die "riggverk-delegate also has: @x\n" if @x' "$T/agent.json" \
 && perl -e 'alarm shift; exec @ARGV or die "exec: $!"' 1800 \
@@ -97,6 +97,8 @@ cd "$T/wt" \
     < /dev/null > "$T/out.md" 2> "$T/run.err"
 ```
 
+- `git add -f` and `git commit --file`/`-F` are denied because they are the way to bring a file the repository ignores into a commit. The worktree is a fresh checkout of a commit, so an untracked secret such as `.env` is not in it, and the delegate cannot print a commit (`git log` and `git show` are not allowed); the residual risk is a spelling the patterns do not see (`git add -''f`), which OpenCode cannot close (next bullet), and a commit that holds a file you did not expect, which the diff review in SKILL.md catches.
+- OpenCode asks about commands only. `export`, `declare`, `typeset`, `readonly`, `local` and `unset` are not commands in its parser, so the delegate can change or unset an environment variable, such as the `GIT_CONFIG_*` hook override above, before an allowed command runs, and nothing asks. On this route that override and the rules above are a filter, not a boundary; the Claude Code route has no such gap in its allow-list (`export` is not allowed there), and the Codex route is sandboxed. The diff review before you run anything is what you rely on.
 - Allow `git status` and `git diff` only as the exact commands listed, with no `*`: OpenCode matches the command's source text, so a deny such as `git diff*--output*` is bypassed by `--out''put`, and its wildcard reads a backslash as `/`, so no deny pattern can close that gap. Anything else, including `git diff HEAD~1` and `git difftool`, is refused by the `"*":"deny"` default. Give each acceptance check as its exact command, not as a prefix with `*`, and drop the `edit` denies for files the slice is meant to change. The `edit` map replaces the plain `"edit":"allow"`: `opencode run` still refuses anything that would ask, so list nothing as `ask`.
 - Put the message before `-f`: `-f` takes every following word as a file. Never print `agent.json`: it lists the user's permission rules.
 - `OPENCODE_DISABLE_PROJECT_CONFIG=1` keeps the repository's own OpenCode config out; `--pure` runs without external plugins. `external_directory: deny` keeps edits inside the worktree; `"*_*":"deny"` removes every MCP tool, since OpenCode names them `<server>_<tool>`.

@@ -300,8 +300,31 @@ ARCHITECT_BASH_ACTIONS = [
     ("git status", "allow"),
     ("git diff --stat", "allow"),
     ("git log --oneline -5", "allow"),
-    ("git add .", "allow"),
-    ("git commit -m test", "allow"),
+    # State-changing git needs the user's ok. `git commit --file=.env` and `git add -f .env` bring a
+    # secret file into the history, where an allowed `git log` or `git diff --cached` would print it.
+    ("git add .", "ask"),
+    ("git add src/a.ts", "ask"),
+    ("git add -f .env", "ask"),
+    ("git commit -m test", "ask"),
+    ("git commit --allow-empty --file=.env", "ask"),
+    ("git commit --allow-empty -F .env", "ask"),
+    ("git commit --allow-empty --file=.env && git log -1", "ask"),
+    ("git add -f .env && git diff --cached", "ask"),
+    ("git add --force .env && git diff --cached", "ask"),
+    ("git ad''d -f .env && git diff --cached", "ask"),
+    # A one-shot environment prefix and `env` are commands of their own and never match an allow;
+    # `export`, `declare`, `typeset`, `readonly`, `local` and `unset` are not commands in the grammar,
+    # so OpenCode asks nothing about them (OPENCODE_CONFIG.md, "Limits of bash rules").
+    ("GIT_EDITOR=/tmp/evil git commit --allow-empty", "ask"),
+    ("GIT_EXTERNAL_DIFF=/tmp/evil git diff", "ask"),
+    ("GIT_SSH_COMMAND=/tmp/evil git fetch", "ask"),
+    ("env GIT_EXTERNAL_DIFF=/tmp/evil git diff", "ask"),
+    ("alias git=/tmp/evil", "ask"),
+    ("source /tmp/evil.sh", "ask"),
+    (". /tmp/evil.sh", "ask"),
+    ("ev" "al 'git diff --output=x'", "ask"),
+    ("set -a", "ask"),
+    ("export GIT_EDITOR=/tmp/evil; git commit --allow-empty", "ask"),
     # OpenCode matches the command's source text, and a backslash in it is read as `/` (Wildcard.match),
     # so no ask pattern can tell `--out\put` from a path. `git diff`, `git log` and `git show` are therefore
     # allowed only in a short list of fixed forms (`?` is one character); every other spelling asks.
@@ -503,7 +526,7 @@ ARCHITECT_BASH_ACTIONS = [
     # OpenCode asks once per command node, so a compound command is as strict as its strictest part.
     ("git status && git diff --stat", "allow"),
     ("cd src && git status", "allow"),
-    ("git add . && git commit -m test", "allow"),
+    ("git add . && git commit -m test", "ask"),
     ("git status && echo hello", "ask"),
     ("git status; npm install", "ask"),
     ("git status && rm -rf node_modules", "deny"),
@@ -1127,8 +1150,8 @@ def validate() -> list[str]:
     architect = compose_role_permission(load_role("architect"))
     if not edit_is_allowed(architect, "src/App.tsx"):
         errors.append("architect: must allow source edit")
-    if not bash_is_allowed(architect, "git commit -m test"):
-        errors.append("architect: must allow git commit")
+    if bash_is_allowed(architect, "git commit -m test"):
+        errors.append("architect: git commit must ask")
     task = architect.get("task", {})
     if not isinstance(task, dict) or task.get("repo-scout") != "allow":
         errors.append("architect: must allow repo-scout delegation")

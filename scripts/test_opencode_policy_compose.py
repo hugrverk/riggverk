@@ -427,9 +427,32 @@ class TestArchitect(unittest.TestCase):
     def test_implementation_edit_allowed(self) -> None:
         self.assertTrue(edit_is_allowed(self.perm, "src/App.tsx"))
 
-    def test_git_commit_allowed(self) -> None:
-        self.assertTrue(bash_is_allowed(self.perm, "git add ."))
-        self.assertTrue(bash_is_allowed(self.perm, "git commit -m test"))
+    def test_git_add_and_commit_ask(self) -> None:
+        for command in ("git add .", "git add -f .env", "git commit -m test", "git commit --allow-empty --file=.env"):
+            with self.subTest(command=command):
+                self.assertEqual(effective_bash_action(self.perm, command), "ask")
+
+    def test_declarations_reach_no_rule_so_the_command_after_them_decides(self) -> None:
+        # Known limit, pinned so the docs cannot claim more. OpenCode 1.19.5 asks only about `command`
+        # nodes (`descendantsOfType("command")` in the shell tool's `collect`), and tree-sitter-bash
+        # parses `export`, `declare`, `typeset`, `readonly`, `local` and `unset` as other node types.
+        # An environment change the policy cannot see can therefore steer the next allowed command.
+        for command in (
+            "export GIT_CONFIG_PARAMETERS=\"'core.fsmonitor=/tmp/x'\"; git status",
+            "export GIT_EXTERNAL_DIFF=/tmp/x; git diff",
+            "declare -x GIT_SSH_COMMAND=/tmp/x; git fetch",
+            "export PATH=/tmp/bin:$PATH; ls",
+        ):
+            with self.subTest(command=command):
+                self.assertEqual(effective_bash_action(self.perm, command), "allow")
+                self.assertEqual(len(shell_command_patterns(command)), 1)
+        for command in ("export AA=1", "declare -x AA=1", "typeset -x AA=1", "readonly AA=1", "local AA=1", "unset AA"):
+            with self.subTest(command=command):
+                self.assertEqual(shell_command_patterns(command), [])
+        # What is a command is checked: the prefix form, `env`, `alias`, `source`, `.` and `set`.
+        for command in ("AA=1 git status", "env AA=1 git status", "alias git=x", "source x.sh", ". x.sh", "ev" "al git status", "set -a"):
+            with self.subTest(command=command):
+                self.assertEqual(effective_bash_action(self.perm, command), "ask")
 
     def test_delegation_allowed(self) -> None:
         task = self.perm.get("task", {})
@@ -489,6 +512,13 @@ class TestArchitect(unittest.TestCase):
             ("git add src/a.ts", "allow"),
             ("git commit -m x", "allow"),
             ("npm test", "allow"),
+            ("git add -f .env", "deny"),
+            ("git add --force .env", "deny"),
+            ("git add src/a.ts -f", "deny"),
+            ("git commit --allow-empty --file=.env", "deny"),
+            ("git commit --allow-empty -F .env", "deny"),
+            ("git add -''f .env", "allow"),  # residual: quoting hides the option from any literal deny
+            ("export GIT_CONFIG_COUNT=0; git status", "allow"),  # residual: `export` is not checked
             ("git diff --output=x", "deny"),
             ("git diff --out''put=x", "deny"),
             ('git diff --out"put"=x', "deny"),
