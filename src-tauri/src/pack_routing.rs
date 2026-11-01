@@ -9,7 +9,8 @@
 //! Every non-blank line must be a `- ` bullet whose backticked spans all name an active skill of
 //! that same pack (not shadowed by the bundle, not in error, not held), with at least one span.
 //! A line that could change how the block parses or reads (a marker or any other `<`, a heading, a
-//! code fence, a control character, more than [`MAX_LINE_CHARS`] characters) is refused. One bad
+//! code fence, a control character or an invisible format character such as a zero-width space, a
+//! bidi override or a tag character, more than [`MAX_LINE_CHARS`] characters) is refused. One bad
 //! line excludes the whole file, with a fixed-phrase reason that quotes no text of it.
 //!
 //! Valid lines are rendered under [`SECTION_HEADING`], one `###` group per pack in name order, right
@@ -157,7 +158,12 @@ fn validate(text: &str, own_skills: &BTreeSet<&str>) -> Result<Vec<String>, Stri
         if line.chars().count() > MAX_LINE_CHARS {
             return refuse(&format!("is longer than {MAX_LINE_CHARS} characters"));
         }
-        if line.chars().any(|c| c.is_control() && c != '\t') {
+        // Invisible format characters (Unicode Cf, Zl, Zp) read as nothing in a diff or a rules file but
+        // reach the agent, so they get the same fixed phrase as a control character.
+        if line
+            .chars()
+            .any(|c| (c.is_control() && c != '\t') || is_invisible_format(c))
+        {
             return refuse("holds a control character");
         }
         let Some(item) = line.strip_prefix("- ") else {
@@ -184,6 +190,37 @@ fn validate(text: &str, own_skills: &BTreeSet<&str>) -> Result<Vec<String>, Stri
         lines.push(line.to_string());
     }
     Ok(lines)
+}
+
+/// A character of Unicode category Cf (format), Zl or Zp: soft hyphen, zero-width and bidi marks and
+/// overrides, word joiner and invisible operators, the byte order mark, interlinear annotation marks,
+/// shorthand format controls and tag characters, plus the line and paragraph separators. The ranges are
+/// those of the Unicode Character Database.
+fn is_invisible_format(c: char) -> bool {
+    matches!(
+        u32::from(c),
+        0x00AD
+            | 0x0600..=0x0605
+            | 0x061C
+            | 0x06DD
+            | 0x070F
+            | 0x0890..=0x0891
+            | 0x08E2
+            | 0x180E
+            | 0x200B..=0x200F
+            | 0x2028..=0x202E
+            | 0x2060..=0x2064
+            | 0x2066..=0x206F
+            | 0xFEFF
+            | 0xFFF9..=0xFFFB
+            | 0x110BD
+            | 0x110CD
+            | 0x13430..=0x1343F
+            | 0x1BCA0..=0x1BCA3
+            | 0x1D173..=0x1D17A
+            | 0xE0001
+            | 0xE0020..=0xE007F
+    )
 }
 
 /// The backticked spans of `line`; `None` when a backtick is unpaired or a span is empty.
@@ -372,6 +409,47 @@ mod tests {
                 "line 1 has unpaired or empty backticks",
             ),
             ("- \u{7}bell `mine`\n", "line 1 holds a control character"),
+            // Invisible format characters (Cf, Zl, Zp) are refused with the same fixed phrase.
+            (
+                "- zero\u{200B}width `mine`\n",
+                "line 1 holds a control character",
+            ),
+            (
+                "- joiner\u{200D} `mine`\n",
+                "line 1 holds a control character",
+            ),
+            (
+                "- bidi \u{202E}override `mine`\n",
+                "line 1 holds a control character",
+            ),
+            (
+                "- isolate \u{2066} `mine`\n",
+                "line 1 holds a control character",
+            ),
+            (
+                "- tag \u{E0041} `mine`\n",
+                "line 1 holds a control character",
+            ),
+            (
+                "- soft\u{AD}hyphen `mine`\n",
+                "line 1 holds a control character",
+            ),
+            (
+                "- bom \u{FEFF} `mine`\n",
+                "line 1 holds a control character",
+            ),
+            (
+                "- line\u{2028}sep `mine`\n",
+                "line 1 holds a control character",
+            ),
+            (
+                "- para\u{2029}sep `mine`\n",
+                "line 1 holds a control character",
+            ),
+            (
+                "- mark \u{61C} `mine`\n",
+                "line 1 holds a control character",
+            ),
             ("-\n", "line 1 is not a \"- \" bullet"),
             ("- \n", "line 1 is not a \"- \" bullet"),
         ];
@@ -383,6 +461,11 @@ mod tests {
                 "{reason}"
             );
         }
+        // A leading byte order mark is still stripped, and visible non-ASCII text stays valid.
+        assert_eq!(
+            validate("\u{feff}- Rita \u{e5}t `mine`\n", &skills),
+            Ok(vec!["- Rita \u{e5}t `mine`".to_string()])
+        );
         let long = format!("- `mine` {}\n", "x".repeat(MAX_LINE_CHARS));
         assert!(validate(&long, &skills)
             .unwrap_err()
