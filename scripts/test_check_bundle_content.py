@@ -103,6 +103,30 @@ class BundleTests(unittest.TestCase):
     def test_copy_passes(self) -> None:
         self.assertEqual(bc.run(self.tree, list(bc.GROUPS)), [])
 
+    def test_security_audit_digest_lock(self) -> None:
+        directory = self.tree / WS / "skills/security-audit"
+        path = directory / "HUNTING.md"
+        original = path.read_bytes()
+        for change in ("modify", "remove", "add", "upstream", "manifest"):
+            with self.subTest(change=change):
+                upstream = directory / "UPSTREAM.md"
+                upstream_original = upstream.read_bytes()
+                if change == "modify":
+                    path.write_bytes(original + b"changed\n")
+                elif change == "remove":
+                    path.unlink()
+                elif change == "add":
+                    (directory / "extra.md").write_text("extra\n")
+                elif change == "upstream":
+                    upstream.write_bytes(b"changed\n" + upstream_original)
+                else:
+                    upstream.write_bytes(upstream_original + b"invalid\n")
+                self.assertFails("security-audit", "update UPSTREAM.md after reviewing the change")
+                path.write_bytes(original)
+                upstream.write_bytes(upstream_original)
+                (directory / "extra.md").unlink(missing_ok=True)
+                self.assertEqual(self.failures("security-audit"), [])
+
     def test_hardcoded_home_directory(self) -> None:
         (self.tree / WS / "templates/leaked-home.json").write_text('{"path": "/Users/someone-else/project"}\n')
         self.assertFails("playwright", "hardcoded")

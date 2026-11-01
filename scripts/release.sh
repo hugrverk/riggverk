@@ -327,7 +327,7 @@ app_bundle="${CARGO_TARGET_DIR:-$repo_root/src-tauri/target}/release/bundle/maco
 
 build_app() {
   rm -rf "$app_bundle"
-  npm run tauri build -- --bundles app
+  npm run tauri build -- --bundles app -- --locked
   [ -d "$app_bundle" ] || fail "the build did not produce $app_bundle"
   local built
   built="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app_bundle/Contents/Info.plist")"
@@ -455,7 +455,7 @@ cmd_publish() {
   zip_file="release/Riggverk-v${version:-VERSION}-macOS.zip"
   if [ "$dry_run" -eq 1 ]; then
     step "release"
-    would "build: npm run tauri build -- --bundles app (expects $app_bundle)"
+    would "build: npm run tauri build -- --bundles app -- --locked (expects $app_bundle)"
     would "ad hoc sign and verify: codesign --force --deep --sign - $app_bundle"
     would "zip: ditto -c -k --keepParent $app_bundle $zip_file, then verify the signature inside the zip"
     would "tag: git tag -a v${version:-VERSION} -m 'Riggverk ${version:-VERSION}', then git push origin refs/tags/v${version:-VERSION}"
