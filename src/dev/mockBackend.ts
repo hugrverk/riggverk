@@ -2358,7 +2358,8 @@ function checkPersonalSkillText(content: string, name: string): void {
     .split(",")
     .map(target => target.trim().replace(/^["']|["']$/g, ""))
     .filter(Boolean);
-  if (targets.length === 0 || targets.some(target => !VALID_SKILL_AGENTS.includes(target))) {
+  // A pack skill without `targets` is for every harness; a target it names must exist.
+  if (targets.some(target => !VALID_SKILL_AGENTS.includes(target))) {
     throw new Error(`The targets in the frontmatter must list harnesses from: ${VALID_SKILL_AGENTS.join(", ")}.`);
   }
 }

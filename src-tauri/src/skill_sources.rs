@@ -9,6 +9,7 @@
 //!
 //! - **Bundle wins.** A pack skill whose name the bundle ships is *shadowed*: listed, never
 //!   installed. Two pack skills of one name are both an *error* (that skill only; the plan goes on).
+//! - **Targets** are optional in a pack skill: without them it is for every harness.
 //! - **Limits** are the bundle's (no symlinks, 64 files and 2 MiB per skill, four levels). On Unix
 //!   a pack is refused as a whole when its folder, `skills/` or anything below `skills/` is group-
 //!   or world-writable or not owned by the current user, and no pack is read when `packs/` itself
@@ -838,7 +839,15 @@ fn candidate(
             .map(|(name, _, _)| name.clone())
             .ok()
             .or_else(|| crate::skill_discovery::declared_skill_name(skill_md));
-        let (name, description, targets) = metadata?;
+        let (name, description, mut targets) = metadata?;
+        // `targets` is Riggverk's own key, outside the Agent Skills spec: a pack skill without it
+        // (any skill taken from elsewhere) is for every harness. A target it does name must exist.
+        if targets.is_empty() {
+            targets = crate::agent_skill_targets::VALID_SKILL_AGENTS
+                .iter()
+                .map(|target| target.to_string())
+                .collect();
+        }
         if crate::artifact_registry::SkillName::new(name.as_str()).is_none() {
             return Err(format!("invalid skill name: {name:?}"));
         }

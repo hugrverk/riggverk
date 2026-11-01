@@ -283,9 +283,11 @@ describe("mock backend: the Library edits only personal docs", () => {
     await expect(save("no frontmatter")).rejects.toThrow("The frontmatter cannot be read");
     await expect(save("---\nname: other\ndescription: d\ntargets: codex\n---\n")).rejects.toThrow("must stay mock-copy");
     await expect(save("---\nname: mock-copy\ndescription:\ntargets: codex\n---\n")).rejects.toThrow("description in the frontmatter cannot be empty");
-    await expect(save("---\nname: mock-copy\ndescription: d\n---\n")).rejects.toThrow("targets in the frontmatter must list harnesses");
     await expect(save("---\nname: mock-copy\ndescription: d\ntargets: [codex, nope]\n---\n")).rejects.toThrow("targets in the frontmatter must list harnesses");
     expect(await save("---\nname: mock-copy\ndescription: d\ntargets: [codex, claude]\n---\nbody\n")).toMatchObject({ success: true });
+    // Without `targets` a pack skill is for every harness.
+    const reopened = await invoke<DocumentContent>("read_skill", { id });
+    expect(await invoke<ActionResult>("save_pack_skill", { id, content: "---\nname: mock-copy\ndescription: d\n---\nbody\n", expectedRevision: reopened.revision })).toMatchObject({ success: true });
   });
 
   it("saves a personal skill in the older top-level layout, the spec layout or both, byte for byte", async () => {

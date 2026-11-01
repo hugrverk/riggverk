@@ -370,11 +370,11 @@ pub(crate) fn check_skill_text(content: &str, name: &str, folder: &str) -> Resul
     if fields.get("description").is_none_or(String::is_empty) {
         return Err("The description in the frontmatter cannot be empty.".to_string());
     }
+    // A pack skill without `targets` is for every harness; a target it names must exist.
     let targets = extract_frontmatter_list(&fields, "targets");
-    if targets.is_empty()
-        || targets
-            .iter()
-            .any(|target| !VALID_SKILL_AGENTS.contains(&target.as_str()))
+    if targets
+        .iter()
+        .any(|target| !VALID_SKILL_AGENTS.contains(&target.as_str()))
     {
         return Err(format!(
             "The targets in the frontmatter must list harnesses from: {}.",

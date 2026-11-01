@@ -128,7 +128,7 @@ The spec allows `allowed-tools` (experimental). The other four are outside it, a
 
 Packs and personal skills may keep `category`, `risk`, `targets` and `related` at the top level, as older releases wrote them; the app reads both layouts. When a file sets a key in both places, the non-empty `metadata.<key>` wins. A Library save writes the text as you typed it and never moves keys between the layouts.
 
-`targets` is validated metadata and selects nothing: skills folders are shared between harnesses, so every bundled skill is installed into every folder that is wanted, flat as `<skills-folder>/<name>/`, with its `SKILL.md` and every supporting file in it. A pack or personal skill must name at least one harness from the nine. Other metadata fields are operator guidance only.
+`targets` is validated metadata and selects nothing: skills folders are shared between harnesses, so every bundled skill is installed into every folder that is wanted, flat as `<skills-folder>/<name>/`, with its `SKILL.md` and every supporting file in it. A pack or personal skill may leave `targets` out, as a skill that follows the Agent Skills spec does: it is then for all nine harnesses. A target it does name must be one of the nine; an unknown one makes the skill an error. Other metadata fields are operator guidance only.
 
 ## Description standard
 
