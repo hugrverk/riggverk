@@ -4,6 +4,10 @@
 #   scripts/release.sh prepare [--dry-run] [--since REV]   next CalVer version, notes draft, bump, release check, PR
 #   scripts/release.sh publish [--dry-run] [--allow-newer] universal build, dmg, zip, SHA256SUMS, tag and GitHub release
 #
+# App updates: with TAURI_SIGNING_PRIVATE_KEY (and TAURI_SIGNING_PRIVATE_KEY_PASSWORD) in the environment, publish
+# also signs the updater archive, writes latest.json and releases as a draft that is published once every asset is
+# there. That needs plugins.updater in src-tauri/tauri.conf.json; see docs/RELEASE.md, "Turning on updates".
+#
 # --dry-run runs the read-only checks (and git fetch) and prints what a real run would do; it changes nothing.
 set -euo pipefail
 
@@ -20,6 +24,8 @@ version=""
 notes_file=""
 tmp_dir=""
 dmg_mount=""
+updater=0
+updater_repo=""
 
 step() {
   printf '\n==> %s\n' "$1"
@@ -319,7 +325,10 @@ cleanup_publish() {
   if [ -n "$tmp_dir" ] && [ -d "$tmp_dir" ]; then
     rm -rf "$tmp_dir"
   fi
-  if [ "$status" -ne 0 ] && [ "$stage" = "tagged" ]; then
+  if [ "$status" -ne 0 ] && [ "$stage" = "drafted" ]; then
+    printf '\npublish failed after the draft release v%s was created; nothing is public yet. To retry:\n' "$version" >&2
+    printf '  gh release delete v%s --cleanup-tag --yes; git tag -d v%s\n' "$version" "$version" >&2
+  elif [ "$status" -ne 0 ] && [ "$stage" = "tagged" ]; then
     printf '\npublish failed after the tag v%s was created. To retry from a clean slate:\n' "$version" >&2
     printf '  git push origin --delete v%s; git tag -d v%s\n' "$version" "$version" >&2
     printf 'If the release exists on GitHub: gh release delete v%s --cleanup-tag --yes\n' "$version" >&2
@@ -365,6 +374,33 @@ check_signature() {
   esac
 }
 
+# Updates are on when the signing key is in the environment; then tauri.conf.json must turn them on too, and the other
+# way round: a release without latest.json would never reach installed apps. The key is never printed.
+check_updater() {
+  local status
+  if ! status="$(python3 scripts/release_tools.py updater-config)"; then
+    problem "plugins.updater in src-tauri/tauri.conf.json is incomplete or weakened (see above)"
+    return 0
+  fi
+  if [ -n "${TAURI_SIGNING_PRIVATE_KEY:-}" ]; then
+    case "$status" in
+      on\ *)
+        updater=1
+        updater_repo="${status#on }"
+        [ -n "${TAURI_SIGNING_PRIVATE_KEY_PASSWORD+set}" ] ||
+          problem "TAURI_SIGNING_PRIVATE_KEY_PASSWORD is not set (export it, empty for a key without a password)"
+        info "updates: on (signing key: ok; latest.json for $updater_repo)"
+        ;;
+      *) problem "TAURI_SIGNING_PRIVATE_KEY is set, but src-tauri/tauri.conf.json has no plugins.updater (docs/RELEASE.md, Turning on updates)" ;;
+    esac
+  else
+    case "$status" in
+      on\ *) problem "src-tauri/tauri.conf.json turns updates on, but TAURI_SIGNING_PRIVATE_KEY is not set: without latest.json installed apps never see this release" ;;
+      *) info "updates: off (no TAURI_SIGNING_PRIVATE_KEY, no plugins.updater)" ;;
+    esac
+  fi
+}
+
 build_app() {
   local built dmgs shim_dir="$tmp_dir/bin"
   rm -rf "$bundle_dir/macos" "$bundle_dir/dmg"
@@ -375,7 +411,11 @@ build_app() {
   printf '#!/bin/sh\nexec xcrun actool "$@" </dev/null\n' >"$shim_dir/actool"
   chmod +x "$shim_dir/actool"
   # The disk image layout is set through Finder: the terminal needs Automation permission for Finder once.
-  PATH="$shim_dir:$PATH" npm run tauri build -- --target "$build_target" --bundles app,dmg -- --locked </dev/null
+  local config_args=()
+  # The updater archive (Riggverk.app.tar.gz, signed for this version) is made from the app the bundler signed.
+  [ "$updater" -eq 0 ] || config_args=(--config '{"bundle":{"createUpdaterArtifacts":true}}')
+  PATH="$shim_dir:$PATH" npm run tauri build -- --target "$build_target" --bundles app,dmg \
+    ${config_args[@]+"${config_args[@]}"} -- --locked </dev/null
   [ -d "$app_bundle" ] || fail "the build did not produce $app_bundle"
   built="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app_bundle/Contents/Info.plist")"
   [ "$built" = "$version" ] || fail "the bundle reports version $built, expected $version"
@@ -438,8 +478,25 @@ dmg_app() {
   info "$dmg_file ($(du -h "$dmg_file" | cut -f1)), verified, mounted and checked"
 }
 
+# The signed updater archive and latest.json. The archive must hold the same signed app as the zip and the disk image.
+updater_artifacts() {
+  local archive="$bundle_dir/macos/Riggverk.app.tar.gz" check_dir="$tmp_dir/updater"
+  [ -s "$archive" ] && [ -s "$archive.sig" ] || fail "the build did not produce $archive and its .sig"
+  cp "$archive" "$updater_file"
+  cp "$archive.sig" "$updater_file.sig"
+  mkdir -p "$check_dir"
+  tar -xzf "$updater_file" -C "$check_dir"
+  check_signature "$check_dir/Riggverk.app"
+  check_universal "$check_dir/Riggverk.app"
+  python3 scripts/release_tools.py updater-manifest --version "$version" --repo "$updater_repo" \
+    --asset "$(basename "$updater_file")" --signature-file "$updater_file.sig" --notes-file "$notes_file" >"$manifest_file"
+  info "$updater_file, its .sig and $manifest_file"
+}
+
 write_checksums() {
-  (cd "$(dirname "$sums_file")" && shasum -a 256 "$(basename "$dmg_file")" "$(basename "$zip_file")") >"$sums_file"
+  local files=("$(basename "$dmg_file")" "$(basename "$zip_file")")
+  [ "$updater" -eq 0 ] || files+=("$(basename "$updater_file")")
+  (cd "$(dirname "$sums_file")" && shasum -a 256 "${files[@]}") >"$sums_file"
   sed 's/^/  /' "$sums_file"
 }
 
@@ -448,10 +505,28 @@ create_release() {
   git tag -a "v$version" -m "Riggverk $version"
   stage="tagged"
   git push --quiet origin "refs/tags/v$version"
-  url="$(gh release create "v$version" "$dmg_file" "$zip_file" "$sums_file" --title "Riggverk $version" \
-    --notes-file "$notes_file" --verify-tag)"
+  if [ "$updater" -eq 0 ]; then
+    url="$(gh release create "v$version" "$dmg_file" "$zip_file" "$sums_file" --title "Riggverk $version" \
+      --notes-file "$notes_file" --verify-tag)"
+  else
+    # A draft first: latest.json goes public only together with every file it and the page point to.
+    gh release create "v$version" "$dmg_file" "$zip_file" "$updater_file" "$updater_file.sig" "$manifest_file" \
+      "$sums_file" --title "Riggverk $version" --notes-file "$notes_file" --verify-tag --draft >/dev/null
+    stage="drafted"
+    check_release_assets "$dmg_file" "$zip_file" "$updater_file" "$updater_file.sig" "$manifest_file" "$sums_file"
+    url="$(gh release edit "v$version" --draft=false --latest)"
+  fi
   stage="released"
   printf '\nReleased: %s\n' "$url"
+}
+
+check_release_assets() {
+  local uploaded file
+  uploaded="$(gh release view "v$version" --json assets --jq '.assets[].name')"
+  for file in "$@"; do
+    printf '%s\n' "$uploaded" | grep -qxF "$(basename "$file")" || fail "the draft release v$version lacks $(basename "$file")"
+  done
+  info "checked: the draft has every asset"
 }
 
 # The notes were drafted at the release commit. Whatever landed on main after it (a PR merged meanwhile, or brought
@@ -490,6 +565,7 @@ cmd_publish() {
   require_python
   require_tools git gh npm codesign ditto hdiutil lipo shasum
   require_universal_targets
+  check_updater
   require_gh_login
   # The build uses whatever is installed; it must be what the tag's lock says.
   if python3 scripts/release_tools.py check-node-modules; then
@@ -540,15 +616,26 @@ cmd_publish() {
   zip_file="release/Riggverk-v${version:-VERSION}-macOS.zip"
   dmg_file="release/Riggverk-v${version:-VERSION}-macOS.dmg"
   sums_file="release/SHA256SUMS"
+  updater_file="release/Riggverk-v${version:-VERSION}-macOS.app.tar.gz"
+  manifest_file="release/latest.json"
   if [ "$dry_run" -eq 1 ]; then
     step "release"
     would "build: npm run tauri build -- --target $build_target --bundles app,dmg -- --locked (expects $app_bundle, universal)"
     would "verify the bundler's ad hoc signature: codesign --verify --deep --strict $app_bundle"
     would "zip: ditto -c -k --keepParent $app_bundle $zip_file, then verify the signature inside the zip"
     would "disk image: add the volume icon to the bundler's disk image as $dmg_file, then hdiutil verify, mount and check the app"
-    would "checksums: shasum -a 256 of the disk image and the zip into $sums_file"
+    if [ "$updater" -eq 1 ]; then
+      would "updates: build with createUpdaterArtifacts, copy the signed archive to $updater_file (+ .sig), check the app inside, write $manifest_file for $updater_repo"
+      would "checksums: shasum -a 256 of the disk image, the zip and the updater archive into $sums_file"
+    else
+      would "checksums: shasum -a 256 of the disk image and the zip into $sums_file"
+    fi
     would "tag: git tag -a v${version:-VERSION} -m 'Riggverk ${version:-VERSION}', then git push origin refs/tags/v${version:-VERSION}"
-    would "release: gh release create v${version:-VERSION} $dmg_file $zip_file $sums_file --title 'Riggverk ${version:-VERSION}' --notes-file ${notes_file:-release-notes/VERSION.md} --verify-tag"
+    if [ "$updater" -eq 1 ]; then
+      would "release: gh release create v${version:-VERSION} $dmg_file $zip_file $updater_file $updater_file.sig $manifest_file $sums_file --title 'Riggverk ${version:-VERSION}' --notes-file ${notes_file:-release-notes/VERSION.md} --verify-tag --draft, check the assets, then gh release edit v${version:-VERSION} --draft=false --latest"
+    else
+      would "release: gh release create v${version:-VERSION} $dmg_file $zip_file $sums_file --title 'Riggverk ${version:-VERSION}' --notes-file ${notes_file:-release-notes/VERSION.md} --verify-tag"
+    fi
     finish_dry_run
     return
   fi
@@ -565,6 +652,10 @@ cmd_publish() {
   zip_app
   step "disk image"
   dmg_app
+  if [ "$updater" -eq 1 ]; then
+    step "updater archive and latest.json"
+    updater_artifacts
+  fi
   step "checksums"
   write_checksums
   step "tag and GitHub release"

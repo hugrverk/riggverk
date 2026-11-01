@@ -785,6 +785,8 @@ mod tests {
                 revision: 0,
                 target_defaults_version: crate::settings::TARGET_DEFAULTS_VERSION,
                 last_seen_version: None,
+                update_check: "ask".into(),
+                last_update_check: None,
             };
 
             let candidate = configured_workspace_path(&settings).expect("canonical fallback");
@@ -822,6 +824,8 @@ mod tests {
                 revision: 0,
                 target_defaults_version: crate::settings::TARGET_DEFAULTS_VERSION,
                 last_seen_version: None,
+                update_check: "ask".into(),
+                last_update_check: None,
             };
             let candidate = configured_workspace_path(&settings).expect("candidate");
             assert_eq!(candidate, home.join(".config/riggverk"));
@@ -860,6 +864,8 @@ mod tests {
             revision: 0,
             target_defaults_version: crate::settings::TARGET_DEFAULTS_VERSION,
             last_seen_version: None,
+            update_check: "ask".into(),
+            last_update_check: None,
         };
 
         assert!(scrub_stale_workspace_path(&mut settings));
@@ -885,6 +891,8 @@ mod tests {
             revision: 0,
             target_defaults_version: crate::settings::TARGET_DEFAULTS_VERSION,
             last_seen_version: None,
+            update_check: "ask".into(),
+            last_update_check: None,
         };
 
         assert!(!scrub_stale_workspace_path(&mut settings));

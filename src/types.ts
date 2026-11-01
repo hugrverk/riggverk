@@ -486,6 +486,41 @@ export interface AppSettings {
   target_defaults_version?: number;
   // App version whose "what's new" was shown. Absent or null: a fresh install (or a file that predates it).
   last_seen_version?: string | null;
+  // Whether the app looks for a new version (only when the build has updates on): "ask" until the user chooses.
+  update_check?: UpdateCheckChoice;
+  // When the last successful update check finished, in seconds since the Unix epoch.
+  last_update_check?: number | null;
+}
+
+export type UpdateCheckChoice = "ask" | "daily" | "manual";
+
+/** `get_app_update_info`: whether this build has updates on at all. Asks nothing over the network. */
+export interface AppUpdateInfo {
+  configured: boolean;
+  current_version: string;
+}
+
+/** `check_app_update`. */
+export type AppUpdateCheck =
+  | { status: "skipped" }
+  | { status: "up_to_date"; current_version: string }
+  | {
+      status: "available";
+      version: string;
+      current_version: string;
+      notes: string | null;
+      date: string | null;
+      app_path: string | null;
+      blocked: string | null;
+    };
+
+export type AvailableUpdate = Extract<AppUpdateCheck, { status: "available" }>;
+
+/** `app-update-progress` events while a reviewed update downloads and installs. */
+export interface AppUpdateProgress {
+  phase: "download" | "install";
+  downloaded: number;
+  total: number | null;
 }
 
 export interface GetSettingsResponse {

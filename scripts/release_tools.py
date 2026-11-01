@@ -12,6 +12,9 @@ Usage (tags are read from stdin, one per line):
   python3 scripts/release_tools.py set-version VERSION
   python3 scripts/release_tools.py check-versions [--expect VERSION]
   python3 scripts/release_tools.py check-node-modules
+  python3 scripts/release_tools.py updater-config
+  python3 scripts/release_tools.py updater-manifest --version V --repo OWNER/REPO --asset NAME --signature-file SIG \
+      --notes-file F [--pub-date RFC3339]
 """
 
 from __future__ import annotations
@@ -263,6 +266,69 @@ def check_node_modules(root: Path = ROOT) -> None:
         raise ReleaseError(f"node_modules does not match package-lock.json ({shown}); run npm ci")
 
 
+# ── app updates ──
+
+UPDATER_ENDPOINT_RE = re.compile(r"^https://github\.com/([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)/releases/latest/download/latest\.json$")
+# The universal app serves both architectures; the updater looks for darwin-<arch>.
+UPDATER_PLATFORMS = ("darwin-aarch64", "darwin-x86_64")
+
+
+def updater_config(root: Path = ROOT) -> str | None:
+    """`owner/repo` whose releases carry latest.json when tauri.conf.json turns updates on, else None.
+
+    Updates are on with a `plugins.updater` block; it must then be complete and strict, as the app reads it
+    (src-tauri/src/app_update.rs): a pubkey, the GitHub latest.json endpoint, `requireSignedVersion`, no downgrades
+    and no `dangerous*` switch. Anything else is an error, never a weaker updater.
+    """
+    conf = json.loads((root / TAURI_CONF).read_text(encoding="utf-8"))
+    updater = conf.get("plugins", {}).get("updater")
+    if updater is None:
+        return None
+    if not isinstance(updater, dict) or not str(updater.get("pubkey", "")).strip():
+        raise ReleaseError("plugins.updater in tauri.conf.json has no pubkey")
+    endpoints = updater.get("endpoints")
+    if not isinstance(endpoints, list) or len(endpoints) != 1 or not isinstance(endpoints[0], str):
+        raise ReleaseError("plugins.updater must list exactly one endpoint, the latest.json of the GitHub releases")
+    match = UPDATER_ENDPOINT_RE.match(endpoints[0])
+    if not match:
+        raise ReleaseError(
+            "the plugins.updater endpoint must be https://github.com/OWNER/REPO/releases/latest/download/latest.json"
+        )
+    if updater.get("requireSignedVersion") is not True:
+        raise ReleaseError("plugins.updater must set requireSignedVersion to true")
+    for key in ("allowDowngrades", "dangerousInsecureTransportProtocol", "dangerousAcceptInvalidCerts",
+                "dangerousAcceptInvalidHostnames"):
+        if updater.get(key) is True:
+            raise ReleaseError(f"plugins.updater must not set {key}")
+    return match[1]
+
+
+def update_notes(notes: str) -> str:
+    """The release notes the app shows in its update review: without the title (the review names the version),
+    the Install section and HTML comments."""
+    notes = re.sub(r"\A# [^\n]*\n+", "", notes)
+    notes = re.sub(r"<!--.*?-->\n?", "", notes, flags=re.S)
+    notes = re.sub(r"(?ms)^## Install\b.*?(?=^## |\Z)", "", notes)
+    return re.sub(r"\n{3,}", "\n\n", notes).strip() + "\n"
+
+
+def updater_manifest(version: str, repo: str, asset: str, signature: str, notes: str, pub_date: str) -> dict:
+    """latest.json for the updater: one universal archive for every macOS architecture."""
+    if parse_version(version) is None:
+        raise ReleaseError(f"{version} is not a CalVer version (YYYY.M.N)")
+    signature = signature.strip()
+    if not signature or "\n" in signature:
+        raise ReleaseError("the updater signature must be the one-line contents of the .sig file")
+    url = f"https://github.com/{repo}/releases/download/v{version}/{asset}"
+    platform = {"signature": signature, "url": url}
+    return {
+        "version": version,
+        "notes": update_notes(notes),
+        "pub_date": pub_date,
+        "platforms": {name: dict(platform) for name in UPDATER_PLATFORMS},
+    }
+
+
 # ── CLI ──
 
 
@@ -287,6 +353,14 @@ def main() -> int:
     checker = sub.add_parser("check-versions")
     checker.add_argument("--expect")
     sub.add_parser("check-node-modules")
+    sub.add_parser("updater-config")
+    manifest = sub.add_parser("updater-manifest")
+    manifest.add_argument("--version", required=True)
+    manifest.add_argument("--repo", required=True)
+    manifest.add_argument("--asset", required=True)
+    manifest.add_argument("--signature-file", required=True)
+    manifest.add_argument("--notes-file", required=True)
+    manifest.add_argument("--pub-date")
     args = parser.parse_args()
 
     try:
@@ -305,6 +379,20 @@ def main() -> int:
             set_version(args.version)
         elif args.command == "check-node-modules":
             check_node_modules()
+        elif args.command == "updater-config":
+            repo = updater_config()
+            print(f"on {repo}" if repo else "off")
+        elif args.command == "updater-manifest":
+            pub_date = args.pub_date or datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            data = updater_manifest(
+                args.version,
+                args.repo,
+                args.asset,
+                Path(args.signature_file).read_text(encoding="utf-8"),
+                Path(args.notes_file).read_text(encoding="utf-8"),
+                pub_date,
+            )
+            print(json.dumps(data, indent=2))
         else:
             print(check_versions(args.expect))
     except (ReleaseError, ValueError) as error:

@@ -316,5 +316,74 @@ class NotesBundleTests(unittest.TestCase):
         )
 
 
+ON = {
+    "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IHRlc3Qga2V5",
+    "endpoints": ["https://github.com/hugrverk/riggverk/releases/latest/download/latest.json"],
+    "requireSignedVersion": True,
+}
+
+
+class UpdaterTests(unittest.TestCase):
+    def config(self, updater: object | None) -> str | None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            conf = json.loads((ROOT / "src-tauri/tauri.conf.json").read_text(encoding="utf-8"))
+            if updater is not None:
+                conf.setdefault("plugins", {})["updater"] = updater
+            (root / "src-tauri").mkdir()
+            (root / "src-tauri/tauri.conf.json").write_text(json.dumps(conf), encoding="utf-8")
+            return tools.updater_config(root)
+
+    def test_the_shipped_config_has_updates_off(self) -> None:
+        self.assertIsNone(tools.updater_config())
+
+    def test_a_complete_strict_config_names_the_release_repo(self) -> None:
+        self.assertEqual(self.config(ON), "hugrverk/riggverk")
+        self.assertIsNone(self.config(None))
+
+    def test_an_incomplete_or_weakened_config_is_refused(self) -> None:
+        for change in (
+            {"pubkey": ""},
+            {"endpoints": []},
+            {"endpoints": ["http://github.com/hugrverk/riggverk/releases/latest/download/latest.json"]},
+            {"endpoints": ["https://example.com/latest.json"]},
+            {"requireSignedVersion": False},
+            {"allowDowngrades": True},
+            {"dangerousAcceptInvalidCerts": True},
+        ):
+            with self.subTest(change=change), self.assertRaises(tools.ReleaseError):
+                self.config({**ON, **change})
+
+    def test_the_manifest_points_every_mac_at_the_universal_archive(self) -> None:
+        notes = (
+            "# Riggverk 2026.11.7\n\n## New\n\n- A thing (#1)\n\n## Other\n\n<!-- chores -->\n- Bump (#2)\n\n"
+            "## Install\n\nOpen the disk image. Open Anyway.\n"
+        )
+        data = tools.updater_manifest(
+            "2026.11.7", "hugrverk/riggverk", "Riggverk-v2026.11.7-macOS.app.tar.gz", "c2lnbmF0dXJl\n", notes,
+            "2026-11-08T12:00:00Z",
+        )
+        url = "https://github.com/hugrverk/riggverk/releases/download/v2026.11.7/Riggverk-v2026.11.7-macOS.app.tar.gz"
+        self.assertEqual(data["version"], "2026.11.7")
+        self.assertEqual(data["pub_date"], "2026-11-08T12:00:00Z")
+        self.assertEqual(
+            data["platforms"],
+            {
+                "darwin-aarch64": {"signature": "c2lnbmF0dXJl", "url": url},
+                "darwin-x86_64": {"signature": "c2lnbmF0dXJl", "url": url},
+            },
+        )
+        self.assertIn("- A thing (#1)", data["notes"])
+        self.assertNotIn("Install", data["notes"])
+        self.assertNotIn("<!--", data["notes"])
+        self.assertTrue(data["notes"].startswith("## New"))
+
+    def test_the_manifest_refuses_a_bad_version_or_signature(self) -> None:
+        with self.assertRaises(tools.ReleaseError):
+            tools.updater_manifest("v2026.11.7", "a/b", "x.tar.gz", "sig", "", "2026-11-08T12:00:00Z")
+        with self.assertRaises(tools.ReleaseError):
+            tools.updater_manifest("2026.11.7", "a/b", "x.tar.gz", "line one\nline two", "", "2026-11-08T12:00:00Z")
+
+
 if __name__ == "__main__":
     unittest.main()

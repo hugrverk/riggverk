@@ -4,6 +4,8 @@ import { DEFAULT_ENABLED_HARNESS_IDS } from "../lib/harnessInstallation";
 import type { InstallAgent } from "../types";
 import { VIEW_DIGITS, visibleViews, type AppView, type ViewDef } from "./views";
 import { RuneMark } from "../ui/RuneMark";
+import type { AppUpdate } from "../hooks/useAppUpdate";
+import { UpdateConsentCard, UpdateFootLink } from "./AppUpdate";
 
 export interface SidebarProps {
   view: AppView;
@@ -19,6 +21,8 @@ export interface SidebarProps {
   backupCount?: number | null;
   /** When the installation status was last fetched; null before the first check. */
   checkedAt?: Date | null;
+  /** The app update (consent card, "New: <version>"); absent or off: nothing shows. */
+  update?: AppUpdate;
   onSwitchView: (view: AppView) => void | Promise<void>;
 }
 
@@ -45,6 +49,7 @@ export function Sidebar({
   version,
   backupCount = null,
   checkedAt = null,
+  update,
   onSwitchView,
 }: SidebarProps) {
   const baseId = useId();
@@ -105,8 +110,19 @@ export function Sidebar({
           {workspace.map(item)}
         </div>
       </nav>
+      {update && <UpdateConsentCard update={update} />}
       <div className="foot" data-tauri-drag-region>
-        {version && <span>{version}</span>}
+        {version && (
+          <span>
+            {version}
+            {update?.available && (
+              <>
+                {" · "}
+                <UpdateFootLink update={update} />
+              </>
+            )}
+          </span>
+        )}
         {backupCount !== null && <span>{backupCount} backup{backupCount === 1 ? "" : "s"}</span>}
         {checkedAt && <span>checked {formatCheckedAt(checkedAt)}</span>}
       </div>

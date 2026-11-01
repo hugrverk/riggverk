@@ -51,6 +51,13 @@ pub struct AppSettings {
     /// predate the field; the app then records its version without showing anything.
     #[serde(default)]
     pub last_seen_version: Option<String>,
+    /// Whether the app looks for a new version: "ask" (the default; nothing is requested until the user chooses),
+    /// "daily" (once a day at startup) or "manual" (only from Check for Updates). Used only when updates are on.
+    #[serde(default = "default_update_check")]
+    pub update_check: String,
+    /// When the last successful update check finished, in seconds since the Unix epoch; unset before the first.
+    #[serde(default)]
+    pub last_update_check: Option<u64>,
 }
 
 /// Bump when the default set of enabled targets changes in a way that existing
@@ -88,6 +95,8 @@ impl Default for AppSettings {
             revision: 0,
             target_defaults_version: TARGET_DEFAULTS_VERSION,
             last_seen_version: None,
+            update_check: default_update_check(),
+            last_update_check: None,
         }
     }
 }
@@ -121,6 +130,17 @@ fn default_app_font_size() -> String {
 
 fn default_landing_view() -> String {
     "start".into()
+}
+
+fn default_update_check() -> String {
+    "ask".into()
+}
+
+fn normalize_update_check(value: &str) -> String {
+    match value {
+        "ask" | "daily" | "manual" => value.to_string(),
+        _ => default_update_check(),
+    }
 }
 
 fn default_motion() -> String {
@@ -235,6 +255,7 @@ fn normalize(settings: &mut AppSettings) {
         .as_deref()
         .and_then(validate_hex_color);
     settings.last_seen_version = normalize_last_seen_version(settings.last_seen_version.as_deref());
+    settings.update_check = normalize_update_check(&settings.update_check);
 }
 
 fn normalize_for_save(settings: &mut AppSettings) -> Result<(), String> {
@@ -272,6 +293,7 @@ fn normalize_for_save(settings: &mut AppSettings) -> Result<(), String> {
         .as_deref()
         .and_then(validate_hex_color);
     settings.last_seen_version = normalize_last_seen_version(settings.last_seen_version.as_deref());
+    settings.update_check = normalize_update_check(&settings.update_check);
 
     // Anything written by this build carries the current target defaults, even
     // when the caller (e.g. the UI) round-tripped an older object without the marker.
@@ -625,6 +647,8 @@ mod tests {
             revision: 0,
             target_defaults_version: TARGET_DEFAULTS_VERSION,
             last_seen_version: None,
+            update_check: "ask".into(),
+            last_update_check: None,
         }
     }
 
@@ -729,6 +753,8 @@ mod tests {
             revision: 0,
             target_defaults_version: TARGET_DEFAULTS_VERSION,
             last_seen_version: None,
+            update_check: "ask".into(),
+            last_update_check: None,
         };
 
         normalize(&mut settings);
@@ -1055,6 +1081,8 @@ mod tests {
             revision: 0,
             target_defaults_version: TARGET_DEFAULTS_VERSION,
             last_seen_version: None,
+            update_check: "ask".into(),
+            last_update_check: None,
         };
         normalize(&mut s);
         assert_eq!(s.accent_color, Some("#ffaa00".into()));
@@ -1077,6 +1105,8 @@ mod tests {
             revision: 0,
             target_defaults_version: TARGET_DEFAULTS_VERSION,
             last_seen_version: None,
+            update_check: "ask".into(),
+            last_update_check: None,
         };
         normalize(&mut s);
         assert_eq!(s.accent_color, None);
@@ -1965,6 +1995,47 @@ mod tests {
                 expected,
                 "save {input:?}"
             );
+        }
+    }
+
+    // ── update_check tests ──
+
+    #[test]
+    fn update_check_asks_by_default_and_in_files_that_predate_it() {
+        assert_eq!(AppSettings::default().update_check, "ask");
+        assert_eq!(AppSettings::default().last_update_check, None);
+        with_temp_home(|dir| {
+            let mut json = serde_json::to_value(AppSettings::default()).expect("serialize");
+            let object = json.as_object_mut().expect("settings object");
+            object.remove("update_check");
+            object.remove("last_update_check");
+            write_settings_file(dir, &json.to_string());
+
+            let loaded = get_settings_snapshot().expect("snapshot");
+            assert_eq!(loaded.settings.update_check, "ask");
+            assert_eq!(loaded.settings.last_update_check, None);
+            assert!(loaded.load_warning.is_none());
+        });
+    }
+
+    #[test]
+    fn update_check_keeps_the_three_choices_and_asks_for_anything_else() {
+        for (input, expected) in [
+            ("ask", "ask"),
+            ("daily", "daily"),
+            ("manual", "manual"),
+            ("always", "ask"),
+            ("", "ask"),
+        ] {
+            let mut loaded = settings_with_path(None);
+            loaded.update_check = input.into();
+            normalize(&mut loaded);
+            assert_eq!(loaded.update_check, expected, "load {input:?}");
+
+            let mut saved = settings_with_path(None);
+            saved.update_check = input.into();
+            normalize_for_save(&mut saved).expect("save normalization");
+            assert_eq!(saved.update_check, expected, "save {input:?}");
         }
     }
 }

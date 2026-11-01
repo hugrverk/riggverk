@@ -161,3 +161,23 @@
   border-top: 1px solid var(--border);
   background: var(--bg-raised);
 }
+
+/* ---- app update review: built on the what's new overlay ---- */
+
+.app-update .app-update-text {
+  margin: 8px 24px;
+}
+
+.app-update .app-update-facts {
+  margin: 0 24px;
+}
+
+.app-update .app-update-notes {
+  max-height: 40vh;
+  margin: 12px 24px;
+  overflow: auto;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  white-space: pre-wrap;
+}

@@ -85,6 +85,8 @@ class ReleaseShTests(unittest.TestCase):
             "GIT_COMMITTER_EMAIL": "t@example.invalid",
         }
         self.env.pop("CARGO_TARGET_DIR", None)
+        for name in ("TAURI_SIGNING_PRIVATE_KEY", "TAURI_SIGNING_PRIVATE_KEY_PASSWORD"):
+            self.env.pop(name, None)
         subprocess.run(["git", "init", "-q", "--bare", "-b", "main", str(self.origin)], check=True, env=self.env)
         self.repo.mkdir()
         self.git("init", "-q", "-b", "main")
@@ -295,6 +297,61 @@ class ReleaseShTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 1)
         self.assertIn("rustup target add x86_64-apple-darwin", result.stderr)
+
+    def turn_updates_on(self) -> None:
+        conf_path = self.repo / "src-tauri/tauri.conf.json"
+        conf = json.loads(conf_path.read_text())
+        conf.setdefault("plugins", {})["updater"] = {
+            "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IHRlc3Qga2V5",
+            "endpoints": ["https://github.com/o/r/releases/latest/download/latest.json"],
+            "requireSignedVersion": True,
+        }
+        conf_path.write_text(json.dumps(conf, indent=2) + "\n")
+
+    def test_publish_without_a_signing_key_leaves_updates_off(self) -> None:
+        self.merge_release_pr(NEXT)
+
+        result = self.release("publish", "--dry-run")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("updates: off", result.stdout)
+        self.assertNotIn("latest.json", result.stdout)
+        self.assertNotIn("--draft", result.stdout)
+
+    def test_a_signing_key_without_the_updater_config_is_refused(self) -> None:
+        self.merge_release_pr(NEXT)
+
+        result = self.release(
+            "publish", "--dry-run", TAURI_SIGNING_PRIVATE_KEY="not-a-real-key", TAURI_SIGNING_PRIVATE_KEY_PASSWORD=""
+        )
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("has no plugins.updater", result.stderr)
+        self.assertNotIn("not-a-real-key", result.stdout + result.stderr)
+
+    def test_the_updater_config_without_a_signing_key_is_refused(self) -> None:
+        self.turn_updates_on()
+        self.merge_release_pr(NEXT)
+
+        result = self.release("publish", "--dry-run")
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("TAURI_SIGNING_PRIVATE_KEY is not set", result.stderr)
+
+    def test_publish_with_updates_on_signs_writes_latest_json_and_releases_through_a_draft(self) -> None:
+        self.turn_updates_on()
+        self.merge_release_pr(NEXT)
+
+        result = self.release(
+            "publish", "--dry-run", TAURI_SIGNING_PRIVATE_KEY="not-a-real-key", TAURI_SIGNING_PRIVATE_KEY_PASSWORD=""
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("updates: on (signing key: ok; latest.json for o/r)", result.stdout)
+        self.assertIn(f"release/Riggverk-v{NEXT}-macOS.app.tar.gz (+ .sig)", result.stdout)
+        self.assertIn("--draft, check the assets, then gh release edit", result.stdout)
+        self.assertIn("release/latest.json", result.stdout)
+        self.assertNotIn("not-a-real-key", result.stdout + result.stderr)
 
     def test_publish_refuses_an_existing_tag_or_release(self) -> None:
         self.merge_release_pr(NEXT)
