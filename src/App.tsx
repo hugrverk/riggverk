@@ -449,6 +449,7 @@ function AppShell() {
     runWorkspaceTask: runWsTask,
     refresh: refreshAfterApply,
     onApplied,
+    running: wsRunning,
   });
 
   const runWorkspaceUninstall = useCallback((planFingerprint: string, previewToken: string) => {
@@ -675,6 +676,7 @@ function AppShell() {
     agentTargets: visibleAgentTargets,
     settingsSaveStatus,
     onToggleTarget: toggleTarget,
+    onUndo: (transactionId: string) => void requestRollback(transactionId),
   };
 
   const outputText = useMemo(() => {

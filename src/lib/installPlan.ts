@@ -5,6 +5,9 @@ import { resolvePointer } from "./fileConflicts";
 import {
   enabledSetupSurfaces,
   enabledSurfacesForHarness,
+  HARNESS_LABELS,
+  HARNESS_NAV_ORDER,
+  harnessForSurface,
   WORKSPACE_SURFACES,
 } from "./harnessInstallation";
 import { plural } from "./plural";
@@ -200,6 +203,187 @@ export function countPlanRows(groups: readonly PlanGroup[]): PlanCounts {
     for (const row of group.rows) counts[row.kind] += 1;
   }
   return counts;
+}
+
+/* ---- the plan per agent ---- */
+
+/** Whose a row is: an agent, or `shared` for what every agent reads (`~/.agents/skills`, the workspace bundle). */
+export type PlanAgentId = InstallAgent | "shared";
+
+/** The skills surface writes into several agents' folders; its rows name the folder (`SkillRoot::display`). */
+const SKILL_FOLDER_AGENT: ReadonlyArray<readonly [RegExp, InstallAgent]> = [
+  [/^~\/\.claude\//, "claude"],
+  [/^\$CODEX_HOME\//, "codex"],
+  [/^(~\/\.config|\$XDG_CONFIG_HOME)\/opencode\//, "opencode"],
+  [/^~\/\.cursor\//, "cursor"],
+  [/^~\/\.gemini\//, "antigravity"],
+];
+
+/** The agent a row writes to: the surface's harness, or for the skills surface the agent whose folder the row names. */
+export function planRowAgent(row: Pick<PlanRow, "surface" | "file">): PlanAgentId {
+  const harness = harnessForSurface(row.surface);
+  if (harness) return harness;
+  if (row.surface === "skills") {
+    const file = `${row.file}/`;
+    for (const [pattern, agent] of SKILL_FOLDER_AGENT) if (pattern.test(file)) return agent;
+  }
+  return "shared";
+}
+
+export function planAgentLabel(agent: PlanAgentId): string {
+  return agent === "shared" ? "Shared" : HARNESS_LABELS[agent];
+}
+
+export interface AgentPlanGroup {
+  agent: PlanAgentId;
+  label: string;
+  /** What apply writes for the agent, and what it leaves to the user; never a conflict. */
+  rows: PlanRow[];
+  /** The agent's conflicts: listed once, in the skipped group at the top, and named here. */
+  skipped: PlanRow[];
+  /** Short names of the agent's surfaces that are already in sync ("rules", "agents"). */
+  unchanged: string[];
+}
+
+export interface AgentPlan {
+  /** Every conflict of the plan: apply never writes them, so they are pinned above the agents. */
+  conflicts: PlanRow[];
+  groups: AgentPlanGroup[];
+  /** Every row in the order the table shows them, conflicts first: `j`/`k` walk this. */
+  rows: PlanRow[];
+}
+
+/** Rows a kind of change: the counts a chip, a tile or a sub-line is made of. */
+export interface WriteCounts {
+  create: number;
+  update: number;
+  remove: number;
+  conflict: number;
+  manual: number;
+}
+
+export function writeCounts(rows: readonly PlanRow[]): WriteCounts {
+  const counts: WriteCounts = { create: 0, update: 0, remove: 0, conflict: 0, manual: 0 };
+  for (const row of rows) if (row.kind in counts) counts[row.kind as keyof WriteCounts] += 1;
+  return counts;
+}
+
+export function writesOf(counts: WriteCounts): number {
+  return counts.create + counts.update + counts.remove;
+}
+
+/**
+ * The plan's rows by the agent they write to, from `buildPlanGroups`: the shared folders first, then the agents with
+ * the most to write, then the rest in sidebar order. An agent with nothing to write keeps a group when any of its
+ * surfaces was checked, so its unchanged surfaces are still acknowledged. Pure, so the table and the map share it.
+ */
+export function buildAgentPlan(groups: readonly PlanGroup[]): AgentPlan {
+  const byAgent = new Map<PlanAgentId, AgentPlanGroup>();
+  const groupFor = (agent: PlanAgentId) => {
+    let group = byAgent.get(agent);
+    if (!group) {
+      group = { agent, label: planAgentLabel(agent), rows: [], skipped: [], unchanged: [] };
+      byAgent.set(agent, group);
+    }
+    return group;
+  };
+  const conflicts: PlanRow[] = [];
+  for (const group of groups) {
+    if (group.unchanged) {
+      const owner = harnessForSurface(group.surface) ?? "shared";
+      // "claude_rules" -> "rules", like the Overview's rows (`surfaceShortName`).
+      groupFor(owner).unchanged.push(group.surface === "workspace_bundle" ? "workspace bundle" : group.surface.slice(group.surface.lastIndexOf("_") + 1));
+    }
+    for (const row of group.rows) {
+      const owner = groupFor(planRowAgent(row));
+      if (row.conflict) {
+        conflicts.push(row);
+        owner.skipped.push(row);
+      } else owner.rows.push(row);
+    }
+  }
+  const navIndex = (agent: PlanAgentId) => (agent === "shared" ? -1 : HARNESS_NAV_ORDER.indexOf(agent));
+  const ordered = [...byAgent.values()].sort((a, b) => {
+    if (a.agent === "shared" || b.agent === "shared") return navIndex(a.agent) - navIndex(b.agent);
+    return b.rows.length - a.rows.length || navIndex(a.agent) - navIndex(b.agent);
+  });
+  return { conflicts, groups: ordered, rows: [...conflicts, ...ordered.flatMap(group => group.rows)] };
+}
+
+const WRITE_GLYPH = { create: "+", update: "~", remove: "−" } as const;
+
+/**
+ * What apply writes along one curve of the map, in the plan's own signs: `− 1 remove`, `~ 2 update`, `+ 1 · ~ 3`, and the
+ * filled square for conflicts it keeps (`■ 1 kept`). Null when nothing is written or kept.
+ */
+export function writeChip(counts: WriteCounts): string | null {
+  const parts = (["create", "update", "remove"] as const).filter(kind => counts[kind] > 0);
+  if (parts.length === 1 && counts.conflict === 0) {
+    const kind = parts[0]!;
+    return `${WRITE_GLYPH[kind]} ${counts[kind]} ${kind}`;
+  }
+  if (parts.length === 0) return counts.conflict > 0 ? `■ ${counts.conflict} kept` : null;
+  const signed = parts.map(kind => `${WRITE_GLYPH[kind]} ${counts[kind]}`);
+  if (counts.conflict > 0) signed.push(`■ ${counts.conflict}`);
+  return signed.join(" · ");
+}
+
+/** The line under an agent in the map: "1 create · 3 update", "1 kept, skipped", "nothing to write". */
+export function writeLine(counts: WriteCounts): string {
+  const parts = (["create", "update", "remove"] as const).filter(kind => counts[kind] > 0).map(kind => `${counts[kind]} ${kind}`);
+  if (counts.conflict > 0) parts.push(parts.length > 0 ? `${counts.conflict} kept` : `${counts.conflict} kept, skipped`);
+  if (counts.manual > 0) parts.push(`${counts.manual} left to you`);
+  return parts.length > 0 ? parts.join(" · ") : "nothing to write";
+}
+
+export type SummaryKind = "create" | "update" | "remove" | "conflict" | "manual" | "unchanged";
+
+export interface SummaryTile {
+  kind: SummaryKind;
+  n: number;
+  label: string;
+  /** What the kind means for the files: "new files", "backed up first". */
+  sub: string;
+}
+
+const TILE_TEXT: Record<SummaryKind, [string, string]> = {
+  create: ["Create", "new files"],
+  update: ["Update", "backed up first"],
+  remove: ["Remove", "backed up first"],
+  conflict: ["Conflict", "skipped, yours"],
+  manual: ["Manual", "left to you"],
+  unchanged: ["Unchanged", "already in sync"],
+};
+
+/** The count tiles of the summary band: the five kinds always, a manual tile only when the plan has a manual step. */
+export function summaryTiles(counts: PlanCounts): SummaryTile[] {
+  const kinds: SummaryKind[] = ["create", "update", "remove", "conflict", ...(counts.manual > 0 ? (["manual"] as const) : []), "unchanged"];
+  return kinds.map(kind => ({ kind, n: counts[kind], label: TILE_TEXT[kind][0], sub: TILE_TEXT[kind][1] }));
+}
+
+const FILES_IN_NOTE = /\b(\d+) files?\b/;
+
+/**
+ * How many files a row stands for: a row that names its file count ("17 skills, 17 files") counts that many, any other
+ * row one. Only as exact as the backend's notes; every file figure of the review uses it, so they agree.
+ */
+export function rowFileCount(row: Pick<PlanRow, "note">): number {
+  return Number(FILES_IN_NOTE.exec(row.note)?.[1] ?? 1);
+}
+
+/** How many files the safe rows write (`rowFileCount`). */
+export function planFileCount(rows: readonly PlanRow[]): number {
+  return rows.filter(row => row.safe).reduce((total, row) => total + rowFileCount(row), 0);
+}
+
+/**
+ * The band's backup sentence: the files that exist and are backed up before anything is written (the update and
+ * remove rows, counted like `planFileCount`).
+ */
+export function backupSentence(rows: readonly PlanRow[]): string {
+  const existing = rows.filter(row => row.kind === "update" || row.kind === "remove").reduce((total, row) => total + rowFileCount(row), 0);
+  if (existing > 0) return `${plural(existing, "existing file")} ${existing === 1 ? "is" : "are"} backed up before anything is written`;
+  return rows.some(row => row.kind === "create") ? "Nothing that exists is overwritten; Undo removes what is created" : "Nothing is written";
 }
 
 /**

@@ -323,6 +323,26 @@ describe("HarnessPage", () => {
     expect(install.apply).toHaveBeenCalledTimes(1);
   });
 
+  it("offers Undo on the done review of an update applied from the page", () => {
+    const flow = flowOf();
+    const review = flowOf([op("codex_rules", "update")], { label: "update codex", surfaces: ["codex_rules"] }).review!;
+    const result = { success: true, transaction_id: "tx-9", applied: ["CodexRules"], failed: [], rolled_back: [], manual_steps: [], message: "ok" };
+    const install = { ...installScreenOf(flow, "codex"), done: { review, result, at: Date.now() }, isOpenOn: (view: string) => view === "codex" };
+    const onUndo = vi.fn();
+    renderCodex({ install, onUndo });
+    const pane = screen.getByRole("region", { name: "Install plan" });
+    expect(within(pane).getByText("Undo any time")).toBeTruthy();
+    fireEvent.click(within(pane).getByRole("button", { name: "Undo this update…" }));
+    expect(onUndo).toHaveBeenCalledWith("tx-9");
+    cleanup();
+
+    // Without an Undo to offer, the card does not promise one.
+    renderCodex({ install });
+    const bare = screen.getByRole("region", { name: "Install plan" });
+    expect(within(bare).queryByRole("button", { name: "Undo this update…" })).toBeNull();
+    expect(within(bare).queryByText("Undo any time")).toBeNull();
+  });
+
   it("lists claude_config as an off cell with its own switch and what stays when it is off", () => {
     const p = props();
     renderInFrame(<ClaudeView {...p} runtimeHealth={CLAUDE_HEALTH} />);

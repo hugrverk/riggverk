@@ -107,24 +107,27 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("InstallPlanPane", () => {
-  it("lists the plan grouped by surface with a word and a hollow mark on every row; a conflict is the filled decision mark", () => {
+  it("lists the plan grouped by agent, the conflicts pinned first, with a word and a hollow mark on every row; a conflict is the filled decision mark", () => {
     renderPane(makeFlow());
-    expect(Array.from(grid().querySelectorAll("tr.g")).map(row => row.textContent)).toEqual([
-      "claude rules",
-      "claude agents",
-      "skills",
+    expect(Array.from(grid().querySelectorAll("tr.g .gh-name")).map(name => name.textContent)).toEqual([
+      "Skipped · needs your decision",
+      "Shared",
+      "Claude",
     ]);
-    const rows = Array.from(grid().querySelectorAll("tbody tr:not(.g)"));
+    expect(grid().querySelector("tr.g-skip")!.textContent).toContain("apply never writes it");
+    // The shared group has only the skipped conflict: it points up at it instead of repeating it.
+    expect(grid().querySelector("tr.unch")!.textContent).toBe("skills is skipped, see above · nothing else to write");
+    const rows = Array.from(grid().querySelectorAll("tbody tr:not(.g):not(.unch)"));
     // The word is the cell's own text; the details button after it has a name of its own.
     const wordOf = (row: Element) =>
       Array.from(row.querySelector("td.op")!.childNodes).filter(node => node.nodeType === Node.TEXT_NODE).map(node => node.textContent).join("").trim();
-    expect(rows.map(wordOf)).toEqual(["update", "create", "update", "conflict"]);
+    expect(rows.map(wordOf)).toEqual(["conflict", "update", "create", "update"]);
     // The mark is decoration; the word next to it carries the meaning.
     expect(rows.map(row => row.querySelector("td.op .rv-mark")!.className)).toEqual([
+      "rv-mark rv-mark-conflict",
       "rv-mark rv-mark-update",
       "rv-mark rv-mark-create",
       "rv-mark rv-mark-update",
-      "rv-mark rv-mark-conflict",
     ]);
     for (const row of rows) expect(row.querySelector("td.op .rv-mark")!.getAttribute("aria-hidden")).toBe("true");
   });
@@ -351,28 +354,32 @@ describe("InstallPlanPane", () => {
     expect(within(screen.getByRole("region", { name: "Install plan" })).getByRole("status").textContent).toContain("applying");
   });
 
-  it("moves the cursor with j and k", () => {
+  it("moves the cursor with j and k, from the pinned conflict down the agents' rows", () => {
     renderPane(makeFlow());
+    expect(cursorRow().textContent).toContain("skills");
+    press("j");
     expect(cursorRow().textContent).toContain("claude rules");
     press("j");
     expect(cursorRow().textContent).toContain("agents/sentinel.md");
     press("j");
     press("j");
-    expect(cursorRow().textContent).toContain("skills");
-    press("j");
-    expect(cursorRow().textContent).toContain("skills");
-    press("k");
     expect(cursorRow().textContent).toContain("agents/verifier.md");
+    press("k");
+    expect(cursorRow().textContent).toContain("agents/sentinel.md");
     expect(grid().getAttribute("aria-activedescendant")).toBe(cursorRow().id);
   });
 
   it("jumps to the next conflict with c and wraps around", () => {
     const ops = [...MIXED_OPS, op("cursor_mcp", "conflict", { summary: "mcp differs" })];
     renderPane(makeFlow({ operations: ops, request: { ...REQUEST, surfaces: [...REQUEST.surfaces, "cursor_mcp"] } }));
-    press("c");
+    // The conflicts are pinned first; the cursor starts on the first of them.
     expect(cursorRow().textContent).toContain("skills");
     press("c");
     expect(cursorRow().textContent).toContain("cursor mcp");
+    press("c");
+    expect(cursorRow().textContent).toContain("skills");
+    press("j");
+    press("j");
     press("c");
     expect(cursorRow().textContent).toContain("skills");
   });
@@ -387,9 +394,6 @@ describe("InstallPlanPane", () => {
 
   it("toggles the details of the cursor row with d", () => {
     renderPane(makeFlow());
-    press("j");
-    press("j");
-    press("j");
     expect(cursorRow().getAttribute("aria-expanded")).toBe("false");
     press("d");
     expect(cursorRow().getAttribute("aria-expanded")).toBe("true");
@@ -416,6 +420,7 @@ describe("InstallPlanPane", () => {
   it("jumps to the next conflict from a button in the footer", () => {
     renderPane(makeFlow({ operations: [op("claude_rules", "update"), op("skills", "conflict", { summary: "differs" }), op("claude_agents", "update")] }));
     const pane = screen.getByRole("region", { name: "Install plan" });
+    press("j");
     const before = cursorRow();
     fireEvent.click(within(pane).getByRole("button", { name: "next conflict" }));
     expect(cursorRow()).not.toBe(before);
@@ -455,6 +460,143 @@ describe("InstallPlanPane", () => {
       </button>,
     );
     expect(document.activeElement).toBe(screen.getByRole("button", { name: "next page pane" }));
+  });
+});
+
+describe("InstallPlanPane: band, map and states", () => {
+  const AGENT_OPS: PlannedOperation[] = [
+    op("skills", "update", {
+      details: ["+ ~/.agents/skills (3 skills, 3 files)", "- $CODEX_HOME/skills (3 skills, owned copies)", "! ~/.cursor/skills/tdd (edited, kept)"],
+    }),
+    op("claude_rules", "update", { summary: "Update ~/.claude/CLAUDE.md" }),
+    op("claude_agents", "update", { details: ["+ create agents/sentinel.md"] }),
+  ];
+  const AGENT_REQUEST: InstallFlowRequest = { label: "update all", surfaces: ["skills", "claude_rules", "claude_agents"] };
+  const agentFlow = (status: InstallFlowStatus = "review") => makeFlow({ status, operations: AGENT_OPS, request: AGENT_REQUEST });
+  const map = () => document.querySelector(".plan-map") as HTMLElement;
+
+  it("sums the plan up in a band of count tiles, each kind in words", () => {
+    renderPane(agentFlow());
+    const tiles = screen.getByRole("list", { name: "Changes by kind" });
+    expect(within(tiles).getAllByRole("listitem").map(tile => tile.textContent)).toEqual([
+      "2Createnew files",
+      "1Updatebacked up first",
+      "1Removebacked up first",
+      "1Conflictskipped, yours",
+      "0Unchangedalready in sync",
+    ]);
+    const band = document.querySelector(".plan-band")!;
+    expect(band.querySelector(".plan-bar")!.getAttribute("aria-hidden")).toBe("true");
+    expect(band.querySelector(".plan-ask")!.textContent).toBe("4 safe changes · 6 files2 existing files are backed up before anything is written");
+  });
+
+  it("draws what apply writes to each agent on a map the table states in words, hidden from assistive technology", () => {
+    renderPane(agentFlow());
+    expect(map().getAttribute("aria-hidden")).toBe("true");
+    const chips = Array.from(map().querySelectorAll(".plan-chip")).map(chip => [chip.getAttribute("data-agent"), chip.textContent]);
+    expect(chips).toEqual([
+      ["codex", "− 1 remove"],
+      ["cursor", "■ 1 kept"],
+      ["claude", "+ 1 · ~ 1"],
+    ]);
+    expect(map().querySelector('.plan-ln[data-agent="cursor"]')!.getAttribute("data-curve")).toBe("kept");
+    // The table keeps its grid semantics and names every group in words.
+    expect(Array.from(grid().querySelectorAll("tr.g .gh-name")).map(name => name.textContent)).toEqual([
+      "Skipped · needs your decision",
+      "Shared",
+      "Claude",
+      "Codex",
+      "Cursor",
+    ]);
+  });
+
+  it("lights the cursor row's agent on the map once the cursor moves with j and k", () => {
+    renderPane(agentFlow());
+    const svg = () => map().querySelector("svg")!;
+    expect(svg().classList.contains("has-hl")).toBe(false);
+    press("j");
+    // The shared folder belongs to no single agent: nothing is lit.
+    expect(cursorRow().textContent).toContain("~/.agents/skills");
+    expect(svg().classList.contains("has-hl")).toBe(false);
+    press("j");
+    expect(cursorRow().textContent).toContain("claude rules");
+    expect(svg().classList.contains("has-hl")).toBe(true);
+    expect(Array.from(map().querySelectorAll(".plan-ln.hl")).map(path => path.getAttribute("data-agent"))).toEqual(["claude"]);
+    expect(map().querySelector('.plan-chip.hl')!.getAttribute("data-agent")).toBe("claude");
+  });
+
+  it("points a conflict at the page that resolves it", () => {
+    const onOpenAgent = vi.fn();
+    renderPane(agentFlow(), { onOpenAgent });
+    fireEvent.click(within(grid()).getByRole("button", { name: "Open Cursor →" }));
+    expect(onOpenAgent).toHaveBeenCalledWith("cursor");
+  });
+
+  it("shows where the apply is while it runs, and claims nothing written before it succeeded", () => {
+    const trace = { current: "claude" as const, seen: ["codex" as const, "claude" as const], counts: { codex: 3, claude: 1 }, files: [] };
+    renderPane(agentFlow("applying"), { trace, progress: { task: "apply_setup", phase: "apply", done: 4, total: 8, file: "~/.claude/CLAUDE.md" } });
+    const stateOf = (file: string) => within(grid()).getByText(file).closest("tr")!.querySelector("td.state")!.textContent;
+    expect(stateOf("$CODEX_HOME/skills")).toBe("reached");
+    expect(stateOf("claude rules")).toBe("writing…");
+    expect(stateOf("~/.cursor/skills/tdd")).toBe("skipped");
+    expect(grid().textContent).not.toContain("written");
+    expect(within(screen.getByRole("region", { name: "Install plan" })).getByRole("status").textContent).toBe("applying: writing Claude… 4 of 8 files");
+    expect(map().querySelector('.plan-ln[data-agent="codex"]')!.getAttribute("data-curve")).toBe("seen");
+    expect(map().querySelector('.plan-ln[data-agent="claude"]')!.getAttribute("data-curve")).toBe("live");
+    const said = Array.from(map().querySelectorAll(".plan-chip, .plan-agent")).map(node => node.textContent).join(" ");
+    expect(said).not.toMatch(/written|✓|\bfiles?\b/);
+  });
+
+  it("stays as the receipt of a successful apply, with Undo, until it is dismissed", () => {
+    const flow = { ...agentFlow(), status: "idle" as const, request: null, review: null };
+    const review = agentFlow().review!;
+    const result: SetupResult = { success: true, transaction_id: "tx-42", applied: ["x"], failed: [], rolled_back: [], manual_steps: [], message: "ok" };
+    const onUndo = vi.fn();
+    const onDismiss = vi.fn();
+    renderPane(flow, { done: { review, result, at: new Date(2026, 10, 1, 16, 14).getTime() }, onUndo, onDismiss });
+    const pane = screen.getByRole("region", { name: "Install plan" });
+    expect(pane.querySelector(".pane-title b")!.textContent).toBe("Update applied");
+    expect(within(pane).getByRole("status").textContent).toBe("done at 16:14 · 4 changes applied, 1 conflict skipped");
+    expect(pane.textContent).toContain("Applied. The rest is yours to decide.");
+    expect(pane.querySelector(".bk")!.textContent).toContain("transaction tx-42 recorded · rollback available");
+    expect(map().querySelector('.plan-ln[data-agent="claude"]')!.getAttribute("data-curve")).toBe("written");
+    const wordOf = (file: string) => within(grid()).getByText(file).closest("tr")!.querySelector("td.op")!.firstChild!.nextSibling!.textContent;
+    expect(wordOf("claude rules")).toBe("updated");
+    expect(within(pane).queryByRole("button", { name: "apply" })).toBeNull();
+    fireEvent.click(within(pane).getByRole("button", { name: "Undo this update…" }));
+    expect(onUndo).toHaveBeenCalledWith("tx-42");
+    press("n");
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    fireEvent.click(within(pane).getByRole("button", { name: "dismiss" }));
+    expect(onDismiss).toHaveBeenCalledTimes(3);
+    expect(flow.cancel).not.toHaveBeenCalled();
+  });
+});
+
+describe("InstallPlanPane: a done state with steps left", () => {
+  it("never reads as all clear when the run left a step to the user, and lists each step", () => {
+    const review = buildInstallReview(REQUEST, planOf([op("claude_rules", "update")]));
+    const result: SetupResult = {
+      success: true,
+      transaction_id: "tx-7",
+      applied: ["x"],
+      failed: [],
+      rolled_back: [],
+      manual_steps: ["The files were applied, but a choice to keep your version of one of them could not be cleared: denied"],
+      message: "ok",
+    };
+    const flow = { ...makeFlow(), status: "idle" as const, request: null, review: null };
+    renderPane(flow, { done: { review, result, at: new Date(2026, 10, 1, 9, 5).getTime() }, onDismiss: vi.fn() });
+    const pane = screen.getByRole("region", { name: "Install plan" });
+    expect(pane.textContent).not.toContain("Everything is set up.");
+    expect(pane.textContent).toContain("Applied. The rest is yours to decide.");
+    expect(within(pane.querySelector<HTMLElement>(".plan-left")!).getByRole("listitem").textContent).toContain("could not be cleared: denied");
+    expect(within(pane).getByRole("status").textContent).toBe("done at 09:05 · 1 change applied, 1 step left to you");
+    cleanup();
+
+    renderPane(flow, { done: { review, result: { ...result, manual_steps: [] }, at: Date.now() }, onDismiss: vi.fn() });
+    expect(screen.getByRole("region", { name: "Install plan" }).textContent).toContain("Everything is set up.");
+    expect(document.querySelector(".plan-left")).toBeNull();
   });
 });
 

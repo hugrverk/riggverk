@@ -87,7 +87,9 @@ export function HarnessPage({
   refreshAfterApply,
   onApplied,
   wsRunning,
+  wsProgress,
   dataFolderOk,
+  onUndo,
 }: HarnessPageProps) {
   const label = HARNESS_LABELS[harness];
   const entry = overview.entries[harness];
@@ -230,7 +232,16 @@ export function HarnessPage({
   if (installOpen) {
     return (
       <section className="screen review" aria-label={`${label} install review`}>
-        <InstallPlanPane flow={install.flow} busyLabel={wsRunning} backupRoot={backupRoot} onApply={install.apply} />
+        <InstallPlanPane
+          flow={install.flow}
+          busyLabel={wsRunning}
+          backupRoot={backupRoot}
+          onApply={install.apply}
+          done={install.done}
+          onDismiss={install.dismiss}
+          onUndo={onUndo}
+          progress={wsProgress}
+        />
       </section>
     );
   }
