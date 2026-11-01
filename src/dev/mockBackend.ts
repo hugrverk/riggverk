@@ -69,7 +69,12 @@ import type {
   RulesFileContent,
   RulesFileSummary,
   RulesMalformedReason,
+  ImportCandidate,
+  ImportFlag,
   PackLibrary,
+  PackSkillEntry,
+  SkillImportPreview,
+  SkillImportResult,
   RulesStatus,
   RulesSurfaceId,
   SecurityPosture,
@@ -1515,15 +1520,18 @@ const packLibrary: PackLibrary = scenario === "empty" || scenario === "fresh"
     packs: [
       { name: "mine", state: "ok", reason: "", forgettable: false, routing: MINE_ROUTING, routing_problem: null },
       { name: "old-pack", state: "missing", reason: "the pack folder is gone", forgettable: true, routing: [], routing_problem: null },
+      { name: "imported", state: "ok", reason: "", forgettable: false, routing: [], routing_problem: null },
       { name: "team", state: "ok", reason: "", forgettable: false, routing: [], routing_problem: "routing.md is not used: line 2 names a skill that is not an active skill of this pack" },
     ],
     skills: [
+      { id: "pack:imported/pdf-tools", name: "pdf-tools", description: "Fill, merge and split PDF files with the bundled scripts.", pack: "imported", state: "active", reason: "", path: "skills/pdf-tools/SKILL.md", privileged: [], provenance: { source: "~/Downloads/pdf-tools", kind: "folder", imported_at: 1761984000, digest: "sha256:5e1f" } },
       { id: "pack:mine/my-checklist", name: "my-checklist", description: "A checklist kept in the pack.", pack: "mine", state: "active", reason: "", path: "skills/my-checklist/SKILL.md" },
       { id: "pack:mine/tdd", name: "tdd", description: "A pack skill named like a bundled one.", pack: "mine", state: "shadowed", reason: "the bundle ships a skill with this name; the bundle's version is used", path: "skills/tdd/SKILL.md" },
       { id: "pack:old-pack/old-skill", name: "old-skill", description: "", pack: "old-pack", state: "missing", reason: "pack missing", path: "" },
       { id: "pack:team/team-review", name: "team-review", description: "A review checklist the team shares.", pack: "team", state: "active", reason: "", path: "skills/team-review/SKILL.md", privileged: [{ key: "allowed-tools", value: "Bash(git diff *)", note: "grants tool access without asking" }] },
     ],
     ignored: [],
+    undo_import: { action: "import", name: "pdf-tools" },
   };
 
 function skillContent(id: string): string {
@@ -2363,18 +2371,218 @@ function checkPersonalSkillText(content: string, name: string): void {
     .split(",")
     .map(target => target.trim().replace(/^["']|["']$/g, ""))
     .filter(Boolean);
-  if (targets.length === 0 || targets.some(target => !VALID_SKILL_AGENTS.includes(target))) {
+  // A pack skill without `targets` is for every harness; a target it names must exist.
+  if (targets.some(target => !VALID_SKILL_AGENTS.includes(target))) {
     throw new Error(`The targets in the frontmatter must list harnesses from: ${VALID_SKILL_AGENTS.join(", ")}.`);
   }
 }
 
+// ---- Skill import ----
+// Like the backend's shape, from canned sources: a path ending in `skills-repo` is a folder of skills, a path ending in
+// an imported skill's name is that skill imported again (an update with a diff), any other full path one new skill.
+
+const IMPORTED_TEXT = new Map<string, string>([[
+  "pdf-tools",
+  "---\nname: pdf-tools\ndescription: Fill, merge and split PDF files with the bundled scripts.\nlicense: Apache-2.0\n---\n# PDF tools\n\nRun `scripts/fill.py <form.pdf>` to fill a form.\n",
+]]);
+
+function specSkill(name: string, description: string, body: string, extra = ""): string {
+  return `---\nname: ${name}\ndescription: ${description}\n${extra}---\n${body}`;
+}
+
+function mockCandidate(key: string, source: string, name: string, skillMd: string, more: Partial<ImportCandidate> = {}): ImportCandidate {
+  return {
+    key,
+    kind: "folder",
+    source,
+    name,
+    description: /description: (.*)/.exec(skillMd)?.[1] ?? "",
+    license: /license: (.*)/.exec(skillMd)?.[1] ?? "",
+    compatibility: "",
+    files: [{ path: "SKILL.md", size: new TextEncoder().encode(skillMd).length, executable: false, binary: false, problem: null }],
+    omitted: [],
+    flags: [],
+    problems: [],
+    skill_md: skillMd,
+    digest: `sha256:${key}${name.length}`,
+    status: "new",
+    collision: null,
+    changes: [],
+    ...more,
+  };
+}
+
+const SHELL_FLAGS: ImportFlag[] = [
+  { kind: "unicode", label: "hidden Unicode", detail: "1 invisible format character (zero-width, soft hyphen and the like) on lines 9" },
+  { kind: "shell", label: "! commands", detail: "line 8: Current branch: !`git branch --show-current` · runs shell commands when the skill loads" },
+  { kind: "key", label: "allowed-tools", detail: "Bash(git *) · grants tool access without asking" },
+  { kind: "executable", label: "scripts and executables", detail: "scripts/collect.sh; an agent may run them. The app never does, and copies them without the executable bit" },
+];
+
+function mockImportPreview(paths: string[]): SkillImportPreview {
+  const problems: string[] = [];
+  const candidates: ImportCandidate[] = [];
+  for (const raw of paths) {
+    const path = raw.trim().replace(/\/+$/, "");
+    if (!path.startsWith("/") && !path.startsWith("~/")) {
+      problems.push(`${raw}: give a full path (starting with / or ~/)`);
+      continue;
+    }
+    const shown = path.replace(/^\/Users\/[^/]+/, "~");
+    const base = shown.split("/").pop() ?? "";
+    if (base === "skills-repo") {
+      const key = () => String(candidates.length);
+      candidates.push(mockCandidate(key(), `${shown}/skills/changelog-writer`, "changelog-writer", specSkill("changelog-writer", "Use for writing a changelog section from merged pull requests.", "# Changelog writer\n\nRead the merged pull requests since the last tag and group them.\n", "license: MIT\n"), { kind: "collection" }));
+      candidates.push(mockCandidate(key(), `${shown}/skills/tdd`, "tdd", specSkill("tdd", "A test-first loop from the community.", "# TDD\n"), { kind: "collection", collision: "bundled" }));
+      candidates.push(mockCandidate(key(), `${shown}/skills/git-context`, "git-context", specSkill("git-context", "Use for answers that need the repository's current branch and status.", "# Git context\n\nCurrent branch: !`git branch --show-current`\nStatus\u200b first.\n", "allowed-tools: Bash(git *)\n"), {
+        kind: "collection",
+        flags: SHELL_FLAGS,
+        files: [
+          { path: "SKILL.md", size: 214, executable: false, binary: false, problem: null },
+          { path: "scripts/collect.sh", size: 88, executable: true, binary: false, problem: null },
+        ],
+        omitted: [".github"],
+      }));
+      candidates.push(mockCandidate(key(), `${shown}/skills/Notes_Helper`, "Notes_Helper", "", {
+        kind: "collection",
+        status: "refused",
+        files: [
+          { path: "SKILL.md", size: 120, executable: false, binary: false, problem: null },
+          { path: "my notes.md", size: 40, executable: false, binary: false, problem: "the installer cannot use this name" },
+        ],
+        problems: ["my notes.md: a name the installer cannot use (ASCII letters, digits, dot, dash and underscore)"],
+        digest: "",
+      }));
+      continue;
+    }
+    const existing = IMPORTED_TEXT.get(base);
+    if (existing !== undefined && packLibrary.skills.some(skill => skill.id === `pack:imported/${base}`)) {
+      const after = existing.replace("to fill a form.", "to fill a form, or `scripts/merge.py a.pdf b.pdf` to merge two.");
+      candidates.push(mockCandidate(String(candidates.length), shown, base, after, {
+        status: "update",
+        changes: [
+          { path: "SKILL.md", change: "changed", before: existing, after },
+          { path: "scripts/merge.py", change: "added", before: null, after: "import sys\n\nprint(sys.argv)\n" },
+        ],
+        flags: [{ kind: "executable", label: "scripts and executables", detail: "scripts/fill.py, scripts/merge.py; an agent may run them. The app never does, and copies them without the executable bit" }],
+      }));
+      continue;
+    }
+    const name = base.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "my-skill";
+    candidates.push(mockCandidate(String(candidates.length), shown, name, specSkill(name, `Use for ${name.replace(/-/g, " ")} work.`, `# ${name}\n\nFollow the steps below.\n`, "license: MIT\n")));
+  }
+  const importable = candidates.some(candidate => candidate.problems.length === 0 && (candidate.status === "new" || candidate.status === "update"));
+  const token = importable ? `mock-import-${++importSeq}` : null;
+  if (token) stagedImports.set(token, candidates);
+  return { token, candidates, problems, folder: "~/.config/riggverk/packs/imported/skills" };
+}
+
+let importSeq = 0;
+const stagedImports = new Map<string, ImportCandidate[]>();
+/** What Undo import takes back, newest last: the entry it replaced or removed. */
+const importUndo: { action: "import" | "replace" | "remove"; name: string; previous: PackSkillEntry | null; text: string | null }[] = [];
+
+function refreshUndo(): void {
+  const last = importUndo[importUndo.length - 1];
+  packLibrary.undo_import = last ? { action: last.action, name: last.name } : null;
+}
+
+function ensureImportedPack(): void {
+  if (!packLibrary.packs.some(pack => pack.name === "imported")) {
+    packLibrary.packs.push({ name: "imported", state: "ok", reason: "", forgettable: false, routing: [], routing_problem: null });
+    packLibrary.packs.sort((a, b) => a.name.localeCompare(b.name));
+  }
+}
+
+function putImported(entry: PackSkillEntry): void {
+  packLibrary.skills = [...packLibrary.skills.filter(skill => skill.id !== entry.id), entry].sort((a, b) => a.id.localeCompare(b.id));
+}
+
+function mockCommitImport(token: string, selection: string[], renames: Record<string, string>): SkillImportResult {
+  const staged = stagedImports.get(token);
+  stagedImports.delete(token);
+  if (!staged) throw new Error("invalid or expired preview token");
+  const result: SkillImportResult = { imported: [], updated: [] };
+  for (const key of selection) {
+    const candidate = staged.find(c => c.key === key);
+    if (!candidate || candidate.problems.length > 0) throw new Error("a picked skill is not in the preview");
+    const name = renames[key] ?? candidate.name;
+    if (skills.some(skill => skill.name === name)) throw new Error(`a bundled skill is named ${name}; import it under another name`);
+    const other = packLibrary.skills.find(skill => skill.name === name && skill.pack !== "imported");
+    if (other) throw new Error(`pack:${other.pack} already has a skill named ${name}; remove or rename it there first`);
+    ensureImportedPack();
+    const id = `pack:imported/${name}`;
+    const previous = packLibrary.skills.find(skill => skill.id === id) ?? null;
+    importUndo.push({ action: previous ? "replace" : "import", name, previous, text: IMPORTED_TEXT.get(name) ?? null });
+    const text = name === candidate.name ? candidate.skill_md : candidate.skill_md.replace(/^name: .*$/m, `name: ${name}`);
+    IMPORTED_TEXT.set(name, text);
+    putImported({
+      id, name, description: candidate.description, pack: "imported", state: "active", reason: "", path: `skills/${name}/SKILL.md`,
+      privileged: candidate.flags.filter(flag => flag.kind === "key" || flag.kind === "shell").map(flag => {
+        const [value, note] = flag.detail.split(" · ");
+        return { key: flag.kind === "shell" ? "!" : flag.label, value: value ?? "", note: note ?? "" };
+      }),
+      provenance: { source: candidate.source, kind: candidate.kind, imported_at: Math.floor(Date.now() / 1000), digest: candidate.digest },
+    });
+    (previous ? result.updated : result.imported).push(name);
+  }
+  refreshUndo();
+  return result;
+}
+
+async function handleSkillImport(cmd: string, args: Args): Promise<unknown> {
+  switch (cmd) {
+    case "preview_skill_import":
+      if (!workspaceIsValid()) return unavailable();
+      await delay(350);
+      return mockImportPreview(arg<string[]>(args, "paths"));
+    case "commit_skill_import":
+      await delay(250);
+      return mockCommitImport(arg<string>(args, "token"), arg<string[]>(args, "selection"), arg<Record<string, string>>(args, "renames") ?? {});
+    case "remove_imported_skill": {
+      const name = arg<string>(args, "name");
+      const entry = packLibrary.skills.find(skill => skill.id === `pack:imported/${name}`);
+      if (!entry) throw new Error(`no imported skill is named ${name}`);
+      importUndo.push({ action: "remove", name, previous: entry, text: IMPORTED_TEXT.get(name) ?? null });
+      packLibrary.skills = packLibrary.skills.filter(skill => skill !== entry);
+      refreshUndo();
+      return `${name} removed from pack:imported, with a backup; the next Update removes the installed copies`;
+    }
+    case "undo_last_import": {
+      const last = importUndo.pop();
+      if (!last) throw new Error("there is no import to undo");
+      const id = `pack:imported/${last.name}`;
+      packLibrary.skills = packLibrary.skills.filter(skill => skill.id !== id);
+      if (last.previous) putImported(last.previous);
+      if (last.text !== null) IMPORTED_TEXT.set(last.name, last.text);
+      refreshUndo();
+      return last.action === "import" ? `import of ${last.name} undone, with a backup` : `${last.name} is back in pack:imported`;
+    }
+    case "read_skill": {
+      const id = arg<string>(args, "id");
+      const name = id.startsWith("pack:imported/") ? id.slice("pack:imported/".length) : "";
+      const text = IMPORTED_TEXT.get(name);
+      const entry = packLibrary.skills.find(skill => skill.id === id);
+      if (entry && text !== undefined) return { id, title: name, path: entry.path, section: "pack:imported", source: "pack", content: text } satisfies DocumentContent;
+      return undefined;
+    }
+  }
+  return undefined;
+}
+
 async function handlePersonalPackWrites(cmd: string, args: Args): Promise<unknown> {
+  const imported = await handleSkillImport(cmd, args);
+  if (imported !== undefined) return imported;
   if (cmd === "copy_skill_to_pack") {
     if (!workspaceIsValid()) return unavailable();
     const name = arg<string>(args, "name");
     const newName = arg<string>(args, "newName");
     if (!validPersonalSkillName(newName)) throw new Error("invalid skill name");
-    const source = skills.find(skill => skill.name === name);
+    // Like the backend: a bundled skill's name, or an active imported skill's id.
+    const importedName = name.startsWith("pack:imported/") ? name.slice("pack:imported/".length) : null;
+    const importedEntry = importedName === null ? undefined : packLibrary.skills.find(skill => skill.id === name && skill.state === "active");
+    if (importedName !== null && !importedEntry) throw new Error("source must be an active imported skill");
+    const source = importedEntry ? { id: importedEntry.name, description: importedEntry.description } : skills.find(skill => skill.name === name);
     if (!source) throw new Error("source must be a bundled skill name");
     if (skills.some(skill => skill.name === newName)) throw new Error("this name belongs to a bundled skill");
     if (packLibrary.skills.some(skill => skill.name === newName)) throw new Error("a pack already has a skill with this name");
@@ -2385,7 +2593,7 @@ async function handlePersonalPackWrites(cmd: string, args: Args): Promise<unknow
       packLibrary.packs.push({ name: "personal", state: "ok", reason: "", forgettable: false, routing: [], routing_problem: null });
     }
     packLibrary.skills.push({ id, name: newName, description: source.description, pack: "personal", state: "active", reason: "", path });
-    const sourceContent = skillContent(source.id);
+    const sourceContent = importedName !== null ? IMPORTED_TEXT.get(importedName) ?? skillContent(source.id) : skillContent(source.id);
     const frontmatterEnd = sourceContent.indexOf("\n---", 4);
     const content = sourceContent.slice(0, frontmatterEnd).replace(/^name:.*$/m, `name: ${newName}`) + sourceContent.slice(frontmatterEnd);
     personalPackDocuments.set(id, { id, title: newName, path, section: "pack:personal", source: "pack", content });

@@ -7,7 +7,8 @@ import type { InstallAgent, RulesFileContent } from "../../types";
 import type { KvItem } from "../../ui/Kv";
 import type { Tone } from "../../ui/tone";
 import type { LibraryViewProps } from "../LibraryView";
-import { isPersonalSkill } from "../../lib/packSkills";
+import { isImportedSkill, isPersonalSkill } from "../../lib/packSkills";
+import { provenanceText } from "./skillImport";
 import type { OpenTarget, RowTagKind } from "./model";
 
 export type LibraryPreviewKind = "markdown" | "json";
@@ -17,6 +18,9 @@ export const BUNDLED_READ_ONLY_REASON = "bundled with the app: read-only here";
 
 /** Why a pack skill cannot be edited here: it is the user's file, in the pack folder. */
 export const PACK_READ_ONLY_REASON = "from a skill pack: read-only here, edit it in the pack folder";
+
+/** Why an imported skill cannot be edited here: the import stays as it was previewed. */
+export const IMPORTED_READ_ONLY_REASON = "imported: read-only here; Edit as my copy to change it";
 
 /**
  * The one item open in the sheet, normalised across topics so the sheet does not care whether it is a doc, a
@@ -47,7 +51,7 @@ export interface LibraryEntry {
   meta: KvItem[];
   /** A rules file of the user's: the sheet shows the modes, or the conflict card. */
   rules?: { file: RulesFileContent; harness: InstallAgent | null; conflict: boolean };
-  /** A bundled skill: "Edit as my copy" starts from this name. */
+  /** A bundled skill's name or an imported skill's id: "Edit as my copy" starts from it. */
   copySkill?: string;
   /** Plain words in the footer of an editable item (what Update does with the saved text). */
   footNote?: string;
@@ -192,6 +196,7 @@ function skillEntry(props: LibraryViewProps, id: string): LibraryEntry | null {
   if (skill?.risk) meta.push({ label: "risk", value: skill.risk, tone: riskTone(skill.risk) });
   if (skill?.packState) {
     meta.push({ label: "pack", value: skill.group });
+    if (skill.provenance) meta.push({ label: "source", value: provenanceText(skill.provenance), wrap: true });
     if (skill.packState !== "active") {
       meta.push({ label: "state", value: PACK_STATE_LABEL[skill.packState], tone: "warn" });
       if (skill.packReason) meta.push({ label: "why", value: skill.packReason, wrap: true });
@@ -211,6 +216,7 @@ function skillEntry(props: LibraryViewProps, id: string): LibraryEntry | null {
     meta.push(...listItems("targets", skill.targets), ...listItems("related", skill.related));
   }
   const fromPack = skill?.packState !== undefined || content.id.startsWith("pack:");
+  const imported = isImportedSkill(content.id, skill);
   if (isPersonalSkill(content.id, skill)) {
     return {
       kind: "skill",
@@ -247,8 +253,8 @@ function skillEntry(props: LibraryViewProps, id: string): LibraryEntry | null {
       preview: "markdown",
       metaTitle: "metadata",
       meta,
-      readOnlyReason: fromPack ? PACK_READ_ONLY_REASON : BUNDLED_READ_ONLY_REASON,
-      copySkill: fromPack ? undefined : skill?.name ?? content.title,
+      readOnlyReason: imported ? IMPORTED_READ_ONLY_REASON : fromPack ? PACK_READ_ONLY_REASON : BUNDLED_READ_ONLY_REASON,
+      copySkill: imported ? content.id : fromPack ? undefined : skill?.name ?? content.title,
     },
     content.content,
   );

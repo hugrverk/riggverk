@@ -16,6 +16,8 @@ import type {
   DocumentContent,
   PackLibrary,
   PackSkillCopy,
+  SkillImportPreview,
+  SkillImportResult,
   RulesFileContent,
   RulesFileSummary,
   RulesSurfaceId,
@@ -910,6 +912,58 @@ export function useLibraryController({
     return copy;
   }, [loadSkills]);
 
+  /** Copies what the paths hold into the backend's private staging and shows it; nothing is published. */
+  const previewSkillImport = useCallback(
+    (paths: string[]) => invoke<SkillImportPreview>("preview_skill_import", { paths }),
+    [],
+  );
+
+  /** Publishes the previewed skills into pack:imported, then lists the packs again. Refusals are thrown for the dialog. */
+  const commitSkillImport = useCallback(async (token: string, selection: string[], renames: Record<string, string>) => {
+    const result = await invoke<SkillImportResult>("commit_skill_import", { token, selection, renames });
+    await loadSkills();
+    return result;
+  }, [loadSkills]);
+
+  /** Moves an imported skill into a backup once the user agrees; resolves with the notice, or null. */
+  const removeImportedSkill = useCallback(async (name: string): Promise<string | null> => {
+    const ok = await confirm({
+      title: `Remove import ${name}?`,
+      message: `${name} leaves pack:imported and goes into a backup; Undo import puts it back. The next Update removes the copies installed in your agents, with a backup.`,
+      confirmLabel: "Remove import",
+      destructive: true,
+    });
+    if (!ok) return null;
+    try {
+      const message = await invoke<string>("remove_imported_skill", { name });
+      await loadSkills();
+      return message;
+    } catch (e) {
+      setError(`Remove import: ${e}`);
+      return null;
+    }
+  }, [confirm, loadSkills, setError]);
+
+  /** Takes back the last import, replacement or removal once the user agrees; resolves with the notice, or null. */
+  const undoLastImport = useCallback(async (): Promise<string | null> => {
+    const undo = packLibrary?.undo_import;
+    const what = !undo ? "the last import" : undo.action === "import" ? `the import of ${undo.name}` : undo.action === "replace" ? `the new import of ${undo.name}` : `the removal of ${undo.name}`;
+    const ok = await confirm({
+      title: "Undo import?",
+      message: `This takes back ${what}. What it replaces goes into a backup first. Agents see the change at the next Update.`,
+      confirmLabel: "Undo import",
+    });
+    if (!ok) return null;
+    try {
+      const message = await invoke<string>("undo_last_import");
+      await loadSkills();
+      return message;
+    } catch (e) {
+      setError(`Undo import: ${e}`);
+      return null;
+    }
+  }, [confirm, loadSkills, packLibrary, setError]);
+
   // The configs load whenever the Library is open, not only on their topic: a search result can open one from any topic.
   // Choosing a target resets the source itself, so only a new visit or a workspace reload sends it back to the base.
   const configSourceVisitRef = useRef("");
@@ -957,6 +1011,10 @@ export function useLibraryController({
     onSaveSkill,
     onResetSkill,
     copySkillToPack,
+    previewSkillImport,
+    commitSkillImport,
+    removeImportedSkill,
+    undoLastImport,
     docs,
     activeDoc,
     docDraft,

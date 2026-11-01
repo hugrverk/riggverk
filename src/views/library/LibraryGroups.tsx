@@ -1,6 +1,6 @@
 import { useId, type MouseEvent } from "react";
 import { StateMark } from "../../ui/StatePill";
-import type { LibraryGroup, LibraryRow, RowVerb } from "./model";
+import type { GroupActionId, LibraryGroup, LibraryRow, RowVerb } from "./model";
 
 interface RowViewProps {
   row: LibraryRow;
@@ -70,7 +70,7 @@ interface GroupViewProps {
   group: LibraryGroup;
   scope: string;
   onVerb: (row: LibraryRow, verb: RowVerb) => void;
-  onGroupAction: (id: "new-doc") => void;
+  onGroupAction: (id: GroupActionId) => void;
 }
 
 /** A hairline box of rows under its label, as System Settings groups its rows. */

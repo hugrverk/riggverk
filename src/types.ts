@@ -15,6 +15,8 @@ export interface SkillSummary {
   packState?: PackSkillState; packReason?: string;
   /** Set on a skill from a pack: the frontmatter keys the harness acts on by itself. */
   privileged?: PrivilegedSkillKey[];
+  /** Set on a skill of the imported pack: where it was imported from. */
+  provenance?: ImportProvenance;
 }
 
 /**
@@ -963,6 +965,8 @@ export interface PackSkillEntry {
   state: PackSkillState; reason: string; path: string;
   /** Frontmatter keys the harness acts on by itself; the backend always sends the list, empty when none. */
   privileged?: PrivilegedSkillKey[];
+  /** For a skill of the imported pack: where it was imported from. */
+  provenance?: ImportProvenance;
 }
 
 export interface PackEntry {
@@ -985,6 +989,8 @@ export interface PackLibrary {
   packs: PackEntry[];
   skills: PackSkillEntry[];
   ignored: { name: string; reason: string }[];
+  /** What "Undo import" would take back; null or absent when there is nothing to undo. */
+  undo_import?: UndoImport | null;
 }
 
 /** Persisted plan facts. A null history receipt means these facts were not recorded. */
@@ -1026,4 +1032,83 @@ export interface PackSkillCopy {
   pack: string;
   /** Display path of SKILL.md (`~/...`, or `<data>/...` outside home). */
   path: string;
+}
+
+/** Where a skill to import was found: a skill folder, a loose `SKILL.md`, or a skill in a folder of skills. */
+export type ImportSourceKind = "folder" | "file" | "collection";
+
+/** Where an imported skill came from (`imported_at` in Unix seconds). */
+export interface ImportProvenance {
+  source: string;
+  kind: ImportSourceKind;
+  imported_at: number;
+  digest: string;
+}
+
+/** The import event "Undo import" takes back. */
+export interface UndoImport {
+  action: "import" | "replace" | "remove";
+  name: string;
+}
+
+export interface ImportFile {
+  path: string;
+  size: number;
+  executable: boolean;
+  binary: boolean;
+  /** Why the installer cannot take the file; null when it can. */
+  problem: string | null;
+}
+
+/** Shown before an import, never refused: what makes an agent act without asking, or hides text. */
+export interface ImportFlag {
+  kind: "key" | "shell" | "openai" | "executable" | "binary" | "unicode";
+  label: string;
+  detail: string;
+}
+
+export interface ImportFileChange {
+  path: string;
+  change: "added" | "removed" | "changed";
+  /** The texts for the diff; null for a binary file or one too big to show. */
+  before: string | null;
+  after: string | null;
+}
+
+/** One skill a source holds, as staged by `preview_skill_import`. */
+export interface ImportCandidate {
+  key: string;
+  kind: ImportSourceKind;
+  source: string;
+  name: string;
+  description: string;
+  license: string;
+  compatibility: string;
+  files: ImportFile[];
+  omitted: string[];
+  flags: ImportFlag[];
+  /** Why it cannot be imported; empty when it can. */
+  problems: string[];
+  /** The `SKILL.md` as it is; shown as text, never rendered. */
+  skill_md: string;
+  digest: string;
+  status: "new" | "update" | "unchanged" | "refused";
+  /** "bundled": a bundled skill has the name, so it imports only under another name. */
+  collision: "bundled" | null;
+  changes: ImportFileChange[];
+}
+
+export interface SkillImportPreview {
+  /** One-time proof for `commit_skill_import`; null when nothing can be imported. */
+  token: string | null;
+  candidates: ImportCandidate[];
+  /** Sources that held no skill, with the reason. */
+  problems: string[];
+  /** Where imports go, as `~/...`. */
+  folder: string;
+}
+
+export interface SkillImportResult {
+  imported: string[];
+  updated: string[];
 }

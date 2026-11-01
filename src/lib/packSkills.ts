@@ -10,6 +10,17 @@ export const PACK_STATE_LABEL: Record<Exclude<PackSkillState, "active">, string>
 /** The id prefix of the skills in the user's own pack: the only pack skills the Library edits. */
 export const PERSONAL_SKILL_PREFIX = "pack:personal/";
 
+/** The id prefix of the skills the user imported: read-only, edited as a personal copy. */
+export const IMPORTED_SKILL_PREFIX = "pack:imported/";
+
+/** The app-owned pack imports go into. */
+export const IMPORTED_PACK = "imported";
+
+/** An active skill of the imported pack: it offers "Edit as my copy" and "Remove import". */
+export function isImportedSkill(id: string, skill: { packState?: string } | undefined): boolean {
+  return id.startsWith(IMPORTED_SKILL_PREFIX) && (skill === undefined || skill.packState === "active");
+}
+
 /**
  * A skill of the user's own pack that is not held back: the only skill the Library edits. A skill whose summary is
  * not in hand (a copy opened while the pack list failed to load) counts by its id; the backend decides on save.
@@ -37,6 +48,7 @@ function toSummary(skill: PackSkillEntry): SkillSummary {
     packState: skill.state,
     packReason: skill.reason,
     privileged: skill.privileged ?? [],
+    ...(skill.provenance ? { provenance: skill.provenance } : {}),
   };
 }
 

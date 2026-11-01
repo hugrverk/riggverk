@@ -91,6 +91,8 @@ mod skill_files_contract;
 #[cfg(test)]
 mod skill_folders_contract;
 #[cfg(test)]
+mod skill_import_contract;
+#[cfg(test)]
 mod skill_packs_contract;
 #[cfg(test)]
 mod smoke_runtime;
@@ -115,7 +117,10 @@ use commands::{
     rollback_setup_transaction, save_doc, save_rules_refinements, set_codex_config_kept,
     set_files_kept, set_rules_user_managed, update_opencode_model_selection, update_settings,
 };
-use commands::{copy_skill_to_pack, forget_pack, list_pack_skills, save_pack_skill};
+use commands::{
+    commit_skill_import, copy_skill_to_pack, forget_pack, list_pack_skills, preview_skill_import,
+    remove_imported_skill, save_pack_skill, undo_last_import,
+};
 use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -204,6 +209,10 @@ pub fn run() {
             list_pack_skills,
             forget_pack,
             copy_skill_to_pack,
+            preview_skill_import,
+            commit_skill_import,
+            remove_imported_skill,
+            undo_last_import,
             save_pack_skill,
         ])
         .build(tauri::generate_context!())

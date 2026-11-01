@@ -9,6 +9,7 @@
 //!
 //! - **Bundle wins.** A pack skill whose name the bundle ships is *shadowed*: listed, never
 //!   installed. Two pack skills of one name are both an *error* (that skill only; the plan goes on).
+//! - **Targets** are optional in a pack skill: without them it is for every harness.
 //! - **Limits** are the bundle's (no symlinks, 64 files and 2 MiB per skill, four levels). On Unix
 //!   a pack is refused as a whole when its folder, `skills/` or anything below `skills/` is group-
 //!   or world-writable or not owned by the current user, and no pack is read when `packs/` itself
@@ -30,6 +31,9 @@ use crate::skill_discovery::DiscoveredSkill;
 /// Folder of the packs inside the data folder. Never `skills/`: that path belongs to the cleanup
 /// of the copies of the bundle that older releases kept in the data folder.
 pub const PACKS_DIR: &str = "packs";
+/// The app-owned pack that skill imports go into (see `commands::skill_import`). Only the app writes
+/// it, so a skill gone from it was removed on purpose, even the last one.
+pub const IMPORTED_PACK: &str = "imported";
 /// File name inside the state folder (see `workspace_layout::state_file`).
 pub const PACK_SKILLS_FILE: &str = "pack-skills.json";
 const SCHEMA_VERSION: u32 = 1;
@@ -838,7 +842,15 @@ fn candidate(
             .map(|(name, _, _)| name.clone())
             .ok()
             .or_else(|| crate::skill_discovery::declared_skill_name(skill_md));
-        let (name, description, targets) = metadata?;
+        let (name, description, mut targets) = metadata?;
+        // `targets` is Riggverk's own key, outside the Agent Skills spec: a pack skill without it
+        // (any skill taken from elsewhere) is for every harness. A target it does name must exist.
+        if targets.is_empty() {
+            targets = crate::agent_skill_targets::VALID_SKILL_AGENTS
+                .iter()
+                .map(|target| target.to_string())
+                .collect();
+        }
         if crate::artifact_registry::SkillName::new(name.as_str()).is_none() {
             return Err(format!("invalid skill name: {name:?}"));
         }
@@ -938,8 +950,8 @@ fn compute_held(
                     Some(reason) => (HeldState::Missing, format!("pack refused: {reason}")),
                     // A present pack with no skill in it at all, while a skill of it is installed:
                     // an emptied or unreadable checkout is told apart from a removal by the user
-                    // forgetting the pack.
-                    None if report.skills.is_empty() => (
+                    // forgetting the pack. The imported pack is no checkout: the app removed it.
+                    None if report.skills.is_empty() && pack != IMPORTED_PACK => (
                         HeldState::Missing,
                         "the pack holds no skills now".to_string(),
                     ),

@@ -107,6 +107,10 @@ function AppShell() {
     onSaveSkill,
     onResetSkill,
     copySkillToPack,
+    previewSkillImport,
+    commitSkillImport,
+    removeImportedSkill,
+    undoLastImport,
     docs,
     activeDoc,
     docDraft,
@@ -877,6 +881,10 @@ function AppShell() {
             packLibrary={packLibrary}
             packError={packError}
             onForgetPack={forgetPack}
+            onPreviewImport={previewSkillImport}
+            onCommitImport={commitSkillImport}
+            onRemoveImport={removeImportedSkill}
+            onUndoImport={undoLastImport}
             // Agents
             agentSources={visibleAgentSources}
             activeAgentContent={activeAgentId && visibleAgentIds.has(activeAgentId) ? activeAgentContent : null}

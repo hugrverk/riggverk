@@ -2,8 +2,10 @@ import { useEffect, useId, useRef, type FormEvent, type KeyboardEvent } from "re
 import { TButton } from "../../ui/TButton";
 
 interface CopySkillDialogProps {
-  /** The bundled skill being copied. */
+  /** The skill being copied: a bundled one, or one the user imported. */
   source: string;
+  /** Where it comes from, in the sentence that names it. */
+  origin?: "bundled" | "imported";
   name: string;
   /** Why the name will not do (checked as it is typed), or "". */
   problem: string;
@@ -20,7 +22,7 @@ interface CopySkillDialogProps {
  * while it is open; Escape and Cancel close it, Enter creates. The name is checked as it is typed; the backend's own
  * refusal, if any, stays in the dialog.
  */
-export function CopySkillDialog({ source, name, problem, error, creating, onChangeName, onCreate, onClose }: CopySkillDialogProps) {
+export function CopySkillDialog({ source, origin = "bundled", name, problem, error, creating, onChangeName, onCreate, onClose }: CopySkillDialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const headingId = useId();
@@ -68,7 +70,7 @@ export function CopySkillDialog({ source, name, problem, error, creating, onChan
         </div>
         <div className="app-modal-body lib-newdoc-body">
           <p>
-            The bundled <b>{source}</b> keeps its name and stays active. Your copy is a new skill in{" "}
+            The {origin} <b>{source}</b> keeps its name and stays active. Your copy is a new skill in{" "}
             <span className="lib-mono">pack:personal</span> that Update installs next to it.
           </p>
           <label className="lib-label" htmlFor={`${headingId}-name`}>Name</label>

@@ -19,6 +19,8 @@ import type {
   SetupHistoryEntry,
   SetupPlan,
   SetupResult,
+  SkillImportPreview,
+  SkillImportResult,
   SkillSummary,
   TakeBundledPreview,
   WorkspaceDiagnostics,
@@ -283,9 +285,38 @@ describe("mock backend: the Library edits only personal docs", () => {
     await expect(save("no frontmatter")).rejects.toThrow("The frontmatter cannot be read");
     await expect(save("---\nname: other\ndescription: d\ntargets: codex\n---\n")).rejects.toThrow("must stay mock-copy");
     await expect(save("---\nname: mock-copy\ndescription:\ntargets: codex\n---\n")).rejects.toThrow("description in the frontmatter cannot be empty");
-    await expect(save("---\nname: mock-copy\ndescription: d\n---\n")).rejects.toThrow("targets in the frontmatter must list harnesses");
     await expect(save("---\nname: mock-copy\ndescription: d\ntargets: [codex, nope]\n---\n")).rejects.toThrow("targets in the frontmatter must list harnesses");
     expect(await save("---\nname: mock-copy\ndescription: d\ntargets: [codex, claude]\n---\nbody\n")).toMatchObject({ success: true });
+    // Without `targets` a pack skill is for every harness.
+    const reopened = await invoke<DocumentContent>("read_skill", { id });
+    expect(await invoke<ActionResult>("save_pack_skill", { id, content: "---\nname: mock-copy\ndescription: d\n---\nbody\n", expectedRevision: reopened.revision })).toMatchObject({ success: true });
+  });
+
+  it("previews, imports, copies and undoes a skill import into pack:imported, like the backend", async () => {
+    const preview = await invoke<SkillImportPreview>("preview_skill_import", { paths: ["~/Downloads/skills-repo"] });
+    expect(preview.token).toEqual(expect.any(String));
+    expect(preview.candidates.map(c => [c.name, c.status, c.collision])).toEqual([
+      ["changelog-writer", "new", null],
+      ["tdd", "new", "bundled"],
+      ["git-context", "new", null],
+      ["Notes_Helper", "refused", null],
+    ]);
+    await expect(invoke("commit_skill_import", { token: preview.token, selection: ["1"], renames: {} })).rejects.toThrow("bundled skill is named tdd");
+    const again = await invoke<SkillImportPreview>("preview_skill_import", { paths: ["~/Downloads/skills-repo"] });
+    const result = await invoke<SkillImportResult>("commit_skill_import", { token: again.token, selection: ["0", "1"], renames: { "1": "tdd-imported" } });
+    expect(result).toEqual({ imported: ["changelog-writer", "tdd-imported"], updated: [] });
+    const packs = await invoke<PackLibrary>("list_pack_skills");
+    expect(packs.skills.filter(s => s.pack === "imported").map(s => s.name)).toEqual(["changelog-writer", "pdf-tools", "tdd-imported"]);
+    expect(packs.undo_import).toEqual({ action: "import", name: "tdd-imported" });
+    expect((await invoke<DocumentContent>("read_skill", { id: "pack:imported/tdd-imported" })).content).toContain("name: tdd-imported");
+    await invoke("copy_skill_to_pack", { name: "pack:imported/changelog-writer", newName: "changelog-mine" });
+    expect((await invoke<DocumentContent>("read_skill", { id: "pack:personal/changelog-mine" })).content).toContain("name: changelog-mine");
+    await invoke("undo_last_import");
+    await invoke("remove_imported_skill", { name: "changelog-writer" });
+    expect((await invoke<PackLibrary>("list_pack_skills")).undo_import).toEqual({ action: "remove", name: "changelog-writer" });
+    await invoke("undo_last_import");
+    const after = await invoke<PackLibrary>("list_pack_skills");
+    expect(after.skills.filter(s => s.pack === "imported").map(s => s.name)).toEqual(["changelog-writer", "pdf-tools"]);
   });
 
   it("saves a personal skill in the older top-level layout, the spec layout or both, byte for byte", async () => {

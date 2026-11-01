@@ -42,6 +42,9 @@ pub struct PackSkillSummary {
     /// Frontmatter keys the harness acts on by itself (`allowed-tools`, `hooks`, ...), as written.
     /// The Library hides the frontmatter of a pack skill, so these are listed on their own.
     pub(crate) privileged: Vec<crate::skill_discovery::PrivilegedKey>,
+    /// For a skill of the imported pack: where it was imported from.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) provenance: Option<super::skill_import::ImportProvenance>,
 }
 
 #[derive(Serialize)]
@@ -74,13 +77,23 @@ pub struct PackLibrary {
     pub(crate) packs: Vec<PackSummary>,
     pub(crate) skills: Vec<PackSkillSummary>,
     pub(crate) ignored: Vec<IgnoredPackEntry>,
+    /// What "Undo import" would take back; `None` when there is nothing to undo.
+    pub(crate) undo_import: Option<super::skill_import::UndoImport>,
 }
 
 fn skill_id(pack: &str, name: &str) -> String {
     format!("pack:{pack}/{name}")
 }
 
-fn library(sources: &SkillSources, folder: String) -> PackLibrary {
+fn library(
+    sources: &SkillSources,
+    folder: String,
+    imports: (
+        std::collections::BTreeMap<String, super::skill_import::ImportProvenance>,
+        Option<super::skill_import::UndoImport>,
+    ),
+) -> PackLibrary {
+    let (mut provenance, undo_import) = imports;
     let mut packs = Vec::new();
     let mut skills = Vec::new();
     for pack in sources.packs() {
@@ -120,6 +133,11 @@ fn library(sources: &SkillSources, folder: String) -> PackLibrary {
                     .skill_md_path()
                     .map(crate::skill_discovery::read_privileged_keys)
                     .unwrap_or_default(),
+                provenance: if pack.name == crate::skill_sources::IMPORTED_PACK {
+                    provenance.remove(&skill.name)
+                } else {
+                    None
+                },
             });
         }
     }
@@ -136,6 +154,7 @@ fn library(sources: &SkillSources, folder: String) -> PackLibrary {
                 reason: held.reason.clone(),
                 path: String::new(),
                 privileged: Vec::new(),
+                provenance: None,
             });
             continue;
         }
@@ -162,6 +181,7 @@ fn library(sources: &SkillSources, folder: String) -> PackLibrary {
                 reason: held.reason.clone(),
                 path: String::new(),
                 privileged: Vec::new(),
+                provenance: None,
             });
         } else if held.state == HeldState::Error {
             // The pack lists it as an error already; say that the installed copy is kept.
@@ -188,6 +208,7 @@ fn library(sources: &SkillSources, folder: String) -> PackLibrary {
                 reason: reason.clone(),
             })
             .collect(),
+        undo_import,
     }
 }
 
@@ -199,7 +220,11 @@ pub fn list_pack_skills() -> Result<PackLibrary, String> {
     let sources = SkillSources::for_workspace(&workspace_root)?;
     let folder =
         crate::skill_loads::display_path(&crate::skill_sources::packs_dir(&workspace_root), &home);
-    Ok(library(&sources, folder))
+    Ok(library(
+        &sources,
+        folder,
+        super::skill_import::library_imports(&workspace_root),
+    ))
 }
 
 /// The `SKILL.md` of a pack skill, by the id [`list_pack_skills`] gave. A skill that is not
@@ -295,25 +320,26 @@ fn personal_sources(root: &Path) -> Result<SkillSources, String> {
     Ok(sources)
 }
 
-fn create_personal_skill_dirs(root: &Path) -> Result<PathBuf, String> {
+/// `<data>/packs/<pack>/skills`, created owner-only where missing; for the app's own packs
+/// (`personal`, `imported`). Refuses a link on the way or a folder the pack checks would refuse.
+pub(super) fn create_pack_skill_dirs(root: &Path, pack: &str) -> Result<PathBuf, String> {
     crate::safe_filesystem::create_private_root_directory_all_no_symlinks(root)
         .map_err(|_| "cannot create the data folder safely".to_string())?;
     let packs = crate::skill_sources::packs_dir(root);
-    let personal = packs.join("personal");
-    let skills = personal.join("skills");
-    for dir in [&packs, &personal, &skills] {
-        crate::path_safety::reject_symlink_parent_chain(dir, root, "personal pack")
-            .map_err(|_| "refusing a symlink in the personal pack path".to_string())?;
+    let pack_dir = packs.join(pack);
+    let skills = pack_dir.join("skills");
+    let label = format!("{pack} pack");
+    for dir in [&packs, &pack_dir, &skills] {
+        crate::path_safety::reject_symlink_parent_chain(dir, root, &label)
+            .map_err(|_| format!("refusing a symlink in the {label} path"))?;
         match fs::symlink_metadata(dir) {
-            Ok(meta) if meta.is_dir() => {
-                crate::skill_sources::check_trusted(&meta, "personal pack")?
-            }
-            Ok(_) => return Err("personal pack path is not a folder".to_string()),
+            Ok(meta) if meta.is_dir() => crate::skill_sources::check_trusted(&meta, &label)?,
+            Ok(_) => return Err(format!("{label} path is not a folder")),
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
                 crate::safe_filesystem::create_private_directory_all_no_symlinks(dir, root)
-                    .map_err(|_| "cannot create personal pack folders safely".to_string())?;
+                    .map_err(|_| format!("cannot create {label} folders safely"))?;
             }
-            Err(_) => return Err("cannot inspect personal pack folders".to_string()),
+            Err(_) => return Err(format!("cannot inspect {label} folders")),
         }
     }
     Ok(skills)
@@ -328,7 +354,7 @@ fn require_absent_copy(target: &Path) -> Result<(), String> {
 }
 
 /// Replaces only frontmatter keys in the leading block, preserving the rest byte for byte.
-fn rename_skill_frontmatter(content: &str, new_name: &str) -> Result<String, String> {
+pub(super) fn rename_skill_frontmatter(content: &str, new_name: &str) -> Result<String, String> {
     let mut lines = content.split_inclusive('\n');
     let opening = lines.next().unwrap_or_default();
     if opening.trim_end_matches(['\r', '\n']) != "---" {
@@ -362,10 +388,17 @@ fn rename_skill_frontmatter(content: &str, new_name: &str) -> Result<String, Str
     Ok(renamed)
 }
 
-fn copy_bundled_tree(source: &Path, temp: &Path, new_name: &str) -> Result<(), String> {
+/// Copies the skill folder `source` into `temp`, renaming the skill to `new_name`. `max_bytes` caps
+/// the whole copy: 1 MiB for a bundled skill, the pack limits for an imported one.
+fn copy_bundled_tree(
+    source: &Path,
+    temp: &Path,
+    new_name: &str,
+    max_bytes: usize,
+) -> Result<(), String> {
     const MAX_FILES: usize = 64;
-    const MAX_BYTES: usize = 1024 * 1024;
     const MAX_ENTRIES: usize = 256;
+    let limit = format!("{} MiB", max_bytes / (1024 * 1024));
     let meta = fs::symlink_metadata(source)
         .map_err(|_| "cannot inspect the bundled skill folder".to_string())?;
     if !meta.is_dir() || meta.file_type().is_symlink() {
@@ -406,11 +439,11 @@ fn copy_bundled_tree(source: &Path, temp: &Path, new_name: &str) -> Result<(), S
             let mut content = Vec::new();
             fs::File::open(entry.path())
                 .map_err(|_| "cannot open bundled skill file".to_string())?
-                .take((MAX_BYTES - bytes + 1) as u64)
+                .take((max_bytes - bytes + 1) as u64)
                 .read_to_end(&mut content)
                 .map_err(|_| "cannot read bundled skill file".to_string())?;
-            if content.len() > MAX_BYTES - bytes {
-                return Err("bundled skill exceeds the 1 MiB copy limit".to_string());
+            if content.len() > max_bytes - bytes {
+                return Err(format!("the skill exceeds the {limit} copy limit"));
             }
             if relative == Path::new("SKILL.md") {
                 let text = std::str::from_utf8(&content)
@@ -418,8 +451,8 @@ fn copy_bundled_tree(source: &Path, temp: &Path, new_name: &str) -> Result<(), S
                 content = rename_skill_frontmatter(text, new_name)?.into_bytes();
             }
             bytes += content.len();
-            if bytes > MAX_BYTES {
-                return Err("bundled skill exceeds the 1 MiB copy limit".to_string());
+            if bytes > max_bytes {
+                return Err(format!("the skill exceeds the {limit} copy limit"));
             }
             crate::safe_filesystem::write_private_new_regular_file_synced(&target, &content, temp)
                 .map_err(|_| "cannot write personal skill file".to_string())?;
@@ -439,7 +472,9 @@ fn copy_bundled_tree(source: &Path, temp: &Path, new_name: &str) -> Result<(), S
     Ok(())
 }
 
-/// Writes only inside `<data>/packs/personal/`; installation waits for the next Update.
+/// Writes only inside `<data>/packs/personal/`; installation waits for the next Update. `name` is a
+/// bundled skill's name, or the id (`pack:imported/<name>`) of an active imported skill: the one
+/// pack whose skills are read-only in the Library and edited as a personal copy.
 #[tauri::command(async)]
 pub fn copy_skill_to_pack(name: String, new_name: String) -> Result<PackSkillCopy, String> {
     if !valid_personal_skill_name(&new_name) {
@@ -458,10 +493,35 @@ pub fn copy_skill_to_pack(name: String, new_name: String) -> Result<PackSkillCop
     let catalog = sources
         .catalog()
         .map_err(|_| "bundled catalog is unavailable or unsafe".to_string())?;
-    let source = catalog
-        .iter()
-        .find(|entry| entry.pack.is_none() && entry.skill.name == name)
-        .ok_or_else(|| "source must be a bundled skill name".to_string())?;
+    let imported = name
+        .strip_prefix("pack:")
+        .and_then(|rest| rest.strip_prefix(crate::skill_sources::IMPORTED_PACK))
+        .and_then(|rest| rest.strip_prefix('/'));
+    let (source_dir, max_bytes) = match imported {
+        Some(imported) => {
+            let skill = sources
+                .packs()
+                .iter()
+                .filter(|pack| {
+                    pack.name == crate::skill_sources::IMPORTED_PACK && pack.refused.is_none()
+                })
+                .flat_map(|pack| &pack.skills)
+                .find(|skill| skill.name == imported && skill.state == PackSkillState::Active)
+                .and_then(|skill| skill.skill_md_path())
+                .and_then(Path::parent)
+                .ok_or_else(|| "source must be an active imported skill".to_string())?;
+            let max = crate::skill_discovery::MAX_SKILL_MD_BYTES
+                + crate::skill_discovery::MAX_SUPPORT_TOTAL_BYTES;
+            (skill.to_path_buf(), max as usize)
+        }
+        None => {
+            let source = catalog
+                .iter()
+                .find(|entry| entry.pack.is_none() && entry.skill.name == name)
+                .ok_or_else(|| "source must be a bundled skill name".to_string())?;
+            (source.skill.source_dir.clone(), 1024 * 1024)
+        }
+    };
     if catalog
         .iter()
         .any(|entry| entry.pack.is_none() && entry.skill.name == new_name)
@@ -492,7 +552,7 @@ pub fn copy_skill_to_pack(name: String, new_name: String) -> Result<PackSkillCop
     {
         return Err("cannot add a personal pack: the pack limit is reached".to_string());
     }
-    let skills = create_personal_skill_dirs(&root)?;
+    let skills = create_pack_skill_dirs(&root, "personal")?;
     let target = skills.join(&new_name);
     require_absent_copy(&target)?;
     let nonce = SystemTime::now()
@@ -511,7 +571,7 @@ pub fn copy_skill_to_pack(name: String, new_name: String) -> Result<PackSkillCop
         .create(&temp)
         .map_err(|_| "cannot create temporary personal skill folder".to_string())?;
     let result = (|| {
-        copy_bundled_tree(&source.skill.source_dir, &temp, &new_name)?;
+        copy_bundled_tree(&source_dir, &temp, &new_name, max_bytes)?;
         safe_canonical_target(&skills, &target)
             .map_err(|_| "unsafe personal skill destination".to_string())?;
         crate::path_safety::reject_symlink_parent_chain(&target, &root, "personal skill")

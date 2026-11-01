@@ -291,6 +291,8 @@ const PREVIEW_TOKEN_TTL_SECS: u64 = 600;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PreviewPurpose {
     Apply,
+    /// A skill import (`commands::skill_import`): the fingerprint is the staged copy's digest.
+    SkillImport,
 }
 
 #[derive(Debug, Clone)]

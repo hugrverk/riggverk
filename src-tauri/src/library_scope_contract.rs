@@ -21,8 +21,11 @@ mod tests {
     /// (`docs/context/<slug>.md`), personal pack skills, or the text below a rules managed block.
     /// The others are install, conflict, rules-conversion, settings and workspace-reset
     /// actions that never take Library text. `forget_pack` edits `pack-skills.json` only.
-    /// `copy_skill_to_pack` and `save_pack_skill` write only inside `<data>/packs/personal/`.
-    const WRITE_COMMANDS: [&str; 19] = [
+    /// `copy_skill_to_pack` and `save_pack_skill` write only inside `<data>/packs/personal/`;
+    /// `commit_skill_import`, `remove_imported_skill` and `undo_last_import` only inside
+    /// `<data>/packs/imported/` and the backups. `preview_skill_import` reads the source and writes
+    /// only its private staging copy in the state folder.
+    const WRITE_COMMANDS: [&str; 22] = [
         "save_doc",
         "create_doc",
         "save_rules_refinements",
@@ -37,6 +40,9 @@ mod tests {
         "set_codex_config_kept",
         "apply_codex_config_defaults",
         "forget_pack",
+        "commit_skill_import",
+        "remove_imported_skill",
+        "undo_last_import",
         "apply_take_bundled",
         "update_settings",
         "update_opencode_model_selection",

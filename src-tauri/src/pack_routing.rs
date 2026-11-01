@@ -196,7 +196,7 @@ fn validate(text: &str, own_skills: &BTreeSet<&str>) -> Result<Vec<String>, Stri
 /// overrides, word joiner and invisible operators, the byte order mark, interlinear annotation marks,
 /// shorthand format controls and tag characters, plus the line and paragraph separators. The ranges are
 /// those of the Unicode Character Database.
-fn is_invisible_format(c: char) -> bool {
+pub(crate) fn is_invisible_format(c: char) -> bool {
     matches!(
         u32::from(c),
         0x00AD

@@ -36,6 +36,7 @@ mod packs;
 mod rules;
 mod rules_refinements;
 mod settings_commands;
+mod skill_import;
 mod skills;
 mod status;
 mod workspace;
@@ -75,6 +76,11 @@ pub use settings_commands::{get_agent_targets, get_settings, update_settings};
 pub use setup::{
     apply_setup, apply_uninstall, get_installation_status, preview_setup, preview_uninstall,
     rollback_setup_transaction,
+};
+#[cfg(test)]
+pub(crate) use skill_import::renamed_skill_md;
+pub use skill_import::{
+    commit_skill_import, preview_skill_import, remove_imported_skill, undo_last_import,
 };
 pub use skills::{get_effective_skill_loads, list_skills, read_skill};
 pub use workspace::{
