@@ -23,14 +23,14 @@ Preflight: `codex login status >/dev/null 2>&1`
 ```sh
 perl -e 'alarm shift; exec @ARGV or die "exec: $!"' 1200 \
   env -u ANTHROPIC_API_KEY -u OPENAI_API_KEY -u CODEX_API_KEY \
-  codex exec -s read-only --ephemeral --ignore-rules --disable multi_agent \
+  codex exec -s read-only --ephemeral --ignore-rules -c project_doc_max_bytes=0 --disable multi_agent \
     --disable plugins --disable apps --disable browser_use --disable computer_use \
     [-c 'mcp_servers.<name>.enabled=false' ...] \
     -C "<repo-root>" [-m '<model>'] -o "$T/critic.md" - \
     < "$T/brief.md" > "$T/critic.log" 2>&1
 ```
 
-- `-s read-only` pins the sandbox whatever `config.toml` says; `--ephemeral` keeps no session files; `--ignore-rules` skips execpolicy `.rules` files, including the reviewed repository's; `--disable multi_agent` stops the critic spawning agents; `-` reads the brief from stdin; `-o` writes only the final message. The `model:` line near the top of `critic.log` names the model for the ledger.
+- `-s read-only` pins the sandbox whatever `config.toml` says; `--ephemeral` keeps no session files; `--ignore-rules` skips execpolicy `.rules` files, including the reviewed repository's; `-c project_doc_max_bytes=0` stops Codex loading the repository's `AGENTS.md` and `AGENTS.override.md` (from the root down to `-C`), which `--ignore-rules` does not cover, so the change under review cannot instruct its own reviewer (checked with `codex debug prompt-input` on 0.166.0: without it a marker in `AGENTS.md` reaches the model input, with it nothing does); `--disable multi_agent` stops the critic spawning agents; `-` reads the brief from stdin; `-o` writes only the final message. The `model:` line near the top of `critic.log` names the model for the ledger.
 - MCP: the `--disable` flags drop plugin, app, browser and computer-use tools. Servers from the user's `config.toml` need one `-c 'mcp_servers.<name>.enabled=false'` each: take the names that are still enabled from `codex --disable plugins mcp list --json`, reading only `name` and `enabled` (the JSON can hold commands and env values; never print it). Skip the route if a name is outside `[A-Za-z0-9_-]`. Re-run the list with the same flags: nothing may stay enabled. `-c mcp_servers={}` does not work; it merges.
 - Do not add `--ignore-user-config`: it drops the model the user configured.
 - The read-only sandbox cannot run test suites that write caches. That is fine: the lead runs the proofs.

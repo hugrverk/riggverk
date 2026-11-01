@@ -165,6 +165,7 @@
       "sha256:0a975103972fd9ea9740284dff40841444ef0bd56c9348e60a8a9a2e4096beca",
       "sha256:568f4aeea5f8c1cbffcc4b14a670dd6085f0422545d6067dd09d3b2a66b74818",
       "sha256:768113b4c69ac251bc2f79c8ca73f238fd12775865b789a69efca1e24c8b4124",
+      "sha256:ae2dd66563a2f9bbd6248ca11704aea5b954daec90f7b35fb31965bf9acb340a",
       "sha256:bd55456493637dd7b0bc094c6ba8e4f8d35ee11e001d238ba022817b04ddfc5a"
     ],
     "skills/adversarial-review/SKILL.md": [
@@ -182,6 +183,7 @@
       "sha256:a267cc86b85b1e72b98ebeabfdc5cce1e3063f4bdee77a528e5cdbc6ad6131ac"
     ],
     "skills/adversarial-review/critic-recipes.md": [
+      "sha256:ae2dd66563a2f9bbd6248ca11704aea5b954daec90f7b35fb31965bf9acb340a",
       "sha256:bd55456493637dd7b0bc094c6ba8e4f8d35ee11e001d238ba022817b04ddfc5a"
     ],
     "skills/adversarial-test/SKILL.md": [
@@ -200,6 +202,7 @@
       "sha256:a267cc86b85b1e72b98ebeabfdc5cce1e3063f4bdee77a528e5cdbc6ad6131ac"
     ],
     "skills/adversarial-test/critic-recipes.md": [
+      "sha256:ae2dd66563a2f9bbd6248ca11704aea5b954daec90f7b35fb31965bf9acb340a",
       "sha256:bd55456493637dd7b0bc094c6ba8e4f8d35ee11e001d238ba022817b04ddfc5a"
     ],
     "skills/agent-report-review/SKILL.md": [
