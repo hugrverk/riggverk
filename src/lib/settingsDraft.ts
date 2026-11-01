@@ -92,20 +92,17 @@ export function contrastRatio(foreground: string, background: string): number {
   return (lighter + 0.05) / (darker + 0.05);
 }
 
+/** Mirrors `--bg` and `--text` in _tokens.scss; settingsDraft.test.ts fails when they drift apart. */
+const THEME_COLOR_DEFAULTS = {
+  dark: { background: "#1e1e20", foreground: "#e6e6e8" },
+  light: { background: "#f5f5f7", foreground: "#1d1d1f" },
+} as const;
+
 export function themeColorDefaults(appearance: AppSettings["appearance"]): {
   background: string;
   foreground: string;
 } {
-  switch (appearance) {
-    case "light":
-      return { background: "#f5f5f7", foreground: "#1d1d1f" };
-    case "dark":
-      return { background: "#1e1e20", foreground: "#e6e6e8" };
-    case "system":
-      return window.matchMedia("(prefers-color-scheme: dark)").matches
-        ? { background: "#1e1e20", foreground: "#e6e6e8" }
-        : { background: "#f5f5f7", foreground: "#1d1d1f" };
-  }
+  return { ...THEME_COLOR_DEFAULTS[resolvedThemeClass(appearance)] };
 }
 
 /**
@@ -125,12 +122,6 @@ export function inverseForeground(accentHex: string): string {
   return contrastRatio(accentHex, "#ffffff") >= contrastRatio(accentHex, "#111111")
     ? "#ffffff"
     : "#111111";
-}
-
-export function hasPoorContrast(foreground: string | null, background: string | null): boolean {
-  if (!foreground || !background) return false;
-  if (!isValidThemeHex(foreground) || !isValidThemeHex(background)) return false;
-  return contrastRatio(foreground, background) < 4.5;
 }
 
 /**
@@ -153,7 +144,8 @@ function resolvedThemeClass(appearance: AppSettings["appearance"]): "dark" | "li
 
 /**
  * Warnings for a custom colour set. Only colours that are set (or typed as a valid hex) are judged; an unset colour
- * keeps the theme default, which the palette test already covers.
+ * keeps the theme default, which the palette test already covers. A colour that does not fit the theme in force is
+ * named as unused (see `themeColorsInForce`); the contrast checks judge what is actually shown.
  */
 export function themeColorWarnings(input: {
   appearance: AppSettings["appearance"];
@@ -164,31 +156,64 @@ export function themeColorWarnings(input: {
   const foreground = isValidThemeHex(input.foreground) ? input.foreground : null;
   const background = isValidThemeHex(input.background) ? input.background : null;
   const accent = isValidThemeHex(input.accent) ? input.accent : null;
+  const theme = resolvedThemeClass(input.appearance);
+  const inForce = themeColorsInForce({
+    appearance: input.appearance,
+    accent_color: accent,
+    background_color: background,
+    foreground_color: foreground,
+  });
+  const shownBackground = inForce.background ?? THEME_COLOR_DEFAULTS[theme].background;
+  const shownForeground = inForce.foreground ?? THEME_COLOR_DEFAULTS[theme].foreground;
+  const lightness = (hex: string) => (relativeLuminance(hex) > LIGHT_BACKGROUND_LUMINANCE ? "light" : "dark");
   const warnings: string[] = [];
 
-  if (foreground && background && hasPoorContrast(foreground, background)) {
-    warnings.push(`Contrast ratio ${contrastRatio(foreground, background).toFixed(1)}:1 is below 4.5:1.`);
-  } else if (hasPoorContrast(input.foreground, input.background)) {
-    warnings.push("Custom foreground and background may be hard to read.");
+  if ((inForce.foreground || inForce.background) && contrastRatio(shownForeground, shownBackground) < 4.5) {
+    warnings.push(`Contrast ratio ${contrastRatio(shownForeground, shownBackground).toFixed(1)}:1 is below 4.5:1.`);
   }
-
-  const theme = resolvedThemeClass(input.appearance);
-  const effectiveBackground = background ?? themeColorDefaults(input.appearance).background;
-  if (accent && contrastRatio(accent, effectiveBackground) < 3) {
+  if (background && !inForce.background) {
+    warnings.push(`This background is ${lightness(background)} on the ${theme} theme, so it is not used. Pick a ${theme} one or switch the appearance.`);
+  }
+  if (foreground && !inForce.foreground) {
+    warnings.push(`This foreground is ${lightness(foreground)} on the ${theme} theme, so it is not used. Pick a ${theme === "light" ? "dark" : "light"} one or switch the appearance.`);
+  }
+  if (accent && !inForce.accent) {
     warnings.push(
-      `Accent contrast ${contrastRatio(accent, effectiveBackground).toFixed(1)}:1 against the background is below 3:1; the focus ring may be hard to see.`,
+      `Accent contrast ${contrastRatio(accent, shownBackground).toFixed(1)}:1 against the background is below 3:1, so the theme accent is used.`,
     );
   }
-  if (background) {
-    const isLight = relativeLuminance(background) > LIGHT_BACKGROUND_LUMINANCE;
-    if (isLight !== (theme === "light")) {
-      warnings.push(`This background is ${isLight ? "light" : "dark"} on the ${theme} theme; muted and status text will be hard to read. Switch the appearance instead.`);
-    } else if (FIXED_INKS[theme].some(ink => contrastRatio(ink, background) < 4.5)) {
-      warnings.push("Muted and status text may be hard to read on this background.");
-    }
+  if (inForce.background && FIXED_INKS[theme].some(ink => contrastRatio(ink, shownBackground) < 4.5)) {
+    warnings.push("Muted and status text may be hard to read on this background.");
   }
   return warnings;
 }
+
+/**
+ * The custom colours that suit the theme in force. The theme's other inks (muted text, state colours, panel mixes)
+ * stay fixed, so a colour from the opposite theme would leave them unreadable: a background must be dark on the dark
+ * theme and light on the light one, a foreground the reverse, and an accent must keep 3:1 against the background.
+ * This matters most for the system theme, where one saved colour set meets both appearances; a colour that does not
+ * fit is left out and the theme default shows instead.
+ */
+export function themeColorsInForce(
+  settings: Pick<AppSettings, "appearance" | "accent_color" | "background_color" | "foreground_color">,
+): { accent: string | null; background: string | null; foreground: string | null } {
+  const theme = resolvedThemeClass(settings.appearance);
+  const isLight = (hex: string) => relativeLuminance(hex) > LIGHT_BACKGROUND_LUMINANCE;
+  const background = isValidThemeHex(settings.background_color) && isLight(settings.background_color!) === (theme === "light")
+    ? settings.background_color!
+    : null;
+  const foreground = isValidThemeHex(settings.foreground_color) && isLight(settings.foreground_color!) === (theme === "dark")
+    ? settings.foreground_color!
+    : null;
+  const effectiveBackground = background ?? THEME_COLOR_DEFAULTS[theme].background;
+  const accent = isValidThemeHex(settings.accent_color) && contrastRatio(settings.accent_color!, effectiveBackground) >= 3
+    ? settings.accent_color!
+    : null;
+  return { accent, background, foreground };
+}
+
+let stopWatchingColorScheme: (() => void) | null = null;
 
 export function applyThemeSettings(settings: AppSettings): void {
   const root = document.documentElement;
@@ -199,28 +224,46 @@ export function applyThemeSettings(settings: AppSettings): void {
   root.style.setProperty("--app-font-scale", "1");
   applyMotionSetting(settings.motion);
 
-  if (settings.accent_color && THEME_HEX_RE.test(settings.accent_color)) {
-    root.style.setProperty("--accent", settings.accent_color);
-    root.style.setProperty("--accent-rgb", hexToRgb(settings.accent_color));
-    root.style.setProperty("--inv-fg", inverseForeground(settings.accent_color));
+  // Which custom colours fit depends on the resolved theme: the system theme re-applies them when macOS switches.
+  stopWatchingColorScheme?.();
+  stopWatchingColorScheme = null;
+  applyThemeColors(settings);
+  if (settings.appearance === "system") {
+    const query = window.matchMedia?.("(prefers-color-scheme: light)");
+    if (query?.addEventListener) {
+      const reapply = () => applyThemeColors(settings);
+      query.addEventListener("change", reapply);
+      stopWatchingColorScheme = () => query.removeEventListener("change", reapply);
+    }
+  }
+}
+
+function applyThemeColors(settings: AppSettings): void {
+  const root = document.documentElement;
+  const { accent, background, foreground } = themeColorsInForce(settings);
+
+  if (accent) {
+    root.style.setProperty("--accent", accent);
+    root.style.setProperty("--accent-rgb", hexToRgb(accent));
+    root.style.setProperty("--inv-fg", inverseForeground(accent));
   } else {
     root.style.removeProperty("--accent");
     root.style.removeProperty("--accent-rgb");
     root.style.removeProperty("--inv-fg");
   }
 
-  if (settings.background_color && THEME_HEX_RE.test(settings.background_color)) {
-    root.style.setProperty("--custom-bg", settings.background_color);
-    root.style.setProperty("--bg", settings.background_color);
+  if (background) {
+    root.style.setProperty("--custom-bg", background);
+    root.style.setProperty("--bg", background);
   } else {
     root.style.removeProperty("--custom-bg");
     root.style.removeProperty("--bg");
   }
 
-  if (settings.foreground_color && THEME_HEX_RE.test(settings.foreground_color)) {
-    root.style.setProperty("--custom-text", settings.foreground_color);
-    root.style.setProperty("--text", settings.foreground_color);
-    root.style.setProperty("--text-heading", settings.foreground_color);
+  if (foreground) {
+    root.style.setProperty("--custom-text", foreground);
+    root.style.setProperty("--text", foreground);
+    root.style.setProperty("--text-heading", foreground);
   } else {
     root.style.removeProperty("--custom-text");
     root.style.removeProperty("--text");
