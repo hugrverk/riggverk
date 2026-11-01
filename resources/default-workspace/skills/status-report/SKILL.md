@@ -82,10 +82,10 @@ All content lands in the markup, so the file reads without JavaScript (Quick Loo
 ## 6. Verify
 
 ```bash
-node "<skill-dir>/scripts/verify-report.mjs" <work>/report.json <work>/<repo>-status-<to>.html
+node "<skill-dir>/scripts/verify-report.mjs" <work>/report.json <work>/<repo>-status-<to>.html [--playwright-dir=<dir>]
 ```
 
-It checks the schema and cross-field rules (cites resolve, dates in the period, health against risks), leak patterns, external requests, and that every title is in the no-JS markup. When `playwright` resolves from the current directory it also loads the file at 1280 and 390 px with JavaScript off and on; a `SKIP` line means that pass did not run, so report it as not verified. Fix the data and rerun until it prints `PASS`.
+It checks the schema and cross-field rules (cites resolve, dates in the period, health against risks), leak patterns, external requests, and that every title is in the no-JS markup. The browser pass runs only with `--playwright-dir=<dir>`, a directory you made and the user approved. Never point it at the repository, the current directory or any folder you did not create: the script runs the `playwright` package from there. To run the pass, ask first, then install into a fresh `mktemp -d` outside the repository (`npm init -y` and `npm i playwright` there, then `<dir>/node_modules/.bin/playwright install chromium`). Without the flag it skips the pass, and a `SKIP` line means that pass did not run, so report it as not verified. Fix the data and rerun until it prints `PASS`.
 
 ## 7. Deliver
 

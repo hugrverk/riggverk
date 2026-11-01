@@ -533,6 +533,7 @@
     ],
     "skills/status-report/SKILL.md": [
       "sha256:22a73f9d46a634cb8834b5775b954be6ab2b4e0a947997f7fc578c2763b65cfd",
+      "sha256:743a0624ce85d45b4abd788f829c9724fecc124e847520e6fd057219508bfbb4",
       "sha256:821cbe45e92089f8818cb7ded30dca5e25e410117b0833d05f69b99d7857cc50",
       "sha256:ae498b04de8afc58970430edc96de1339e9f0afee1307d4cfa374b51402b3882",
       "sha256:d3134dad5465000c80dadc7467be389410a858e38d182cd741fb6f79c16f83de",
@@ -548,6 +549,7 @@
       "sha256:83ab8a77b645354cf8d2a2c1a6188d0fc3e347e6836ee08b10d47b105467ffe5"
     ],
     "skills/status-report/scripts/verify-report.mjs": [
+      "sha256:17d2e08e8923c4502594b86fe2ee1bfdd5f3191f21d40e4574df16fd66ee83b2",
       "sha256:8e464a3f9f0e1c51ea74c5c411e74352a59c54fb3c3615982736ad67c8b8913b"
     ],
     "skills/supabase-rls-review/SKILL.md": [
