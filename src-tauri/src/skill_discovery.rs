@@ -384,6 +384,65 @@ pub(crate) fn check_skill_text(content: &str, name: &str, folder: &str) -> Resul
     Ok(())
 }
 
+/// Top-level `SKILL.md` keys a harness acts on by itself once the skill runs, with what the two
+/// that act without asking do. Claude Code lets the tools in `allowed-tools` run without a
+/// permission prompt while the skill is active and registers the commands in `hooks` for the
+/// session; `context`, `agent`, `background` and `model` change where and how the skill runs.
+/// A pack skill is copied byte for byte, so these are shown before Install, never refused.
+pub(crate) const PRIVILEGED_SKILL_KEYS: [(&str, &str); 6] = [
+    ("allowed-tools", "grants tool access without asking"),
+    ("hooks", "runs commands without asking"),
+    ("context", ""),
+    ("agent", ""),
+    ("background", ""),
+    ("model", ""),
+];
+
+/// One of [`PRIVILEGED_SKILL_KEYS`] set in a `SKILL.md`. Config, not a secret: shown as written.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct PrivilegedKey {
+    pub key: String,
+    /// The value as written, nested lines included, with each run of whitespace made one space.
+    pub value: String,
+    /// What it grants in plain words; empty for a key that grants nothing by itself.
+    pub note: String,
+}
+
+/// The [`PRIVILEGED_SKILL_KEYS`] a `SKILL.md` text sets at the top level of its frontmatter, in
+/// file order. Empty when the frontmatter cannot be read: such a skill does not load at all.
+pub(crate) fn privileged_keys(content: &str) -> Vec<PrivilegedKey> {
+    let Ok(lines) = frontmatter_lines(content) else {
+        return Vec::new();
+    };
+    let mut found = Vec::new();
+    let _ = read_mapping(&lines, |key, rest, continuation| {
+        if let Some((key, note)) = PRIVILEGED_SKILL_KEYS
+            .iter()
+            .find(|(privileged, _)| *privileged == key)
+        {
+            let value = std::iter::once(rest)
+                .chain(continuation.iter().copied())
+                .flat_map(str::split_whitespace)
+                .collect::<Vec<_>>()
+                .join(" ");
+            found.push(PrivilegedKey {
+                key: key.to_string(),
+                value,
+                note: note.to_string(),
+            });
+        }
+        Ok(())
+    });
+    found
+}
+
+/// [`privileged_keys`] of the `SKILL.md` at `skill_md`; empty when it cannot be read.
+pub(crate) fn read_privileged_keys(skill_md: &Path) -> Vec<PrivilegedKey> {
+    read_skill_md_capped(skill_md)
+        .map(|content| privileged_keys(&content))
+        .unwrap_or_default()
+}
+
 pub(crate) fn read_skill_metadata(
     skill_md: &Path,
     fallback_name: &str,
@@ -730,6 +789,60 @@ mod tests {
     use std::collections::HashSet;
     use std::fs;
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn privileged_keys_are_listed_with_their_values_as_written() {
+        let text = [
+            "---",
+            "name: demo",
+            "description: Use for any release question.",
+            "targets: [claude]",
+            "allowed-tools: Bash(touch *)",
+            "hooks:",
+            "  PreToolUse:",
+            "    - matcher: \"Bash\"",
+            "      hooks:",
+            "        - type: command",
+            "          command: \"touch \\\"$HOME/marker\\\"\"",
+            "metadata:",
+            "  model: not-top-level",
+            "\"context\": fork",
+            "---",
+            "# Demo",
+            "allowed-tools: in the body",
+        ]
+        .join("\n");
+        let keys = privileged_keys(&text);
+        let pairs: Vec<_> = keys
+            .iter()
+            .map(|key| (key.key.as_str(), key.value.as_str(), key.note.as_str()))
+            .collect();
+        assert_eq!(
+            pairs,
+            [
+                (
+                    "allowed-tools",
+                    "Bash(touch *)",
+                    "grants tool access without asking"
+                ),
+                (
+                    "hooks",
+                    "PreToolUse: - matcher: \"Bash\" hooks: - type: command command: \"touch \\\"$HOME/marker\\\"\"",
+                    "runs commands without asking"
+                ),
+                ("context", "fork", ""),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_skill_without_privileged_keys_or_frontmatter_lists_none() {
+        assert!(
+            privileged_keys("---\nname: a\ndescription: b\n---\nallowed-tools: x\n").is_empty()
+        );
+        assert!(privileged_keys("allowed-tools: Bash\n").is_empty());
+        assert!(privileged_keys("---\nallowed-tools: Bash\n").is_empty());
+    }
 
     fn validate_bundled_catalog_all_targets(catalog: &[DiscoveredSkill]) -> Result<(), String> {
         let expected: HashSet<&str> = VALID_SKILL_AGENTS.iter().copied().collect();

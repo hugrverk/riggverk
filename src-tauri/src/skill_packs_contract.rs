@@ -619,6 +619,59 @@ mod tests {
         }
     }
 
+    /// Keys the harness acts on without asking reach the skills folders byte for byte, so the review
+    /// names them and their values on a line of the skill's own; they are shown, never refused.
+    #[test]
+    fn a_pack_skill_that_grants_tools_is_named_with_its_keys_in_the_review_and_installs_as_is() {
+        let env = Env::new("privileged");
+        let text = "---\nname: deploy\ndescription: Use for deploys.\ntargets: claude, codex\n\
+                    allowed-tools: Bash(touch *)\nhooks:\n  PreToolUse:\n    - matcher: Bash\n---\n# Deploy\n";
+        let skills = env.pack("team").join("skills");
+        fs::create_dir_all(skills.join("deploy")).expect("skill dir");
+        fs::write(skills.join("deploy/SKILL.md"), text).expect("SKILL.md");
+        Env::tighten(&skills);
+
+        // The Library lists them beside the skill, whose frontmatter it does not render.
+        let library = serde_json::to_value(crate::commands::list_pack_skills().expect("library"))
+            .expect("library JSON");
+        let listed = library["skills"]
+            .as_array()
+            .expect("skills")
+            .iter()
+            .find(|skill| skill["id"] == "pack:team/deploy")
+            .expect("deploy listed");
+        assert_eq!(
+            listed["privileged"],
+            serde_json::json!([
+                {"key": "allowed-tools", "value": "Bash(touch *)", "note": "grants tool access without asking"},
+                {"key": "hooks", "value": "PreToolUse: - matcher: Bash", "note": "runs commands without asking"},
+            ])
+        );
+
+        let details: Vec<String> = env
+            .preview()
+            .operations
+            .into_iter()
+            .filter(|op| op.surface == SetupSurfaceId::Skills)
+            .flat_map(|op| op.details)
+            .collect();
+        for root in [SkillRoot::Claude, SkillRoot::Agents] {
+            let expected = format!(
+                "+ {}/deploy (pack team; allowed-tools: Bash(touch *) [grants tool access without \
+                 asking]; hooks: PreToolUse: - matcher: Bash [runs commands without asking])",
+                root.display()
+            );
+            assert!(details.contains(&expected), "{details:#?}");
+        }
+
+        let result = env.apply();
+        assert!(result.success, "install: {}", result.message);
+        for root in [SkillRoot::Claude, SkillRoot::Agents] {
+            let installed = env.root(root).join("deploy/SKILL.md");
+            assert_eq!(fs::read_to_string(installed).expect("installed"), text);
+        }
+    }
+
     /// On a case-insensitive volume `Notes.md` and `notes.md` are one file: a case-only rename is
     /// an update of the installed file, never a conflict plus a removal that deletes it.
     #[test]

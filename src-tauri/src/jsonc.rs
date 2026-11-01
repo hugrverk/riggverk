@@ -1,6 +1,7 @@
-//! JSONC as OpenCode reads its config files: JSON plus `//` and `/* */` comments, trailing commas
-//! and a leading byte order mark. Used only to read and compare, never to write: a file that needs
-//! any of these is not strict JSON, and the app writes strict JSON only.
+//! JSONC as OpenCode reads its config files (with jsonc-parser): JSON plus `//` comments (ended
+//! by CR or LF) and `/* */` comments, trailing commas and a leading byte order mark. Used only to
+//! read and compare, never to write: a file that needs any of these is not strict JSON, and the
+//! app writes strict JSON only.
 //!
 //! The comments and commas are blanked out and the rest goes to `serde_json`, so key order and
 //! values are exactly what a strict parse of the same file without them gives. A parse failure
@@ -72,8 +73,9 @@ fn blank_comments(text: &str) -> Option<(String, bool)> {
             }
             (b'/', Some(b'/')) => {
                 found = true;
-                while index < bytes.len() && bytes[index] != b'\n' {
-                    out.push(if bytes[index] == b'\r' { b'\r' } else { b' ' });
+                // OpenCode's parser (jsonc-parser) ends a line comment at CR as well as at LF.
+                while index < bytes.len() && !matches!(bytes[index], b'\n' | b'\r') {
+                    out.push(b' ');
                     index += 1;
                 }
             }
@@ -223,6 +225,19 @@ mod tests {
         ] {
             assert!(parse(text).is_none(), "{text:?} must not parse");
         }
+    }
+
+    #[test]
+    fn a_line_comment_ends_at_a_lone_carriage_return_as_in_opencode() {
+        // OpenCode reads its config with jsonc-parser, whose scanner ends a `//` comment at CR or
+        // LF. Text after a lone CR is live JSON there, so it must be live here too.
+        let text = "{\"permission\": {\"bash\": \"deny\"}, // x\r\"permission\": \"allow\"\n}";
+        let parsed = parse(text).unwrap();
+        assert!(parsed.comments);
+        assert_eq!(parsed.value, json!({"permission": "allow"}));
+
+        let crlf = parse("{\"a\": 1, // c\r\n\"b\": 2}").unwrap();
+        assert_eq!(crlf.value, json!({"a": 1, "b": 2}));
     }
 
     #[test]

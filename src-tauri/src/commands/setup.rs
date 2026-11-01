@@ -145,6 +145,10 @@ fn reconcile_interrupted_setup_transactions(
         if !header.status.needs_reconciliation() {
             continue;
         }
+        // Checked once the transaction is known to need a restore, so an odd folder that is
+        // finished or belongs to another workspace never blocks setup.
+        setup_transaction::check_transaction_folder_trusted(&backup_dir)
+            .map_err(|e| format!("interrupted setup {transaction_id}: {e}"))?;
         let mut manifest: ArtifactTransactionManifest = serde_json::from_str(&raw)
             .map_err(|e| format!("parse interrupted setup {transaction_id} manifest: {e}"))?;
         setup_transaction::validate_manifest(&manifest, workspace_root)
@@ -2027,6 +2031,17 @@ pub fn rollback_transaction(
             message: format!("Manifest path safety failed: {e}"),
         };
     }
+    if let Err(e) = setup_transaction::check_transaction_folder_trusted(&backup_dir) {
+        return SetupResult {
+            success: false,
+            transaction_id: transaction_id.to_string(),
+            applied: vec![],
+            failed: vec![e.clone()],
+            rolled_back: vec![],
+            manual_steps: vec![],
+            message: format!("Transaction backup refused: {e}"),
+        };
+    }
     let manifest_raw = match fs::read_to_string(&manifest_path) {
         Ok(r) => r,
         Err(e) => {
@@ -2773,7 +2788,8 @@ fn attach_skill_details(
     ) else {
         return;
     };
-    let details = setup_transaction::skill_plan_details(&planned, &scope);
+    let flagged = setup_transaction::flagged_pack_skills(sources);
+    let details = setup_transaction::skill_plan_details(&planned, &scope, &flagged);
     for op in plan
         .operations
         .iter_mut()
@@ -4359,6 +4375,64 @@ mod tests {
             fs::read_to_string(home.join(".config/opencode/AGENTS.md")).unwrap(),
             "opencode-rules-backup"
         );
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_transaction_folder_others_can_write_is_never_restored_from() {
+        use std::os::unix::fs::PermissionsExt;
+        let _guard = guard::lock();
+        let _restore = guard::EnvRestore::capture();
+        let (base, home, ws, txn_id) = rollback_test_fixture();
+        let backup_dir = seed_two_artifact_transaction(&txn_id);
+        let codex = home.join(".codex/AGENTS.md");
+        let before = fs::read(&codex).ok();
+        let set_mode = |path: &Path, mode: u32| {
+            fs::set_permissions(path, fs::Permissions::from_mode(mode)).unwrap()
+        };
+        for (path, open_mode, phrase) in [
+            (
+                backup_dir.clone(),
+                0o770,
+                "refusing the setup transaction folder",
+            ),
+            (
+                backup_dir.join("manifest.json"),
+                0o666,
+                "refusing the setup manifest",
+            ),
+            (
+                backup_dir.join("artifacts"),
+                0o707,
+                "refusing the setup backup folder",
+            ),
+        ] {
+            let kept_mode = fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+            set_mode(&path, open_mode);
+            let error = reconcile_interrupted_setup_transactions(&ws, &home).unwrap_err();
+            assert!(
+                error.contains(phrase) && error.contains("writable by its group or by everyone"),
+                "{error}"
+            );
+            let result = rollback_transaction(&txn_id, false, &mut ProgressReporter::silent());
+            assert!(
+                !result.success && result.message.contains(phrase),
+                "{}",
+                result.message
+            );
+            assert!(!result.message.contains(&*backup_dir.to_string_lossy()));
+            assert_eq!(fs::read(&codex).ok(), before, "nothing was restored");
+            set_mode(&path, kept_mode);
+        }
+        let manifest = read_manifest(&txn_id);
+        assert_ne!(
+            manifest.transaction_status,
+            setup_transaction::TransactionStatus::RolledBack
+        );
+        // Not writable by others again: the interrupted transaction is restored as before.
+        reconcile_interrupted_setup_transactions(&ws, &home).expect("reconcile transaction");
+        assert_eq!(fs::read_to_string(&codex).unwrap(), "codex-rules-backup");
         let _ = fs::remove_dir_all(&base);
     }
 

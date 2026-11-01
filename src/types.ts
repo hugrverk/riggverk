@@ -13,6 +13,20 @@ export interface SkillSummary {
   category: string; risk: string; targets: string[]; related: string[];
   /** Set on a skill from a pack: its state and why it is not active. */
   packState?: PackSkillState; packReason?: string;
+  /** Set on a skill from a pack: the frontmatter keys the harness acts on by itself. */
+  privileged?: PrivilegedSkillKey[];
+}
+
+/**
+ * A `SKILL.md` frontmatter key the harness acts on by itself once the skill runs (`allowed-tools`, `hooks`,
+ * `context`, `agent`, `background`, `model`). Config, not a secret: the value is shown as written, whitespace
+ * collapsed.
+ */
+export interface PrivilegedSkillKey {
+  key: string;
+  value: string;
+  /** What it grants in plain words ("grants tool access without asking"); empty when it grants nothing by itself. */
+  note: string;
 }
 
 export interface AgentMetadataEntry {
@@ -947,6 +961,8 @@ export type PackSkillState = "active" | "shadowed" | "error" | "missing";
 export interface PackSkillEntry {
   id: string; name: string; description: string; pack: string;
   state: PackSkillState; reason: string; path: string;
+  /** Frontmatter keys the harness acts on by itself; the backend always sends the list, empty when none. */
+  privileged?: PrivilegedSkillKey[];
 }
 
 export interface PackEntry {

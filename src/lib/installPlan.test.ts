@@ -89,6 +89,25 @@ describe("buildPlanGroups", () => {
     expect(describePlanCounts(countPlanRows([group]))).toBe("apply 2 safe changes, skip 1 conflict");
   });
 
+  it("reads a pack skill's own line, with the keys it acts on without asking, as a row of that skill", () => {
+    const skills = review(
+      [
+        op("skills", "update", {
+          details: [
+            "+ ~/.claude/skills (3 skills, 5 files)",
+            "+ ~/.claude/skills/deploy (pack team; allowed-tools: Bash(git *) [grants tool access without asking])",
+          ],
+        }),
+      ],
+      ["skills"],
+    );
+    const rows = buildPlanGroups(skills)[0]!.rows;
+    expect(rows.map(row => [row.kind, row.file, row.note])).toEqual([
+      ["create", "~/.claude/skills", "3 skills, 5 files"],
+      ["create", "~/.claude/skills/deploy", "pack team; allowed-tools: Bash(git *) [grants tool access without asking]"],
+    ]);
+  });
+
   it("reads a skill the user keeps (=) as a manual row, and points a skill in conflict at the page that resolves it", () => {
     const skills = review(
       [

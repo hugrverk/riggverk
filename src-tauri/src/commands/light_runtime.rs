@@ -9,8 +9,8 @@
 //! `pi --help` writes files into the agent dir, `kilo debug *` prints the resolved config with its
 //! secrets; `pi mcp list` spawns the servers; `copilot mcp` and `kilo mcp` are not needed), read an
 //! auth, settings or config file of the harness, show any text of the rules or MCP file, or keep
-//! any raw output. The version probe is bounded, parse-only and runs from a neutral
-//! working directory (`opencode_cli::probe_version_with_env`).
+//! any raw output. The version probe is bounded, parse-only and runs from a fresh
+//! owner-only folder (`opencode_cli::probe_version_with_env`).
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -889,8 +889,14 @@ mod tests {
         let args = fs::read_to_string(bin.dir.join("args.txt")).expect("args recorded");
         assert_eq!(args.trim(), "--version");
         let cwd = fs::read_to_string(bin.dir.join("cwd.txt")).expect("cwd recorded");
-        let neutral = fs::canonicalize(std::env::temp_dir()).expect("neutral cwd");
-        assert_eq!(Path::new(cwd.trim()), neutral);
+        let shared = fs::canonicalize(std::env::temp_dir()).expect("temp dir");
+        let cwd = Path::new(cwd.trim());
+        assert_eq!(
+            cwd.parent(),
+            Some(shared.as_path()),
+            "a fresh folder in the temp dir"
+        );
+        assert!(!cwd.exists(), "the probe folder is removed afterwards");
     }
 
     #[cfg(unix)]
