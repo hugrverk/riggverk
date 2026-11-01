@@ -570,6 +570,33 @@ describe("InstallPlanPane: band, map and states", () => {
   });
 });
 
+describe("InstallPlanPane: a done state with steps left", () => {
+  it("never reads as all clear when the run left a step to the user, and lists each step", () => {
+    const review = buildInstallReview(REQUEST, planOf([op("claude_rules", "update")]));
+    const result: SetupResult = {
+      success: true,
+      transaction_id: "tx-7",
+      applied: ["x"],
+      failed: [],
+      rolled_back: [],
+      manual_steps: ["The files were applied, but a choice to keep your version of one of them could not be cleared: denied"],
+      message: "ok",
+    };
+    const flow = { ...makeFlow(), status: "idle" as const, request: null, review: null };
+    renderPane(flow, { done: { review, result, at: new Date(2026, 10, 1, 9, 5).getTime() }, onDismiss: vi.fn() });
+    const pane = screen.getByRole("region", { name: "Install plan" });
+    expect(pane.textContent).not.toContain("Everything is set up.");
+    expect(pane.textContent).toContain("Applied. The rest is yours to decide.");
+    expect(within(pane.querySelector<HTMLElement>(".plan-left")!).getByRole("listitem").textContent).toContain("could not be cleared: denied");
+    expect(within(pane).getByRole("status").textContent).toBe("done at 09:05 · 1 change applied, 1 step left to you");
+    cleanup();
+
+    renderPane(flow, { done: { review, result: { ...result, manual_steps: [] }, at: Date.now() }, onDismiss: vi.fn() });
+    expect(screen.getByRole("region", { name: "Install plan" }).textContent).toContain("Everything is set up.");
+    expect(document.querySelector(".plan-left")).toBeNull();
+  });
+});
+
 describe("InstallPlanPane with the install flow", () => {
   function FlowHarness({ plan, onApply }: { plan: SetupPlan; onApply?: (flow: InstallFlow) => void }) {
     invokeMock.mockImplementation(async (command: string) => {

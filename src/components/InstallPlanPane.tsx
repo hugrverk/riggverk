@@ -154,19 +154,36 @@ function PlanProgress({ progress, agent }: { progress: ApplyProgress | null | un
   );
 }
 
-/** Under the map once the apply succeeded: the verdict and the run's receipt. */
+/**
+ * Under the map once the apply succeeded: the verdict and the run's receipt. A successful run can still leave steps to
+ * the user (a manual step of the plan, a warning the backend returned with it): then it never reads as all clear, and
+ * each step is listed.
+ */
 function DoneReceipt({ done, counts, agents }: { done: InstallDone; counts: PlanCounts; agents: string[] }) {
   const { result } = done;
   const written = counts.create + counts.update + counts.remove;
+  const steps = result.manual_steps;
   const lines = [
     { label: "Changed", value: `${plural(written, "change")}${agents.length > 0 ? ` to ${listJoin(agents)}` : ""}` },
     ...(counts.conflict > 0 ? [{ label: "Skipped", value: `${plural(counts.conflict, "conflict")}, yours to decide` }] : []),
+    ...(counts.manual > 0 ? [{ label: "Manual", value: `${plural(counts.manual, "manual step")} in the plan, left to you` }] : []),
     ...(result.transaction_id ? [{ label: "Transaction", value: result.transaction_id }] : []),
   ];
+  const allClear = counts.conflict === 0 && counts.manual === 0 && steps.length === 0;
   return (
     <div className="plan-done">
-      <h3>{counts.conflict > 0 ? "Applied. The rest is yours to decide." : "Everything is set up."}</h3>
+      <h3>{allClear ? "Everything is set up." : "Applied. The rest is yours to decide."}</h3>
       <Receipt lines={lines} />
+      {steps.length > 0 && (
+        <div className="plan-left">
+          <b>Left for you</b>
+          <ul>
+            {steps.map(step => (
+              <li key={step}>{step}</li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }
@@ -282,7 +299,9 @@ export function InstallPlanPane({
   const question = (() => {
     if (done) {
       const skipped = counts.conflict > 0 ? `, ${counts.conflict} ${counts.conflict === 1 ? "conflict" : "conflicts"} skipped` : "";
-      return `done at ${formatCheckedAt(new Date(done.at))} · ${plural(counts.create + counts.update + counts.remove, "change")} applied${skipped}`;
+      const left = done.result.manual_steps.length;
+      const steps = left > 0 ? `, ${plural(left, "step")} left to you` : "";
+      return `done at ${formatCheckedAt(new Date(done.at))} · ${plural(counts.create + counts.update + counts.remove, "change")} applied${skipped}${steps}`;
     }
     if (status === "previewing") return "computing the plan…";
     if (status === "applying") {
