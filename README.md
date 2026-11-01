@@ -211,7 +211,7 @@ Several bundled skills adapt methods from open skill collections. The wording is
 
 | Source | Used in | License |
 |---|---|---|
-| [Matt Pocock's skills](https://github.com/mattpocock/skills) | `diagnose`, `tdd`, `prototype`, `handoff`, `context-budget`, `retro`; the idea behind `zoom-out` | MIT |
+| [Matt Pocock's skills](https://github.com/mattpocock/skills) | `diagnose`, `tdd`, `prototype`, `handoff`, `context-budget`, `retro`, `grill-me`; the idea behind `zoom-out` | MIT |
 | [obra/superpowers](https://github.com/obra/superpowers) | `implementation-plan`, `delegate`, `review-response` | MIT |
 | [raddue/crucible](https://github.com/raddue/crucible) | the fresh-critic loop in the adversarial skills | MIT |
 | [dementev-dev/adversarial-review](https://github.com/dementev-dev/adversarial-review) | the read-only critic and its adjudication | Apache-2.0 |

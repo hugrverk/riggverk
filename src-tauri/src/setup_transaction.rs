@@ -4205,10 +4205,17 @@ mod tests {
 
     #[test]
     fn skill_without_a_canonical_source_is_unavailable_and_with_one_is_created() {
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
         let home = temp("skill-source-home");
         let ws = temp("skill-source-ws");
         fs::create_dir_all(&home).unwrap();
         fs::create_dir_all(&ws).unwrap();
+        crate::test_env::set_test_user_dirs(&home);
+        unsafe {
+            std::env::remove_var("OPENCODE_SKILLS_PATH");
+            std::env::remove_var("CLAUDE_SKILLS_PATH");
+        }
         let name = |name: &str| crate::artifact_registry::SkillName::new(name).unwrap();
 
         let skill_md = |root, name| ArtifactId::skill_md(root, name);
