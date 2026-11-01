@@ -31,6 +31,9 @@ use crate::skill_discovery::DiscoveredSkill;
 /// Folder of the packs inside the data folder. Never `skills/`: that path belongs to the cleanup
 /// of the copies of the bundle that older releases kept in the data folder.
 pub const PACKS_DIR: &str = "packs";
+/// The app-owned pack that skill imports go into (see `commands::skill_import`). Only the app writes
+/// it, so a skill gone from it was removed on purpose, even the last one.
+pub const IMPORTED_PACK: &str = "imported";
 /// File name inside the state folder (see `workspace_layout::state_file`).
 pub const PACK_SKILLS_FILE: &str = "pack-skills.json";
 const SCHEMA_VERSION: u32 = 1;
@@ -947,8 +950,8 @@ fn compute_held(
                     Some(reason) => (HeldState::Missing, format!("pack refused: {reason}")),
                     // A present pack with no skill in it at all, while a skill of it is installed:
                     // an emptied or unreadable checkout is told apart from a removal by the user
-                    // forgetting the pack.
-                    None if report.skills.is_empty() => (
+                    // forgetting the pack. The imported pack is no checkout: the app removed it.
+                    None if report.skills.is_empty() && pack != IMPORTED_PACK => (
                         HeldState::Missing,
                         "the pack holds no skills now".to_string(),
                     ),
