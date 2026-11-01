@@ -61,6 +61,18 @@ describe("receiptLines", () => {
       changes: [{ surface: "claude_rules", kind: "update", path: "~/.claude/CLAUDE.md", applied: true, restored: true }],
     });
     expect(receiptLines(undone).slice(0, 1)).toEqual([{ label: "Restored", value: "1 file from the backup" }]);
+    // A file the run had created is removed by the undo, not restored.
+    const created = entry({
+      status: "rolled_back",
+      changes: [
+        { surface: "skills", kind: "create", path: "~/.claude/skills/tdd/SKILL.md", applied: true, restored: true },
+        { surface: "claude_rules", kind: "update", path: "~/.claude/CLAUDE.md", applied: true, restored: true },
+      ],
+    });
+    expect(receiptLines(created).slice(0, 2)).toEqual([
+      { label: "Removed", value: "1 file it had created" },
+      { label: "Restored", value: "1 file from the backup" },
+    ]);
   });
 
   it("tells a manual step apart from a conflict", () => {

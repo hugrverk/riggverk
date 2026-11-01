@@ -37,6 +37,16 @@ export function updateAgentsText(entry: Pick<SetupHistoryEntry, "harnesses">): s
   return names.length === 0 ? null : listText(names);
 }
 
+/** What an undo did to the run's changes: the files it had created were removed, the others restored from the backup. */
+function undoneLines(restored: SetupHistoryEntry["changes"]): ReceiptLine[] {
+  const created = restored.filter(change => change.kind === "create").length;
+  const fromBackup = restored.length - created;
+  const lines: ReceiptLine[] = [];
+  if (created > 0) lines.push({ label: "Removed", value: `${plural(created, "file")} it had created` });
+  if (fromBackup > 0) lines.push({ label: "Restored", value: `${plural(fromBackup, "file")} from the backup` });
+  return lines;
+}
+
 function unique<T>(values: readonly T[]): T[] {
   return [...new Set(values)];
 }
@@ -54,9 +64,7 @@ export function receiptLines(entry: SetupHistoryEntry, backupCount: number | nul
     const surfaces = unique(changed.map(change => change.surface)).map(surfaceTitle).join(", ");
     lines.push({ label: "Changed", value: `${surfaces} · ${plural(changed.length, "file")}` });
   }
-  if (restored.length > 0) {
-    lines.push({ label: "Restored", value: `${plural(restored.length, "file")} from the backup` });
-  }
+  lines.push(...undoneLines(restored));
   if (entry.receipt) {
     if (entry.receipt.synced.length > 0) {
       lines.push({ label: "Checked", value: `${unique(entry.receipt.synced).map(surfaceTitle).join(", ")} · current` });
@@ -147,7 +155,7 @@ export function agentReceipt(entry: SetupHistoryEntry, harness: InstallAgent): {
   if (changed.length > 0) {
     lines.push({ label: "Changed", value: `${unique(changed.map(change => change.surface)).map(surfaceTitle).join(", ")} · ${plural(changed.length, "file")}` });
   }
-  if (restored.length > 0) lines.push({ label: "Restored", value: `${plural(restored.length, "file")} from the backup` });
+  lines.push(...undoneLines(restored));
   if (synced.length > 0) lines.push({ label: "Checked", value: `${synced.map(surfaceTitle).join(", ")} · current` });
   if (left.length > 0) {
     lines.push({
