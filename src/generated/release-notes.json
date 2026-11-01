@@ -1,6 +1,18 @@
 {
   "releases": [
     {
+      "version": "2026.11.2",
+      "sections": [
+        {
+          "title": "New",
+          "items": [
+            "Use a silver accent that matches the rune mark",
+            "Show the rune next to the name in the sidebar"
+          ]
+        }
+      ]
+    },
+    {
       "version": "2026.11.1",
       "sections": [
         {
