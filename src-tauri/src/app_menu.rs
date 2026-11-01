@@ -55,6 +55,10 @@ pub fn on_event<R: Runtime>(app: &AppHandle<R>, event: MenuEvent) {
     }
     match app.get_webview_window(MAIN_WINDOW) {
         Some(window) => {
+            // The guard may ask in this window; a minimized or hidden one would hide the question.
+            let _ = window.unminimize();
+            let _ = window.show();
+            let _ = window.set_focus();
             if window.close().is_err() {
                 app.exit(0);
             }
