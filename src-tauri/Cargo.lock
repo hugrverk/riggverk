@@ -2432,6 +2432,7 @@ dependencies = [
 name = "riggverk"
 version = "2026.11.6"
 dependencies = [
+ "libc",
  "serde",
  "serde_json",
  "sha2",

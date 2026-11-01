@@ -244,21 +244,11 @@ pub(crate) fn valid_spec_skill_name(name: &str) -> bool {
         && crate::skill_sources::valid_pack_name(name)
 }
 
-/// `open(2)` flags: never follow a link in the last component, never block (a pipe would).
-#[cfg(any(target_os = "macos", target_os = "ios"))]
-const OPEN_FLAGS: i32 = 0x0100 | 0x0004; // O_NOFOLLOW | O_NONBLOCK
-#[cfg(any(target_os = "linux", target_os = "android"))]
-const OPEN_FLAGS: i32 = 0o400000 | 0o4000; // O_NOFOLLOW | O_NONBLOCK
-#[cfg(all(
-    unix,
-    not(any(
-        target_os = "macos",
-        target_os = "ios",
-        target_os = "linux",
-        target_os = "android"
-    ))
-))]
-const OPEN_FLAGS: i32 = 0;
+/// `open(2)` flags: never follow a link in the last component, never block (a pipe would). They come
+/// from libc because the values differ per platform: `O_NOFOLLOW` is `0o400000` on Linux x86_64 but
+/// `0o100000` on Linux aarch64, where `0o400000` is `O_LARGEFILE`.
+#[cfg(unix)]
+const OPEN_FLAGS: i32 = libc::O_NOFOLLOW | libc::O_NONBLOCK;
 
 /// Opens `path` for reading without following a link at it and without blocking, and returns the
 /// handle with the metadata of what was opened (`fstat`): only a regular file with one link passes,
@@ -1956,6 +1946,19 @@ mod tests {
             .unwrap_err()
             .contains("changed while it was read"));
         assert!(read_capped(&path, 1024).is_err());
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn the_open_itself_refuses_a_link_to_a_regular_file() {
+        let dir = dir("nofollow");
+        let real = dir.join("real.md");
+        fs::write(&real, "text\n").expect("file");
+        let path = dir.join("a.md");
+        std::os::unix::fs::symlink(&real, &path).expect("link");
+        assert!(open_regular(&real).is_ok());
+        // Followed, the link would open a regular file with one link, which passes the check after it.
+        assert_eq!(open_regular(&path).unwrap_err(), "cannot open");
         let _ = fs::remove_dir_all(dir);
     }
 
