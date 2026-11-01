@@ -37,8 +37,6 @@ const MAX_EVENTS: usize = 200;
 /// Below the state folder; one folder per preview, named by its token.
 const STAGING_DIR: &str = "import-staging";
 const MANIFEST_FILE: &str = "candidates.json";
-/// A staging folder older than a preview token is left over: the next preview removes it.
-const STAGING_TTL_SECS: u64 = 600;
 const MAX_SOURCE_PATHS: usize = 16;
 const MAX_CANDIDATES: usize = 64;
 /// Entries one skill folder may hold before it is read as something else (checked before copying).
@@ -247,7 +245,10 @@ pub(crate) fn valid_spec_skill_name(name: &str) -> bool {
 }
 
 fn read_capped(path: &Path, cap: u64) -> Result<Vec<u8>, String> {
-    crate::path_safety::reject_symlink(path, "file").map_err(|_| "refusing a link".to_string())?;
+    // Only a regular file is opened: a pipe would block the open.
+    if !fs::symlink_metadata(path).is_ok_and(|meta| meta.is_file()) {
+        return Err("a file of the skill is not a regular file".to_string());
+    }
     let mut bytes = Vec::new();
     fs::File::open(path)
         .map_err(|_| "cannot open a file of the skill".to_string())?
@@ -501,25 +502,27 @@ fn scan_dir(dir: &Path, prefix: &str, level: usize, scan: &mut Scan) {
         scan.problems.push(format!("{shown}: cannot be read"));
         return;
     };
-    let mut entries: Vec<fs::DirEntry> = entries.flatten().collect();
+    // Every entry counts, dot entries and unreadable names too, and no more are read than the cap.
+    let room = (MAX_SKILL_ENTRIES + 1).saturating_sub(scan.entries);
+    let mut entries: Vec<fs::DirEntry> = entries.flatten().take(room).collect();
     entries.sort_by_key(|entry| entry.file_name());
     for entry in entries {
-        let Ok(name) = entry.file_name().into_string() else {
-            scan.problems
-                .push(format!("{shown}: holds a file name that is not UTF-8"));
-            continue;
-        };
-        let rel = format!("{prefix}{name}");
-        if name.starts_with('.') {
-            scan.omitted.push(rel);
-            continue;
-        }
         scan.entries += 1;
         if scan.entries > MAX_SKILL_ENTRIES {
             scan.problems.push(format!(
                 "more than {MAX_SKILL_ENTRIES} files and folders in the skill"
             ));
             return;
+        }
+        let Ok(name) = entry.file_name().into_string() else {
+            scan.problems
+                .push(format!("{shown}: holds a file name that is not UTF-8"));
+            return;
+        };
+        let rel = format!("{prefix}{name}");
+        if name.starts_with('.') {
+            scan.omitted.push(rel);
+            continue;
         }
         let Ok(meta) = fs::symlink_metadata(entry.path()) else {
             scan.problems.push(format!("{rel}: cannot be read"));
@@ -927,21 +930,14 @@ fn source_path(raw: &str, home: &Path) -> Result<PathBuf, String> {
     Ok(path)
 }
 
-/// Removes staging folders older than a preview token. A failure only leaves them in place.
+/// Removes the staging folders of earlier previews: the dialog imports only from the latest one, so
+/// staging never holds more than one preview. A failure only leaves them in place.
 fn prune_staging(staging: &Path) {
     let Ok(entries) = fs::read_dir(staging) else {
         return;
     };
     for entry in entries.flatten() {
-        let old = entry
-            .metadata()
-            .and_then(|meta| meta.modified())
-            .ok()
-            .and_then(|modified| modified.elapsed().ok())
-            .is_some_and(|age| age.as_secs() >= STAGING_TTL_SECS);
-        if old {
-            let _ = crate::safe_filesystem::remove_dir_no_symlinks(&entry.path(), staging);
-        }
+        let _ = crate::safe_filesystem::remove_dir_no_symlinks(&entry.path(), staging);
     }
 }
 
@@ -985,7 +981,10 @@ pub fn preview_skill_import(paths: Vec<String>) -> Result<SkillImportPreview, St
             }
         };
         let shown = crate::skill_loads::display_path(&path, &home);
-        if path.starts_with(crate::skill_sources::packs_dir(&root)) {
+        let canonical = |p: &Path| p.canonicalize().unwrap_or_else(|_| p.to_path_buf());
+        if canonical(&path).starts_with(canonical(&crate::skill_sources::packs_dir(&root)))
+            || canonical(&path).starts_with(canonical(&crate::workspace_layout::state_dir(&root)))
+        {
             problems.push(format!("{shown}: is in the packs folder already"));
             continue;
         }
@@ -1246,6 +1245,21 @@ fn read_record(root: &Path) -> Result<RecordDocument, String> {
     if document.schema_version != RECORD_SCHEMA {
         return Err("the import record is of another version; it is left as it is".to_string());
     }
+    // Names in the record become paths: a record changed by hand is not used.
+    let names_ok = document
+        .skills
+        .keys()
+        .all(|name| valid_spec_skill_name(name))
+        && document
+            .events
+            .iter()
+            .all(|event| valid_spec_skill_name(&event.name));
+    if !names_ok {
+        return Err(
+            "the import record names a skill that is no skill name; it is left as it is"
+                .to_string(),
+        );
+    }
     Ok(document)
 }
 
@@ -1326,7 +1340,17 @@ fn back_up(dir: &Path, name: &str) -> Result<String, String> {
 }
 
 fn backup_dir(label: &str, name: &str) -> Result<PathBuf, String> {
-    if label.contains(['/', '\\']) || label.starts_with('.') || !valid_spec_skill_name(name) {
+    // `<name>-<pid>-<nanos>`, as [`back_up`] names it.
+    let stamp = label
+        .strip_prefix(name)
+        .and_then(|rest| rest.strip_prefix('-'))
+        .and_then(|rest| rest.split_once('-'))
+        .filter(|(pid, nanos)| {
+            [pid, nanos]
+                .iter()
+                .all(|part| !part.is_empty() && part.chars().all(|c| c.is_ascii_digit()))
+        });
+    if stamp.is_none() || !valid_spec_skill_name(name) {
         return Err("the backup of this import is not usable".to_string());
     }
     Ok(super::backups::backup_root()?

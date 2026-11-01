@@ -608,6 +608,14 @@ mod tests {
             env.record()["skills"]["release-notes-plus"]["source"],
             "~/Downloads/release-notes-plus"
         );
+
+        // A record changed by hand to name a path is not used.
+        let record_path = env.ws.join("packs/imported/.riggverk-imports.json");
+        let mut record = env.record();
+        record["events"][0]["name"] = serde_json::json!("../../victim");
+        fs::write(&record_path, serde_json::to_vec(&record).expect("json")).expect("tamper");
+        let error = undo_last_import().expect_err("refused");
+        assert!(error.contains("no skill name"), "{error}");
     }
 
     #[test]
