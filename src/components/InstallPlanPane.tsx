@@ -126,7 +126,7 @@ function SummaryBand({ counts, rows, phase }: { counts: PlanCounts; rows: readon
         <b>
           {phase === "done" ? `${plural(safe, "change")} applied` : plural(safe, "safe change")} · {plural(files, "file")}
         </b>
-        <span>{phase === "done" ? "Undo puts the backed-up files back and removes the new ones" : backupSentence(counts)}</span>
+        <span>{phase === "done" ? "Undo puts the backed-up files back and removes the new ones" : backupSentence(rows)}</span>
       </p>
     </div>
   );

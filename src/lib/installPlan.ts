@@ -364,18 +364,26 @@ export function summaryTiles(counts: PlanCounts): SummaryTile[] {
 const FILES_IN_NOTE = /\b(\d+) files?\b/;
 
 /**
- * How many files the safe rows write: a row that names its file count ("17 skills, 17 files") counts that many, any
- * other row one. Only as exact as the backend's notes.
+ * How many files a row stands for: a row that names its file count ("17 skills, 17 files") counts that many, any other
+ * row one. Only as exact as the backend's notes; every file figure of the review uses it, so they agree.
  */
-export function planFileCount(rows: readonly PlanRow[]): number {
-  return rows.filter(row => row.safe).reduce((total, row) => total + Number(FILES_IN_NOTE.exec(row.note)?.[1] ?? 1), 0);
+export function rowFileCount(row: Pick<PlanRow, "note">): number {
+  return Number(FILES_IN_NOTE.exec(row.note)?.[1] ?? 1);
 }
 
-/** The band's backup sentence: what exists and is backed up before anything is written. */
-export function backupSentence(counts: PlanCounts): string {
-  const existing = counts.update + counts.remove;
+/** How many files the safe rows write (`rowFileCount`). */
+export function planFileCount(rows: readonly PlanRow[]): number {
+  return rows.filter(row => row.safe).reduce((total, row) => total + rowFileCount(row), 0);
+}
+
+/**
+ * The band's backup sentence: the files that exist and are backed up before anything is written (the update and
+ * remove rows, counted like `planFileCount`).
+ */
+export function backupSentence(rows: readonly PlanRow[]): string {
+  const existing = rows.filter(row => row.kind === "update" || row.kind === "remove").reduce((total, row) => total + rowFileCount(row), 0);
   if (existing > 0) return `${plural(existing, "existing file")} ${existing === 1 ? "is" : "are"} backed up before anything is written`;
-  return counts.create > 0 ? "Nothing that exists is overwritten; Undo removes what is created" : "Nothing is written";
+  return rows.some(row => row.kind === "create") ? "Nothing that exists is overwritten; Undo removes what is created" : "Nothing is written";
 }
 
 /**

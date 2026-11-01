@@ -414,8 +414,9 @@ describe("the plan per agent", () => {
     ]);
     // A row that names its files counts them; any other row is one file.
     expect(planFileCount(planRows(groups))).toBe(17 + 17 + 1 + 1 + 1 + 1 + 1 + 1);
-    expect(backupSentence(counts)).toBe("6 existing files are backed up before anything is written");
-    expect(backupSentence(countPlanRows(buildPlanGroups(review([op("claude_rules", "create")], ["claude_rules"]))))).toBe(
+    // The backed-up files are counted like the file total: the one ~/.claude/skills update row is 17 files.
+    expect(backupSentence(planRows(groups))).toBe(`${17 + 1 + 1 + 1 + 1 + 1} existing files are backed up before anything is written`);
+    expect(backupSentence(planRows(buildPlanGroups(review([op("claude_rules", "create")], ["claude_rules"]))))).toBe(
       "Nothing that exists is overwritten; Undo removes what is created",
     );
     expect(summaryTiles({ ...counts, manual: 1 }).map(tile => tile.kind)).toContain("manual");
