@@ -23,6 +23,7 @@ if sys.version_info < (3, 11):
     )
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -120,6 +121,38 @@ def nonempty(root: Path, files: list[str]) -> list[str]:
         if not path.is_file() or path.stat().st_size == 0:
             errors.append(f"bundled file missing or empty: {W}{rel}")
     return errors
+
+
+# --- security-audit vendor lock ---------------------------------------------------------------
+VENDOR = f"{W}skills/security-audit/"
+VENDOR_MANIFEST = "## SHA-256 manifest\n"
+
+
+def security_audit(root: Path, files: list[str]) -> list[str]:
+    upstream = root / VENDOR / "UPSTREAM.md"
+    message = "update UPSTREAM.md after reviewing the change"
+    try:
+        content = upstream.read_bytes()
+        before, marker, manifest = content.partition(VENDOR_MANIFEST.encode())
+        if not marker:
+            raise ValueError("missing manifest")
+        recorded = {}
+        for line in manifest.decode("utf-8").splitlines():
+            match = re.fullmatch(r"([0-9a-f]{64})  (.+)", line)
+            if not match or match[2] in recorded:
+                raise ValueError("invalid manifest")
+            recorded[match[2]] = match[1]
+        actual = {}
+        for rel in files:
+            if rel.startswith(VENDOR):
+                name = rel[len(VENDOR):]
+                data = before if name == "UPSTREAM.md" else (root / rel).read_bytes()
+                actual[name] = hashlib.sha256(data).hexdigest()
+        if recorded != actual:
+            raise ValueError("files or digests differ")
+    except (OSError, UnicodeError, ValueError) as exc:
+        return [f"{VENDOR}: {exc}; {message}"]
+    return []
 
 
 # --- symlinks --------------------------------------------------------------------------------
@@ -526,6 +559,7 @@ Check = Callable[[Path, list[str]], list[str]]
 GROUPS: dict[str, tuple[tuple[Rule, ...], Check | None]] = {
     "codex": ((), codex),
     "nonempty": ((), nonempty),
+    "security-audit": ((), security_audit),
     "symlinks": ((), symlinks),
     "json": ((), strict_json),
     "playwright": (PLAYWRIGHT_RULES, None),
