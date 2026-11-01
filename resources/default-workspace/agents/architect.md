@@ -144,12 +144,43 @@ permission:
     "pwd": allow
     "ls*": allow
     "tree": allow
-    "tree *": allow
+    "tree -a": allow
+    "tree -d": allow
+    "tree -L ?": allow
+    "tree -a -L ?": allow
+    "tree -d -L ?": allow
     "find *": allow
     "git status*": allow
-    "git diff*": allow
-    "git log*": allow
-    "git show*": allow
+    "git diff": allow
+    "git diff --stat": allow
+    "git diff --cached": allow
+    "git diff --staged": allow
+    "git diff --name-only": allow
+    "git diff --name-status": allow
+    "git diff --cached --stat": allow
+    "git diff --cached --name-only": allow
+    "git diff HEAD": allow
+    "git diff HEAD --stat": allow
+    "git diff HEAD~?": allow
+    "git diff HEAD~? --stat": allow
+    "git log": allow
+    "git log -?": allow
+    "git log -??": allow
+    "git log --oneline": allow
+    "git log --oneline -?": allow
+    "git log --oneline -??": allow
+    "git log --oneline --decorate": allow
+    "git log --oneline --graph": allow
+    "git log --oneline --graph -??": allow
+    "git log --stat -?": allow
+    "git show": allow
+    "git show HEAD": allow
+    "git show HEAD~?": allow
+    "git show --stat": allow
+    "git show --stat HEAD": allow
+    "git show --stat HEAD~?": allow
+    "git show --name-only HEAD": allow
+    "git show --name-status HEAD": allow
     "git branch": allow
     "git branch --list*": allow
     "git branch --show-current": allow
@@ -218,19 +249,6 @@ permission:
     "git rebase*": ask
     "git stash*": ask
     "git tag*": ask
-    "git difftool*": ask
-    "git diff*--output*": ask
-    "git log*--output*": ask
-    "git show*--output*": ask
-    "git diff*--ext-diff*": ask
-    "git log*--ext-diff*": ask
-    "git show*--ext-diff*": ask
-    "git diff*--textconv*": ask
-    "git log*--textconv*": ask
-    "git show*--textconv*": ask
-    "git diff*--no-index*": ask
-    "tree -*": ask
-    "tree * -*": ask
     "cp *": ask
     "mv *": ask
     "npm run dev*": ask

@@ -18,7 +18,8 @@
       "sha256:bc9608cba3766987e207af0dc67a9d9a860138e53ecc3b17de58c24c315e1d83",
       "sha256:e3d487e7f2d911e2b72dfa131572ab7ffcd300d052ca2b863a1ef5050bcdbf85",
       "sha256:ea0ebf3d06c04f96a8b6ddd5dca4adea7a420346698d49282d27360f397c8d8c",
-      "sha256:eb4b46355dd22c8f0299cc4507805e7019807ff64ea497de5d578a8e6b1a6146"
+      "sha256:eb4b46355dd22c8f0299cc4507805e7019807ff64ea497de5d578a8e6b1a6146",
+      "sha256:f7e14c8dcc7e6ba6c44edea1152ee471b95c7339426428c7b2a716ee564e1681"
     ],
     "agents/autopilot.md": [
       "sha256:380f0714edc670c6d0a5ebb55cd40ce44efedc6248b300e8608e476050c16e6d",
@@ -284,7 +285,8 @@
     ],
     "skills/delegate/delegate-recipes.md": [
       "sha256:4a62b565587e153a924a26f28dfda0d9a52b9262c5eb015350f1c59e58cc3fcf",
-      "sha256:978a5806bdd037656d83d435b4eafba6e2fbcc361131a8a89d7ac23d04af6fc3"
+      "sha256:978a5806bdd037656d83d435b4eafba6e2fbcc361131a8a89d7ac23d04af6fc3",
+      "sha256:c82fc3d82fe46930bda7e2855e3b9fc2f5f13836311aa93bedf1f70499efe55f"
     ],
     "skills/dependency-evaluation/SKILL.md": [
       "sha256:270a48d2edc996abcffd4c81012c61492d0484401810a7324eb46344b48398fd",

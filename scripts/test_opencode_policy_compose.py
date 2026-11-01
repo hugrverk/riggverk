@@ -456,6 +456,43 @@ class TestArchitect(unittest.TestCase):
         late_allows = [pattern for pattern, action in bash[guard + 1 :] if action == "allow"]
         self.assertEqual(late_allows, [])
 
+    def test_git_and_tree_allows_are_fixed_forms_without_a_star(self) -> None:
+        # A `*` allow cannot be made safe: OpenCode matches the source text, so shell quoting hides a
+        # guarded option (`--out''put`), and its matcher reads a backslash as `/`.
+        for pattern, action in self.perm["bash"].items():
+            if action == "allow" and pattern.startswith(("git diff", "git log", "git show", "git fetch", "git difftool", "tree")):
+                with self.subTest(pattern=pattern):
+                    self.assertNotIn("*", pattern)
+
+    def test_delegate_recipe_opencode_agent_has_no_quoting_bypass(self) -> None:
+        import re
+
+        recipes = REPO_ROOT / "resources" / "default-workspace" / "skills" / "delegate" / "delegate-recipes.md"
+        match = re.search(r"OPENCODE_CONFIG_CONTENT='(\{.*?\})' \\\n", recipes.read_text(encoding="utf-8"))
+        self.assertIsNotNone(match)
+        perm = json.loads(match.group(1))["agent"]["riggverk-delegate"]["permission"]
+        perm["bash"]["npm test"] = perm["bash"].pop("<check command>")
+        cases = [
+            ("git status", "allow"),
+            ("git diff", "allow"),
+            ("git diff --stat", "allow"),
+            ("git add src/a.ts", "allow"),
+            ("git commit -m x", "allow"),
+            ("npm test", "allow"),
+            ("git diff --output=x", "deny"),
+            ("git diff --out''put=x", "deny"),
+            ('git diff --out"put"=x', "deny"),
+            ("git diff --out\\put=x", "deny"),
+            ("git diff $'--output'=x", "deny"),
+            ("git diff /dev/null .env", "deny"),
+            ("git difftool", "deny"),
+            ("git config core.fsmonitor ./hook", "deny"),
+            ("git push", "deny"),
+        ]
+        for command, expected in cases:
+            with self.subTest(command=command):
+                self.assertEqual(effective_bash_action(perm, command), expected)
+
     def test_read_denies_credential_config(self) -> None:
         for path, expected in READ_ACTIONS:
             with self.subTest(path=path):
