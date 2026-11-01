@@ -1090,11 +1090,11 @@ function applyPlan(surfaces: SetupSurfaceId[]): SetupResult {
       before.push([surface, state]);
       changes.push({ surface, kind: state === "not_installed" ? "create" : "update", path: SURFACE_PATHS[surface], applied: true, restored: false });
       surfaceStates.set(surface, "current");
-      // A rules file Riggverk writes is the managed block, as the backend would read it back.
+      // A rules file Riggverk writes is the managed block, as the backend would read it back; a new one has no refinements.
       const rules = rulesFiles.get(surface as RulesSurfaceId);
       if (rules) {
         rulesBefore.push([surface as RulesSurfaceId, { ...rules }]);
-        rulesFiles.set(surface as RulesSurfaceId, { ...RULES_VARIANTS.current!.file });
+        rulesFiles.set(surface as RulesSurfaceId, rules.layout === "block" ? { ...rules } : { layout: "block", refinement_lines: 0, user_managed: false });
       }
       applied.push(SURFACE_PATHS[surface]);
       if (surface === "open_code_config") {
@@ -2059,6 +2059,9 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
       if (!lastTransactionId || id !== lastTransactionId) {
         return { success: false, transaction_id: id, applied: [], failed: [id], rolled_back: [], manual_steps: [], message: `transaction ${id} not found` } satisfies SetupResult;
       }
+      // What the run wrote, from its history entry; the older fixed pair for a run the history does not list.
+      const recorded = historyLog.find(entry => entry.transaction_id === id)?.changes.map(change => change.path);
+      const restored = recorded?.length ? recorded : ["~/.claude/CLAUDE.md", "~/.claude/agents/verifier.md"];
       if (!dryRun) {
         const snapshot = rulesSnapshots.get(id);
         const replaced = takeBundledSnapshots.get(id);
@@ -2092,9 +2095,8 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
         markHistoryUndone(id);
         lastTransactionId = null;
       }
-      const restored = ["~/.claude/CLAUDE.md", "~/.claude/agents/verifier.md"];
       // Like the backend: a dry run lists what would be restored under `applied`; a real run under `rolled_back`.
-      return { success: true, transaction_id: id, applied: dryRun ? restored : [], failed: [], rolled_back: dryRun ? [] : restored, manual_steps: [], message: dryRun ? "Dry run: would restore 2 artifact(s); 0 already restored; 0 conflicted" : "restored 2 files" } satisfies SetupResult;
+      return { success: true, transaction_id: id, applied: dryRun ? restored : [], failed: [], rolled_back: dryRun ? [] : restored, manual_steps: [], message: dryRun ? `Dry run: would restore ${restored.length} artifact(s); 0 already restored; 0 conflicted` : `restored ${restored.length} files` } satisfies SetupResult;
     }
     case "preview_uninstall":
       await delay(200);
