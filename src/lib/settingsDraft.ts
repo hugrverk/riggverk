@@ -1,3 +1,4 @@
+import { useSyncExternalStore } from "react";
 import type { AppSettings } from "../types";
 import { DEFAULT_ENABLED_HARNESS_IDS, DEFAULT_ENABLED_TARGET_IDS } from "./harnessInstallation";
 import { applyMotionSetting } from "./motion";
@@ -251,6 +252,15 @@ export function subscribeToColorScheme(onChange: () => void): () => void {
     return () => query.removeListener(onChange);
   }
   return () => {};
+}
+
+/** Whether the OS is in light appearance right now; re-renders when that changes (the system theme follows it). */
+export function useSystemPrefersLight(): boolean {
+  return useSyncExternalStore(
+    subscribeToColorScheme,
+    () => window.matchMedia?.(LIGHT_SCHEME_QUERY).matches === true,
+    () => false,
+  );
 }
 
 function applyThemeColors(settings: AppSettings): void {

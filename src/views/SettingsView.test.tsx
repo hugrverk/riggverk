@@ -398,6 +398,26 @@ describe("SettingsView colour fields", () => {
     expect(within(pane("Appearance")).getByRole("status").textContent).toContain("below 4.5:1");
   });
 
+  it("updates the colour warnings when macOS switches appearance under the system theme", () => {
+    const listeners = new Set<() => void>();
+    let light = false;
+    // Only the colour-scheme query changes, so no other subscriber (reduced motion) re-renders the view.
+    const scheme = (query: string) => query.includes("prefers-color-scheme");
+    window.matchMedia = ((query: string) => ({
+      get matches() { return scheme(query) && (query.includes("light") ? light : !light); },
+      media: query,
+      addEventListener: (_: string, listener: () => void) => { if (scheme(query)) listeners.add(listener); },
+      removeEventListener: (_: string, listener: () => void) => listeners.delete(listener),
+    })) as unknown as typeof window.matchMedia;
+    renderSettings({ appSettings: { ...defaultSettings(), appearance: "system", background_color: "#212121" } });
+    expect(within(pane("Appearance")).queryByRole("status")).toBeNull();
+    act(() => {
+      light = true;
+      listeners.forEach(listener => listener());
+    });
+    expect(within(pane("Appearance")).getByRole("status").textContent).toContain("dark on the light theme, so it is not used");
+  });
+
   it("shows no contrast warning for a readable pair", () => {
     renderSettings({
       appSettings: { ...defaultSettings(), foreground_color: "#ffffff", background_color: "#000000" },
