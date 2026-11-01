@@ -518,6 +518,7 @@ function applyRulesConversion(surface: RulesSurfaceId, fingerprint: string | nul
   surfaceStates.set(surface, "current");
   lastTransactionId = id;
   backups.unshift({ id, timestamp: new Date().toISOString(), path: `${BACKUP_ROOT}/${id}`, targets: [surface], file_count: 1 });
+  recordSurfaceRun(id, surface, [SURFACE_PATHS[surface]]);
   return {
     success: true,
     transaction_id: id,
@@ -807,6 +808,7 @@ function applyTakeBundled(surface: FilesSurfaceId, keys: string[], fingerprint: 
   lastTransactionId = id;
   const applied = unit.files.map(file => `${unit.folder}/${unit.kind === "skill" ? `${unit.name}/` : ""}${file.rel}`);
   backups.unshift({ id, timestamp: new Date().toISOString(), path: `${BACKUP_ROOT}/${id}`, targets: [surface], file_count: applied.length });
+  recordSurfaceRun(id, surface, applied);
   return {
     success: true,
     transaction_id: id,
@@ -903,6 +905,7 @@ function applyCodexDefaults(fingerprint: string | null, token: string | null): S
   surfaceStates.set("codex_config", "current");
   lastTransactionId = id;
   backups.unshift({ id, timestamp: new Date().toISOString(), path: `${BACKUP_ROOT}/${id}`, targets: ["codex_config"], file_count: 1 });
+  recordSurfaceRun(id, "codex_config", [SURFACE_PATHS.codex_config]);
   return {
     success: true,
     transaction_id: id,
@@ -1055,6 +1058,8 @@ function setupPlan(surfaces: SetupSurfaceId[]): SetupPlan {
 let setupPreview: { surfaces: SetupSurfaceId[]; fingerprint: string; token: string } | null = null;
 /** What each install run changed, to put the surfaces back when it is undone. */
 const installSnapshots = new Map<string, Array<[SetupSurfaceId, InstallationState]>>();
+/** The rules files an install run wrote over, by transaction, so its rollback puts them back too. */
+const installRulesSnapshots = new Map<string, Array<[RulesSurfaceId, RulesStatus]>>();
 
 function previewSetup(surfaces: SetupSurfaceId[]): SetupPlan {
   const plan = setupPlan(surfaces);
@@ -1078,12 +1083,19 @@ function applyPlan(surfaces: SetupSurfaceId[]): SetupResult {
   const operations = surfaces.map(plannedOperation);
   const before: Array<[SetupSurfaceId, InstallationState]> = [];
   const changes: SetupHistoryEntry["changes"] = [];
+  const rulesBefore: Array<[RulesSurfaceId, RulesStatus]> = [];
   for (const surface of surfaces) {
     const state = surfaceStates.get(surface);
     if (state === "not_installed" || state === "update_available") {
       before.push([surface, state]);
       changes.push({ surface, kind: state === "not_installed" ? "create" : "update", path: SURFACE_PATHS[surface], applied: true, restored: false });
       surfaceStates.set(surface, "current");
+      // A rules file Riggverk writes is the managed block, as the backend would read it back.
+      const rules = rulesFiles.get(surface as RulesSurfaceId);
+      if (rules) {
+        rulesBefore.push([surface as RulesSurfaceId, { ...rules }]);
+        rulesFiles.set(surface as RulesSurfaceId, { ...RULES_VARIANTS.current!.file });
+      }
       applied.push(SURFACE_PATHS[surface]);
       if (surface === "open_code_config") {
         installedModelSelection = { ...modelSelection };
@@ -1101,6 +1113,7 @@ function applyPlan(surfaces: SetupSurfaceId[]): SetupResult {
     file_count: applied.length,
   });
   installSnapshots.set(lastTransactionId, before);
+  installRulesSnapshots.set(lastTransactionId, rulesBefore);
   recordInstallRun(lastTransactionId, surfaces, changes, operations);
   return {
     success: true,
@@ -1111,6 +1124,11 @@ function applyPlan(surfaces: SetupSurfaceId[]): SetupResult {
     manual_steps: [],
     message: `applied ${applied.length} · preserved ${surfaces.length - applied.length} · failed 0 · transaction ${lastTransactionId} recorded`,
   };
+}
+
+/** A run that updated files of one surface (a conversion, Riggverk's defaults, a bundled version): in the history too. */
+function recordSurfaceRun(id: string, surface: SetupSurfaceId, paths: string[]): void {
+  recordInstallRun(id, [surface], paths.map(path => ({ surface, kind: "update", path, applied: true, restored: false })), []);
 }
 
 /** A finished install run in the history, newest first; the offer to undo moves to it, like the backend's. */
@@ -1623,14 +1641,15 @@ const configSources: ConfigEditorSourceMeta[] = [
 ];
 
 const configStore = new Map<string, DocumentContent>([
-  ["base", { id: "opencode_config:base", title: "base Config", path: "templates/opencode.base.json", section: "", source: "curated", content: "{\n  \"$schema\": \"https://opencode.ai/config.json\",\n  \"model\": \"anthropic/claude-sonnet-4-5\",\n  \"small_model\": \"anthropic/claude-haiku-4-5\",\n  \"autoupdate\": true\n}\n" }],
+  ["base", { id: "opencode_config:base", title: "base Config", path: "templates/opencode.base.json", section: "", source: "curated", content: "{\n  \"$schema\": \"https://opencode.ai/config.json\",\n  \"autoupdate\": \"notify\"\n}\n" }],
   ["policy", { id: "opencode_config:policy", title: "policy Config", path: "templates/opencode.policy.json", section: "", source: "curated", content: "{\n  \"permission\": { \"bash\": \"ask\", \"edit\": \"allow\" }\n}\n" }],
-  ["snapshot", { id: "opencode_config:snapshot", title: "snapshot Config", path: "templates/opencode.json", section: "", source: "curated", content: "{\n  \"model\": \"anthropic/claude-sonnet-4-5\",\n  \"permission\": { \"bash\": \"ask\", \"edit\": \"allow\" }\n}\n" }],
+  ["snapshot", { id: "opencode_config:snapshot", title: "snapshot Config", path: "templates/opencode.json", section: "", source: "curated", content: "{\n  \"permission\": { \"bash\": \"ask\", \"edit\": \"allow\" }\n}\n" }],
 ]);
 
+// Like the shipped templates: Riggverk sets no model, so the agent's own default applies until the user picks one.
 const BUNDLED_MODEL_SELECTION: OpenCodeModelSelection = {
-  model: "anthropic/claude-sonnet-4-5",
-  small_model: "anthropic/claude-haiku-4-5",
+  model: "",
+  small_model: "",
   subagent_model: "",
   critic_model: "",
   model_source: "bundled default",
@@ -2064,7 +2083,9 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
         } else if (installSnapshots.has(id)) {
           // An install run: put back exactly the surfaces it changed.
           for (const [surface, state] of installSnapshots.get(id)!) surfaceStates.set(surface, state);
+          for (const [surface, file] of installRulesSnapshots.get(id) ?? []) rulesFiles.set(surface, file);
           installSnapshots.delete(id);
+          installRulesSnapshots.delete(id);
         } else {
           for (const surface of ["claude_rules", "claude_agents", "skills"] as SetupSurfaceId[]) surfaceStates.set(surface, "update_available");
         }
@@ -2200,8 +2221,8 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
       const subagent = validatedModelId(arg<string | null>(args, "subagentModel") ?? "", true);
       const critic = validatedModelId(arg<string | null>(args, "criticModel") ?? "", true);
       // Like the backend: a value equal to the bundled default is not an override.
-      const model = validatedModelId(arg<string>(args, "model"));
-      const small = validatedModelId(arg<string>(args, "smallModel"));
+      const model = validatedModelId(arg<string>(args, "model") ?? "", true);
+      const small = validatedModelId(arg<string>(args, "smallModel") ?? "", true);
       modelSelection = {
         model,
         small_model: small,
