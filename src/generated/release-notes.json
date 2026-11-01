@@ -1,6 +1,17 @@
 {
   "releases": [
     {
+      "version": "2026.11.3",
+      "sections": [
+        {
+          "title": "Changes",
+          "items": [
+            "The `status-report` skill's HTML report uses the same silver accent as the app"
+          ]
+        }
+      ]
+    },
+    {
       "version": "2026.11.2",
       "sections": [
         {
