@@ -32,11 +32,17 @@ if ! xcrun --find swift >/dev/null 2>&1; then
   exit 1
 fi
 
-renderer="scripts/render-macos-pyramid-icons.swift"
+renderer="scripts/render-macos-rune-icons.swift"
+icon_source="assets/icon-source.svg"
 output_icon="src-tauri/macos/Riggverk.icns"
 
 if [ ! -f "$renderer" ]; then
   printf 'FAIL: missing macOS app icon renderer: %s\n' "$renderer" >&2
+  exit 1
+fi
+
+if [ ! -f "$icon_source" ]; then
+  printf 'FAIL: missing macOS app icon source: %s\n' "$icon_source" >&2
   exit 1
 fi
 
@@ -50,7 +56,7 @@ trap cleanup EXIT
 swift_bin="$(xcrun --find swift)"
 swift_cache_dir="${CLANG_MODULE_CACHE_PATH:-$work_dir/clang-module-cache}"
 mkdir -p "$swift_cache_dir" "$rendered_dir" "$(dirname "$output_icon")"
-CLANG_MODULE_CACHE_PATH="$swift_cache_dir" "$swift_bin" "$renderer" "$rendered_dir"
+CLANG_MODULE_CACHE_PATH="$swift_cache_dir" "$swift_bin" "$renderer" "$icon_source" "$rendered_dir"
 
 make_iconset() {
   local mode="$1"
@@ -133,7 +139,7 @@ if b"dark" not in record_types:
 for required in (b"ic07", b"ic08", b"ic09", b"ic10"):
     if required not in record_types:
         raise SystemExit(f"FAIL: generated icon is missing {required.decode('latin1')} slot")
-print("generated iconutil pyramid nested dark macOS icon")
+print("generated iconutil rune nested dark macOS icon")
 PY
 
 if [ ! -s "$output_icon" ]; then
