@@ -193,15 +193,19 @@ function listJoin(items: readonly string[]): string {
   return `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
 }
 
-/** The state of a row while the apply runs and after it: queued, writing, written, or skipped and left to you. */
+/**
+ * The state of a row while the apply runs and after it. During the run only where it is: pending, writing (its agent
+ * is the one the newest progress report names) or reached (the run moved on from its agent); a row is written only
+ * once the run succeeded. A conflict is skipped, a manual step left to you.
+ */
 function rowState(row: PlanRow, phase: PlanPhase, agentCurve: (agent: PlanAgentId) => PlanCurve | null): { text: string; tone: string } {
   if (row.conflict) return { text: "skipped", tone: "dim" };
   if (!row.safe) return { text: "left to you", tone: "dim" };
   if (phase === "done") return { text: "✓ written", tone: "ok" };
   const curve = agentCurve(planRowAgent(row));
-  if (curve === "written") return { text: "✓ written", tone: "ok" };
   if (curve === "live") return { text: "writing…", tone: "live" };
-  return { text: "queued", tone: "dim" };
+  if (curve === "seen") return { text: "reached", tone: "seen" };
+  return { text: "pending", tone: "dim" };
 }
 
 function GroupIcon({ agent }: { agent: PlanAgentId }) {
@@ -534,9 +538,9 @@ export function InstallPlanPane({
     if (phase === "done") return { text: "in sync", tone: "ok" };
     if (phase !== "applying" || !group.rows.some(row => row.safe)) return null;
     const curve = agentCurve(group.agent);
-    if (curve === "written") return { text: "written", tone: "ok" };
     if (curve === "live") return { text: "writing", tone: "live" };
-    return { text: "queued", tone: "dim" };
+    if (curve === "seen") return { text: "reached", tone: "seen" };
+    return { text: "pending", tone: "dim" };
   };
 
   return (
@@ -695,7 +699,8 @@ export function InstallPlanPane({
 
 /**
  * Where the apply is in the shared folders (`~/.agents/skills`), which belong to no agent's folder: a file the trace
- * cannot give an agent is shared, and once the run moves on to an agent's file the shared ones are written.
+ * cannot give an agent is shared, and once the run moves on to an agent's file the shared folder has been reached.
+ * Like the agents, it is written only once the run succeeded.
  */
 function useSharedProgress(phase: PlanPhase | null, progress: ApplyProgress | null, trace: RunTrace | null): PlanCurve | null {
   const [state, setState] = useState<PlanCurve>("write");
@@ -705,9 +710,8 @@ function useSharedProgress(phase: PlanPhase | null, progress: ApplyProgress | nu
       return;
     }
     if (progress?.phase === "apply" && progress.file && trace && trace.current === null) setState("live");
-    else if (trace?.current) setState(previous => (previous === "live" ? "written" : previous));
+    else if (trace?.current) setState(previous => (previous === "live" ? "seen" : previous));
   }, [phase, progress, trace]);
   if (phase === "done") return "written";
-  if (phase === "applying" && !trace) return "live";
   return phase === "applying" ? state : null;
 }

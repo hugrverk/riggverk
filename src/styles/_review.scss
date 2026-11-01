@@ -536,6 +536,7 @@
 .flow-ln.plan-ln.is-sync { opacity: 0.55; }
 .flow-ln.plan-ln.is-written { stroke: var(--ok); stroke-dasharray: none; opacity: 0.9; }
 .flow-ln.plan-ln.live { stroke: var(--ready); stroke-dasharray: none; opacity: 1; }
+.flow-ln.plan-ln.is-seen { stroke: var(--text); stroke-dasharray: 3 4; opacity: 0.9; }
 
 .plan-svg.has-hl .flow-ln { opacity: 0.12; }
 .plan-svg.has-hl .flow-ln.hl { opacity: 1; }
@@ -580,6 +581,7 @@
 .plan-legend .lg-kept { border-top-style: dotted; border-color: var(--decide); }
 .plan-legend .lg-sync { border-top-style: solid; border-color: var(--border-strong); }
 .plan-legend .lg-written { border-top-style: solid; border-color: var(--ok); }
+.plan-legend .lg-live { border-top-style: solid; border-color: var(--ready); }
 
 .plan-progress,
 .plan-done {
@@ -636,6 +638,7 @@
 
 .plan-card .plan td.state.is-ok { color: var(--ok); }
 .plan-card .plan td.state.is-live { color: var(--text); }
+.plan-card .plan td.state.is-seen { color: var(--text); }
 .plan-card .plan tr.is-written .rv-mark:not(.rv-mark-conflict) { background: var(--ok); color: var(--ok); }
 .plan-card .plan td.file { min-width: 22ch; }
 
@@ -667,7 +670,8 @@
 }
 
 .plan-card .plan .gh-state.is-ok { color: var(--ok); }
-.plan-card .plan .gh-state.is-live { color: var(--text); }
+.plan-card .plan .gh-state.is-live,
+.plan-card .plan .gh-state.is-seen { color: var(--text); }
 
 .plan-card .plan .gh-end {
   display: inline-flex;

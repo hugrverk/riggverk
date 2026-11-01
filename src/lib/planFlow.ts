@@ -12,11 +12,12 @@ import { writeChip, writeCounts, writeLine, writesOf, type AgentPlan, type Write
 export type PlanPhase = "review" | "applying" | "done";
 
 /**
- * How the base's curve to an agent is drawn: `write` dashed (apply will write), `kept` dotted (only a conflict, which
- * apply never writes), `sync` thin and solid (nothing to write), `live` the agent being written, `written` solid in
- * the ok hue.
+ * How the base's curve to an agent is drawn: `write` dashed (apply will write; while it runs, not reached yet), `kept`
+ * dotted (only a conflict, which apply never writes), `sync` thin and solid (nothing to write), `live` the agent the
+ * newest progress report names, `seen` an agent the run has reported and moved on from, `written` solid in the ok
+ * hue, only once the run succeeded.
  */
-export type PlanCurve = "write" | "kept" | "sync" | "live" | "written";
+export type PlanCurve = "write" | "kept" | "sync" | "live" | "seen" | "written";
 
 /** The hue of a chip's text; the sign and the word in it always say the same. */
 export type PlanChipTone = "create" | "update" | "remove" | "conflict" | "ok" | "live";
@@ -76,12 +77,11 @@ function agentState(
     return { curve: "written", chip: kept > 0 ? `✓ ${writes} · ■ ${kept}` : `✓ ${writes}`, tone: "ok", sub: kept > 0 ? `in sync · ${kept} yours` : "in sync" };
   }
   if (phase === "applying") {
-    const files = trace?.counts[id] ?? 0;
-    const fileText = `${files} ${files === 1 ? "file" : "files"}`;
-    // Without a trace (no agent folders to read files by) every agent being written counts as live.
-    if (!trace || trace.current === id) return { curve: "live", chip: trace ? `${files} written` : "writing", tone: "live", sub: trace ? `writing ${fileText}…` : "writing…" };
-    if (trace.seen.includes(id)) return { curve: "written", chip: `✓ ${fileText}`, tone: "ok", sub: `written · ${fileText}` };
-    return { curve: "write", chip: writeChip(counts), tone: reviewTone(counts), sub: `queued · ${writeLine(counts)}` };
+    // Progress reports are rate-limited and name one file at a time: they show where the run is, never that an agent
+    // is fully written or how many of its files are. Nothing is "written" before the run has succeeded.
+    if (trace?.current === id) return { curve: "live", chip: "writing…", tone: "live", sub: "writing…" };
+    if (trace?.seen.includes(id)) return { curve: "seen", chip: writeChip(counts), tone: reviewTone(counts), sub: `reached · ${writeLine(counts)}` };
+    return { curve: "write", chip: writeChip(counts), tone: reviewTone(counts), sub: `pending · ${writeLine(counts)}` };
   }
   return { curve: "write", chip: writeChip(counts), tone: reviewTone(counts), sub: writeLine(counts) };
 }

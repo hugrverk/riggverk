@@ -532,16 +532,19 @@ describe("InstallPlanPane: band, map and states", () => {
     expect(onOpenAgent).toHaveBeenCalledWith("cursor");
   });
 
-  it("ticks the rows agent by agent while the apply runs", () => {
+  it("shows where the apply is while it runs, and claims nothing written before it succeeded", () => {
     const trace = { current: "claude" as const, seen: ["codex" as const, "claude" as const], counts: { codex: 3, claude: 1 }, files: [] };
     renderPane(agentFlow("applying"), { trace, progress: { task: "apply_setup", phase: "apply", done: 4, total: 8, file: "~/.claude/CLAUDE.md" } });
     const stateOf = (file: string) => within(grid()).getByText(file).closest("tr")!.querySelector("td.state")!.textContent;
-    expect(stateOf("$CODEX_HOME/skills")).toBe("✓ written");
+    expect(stateOf("$CODEX_HOME/skills")).toBe("reached");
     expect(stateOf("claude rules")).toBe("writing…");
     expect(stateOf("~/.cursor/skills/tdd")).toBe("skipped");
+    expect(grid().textContent).not.toContain("written");
     expect(within(screen.getByRole("region", { name: "Install plan" })).getByRole("status").textContent).toBe("applying: writing Claude… 4 of 8 files");
-    expect(map().querySelector('.plan-ln[data-agent="codex"]')!.getAttribute("data-curve")).toBe("written");
+    expect(map().querySelector('.plan-ln[data-agent="codex"]')!.getAttribute("data-curve")).toBe("seen");
     expect(map().querySelector('.plan-ln[data-agent="claude"]')!.getAttribute("data-curve")).toBe("live");
+    const said = Array.from(map().querySelectorAll(".plan-chip, .plan-agent")).map(node => node.textContent).join(" ");
+    expect(said).not.toMatch(/written|✓|\bfiles?\b/);
   });
 
   it("stays as the receipt of a successful apply, with Undo, until it is dismissed", () => {

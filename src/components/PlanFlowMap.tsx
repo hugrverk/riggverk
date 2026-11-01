@@ -21,6 +21,7 @@ const CURVE_CLASS: Record<PlanCurve, string> = {
   kept: "is-kept",
   sync: "is-sync",
   live: "live",
+  seen: "is-seen",
   written: "is-written",
 };
 
@@ -29,6 +30,7 @@ const NODE_CLASS: Record<PlanCurve, string> = {
   kept: "is-decide",
   sync: "is-ok",
   live: "is-live",
+  seen: "is-ready",
   written: "is-ok",
 };
 
@@ -158,13 +160,19 @@ export function PlanFlowMap({ flow, phase, highlight }: PlanFlowMapProps) {
         </svg>
       </div>
       <ul className="plan-legend">
-        {phase === "review" && (
+        {phase !== "done" && (
           <li>
             <i className="lg-write" />
-            will be written
+            {phase === "review" ? "will be written" : "pending"}
           </li>
         )}
-        {phase !== "review" && (
+        {phase === "applying" && (
+          <li>
+            <i className="lg-live" />
+            being written
+          </li>
+        )}
+        {phase === "done" && (
           <li>
             <i className="lg-written" />
             written

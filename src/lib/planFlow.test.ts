@@ -80,17 +80,22 @@ describe("buildPlanFlow", () => {
     expect(flow.agents.find(entry => entry.id === "codex")).toMatchObject({ curve: "sync", chip: null, sub: "in sync" });
   });
 
-  it("draws the curves solid agent by agent as the run's trace reaches them", () => {
+  it("shows only where the run is while it applies: the agent being written, those reached, the rest pending", () => {
+    // Progress reports are rate-limited: a reached agent is not proven written, and report counts are not file counts.
     const trace: RunTrace = { ...EMPTY_TRACE, current: "claude", seen: ["opencode", "claude"], counts: { opencode: 2, claude: 1 } };
     const flow = buildPlanFlow(PLAN, { base: BASE, phase: "applying", trace });
-    const state = Object.fromEntries(flow.agents.map(entry => [entry.id, [entry.curve, entry.chip]]));
+    const state = Object.fromEntries(flow.agents.map(entry => [entry.id, [entry.curve, entry.chip, entry.sub]]));
     expect(state).toEqual({
-      codex: ["write", "− 1 remove"],
-      opencode: ["written", "✓ 2 files"],
-      cursor: ["kept", "■ skipped"],
-      claude: ["live", "1 written"],
+      codex: ["write", "− 1 remove", "pending · 1 remove"],
+      opencode: ["seen", "~ 2 update", "reached · 2 update"],
+      cursor: ["kept", "■ skipped", "skipped · untouched"],
+      claude: ["live", "writing…", "writing…"],
     });
+    expect(flow.agents.some(entry => entry.curve === "written")).toBe(false);
+    expect(JSON.stringify(flow.agents)).not.toMatch(/\bfiles?\b/);
     expect(flow.sourceSub.base).toBe("25 items · writing…");
+    // Without a trace nothing is known yet: every agent with writes is pending.
+    expect(buildPlanFlow(PLAN, { base: BASE, phase: "applying" }).agents.filter(entry => entry.curve === "write").map(entry => entry.id)).toEqual(["codex", "opencode", "claude"]);
   });
 
   it("shows every curve written once the apply is done, the kept conflict still the user's", () => {
