@@ -1538,6 +1538,9 @@ fn commit_staged(
                 "two picked skills would both be named {final_name}"
             ));
         }
+        if name.is_none() && candidate.existing.as_ref() == Some(&candidate.digest) {
+            return Err(format!("{final_name} is imported already, unchanged"));
+        }
         if name.is_some() {
             if existing_import(root, &final_name)?.is_some() {
                 return Err(format!(
@@ -1563,15 +1566,29 @@ fn commit_staged(
         imported: Vec::new(),
         updated: Vec::new(),
     };
+    // Each skill is published on its own; a failure stops there and says what is in already.
+    let partial = |result: &SkillImportResult, error: String| {
+        let done: Vec<&str> = result
+            .imported
+            .iter()
+            .chain(&result.updated)
+            .map(String::as_str)
+            .collect();
+        if done.is_empty() {
+            error
+        } else {
+            format!("{error} ({} imported before this)", done.join(", "))
+        }
+    };
     for (candidate, name, renamed_from, files) in plan {
         let target = skills.join(&name);
         let replacing = fs::symlink_metadata(&target).is_ok();
         let backup = if replacing {
-            Some(back_up(&target, &name)?)
+            Some(back_up(&target, &name).map_err(|e| partial(&result, e))?)
         } else {
             None
         };
-        let aside = publish(root, &skills, &name, &files)?;
+        let aside = publish(root, &skills, &name, &files).map_err(|e| partial(&result, e))?;
         let previous = document.skills.insert(
             name.clone(),
             record_of(&files, &candidate.source, candidate.kind, renamed_from),
@@ -1589,7 +1606,7 @@ fn commit_staged(
         });
         if let Err(error) = write_record(root, &mut document) {
             unpublish(&skills, &name, aside);
-            return Err(error);
+            return Err(partial(&result, error));
         }
         if let Some(aside) = aside {
             // The old copy is in the backup; the one moved aside goes.
