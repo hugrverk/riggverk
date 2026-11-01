@@ -5502,7 +5502,7 @@ mod tests {
                 crate::artifact_registry::SkillName::new(name).unwrap(),
             )
         };
-        let (untouched, edited) = (stale_skill("grill-me"), stale_skill("caveman"));
+        let (untouched, edited) = (stale_skill("agent-report-review"), stale_skill("caveman"));
         let mut records = Vec::new();
         for (artifact, installed_by_app) in [(&untouched, "app copy"), (&edited, "app copy")] {
             let dest = artifact.resolve_dest(&env.home, &env.ws).unwrap();

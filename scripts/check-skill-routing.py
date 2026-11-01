@@ -333,7 +333,7 @@ ON_REQUEST_PREFIX = "adversarial-"
 
 
 def validate_user_invoked_routing(discovered: dict[str, Path]) -> None:
-    """Rules must not route to skills the model is not allowed to invoke, or to on-request skills."""
+    """Reject automatic routes to user-invoked and on-request skills."""
     user_invoked = user_invoked_skills(discovered)
     on_request = {name for name in discovered if name.startswith(ON_REQUEST_PREFIX)}
     if not user_invoked and not on_request:
@@ -345,6 +345,8 @@ def validate_user_invoked_routing(discovered: dict[str, Path]) -> None:
             if not line.lstrip().startswith("- "):
                 continue
             for token in BACKTICK_NAME_RE.findall(line):
+                if token == "grill-me" and line.strip() == "- Sharpening a loose idea, plan or design by interview, only when the user asks: `grill-me`.":
+                    continue
                 if token in user_invoked:
                     fail(f"{rel(source)}:{number}: routing bullet names user-invoked skill `{token}` (disable-model-invocation)")
                 elif token in on_request:

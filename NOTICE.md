@@ -15,6 +15,7 @@ Adapted material and bundled skills it informs:
 - `prototype` informs `prototype` (pure logic module, `?variant=` UI hosting, state surfacing, stating the assumed branch).
 - `handoff` informs `handoff` (redaction, OS temporary directory, referencing rather than duplicating, suggested skills).
 - `writing-for-agents` informs `context-budget` (no-op test, sediment, single source of truth, pointer wording).
+- `grill-me` and `grilling` at commit `4ae2317ddb22b046e26455e4f9c9b3aaaf62212d` inform `grill-me` (rounds over the decision frontier, a recommendation per question, facts versus decisions, and prototypes for questions that need something to react to).
 - `retro` informs `retro` (its improvement categories and the implementation-versus-review split).
 
 The text of these skills was paraphrased and restructured for Riggverk; the ideas and structure credited above come from the original work.
