@@ -3,15 +3,23 @@ import { buildInstallReview, type InstallFlowRequest } from "../hooks/useInstall
 import type { PlannedOperation, SetupPlan, SetupResult, SetupSurfaceId } from "../types";
 import {
   applyOutputLineTone,
+  backupSentence,
+  buildAgentPlan,
   buildPlanGroups,
   countPlanRows,
   describePlanCounts,
   formatApplyOutput,
   installRequestFor,
   installReviewLabel,
+  planFileCount,
+  planRowAgent,
   planRows,
   scopeForTarget,
+  summaryTiles,
   surfaceTitle,
+  writeChip,
+  writeCounts,
+  writeLine,
 } from "./installPlan";
 
 function op(surface: SetupSurfaceId, kind: PlannedOperation["kind"], extra: Partial<PlannedOperation> = {}): PlannedOperation {
@@ -309,5 +317,107 @@ describe("formatApplyOutput", () => {
     expect(surfaceTitle("open_code_agents")).toBe("opencode agents");
     expect(surfaceTitle("skills")).toBe("skills");
     expect(surfaceTitle("workspace_bundle")).toBe("workspace bundle");
+  });
+});
+
+/** The default mock scenario's plan: shared and per-agent skill folders, two agents' surfaces and a kept edit. */
+const UPDATE_ALL = review(
+  [
+    op("workspace_bundle", "no_change"),
+    op("codex_agents", "no_change"),
+    op("skills", "update", {
+      details: [
+        "+ ~/.agents/skills (17 skills, 17 files)",
+        "~ ~/.claude/skills (17 skills, 17 files)",
+        "- $CODEX_HOME/skills (17 skills, owned copies)",
+        "! ~/.cursor/skills/tdd (edited, kept)",
+      ],
+    }),
+    op("open_code_config", "update", { summary: "Update ~/.config/opencode/opencode.json" }),
+    op("open_code_rules", "update", { summary: "Update ~/.config/opencode/AGENTS.md" }),
+    op("claude_rules", "update", { summary: "Update ~/.claude/CLAUDE.md" }),
+    op("claude_agents", "update", { details: ["+ create agents/sentinel.md", "~ update agents/verifier.md"] }),
+    op("cursor_agents", "no_change"),
+  ],
+  ["workspace_bundle", "codex_agents", "skills", "open_code_config", "open_code_rules", "claude_rules", "claude_agents", "cursor_agents"],
+  ["workspace_bundle", "codex_agents", "cursor_agents"],
+);
+
+describe("the plan per agent", () => {
+  it("gives each row the agent it writes to, the skills surface by the folder its row names", () => {
+    const agentOf = (surface: SetupSurfaceId, file: string) => planRowAgent({ surface, file });
+    expect(agentOf("claude_rules", "claude rules")).toBe("claude");
+    expect(agentOf("open_code_config", "opencode config")).toBe("opencode");
+    expect(agentOf("skills", "~/.claude/skills")).toBe("claude");
+    expect(agentOf("skills", "~/.claude/skills/deploy")).toBe("claude");
+    expect(agentOf("skills", "$CODEX_HOME/skills")).toBe("codex");
+    expect(agentOf("skills", "~/.config/opencode/skills")).toBe("opencode");
+    expect(agentOf("skills", "$XDG_CONFIG_HOME/opencode/skills")).toBe("opencode");
+    expect(agentOf("skills", "~/.cursor/skills/tdd")).toBe("cursor");
+    expect(agentOf("skills", "~/.gemini/config/skills")).toBe("antigravity");
+    // The folder every agent reads, a skills row without a folder and the workspace bundle are shared.
+    expect(agentOf("skills", "~/.agents/skills")).toBe("shared");
+    expect(agentOf("skills", "skills/handoff/SKILL.md")).toBe("shared");
+    expect(agentOf("workspace_bundle", "workspace bundle")).toBe("shared");
+  });
+
+  it("groups the rows by agent, shared first, then the agents with the most to write, and pins the conflicts", () => {
+    const plan = buildAgentPlan(buildPlanGroups(UPDATE_ALL));
+    expect(plan.groups.map(group => [group.label, group.rows.map(row => row.file), group.unchanged])).toEqual([
+      ["Shared", ["~/.agents/skills"], ["workspace bundle"]],
+      ["Claude", ["~/.claude/skills", "claude rules", "agents/sentinel.md", "agents/verifier.md"], []],
+      ["OpenCode", ["opencode config", "opencode rules"], []],
+      ["Codex", ["$CODEX_HOME/skills"], ["agents"]],
+      ["Cursor", [], ["agents"]],
+    ]);
+    expect(plan.conflicts.map(row => row.file)).toEqual(["~/.cursor/skills/tdd"]);
+    // The conflict is listed once, at the top; its agent names it as skipped.
+    expect(plan.groups.find(group => group.agent === "cursor")!.skipped.map(row => row.file)).toEqual(["~/.cursor/skills/tdd"]);
+    // j/k walk the rows in the order the table shows them.
+    expect(plan.rows.map(row => row.file)).toEqual([
+      "~/.cursor/skills/tdd",
+      "~/.agents/skills",
+      "~/.claude/skills",
+      "claude rules",
+      "agents/sentinel.md",
+      "agents/verifier.md",
+      "opencode config",
+      "opencode rules",
+      "$CODEX_HOME/skills",
+    ]);
+  });
+
+  it("writes a chip per agent in the plan's own signs, the filled square for what it keeps", () => {
+    const chipOf = (create: number, update: number, remove: number, conflict = 0) =>
+      writeChip({ create, update, remove, conflict, manual: 0 });
+    expect(chipOf(0, 0, 1)).toBe("− 1 remove");
+    expect(chipOf(0, 2, 0)).toBe("~ 2 update");
+    expect(chipOf(1, 3, 0)).toBe("+ 1 · ~ 3");
+    expect(chipOf(0, 0, 0, 1)).toBe("■ 1 kept");
+    expect(chipOf(0, 2, 0, 1)).toBe("~ 2 · ■ 1");
+    expect(chipOf(0, 0, 0)).toBeNull();
+    const claude = buildAgentPlan(buildPlanGroups(UPDATE_ALL)).groups.find(group => group.agent === "claude")!;
+    expect(writeLine(writeCounts(claude.rows))).toBe("1 create · 3 update");
+    expect(writeLine({ create: 0, update: 0, remove: 0, conflict: 1, manual: 0 })).toBe("1 kept, skipped");
+    expect(writeLine({ create: 0, update: 0, remove: 0, conflict: 0, manual: 0 })).toBe("nothing to write");
+  });
+
+  it("sums the plan up for the band: a tile per kind, the files and what is backed up", () => {
+    const groups = buildPlanGroups(UPDATE_ALL);
+    const counts = countPlanRows(groups);
+    expect(summaryTiles(counts).map(tile => [tile.kind, tile.n, tile.sub])).toEqual([
+      ["create", 2, "new files"],
+      ["update", 5, "backed up first"],
+      ["remove", 1, "backed up first"],
+      ["conflict", 1, "skipped, yours"],
+      ["unchanged", 3, "already in sync"],
+    ]);
+    // A row that names its files counts them; any other row is one file.
+    expect(planFileCount(planRows(groups))).toBe(17 + 17 + 1 + 1 + 1 + 1 + 1 + 1);
+    expect(backupSentence(counts)).toBe("6 existing files are backed up before anything is written");
+    expect(backupSentence(countPlanRows(buildPlanGroups(review([op("claude_rules", "create")], ["claude_rules"]))))).toBe(
+      "Nothing that exists is overwritten; Undo removes what is created",
+    );
+    expect(summaryTiles({ ...counts, manual: 1 }).map(tile => tile.kind)).toContain("manual");
   });
 });
