@@ -165,6 +165,31 @@ describe("custom colours on the theme in force", () => {
     }
   });
 
+  it("follows macOS through the legacy addListener API when addEventListener is missing", () => {
+    const listeners = new Set<() => void>();
+    let light = false;
+    const original = window.matchMedia;
+    window.matchMedia = ((query: string) => ({
+      get matches() { return query.includes("light") ? light : !light; },
+      media: query,
+      addListener: (listener: () => void) => listeners.add(listener),
+      removeListener: (listener: () => void) => listeners.delete(listener),
+    })) as unknown as typeof window.matchMedia;
+    try {
+      applyThemeSettings({ ...defaultSettings(), appearance: "system", ...darkChoices });
+      expect(style("--bg")).toBe("#212121");
+      expect(listeners.size).toBe(1);
+      light = true;
+      listeners.forEach(listener => listener());
+      expect(style("--bg")).toBe("");
+      applyThemeSettings({ ...defaultSettings(), appearance: "dark", ...darkChoices });
+      expect(listeners.size).toBe(0);
+    } finally {
+      window.matchMedia = original;
+      applyThemeSettings(defaultSettings());
+    }
+  });
+
   it("says which saved colours the theme does not use", () => {
     const warnings = themeColorWarnings({ appearance: "light", foreground: "#eeeeee", background: "#212121", accent: "#aaaaaa" }).join(" ");
     expect(warnings).toContain("background is dark on the light theme, so it is not used");

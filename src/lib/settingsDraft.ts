@@ -232,13 +232,25 @@ export function applyThemeSettings(settings: AppSettings): void {
   stopWatchingColorScheme = null;
   applyThemeColors(settings);
   if (settings.appearance === "system") {
-    const query = window.matchMedia?.("(prefers-color-scheme: light)");
-    if (query?.addEventListener) {
-      const reapply = () => applyThemeColors(settings);
-      query.addEventListener("change", reapply);
-      stopWatchingColorScheme = () => query.removeEventListener("change", reapply);
-    }
+    stopWatchingColorScheme = subscribeToColorScheme(() => applyThemeColors(settings));
   }
+}
+
+/**
+ * Calls `onChange` when the OS switches between light and dark; returns the unsubscribe. Falls back to the legacy
+ * `addListener` API of older WebKit, where MediaQueryList has no addEventListener.
+ */
+export function subscribeToColorScheme(onChange: () => void): () => void {
+  const query = typeof window.matchMedia === "function" ? window.matchMedia(LIGHT_SCHEME_QUERY) : null;
+  if (query?.addEventListener) {
+    query.addEventListener("change", onChange);
+    return () => query.removeEventListener("change", onChange);
+  }
+  if (query?.addListener) {
+    query.addListener(onChange);
+    return () => query.removeListener(onChange);
+  }
+  return () => {};
 }
 
 function applyThemeColors(settings: AppSettings): void {
