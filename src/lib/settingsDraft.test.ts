@@ -126,6 +126,15 @@ describe("custom colours on the theme in force", () => {
       .toEqual({ accent: "#0b5fa5", background: "#fafafa", foreground: "#222222" });
   });
 
+  it("keeps a foreground that reads at 4.5:1 on the background shown, whatever its lightness class", () => {
+    expect(themeColorsInForce({ ...defaultSettings(), appearance: "dark", background_color: "#000000", foreground_color: "#757575" }).foreground)
+      .toBe("#757575");
+    expect(themeColorsInForce({ ...defaultSettings(), appearance: "light", background_color: "#ffffff", foreground_color: "#767676" }).foreground)
+      .toBe("#767676");
+    expect(themeColorsInForce({ ...defaultSettings(), appearance: "dark", background_color: "#000000", foreground_color: "#6a6a6a" }).foreground)
+      .toBeNull();
+  });
+
   it("does not pin a dark background under the light theme", () => {
     applyThemeSettings({ ...defaultSettings(), appearance: "light", ...darkChoices });
     expect(document.documentElement.getAttribute("data-theme")).toBe("light");
@@ -159,7 +168,7 @@ describe("custom colours on the theme in force", () => {
   it("says which saved colours the theme does not use", () => {
     const warnings = themeColorWarnings({ appearance: "light", foreground: "#eeeeee", background: "#212121", accent: "#aaaaaa" }).join(" ");
     expect(warnings).toContain("background is dark on the light theme, so it is not used");
-    expect(warnings).toContain("foreground is light on the light theme, so it is not used");
+    expect(warnings).toContain("below 4.5:1, so the theme text colour is used");
     expect(warnings).toContain("the theme accent is used");
   });
 });

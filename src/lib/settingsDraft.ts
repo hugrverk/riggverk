@@ -136,10 +136,12 @@ const FIXED_INKS = {
 /** Luminance where black and white text have equal contrast; above it a background reads as light. */
 const LIGHT_BACKGROUND_LUMINANCE = 0.179;
 
+const LIGHT_SCHEME_QUERY = "(prefers-color-scheme: light)";
+
 function resolvedThemeClass(appearance: AppSettings["appearance"]): "dark" | "light" {
   if (appearance === "light") return "light";
   if (appearance === "dark") return "dark";
-  return window.matchMedia?.("(prefers-color-scheme: light)").matches ? "light" : "dark";
+  return window.matchMedia?.(LIGHT_SCHEME_QUERY).matches ? "light" : "dark";
 }
 
 /**
@@ -168,14 +170,15 @@ export function themeColorWarnings(input: {
   const lightness = (hex: string) => (relativeLuminance(hex) > LIGHT_BACKGROUND_LUMINANCE ? "light" : "dark");
   const warnings: string[] = [];
 
-  if ((inForce.foreground || inForce.background) && contrastRatio(shownForeground, shownBackground) < 4.5) {
+  if (foreground && !inForce.foreground) {
+    warnings.push(
+      `Foreground contrast ${contrastRatio(foreground, shownBackground).toFixed(1)}:1 against the background is below 4.5:1, so the theme text colour is used.`,
+    );
+  } else if (inForce.background && contrastRatio(shownForeground, shownBackground) < 4.5) {
     warnings.push(`Contrast ratio ${contrastRatio(shownForeground, shownBackground).toFixed(1)}:1 is below 4.5:1.`);
   }
   if (background && !inForce.background) {
     warnings.push(`This background is ${lightness(background)} on the ${theme} theme, so it is not used. Pick a ${theme} one or switch the appearance.`);
-  }
-  if (foreground && !inForce.foreground) {
-    warnings.push(`This foreground is ${lightness(foreground)} on the ${theme} theme, so it is not used. Pick a ${theme === "light" ? "dark" : "light"} one or switch the appearance.`);
   }
   if (accent && !inForce.accent) {
     warnings.push(
@@ -191,7 +194,7 @@ export function themeColorWarnings(input: {
 /**
  * The custom colours that suit the theme in force. The theme's other inks (muted text, state colours, panel mixes)
  * stay fixed, so a colour from the opposite theme would leave them unreadable: a background must be dark on the dark
- * theme and light on the light one, a foreground the reverse, and an accent must keep 3:1 against the background.
+ * theme and light on the light one, a foreground must keep 4.5:1 and an accent 3:1 against the background shown.
  * This matters most for the system theme, where one saved colour set meets both appearances; a colour that does not
  * fit is left out and the theme default shows instead.
  */
@@ -203,10 +206,10 @@ export function themeColorsInForce(
   const background = isValidThemeHex(settings.background_color) && isLight(settings.background_color!) === (theme === "light")
     ? settings.background_color!
     : null;
-  const foreground = isValidThemeHex(settings.foreground_color) && isLight(settings.foreground_color!) === (theme === "dark")
+  const effectiveBackground = background ?? THEME_COLOR_DEFAULTS[theme].background;
+  const foreground = isValidThemeHex(settings.foreground_color) && contrastRatio(settings.foreground_color!, effectiveBackground) >= 4.5
     ? settings.foreground_color!
     : null;
-  const effectiveBackground = background ?? THEME_COLOR_DEFAULTS[theme].background;
   const accent = isValidThemeHex(settings.accent_color) && contrastRatio(settings.accent_color!, effectiveBackground) >= 3
     ? settings.accent_color!
     : null;
