@@ -478,7 +478,8 @@ describe("App shell", () => {
       fireEvent.click(screen.getByRole("button", { name: "Check" }));
       await waitFor(() => expect(backend.statusRequests.length).toBeGreaterThanOrEqual(before + 5));
       const foot = document.querySelector(".side .foot")!;
-      await waitFor(() => expect(foot.textContent).toMatch(/^0 backupschecked \d{2}:\d{2}$/));
+      // The app version leads the foot; then the backups and when the check ran.
+      await waitFor(() => expect(foot.textContent).toMatch(/^(\d{4}\.\d+\.\d+)?0 backupschecked \d{2}:\d{2}$/));
     });
   });
 

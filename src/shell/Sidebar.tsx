@@ -28,7 +28,7 @@ export function formatCheckedAt(date: Date): string {
 }
 
 /**
- * 200px text sidebar: the brand row below the macOS traffic lights (the top 40px stay clear and drag the window),
+ * 200px text sidebar: the brand row below the macOS traffic lights (the top 52px stay clear and drag the window),
  * Overview, the enabled agents, then History / Library / Settings. Each destination has a fixed digit key
  * (`VIEW_DIGITS`: it does not move when an agent is turned off) that shows only as `aria-keyshortcuts` and tooltip.
  * The current item draws a 2px hairline
@@ -89,7 +89,6 @@ export function Sidebar({
           <RuneMark className="brand-mark" />
           Riggverk
         </b>
-        {version && <span data-tauri-drag-region>{version}</span>}
       </div>
       <nav aria-label="Main navigation">
         {overview.map(item)}
@@ -107,6 +106,7 @@ export function Sidebar({
         </div>
       </nav>
       <div className="foot" data-tauri-drag-region>
+        {version && <span>{version}</span>}
         {backupCount !== null && <span>{backupCount} backup{backupCount === 1 ? "" : "s"}</span>}
         {checkedAt && <span>checked {formatCheckedAt(checkedAt)}</span>}
       </div>

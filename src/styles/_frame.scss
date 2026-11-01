@@ -12,7 +12,7 @@
 }
 
 /* ---- sidebar ----
-   200px. padding-top keeps the top 40px free for the macOS traffic lights (80 x 40 from the window corner),
+   200px. padding-top keeps the top 52px free for the macOS traffic lights (set in tauri.conf.json: centred on the top bar line),
    and the whole column drags the window; the nav and its buttons do not. */
 
 .side {
@@ -21,7 +21,7 @@
   flex: none;
   width: 200px;
   min-height: 0;
-  padding: 40px 0 16px;
+  padding: 52px 0 16px;
   border-right: 1px solid var(--border);
   background: var(--bg);
   font-family: var(--font-sans);
@@ -54,7 +54,6 @@
   height: 1.15em;
 }
 
-.side .brand span,
 .side .foot {
   font-family: var(--font-mono);
   font-size: max(10px, calc(var(--fs) * 0.8));
