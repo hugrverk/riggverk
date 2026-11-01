@@ -1498,7 +1498,7 @@ const packLibrary: PackLibrary = scenario === "empty" || scenario === "fresh"
       { id: "pack:mine/my-checklist", name: "my-checklist", description: "A checklist kept in the pack.", pack: "mine", state: "active", reason: "", path: "skills/my-checklist/SKILL.md" },
       { id: "pack:mine/tdd", name: "tdd", description: "A pack skill named like a bundled one.", pack: "mine", state: "shadowed", reason: "the bundle ships a skill with this name; the bundle's version is used", path: "skills/tdd/SKILL.md" },
       { id: "pack:old-pack/old-skill", name: "old-skill", description: "", pack: "old-pack", state: "missing", reason: "pack missing", path: "" },
-      { id: "pack:team/team-review", name: "team-review", description: "A review checklist the team shares.", pack: "team", state: "active", reason: "", path: "skills/team-review/SKILL.md" },
+      { id: "pack:team/team-review", name: "team-review", description: "A review checklist the team shares.", pack: "team", state: "active", reason: "", path: "skills/team-review/SKILL.md", privileged: [{ key: "allowed-tools", value: "Bash(git diff *)", note: "grants tool access without asking" }] },
     ],
     ignored: [],
   };

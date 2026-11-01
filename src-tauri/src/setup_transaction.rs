@@ -2606,21 +2606,75 @@ fn keep_stale_units_whole(planned: &mut [PlannedArtifact]) {
     }
 }
 
+/// A pack skill whose `SKILL.md` sets keys the harness acts on by itself, for the review.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FlaggedSkill {
+    pub pack: String,
+    pub keys: Vec<crate::skill_discovery::PrivilegedKey>,
+}
+
+/// The pack skills of the catalog that set any of
+/// [`crate::skill_discovery::PRIVILEGED_SKILL_KEYS`], by name. Bundled skills are not listed: the
+/// bundle's keys are reviewed where it is built.
+pub fn flagged_pack_skills<R: SourceRoot + ?Sized>(
+    sources: &R,
+) -> std::collections::BTreeMap<String, FlaggedSkill> {
+    sources
+        .catalog()
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|entry| {
+            let pack = entry.pack?;
+            let keys = crate::skill_discovery::read_privileged_keys(&entry.skill.skill_md_path);
+            (!keys.is_empty()).then_some((entry.skill.name, FlaggedSkill { pack, keys }))
+        })
+        .collect()
+}
+
+/// The longest value of a privileged key a review line carries; the Library shows it whole.
+const REVIEW_KEY_VALUE_CHARS: usize = 200;
+
+/// The note of a flagged skill's review line: `pack team; allowed-tools: Bash(git *) [grants tool
+/// access without asking]; model: opus`.
+fn flagged_note(flagged: &FlaggedSkill) -> String {
+    let mut parts = vec![format!("pack {}", flagged.pack)];
+    for key in &flagged.keys {
+        let mut value: String = key.value.chars().take(REVIEW_KEY_VALUE_CHARS).collect();
+        if value.len() < key.value.len() {
+            value.push_str("… (whole value in the Library)");
+        }
+        let note = if key.note.is_empty() {
+            String::new()
+        } else {
+            format!(" [{}]", key.note)
+        };
+        parts.push(format!("{}: {value}{note}", key.key));
+    }
+    parts.join("; ")
+}
+
 /// Review lines for the skills surface, one per folder and kind, in the shape the review table
 /// reads (`+ file (note)`):
 ///
 /// ```text
 /// + ~/.agents/skills (N skills, M files)
 /// ~ ~/.claude/skills (N skills, M files)
+/// + ~/.claude/skills/deploy (pack team; allowed-tools: Bash(git *) [grants tool access without asking])
 /// - $CODEX_HOME/skills (N skills, owned copies)
 /// ! ~/.cursor/skills/tdd (edited, kept)
 /// = ~/.claude/skills/diagnose (you manage; bundled update available)
 /// ```
 ///
-/// Creations, updates and removals are summarised per folder; every skill that stays because it
-/// was edited or is in the way gets its own line, with the harnesses that read both that copy
-/// and the installed one. `=` marks a skill with a file the user keeps.
-pub fn skill_plan_details(planned: &[PlannedArtifact], scope: &SkillScope) -> Vec<String> {
+/// Creations, updates and removals are summarised per folder, except a pack skill in `flagged`
+/// (it sets keys the harness acts on without asking), which gets a line of its own in each folder
+/// it is written to, naming those keys and their values. Every skill that stays because it was
+/// edited or is in the way gets its own line, with the harnesses that read both that copy and the
+/// installed one. `=` marks a skill with a file the user keeps.
+pub fn skill_plan_details(
+    planned: &[PlannedArtifact],
+    scope: &SkillScope,
+    flagged: &std::collections::BTreeMap<String, FlaggedSkill>,
+) -> Vec<String> {
     use std::collections::{BTreeMap, BTreeSet};
     let count = |n: usize, noun: &str| format!("{n} {noun}{}", if n == 1 { "" } else { "s" });
     let mut lines = Vec::new();
@@ -2630,26 +2684,33 @@ pub fn skill_plan_details(planned: &[PlannedArtifact], scope: &SkillScope) -> Ve
         ("-", OperationKind::Remove, true),
     ] {
         for root in crate::skill_roots::SkillRoot::ALL {
-            let files: Vec<_> = planned
+            let (own_line, files): (Vec<_>, Vec<_>) = planned
                 .iter()
                 .filter(|operation| operation.kind == kind)
                 .filter_map(|operation| operation.artifact.as_skill_file())
                 .filter(|file| file.root == root)
-                .collect();
-            if files.is_empty() {
-                continue;
+                .partition(|file| !owned && flagged.contains_key(file.skill.as_str()));
+            if !files.is_empty() {
+                let skills: BTreeSet<_> = files.iter().map(|file| file.skill.as_str()).collect();
+                let tail = if owned {
+                    "owned copies".to_string()
+                } else {
+                    count(files.len(), "file")
+                };
+                lines.push(format!(
+                    "{sign} {} ({}, {tail})",
+                    root.display(),
+                    count(skills.len(), "skill")
+                ));
             }
-            let skills: BTreeSet<_> = files.iter().map(|file| file.skill.as_str()).collect();
-            let tail = if owned {
-                "owned copies".to_string()
-            } else {
-                count(files.len(), "file")
-            };
-            lines.push(format!(
-                "{sign} {} ({}, {tail})",
-                root.display(),
-                count(skills.len(), "skill")
-            ));
+            let own_skills: BTreeSet<_> = own_line.iter().map(|file| file.skill.as_str()).collect();
+            for skill in own_skills {
+                lines.push(format!(
+                    "{sign} {}/{skill} ({})",
+                    root.display(),
+                    flagged_note(&flagged[skill])
+                ));
+            }
         }
     }
     // The skills that stay as they are, per folder and name: edited ones (conflicts) and the ones
@@ -3346,6 +3407,60 @@ fn validate_operation_consistency(op: &ArtifactManifestOperation) -> Result<(), 
     validate_operation_status_combo(op)
 }
 
+/// Refuses a transaction folder someone other than the user could have written. Rollback and
+/// interrupted-transaction recovery trust the digests in `manifest.json` and the bytes below
+/// `artifacts/` with nothing to authenticate them, so the folder, the manifest and `artifacts/`
+/// must each be no link, owned by the current user and not writable by its group or by everyone
+/// (Unix; the checks a pack folder gets). The reasons are fixed phrases without the path.
+pub fn check_transaction_folder_trusted(backup_dir: &Path) -> Result<(), String> {
+    let entries = [
+        (
+            backup_dir.to_path_buf(),
+            "the setup transaction folder",
+            true,
+        ),
+        (backup_dir.join("manifest.json"), "the setup manifest", true),
+        (
+            backup_dir.join("artifacts"),
+            "the setup backup folder",
+            false,
+        ),
+    ];
+    for (path, what, required) in entries {
+        let meta = match fs::symlink_metadata(&path) {
+            Ok(meta) => meta,
+            Err(error) if !required && error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(_) => return Err(format!("cannot inspect {what}")),
+        };
+        if meta.file_type().is_symlink() {
+            return Err(format!("refusing {what}: it is a link"));
+        }
+        crate::skill_sources::check_trusted(&meta, what)?;
+    }
+    Ok(())
+}
+
+/// Refuses a backup someone other than the user could have written before it is restored: the
+/// file, or the folder and everything below it, must be no link, owned by the current user and not
+/// writable by its group or by everyone (Unix). Nothing authenticates the backed-up bytes, so this
+/// is what keeps another local user from choosing what a rollback writes. Read access is not
+/// checked: releases before v2026.10.1 left backups 0644 and folders 0755, which still restore.
+pub fn check_backup_trusted(backup: &Path) -> Result<(), String> {
+    const WHAT: &str = "the setup backup";
+    let meta = fs::symlink_metadata(backup).map_err(|_| format!("cannot inspect {WHAT}"))?;
+    if meta.file_type().is_symlink() {
+        return Err(format!("refusing {WHAT}: it is a link"));
+    }
+    crate::skill_sources::check_trusted(&meta, WHAT)?;
+    if meta.is_dir() {
+        for entry in fs::read_dir(backup).map_err(|_| format!("cannot inspect {WHAT}"))? {
+            let entry = entry.map_err(|_| format!("cannot inspect {WHAT}"))?;
+            check_backup_trusted(&entry.path())?;
+        }
+    }
+    Ok(())
+}
+
 pub fn persist_manifest_atomic(
     path: &Path,
     manifest: &ArtifactTransactionManifest,
@@ -3721,6 +3836,7 @@ pub fn validate_backup_for_rollback(
         return Err("backup missing".into());
     }
     reject_symlink(&backup_path, "rollback backup")?;
+    check_backup_trusted(&backup_path)?;
     if backup_path.is_dir() {
         scan_backup_tree_no_symlinks(&backup_path)?;
     } else if !backup_path.is_file() {
@@ -3840,6 +3956,7 @@ fn restore_artifact_from_backup_with_mode(
                 return Err("backup missing".into());
             }
             reject_symlink(&backup_path, "backup")?;
+            check_backup_trusted(&backup_path)?;
             // The copy replaces the destination atomically; removing it first
             // would lose the file if the copy then fails.
             crate::safe_filesystem::copy_regular_file_no_symlinks(
@@ -3860,6 +3977,7 @@ fn restore_artifact_from_backup_with_mode(
                 return Err("backup missing".into());
             }
             reject_symlink(&backup_path, "backup")?;
+            check_backup_trusted(&backup_path)?;
             match mode {
                 RollbackRestoreMode::FullBackup => {
                     crate::safe_filesystem::copy_regular_file_no_symlinks(
@@ -4419,6 +4537,93 @@ mod tests {
     }
 
     #[test]
+    fn a_flagged_pack_skill_gets_its_own_review_line_naming_its_keys() {
+        use crate::artifact_registry::{SkillName, SkillRelPath};
+        use crate::skill_discovery::PrivilegedKey;
+        use crate::skill_roots::SkillRoot;
+        let file = |skill: &str, rel: &str, kind: OperationKind| PlannedArtifact {
+            artifact: ArtifactId::skill_file(
+                SkillRoot::Claude,
+                SkillName::new(skill).unwrap(),
+                SkillRelPath::new(rel).unwrap(),
+            ),
+            surface: SetupSurfaceId::Skills,
+            kind,
+            previous_state: PreviousState::Absent,
+            rollback_action: RollbackAction::RemoveCreatedFile,
+            rules: None,
+            rules_rewrite: None,
+            mcp: None,
+            file: None,
+            overwrite: None,
+        };
+        let planned = [
+            file("tdd", "SKILL.md", OperationKind::Create),
+            file("deploy", "SKILL.md", OperationKind::Create),
+            file("deploy", "notes.md", OperationKind::Create),
+        ];
+        let long = "x".repeat(250);
+        let flagged = std::collections::BTreeMap::from([(
+            "deploy".to_string(),
+            FlaggedSkill {
+                pack: "team".to_string(),
+                keys: vec![
+                    PrivilegedKey {
+                        key: "allowed-tools".to_string(),
+                        value: "Bash(git *)".to_string(),
+                        note: "grants tool access without asking".to_string(),
+                    },
+                    PrivilegedKey {
+                        key: "model".to_string(),
+                        value: long,
+                        note: String::new(),
+                    },
+                ],
+            },
+        )]);
+        let lines = skill_plan_details(&planned, &SkillScope::all(), &flagged);
+        assert_eq!(
+            lines,
+            [
+                "+ ~/.claude/skills (1 skill, 1 file)".to_string(),
+                format!(
+                    "+ ~/.claude/skills/deploy (pack team; allowed-tools: Bash(git *) [grants tool \
+                     access without asking]; model: {}… (whole value in the Library))",
+                    "x".repeat(200)
+                ),
+            ]
+        );
+        assert_eq!(
+            skill_plan_details(&planned, &SkillScope::all(), &Default::default()),
+            ["+ ~/.claude/skills (2 skills, 3 files)"]
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_transaction_folder_is_trusted_only_without_links_or_shared_write() {
+        let base = temp("txn-trust");
+        let txn = base.join("setup/123");
+        fs::create_dir_all(&txn).unwrap();
+        fs::write(txn.join("manifest.json"), b"{}").unwrap();
+        check_transaction_folder_trusted(&txn).expect("no artifacts folder is fine");
+
+        fs::write(base.join("planted.json"), b"{}").unwrap();
+        fs::remove_file(txn.join("manifest.json")).unwrap();
+        std::os::unix::fs::symlink(base.join("planted.json"), txn.join("manifest.json")).unwrap();
+        assert_eq!(
+            check_transaction_folder_trusted(&txn).unwrap_err(),
+            "refusing the setup manifest: it is a link"
+        );
+        fs::remove_file(txn.join("manifest.json")).unwrap();
+        assert_eq!(
+            check_transaction_folder_trusted(&txn).unwrap_err(),
+            "cannot inspect the setup manifest"
+        );
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
     fn explicit_rollback_restores_codex_artifact_under_codex_home_outside_home() {
         let _guard = crate::test_env::guard::lock();
         let _restore = crate::test_env::guard::EnvRestore::capture();
@@ -4640,6 +4845,88 @@ mod tests {
             fs::read_to_string(home.join(".codex/AGENTS.md")).unwrap(),
             "original"
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_backup_file_others_can_write_is_never_restored() {
+        use std::os::unix::fs::PermissionsExt;
+        let _guard = crate::test_env::guard::lock();
+        let bundled = crate::setup_roots::bundled_root().unwrap();
+        let source = fs::read_to_string(bundled.join("templates/sync/codex-rules.md")).unwrap();
+        let (mut op, backup_dir, home, ws) =
+            automatic_restore_fixture("auto-shared-backup", "original", &source);
+        op.expected_full_digest = Some(crate::stable_digest::bytes(source.as_bytes()));
+        let backup = backup_dir.join("artifacts/codex-rules");
+        let dest = home.join(".codex/AGENTS.md");
+        let set_mode = |path: &Path, mode: u32| {
+            fs::set_permissions(path, fs::Permissions::from_mode(mode)).unwrap()
+        };
+
+        set_mode(&backup, 0o666);
+        let refused = "refusing the setup backup: it is writable by its group or by everyone; \
+                       run chmod go-w on it";
+        assert_eq!(
+            restore_artifact_from_backup(&op, &backup_dir, &home, &ws).unwrap_err(),
+            refused
+        );
+        assert_eq!(
+            restore_artifact_from_backup_for_explicit_rollback(&op, &backup_dir, &home, &ws)
+                .unwrap_err(),
+            refused
+        );
+        assert_eq!(
+            validate_backup_for_rollback(&op, &backup_dir).unwrap_err(),
+            refused
+        );
+        assert_eq!(
+            fs::read_to_string(&dest).unwrap(),
+            source,
+            "nothing restored"
+        );
+
+        // Owner-only, as this version writes it, or 0644 as releases before v2026.10.1 left it.
+        for mode in [0o600, 0o644] {
+            fs::write(&dest, &source).unwrap();
+            set_mode(&backup, mode);
+            validate_backup_for_rollback(&op, &backup_dir).expect("trusted backup");
+            restore_artifact_from_backup(&op, &backup_dir, &home, &ws).expect("restore");
+            assert_eq!(fs::read_to_string(&dest).unwrap(), "original");
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_folder_backup_is_trusted_only_when_nothing_below_it_is_shared() {
+        use std::os::unix::fs::PermissionsExt;
+        let base = temp("shared-backup-tree");
+        let tree = base.join("txn/artifacts/skill");
+        fs::create_dir_all(tree.join("nested")).unwrap();
+        fs::write(tree.join("SKILL.md"), "skill").unwrap();
+        fs::write(tree.join("nested/notes.md"), "notes").unwrap();
+        let op = ArtifactManifestOperation {
+            rollback_action: RollbackAction::RestoreFile,
+            backup_rel: Some("artifacts/skill".into()),
+            ..Default::default()
+        };
+        let backup_dir = base.join("txn");
+        let set_mode = |path: &Path, mode: u32| {
+            fs::set_permissions(path, fs::Permissions::from_mode(mode)).unwrap()
+        };
+        for path in [tree.clone(), tree.join("nested")] {
+            set_mode(&path, 0o755);
+        }
+        validate_backup_for_rollback(&op, &backup_dir).expect("0755 folders, 0644 files");
+        set_mode(&tree.join("nested/notes.md"), 0o666);
+        assert!(validate_backup_for_rollback(&op, &backup_dir)
+            .unwrap_err()
+            .starts_with("refusing the setup backup: it is writable"));
+        set_mode(&tree.join("nested/notes.md"), 0o600);
+        set_mode(&tree.join("nested"), 0o777);
+        assert!(validate_backup_for_rollback(&op, &backup_dir)
+            .unwrap_err()
+            .starts_with("refusing the setup backup: it is writable"));
+        let _ = fs::remove_dir_all(&base);
     }
 
     #[test]

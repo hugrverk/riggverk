@@ -897,6 +897,25 @@ describe("Library skills of your own", () => {
     expect(within(sheet).queryByRole("textbox")).toBeNull();
     expect(within(sheet).queryByRole("button", { name: "Save" })).toBeNull();
   });
+
+  it("lists a pack skill's frontmatter keys that act without asking, with their values", async () => {
+    fixture.packs.skills[0] = {
+      ...fixture.packs.skills[0]!,
+      privileged: [
+        { key: "allowed-tools", value: "Bash(touch *)", note: "grants tool access without asking" },
+        { key: "hooks", value: "PreToolUse: - matcher: Bash", note: "runs commands without asking" },
+        { key: "model", value: "opus", note: "" },
+      ],
+    };
+    await renderLibrary({ topic: "skills" });
+    fireEvent.click(within(rowOf("my-checklist")).getByRole("button", { name: "Read" }));
+    const sheet = await screen.findByRole("dialog", { name: /my-checklist/ });
+    const meta = await within(sheet).findByRole("region", { name: "metadata" });
+    const value = (label: string) => within(meta).getByText(label).nextElementSibling;
+    expect(value("allowed-tools")?.textContent).toBe("Bash(touch *) · grants tool access without asking");
+    expect(value("hooks")?.textContent).toBe("PreToolUse: - matcher: Bash · runs commands without asking");
+    expect(value("model")?.textContent).toBe("opus");
+  });
 });
 
 describe("Library new doc", () => {

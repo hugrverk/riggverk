@@ -1,11 +1,14 @@
 //! The installed `opencode` CLI as the OpenCode runtime health sees it: which version it is and
 //! whether the default agent resolves.
 //!
-//! Every call is bounded by a timeout and an output cap, runs from a neutral working directory
-//! and is parse-only: only an exit status and a version token are kept, never the raw output.
+//! Every call is bounded by a timeout and an output cap, runs from a fresh owner-only folder with
+//! OpenCode's project config turned off and is parse-only: only an exit status and a version token
+//! are kept, never the raw output.
 
 use serde::Serialize;
-use std::time::Duration;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use super::process::{run_cmd_bounded, BoundedCmdOptions};
 
@@ -84,9 +87,54 @@ pub(super) fn models_args(version: Option<&CliVersion>) -> &'static [&'static st
     }
 }
 
-/// A working directory without project config for OpenCode to pick up.
-pub(super) fn neutral_cwd() -> std::path::PathBuf {
-    std::env::temp_dir()
+static PROBE_DIR_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+
+/// A new, empty folder for one probe to run from, owner-only (0700 on unix) and removed on drop.
+/// The system temp folder itself is shared by every user on Linux, so it is never the working
+/// directory; a folder somebody else made first at the same name (or a link there) is refused,
+/// never reused.
+pub(super) struct ProbeDir(PathBuf);
+
+impl ProbeDir {
+    pub(super) fn create() -> std::io::Result<Self> {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        let sequence = PROBE_DIR_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+        let path = std::env::temp_dir().join(format!(
+            "riggverk-probe-{}-{nanos}-{sequence}",
+            std::process::id()
+        ));
+        let mut builder = std::fs::DirBuilder::new();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::DirBuilderExt;
+            builder.mode(0o700);
+        }
+        builder.create(&path)?;
+        Ok(Self(path))
+    }
+
+    pub(super) fn path(&self) -> &Path {
+        &self.0
+    }
+}
+
+impl Drop for ProbeDir {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+/// Set on every `opencode` probe. OpenCode looks for `opencode.json` and `.opencode/` in the
+/// working directory and in every folder above it, so a private working directory alone does not
+/// keep out a file planted in a shared parent such as `/tmp`.
+pub(super) fn project_config_off() -> Vec<(String, String)> {
+    vec![(
+        "OPENCODE_DISABLE_PROJECT_CONFIG".to_string(),
+        "1".to_string(),
+    )]
 }
 
 pub(super) enum VersionProbe {
@@ -96,22 +144,26 @@ pub(super) enum VersionProbe {
     TimedOut,
 }
 
-/// `opencode --version`, from a neutral working directory.
+/// `opencode --version`, from a fresh probe folder without project config.
 pub(super) fn probe_version(program: &str, timeout: Duration) -> VersionProbe {
-    probe_version_with_env(program, timeout, Vec::new())
+    probe_version_with_env(program, timeout, project_config_off())
 }
 
-/// `<program> --version` with `extra_env` set on the child, for a CLI that needs more than the
-/// app's `PATH` to start (a Node script whose `node` is not on it). Nothing else is run.
+/// `<program> --version` from a fresh probe folder, with `extra_env` set on the child, for a CLI
+/// that needs more than the app's `PATH` to start (a Node script whose `node` is not on it).
+/// Nothing else is run.
 pub(super) fn probe_version_with_env(
     program: &str,
     timeout: Duration,
     extra_env: Vec<(String, String)>,
 ) -> VersionProbe {
+    let Ok(cwd) = ProbeDir::create() else {
+        return VersionProbe::Unreadable;
+    };
     let result = run_cmd_bounded(
         program,
         &["--version"],
-        &neutral_cwd(),
+        cwd.path(),
         BoundedCmdOptions {
             timeout: Some(timeout),
             stdout_cap: OUTPUT_CAP,
@@ -240,20 +292,24 @@ pub(super) enum AgentProbe {
     NotRun,
 }
 
-/// `opencode debug agent <name> --pure` (1.x), from a neutral working directory. Only the exit
-/// status is used; the resolved ruleset it prints is dropped.
+/// `opencode debug agent <name> --pure` (1.x), from a fresh probe folder without project config.
+/// Only the exit status is used; the resolved ruleset it prints is dropped.
 pub(super) fn probe_agent(program: &str, name: &str, timeout: Duration) -> AgentProbe {
     if !is_valid_agent_name(name) {
         return AgentProbe::NotRun;
     }
+    let Ok(cwd) = ProbeDir::create() else {
+        return AgentProbe::NotRun;
+    };
     let result = run_cmd_bounded(
         program,
         &["debug", "agent", name, "--pure"],
-        &neutral_cwd(),
+        cwd.path(),
         BoundedCmdOptions {
             timeout: Some(timeout),
             stdout_cap: OUTPUT_CAP,
             stderr_cap: OUTPUT_CAP,
+            extra_env: project_config_off(),
             ..BoundedCmdOptions::default()
         },
     );
@@ -498,16 +554,52 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn probes_run_from_a_neutral_working_directory() {
-        let stub = Stub::new("cwd", "pwd -P > \"$(dirname \"$0\")/cwd.txt\"\necho 1.19.3");
-        probe_version(stub.program(), Duration::from_secs(10));
-        let seen = std::fs::read_to_string(stub.dir.join("cwd.txt")).expect("cwd recorded");
-        let neutral = std::fs::canonicalize(neutral_cwd()).expect("neutral cwd");
-        assert_eq!(std::path::Path::new(seen.trim()), neutral);
-        assert_ne!(
-            std::path::Path::new(seen.trim()),
-            std::fs::canonicalize(std::env::current_dir().expect("cwd")).expect("canonical cwd")
+    fn probes_run_from_a_fresh_private_folder_without_project_config() {
+        let stub = Stub::new(
+            "cwd",
+            "d=\"$(dirname \"$0\")\"\npwd -P >> \"$d/cwd.txt\"\nls -ld . | cut -c1-10 >> \"$d/mode.txt\"\necho \"$OPENCODE_DISABLE_PROJECT_CONFIG\" >> \"$d/env.txt\"\necho 1.19.3",
         );
+        let timeout = Duration::from_secs(10);
+        probe_version(stub.program(), timeout);
+        probe_agent(stub.program(), "architect", timeout);
+        let read = |name: &str| std::fs::read_to_string(stub.dir.join(name)).expect(name);
+        let seen: Vec<PathBuf> = read("cwd.txt").lines().map(PathBuf::from).collect();
+        let shared = std::fs::canonicalize(std::env::temp_dir()).expect("temp dir");
+        assert_eq!(seen.len(), 2);
+        assert_ne!(seen[0], seen[1], "each probe gets its own folder");
+        for cwd in &seen {
+            assert_eq!(cwd.parent(), Some(shared.as_path()), "{cwd:?}");
+            assert!(!cwd.exists(), "{cwd:?} is removed after the probe");
+        }
+        assert_eq!(
+            read("mode.txt").lines().collect::<Vec<_>>(),
+            ["drwx------"; 2]
+        );
+        assert_eq!(read("env.txt").lines().collect::<Vec<_>>(), ["1"; 2]);
+    }
+
+    #[test]
+    fn a_probe_folder_is_new_owner_only_and_removed_on_drop() {
+        let first = ProbeDir::create().expect("first");
+        let second = ProbeDir::create().expect("second");
+        assert_ne!(first.path(), second.path());
+        assert!(std::fs::read_dir(first.path())
+            .expect("read")
+            .next()
+            .is_none());
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(first.path())
+                .expect("meta")
+                .permissions()
+                .mode();
+            assert_eq!(mode & 0o777, 0o700);
+        }
+        let path = first.path().to_path_buf();
+        std::fs::write(path.join("left-behind"), b"x").expect("write");
+        drop(first);
+        assert!(!path.exists());
     }
 
     #[cfg(unix)]
