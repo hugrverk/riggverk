@@ -45,6 +45,10 @@ Use English commit subjects in the form `<type>(<scope>): <subject>`, imperative
 
 Releases use CalVer `YYYY.MM.N`: year, month (without a leading zero), and a counter within that month.
 
+## Conduct
+
+Taking part means following the [code of conduct](CODE_OF_CONDUCT.md). Report vulnerabilities as described in [SECURITY.md](SECURITY.md), never in a public issue.
+
 ## License
 
 No CLA is required. Inbound equals outbound: contributions are accepted under the same [MIT license](LICENSE) as the project.

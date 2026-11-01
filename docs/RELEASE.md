@@ -24,7 +24,7 @@ This local check is the gate: run it before merging and before a release. GitHub
 
 ## Cutting a release
 
-Releases are local: the flow does not use GitHub Actions. A release is a zip on GitHub Releases, built, ad hoc signed and uploaded from the owner's Mac by two commands.
+Releases are local: the flow does not use GitHub Actions. A release is a zip on GitHub Releases, built, ad hoc signed and uploaded from a maintainer's Mac by two commands.
 
 Versions are CalVer `YYYY.M.N`, which is valid semver: the year, the month without a leading zero, and a counter inside that month that starts at 1 (`2026.10.1`, `2026.10.2`, `2026.11.1`). Tags are `v<version>`. Other tags (`app-v0.1.0`, `v0.1.0-rc.1`) are ignored. The next version is computed from the tags and today's date, so the counter restarts when the month changes.
 

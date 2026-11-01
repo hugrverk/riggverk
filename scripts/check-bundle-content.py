@@ -490,16 +490,13 @@ def opencode_headers(root: Path, files: list[str]) -> list[str]:
 # --- boundary --------------------------------------------------------------------------------
 PRIVATE_FILES = ("saved-memory.md", "USER_CONTEXT.md", "skill-routing-brain-setup.md")
 PRIVATE_DIRS = ("private-context",)
-# Built from fragments so this file does not itself contain the names it bans.
-_FIRST = "C" "arl"
-PRIVATE_NAMES = (
-    _FIRST,
-    "Dis" "chornan",
-    "Disch" "örnan",
-    "Hantverks" "registret",
-    "Account cred" "its",
-    "personal mod" "el",
-)
+# Names that must never ship (people, private projects) are not kept in the repository: a
+# maintainer lists them in an untracked file, one per line, `#` for comments. The default file
+# is .private-names at the repository root (gitignored); RIGGVERK_PRIVATE_NAMES_FILE points at
+# another one, for example a single list shared by every worktree. Without a list the check is
+# skipped and main() says so; a list named by the variable that does not exist is a failure.
+PRIVATE_NAMES_ENV = "RIGGVERK_PRIVATE_NAMES_FILE"
+PRIVATE_NAMES_DEFAULT = ".private-names"
 BOUNDARY_RULES = (
     Rule(
         "private-context-paths",
@@ -512,20 +509,38 @@ BOUNDARY_RULES = (
     Rule(
         "private-context-markers",
         "forbid",
-        f"{_FIRST}'s private|{_FIRST}-specific personal|private-context repo",
+        r"private-context repo",
         (W,),
         "the bundle must not carry private context markers",
         "kept in the private-context repo",
     ),
-    Rule(
+)
+
+
+def private_names_file(root: Path) -> tuple[Path, bool]:
+    """The private-names list and whether the environment named it."""
+    override = os.environ.get(PRIVATE_NAMES_ENV)
+    if override:
+        return Path(override).expanduser(), True
+    return root / PRIVATE_NAMES_DEFAULT, False
+
+
+def load_private_names(path: Path) -> tuple[str, ...]:
+    if not path.is_file():
+        return ()
+    lines = (line.strip() for line in path.read_text(encoding="utf-8").splitlines())
+    return tuple(line for line in lines if line and not line.startswith("#"))
+
+
+def private_names_rule(names: tuple[str, ...]) -> Rule:
+    return Rule(
         "private-names",
         "forbid",
-        r"(?<!\w)(?:" + "|".join(map(re.escape, PRIVATE_NAMES)) + r")(?!\w)",
+        r"(?<!\w)(?:" + "|".join(map(re.escape, names)) + r")(?!\w)",
         (W,),
-        "the bundle must not contain private names",
-        f"ask {PRIVATE_NAMES[3]} first",
-    ),
-)
+        "the bundle must not contain a name from the local private-names list",
+        names[0],
+    )
 
 
 def boundary(root: Path, files: list[str]) -> list[str]:
@@ -534,6 +549,11 @@ def boundary(root: Path, files: list[str]) -> list[str]:
         rel = Path(current).relative_to(root).as_posix()
         errors += [f"private context file in the bundle: {rel}/{name}" for name in names if name in PRIVATE_FILES]
         errors += [f"private context directory in the bundle: {rel}/{name}" for name in dirs if name in PRIVATE_DIRS]
+    path, named = private_names_file(root)
+    if named and not path.is_file():
+        errors.append(f"{PRIVATE_NAMES_ENV} names a private-names list that does not exist")
+    if private_names := load_private_names(path):
+        errors += check(root, [private_names_rule(private_names)], files)
     return errors
 
 
@@ -613,6 +633,8 @@ def main(argv: list[str] | None = None) -> int:
     if failures:
         return 1
     print(f"  bundle content checks passed: {', '.join(groups)}")
+    if "boundary" in groups and not load_private_names(private_names_file(root)[0]):
+        print(f"  private names not checked: no local list ({PRIVATE_NAMES_DEFAULT} or {PRIVATE_NAMES_ENV})")
     return 0
 
 

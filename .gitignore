@@ -19,6 +19,7 @@ release/
 __pycache__/
 
 # Local agent state and notes
+.private-names
 .claude/
 .claude/launch.json
 research_notes/
