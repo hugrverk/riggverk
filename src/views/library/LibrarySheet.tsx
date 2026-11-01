@@ -46,7 +46,9 @@ function ReadOnlyBody({ entry, onCopySkill }: { entry: LibraryEntry; onCopySkill
       {entry.copySkill && onCopySkill && (
         <div className="lib-copy-row">
           <TButton keys={[]} onClick={() => onCopySkill(entry.copySkill!)}>Edit as my copy</TButton>
-          <span className="lib-dim">Creates your own skill in a pack; the bundled one stays active.</span>
+          <span className="lib-dim">
+            Creates your own skill in a pack; the {entry.copySkill.startsWith("pack:imported/") ? "imported" : "bundled"} one stays active.
+          </span>
         </div>
       )}
       {entry.meta.length > 0 && (

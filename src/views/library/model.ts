@@ -4,7 +4,6 @@ import { IMPORTED_PACK, isImportedSkill, isPersonalSkill, packGroup, packNoticeL
 import { harnessOfRulesSurface } from "../../lib/rulesView";
 import { HARNESS_LABELS } from "../../lib/harnessInstallation";
 import type { UiState } from "../../lib/uiState";
-import { provenanceText } from "./skillImport";
 import type {
   AgentMetadataResponse,
   AgentTargetMeta,
@@ -214,16 +213,16 @@ function skillRow(skill: SkillSummary, input: SkillRowInput, indent = false): Li
     const undo = input.packLibrary?.undo_import;
     if (undo && undo.action !== "remove" && undo.name === skill.name) verbs.push({ label: "Undo import", action: { type: "undo-import" } });
   }
-  const origin = skill.provenance ? provenanceText(skill.provenance) : undefined;
+  // Where an imported skill came from leads its line; the sheet adds the date.
+  const origin = skill.provenance ? `from ${skill.provenance.source}` : undefined;
   const base = {
     ...common,
     tag,
     verbs,
-    note: origin,
     haystack: haystack(skill.name, skill.description, skill.group, "skill", personal ? "yours" : "pack", skill.provenance?.source),
   };
   if (skill.packState === "active") {
-    return { ...base, desc: skill.description, state: { state: "ok", label: "Active" } };
+    return { ...base, desc: [origin, skill.description].filter(Boolean).join(" · "), state: { state: "ok", label: "Active" } };
   }
   if (skill.packState === "shadowed") {
     return {
