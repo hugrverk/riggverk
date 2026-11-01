@@ -1,6 +1,17 @@
 {
   "releases": [
     {
+      "version": "2026.11.5",
+      "sections": [
+        {
+          "title": "Fixes",
+          "items": [
+            "Clearer undo and plan wording, mock in step with the app"
+          ]
+        }
+      ]
+    },
+    {
       "version": "2026.11.4",
       "sections": [
         {

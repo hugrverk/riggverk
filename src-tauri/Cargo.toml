@@ -1,6 +1,6 @@
 [package]
 name = "riggverk"
-version = "2026.11.4"
+version = "2026.11.5"
 description = "Desktop app that installs one shared set of agent rules, skills, agents and MCP config into Claude Code, Codex, OpenCode, Cursor and more"
 license = "MIT"
 repository = "https://github.com/hugrverk/riggverk"
