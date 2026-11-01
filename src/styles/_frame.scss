@@ -40,9 +40,18 @@
 }
 
 .side .brand b {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   font-weight: 600;
   letter-spacing: -0.01em;
   color: var(--text-heading);
+}
+
+.side .brand .brand-mark {
+  flex: none;
+  width: 1.15em;
+  height: 1.15em;
 }
 
 .side .brand span,

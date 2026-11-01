@@ -3,6 +3,7 @@ import { dirtyTabAriaLabel } from "../lib/editorGuards";
 import { DEFAULT_ENABLED_HARNESS_IDS } from "../lib/harnessInstallation";
 import type { InstallAgent } from "../types";
 import { VIEW_DIGITS, visibleViews, type AppView, type ViewDef } from "./views";
+import { RuneMark } from "../ui/RuneMark";
 
 export interface SidebarProps {
   view: AppView;
@@ -84,7 +85,10 @@ export function Sidebar({
   return (
     <aside className="side shell-chrome" data-tauri-drag-region>
       <div className="brand" data-tauri-drag-region>
-        <b data-tauri-drag-region>Riggverk</b>
+        <b data-tauri-drag-region>
+          <RuneMark className="brand-mark" />
+          Riggverk
+        </b>
         {version && <span data-tauri-drag-region>{version}</span>}
       </div>
       <nav aria-label="Main navigation">
