@@ -3346,6 +3346,39 @@ fn validate_operation_consistency(op: &ArtifactManifestOperation) -> Result<(), 
     validate_operation_status_combo(op)
 }
 
+/// Refuses a transaction folder someone other than the user could have written. Rollback and
+/// interrupted-transaction recovery trust the digests in `manifest.json` and the bytes below
+/// `artifacts/` with nothing to authenticate them, so the folder, the manifest and `artifacts/`
+/// must each be no link, owned by the current user and not writable by its group or by everyone
+/// (Unix; the checks a pack folder gets). The reasons are fixed phrases without the path.
+pub fn check_transaction_folder_trusted(backup_dir: &Path) -> Result<(), String> {
+    let entries = [
+        (
+            backup_dir.to_path_buf(),
+            "the setup transaction folder",
+            true,
+        ),
+        (backup_dir.join("manifest.json"), "the setup manifest", true),
+        (
+            backup_dir.join("artifacts"),
+            "the setup backup folder",
+            false,
+        ),
+    ];
+    for (path, what, required) in entries {
+        let meta = match fs::symlink_metadata(&path) {
+            Ok(meta) => meta,
+            Err(error) if !required && error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(_) => return Err(format!("cannot inspect {what}")),
+        };
+        if meta.file_type().is_symlink() {
+            return Err(format!("refusing {what}: it is a link"));
+        }
+        crate::skill_sources::check_trusted(&meta, what)?;
+    }
+    Ok(())
+}
+
 pub fn persist_manifest_atomic(
     path: &Path,
     manifest: &ArtifactTransactionManifest,
@@ -4408,6 +4441,30 @@ mod tests {
         let err = validate_artifact_source_dest(&ArtifactId::CodexRules, &ws, &home)
             .expect_err("relative CODEX_HOME must be rejected");
         assert!(err.contains("CODEX_HOME must be an absolute path"), "{err}");
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_transaction_folder_is_trusted_only_without_links_or_shared_write() {
+        let base = temp("txn-trust");
+        let txn = base.join("setup/123");
+        fs::create_dir_all(&txn).unwrap();
+        fs::write(txn.join("manifest.json"), b"{}").unwrap();
+        check_transaction_folder_trusted(&txn).expect("no artifacts folder is fine");
+
+        fs::write(base.join("planted.json"), b"{}").unwrap();
+        fs::remove_file(txn.join("manifest.json")).unwrap();
+        std::os::unix::fs::symlink(base.join("planted.json"), txn.join("manifest.json")).unwrap();
+        assert_eq!(
+            check_transaction_folder_trusted(&txn).unwrap_err(),
+            "refusing the setup manifest: it is a link"
+        );
+        fs::remove_file(txn.join("manifest.json")).unwrap();
+        assert_eq!(
+            check_transaction_folder_trusted(&txn).unwrap_err(),
+            "cannot inspect the setup manifest"
+        );
         let _ = fs::remove_dir_all(&base);
     }
 
