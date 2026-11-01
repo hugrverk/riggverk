@@ -52,36 +52,33 @@ pub fn configured(config: &tauri::Config) -> bool {
     config_problem(config.plugins.0.get("updater")).is_none()
 }
 
-/// Why `plugins.updater` does not turn updates on; `None` when it does.
+/// Why `plugins.updater` does not turn updates on; `None` when it does. The block is read as the plugin reads it,
+/// so an option set under its kebab-case alias (`allow-downgrades`) counts as well.
 pub fn config_problem(updater: Option<&Value>) -> Option<&'static str> {
     let Some(updater) = updater else {
         return Some("no plugins.updater");
     };
-    let pubkey = updater.get("pubkey").and_then(Value::as_str).unwrap_or("");
-    if pubkey.trim().is_empty() {
+    let Ok(config) = serde_json::from_value::<tauri_plugin_updater::Config>(updater.clone()) else {
+        return Some("plugins.updater is not a valid updater config");
+    };
+    if config.pubkey.trim().is_empty() {
         return Some("plugins.updater has no pubkey");
     }
-    let endpoints = updater.get("endpoints").and_then(Value::as_array);
-    let Some(endpoints) = endpoints.filter(|list| !list.is_empty()) else {
+    if config.endpoints.is_empty() {
         return Some("plugins.updater has no endpoints");
-    };
-    if !endpoints.iter().all(|endpoint| {
-        endpoint
-            .as_str()
-            .is_some_and(|url| url.starts_with("https://"))
-    }) {
+    }
+    if !config.endpoints.iter().all(|url| url.scheme() == "https") {
         return Some("every plugins.updater endpoint must be https");
     }
-    if updater.get("requireSignedVersion").and_then(Value::as_bool) != Some(true) {
+    if !config.require_signed_version {
         return Some("plugins.updater must set requireSignedVersion to true");
     }
-    let enabled = |key: &str| updater.get(key).and_then(Value::as_bool) == Some(true);
-    if enabled("allowDowngrades") {
+    if config.allow_downgrades {
         return Some("plugins.updater must not allow downgrades");
     }
-    if enabled("dangerousInsecureTransportProtocol")
-        || enabled("dangerousAcceptInvalidCerts")
-        || enabled("dangerousAcceptInvalidHostnames")
+    if config.dangerous_insecure_transport_protocol
+        || config.dangerous_accept_invalid_certs
+        || config.dangerous_accept_invalid_hostnames
     {
         return Some("plugins.updater must not turn on a dangerous* option");
     }
@@ -369,16 +366,16 @@ pub async fn install_app_update<R: Runtime>(
             total: Some(downloaded),
         },
     );
-    {
-        // No apply may start while the bundle is swapped, and none may be running.
-        let _mutation = crate::mutation_lock::try_acquire(APPLY_RUNNING)?;
-        update.install(&bytes).map_err(|error| {
-            user_error(
-                &error,
-                "The new version could not be installed. Nothing was changed.",
-            )
-        })?;
-    }
+    // No apply may start while the bundle is swapped, and none may be running.
+    let mutation = crate::mutation_lock::try_acquire(APPLY_RUNNING)?;
+    update.install(&bytes).map_err(|error| {
+        user_error(
+            &error,
+            "The new version could not be installed. Nothing was changed.",
+        )
+    })?;
+    // The restart is only requested here; keep the lock until the process exits, so no apply starts and is cut off.
+    std::mem::forget(mutation);
     app.request_restart();
     Ok(())
 }
@@ -421,6 +418,8 @@ mod tests {
         assert!(with("requireSignedVersion", json!(false)).is_some());
         assert!(with("allowDowngrades", json!(true)).is_some());
         assert!(with("dangerousAcceptInvalidCerts", json!(true)).is_some());
+        assert!(with("allow-downgrades", json!(true)).is_some());
+        assert!(with("dangerous-accept-invalid-certs", json!(true)).is_some());
         let mut unbound = on();
         unbound
             .as_object_mut()

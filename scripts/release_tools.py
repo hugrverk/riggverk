@@ -20,6 +20,7 @@ Usage (tags are read from stdin, one per line):
 from __future__ import annotations
 
 import argparse
+import base64
 import datetime
 import json
 import re
@@ -298,9 +299,33 @@ def updater_config(root: Path = ROOT) -> str | None:
         raise ReleaseError("plugins.updater must set requireSignedVersion to true")
     for key in ("allowDowngrades", "dangerousInsecureTransportProtocol", "dangerousAcceptInvalidCerts",
                 "dangerousAcceptInvalidHostnames"):
-        if updater.get(key) is True:
+        # The plugin also reads each one under its kebab-case alias (allow-downgrades, ...).
+        kebab = re.sub(r"[A-Z]", lambda upper: "-" + upper[0].lower(), key)
+        if updater.get(key) is True or updater.get(kebab) is True:
             raise ReleaseError(f"plugins.updater must not set {key}")
     return match[1]
+
+
+def minisign_key_id(encoded: str, what: str) -> bytes:
+    """The key id in a Tauri updater public key or signature: base64 of a minisign file whose second line is the
+    base64 key or signature, two algorithm bytes followed by the 8-byte key id."""
+    try:
+        lines = base64.b64decode(encoded.strip(), validate=True).decode("utf-8").splitlines()
+        raw = base64.b64decode(lines[1].strip(), validate=True)
+    except (ValueError, IndexError) as error:
+        raise ReleaseError(f"the updater {what} is not a minisign {what}") from error
+    if len(raw) < 10:
+        raise ReleaseError(f"the updater {what} is not a minisign {what}")
+    return raw[2:10]
+
+
+def check_signature_key(signature: str, pubkey: str) -> None:
+    """The updater signature must come from the key whose public half the app trusts, or every installed copy would
+    refuse the update."""
+    if minisign_key_id(signature, "signature") != minisign_key_id(pubkey, "public key"):
+        raise ReleaseError(
+            "the updater signature was not made with the key in plugins.updater (check TAURI_SIGNING_PRIVATE_KEY)"
+        )
 
 
 def update_notes(notes: str) -> str:
@@ -383,12 +408,15 @@ def main() -> int:
             repo = updater_config()
             print(f"on {repo}" if repo else "off")
         elif args.command == "updater-manifest":
+            signature = Path(args.signature_file).read_text(encoding="utf-8")
+            conf = json.loads((ROOT / TAURI_CONF).read_text(encoding="utf-8"))
+            check_signature_key(signature, str(conf.get("plugins", {}).get("updater", {}).get("pubkey", "")))
             pub_date = args.pub_date or datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
             data = updater_manifest(
                 args.version,
                 args.repo,
                 args.asset,
-                Path(args.signature_file).read_text(encoding="utf-8"),
+                signature,
                 Path(args.notes_file).read_text(encoding="utf-8"),
                 pub_date,
             )

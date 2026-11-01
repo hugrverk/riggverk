@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import base64
 import contextlib
 import datetime
 import importlib.util
@@ -350,6 +351,8 @@ class UpdaterTests(unittest.TestCase):
             {"requireSignedVersion": False},
             {"allowDowngrades": True},
             {"dangerousAcceptInvalidCerts": True},
+            {"allow-downgrades": True},
+            {"dangerous-accept-invalid-certs": True},
         ):
             with self.subTest(change=change), self.assertRaises(tools.ReleaseError):
                 self.config({**ON, **change})
@@ -383,6 +386,18 @@ class UpdaterTests(unittest.TestCase):
             tools.updater_manifest("v2026.11.7", "a/b", "x.tar.gz", "sig", "", "2026-11-08T12:00:00Z")
         with self.assertRaises(tools.ReleaseError):
             tools.updater_manifest("2026.11.7", "a/b", "x.tar.gz", "line one\nline two", "", "2026-11-08T12:00:00Z")
+
+    def test_the_signature_must_come_from_the_configured_key(self) -> None:
+        def minisign(algorithm: bytes, key_id: bytes, rest: int) -> str:
+            line = base64.b64encode(algorithm + key_id + bytes(rest)).decode()
+            return base64.b64encode(f"untrusted comment: test\n{line}\n".encode()).decode()
+
+        pubkey = minisign(b"Ed", b"KEYID-01", 32)
+        tools.check_signature_key(minisign(b"ED", b"KEYID-01", 64), pubkey)
+        with self.assertRaises(tools.ReleaseError):
+            tools.check_signature_key(minisign(b"ED", b"KEYID-02", 64), pubkey)
+        with self.assertRaises(tools.ReleaseError):
+            tools.check_signature_key("not base64!", pubkey)
 
 
 if __name__ == "__main__":
