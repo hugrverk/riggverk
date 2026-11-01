@@ -96,6 +96,8 @@ describe("run rows of the History page", () => {
   it("says Removed only when every applied change was a removal, and never claims an update for a run that stopped", () => {
     const removals = entry({ changes: [{ surface: "skills", kind: "remove", path: "~/.claude/skills/old", applied: true, restored: false }] });
     expect(runTitle(removals)).toBe("Removed Claude");
+    const creations = entry({ changes: [{ surface: "skills", kind: "create", path: "~/.claude/skills/tdd/SKILL.md", applied: true, restored: false }] });
+    expect(runTitle(creations)).toBe("Installed Claude");
     expect(runTitle(entry({ status: "failed", changes: [] }))).toBe("Update of Claude");
   });
 

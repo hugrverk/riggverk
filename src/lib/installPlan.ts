@@ -90,6 +90,13 @@ const KIND_LABEL: Record<PlanRowKind, string> = {
   unavailable: "unavailable",
 };
 
+/** What a safe change does to the file and to Undo, added to a row whose details would only repeat its note. */
+const KIND_EFFECT: Partial<Record<PlanRowKind, string>> = {
+  create: "Nothing is there yet: Riggverk writes it, and Undo removes it again.",
+  update: "The current file is backed up first; Undo puts it back.",
+  remove: "The file is backed up first; Undo puts it back.",
+};
+
 /**
  * `!` marks a file that stays because the user edited it (a conflict inside an otherwise safe surface), `=` one the
  * user chose to keep (a manual step: updates never write it).
@@ -154,7 +161,10 @@ function rowsForOperation(op: PlannedOperation): PlanRow[] {
     });
   }
   const note = op.conflict_description ?? op.manual_step ?? op.summary;
-  return [rowFor(op.surface, 0, kind, surfaceTitle(op.surface), note, unique([...baseDetail, ...lines, ...resolveLines(kind, op.surface)]))];
+  const detail = unique([...baseDetail, ...lines, ...resolveLines(kind, op.surface)]);
+  const effect = KIND_EFFECT[kind];
+  const onlyNote = detail.every(line => line === note);
+  return [rowFor(op.surface, 0, kind, surfaceTitle(op.surface), note, onlyNote && effect ? [...detail, effect] : detail)];
 }
 
 /** Rows grouped by surface, in request order; unchanged surfaces keep a header with no rows. */

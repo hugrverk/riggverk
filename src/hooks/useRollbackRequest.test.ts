@@ -78,6 +78,23 @@ describe("useRollbackRequest", () => {
     expect(t.runRollback).toHaveBeenCalledWith("1710000000000");
   });
 
+  it("says the files the run created are removed, and only the rest are restored", async () => {
+    const created = (path: string) => ({ surface: "skills" as const, kind: "create" as const, path, applied: true, restored: false });
+    const install = { ...historyEntry("1710000000000"), changes: [created("~/.claude/skills/a/SKILL.md"), created("~/.claude/skills/b/SKILL.md")] };
+    invokeMock.mockImplementation(async (command: string) => (command === "list_setup_history" ? [install] : dryRun()));
+    const onlyCreated = setup();
+    await onlyCreated.request();
+    expect((onlyCreated.confirm.mock.calls[0]![0] as ConfirmConfig).message).toMatch(/\? This removes the 2 files it created\.$/);
+
+    const mixed = { ...install, changes: [created("~/.claude/skills/a/SKILL.md"), historyEntry("x").changes[0]!] };
+    invokeMock.mockImplementation(async (command: string) => (command === "list_setup_history" ? [mixed] : dryRun()));
+    const both = setup();
+    await both.request();
+    expect((both.confirm.mock.calls[0]![0] as ConfirmConfig).message).toMatch(
+      /\? This removes the 1 file it created and restores 1 item from the backup\.$/,
+    );
+  });
+
   it("still asks, without a name, when the history cannot be read", async () => {
     invokeMock.mockImplementation(async (command: string) => {
       if (command === "list_setup_history") throw new Error("no history");

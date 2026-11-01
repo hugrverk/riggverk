@@ -95,14 +95,16 @@ function runSubject(entry: SetupHistoryEntry): string {
 }
 
 /**
- * "Updated Codex", "Removed files" or, for a run that stopped, "Update of Codex". Only the recorded changes decide
- * the verb: a run whose applied changes were all removals says "Removed"; everything else says "Updated".
+ * "Updated Codex", "Installed Codex", "Removed files" or, for a run that stopped, "Update of Codex". Only the recorded
+ * changes decide the verb: a run whose applied changes were all removals says "Removed", all creations "Installed";
+ * everything else says "Updated".
  */
 export function runTitle(entry: SetupHistoryEntry): string {
   const subject = runSubject(entry);
   if (entry.status === "failed") return `Update of ${subject}`;
   const applied = entry.changes.filter(change => change.applied);
-  const verb = applied.length > 0 && applied.every(change => change.kind === "remove") ? "Removed" : "Updated";
+  const all = (kind: string) => applied.length > 0 && applied.every(change => change.kind === kind);
+  const verb = all("remove") ? "Removed" : all("create") ? "Installed" : "Updated";
   return `${verb} ${subject}`;
 }
 

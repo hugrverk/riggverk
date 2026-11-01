@@ -114,7 +114,7 @@ export function InstallPlanPane({ flow, busyLabel, backupRoot, onApply }: Instal
   const describe = describePlanCounts(counts);
   const question =
     status === "previewing"
-      ? `previewing ${request?.label ?? ""}…`
+      ? "computing the plan…"
       : status === "applying"
         ? "applying: backing up, then writing…"
         : status === "error"
@@ -269,7 +269,7 @@ export function InstallPlanPane({ flow, busyLabel, backupRoot, onApply }: Instal
                 <Counts counts={counts} />
               </>
             )}
-            {status === "previewing" && " · previewing"}
+            {status === "previewing" && " · computing"}
             {status === "error" && " · failed"}
           </>
         ) : null

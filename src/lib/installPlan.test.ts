@@ -155,6 +155,8 @@ describe("buildPlanGroups", () => {
     const rules = buildPlanGroups(MIXED)[0]!.rows;
     expect(rules).toHaveLength(1);
     expect(rules[0]).toMatchObject({ kind: "update", file: "claude rules", note: "Update ~/.claude/CLAUDE.md", safe: true });
+    // Its details never just repeat the note: with nothing else to add they also say what the change does to Undo.
+    expect(rules[0]!.detail).toEqual(["Update ~/.claude/CLAUDE.md", "The current file is backed up first; Undo puts it back."]);
   });
 
   it("marks conflicts with their description and keeps them out of the safe rows", () => {
