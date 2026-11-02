@@ -344,8 +344,16 @@ fn open_args(path: &str) -> [&str; 1] {
     [path]
 }
 
+/// explorer.exe exits 1 even when it opened the path (and shows its own dialog when it could not),
+/// so only a failure to start it counts there.
+fn open_succeeded(program: &str, ok: bool, code: Option<i32>) -> bool {
+    ok || (program == "explorer.exe" && code == Some(1))
+}
+
 pub(super) fn open_path(path: &str, cwd: &Path) -> (bool, String, String, Option<i32>) {
-    run_cmd(open_program(std::env::consts::OS), &open_args(path), cwd)
+    let program = open_program(std::env::consts::OS);
+    let (ok, stdout, stderr, code) = run_cmd(program, &open_args(path), cwd);
+    (open_succeeded(program, ok, code), stdout, stderr, code)
 }
 
 #[cfg(test)]
@@ -362,6 +370,14 @@ mod tests {
         assert_eq!(open_args(path), [path]);
         let error = std::io::Error::new(std::io::ErrorKind::NotFound, "program not found");
         assert!(format_spawn_error(open_program("linux"), &error).contains("xdg-open"));
+    }
+
+    #[test]
+    fn explorer_exit_code_one_counts_as_opened() {
+        assert!(open_succeeded("explorer.exe", false, Some(1)));
+        assert!(!open_succeeded("explorer.exe", false, None));
+        assert!(!open_succeeded("xdg-open", false, Some(1)));
+        assert!(open_succeeded("open", true, Some(0)));
     }
 
     #[test]
