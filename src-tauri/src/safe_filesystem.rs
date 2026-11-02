@@ -137,11 +137,9 @@ fn preserve_destination_permissions(
 /// 0600, or 0700 when the source was executable.
 #[cfg(unix)]
 fn restrict_file_to_owner(path: &Path) -> Result<(), String> {
-    use std::os::unix::fs::PermissionsExt;
+    // The mode `fs::copy` carried over; read before it is replaced, by a call that refuses a link.
     let executable = file_is_executable(path)?;
-    let mode = if executable { 0o700 } else { 0o600 };
-    fs::set_permissions(path, fs::Permissions::from_mode(mode))
-        .map_err(|e| format!("restrict permissions on {}: {e}", path.display()))
+    set_file_executable(path, executable, true)
 }
 
 #[cfg(not(unix))]
@@ -157,7 +155,7 @@ pub fn set_file_executable(path: &Path, executable: bool, private: bool) -> Resu
     use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
     let file = fs::OpenOptions::new()
         .read(true)
-        .custom_flags(libc::O_NOFOLLOW)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
         .open(path)
         .map_err(|e| format!("open {}: {e}", path.display()))?;
     let metadata = file
@@ -843,6 +841,58 @@ mod tests {
         assert!(err.contains("outside"), "{err}");
         let _ = fs::remove_dir_all(&base);
     }
+    #[cfg(unix)]
+    #[test]
+    fn setting_the_execute_bit_refuses_a_link_and_a_non_regular_file() {
+        use std::os::unix::fs::PermissionsExt;
+        let base = temp("exec-refuse");
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(base.join("dir")).unwrap();
+        let real = base.join("real");
+        fs::write(&real, b"x").unwrap();
+        fs::set_permissions(&real, fs::Permissions::from_mode(0o644)).unwrap();
+        let link = base.join("link");
+        std::os::unix::fs::symlink(&real, &link).unwrap();
+        for private in [true, false] {
+            assert!(set_file_executable(&link, true, private).is_err());
+            assert!(file_is_executable(&link).is_err());
+            assert!(set_file_executable(&base.join("dir"), true, private).is_err());
+            assert!(file_is_executable(&base.join("dir")).is_err());
+            assert!(set_file_executable(&base.join("missing"), true, private).is_err());
+        }
+        // The link's target was not touched.
+        assert_eq!(
+            fs::metadata(&real).unwrap().permissions().mode() & 0o777,
+            0o644
+        );
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn setting_the_execute_bit_never_leaves_a_file_group_or_world_writable() {
+        use std::os::unix::fs::PermissionsExt;
+        let base = temp("exec-clamp");
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(&base).unwrap();
+        let path = base.join("script");
+        fs::write(&path, b"x").unwrap();
+        let mode = |path: &Path| fs::metadata(path).unwrap().permissions().mode() & 0o7777;
+        for start in [0o666, 0o777] {
+            for executable in [true, false] {
+                fs::set_permissions(&path, fs::Permissions::from_mode(start)).unwrap();
+                set_file_executable(&path, executable, false).unwrap();
+                let now = mode(&path);
+                assert_eq!(now & 0o022, 0, "{start:o} -> {now:o}");
+                assert_eq!(now & 0o111 != 0, executable, "{start:o} -> {now:o}");
+                fs::set_permissions(&path, fs::Permissions::from_mode(start)).unwrap();
+                set_file_executable(&path, executable, true).unwrap();
+                assert_eq!(mode(&path), if executable { 0o700 } else { 0o600 });
+            }
+        }
+        let _ = fs::remove_dir_all(&base);
+    }
+
     #[cfg(unix)]
     #[test]
     fn copying_an_executable_source_writes_a_readable_file() {

@@ -812,8 +812,8 @@ fn inspect(
             kind: "executable".to_string(),
             label: "scripts and executables".to_string(),
             detail: format!(
-                "{}; an agent may run them. The app never does, and copies them without the \
-                 executable bit",
+                "{}; an agent may run them. The app never does. The executable bit is kept: \
+                 owner-only (0700) in the pack, executable when installed into agent skill folders",
                 runnable.join(", ")
             ),
         });
@@ -1484,19 +1484,22 @@ fn write_temp(skills: &Path, files: &SkillTree) -> Result<PathBuf, String> {
     let temp = skills.join(format!(".import-{}", nonce()?));
     create_private_dir(&temp)?;
     for (rel, bytes) in &files.files {
-        if let Err(error) = crate::safe_filesystem::write_private_new_regular_file_synced(
+        let written = crate::safe_filesystem::write_private_new_regular_file_synced(
             &temp.join(rel),
             bytes,
             &temp,
-        ) {
+        )
+        .and_then(|()| {
+            crate::safe_filesystem::set_file_executable(
+                &temp.join(rel),
+                files.executables.contains(rel),
+                true,
+            )
+        });
+        if let Err(error) = written {
             let _ = crate::safe_filesystem::remove_dir_no_symlinks(&temp, skills);
             return Err(format!("cannot write the imported skill: {error}"));
         }
-        crate::safe_filesystem::set_file_executable(
-            &temp.join(rel),
-            files.executables.contains(rel),
-            true,
-        )?;
     }
     Ok(temp)
 }
@@ -1964,6 +1967,50 @@ mod tests {
             executable: false,
             identity: identity(&meta),
         }
+    }
+
+    /// A tree without an executable hashes as it did before the bit was recorded, so the digests
+    /// in existing import records stay valid; an executable changes it.
+    #[test]
+    fn a_tree_digest_without_executables_is_the_one_computed_before_the_bit_was_recorded() {
+        let mut files = BTreeMap::new();
+        files.insert("SKILL.md".to_string(), b"text\n".to_vec());
+        files.insert("scripts/run.sh".to_string(), b"#!/bin/sh\n".to_vec());
+        let listing: String = file_digests(&files)
+            .iter()
+            .map(|(rel, digest)| format!("{rel}\0{digest}\n"))
+            .collect();
+        let old = crate::stable_digest::bytes(listing.as_bytes());
+        let mut tree = SkillTree {
+            files,
+            executables: BTreeSet::new(),
+        };
+        assert_eq!(tree_digest(&tree), old);
+        tree.executables.insert("scripts/run.sh".to_string());
+        assert_ne!(tree_digest(&tree), old);
+    }
+
+    #[test]
+    fn the_script_flag_says_the_executable_bit_is_kept() {
+        let mut files = BTreeMap::new();
+        files.insert(
+            "SKILL.md".to_string(),
+            b"---\nname: demo\ndescription: Use it.\n---\n# Demo\n".to_vec(),
+        );
+        files.insert("scripts/run.sh".to_string(), b"#!/bin/sh\n".to_vec());
+        let executables = BTreeSet::from(["scripts/run.sh".to_string()]);
+        let inspected = inspect(&files, &executables, Some("demo"));
+        let flag = inspected
+            .flags
+            .iter()
+            .find(|flag| flag.kind == "executable")
+            .expect("script flag");
+        assert!(
+            flag.detail.contains("executable bit is kept"),
+            "{}",
+            flag.detail
+        );
+        assert!(!flag.detail.contains("without the executable bit"));
     }
 
     #[test]

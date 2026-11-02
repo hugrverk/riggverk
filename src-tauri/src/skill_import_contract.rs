@@ -211,6 +211,9 @@ mod tests {
             .map(|flag| flag["kind"].as_str().expect("kind"))
             .collect();
         assert_eq!(flags, ["executable"]);
+        let detail = candidate["flags"][0]["detail"].as_str().expect("detail");
+        assert!(detail.contains("executable bit is kept"), "{detail}");
+        assert!(!detail.contains("without the executable bit"), "{detail}");
         assert!(shown["token"].is_string());
         // A preview publishes nothing and installs nothing; the script never ran.
         assert!(!env.imported().exists());
