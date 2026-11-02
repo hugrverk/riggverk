@@ -550,8 +550,8 @@ describe("Library sheet", () => {
     expect(within(sheet).queryByRole("textbox")).toBeNull();
     expect(sheet.contains(document.activeElement)).toBe(true);
 
-    fireEvent.click(within(sheet).getByRole("button", { name: "Close" }));
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await act(async () => { fireEvent.click(within(sheet).getByRole("button", { name: "Close" })); });
+    expect(screen.queryByRole("dialog")).toBeNull();
     const bundled = within(screen.getByRole("heading", { name: "Bundled" }).closest("section")!);
     expect(document.activeElement).toBe(bundled.getAllByRole("button", { name: "Read" })[0]);
   });
@@ -559,12 +559,12 @@ describe("Library sheet", () => {
   it("closes on Escape and on a click on the backdrop", async () => {
     await renderLibrary({ topic: "agents" });
     let sheet = await openSheet("verifier", "Read");
-    fireEvent.keyDown(sheet, { key: "Escape" });
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await act(async () => { fireEvent.keyDown(sheet, { key: "Escape" }); });
+    expect(screen.queryByRole("dialog")).toBeNull();
 
     sheet = await openSheet("verifier", "Read");
-    fireEvent.click(document.querySelector(".lib-sheet-back")!);
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await act(async () => { fireEvent.click(document.querySelector(".lib-sheet-back")!); });
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 
   it("keeps the window's keys out of the sheet, whose own keys still work", async () => {
@@ -578,8 +578,8 @@ describe("Library sheet", () => {
     fireEvent.keyDown(close, { key: "?" });
     expect(onSwitchView).not.toHaveBeenCalled();
     expect(screen.queryByRole("dialog", { name: /keyboard/i })).toBeNull();
-    fireEvent.keyDown(close, { key: "Escape" });
-    await waitFor(() => expect(screen.queryByRole("dialog", { name: /verifier/i })).toBeNull());
+    await act(async () => { fireEvent.keyDown(close, { key: "Escape" }); });
+    expect(screen.queryByRole("dialog", { name: /verifier/i })).toBeNull();
   });
 
   it("keeps Tab inside the sheet", async () => {
