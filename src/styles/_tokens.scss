@@ -48,7 +48,10 @@
   --fail-bg: rgba(207, 142, 133, 0.12);
   --fix: var(--fail);
   --off: #9b9ba0;
-  --pill-off: #a1a1a6;
+  --pill-ok: color-mix(in srgb, var(--ok) 98%, white);
+  --pill-yours: color-mix(in srgb, var(--yours) 96%, white);
+  --pill-fix: color-mix(in srgb, var(--fix) 89%, white);
+  --pill-off: #a8a8ad;
   --decide: var(--text);
   --decide-bg: var(--bg-raised);
   --primary: #b8bcc4;
