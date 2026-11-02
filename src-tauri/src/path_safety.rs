@@ -1,10 +1,25 @@
 //! Bounded path safety checks for managed installation mutations.
 //!
-//! Rejects symlinks on paths and in parent chains up to an allowlisted root.
+//! Rejects symlinks and, on Windows, reparse points on paths and parent chains up to an
+//! allowlisted root.
 
 use std::ffi::OsStr;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
+
+#[cfg(any(windows, test))]
+const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
+
+#[cfg(any(windows, test))]
+pub(crate) fn has_reparse_point_attribute(file_attributes: u32) -> bool {
+    file_attributes & FILE_ATTRIBUTE_REPARSE_POINT != 0
+}
+
+#[cfg(windows)]
+fn is_reparse_point(metadata: &fs::Metadata) -> bool {
+    use std::os::windows::fs::MetadataExt;
+    has_reparse_point_attribute(metadata.file_attributes())
+}
 
 /// Reject when `path` is a symlink, including dangling symlinks.
 ///
@@ -16,6 +31,11 @@ pub fn reject_symlink(path: &Path, label: &str) -> Result<(), String> {
         Ok(meta) if meta.file_type().is_symlink() => {
             Err(format!("refusing symlink {label}: {}", path.display()))
         }
+        #[cfg(windows)]
+        Ok(meta) if is_reparse_point(&meta) => Err(format!(
+            "refusing reparse point {label}: {}",
+            path.display()
+        )),
         Ok(_) => Ok(()),
     }
 }
@@ -157,6 +177,14 @@ pub fn ensure_within_root(child: &Path, root: &Path, label: &str) -> Result<(), 
 mod tests {
     use super::*;
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn reparse_point_attribute_is_detected_without_windows_metadata() {
+        assert!(!has_reparse_point_attribute(0));
+        assert!(!has_reparse_point_attribute(0x20));
+        assert!(has_reparse_point_attribute(0x400));
+        assert!(has_reparse_point_attribute(0x420));
+    }
 
     fn temp(label: &str) -> PathBuf {
         let n = SystemTime::now()
