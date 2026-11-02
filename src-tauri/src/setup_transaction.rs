@@ -1868,7 +1868,7 @@ fn managed_hash_for(
 
 /// [`managed_hash_for`], and for a skill file without a record of its own the record of the same
 /// file under another case: on a case-insensitive volume (APFS by default) a case-only rename
-/// (`Notes.md` to `notes.md`) finds the installed file, which the app owns.
+/// (`Notes.md` to `notes.md`) finds the installed file, which the app owns. Linux compares exactly.
 fn managed_hash_for_artifact(
     artifact: &ArtifactId,
     identity: &str,
@@ -1879,11 +1879,14 @@ fn managed_hash_for_artifact(
         records
             .iter()
             .find(|record| {
-                record.identity.eq_ignore_ascii_case(identity)
-                    && crate::managed_bootstrap::artifact_from_identity(&record.identity)
-                        .ok()
-                        .and_then(|other| other.as_skill_file())
-                        .is_some_and(|other| file.same_file_ignoring_case(&other))
+                crate::platform_paths::names_match(
+                    &record.identity,
+                    identity,
+                    crate::platform_paths::Platform::current(),
+                ) && crate::managed_bootstrap::artifact_from_identity(&record.identity)
+                    .ok()
+                    .and_then(|other| other.as_skill_file())
+                    .is_some_and(|other| file.same_file(&other))
             })
             .map(|record| record.hash.clone())
     })

@@ -12,7 +12,7 @@ use std::path::{Component, Path, PathBuf};
 
 use crate::agent_skill_targets::codex_home;
 use crate::light_harness::LightHarnessId;
-use crate::platform_paths::opencode_config_dir;
+use crate::platform_paths::{names_match, opencode_config_dir, Platform};
 use crate::setup_lifecycle::SetupSurfaceId;
 use crate::skill_roots::{SkillRoot, SkillScope};
 use crate::skill_sources::{BundleOnly, SourceRoot};
@@ -253,10 +253,10 @@ impl SkillRelPath {
         self.0 == Self::SKILL_MD
     }
 
-    /// Whether `other` names the same file on a case-insensitive volume (APFS by default). Paths
-    /// are ASCII, so ASCII case folding is the volume's.
-    pub fn same_file_ignoring_case(&self, other: &Self) -> bool {
-        self.0.eq_ignore_ascii_case(&other.0)
+    /// Whether `other` names the same file under `platform`'s case rules: a case-insensitive
+    /// volume (APFS, NTFS by default) folds ASCII case, Linux compares exactly. Paths are ASCII.
+    pub fn same_file_on(&self, other: &Self, platform: Platform) -> bool {
+        names_match(&self.0, &other.0, platform)
     }
 }
 
@@ -269,12 +269,16 @@ pub struct SkillFileRef {
 }
 
 impl SkillFileRef {
-    /// Whether `other` is this file on a case-insensitive volume: the same root and skill, and a
-    /// path that differs at most in case (`Notes.md` and `notes.md`).
-    pub fn same_file_ignoring_case(&self, other: &Self) -> bool {
+    /// Whether `other` is this file on the current platform: the same root and skill, and a path
+    /// that differs at most in case (`Notes.md` and `notes.md`) where the volume folds case.
+    pub fn same_file(&self, other: &Self) -> bool {
+        self.same_file_on(other, Platform::current())
+    }
+
+    fn same_file_on(&self, other: &Self, platform: Platform) -> bool {
         self.root == other.root
             && self.skill == other.skill
-            && self.rel.same_file_ignoring_case(&other.rel)
+            && self.rel.same_file_on(&other.rel, platform)
     }
 
     pub fn skill_md(root: SkillRoot, skill: SkillName) -> Self {
@@ -838,6 +842,24 @@ fn dirs_home() -> Option<PathBuf> {
 mod tests {
     use super::*;
     use std::fs;
+
+    #[test]
+    fn skill_file_identity_follows_platform_case_rules() {
+        let file = |rel: &str| SkillFileRef {
+            root: SkillRoot::Claude,
+            skill: SkillName::new("tdd").unwrap(),
+            rel: SkillRelPath::new(rel).unwrap(),
+        };
+        let (upper, lower) = (file("Notes.md"), file("notes.md"));
+        for (platform, folds) in [
+            (Platform::MacOS, true),
+            (Platform::Windows, true),
+            (Platform::Linux, false),
+        ] {
+            assert_eq!(upper.same_file_on(&lower, platform), folds);
+            assert!(upper.same_file_on(&upper, platform));
+        }
+    }
 
     fn temp_dir(label: &str) -> PathBuf {
         let nonce = std::time::SystemTime::now()

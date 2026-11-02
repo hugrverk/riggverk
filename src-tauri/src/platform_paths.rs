@@ -238,6 +238,15 @@ pub fn path_comparison_key(path: &Path, platform: Platform) -> PathBuf {
     }
 }
 
+/// Whether two file names are the same file under `platform`'s case rules: exact on Linux,
+/// ASCII-case-insensitive on macOS and Windows (APFS and NTFS defaults).
+pub fn names_match(a: &str, b: &str, platform: Platform) -> bool {
+    match platform {
+        Platform::Linux => a == b,
+        Platform::MacOS | Platform::Windows => a.eq_ignore_ascii_case(b),
+    }
+}
+
 pub fn normalized_path_key(path: &Path) -> String {
     let normalized = path
         .components()
@@ -342,6 +351,20 @@ mod tests {
                     == path_comparison_key(Path::new("foo"), platform),
                 equal
             );
+        }
+    }
+
+    #[test]
+    fn names_match_obeys_platform_case_rules() {
+        use super::{names_match, Platform};
+        for (platform, folds) in [
+            (Platform::MacOS, true),
+            (Platform::Windows, true),
+            (Platform::Linux, false),
+        ] {
+            assert_eq!(names_match("Notes.md", "notes.md", platform), folds);
+            assert!(names_match("notes.md", "notes.md", platform));
+            assert!(!names_match("notes.md", "other.md", platform));
         }
     }
 
