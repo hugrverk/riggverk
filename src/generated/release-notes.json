@@ -6,24 +6,8 @@
         {
           "title": "New",
           "items": [
-            "Add a consent-first updater, off until configured",
-            "Branded universal dmg"
-          ]
-        },
-        {
-          "title": "Fixes",
-          "items": [
-            "Use the platform O_NOFOLLOW",
-            "Give the bundle step a stdin so actool can run"
-          ]
-        },
-        {
-          "title": "Other",
-          "items": [
-            "Show the Overview and explain Claude model pins",
-            "Bump Tauri to 2.12",
-            "Take conduct reports through GitHub only",
-            "Prepare the repository for a public release"
+            "Riggverk now comes as a disk image: open it and drag Riggverk to Applications. One universal app runs on Apple silicon and Intel Macs, and `SHA256SUMS` lists the checksums of the downloads",
+            "The groundwork for updating Riggverk from inside the app. It stays off until a later release turns it on, and then asks you once before it checks"
           ]
         }
       ]
