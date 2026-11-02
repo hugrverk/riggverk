@@ -226,6 +226,7 @@ describe("useInstallScreen", () => {
     await applyOnce();
     expect(result.current.flow.status).toBe("idle");
     expect(result.current.done!.result).toEqual(RESULT);
+    expect(result.current.done!.actionResult).toBe(h.results[0]);
     expect(result.current.done!.review.request.label).toBe("update claude");
     expect(result.current.isOpenOn("claude")).toBe(true);
     act(() => result.current.dismiss());
