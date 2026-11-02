@@ -335,11 +335,14 @@ function CandidateView({ candidate, open, checked, name, nameProblem, disabled, 
                 return (
                   <div key={change.path} className="lib-import-change">
                     <p className="lib-mono">{change.path} · {change.change}</p>
+                    {change.executable_before != null && change.executable_after != null && change.executable_before !== change.executable_after && (
+                      <p>Executable: {change.executable_before ? "yes" : "no"} → {change.executable_after ? "yes" : "no"}</p>
+                    )}
                     {diff ? (
                       <DiffView diff={diff} labelled={false} label={`${change.path} against the import in place`} />
-                    ) : (
+                    ) : change.before === null && change.after === null ? (
                       <p className="lib-dim">Binary or too large to show.</p>
-                    )}
+                    ) : null}
                   </div>
                 );
               })}

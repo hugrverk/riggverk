@@ -3986,6 +3986,13 @@ fn restore_artifact_from_backup_with_mode(
                 allowlist_root,
             )
             .map_err(|e| format!("restore file: {e}"))?;
+            if op.artifact.is_skill_file() {
+                crate::safe_filesystem::set_file_executable(
+                    &restore_dest,
+                    crate::safe_filesystem::file_is_executable(&backup_path)?,
+                    false,
+                )?;
+            }
             Ok(())
         }
         RollbackAction::RestoreManagedConfigFile => {
@@ -4682,6 +4689,78 @@ mod tests {
         .expect("restore under CODEX_HOME");
 
         assert_eq!(fs::read_to_string(&dest).unwrap(), "before");
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    /// A backed-up skill script comes back executable, and a plain skill file comes back plain.
+    #[cfg(unix)]
+    #[test]
+    fn restoring_a_skill_file_from_its_backup_restores_the_execute_bit() {
+        use std::os::unix::fs::PermissionsExt;
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        let _isolated = crate::test_env::guard::isolate_data_location_env();
+        unsafe { std::env::remove_var("CLAUDE_SKILLS_PATH") };
+        let base = temp("skill-exec-restore");
+        let ws = base.join("ws");
+        let home = base.join("home");
+        let backup_dir = base.join("backup");
+        fs::create_dir_all(&ws).unwrap();
+        fs::create_dir_all(&home).unwrap();
+        fs::create_dir_all(&backup_dir).unwrap();
+        let mode = |path: &Path| fs::metadata(path).unwrap().permissions().mode() & 0o777;
+        for (rel, before, after) in [
+            ("scripts/run.sh", 0o755, 0o644),
+            ("references/guide.md", 0o644, 0o755),
+        ] {
+            let artifact = ArtifactId::skill_file(
+                SkillRoot::Claude,
+                crate::artifact_registry::SkillName::new("demo").unwrap(),
+                crate::artifact_registry::SkillRelPath::new(rel).unwrap(),
+            );
+            let dest = artifact.resolve_dest(&home, &ws).unwrap();
+            fs::create_dir_all(dest.parent().unwrap()).unwrap();
+            fs::write(&dest, "before").unwrap();
+            fs::set_permissions(&dest, fs::Permissions::from_mode(before)).unwrap();
+            let backup_rel = backup_artifact(&artifact, &backup_dir, &home, &ws)
+                .unwrap()
+                .expect("backed up");
+            let backed_up = backup_dir.join(&backup_rel);
+            assert_eq!(
+                mode(&backed_up),
+                if before & 0o100 != 0 { 0o700 } else { 0o600 }
+            );
+
+            // The update rewrote the file with the other mode.
+            fs::write(&dest, "after").unwrap();
+            fs::set_permissions(&dest, fs::Permissions::from_mode(after)).unwrap();
+            let op = ArtifactManifestOperation {
+                artifact,
+                surface: SetupSurfaceId::Skills,
+                kind: OperationKind::Update,
+                previous_state: PreviousState::ManagedFile,
+                rollback_action: RollbackAction::RestoreFile,
+                backup_rel: Some(backup_rel),
+                apply_status: ApplyStatus::Applied,
+                ..Default::default()
+            };
+            restore_artifact_from_backup_with_mode(
+                &op,
+                &backup_dir,
+                &home,
+                RollbackRestoreMode::FullBackup,
+                Some(&ws),
+            )
+            .expect("restore");
+            assert_eq!(fs::read_to_string(&dest).unwrap(), "before");
+            let restored = mode(&dest);
+            assert_eq!(
+                restored & 0o111 != 0,
+                before & 0o100 != 0,
+                "{rel}: {restored:o}"
+            );
+            assert_eq!(restored & 0o022, 0, "{rel}: never group or world writable");
+        }
         let _ = fs::remove_dir_all(&base);
     }
 
