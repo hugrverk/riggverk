@@ -14,6 +14,7 @@ import type { PlannedOperation, SetupPlan, SetupResult, SetupSurfaceId } from ".
 import { InstallPlanPane } from "./InstallPlanPane";
 
 const invokeMock = vi.fn();
+const ACTION_RESULT = { success: true, action: "apply_setup update claude", stdout: "", stderr: "", exit_code: 0 };
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: (...args: unknown[]) => invokeMock(...args),
@@ -553,7 +554,7 @@ describe("InstallPlanPane: band, map and states", () => {
     const result: SetupResult = { success: true, transaction_id: "tx-42", applied: ["x"], failed: [], rolled_back: [], manual_steps: [], message: "ok" };
     const onUndo = vi.fn();
     const onDismiss = vi.fn();
-    renderPane(flow, { done: { review, result, at: new Date(2026, 10, 1, 16, 14).getTime() }, onUndo, onDismiss });
+    renderPane(flow, { done: { review, result, at: new Date(2026, 10, 1, 16, 14).getTime(), actionResult: ACTION_RESULT }, onUndo, onDismiss });
     const pane = screen.getByRole("region", { name: "Install plan" });
     expect(pane.querySelector(".pane-title b")!.textContent).toBe("Update applied");
     expect(within(pane).getByRole("status").textContent).toBe("done at 16:14 · 4 changes applied, 1 conflict skipped");
@@ -586,7 +587,7 @@ describe("InstallPlanPane: a done state with steps left", () => {
       message: "ok",
     };
     const flow = { ...makeFlow(), status: "idle" as const, request: null, review: null };
-    renderPane(flow, { done: { review, result, at: new Date(2026, 10, 1, 9, 5).getTime() }, onDismiss: vi.fn() });
+    renderPane(flow, { done: { review, result, at: new Date(2026, 10, 1, 9, 5).getTime(), actionResult: ACTION_RESULT }, onDismiss: vi.fn() });
     const pane = screen.getByRole("region", { name: "Install plan" });
     expect(pane.textContent).not.toContain("Everything is set up.");
     expect(pane.textContent).toContain("Applied. The rest is yours to decide.");
@@ -594,7 +595,7 @@ describe("InstallPlanPane: a done state with steps left", () => {
     expect(within(pane).getByRole("status").textContent).toBe("done at 09:05 · 1 change applied, 1 step left to you");
     cleanup();
 
-    renderPane(flow, { done: { review, result: { ...result, manual_steps: [] }, at: Date.now() }, onDismiss: vi.fn() });
+    renderPane(flow, { done: { review, result: { ...result, manual_steps: [] }, at: Date.now(), actionResult: ACTION_RESULT }, onDismiss: vi.fn() });
     expect(screen.getByRole("region", { name: "Install plan" }).textContent).toContain("Everything is set up.");
     expect(document.querySelector(".plan-left")).toBeNull();
   });
