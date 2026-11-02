@@ -1094,6 +1094,13 @@ fn apply_single_artifact(
 
     crate::safe_filesystem::copy_regular_file_no_symlinks(&source, &dest, &root)
         .map_err(|e| format!("create {}: {e}", dest.display()))?;
+    if artifact.is_skill_file() {
+        crate::safe_filesystem::set_file_executable(
+            &dest,
+            crate::safe_filesystem::file_is_executable(&source)?,
+            false,
+        )?;
+    }
     Ok(())
 }
 
