@@ -8,21 +8,15 @@ pub fn resolve_executable(program: &str, path_env: &str, pathext: Option<&str>) 
         return None;
     }
 
+    #[cfg(windows)]
+    let windows_pathext = std::env::var("PATHEXT").ok();
+    #[cfg(windows)]
+    let pathext = Some(default_windows_pathext(
+        pathext.or(windows_pathext.as_deref()),
+    ));
     let candidate = Path::new(trimmed);
-    if candidate.is_absolute() {
-        return if is_executable_file(candidate, pathext) {
-            Some(candidate.to_path_buf())
-        } else {
-            None
-        };
-    }
-
-    if candidate.components().count() > 1 {
-        return if is_executable_file(candidate, pathext) {
-            Some(candidate.to_path_buf())
-        } else {
-            None
-        };
+    if candidate.is_absolute() || candidate.components().count() > 1 {
+        return resolve_with_extensions(candidate, pathext);
     }
 
     let delimiter = if cfg!(windows) { ';' } else { ':' };
@@ -39,27 +33,50 @@ pub fn resolve_executable(program: &str, path_env: &str, pathext: Option<&str>) 
     None
 }
 
+#[cfg(any(test, windows))]
+fn default_windows_pathext(pathext: Option<&str>) -> &str {
+    pathext.unwrap_or(".COM;.EXE;.BAT;.CMD")
+}
+
+fn windows_extensions(pathext: &str) -> Vec<String> {
+    let mut extensions: Vec<String> = pathext
+        .split(';')
+        .map(|ext| ext.trim().trim_start_matches('.').to_ascii_uppercase())
+        .filter(|ext| matches!(ext.as_str(), "EXE" | "CMD" | "BAT" | "COM"))
+        .collect();
+    extensions.sort_by_key(|ext| match ext.as_str() {
+        "EXE" => 0,
+        "CMD" => 1,
+        _ => 2,
+    });
+    extensions.dedup();
+    extensions
+}
+
 fn resolve_with_extensions(base: &Path, pathext: Option<&str>) -> Option<PathBuf> {
-    if is_executable_file(base, pathext) {
-        return Some(base.to_path_buf());
+    let Some(pathext) = pathext else {
+        return is_executable_file(base, None).then(|| base.to_path_buf());
+    };
+    let extensions = windows_extensions(pathext);
+    if base.extension().is_some_and(|ext| {
+        extensions
+            .iter()
+            .any(|allowed| ext.eq_ignore_ascii_case(allowed))
+    }) {
+        return base.is_file().then(|| base.to_path_buf());
     }
-    let exts = pathext?;
-    for ext in exts.split(';') {
-        let ext = ext.trim();
-        if ext.is_empty() {
-            continue;
-        }
-        let suffix = if ext.starts_with('.') {
-            ext.to_string()
-        } else {
-            format!(".{ext}")
-        };
-        let candidate = PathBuf::from(format!("{}{}", base.display(), suffix));
-        if is_executable_file(&candidate, pathext) {
+    for ext in extensions {
+        let suffix = format!(".{ext}");
+        let mut name = base.as_os_str().to_os_string();
+        name.push(&suffix);
+        let candidate = PathBuf::from(name);
+        if candidate.is_file() {
             return Some(candidate);
         }
         if let Some(existing) = find_case_insensitive_match(base, &suffix) {
-            return Some(existing);
+            if existing.is_file() {
+                return Some(existing);
+            }
         }
     }
     None
@@ -82,8 +99,14 @@ pub(crate) fn is_executable_file(path: &Path, pathext: Option<&str>) -> bool {
     if !path.is_file() {
         return false;
     }
-    if pathext.is_some() {
-        return true;
+    #[cfg(windows)]
+    let pathext = Some(default_windows_pathext(pathext));
+    if let Some(pathext) = pathext {
+        return path.extension().is_some_and(|ext| {
+            windows_extensions(pathext)
+                .iter()
+                .any(|allowed| ext.eq_ignore_ascii_case(allowed))
+        });
     }
     #[cfg(unix)]
     {
@@ -101,8 +124,6 @@ pub(crate) fn is_executable_file(path: &Path, pathext: Option<&str>) -> bool {
 /// Returns `current` with every existing directory from `fallbacks` that is not already on it
 /// appended, or `None` when nothing changes. Append-only so system tools earlier on the path
 /// are never shadowed. An unset or empty `current` is left alone.
-// Only the unix startup path calls this; tests exercise it on every platform.
-#[cfg_attr(not(unix), allow(dead_code))]
 pub(crate) fn append_missing_path_dirs(current: &OsStr, fallbacks: &[PathBuf]) -> Option<OsString> {
     if current.is_empty() {
         return None;
@@ -122,10 +143,7 @@ pub(crate) fn append_missing_path_dirs(current: &OsStr, fallbacks: &[PathBuf]) -
     }
 }
 
-/// A GUI launch (Finder/launchd) starts with a minimal `PATH` that lacks Homebrew and the
-/// per-user bin directory, so `gh`, `python3`, and `claude` would not resolve. Call once at
-/// startup before other threads exist.
-#[cfg(unix)]
+/// Add existing tool directories to PATH once at startup before other threads exist.
 pub fn extend_path_with_tool_dirs() {
     let Some(current) = std::env::var_os("PATH") else {
         return;
@@ -135,25 +153,91 @@ pub fn extend_path_with_tool_dirs() {
     }
 }
 
-#[cfg(not(unix))]
-pub fn extend_path_with_tool_dirs() {}
-
-/// The tool folders a GUI launch's `PATH` lacks (Homebrew, the per-user bin folders), in the
-/// order they are searched. Empty off unix.
-pub(crate) fn tool_dirs() -> Vec<PathBuf> {
-    if !cfg!(unix) {
-        return Vec::new();
-    }
+/// Tool folders to append to PATH, in search order.
+#[cfg(any(test, target_os = "linux"))]
+fn linux_tool_dirs(home: Option<&Path>) -> Vec<PathBuf> {
     let mut dirs = vec![
         PathBuf::from("/opt/homebrew/bin"),
         PathBuf::from("/usr/local/bin"),
+        PathBuf::from("/home/linuxbrew/.linuxbrew/bin"),
     ];
-    if let Ok(home) = crate::cursor_profile_paths::resolve_user_home() {
-        dirs.push(home.join(".local/bin"));
-        // The official OpenCode installer puts its binary here.
-        dirs.push(home.join(".opencode/bin"));
+    if let Some(home) = home {
+        for dir in [
+            ".local/bin",
+            ".opencode/bin",
+            ".linuxbrew/bin",
+            ".npm-global/bin",
+            ".bun/bin",
+            ".cargo/bin",
+        ] {
+            dirs.push(home.join(dir));
+        }
     }
     dirs
+}
+
+#[cfg(any(test, windows))]
+fn windows_tool_dirs(
+    home: Option<&Path>,
+    appdata: Option<&Path>,
+    local_appdata: Option<&Path>,
+) -> Vec<PathBuf> {
+    let mut dirs = Vec::new();
+    if let Some(appdata) = appdata {
+        dirs.push(appdata.join("npm"));
+    }
+    if let Some(home) = home {
+        for dir in [
+            ".bun/bin",
+            ".cargo/bin",
+            "scoop/shims",
+            ".local/bin",
+            ".opencode/bin",
+        ] {
+            dirs.push(home.join(dir));
+        }
+    }
+    if let Some(local) = local_appdata {
+        for dir in ["Programs/opencode/bin", "Programs/Claude"] {
+            dirs.push(local.join(dir));
+        }
+    }
+    dirs
+}
+
+pub(crate) fn tool_dirs() -> Vec<PathBuf> {
+    let home = crate::cursor_profile_paths::resolve_user_home().ok();
+    #[cfg(windows)]
+    {
+        let appdata = std::env::var_os("APPDATA")
+            .map(PathBuf::from)
+            .filter(|p| !p.as_os_str().is_empty());
+        let local = std::env::var_os("LOCALAPPDATA")
+            .map(PathBuf::from)
+            .filter(|p| !p.as_os_str().is_empty());
+        windows_tool_dirs(home.as_deref(), appdata.as_deref(), local.as_deref())
+    }
+    #[cfg(target_os = "linux")]
+    {
+        linux_tool_dirs(home.as_deref())
+    }
+    #[cfg(all(unix, not(target_os = "linux")))]
+    {
+        let mut dirs = vec![
+            PathBuf::from("/opt/homebrew/bin"),
+            PathBuf::from("/usr/local/bin"),
+        ];
+        if let Some(home) = home {
+            dirs.push(home.join(".local/bin"));
+            dirs.push(home.join(".opencode/bin"));
+        }
+        dirs
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        let _ = home;
+        Vec::new()
+    }
 }
 
 #[cfg(test)]
@@ -172,6 +256,7 @@ mod tests {
         dir
     }
 
+    #[cfg(unix)]
     #[test]
     fn absolute_executable_path_is_accepted() {
         let _guard = crate::test_env::guard::lock();
@@ -188,6 +273,7 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
     }
 
+    #[cfg(unix)]
     #[test]
     fn path_lookup_finds_executable_in_path() {
         let _guard = crate::test_env::guard::lock();
@@ -213,6 +299,7 @@ mod tests {
         );
     }
 
+    #[cfg(unix)]
     #[test]
     fn path_with_spaces_is_one_candidate() {
         let _guard = crate::test_env::guard::lock();
@@ -232,6 +319,7 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
     }
 
+    #[cfg(unix)]
     #[test]
     fn empty_path_entries_are_skipped() {
         let _guard = crate::test_env::guard::lock();
@@ -271,6 +359,75 @@ mod tests {
                 .map(|n| n.to_string_lossy().to_ascii_lowercase())
         );
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn windows_resolution_prefers_exe_then_cmd_and_skips_shims() {
+        assert_eq!(
+            windows_extensions(default_windows_pathext(None)),
+            ["EXE", "CMD", "COM", "BAT"]
+        );
+        let dir = temp_bin_dir("windows-order");
+        for name in ["tool", "tool.cmd", "tool.exe", "other", "other.bat"] {
+            fs::write(dir.join(name), "").unwrap();
+        }
+        let path = dir.to_str().unwrap();
+        let canonical = |path: Option<PathBuf>| fs::canonicalize(path.unwrap()).unwrap();
+        assert_eq!(
+            canonical(resolve_executable(
+                "tool",
+                path,
+                Some(".COM;.BAT;.CMD;.EXE")
+            )),
+            fs::canonicalize(dir.join("tool.exe")).unwrap()
+        );
+        fs::remove_file(dir.join("tool.exe")).unwrap();
+        assert_eq!(
+            canonical(resolve_executable(
+                "tool",
+                path,
+                Some(".COM;.BAT;.CMD;.EXE")
+            )),
+            fs::canonicalize(dir.join("tool.cmd")).unwrap()
+        );
+        assert_eq!(
+            canonical(resolve_executable(
+                &dir.join("other").to_string_lossy(),
+                "",
+                Some(".BAT")
+            )),
+            fs::canonicalize(dir.join("other.bat")).unwrap()
+        );
+        assert!(resolve_executable("tool", path, Some(".PS1")).is_none());
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn platform_tool_directories_are_derived_from_supplied_roots() {
+        let home = Path::new("home");
+        let linux = linux_tool_dirs(Some(home));
+        for dir in [
+            ".local/bin",
+            ".linuxbrew/bin",
+            ".npm-global/bin",
+            ".bun/bin",
+            ".cargo/bin",
+        ] {
+            assert!(linux.contains(&home.join(dir)));
+        }
+        assert!(linux.contains(&PathBuf::from("/home/linuxbrew/.linuxbrew/bin")));
+        let windows = windows_tool_dirs(
+            Some(home),
+            Some(Path::new("roaming")),
+            Some(Path::new("local")),
+        );
+        for dir in [".bun/bin", ".cargo/bin", "scoop/shims"] {
+            assert!(windows.contains(&home.join(dir)));
+        }
+        assert!(windows.contains(&PathBuf::from("roaming/npm")));
+        assert!(windows.contains(&PathBuf::from("local/Programs/opencode/bin")));
+        assert!(!windows.contains(&PathBuf::from("local/Programs")));
+        assert!(windows_tool_dirs(None, None, None).is_empty());
     }
 
     fn path_list(dirs: &[&Path]) -> OsString {
