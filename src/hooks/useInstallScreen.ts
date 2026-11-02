@@ -43,6 +43,8 @@ export interface InstallDone {
   result: SetupResult;
   /** When the apply returned (ms). */
   at: number;
+  /** The corresponding run-panel outcome. */
+  actionResult: ActionResult;
 }
 
 export interface InstallOpenOptions {
@@ -136,8 +138,6 @@ export function useInstallScreen({
       action: "apply_setup",
       task: async () => {
         const result = await flowRef.current.apply();
-        // Set with the flow's own return to idle, so the card goes from applying to done without closing in between.
-        if (result?.success) setDone({ review, result, at: Date.now() });
         return { review, result };
       },
       toActionResult: ({ review: reviewed, result }) => {
@@ -152,7 +152,9 @@ export function useInstallScreen({
             exit_code: null,
           };
         }
-        return { success: result.success, action, ...formatApplyOutput(reviewed, result), exit_code: result.success ? 0 : 1 };
+        const actionResult = { success: result.success, action, ...formatApplyOutput(reviewed, result), exit_code: result.success ? 0 : 1 };
+        if (result.success) setDone({ review: reviewed, result, at: Date.now(), actionResult });
+        return actionResult;
       },
       refresh,
     }).then(outcome => {
