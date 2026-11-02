@@ -57,8 +57,7 @@ describe("status pill contrast", () => {
           const background = rule.match(/(?:^|;)\s*background:\s*([^;]+)/)![1].trim();
           const base = color(`var(${surface})`, vars);
           const ratio = contrast(color(ink, vars), color(background, vars, base));
-          // The existing dark off pill is below AA on cards; dark colors are outside this change.
-          expect(ratio).toBeGreaterThanOrEqual(name === "dark" && tone === "off" && surface === "--bg-panel" ? 4.35 : 4.5);
+          expect(ratio).toBeGreaterThanOrEqual(4.5);
         });
       }
     }
