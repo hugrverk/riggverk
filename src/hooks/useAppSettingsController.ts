@@ -11,7 +11,7 @@ import {
   type SettingsSaveStatus,
 } from "../lib/settingsDraft";
 import { workspaceTaskBlockedMessage } from "../lib/workspaceErrors";
-import type { AgentTargetMeta, AppSettings, GetSettingsResponse, InstallAgent } from "../types";
+import type { AgentTargetMeta, AppSettings, GetSettingsResponse, InstallAgent, UpdateCheckChoice } from "../types";
 
 /**
  * Harness and target toggles as the backend last acknowledged them. Its status commands filter on the saved
@@ -376,6 +376,17 @@ export function useAppSettingsController({
     setAppSettings(prev => (prev && prev.last_seen_version !== version ? { ...prev, last_seen_version: version } : prev));
   }, []);
 
+  /** The update check choice from the consent card or Settings; autosaved. */
+  const setUpdateCheck = useCallback((choice: UpdateCheckChoice) => {
+    setSettingsMsg(null);
+    setAppSettings(prev => (prev && prev.update_check !== choice ? { ...prev, update_check: choice } : prev));
+  }, []);
+
+  /** Records a successful update check (seconds since the epoch); autosaved like any other setting. */
+  const setLastUpdateCheck = useCallback((seconds: number) => {
+    setAppSettings(prev => (prev ? { ...prev, last_update_check: seconds } : prev));
+  }, []);
+
   const toggleTarget = useCallback((id: string) => {
     setSettingsMsg(null);
     setAppSettings(prev => {
@@ -482,6 +493,8 @@ export function useAppSettingsController({
     setMotion,
     setLandingView,
     setLastSeenVersion,
+    setUpdateCheck,
+    setLastUpdateCheck,
     toggleTarget,
     toggleHarness,
     clearSettingsMsg,

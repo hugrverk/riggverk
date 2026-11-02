@@ -24,7 +24,8 @@ import {
   useSystemPrefersLight,
   type SettingsSaveStatus,
 } from "../lib/settingsDraft";
-import type { AppSettings } from "../types";
+import type { AppUpdate } from "../hooks/useAppUpdate";
+import type { AppSettings, UpdateCheckChoice } from "../types";
 import { INSTALL_AGENTS, type InstallAgent } from "../types";
 import { BindingButton } from "../ui/BindingButton";
 import { Pane } from "../ui/Pane";
@@ -63,6 +64,8 @@ interface SettingsViewProps {
    * custom one saved by an earlier version.
    */
   onResetWorkspace?: () => Promise<SettingsMessage | null>;
+  /** The app update, when this build has updates on; absent: no Updates group. */
+  update?: AppUpdate;
 }
 
 const APPEARANCE_OPTIONS = [
@@ -78,6 +81,11 @@ const MOTION_OPTIONS = [
 ] as const satisfies ReadonlyArray<{ value: AppSettings["motion"]; label: string }>;
 
 /** `start` is the id of the Overview page; the saved landing value ids stay as they are. */
+const UPDATE_OPTIONS: readonly RadioOption<UpdateCheckChoice>[] = [
+  { value: "daily", label: "Daily" },
+  { value: "manual", label: "When I ask" },
+];
+
 const LANDING_OPTIONS = [
   { value: "start", label: "Overview" },
   { value: "library", label: "Library" },
@@ -327,6 +335,7 @@ export function SettingsView({
   workspacePath,
   workspaceBusy = false,
   onResetWorkspace,
+  update,
 }: SettingsViewProps) {
   const ids = useId();
   // The OS preference beats the setting (lib/motion), so the row says when it is the one in charge.
@@ -641,6 +650,32 @@ export function SettingsView({
             />
           </SettingRow>
         </SettingRows>
+        {update && (
+          <>
+            <h3 className="sgroup">Updates</h3>
+            <SettingRows label="App updates">
+              <SettingRow labelId={labelId("update-check")} label="Check for new versions">
+                <Segmented
+                  options={UPDATE_OPTIONS}
+                  value={appSettings.update_check ?? "ask"}
+                  onSelect={update.setChoice}
+                  label="Check for new versions"
+                />
+              </SettingRow>
+              <SettingRow labelId={labelId("update-now")} label="Check now">
+                <div className="setting-line" data-setting-row="">
+                  <TButton keys={[]} disabled={update.checking ? "Checking…" : false} onClick={update.checkNow}>
+                    check for updates
+                  </TButton>
+                </div>
+              </SettingRow>
+            </SettingRows>
+            <p className="setting-note c-dim">
+              A check asks github.com for the newest version and sends nothing about you or your setup. Nothing is
+              downloaded until you review a new version and choose Download and restart.
+            </p>
+          </>
+        )}
         <h3 className="sgroup">Agents</h3>
         <SettingRows label="Enabled agents">
           {INSTALL_AGENTS.map(harness => {

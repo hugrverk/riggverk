@@ -3,6 +3,7 @@ mod agent_skill_targets;
 mod agent_targets;
 mod app_data_migration;
 mod app_menu;
+mod app_update;
 mod apply_progress;
 mod artifact_registry;
 mod claude_settings;
@@ -101,6 +102,7 @@ mod test_env;
 #[cfg(test)]
 mod workspace_cleanup_contract;
 
+use app_update::{check_app_update, get_app_update_info, install_app_update};
 use commands::{
     apply_codex_config_defaults, apply_rules_conversion, apply_setup, apply_take_bundled,
     apply_uninstall, create_doc, get_agent_targets, get_backup_details, get_claude_runtime_health,
@@ -126,7 +128,16 @@ use tauri::Manager;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     executable_resolver::extend_path_with_tool_dirs();
-    tauri::Builder::default()
+    let context = tauri::generate_context!();
+    // The updater plugin exists only in a build whose config turns updates on (see app_update); otherwise the app
+    // has no updater and makes no network request.
+    let builder = if app_update::configured(context.config()) {
+        tauri::Builder::default().plugin(app_update::plugin())
+    } else {
+        tauri::Builder::default()
+    };
+    builder
+        .manage(app_update::UpdateState::default())
         // Restores the main window's size, position and maximized state when it is created (hidden); setup shows it.
         // Its own setup reads `.window-state.json` before the app data move below. No build before the plugin wrote
         // that file, so the move can never bring one in, and the read creates nothing.
@@ -214,8 +225,11 @@ pub fn run() {
             remove_imported_skill,
             undo_last_import,
             save_pack_skill,
+            get_app_update_info,
+            check_app_update,
+            install_app_update,
         ])
-        .build(tauri::generate_context!())
+        .build(context)
         .expect("error while building tauri application")
         .run(|app, event| {
             if let tauri::RunEvent::ExitRequested { code, api, .. } = event {

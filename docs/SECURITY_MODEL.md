@@ -163,6 +163,18 @@ The pages of the light harnesses (GitHub Copilot, Pi, Kilo Code, Google Antigrav
 - Unrelated IDE settings or MCP server payloads outside the allowlisted Playwright entries of Cursor and of the light harnesses (the other servers in those files are parsed with the file and never scanned, shown or logged).
 - Project `.git/` directories.
 
+## App updates (off in this build)
+
+The app has an updater (`src-tauri/src/app_update.rs`, `tauri-plugin-updater`) that stays off until `src-tauri/tauri.conf.json` has a `plugins.updater` block with the release key's public key, the GitHub `latest.json` endpoint and `requireSignedVersion: true` (docs/RELEASE.md, "Turning on updates"). Today there is no such block, so the plugin is not registered, the app menu has no Check for Updates, the UI shows no update card or setting, and the statement above holds: the app makes no network requests. A block that names a key and an endpoint but turns on a `dangerous*` option, allows downgrades, uses plain HTTP or leaves out `requireSignedVersion` counts as off, in the app (`app_update::configured`) and in `release.sh` (`release_tools.py updater-config`). The webview never gets the plugin's commands: no capability names them, so checks and installs run only through the app's own Rust commands, and the CSP does not change.
+
+When updates are turned on, replace the **No remote control** line under Core principles with these three, and add "The app bundle is replaced only by an update the user reviewed." to **Writes are explicit**:
+
+> - **No remote control.** The app accepts no remote commands, webhooks, or external IPC. No telemetry, no analytics, no cloud service, no AI model.
+> - **One network request, and only with consent.** The only network access is the update check: an HTTPS GET of `latest.json` from the Riggverk GitHub releases, made from the backend, never the webview. It runs only after the user turned on "Check daily" or chose Check for Updates; until the user answers the one-time question nothing is requested. It sends no app version, settings, paths or identifier; GitHub sees the IP address and a `tauri-plugin-updater` user agent. Offline, an automatic check fails quietly.
+> - **Updates are signed and explicit.** An update is downloaded only after the user reviewed its notes and pressed Download and restart, and only the version that was reviewed is installed. The archive must carry a minisign signature from the Riggverk release key, bound to the announced version (`requireSignedVersion`); otherwise nothing is changed. Only the app bundle is replaced; the workspace, rules, skills, settings and backups are not touched. Older versions are not installed by the app. An install waits for no apply: it is refused while one runs, and unsaved Library or settings changes are settled first, as when the window closes.
+
+and change the Tauri entry under Dependencies to name the plugin as active ("signed app updates, driven from the backend; the webview has no updater permission").
+
 ## Process output
 
 Command output is redacted for display and capped at 16 MB per stream. Helper subprocesses run with a 120 s default timeout; a timeout kills the whole process group.
@@ -174,4 +186,5 @@ Command output is redacted for display and capped at 16 MB per stream. Helper su
 ## Dependencies
 
 - [Tauri](https://tauri.app) - application shell. The webview CSP allows only `'self'` and IPC; capabilities are window dragging and listening for backend events (the webview cannot emit).
+- [tauri-plugin-updater](https://v2.tauri.app/plugin/updater/) - signed app updates, compiled in but registered only when `plugins.updater` turns updates on (it does not yet; see App updates above). The webview has no updater permission.
 - [serde](https://serde.rs), [React](https://react.dev), [TypeScript](https://www.typescriptlang.org), [Vite](https://vite.dev) (MIT).

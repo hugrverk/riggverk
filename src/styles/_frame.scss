@@ -233,3 +233,41 @@
 [data-motion="full"] .toast-text { animation: toast-in var(--dur-view) var(--ease) both; }
 
 @keyframes toast-in { from { opacity: 0; transform: translateY(10px); } }
+
+/* ---- app update: the one-time consent card and the "New: <version>" link in the foot ---- */
+
+.side .update-card {
+  margin: 12px 12px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  background: var(--bg-raised);
+  font-size: var(--fs-sm);
+  line-height: 1.45;
+}
+
+.update-card-title {
+  margin: 0 0 4px;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.update-card-text {
+  margin: 0 0 8px;
+  color: var(--text-muted);
+}
+
+.update-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.update-foot-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}

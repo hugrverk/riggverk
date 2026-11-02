@@ -16,6 +16,7 @@ import { useAppSettingsController } from "./hooks/useAppSettingsController";
 import { useApplyProgress } from "./hooks/useApplyProgress";
 import { useCheckedAt } from "./hooks/useCheckedAt";
 import { useWhatsNewOnUpgrade } from "./hooks/useWhatsNewOnUpgrade";
+import { useAppUpdate } from "./hooks/useAppUpdate";
 import { useWorkspaceReset } from "./hooks/useWorkspaceReset";
 import { workspaceTaskBlockedMessage } from "./lib/workspaceErrors";
 import { useEffectiveSkillLoads } from "./hooks/useEffectiveSkillLoads";
@@ -269,6 +270,8 @@ function AppShell() {
     setMotion,
     setLandingView,
     setLastSeenVersion,
+    setUpdateCheck,
+    setLastUpdateCheck,
     toggleTarget,
     toggleHarness,
     clearSettingsMsg,
@@ -698,6 +701,24 @@ function AppShell() {
 
   useWhatsNewOnUpgrade({ settings: appSettings, appVersion: APP_VERSION, recordVersion: setLastSeenVersion });
 
+  // Download and restart settles unsaved work the way closing the window does, and waits for a running apply.
+  const update = useAppUpdate({
+    settings: appSettings,
+    setUpdateCheck,
+    setLastUpdateCheck,
+    installBlocked: wsRunning !== null ? "Riggverk is applying changes. Wait until they are finished." : false,
+    beforeRestart: async () => {
+      if (!(await confirmLeave("Save and restart"))) return false;
+      if (await flushSettings()) return true;
+      return confirm({
+        title: "Settings not saved",
+        message: "Your latest settings change could not be saved. Restart anyway?",
+        confirmLabel: "Restart anyway",
+        destructive: true,
+      });
+    },
+  });
+
   useAppCommands({
     enabledHarnessIds,
     dataFolderOk,
@@ -744,6 +765,7 @@ function AppShell() {
         version={APP_VERSION}
         backupCount={backups.length}
         checkedAt={checkedAt}
+        update={update}
         dock={
           <RunPanel
             wsRunning={wsRunning}
@@ -928,6 +950,7 @@ function AppShell() {
             workspacePath={activeWorkspacePath}
             workspaceBusy={workspaceReset.busy}
             onResetWorkspace={workspaceReset.reset}
+            update={update.configured ? update : undefined}
           />
           </Suspense>
         )}

@@ -14,7 +14,7 @@
 //! held; the other instance is refused with [`BUSY_IN_ANOTHER_WINDOW`] instead of waiting.
 
 use std::path::PathBuf;
-use std::sync::{Mutex, MutexGuard, PoisonError};
+use std::sync::{Mutex, MutexGuard, PoisonError, TryLockError};
 
 static MUTATION_LOCK: Mutex<()> = Mutex::new(());
 
@@ -40,6 +40,24 @@ pub struct MutationGuard {
 /// file lock is advisory and the command still runs.
 pub fn acquire() -> Result<MutationGuard, String> {
     let process = lock_ignoring_poison(&MUTATION_LOCK);
+    let instance = match lock_path() {
+        Some(path) => instance::try_lock(&path)?,
+        None => None,
+    };
+    Ok(MutationGuard {
+        _instance: instance,
+        _process: process,
+    })
+}
+
+/// Like [`acquire`], but refuses at once with `busy` instead of waiting while a mutating command of this process
+/// runs. For the app update, which must not wait behind an apply and must not let one start while it swaps the app.
+pub fn try_acquire(busy: &str) -> Result<MutationGuard, String> {
+    let process = match MUTATION_LOCK.try_lock() {
+        Ok(guard) => guard,
+        Err(TryLockError::Poisoned(poisoned)) => poisoned.into_inner(),
+        Err(TryLockError::WouldBlock) => return Err(busy.to_string()),
+    };
     let instance = match lock_path() {
         Some(path) => instance::try_lock(&path)?,
         None => None,
@@ -177,6 +195,15 @@ mod tests {
             1,
             "two critical sections ran at the same time"
         );
+    }
+
+    #[test]
+    fn try_acquire_refuses_at_once_while_a_mutation_runs() {
+        let _env = crate::test_env::guard::lock();
+        let held = acquire().expect("no other instance");
+        assert_eq!(try_acquire("busy").err().as_deref(), Some("busy"));
+        drop(held);
+        assert!(try_acquire("busy").is_ok());
     }
 
     #[test]

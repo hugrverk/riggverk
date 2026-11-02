@@ -59,6 +59,10 @@ mod tests {
         "open_default_workspace_folder",
     ];
 
+    /// The app update (`app_update`): it checks for and installs a new app bundle, never touches the workspace,
+    /// and is off (refuses or skips) unless the release config turns updates on.
+    const APP_UPDATE_COMMANDS: [&str; 2] = ["check_app_update", "install_app_update"];
+
     /// Commands that existed to edit or open bundled items, or to choose another workspace folder.
     /// They were deleted, not disabled: the webview cannot call them.
     const REMOVED_COMMANDS: [&str; 9] = [
@@ -104,6 +108,7 @@ mod tests {
         let allowlisted: BTreeSet<&str> = set(&WRITE_COMMANDS)
             .union(&set(&OPEN_COMMANDS))
             .copied()
+            .chain(APP_UPDATE_COMMANDS)
             .collect();
         assert_eq!(
             unlisted, allowlisted,

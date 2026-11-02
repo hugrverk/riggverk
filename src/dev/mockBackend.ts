@@ -93,11 +93,12 @@ import type {
   WorkspaceDiagnostics,
 } from "../types";
 
-type Scenario = "default" | "conflict" | "fresh" | "error" | "empty";
+// `update`: like `default`, in a build with app updates on and a newer version on offer.
+type Scenario = "default" | "conflict" | "fresh" | "error" | "empty" | "update";
 
 const params = new URLSearchParams(location.search);
 const scenarioParam = params.get("mock");
-const scenario: Scenario = (["default", "conflict", "fresh", "error", "empty"] as const).includes(
+const scenario: Scenario = (["default", "conflict", "fresh", "error", "empty", "update"] as const).includes(
   scenarioParam as Scenario,
 )
   ? (scenarioParam as Scenario)
@@ -1986,6 +1987,24 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
     return actionResult(cmd, true, "");
   }
   switch (cmd) {
+    // Updates are off unless `?mock=update`; the mock never downloads anything.
+    case "get_app_update_info":
+      return { configured: scenario === "update", current_version: "2026.11.6" };
+    case "check_app_update":
+      if (scenario !== "update") return { status: "skipped" };
+      await delay(300);
+      return {
+        status: "available",
+        version: "2026.11.7",
+        current_version: "2026.11.6",
+        notes: "## New\n\n- Show the update review before anything is downloaded (#181)\n\n## Fixes\n\n- Keep the close guard in front of a restart (#182)",
+        date: "2026-11-08T12:00:00Z",
+        app_path: "/Applications/Riggverk.app",
+        blocked: null,
+      };
+    case "install_app_update":
+      await delay(600);
+      throw new Error("The mock backend does not install updates.");
     case "get_settings":
       return { settings, load_warning: scenario === "error" ? "settings.json had an unknown key `theme`; it was ignored." : null } satisfies GetSettingsResponse;
     case "update_settings": {

@@ -101,6 +101,52 @@ git tag -d v<version>                              # the local tag
 
 A failure after the tag was created prints these commands. A typo in the notes of a published release needs no rollback: `gh release edit v<version> --notes-file release-notes/<version>.md`. If the build itself is wrong, fix it in a pull request and publish with `--allow-newer`, or prepare the next version.
 
+## Turning on updates
+
+The app can update itself (Tauri's updater with a static `latest.json` on GitHub Releases), but it ships switched off: there is no `plugins.updater` in `src-tauri/tauri.conf.json`, so the app has no updater, no menu item, no update card and makes no network request, and `publish` makes no updater files. The design: the user is asked once ("Check daily" or "Not now"; nothing is requested before the answer), a new version is named in the sidebar foot, its review shows the notes, and one click, Download and restart, installs exactly that version after settling unsaved work. Nothing installs in the background, and older versions are never installed.
+
+Updates need public release files: the app fetches `https://github.com/hugrverk/riggverk/releases/latest/download/latest.json` without credentials, which a private repository answers with 404. Turn them on the day the repository goes public, in this order:
+
+1. **Make the signing key** (once, on the release Mac; never in the repository, never in CI while CI is off):
+
+   ```bash
+   npm run tauri signer generate -- -w ~/.tauri/riggverk-updater.key   # asks for a password; use a long one
+   ```
+
+   It writes the private key `~/.tauri/riggverk-updater.key` and the public key `~/.tauri/riggverk-updater.key.pub`.
+2. **Keep the key safe.** Store the private key file and its password in the Keychain or your password manager, and make an encrypted offline backup (for example an encrypted disk image on a USB stick kept elsewhere). A lost key means installed apps can never be updated again: every later release would have to be installed by hand. A leaked key lets someone sign an update, so it is never printed, committed or pasted anywhere.
+3. **Set the public key and endpoint** in `src-tauri/tauri.conf.json`, as a top-level `plugins` block (one switch: the app and `release.sh` both read it):
+
+   ```json
+   "plugins": {
+     "updater": {
+       "pubkey": "<the one line in ~/.tauri/riggverk-updater.key.pub>",
+       "endpoints": ["https://github.com/hugrverk/riggverk/releases/latest/download/latest.json"],
+       "requireSignedVersion": true
+     }
+   }
+   ```
+
+   The app and `release_tools.py updater-config` treat anything weaker (no `requireSignedVersion`, `allowDowngrades`, a `dangerous*` option, plain HTTP, another endpoint shape) as off or as an error. Merge it through a normal pull request; it ships with the next release.
+4. **Make the repository public**, and turn on immutable releases (Settings, General, Releases) so a published release's files cannot be swapped.
+5. **Apply the wording** that docs/SECURITY_MODEL.md ("App updates") gives for when updates are on, in the same pull request as step 3.
+6. **Publish with the key in the environment.** `publish` turns the updater on only when `TAURI_SIGNING_PRIVATE_KEY` is set; it refuses a key without the `plugins.updater` block, and the block without a key (a release without `latest.json` never reaches installed apps). Read both from the Keychain, never from a file in the repository:
+
+   ```bash
+   export TAURI_SIGNING_PRIVATE_KEY="$(security find-generic-password -s riggverk-updater-key -w)"
+   export TAURI_SIGNING_PRIVATE_KEY_PASSWORD="$(security find-generic-password -s riggverk-updater-password -w)"
+   ./scripts/release.sh publish --dry-run   # says "updates: on (signing key: ok; latest.json for hugrverk/riggverk)"
+   ./scripts/release.sh publish
+   ```
+
+   (Store them once with `security add-generic-password -s riggverk-updater-key -a "$USER" -w` and `-s riggverk-updater-password`, which prompt for the value.) With the key, `publish` also builds the signed updater archive (`createUpdaterArtifacts`; the bundler signs it for the version, so `requireSignedVersion` holds), checks the app inside it, writes `release/latest.json` (`release_tools.py updater-manifest`: both `darwin-aarch64` and `darwin-x86_64` point at the universal `Riggverk-v<version>-macOS.app.tar.gz`, with the notes minus the Install section), adds the archive to `SHA256SUMS`, creates the release as a draft with every file, checks that every file is there, and only then publishes it as the latest release, so `latest.json` never points at a missing file.
+
+The first release with the block is still installed by hand; the ones after it reach installed apps. A broken release is fixed with a newer version: the app never installs an older one, and there is no remote switch to stop a published update.
+
+Until the app is notarized (Apple Developer ID), an update is still ad hoc signed: the update itself needs no Open Anyway (the app downloads it, so it carries no quarantine flag), but macOS may ask for folder or automation permissions again after it, because each ad hoc build counts as a new app. An app run from the disk image or straight from Downloads (App Translocation) cannot be replaced; the review says "Move Riggverk to Applications first".
+
+To try the update UI without a release: `npm run dev`, then `http://localhost:1420/?mock=update`.
+
 ## Backend runtime smoke
 
 ```bash
@@ -111,7 +157,7 @@ Isolated temp `HOME` and workspace path; exercises the Rust command handlers the
 
 ## Browser-only checks
 
-`npm run dev` then `http://localhost:1420/?mock=<scenario>` renders the UI against `src/dev/mockBackend.ts` (scenarios `default`, `conflict`, `fresh`, `error`, `empty`). Use it for layout and keyboard checks. It has no Tauri backend, so it cannot prove filesystem behavior.
+`npm run dev` then `http://localhost:1420/?mock=<scenario>` renders the UI against `src/dev/mockBackend.ts` (scenarios `default`, `conflict`, `fresh`, `error`, `empty`, and `update` for a build with app updates on and a new version on offer). Use it for layout and keyboard checks. It has no Tauri backend, so it cannot prove filesystem behavior.
 
 ## Manual GUI smoke
 

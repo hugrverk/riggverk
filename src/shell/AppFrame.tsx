@@ -11,6 +11,8 @@ import { TopBar } from "./TopBar";
 import { useShellBindings } from "./useShellBindings";
 import { useViewFocus } from "./useViewFocus";
 import { WhatsNewOverlay } from "./WhatsNewOverlay";
+import { AppUpdateOverlay } from "./AppUpdate";
+import type { AppUpdate } from "../hooks/useAppUpdate";
 import { viewDef, visibleViews, type AppView } from "./views";
 
 export interface AppFrameProps {
@@ -39,6 +41,8 @@ export interface AppFrameProps {
   backupCount?: number | null;
   /** When the installation status was last fetched, for the sidebar foot. */
   checkedAt?: Date | null;
+  /** The app update: the sidebar's consent card and "New: <version>", and its review overlay. */
+  update?: AppUpdate;
   /** Shown under every view: the run panel, so a task's progress and outcome are visible wherever the user is. */
   dock?: ReactNode;
   /** The active view. */
@@ -65,6 +69,7 @@ export function AppFrame({
   version,
   backupCount,
   checkedAt,
+  update,
   dock,
   children,
 }: AppFrameProps) {
@@ -93,6 +98,7 @@ export function AppFrame({
         version={version}
         backupCount={backupCount}
         checkedAt={checkedAt}
+        update={update}
         onSwitchView={goTo}
       />
       <div className="main">
@@ -127,6 +133,7 @@ export function AppFrame({
       <CommandLine />
       <HelpOverlay />
       <WhatsNewOverlay />
+      {update && <AppUpdateOverlay update={update} />}
     </div>
   );
 }

@@ -24,6 +24,8 @@ export function mergePendingLocalOntoAcknowledged(
     motion: local.motion,
     landing_view: local.landing_view,
     last_seen_version: local.last_seen_version ?? acknowledged.last_seen_version,
+    update_check: local.update_check ?? acknowledged.update_check,
+    last_update_check: local.last_update_check ?? acknowledged.last_update_check,
     revision: acknowledged.revision ?? 0,
   };
 }
