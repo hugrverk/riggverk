@@ -1,6 +1,8 @@
 //! Bounded path safety checks for managed installation mutations.
 //!
-//! Rejects symlinks on paths and in parent chains up to an allowlisted root.
+//! Rejects symlinks (on Windows also junctions, which std reports as symlinks) on paths and
+//! parent chains up to an allowlisted root. Other reparse points such as cloud placeholders are
+//! allowed.
 
 use std::ffi::OsStr;
 use std::fs;

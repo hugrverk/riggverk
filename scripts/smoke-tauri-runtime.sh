@@ -25,12 +25,26 @@ cleanup() {
 trap cleanup EXIT
 
 # Resolve the real user home without trusting a possibly overridden HOME.
-REAL_HOME="$(python3 -c 'import os, pwd; print(pwd.getpwuid(os.getuid()).pw_dir)')"
+if command -v cygpath >/dev/null 2>&1; then
+  REAL_HOME="$(cygpath -u "$USERPROFILE")"
+else
+  REAL_HOME="$(python3 -c 'import os, pwd; print(pwd.getpwuid(os.getuid()).pw_dir)')"
+fi
 export SMOKE_HOME="$SMOKE_ROOT/home"
 export HOME="$SMOKE_HOME"
 # OpenCode's (and Kilo's) config folder follows XDG_CONFIG_HOME: keep it below the smoke HOME.
 export XDG_CONFIG_HOME="$HOME/.config"
-mkdir -p "$HOME" "$XDG_CONFIG_HOME"
+export XDG_DATA_HOME="$HOME/.local/share"
+mkdir -p "$HOME" "$XDG_CONFIG_HOME" "$XDG_DATA_HOME" "$HOME/AppData/Roaming" "$HOME/AppData/Local"
+if command -v cygpath >/dev/null 2>&1; then
+  export USERPROFILE="$(cygpath -w "$HOME")"
+  export APPDATA="$(cygpath -w "$HOME/AppData/Roaming")"
+  export LOCALAPPDATA="$(cygpath -w "$HOME/AppData/Local")"
+  export XDG_CONFIG_HOME="$(cygpath -w "$XDG_CONFIG_HOME")"
+  export XDG_DATA_HOME="$(cygpath -w "$XDG_DATA_HOME")"
+else
+  export USERPROFILE="$HOME" APPDATA="$HOME/AppData/Roaming" LOCALAPPDATA="$HOME/AppData/Local"
+fi
 # Keep rustup/cargo on the real toolchain while harness paths use SMOKE_HOME.
 TOOLCHAIN_HOME="$REAL_HOME"
 export RUSTUP_HOME="$TOOLCHAIN_HOME/.rustup"
@@ -96,6 +110,15 @@ run_cargo_smoke() {
   export RUSTUP_HOME
   export CARGO_HOME
   export PATH="$CARGO_HOME/bin:$PATH"
+  if command -v cygpath >/dev/null 2>&1; then
+    export HOME="$(cygpath -w "$HOME")"
+    export SMOKE_HOME="$(cygpath -w "$SMOKE_HOME")"
+    export RIGGVERK_WORKSPACE_PATH="$(cygpath -w "$RIGGVERK_WORKSPACE_PATH")"
+    export PLAYWRIGHT_MCP_CONFIG_PATH="$(cygpath -w "$PLAYWRIGHT_MCP_CONFIG_PATH")"
+    export PLAYWRIGHT_BROWSERS_PATH="$(cygpath -w "$PLAYWRIGHT_BROWSERS_PATH")"
+    export RUSTUP_HOME="$(cygpath -w "$RUSTUP_HOME")"
+    export CARGO_HOME="$(cygpath -w "$CARGO_HOME")"
+  fi
   # The smoke test is #[ignore]d so plain `cargo test` cannot pass it vacuously;
   # it is run explicitly here, against the temp HOME and workspace above.
   run_cargo_smoke smoke_runtime::tests::runtime_smoke_end_to_end -- --ignored --exact --nocapture

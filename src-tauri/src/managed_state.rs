@@ -13,6 +13,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
 
 use crate::artifact_registry::{expand_surface, ArtifactId};
+use crate::platform_paths::{names_match, Platform};
 use crate::setup_fingerprint;
 use crate::setup_lifecycle::SetupSurfaceId;
 use crate::skill_roots::SkillScope;
@@ -232,7 +233,8 @@ fn validate_state(state: &ManagedState) -> Result<(), String> {
 }
 
 /// Drops the records of `artifact`'s skill file under another case (`Notes.md` for `notes.md`):
-/// on a case-insensitive volume they are the one file the new record now covers.
+/// on a case-insensitive volume they are the one file the new record now covers. Linux compares
+/// exactly, so nothing is dropped there.
 fn drop_case_variants(
     records: &mut HashMap<String, ManagedArtifactRecord>,
     artifact: &crate::artifact_registry::ArtifactId,
@@ -245,11 +247,11 @@ fn drop_case_variants(
         // The identity string differs in case too; checked first, so a plan parses no record of
         // another file.
         *identity == own
-            || !identity.eq_ignore_ascii_case(&own)
+            || !names_match(identity, &own, Platform::current())
             || crate::managed_bootstrap::artifact_from_identity(identity)
                 .ok()
                 .and_then(|other| other.as_skill_file())
-                .is_none_or(|other| !file.same_file_ignoring_case(&other))
+                .is_none_or(|other| !file.same_file(&other))
     });
 }
 
