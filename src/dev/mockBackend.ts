@@ -2435,7 +2435,7 @@ const SHELL_FLAGS: ImportFlag[] = [
   { kind: "unicode", label: "hidden Unicode", detail: "1 invisible format character (zero-width, soft hyphen and the like) on lines 9" },
   { kind: "shell", label: "! commands", detail: "line 8: Current branch: !`git branch --show-current` · runs shell commands when the skill loads" },
   { kind: "key", label: "allowed-tools", detail: "Bash(git *) · grants tool access without asking" },
-  { kind: "executable", label: "scripts and executables", detail: "scripts/collect.sh; an agent may run them. The app never does, and copies them without the executable bit" },
+  { kind: "executable", label: "scripts and executables", detail: "scripts/collect.sh; an agent may run them. The app never does. The executable bit is kept: owner-only (0700) in the pack, executable when installed into agent skill folders" },
 ];
 
 function mockImportPreview(paths: string[]): SkillImportPreview {
@@ -2483,7 +2483,7 @@ function mockImportPreview(paths: string[]): SkillImportPreview {
           { path: "SKILL.md", change: "changed", before: existing, after },
           { path: "scripts/merge.py", change: "added", before: null, after: "import sys\n\nprint(sys.argv)\n" },
         ],
-        flags: [{ kind: "executable", label: "scripts and executables", detail: "scripts/fill.py, scripts/merge.py; an agent may run them. The app never does, and copies them without the executable bit" }],
+        flags: [{ kind: "executable", label: "scripts and executables", detail: "scripts/fill.py, scripts/merge.py; an agent may run them. The app never does. The executable bit is kept: owner-only (0700) in the pack, executable when installed into agent skill folders" }],
       }));
       continue;
     }

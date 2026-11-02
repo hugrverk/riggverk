@@ -211,6 +211,9 @@ mod tests {
             .map(|flag| flag["kind"].as_str().expect("kind"))
             .collect();
         assert_eq!(flags, ["executable"]);
+        let detail = candidate["flags"][0]["detail"].as_str().expect("detail");
+        assert!(detail.contains("executable bit is kept"), "{detail}");
+        assert!(!detail.contains("without the executable bit"), "{detail}");
         assert!(shown["token"].is_string());
         // A preview publishes nothing and installs nothing; the script never ran.
         assert!(!env.imported().exists());
@@ -240,7 +243,8 @@ mod tests {
             let mode =
                 |path: PathBuf| fs::metadata(path).expect("mode").permissions().mode() & 0o777;
             assert_eq!(mode(published.clone()), 0o700);
-            assert_eq!(mode(published.join("scripts/collect.sh")), 0o600);
+            assert_eq!(mode(published.join("scripts/collect.sh")), 0o700);
+            assert_eq!(mode(published.join("references/guide.md")), 0o600);
         }
         let record = env.record();
         let entry = &record["skills"]["release-notes-plus"];
@@ -275,7 +279,78 @@ mod tests {
             let installed = env.root(root).join("release-notes-plus/SKILL.md");
             assert_eq!(fs::read_to_string(installed).expect("installed"), SPEC);
         }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            for root in [SkillRoot::Claude, SkillRoot::Agents] {
+                let skill = env.root(root).join("release-notes-plus");
+                let mode = |rel: &str| fs::metadata(skill.join(rel)).unwrap().permissions().mode();
+                assert_ne!(
+                    mode("scripts/collect.sh") & 0o100,
+                    0,
+                    "script stays executable"
+                );
+                assert_eq!(
+                    mode("scripts/collect.sh") & 0o022,
+                    0,
+                    "never group/world writable"
+                );
+                assert_eq!(
+                    mode("references/guide.md") & 0o111,
+                    0,
+                    "plain file stays plain"
+                );
+            }
+        }
         assert!(!env.home.join("ran").exists(), "nothing of the skill ran");
+    }
+
+    /// A change of the execute bit alone is a change the user sees and commits; undo restores it.
+    #[cfg(unix)]
+    #[test]
+    fn a_permission_only_reimport_shows_a_change_and_undo_restores_the_mode() {
+        use std::os::unix::fs::PermissionsExt;
+        let env = Env::new("permission");
+        let source = env.source(
+            "release-notes-plus",
+            &[
+                ("SKILL.md", SPEC),
+                ("scripts/collect.sh", "#!/bin/sh\ntrue\n"),
+            ],
+        );
+        let script = source.join("scripts/collect.sh");
+        let mode_of = |path: &Path| fs::metadata(path).expect("mode").permissions().mode() & 0o777;
+        fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).expect("chmod");
+        commit(&preview(&[&source]), &["0"]).expect("first import");
+        let imported = env.imported().join("release-notes-plus/scripts/collect.sh");
+        assert_eq!(mode_of(&imported), 0o700);
+
+        // The same source again is unchanged.
+        assert_eq!(preview(&[&source])["candidates"][0]["status"], "unchanged");
+
+        fs::set_permissions(&script, fs::Permissions::from_mode(0o644)).expect("chmod");
+        let shown = preview(&[&source]);
+        let candidate = &shown["candidates"][0];
+        assert_eq!(candidate["status"], "update");
+        assert_eq!(candidate["changes"].as_array().expect("changes").len(), 1);
+        let change = &candidate["changes"][0];
+        assert_eq!(change["path"], "scripts/collect.sh");
+        assert_eq!(change["change"], "changed");
+        assert_eq!(change["executable_before"], true);
+        assert_eq!(change["executable_after"], false);
+        commit(&shown, &["0"]).expect("reimport");
+        assert_eq!(mode_of(&imported), 0o600);
+
+        // Adding the bit back is a change too, and undo returns to the state before it.
+        fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).expect("chmod");
+        let shown = preview(&[&source]);
+        assert_eq!(shown["candidates"][0]["status"], "update");
+        commit(&shown, &["0"]).expect("reimport");
+        assert_eq!(mode_of(&imported), 0o700);
+        undo_last_import().expect("undo");
+        assert_eq!(mode_of(&imported), 0o600);
+        undo_last_import().expect("undo again");
+        assert_eq!(mode_of(&imported), 0o700);
     }
 
     /// The folders above the chosen source are resolved (macOS's `/tmp` is a link), and the preview
@@ -599,8 +674,8 @@ mod tests {
         assert_eq!(
             candidate["changes"],
             serde_json::json!([
-                {"path": "a.md", "change": "changed", "before": "one\n", "after": "two\n"},
-                {"path": "b.md", "change": "added", "before": null, "after": "new\n"},
+                {"path": "a.md", "change": "changed", "before": "one\n", "after": "two\n", "executable_before": false, "executable_after": false},
+                {"path": "b.md", "change": "added", "before": null, "after": "new\n", "executable_before": null, "executable_after": false},
             ])
         );
         let result = commit(&again, &["0"]).expect("update");
@@ -692,8 +767,18 @@ mod tests {
         let env = Env::new("copy");
         let source = env.source(
             "release-notes-plus",
-            &[("SKILL.md", SPEC), ("a.md", "one\n")],
+            &[
+                ("SKILL.md", SPEC),
+                ("a.md", "one\n"),
+                ("scripts/run.sh", "#!/bin/sh\ntrue\n"),
+            ],
         );
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let script = source.join("scripts/run.sh");
+            fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).expect("chmod");
+        }
         commit(&preview(&[&source]), &["0"]).expect("import");
         let copy = copy_skill_to_pack(
             "pack:imported/release-notes-plus".into(),
@@ -707,6 +792,14 @@ mod tests {
             SPEC.replace("name: release-notes-plus", "name: release-notes-mine")
         );
         assert_eq!(fs::read(dir.join("a.md")).expect("support"), b"one\n");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode =
+                |rel: &str| fs::metadata(dir.join(rel)).unwrap().permissions().mode() & 0o777;
+            assert_eq!(mode("scripts/run.sh"), 0o700);
+            assert_eq!(mode("a.md"), 0o600);
+        }
         let sources = env.sources();
         let state = |pack: &str, name: &str| {
             sources

@@ -104,6 +104,19 @@ describe("ImportSkillDialog", () => {
     expect(screen.getByRole("group", { name: "SKILL.md against the import in place" })).toBeInTheDocument();
   });
 
+  it("shows a change of the execute bit alone, with no diff to read", async () => {
+    const update = candidate({
+      status: "update",
+      flags: [],
+      changes: [{ path: "scripts/run.sh", change: "changed", before: "same\n", after: "same\n", executable_before: true, executable_after: false }],
+    });
+    const { previewPath } = renderDialog({ token: "t5", candidates: [update], problems: [], folder: "" });
+    await previewPath("~/Downloads/repo");
+    expect(screen.getByText("scripts/run.sh · changed")).toBeInTheDocument();
+    expect(screen.getByText("Executable: yes → no")).toBeInTheDocument();
+    expect(screen.queryByText("Binary or too large to show.")).not.toBeInTheDocument();
+  });
+
   it("keeps the backend's refusal in the dialog and asks for a new preview", async () => {
     const { onCommit, previewPath } = renderDialog({ token: "t4", candidates: [candidate({ flags: [] })], problems: [], folder: "" });
     onCommit.mockRejectedValueOnce(new Error("the skill or the import in place changed since the preview; preview it again"));
