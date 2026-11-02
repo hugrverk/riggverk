@@ -21,7 +21,7 @@
   flex: none;
   width: 200px;
   min-height: 0;
-  padding: 52px 0 16px;
+  padding: 16px 0;
   border-right: 1px solid var(--border);
   background: var(--bg);
   font-family: var(--font-sans);
@@ -30,6 +30,8 @@
   -webkit-app-region: drag;
   app-region: drag;
 }
+
+[data-frame="macos"] .side { padding-top: 52px; }
 
 .side .brand {
   display: flex;
