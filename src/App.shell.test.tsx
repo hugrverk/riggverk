@@ -339,6 +339,35 @@ describe("App shell", () => {
     expect(backend.commandLog).not.toContain("rollback_setup_transaction");
   });
 
+  it.each(["all", "workspace"])("keeps the right outcome actions after update %s", async target => {
+    const backend = installBackend();
+    render(<App />);
+    await ready();
+    fireEvent.keyDown(document.body, { key: ":", shiftKey: true });
+    const input = screen.getByRole("combobox", { name: "Command" });
+    fireEvent.change(input, { target: { value: `update ${target === "all" ? "--all" : target}` } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    const receipt = await screen.findByRole("region", { name: "Workspace install review" });
+    fireEvent.click(within(receipt).getByRole("button", { name: /apply/i }));
+    await within(receipt).findByRole("button", { name: "Undo this update…" });
+    await waitFor(() => expect(within(screen.getByRole("region", { name: "Run" })).getByRole("button", { name: "Details" })).toBeTruthy());
+    const run = screen.getByRole("region", { name: "Run" });
+    expect(within(receipt).getByRole("button", { name: "dismiss" })).toBeTruthy();
+    expect(!!within(run).queryByRole("button", { name: "Undo last update…" })).toBe(target !== "all");
+    expect(!!within(run).queryByRole("button", { name: "Dismiss" })).toBe(target !== "all");
+    if (target === "all") {
+      fireEvent.keyDown(document.body, { key: "z" });
+      await waitFor(() => expect(backend.commandLog.filter(command => command === "rollback_setup_transaction")).toHaveLength(1));
+      const grid = within(receipt).getByRole("grid", { name: "Install plan" });
+      grid.focus();
+      fireEvent.keyDown(grid, { key: "n" });
+    } else {
+      fireEvent.click(within(receipt).getByRole("button", { name: "dismiss" }));
+    }
+    expect(within(run).getByRole("button", { name: "Undo last update…" })).toBeTruthy();
+    expect(within(run).getByRole("button", { name: "Dismiss" })).toBeTruthy();
+  }, 15_000);
+
   it("refuses a hidden harness command with the reason instead of navigating", async () => {
     installBackend({ enabled_harness_ids: ["codex"] });
     render(<App />);

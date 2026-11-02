@@ -22,6 +22,21 @@ fn replace_file_atomic(temp: &Path, destination: &Path) -> std::io::Result<()> {
 
 #[cfg(windows)]
 fn replace_file_atomic(temp: &Path, destination: &Path) -> std::io::Result<()> {
+    const BACKOFF_MS: [u64; 4] = [20, 40, 80, 160];
+
+    for attempt in 0..=BACKOFF_MS.len() {
+        match replace_file_atomic_once(temp, destination) {
+            Err(error) if attempt < BACKOFF_MS.len() && should_retry_windows_replace(&error) => {
+                std::thread::sleep(std::time::Duration::from_millis(BACKOFF_MS[attempt]));
+            }
+            result => return result,
+        }
+    }
+    unreachable!("the final replacement attempt returns")
+}
+
+#[cfg(windows)]
+fn replace_file_atomic_once(temp: &Path, destination: &Path) -> std::io::Result<()> {
     use std::os::windows::ffi::OsStrExt;
 
     const MOVEFILE_REPLACE_EXISTING: u32 = 0x1;
@@ -48,6 +63,11 @@ fn replace_file_atomic(temp: &Path, destination: &Path) -> std::io::Result<()> {
     } else {
         Ok(())
     }
+}
+
+#[cfg(any(windows, test))]
+fn should_retry_windows_replace(error: &std::io::Error) -> bool {
+    matches!(error.raw_os_error(), Some(5 | 32))
 }
 
 /// Create one directory; owner-only (0700) when `private` on unix.
@@ -670,6 +690,22 @@ pub fn remove_empty_directory_no_symlinks(
 mod tests {
     use super::*;
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn windows_replace_retries_only_sharing_and_access_errors() {
+        assert!(should_retry_windows_replace(
+            &std::io::Error::from_raw_os_error(5)
+        ));
+        assert!(should_retry_windows_replace(
+            &std::io::Error::from_raw_os_error(32)
+        ));
+        assert!(!should_retry_windows_replace(
+            &std::io::Error::from_raw_os_error(2)
+        ));
+        assert!(!should_retry_windows_replace(&std::io::Error::other(
+            "no OS error"
+        )));
+    }
 
     fn temp(label: &str) -> std::path::PathBuf {
         let n = SystemTime::now()

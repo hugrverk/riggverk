@@ -776,6 +776,7 @@ function AppShell() {
             onRefresh={() => void refreshAll()}
             rollbackTransactionId={rollbackTransactionId}
             onRollback={() => void requestRollback()}
+            receiptOwnsActions={!!install.done && install.done.review.request.label === "update all" && install.isOpenOn(view) && install.done.actionResult === wsLog}
           />
         }
       >
