@@ -667,7 +667,7 @@ fn effective_uid() -> u32 {
 }
 
 /// Why a pack entry cannot be trusted: writable by its group or by everyone, or owned by someone
-/// else than the current user (Unix); a reparse point (Windows). `what` names the entry in the reason.
+/// else than the current user (Unix); a symlink or junction (Windows). `what` names the entry in the reason.
 pub(crate) fn check_trusted(meta: &fs::Metadata, what: &str) -> Result<(), String> {
     #[cfg(unix)]
     {
@@ -686,9 +686,8 @@ pub(crate) fn check_trusted(meta: &fs::Metadata, what: &str) -> Result<(), Strin
     }
     #[cfg(windows)]
     {
-        use std::os::windows::fs::MetadataExt;
-        if crate::path_safety::has_reparse_point_attribute(meta.file_attributes()) {
-            return Err(format!("refusing {what}: it is a reparse point"));
+        if meta.file_type().is_symlink() {
+            return Err(format!("refusing {what}: it is a symlink or junction"));
         }
         Ok(())
     }
@@ -699,7 +698,7 @@ pub(crate) fn check_trusted(meta: &fs::Metadata, what: &str) -> Result<(), Strin
     }
 }
 
-/// Checks the entry and, on Windows, each ancestor through the trusted root for reparse points.
+/// Checks the entry and, on Windows, each ancestor through the trusted root for symlinks and junctions.
 /// Unix keeps its existing metadata checks on the entry only.
 pub(crate) fn check_trusted_path(
     path: &Path,
@@ -709,13 +708,14 @@ pub(crate) fn check_trusted_path(
 ) -> Result<(), String> {
     #[cfg(windows)]
     {
+        // `path` must be lexically under `trusted_root`: the walk only stops on equality with it
+        // and otherwise runs out of parents, which fails closed.
         let mut current = path;
         loop {
             let ancestor =
                 fs::symlink_metadata(current).map_err(|_| format!("cannot inspect {what}"))?;
-            use std::os::windows::fs::MetadataExt;
-            if crate::path_safety::has_reparse_point_attribute(ancestor.file_attributes()) {
-                return Err(format!("refusing {what}: it is a reparse point"));
+            if ancestor.file_type().is_symlink() {
+                return Err(format!("refusing {what}: it is a symlink or junction"));
             }
             if current == trusted_root {
                 break;

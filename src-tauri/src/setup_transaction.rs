@@ -3413,7 +3413,7 @@ fn validate_operation_consistency(op: &ArtifactManifestOperation) -> Result<(), 
 /// interrupted-transaction recovery trust the digests in `manifest.json` and the bytes below
 /// `artifacts/` with nothing to authenticate them, so the folder, the manifest and `artifacts/`
 /// must each be no link, owned by the current user and not writable by its group or by everyone
-/// (Unix), or a Windows reparse point through the trusted root. The reasons are fixed phrases
+/// (Unix), or a Windows symlink or junction through the trusted root. The reasons are fixed phrases
 /// without the path.
 pub fn check_transaction_folder_trusted(backup_dir: &Path) -> Result<(), String> {
     let trusted_root = backup_dir.parent().unwrap_or(backup_dir);
@@ -3451,7 +3451,7 @@ pub fn check_transaction_folder_trusted(backup_dir: &Path) -> Result<(), String>
 
 /// Refuses a backup someone other than the user could have written before it is restored: the
 /// file, or the folder and everything below it, must be no link, owned by the current user and not
-/// writable by its group or by everyone (Unix), or a Windows reparse point through the trusted
+/// writable by its group or by everyone (Unix), or a Windows symlink or junction through the trusted
 /// root. Nothing authenticates the backed-up bytes, so this is what keeps another local user from
 /// choosing what a rollback writes. Read access is not checked: releases before v2026.10.1 left
 /// backups 0644 and folders 0755, which still restore.
