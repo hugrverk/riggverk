@@ -27,6 +27,8 @@ export interface RunPanelProps {
   rollbackTransactionId?: string | null;
   /** Undo that transaction (the dry run and the confirm happen in the owner). */
   onRollback?: () => void;
+  /** The visible receipt owns the actions for this outcome. */
+  receiptOwnsActions?: boolean;
 }
 
 /** How the running task is going: a count and the current file, a phase word, or "working…" while there is nothing to count. */
@@ -80,6 +82,7 @@ export function RunPanel({
   onRefresh,
   rollbackTransactionId,
   onRollback,
+  receiptOwnsActions = false,
 }: RunPanelProps) {
   const detailsId = useId();
   const [expanded, setExpanded] = useState(() => wsLog !== null && !wsLog.success);
@@ -175,7 +178,7 @@ export function RunPanel({
         )}
         {finished && (
           <span className="run-actions">
-            {rollbackTransactionId && onRollback && (
+            {!receiptOwnsActions && rollbackTransactionId && onRollback && (
               <TButton keys={["z"]} shortcut="z" onClick={onRollback}>
                 Undo last update…
               </TButton>
@@ -191,7 +194,7 @@ export function RunPanel({
             >
               <span className="tbtn-label">Details</span>
             </button>
-            {onClear && (
+            {!receiptOwnsActions && onClear && (
               <TButton keys={[]} onClick={dismiss}>
                 Dismiss
               </TButton>

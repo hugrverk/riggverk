@@ -327,7 +327,8 @@ describe("HarnessPage", () => {
     const flow = flowOf();
     const review = flowOf([op("codex_rules", "update")], { label: "update codex", surfaces: ["codex_rules"] }).review!;
     const result = { success: true, transaction_id: "tx-9", applied: ["CodexRules"], failed: [], rolled_back: [], manual_steps: [], message: "ok" };
-    const install = { ...installScreenOf(flow, "codex"), done: { review, result, at: Date.now() }, isOpenOn: (view: string) => view === "codex" };
+    const actionResult = { success: true, action: "apply_setup update codex", stdout: "", stderr: "", exit_code: 0 };
+    const install = { ...installScreenOf(flow, "codex"), done: { review, result, at: Date.now(), actionResult }, isOpenOn: (view: string) => view === "codex" };
     const onUndo = vi.fn();
     renderCodex({ install, onUndo });
     const pane = screen.getByRole("region", { name: "Install plan" });
