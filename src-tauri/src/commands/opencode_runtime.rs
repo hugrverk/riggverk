@@ -2100,10 +2100,9 @@ fn opencode_fallback_candidates(home: Option<&Path>) -> Vec<PathBuf> {
 /// Returns `None` if no executable is found.
 fn resolve_opencode_executable_in(path_env: &str, fallbacks: &[PathBuf]) -> Option<PathBuf> {
     crate::executable_resolver::resolve_executable("opencode", path_env, None).or_else(|| {
-        fallbacks
-            .iter()
-            .find(|candidate| crate::executable_resolver::is_executable_file(candidate, None))
-            .cloned()
+        fallbacks.iter().find_map(|candidate| {
+            crate::executable_resolver::resolve_executable(&candidate.to_string_lossy(), "", None)
+        })
     })
 }
 
