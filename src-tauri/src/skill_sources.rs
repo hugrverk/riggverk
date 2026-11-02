@@ -490,7 +490,8 @@ fn scan_packs(
         }
         Ok(meta) if !meta.is_dir() => return (Vec::new(), ignored),
         Ok(meta) => {
-            if let Err(reason) = check_trusted(&meta, "the packs folder") {
+            if let Err(reason) = check_trusted_path(&dir, workspace_root, &meta, "the packs folder")
+            {
                 ignored.push((PACKS_DIR.to_string(), reason));
                 return (Vec::new(), ignored);
             }
@@ -533,7 +534,7 @@ fn scan_packs(
             ignored.push((name, format!("more than {MAX_PACKS} packs")));
             continue;
         }
-        let outcome = scan_pack(&dir.join(&name));
+        let outcome = scan_pack(&dir.join(&name), workspace_root);
         pending.push((name, outcome));
     }
 
@@ -665,8 +666,8 @@ fn effective_uid() -> u32 {
     unsafe { geteuid() }
 }
 
-/// Why a pack entry cannot be trusted (Unix): writable by its group or by everyone, or owned by
-/// someone else than the current user. Always `Ok` elsewhere. `what` names the entry in the reason.
+/// Why a pack entry cannot be trusted: writable by its group or by everyone, or owned by someone
+/// else than the current user (Unix); a symlink or junction (Windows). `what` names the entry in the reason.
 pub(crate) fn check_trusted(meta: &fs::Metadata, what: &str) -> Result<(), String> {
     #[cfg(unix)]
     {
@@ -683,20 +684,59 @@ pub(crate) fn check_trusted(meta: &fs::Metadata, what: &str) -> Result<(), Strin
         }
         Ok(())
     }
-    #[cfg(not(unix))]
+    #[cfg(windows)]
+    {
+        if meta.file_type().is_symlink() {
+            return Err(format!("refusing {what}: it is a symlink or junction"));
+        }
+        Ok(())
+    }
+    #[cfg(not(any(unix, windows)))]
     {
         let _ = (meta, what);
         Ok(())
     }
 }
 
+/// Checks the entry and, on Windows, each ancestor through the trusted root for symlinks and junctions.
+/// Unix keeps its existing metadata checks on the entry only.
+pub(crate) fn check_trusted_path(
+    path: &Path,
+    trusted_root: &Path,
+    meta: &fs::Metadata,
+    what: &str,
+) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        // `path` must be lexically under `trusted_root`: the walk only stops on equality with it
+        // and otherwise runs out of parents, which fails closed.
+        let mut current = path;
+        loop {
+            let ancestor =
+                fs::symlink_metadata(current).map_err(|_| format!("cannot inspect {what}"))?;
+            if ancestor.file_type().is_symlink() {
+                return Err(format!("refusing {what}: it is a symlink or junction"));
+            }
+            if current == trusted_root {
+                break;
+            }
+            current = current
+                .parent()
+                .ok_or_else(|| format!("cannot inspect {what}"))?;
+        }
+    }
+    #[cfg(not(windows))]
+    let _ = (path, trusted_root);
+    check_trusted(meta, what)
+}
+
 /// Reads one pack folder. `Err` is the reason the whole pack is refused.
-fn scan_pack(pack_dir: &Path) -> Result<Vec<Candidate>, String> {
+fn scan_pack(pack_dir: &Path, trusted_root: &Path) -> Result<Vec<Candidate>, String> {
     let meta = fs::symlink_metadata(pack_dir).map_err(|e| format!("cannot read the pack: {e}"))?;
     if meta.file_type().is_symlink() {
         return Err("refusing a symlinked pack".to_string());
     }
-    check_trusted(&meta, "a pack folder")?;
+    check_trusted_path(pack_dir, trusted_root, &meta, "a pack folder")?;
     let skills_dir = pack_dir.join("skills");
     // Only a skills folder that is not there at all means "no skills". One that cannot be looked
     // at, or is no folder, must not read as an empty pack: that would retire everything installed.
@@ -707,10 +747,10 @@ fn scan_pack(pack_dir: &Path) -> Result<Vec<Candidate>, String> {
             return Err("refusing a symlinked skills folder".to_string())
         }
         Ok(meta) if !meta.is_dir() => return Err("skills is not a folder".to_string()),
-        Ok(meta) => check_trusted(&meta, "the skills folder")?,
+        Ok(meta) => check_trusted_path(&skills_dir, trusted_root, &meta, "the skills folder")?,
     }
     let mut seen = 0usize;
-    reject_links_below(&skills_dir, 0, &mut seen)?;
+    reject_links_below(&skills_dir, trusted_root, 0, &mut seen)?;
 
     let mut candidates = Vec::new();
     let mut entries = sorted_dirs(&skills_dir)?;
@@ -789,7 +829,12 @@ fn sorted_dirs(dir: &Path) -> Result<Vec<(String, PathBuf)>, String> {
 /// Refuses the pack on a symlink or any other link-like entry below `dir`, on an entry that is
 /// writable by its group or by everyone or not owned by the current user (Unix), and on a tree too
 /// big to read. Dot entries (`.git`) are never read, so they are not walked.
-fn reject_links_below(dir: &Path, depth: usize, seen: &mut usize) -> Result<(), String> {
+fn reject_links_below(
+    dir: &Path,
+    trusted_root: &Path,
+    depth: usize,
+    seen: &mut usize,
+) -> Result<(), String> {
     if depth > MAX_TREE_DEPTH {
         return Err("pack skills nested too deep".to_string());
     }
@@ -815,9 +860,14 @@ fn reject_links_below(dir: &Path, depth: usize, seen: &mut usize) -> Result<(), 
         let meta = entry
             .metadata()
             .map_err(|e| format!("cannot read {}: {e}", entry.path().display()))?;
-        check_trusted(&meta, &entry.path().display().to_string())?;
+        check_trusted_path(
+            &entry.path(),
+            trusted_root,
+            &meta,
+            &entry.path().display().to_string(),
+        )?;
         if kind.is_dir() {
-            reject_links_below(&entry.path(), depth + 1, seen)?;
+            reject_links_below(&entry.path(), trusted_root, depth + 1, seen)?;
         }
     }
     Ok(())
@@ -1256,7 +1306,7 @@ pub fn restore_record(workspace_root: &Path, backup_dir: &Path) -> Result<(), St
     if saved.is_file() {
         let meta = fs::metadata(&saved)
             .map_err(|_| "cannot inspect the pack skills backup".to_string())?;
-        check_trusted(&meta, "the pack skills backup")?;
+        check_trusted_path(&saved, backup_dir, &meta, "the pack skills backup")?;
         let mut raw = fs::read(&saved).map_err(|e| format!("read pack skills backup: {e}"))?;
         if let (Stored::Usable(live), Ok(mut document)) = (
             read_stored(workspace_root),

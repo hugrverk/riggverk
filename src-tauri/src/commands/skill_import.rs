@@ -89,6 +89,9 @@ pub struct ImportFileChange {
     /// The texts, for the diff; `None` for a binary file or one too big to show.
     pub(crate) before: Option<String>,
     pub(crate) after: Option<String>,
+    /// The execute bit before and after; `None` for the side where the file does not exist.
+    pub(crate) executable_before: Option<bool>,
+    pub(crate) executable_after: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -285,8 +288,14 @@ fn read_capped(path: &Path, cap: u64) -> Result<Vec<u8>, String> {
     Ok(bytes)
 }
 
+/// The files of a skill folder and which of them carry an execute bit.
+struct SkillTree {
+    files: BTreeMap<String, Vec<u8>>,
+    executables: BTreeSet<String>,
+}
+
 /// The files of a skill folder the app wrote (staging or the imported pack), by path.
-fn tree_files(dir: &Path) -> Result<BTreeMap<String, Vec<u8>>, String> {
+fn tree_files(dir: &Path) -> Result<SkillTree, String> {
     crate::path_safety::reject_symlink(dir, "skill folder")?;
     let mut files = BTreeMap::new();
     files.insert(
@@ -297,7 +306,14 @@ fn tree_files(dir: &Path) -> Result<BTreeMap<String, Vec<u8>>, String> {
         let bytes = read_capped(&dir.join(&rel), MAX_SUPPORT_FILE_BYTES)?;
         files.insert(rel, bytes);
     }
-    Ok(files)
+    let mut executables = BTreeSet::new();
+    for rel in files.keys() {
+        let (_, metadata) = open_regular(&dir.join(rel))?;
+        if executable_bit(&metadata) {
+            executables.insert(rel.clone());
+        }
+    }
+    Ok(SkillTree { files, executables })
 }
 
 fn file_digests(files: &BTreeMap<String, Vec<u8>>) -> BTreeMap<String, String> {
@@ -307,11 +323,14 @@ fn file_digests(files: &BTreeMap<String, Vec<u8>>) -> BTreeMap<String, String> {
         .collect()
 }
 
-fn tree_digest(files: &BTreeMap<String, Vec<u8>>) -> String {
-    let listing: String = file_digests(files)
+fn tree_digest(tree: &SkillTree) -> String {
+    let mut listing: String = file_digests(&tree.files)
         .iter()
         .map(|(rel, digest)| format!("{rel}\0{digest}\n"))
         .collect();
+    for rel in &tree.executables {
+        listing.push_str(&format!("exec\0{rel}\n"));
+    }
     crate::stable_digest::bytes(listing.as_bytes())
 }
 
@@ -618,7 +637,7 @@ fn read_source(file: &SourceFile) -> Result<Vec<u8>, String> {
     let changed = || format!("{}: changed while it was read; import again", file.rel);
     // A link, a pipe or another file swapped in since the scan is refused on the opened handle.
     let (handle, meta) = open_regular(&file.path).map_err(|_| changed())?;
-    if identity(&meta) != file.identity {
+    if identity(&meta) != file.identity || executable_bit(&meta) != file.executable {
         return Err(changed());
     }
     let mut bytes = Vec::new();
@@ -793,8 +812,8 @@ fn inspect(
             kind: "executable".to_string(),
             label: "scripts and executables".to_string(),
             detail: format!(
-                "{}; an agent may run them. The app never does, and copies them without the \
-                 executable bit",
+                "{}; an agent may run them. The app never does. The executable bit is kept: \
+                 owner-only (0700) in the pack, executable when installed into agent skill folders",
                 runnable.join(", ")
             ),
         });
@@ -822,18 +841,20 @@ fn text_for_diff(bytes: Option<&Vec<u8>>) -> Option<String> {
     String::from_utf8(bytes.clone()).ok()
 }
 
-fn changes(
-    before: &BTreeMap<String, Vec<u8>>,
-    after: &BTreeMap<String, Vec<u8>>,
-) -> Vec<ImportFileChange> {
-    let paths: BTreeSet<&String> = before.keys().chain(after.keys()).collect();
+fn changes(before: &SkillTree, after: &SkillTree) -> Vec<ImportFileChange> {
+    let paths: BTreeSet<&String> = before.files.keys().chain(after.files.keys()).collect();
     let mut out = Vec::new();
     for path in paths {
-        let (old, new) = (before.get(path), after.get(path));
+        let (old, new) = (before.files.get(path), after.files.get(path));
         let change = match (old, new) {
             (None, Some(_)) => "added",
             (Some(_), None) => "removed",
-            (Some(a), Some(b)) if a != b => "changed",
+            (Some(a), Some(b))
+                if a != b
+                    || before.executables.contains(path) != after.executables.contains(path) =>
+            {
+                "changed"
+            }
             _ => continue,
         };
         out.push(ImportFileChange {
@@ -841,6 +862,8 @@ fn changes(
             change: change.to_string(),
             before: text_for_diff(old),
             after: text_for_diff(new),
+            executable_before: old.map(|_| before.executables.contains(path)),
+            executable_after: new.map(|_| after.executables.contains(path)),
         });
     }
     out
@@ -912,7 +935,7 @@ fn staging_root(root: &Path) -> PathBuf {
 }
 
 /// The import of `name` in place, if any: its files.
-fn existing_import(root: &Path, name: &str) -> Result<Option<BTreeMap<String, Vec<u8>>>, String> {
+fn existing_import(root: &Path, name: &str) -> Result<Option<SkillTree>, String> {
     let dir = imported_skills_dir(root).join(name);
     match fs::symlink_metadata(&dir) {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
@@ -1228,6 +1251,11 @@ fn stage_candidates(
                 stage,
             )
             .map_err(|_| "cannot write the staged copy".to_string())?;
+            crate::safe_filesystem::set_file_executable(
+                &dir.join(&file.rel),
+                file.executable,
+                true,
+            )?;
             files.insert(file.rel.clone(), bytes);
         }
         if !candidate.problems.is_empty() {
@@ -1253,7 +1281,8 @@ fn stage_candidates(
         candidate.flags = inspected.flags;
         candidate.problems = inspected.problems;
         candidate.skill_md = inspected.skill_md;
-        candidate.digest = tree_digest(&files);
+        let tree = SkillTree { files, executables };
+        candidate.digest = tree_digest(&tree);
         if candidate.problems.is_empty() {
             // The checks the pack reader applies, on the copy itself.
             if let Err(error) = crate::skill_discovery::skill_support_files(&dir) {
@@ -1294,7 +1323,7 @@ fn stage_candidates(
         }
         .to_string();
         if let Some(before) = &existing {
-            candidate.changes = changes(before, &files);
+            candidate.changes = changes(before, &tree);
         }
         staged.push(StagedCandidate {
             key,
@@ -1451,15 +1480,23 @@ fn backup_dir(label: &str, name: &str) -> Result<PathBuf, String> {
 }
 
 /// Writes `files` into a new temporary folder in `skills` and returns it.
-fn write_temp(skills: &Path, files: &BTreeMap<String, Vec<u8>>) -> Result<PathBuf, String> {
+fn write_temp(skills: &Path, files: &SkillTree) -> Result<PathBuf, String> {
     let temp = skills.join(format!(".import-{}", nonce()?));
     create_private_dir(&temp)?;
-    for (rel, bytes) in files {
-        if let Err(error) = crate::safe_filesystem::write_private_new_regular_file_synced(
+    for (rel, bytes) in &files.files {
+        let written = crate::safe_filesystem::write_private_new_regular_file_synced(
             &temp.join(rel),
             bytes,
             &temp,
-        ) {
+        )
+        .and_then(|()| {
+            crate::safe_filesystem::set_file_executable(
+                &temp.join(rel),
+                files.executables.contains(rel),
+                true,
+            )
+        });
+        if let Err(error) = written {
             let _ = crate::safe_filesystem::remove_dir_no_symlinks(&temp, skills);
             return Err(format!("cannot write the imported skill: {error}"));
         }
@@ -1473,7 +1510,7 @@ fn publish(
     root: &Path,
     skills: &Path,
     name: &str,
-    files: &BTreeMap<String, Vec<u8>>,
+    files: &SkillTree,
 ) -> Result<Option<PathBuf>, String> {
     let target = skills.join(name);
     super::content::safe_canonical_target(skills, &target)
@@ -1516,7 +1553,7 @@ fn unpublish(skills: &Path, name: &str, aside: Option<PathBuf>) {
 }
 
 fn record_of(
-    files: &BTreeMap<String, Vec<u8>>,
+    files: &SkillTree,
     source: &str,
     kind: SourceKind,
     renamed_from: Option<String>,
@@ -1526,7 +1563,7 @@ fn record_of(
         kind,
         imported_at: now_secs(),
         tree_digest: tree_digest(files),
-        files: file_digests(files),
+        files: file_digests(&files.files),
         renamed_from,
     }
 }
@@ -1663,10 +1700,12 @@ fn commit_staged(
                 ));
             }
             // The bytes the dialog showed: the verified staged text with its `name:` line rewritten.
-            let text = std::str::from_utf8(&files["SKILL.md"])
+            let text = std::str::from_utf8(&files.files["SKILL.md"])
                 .map_err(|_| "SKILL.md is not UTF-8 text".to_string())?;
             let renamed = renamed_skill_md(text, &final_name)?;
-            files.insert("SKILL.md".to_string(), renamed.into_bytes());
+            files
+                .files
+                .insert("SKILL.md".to_string(), renamed.into_bytes());
         }
         plan.push((
             candidate,
@@ -1928,6 +1967,50 @@ mod tests {
             executable: false,
             identity: identity(&meta),
         }
+    }
+
+    /// A tree without an executable hashes as it did before the bit was recorded, so the digests
+    /// in existing import records stay valid; an executable changes it.
+    #[test]
+    fn a_tree_digest_without_executables_is_the_one_computed_before_the_bit_was_recorded() {
+        let mut files = BTreeMap::new();
+        files.insert("SKILL.md".to_string(), b"text\n".to_vec());
+        files.insert("scripts/run.sh".to_string(), b"#!/bin/sh\n".to_vec());
+        let listing: String = file_digests(&files)
+            .iter()
+            .map(|(rel, digest)| format!("{rel}\0{digest}\n"))
+            .collect();
+        let old = crate::stable_digest::bytes(listing.as_bytes());
+        let mut tree = SkillTree {
+            files,
+            executables: BTreeSet::new(),
+        };
+        assert_eq!(tree_digest(&tree), old);
+        tree.executables.insert("scripts/run.sh".to_string());
+        assert_ne!(tree_digest(&tree), old);
+    }
+
+    #[test]
+    fn the_script_flag_says_the_executable_bit_is_kept() {
+        let mut files = BTreeMap::new();
+        files.insert(
+            "SKILL.md".to_string(),
+            b"---\nname: demo\ndescription: Use it.\n---\n# Demo\n".to_vec(),
+        );
+        files.insert("scripts/run.sh".to_string(), b"#!/bin/sh\n".to_vec());
+        let executables = BTreeSet::from(["scripts/run.sh".to_string()]);
+        let inspected = inspect(&files, &executables, Some("demo"));
+        let flag = inspected
+            .flags
+            .iter()
+            .find(|flag| flag.kind == "executable")
+            .expect("script flag");
+        assert!(
+            flag.detail.contains("executable bit is kept"),
+            "{}",
+            flag.detail
+        );
+        assert!(!flag.detail.contains("without the executable bit"));
     }
 
     #[test]

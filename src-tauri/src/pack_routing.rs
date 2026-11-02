@@ -86,7 +86,9 @@ pub(crate) fn read(pack_dir: &Path, own_skills: &BTreeSet<&str>) -> PackRouting 
     if !meta.is_file() {
         return excluded("it is not a regular file");
     }
-    if let Err(reason) = crate::skill_sources::check_trusted(&meta, ROUTING_FILE) {
+    if let Err(reason) =
+        crate::skill_sources::check_trusted_path(&path, pack_dir, &meta, ROUTING_FILE)
+    {
         return PackRouting::Excluded(reason);
     }
     if meta.len() > MAX_ROUTING_BYTES {

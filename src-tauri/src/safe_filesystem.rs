@@ -22,6 +22,21 @@ fn replace_file_atomic(temp: &Path, destination: &Path) -> std::io::Result<()> {
 
 #[cfg(windows)]
 fn replace_file_atomic(temp: &Path, destination: &Path) -> std::io::Result<()> {
+    const BACKOFF_MS: [u64; 4] = [20, 40, 80, 160];
+
+    for attempt in 0..=BACKOFF_MS.len() {
+        match replace_file_atomic_once(temp, destination) {
+            Err(error) if attempt < BACKOFF_MS.len() && should_retry_windows_replace(&error) => {
+                std::thread::sleep(std::time::Duration::from_millis(BACKOFF_MS[attempt]));
+            }
+            result => return result,
+        }
+    }
+    unreachable!("the final replacement attempt returns")
+}
+
+#[cfg(windows)]
+fn replace_file_atomic_once(temp: &Path, destination: &Path) -> std::io::Result<()> {
     use std::os::windows::ffi::OsStrExt;
 
     const MOVEFILE_REPLACE_EXISTING: u32 = 0x1;
@@ -48,6 +63,11 @@ fn replace_file_atomic(temp: &Path, destination: &Path) -> std::io::Result<()> {
     } else {
         Ok(())
     }
+}
+
+#[cfg(any(windows, test))]
+fn should_retry_windows_replace(error: &std::io::Error) -> bool {
+    matches!(error.raw_os_error(), Some(5 | 32))
 }
 
 /// Create one directory; owner-only (0700) when `private` on unix.
@@ -133,18 +153,67 @@ fn preserve_destination_permissions(
     Ok(())
 }
 
-/// Owner-only (0600) permissions for a file copied with `fs::copy`, which
-/// carries over the source's mode.
+/// Owner-only permissions for a file copied with `fs::copy`, which carries over the source's mode:
+/// 0600, or 0700 when the source was executable.
 #[cfg(unix)]
 fn restrict_file_to_owner(path: &Path) -> Result<(), String> {
-    use std::os::unix::fs::PermissionsExt;
-    fs::set_permissions(path, fs::Permissions::from_mode(0o600))
-        .map_err(|e| format!("restrict permissions on {}: {e}", path.display()))
+    // The mode `fs::copy` carried over; read before it is replaced, by a call that refuses a link.
+    let executable = file_is_executable(path)?;
+    set_file_executable(path, executable, true)
 }
 
 #[cfg(not(unix))]
 fn restrict_file_to_owner(_path: &Path) -> Result<(), String> {
     Ok(())
+}
+
+/// Sets or clears the execute bits of a regular file, never following a symlink and never granting
+/// group or world write. `private` keeps the file owner-only (0600, or 0700 executable); otherwise
+/// the existing read bits stay and an executable file gets the execute bit for all three classes.
+#[cfg(unix)]
+pub fn set_file_executable(path: &Path, executable: bool, private: bool) -> Result<(), String> {
+    use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+    let file = fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
+        .open(path)
+        .map_err(|e| format!("open {}: {e}", path.display()))?;
+    let metadata = file
+        .metadata()
+        .map_err(|e| format!("stat {}: {e}", path.display()))?;
+    if !metadata.is_file() {
+        return Err(format!("not a regular file: {}", path.display()));
+    }
+    let mode = match (private, executable) {
+        (true, true) => 0o700,
+        (true, false) => 0o600,
+        (false, true) => (metadata.permissions().mode() & 0o644) | 0o111,
+        (false, false) => metadata.permissions().mode() & 0o644,
+    };
+    file.set_permissions(fs::Permissions::from_mode(mode))
+        .map_err(|e| format!("set permissions on {}: {e}", path.display()))
+}
+
+#[cfg(not(unix))]
+pub fn set_file_executable(_path: &Path, _executable: bool, _private: bool) -> Result<(), String> {
+    Ok(())
+}
+
+/// Whether the owner, group or world execute bit of a regular file is set; a symlink is refused.
+#[cfg(unix)]
+pub fn file_is_executable(path: &Path) -> Result<bool, String> {
+    use std::os::unix::fs::PermissionsExt;
+    let metadata =
+        fs::symlink_metadata(path).map_err(|e| format!("stat {}: {e}", path.display()))?;
+    if !metadata.is_file() {
+        return Err(format!("not a regular file: {}", path.display()));
+    }
+    Ok(metadata.permissions().mode() & 0o111 != 0)
+}
+
+#[cfg(not(unix))]
+pub fn file_is_executable(_path: &Path) -> Result<bool, String> {
+    Ok(false)
 }
 
 fn validate_mutation_path(path: &Path, allowlisted_root: &Path, label: &str) -> Result<(), String> {
@@ -622,7 +691,11 @@ fn copy_regular_file_with(
     }
     validate_mutation_path(dst, allowlisted_root, "regular file copy destination")?;
     let content = fs::read(src).map_err(|e| format!("read copy source {}: {e}", src.display()))?;
-    write_regular_file_atomic_with(dst, &content, allowlisted_root, private)
+    write_regular_file_atomic_with(dst, &content, allowlisted_root, private)?;
+    if private {
+        set_file_executable(dst, file_is_executable(src)?, true)?;
+    }
+    Ok(())
 }
 
 /// Remove a regular file without following symlinks.
@@ -670,6 +743,22 @@ pub fn remove_empty_directory_no_symlinks(
 mod tests {
     use super::*;
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn windows_replace_retries_only_sharing_and_access_errors() {
+        assert!(should_retry_windows_replace(
+            &std::io::Error::from_raw_os_error(5)
+        ));
+        assert!(should_retry_windows_replace(
+            &std::io::Error::from_raw_os_error(32)
+        ));
+        assert!(!should_retry_windows_replace(
+            &std::io::Error::from_raw_os_error(2)
+        ));
+        assert!(!should_retry_windows_replace(&std::io::Error::other(
+            "no OS error"
+        )));
+    }
 
     fn temp(label: &str) -> std::path::PathBuf {
         let n = SystemTime::now()
@@ -788,6 +877,58 @@ mod tests {
         assert!(err.contains("outside"), "{err}");
         let _ = fs::remove_dir_all(&base);
     }
+    #[cfg(unix)]
+    #[test]
+    fn setting_the_execute_bit_refuses_a_link_and_a_non_regular_file() {
+        use std::os::unix::fs::PermissionsExt;
+        let base = temp("exec-refuse");
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(base.join("dir")).unwrap();
+        let real = base.join("real");
+        fs::write(&real, b"x").unwrap();
+        fs::set_permissions(&real, fs::Permissions::from_mode(0o644)).unwrap();
+        let link = base.join("link");
+        std::os::unix::fs::symlink(&real, &link).unwrap();
+        for private in [true, false] {
+            assert!(set_file_executable(&link, true, private).is_err());
+            assert!(file_is_executable(&link).is_err());
+            assert!(set_file_executable(&base.join("dir"), true, private).is_err());
+            assert!(file_is_executable(&base.join("dir")).is_err());
+            assert!(set_file_executable(&base.join("missing"), true, private).is_err());
+        }
+        // The link's target was not touched.
+        assert_eq!(
+            fs::metadata(&real).unwrap().permissions().mode() & 0o777,
+            0o644
+        );
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn setting_the_execute_bit_never_leaves_a_file_group_or_world_writable() {
+        use std::os::unix::fs::PermissionsExt;
+        let base = temp("exec-clamp");
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(&base).unwrap();
+        let path = base.join("script");
+        fs::write(&path, b"x").unwrap();
+        let mode = |path: &Path| fs::metadata(path).unwrap().permissions().mode() & 0o7777;
+        for start in [0o666, 0o777] {
+            for executable in [true, false] {
+                fs::set_permissions(&path, fs::Permissions::from_mode(start)).unwrap();
+                set_file_executable(&path, executable, false).unwrap();
+                let now = mode(&path);
+                assert_eq!(now & 0o022, 0, "{start:o} -> {now:o}");
+                assert_eq!(now & 0o111 != 0, executable, "{start:o} -> {now:o}");
+                fs::set_permissions(&path, fs::Permissions::from_mode(start)).unwrap();
+                set_file_executable(&path, executable, true).unwrap();
+                assert_eq!(mode(&path), if executable { 0o700 } else { 0o600 });
+            }
+        }
+        let _ = fs::remove_dir_all(&base);
+    }
+
     #[cfg(unix)]
     #[test]
     fn copying_an_executable_source_writes_a_readable_file() {

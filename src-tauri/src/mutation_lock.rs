@@ -10,8 +10,8 @@
 //!
 //! A second app instance (`open -n`, a dev build) shares the same files and backups, and would roll
 //! back this instance's running transaction as an interrupted one. So the lock also holds an
-//! exclusive advisory file lock (`flock`, Unix only) in the app's data folder for as long as it is
-//! held; the other instance is refused with [`BUSY_IN_ANOTHER_WINDOW`] instead of waiting.
+//! exclusive advisory file lock in the app's data folder for as long as it is held; the other
+//! instance is refused with [`BUSY_IN_ANOTHER_WINDOW`] instead of waiting.
 
 use std::path::PathBuf;
 use std::sync::{Mutex, MutexGuard, PoisonError, TryLockError};
@@ -29,7 +29,6 @@ pub struct MutationGuard {
     _instance: Option<instance::InstanceLock>,
     _process: MutexGuard<'static, ()>,
 }
-
 /// Blocks until no other mutating command of this process is running, then takes the lock that
 /// keeps other app instances out. Held until the returned guard is dropped; bind it to a named
 /// variable (`let _mutation = ...?`), not `_`. Refused with [`BUSY_IN_ANOTHER_WINDOW`] while another
@@ -147,16 +146,64 @@ mod instance {
     }
 }
 
-#[cfg(not(unix))]
+#[cfg(not(any(unix, windows)))]
 mod instance {
     use std::path::Path;
 
     pub struct InstanceLock;
 
-    /// No cross-process lock off Unix.
+    /// No cross-process lock on unsupported platforms.
     pub fn try_lock(_path: &Path) -> Result<Option<InstanceLock>, String> {
         Ok(None)
     }
+}
+
+#[cfg(windows)]
+mod instance {
+    use std::fs::{self, File, OpenOptions};
+    use std::path::Path;
+
+    /// An open lock file with an exclusive `File` lock; closing the file releases the lock.
+    pub struct InstanceLock {
+        _file: File,
+    }
+
+    /// The exclusive lock on `path`, `Err` with the busy message when another open file holds it,
+    /// `Ok(None)` when the file cannot be used.
+    pub fn try_lock(path: &Path) -> Result<Option<InstanceLock>, String> {
+        if let Some(parent) = path.parent() {
+            if fs::create_dir_all(parent).is_err() {
+                return Ok(None);
+            }
+        }
+        if crate::path_safety::reject_symlink(path, "mutation lock").is_err() {
+            return Ok(None);
+        }
+        if fs::symlink_metadata(path).is_ok_and(|meta| !meta.file_type().is_file()) {
+            return Ok(None);
+        }
+        let Ok(file) = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(path)
+        else {
+            return Ok(None);
+        };
+        match file.try_lock() {
+            Ok(()) => Ok(Some(InstanceLock { _file: file })),
+            Err(error) if super::is_instance_lock_busy(&error) => {
+                Err(super::BUSY_IN_ANOTHER_WINDOW.to_string())
+            }
+            Err(_) => Ok(None),
+        }
+    }
+}
+
+#[cfg(any(windows, test))]
+fn is_instance_lock_busy(error: &std::fs::TryLockError) -> bool {
+    matches!(error, std::fs::TryLockError::WouldBlock)
 }
 
 #[cfg(test)]
@@ -166,6 +213,14 @@ mod tests {
     use std::sync::Arc;
     use std::thread;
     use std::time::Duration;
+
+    #[test]
+    fn standard_file_lock_would_block_maps_to_busy() {
+        assert!(is_instance_lock_busy(&std::fs::TryLockError::WouldBlock));
+        assert!(!is_instance_lock_busy(&std::fs::TryLockError::Error(
+            std::io::Error::other("lock failed")
+        )));
+    }
 
     #[test]
     fn critical_sections_never_overlap() {
@@ -247,7 +302,7 @@ mod tests {
         // A later acquire still works after the recovered guard dropped.
         drop(lock_ignoring_poison(&lock));
     }
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     #[test]
     fn another_instance_holding_the_file_lock_is_refused_not_waited_for() {
         let _env = crate::test_env::guard::lock();

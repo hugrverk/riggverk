@@ -333,7 +333,9 @@ pub(super) fn create_pack_skill_dirs(root: &Path, pack: &str) -> Result<PathBuf,
         crate::path_safety::reject_symlink_parent_chain(dir, root, &label)
             .map_err(|_| format!("refusing a symlink in the {label} path"))?;
         match fs::symlink_metadata(dir) {
-            Ok(meta) if meta.is_dir() => crate::skill_sources::check_trusted(&meta, &label)?,
+            Ok(meta) if meta.is_dir() => {
+                crate::skill_sources::check_trusted_path(dir, root, &meta, &label)?
+            }
             Ok(_) => return Err(format!("{label} path is not a folder")),
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
                 crate::safe_filesystem::create_private_directory_all_no_symlinks(dir, root)
@@ -456,6 +458,11 @@ fn copy_bundled_tree(
             }
             crate::safe_filesystem::write_private_new_regular_file_synced(&target, &content, temp)
                 .map_err(|_| "cannot write personal skill file".to_string())?;
+            crate::safe_filesystem::set_file_executable(
+                &target,
+                crate::safe_filesystem::file_is_executable(&entry.path())?,
+                true,
+            )?;
         }
     }
     // Keep the copy representable by the installer, including nested supporting file names.

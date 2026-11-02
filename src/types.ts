@@ -1108,6 +1108,8 @@ export interface ImportFileChange {
   /** The texts for the diff; null for a binary file or one too big to show. */
   before: string | null;
   after: string | null;
+  executable_before?: boolean | null;
+  executable_after?: boolean | null;
 }
 
 /** One skill a source holds, as staged by `preview_skill_import`. */
