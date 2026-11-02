@@ -340,9 +340,8 @@ fn open_program(os: &str) -> &str {
     }
 }
 
-fn open_args(path: &str) -> [&str; 1] {
-    [path]
-}
+/// How long the opener may run before it counts as having handed the path over.
+const OPEN_HANDOFF: Duration = Duration::from_secs(3);
 
 /// explorer.exe exits 1 even when it opened the path (and shows its own dialog when it could not),
 /// so only a failure to start it counts there.
@@ -350,10 +349,79 @@ fn open_succeeded(program: &str, ok: bool, code: Option<i32>) -> bool {
     ok || (program == "explorer.exe" && code == Some(1))
 }
 
+/// The one argument explorer.exe gets: a plain `C:\...` path (it rejects `\\?\` paths and reads `/` as a
+/// switch), quoted so a comma does not split it. Windows paths cannot contain `"`.
+#[cfg(any(windows, test))]
+fn windows_open_arg(path: &str) -> String {
+    let plain = if let Some(unc) = path.strip_prefix(r"\\?\UNC\") {
+        format!(r"\\{unc}")
+    } else {
+        path.strip_prefix(r"\\?\").unwrap_or(path).to_string()
+    };
+    format!("\"{}\"", plain.replace('/', "\\"))
+}
+
+/// Opens `path` with the platform's default handler. macOS `open` returns at once and runs as before;
+/// xdg-open and explorer.exe can stay in the foreground with what they opened, so they are not waited for
+/// (or killed) once they have run for a moment.
 pub(super) fn open_path(path: &str, cwd: &Path) -> (bool, String, String, Option<i32>) {
     let program = open_program(std::env::consts::OS);
-    let (ok, stdout, stderr, code) = run_cmd(program, &open_args(path), cwd);
-    (open_succeeded(program, ok, code), stdout, stderr, code)
+    if program == "open" {
+        return run_cmd(program, &[path], cwd);
+    }
+    let mut command = Command::new(program);
+    command
+        .current_dir(cwd)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        command
+            .raw_arg(windows_open_arg(path))
+            .creation_flags(CREATE_NO_WINDOW);
+    }
+    #[cfg(not(windows))]
+    command.arg(path);
+    let mut child = match command.spawn() {
+        Ok(child) => child,
+        Err(error) => {
+            return (
+                false,
+                String::new(),
+                format_spawn_error(program, &error),
+                None,
+            )
+        }
+    };
+    let started = Instant::now();
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                let code = status.code();
+                let ok = open_succeeded(program, status.success(), code);
+                let err = if ok {
+                    String::new()
+                } else {
+                    format!("{program} could not open {path}")
+                };
+                return (ok, String::new(), err, code);
+            }
+            Ok(None) if started.elapsed() < OPEN_HANDOFF => {
+                thread::sleep(Duration::from_millis(50))
+            }
+            Ok(None) => {
+                // Still running with what it opened: leave it, and reap it when it ends.
+                thread::spawn(move || {
+                    let _ = child.wait();
+                });
+                return (true, String::new(), String::new(), None);
+            }
+            Err(error) => return (false, String::new(), error.to_string(), None),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -366,8 +434,15 @@ mod tests {
         assert_eq!(open_program("macos"), "open");
         assert_eq!(open_program("linux"), "xdg-open");
         assert_eq!(open_program("windows"), "explorer.exe");
-        let path = r#"C:\My folder\file & (notes) "quoted".md"#;
-        assert_eq!(open_args(path), [path]);
+        assert_eq!(
+            windows_open_arg(r"\\?\C:\Users\me\.config/riggverk/backups"),
+            r#""C:\Users\me\.config\riggverk\backups""#
+        );
+        assert_eq!(
+            windows_open_arg(r"\\?\UNC\server\share\a,b"),
+            r#""\\server\share\a,b""#
+        );
+        assert_eq!(windows_open_arg(r"C:\plain"), r#""C:\plain""#);
         let error = std::io::Error::new(std::io::ErrorKind::NotFound, "program not found");
         assert!(format_spawn_error(open_program("linux"), &error).contains("xdg-open"));
     }
