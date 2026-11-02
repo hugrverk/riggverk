@@ -16,7 +16,7 @@ use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 
-use super::process::{run_cmd, ActionResult};
+use super::process::{open_path as open_with_default_handler, ActionResult};
 use super::rules::{enabled_rules_artifact, rules_target, user_home};
 use super::workspace::{path_arg, setup_workspace_target_path, workspace_target_for_write};
 use crate::artifact_registry::ArtifactId;
@@ -440,7 +440,7 @@ pub fn open_rules_file(surface: String) -> Result<ActionResult, String> {
     let home = user_home()?;
     let path = open_path(&artifact, &ws_root, &home)?;
     let path_str = path_arg(&path)?;
-    let (ok, out, err, code) = run_cmd("open", &[&path_str], &home);
+    let (ok, out, err, code) = open_with_default_handler(&path_str, &home);
     Ok(ActionResult::new(
         ok,
         format!("open_rules_file:{surface}"),

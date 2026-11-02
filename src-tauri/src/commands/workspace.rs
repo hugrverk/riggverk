@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 
-use super::process::{run_cmd, ActionResult};
+use super::process::{open_path, ActionResult};
 use crate::agent_targets;
 use crate::path_utils::{
     default_installed_workspace_path, is_legacy_default_workspace_path,
@@ -340,7 +340,7 @@ pub fn open_default_workspace_folder() -> Result<ActionResult, String> {
         ));
     }
     let path_str = path_arg(&path)?;
-    let (success, stdout, stderr, code) = run_cmd("open", &[&path_str], &path);
+    let (success, stdout, stderr, code) = open_path(&path_str, &path);
     Ok(ActionResult::new(
         success,
         "open_default_workspace_folder",

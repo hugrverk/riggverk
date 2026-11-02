@@ -1,7 +1,7 @@
 use std::io::{BufReader, Read};
 use std::path::{Path, PathBuf};
 
-use super::process::{run_cmd, ActionResult};
+use super::process::{open_path, ActionResult};
 use super::workspace::path_arg;
 
 const ALLOWED_TARGET_IDS: &[&str] = &[
@@ -534,7 +534,7 @@ pub fn list_backups() -> Result<Vec<BackupRunSummary>, String> {
 pub fn open_backups_folder() -> Result<ActionResult, String> {
     let root = prepare_backup_root_for_open()?;
     let path_str = path_arg(&root)?;
-    let (success, stdout, stderr, code) = run_cmd("open", &[&path_str], &root);
+    let (success, stdout, stderr, code) = open_path(&path_str, &root);
 
     Ok(ActionResult::new(
         success,
