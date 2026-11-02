@@ -824,7 +824,8 @@ describe("OpenCodeView model override", () => {
       await waitFor(() => expect(model().value).toBe("openai/gpt-5"));
       const body = paneBody();
       act(() => body.focus());
-      expect(hint(/reset model/).getAttribute("aria-disabled")).toBeNull();
+      // The hint enables once the loaded override settles, which can trail the field value on a loaded machine.
+      await waitFor(() => expect(hint(/reset model/).getAttribute("aria-disabled")).toBeNull());
 
       fireEvent.keyDown(body, { key: "x" });
       await confirmReset();
