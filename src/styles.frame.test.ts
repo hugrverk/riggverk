@@ -19,7 +19,7 @@ describe("frame styles", () => {
     const side = block(".side");
     expect(side).toMatch(/width:\s*200px/);
     // padding: <top> 0 <bottom>; the top band must cover the lights.
-    const top = Number(side.match(/padding:\s*(\d+)px/)?.[1]);
+    const top = Number(block('[data-frame="macos"] .side').match(/padding-top:\s*(\d+)px/)?.[1]);
     expect(top).toBeGreaterThanOrEqual(40);
     expect(side).toMatch(/app-region:\s*drag/);
     expect(block(".side nav")).toMatch(/app-region:\s*no-drag/);

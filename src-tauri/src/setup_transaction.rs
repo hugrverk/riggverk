@@ -1868,7 +1868,7 @@ fn managed_hash_for(
 
 /// [`managed_hash_for`], and for a skill file without a record of its own the record of the same
 /// file under another case: on a case-insensitive volume (APFS by default) a case-only rename
-/// (`Notes.md` to `notes.md`) finds the installed file, which the app owns.
+/// (`Notes.md` to `notes.md`) finds the installed file, which the app owns. Linux compares exactly.
 fn managed_hash_for_artifact(
     artifact: &ArtifactId,
     identity: &str,
@@ -1879,20 +1879,17 @@ fn managed_hash_for_artifact(
         records
             .iter()
             .find(|record| {
-                record.identity.eq_ignore_ascii_case(identity)
-                    && crate::managed_bootstrap::artifact_from_identity(&record.identity)
-                        .ok()
-                        .and_then(|other| other.as_skill_file())
-                        .is_some_and(|other| file.same_file_ignoring_case(&other))
+                crate::platform_paths::names_match(
+                    &record.identity,
+                    identity,
+                    crate::platform_paths::Platform::current(),
+                ) && crate::managed_bootstrap::artifact_from_identity(&record.identity)
+                    .ok()
+                    .and_then(|other| other.as_skill_file())
+                    .is_some_and(|other| file.same_file(&other))
             })
             .map(|record| record.hash.clone())
     })
-}
-
-/// A destination as a case-insensitive volume compares it: two paths that differ only in case are
-/// one file there, so one of them being wanted means the other is not stale.
-fn folded_destination(dest: &Path) -> PathBuf {
-    PathBuf::from(dest.to_string_lossy().to_ascii_lowercase())
 }
 
 fn detect_stale_artifact_state<R: SourceRoot + ?Sized>(
@@ -2435,11 +2432,16 @@ pub fn plan_artifacts_for_surfaces_with(
     let requested_surfaces: std::collections::HashSet<SetupSurfaceId> =
         surfaces.iter().map(|surface| surface.canonical()).collect();
     // One file is never both wanted and stale: whatever has a wanted artifact's destination is
-    // that artifact, however an older record named it, in whatever case.
+    // that artifact, using the current platform’s path comparison rule.
     let wanted_destinations: HashSet<PathBuf> = planned
         .iter()
         .filter_map(|operation| operation.artifact.resolve_dest(home, workspace_root).ok())
-        .map(|dest| folded_destination(&dest))
+        .map(|dest| {
+            crate::platform_paths::path_comparison_key(
+                &dest,
+                crate::platform_paths::Platform::current(),
+            )
+        })
         .collect();
     let stale = crate::managed_bootstrap::collect_stale_removal_artifacts(
         workspace_root,
@@ -2464,7 +2466,12 @@ pub fn plan_artifacts_for_surfaces_with(
         if seen.contains(&identity)
             || artifact
                 .resolve_dest(home, workspace_root)
-                .map(|dest| folded_destination(&dest))
+                .map(|dest| {
+                    crate::platform_paths::path_comparison_key(
+                        &dest,
+                        crate::platform_paths::Platform::current(),
+                    )
+                })
                 .is_ok_and(|dest| {
                     wanted_destinations.contains(&dest)
                     // Two skill roots that are one folder: the file is removed once.
@@ -3413,8 +3420,10 @@ fn validate_operation_consistency(op: &ArtifactManifestOperation) -> Result<(), 
 /// interrupted-transaction recovery trust the digests in `manifest.json` and the bytes below
 /// `artifacts/` with nothing to authenticate them, so the folder, the manifest and `artifacts/`
 /// must each be no link, owned by the current user and not writable by its group or by everyone
-/// (Unix; the checks a pack folder gets). The reasons are fixed phrases without the path.
+/// (Unix), or a Windows symlink or junction through the trusted root. The reasons are fixed phrases
+/// without the path.
 pub fn check_transaction_folder_trusted(backup_dir: &Path) -> Result<(), String> {
+    let trusted_root = backup_dir.parent().unwrap_or(backup_dir);
     let entries = [
         (
             backup_dir.to_path_buf(),
@@ -3437,27 +3446,37 @@ pub fn check_transaction_folder_trusted(backup_dir: &Path) -> Result<(), String>
         if meta.file_type().is_symlink() {
             return Err(format!("refusing {what}: it is a link"));
         }
-        crate::skill_sources::check_trusted(&meta, what)?;
+        let entry_root = if path == backup_dir {
+            trusted_root
+        } else {
+            backup_dir
+        };
+        crate::skill_sources::check_trusted_path(&path, entry_root, &meta, what)?;
     }
     Ok(())
 }
 
 /// Refuses a backup someone other than the user could have written before it is restored: the
 /// file, or the folder and everything below it, must be no link, owned by the current user and not
-/// writable by its group or by everyone (Unix). Nothing authenticates the backed-up bytes, so this
-/// is what keeps another local user from choosing what a rollback writes. Read access is not
-/// checked: releases before v2026.10.1 left backups 0644 and folders 0755, which still restore.
-pub fn check_backup_trusted(backup: &Path) -> Result<(), String> {
+/// writable by its group or by everyone (Unix), or a Windows symlink or junction through the trusted
+/// root. Nothing authenticates the backed-up bytes, so this is what keeps another local user from
+/// choosing what a rollback writes. Read access is not checked: releases before v2026.10.1 left
+/// backups 0644 and folders 0755, which still restore.
+pub fn check_backup_trusted(backup: &Path, trusted_root: &Path) -> Result<(), String> {
+    check_backup_trusted_with_root(backup, trusted_root)
+}
+
+fn check_backup_trusted_with_root(backup: &Path, trusted_root: &Path) -> Result<(), String> {
     const WHAT: &str = "the setup backup";
     let meta = fs::symlink_metadata(backup).map_err(|_| format!("cannot inspect {WHAT}"))?;
     if meta.file_type().is_symlink() {
         return Err(format!("refusing {WHAT}: it is a link"));
     }
-    crate::skill_sources::check_trusted(&meta, WHAT)?;
+    crate::skill_sources::check_trusted_path(backup, trusted_root, &meta, WHAT)?;
     if meta.is_dir() {
         for entry in fs::read_dir(backup).map_err(|_| format!("cannot inspect {WHAT}"))? {
             let entry = entry.map_err(|_| format!("cannot inspect {WHAT}"))?;
-            check_backup_trusted(&entry.path())?;
+            check_backup_trusted_with_root(&entry.path(), trusted_root)?;
         }
     }
     Ok(())
@@ -3838,7 +3857,7 @@ pub fn validate_backup_for_rollback(
         return Err("backup missing".into());
     }
     reject_symlink(&backup_path, "rollback backup")?;
-    check_backup_trusted(&backup_path)?;
+    check_backup_trusted(&backup_path, backup_dir)?;
     if backup_path.is_dir() {
         scan_backup_tree_no_symlinks(&backup_path)?;
     } else if !backup_path.is_file() {
@@ -3958,7 +3977,7 @@ fn restore_artifact_from_backup_with_mode(
                 return Err("backup missing".into());
             }
             reject_symlink(&backup_path, "backup")?;
-            check_backup_trusted(&backup_path)?;
+            check_backup_trusted(&backup_path, backup_dir)?;
             // The copy replaces the destination atomically; removing it first
             // would lose the file if the copy then fails.
             crate::safe_filesystem::copy_regular_file_no_symlinks(
@@ -3979,7 +3998,7 @@ fn restore_artifact_from_backup_with_mode(
                 return Err("backup missing".into());
             }
             reject_symlink(&backup_path, "backup")?;
-            check_backup_trusted(&backup_path)?;
+            check_backup_trusted(&backup_path, backup_dir)?;
             match mode {
                 RollbackRestoreMode::FullBackup => {
                     crate::safe_filesystem::copy_regular_file_no_symlinks(
