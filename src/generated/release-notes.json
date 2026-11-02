@@ -1,6 +1,34 @@
 {
   "releases": [
     {
+      "version": "2026.11.7",
+      "sections": [
+        {
+          "title": "New",
+          "items": [
+            "Add a consent-first updater, off until configured",
+            "Branded universal dmg"
+          ]
+        },
+        {
+          "title": "Fixes",
+          "items": [
+            "Use the platform O_NOFOLLOW",
+            "Give the bundle step a stdin so actool can run"
+          ]
+        },
+        {
+          "title": "Other",
+          "items": [
+            "Show the Overview and explain Claude model pins",
+            "Bump Tauri to 2.12",
+            "Take conduct reports through GitHub only",
+            "Prepare the repository for a public release"
+          ]
+        }
+      ]
+    },
+    {
       "version": "2026.11.6",
       "sections": [
         {
