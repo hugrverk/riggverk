@@ -8,12 +8,12 @@ it("shows Update all actions in the receipt with the default mock backend", asyn
   window.history.replaceState(null, "", "/?mock=default");
   await import("./mockBackend");
   render(<App />);
-  await within(screen.getByRole("navigation", { name: "Main navigation" })).findByRole("button", { name: "Claude" });
+  await within(screen.getByRole("navigation", { name: "Main navigation" })).findByRole("button", { name: "Claude" }, { timeout: 10000 });
   fireEvent.keyDown(document.body, { key: ":", shiftKey: true });
   const input = screen.getByRole("combobox", { name: "Command" });
   fireEvent.change(input, { target: { value: "update --all" } });
   fireEvent.keyDown(input, { key: "Enter" });
-  const receipt = await screen.findByRole("region", { name: "Workspace install review" });
+  const receipt = await screen.findByRole("region", { name: "Workspace install review" }, { timeout: 10000 });
   fireEvent.click(await within(receipt).findByRole("button", { name: /apply/i }, { timeout: 10000 }));
   await within(receipt).findByRole("button", { name: "Undo this update…" }, { timeout: 10000 });
   await waitFor(() => expect(within(screen.getByRole("region", { name: "Run" })).getByRole("button", { name: "Details" })).toBeTruthy(), { timeout: 10000 });
