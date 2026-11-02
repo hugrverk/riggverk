@@ -5,7 +5,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use crate::agent_targets;
 use crate::platform_paths::{display_path, Platform};
 
-use super::process::{run_cmd, ActionResult};
+use super::process::{open_path, ActionResult};
 use super::workspace::{path_arg, workspace_root, workspace_root_for_write};
 
 struct DocEntry {
@@ -434,7 +434,7 @@ pub fn open_doc(id: String) -> Result<ActionResult, String> {
     let root = workspace_root()?;
     let path = personal_doc_open_path(&root, &id)?;
     let path_str = path_arg(&path)?;
-    let (ok, out, err, code) = run_cmd("open", &[&path_str], &root);
+    let (ok, out, err, code) = open_path(&path_str, &root);
     Ok(ActionResult::new(
         ok,
         format!("open_doc:{}", id),

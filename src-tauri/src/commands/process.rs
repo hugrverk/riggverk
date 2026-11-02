@@ -174,7 +174,21 @@ fn terminate_process_tree(child: &mut Child) {
         }
         signal_process_group(pgid, SIGKILL);
     }
-    #[cfg(not(unix))]
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        let _ = Command::new("taskkill")
+            .args(["/T", "/F", "/PID", &child.id().to_string()])
+            .creation_flags(CREATE_NO_WINDOW)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+        // Fall back to the direct child if taskkill could not stop it.
+        let _ = child.kill();
+    }
+    #[cfg(not(any(unix, windows)))]
     {
         let _ = child.kill();
     }
@@ -231,6 +245,12 @@ pub(super) fn run_cmd_bounded(
         use std::os::unix::process::CommandExt;
         // Own process group so a timeout can stop grandchildren that hold the pipes.
         command.process_group(0);
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        command.creation_flags(CREATE_NO_WINDOW);
     }
     for (key, value) in &options.extra_env {
         command.env(key, value);
@@ -312,10 +332,37 @@ pub(super) fn run_cmd(
     run_cmd_with_timeout(program, args, cwd, DEFAULT_RUN_CMD_TIMEOUT)
 }
 
+fn open_program(os: &str) -> &str {
+    match os {
+        "macos" => "open",
+        "windows" => "explorer.exe",
+        _ => "xdg-open",
+    }
+}
+
+fn open_args(path: &str) -> [&str; 1] {
+    [path]
+}
+
+pub(super) fn open_path(path: &str, cwd: &Path) -> (bool, String, String, Option<i32>) {
+    run_cmd(open_program(std::env::consts::OS), &open_args(path), cwd)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::shell_runtime::format_spawn_error;
+
+    #[test]
+    fn open_program_selects_platform_handler() {
+        assert_eq!(open_program("macos"), "open");
+        assert_eq!(open_program("linux"), "xdg-open");
+        assert_eq!(open_program("windows"), "explorer.exe");
+        let path = r#"C:\My folder\file & (notes) "quoted".md"#;
+        assert_eq!(open_args(path), [path]);
+        let error = std::io::Error::new(std::io::ErrorKind::NotFound, "program not found");
+        assert!(format_spawn_error(open_program("linux"), &error).contains("xdg-open"));
+    }
 
     #[test]
     fn format_spawn_error_for_missing_bash_is_actionable() {
