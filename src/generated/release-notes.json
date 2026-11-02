@@ -6,14 +6,19 @@
         {
           "title": "Fixes",
           "items": [
-            "Open paths and manage Windows children",
-            "Resolve Windows and Linux agent CLIs",
-            "Keep the execute bit of skill files",
-            "Respect native paths and window behavior",
-            "Address filesystem safety gaps",
-            "Raise status pill contrast to WCAG AA",
-            "Await asynchronous sheet closing",
-            "Avoid duplicate update all actions"
+            "Scripts in skills stay runnable. A skill file that is executable where it comes from keeps its executable bit through import, Edit as my copy, install into your agents, backups and undo. The import review says so, and a change to only that bit shows in the preview",
+            "Status labels are easier to read: every state now meets the WCAG AA contrast minimum in both light and dark mode",
+            "After Update all, Undo and Dismiss show once, in the receipt, instead of also in the run panel"
+          ]
+        },
+        {
+          "title": "Linux and Windows groundwork",
+          "items": [
+            "Riggverk is being tested on Linux and Windows. These changes do not affect the Mac app (#193–#196):",
+            "Open folder and file actions use xdg-open on Linux and Explorer on Windows.",
+            "Agent CLIs installed through npm, bun, cargo, scoop or Linuxbrew are found.",
+            "On Windows, a second Riggverk window cannot apply at the same time, and folders behind symlinks or junctions are refused while OneDrive folders work.",
+            "On Linux, file names that differ only in case are kept apart, and the window has no empty strip at the top."
           ]
         }
       ]
