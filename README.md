@@ -2,6 +2,8 @@
 
 Riggverk is a local agent environment manager: a Tauri control panel that installs and maintains one shared set of rules, skills, agents, and MCP entries across Codex, OpenCode, Claude Code, and Cursor, plus a lighter opt-in tier (rules, Playwright MCP entry, skills) for GitHub Copilot CLI, Pi, Kilo Code, Google Antigravity, and Grok Build (which reads Claude Code's rules file instead of its own). A desktop UI you can use with the mouse, with a keyboard shortcut for every action: a sidebar of agents, cards that say what is up to date, what can be updated and what needs your decision, and a history of every update. Every write is previewed before it happens.
 
+![Riggverk's Overview: the base, your refinements and packs flowing into each agent, with what is up to date and what is ready to update](docs/images/overview.png)
+
 The repository contains the application and its canonical bundled workspace. Installed workspaces and harness files are downstream user-owned data.
 
 ## Upgrading from earlier versions
@@ -111,7 +113,7 @@ Only that entry is written. The file is read and written as strict JSON: your ot
 Shared semantic bodies live under `agent-specs/`; `scripts/generate-agent-adapters.py` composes the harness-native adapters. See [Agents](docs/WORKSPACE_CONTRACT.md#agents) for the names provided for each harness:
 
 - OpenCode: Markdown agents under `agents/` (`architect` is the primary agent). `inspector` and `verifier` can be run directly with `@`; the other subagents are hidden from `@` and reached through delegation.
-- Claude Code: subagents under `templates/claude/agents/`.
+- Claude Code: subagents under `templates/claude/agents/`. Each pins a model in its `*.header.yaml` (`haiku` for `repo-scout`, `sonnet` for the others), so the read-only helpers stay cheap and behave the same whatever model the main session runs. To change one, edit its `model:` (`inherit` uses the session's model) and regenerate the adapters.
 - Codex: TOML agents under `templates/codex/agents/`.
 - Cursor: agents under `templates/cursor/agents/`.
 
