@@ -456,6 +456,11 @@ fn copy_bundled_tree(
             }
             crate::safe_filesystem::write_private_new_regular_file_synced(&target, &content, temp)
                 .map_err(|_| "cannot write personal skill file".to_string())?;
+            crate::safe_filesystem::set_file_executable(
+                &target,
+                crate::safe_filesystem::file_is_executable(&entry.path())?,
+                true,
+            )?;
         }
     }
     // Keep the copy representable by the installer, including nested supporting file names.
