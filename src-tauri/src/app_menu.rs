@@ -9,7 +9,9 @@
 //! When updates are on (see `app_update`), the app menu also has "Check for Updates…" after About; the UI runs the
 //! check. Without the updater config the item is not there.
 
-use tauri::menu::{Menu, MenuEvent, MenuItem, MenuItemKind};
+use tauri::menu::{Menu, MenuEvent};
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+use tauri::menu::{MenuItem, MenuItemKind};
 use tauri::{AppHandle, Manager, Runtime};
 
 use crate::window_placement::MAIN_WINDOW;
@@ -22,6 +24,8 @@ pub fn build<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
     let menu = Menu::default(app)?;
     #[cfg(target_os = "macos")]
     replace_quit(app, &menu)?;
+    #[cfg(target_os = "windows")]
+    replace_windows_exit(app, &menu)?;
     #[cfg(target_os = "macos")]
     if crate::app_update::configured(app.config()) {
         add_check_for_updates(app, &menu)?;
@@ -52,6 +56,25 @@ fn replace_quit<R: Runtime>(app: &AppHandle<R>, menu: &Menu<R>) -> tauri::Result
             true,
             Some("CmdOrCtrl+Q"),
         )?)?;
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn replace_windows_exit<R: Runtime>(app: &AppHandle<R>, menu: &Menu<R>) -> tauri::Result<()> {
+    let Some(MenuItemKind::Submenu(file_menu)) = menu.items()?.into_iter().next() else {
+        return Ok(());
+    };
+    let items = file_menu.items()?;
+    if let Some(position) = items.iter().position(|item| match item {
+        MenuItemKind::Predefined(item) => item.text().is_ok_and(|text| text == "&Exit"),
+        _ => false,
+    }) {
+        file_menu.remove_at(position)?;
+        file_menu.insert(
+            &MenuItem::with_id(app, QUIT_ID, "&Exit", true, Some("CmdOrCtrl+Q"))?,
+            position,
+        )?;
     }
     Ok(())
 }

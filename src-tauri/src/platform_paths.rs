@@ -229,8 +229,18 @@ pub fn opencode_config_moved(home: &Path) -> bool {
     opencode_config_moved_for(home, xdg.as_deref())
 }
 
+pub fn path_comparison_key(path: &Path, platform: Platform) -> PathBuf {
+    match platform {
+        Platform::Linux => path.to_path_buf(),
+        Platform::MacOS | Platform::Windows => {
+            PathBuf::from(path.to_string_lossy().to_ascii_lowercase())
+        }
+    }
+}
+
 pub fn normalized_path_key(path: &Path) -> String {
-    path.components()
+    let normalized = path
+        .components()
         .map(|component| match component {
             Component::Prefix(prefix) => prefix.as_os_str().to_string_lossy().into_owned(),
             Component::RootDir => "/".into(),
@@ -239,8 +249,10 @@ pub fn normalized_path_key(path: &Path) -> String {
             Component::Normal(part) => part.to_string_lossy().into_owned(),
         })
         .collect::<Vec<_>>()
-        .join("/")
-        .to_ascii_lowercase()
+        .join("/");
+    path_comparison_key(Path::new(&normalized), Platform::current())
+        .to_string_lossy()
+        .into_owned()
 }
 
 pub fn is_windows_drive_root(path: &Path) -> bool {
@@ -316,6 +328,23 @@ pub fn display_path(path: &Path, platform: Platform) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn path_comparison_obeys_platform_case_rules() {
+        use super::{path_comparison_key, Platform};
+        use std::path::Path;
+        for (platform, equal) in [
+            (Platform::MacOS, true),
+            (Platform::Windows, true),
+            (Platform::Linux, false),
+        ] {
+            assert_eq!(
+                path_comparison_key(Path::new("Foo"), platform)
+                    == path_comparison_key(Path::new("foo"), platform),
+                equal
+            );
+        }
+    }
+
     use super::*;
 
     fn win_env() -> PlatformEnv {

@@ -1889,12 +1889,6 @@ fn managed_hash_for_artifact(
     })
 }
 
-/// A destination as a case-insensitive volume compares it: two paths that differ only in case are
-/// one file there, so one of them being wanted means the other is not stale.
-fn folded_destination(dest: &Path) -> PathBuf {
-    PathBuf::from(dest.to_string_lossy().to_ascii_lowercase())
-}
-
 fn detect_stale_artifact_state<R: SourceRoot + ?Sized>(
     artifact: &ArtifactId,
     workspace_root: &Path,
@@ -2435,11 +2429,16 @@ pub fn plan_artifacts_for_surfaces_with(
     let requested_surfaces: std::collections::HashSet<SetupSurfaceId> =
         surfaces.iter().map(|surface| surface.canonical()).collect();
     // One file is never both wanted and stale: whatever has a wanted artifact's destination is
-    // that artifact, however an older record named it, in whatever case.
+    // that artifact, using the current platform’s path comparison rule.
     let wanted_destinations: HashSet<PathBuf> = planned
         .iter()
         .filter_map(|operation| operation.artifact.resolve_dest(home, workspace_root).ok())
-        .map(|dest| folded_destination(&dest))
+        .map(|dest| {
+            crate::platform_paths::path_comparison_key(
+                &dest,
+                crate::platform_paths::Platform::current(),
+            )
+        })
         .collect();
     let stale = crate::managed_bootstrap::collect_stale_removal_artifacts(
         workspace_root,
@@ -2464,7 +2463,12 @@ pub fn plan_artifacts_for_surfaces_with(
         if seen.contains(&identity)
             || artifact
                 .resolve_dest(home, workspace_root)
-                .map(|dest| folded_destination(&dest))
+                .map(|dest| {
+                    crate::platform_paths::path_comparison_key(
+                        &dest,
+                        crate::platform_paths::Platform::current(),
+                    )
+                })
                 .is_ok_and(|dest| {
                     wanted_destinations.contains(&dest)
                     // Two skill roots that are one folder: the file is removed once.
