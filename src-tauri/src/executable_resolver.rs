@@ -159,7 +159,7 @@ fn linux_tool_dirs(home: Option<&Path>) -> Vec<PathBuf> {
     let mut dirs = vec![
         PathBuf::from("/opt/homebrew/bin"),
         PathBuf::from("/usr/local/bin"),
-        PathBuf::from("/home/linuxbrew/.linuxbrew/bin"),
+        PathBuf::from("/home/linuxbrew/.linuxbrew/bin"), // residue-allow: the Linux Homebrew prefix, not a user home
     ];
     if let Some(home) = home {
         for dir in [
@@ -415,7 +415,7 @@ mod tests {
         ] {
             assert!(linux.contains(&home.join(dir)));
         }
-        assert!(linux.contains(&PathBuf::from("/home/linuxbrew/.linuxbrew/bin")));
+        assert!(linux.contains(&PathBuf::from("/home/linuxbrew/.linuxbrew/bin"))); // residue-allow: Homebrew prefix
         let windows = windows_tool_dirs(
             Some(home),
             Some(Path::new("roaming")),
