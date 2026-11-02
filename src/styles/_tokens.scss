@@ -107,6 +107,10 @@
   --fail: #b0493e;
   --fail-bg: rgba(176, 73, 62, 0.10);
   --off: #6b6b70;
+  --pill-ok: color-mix(in srgb, var(--ok) 94%, black);
+  --pill-yours: color-mix(in srgb, var(--yours) 94%, black);
+  --pill-fix: color-mix(in srgb, var(--fix) 94%, black);
+  --pill-off: color-mix(in srgb, var(--off) 94%, black);
   --primary: #50555e;
   --primary-fg: #ffffff;
   --warn-bg: rgba(80, 85, 94, 0.12);
@@ -135,6 +139,10 @@
     --fail: #b0493e;
     --fail-bg: rgba(176, 73, 62, 0.10);
     --off: #6b6b70;
+    --pill-ok: color-mix(in srgb, var(--ok) 94%, black);
+    --pill-yours: color-mix(in srgb, var(--yours) 94%, black);
+    --pill-fix: color-mix(in srgb, var(--fix) 94%, black);
+    --pill-off: color-mix(in srgb, var(--off) 94%, black);
     --primary: #50555e;
     --primary-fg: #ffffff;
     --warn-bg: rgba(80, 85, 94, 0.12);
