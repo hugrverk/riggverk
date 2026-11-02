@@ -1,6 +1,24 @@
 {
   "releases": [
     {
+      "version": "2026.11.8",
+      "sections": [
+        {
+          "title": "Fixes",
+          "items": [
+            "Open paths and manage Windows children",
+            "Resolve Windows and Linux agent CLIs",
+            "Keep the execute bit of skill files",
+            "Respect native paths and window behavior",
+            "Address filesystem safety gaps",
+            "Raise status pill contrast to WCAG AA",
+            "Await asynchronous sheet closing",
+            "Avoid duplicate update all actions"
+          ]
+        }
+      ]
+    },
+    {
       "version": "2026.11.7",
       "sections": [
         {
