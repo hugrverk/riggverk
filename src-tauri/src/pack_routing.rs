@@ -118,6 +118,65 @@ pub(crate) fn read(pack_dir: &Path, own_skills: &BTreeSet<&str>) -> PackRouting 
     }
 }
 
+/// Builds one app-managed routing line without accepting markup from the description.
+pub(crate) fn routing_line(when: &str, name: &str) -> Result<String, String> {
+    if when
+        .chars()
+        .any(|c| c.is_control() || is_invisible_format(c))
+    {
+        return Err("invalid routing description".to_string());
+    }
+    let when = when.trim();
+    if when.is_empty() || when.starts_with('#') || when.contains(['`', '<']) || when.contains("~~~")
+    {
+        return Err("invalid routing description".to_string());
+    }
+    let line = format!("- {when}: `{name}`.");
+    validate(&line, &BTreeSet::from([name]))
+        .map_err(|_| "invalid routing description".to_string())?;
+    Ok(line)
+}
+
+/// Recognises only a line produced by the app.
+pub(crate) fn own_when(line: &str, name: &str) -> Option<String> {
+    let when = line
+        .strip_prefix("- ")?
+        .strip_suffix(&format!(": `{name}`."))?;
+    if when.contains('`') {
+        None
+    } else {
+        Some(when.to_string())
+    }
+}
+
+/// Reads raw routing text with the same file trust checks as the reader.
+pub(crate) fn read_raw(pack_dir: &Path) -> Result<String, String> {
+    let path = pack_dir.join(ROUTING_FILE);
+    let bad = || "routing.md cannot be read safely".to_string();
+    let meta = match fs::symlink_metadata(&path) {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(String::new()),
+        Err(_) => return Err(bad()),
+        Ok(meta) => meta,
+    };
+    if meta.file_type().is_symlink()
+        || !meta.is_file()
+        || meta.len() > MAX_ROUTING_BYTES
+        || crate::skill_sources::check_trusted_path(&path, pack_dir, &meta, ROUTING_FILE).is_err()
+    {
+        return Err(bad());
+    }
+    let mut bytes = Vec::new();
+    open_checked(&path, &meta)
+        .map_err(|_| bad())?
+        .take(MAX_ROUTING_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|_| bad())?;
+    if bytes.len() as u64 > MAX_ROUTING_BYTES {
+        return Err(bad());
+    }
+    String::from_utf8(bytes).map_err(|_| bad())
+}
+
 /// Opens the file checked above, and refuses it when what opened is not that file any more (a link
 /// or another file swapped in between the check and the open).
 fn open_checked(path: &Path, checked: &fs::Metadata) -> std::io::Result<fs::File> {
@@ -327,6 +386,34 @@ mod tests {
 
     fn own<'a>(names: &[&'a str]) -> BTreeSet<&'a str> {
         names.iter().copied().collect()
+    }
+
+    #[test]
+    fn generated_lines_validate_and_round_trip() {
+        assert_eq!(
+            routing_line("  Use for testing  ", "mine").unwrap(),
+            "- Use for testing: `mine`."
+        );
+        for when in [
+            "",
+            "a`b",
+            "<tag>",
+            "a\nb",
+            "\ntrimmed",
+            "a\u{200b}b",
+            "# heading",
+            "~~~",
+            &"x".repeat(241),
+        ] {
+            assert!(routing_line(when, "mine").is_err());
+        }
+        assert_eq!(
+            own_when("- Use for testing: `mine`.", "mine"),
+            Some("Use for testing".into())
+        );
+        for line in ["- Use: `mine`", "- Use `other`: `mine`.", "- Use: `other`."] {
+            assert_eq!(own_when(line, "mine"), None);
+        }
     }
 
     const BASE: &str =

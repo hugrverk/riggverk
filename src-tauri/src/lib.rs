@@ -121,7 +121,7 @@ use commands::{
 };
 use commands::{
     commit_skill_import, copy_skill_to_pack, forget_pack, list_pack_skills, preview_skill_import,
-    remove_imported_skill, save_pack_skill, undo_last_import,
+    remove_imported_skill, save_pack_skill, set_imported_skill_routing, undo_last_import,
 };
 use tauri::Manager;
 
@@ -223,6 +223,7 @@ pub fn run() {
             preview_skill_import,
             commit_skill_import,
             remove_imported_skill,
+            set_imported_skill_routing,
             undo_last_import,
             save_pack_skill,
             get_app_update_info,
