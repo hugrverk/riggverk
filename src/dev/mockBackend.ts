@@ -2433,7 +2433,7 @@ function mockCandidate(key: string, source: string, name: string, skillMd: strin
 }
 
 const SHELL_FLAGS: ImportFlag[] = [
-  { kind: "unicode", label: "hidden Unicode", detail: "1 invisible format character (zero-width, soft hyphen and the like) on lines 9" },
+  { kind: "unicode", label: "hidden Unicode", detail: "1 invisible character (zero-width, soft hyphen, variation selector and the like) on lines 9" },
   { kind: "shell", label: "! commands", detail: "line 8: Current branch: !`git branch --show-current` · runs shell commands when the skill loads" },
   { kind: "key", label: "allowed-tools", detail: "Bash(git *) · grants tool access without asking" },
   { kind: "executable", label: "scripts and executables", detail: "scripts/collect.sh; an agent may run them. The app never does. The executable bit is kept: owner-only (0700) in the pack, executable when installed into agent skill folders" },

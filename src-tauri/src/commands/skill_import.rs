@@ -662,24 +662,33 @@ fn read_source(file: &SourceFile) -> Result<Vec<u8>, String> {
 // ── Checking the copy ──
 
 /// Hidden characters of a `SKILL.md`: `Err` for tag characters and bidi overrides or isolates,
-/// which can hide or reorder instructions; otherwise the flag for other invisible format
-/// characters, if any.
+/// which can hide or reorder instructions; otherwise the flag for the other characters a routing
+/// line refuses as invisible (format characters, variation selectors and the like), if any. A text
+/// or emoji presentation selector (U+FE0E, U+FE0F) right after a visible non-ASCII character, as in
+/// "⚠️", only picks how that character looks and is not counted.
 fn hidden_unicode(text: &str) -> Result<Option<ImportFlag>, String> {
+    let invisible = crate::pack_routing::is_invisible_in_routing;
     let mut refused = BTreeSet::new();
     let mut flagged = BTreeSet::new();
     let mut count = 0usize;
     for (index, line) in text.lines().enumerate() {
+        let mut previous: Option<char> = None;
         for c in line.chars() {
             let code = u32::from(c);
+            let presentation = matches!(c, '\u{FE0E}' | '\u{FE0F}')
+                && previous.is_some_and(|p| {
+                    !p.is_ascii() && !p.is_whitespace() && !p.is_control() && !invisible(p)
+                });
             if (0xE0000..=0xE007F).contains(&code)
                 || (0x202A..=0x202E).contains(&code)
                 || (0x2066..=0x2069).contains(&code)
             {
                 refused.insert(index + 1);
-            } else if crate::pack_routing::is_invisible_format(c) {
+            } else if invisible(c) && !presentation {
                 flagged.insert(index + 1);
                 count += 1;
             }
+            previous = Some(c);
         }
     }
     if !refused.is_empty() {
@@ -693,8 +702,8 @@ fn hidden_unicode(text: &str) -> Result<Option<ImportFlag>, String> {
         kind: "unicode".to_string(),
         label: "hidden Unicode".to_string(),
         detail: format!(
-            "{} (zero-width, soft hyphen and the like) on lines {}",
-            plural(count, "invisible format character"),
+            "{} (zero-width, soft hyphen, variation selector and the like) on lines {}",
+            plural(count, "invisible character"),
             line_list(&flagged)
         ),
     }))
@@ -2350,6 +2359,41 @@ mod tests {
             flag.detail
         );
         assert!(!flag.detail.contains("without the executable bit"));
+    }
+
+    #[test]
+    fn variation_selectors_are_flagged_as_hidden_unicode() {
+        let flag = hidden_unicode("a\u{FE0F}b\nc\u{E0100}d\n")
+            .expect("not refused")
+            .expect("flagged");
+        assert!(flag.detail.contains("2 invisible"), "{}", flag.detail);
+        assert!(flag.detail.ends_with("lines 1, 2"), "{}", flag.detail);
+    }
+
+    /// "⚠️" and "☺︎" pick how a symbol looks; the same selectors standalone, after ASCII or in a run,
+    /// and every other variation selector, are still flagged.
+    #[test]
+    fn a_presentation_selector_after_a_symbol_is_not_flagged() {
+        let plain = hidden_unicode("\u{26A0}\u{FE0F} careful\n\u{263A}\u{FE0E} ok\n").expect("ok");
+        assert!(plain.is_none(), "{plain:?}");
+        let text = [
+            "\u{FE0F}start",
+            "x\u{FE0F}",
+            "\u{26A0} \u{FE0F}",
+            "\u{26A0}\u{FE0F}\u{FE0F}",
+            "\u{26A0}\u{FE00}",
+            "\u{26A0}\u{E0100}",
+        ]
+        .join("\n");
+        let flag = hidden_unicode(&text)
+            .expect("not refused")
+            .expect("flagged");
+        assert!(flag.detail.starts_with("6 invisible"), "{}", flag.detail);
+        assert!(
+            flag.detail.ends_with("lines 1, 2, 3, 4, 5, 6"),
+            "{}",
+            flag.detail
+        );
     }
 
     #[test]
