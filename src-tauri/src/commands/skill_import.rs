@@ -2104,8 +2104,20 @@ pub fn undo_last_import() -> Result<String, String> {
                 .backup
                 .as_deref()
                 .ok_or_else(|| "the backup of this import is not recorded".to_string())?;
-            let files = tree_files(&backup_dir(label, &name)?)
+            // Nothing authenticates a backup: as in a setup rollback, it must be the user's alone
+            // and still the copy the record describes.
+            let backup = backup_dir(label, &name)?;
+            let folder = backup.parent().unwrap_or(&backup);
+            crate::setup_transaction::check_backup_trusted(folder, folder).map_err(|_| {
+                "the backup of this import is a link, or someone else could have written it"
+                    .to_string()
+            })?;
+            let files = tree_files(&backup)
                 .map_err(|_| "the backup of this import cannot be read".to_string())?;
+            let recorded = event.previous.as_ref().map(|record| &record.tree_digest);
+            if recorded != Some(&tree_digest(&files)) {
+                return Err("the backup of this import is not the copy it recorded".to_string());
+            }
             Some(files)
         }
         EventAction::Undo => return Err("there is no import to undo".to_string()),

@@ -908,6 +908,42 @@ mod tests {
         assert!(undo_last_import().is_err(), "nothing left to undo");
     }
 
+    /// Nothing authenticates a backup, so undo restores one only while it is the user's alone and
+    /// still the copy the record describes, as a setup rollback does.
+    #[cfg(unix)]
+    #[test]
+    fn undo_refuses_a_backup_someone_else_could_write_or_that_changed() {
+        use std::os::unix::fs::PermissionsExt;
+        let env = Env::new("undo-trust");
+        let source = env.source("release-notes-plus", &[("SKILL.md", SPEC)]);
+        commit(&preview(&[&source]), &["0"]).expect("import");
+        remove_imported_skill("release-notes-plus".into()).expect("remove");
+        let backup = fs::read_dir(env.base.join("backups/imports"))
+            .expect("backups")
+            .flatten()
+            .next()
+            .expect("one")
+            .path()
+            .join("release-notes-plus/SKILL.md");
+
+        fs::set_permissions(&backup, fs::Permissions::from_mode(0o620)).expect("chmod");
+        let error = undo_last_import().expect_err("group-writable");
+        assert!(error.contains("someone else could have written"), "{error}");
+        fs::set_permissions(&backup, fs::Permissions::from_mode(0o600)).expect("chmod");
+
+        fs::write(&backup, SPEC.replace("# Notes", "# Changed")).expect("tamper");
+        let error = undo_last_import().expect_err("changed");
+        assert!(error.contains("not the copy it recorded"), "{error}");
+        assert!(!env.imported().join("release-notes-plus").exists());
+
+        fs::write(&backup, SPEC).expect("put back");
+        undo_last_import().expect("the recorded copy");
+        assert_eq!(
+            fs::read_to_string(env.imported().join("release-notes-plus/SKILL.md")).expect("back"),
+            SPEC
+        );
+    }
+
     #[test]
     fn removing_the_last_import_backs_it_up_and_the_next_update_retires_its_installed_copies() {
         let env = Env::new("remove");
