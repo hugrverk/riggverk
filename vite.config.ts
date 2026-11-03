@@ -6,6 +6,10 @@ const host = process.env.TAURI_DEV_HOST;
 export default defineConfig(async () => ({
   plugins: [react()],
   clearScreen: false,
+  build: {
+    // The main desktop bundle currently exceeds Vite's default warning threshold.
+    chunkSizeWarningLimit: 560,
+  },
   server: {
     port: 1420,
     strictPort: true,

@@ -1,5 +1,8 @@
 import "@testing-library/jest-dom/vitest";
 import { configure } from "@testing-library/react";
+import { vi } from "vitest";
+
+HTMLFormElement.prototype.requestSubmit = vi.fn();
 
 // The release check runs the suite next to cargo and other jobs; under that load a render can
 // take longer than the default 1 s that findBy*/waitFor wait for. Waiting longer changes no
