@@ -1,4 +1,3 @@
-import type { ImportRouting } from "../types";
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useRef, useState, type MutableRefObject } from "react";
 import type { ActionResult } from "../components/TerminalOutput";
@@ -15,6 +14,7 @@ import type {
   ConfigEditorSourceMeta,
   DocSummary,
   DocumentContent,
+  ImportRouting,
   PackLibrary,
   PackSkillCopy,
   SkillImportPreview,
@@ -926,6 +926,7 @@ export function useLibraryController({
     return result;
   }, [loadSkills]);
 
+  /** Saves (or with null removes) an imported skill's routing line, then lists the packs again. Refusals are thrown. */
   const setImportedSkillRouting = useCallback(async (name: string, when: string | null) => {
     const message = await invoke<string>("set_imported_skill_routing", { name, when });
     await loadSkills();

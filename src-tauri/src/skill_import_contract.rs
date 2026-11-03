@@ -205,7 +205,7 @@ mod tests {
         set_imported_skill_routing("renamed".into(), Some("Use for releases".into())).unwrap();
         fs::write(
             &path,
-            "- Use for releases: `renamed`.\n- Hand: `renamed`.  \n",
+            "- Use for releases: `renamed`.\n- Hand-picked for `renamed` too.\n",
         )
         .unwrap();
         remove_imported_skill("renamed".into()).unwrap();
@@ -220,7 +220,7 @@ mod tests {
         undo_last_import().unwrap();
         assert_eq!(
             fs::read_to_string(&path).unwrap(),
-            "- Use for releases: `renamed`.\n- Hand: `renamed`.  \n"
+            "- Use for releases: `renamed`.\n- Hand-picked for `renamed` too.\n"
         );
         undo_last_import().unwrap();
         assert_eq!(fs::read_to_string(&path).unwrap(), "");
@@ -230,6 +230,45 @@ mod tests {
                 .unwrap()
                 .len(),
             2
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn an_unsafe_routing_file_refuses_routed_imports_but_never_blocks_a_removal() {
+        use std::os::unix::fs::PermissionsExt;
+        let env = Env::new("routing-unsafe");
+        let source = env.source("release-notes-plus", &[("SKILL.md", SPEC)]);
+        let shown = preview(&[&source]);
+        commit_skill_import(
+            shown["token"].as_str().unwrap().into(),
+            vec!["0".into()],
+            BTreeMap::new(),
+            BTreeMap::new(),
+        )
+        .unwrap();
+        let path = env.ws.join("packs/imported/routing.md");
+        fs::write(&path, "- Notes: `release-notes-plus`.\n").unwrap();
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o666)).unwrap();
+        // A changed source, so the preview offers an import in place.
+        fs::write(source.join("SKILL.md"), format!("{SPEC}\nMore.\n")).unwrap();
+        let shown = preview(&[&source]);
+        assert!(commit_skill_import(
+            shown["token"].as_str().unwrap().into(),
+            vec!["0".into()],
+            BTreeMap::new(),
+            BTreeMap::from([("0".into(), Some("Use for notes".into()))]),
+        )
+        .is_err());
+        // Refused before anything was published: the copy in place is the first import.
+        let installed = env.imported().join("release-notes-plus/SKILL.md");
+        assert!(!fs::read_to_string(installed).unwrap().contains("More."));
+        assert!(set_imported_skill_routing("release-notes-plus".into(), None).is_err());
+        remove_imported_skill("release-notes-plus".into()).unwrap();
+        assert!(!env.imported().join("release-notes-plus").exists());
+        assert_eq!(
+            fs::read_to_string(&path).unwrap(),
+            "- Notes: `release-notes-plus`.\n"
         );
     }
 

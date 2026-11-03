@@ -118,7 +118,9 @@ pub(crate) fn read(pack_dir: &Path, own_skills: &BTreeSet<&str>) -> PackRouting 
     }
 }
 
-/// Builds one app-managed routing line without accepting markup from the description.
+/// The line the app writes into the imported pack's `routing.md` for `name`: ``- {when}: `{name}`.``,
+/// checked by the same rules as the reader, so a saved line is never what excludes the file. `when`
+/// may name no skill and hold no markup; the reason is a fixed phrase that quotes none of it.
 pub(crate) fn routing_line(when: &str, name: &str) -> Result<String, String> {
     if when
         .chars()
@@ -137,19 +139,18 @@ pub(crate) fn routing_line(when: &str, name: &str) -> Result<String, String> {
     Ok(line)
 }
 
-/// Recognises only a line produced by the app.
+/// The `when` of `line` when it has exactly the form [`routing_line`] writes for `name` (trailing
+/// whitespace aside, as the reader trims it); `None` for any other line, which stays as it is.
 pub(crate) fn own_when(line: &str, name: &str) -> Option<String> {
     let when = line
+        .trim_end()
         .strip_prefix("- ")?
         .strip_suffix(&format!(": `{name}`."))?;
-    if when.contains('`') {
-        None
-    } else {
-        Some(when.to_string())
-    }
+    (!when.is_empty() && !when.contains('`')).then(|| when.to_string())
 }
 
-/// Reads raw routing text with the same file trust checks as the reader.
+/// The text of `<pack_dir>/routing.md` ("" when there is none), under the same trust checks as
+/// [`read`] but without validating its lines, so the app can edit a file that is not used.
 pub(crate) fn read_raw(pack_dir: &Path) -> Result<String, String> {
     let path = pack_dir.join(ROUTING_FILE);
     let bad = || "routing.md cannot be read safely".to_string();
@@ -411,7 +412,16 @@ mod tests {
             own_when("- Use for testing: `mine`.", "mine"),
             Some("Use for testing".into())
         );
-        for line in ["- Use: `mine`", "- Use `other`: `mine`.", "- Use: `other`."] {
+        assert_eq!(
+            own_when("- Use for testing: `mine`.  \r", "mine"),
+            Some("Use for testing".into())
+        );
+        for line in [
+            "- Use: `mine`",
+            "- Use `other`: `mine`.",
+            "- Use: `other`.",
+            "- : `mine`.",
+        ] {
             assert_eq!(own_when(line, "mine"), None);
         }
     }

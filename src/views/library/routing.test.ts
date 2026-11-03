@@ -1,16 +1,28 @@
 import { describe, expect, it } from "vitest";
-import { ownWhen, routingLine, suggestWhen, whenProblem } from "./routing";
+import { handWritten, ownWhen, routingLine, suggestWhen, whenProblem } from "./routing";
 
-describe("routing", () => {
-  it("suggests the first use-when clause without markup", () => {
-    expect(suggestWhen("A helper. use it when fixing bugs. More text.")).toBe("Fixing bugs");
-    expect(suggestWhen("Use when reviewing code")).toBe("Reviewing code");
-    expect(suggestWhen("No clause here")).toBe("");
-    expect(suggestWhen("Use when `code` or <html> appears.")).toBe("");
+describe("imported skill routing", () => {
+  it("suggests the use-when clause up to the end of its sentence", () => {
+    expect(suggestWhen("A helper. Use it when fixing bugs. More text.", "mine")).toBe("Fixing bugs");
+    expect(suggestWhen("Use when reviewing code.", "mine")).toBe("Reviewing code");
+    expect(suggestWhen("Use when v1.2 ships", "mine")).toBe("V1.2 ships");
+    expect(suggestWhen("No clause here.", "mine")).toBe("");
+    expect(suggestWhen("Use when `code` or <html> appears.", "mine")).toBe("");
+    expect(suggestWhen(`Use when ${"x".repeat(240)}.`, "mine")).toBe("");
   });
-  it("recognises only app lines and rejects unsafe descriptions", () => {
+
+  it("checks the text the way the backend writes the line", () => {
     expect(routingLine("  Fix bugs  ", "mine")).toBe("- Fix bugs: `mine`.");
-    expect(ownWhen(["- Hand `other`: `mine`.", "- Fix bugs: `mine`."], "mine")).toBe("Fix bugs");
-    for (const text of ["", "# heading", "a\nb", "x\u200b", "~~~", "<tag>", "`x`", "x".repeat(240)]) expect(whenProblem(text, "mine")).not.toBe("");
+    expect(whenProblem("Fix bugs", "mine")).toBe("");
+    for (const text of ["", "  ", "# heading", "a\nb", "a\tb", "x​", "~~~", "<tag>", "`x`", "x".repeat(240)]) {
+      expect(whenProblem(text, "mine")).not.toBe("");
+    }
+  });
+
+  it("tells the app's own line from lines written by hand", () => {
+    const lines = ["- Hand `other`: `mine`.", "- Fix bugs: `mine`.  ", "- Also for `mine` and `other`.", "- : `mine`."];
+    expect(ownWhen(lines, "mine")).toBe("Fix bugs");
+    expect(ownWhen(lines, "other")).toBeNull();
+    expect(handWritten(lines, "mine")).toEqual(["- Hand `other`: `mine`.", "- Also for `mine` and `other`.", "- : `mine`."]);
   });
 });

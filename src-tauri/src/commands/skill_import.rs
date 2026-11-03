@@ -192,6 +192,8 @@ struct ImportEvent {
     /// The record of the copy this event moved away.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     previous: Option<ImportRecord>,
+    /// The `routing.md` lines this event took out (a removal, or an undone import), as written, so
+    /// undoing a removal can put them back. Older records have none.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     routing: Vec<String>,
 }
@@ -1400,7 +1402,13 @@ fn write_record(root: &Path, document: &mut RecordDocument) -> Result<(), String
     .map_err(|_| "cannot write the import record".to_string())
 }
 
-// Only the app-owned imported pack is ever written here.
+// ── Routing of imported skills ──
+//
+// The app keeps one line per imported skill in `packs/imported/routing.md`, in the form
+// `pack_routing::routing_line` writes; lines of any other form are the user's and stay byte for byte.
+// Only this app-owned pack is ever written. The reader validates the file as it does any pack's.
+
+/// Writes `text` as the imported pack's `routing.md`, refused over the reader's limits.
 fn routing_write(root: &Path, text: &str) -> Result<(), String> {
     use crate::pack_routing::{MAX_ROUTING_BYTES, MAX_ROUTING_LINES, ROUTING_FILE};
     if text.len() as u64 > MAX_ROUTING_BYTES {
@@ -1422,45 +1430,40 @@ fn routing_write(root: &Path, text: &str) -> Result<(), String> {
     .map_err(|_| "routing.md cannot be written safely".to_string())
 }
 
+/// `text` with each `(name, line)` applied to the app's own line of `name`: a line replaces the
+/// first one in place (further ones go) or is appended; `None` takes them out.
 fn routing_edit(text: &str, edits: &[(String, Option<String>)]) -> String {
     let mut out = text.to_string();
     for (name, replacement) in edits {
         let mut next = String::new();
         let mut found = false;
         for line in out.split_inclusive('\n') {
-            let content = line
-                .strip_suffix('\n')
-                .unwrap_or(line)
-                .strip_suffix('\r')
-                .unwrap_or(line.strip_suffix('\n').unwrap_or(line));
-            if crate::pack_routing::own_when(content, name).is_some() {
-                if !found {
-                    if let Some(new) = replacement {
-                        next.push_str(new);
-                        if line.ends_with('\n') {
-                            next.push('\n');
-                        }
-                    }
-                    found = true;
-                }
-            } else {
+            if crate::pack_routing::own_when(line, name).is_none() {
                 next.push_str(line);
+                continue;
             }
-        }
-        if !found {
-            if let Some(new) = replacement {
-                if !next.is_empty() && !next.ends_with('\n') {
+            if !found {
+                if let Some(new) = replacement {
+                    next.push_str(new);
                     next.push('\n');
                 }
-                next.push_str(new);
+                found = true;
+            }
+        }
+        if let (false, Some(new)) = (found, replacement) {
+            if !next.is_empty() && !next.ends_with('\n') {
                 next.push('\n');
             }
+            next.push_str(new);
+            next.push('\n');
         }
         out = next;
     }
     out
 }
 
+/// `text` without every line that names `name` in backticks, the app's or the user's, since a line
+/// naming a skill that is gone would exclude the whole file; and the lines taken out.
 fn routing_remove_named(text: &str, name: &str) -> (String, Vec<String>) {
     let needle = format!("`{name}`");
     let mut kept = String::new();
@@ -1475,10 +1478,8 @@ fn routing_remove_named(text: &str, name: &str) -> (String, Vec<String>) {
     (kept, removed)
 }
 
+/// `text` with `lines` (as [`routing_remove_named`] took them out) appended again.
 fn routing_restore(mut text: String, lines: &[String]) -> String {
-    if !lines.is_empty() && !text.is_empty() && !text.ends_with('\n') {
-        text.push('\n');
-    }
     for line in lines {
         if !text.is_empty() && !text.ends_with('\n') {
             text.push('\n');
@@ -1486,6 +1487,18 @@ fn routing_restore(mut text: String, lines: &[String]) -> String {
         text.push_str(line);
     }
     text
+}
+
+/// The imported pack's `routing.md` before and after `edit`, and the lines `edit` took out; `None`
+/// when nothing changes or the file cannot be read safely. The reader does not use such a file, so
+/// removing or restoring a skill goes on without touching it.
+fn routing_change(
+    root: &Path,
+    edit: impl FnOnce(&str) -> (String, Vec<String>),
+) -> Option<(String, String, Vec<String>)> {
+    let before = crate::pack_routing::read_raw(&imported_pack_dir(root)).ok()?;
+    let (after, removed) = edit(&before);
+    (after != before).then_some((before, after, removed))
 }
 
 /// The index of the event [`undo_last_import`] undoes: the latest one no undo has taken back.
@@ -1807,6 +1820,8 @@ fn commit_staged(
         ));
     }
 
+    // Routing is checked and read before anything is published, so a bad line or an unsafe
+    // routing.md refuses the import as a whole.
     let mut routing_edits = Vec::new();
     for (candidate, name, _, _) in &plan {
         if let Some(when) = routing.get(&candidate.key) {
@@ -1818,6 +1833,11 @@ fn commit_staged(
             ));
         }
     }
+    let routing_text = if routing_edits.is_empty() {
+        None
+    } else {
+        Some(crate::pack_routing::read_raw(&imported_pack_dir(root))?)
+    };
     let mut document = read_record(root)?;
     let skills = super::packs::create_pack_skill_dirs(root, IMPORTED_PACK)?;
     let mut result = SkillImportResult {
@@ -1875,18 +1895,19 @@ fn commit_staged(
             result.imported.push(name);
         }
     }
-    if !routing_edits.is_empty() {
-        let saved = crate::pack_routing::read_raw(&imported_pack_dir(root))
-            .and_then(|text| routing_write(root, &routing_edit(&text, &routing_edits)));
-        if saved.is_err() {
-            let done = result
-                .imported
-                .iter()
-                .chain(&result.updated)
-                .cloned()
-                .collect::<Vec<_>>()
-                .join(", ");
-            return Err(format!("{done} imported; routing was not saved"));
+    if let Some(text) = routing_text {
+        let edited = routing_edit(&text, &routing_edits);
+        if edited != text {
+            if let Err(error) = routing_write(root, &edited) {
+                let done = result
+                    .imported
+                    .iter()
+                    .chain(&result.updated)
+                    .cloned()
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                return Err(format!("{done} imported; routing was not saved: {error}"));
+            }
         }
     }
     Ok(result)
@@ -1947,8 +1968,7 @@ pub fn remove_imported_skill(name: String) -> Result<String, String> {
         _ => return Err(format!("no imported skill is named {name}")),
     }
     let mut document = read_record(&root)?;
-    let routing_before = crate::pack_routing::read_raw(&imported_pack_dir(&root))?;
-    let (routing_after, removed_routing) = routing_remove_named(&routing_before, &name);
+    let routing = routing_change(&root, |text| routing_remove_named(text, &name));
     let backup = back_up(&dir, &name)?;
     let previous = document.skills.remove(&name);
     document.events.push(ImportEvent {
@@ -1957,16 +1977,23 @@ pub fn remove_imported_skill(name: String) -> Result<String, String> {
         at: now_secs(),
         backup: Some(backup),
         previous,
-        routing: removed_routing,
+        routing: routing
+            .as_ref()
+            .map(|(_, _, removed)| removed.clone())
+            .unwrap_or_default(),
     });
     let aside = skills.join(format!(".removed-{}", nonce()?));
     fs::rename(&dir, &aside).map_err(|_| "cannot remove the imported skill".to_string())?;
-    if let Err(error) = routing_write(&root, &routing_after) {
-        let _ = fs::rename(&aside, &dir);
-        return Err(error);
+    if let Some((_, after, _)) = &routing {
+        if let Err(error) = routing_write(&root, after) {
+            let _ = fs::rename(&aside, &dir);
+            return Err(error);
+        }
     }
     if let Err(error) = write_record(&root, &mut document) {
-        let _ = routing_write(&root, &routing_before);
+        if let Some((before, _, _)) = &routing {
+            let _ = routing_write(&root, before);
+        }
         let _ = fs::rename(&aside, &dir);
         return Err(error);
     }
@@ -2024,18 +2051,16 @@ pub fn undo_last_import() -> Result<String, String> {
             return Err(problem);
         }
     }
-    let routing_before = if event.action == EventAction::Replace {
-        String::new()
-    } else {
-        crate::pack_routing::read_raw(&imported_pack_dir(&root))?
-    };
-    let (routing_after, removed_routing) = match event.action {
-        EventAction::Import => routing_remove_named(&routing_before, &name),
-        EventAction::Remove => (
-            routing_restore(routing_before.clone(), &event.routing),
-            Vec::new(),
-        ),
-        _ => (routing_before.clone(), Vec::new()),
+    // An undone import takes its lines out; an undone removal puts back the lines it took out.
+    let routing = match event.action {
+        EventAction::Import => routing_change(&root, |text| routing_remove_named(text, &name)),
+        EventAction::Remove => routing_change(&root, |text| {
+            (
+                routing_restore(text.to_string(), &event.routing),
+                Vec::new(),
+            )
+        }),
+        _ => None,
     };
     let backup = if in_place.is_some() {
         Some(back_up(&dir, &name)?)
@@ -2065,16 +2090,18 @@ pub fn undo_last_import() -> Result<String, String> {
         at: now_secs(),
         backup,
         previous: None,
-        routing: removed_routing,
+        routing: routing
+            .as_ref()
+            .map(|(_, _, removed)| removed.clone())
+            .unwrap_or_default(),
     });
-    let routing_result = if event.action == EventAction::Replace {
-        Ok(())
-    } else {
-        routing_write(&root, &routing_after)
+    let saved = match &routing {
+        Some((_, after, _)) => routing_write(&root, after),
+        None => Ok(()),
     };
-    if let Err(error) = routing_result.and_then(|()| write_record(&root, &mut document)) {
-        if event.action != EventAction::Replace {
-            let _ = routing_write(&root, &routing_before);
+    if let Err(error) = saved.and_then(|()| write_record(&root, &mut document)) {
+        if let Some((before, _, _)) = &routing {
+            let _ = routing_write(&root, before);
         }
         match (&restore, aside) {
             (Some(_), aside) => unpublish(&skills, &name, aside),
@@ -2098,6 +2125,7 @@ pub fn undo_last_import() -> Result<String, String> {
 #[cfg(test)]
 mod routing_tests {
     use super::*;
+
     #[test]
     fn edits_preserve_other_lines_and_enforce_limits() {
         let text = "- Old: `mine`.\r\n- Hand written `mine` and `other`.  \n- Again: `mine`.\n";
@@ -2130,6 +2158,7 @@ mod routing_tests {
         }
         fs::remove_dir_all(root).unwrap();
     }
+
     #[test]
     fn old_events_default_to_no_routing() {
         let event: ImportEvent =

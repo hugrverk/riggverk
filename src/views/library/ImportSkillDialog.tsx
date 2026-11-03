@@ -1,11 +1,10 @@
-import type { ImportRouting } from "../../types";
-import { RoutingField, type RoutingValue } from "./RoutingField";
-import { ownWhen, suggestWhen, whenProblem } from "./routing";
 import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { DiffView } from "../../components/DiffView";
 import { StateMark } from "../../ui/StatePill";
 import { TButton } from "../../ui/TButton";
-import type { ImportCandidate, SkillImportPreview, SkillImportResult, SkillSummary } from "../../types";
+import type { ImportCandidate, ImportRouting, SkillImportPreview, SkillImportResult, SkillSummary } from "../../types";
+import { ownWhen, suggestWhen, whenProblem } from "./routing";
+import { RoutingField, type RoutingValue } from "./RoutingField";
 import {
   canImport,
   changeDiff,
@@ -35,6 +34,7 @@ interface ImportSkillDialogProps {
   skills: readonly SkillSummary[];
   /** The packs folder, as `~/...`, for the `git clone` hint. */
   packsFolder: string;
+  /** The imported pack's routing lines, so an import in place starts from the skill's current line. */
   routingLines?: readonly string[];
   onPreview: (paths: string[]) => Promise<SkillImportPreview>;
   onCommit: (token: string, selection: string[], renames: Record<string, string>, routing: ImportRouting) => Promise<SkillImportResult>;
@@ -120,12 +120,17 @@ export function ImportSkillDialog({ dropped, dragging, skills, packsFolder, rout
     return renamedSkillMd(candidate.skill_md, nameOf(candidate)) === null ? "This SKILL.md has no plain name: line to rewrite, so it cannot be imported under another name." : "";
   };
   const picked = candidates.filter(candidate => selected.has(candidate.key) && canImport(candidate));
+  // Until the field is touched, a skill keeps the line it has, or starts from the suggestion in its description.
   const routingOf = (candidate: ImportCandidate): RoutingValue => {
     const own = ownWhen(routingLines, nameOf(candidate));
-    const suggestion = suggestWhen(candidate.description);
+    const suggestion = suggestWhen(candidate.description, nameOf(candidate));
     return routing[candidate.key] ?? { checked: own !== null || suggestion !== "", when: own ?? suggestion };
   };
-  const blocked = picked.some(candidate => problemOf(candidate) !== "" || (routingOf(candidate).checked && whenProblem(routingOf(candidate).when, nameOf(candidate)) !== ""));
+  const routingProblem = (candidate: ImportCandidate) => {
+    const value = routingOf(candidate);
+    return value.checked ? whenProblem(value.when, nameOf(candidate)) : "";
+  };
+  const blocked = picked.some(candidate => problemOf(candidate) !== "" || routingProblem(candidate) !== "");
   const ready = preview?.token != null && picked.length > 0 && !blocked && busy === null;
   const single = candidates.length === 1;
 
@@ -136,10 +141,11 @@ export function ImportSkillDialog({ dropped, dragging, skills, packsFolder, rout
     setError(null);
     try {
       const chosen = Object.fromEntries(picked.filter(c => renames[c.key] !== undefined).map(c => [c.key, nameOf(c)]));
+      // A key left out keeps routing as it is; null takes out the line the skill had.
       const edits: ImportRouting = {};
       for (const candidate of picked) {
         const value = routingOf(candidate);
-        if (value.checked) edits[candidate.key] = value.when;
+        if (value.checked) edits[candidate.key] = value.when.trim();
         else if (ownWhen(routingLines, nameOf(candidate)) !== null) edits[candidate.key] = null;
       }
       const result = await onCommit(preview.token, picked.map(candidate => candidate.key), chosen, edits);
@@ -261,6 +267,7 @@ interface CandidateViewProps {
   disabled: boolean;
   onToggle: (on: boolean) => void;
   onRename: (name: string) => void;
+  /** Its "Use when" line, shown while it is ticked. */
   routing: RoutingValue;
   onRouting: (value: RoutingValue) => void;
 }
@@ -327,7 +334,9 @@ function CandidateView({ candidate, open, checked, name, nameProblem, disabled, 
           )}
         </div>
       )}
-      {checked && importable && <RoutingField name={name} suggestion={suggestWhen(candidate.description)} value={routing} onChange={onRouting} disabled={disabled} />}
+      {checked && importable && (
+        <RoutingField name={name} suggestion={suggestWhen(candidate.description, name)} value={routing} onChange={onRouting} disabled={disabled} />
+      )}
       {candidate.files.length > 0 && (
         <details className="lib-import-details" open={open}>
           <summary>Files ({candidate.files.length}){candidate.skill_md ? " and SKILL.md" : ""}</summary>

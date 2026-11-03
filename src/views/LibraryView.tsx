@@ -1,5 +1,3 @@
-import type { ImportRouting } from "../types";
-import { RoutingDialog } from "./library/RoutingDialog";
 import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import type { ActionResult } from "../components/TerminalOutput";
 import { redactTerminalOutput } from "../lib/redactTerminalOutput";
@@ -11,6 +9,7 @@ import type {
   ConfigEditorSourceMeta,
   DocSummary,
   DocumentContent,
+  ImportRouting,
   InstallAgent,
   PackLibrary,
   RulesFileContent,
@@ -20,7 +19,7 @@ import type {
   SkillImportResult,
   SkillSummary,
 } from "../types";
-import { IMPORTED_SKILL_PREFIX } from "../lib/packSkills";
+import { IMPORTED_PACK, IMPORTED_SKILL_PREFIX } from "../lib/packSkills";
 import { buildEntry } from "./library/entry";
 import { GroupView } from "./library/LibraryGroups";
 import { LibrarySheet } from "./library/LibrarySheet";
@@ -38,6 +37,7 @@ import {
 } from "./library/model";
 import { CopySkillDialog } from "./library/CopySkillDialog";
 import { ImportSkillDialog, type DroppedPaths } from "./library/ImportSkillDialog";
+import { RoutingDialog } from "./library/RoutingDialog";
 import { importDoneText } from "./library/skillImport";
 import { useDroppedPaths } from "./library/useDroppedPaths";
 import { NewDocDialog } from "./library/NewDocDialog";
@@ -124,8 +124,9 @@ export interface LibraryViewProps {
    */
   onPreviewImport?: (paths: string[]) => Promise<SkillImportPreview>;
   onCommitImport?: (token: string, selection: string[], renames: Record<string, string>, routing: ImportRouting) => Promise<SkillImportResult>;
-  /** Asks first; resolves with the notice once done, or null when the user said no or it failed. */
+  /** Saves (or with null removes) an imported skill's routing line; resolves with the notice, throws a refusal. */
   onSetImportedRouting?: (name: string, when: string | null) => Promise<string>;
+  /** Asks first; resolves with the notice once done, or null when the user said no or it failed. */
   onRemoveImport?: (name: string) => Promise<string | null>;
   onUndoImport?: () => Promise<string | null>;
 
@@ -188,6 +189,7 @@ export function LibraryView(props: LibraryViewProps) {
   const [copy, setCopy] = useState<{ source: string; name: string; error: string | null; busy: boolean } | null>(null);
   /** The "Import skill…" dialog, with the paths a drop opened it with. */
   const [importing, setImporting] = useState<{ dropped: DroppedPaths | null } | null>(null);
+  /** The imported skill whose "Routing…" dialog is open. */
   const [routingName, setRoutingName] = useState<string | null>(null);
   const routingOpenerRef = useRef<Element | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -378,6 +380,18 @@ export function LibraryView(props: LibraryViewProps) {
     setImporting({ dropped });
   };
 
+  const openRouting = (name: string) => {
+    routingOpenerRef.current = document.activeElement;
+    setRoutingName(name);
+  };
+
+  const closeRouting = () => {
+    setRoutingName(null);
+    const opener = routingOpenerRef.current;
+    routingOpenerRef.current = null;
+    if (opener instanceof HTMLElement && opener.isConnected) opener.focus();
+  };
+
   const closeImport = () => {
     setImporting(null);
     const opener = importOpenerRef.current;
@@ -387,6 +401,7 @@ export function LibraryView(props: LibraryViewProps) {
 
   // Paths dropped onto the window while the Packs topic (or the import dialog) is on show are previewed for import.
   const importAvailable = input.canImportSkill && dataFolderOk;
+  const importedPack = props.packLibrary?.packs.find(pack => pack.name === IMPORTED_PACK);
   const dropTarget = importAvailable && (importing !== null || (topicId === "packs" && !searching && sheet === null && copy === null && routingName === null && !props.showCreateDoc));
   useDroppedPaths(
     dropTarget,
@@ -453,8 +468,7 @@ export function LibraryView(props: LibraryViewProps) {
         openCopy(action.skill);
         break;
       case "routing":
-        routingOpenerRef.current = document.activeElement;
-        setRoutingName(action.name);
+        openRouting(action.name);
         break;
       case "remove-import": {
         const name = action.name;
@@ -631,7 +645,7 @@ export function LibraryView(props: LibraryViewProps) {
           dropped={importing.dropped}
           dragging={dragging}
           skills={props.skills}
-          routingLines={props.packLibrary?.packs.find(pack => pack.name === "imported")?.routing ?? []}
+          routingLines={importedPack?.routing ?? []}
           packsFolder={props.packLibrary?.folder ?? "~/.config/riggverk/packs"}
           onPreview={props.onPreviewImport}
           onCommit={props.onCommitImport}
@@ -647,12 +661,17 @@ export function LibraryView(props: LibraryViewProps) {
         <RoutingDialog
           name={routingName}
           description={props.skills.find(skill => skill.id === `${IMPORTED_SKILL_PREFIX}${routingName}`)?.description ?? ""}
-          lines={props.packLibrary?.packs.find(pack => pack.name === "imported")?.routing ?? []}
-          problem={props.packLibrary?.packs.find(pack => pack.name === "imported")?.routing_problem ?? null}
-          onSave={async when => { const message = await props.onSetImportedRouting!(routingName, when); notify(message, { tone: "ok" }); return message; }}
-          onClose={() => { setRoutingName(null); const opener = routingOpenerRef.current; if (opener instanceof HTMLElement && opener.isConnected) opener.focus(); }}
+          lines={importedPack?.routing ?? []}
+          problem={importedPack?.routing_problem ?? null}
+          onSave={async when => {
+            const message = await props.onSetImportedRouting!(routingName, when);
+            notify(message, { tone: "ok" });
+            return message;
+          }}
+          onClose={closeRouting}
         />
       )}
+
       {props.showCreateDoc && (
         <NewDocDialog
           title={props.createDocTitle}

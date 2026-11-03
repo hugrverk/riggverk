@@ -1,28 +1,55 @@
-export function suggestWhen(description: string): string {
-  const match = /\buse (?:it )?when\s+([\s\S]*?)(?:\.\s|$)/i.exec(description);
-  const text = match?.[1]?.trim() ?? "";
-  if (!text || /[`<]/.test(text)) return "";
-  return text[0]!.toUpperCase() + text.slice(1);
-}
+/**
+ * The routing line of an imported skill, as the app writes it into `packs/imported/routing.md`:
+ * `- {when}: \`{name}\`.` These mirror `routing_line` and `own_when` in `src-tauri/src/pack_routing.rs`, which stay
+ * the authority; here they only fill and check the "Use when" field as it is typed.
+ */
 
+/** Longest routing line, in characters (the backend's `MAX_LINE_CHARS`). */
+const MAX_LINE_CHARS = 240;
+
+/** Control characters and invisible format characters (Unicode Cc, Cf, Zl, Zp), as the backend refuses them. */
+const INVISIBLE = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u;
+
+/** The line the app writes for `name`. */
 export function routingLine(when: string, name: string): string {
   return `- ${when.trim()}: \`${name}\`.`;
 }
 
+/** Why `when` cannot become a routing line for `name`, or "". */
+export function whenProblem(when: string, name: string): string {
+  const text = when.trim();
+  if (text === "") return "Say when an agent should use it.";
+  if (INVISIBLE.test(when)) return "Remove the line break or invisible character.";
+  if (text.startsWith("#") || /[`<]/.test(text) || text.includes("~~~")) return "Plain words only: no backticks, < or a leading #.";
+  if (Array.from(routingLine(when, name)).length > MAX_LINE_CHARS) return `Keep the line under ${MAX_LINE_CHARS} characters.`;
+  return "";
+}
+
+/**
+ * A "Use when" suggestion from a skill's description: the clause after "Use when" or "Use it when", up to the end of
+ * its sentence, with a capital first letter. "" when there is none or it would not make a valid line.
+ */
+export function suggestWhen(description: string, name: string): string {
+  const match = /\buse (?:it )?when\s+([\s\S]*?)(?:\.(?=\s|$)|$)/i.exec(description);
+  const clause = match?.[1]?.trim() ?? "";
+  if (clause === "") return "";
+  const text = clause[0]!.toUpperCase() + clause.slice(1);
+  return whenProblem(text, name) === "" ? text : "";
+}
+
+/** The "Use when" text of the line the app wrote for `name` among `lines`, or null when there is none. */
 export function ownWhen(lines: readonly string[], name: string): string | null {
   const suffix = `: \`${name}\`.`;
   for (const line of lines) {
-    if (line.startsWith("- ") && line.endsWith(suffix)) {
-      const when = line.slice(2, -suffix.length);
-      if (!when.includes("`")) return when;
-    }
+    const text = line.trimEnd();
+    if (!text.startsWith("- ") || !text.endsWith(suffix)) continue;
+    const when = text.slice(2, -suffix.length);
+    if (when !== "" && !when.includes("`")) return when;
   }
   return null;
 }
 
-export function whenProblem(when: string, name = ""): string {
-  const invisible = /[\u0000-\u001f\u007f-\u009f\u00ad\u0600-\u0605\u061c\u06dd\u070f\u0890-\u0891\u08e2\u180e\u200b-\u200f\u2028-\u202e\u2060-\u2064\u2066-\u206f\ufeff\ufff9-\ufffb]|[\u{110bd}\u{110cd}\u{13430}-\u{1343f}\u{1bca0}-\u{1bca3}\u{1d173}-\u{1d17a}\u{e0001}\u{e0020}-\u{e007f}]/u;
-  const trimmed = when.trim();
-  return invisible.test(when) || !trimmed || trimmed.startsWith("#") || /[`<]/.test(trimmed) || trimmed.includes("~~~") || Array.from(routingLine(when, name)).length > 240
-    ? "Invalid routing description." : "";
+/** Lines among `lines` that name `name` but were not written by the app (kept as they are). */
+export function handWritten(lines: readonly string[], name: string): string[] {
+  return lines.filter(line => line.includes(`\`${name}\``) && ownWhen([line], name) === null);
 }

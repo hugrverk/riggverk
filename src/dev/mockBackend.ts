@@ -1,4 +1,3 @@
-import { ownWhen, routingLine, whenProblem } from "../views/library/routing";
 /**
  * Browser-only mock of the Tauri backend for visual QA (`vite dev` + `?mock=<scenario>`).
  *
@@ -30,6 +29,7 @@ import { ownWhen, routingLine, whenProblem } from "../views/library/routing";
 import { emit } from "@tauri-apps/api/event";
 import { mockIPC } from "@tauri-apps/api/mocks";
 import { harnessForSurface, isLightAgent } from "../lib/harnessInstallation";
+import { ownWhen, routingLine, whenProblem } from "../views/library/routing";
 import { INSTALL_AGENTS } from "../types";
 import type {
   ActionResult,
@@ -2518,6 +2518,7 @@ function putImported(entry: PackSkillEntry): void {
   packLibrary.skills = [...packLibrary.skills.filter(skill => skill.id !== entry.id), entry].sort((a, b) => a.id.localeCompare(b.id));
 }
 
+/** Sets (or with null removes) the app's own routing line of an imported skill, as `set_imported_skill_routing` does. */
 function setMockRouting(name: string, when: string | null): void {
   if (when !== null && whenProblem(when, name)) throw new Error("invalid routing description");
   ensureImportedPack();
