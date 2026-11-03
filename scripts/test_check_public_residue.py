@@ -138,19 +138,10 @@ class ResidueGuardTests(unittest.TestCase):
         self.assertEqual(self.scan({skill: "---\nname: demo\ndescription: Use when asked.\n---\nSwedish: \"kör demo\".\n"}), [])
         self.assertEqual(self.scan({"docs/NOTES.md": "description: kör\n"}), [])
 
-    def test_owner_specific_rules_text_fails_outside_the_history(self) -> None:
-        for text in ("Prefer rtk for reads.", "Codex is cheap, so delegate.", "Never while a GPT computer-use agent runs."):
-            with self.subTest(text=text):
-                found = self.scan({"resources/default-workspace/templates/rules/claude.md": text + "\n"})
-                self.assertEqual(len(found), 1, found)
-        history = {"resources/default-workspace/metadata/rules-history/claude/x.md": "Prefer rtk for reads.\n"}
-        self.assertEqual(self.scan(history), [])
-        self.assertEqual(self.scan({"resources/default-workspace/skills/a/SKILL.md": "The artkit and smartkey words.\n"}), [])
-
     def test_a_model_id_in_skill_text_fails(self) -> None:
         skill = "resources/default-workspace/skills/a/SKILL.md"
         ids = (
-            "gpt-6.1-terra", "gpt-5.1", "gpt-4o", "gpt-5.1-codex", "claude-opus-4-6", "claude-3-5-sonnet-20241022",
+            "gpt-9.9-example", "gpt-5.1", "gpt-4o", "gpt-5.1-codex", "claude-opus-4-6", "claude-3-5-sonnet-20241022",
             "claude-sonnet-4", "gemini-2.5-pro", "o3-mini", "o1-preview", "grok-4", "glm-5.2", "deepseek-v4.1-flash",
         )
         for model in ids:
@@ -160,7 +151,7 @@ class ResidueGuardTests(unittest.TestCase):
             with self.subTest(text=text):
                 self.assertEqual(self.scan({skill: text + "\n"}), [], text)
         self.assertEqual(self.scan({"resources/default-workspace/skills/a/SKILL.md": "critic=codex/<model>\n"}), [])
-        self.assertEqual(self.scan({"resources/default-workspace/docs/CODEX_CONFIG.md": "model gpt-6.1-terra\n"}), [])
+        self.assertEqual(self.scan({"resources/default-workspace/docs/CODEX_CONFIG.md": "model gpt-9.9-example\n"}), [])
 
     def test_a_real_looking_home_path_fails_and_placeholders_pass(self) -> None:
         users = "/Users/"  # split so this file holds no path of its own

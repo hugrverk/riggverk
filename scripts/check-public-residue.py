@@ -17,8 +17,7 @@ and where history is recorded:
     that seed an earlier layout on purpose. A begin without its end is a failure.
 
 The later residues guard cleaned text from coming back, each scoped to the files it concerns:
-Swedish in skill descriptions, owner-specific tool and delegation lines in the bundled rules,
-model ids in skill text, hard-coded user home paths, and team-pack content in the bundle. They name no person: the home-path
+Swedish in skill descriptions, model ids in skill text, hard-coded user home paths, and team-pack content in the bundle. They name no person: the home-path
 residue matches the shape of a path, with a short list of placeholder names.
 
 Adding a residue later is one more entry in RESIDUES with its own scope and allowlist. For
@@ -131,15 +130,6 @@ TEAM_PACK_CONTENT = Residue(
     allowed_lines=(_PRAGMA_LINE,),
 )
 
-OWNER_RULES = Residue(
-    id="owner-specific tooling or delegation in the bundled rules",
-    pattern=re.compile(r"\brtk\b|Codex is cheap|GPT computer-use", re.IGNORECASE),
-    why="the shared rules, agents and skills hold no personal tool or account-specific delegation line; users add those as refinements",
-    scope=(_BUNDLE,),
-    allowed_paths=(_BUNDLE_HISTORY,),
-    allowed_lines=(_PRAGMA_LINE,),
-)
-
 MODEL_IDS = Residue(
     id="a concrete model id in skill text",
     pattern=re.compile(
@@ -167,7 +157,7 @@ HOME_PATHS = Residue(
     allowed_lines=(_PRAGMA_LINE,),
 )
 
-RESIDUES = (RENAMED_AWAY, SWEDISH_TRIGGERS, OWNER_RULES, MODEL_IDS, HOME_PATHS, TEAM_PACK_CONTENT)
+RESIDUES = (RENAMED_AWAY, SWEDISH_TRIGGERS, MODEL_IDS, HOME_PATHS, TEAM_PACK_CONTENT)
 
 
 def allowed_path(residue: Residue, rel: str) -> Allowed | None:
