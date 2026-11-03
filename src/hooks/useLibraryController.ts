@@ -919,11 +919,16 @@ export function useLibraryController({
     [],
   );
 
-  /** Publishes the previewed skills into pack:imported, then lists the packs again. Refusals are thrown for the dialog. */
+  /**
+   * Publishes the previewed skills into pack:imported, then lists the packs again, also after a refusal, which may
+   * come after some skills are in. Refusals are thrown for the dialog.
+   */
   const commitSkillImport = useCallback(async (token: string, selection: string[], renames: Record<string, string>, routing: ImportRouting) => {
-    const result = await invoke<SkillImportResult>("commit_skill_import", { token, selection, renames, routing });
-    await loadSkills();
-    return result;
+    try {
+      return await invoke<SkillImportResult>("commit_skill_import", { token, selection, renames, routing });
+    } finally {
+      await loadSkills();
+    }
   }, [loadSkills]);
 
   /** Saves (or with null removes) an imported skill's routing line, then lists the packs again. Refusals are thrown. */

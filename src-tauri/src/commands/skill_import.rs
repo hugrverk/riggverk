@@ -192,10 +192,14 @@ struct ImportEvent {
     /// The record of the copy this event moved away.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     previous: Option<ImportRecord>,
-    /// The `routing.md` lines this event took out (a removal, or an undone import), as written, so
-    /// undoing a removal can put them back. Older records have none.
+    /// The `routing.md` lines this event took out, as written: every line naming the skill for a
+    /// removal or an undone import, the skill's own line(s) for a replacement that set its routing,
+    /// so undoing it can put them back. Older records have none.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     routing: Vec<String>,
+    /// A replacement that set the skill's routing line, so undoing it puts back `routing`.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    routing_set: bool,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -1408,9 +1412,9 @@ fn write_record(root: &Path, document: &mut RecordDocument) -> Result<(), String
 // `pack_routing::routing_line` writes; lines of any other form are the user's and stay byte for byte.
 // Only this app-owned pack is ever written. The reader validates the file as it does any pack's.
 
-/// Writes `text` as the imported pack's `routing.md`, refused over the reader's limits.
-fn routing_write(root: &Path, text: &str) -> Result<(), String> {
-    use crate::pack_routing::{MAX_ROUTING_BYTES, MAX_ROUTING_LINES, ROUTING_FILE};
+/// Refuses `text` over the reader's limits, which would exclude the whole file.
+fn routing_check(text: &str) -> Result<(), String> {
+    use crate::pack_routing::{MAX_ROUTING_BYTES, MAX_ROUTING_LINES};
     if text.len() as u64 > MAX_ROUTING_BYTES {
         return Err(format!(
             "routing.md would be larger than {MAX_ROUTING_BYTES} bytes"
@@ -1421,9 +1425,15 @@ fn routing_write(root: &Path, text: &str) -> Result<(), String> {
             "routing.md would be longer than {MAX_ROUTING_LINES} lines"
         ));
     }
+    Ok(())
+}
+
+/// Writes `text` as the imported pack's `routing.md`, refused over the reader's limits.
+fn routing_write(root: &Path, text: &str) -> Result<(), String> {
+    routing_check(text)?;
     let pack = imported_pack_dir(root);
     crate::safe_filesystem::write_private_regular_file_atomic(
-        &pack.join(ROUTING_FILE),
+        &pack.join(crate::pack_routing::ROUTING_FILE),
         text.as_bytes(),
         &pack,
     )
@@ -1433,6 +1443,11 @@ fn routing_write(root: &Path, text: &str) -> Result<(), String> {
 /// `text` with each `(name, line)` applied to the app's own line of `name`: a line replaces the
 /// first one in place (further ones go) or is appended; `None` takes them out.
 fn routing_edit(text: &str, edits: &[(String, Option<String>)]) -> String {
+    // The reader skips a leading byte order mark; it stays in front of the first line.
+    let (bom, text) = match text.strip_prefix('\u{feff}') {
+        Some(rest) => ("\u{feff}", rest),
+        None => ("", text),
+    };
     let mut out = text.to_string();
     for (name, replacement) in edits {
         let mut next = String::new();
@@ -1459,7 +1474,17 @@ fn routing_edit(text: &str, edits: &[(String, Option<String>)]) -> String {
         }
         out = next;
     }
-    out
+    format!("{bom}{out}")
+}
+
+/// The app's own line(s) of `name` in `text`, without a leading byte order mark.
+fn routing_own_lines(text: &str, name: &str) -> Vec<String> {
+    text.strip_prefix('\u{feff}')
+        .unwrap_or(text)
+        .split_inclusive('\n')
+        .filter(|line| crate::pack_routing::own_when(line, name).is_some())
+        .map(str::to_string)
+        .collect()
 }
 
 /// `text` without every line that names `name` in backticks, the app's or the user's, since a line
@@ -1836,8 +1861,12 @@ fn commit_staged(
     let routing_text = if routing_edits.is_empty() {
         None
     } else {
-        Some(crate::pack_routing::read_raw(&imported_pack_dir(root))?)
+        let text = crate::pack_routing::read_raw(&imported_pack_dir(root))?;
+        let edited = routing_edit(&text, &routing_edits);
+        routing_check(&edited)?;
+        Some((text, edited))
     };
+    let routing_set_for = |name: &str| routing_edits.iter().any(|(edited, _)| edited == name);
     let mut document = read_record(root)?;
     let skills = super::packs::create_pack_skill_dirs(root, IMPORTED_PACK)?;
     let mut result = SkillImportResult {
@@ -1881,7 +1910,13 @@ fn commit_staged(
             at: now_secs(),
             backup,
             previous: if replacing { previous.clone() } else { None },
-            routing: Vec::new(),
+            routing: match &routing_text {
+                Some((text, _)) if replacing && routing_set_for(&name) => {
+                    routing_own_lines(text, &name)
+                }
+                _ => Vec::new(),
+            },
+            routing_set: replacing && routing_set_for(&name),
         });
         if let Err(error) = write_record(root, &mut document) {
             unpublish(&skills, &name, aside);
@@ -1895,8 +1930,7 @@ fn commit_staged(
             result.imported.push(name);
         }
     }
-    if let Some(text) = routing_text {
-        let edited = routing_edit(&text, &routing_edits);
+    if let Some((text, edited)) = routing_text {
         if edited != text {
             if let Err(error) = routing_write(root, &edited) {
                 let done = result
@@ -1981,6 +2015,7 @@ pub fn remove_imported_skill(name: String) -> Result<String, String> {
             .as_ref()
             .map(|(_, _, removed)| removed.clone())
             .unwrap_or_default(),
+        routing_set: false,
     });
     let aside = skills.join(format!(".removed-{}", nonce()?));
     fs::rename(&dir, &aside).map_err(|_| "cannot remove the imported skill".to_string())?;
@@ -2060,6 +2095,14 @@ pub fn undo_last_import() -> Result<String, String> {
                 Vec::new(),
             )
         }),
+        // An undone replacement that set the line puts back the line the skill had, or none.
+        EventAction::Replace if event.routing_set => routing_change(&root, |text| {
+            let line = event
+                .routing
+                .first()
+                .map(|line| line.trim_end().to_string());
+            (routing_edit(text, &[(name.clone(), line)]), Vec::new())
+        }),
         _ => None,
     };
     let backup = if in_place.is_some() {
@@ -2094,6 +2137,7 @@ pub fn undo_last_import() -> Result<String, String> {
             .as_ref()
             .map(|(_, _, removed)| removed.clone())
             .unwrap_or_default(),
+        routing_set: false,
     });
     let saved = match &routing {
         Some((_, after, _)) => routing_write(&root, after),
@@ -2157,6 +2201,20 @@ mod routing_tests {
             assert!(crate::pack_routing::read_raw(&imported_pack_dir(&root)).is_err());
         }
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn a_byte_order_mark_stays_in_front_and_the_first_line_is_still_found() {
+        let text = "\u{feff}- Old: `mine`.\n- Hand `mine` too.\n";
+        assert_eq!(
+            routing_edit(text, &[("mine".into(), Some("- New: `mine`.".into()))]),
+            "\u{feff}- New: `mine`.\n- Hand `mine` too.\n"
+        );
+        assert_eq!(
+            routing_edit(text, &[("mine".into(), None)]),
+            "\u{feff}- Hand `mine` too.\n"
+        );
+        assert_eq!(routing_own_lines(text, "mine"), vec!["- Old: `mine`.\n"]);
     }
 
     #[test]

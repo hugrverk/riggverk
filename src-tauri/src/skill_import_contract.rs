@@ -233,6 +233,63 @@ mod tests {
         );
     }
 
+    #[test]
+    fn undoing_a_replacement_puts_back_the_routing_line_it_replaced() {
+        let env = Env::new("routing-replace");
+        let source = env.source("release-notes-plus", &[("SKILL.md", SPEC)]);
+        let shown = preview(&[&source]);
+        commit_skill_import(
+            shown["token"].as_str().unwrap().into(),
+            vec!["0".into()],
+            BTreeMap::new(),
+            BTreeMap::from([("0".into(), Some("Notes".into()))]),
+        )
+        .unwrap();
+        let path = env.ws.join("packs/imported/routing.md");
+        fs::write(source.join("SKILL.md"), format!("{SPEC}\nMore.\n")).unwrap();
+        let shown = preview(&[&source]);
+        commit_skill_import(
+            shown["token"].as_str().unwrap().into(),
+            vec!["0".into()],
+            BTreeMap::new(),
+            BTreeMap::from([("0".into(), Some("Release notes".into()))]),
+        )
+        .unwrap();
+        assert_eq!(
+            fs::read_to_string(&path).unwrap(),
+            "- Release notes: `release-notes-plus`.\n"
+        );
+        undo_last_import().unwrap();
+        assert_eq!(
+            fs::read_to_string(&path).unwrap(),
+            "- Notes: `release-notes-plus`.\n"
+        );
+    }
+
+    #[test]
+    fn a_routed_import_over_the_line_limit_is_refused_before_anything_is_published() {
+        let env = Env::new("routing-full");
+        let source = env.source("release-notes-plus", &[("SKILL.md", SPEC)]);
+        let path = env.ws.join("packs/imported/routing.md");
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(&path, "\n".repeat(crate::pack_routing::MAX_ROUTING_LINES)).unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
+        }
+        let shown = preview(&[&source]);
+        let error = commit_skill_import(
+            shown["token"].as_str().unwrap().into(),
+            vec!["0".into()],
+            BTreeMap::new(),
+            BTreeMap::from([("0".into(), Some("Notes".into()))]),
+        )
+        .expect_err("over the limit");
+        assert!(error.contains("longer than"), "{error}");
+        assert!(!env.imported().join("release-notes-plus").exists());
+    }
+
     #[cfg(unix)]
     #[test]
     fn an_unsafe_routing_file_refuses_routed_imports_but_never_blocks_a_removal() {
