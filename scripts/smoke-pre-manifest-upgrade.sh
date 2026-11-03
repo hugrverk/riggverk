@@ -7,8 +7,11 @@ RUSTUP_HOME="${RUSTUP_HOME:-$HOME/.rustup}"
 export CARGO_HOME RUSTUP_HOME
 cd "$ROOT"
 
-if ! git cat-file -e 2d85d94b6f2f1dc06f45f6ec52a22ae97e499588^{commit}; then
-  echo "FAIL: required pre-manifest source commit is unavailable" >&2
+# resources/default-workspace/ as commit 2d85d94b (the pre-manifest ownership source) left it.
+# A tree id, not a commit id: a history rewrite that leaves the bundle byte for byte keeps it.
+source_bundle_tree=ee0eefd4b7c8d84f7dc40de05556aaa225d9b087
+if ! git cat-file -e "$source_bundle_tree^{tree}"; then
+  echo "FAIL: required pre-manifest source bundle is unavailable" >&2
   exit 1
 fi
 
@@ -23,10 +26,8 @@ export RIGGVERK_BACKUP_DIR="$smoke_root/backups"
 mkdir -p "$HOME" "$XDG_CONFIG_HOME" "$XDG_DATA_HOME" "$XDG_CACHE_HOME"
 
 fixture="$smoke_root/source-commit-default-workspace"
-git archive 2d85d94b6f2f1dc06f45f6ec52a22ae97e499588 resources/default-workspace |
-  tar -x -C "$smoke_root"
-mv "$smoke_root/resources/default-workspace" "$fixture"
-rmdir "$smoke_root/resources"
+mkdir -p "$fixture"
+git archive "$source_bundle_tree" | tar -x -C "$fixture"
 
 current_workflows="$(shasum -a 256 resources/default-workspace/docs/WORKFLOWS.md | awk '{print $1}')"
 historical_workflows="$(shasum -a 256 "$fixture/docs/WORKFLOWS.md" | awk '{print $1}')"
