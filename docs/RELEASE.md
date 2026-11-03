@@ -173,19 +173,17 @@ Sidebar order is Overview, the enabled agents, History, Library, Settings; the d
 
 ## Installing a local build
 
-The app bundle is `Riggverk.app` (executable `riggverk`, identifier `se.hugrverk.riggverk`). Earlier builds were named `Agent Workspace.app` with a different identifier, so installing Riggverk is not an in-place overwrite: macOS treats it as a separate app. Nothing stops both from running at the same time, so never leave both installed, and quit the old one before the first launch of Riggverk (it moves the app data, see [App data move](#app-data-move)).
+The app bundle is `Riggverk.app` (executable `riggverk`, identifier `se.hugrverk.riggverk`).
 
-1. Quit the old app (`Agent Workspace`) if it is running.
-2. Build: `npm run tauri build -- --bundles app -- --locked` (this Mac's architecture only; add `--target universal-apple-darwin` for the universal app, which lands under `src-tauri/target/universal-apple-darwin/release/bundle/`). With `--bundles app,dmg` the bundler also makes a disk image with the Riggverk background but its default volume icon; only `release.sh publish` adds the Riggverk one.
-3. Install: `ditto "src-tauri/target/release/bundle/macos/Riggverk.app" /Applications/Riggverk.app`.
-4. Launch Riggverk. Check that the Overview and Settings still show your workspace and settings.
-5. Move `/Applications/Agent Workspace.app` to the Trash, then re-pin the Dock item.
+1. Build: `npm run tauri build -- --bundles app -- --locked` (this Mac's architecture only; add `--target universal-apple-darwin` for the universal app, which lands under `src-tauri/target/universal-apple-darwin/release/bundle/`). With `--bundles app,dmg` the bundler also makes a disk image with the Riggverk background but its default volume icon; only `release.sh publish` adds the Riggverk one.
+2. Install: `ditto "src-tauri/target/release/bundle/macos/Riggverk.app" /Applications/Riggverk.app`.
+3. Launch Riggverk.
 
-The old `Agent Workspace.app` that an earlier build left in `src-tauri/target/release/bundle/macos` is harmless, but `scripts/release-size-report.sh` lists it. Delete it or run `cargo clean`.
+The bundle is ad-hoc signed and not notarized, so Gatekeeper and any folder-access prompts apply as for any local build.
 
-The data folder `~/.config/agent-workspace` is read in place and renamed to `~/.config/riggverk` by the first write (see "Upgrading from earlier versions" in the README); to undo that by hand, quit the app and rename it back, and the `.riggverk/` state folder inside it to `.agent-workspace/`. Going back to an older build after the move is not supported: it would find no folder under the old name and start as a fresh profile, and it does not recognise rules blocks rewritten with `RIGGVERK BASE` markers (restore those files from `backups/setup/<transaction id>/`). Quit any older Riggverk before the first launch of the new build, and update tools, editors and scripts that mention `~/.config/agent-workspace`. The bundle is ad-hoc signed and not notarized, so Gatekeeper and any folder-access prompts apply as for any local build.
+For installs that predate the rename, see [Upgrading from earlier versions](../README.md#upgrading-from-earlier-versions) in the README and [App data move](#app-data-move) below.
 
-Releases are built and zipped by `scripts/release.sh publish` (see [Cutting a release](#cutting-a-release)); name any other manual zip `Riggverk-v<version>-<channel>-macOS.zip`. Release notes for testers who still have the old app must say: quit `Agent Workspace` first, then install and launch `Riggverk.app` (it moves your settings and backups on first launch), then move the old app to the Trash.
+Releases are built and zipped by `scripts/release.sh publish` (see [Cutting a release](#cutting-a-release)); name any other manual zip `Riggverk-v<version>-<channel>-macOS.zip`.
 
 ## App data move
 
