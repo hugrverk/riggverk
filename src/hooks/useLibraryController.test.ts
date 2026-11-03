@@ -961,7 +961,8 @@ describe("useLibraryController skills of the personal pack", () => {
 
   it("saves the draft of a personal skill and takes the text the backend now has", async () => {
     const { deps } = createDeps();
-    const { result } = renderHook(() => useLibraryController(deps));
+    const onPacksChanged = vi.fn();
+    const { result } = renderHook(() => useLibraryController({ ...deps, onPacksChanged }));
     invoke.mockImplementation((cmd: string) => {
       if (cmd === "read_skill") return Promise.resolve(personal);
       return Promise.reject(new Error(`unexpected invoke: ${cmd}`));
@@ -988,6 +989,8 @@ describe("useLibraryController skills of the personal pack", () => {
     expect(invoke).toHaveBeenCalledWith("save_pack_skill", { id: personal.id, content: "two" });
     expect(result.current.skillDirty).toBe(false);
     expect(result.current.skillDraft).toBe("two");
+    // The next Update installs the saved skill: the install status is read again once.
+    expect(onPacksChanged).toHaveBeenCalledTimes(1);
   });
 
   it("sends the revision it read and keeps the draft when the skill changed on disk", async () => {

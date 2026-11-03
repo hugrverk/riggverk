@@ -873,6 +873,8 @@ export function useLibraryController({
       setSkillSaveResult(result);
       if (!result.success) return false;
       if (result.stdout !== "unchanged") {
+        // A personal pack skill is installed by the next Update, like any other pack change.
+        onPacksChanged?.();
         const updated = await invoke<DocumentContent>("read_skill", { id: skill.id });
         if (!isCurrent()) return false;
         activeSkillContentIdRef.current = updated.id;
@@ -910,7 +912,7 @@ export function useLibraryController({
     } finally {
       setSkillSaving(false);
     }
-  }, [activeSkillContent, isWorkspaceLoadCurrent, setSkillDirty, skillDraft, workspaceLoadGenerationRef]);
+  }, [activeSkillContent, isWorkspaceLoadCurrent, onPacksChanged, setSkillDirty, skillDraft, workspaceLoadGenerationRef]);
 
   /**
    * Copies a bundled skill into the personal pack under `newName`, then lists the packs again so the copy shows. The
