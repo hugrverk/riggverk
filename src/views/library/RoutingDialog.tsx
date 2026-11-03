@@ -37,7 +37,8 @@ export function RoutingDialog({ name, description, lines, problem, onSave, onClo
   useEffect(() => {
     const dialog = dialogRef.current;
     if (dialog && !dialog.open) dialog.showModal();
-    dialog?.querySelector<HTMLInputElement>("input")?.focus();
+    // The text when there is a line to edit, else the box that adds one.
+    (dialog?.querySelector<HTMLInputElement>("input[type=text]:enabled") ?? dialog?.querySelector<HTMLInputElement>("input"))?.focus();
   }, []);
 
   // A save under way cannot be called off from here: closing would hide its outcome.

@@ -50,7 +50,7 @@ export function RoutingField({ name, suggestion, value, onChange, disabled = fal
         aria-describedby={`${id}-note`}
         onChange={event => onChange({ ...value, when: event.target.value })}
       />
-      <p id={`${id}-note`} className={problem ? "lib-newdoc-error" : "lib-dim"}>
+      <p id={`${id}-note`} className={problem ? "lib-newdoc-error" : "lib-dim"} hidden={value.checked && note === ""}>
         {note || (value.checked ? "" : "Agents can still pick it from its description.")}
       </p>
       {value.checked && !problem && (
