@@ -254,7 +254,7 @@ describe("InstallPlanPane", () => {
       const apply = confirmLine().getByRole("button", { name: "apply" });
       const cancel = confirmLine().getByRole("button", { name: "cancel" });
       expect(apply.getAttribute("title")).toBe("applying…");
-      expect(cancel.getAttribute("title")).toBe("applying; it cannot be cancelled");
+      expect(cancel.getAttribute("title")).toBe("applying; it cannot be canceled");
       fireEvent.click(apply);
       fireEvent.click(cancel);
       expect(onApply).not.toHaveBeenCalled();

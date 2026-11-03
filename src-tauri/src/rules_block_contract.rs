@@ -367,13 +367,14 @@ mod tests {
         assert_eq!(env.read_claude(), format!("{PREFIX}{}", block(&source)));
     }
 
-    /// A claude base the app shipped before, read from the pre-manifest
-    /// ownership commit.
+    /// A claude base the app shipped before, read from the bundle of the pre-manifest ownership
+    /// commit 2d85d94b. The bundle is addressed by tree ids, not commit ids: a history rewrite that leaves
+    /// `resources/default-workspace/` byte for byte keeps them, while every commit id changes.
     fn historical_claude_base() -> String {
         let output = std::process::Command::new("git")
             .args([
                 "show",
-                "2d85d94b6f2f1dc06f45f6ec52a22ae97e499588:resources/default-workspace/templates/sync/claude-rules.md",
+                "ee0eefd4b7c8d84f7dc40de05556aaa225d9b087:templates/sync/claude-rules.md",
             ])
             .current_dir(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(".."))
             .output()

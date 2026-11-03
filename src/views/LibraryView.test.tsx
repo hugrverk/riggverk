@@ -445,7 +445,7 @@ describe("Library topics", () => {
     expect(within(rowOf("OpenCode rules")).getByRole("button", { name: "Add refinements" })).toBeTruthy();
     const conflict = rowOf("Codex rules");
     expect(within(conflict).getByText("Needs your decision")).toBeTruthy();
-    fireEvent.click(within(conflict).getByRole("button", { name: "Open Codex view ›" }));
+    fireEvent.click(within(conflict).getByRole("button", { name: "Open Codex page ›" }));
     expect(onOpenHarnessView).toHaveBeenCalledWith("codex");
   });
 

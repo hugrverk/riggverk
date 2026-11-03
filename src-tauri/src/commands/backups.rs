@@ -138,9 +138,59 @@ pub(crate) fn backup_root() -> Result<PathBuf, String> {
     Ok(root)
 }
 
+#[cfg(unix)]
+pub(crate) fn tighten_legacy_backup_permissions(root: &Path) {
+    use std::collections::HashSet;
+    use std::fs;
+    use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
+    use std::sync::{Mutex, OnceLock};
+
+    static VISITED: OnceLock<Mutex<HashSet<PathBuf>>> = OnceLock::new();
+    let mut visited = VISITED
+        .get_or_init(|| Mutex::new(HashSet::new()))
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    if !visited.insert(root.to_path_buf()) {
+        return;
+    }
+    let Ok(root_metadata) = fs::symlink_metadata(root) else {
+        return;
+    };
+    if !root_metadata.is_dir() || root_metadata.file_type().is_symlink() {
+        return;
+    }
+    let device = root_metadata.dev();
+    let mut pending = vec![root.to_path_buf()];
+    while let Some(path) = pending.pop() {
+        let Ok(metadata) = fs::symlink_metadata(&path) else {
+            continue;
+        };
+        if metadata.file_type().is_symlink() || metadata.dev() != device {
+            continue;
+        }
+        if metadata.is_dir() {
+            if let Ok(entries) = fs::read_dir(&path) {
+                pending.extend(entries.flatten().map(|entry| entry.path()));
+            }
+        }
+        if metadata.is_file() || metadata.is_dir() {
+            let mode = metadata.permissions().mode();
+            if mode & 0o077 != 0 {
+                if let Ok(file) = fs::OpenOptions::new()
+                    .read(true)
+                    .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
+                    .open(&path)
+                {
+                    let _ = file.set_permissions(fs::Permissions::from_mode(mode & !0o077));
+                }
+            }
+        }
+    }
+}
+
 fn prepare_backup_root_for_open() -> Result<PathBuf, String> {
     let root = backup_root()?;
-    std::fs::create_dir_all(&root).map_err(|e| format!("cannot create backup directory: {}", e))?;
+    crate::safe_filesystem::create_private_root_directory_all_no_symlinks(&root)?;
     if !root.is_dir() {
         return Err("backup path is not a directory".to_string());
     }
@@ -842,6 +892,37 @@ mod tests {
         let _ = fs::remove_dir_all(&root);
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn legacy_backup_permissions_are_tightened_without_following_links() {
+        use std::os::unix::fs::{symlink, PermissionsExt};
+        let base = temp_root("legacy-permissions");
+        let root = base.join("backups");
+        let nested = root.join("setup/old");
+        let outside = base.join("outside");
+        fs::create_dir_all(&nested).unwrap();
+        fs::create_dir_all(&outside).unwrap();
+        let file = nested.join("config");
+        let external = outside.join("config");
+        fs::write(&file, b"backup").unwrap();
+        fs::write(&external, b"outside").unwrap();
+        for path in [&root, &root.join("setup"), &nested, &outside] {
+            fs::set_permissions(path, fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        for path in [&file, &external] {
+            fs::set_permissions(path, fs::Permissions::from_mode(0o644)).unwrap();
+        }
+        symlink(&outside, root.join("link")).unwrap();
+        tighten_legacy_backup_permissions(&root);
+        let mode = |path: &Path| fs::metadata(path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode(&root), 0o700);
+        assert_eq!(mode(&nested), 0o700);
+        assert_eq!(mode(&file), 0o600);
+        assert_eq!(mode(&outside), 0o755);
+        assert_eq!(mode(&external), 0o644);
+        let _ = fs::remove_dir_all(&base);
+    }
+
     #[test]
     fn prepare_backup_root_for_open_creates_missing_root() {
         let _guard = crate::test_env::guard::lock();
@@ -857,6 +938,14 @@ mod tests {
 
         assert!(result.is_ok(), "backup root should be created: {result:?}");
         assert!(backup_root.is_dir(), "backup root should exist");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(
+                fs::metadata(&backup_root).unwrap().permissions().mode() & 0o777,
+                0o700
+            );
+        }
         let _ = fs::remove_dir_all(&root);
     }
 

@@ -34,8 +34,12 @@ mod tests {
     /// Source keys of the per-harness adapters the app shipped before the canonical file.
     const LEGACY_CLAUDE_SKILL_SOURCE: &str = "templates/skills/claude/tdd/SKILL.md";
     const LEGACY_CODEX_SKILL_SOURCE: &str = "templates/skills/codex/tdd/SKILL.md";
-    /// The last commit that shipped one SKILL.md adapter per harness.
-    const LAST_PER_HARNESS_ADAPTERS_COMMIT: &str = "fa9e0b48";
+    /// The bundle of the last commit that shipped one SKILL.md adapter per harness (fa9e0b48).
+    /// Pinned bundles are tree ids, not commit ids: a history rewrite that leaves
+    /// `resources/default-workspace/` byte for byte keeps them, while every commit id changes.
+    const LAST_PER_HARNESS_ADAPTERS_TREE: &str = "86ececc7f09bd63b7f9d5985d1df77959881f7bc";
+    /// The bundle of commit 0e042154, whose per-harness skill versions installations still hold.
+    const OLD_SHIPPED_BUNDLE_TREE: &str = "6e700814a131bb3895290535dce2f8d1c295f202";
 
     fn surface_name(surface: SetupSurfaceId) -> String {
         serde_json::to_value(surface)
@@ -199,14 +203,11 @@ mod tests {
         .expect("apply_setup")
     }
 
-    /// A bundled file as it was committed at `commit`.
-    fn git_show(commit: &str, rel: &str) -> Vec<u8> {
+    /// A bundled file as a pinned bundle tree holds it.
+    fn git_show(tree: &str, rel: &str) -> Vec<u8> {
         let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..");
         let output = Command::new("git")
-            .args([
-                "show",
-                &format!("{commit}:resources/default-workspace/{rel}"),
-            ])
+            .args(["show", &format!("{tree}:{rel}")])
             .current_dir(&repo)
             .output()
             .expect("run git show");
@@ -538,7 +539,7 @@ mod tests {
     #[test]
     fn versions_shipped_at_an_old_commit_update_with_the_real_metadata() {
         let env = Installed::new("real-history", FILE_SURFACES);
-        let show = |rel: &str| git_show("0e042154", rel);
+        let show = |rel: &str| git_show(OLD_SHIPPED_BUNDLE_TREE, rel);
         let mut replayed = 0;
         for name in ["frontend-design", "diagnose", "tdd", "security-review"] {
             let old = show(&format!("templates/skills/claude/{name}/SKILL.md"));
@@ -605,7 +606,7 @@ mod tests {
         for (root, harness, owned) in &cases {
             let artifact = ArtifactId::skill_md(*root, name.clone());
             let old = git_show(
-                LAST_PER_HARNESS_ADAPTERS_COMMIT,
+                LAST_PER_HARNESS_ADAPTERS_TREE,
                 &format!("templates/skills/{harness}/release-check/SKILL.md"),
             );
             assert_ne!(
@@ -638,7 +639,7 @@ mod tests {
             fs::write(
                 env.path(&ArtifactId::skill_md(*root, name.clone())),
                 git_show(
-                    LAST_PER_HARNESS_ADAPTERS_COMMIT,
+                    LAST_PER_HARNESS_ADAPTERS_TREE,
                     &format!("templates/skills/{harness}/release-check/SKILL.md"),
                 ),
             )

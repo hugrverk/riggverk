@@ -325,10 +325,10 @@ def minisign_key_id(encoded: str, what: str) -> bytes:
 
 def check_signature_key(signature: str, pubkey: str) -> None:
     """The updater signature must come from the key whose public half the app trusts, or every installed copy would
-    refuse the update. Comparing key ids catches the wrong key in the environment; it is not a signature check."""
+    refuse the update. Comparing key ids catches the wrong key in the Keychain; it is not a signature check."""
     if minisign_key_id(signature, "signature") != minisign_key_id(pubkey, "public key"):
         raise ReleaseError(
-            "the updater signature was not made with the key in plugins.updater (check TAURI_SIGNING_PRIVATE_KEY)"
+            "the updater signature was not made with the key in plugins.updater (check the Keychain item riggverk-updater-key)"
         )
 
 

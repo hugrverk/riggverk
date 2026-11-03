@@ -54,8 +54,8 @@ function PreviewBody({ preview }: { preview: CodexConfigDefaultsPreview }) {
   return (
     <>
       <Kv items={items} aria-label="Keys set to Riggverk's values" />
-      <div className="group pane-group">diff: your values → Riggverk’s</div>
-      <DiffView diff={preview.diff} label="Diff: your Codex config keys to Riggverk’s values" empty="no differences" />
+      <div className="group pane-group">diff: your values → Riggverk's</div>
+      <DiffView diff={preview.diff} label="Diff: your Codex config keys to Riggverk's values" empty="no differences" />
     </>
   );
 }
@@ -99,7 +99,7 @@ export function CodexDefaultsPane({ flow, busyLabel, backupRoot, returnPaneId = 
     if (busyLabel) return `${busyLabel} is running`;
     return true;
   };
-  const closeState = (): boolean | string => (state.status === "applying" ? "applying; it cannot be cancelled" : open);
+  const closeState = (): boolean | string => (state.status === "applying" ? "applying; it cannot be canceled" : open);
 
   // The confirm line's buttons run these two: the very bindings the keys fire.
   const applyAction: Binding = {
@@ -168,7 +168,7 @@ export function CodexDefaultsPane({ flow, busyLabel, backupRoot, returnPaneId = 
         : state.status === "error"
           ? "nothing was written"
           : state.status === "preview"
-            ? `set ${keys} to Riggverk’s ${preview && preview.keys.length === 1 ? "value" : "values"}?`
+            ? `set ${keys} to Riggverk's ${preview && preview.keys.length === 1 ? "value" : "values"}?`
             : "";
 
   return (
