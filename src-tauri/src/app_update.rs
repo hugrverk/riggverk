@@ -100,7 +100,7 @@ pub enum UpdateCheck {
     Available {
         version: String,
         current_version: String,
-        /// Release notes as plain text (Markdown source), shown as text.
+        /// Release notes as Markdown source; unsigned, so the review renders them without raw HTML.
         notes: Option<String>,
         /// RFC 3339 publication date, when the manifest has one.
         date: Option<String>,
