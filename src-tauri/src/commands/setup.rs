@@ -1035,7 +1035,7 @@ fn apply_single_artifact(
             &installed,
             &crate::commands::managed_opencode_install_projection(&installed, &rendered, &app),
         );
-        crate::safe_filesystem::write_regular_file_atomic(
+        crate::safe_filesystem::write_private_regular_file_atomic(
             &dest,
             crate::commands::serialize_opencode_preserving_models(&content, &merged)?.as_bytes(),
             &root,
@@ -1087,8 +1087,9 @@ fn apply_single_artifact(
                 &root,
             );
         }
-        crate::safe_filesystem::copy_regular_file_no_symlinks(&source, &dest, &root)
+        crate::safe_filesystem::copy_private_regular_file_no_symlinks(&source, &dest, &root)
             .map_err(|e| format!("write codex config {}: {e}", dest.display()))?;
+        crate::safe_filesystem::set_file_executable(&dest, false, true)?;
         return Ok(());
     }
 
@@ -6268,6 +6269,26 @@ mod tests {
         record.hash = digest;
         crate::managed_state::write_managed_state_atomic(&env.ws, &state)
             .expect("write managed state");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn config_files_are_private_when_new_and_preserve_existing_modes() {
+        use std::os::unix::fs::PermissionsExt;
+        let env = TempSetupEnv::new("config-modes");
+        let mode = |path: &Path| fs::metadata(path).unwrap().permissions().mode() & 0o777;
+        for (artifact, rel) in [
+            (ArtifactId::CodexConfig, ".codex/config.toml"),
+            (ArtifactId::OpenCodeConfig, ".config/opencode/opencode.json"),
+            (ArtifactId::CursorMcp, ".cursor/mcp.json"),
+        ] {
+            let path = env.home.join(rel);
+            apply_single_artifact(&artifact, &env.ws, &env.home, None, None).expect("create");
+            assert_eq!(mode(&path), 0o600, "{artifact:?}");
+            fs::set_permissions(&path, fs::Permissions::from_mode(0o644)).unwrap();
+            apply_single_artifact(&artifact, &env.ws, &env.home, None, None).expect("update");
+            assert_eq!(mode(&path), 0o644, "{artifact:?}");
+        }
     }
 
     #[test]
