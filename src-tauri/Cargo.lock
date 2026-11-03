@@ -2552,7 +2552,7 @@ dependencies = [
 
 [[package]]
 name = "riggverk"
-version = "2026.11.9"
+version = "2026.11.10"
 dependencies = [
  "libc",
  "serde",
