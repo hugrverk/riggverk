@@ -4,9 +4,9 @@
 #   scripts/release.sh prepare [--dry-run] [--since REV]   next CalVer version, notes draft, bump, release check, PR
 #   scripts/release.sh publish [--dry-run] [--allow-newer] universal build, dmg, zip, SHA256SUMS, tag and GitHub release
 #
-# App updates: with TAURI_SIGNING_PRIVATE_KEY (and TAURI_SIGNING_PRIVATE_KEY_PASSWORD) in the environment, publish
-# also signs the updater archive, writes latest.json and releases as a draft that is published once every asset is
-# there. That needs plugins.updater in src-tauri/tauri.conf.json; see docs/RELEASE.md, "Turning on updates".
+# App updates: with plugins.updater in src-tauri/tauri.conf.json, publish reads the signing key and its password from
+# the macOS Keychain into the environment of the tauri build alone, signs the updater archive, writes latest.json and
+# releases as a draft that is published once every asset is there; see docs/RELEASE.md, "Turning on updates".
 #
 # --dry-run runs the read-only checks (and git fetch) and prints what a real run would do; it changes nothing.
 set -euo pipefail
@@ -26,6 +26,9 @@ tmp_dir=""
 dmg_mount=""
 updater=0
 updater_repo=""
+# Keychain items (generic passwords) that hold the updater signing key and its password.
+updater_key_item="riggverk-updater-key"
+updater_password_item="riggverk-updater-password"
 
 step() {
   printf '\n==> %s\n' "$1"
@@ -374,31 +377,32 @@ check_signature() {
   esac
 }
 
-# Updates are on when the signing key is in the environment; then tauri.conf.json must turn them on too, and the other
-# way round: a release without latest.json would never reach installed apps. The key is never printed.
+# Updates are on when tauri.conf.json has plugins.updater; then the signing key and its password must be readable in the
+# Keychain, or this release would ship without latest.json and never reach installed apps. Only build_app reads them,
+# for the tauri build alone; a key exported in the shell would reach every step and is refused. Nothing here prints them.
 check_updater() {
-  local status
+  local status item
+  if [ -n "${TAURI_SIGNING_PRIVATE_KEY+set}${TAURI_SIGNING_PRIVATE_KEY_PASSWORD+set}" ]; then
+    problem "TAURI_SIGNING_PRIVATE_KEY or TAURI_SIGNING_PRIVATE_KEY_PASSWORD is set in this shell; publish reads both from the Keychain for the build alone (unset them, and close the shell that exported them)"
+  fi
   if ! status="$(python3 scripts/release_tools.py updater-config)"; then
     problem "plugins.updater in src-tauri/tauri.conf.json is incomplete or weakened (see above)"
     return 0
   fi
-  if [ -n "${TAURI_SIGNING_PRIVATE_KEY:-}" ]; then
-    case "$status" in
-      on\ *)
-        updater=1
-        updater_repo="${status#on }"
-        [ -n "${TAURI_SIGNING_PRIVATE_KEY_PASSWORD+set}" ] ||
-          problem "TAURI_SIGNING_PRIVATE_KEY_PASSWORD is not set (export it, empty for a key without a password)"
-        info "updates: on (signing key: ok; latest.json for $updater_repo)"
-        ;;
-      *) problem "TAURI_SIGNING_PRIVATE_KEY is set, but src-tauri/tauri.conf.json has no plugins.updater (docs/RELEASE.md, Turning on updates)" ;;
-    esac
-  else
-    case "$status" in
-      on\ *) problem "src-tauri/tauri.conf.json turns updates on, but TAURI_SIGNING_PRIVATE_KEY is not set: without latest.json installed apps never see this release" ;;
-      *) info "updates: off (no TAURI_SIGNING_PRIVATE_KEY, no plugins.updater)" ;;
-    esac
-  fi
+  case "$status" in
+    on\ *)
+      for item in "$updater_key_item" "$updater_password_item"; do
+        if ! security find-generic-password -s "$item" -w >/dev/null 2>&1; then
+          problem "src-tauri/tauri.conf.json turns updates on, but the Keychain item $item is missing or unreadable: without latest.json installed apps never see this release (docs/RELEASE.md, Turning on updates)"
+          return 0
+        fi
+      done
+      updater=1
+      updater_repo="${status#on }"
+      info "updates: on (signing key: in the Keychain; latest.json for $updater_repo)"
+      ;;
+    *) info "updates: off (no plugins.updater)" ;;
+  esac
 }
 
 build_app() {
@@ -414,8 +418,20 @@ build_app() {
   local config_args=()
   # The updater archive (Riggverk.app.tar.gz, signed for this version) is made from the app the bundler signed.
   [ "$updater" -eq 0 ] || config_args=(--config '{"bundle":{"createUpdaterArtifacts":true}}')
-  PATH="$shim_dir:$PATH" npm run tauri build -- --target "$build_target" --bundles app,dmg \
-    ${config_args[@]+"${config_args[@]}"} -- --locked </dev/null
+  # The signing key and its password are read in this subshell and exported to the build alone; the rest of the script
+  # never holds them. xtrace stays off here, so even bash -x cannot print them.
+  (
+    { set +x; } 2>/dev/null
+    if [ "$updater" -eq 1 ]; then
+      TAURI_SIGNING_PRIVATE_KEY="$(security find-generic-password -s "$updater_key_item" -w)" &&
+        [ -n "$TAURI_SIGNING_PRIVATE_KEY" ] || fail "could not read the signing key from the Keychain item $updater_key_item"
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD="$(security find-generic-password -s "$updater_password_item" -w)" ||
+        fail "could not read the key password from the Keychain item $updater_password_item"
+      export TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD
+    fi
+    PATH="$shim_dir:$PATH" exec npm run tauri build -- --target "$build_target" --bundles app,dmg \
+      ${config_args[@]+"${config_args[@]}"} -- --locked </dev/null
+  )
   [ -d "$app_bundle" ] || fail "the build did not produce $app_bundle"
   built="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app_bundle/Contents/Info.plist")"
   [ "$built" = "$version" ] || fail "the bundle reports version $built, expected $version"
@@ -625,7 +641,7 @@ cmd_publish() {
     would "zip: ditto -c -k --keepParent $app_bundle $zip_file, then verify the signature inside the zip"
     would "disk image: add the volume icon to the bundler's disk image as $dmg_file, then hdiutil verify, mount and check the app"
     if [ "$updater" -eq 1 ]; then
-      would "updates: build with createUpdaterArtifacts, copy the signed archive to $updater_file (+ .sig), check the app inside, write $manifest_file for $updater_repo"
+      would "updates: build with createUpdaterArtifacts and the signing key from the Keychain ($updater_key_item, $updater_password_item) in that build's environment only, copy the signed archive to $updater_file (+ .sig), check the app inside, write $manifest_file for $updater_repo"
       would "checksums: shasum -a 256 of the disk image, the zip and the updater archive into $sums_file"
     else
       would "checksums: shasum -a 256 of the disk image and the zip into $sums_file"

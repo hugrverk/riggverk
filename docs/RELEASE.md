@@ -114,7 +114,14 @@ Updates need public release files: the app fetches `https://github.com/hugrverk/
    ```
 
    It writes the private key `~/.tauri/riggverk-updater.key` and the public key `~/.tauri/riggverk-updater.key.pub`.
-2. **Keep the key safe.** Store the private key file and its password in the Keychain or your password manager, and make an encrypted offline backup (for example an encrypted disk image on a USB stick kept elsewhere). A lost key means installed apps can never be updated again: every later release would have to be installed by hand. A leaked key lets someone sign an update, so it is never printed, committed or pasted anywhere.
+2. **Keep the key safe.** Store the private key (the one line in `~/.tauri/riggverk-updater.key`) and its password in the login Keychain, where `publish` reads them; each command prompts for the value:
+
+   ```bash
+   security add-generic-password -s riggverk-updater-key -a "$USER" -w
+   security add-generic-password -s riggverk-updater-password -a "$USER" -w
+   ```
+
+   Make an encrypted offline backup of the key file and its password too (for example an encrypted disk image on a USB stick kept elsewhere), then delete `~/.tauri/riggverk-updater.key` so no other copy stays on the Mac. A lost key means installed apps can never be updated again: every later release would have to be installed by hand. A leaked key lets someone sign an update, so it is never printed, committed, pasted anywhere or exported into a shell.
 3. **Set the public key and endpoint** in `src-tauri/tauri.conf.json`, as a top-level `plugins` block (one switch: the app and `release.sh` both read it):
 
    ```json
@@ -130,16 +137,14 @@ Updates need public release files: the app fetches `https://github.com/hugrverk/
    The app and `release_tools.py updater-config` treat anything weaker (no `requireSignedVersion`, `allowDowngrades`, a `dangerous*` option, plain HTTP, another endpoint shape) as off or as an error. Merge it through a normal pull request; it ships with the next release.
 4. **Make the repository public**, and turn on immutable releases (Settings, General, Releases) so a published release's files cannot be swapped.
 5. **Apply the wording** that docs/SECURITY_MODEL.md ("App updates") gives for when updates are on, in the same pull request as step 3.
-6. **Publish with the key in the environment.** `publish` turns the updater on only when `TAURI_SIGNING_PRIVATE_KEY` is set; it refuses a key without the `plugins.updater` block, and the block without a key (a release without `latest.json` never reaches installed apps). Read both from the Keychain, never from a file in the repository:
+6. **Publish.** The `plugins.updater` block is the switch: with it, `publish` needs both Keychain items from step 2 and stops before building when either is missing or cannot be read (a release without `latest.json` never reaches installed apps). It reads them itself (`security find-generic-password -s riggverk-updater-key -w`, and `riggverk-updater-password`) and hands them, as `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, to the environment of the one `tauri build` and nothing else: no other step, `git`, `gh` or Python helper sees them, they are never printed (not even under `bash -x`) and never written to a file. Nothing after the build needs the key. Never export them in your shell: `publish` refuses to run while either is set there, because every program started from that shell, an agent CLI included, would inherit them.
 
    ```bash
-   export TAURI_SIGNING_PRIVATE_KEY="$(security find-generic-password -s riggverk-updater-key -w)"
-   export TAURI_SIGNING_PRIVATE_KEY_PASSWORD="$(security find-generic-password -s riggverk-updater-password -w)"
-   ./scripts/release.sh publish --dry-run   # says "updates: on (signing key: ok; latest.json for hugrverk/riggverk)"
+   ./scripts/release.sh publish --dry-run   # says "updates: on (signing key: in the Keychain; latest.json for hugrverk/riggverk)"
    ./scripts/release.sh publish
    ```
 
-   (Store them once with `security add-generic-password -s riggverk-updater-key -a "$USER" -w` and `-s riggverk-updater-password`, which prompt for the value.) With the key, `publish` also builds the signed updater archive (`createUpdaterArtifacts`; the bundler signs it for the version, so `requireSignedVersion` holds), checks the app inside it, writes `release/latest.json` (`release_tools.py updater-manifest`: both `darwin-aarch64` and `darwin-x86_64` point at the universal `Riggverk-v<version>-macOS.app.tar.gz`, with the notes minus the Install section), adds the archive to `SHA256SUMS`, creates the release as a draft with every file, checks that every file is there, and only then publishes it as the latest release, so `latest.json` never points at a missing file.
+   The build is the only step that sees the key, but within it every build script runs with it (npm scripts, Cargo build scripts and proc-macros of the locked dependencies). With the key, `publish` also builds the signed updater archive (`createUpdaterArtifacts`; the bundler signs it for the version, so `requireSignedVersion` holds), checks the app inside it, writes `release/latest.json` (`release_tools.py updater-manifest`: both `darwin-aarch64` and `darwin-x86_64` point at the universal `Riggverk-v<version>-macOS.app.tar.gz`, with the notes minus the Install section), adds the archive to `SHA256SUMS`, creates the release as a draft with every file, checks that every file is there, and only then publishes it as the latest release, so `latest.json` never points at a missing file.
 
 The first release with the block is still installed by hand; the ones after it reach installed apps. A broken release is fixed with a newer version: the app never installs an older one, and there is no remote switch to stop a published update.
 
