@@ -475,12 +475,12 @@ mod tests {
         fs::remove_file(&path).expect("unlink");
 
         let line = "- Canvas: `my-canvas`.\n";
-        env.routing("mine", &line.repeat(4096 / line.len() + 1));
+        env.routing("mine", &line.repeat(12288 / line.len() + 1));
         let routing = env.routing_of("mine");
         assert!(
             routing
                 .problem()
-                .is_some_and(|p| p.contains("larger than 4096 bytes")),
+                .is_some_and(|p| p.contains("larger than 12288 bytes")),
             "{routing:?}"
         );
         assert_eq!(env.sources().pack_routing(), "");

@@ -34,9 +34,9 @@ pub const SECTION_HEADING: &str = "## Pack skill routing";
 /// The base section the pack section follows.
 const ANCHOR_HEADING: &str = "## Skill routing";
 /// Largest `routing.md` read.
-pub const MAX_ROUTING_BYTES: u64 = 4 * 1024;
+pub const MAX_ROUTING_BYTES: u64 = 12 * 1024;
 /// Most lines a `routing.md` may have, blank ones included.
-pub const MAX_ROUTING_LINES: usize = 30;
+pub const MAX_ROUTING_LINES: usize = 60;
 /// Longest line, in characters.
 pub const MAX_LINE_CHARS: usize = 240;
 
@@ -475,7 +475,7 @@ mod tests {
         let many = "- `mine`\n".repeat(MAX_ROUTING_LINES + 1);
         assert!(validate(&many, &skills)
             .unwrap_err()
-            .contains("more than 30 lines"));
+            .contains("more than 60 lines"));
         let exact = "- `mine`\n".repeat(MAX_ROUTING_LINES);
         assert_eq!(
             validate(&exact, &skills).map(|l| l.len()),
