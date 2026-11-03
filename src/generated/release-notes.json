@@ -1,6 +1,17 @@
 {
   "releases": [
     {
+      "version": "2026.11.9",
+      "sections": [
+        {
+          "title": "Fixes",
+          "items": [
+            "Improve pill contrast on raised surfaces"
+          ]
+        }
+      ]
+    },
+    {
       "version": "2026.11.8",
       "sections": [
         {
