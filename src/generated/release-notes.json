@@ -1,6 +1,17 @@
 {
   "releases": [
     {
+      "version": "2026.11.9",
+      "sections": [
+        {
+          "title": "Fixes",
+          "items": [
+            "Status labels stay readable on a hovered row in History: in dark mode every label now meets the WCAG AA contrast minimum on the hover background too"
+          ]
+        }
+      ]
+    },
+    {
       "version": "2026.11.8",
       "sections": [
         {
