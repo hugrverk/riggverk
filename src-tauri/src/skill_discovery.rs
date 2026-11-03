@@ -476,12 +476,22 @@ fn shell_command_lines(content: &str) -> Vec<String> {
             closed = line.trim_end() == "---";
             continue;
         }
-        if line.contains("!`") || line.trim_start().starts_with("```!") {
+        if line.contains("!`") || is_command_fence(line) {
             let text = line.split_whitespace().collect::<Vec<_>>().join(" ");
             found.push(format!("line {}: {text}", index + 1));
         }
     }
     found
+}
+
+/// Whether `line` opens a fence of three or more backticks or tildes with `!` right after it:
+/// a ```` ```! ```` block, and the longer and tilde forms Markdown reads as the same fence.
+fn is_command_fence(line: &str) -> bool {
+    let line = line.trim_start();
+    ['`', '~'].into_iter().any(|mark| {
+        let rest = line.trim_start_matches(mark);
+        line.len() - rest.len() >= 3 && rest.starts_with('!')
+    })
 }
 
 /// [`privileged_keys`] of the `SKILL.md` at `skill_md`; empty when it cannot be read.
@@ -905,6 +915,15 @@ mod tests {
                 value: "line 6: Branch: !`git branch --show-current`; line 7: ```!".to_string(),
                 note: "runs shell commands when the skill loads".to_string(),
             }]
+        );
+    }
+
+    #[test]
+    fn longer_and_tilde_command_fences_are_listed_too() {
+        let text = "---\nname: demo\ndescription: d\n---\n````!\nls\n````\n  ~~~!\n``!\n~~!\n";
+        assert_eq!(
+            privileged_keys(text)[0].value,
+            "line 5: ````!; line 8: ~~~!"
         );
     }
 
