@@ -6,13 +6,14 @@
         {
           "title": "New",
           "items": [
-            "Route imported skills from the app"
+            "Imported skills get routing like the bundled ones. Import skill… has an \"Add a routing line\" box and a \"Use when\" field for each skill, filled in from the skill's own \"Use when …\" sentence (a \"Do not use when …\" sentence is skipped) and showing the exact line before it is saved. **Routing…** on an imported skill in Library, Packs adds, changes or removes its line later. The next Update adds the lines to every rules file under \"Pack skill routing\"; removing an imported skill takes its lines out, and Undo puts them back",
+            "A routing file may hold up to 60 lines, and routing lines refuse hidden characters such as variation selectors, so no text reaches your agents that a diff does not show"
           ]
         },
         {
           "title": "Fixes",
           "items": [
-            "Refresh install status after a skill pack change"
+            "After an import, a routing change, a removal, an undo, Edit as my copy, Forget pack or saving your own pack skill, Update all is ready at once; it no longer waited for Check"
           ]
         }
       ]
