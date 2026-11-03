@@ -53,7 +53,7 @@ The first release has no CalVer tag to start from, so the draft lists every merg
 
 The draft is the pull request titles that were merged into `main` since the previous release tag. Merge commits (`Merge pull request #N ...`) and squash commits that end in `(#N)` are read; direct pushes and rebase merges are not, so add those by hand.
 
-- `feat` goes under **New**, `fix` under **Fixes**, every other type and every title without a type under **Other**. The `type(scope):` prefix is removed, the first letter is capitalised, and `(#N)` is kept for the GitHub page. The release pull request itself is skipped.
+- `feat` goes under **New**, `fix` under **Fixes**, every other type and every title without a type under **Other**. The `type(scope):` prefix is removed, the first letter is capitalized, and `(#N)` is kept for the GitHub page. The release pull request itself is skipped.
 - **Other** starts with a comment saying so: delete the section to keep chores, refactors and docs out of the notes.
 - **Install** is the Gatekeeper hint for the GitHub release page only. The app leaves it out. Keep it in every release.
 - Edit freely, then regenerate the data the app bundles and push:
