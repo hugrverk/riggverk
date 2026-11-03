@@ -109,7 +109,7 @@ describe("the Library model of imports", () => {
   it("puts Undo remove on the imported pack's row once the last event is a removal", () => {
     const removed = { ...library, skills: [], undo_import: { action: "remove" as const, name: "pdf-tools" } };
     const [group] = topicGroups("packs", input({ packLibrary: removed, skills: [] }));
-    expect(group?.rows[0]?.verbs.map(v => v.label)).toEqual(["Undo remove of pdf-tools"]);
+    expect(group?.rows[0]?.verbs.map(v => v.label)).toEqual(["Undo removal of pdf-tools"]);
   });
 
   it("offers nothing to import while the app cannot", () => {

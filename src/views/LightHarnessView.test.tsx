@@ -325,7 +325,7 @@ describe("LightHarnessView", () => {
     renderLight("pi", health({
       status: "unserved",
       skills: { status: "unserved", synced: 0, expected: 17, roots: [] },
-      warnings: ["No skills are installed for Pi: it reads ~/.agents/skills, and a customised CODEX_HOME keeps Codex out of that folder."],
+      warnings: ["No skills are installed for Pi: it reads ~/.agents/skills, and a customized CODEX_HOME keeps Codex out of that folder."],
       next_action: "Disable Codex or unset CODEX_HOME to install skills for Pi.",
     }));
     const pi = detail("Pi");

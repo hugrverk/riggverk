@@ -33,7 +33,7 @@ export function RunDetails({ wsRunning, progress, wsLog, wsLogCompletedAt }: Run
       await navigator.clipboard.writeText(text);
       notify("copied output");
     } catch {
-      notify("copy failed: clipboard is not available");
+      notify("Copy failed: clipboard is not available");
     }
   };
   return (

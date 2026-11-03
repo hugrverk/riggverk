@@ -10,7 +10,7 @@ Hugrverk
 
 Adapted material and bundled skills it informs:
 
-- `diagnosing-bugs` informs `diagnose` (redaction, feedback-loop acceptance criteria, the minimise step, ranked falsifiable "if X is the cause" hypotheses, tagged debug logs, regression tests at a seam).
+- `diagnosing-bugs` informs `diagnose` (redaction, feedback-loop acceptance criteria, the minimize step, ranked falsifiable "if X is the cause" hypotheses, tagged debug logs, regression tests at a seam).
 - `tdd` informs `tdd` (seams, tautological-test anti-pattern, mocking at system boundaries).
 - `prototype` informs `prototype` (pure logic module, `?variant=` UI hosting, state surfacing, stating the assumed branch).
 - `handoff` informs `handoff` (redaction, OS temporary directory, referencing rather than duplicating, suggested skills).
