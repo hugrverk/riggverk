@@ -63,6 +63,8 @@ fn setup_backup_dir(transaction_id: &str) -> Result<PathBuf, String> {
     // The backup root lives under the app-data dir, which may not exist yet
     // on a fresh install (or after an app identifier change).
     crate::safe_filesystem::create_private_root_directory_all_no_symlinks(&root)?;
+    #[cfg(unix)]
+    crate::commands::backups::tighten_legacy_backup_permissions(&root);
     crate::safe_filesystem::create_private_directory_all_no_symlinks(&dir, &root)?;
     Ok(dir)
 }
