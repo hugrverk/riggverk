@@ -102,7 +102,7 @@ describe("the Library model of imports", () => {
     expect(group?.action).toEqual({ label: "Import skill…", id: "import-skill" });
     const row = group?.rows.find(r => r.name === "pdf-tools");
     expect(row?.desc).toBe("from ~/Downloads/pdf-tools · PDFs.");
-    expect(row?.verbs.map(v => v.label)).toEqual(["Read", "Edit as my copy", "Remove import", "Undo import"]);
+    expect(row?.verbs.map(v => v.label)).toEqual(["Read", "Edit as my copy", "Routing…", "Remove import", "Undo import"]);
     expect(row?.verbs[1]?.action).toEqual({ type: "copy", skill: "pack:imported/pdf-tools" });
   });
 

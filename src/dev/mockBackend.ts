@@ -1,3 +1,4 @@
+import { ownWhen, routingLine, whenProblem } from "../views/library/routing";
 /**
  * Browser-only mock of the Tauri backend for visual QA (`vite dev` + `?mock=<scenario>`).
  *
@@ -2499,7 +2500,7 @@ function mockImportPreview(paths: string[]): SkillImportPreview {
 let importSeq = 0;
 const stagedImports = new Map<string, ImportCandidate[]>();
 /** What Undo import takes back, newest last: the entry it replaced or removed. */
-const importUndo: { action: "import" | "replace" | "remove"; name: string; previous: PackSkillEntry | null; text: string | null }[] = [];
+const importUndo: { action: "import" | "replace" | "remove"; name: string; previous: PackSkillEntry | null; text: string | null; routing?: string[] }[] = [];
 
 function refreshUndo(): void {
   const last = importUndo[importUndo.length - 1];
@@ -2517,7 +2518,18 @@ function putImported(entry: PackSkillEntry): void {
   packLibrary.skills = [...packLibrary.skills.filter(skill => skill.id !== entry.id), entry].sort((a, b) => a.id.localeCompare(b.id));
 }
 
-function mockCommitImport(token: string, selection: string[], renames: Record<string, string>): SkillImportResult {
+function setMockRouting(name: string, when: string | null): void {
+  if (when !== null && whenProblem(when, name)) throw new Error("invalid routing description");
+  ensureImportedPack();
+  const pack = packLibrary.packs.find(p => p.name === "imported")!;
+  const lines = pack.routing ?? [];
+  const index = lines.findIndex(line => ownWhen([line], name) !== null);
+  const kept = lines.filter(line => ownWhen([line], name) === null);
+  if (when !== null) kept.splice(index < 0 ? kept.length : index, 0, routingLine(when, name));
+  pack.routing = kept;
+}
+
+function mockCommitImport(token: string, selection: string[], renames: Record<string, string>, routing: Record<string, string | null>): SkillImportResult {
   const staged = stagedImports.get(token);
   stagedImports.delete(token);
   if (!staged) throw new Error("invalid or expired preview token");
@@ -2543,6 +2555,7 @@ function mockCommitImport(token: string, selection: string[], renames: Record<st
       }),
       provenance: { source: candidate.source, kind: candidate.kind, imported_at: Math.floor(Date.now() / 1000), digest: candidate.digest },
     });
+    if (Object.prototype.hasOwnProperty.call(routing, key)) setMockRouting(name, routing[key] ?? null);
     (previous ? result.updated : result.imported).push(name);
   }
   refreshUndo();
@@ -2557,12 +2570,22 @@ async function handleSkillImport(cmd: string, args: Args): Promise<unknown> {
       return mockImportPreview(arg<string[]>(args, "paths"));
     case "commit_skill_import":
       await delay(250);
-      return mockCommitImport(arg<string>(args, "token"), arg<string[]>(args, "selection"), arg<Record<string, string>>(args, "renames") ?? {});
+      return mockCommitImport(arg<string>(args, "token"), arg<string[]>(args, "selection"), arg<Record<string, string>>(args, "renames") ?? {}, arg<Record<string, string | null>>(args, "routing") ?? {});
+    case "set_imported_skill_routing": {
+      const name = arg<string>(args, "name");
+      if (!packLibrary.skills.some(skill => skill.id === `pack:imported/${name}`)) throw new Error(`no imported skill is named ${name}`);
+      const when = arg<string | null>(args, "when");
+      setMockRouting(name, when);
+      return when !== null ? `Routing for ${name} saved; the next Update adds it to your rules files` : `Routing for ${name} removed; the next Update takes it out of your rules files`;
+    }
     case "remove_imported_skill": {
       const name = arg<string>(args, "name");
       const entry = packLibrary.skills.find(skill => skill.id === `pack:imported/${name}`);
       if (!entry) throw new Error(`no imported skill is named ${name}`);
-      importUndo.push({ action: "remove", name, previous: entry, text: IMPORTED_TEXT.get(name) ?? null });
+      const pack = packLibrary.packs.find(p => p.name === "imported");
+      const routing = (pack?.routing ?? []).filter(line => line.includes(`\`${name}\``));
+      if (pack) pack.routing = (pack.routing ?? []).filter(line => !line.includes(`\`${name}\``));
+      importUndo.push({ action: "remove", name, previous: entry, text: IMPORTED_TEXT.get(name) ?? null, routing });
       packLibrary.skills = packLibrary.skills.filter(skill => skill !== entry);
       refreshUndo();
       return `${name} removed from pack:imported, with a backup; the next Update removes the installed copies`;
@@ -2572,6 +2595,9 @@ async function handleSkillImport(cmd: string, args: Args): Promise<unknown> {
       if (!last) throw new Error("there is no import to undo");
       const id = `pack:imported/${last.name}`;
       packLibrary.skills = packLibrary.skills.filter(skill => skill.id !== id);
+      const pack = packLibrary.packs.find(p => p.name === "imported");
+      if (pack && last.action === "import") pack.routing = (pack.routing ?? []).filter(line => !line.includes(`\`${last.name}\``));
+      if (pack && last.action === "remove") pack.routing = [...(pack.routing ?? []), ...(last.routing ?? [])];
       if (last.previous) putImported(last.previous);
       if (last.text !== null) IMPORTED_TEXT.set(last.name, last.text);
       refreshUndo();

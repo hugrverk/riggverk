@@ -1,3 +1,5 @@
+import type { ImportRouting } from "../types";
+import { RoutingDialog } from "./library/RoutingDialog";
 import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import type { ActionResult } from "../components/TerminalOutput";
 import { redactTerminalOutput } from "../lib/redactTerminalOutput";
@@ -121,8 +123,9 @@ export interface LibraryViewProps {
    * copy into pack:imported and lists the packs again. Without them there is no "Import skill…".
    */
   onPreviewImport?: (paths: string[]) => Promise<SkillImportPreview>;
-  onCommitImport?: (token: string, selection: string[], renames: Record<string, string>) => Promise<SkillImportResult>;
+  onCommitImport?: (token: string, selection: string[], renames: Record<string, string>, routing: ImportRouting) => Promise<SkillImportResult>;
   /** Asks first; resolves with the notice once done, or null when the user said no or it failed. */
+  onSetImportedRouting?: (name: string, when: string | null) => Promise<string>;
   onRemoveImport?: (name: string) => Promise<string | null>;
   onUndoImport?: () => Promise<string | null>;
 
@@ -185,6 +188,8 @@ export function LibraryView(props: LibraryViewProps) {
   const [copy, setCopy] = useState<{ source: string; name: string; error: string | null; busy: boolean } | null>(null);
   /** The "Import skill…" dialog, with the paths a drop opened it with. */
   const [importing, setImporting] = useState<{ dropped: DroppedPaths | null } | null>(null);
+  const [routingName, setRoutingName] = useState<string | null>(null);
+  const routingOpenerRef = useRef<Element | null>(null);
   const [dragging, setDragging] = useState(false);
   const importOpenerRef = useRef<Element | null>(null);
   const dropSeq = useRef(0);
@@ -382,7 +387,7 @@ export function LibraryView(props: LibraryViewProps) {
 
   // Paths dropped onto the window while the Packs topic (or the import dialog) is on show are previewed for import.
   const importAvailable = input.canImportSkill && dataFolderOk;
-  const dropTarget = importAvailable && (importing !== null || (topicId === "packs" && !searching && sheet === null && copy === null && !props.showCreateDoc));
+  const dropTarget = importAvailable && (importing !== null || (topicId === "packs" && !searching && sheet === null && copy === null && routingName === null && !props.showCreateDoc));
   useDroppedPaths(
     dropTarget,
     paths => {
@@ -446,6 +451,10 @@ export function LibraryView(props: LibraryViewProps) {
         break;
       case "copy":
         openCopy(action.skill);
+        break;
+      case "routing":
+        routingOpenerRef.current = document.activeElement;
+        setRoutingName(action.name);
         break;
       case "remove-import": {
         const name = action.name;
@@ -622,6 +631,7 @@ export function LibraryView(props: LibraryViewProps) {
           dropped={importing.dropped}
           dragging={dragging}
           skills={props.skills}
+          routingLines={props.packLibrary?.packs.find(pack => pack.name === "imported")?.routing ?? []}
           packsFolder={props.packLibrary?.folder ?? "~/.config/riggverk/packs"}
           onPreview={props.onPreviewImport}
           onCommit={props.onCommitImport}
@@ -633,6 +643,16 @@ export function LibraryView(props: LibraryViewProps) {
         />
       )}
 
+      {routingName && props.onSetImportedRouting && (
+        <RoutingDialog
+          name={routingName}
+          description={props.skills.find(skill => skill.id === `${IMPORTED_SKILL_PREFIX}${routingName}`)?.description ?? ""}
+          lines={props.packLibrary?.packs.find(pack => pack.name === "imported")?.routing ?? []}
+          problem={props.packLibrary?.packs.find(pack => pack.name === "imported")?.routing_problem ?? null}
+          onSave={async when => { const message = await props.onSetImportedRouting!(routingName, when); notify(message, { tone: "ok" }); return message; }}
+          onClose={() => { setRoutingName(null); const opener = routingOpenerRef.current; if (opener instanceof HTMLElement && opener.isConnected) opener.focus(); }}
+        />
+      )}
       {props.showCreateDoc && (
         <NewDocDialog
           title={props.createDocTitle}

@@ -1,3 +1,4 @@
+import type { ImportRouting } from "../types";
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useRef, useState, type MutableRefObject } from "react";
 import type { ActionResult } from "../components/TerminalOutput";
@@ -919,10 +920,16 @@ export function useLibraryController({
   );
 
   /** Publishes the previewed skills into pack:imported, then lists the packs again. Refusals are thrown for the dialog. */
-  const commitSkillImport = useCallback(async (token: string, selection: string[], renames: Record<string, string>) => {
-    const result = await invoke<SkillImportResult>("commit_skill_import", { token, selection, renames });
+  const commitSkillImport = useCallback(async (token: string, selection: string[], renames: Record<string, string>, routing: ImportRouting) => {
+    const result = await invoke<SkillImportResult>("commit_skill_import", { token, selection, renames, routing });
     await loadSkills();
     return result;
+  }, [loadSkills]);
+
+  const setImportedSkillRouting = useCallback(async (name: string, when: string | null) => {
+    const message = await invoke<string>("set_imported_skill_routing", { name, when });
+    await loadSkills();
+    return message;
   }, [loadSkills]);
 
   /** Moves an imported skill into a backup once the user agrees; resolves with the notice, or null. */
@@ -1013,6 +1020,7 @@ export function useLibraryController({
     copySkillToPack,
     previewSkillImport,
     commitSkillImport,
+    setImportedSkillRouting,
     removeImportedSkill,
     undoLastImport,
     docs,

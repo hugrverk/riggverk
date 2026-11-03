@@ -1,3 +1,6 @@
+import type { ImportRouting } from "../../types";
+import { RoutingField, type RoutingValue } from "./RoutingField";
+import { ownWhen, suggestWhen, whenProblem } from "./routing";
 import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { DiffView } from "../../components/DiffView";
 import { StateMark } from "../../ui/StatePill";
@@ -32,8 +35,9 @@ interface ImportSkillDialogProps {
   skills: readonly SkillSummary[];
   /** The packs folder, as `~/...`, for the `git clone` hint. */
   packsFolder: string;
+  routingLines?: readonly string[];
   onPreview: (paths: string[]) => Promise<SkillImportPreview>;
-  onCommit: (token: string, selection: string[], renames: Record<string, string>) => Promise<SkillImportResult>;
+  onCommit: (token: string, selection: string[], renames: Record<string, string>, routing: ImportRouting) => Promise<SkillImportResult>;
   onDone: (result: SkillImportResult) => void;
   onClose: () => void;
 }
@@ -48,7 +52,7 @@ function errorText(error: unknown): string {
  * rendered) and, for an import in place, the diff. Import publishes exactly that copy into pack:imported; nothing
  * reaches an agent before the next Update. A modal `<dialog>` like "Edit as my copy".
  */
-export function ImportSkillDialog({ dropped, dragging, skills, packsFolder, onPreview, onCommit, onDone, onClose }: ImportSkillDialogProps) {
+export function ImportSkillDialog({ dropped, dragging, skills, packsFolder, routingLines = [], onPreview, onCommit, onDone, onClose }: ImportSkillDialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const headingId = useId();
@@ -57,6 +61,7 @@ export function ImportSkillDialog({ dropped, dragging, skills, packsFolder, onPr
   const [preview, setPreview] = useState<SkillImportPreview | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [renames, setRenames] = useState<Record<string, string>>({});
+  const [routing, setRouting] = useState<Record<string, RoutingValue>>({});
   const [busy, setBusy] = useState<"preview" | "import" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const requestRef = useRef(0);
@@ -79,6 +84,7 @@ export function ImportSkillDialog({ dropped, dragging, skills, packsFolder, onPr
       setPreview(shown);
       const importable = shown.candidates.filter(canImport);
       setSelected(new Set(importable.map(candidate => candidate.key)));
+      setRouting({});
       setRenames(Object.fromEntries(importable.filter(c => c.collision === "bundled").map(c => [c.key, suggestedImportName(c.name)])));
     } catch (e) {
       if (request === requestRef.current) setError(errorText(e));
@@ -114,7 +120,12 @@ export function ImportSkillDialog({ dropped, dragging, skills, packsFolder, onPr
     return renamedSkillMd(candidate.skill_md, nameOf(candidate)) === null ? "This SKILL.md has no plain name: line to rewrite, so it cannot be imported under another name." : "";
   };
   const picked = candidates.filter(candidate => selected.has(candidate.key) && canImport(candidate));
-  const blocked = picked.some(candidate => problemOf(candidate) !== "");
+  const routingOf = (candidate: ImportCandidate): RoutingValue => {
+    const own = ownWhen(routingLines, nameOf(candidate));
+    const suggestion = suggestWhen(candidate.description);
+    return routing[candidate.key] ?? { checked: own !== null || suggestion !== "", when: own ?? suggestion };
+  };
+  const blocked = picked.some(candidate => problemOf(candidate) !== "" || (routingOf(candidate).checked && whenProblem(routingOf(candidate).when, nameOf(candidate)) !== ""));
   const ready = preview?.token != null && picked.length > 0 && !blocked && busy === null;
   const single = candidates.length === 1;
 
@@ -125,7 +136,13 @@ export function ImportSkillDialog({ dropped, dragging, skills, packsFolder, onPr
     setError(null);
     try {
       const chosen = Object.fromEntries(picked.filter(c => renames[c.key] !== undefined).map(c => [c.key, nameOf(c)]));
-      const result = await onCommit(preview.token, picked.map(candidate => candidate.key), chosen);
+      const edits: ImportRouting = {};
+      for (const candidate of picked) {
+        const value = routingOf(candidate);
+        if (value.checked) edits[candidate.key] = value.when;
+        else if (ownWhen(routingLines, nameOf(candidate)) !== null) edits[candidate.key] = null;
+      }
+      const result = await onCommit(preview.token, picked.map(candidate => candidate.key), chosen, edits);
       setBusy(null);
       onDone(result);
     } catch (e) {
@@ -209,6 +226,8 @@ export function ImportSkillDialog({ dropped, dragging, skills, packsFolder, onPr
                   nameProblem={problemOf(candidate)}
                   disabled={busy !== null || preview?.token == null}
                   onToggle={on => toggle(candidate.key, on)}
+                  routing={routingOf(candidate)}
+                  onRouting={value => setRouting(current => ({ ...current, [candidate.key]: value }))}
                   onRename={name => setRenames(current => ({ ...current, [candidate.key]: name }))}
                 />
               ))}
@@ -242,9 +261,11 @@ interface CandidateViewProps {
   disabled: boolean;
   onToggle: (on: boolean) => void;
   onRename: (name: string) => void;
+  routing: RoutingValue;
+  onRouting: (value: RoutingValue) => void;
 }
 
-function CandidateView({ candidate, open, checked, name, nameProblem, disabled, onToggle, onRename }: CandidateViewProps) {
+function CandidateView({ candidate, open, checked, name, nameProblem, disabled, onToggle, onRename, routing, onRouting }: CandidateViewProps) {
   const id = useId();
   const importable = canImport(candidate);
   const flags = orderedFlags(candidate.flags);
@@ -306,6 +327,7 @@ function CandidateView({ candidate, open, checked, name, nameProblem, disabled, 
           )}
         </div>
       )}
+      {checked && importable && <RoutingField name={name} suggestion={suggestWhen(candidate.description)} value={routing} onChange={onRouting} disabled={disabled} />}
       {candidate.files.length > 0 && (
         <details className="lib-import-details" open={open}>
           <summary>Files ({candidate.files.length}){candidate.skill_md ? " and SKILL.md" : ""}</summary>

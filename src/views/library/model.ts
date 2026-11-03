@@ -56,6 +56,7 @@ export type RowAction =
   /** "Edit as my copy": `skill` is a bundled skill's name or an imported skill's id. */
   | { type: "copy"; skill: string }
   | { type: "forget"; pack: string }
+  | { type: "routing"; name: string }
   | { type: "remove-import"; name: string }
   | { type: "undo-import" };
 
@@ -209,6 +210,7 @@ function skillRow(skill: SkillSummary, input: SkillRowInput, indent = false): Li
   if (imported && input.canImportSkill) {
     // Read-only: changed as a personal copy, taken out with a backup, or the last import taken back.
     if (input.canCopySkill) verbs.push({ label: "Edit as my copy", action: { type: "copy", skill: skill.id } });
+    verbs.push({ label: "Routing…", action: { type: "routing", name: skill.name } });
     verbs.push({ label: "Remove import", action: { type: "remove-import", name: skill.name } });
     const undo = input.packLibrary?.undo_import;
     if (undo && undo.action !== "remove" && undo.name === skill.name) verbs.push({ label: "Undo import", action: { type: "undo-import" } });

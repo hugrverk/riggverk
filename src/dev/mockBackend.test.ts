@@ -303,10 +303,13 @@ describe("mock backend: the Library edits only personal docs", () => {
     ]);
     await expect(invoke("commit_skill_import", { token: preview.token, selection: ["1"], renames: {} })).rejects.toThrow("bundled skill is named tdd");
     const again = await invoke<SkillImportPreview>("preview_skill_import", { paths: ["~/Downloads/skills-repo"] });
-    const result = await invoke<SkillImportResult>("commit_skill_import", { token: again.token, selection: ["0", "1"], renames: { "1": "tdd-imported" } });
+    const result = await invoke<SkillImportResult>("commit_skill_import", { token: again.token, selection: ["0", "1"], renames: { "1": "tdd-imported" }, routing: { "0": "Writing changes" } });
     expect(result).toEqual({ imported: ["changelog-writer", "tdd-imported"], updated: [] });
     const packs = await invoke<PackLibrary>("list_pack_skills");
     expect(packs.skills.filter(s => s.pack === "imported").map(s => s.name)).toEqual(["changelog-writer", "pdf-tools", "tdd-imported"]);
+    expect(packs.packs.find(p => p.name === "imported")?.routing).toContain("- Writing changes: `changelog-writer`.");
+    await invoke("set_imported_skill_routing", { name: "changelog-writer", when: "Release notes" });
+    expect((await invoke<PackLibrary>("list_pack_skills")).packs.find(p => p.name === "imported")?.routing).toContain("- Release notes: `changelog-writer`.");
     expect(packs.undo_import).toEqual({ action: "import", name: "tdd-imported" });
     expect((await invoke<DocumentContent>("read_skill", { id: "pack:imported/tdd-imported" })).content).toContain("name: tdd-imported");
     await invoke("copy_skill_to_pack", { name: "pack:imported/changelog-writer", newName: "changelog-mine" });
@@ -317,6 +320,7 @@ describe("mock backend: the Library edits only personal docs", () => {
     await invoke("undo_last_import");
     const after = await invoke<PackLibrary>("list_pack_skills");
     expect(after.skills.filter(s => s.pack === "imported").map(s => s.name)).toEqual(["changelog-writer", "pdf-tools"]);
+    expect(after.packs.find(p => p.name === "imported")?.routing).toContain("- Release notes: `changelog-writer`.");
   });
 
   it("saves a personal skill in the older top-level layout, the spec layout or both, byte for byte", async () => {
