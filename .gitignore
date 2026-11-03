@@ -18,10 +18,7 @@ src-tauri/target/
 src-tauri/gen/
 src-tauri/macos/Riggverk.icns
 src-tauri/macos/dmg/
-src-tauri/macos/AppIcon.icns
 src-tauri/macos/Assets.car
-src-tauri/macos/assetcatalog_generated_info.plist
-src-tauri/macos/Assets.xcassets/AppIcon.appiconset/appicon-*.png
 
 # Release assets
 release/
