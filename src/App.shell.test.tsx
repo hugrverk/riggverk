@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 import { defaultSettings } from "./lib/settingsDraft";
 import { op, planOf } from "./test/pageFixtures";
-import type { AppSettings, InstallAgent, InstallationState } from "./types";
+import type { AppSettings, InstallAgent, InstallationState, PackLibrary } from "./types";
 
 const invokeMock = vi.fn();
 
@@ -26,6 +26,8 @@ interface Backend {
   holdClaudeHealth: Promise<void> | null;
   /** Personal docs the Library lists. */
   docs: Array<{ id: string; title: string; content: string }>;
+  /** The skill packs the Library lists; forget_pack drops one. */
+  packs: PackLibrary;
 }
 
 function installBackend(overrides: Partial<AppSettings> = {}): Backend {
@@ -38,6 +40,7 @@ function installBackend(overrides: Partial<AppSettings> = {}): Backend {
     lightHealthRequests: [],
     holdClaudeHealth: null,
     docs: [],
+    packs: { folder: "~/packs", packs: [], skills: [], ignored: [] },
   };
   invokeMock.mockImplementation((command: string, args?: { settings?: AppSettings; surfaces?: string[]; harness?: string }) => {
     backend.commandLog.push(command);
@@ -76,6 +79,13 @@ function installBackend(overrides: Partial<AppSettings> = {}): Backend {
           backup_root: "/tmp/backups",
           backup_root_exists: false,
         });
+      case "list_pack_skills":
+        return Promise.resolve(backend.packs);
+      case "forget_pack": {
+        const name = (args as { name?: string } | undefined)?.name;
+        backend.packs = { ...backend.packs, packs: backend.packs.packs.filter(pack => pack.name !== name) };
+        return Promise.resolve(1);
+      }
       case "list_agent_metadata":
         return Promise.resolve({ agents: [], warnings: [] });
       case "preview_setup":
@@ -139,6 +149,27 @@ function currentTab() {
 
 async function ready() {
   await within(nav()).findByRole("button", { name: "Claude" });
+}
+
+/** jsdom has no native modal dialog; emulate open/close and the `close` event browsers fire. */
+function emulateModalDialogs() {
+  const originalShowModal = HTMLDialogElement.prototype.showModal;
+  const originalClose = HTMLDialogElement.prototype.close;
+
+  beforeEach(() => {
+    HTMLDialogElement.prototype.showModal = vi.fn(function showModal(this: HTMLDialogElement) {
+      this.setAttribute("open", "");
+    });
+    HTMLDialogElement.prototype.close = vi.fn(function close(this: HTMLDialogElement) {
+      this.removeAttribute("open");
+      this.dispatchEvent(new Event("close"));
+    });
+  });
+
+  afterEach(() => {
+    HTMLDialogElement.prototype.showModal = originalShowModal;
+    HTMLDialogElement.prototype.close = originalClose;
+  });
 }
 
 describe("App shell", () => {
@@ -226,24 +257,7 @@ describe("App shell", () => {
   });
 
   describe("leaving the Library with unsaved changes", () => {
-    const originalShowModal = HTMLDialogElement.prototype.showModal;
-    const originalClose = HTMLDialogElement.prototype.close;
-
-    beforeEach(() => {
-      // jsdom has no native modal dialog; emulate open/close and the `close` event browsers fire.
-      HTMLDialogElement.prototype.showModal = vi.fn(function showModal(this: HTMLDialogElement) {
-        this.setAttribute("open", "");
-      });
-      HTMLDialogElement.prototype.close = vi.fn(function close(this: HTMLDialogElement) {
-        this.removeAttribute("open");
-        this.dispatchEvent(new Event("close"));
-      });
-    });
-
-    afterEach(() => {
-      HTMLDialogElement.prototype.showModal = originalShowModal;
-      HTMLDialogElement.prototype.close = originalClose;
-    });
+    emulateModalDialogs();
 
     async function editNotes() {
       const backend = installBackend();
@@ -509,6 +523,32 @@ describe("App shell", () => {
       const foot = document.querySelector(".side .foot")!;
       // The app version leads the foot; then the backups and when the check ran.
       await waitFor(() => expect(foot.textContent).toMatch(/^(\d{4}\.\d+\.\d+)?0 backupschecked \d{2}:\d{2}$/));
+    });
+
+    describe("after a change to the skill packs in the Library", () => {
+      emulateModalDialogs();
+
+      it("turns Update all on without Check", async () => {
+        const backend = installBackend();
+        backend.packs.packs = [{ name: "old-pack", state: "missing", reason: "the pack folder is gone", forgettable: true }];
+        render(<App />);
+        await ready();
+        await waitFor(() => expect(updateAll().getAttribute("title")).toBe("Everything Riggverk can update is already up to date."));
+        fireEvent.keyDown(document.body, { key: "7" });
+        fireEvent.click(await screen.findByRole("tab", { name: "Packs" }));
+        const row = await waitFor(() => {
+          const found = screen.getAllByRole("listitem").find(item => item.querySelector("b")?.textContent === "old-pack");
+          if (!found) throw new Error("no old-pack row");
+          return found;
+        });
+        // Forgetting the pack is what the next Update installs: it removes the skills the pack left in Claude.
+        backend.installation = { claude: "update_available" };
+        fireEvent.click(within(row).getByRole("button", { name: "Forget pack" }));
+        const dialog = await screen.findByRole("dialog", { name: "Forget pack old-pack?" });
+        fireEvent.click(within(dialog).getByRole("button", { name: "Forget pack" }));
+        await waitFor(() => expect(backend.commandLog).toContain("forget_pack"));
+        await waitFor(() => expect(updateAll().getAttribute("aria-disabled")).toBeNull());
+      });
     });
   });
 

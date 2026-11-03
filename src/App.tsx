@@ -92,6 +92,10 @@ function AppShell() {
     isWorkspaceLoadCurrent,
   });
 
+  const [overviewRefreshKey, setOverviewRefreshKey] = useState(0);
+  // A pack change in the Library (import, routing, removal, copy, forget) is what Update all would install next.
+  const refreshOverview = useCallback(() => setOverviewRefreshKey(key => key + 1), []);
+
   const {
     skills,
     packLibrary,
@@ -173,6 +177,7 @@ function AppShell() {
     isWorkspaceLoadCurrent,
     isInvalidWorkspaceError,
     view,
+    onPacksChanged: refreshOverview,
   });
 
   const loadEnabledHarnessHealth = useCallback(async (
@@ -219,7 +224,6 @@ function AppShell() {
   const [applyTransactionId, setApplyTransactionId] = useState<string | null>(null);
   const rollbackTransactionId = applyTransactionId ?? uninstallRecoveryTransactionId;
   const [uninstallPreviewRequested, setUninstallPreviewRequested] = useState(false);
-  const [overviewRefreshKey, setOverviewRefreshKey] = useState(0);
   const { notify } = useShellState();
 
   // workspace action runner (terminal output, activity animation, action wrappers)

@@ -36,6 +36,8 @@ export interface LibraryControllerDeps {
   isWorkspaceLoadCurrent: (generation: number) => boolean;
   isInvalidWorkspaceError: (e: unknown) => boolean;
   view: string;
+  /** A Library action changed the skill packs, and with them what the next Update installs. */
+  onPacksChanged?: () => void;
 }
 
 export function useLibraryController({
@@ -44,6 +46,7 @@ export function useLibraryController({
   isWorkspaceLoadCurrent,
   isInvalidWorkspaceError,
   view,
+  onPacksChanged,
 }: LibraryControllerDeps) {
   const confirm = useConfirm();
   const choose = useConfirmChoice();
@@ -290,6 +293,12 @@ export function useLibraryController({
       if (!isInvalidWorkspaceError(e)) setError(`Skills: ${e}`);
     }
   }, [isInvalidWorkspaceError, isWorkspaceLoadCurrent, setError, workspaceLoadGenerationRef]);
+
+  /** Lists the packs again after a change to them, and says so: the install status no longer matches them. */
+  const reloadChangedPacks = useCallback(async () => {
+    onPacksChanged?.();
+    await loadSkills();
+  }, [loadSkills, onPacksChanged]);
 
   const loadDocs = useCallback(async (generation = workspaceLoadGenerationRef.current) => {
     try {
@@ -802,13 +811,13 @@ export function useLibraryController({
     if (!ok) return false;
     try {
       await invoke<number>("forget_pack", { name });
-      await loadSkills();
+      await reloadChangedPacks();
       return true;
     } catch (e) {
       setError(`Forget pack: ${e}`);
       return false;
     }
-  }, [confirm, loadSkills, setError]);
+  }, [confirm, reloadChangedPacks, setError]);
 
   const readSkill = useCallback(async (id: string) => {
     if (id !== activeSkillIdRef.current && !(await confirmLeave())) return;
@@ -909,9 +918,9 @@ export function useLibraryController({
    */
   const copySkillToPack = useCallback(async (name: string, newName: string): Promise<PackSkillCopy> => {
     const copy = await invoke<PackSkillCopy>("copy_skill_to_pack", { name, newName });
-    await loadSkills();
+    await reloadChangedPacks();
     return copy;
-  }, [loadSkills]);
+  }, [reloadChangedPacks]);
 
   /** Copies what the paths hold into the backend's private staging and shows it; nothing is published. */
   const previewSkillImport = useCallback(
@@ -927,16 +936,16 @@ export function useLibraryController({
     try {
       return await invoke<SkillImportResult>("commit_skill_import", { token, selection, renames, routing });
     } finally {
-      await loadSkills();
+      await reloadChangedPacks();
     }
-  }, [loadSkills]);
+  }, [reloadChangedPacks]);
 
   /** Saves (or with null removes) an imported skill's routing line, then lists the packs again. Refusals are thrown. */
   const setImportedSkillRouting = useCallback(async (name: string, when: string | null) => {
     const message = await invoke<string>("set_imported_skill_routing", { name, when });
-    await loadSkills();
+    await reloadChangedPacks();
     return message;
-  }, [loadSkills]);
+  }, [reloadChangedPacks]);
 
   /** Moves an imported skill into a backup once the user agrees; resolves with the notice, or null. */
   const removeImportedSkill = useCallback(async (name: string): Promise<string | null> => {
@@ -949,13 +958,13 @@ export function useLibraryController({
     if (!ok) return null;
     try {
       const message = await invoke<string>("remove_imported_skill", { name });
-      await loadSkills();
+      await reloadChangedPacks();
       return message;
     } catch (e) {
       setError(`Remove import: ${e}`);
       return null;
     }
-  }, [confirm, loadSkills, setError]);
+  }, [confirm, reloadChangedPacks, setError]);
 
   /** Takes back the last import, replacement or removal once the user agrees; resolves with the notice, or null. */
   const undoLastImport = useCallback(async (): Promise<string | null> => {
@@ -969,13 +978,13 @@ export function useLibraryController({
     if (!ok) return null;
     try {
       const message = await invoke<string>("undo_last_import");
-      await loadSkills();
+      await reloadChangedPacks();
       return message;
     } catch (e) {
       setError(`Undo import: ${e}`);
       return null;
     }
-  }, [confirm, loadSkills, packLibrary, setError]);
+  }, [confirm, packLibrary, reloadChangedPacks, setError]);
 
   // The configs load whenever the Library is open, not only on their topic: a search result can open one from any topic.
   // Choosing a target resets the source itself, so only a new visit or a workspace reload sends it back to the base.

@@ -1058,6 +1058,67 @@ describe("useLibraryController skills of the personal pack", () => {
   });
 });
 
+describe("useLibraryController pack changes", () => {
+  const emptyPacks = { folder: "f", packs: [], skills: [], ignored: [] };
+
+  beforeEach(() => {
+    invoke.mockReset();
+    confirm.mockReset();
+    confirm.mockResolvedValue(true);
+  });
+
+  function renderWithPackChanges(answer: (cmd: string) => Promise<unknown>) {
+    const { deps } = createDeps();
+    const onPacksChanged = vi.fn();
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === "list_skills") return Promise.resolve([]);
+      if (cmd === "list_pack_skills") return Promise.resolve(emptyPacks);
+      return answer(cmd);
+    });
+    const { result } = renderHook(() => useLibraryController({ ...deps, onPacksChanged }));
+    return { result, onPacksChanged };
+  }
+
+  it("reports each change to the packs once, so the install status is read again", async () => {
+    const { result, onPacksChanged } = renderWithPackChanges(() => Promise.resolve("done"));
+    await act(async () => {
+      await result.current.commitSkillImport("token", ["a", "b", "c"], {}, {});
+    });
+    expect(onPacksChanged).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      await result.current.setImportedSkillRouting("a", "When testing.");
+      await result.current.removeImportedSkill("a");
+      await result.current.undoLastImport();
+      await result.current.copySkillToPack("tdd", "tdd-mine");
+      await result.current.forgetPack("old-pack");
+    });
+    expect(onPacksChanged).toHaveBeenCalledTimes(6);
+  });
+
+  it("reports an import that was refused part way, which may have published some skills", async () => {
+    const { result, onPacksChanged } = renderWithPackChanges(() => Promise.reject("b: refused"));
+    await act(async () => {
+      await expect(result.current.commitSkillImport("token", ["a", "b"], {}, {})).rejects.toBe("b: refused");
+    });
+    expect(onPacksChanged).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports nothing when the user declines or the backend changes nothing", async () => {
+    const { result, onPacksChanged } = renderWithPackChanges(() => Promise.reject("refused"));
+    await act(async () => {
+      await expect(result.current.setImportedSkillRouting("a", null)).rejects.toBe("refused");
+      await expect(result.current.copySkillToPack("tdd", "x")).rejects.toBe("refused");
+      await result.current.removeImportedSkill("a");
+    });
+    confirm.mockResolvedValue(false);
+    await act(async () => {
+      await result.current.undoLastImport();
+      await result.current.forgetPack("old-pack");
+    });
+    expect(onPacksChanged).not.toHaveBeenCalled();
+  });
+});
+
 describe("useLibraryController drafts and reads", () => {
   beforeEach(() => {
     invoke.mockReset();
