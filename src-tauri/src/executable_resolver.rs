@@ -170,6 +170,14 @@ pub(crate) fn python3_candidates(tool_dirs: Vec<PathBuf>, path: Option<OsString>
     found
 }
 
+/// The first of [`python3_candidates`] that [`trusted_executable`] accepts, resolved: for helpers
+/// that run on any Python 3, such as the OpenCode config generator.
+pub(crate) fn trusted_python3(tool_dirs: Vec<PathBuf>, path: Option<OsString>) -> Option<PathBuf> {
+    python3_candidates(tool_dirs, path)
+        .iter()
+        .find_map(|python| trusted_executable(python))
+}
+
 /// Returns `current` with every existing directory from `fallbacks` that is not already on it
 /// appended, or `None` when nothing changes. Append-only so system tools earlier on the path
 /// are never shadowed. An unset or empty `current` is left alone.

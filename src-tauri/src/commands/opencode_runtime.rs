@@ -834,6 +834,9 @@ fn installed_config_diverged_keys(
 /// The config generators are sub-second scripts; anything longer is hung.
 const GENERATOR_TIMEOUT: Duration = Duration::from_secs(30);
 const GENERATOR_OUTPUT_CAP: usize = 256 * 1024;
+/// No `python3` the generator may run: none found, or each one could be replaced by another user.
+const GENERATOR_PYTHON_MISSING: &str =
+    "no python3 found that only you or root can change; install Python 3 to generate config";
 
 /// Bundled path of the snapshot generator. The app never runs a generator out of the active
 /// workspace: that folder is user-chosen and only validated by marker files, so any script it carries
@@ -854,7 +857,8 @@ fn bundled_generator_script() -> Result<PathBuf, String> {
 }
 
 /// `python3 -I <script> --root <workspace> <mode>`, run with the script's own folder as working directory
-/// so nothing in the workspace is picked up as a working-directory side input.
+/// so nothing in the workspace is picked up as a working-directory side input. The interpreter is
+/// [`crate::executable_resolver::trusted_python3`]: one another user could replace is never run.
 fn run_generator(
     script: &Path,
     workspace_root: &Path,
@@ -864,8 +868,13 @@ fn run_generator(
     let script_str = super::workspace::path_arg(script)?;
     let root_str = super::workspace::path_arg(workspace_root)?;
     let cwd = script.parent().unwrap_or(script);
+    let python = crate::executable_resolver::trusted_python3(
+        crate::executable_resolver::tool_dirs(),
+        std::env::var_os("PATH"),
+    )
+    .ok_or_else(|| GENERATOR_PYTHON_MISSING.to_string())?;
     Ok(run_cmd_bounded(
-        "python3",
+        &super::workspace::path_arg(&python)?,
         &["-I", &script_str, "--root", &root_str, mode],
         cwd,
         BoundedCmdOptions {
@@ -1508,14 +1517,14 @@ fn compute_health_in(
     }
 
     // The generator is the app's bundled copy; it is missing only when the app bundle is damaged
-    // or python3 cannot start.
+    // or no python3 it may run can start.
     if base_source_exists
         && policy_source_exists
         && generated_snapshot_status == "valid"
         && generator_unavailable
     {
         warnings.push(
-            "OpenCode config generator unavailable: python3 or the bundled generator script is missing."
+            "OpenCode config generator unavailable: no python3 that only you or root can change, or the bundled generator script is missing."
                 .to_string(),
         );
     }
@@ -3790,6 +3799,31 @@ mod tests {
             recorded_cwd, expected_cwd,
             "the generator runs from its own folder, not from the workspace"
         );
+    }
+
+    /// The generator runs the first `python3` no other user could replace, links resolved: one in
+    /// a folder everyone can write is skipped for a later one.
+    #[cfg(unix)]
+    #[test]
+    fn test_generator_python_skips_one_another_user_could_replace() {
+        use std::os::unix::fs::PermissionsExt;
+        let tools = temp_root("gen-python-tools");
+        let path = temp_root("gen-python-path");
+        for dir in [&tools, &path] {
+            fs::create_dir_all(dir).expect("mkdir");
+            let python = dir.join("python3");
+            fs::write(&python, "#!/bin/sh\nexit 0\n").expect("write python3");
+            make_executable(&python);
+        }
+        fs::set_permissions(&tools, fs::Permissions::from_mode(0o777)).expect("chmod");
+        let found = crate::executable_resolver::trusted_python3(
+            vec![tools.clone()],
+            Some(path.clone().into_os_string()),
+        );
+        let expected = path.join("python3").canonicalize().expect("resolve");
+        cleanup(&tools);
+        cleanup(&path);
+        assert_eq!(found, Some(expected));
     }
 
     #[cfg(unix)]
