@@ -2,7 +2,8 @@
 """Checks scripts/release.sh --dry-run and its refusals in a throwaway repository.
 
 The repository gets a bare local origin, a few merged pull requests, and stand-ins for gh, npm, cargo, rustup,
-codesign, ditto, hdiutil and lipo, so nothing real is built, pushed or uploaded. A dry run must also leave the repository untouched.
+codesign, ditto, hdiutil, lipo and security (the Keychain), so nothing real is built, pushed, uploaded or read from the
+Keychain. A dry run must also leave the repository untouched.
 """
 
 from __future__ import annotations
@@ -39,6 +40,7 @@ VERSION_LINES = (
 )
 GH_STUB = """#!/usr/bin/env bash
 printf '%s\\n' "$*" >>"$GH_STUB_LOG"
+[ -z "${TAURI_SIGNING_PRIVATE_KEY+set}${TAURI_SIGNING_PRIVATE_KEY_PASSWORD+set}" ] || echo "gh saw the signing key" >>"$GH_STUB_LOG"
 case "$1 $2" in
   "auth status") exit 0 ;;
   "release view")
@@ -50,9 +52,26 @@ case "$1 $2" in
 esac
 """
 
+# The build: records which signing variables it was given. It makes no app, so a real publish stops right after it.
+NPM_STUB = """#!/usr/bin/env bash
+printf '%s|%s|%s\\n' "$*" "${TAURI_SIGNING_PRIVATE_KEY-unset}" "${TAURI_SIGNING_PRIVATE_KEY_PASSWORD-unset}" >>"$NPM_STUB_LOG"
+"""
+
 RUSTUP_STUB = """#!/usr/bin/env bash
 printf '%s\\n' aarch64-apple-darwin ${RUSTUP_STUB_TARGETS-x86_64-apple-darwin}
 """
+
+# The Keychain: `security find-generic-password -s ITEM -w` prints a stand-in secret for the items named in
+# SECURITY_STUB_ITEMS and fails like a missing item otherwise.
+SECURITY_STUB = """#!/usr/bin/env bash
+printf '%s\\n' "$*" >>"$SECURITY_STUB_LOG"
+[ "$1 $2" = "find-generic-password -s" ] || { echo "security stub: unexpected call: $*" >&2; exit 3; }
+case " ${SECURITY_STUB_ITEMS-} " in
+  *" $3 "*) printf 'stub-secret-%s\\n' "$3" ;;
+  *) echo "security: SecKeychainSearchCopyNext: The specified item could not be found in the keychain." >&2; exit 44 ;;
+esac
+"""
+KEYCHAIN_ITEMS = "riggverk-updater-key riggverk-updater-password"
 
 today = datetime.date.today()
 NEXT = f"{today.year}.{today.month}.1"
@@ -68,15 +87,21 @@ class ReleaseShTests(unittest.TestCase):
         self.gh_log = base / "gh.log"
         bin_dir = base / "bin"
         bin_dir.mkdir()
-        for name in ("npm", "cargo", "codesign", "ditto", "hdiutil", "lipo"):
+        for name in ("cargo", "codesign", "ditto", "hdiutil", "lipo"):
             self.stub(bin_dir / name, "#!/usr/bin/env bash\nexit 0\n")
+        self.stub(bin_dir / "npm", NPM_STUB)
+        self.npm_log = base / "npm.log"
         self.stub(bin_dir / "rustup", RUSTUP_STUB)
         self.stub(bin_dir / "gh", GH_STUB)
+        self.stub(bin_dir / "security", SECURITY_STUB)
+        self.security_log = base / "security.log"
         (bin_dir / "python3").symlink_to(sys.executable)
         self.env = {
             **os.environ,
             "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
             "GH_STUB_LOG": str(self.gh_log),
+            "SECURITY_STUB_LOG": str(self.security_log),
+            "NPM_STUB_LOG": str(self.npm_log),
             "GIT_CONFIG_GLOBAL": os.devnull,
             "GIT_CONFIG_SYSTEM": os.devnull,
             "GIT_AUTHOR_NAME": "t",
@@ -308,50 +333,122 @@ class ReleaseShTests(unittest.TestCase):
         }
         conf_path.write_text(json.dumps(conf, indent=2) + "\n")
 
-    def test_publish_without_a_signing_key_leaves_updates_off(self) -> None:
+    def assert_no_secret(self, result: subprocess.CompletedProcess) -> None:
+        self.assertNotIn("stub-secret", result.stdout + result.stderr)
+        self.assertNotIn("not-a-real-key", result.stdout + result.stderr)
+
+    def test_publish_without_the_updater_config_leaves_updates_off_and_reads_no_keychain(self) -> None:
         self.merge_release_pr(NEXT)
 
-        result = self.release("publish", "--dry-run")
+        result = self.release("publish", "--dry-run", SECURITY_STUB_ITEMS=KEYCHAIN_ITEMS)
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("updates: off", result.stdout)
         self.assertNotIn("latest.json", result.stdout)
         self.assertNotIn("--draft", result.stdout)
-
-    def test_a_signing_key_without_the_updater_config_is_refused(self) -> None:
-        self.merge_release_pr(NEXT)
-
-        result = self.release(
-            "publish", "--dry-run", TAURI_SIGNING_PRIVATE_KEY="not-a-real-key", TAURI_SIGNING_PRIVATE_KEY_PASSWORD=""
-        )
-
-        self.assertEqual(result.returncode, 1)
-        self.assertIn("has no plugins.updater", result.stderr)
-        self.assertNotIn("not-a-real-key", result.stdout + result.stderr)
-
-    def test_the_updater_config_without_a_signing_key_is_refused(self) -> None:
-        self.turn_updates_on()
-        self.merge_release_pr(NEXT)
-
-        result = self.release("publish", "--dry-run")
-
-        self.assertEqual(result.returncode, 1)
-        self.assertIn("TAURI_SIGNING_PRIVATE_KEY is not set", result.stderr)
+        self.assertFalse(self.security_log.exists())
 
     def test_publish_with_updates_on_signs_writes_latest_json_and_releases_through_a_draft(self) -> None:
         self.turn_updates_on()
         self.merge_release_pr(NEXT)
 
-        result = self.release(
-            "publish", "--dry-run", TAURI_SIGNING_PRIVATE_KEY="not-a-real-key", TAURI_SIGNING_PRIVATE_KEY_PASSWORD=""
-        )
+        result = self.release("publish", "--dry-run", SECURITY_STUB_ITEMS=KEYCHAIN_ITEMS)
 
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("updates: on (signing key: ok; latest.json for o/r)", result.stdout)
+        self.assertIn("updates: on (signing key: in the Keychain; latest.json for o/r)", result.stdout)
+        self.assertIn("in that build's environment only", result.stdout)
         self.assertIn(f"release/Riggverk-v{NEXT}-macOS.app.tar.gz (+ .sig)", result.stdout)
         self.assertIn("--draft, check the assets, then gh release edit", result.stdout)
         self.assertIn("release/latest.json", result.stdout)
-        self.assertNotIn("not-a-real-key", result.stdout + result.stderr)
+        self.assertEqual(
+            self.security_log.read_text().splitlines(),
+            ["find-generic-password -s riggverk-updater-key -w", "find-generic-password -s riggverk-updater-password -w"],
+        )
+        self.assert_no_secret(result)
+
+    def test_the_updater_config_without_both_keychain_items_is_refused(self) -> None:
+        self.turn_updates_on()
+        self.merge_release_pr(NEXT)
+
+        for items, missing in (("", "riggverk-updater-key"), ("riggverk-updater-key", "riggverk-updater-password")):
+            with self.subTest(missing=missing):
+                result = self.release("publish", "--dry-run", SECURITY_STUB_ITEMS=items)
+
+                self.assertEqual(result.returncode, 1)
+                self.assertIn(f"the Keychain item {missing} is missing or unreadable", result.stderr)
+                self.assertNotIn("latest.json for", result.stdout)
+                self.assert_no_secret(result)
+
+    def test_a_signing_key_exported_in_the_shell_is_refused(self) -> None:
+        self.turn_updates_on()
+        self.merge_release_pr(NEXT)
+
+        for name in ("TAURI_SIGNING_PRIVATE_KEY", "TAURI_SIGNING_PRIVATE_KEY_PASSWORD"):
+            with self.subTest(name=name):
+                result = self.release(
+                    "publish", "--dry-run", SECURITY_STUB_ITEMS=KEYCHAIN_ITEMS, **{name: "not-a-real-key"}
+                )
+
+                self.assertEqual(result.returncode, 1)
+                self.assertIn("is set in this shell", result.stderr)
+                self.assert_no_secret(result)
+
+    def test_xtrace_never_shows_a_keychain_secret(self) -> None:
+        self.turn_updates_on()
+        self.merge_release_pr(NEXT)
+
+        result = subprocess.run(
+            ["bash", "-x", "scripts/release.sh", "publish", "--dry-run"],
+            cwd=self.repo,
+            env={**self.env, "SECURITY_STUB_ITEMS": KEYCHAIN_ITEMS},
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("find-generic-password -s riggverk-updater-key -w", result.stderr)
+        self.assert_no_secret(result)
+
+    def test_publish_passes_the_keychain_secrets_to_the_tauri_build_alone(self) -> None:
+        self.turn_updates_on()
+        self.merge_release_pr(NEXT)
+
+        # A real run (under xtrace) up to the build, which makes no app here, so it stops before tagging.
+        result = subprocess.run(
+            ["bash", "-x", "scripts/release.sh", "publish"],
+            cwd=self.repo,
+            env={**self.env, "SECURITY_STUB_ITEMS": KEYCHAIN_ITEMS},
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("the build did not produce", result.stderr)
+        build_calls = self.npm_log.read_text().splitlines()
+        self.assertEqual(len(build_calls), 1)
+        self.assertTrue(build_calls[0].startswith("run tauri build -- --target universal-apple-darwin"), build_calls[0])
+        self.assertIn("createUpdaterArtifacts", build_calls[0])
+        self.assertTrue(
+            build_calls[0].endswith("|stub-secret-riggverk-updater-key|stub-secret-riggverk-updater-password"),
+            build_calls[0],
+        )
+        self.assertNotIn("gh saw the signing key", self.gh_calls())
+        self.assertNotIn(f"v{NEXT}", self.git("tag", "--list"))
+        self.assert_no_secret(result)
+
+    def test_publish_without_updates_gives_the_build_no_signing_key(self) -> None:
+        self.merge_release_pr(NEXT)
+
+        result = self.release("publish", SECURITY_STUB_ITEMS=KEYCHAIN_ITEMS)
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("the build did not produce", result.stderr)
+        build_call = self.npm_log.read_text()
+        self.assertNotIn("createUpdaterArtifacts", build_call)
+        self.assertTrue(build_call.endswith("|unset|unset\n"), build_call)
+        self.assertFalse(self.security_log.exists())
 
     def test_publish_refuses_an_existing_tag_or_release(self) -> None:
         self.merge_release_pr(NEXT)

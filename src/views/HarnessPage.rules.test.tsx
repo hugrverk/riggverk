@@ -437,7 +437,7 @@ describe("rules file in the detail pane", () => {
 
 /** The Compare fold-out under the rules cell. */
 function compareFold() {
-  return screen.getByRole("group", { name: "Compare CLAUDE.md with Riggverk’s rules" });
+  return screen.getByRole("group", { name: "Compare CLAUDE.md with Riggverk's rules" });
 }
 
 function compareButton() {
@@ -492,19 +492,19 @@ describe("Compare (d), inline", () => {
     expect(compareButton().getAttribute("aria-controls")).toBe(compareFold().id);
     // The button closes it again.
     fireEvent.click(compareButton());
-    expect(screen.queryByRole("group", { name: "Compare CLAUDE.md with Riggverk’s rules" })).toBeNull();
+    expect(screen.queryByRole("group", { name: "Compare CLAUDE.md with Riggverk's rules" })).toBeNull();
     expect(compareButton().getAttribute("aria-expanded")).toBe("false");
     // d opens and closes it.
     focusSurfaces();
     press("d");
     await screen.findByRole("group", { name: /to installed/ });
     press("d");
-    expect(screen.queryByRole("group", { name: "Compare CLAUDE.md with Riggverk’s rules" })).toBeNull();
+    expect(screen.queryByRole("group", { name: "Compare CLAUDE.md with Riggverk's rules" })).toBeNull();
     // Escape closes it from anywhere.
     press("d");
     await screen.findByRole("group", { name: /to installed/ });
     fireEvent.keyDown(document.body, { key: "Escape" });
-    expect(screen.queryByRole("group", { name: "Compare CLAUDE.md with Riggverk’s rules" })).toBeNull();
+    expect(screen.queryByRole("group", { name: "Compare CLAUDE.md with Riggverk's rules" })).toBeNull();
     expect(compareButton().getAttribute("aria-expanded")).toBe("false");
   });
 
@@ -596,7 +596,7 @@ describe("Compare (d), inline", () => {
     await screen.findByRole("group", { name: /to installed/ });
     press("v");
     await screen.findByLabelText("Conversion summary");
-    expect(screen.queryByRole("group", { name: "Compare CLAUDE.md with Riggverk’s rules" })).toBeNull();
+    expect(screen.queryByRole("group", { name: "Compare CLAUDE.md with Riggverk's rules" })).toBeNull();
   });
 });
 

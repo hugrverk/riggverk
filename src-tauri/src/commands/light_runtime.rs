@@ -657,7 +657,7 @@ fn compute_health(harness: &LightHarness, inputs: &Inputs) -> LightRuntimeHealth
     let mut warnings = Vec::new();
     if skills.status == "unserved" {
         warnings.push(format!(
-            "No skills are installed for {label}: it reads ~/.agents/skills, and a customised CODEX_HOME keeps Codex out of that folder.",
+            "No skills are installed for {label}: it reads ~/.agents/skills, and a customized CODEX_HOME keeps Codex out of that folder.",
             label = harness.label
         ));
     }
