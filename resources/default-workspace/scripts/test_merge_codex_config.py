@@ -682,6 +682,7 @@ def test_fallback_parsers_read_single_quoted_literal_strings() -> None:
 def test_string_values_are_written_as_toml_that_reads_back_the_same() -> None:
     import tomllib
 
+    routing = _load_routing_module()
     for value in [
         "plain",
         'a "quoted" word',
@@ -691,9 +692,10 @@ def test_string_values_are_written_as_toml_that_reads_back_the_same() -> None:
         "tab\tcr\rcrlf\r\nnul\0esc\x1bdel\x7f",
         "",
     ]:
-        rendered = f"key = {_merge_mod.format_toml_scalar(value)}\n"
-        assert tomllib.loads(rendered)["key"] == value, rendered
-        assert parse_minimal_toml(rendered)["key"] == value, rendered
+        for script in (_merge_mod, routing):
+            rendered = f"key = {script.format_toml_scalar(value)}\n"
+            assert tomllib.loads(rendered)["key"] == value, rendered
+            assert script.parse_minimal_toml(rendered)["key"] == value, rendered
 
 
 def test_line_patchers_keep_a_hash_inside_a_literal_string() -> None:

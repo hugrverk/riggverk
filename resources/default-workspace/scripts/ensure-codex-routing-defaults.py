@@ -275,6 +275,9 @@ def managed_match(installed: dict[str, Any], managed: dict[str, Any]) -> bool:
     return not differing_paths(installed, managed)
 
 
+TOML_ESCAPES = {"\\": "\\\\", '"': '\\"', "\t": "\\t", "\n": "\\n", "\r": "\\r"}
+
+
 def format_toml_scalar(value: Any) -> str:
     if isinstance(value, bool):
         return "true" if value else "false"
@@ -283,7 +286,13 @@ def format_toml_scalar(value: Any) -> str:
     if isinstance(value, float):
         return repr(value)
     if isinstance(value, str):
-        escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+        # Mirrors merge-codex-config.py (both run isolated with -I, so neither can import the
+        # other): one basic string with every character TOML does not take raw escaped.
+        escaped = "".join(
+            TOML_ESCAPES.get(ch)
+            or (f"\\u{ord(ch):04X}" if ord(ch) < 0x20 or ord(ch) == 0x7F else ch)
+            for ch in value
+        )
         return f'"{escaped}"'
     raise ValueError(f"unsupported scalar type: {type(value)}")
 
