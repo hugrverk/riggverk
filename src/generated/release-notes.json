@@ -6,7 +6,7 @@
         {
           "title": "Fixes",
           "items": [
-            "Improve pill contrast on raised surfaces"
+            "Status labels stay readable on a hovered row in History: in dark mode every label now meets the WCAG AA contrast minimum on the hover background too"
           ]
         }
       ]
