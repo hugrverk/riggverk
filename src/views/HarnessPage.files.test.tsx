@@ -324,11 +324,11 @@ function review() {
 
 /** The Compare fold-out under a files cell. */
 function fold() {
-  return screen.getByRole("group", { name: /^Compare .* with Riggverk’s version$/ });
+  return screen.getByRole("group", { name: /^Compare .* with Riggverk's version$/ });
 }
 
 function foldGone() {
-  return screen.queryByRole("group", { name: /^Compare .* with Riggverk’s version$/ });
+  return screen.queryByRole("group", { name: /^Compare .* with Riggverk's version$/ });
 }
 
 /** The row of one unit (by its key) in a cell, as a query scope. */
@@ -427,8 +427,8 @@ describe("keys and buttons on the skills and agents cells", () => {
     backend();
     renderClaude({ skills: [TDD, AUDIT, DIAGNOSE] });
     const audit = () => unitRow("skills", "skill:agents:security-audit");
-    expect(buttonNames(unitRow("skills", "skill:claude:tdd"))).toEqual(["Compare", "Use Riggverk’s version…", "Keep mine"]);
-    expect(buttonNames(unitRow("skills", "skill:claude:diagnose"))).toEqual(["Compare", "Use Riggverk’s version…", "Hand back"]);
+    expect(buttonNames(unitRow("skills", "skill:claude:tdd"))).toEqual(["Compare", "Use Riggverk's version…", "Keep mine"]);
+    expect(buttonNames(unitRow("skills", "skill:claude:diagnose"))).toEqual(["Compare", "Use Riggverk's version…", "Hand back"]);
     // Next file marks the next unit; a unit's own buttons act on that unit and mark it.
     fireEvent.click(within(surfaceRow("skills")).getByRole("button", { name: "Next file" }));
     expect(markedIndex()).toBe(1);
@@ -437,7 +437,7 @@ describe("keys and buttons on the skills and agents cells", () => {
     expect(invokeMock).toHaveBeenLastCalledWith("preview_file_diff", { surface: "skills", unit: "skill:agents:security-audit" });
     fireEvent.keyDown(document.body, { key: "Escape" });
     expect(foldGone()).toBeNull();
-    fireEvent.click(audit().getByRole("button", { name: "Use Riggverk’s version…" }));
+    fireEvent.click(audit().getByRole("button", { name: "Use Riggverk's version…" }));
     await waitFor(() => expect(invokeMock).toHaveBeenLastCalledWith("preview_take_bundled", expect.objectContaining({ surface: "skills", units: ["skill:agents:security-audit"] })));
     press("n");
     fireEvent.click(audit().getByRole("button", { name: "Keep mine" }));
@@ -504,7 +504,7 @@ describe("Compare (d), inline", () => {
     expect(screen.queryByRole("region", { name: "Claude conflict review" })).toBeNull();
     expect(surfaces()).toBeTruthy();
     const diff = fold();
-    expect(diff.getAttribute("aria-label")).toBe("Compare tdd with Riggverk’s version");
+    expect(diff.getAttribute("aria-label")).toBe("Compare tdd with Riggverk's version");
     expect(diff.querySelector(".diff-split .diff-row .diff-line.remove .diff-text")!.textContent).toBe("Write the failing test first.");
     expect(diff.querySelector("input, textarea, [contenteditable]")).toBeNull();
     // Only the diff was asked for, and it needs no token.
@@ -627,7 +627,7 @@ describe("Compare (d), inline", () => {
     await screen.findByRole("group", { name: "SKILL.md: yours to bundled" });
     press("]");
     await waitFor(() => expect(invokeMock).toHaveBeenLastCalledWith("preview_file_diff", { surface: "skills", unit: "skill:agents:security-audit" }));
-    await waitFor(() => expect(fold().getAttribute("aria-label")).toBe("Compare security-audit with Riggverk’s version"));
+    await waitFor(() => expect(fold().getAttribute("aria-label")).toBe("Compare security-audit with Riggverk's version"));
     expect(markedIndex()).toBe(1);
     press("[");
     await waitFor(() => expect(invokeMock).toHaveBeenLastCalledWith("preview_file_diff", { surface: "skills", unit: "skill:claude:tdd" }));
@@ -642,7 +642,7 @@ describe("Compare (d), inline", () => {
     await screen.findByRole("group", { name: "SKILL.md: yours to bundled" });
     const cards = within(fold()).getByRole("group", { name: "Resolve tdd" });
     expect(within(cards).getAllByRole("button").map(card => card.getAttribute("aria-labelledby") && document.getElementById(card.getAttribute("aria-labelledby")!)!.firstChild!.textContent)).toEqual([
-      "Use Riggverk’s version",
+      "Use Riggverk's version",
       "Keep mine",
     ]);
     expect(fold().querySelector(".hp-conseq")!.textContent).toBe("Preview firstBacked upUndo any time");
@@ -651,7 +651,7 @@ describe("Compare (d), inline", () => {
     expect(invokeMock).not.toHaveBeenCalledWith("set_files_kept", expect.anything());
     fireEvent.click(within(dialog).getByRole("button", { name: "cancel" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    fireEvent.click(within(cards).getByRole("button", { name: "Use Riggverk’s version" }));
+    fireEvent.click(within(cards).getByRole("button", { name: "Use Riggverk's version" }));
     await screen.findByLabelText("Take bundled summary");
     expect(invokeMock).toHaveBeenLastCalledWith("preview_take_bundled", { surface: "skills", units: ["skill:claude:tdd"] });
     expect(invokeMock).not.toHaveBeenCalledWith("apply_take_bundled", expect.anything());

@@ -733,7 +733,7 @@ export function SettingsView({
             </div>
           </SettingRow>
         </SettingRows>
-        <p className="setting-note c-dim">Workspace install is on the Overview page; target profiles and sync are on the agent pages.</p>
+        <p className="setting-note c-dim">Update all is in the top bar; what Riggverk manages for an agent is set on that agent's page.</p>
       </Pane>
     </section>
   );
