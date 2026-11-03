@@ -5,7 +5,7 @@ Use a full clone: generators read Git history, so shallow clones are not support
 Requirements:
 
 - Node.js 22 and npm.
-- Rust via rustup, following repository toolchain files when present and the requirements in [Cargo.toml](src-tauri/Cargo.toml).
+- Rust via rustup, following [rust-toolchain.toml](rust-toolchain.toml) and the requirements in [Cargo.toml](src-tauri/Cargo.toml).
 - Python 3.11 or newer for `scripts/release-check.sh`.
 - On macOS, Xcode Command Line Tools.
 
