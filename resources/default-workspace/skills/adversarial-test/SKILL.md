@@ -14,7 +14,7 @@ metadata:
 
 One agent writes the tests, another writes the code, and neither grades its own work. A fresh adversary tries to break the change with failing tests tied to the acceptance criteria; you, the lead, keep only the tests you ran and saw fail for the stated reason, freeze them, and let the implementer change production code only. Test quality decides whether this helps: weak or over-mocked tests make the result worse, so a test that has not qualified never gates anything. The loop costs several times a plain change.
 
-**Explicit request only.** Run this skill only when the user asks for it in their own words, for example "write adversarial tests", "let an adversary write the tests", or `/adversarial-test` (in Swedish, for example "skriv adversariella tester"). Never pick it on your own, and never because a task merely mentions tests; that is `tdd`.
+**Explicit request only.** Run this skill only when the user asks for it in their own words, for example "write adversarial tests", "let an adversary write the tests", or `/adversarial-test`. Never pick it on your own, and never because a task merely mentions tests; that is `tdd`.
 
 Done when: an adversary round produced no new qualified failing test, or two rounds ran; the lead's own run of the test command is green, every kept test is byte for byte what qualified, and only tests that protect a criterion remain. Or the loop stopped at Escalated and is reported as such.
 

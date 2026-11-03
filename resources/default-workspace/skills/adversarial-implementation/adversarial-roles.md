@@ -15,7 +15,7 @@ Verification is never a role choice: the lead runs it. A `verifier` value anywhe
 
 For each role on its own, the first source that sets it wins:
 
-1. **Chat.** What the user says in this conversation, in any language, for this run only. Examples: "critic: claude", "critic=codex/<model>", "use Codex as the critic", "implementer: opencode", "adversary: codex"; a Swedish "kritiker: claude" works the same way.
+1. **Chat.** What the user says in this conversation, in any language, for this run only. Examples: "critic: claude", "critic=codex/<model>", "use Codex as the critic", "implementer: opencode", "adversary: codex".
 2. **`roles.json`** in the running skill's own directory (next to its `SKILL.md`), if present. Riggverk does not ship it yet; a later release writes it from a picker. Shape:
 
    ```json
