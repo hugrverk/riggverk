@@ -50,7 +50,7 @@ const themes = {
 describe("status pill contrast", () => {
   for (const [name, vars] of Object.entries(themes)) {
     for (const tone of ["ok", "ready", "yours", "fix", "off", "tip", "decide"]) {
-      for (const surface of ["--bg", "--bg-panel"]) {
+      for (const surface of ["--bg", "--bg-panel", "--bg-raised"]) {
         it(`${name} ${tone} on ${surface}`, () => {
           const rule = styles.match(new RegExp(`\\.state-pill\\.is-${tone}\\s*\\{([^}]+)\\}`))![1];
           const ink = rule.match(/(?:^|;)\s*color:\s*([^;]+)/)![1].trim();
