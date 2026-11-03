@@ -128,16 +128,14 @@ fn app_data_dir_named(
             Ok(PathBuf::from(appdata).join(dir_name))
         }
         Platform::Linux => {
-            let config_home = env
-                .xdg_config_home
-                .clone()
+            let config_home = xdg_config_home_dir(env.xdg_config_home.as_deref())
                 .or_else(|| {
                     resolve_user_home(env, platform)
                         .ok()
-                        .map(|h| h.join(".config").to_string_lossy().into_owned())
+                        .map(|h| h.join(".config"))
                 })
                 .ok_or_else(|| "cannot resolve XDG config home".to_string())?;
-            Ok(PathBuf::from(config_home).join(dir_name))
+            Ok(config_home.join(dir_name))
         }
     }
 }
@@ -528,6 +526,23 @@ mod tests {
             settings_file_path(&env, Platform::Linux).expect("settings"),
             PathBuf::from("/custom/config/se.hugrverk.riggverk/settings.json")
         );
+    }
+
+    #[test]
+    fn linux_settings_ignore_a_relative_or_unsafe_xdg_override() {
+        // A relative value would resolve against the working directory (XDG Base Directory
+        // specification: ignore it), the root or a `..` would escape a plain folder.
+        for value in ["relative/config", "/", "/custom/../config"] {
+            let env = PlatformEnv {
+                xdg_config_home: Some(value.into()),
+                ..linux_env()
+            };
+            assert_eq!(
+                settings_file_path(&env, Platform::Linux).expect("settings"),
+                PathBuf::from("/home/example/.config/se.hugrverk.riggverk/settings.json"),
+                "{value}"
+            );
+        }
     }
 
     #[test]
