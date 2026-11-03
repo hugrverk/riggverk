@@ -28,7 +28,7 @@ Describe the problem and what you expected.
 
 ## Output excerpt
 
-Paste the relevant, redacted excerpt from the app's Output pane.
+Paste the relevant, redacted lines from **Details** on the run line (**Copy output** copies them).
 
 ```text
 

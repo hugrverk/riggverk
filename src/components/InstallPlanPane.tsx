@@ -328,7 +328,7 @@ export function InstallPlanPane({
   };
 
   const cancelState = (): boolean | string => {
-    if (status === "applying") return "applying; it cannot be cancelled";
+    if (status === "applying") return "applying; it cannot be canceled";
     return open;
   };
 

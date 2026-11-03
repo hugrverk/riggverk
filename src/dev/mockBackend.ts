@@ -1466,7 +1466,7 @@ function lightHealthWithRules(harness: LightAgent): LightRuntimeHealth {
             : ["~/.agents/skills"],
     },
     warnings: [
-      ...(unserved ? [`No skills are installed for ${label}: it reads ~/.agents/skills, and a customised CODEX_HOME keeps Codex out of that folder.`] : []),
+      ...(unserved ? [`No skills are installed for ${label}: it reads ~/.agents/skills, and a customized CODEX_HOME keeps Codex out of that folder.`] : []),
       ...rulesWarnings,
       ...mcpWarnings,
     ],

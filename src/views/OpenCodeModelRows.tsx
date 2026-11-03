@@ -440,7 +440,7 @@ export function OpenCodeModelRows({ dataFolderOk, health, onModelUpdated, onUnsa
       )}
       <p className="c-dim runtime-note">
         Stored in app settings and applied on the next OpenCode update; workspace templates are not edited. Saving stores only the values you
-        choose: an empty main model leaves the installed value alone. Riggverk sets no model; your agent’s own default applies. The subagent model pins repo-scout, inspector, sentinel, verifier and
+        choose: an empty main model leaves the installed value alone. Riggverk sets no model; your agent's own default applies. The subagent model pins repo-scout, inspector, sentinel, verifier and
         scribe; unset, they use the main model. The critic model takes precedence for inspector only.
       </p>
     </section>

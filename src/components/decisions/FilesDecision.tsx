@@ -71,7 +71,7 @@ export function FilesDecision({ model, flow, files, markedKey, onMark, context, 
     return [
       {
         id: "bundled",
-        title: "Use Riggverk’s version",
+        title: "Use Riggverk's version",
         sub: "Replaces your file with the one Riggverk ships. Yours is backed up first.",
         keyName: "b",
         disabled: gates.bundled.reason ?? false,
@@ -147,7 +147,7 @@ export function FilesDecision({ model, flow, files, markedKey, onMark, context, 
                   active={active && isMarked}
                   onClick={() => files.runOnUnit("bundled", model.surface, unit.key)}
                 >
-                  Use Riggverk’s version…
+                  Use Riggverk's version…
                 </CellButton>
                 <CellButton gate={gates.keep} keyName="m" active={active && isMarked} onClick={() => files.runOnUnit("mine", model.surface, unit.key)}>
                   Keep mine
@@ -170,7 +170,7 @@ export function FilesDecision({ model, flow, files, markedKey, onMark, context, 
       )}
       {aside}
       {open && (
-        <Fold id={foldId} label={`Compare ${shown?.name ?? "the files"} with Riggverk’s version`}>
+        <Fold id={foldId} label={`Compare ${shown?.name ?? "the files"} with Riggverk's version`}>
           {state.status === "loading" && (
             <p className="hp-fold-status" role="status">
               <ActivityLoader />
