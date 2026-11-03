@@ -726,6 +726,38 @@ mod tests {
         );
     }
 
+    /// `allowed-tools` or `hooks` spelled so a YAML parser reads them and a line reader would not
+    /// cannot reach the pack unlisted: the frontmatter is refused as unreadable.
+    #[test]
+    fn the_preview_refuses_frontmatter_that_could_hide_a_key_from_the_flags() {
+        let env = Env::new("hidden-keys");
+        let spellings = [
+            ("explicit", "\n? allowed-tools\n: Bash(*)\n"),
+            ("tagged", "\n!!str allowed-tools: Bash(*)\n"),
+            ("carriage", "\rallowed-tools: Bash(*)\n"),
+            ("merged", "\nbase: &a\n  hooks: {}\n<<: *a\n"),
+        ];
+        let sources: Vec<PathBuf> = spellings
+            .iter()
+            .map(|(name, rest)| {
+                let text = format!("---\nname: {name}\ndescription: d{rest}---\n# Demo\n");
+                env.source(name, &[("SKILL.md", &text)])
+            })
+            .collect();
+        let shown = preview(&sources.iter().collect::<Vec<_>>());
+        let candidates = shown["candidates"].as_array().expect("candidates");
+        assert_eq!(candidates.len(), spellings.len());
+        for candidate in candidates {
+            assert_eq!(candidate["status"], "refused", "{candidate}");
+            let problems = candidate["problems"].to_string();
+            assert!(
+                problems.contains("the frontmatter cannot be read"),
+                "{problems}"
+            );
+        }
+        assert!(shown["token"].is_null(), "nothing can be imported");
+    }
+
     #[test]
     fn a_changed_staging_copy_or_a_changed_import_in_place_refuses_the_commit() {
         let env = Env::new("tamper");
