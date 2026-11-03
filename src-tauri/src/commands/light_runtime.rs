@@ -875,6 +875,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn only_version_is_ever_passed_to_the_cli_from_a_neutral_directory() {
+        let _guard = crate::test_env::guard::lock();
         let bin = Bin::new("args");
         bin.add(
             "kilo",
@@ -889,12 +890,19 @@ mod tests {
         let args = fs::read_to_string(bin.dir.join("args.txt")).expect("args recorded");
         assert_eq!(args.trim(), "--version");
         let cwd = fs::read_to_string(bin.dir.join("cwd.txt")).expect("cwd recorded");
-        let shared = fs::canonicalize(std::env::temp_dir()).expect("temp dir");
+        let shared = fs::canonicalize(
+            crate::platform_paths::app_support_dir(
+                &crate::platform_paths::PlatformEnv::from_process_env(),
+                crate::platform_paths::Platform::current(),
+            )
+            .expect("app data dir"),
+        )
+        .expect("canonical app data dir");
         let cwd = Path::new(cwd.trim());
         assert_eq!(
             cwd.parent(),
             Some(shared.as_path()),
-            "a fresh folder in the temp dir"
+            "a fresh folder in the app data dir"
         );
         assert!(!cwd.exists(), "the probe folder is removed afterwards");
     }

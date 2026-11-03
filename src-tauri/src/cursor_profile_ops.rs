@@ -650,7 +650,7 @@ pub fn run_global_mcp_only(
 
         // The setup transaction has already backed the file up; no second copy is made here.
         // Write merged MCP config
-        if let Err(e) = crate::safe_filesystem::write_regular_file_atomic(
+        if let Err(e) = crate::safe_filesystem::write_private_regular_file_atomic(
             &paths.mcp_config,
             mcp_serialized.as_bytes(),
             &paths.profile_root,
