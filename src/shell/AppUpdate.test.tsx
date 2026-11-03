@@ -31,7 +31,7 @@ const AVAILABLE = {
   status: "available" as const,
   version: "2026.11.7",
   current_version: "2026.11.6",
-  notes: "<img src=x onerror=alert(1)> **bold**",
+  notes: "## New\n\n- <img src=x onerror=alert(1)> **bold** [site](https://example.com) [file](file:///etc/passwd)\n",
   date: null,
   app_path: "/Applications/Riggverk.app",
   blocked: null,
@@ -55,18 +55,31 @@ describe("UpdateConsentCard", () => {
 });
 
 describe("AppUpdateOverlay", () => {
-  it("shows the notes as text, what is replaced, and installs on Download and restart", () => {
+  it("renders the notes as safe markdown, says what is replaced, and installs on Download and restart", () => {
     const update = fakeUpdate({ available: AVAILABLE, review: { kind: "available", update: AVAILABLE } });
     render(<AppUpdateOverlay update={update} />);
     const dialog = screen.getByRole("dialog", { name: "Riggverk 2026.11.7" });
+    expect(screen.getByRole("heading", { name: "New" })).not.toBeNull();
+    expect(dialog.querySelector("li strong")?.textContent).toBe("bold");
+    expect(dialog.textContent).not.toContain("## New");
+    // HTML in the unsigned notes is never rendered as HTML.
     expect(dialog.querySelector("img")).toBeNull();
-    expect(dialog.textContent).toContain("<img src=x onerror=alert(1)> **bold**");
+    expect(dialog.querySelector("[onerror]")).toBeNull();
+    // Only http(s) links are links; anything else is blocked text.
+    expect(screen.getByRole("link", { name: "site" }).getAttribute("href")).toBe("https://example.com");
+    expect(screen.queryByRole("link", { name: "file" })).toBeNull();
     expect(dialog.textContent).toContain("/Applications/Riggverk.app");
     expect(dialog.textContent).toContain("only the app is replaced");
     fireEvent.click(screen.getByRole("button", { name: "Download and restart" }));
     expect(update.install).toHaveBeenCalledTimes(1);
     fireEvent.keyDown(dialog, { key: "Escape" });
     expect(update.closeReview).toHaveBeenCalledTimes(1);
+  });
+
+  it("says so when a release has no notes", () => {
+    const bare = { ...AVAILABLE, notes: "  " };
+    render(<AppUpdateOverlay update={fakeUpdate({ available: bare, review: { kind: "available", update: bare } })} />);
+    expect(screen.getByText("No release notes.")).not.toBeNull();
   });
 
   it("names why an app that cannot be replaced must be moved first, and does not install", () => {
