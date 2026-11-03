@@ -443,7 +443,7 @@ def main() -> None:
     global_mcp_start = cursor_profile_ops.find("pub fn run_global_mcp_only")
     if global_mcp_start < 0:
         fail("Cursor global MCP setup owner is missing")
-    if "write_regular_file_atomic" not in cursor_profile_ops[global_mcp_start:]:
+    if not re.search(r"write_(?:private_)?regular_file_atomic", cursor_profile_ops[global_mcp_start:]):
         fail("Cursor global MCP setup must publish through safe_filesystem")
     require(
         TAURI / "managed_reconciliation_contract.rs",

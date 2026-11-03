@@ -193,7 +193,7 @@ describe("custom colours on the theme in force", () => {
   it("says which saved colours the theme does not use", () => {
     const warnings = themeColorWarnings({ appearance: "light", foreground: "#eeeeee", background: "#212121", accent: "#aaaaaa" }).join(" ");
     expect(warnings).toContain("background is dark on the light theme, so it is not used");
-    expect(warnings).toContain("below 4.5:1, so the theme text colour is used");
+    expect(warnings).toContain("below 4.5:1, so the theme text color is used");
     expect(warnings).toContain("the theme accent is used");
   });
 });

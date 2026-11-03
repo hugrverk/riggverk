@@ -202,7 +202,7 @@ describe("Codex config keys in the settings cell", () => {
   it("says Riggverk's value is unknown from a backend that does not send it, and still offers the choices", () => {
     renderCodex("conflict", { kept: [], differing: [{ key: "approvals_reviewer", value: "auto_review" }] }, CONFLICT_DETAIL);
     expect(tableRows()[0]).toEqual(["approvals_reviewer", "unknown", "differs: auto_review"]);
-    expect(surfaceRow("config").textContent).toContain("Sets approvals_reviewer to Riggverk’s value.");
+    expect(surfaceRow("config").textContent).toContain("Sets approvals_reviewer to Riggverk's value.");
   });
 
   it("shows a kept key on its cell and in the runtime, and offers hand back", () => {
@@ -383,7 +383,7 @@ describe("use Riggverk defaults (b, y)", () => {
     const added = Array.from(review().querySelectorAll(".diff-line.add")).map(row => row.querySelector(".diff-text")!.textContent);
     const removed = Array.from(review().querySelectorAll(".diff-line.remove")).map(row => row.querySelector(".diff-text")!.textContent);
     expect([removed, added]).toEqual([[' approvals_reviewer = "auto_review"'], [' approvals_reviewer = "user"']]);
-    expect(review().textContent).toContain("set approvals_reviewer to Riggverk’s value?");
+    expect(review().textContent).toContain("set approvals_reviewer to Riggverk's value?");
     expect(review().textContent).toContain("Backup:");
   });
 

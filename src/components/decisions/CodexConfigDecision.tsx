@@ -28,7 +28,7 @@ function setsText(model: CodexConfigModel): string {
   });
   const everyValueKnown = model.differing.every(item => (model.expected ?? []).some(expected => expected.key === item.key));
   const list = parts.length <= 1 ? (parts[0] ?? "") : `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
-  return everyValueKnown ? list : `${keyNames(model.differing)} to Riggverk’s ${model.differing.length === 1 ? "value" : "values"}`;
+  return everyValueKnown ? list : `${keyNames(model.differing)} to Riggverk's ${model.differing.length === 1 ? "value" : "values"}`;
 }
 
 /**
