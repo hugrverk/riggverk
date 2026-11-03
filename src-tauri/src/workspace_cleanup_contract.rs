@@ -32,8 +32,10 @@ mod tests {
     use crate::test_env::guard::{self, EnvRestore};
     use crate::test_env::{seed_workspace_copy, set_test_user_dirs};
 
-    /// `v0.1.0-rc.1`, the newest build the testers run: it predates the ownership records.
-    const RC1_COMMIT: &str = "74367d9fcd2b3d4e913cf2a4ecf2b7655a21f24b";
+    /// The bundle of `v0.1.0-rc.1` (commit 74367d9f), the newest build the testers run: it predates
+    /// the ownership records. A tree id, not a commit id: a history rewrite that leaves
+    /// `resources/default-workspace/` byte for byte keeps it, while every commit id changes.
+    const RC1_BUNDLE_TREE: &str = "4014edc449edbc7c6f7a430c7c5f58b7038bbaea";
 
     struct Env {
         base: PathBuf,
@@ -200,12 +202,10 @@ mod tests {
     /// The workspace folder an `v0.1.0-rc.1` install left: the bundle of that build, byte for
     /// byte. Returns the relative paths written.
     fn seed_rc1_workspace(ws: &Path) -> Vec<String> {
-        const PREFIX: &str = "resources/default-workspace/";
-        let listing = git(&["ls-tree", "-r", "--name-only", RC1_COMMIT, PREFIX]);
+        let listing = git(&["ls-tree", "-r", "--name-only", RC1_BUNDLE_TREE]);
         let mut written = Vec::new();
-        for path in String::from_utf8(listing).expect("utf-8 listing").lines() {
-            let rel = path.strip_prefix(PREFIX).expect("bundle path");
-            let bytes = git(&["show", &format!("{RC1_COMMIT}:{path}")]);
+        for rel in String::from_utf8(listing).expect("utf-8 listing").lines() {
+            let bytes = git(&["show", &format!("{RC1_BUNDLE_TREE}:{rel}")]);
             let dest = ws.join(rel);
             fs::create_dir_all(dest.parent().expect("parent")).expect("folder");
             fs::write(dest, bytes).expect("write rc.1 file");

@@ -36,7 +36,12 @@ import retired_workspace_files  # noqa: E402
 from generate_history import git, historical_blobs_by_rel  # noqa: E402,F401
 
 ROOT = Path(__file__).resolve().parents[1]
+# The pre-manifest ownership source. Written to the manifest and compared by managed_bootstrap.rs,
+# so it stays a commit id; it is not looked up.
 SOURCE_COMMIT = "2d85d94b6f2f1dc06f45f6ec52a22ae97e499588"
+# resources/default-workspace/ at SOURCE_COMMIT. A tree id survives a history rewrite that leaves
+# the bundle byte for byte; the commit id does not.
+SOURCE_BUNDLE_TREE = "ee0eefd4b7c8d84f7dc40de05556aaa225d9b087"
 PREFIX = "resources/default-workspace/"
 MANIFEST = ROOT / PREFIX / "metadata/pre-manifest-ownership.json"
 BOOTSTRAP = ROOT / "src-tauri/src/managed_bootstrap.rs"
@@ -240,7 +245,7 @@ def generate() -> dict[str, object]:
         return digests or set(kept.get(identity, {}).get("digests", ()))
 
     try:
-        git("cat-file", "-e", f"{SOURCE_COMMIT}^{{commit}}")
+        git("cat-file", "-e", f"{SOURCE_BUNDLE_TREE}^{{tree}}")
     except RuntimeError:
         if baseline.get("source_commit") != SOURCE_COMMIT:
             raise
