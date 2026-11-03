@@ -30,12 +30,12 @@ function candidate(extra: Partial<ImportCandidate> = {}): ImportCandidate {
 
 const SKILLS: SkillSummary[] = [{ id: "tdd", name: "tdd", description: "", path: "", group: "bundled", category: "", risk: "", targets: [], related: [] }];
 
-function renderDialog(preview: SkillImportPreview) {
+function renderDialog(preview: SkillImportPreview, routingLines: string[] = []) {
   const onPreview = vi.fn(async () => preview);
   const onCommit = vi.fn(async () => ({ imported: ["git-context"], updated: [] }));
   const onDone = vi.fn();
   render(
-    <ImportSkillDialog dropped={null} dragging={false} skills={SKILLS} packsFolder="~/.config/riggverk/packs" onPreview={onPreview} onCommit={onCommit} onDone={onDone} onClose={() => {}} />,
+    <ImportSkillDialog routingLines={routingLines} dropped={null} dragging={false} skills={SKILLS} packsFolder="~/.config/riggverk/packs" onPreview={onPreview} onCommit={onCommit} onDone={onDone} onClose={() => {}} />,
   );
   const previewPath = async (path: string) => {
     fireEvent.change(screen.getByLabelText("Or give its path"), { target: { value: path } });
@@ -66,7 +66,7 @@ describe("ImportSkillDialog", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Import" }));
     await waitFor(() => expect(onDone).toHaveBeenCalledWith({ imported: ["git-context"], updated: [] }));
-    expect(onCommit).toHaveBeenCalledWith("t1", ["0"], {});
+    expect(onCommit).toHaveBeenCalledWith("t1", ["0"], {}, {});
   });
 
   it("imports a bundled name only under a valid other name, which it sends as a rename", async () => {
@@ -88,7 +88,18 @@ describe("ImportSkillDialog", () => {
     expect(screen.getByLabelText("SKILL.md of tdd").textContent).toBe(HOSTILE.replace("name: git-context", "name: my-tdd"));
     fireEvent.click(screen.getByRole("button", { name: "Import" }));
     await waitFor(() => expect(onDone).toHaveBeenCalled());
-    expect(onCommit).toHaveBeenCalledWith("t2", ["0"], { "0": "my-tdd" });
+    expect(onCommit).toHaveBeenCalledWith("t2", ["0"], { "0": "my-tdd" }, {});
+  });
+
+  it("sends selected routing edits and previews the renamed skill", async () => {
+    const candidates = [candidate({ key: "0", name: "tdd", collision: "bundled", description: "Use when reviewing code. More." }), candidate({ key: "1", name: "existing", description: "", flags: [] }), candidate({ key: "2", name: "plain", description: "", flags: [] })];
+    const { previewPath, onCommit } = renderDialog({ token: "routing", candidates, problems: [], folder: "" }, ["- Old: `existing`."]);
+    await previewPath("~/skills");
+    fireEvent.change(screen.getByLabelText("Import as"), { target: { value: "my-tdd" } });
+    expect(screen.getByText("- Reviewing code: `my-tdd`.")).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("checkbox", { name: "Add a routing line" })[1]!);
+    fireEvent.click(screen.getByRole("button", { name: "Import 3" }));
+    await waitFor(() => expect(onCommit).toHaveBeenCalledWith("routing", ["0", "1", "2"], { "0": "my-tdd" }, { "0": "Reviewing code", "1": null }));
   });
 
   it("lists refused skills with the reason and no checkbox to tick, and shows the diff of an import in place", async () => {

@@ -80,7 +80,8 @@ pub use setup::{
 #[cfg(test)]
 pub(crate) use skill_import::renamed_skill_md;
 pub use skill_import::{
-    commit_skill_import, preview_skill_import, remove_imported_skill, undo_last_import,
+    commit_skill_import, preview_skill_import, remove_imported_skill, set_imported_skill_routing,
+    undo_last_import,
 };
 pub use skills::{get_effective_skill_loads, list_skills, read_skill};
 pub use workspace::{

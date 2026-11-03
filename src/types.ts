@@ -1135,6 +1135,9 @@ export interface ImportCandidate {
   changes: ImportFileChange[];
 }
 
+/** Routing edits keyed by preview candidate; null removes its app-managed line. */
+export type ImportRouting = Record<string, string | null>;
+
 export interface SkillImportPreview {
   /** One-time proof for `commit_skill_import`; null when nothing can be imported. */
   token: string | null;

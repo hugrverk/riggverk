@@ -9,8 +9,9 @@
 //! Every non-blank line must be a `- ` bullet whose backticked spans all name an active skill of
 //! that same pack (not shadowed by the bundle, not in error, not held), with at least one span.
 //! A line that could change how the block parses or reads (a marker or any other `<`, a heading, a
-//! code fence, a control character or an invisible format character such as a zero-width space, a
-//! bidi override or a tag character, more than [`MAX_LINE_CHARS`] characters) is refused. One bad
+//! code fence, a control character or an invisible character such as a zero-width space, a
+//! variation selector, a bidi override or a tag character, more than [`MAX_LINE_CHARS`]
+//! characters) is refused. One bad
 //! line excludes the whole file, with a fixed-phrase reason that quotes no text of it.
 //!
 //! Valid lines are rendered under [`SECTION_HEADING`], one `###` group per pack in name order, right
@@ -34,9 +35,9 @@ pub const SECTION_HEADING: &str = "## Pack skill routing";
 /// The base section the pack section follows.
 const ANCHOR_HEADING: &str = "## Skill routing";
 /// Largest `routing.md` read.
-pub const MAX_ROUTING_BYTES: u64 = 4 * 1024;
+pub const MAX_ROUTING_BYTES: u64 = 12 * 1024;
 /// Most lines a `routing.md` may have, blank ones included.
-pub const MAX_ROUTING_LINES: usize = 30;
+pub const MAX_ROUTING_LINES: usize = 60;
 /// Longest line, in characters.
 pub const MAX_LINE_CHARS: usize = 240;
 
@@ -118,6 +119,66 @@ pub(crate) fn read(pack_dir: &Path, own_skills: &BTreeSet<&str>) -> PackRouting 
     }
 }
 
+/// The line the app writes into the imported pack's `routing.md` for `name`: ``- {when}: `{name}`.``,
+/// checked by the same rules as the reader, so a saved line is never what excludes the file. `when`
+/// may name no skill and hold no markup; the reason is a fixed phrase that quotes none of it.
+pub(crate) fn routing_line(when: &str, name: &str) -> Result<String, String> {
+    if when
+        .chars()
+        .any(|c| c.is_control() || is_invisible_in_routing(c))
+    {
+        return Err("invalid routing description".to_string());
+    }
+    let when = when.trim();
+    if when.is_empty() || when.starts_with('#') || when.contains(['`', '<']) || when.contains("~~~")
+    {
+        return Err("invalid routing description".to_string());
+    }
+    let line = format!("- {when}: `{name}`.");
+    validate(&line, &BTreeSet::from([name]))
+        .map_err(|_| "invalid routing description".to_string())?;
+    Ok(line)
+}
+
+/// The `when` of `line` when it has exactly the form [`routing_line`] writes for `name` (trailing
+/// whitespace aside, as the reader trims it); `None` for any other line, which stays as it is.
+pub(crate) fn own_when(line: &str, name: &str) -> Option<String> {
+    let when = line
+        .trim_end()
+        .strip_prefix("- ")?
+        .strip_suffix(&format!(": `{name}`."))?;
+    (!when.is_empty() && !when.contains('`')).then(|| when.to_string())
+}
+
+/// The text of `<pack_dir>/routing.md` ("" when there is none), under the same trust checks as
+/// [`read`] but without validating its lines, so the app can edit a file that is not used.
+pub(crate) fn read_raw(pack_dir: &Path) -> Result<String, String> {
+    let path = pack_dir.join(ROUTING_FILE);
+    let bad = || "routing.md cannot be read safely".to_string();
+    let meta = match fs::symlink_metadata(&path) {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(String::new()),
+        Err(_) => return Err(bad()),
+        Ok(meta) => meta,
+    };
+    if meta.file_type().is_symlink()
+        || !meta.is_file()
+        || meta.len() > MAX_ROUTING_BYTES
+        || crate::skill_sources::check_trusted_path(&path, pack_dir, &meta, ROUTING_FILE).is_err()
+    {
+        return Err(bad());
+    }
+    let mut bytes = Vec::new();
+    open_checked(&path, &meta)
+        .map_err(|_| bad())?
+        .take(MAX_ROUTING_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|_| bad())?;
+    if bytes.len() as u64 > MAX_ROUTING_BYTES {
+        return Err(bad());
+    }
+    String::from_utf8(bytes).map_err(|_| bad())
+}
+
 /// Opens the file checked above, and refuses it when what opened is not that file any more (a link
 /// or another file swapped in between the check and the open).
 fn open_checked(path: &Path, checked: &fs::Metadata) -> std::io::Result<fs::File> {
@@ -164,7 +225,7 @@ fn validate(text: &str, own_skills: &BTreeSet<&str>) -> Result<Vec<String>, Stri
         // reach the agent, so they get the same fixed phrase as a control character.
         if line
             .chars()
-            .any(|c| (c.is_control() && c != '\t') || is_invisible_format(c))
+            .any(|c| (c.is_control() && c != '\t') || is_invisible_in_routing(c))
         {
             return refuse("holds a control character");
         }
@@ -223,6 +284,36 @@ pub(crate) fn is_invisible_format(c: char) -> bool {
             | 0xE0001
             | 0xE0020..=0xE007F
     )
+}
+
+/// A character a routing line refuses because it shows as nothing: the invisible format characters
+/// above, plus the other default-ignorable code points that are not format characters (combining
+/// grapheme joiner, Hangul fillers, Khmer inherent vowels, Mongolian and other variation selectors)
+/// and the blank Braille pattern. Variation selectors can encode text no diff shows, and a routing
+/// line reaches every agent; a `SKILL.md` is only flagged, so this stricter set is routing's own.
+fn is_invisible_in_routing(c: char) -> bool {
+    is_invisible_format(c)
+        || matches!(
+            u32::from(c),
+            0x034F
+                | 0x115F..=0x1160
+                | 0x17B4..=0x17B5
+                | 0x180B..=0x180F
+                | 0x2800
+                | 0x3164
+                | 0xFE00..=0xFE0F
+                | 0xFFA0
+                | 0xE0100..=0xE01EF
+        )
+}
+
+/// Whether `line` names `name` in one of its backticked spans (any line holding `` `name` `` when
+/// its backticks do not pair, since the reader refuses such a line anyway).
+pub(crate) fn names_skill(line: &str, name: &str) -> bool {
+    match backticked(line) {
+        Some(spans) => spans.contains(&name),
+        None => line.contains(&format!("`{name}`")),
+    }
 }
 
 /// The backticked spans of `line`; `None` when a backtick is unpaired or a span is empty.
@@ -329,6 +420,46 @@ mod tests {
         names.iter().copied().collect()
     }
 
+    #[test]
+    fn generated_lines_validate_and_round_trip() {
+        assert_eq!(
+            routing_line("  Use for testing  ", "mine").unwrap(),
+            "- Use for testing: `mine`."
+        );
+        for when in [
+            "",
+            "a`b",
+            "<tag>",
+            "a\nb",
+            "\ntrimmed",
+            "a\u{200b}b",
+            "a\u{fe0f}b",
+            "a\u{e0100}b",
+            "a\u{3164}b",
+            "# heading",
+            "~~~",
+            &"x".repeat(241),
+        ] {
+            assert!(routing_line(when, "mine").is_err());
+        }
+        assert_eq!(
+            own_when("- Use for testing: `mine`.", "mine"),
+            Some("Use for testing".into())
+        );
+        assert_eq!(
+            own_when("- Use for testing: `mine`.  \r", "mine"),
+            Some("Use for testing".into())
+        );
+        for line in [
+            "- Use: `mine`",
+            "- Use `other`: `mine`.",
+            "- Use: `other`.",
+            "- : `mine`.",
+        ] {
+            assert_eq!(own_when(line, "mine"), None);
+        }
+    }
+
     const BASE: &str =
         "# Rules\n\n## Skill routing\nIntro.\n- Bugs: `diagnose`.\n\n## Task flow\nPlan.\n";
 
@@ -428,6 +559,19 @@ mod tests {
                 "- isolate \u{2066} `mine`\n",
                 "line 1 holds a control character",
             ),
+            // So are variation selectors and the other default-ignorable code points.
+            (
+                "- selector\u{FE0F} `mine`\n",
+                "line 1 holds a control character",
+            ),
+            (
+                "- hidden\u{E0101}\u{E0102} `mine`\n",
+                "line 1 holds a control character",
+            ),
+            (
+                "- filler\u{3164} `mine`\n",
+                "line 1 holds a control character",
+            ),
             (
                 "- tag \u{E0041} `mine`\n",
                 "line 1 holds a control character",
@@ -475,7 +619,7 @@ mod tests {
         let many = "- `mine`\n".repeat(MAX_ROUTING_LINES + 1);
         assert!(validate(&many, &skills)
             .unwrap_err()
-            .contains("more than 30 lines"));
+            .contains("more than 60 lines"));
         let exact = "- `mine`\n".repeat(MAX_ROUTING_LINES);
         assert_eq!(
             validate(&exact, &skills).map(|l| l.len()),

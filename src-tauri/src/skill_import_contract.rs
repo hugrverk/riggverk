@@ -13,7 +13,7 @@ mod tests {
 
     use crate::commands::{
         apply_setup, commit_skill_import, copy_skill_to_pack, list_pack_skills, preview_setup,
-        preview_skill_import, remove_imported_skill, undo_last_import,
+        preview_skill_import, remove_imported_skill, set_imported_skill_routing, undo_last_import,
     };
     use crate::setup_lifecycle::{OperationKind, SetupSurfaceId};
     use crate::skill_roots::SkillRoot;
@@ -169,8 +169,168 @@ mod tests {
             preview["token"].as_str().unwrap_or_default().to_string(),
             keys.iter().map(|key| key.to_string()).collect(),
             BTreeMap::new(),
+            BTreeMap::new(),
         )
         .map(json)
+    }
+
+    #[test]
+    fn routing_follows_renames_removal_and_undo() {
+        let env = Env::new("routing");
+        let source = env.source("release-notes-plus", &[("SKILL.md", SPEC)]);
+        let shown = preview(&[&source]);
+        let token = shown["token"].as_str().unwrap().to_string();
+        assert!(commit_skill_import(
+            token,
+            vec!["0".into()],
+            BTreeMap::new(),
+            BTreeMap::from([("0".into(), Some("bad <tag>".into()))])
+        )
+        .is_err());
+        assert!(!env.imported().join("renamed").exists());
+        assert!(!env.imported().join("release-notes-plus").exists());
+        let shown = preview(&[&source]);
+        commit_skill_import(
+            shown["token"].as_str().unwrap().into(),
+            vec!["0".into()],
+            BTreeMap::from([("0".into(), "renamed".into())]),
+            BTreeMap::from([("0".into(), Some("Use for notes".into()))]),
+        )
+        .unwrap();
+        let path = env.ws.join("packs/imported/routing.md");
+        assert_eq!(
+            fs::read_to_string(&path).unwrap(),
+            "- Use for notes: `renamed`.\n"
+        );
+        set_imported_skill_routing("renamed".into(), Some("Use for releases".into())).unwrap();
+        fs::write(
+            &path,
+            "- Use for releases: `renamed`.\n- Hand-picked for `renamed` too.\n",
+        )
+        .unwrap();
+        remove_imported_skill("renamed".into()).unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), "");
+        assert_eq!(
+            env.record()["events"][1]["routing"]
+                .as_array()
+                .unwrap()
+                .len(),
+            2
+        );
+        undo_last_import().unwrap();
+        assert_eq!(
+            fs::read_to_string(&path).unwrap(),
+            "- Use for releases: `renamed`.\n- Hand-picked for `renamed` too.\n"
+        );
+        undo_last_import().unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), "");
+        assert_eq!(
+            env.record()["events"][3]["routing"]
+                .as_array()
+                .unwrap()
+                .len(),
+            2
+        );
+    }
+
+    #[test]
+    fn undoing_a_replacement_puts_back_the_routing_line_it_replaced() {
+        let env = Env::new("routing-replace");
+        let source = env.source("release-notes-plus", &[("SKILL.md", SPEC)]);
+        let shown = preview(&[&source]);
+        commit_skill_import(
+            shown["token"].as_str().unwrap().into(),
+            vec!["0".into()],
+            BTreeMap::new(),
+            BTreeMap::from([("0".into(), Some("Notes".into()))]),
+        )
+        .unwrap();
+        let path = env.ws.join("packs/imported/routing.md");
+        fs::write(source.join("SKILL.md"), format!("{SPEC}\nMore.\n")).unwrap();
+        let shown = preview(&[&source]);
+        commit_skill_import(
+            shown["token"].as_str().unwrap().into(),
+            vec!["0".into()],
+            BTreeMap::new(),
+            BTreeMap::from([("0".into(), Some("Release notes".into()))]),
+        )
+        .unwrap();
+        assert_eq!(
+            fs::read_to_string(&path).unwrap(),
+            "- Release notes: `release-notes-plus`.\n"
+        );
+        undo_last_import().unwrap();
+        assert_eq!(
+            fs::read_to_string(&path).unwrap(),
+            "- Notes: `release-notes-plus`.\n"
+        );
+    }
+
+    #[test]
+    fn a_routed_import_over_the_line_limit_is_refused_before_anything_is_published() {
+        let env = Env::new("routing-full");
+        let source = env.source("release-notes-plus", &[("SKILL.md", SPEC)]);
+        let path = env.ws.join("packs/imported/routing.md");
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(&path, "\n".repeat(crate::pack_routing::MAX_ROUTING_LINES)).unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
+        }
+        let shown = preview(&[&source]);
+        let error = commit_skill_import(
+            shown["token"].as_str().unwrap().into(),
+            vec!["0".into()],
+            BTreeMap::new(),
+            BTreeMap::from([("0".into(), Some("Notes".into()))]),
+        )
+        .expect_err("over the limit");
+        assert!(error.contains("longer than"), "{error}");
+        assert!(!env.imported().join("release-notes-plus").exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn an_unsafe_routing_file_refuses_routed_imports_but_never_blocks_a_removal() {
+        use std::os::unix::fs::PermissionsExt;
+        let env = Env::new("routing-unsafe");
+        let source = env.source("release-notes-plus", &[("SKILL.md", SPEC)]);
+        let shown = preview(&[&source]);
+        commit_skill_import(
+            shown["token"].as_str().unwrap().into(),
+            vec!["0".into()],
+            BTreeMap::new(),
+            BTreeMap::new(),
+        )
+        .unwrap();
+        let path = env.ws.join("packs/imported/routing.md");
+        fs::write(&path, "- Notes: `release-notes-plus`.\n").unwrap();
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o666)).unwrap();
+        // A changed source, so the preview offers an import in place.
+        fs::write(source.join("SKILL.md"), format!("{SPEC}\nMore.\n")).unwrap();
+        let shown = preview(&[&source]);
+        assert!(commit_skill_import(
+            shown["token"].as_str().unwrap().into(),
+            vec!["0".into()],
+            BTreeMap::new(),
+            BTreeMap::from([("0".into(), Some("Use for notes".into()))]),
+        )
+        .is_err());
+        // Refused before anything was published: the copy in place is the first import.
+        let installed = env.imported().join("release-notes-plus/SKILL.md");
+        assert!(!fs::read_to_string(installed).unwrap().contains("More."));
+        assert!(set_imported_skill_routing("release-notes-plus".into(), None).is_err());
+        let removed = remove_imported_skill("release-notes-plus".into()).unwrap();
+        assert!(
+            removed.contains("routing.md cannot be read safely"),
+            "{removed}"
+        );
+        assert!(!env.imported().join("release-notes-plus").exists());
+        assert_eq!(
+            fs::read_to_string(&path).unwrap(),
+            "- Notes: `release-notes-plus`.\n"
+        );
     }
 
     #[test]
@@ -605,6 +765,7 @@ mod tests {
             shown["token"].as_str().expect("token").into(),
             vec!["0".into()],
             renames,
+            BTreeMap::new(),
         )
         .expect("renamed import");
         assert_eq!(
@@ -630,6 +791,7 @@ mod tests {
             shown["token"].as_str().expect("token").into(),
             vec!["0".into()],
             BTreeMap::from([("0".to_string(), "quoted-two".to_string())]),
+            BTreeMap::new(),
         )
         .expect_err("not renamed");
         assert!(error.contains("no plain name"), "{error}");

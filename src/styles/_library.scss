@@ -661,6 +661,10 @@ dialog.app-modal.lib-import { width: min(760px, calc(100vw - 32px)); }
 .lib-import-files li { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
 
 .lib-import-rename { display: grid; gap: var(--sp-1); }
+.lib-import-routing { display: grid; gap: var(--sp-1); min-width: 0; }
+.lib-import-routing-toggle { display: inline-flex; gap: var(--sp-2); align-items: center; }
+.lib-import-routing > p { margin: 0; }
+.lib-import-routing-line { color: var(--text-muted); overflow-wrap: anywhere; }
 
 .lib-import-details { display: grid; gap: var(--sp-2); }
 .lib-import-details > summary { color: var(--text-muted); cursor: pointer; }

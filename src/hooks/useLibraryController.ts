@@ -14,6 +14,7 @@ import type {
   ConfigEditorSourceMeta,
   DocSummary,
   DocumentContent,
+  ImportRouting,
   PackLibrary,
   PackSkillCopy,
   SkillImportPreview,
@@ -918,11 +919,23 @@ export function useLibraryController({
     [],
   );
 
-  /** Publishes the previewed skills into pack:imported, then lists the packs again. Refusals are thrown for the dialog. */
-  const commitSkillImport = useCallback(async (token: string, selection: string[], renames: Record<string, string>) => {
-    const result = await invoke<SkillImportResult>("commit_skill_import", { token, selection, renames });
+  /**
+   * Publishes the previewed skills into pack:imported, then lists the packs again, also after a refusal, which may
+   * come after some skills are in. Refusals are thrown for the dialog.
+   */
+  const commitSkillImport = useCallback(async (token: string, selection: string[], renames: Record<string, string>, routing: ImportRouting) => {
+    try {
+      return await invoke<SkillImportResult>("commit_skill_import", { token, selection, renames, routing });
+    } finally {
+      await loadSkills();
+    }
+  }, [loadSkills]);
+
+  /** Saves (or with null removes) an imported skill's routing line, then lists the packs again. Refusals are thrown. */
+  const setImportedSkillRouting = useCallback(async (name: string, when: string | null) => {
+    const message = await invoke<string>("set_imported_skill_routing", { name, when });
     await loadSkills();
-    return result;
+    return message;
   }, [loadSkills]);
 
   /** Moves an imported skill into a backup once the user agrees; resolves with the notice, or null. */
@@ -1013,6 +1026,7 @@ export function useLibraryController({
     copySkillToPack,
     previewSkillImport,
     commitSkillImport,
+    setImportedSkillRouting,
     removeImportedSkill,
     undoLastImport,
     docs,

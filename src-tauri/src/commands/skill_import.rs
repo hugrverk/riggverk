@@ -192,6 +192,14 @@ struct ImportEvent {
     /// The record of the copy this event moved away.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     previous: Option<ImportRecord>,
+    /// The `routing.md` lines this event took out, as written: every line naming the skill for a
+    /// removal or an undone import, the skill's own line(s) for a replacement that set its routing,
+    /// so undoing it can put them back. Older records have none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    routing: Vec<String>,
+    /// A replacement that set the skill's routing line, so undoing it puts back `routing`.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    routing_set: bool,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -1398,6 +1406,127 @@ fn write_record(root: &Path, document: &mut RecordDocument) -> Result<(), String
     .map_err(|_| "cannot write the import record".to_string())
 }
 
+// ── Routing of imported skills ──
+//
+// The app keeps one line per imported skill in `packs/imported/routing.md`, in the form
+// `pack_routing::routing_line` writes; lines of any other form are the user's and stay byte for byte.
+// Only this app-owned pack is ever written. The reader validates the file as it does any pack's.
+
+/// Refuses `text` over the reader's limits, which would exclude the whole file. Checked by every
+/// edit that adds a line; one that only takes lines out (a removal, an undone import) or puts the
+/// file back after a failure writes whatever it has, so a file the user made too long by hand never
+/// blocks a removal.
+fn routing_check(text: &str) -> Result<(), String> {
+    use crate::pack_routing::{MAX_ROUTING_BYTES, MAX_ROUTING_LINES};
+    if text.len() as u64 > MAX_ROUTING_BYTES {
+        return Err(format!(
+            "routing.md would be larger than {MAX_ROUTING_BYTES} bytes"
+        ));
+    }
+    if text.split_inclusive('\n').count() > MAX_ROUTING_LINES {
+        return Err(format!(
+            "routing.md would be longer than {MAX_ROUTING_LINES} lines"
+        ));
+    }
+    Ok(())
+}
+
+/// Writes `text` as the imported pack's `routing.md` (see [`routing_check`] for the limits).
+fn routing_write(root: &Path, text: &str) -> Result<(), String> {
+    let pack = imported_pack_dir(root);
+    crate::safe_filesystem::write_private_regular_file_atomic(
+        &pack.join(crate::pack_routing::ROUTING_FILE),
+        text.as_bytes(),
+        &pack,
+    )
+    .map_err(|_| "routing.md cannot be written safely".to_string())
+}
+
+/// `text` with each `(name, line)` applied to the app's own line of `name`: a line replaces the
+/// first one in place (further ones go) or is appended; `None` takes them out.
+fn routing_edit(text: &str, edits: &[(String, Option<String>)]) -> String {
+    // The reader skips a leading byte order mark; it stays in front of the first line.
+    let (bom, text) = match text.strip_prefix('\u{feff}') {
+        Some(rest) => ("\u{feff}", rest),
+        None => ("", text),
+    };
+    let mut out = text.to_string();
+    for (name, replacement) in edits {
+        let mut next = String::new();
+        let mut found = false;
+        for line in out.split_inclusive('\n') {
+            if crate::pack_routing::own_when(line, name).is_none() {
+                next.push_str(line);
+                continue;
+            }
+            if !found {
+                if let Some(new) = replacement {
+                    next.push_str(new);
+                    next.push('\n');
+                }
+                found = true;
+            }
+        }
+        if let (false, Some(new)) = (found, replacement) {
+            if !next.is_empty() && !next.ends_with('\n') {
+                next.push('\n');
+            }
+            next.push_str(new);
+            next.push('\n');
+        }
+        out = next;
+    }
+    format!("{bom}{out}")
+}
+
+/// The app's own line(s) of `name` in `text`, without a leading byte order mark.
+fn routing_own_lines(text: &str, name: &str) -> Vec<String> {
+    text.strip_prefix('\u{feff}')
+        .unwrap_or(text)
+        .split_inclusive('\n')
+        .filter(|line| crate::pack_routing::own_when(line, name).is_some())
+        .map(str::to_string)
+        .collect()
+}
+
+/// `text` without every line that names `name` in backticks, the app's or the user's, since a line
+/// naming a skill that is gone would exclude the whole file; and the lines taken out.
+fn routing_remove_named(text: &str, name: &str) -> (String, Vec<String>) {
+    let mut kept = String::new();
+    let mut removed = Vec::new();
+    for line in text.split_inclusive('\n') {
+        if crate::pack_routing::names_skill(line, name) {
+            removed.push(line.to_string());
+        } else {
+            kept.push_str(line);
+        }
+    }
+    (kept, removed)
+}
+
+/// `text` with `lines` (as [`routing_remove_named`] took them out) appended again.
+fn routing_restore(mut text: String, lines: &[String]) -> String {
+    for line in lines {
+        if !text.is_empty() && !text.ends_with('\n') {
+            text.push('\n');
+        }
+        text.push_str(line);
+    }
+    text
+}
+
+/// The imported pack's `routing.md` before and after `edit`, and the lines `edit` took out; `None`
+/// when nothing changes or the file cannot be read safely. The reader does not use such a file, so
+/// removing or restoring a skill goes on without touching it.
+fn routing_change(
+    root: &Path,
+    edit: impl FnOnce(&str) -> (String, Vec<String>),
+) -> Option<(String, String, Vec<String>)> {
+    let before = crate::pack_routing::read_raw(&imported_pack_dir(root)).ok()?;
+    let (after, removed) = edit(&before);
+    (after != before).then_some((before, after, removed))
+}
+
 /// The index of the event [`undo_last_import`] undoes: the latest one no undo has taken back.
 fn undoable(document: &RecordDocument) -> Option<usize> {
     let mut stack = Vec::new();
@@ -1577,6 +1706,7 @@ pub fn commit_skill_import(
     token: String,
     selection: Vec<String>,
     renames: BTreeMap<String, String>,
+    routing: BTreeMap<String, Option<String>>,
 ) -> Result<SkillImportResult, String> {
     if token.len() != 64 || !token.chars().all(|c| c.is_ascii_hexdigit()) {
         return Err("invalid or expired preview token".to_string());
@@ -1590,7 +1720,7 @@ pub fn commit_skill_import(
         .map_err(|_| "data folder is unavailable or unsafe".to_string())?;
     let staging = staging_root(&root);
     let stage = staging.join(&token);
-    let result = commit_staged(&root, &stage, &token, &selection, &renames);
+    let result = commit_staged(&root, &stage, &token, &selection, &renames, &routing);
     if fs::symlink_metadata(&stage).is_ok_and(|meta| meta.is_dir()) {
         let _ = crate::safe_filesystem::remove_dir_no_symlinks(&stage, &staging);
     }
@@ -1603,6 +1733,7 @@ fn commit_staged(
     token: &str,
     selection: &[String],
     renames: &BTreeMap<String, String>,
+    routing: &BTreeMap<String, Option<String>>,
 ) -> Result<SkillImportResult, String> {
     let changed = "the skill or the import in place changed since the preview; preview it again";
     crate::path_safety::reject_symlink(stage, "staging folder")
@@ -1715,6 +1846,28 @@ fn commit_staged(
         ));
     }
 
+    // Routing is checked and read before anything is published, so a bad line or an unsafe
+    // routing.md refuses the import as a whole.
+    let mut routing_edits = Vec::new();
+    for (candidate, name, _, _) in &plan {
+        if let Some(when) = routing.get(&candidate.key) {
+            routing_edits.push((
+                name.clone(),
+                when.as_deref()
+                    .map(|when| crate::pack_routing::routing_line(when, name))
+                    .transpose()?,
+            ));
+        }
+    }
+    let routing_text = if routing_edits.is_empty() {
+        None
+    } else {
+        let text = crate::pack_routing::read_raw(&imported_pack_dir(root))?;
+        let edited = routing_edit(&text, &routing_edits);
+        routing_check(&edited)?;
+        Some((text, edited))
+    };
+    let routing_set_for = |name: &str| routing_edits.iter().any(|(edited, _)| edited == name);
     let mut document = read_record(root)?;
     let skills = super::packs::create_pack_skill_dirs(root, IMPORTED_PACK)?;
     let mut result = SkillImportResult {
@@ -1758,6 +1911,13 @@ fn commit_staged(
             at: now_secs(),
             backup,
             previous: if replacing { previous.clone() } else { None },
+            routing: match &routing_text {
+                Some((text, _)) if replacing && routing_set_for(&name) => {
+                    routing_own_lines(text, &name)
+                }
+                _ => Vec::new(),
+            },
+            routing_set: replacing && routing_set_for(&name),
         });
         if let Err(error) = write_record(root, &mut document) {
             unpublish(&skills, &name, aside);
@@ -1771,6 +1931,20 @@ fn commit_staged(
             result.imported.push(name);
         }
     }
+    if let Some((text, edited)) = routing_text {
+        if edited != text {
+            if let Err(error) = routing_write(root, &edited) {
+                let done = result
+                    .imported
+                    .iter()
+                    .chain(&result.updated)
+                    .cloned()
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                return Err(format!("{done} imported; routing was not saved: {error}"));
+            }
+        }
+    }
     Ok(result)
 }
 
@@ -1782,6 +1956,53 @@ fn locked_imported_skill(root: &Path, name: &str) -> Result<(PathBuf, PathBuf), 
     crate::path_safety::reject_symlink_parent_chain(&dir, root, "imported skill")
         .map_err(|_| "refusing a symlink in the imported skill path".to_string())?;
     Ok((skills, dir))
+}
+
+/// Saves or removes the app-managed routing line of an imported skill.
+#[tauri::command(async)]
+pub fn set_imported_skill_routing(name: String, when: Option<String>) -> Result<String, String> {
+    if !valid_spec_skill_name(&name) {
+        return Err("not an imported skill name".to_string());
+    }
+    let line = when
+        .as_deref()
+        .map(|when| crate::pack_routing::routing_line(when, &name))
+        .transpose()?;
+    let _mutation = crate::mutation_lock::acquire()?;
+    let _guard = crate::setup_mutation_guard::try_acquire_setup_mutation_guard()?;
+    let root = workspace_target_for_write()
+        .map_err(|_| "data folder is unavailable or unsafe".to_string())?;
+    let (_, dir) = locked_imported_skill(&root, &name)?;
+    if !fs::symlink_metadata(&dir).is_ok_and(|meta| meta.is_dir() && !meta.file_type().is_symlink())
+    {
+        return Err(format!("no imported skill is named {name}"));
+    }
+    // The reader routes only to active skills: a line for a shadowed or broken one would exclude
+    // the whole file. Taking a line out is always allowed.
+    if line.is_some() {
+        let sources = sources_for(&root)?;
+        let active = sources.packs().iter().any(|pack| {
+            pack.name == IMPORTED_PACK
+                && pack.skills.iter().any(|skill| {
+                    skill.name == name
+                        && skill.state == crate::skill_sources::PackSkillState::Active
+                })
+        });
+        if !active {
+            return Err(format!(
+                "{name} is not active (shadowed by a bundled skill or not valid), so it cannot be routed to"
+            ));
+        }
+    }
+    let text = crate::pack_routing::read_raw(&imported_pack_dir(&root))?;
+    let edited = routing_edit(&text, &[(name.clone(), line)]);
+    routing_check(&edited)?;
+    routing_write(&root, &edited)?;
+    Ok(if when.is_some() {
+        format!("Routing for {name} saved; the next Update adds it to your rules files")
+    } else {
+        format!("Routing for {name} removed; the next Update takes it out of your rules files")
+    })
 }
 
 /// Moves the imported skill `name` into a backup (never deletes it) and records the removal. The
@@ -1801,6 +2022,8 @@ pub fn remove_imported_skill(name: String) -> Result<String, String> {
         _ => return Err(format!("no imported skill is named {name}")),
     }
     let mut document = read_record(&root)?;
+    let routing = routing_change(&root, |text| routing_remove_named(text, &name));
+    let routing_unread = crate::pack_routing::read_raw(&imported_pack_dir(&root)).is_err();
     let backup = back_up(&dir, &name)?;
     let previous = document.skills.remove(&name);
     document.events.push(ImportEvent {
@@ -1809,16 +2032,35 @@ pub fn remove_imported_skill(name: String) -> Result<String, String> {
         at: now_secs(),
         backup: Some(backup),
         previous,
+        routing: routing
+            .as_ref()
+            .map(|(_, _, removed)| removed.clone())
+            .unwrap_or_default(),
+        routing_set: false,
     });
     let aside = skills.join(format!(".removed-{}", nonce()?));
     fs::rename(&dir, &aside).map_err(|_| "cannot remove the imported skill".to_string())?;
+    if let Some((_, after, _)) = &routing {
+        if let Err(error) = routing_write(&root, after) {
+            let _ = fs::rename(&aside, &dir);
+            return Err(error);
+        }
+    }
     if let Err(error) = write_record(&root, &mut document) {
+        if let Some((before, _, _)) = &routing {
+            let _ = routing_write(&root, before);
+        }
         let _ = fs::rename(&aside, &dir);
         return Err(error);
     }
     let _ = crate::safe_filesystem::remove_dir_no_symlinks(&aside, &skills);
     Ok(format!(
-        "{name} removed from pack:imported, with a backup; the next Update removes the installed copies"
+        "{name} removed from pack:imported, with a backup; the next Update removes the installed copies{}",
+        if routing_unread {
+            "; routing.md cannot be read safely, so a line naming it is still there"
+        } else {
+            ""
+        }
     ))
 }
 
@@ -1870,6 +2112,31 @@ pub fn undo_last_import() -> Result<String, String> {
             return Err(problem);
         }
     }
+    // An undone import takes its lines out; an undone removal puts back the lines it took out.
+    let routing = match event.action {
+        EventAction::Import => routing_change(&root, |text| routing_remove_named(text, &name)),
+        EventAction::Remove => routing_change(&root, |text| {
+            (
+                routing_restore(text.to_string(), &event.routing),
+                Vec::new(),
+            )
+        }),
+        // An undone replacement that set the line puts back the line the skill had, or none.
+        EventAction::Replace if event.routing_set => routing_change(&root, |text| {
+            let line = event
+                .routing
+                .first()
+                .map(|line| line.trim_end().to_string());
+            (routing_edit(text, &[(name.clone(), line)]), Vec::new())
+        }),
+        _ => None,
+    };
+    // Lines put back must fit; this is known before anything is moved.
+    if let (Some((_, after, _)), EventAction::Remove | EventAction::Replace) =
+        (&routing, &event.action)
+    {
+        routing_check(after)?;
+    }
     let backup = if in_place.is_some() {
         Some(back_up(&dir, &name)?)
     } else {
@@ -1898,8 +2165,20 @@ pub fn undo_last_import() -> Result<String, String> {
         at: now_secs(),
         backup,
         previous: None,
+        routing: routing
+            .as_ref()
+            .map(|(_, _, removed)| removed.clone())
+            .unwrap_or_default(),
+        routing_set: false,
     });
-    if let Err(error) = write_record(&root, &mut document) {
+    let saved = match &routing {
+        Some((_, after, _)) => routing_write(&root, after),
+        None => Ok(()),
+    };
+    if let Err(error) = saved.and_then(|()| write_record(&root, &mut document)) {
+        if let Some((before, _, _)) = &routing {
+            let _ = routing_write(&root, before);
+        }
         match (&restore, aside) {
             (Some(_), aside) => unpublish(&skills, &name, aside),
             (None, Some(aside)) => {
@@ -1917,6 +2196,66 @@ pub fn undo_last_import() -> Result<String, String> {
         EventAction::Replace => format!("{name} is back as it was before it was imported again"),
         _ => format!("{name} is back in pack:imported"),
     })
+}
+
+#[cfg(test)]
+mod routing_tests {
+    use super::*;
+
+    #[test]
+    fn edits_preserve_other_lines_and_enforce_limits() {
+        let text = "- Old: `mine`.\r\n- Hand written `mine` and `other`.  \n- Again: `mine`.\n";
+        let edited = routing_edit(
+            text,
+            &[
+                ("mine".into(), Some("- New: `mine`.".into())),
+                ("other".into(), Some("- Other: `other`.".into())),
+            ],
+        );
+        assert_eq!(
+            edited,
+            "- New: `mine`.\n- Hand written `mine` and `other`.  \n- Other: `other`.\n"
+        );
+        assert_eq!(
+            routing_edit(&edited, &[("mine".into(), None)]),
+            "- Hand written `mine` and `other`.  \n- Other: `other`.\n"
+        );
+        let root = std::env::temp_dir().join(format!("routing-test-{}", nonce().unwrap()));
+        fs::create_dir_all(imported_pack_dir(&root)).unwrap();
+        assert!(routing_check(&"x\n".repeat(61)).is_err());
+        assert!(routing_check(&"x\n".repeat(60)).is_ok());
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink(
+                root.join("elsewhere"),
+                imported_pack_dir(&root).join("routing.md"),
+            )
+            .unwrap();
+            assert!(crate::pack_routing::read_raw(&imported_pack_dir(&root)).is_err());
+        }
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn a_byte_order_mark_stays_in_front_and_the_first_line_is_still_found() {
+        let text = "\u{feff}- Old: `mine`.\n- Hand `mine` too.\n";
+        assert_eq!(
+            routing_edit(text, &[("mine".into(), Some("- New: `mine`.".into()))]),
+            "\u{feff}- New: `mine`.\n- Hand `mine` too.\n"
+        );
+        assert_eq!(
+            routing_edit(text, &[("mine".into(), None)]),
+            "\u{feff}- Hand `mine` too.\n"
+        );
+        assert_eq!(routing_own_lines(text, "mine"), vec!["- Old: `mine`.\n"]);
+    }
+
+    #[test]
+    fn old_events_default_to_no_routing() {
+        let event: ImportEvent =
+            serde_json::from_str(r#"{"action":"remove","name":"mine","at":1}"#).unwrap();
+        assert!(event.routing.is_empty());
+    }
 }
 
 #[cfg(test)]

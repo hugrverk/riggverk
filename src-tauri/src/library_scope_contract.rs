@@ -25,7 +25,7 @@ mod tests {
     /// `commit_skill_import`, `remove_imported_skill` and `undo_last_import` only inside
     /// `<data>/packs/imported/` and the backups. `preview_skill_import` reads the source and writes
     /// only its private staging copy in the state folder.
-    const WRITE_COMMANDS: [&str; 22] = [
+    const WRITE_COMMANDS: [&str; 23] = [
         "save_doc",
         "create_doc",
         "save_rules_refinements",
@@ -42,6 +42,7 @@ mod tests {
         "forget_pack",
         "commit_skill_import",
         "remove_imported_skill",
+        "set_imported_skill_routing",
         "undo_last_import",
         "apply_take_bundled",
         "update_settings",

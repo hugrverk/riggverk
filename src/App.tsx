@@ -110,6 +110,7 @@ function AppShell() {
     copySkillToPack,
     previewSkillImport,
     commitSkillImport,
+    setImportedSkillRouting,
     removeImportedSkill,
     undoLastImport,
     docs,
@@ -906,6 +907,7 @@ function AppShell() {
             onForgetPack={forgetPack}
             onPreviewImport={previewSkillImport}
             onCommitImport={commitSkillImport}
+            onSetImportedRouting={setImportedSkillRouting}
             onRemoveImport={removeImportedSkill}
             onUndoImport={undoLastImport}
             // Agents
