@@ -961,7 +961,8 @@ describe("useLibraryController skills of the personal pack", () => {
 
   it("saves the draft of a personal skill and takes the text the backend now has", async () => {
     const { deps } = createDeps();
-    const { result } = renderHook(() => useLibraryController(deps));
+    const onPacksChanged = vi.fn();
+    const { result } = renderHook(() => useLibraryController({ ...deps, onPacksChanged }));
     invoke.mockImplementation((cmd: string) => {
       if (cmd === "read_skill") return Promise.resolve(personal);
       return Promise.reject(new Error(`unexpected invoke: ${cmd}`));
@@ -988,6 +989,8 @@ describe("useLibraryController skills of the personal pack", () => {
     expect(invoke).toHaveBeenCalledWith("save_pack_skill", { id: personal.id, content: "two" });
     expect(result.current.skillDirty).toBe(false);
     expect(result.current.skillDraft).toBe("two");
+    // The next Update installs the saved skill: the install status is read again once.
+    expect(onPacksChanged).toHaveBeenCalledTimes(1);
   });
 
   it("sends the revision it read and keeps the draft when the skill changed on disk", async () => {
@@ -1055,6 +1058,67 @@ describe("useLibraryController skills of the personal pack", () => {
 
     invoke.mockImplementation(() => Promise.reject("a pack already has a skill with this name"));
     await expect(result.current.copySkillToPack("tdd", "x")).rejects.toBe("a pack already has a skill with this name");
+  });
+});
+
+describe("useLibraryController pack changes", () => {
+  const emptyPacks = { folder: "f", packs: [], skills: [], ignored: [] };
+
+  beforeEach(() => {
+    invoke.mockReset();
+    confirm.mockReset();
+    confirm.mockResolvedValue(true);
+  });
+
+  function renderWithPackChanges(answer: (cmd: string) => Promise<unknown>) {
+    const { deps } = createDeps();
+    const onPacksChanged = vi.fn();
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === "list_skills") return Promise.resolve([]);
+      if (cmd === "list_pack_skills") return Promise.resolve(emptyPacks);
+      return answer(cmd);
+    });
+    const { result } = renderHook(() => useLibraryController({ ...deps, onPacksChanged }));
+    return { result, onPacksChanged };
+  }
+
+  it("reports each change to the packs once, so the install status is read again", async () => {
+    const { result, onPacksChanged } = renderWithPackChanges(() => Promise.resolve("done"));
+    await act(async () => {
+      await result.current.commitSkillImport("token", ["a", "b", "c"], {}, {});
+    });
+    expect(onPacksChanged).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      await result.current.setImportedSkillRouting("a", "When testing.");
+      await result.current.removeImportedSkill("a");
+      await result.current.undoLastImport();
+      await result.current.copySkillToPack("tdd", "tdd-mine");
+      await result.current.forgetPack("old-pack");
+    });
+    expect(onPacksChanged).toHaveBeenCalledTimes(6);
+  });
+
+  it("reports an import that was refused part way, which may have published some skills", async () => {
+    const { result, onPacksChanged } = renderWithPackChanges(() => Promise.reject("b: refused"));
+    await act(async () => {
+      await expect(result.current.commitSkillImport("token", ["a", "b"], {}, {})).rejects.toBe("b: refused");
+    });
+    expect(onPacksChanged).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports nothing when the user declines or the backend changes nothing", async () => {
+    const { result, onPacksChanged } = renderWithPackChanges(() => Promise.reject("refused"));
+    await act(async () => {
+      await expect(result.current.setImportedSkillRouting("a", null)).rejects.toBe("refused");
+      await expect(result.current.copySkillToPack("tdd", "x")).rejects.toBe("refused");
+      await result.current.removeImportedSkill("a");
+    });
+    confirm.mockResolvedValue(false);
+    await act(async () => {
+      await result.current.undoLastImport();
+      await result.current.forgetPack("old-pack");
+    });
+    expect(onPacksChanged).not.toHaveBeenCalled();
   });
 });
 
