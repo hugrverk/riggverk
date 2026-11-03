@@ -99,7 +99,7 @@ export function CodexDefaultsPane({ flow, busyLabel, backupRoot, returnPaneId = 
     if (busyLabel) return `${busyLabel} is running`;
     return true;
   };
-  const closeState = (): boolean | string => (state.status === "applying" ? "applying; it cannot be cancelled" : open);
+  const closeState = (): boolean | string => (state.status === "applying" ? "applying; it cannot be canceled" : open);
 
   // The confirm line's buttons run these two: the very bindings the keys fire.
   const applyAction: Binding = {

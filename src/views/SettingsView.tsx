@@ -572,8 +572,8 @@ export function SettingsView({
             )}
           </SettingRow>
         </SettingRows>
-        <h3 className="sgroup">Colours</h3>
-        <SettingRows label="Colour settings">
+        <h3 className="sgroup">Colors</h3>
+        <SettingRows label="Color settings">
           <SettingRow labelId={labelId("accent")} label="Accent">
             <ColorField
               id="accent"

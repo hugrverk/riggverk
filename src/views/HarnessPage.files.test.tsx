@@ -970,7 +970,7 @@ describe("take bundled (b, y)", () => {
     press("n");
     fireEvent.keyDown(document.body, { key: "Escape" });
     expect(review()).toBeTruthy();
-    expect(keyHints().queryByRole("button", { name: /cancel/ })?.getAttribute("title")).toBe("applying; it cannot be cancelled");
+    expect(keyHints().queryByRole("button", { name: /cancel/ })?.getAttribute("title")).toBe("applying; it cannot be canceled");
     await act(async () => finish(APPLY_RESULT));
     await waitFor(() => expect(p.onApplied).toHaveBeenCalledTimes(1));
     expect(await screen.findByRole("region", { name: "Claude" })).toBeTruthy();

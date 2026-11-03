@@ -173,7 +173,7 @@ export function themeColorWarnings(input: {
 
   if (foreground && !inForce.foreground) {
     warnings.push(
-      `Foreground contrast ${contrastRatio(foreground, shownBackground).toFixed(1)}:1 against the background is below 4.5:1, so the theme text colour is used.`,
+      `Foreground contrast ${contrastRatio(foreground, shownBackground).toFixed(1)}:1 against the background is below 4.5:1, so the theme text color is used.`,
     );
   } else if (inForce.background && contrastRatio(shownForeground, shownBackground) < 4.5) {
     warnings.push(`Contrast ratio ${contrastRatio(shownForeground, shownBackground).toFixed(1)}:1 is below 4.5:1.`);
