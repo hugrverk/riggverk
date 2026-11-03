@@ -75,7 +75,7 @@ Each recipe lists the files to touch, the command, and what fails if you forget.
 ### Change or add an agent
 
 - The body lives in `resources/default-workspace/agent-specs/<role>.body.md`; the OpenCode header (mode, permission overrides) in `templates/opencode/agents/<role>.role.json`; which harnesses get the role in `ROLES` in `scripts/generate-agent-adapters.py`.
-- A new role also needs an entry in `metadata/agents.json`, its files in the `Agent specs`, `Agents` and `Templates` sections of the Rust manifest, a line in the Agents section of `docs/WORKSPACE_CONTRACT.md`, and a decision in `scripts/validate_opencode_permissions.py` (`EDIT_DEFAULT`, and `READONLY_ROLES` if it is read-only).
+- A new role also needs an entry in `metadata/agents.json`, a line in the Agents section of `docs/WORKSPACE_CONTRACT.md`, and a decision in `scripts/validate_opencode_permissions.py` (`EDIT_DEFAULT`, and `READONLY_ROLES` if it is read-only).
 - Hand-written Cursor agents (not generated) are listed in `templates/cursor/manifest.json` and in the Cursor list of `docs/AGENT_RULES.md` in the bundle.
 - `generate.py write`. What fails if you forget: `generate.py check` (adapters stale), `check-bundle-content.py` group `agents` (the `agents/` folder, `metadata/agents.json` and the adapters must agree; only the default agent is `mode: primary`), `check-readme-docs-drift.py` (documented agent lists), `validate_opencode_permissions.py` (permission contract).
 
@@ -191,7 +191,6 @@ A new `scripts/check-*.py`, `validate_*.py` or `smoke-*.sh` must be called from 
 | a new bundle file has no shipped digests | it is untracked (`write` prints a note) | `git add` it, `write` again |
 | `FAIL: scripts/test_<name>.py ran no tests` | the file collected no test | give it a `unittest.TestCase` with `test_` methods |
 | "description is N chars (max 300)" | skill description too long | shorten it; triggers go after "Use when" |
-| "Skills section missing: ..." | a skill file not in the Rust manifest | add it to the `Skills` section |
 | `git diff --check` output | trailing whitespace or a conflict marker | fix the named line |
 | `Cargo.lock` changed after `release.sh prepare` | a dependency resolved differently | see RELEASE.md; `prepare` stops and undoes its changes |
 | `[ui] remote-urls: ...` or another `check-source.py` rule id | the named rule fired | the message gives the file and line; the rule's `why` says what to keep |

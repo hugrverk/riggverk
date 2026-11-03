@@ -183,10 +183,10 @@ Command output is redacted for display and capped at 16 MB per stream. Helper su
 
 ## Release verification
 
-`scripts/release-check.sh` validates source format, templates, skill count, adapter currency, and contracts. It runs apply smokes against temporary `HOME` directories and never writes the real user config. See [RELEASE.md](./RELEASE.md).
+`scripts/release-check.sh` validates source format, templates, adapter currency, and contracts. It runs apply smokes against temporary `HOME` directories and never writes the real user config. See [RELEASE.md](./RELEASE.md).
 
 ## Dependencies
 
 - [Tauri](https://tauri.app) - application shell. The webview CSP allows only `'self'` and IPC; capabilities are window dragging and listening for backend events (the webview cannot emit).
 - [tauri-plugin-updater](https://v2.tauri.app/plugin/updater/) - signed app updates, compiled in but registered only when `plugins.updater` turns updates on (it does not yet; see App updates above). The webview has no updater permission.
-- [serde](https://serde.rs), [React](https://react.dev), [TypeScript](https://www.typescriptlang.org), [Vite](https://vite.dev) (MIT).
+- [serde](https://serde.rs) (MIT or Apache-2.0), [React](https://react.dev) (MIT), [TypeScript](https://www.typescriptlang.org) (Apache-2.0), [Vite](https://vite.dev) (MIT).
