@@ -9,8 +9,9 @@
 //! Every non-blank line must be a `- ` bullet whose backticked spans all name an active skill of
 //! that same pack (not shadowed by the bundle, not in error, not held), with at least one span.
 //! A line that could change how the block parses or reads (a marker or any other `<`, a heading, a
-//! code fence, a control character or an invisible format character such as a zero-width space, a
-//! bidi override or a tag character, more than [`MAX_LINE_CHARS`] characters) is refused. One bad
+//! code fence, a control character or an invisible character such as a zero-width space, a
+//! variation selector, a bidi override or a tag character, more than [`MAX_LINE_CHARS`]
+//! characters) is refused. One bad
 //! line excludes the whole file, with a fixed-phrase reason that quotes no text of it.
 //!
 //! Valid lines are rendered under [`SECTION_HEADING`], one `###` group per pack in name order, right
@@ -124,7 +125,7 @@ pub(crate) fn read(pack_dir: &Path, own_skills: &BTreeSet<&str>) -> PackRouting 
 pub(crate) fn routing_line(when: &str, name: &str) -> Result<String, String> {
     if when
         .chars()
-        .any(|c| c.is_control() || is_invisible_format(c))
+        .any(|c| c.is_control() || is_invisible_in_routing(c))
     {
         return Err("invalid routing description".to_string());
     }
@@ -224,7 +225,7 @@ fn validate(text: &str, own_skills: &BTreeSet<&str>) -> Result<Vec<String>, Stri
         // reach the agent, so they get the same fixed phrase as a control character.
         if line
             .chars()
-            .any(|c| (c.is_control() && c != '\t') || is_invisible_format(c))
+            .any(|c| (c.is_control() && c != '\t') || is_invisible_in_routing(c))
         {
             return refuse("holds a control character");
         }
@@ -283,6 +284,36 @@ pub(crate) fn is_invisible_format(c: char) -> bool {
             | 0xE0001
             | 0xE0020..=0xE007F
     )
+}
+
+/// A character a routing line refuses because it shows as nothing: the invisible format characters
+/// above, plus the other default-ignorable code points that are not format characters (combining
+/// grapheme joiner, Hangul fillers, Khmer inherent vowels, Mongolian and other variation selectors)
+/// and the blank Braille pattern. Variation selectors can encode text no diff shows, and a routing
+/// line reaches every agent; a `SKILL.md` is only flagged, so this stricter set is routing's own.
+fn is_invisible_in_routing(c: char) -> bool {
+    is_invisible_format(c)
+        || matches!(
+            u32::from(c),
+            0x034F
+                | 0x115F..=0x1160
+                | 0x17B4..=0x17B5
+                | 0x180B..=0x180F
+                | 0x2800
+                | 0x3164
+                | 0xFE00..=0xFE0F
+                | 0xFFA0
+                | 0xE0100..=0xE01EF
+        )
+}
+
+/// Whether `line` names `name` in one of its backticked spans (any line holding `` `name` `` when
+/// its backticks do not pair, since the reader refuses such a line anyway).
+pub(crate) fn names_skill(line: &str, name: &str) -> bool {
+    match backticked(line) {
+        Some(spans) => spans.contains(&name),
+        None => line.contains(&format!("`{name}`")),
+    }
 }
 
 /// The backticked spans of `line`; `None` when a backtick is unpaired or a span is empty.
@@ -402,6 +433,9 @@ mod tests {
             "a\nb",
             "\ntrimmed",
             "a\u{200b}b",
+            "a\u{fe0f}b",
+            "a\u{e0100}b",
+            "a\u{3164}b",
             "# heading",
             "~~~",
             &"x".repeat(241),
@@ -523,6 +557,19 @@ mod tests {
             ),
             (
                 "- isolate \u{2066} `mine`\n",
+                "line 1 holds a control character",
+            ),
+            // So are variation selectors and the other default-ignorable code points.
+            (
+                "- selector\u{FE0F} `mine`\n",
+                "line 1 holds a control character",
+            ),
+            (
+                "- hidden\u{E0101}\u{E0102} `mine`\n",
+                "line 1 holds a control character",
+            ),
+            (
+                "- filler\u{3164} `mine`\n",
                 "line 1 holds a control character",
             ),
             (

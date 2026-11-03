@@ -7,8 +7,8 @@
 /** Longest routing line, in characters (the backend's `MAX_LINE_CHARS`). */
 const MAX_LINE_CHARS = 240;
 
-/** Control characters and invisible format characters (Unicode Cc, Cf, Zl, Zp), as the backend refuses them. */
-const INVISIBLE = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u;
+/** Control and invisible characters (Cc, Cf, Zl, Zp, default-ignorable code points, the blank Braille pattern). */
+const INVISIBLE = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Default_Ignorable_Code_Point}\u2800]/u;
 
 /** The line the app writes for `name`. */
 export function routingLine(when: string, name: string): string {
@@ -26,15 +26,20 @@ export function whenProblem(when: string, name: string): string {
 }
 
 /**
- * A "Use when" suggestion from a skill's description: the clause after "Use when" or "Use it when", up to the end of
- * its sentence, with a capital first letter. "" when there is none or it would not make a valid line.
+ * A "Use when" suggestion from a skill's description: the first clause after "Use when" or "Use it when" that is not
+ * negated ("Do not use when …" says the opposite), up to the end of its sentence, whitespace collapsed and with a
+ * capital first letter. "" when there is none or it would not make a valid line.
  */
 export function suggestWhen(description: string, name: string): string {
-  const match = /\buse (?:it )?when\s+([\s\S]*?)(?:\.(?=\s|$)|$)/i.exec(description);
-  const clause = match?.[1]?.trim() ?? "";
-  if (clause === "") return "";
-  const text = clause[0]!.toUpperCase() + clause.slice(1);
-  return whenProblem(text, name) === "" ? text : "";
+  const text = description.replace(/\s+/g, " ");
+  for (const match of text.matchAll(/\buse (?:it )?when (.*?)(?:\.(?= |$)|$)/gi)) {
+    if (/\b(?:not|never|don't|n't)\s*$/i.test(text.slice(0, match.index))) continue;
+    const clause = match[1]!.trim();
+    if (clause === "") return "";
+    const suggestion = clause[0]!.toUpperCase() + clause.slice(1);
+    return whenProblem(suggestion, name) === "" ? suggestion : "";
+  }
+  return "";
 }
 
 /** The "Use when" text of the line the app wrote for `name` among `lines`, or null when there is none. */

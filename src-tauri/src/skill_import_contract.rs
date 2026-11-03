@@ -321,7 +321,11 @@ mod tests {
         let installed = env.imported().join("release-notes-plus/SKILL.md");
         assert!(!fs::read_to_string(installed).unwrap().contains("More."));
         assert!(set_imported_skill_routing("release-notes-plus".into(), None).is_err());
-        remove_imported_skill("release-notes-plus".into()).unwrap();
+        let removed = remove_imported_skill("release-notes-plus".into()).unwrap();
+        assert!(
+            removed.contains("routing.md cannot be read safely"),
+            "{removed}"
+        );
         assert!(!env.imported().join("release-notes-plus").exists());
         assert_eq!(
             fs::read_to_string(&path).unwrap(),

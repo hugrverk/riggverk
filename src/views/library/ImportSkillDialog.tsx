@@ -153,9 +153,11 @@ export function ImportSkillDialog({ dropped, dragging, skills, packsFolder, rout
       onDone(result);
     } catch (e) {
       setBusy(null);
-      // The token is spent either way: a new preview is needed.
+      // The token is spent either way: a new preview is needed. A refusal that names skills as imported came after
+      // they were published; the Library already lists them.
       setPreview(current => (current ? { ...current, token: null } : current));
-      setError(`${errorText(e)} Preview again to import.`);
+      const message = errorText(e);
+      setError(/\bimported\b/.test(message) ? `${message} The Library lists what is in.` : `${message} Preview again to import.`);
     }
   };
 
