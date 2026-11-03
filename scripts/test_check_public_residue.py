@@ -175,6 +175,17 @@ class ResidueGuardTests(unittest.TestCase):
         history = "resources/default-workspace/metadata/rules-history/claude/x.md"
         self.assertEqual(self.scan({history: "Krets" "verket\n", "docs/RELEASE.md": "http://localhost:1" "420/\n"}), [])
 
+    def test_phrases_from_the_local_private_residue_list_fail_in_the_bundle_only(self) -> None:
+        rules = "resources/default-workspace/templates/rules/claude.md"
+        files = {".private-residue": "# local\nexample-tool\nPrefer the night shift\n"}
+        for text in ("Use example-tool for reads.", "prefer the night shift, always."):
+            with self.subTest(text=text):
+                self.assertEqual(len(self.scan({**files, rules: text + "\n"})), 1, text)
+        history = "resources/default-workspace/metadata/rules-history/claude/x.md"
+        self.assertEqual(self.scan({**files, history: "Use example-tool.\n", "docs/NOTES.md": "example-tool\n"}), [])
+        self.assertEqual(self.scan({**files, rules: "An example-toolkit is fine.\n"}), [])
+        self.assertEqual(self.scan({rules: "Use example-tool for reads.\n"}), [])
+
     def test_the_allowlist_gives_a_reason_for_every_entry(self) -> None:
         for residue in guard.RESIDUES:
             for allowed in residue.allowed_paths:

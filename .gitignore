@@ -28,4 +28,5 @@ __pycache__/
 
 # Local agent state and notes
 .private-names
+.private-residue
 .claude/
