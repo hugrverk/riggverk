@@ -1,6 +1,23 @@
 {
   "releases": [
     {
+      "version": "2026.11.10",
+      "sections": [
+        {
+          "title": "New",
+          "items": [
+            "Route imported skills from the app"
+          ]
+        },
+        {
+          "title": "Fixes",
+          "items": [
+            "Refresh install status after a skill pack change"
+          ]
+        }
+      ]
+    },
+    {
       "version": "2026.11.9",
       "sections": [
         {
