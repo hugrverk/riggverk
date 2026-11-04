@@ -3,7 +3,7 @@ import type { PostureLevel, SetupSurfaceId } from "../types";
 import type { Tone } from "../ui/tone";
 import { keyNames, type CodexConfigModel } from "./codexConfig";
 import type { FileConflictModel } from "./fileConflicts";
-import type { SurfaceDisplayState } from "./installationView";
+import { dataFolderUnknownSentence, type DataFolderVerdict, type SurfaceDisplayState } from "./installationView";
 import { CONFLICT_TEXT, type RulesModel } from "./rulesView";
 import { plural } from "./plural";
 
@@ -58,8 +58,10 @@ export interface SurfaceUiStateInput {
    * date with a "You keep ..." sub-line instead of "Yours". The status alone cannot tell, so the caller says so.
    */
   codexOtherKeysUpdated?: boolean;
-  /** False while the workspace folder is unusable. Default true. */
+  /** False while the workspace folder is unusable or not known to be usable. Default true. */
   dataFolderOk?: boolean;
+  /** Tells those apart. Without it a false `dataFolderOk` means unusable. */
+  dataFolderVerdict?: DataFolderVerdict;
   /** The item is the workspace item (`workspace_bundle`), not a harness surface. Default false. */
   workspaceItem?: boolean;
   /** `workspaceDiagnostics.error`; the sub-line of an unusable folder on the workspace item. */
@@ -100,6 +102,8 @@ export function surfaceUiState(input: SurfaceUiStateInput): SurfaceUiState {
   const { display, rules, files, codexConfig } = input;
 
   if (input.dataFolderOk === false) {
+    if (input.dataFolderVerdict === "unchecked") return result(null, "Checking…");
+    if (input.dataFolderVerdict === "check_failed") return result(null, "Couldn't check. Try Check again.");
     return input.workspaceItem
       ? result("fix", input.workspaceError || "Riggverk can't use its workspace folder")
       : result(null, "Needs the workspace folder");
@@ -223,6 +227,7 @@ export function summaryParts(
 
 export interface OverviewHeadlineContext {
   dataFolderOk: boolean;
+  dataFolderVerdict?: DataFolderVerdict;
   /** Any entry has a status yet. */
   anyStatus: boolean;
   /** Every counted item is `ready` because it is not installed yet. */
@@ -235,7 +240,7 @@ export interface OverviewHeadlineContext {
 
 /** The Overview headline. No coloured words, no counts: the summary row has them. */
 export function overviewHeadline(t: Record<UiState, number>, ctx: OverviewHeadlineContext): string {
-  if (!ctx.dataFolderOk) return "Riggverk can't use its folder.";
+  if (!ctx.dataFolderOk) return dataFolderUnknownSentence(ctx.dataFolderVerdict) ?? "Riggverk can't use its folder.";
   if (!ctx.anyStatus) {
     // No status at all: still checking, unless every check has already failed.
     return (ctx.failedChecks ?? 0) > 0 && (ctx.pendingChecks ?? 0) === 0 ? "Some agents could not be checked." : "Checking your setup…";

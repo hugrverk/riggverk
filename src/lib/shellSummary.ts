@@ -2,7 +2,7 @@ import type { InstallationOverview, OverviewEntry } from "../hooks/useInstallati
 import type { AppSettings, InstallAgent } from "../types";
 import { codexConfigModelFor, CODEX_CONFIG_SURFACE } from "./codexConfig";
 import { fileConflictModelFor } from "./fileConflicts";
-import { surfaceRowsFor, WORKSPACE_FOLDER_UNUSABLE } from "./installationView";
+import { dataFolderReason, surfaceRowsFor, type DataFolderVerdict } from "./installationView";
 import { rulesModelFor, rulesSurfaceOf } from "./rulesView";
 import { surfaceUiState, type UiItem } from "./uiState";
 
@@ -20,6 +20,7 @@ export function harnessUiItems(
   entry: OverviewEntry | undefined,
   settings: EnabledSettings,
   dataFolderOk: boolean,
+  dataFolderVerdict?: DataFolderVerdict,
 ): UiItem[] {
   const rulesSurface = rulesSurfaceOf(harness);
   const rules = dataFolderOk ? rulesModelFor(harness, entry?.status) : null;
@@ -33,6 +34,7 @@ export function harnessUiItems(
       files: dataFolderOk ? fileConflictModelFor(entry?.status, row.surface) : null,
       codexConfig: row.surface === CODEX_CONFIG_SURFACE ? codexConfig : null,
       dataFolderOk,
+      dataFolderVerdict,
       entryError: entry?.error,
     });
     return { key: `${harness}:${row.surface}`, owner: harness, surface: row.surface, state, subline };
@@ -64,9 +66,9 @@ export function decideCountsByHarness(
  */
 export function updateAllDisabledReason(
   overview: InstallationOverview,
-  context: { dataFolderOk: boolean; busyLabel: string | null; settingsSaving: boolean },
+  context: { dataFolderOk: boolean; dataFolderVerdict?: DataFolderVerdict; busyLabel: string | null; settingsSaving: boolean },
 ): string | false {
-  if (!context.dataFolderOk) return WORKSPACE_FOLDER_UNUSABLE;
+  if (!context.dataFolderOk) return dataFolderReason(context.dataFolderVerdict);
   if (context.busyLabel) return `${context.busyLabel} is running`;
   if (context.settingsSaving) return "Saving target changes…";
   const entries = Object.values(overview.entries).filter((entry): entry is OverviewEntry => entry !== undefined);

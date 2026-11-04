@@ -1,4 +1,5 @@
 import { useEffect, useId, useState } from "react";
+import { dataFolderReason, type DataFolderVerdict } from "../../lib/installationView";
 import type { WorkspaceItemModel } from "../../lib/overviewModel";
 import { UI_STATE_LABEL } from "../../lib/uiState";
 import type { DataFolderStatus, WorkspaceDiagnostics } from "../../types";
@@ -14,6 +15,7 @@ export interface WorkspaceFolderCellProps {
   path: string;
   diagnostics: Pick<WorkspaceDiagnostics, "error" | "layout_notes"> | null;
   dataFolderOk: boolean;
+  dataFolderVerdict?: DataFolderVerdict;
   /** What the app keeps in the folder (the workspace surface's `data_folder`); null while unknown. */
   dataFolder: DataFolderStatus | null;
   backupCount: number;
@@ -43,6 +45,7 @@ export function WorkspaceFolderCell({
   path,
   diagnostics,
   dataFolderOk,
+  dataFolderVerdict,
   dataFolder,
   backupCount,
   backupRoot,
@@ -123,7 +126,7 @@ export function WorkspaceFolderCell({
             <TButton
               keys={["o"]}
               shortcut="o"
-              disabled={!dataFolderOk ? "workspace folder unusable" : busy ? `${wsRunning} is running` : false}
+              disabled={!dataFolderOk ? dataFolderReason(dataFolderVerdict) : busy ? `${wsRunning} is running` : false}
               onClick={onOpenFolder}
             >
               Open folder

@@ -25,6 +25,7 @@ export function useWorkspaceHealthController({
   isWorkspaceLoadCurrent,
 }: WorkspaceHealthControllerDeps) {
   const [workspaceDiagnostics, setWorkspaceDiagnostics] = useState<WorkspaceDiagnostics | null>(null);
+  const [workspaceDiagnosticsFailed, setWorkspaceDiagnosticsFailed] = useState(false);
   const [opencodeRuntimeHealth, setOpencodeRuntimeHealth] = useState<OpenCodeRuntimeHealth | null>(null);
   const [codexRuntimeHealth, setCodexRuntimeHealth] = useState<CodexRuntimeHealth | null>(null);
   const [cursorProfileHealth, setCursorProfileHealth] = useState<CursorProfileHealth | null>(null);
@@ -37,8 +38,10 @@ export function useWorkspaceHealthController({
       const diagnostics = await invoke<WorkspaceDiagnostics>("get_workspace_diagnostics");
       if (!isWorkspaceLoadCurrent(generation)) return;
       setWorkspaceDiagnostics(diagnostics);
+      setWorkspaceDiagnosticsFailed(false);
     } catch (e) {
       if (!isWorkspaceLoadCurrent(generation)) return;
+      setWorkspaceDiagnosticsFailed(true);
       setError(`Workspace diagnostics: ${errorMessage(e)}`);
     }
   }, [isWorkspaceLoadCurrent, setError, workspaceLoadGenerationRef]);
@@ -101,6 +104,7 @@ export function useWorkspaceHealthController({
 
   const resetWorkspaceHealthState = useCallback(() => {
     setWorkspaceDiagnostics(null);
+    setWorkspaceDiagnosticsFailed(false);
     setOpencodeRuntimeHealth(null);
     setCodexRuntimeHealth(null);
     setCursorProfileHealth(null);
@@ -123,6 +127,7 @@ export function useWorkspaceHealthController({
 
   return {
     workspaceDiagnostics,
+    workspaceDiagnosticsFailed,
     opencodeRuntimeHealth,
     codexRuntimeHealth,
     cursorProfileHealth,
