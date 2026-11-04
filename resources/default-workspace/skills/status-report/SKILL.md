@@ -13,7 +13,7 @@ metadata:
 
 # Status Report
 
-Produces one self-contained HTML file that shows a developer, lead or stakeholder what happened, what is happening and what comes next in a project during a period, with every statement backed by cited evidence. Not for release notes, PR descriptions or a short status reply in chat. Swedish requests such as "statusrapport" or "lägesrapport" mean this skill.
+Produces one self-contained HTML file that shows a developer, lead or stakeholder what happened, what is happening and what comes next in a project during a period, with every statement backed by cited evidence. Not for release notes, PR descriptions or a short status reply in chat. Requests in any language for a status report mean this skill.
 
 Done when: `report.json` and the HTML pass `verify-report.mjs`, the file is outside version control, and the user has the path plus a three-line summary that names the gaps.
 

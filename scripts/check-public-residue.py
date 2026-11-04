@@ -17,9 +17,9 @@ and where history is recorded:
     that seed an earlier layout on purpose. A begin without its end is a failure.
 
 The later residues guard cleaned text from coming back, each scoped to the files it concerns:
-Swedish in skill descriptions, owner-specific tool and delegation lines in the bundled rules,
-model ids in skill text, hard-coded user home paths, and team-pack content in the bundle. They name no person: the home-path
-residue matches the shape of a path, with a short list of placeholder names.
+Swedish in skill descriptions, model ids in skill text, hard-coded user home paths, team-pack content in
+the bundle, and the phrases of a maintainer's own rules listed in an untracked file. They name no person:
+the home-path residue matches the shape of a path, with a short list of placeholder names.
 
 Adding a residue later is one more entry in RESIDUES with its own scope and allowlist. For
 the rename residue, file names are checked too. Files come from git (tracked plus
@@ -31,6 +31,7 @@ Usage: python3 scripts/check-public-residue.py [--root PATH] [--list-allowed]
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import sys
 from dataclasses import dataclass
@@ -131,15 +132,6 @@ TEAM_PACK_CONTENT = Residue(
     allowed_lines=(_PRAGMA_LINE,),
 )
 
-OWNER_RULES = Residue(
-    id="owner-specific tooling or delegation in the bundled rules",
-    pattern=re.compile(r"\brtk\b|Codex is cheap|GPT computer-use", re.IGNORECASE),
-    why="the shared rules, agents and skills hold no personal tool or account-specific delegation line; users add those as refinements",
-    scope=(_BUNDLE,),
-    allowed_paths=(_BUNDLE_HISTORY,),
-    allowed_lines=(_PRAGMA_LINE,),
-)
-
 MODEL_IDS = Residue(
     id="a concrete model id in skill text",
     pattern=re.compile(
@@ -167,7 +159,42 @@ HOME_PATHS = Residue(
     allowed_lines=(_PRAGMA_LINE,),
 )
 
-RESIDUES = (RENAMED_AWAY, SWEDISH_TRIGGERS, OWNER_RULES, MODEL_IDS, HOME_PATHS, TEAM_PACK_CONTENT)
+RESIDUES = (RENAMED_AWAY, SWEDISH_TRIGGERS, MODEL_IDS, HOME_PATHS, TEAM_PACK_CONTENT)
+
+# A maintainer's own rules (personal tools, account-specific delegation) must not reach the shared
+# bundle, but their phrases are not kept in the repository: list them in an untracked file, one per
+# line, `#` for comments. The default file is .private-residue at the repository root (gitignored);
+# RIGGVERK_PRIVATE_RESIDUE_FILE points at another one. Without a list this residue is skipped; a list
+# named by the variable that does not exist is a failure.
+PRIVATE_RESIDUE_ENV = "RIGGVERK_PRIVATE_RESIDUE_FILE"
+PRIVATE_RESIDUE_DEFAULT = ".private-residue"
+
+
+def private_residue(root: Path) -> Residue | None:
+    override = os.environ.get(PRIVATE_RESIDUE_ENV)
+    path = Path(override).expanduser() if override else root / PRIVATE_RESIDUE_DEFAULT
+    if override and not path.is_file():
+        raise SystemExit(f"FAIL {PRIVATE_RESIDUE_ENV} names a private-residue list that does not exist")
+    if not path.is_file():
+        return None
+    lines = (line.strip() for line in path.read_text(encoding="utf-8").splitlines())
+    phrases = [line for line in lines if line and not line.startswith("#")]
+    if not phrases:
+        return None
+    return Residue(
+        id="a phrase from the local private-residue list in the bundled workspace",
+        pattern=re.compile(r"(?<!\w)(?:" + "|".join(map(re.escape, phrases)) + r")(?!\w)", re.IGNORECASE),
+        why="the shared rules, agents and skills hold no personal tool or account-specific delegation line; users add those as refinements",
+        scope=(_BUNDLE,),
+        allowed_paths=(_BUNDLE_HISTORY,),
+        allowed_lines=(_PRAGMA_LINE,),
+    )
+
+
+def residues(root: Path) -> tuple[Residue, ...]:
+    """The repository's residues plus the maintainer's local one, when a list exists."""
+    local = private_residue(root)
+    return RESIDUES + ((local,) if local else ())
 
 
 def allowed_path(residue: Residue, rel: str) -> Allowed | None:
@@ -212,7 +239,7 @@ def scan(root: Path, files: list[str] | None = None) -> list[str]:
     """Every use of a residue outside its allowlist, as `path:line: text` strings."""
     files = iter_files(root) if files is None else files
     texts = TextCache(root)
-    return [hit for index, residue in enumerate(RESIDUES) for hit in scan_residue(residue, files, texts, index == 0)]
+    return [hit for index, residue in enumerate(residues(root)) for hit in scan_residue(residue, files, texts, index == 0)]
 
 
 def describe_allowed() -> str:
@@ -237,7 +264,7 @@ def main(argv: list[str] | None = None) -> int:
     files = iter_files(root)
     texts = TextCache(root)
     failed = 0
-    for index, residue in enumerate(RESIDUES):
+    for index, residue in enumerate(residues(root)):
         hits = scan_residue(residue, files, texts, index == 0)
         for hit in hits:
             print(f"FAIL residue {hit}", file=sys.stderr)

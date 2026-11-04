@@ -14,7 +14,7 @@ metadata:
 
 # Review Response
 
-A review comment is a claim to check, not an order to follow or a courtesy to return. Verify it against the code, act on what holds, answer what does not with evidence, and let the user decide what goes out in their name. Swedish requests such as "svara på review-kommentarerna" or "gå igenom granskningen" mean this skill.
+A review comment is a claim to check, not an order to follow or a courtesy to return. Verify it against the code, act on what holds, answer what does not with evidence, and let the user decide what goes out in their name. Requests in any language to respond to review comments mean this skill.
 
 Done when: every open thread has a verdict (fix, push back or ask) with the evidence behind it, fixes are committed one theme per commit with their checks run, a reply is drafted per thread, and nothing was posted, pushed or resolved without the user's explicit ok for that step.
 

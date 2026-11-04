@@ -1,3 +1,4 @@
+* text=auto eol=lf
 # Canonical bundled-workspace sources and every shell script are LF on all
 # platforms. CRLF copies silently pass line-based checks, break shell scripts
 # and change the digests that managed-install ownership is built on.

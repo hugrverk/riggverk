@@ -14,7 +14,7 @@ metadata:
 
 # CI Triage
 
-Turns a red CI run into a classified failure with quoted evidence and a local reproduction, so root-cause work starts from a loop instead of a log dump. Swedish requests such as "CI är rött" or "varför failar bygget" mean this skill.
+Turns a red CI run into a classified failure with quoted evidence and a local reproduction, so root-cause work starts from a loop instead of a log dump. Requests in any language to investigate a failing CI run mean this skill.
 
 Done when: every failed job has a class backed by quoted log lines, the failure was reproduced locally with the repo's own command or the reason it could not be is stated, and the next step is named (a hand-off to `diagnose`, a rerun the user approved, or a report).
 
