@@ -77,6 +77,10 @@ for tool in git node npm cargo; do
   fi
 done
 printf '  %s, node %s, %s\n' "$(python3 --version)" "$(node --version)" "$(cargo --version)"
+if ! npm ls --all >/dev/null 2>&1; then
+  printf 'FAIL: node_modules is out of sync; run npm ci\n' >&2
+  exit 1
+fi
 
 step "shell syntax"
 while IFS= read -r shell_script; do

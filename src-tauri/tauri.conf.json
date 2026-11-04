@@ -31,8 +31,15 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "publisher": "Hugrverk",
+    "copyright": "Copyright (c) 2026 Hugrverk",
+    "category": "DeveloperTool",
+    "homepage": "https://riggverk.se",
     "resources": {
-      "../resources/default-workspace/": "default-workspace/"
+      "../resources/default-workspace/": "default-workspace/",
+      "../LICENSE": "LICENSE",
+      "../NOTICE.md": "NOTICE.md",
+      "../THIRD_PARTY_NOTICES.md": "THIRD_PARTY_NOTICES.md"
     },
     "icon": [
       "icons/32x32.png",

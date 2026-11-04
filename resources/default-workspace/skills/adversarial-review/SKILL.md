@@ -15,7 +15,7 @@ metadata:
 
 A fresh critic that never learns who wrote the work tries to break it; you, the lead, keep only what you can prove. Evidence is the currency: a finding counts when its failing test or command reproduces or its requirement is quoted word for word, never because the critic sounds sure. The skill finds, verifies and reports. It fixes nothing.
 
-Run it only when the user explicitly asks for an adversarial, hostile or critic review ("run an adversarial review", "have a critic review the diff", "review the plan adversarially", `/adversarial-review`; in Swedish for example "kör en adversarial review", "granska planen adversariellt"). For a routine review use `/code-review` on Claude Code or the `inspector` agent elsewhere, and never start this skill on your own. To have new work written under a critic, use `adversarial-implementation` instead.
+Run it only when the user explicitly asks for an adversarial, hostile or critic review ("run an adversarial review", "have a critic review the diff", "review the plan adversarially", `/adversarial-review`). For a routine review use `/code-review` on Claude Code or the `inspector` agent elsewhere, and never start this skill on your own. To have new work written under a critic, use `adversarial-implementation` instead.
 
 Done when: the verified findings, each with its proof result and verdict, are reported with the start and ledger lines, the user's tree is as you found it, and the user has been offered the next step; or the run stopped because no critic route works, and the report says so.
 
