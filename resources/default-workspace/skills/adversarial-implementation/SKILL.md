@@ -27,7 +27,7 @@ Done when: a fresh critic returned `VERDICT: APPROVE`, the simplification round 
 
 Resolve each role with the shared convention in `adversarial-roles.md` next to this file. In short, the first match wins:
 
-1. what the user said in chat ("critic: claude", "use Codex as the critic"; in Swedish "kritiker: claude");
+1. what the user said in chat ("critic: claude", "use Codex as the critic");
 2. `roles.json` next to this file, if present;
 3. an `Adversarial roles:` line in the user's rules, below the END marker;
 4. the default: the implementer on your harness's own path (Harness notes); the critic on the strongest route that passes its preflight, another family only at comparable capability, else a fresh read-only subagent of your own harness.

@@ -48,7 +48,7 @@ jobs:
           node-version: "22"
           cache: npm
 
-      # Pinned (matches local `rustc --version`) so new stable lints cannot turn
+      # The version must match rust-toolchain.toml so new stable lints cannot turn
       # `clippy -D warnings` red without a code change. Bump deliberately.
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:

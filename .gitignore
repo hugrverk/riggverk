@@ -1,5 +1,15 @@
 .DS_Store
-.vs/
+.env
+.env.*
+*.log
+npm-debug.log*
+.idea/
+.vscode/
+coverage/
+*.tsbuildinfo
+Thumbs.db
+*.key
+*.pem
 
 # Tauri app build artifacts
 node_modules/
@@ -8,10 +18,7 @@ src-tauri/target/
 src-tauri/gen/
 src-tauri/macos/Riggverk.icns
 src-tauri/macos/dmg/
-src-tauri/macos/AppIcon.icns
 src-tauri/macos/Assets.car
-src-tauri/macos/assetcatalog_generated_info.plist
-src-tauri/macos/Assets.xcassets/AppIcon.appiconset/appicon-*.png
 
 # Release assets
 release/
@@ -21,7 +28,5 @@ __pycache__/
 
 # Local agent state and notes
 .private-names
+.private-residue
 .claude/
-.claude/launch.json
-research_notes/
-reports/
