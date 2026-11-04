@@ -1435,6 +1435,19 @@
       "action": "update"
     },
     {
+      "identity": "skill:pr-modernize",
+      "path_classes": [
+        "runtime-skill",
+        "harness-skill",
+        "codex-legacy-skill"
+      ],
+      "digests": [
+        "sha256:299287f2a2c964ee8b4e8f38e3d692225de91d0b1c1725a208e8b4ce98251397",
+        "sha256:4e802dd9ced5ec2253911bc1b1e20a4e0006eec0ad89aba5bd3ff179745cfbf7"
+      ],
+      "action": "update"
+    },
+    {
       "identity": "skill:pr-workflow",
       "path_classes": [
         "runtime-skill",
@@ -1443,12 +1456,14 @@
       ],
       "digests": [
         "sha256:1fa0bc086a24195dd61ece99400730ecdea122c5fbacad41c42874c52f9cf28a",
+        "sha256:253dc79c85aa3b4ad1abaf67fa7954f95457a36ef42a72ad6356a8a164d41a52",
         "sha256:2ab6169dbe9e51265e9f4ce3163942735c78c476c593fc1ff77a177165ef7fa6",
         "sha256:6ed025bdc7635b2dc43282d5957fc6d9a14a3d8f2369aecc2a76f39b16625ffe",
         "sha256:72f059870bd72be1d4d667c32f1e68fad30c012e9324970f395ba6469d973fee",
         "sha256:db437c11f0699d7b44489bd6838b240e422cc3f1d4454425d00b44c91e2380c1",
         "sha256:e0c0281a68de01923ff54d591188c349a3bfe14a8908b365e7e970bbaa146ba1",
         "sha256:e953096876406c7d9a49f82f5352166013f2c8fe5f4ad19021338ffeadd2d413",
+        "sha256:effd033bdcb83e98a111017bebfbe45e6774dcd3240d2a33e36824fda919d171",
         "sha256:f0786359b00bbb065ebb554f6078981703d57195baaac88d6b525747ab482fba"
       ],
       "action": "update"
@@ -2626,6 +2641,7 @@
         "sha256:1899cd7be82c50bf23d9ab4afca9a39593e4ec4adf6277f5baabd03ffb719d6b",
         "sha256:1aefbeb142f71ac1b8d7b91edd916013fe2bc30a071eec315d66244bcd9d638a",
         "sha256:1c6d1ae7eb352f033883ec9e032fe4c71c8943d9485257dae0ca1081e9aa801b",
+        "sha256:1e6d213c36333665d20c19a125fe7795aeab6a70ec2e7b520c843c61d4902b9c",
         "sha256:21471220a039400cbd1c50e1212a66512773e44e4db199a2532beb1ddcc207ff",
         "sha256:240d6316cb099cefb303b6d9fb9350d8b41bfdb2ad184f657e72fe489f5204f2",
         "sha256:2510d667ab01c21f097404849626710f859d7ca8f667f618a42b44a19a308c8d",
@@ -2708,6 +2724,7 @@
         "sha256:9b7cb3aea2e19c5c4db20cb2dd662f49075e19bca07bbf00b048a83480c88081",
         "sha256:9c0a9968b3ac036b2cfd5d8798357f190cc607936c704523f497d84d78c01fa0",
         "sha256:9cfaeab28725d482996a40623fc445694f72ef5bf66bea3592b1667f740a4ab5",
+        "sha256:9d3f4589070cd32ba2d82b260f323bd76dbb517e15e28adce166ec4e5a74ff15",
         "sha256:a32736d8f2f43b1aae8c9895c4c0277d5de5484c3fa2f529cb5102061feb4552",
         "sha256:a4f690195d3fd6f9f47ffb433f9b400fcd7ca437b060451bc6fdeb75b4e906fd",
         "sha256:a57f7a839de4dc079c7e5b758707c5c5f09cd10847f32b776094f1966b81e18a",

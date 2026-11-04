@@ -25,6 +25,7 @@ Do not duplicate full `SKILL.md` content here. This file is an index for choosin
 | `handoff` | Reviewing executor evidence or compacting paused work into a trustworthy handoff with verified state and next action. |
 | `implementation-plan` | Creating small verifiable implementation slices with exact files, steps, commands, and risks. |
 | `minimal-implementation` | Implementing or refactoring with the smallest complete diff that fits existing ownership. |
+| `pr-modernize` | An old or inherited PR: decides modernize, rework or close from its goal and what changed on the base, rebases in a disposable worktree with the PR's hooks off, compares the series with `git range-diff`, and keeps the original authors' credit. |
 | `pr-workflow` | Turning finished work into logical commits that follow the repo's own convention, running the gate, pushing a branch and opening or updating a PR with gh. Never force-pushes; each commit, push and PR step needs an explicit ok. On request it also watches a PR through CI with `gh pr checks --watch`, sends red checks to `ci-triage` and open threads to `review-response`, and reports readiness without merging. Ships `assets/pr-body.template.md`. |
 | `prototype` | Validating throwaway UI variants, state-machine/data-model checks, and interaction experiments before production implementation. |
 | `retro` | User-invoked only (`/retro`, `$retro` in Codex): reviewing a named coding session and proposing ranked, evidence-traced improvements to steering files, checks, and tooling. Proposals only. |
@@ -63,6 +64,8 @@ Domain skills for a team's own projects and stack are not bundled: keep them in 
 | `pr-workflow` / `release-check` | Pr-workflow commits, pushes and opens the PR, and runs the repo's gate before the push; release-check owns the go/no-go verdict on merge or deploy readiness. |
 | `pr-workflow` / `ci-triage` | Pr-workflow's watch waits for the checks and reports them; ci-triage takes over when one is red or canceled. |
 | `pr-workflow` / `review-response` | Pr-workflow's watch reports the open threads; review-response verifies them and drafts the replies. |
+| `pr-workflow` / `pr-modernize` | Pr-workflow turns finished work into a new or updated PR and never rewrites pushed commits; pr-modernize judges an existing old or inherited PR and may rewrite its branch, only after an ok for the exact command. |
+| `handoff` / `pr-modernize` | Handoff compacts state for whoever picks the work up; pr-modernize treats such a handoff as context, verifies it against the code and takes the PR forward. |
 | `release-notes` / `release-check` | Release-notes drafts what changed for users; release-check decides whether the branch is ready to ship. |
 | `security-review` / `security-audit` | Security-review checks a change or answers a focused question in the current context; security-audit runs a full multi-agent audit of a whole codebase only when one is explicitly asked for. |
 | `security-review` / `sentinel` (agent) | Skill guides the review in the current context; where the harness has the sentinel agent (OpenCode, Claude), it performs an independent read-only review of a finished diff, otherwise the review stays inline. |
@@ -85,6 +88,7 @@ Domain skills for a team's own projects and stack are not bundled: keep them in 
 - Project status report or weekly summary: `status-report`.
 - Commit, push and open or update a PR: `pr-workflow`; add `release-check` before the push.
 - Watching a PR through CI, on request: `pr-workflow`; it hands a red check to `ci-triage` and open threads to `review-response`.
+- Old, stale or inherited PR: `pr-modernize`; add `pr-workflow` to open a replacement and `review-response` for its open threads.
 - Release readiness: `release-check`.
 - Onboarding agents to a repo, or a missing or stale `AGENTS.md`: `agents-md`.
 - Release notes or a changelog section: `release-notes`; add `release-check` for the gate.
