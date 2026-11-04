@@ -24,6 +24,8 @@ interface Backend {
   lightHealthRequests: string[];
   /** When set, get_claude_runtime_health resolves only after this promise does. */
   holdClaudeHealth: Promise<void> | null;
+  /** When set, get_workspace_diagnostics resolves only after this promise does. */
+  holdDiagnostics: Promise<void> | null;
   /** Personal docs the Library lists. */
   docs: Array<{ id: string; title: string; content: string }>;
   /** The skill packs the Library lists; forget_pack drops one. */
@@ -39,6 +41,7 @@ function installBackend(overrides: Partial<AppSettings> = {}): Backend {
     holdUpdate: null,
     lightHealthRequests: [],
     holdClaudeHealth: null,
+    holdDiagnostics: null,
     docs: [],
     packs: { folder: "~/packs", packs: [], skills: [], ignored: [] },
   };
@@ -67,7 +70,7 @@ function installBackend(overrides: Partial<AppSettings> = {}): Backend {
       case "list_skills":
         return Promise.resolve([]);
       case "get_workspace_diagnostics":
-        return Promise.resolve({
+        return (backend.holdDiagnostics ?? Promise.resolve()).then(() => ({
           candidate_path: "/tmp/ws",
           resolved_path: "/tmp/ws",
           valid: true,
@@ -78,7 +81,7 @@ function installBackend(overrides: Partial<AppSettings> = {}): Backend {
           total_config_targets: 0,
           backup_root: "/tmp/backups",
           backup_root_exists: false,
-        });
+        }));
       case "list_pack_skills":
         return Promise.resolve(backend.packs);
       case "forget_pack": {
@@ -353,10 +356,33 @@ describe("App shell", () => {
     expect(backend.commandLog).not.toContain("rollback_setup_transaction");
   });
 
+  it("refuses update --all truthfully until the folder is checked, and Enter then runs it", async () => {
+    const backend = installBackend();
+    let answerDiagnostics = () => {};
+    backend.holdDiagnostics = new Promise<void>(resolve => {
+      answerDiagnostics = resolve;
+    });
+    render(<App />);
+    await ready();
+    fireEvent.keyDown(document.body, { key: ":", shiftKey: true });
+    const input = screen.getByRole("combobox", { name: "Command" });
+    fireEvent.change(input, { target: { value: "update --all" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(screen.getByRole("alert").textContent).toBe("update: workspace folder not checked yet, press Enter to try again");
+    expect(screen.queryByRole("region", { name: "Workspace install review" })).toBeNull();
+    answerDiagnostics();
+    // The answer arrives while the line is still open, as it would for someone reading the refusal.
+    await waitFor(() => expect(screen.getByRole("button", { name: "Update all" }).getAttribute("title")).toBe("Everything Riggverk can update is already up to date."));
+    fireEvent.keyDown(input, { key: "Enter" });
+    await screen.findByRole("region", { name: "Workspace install review" });
+  });
+
   it.each(["all", "workspace"])("keeps the right outcome actions after update %s", async target => {
     const backend = installBackend();
     render(<App />);
     await ready();
+    // `--all` needs the folder's verdict, which arrives after the sidebar; the settled Update all shows it is in.
+    await waitFor(() => expect(screen.getByRole("button", { name: "Update all" }).getAttribute("title")).toBe("Everything Riggverk can update is already up to date."));
     fireEvent.keyDown(document.body, { key: ":", shiftKey: true });
     const input = screen.getByRole("combobox", { name: "Command" });
     fireEvent.change(input, { target: { value: `update ${target === "all" ? "--all" : target}` } });

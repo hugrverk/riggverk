@@ -727,6 +727,7 @@ function AppShell() {
   useAppCommands({
     enabledHarnessIds,
     dataFolderOk,
+    dataFolderChecked: workspaceDiagnostics !== null,
     busyLabel: wsRunning,
     overview,
     switchView,

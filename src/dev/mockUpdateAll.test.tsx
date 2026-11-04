@@ -9,6 +9,8 @@ it("shows Update all actions in the receipt with the default mock backend", asyn
   await import("./mockBackend");
   render(<App />);
   await within(screen.getByRole("navigation", { name: "Main navigation" })).findByRole("button", { name: "Claude" }, { timeout: 10000 });
+  // `--all` needs the folder's verdict, which arrives after the sidebar; an enabled Update all shows it is in.
+  await waitFor(() => expect(screen.getByRole("button", { name: "Update all" }).getAttribute("aria-disabled")).toBeNull(), { timeout: 10000 });
   fireEvent.keyDown(document.body, { key: ":", shiftKey: true });
   const input = screen.getByRole("combobox", { name: "Command" });
   fireEvent.change(input, { target: { value: "update --all" } });

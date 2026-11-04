@@ -19,6 +19,7 @@ function deps(): AppCommandDeps {
   return {
     enabledHarnessIds: ["codex", "opencode", "cursor", "claude"],
     dataFolderOk: true,
+    dataFolderChecked: true,
     busyLabel: null,
     switchView: vi.fn(),
     appearance: "dark",

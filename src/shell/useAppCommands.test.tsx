@@ -32,6 +32,7 @@ function makeDeps(overrides: Partial<AppCommandDeps> = {}): AppCommandDeps {
   return {
     enabledHarnessIds: ["codex", "opencode", "cursor", "claude"],
     dataFolderOk: true,
+    dataFolderChecked: true,
     busyLabel: null,
     switchView: vi.fn(),
     setLibrarySource: vi.fn(),
@@ -335,6 +336,20 @@ describe("useAppCommands", () => {
       fireEvent.keyDown(screen.getByRole("combobox", { name: "Command" }), { key: "Enter" });
       expect(commandLineError()).toBe("update: use either a target or --all");
       expect(idle.openInstall).not.toHaveBeenCalled();
+    });
+
+    it("does not call the folder unusable before the diagnostics have answered", () => {
+      const unchecked = makeDeps({ dataFolderOk: false, dataFolderChecked: false });
+      setup(unchecked);
+      runLine("update --all");
+      expect(commandLineError()).toBe("update: workspace folder not checked yet, press Enter to try again");
+      fireEvent.keyDown(screen.getByRole("combobox", { name: "Command" }), { key: "Escape" });
+      runLine("update claude");
+      expect(commandLineError()).toBe("update: workspace folder not checked yet, press Enter to try again");
+      fireEvent.keyDown(screen.getByRole("combobox", { name: "Command" }), { key: "Escape" });
+      expect(unchecked.openInstall).not.toHaveBeenCalled();
+      runLine("update workspace");
+      expect(unchecked.openInstall).toHaveBeenCalledWith("workspace");
     });
 
     it("lets the workspace be installed without a valid workspace, but nothing that needs one", () => {

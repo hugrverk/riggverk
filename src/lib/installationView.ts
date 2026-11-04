@@ -49,6 +49,9 @@ const STATE_DISPLAY: Record<SurfaceDisplayState, StateDisplay> = {
  */
 export const WORKSPACE_FOLDER_UNUSABLE = "workspace folder unusable";
 
+/** Why it cannot run yet: the diagnostics that judge the folder have not answered (launch, a workspace switch). */
+export const WORKSPACE_FOLDER_UNCHECKED = "workspace folder not checked yet";
+
 /** What an off target tells beyond its name, for a target whose default is not obvious from the name. */
 const OFF_DETAIL: Partial<Record<string, string>> = {
   claude_config: "off · Claude Code keeps its default commit and PR attribution",
