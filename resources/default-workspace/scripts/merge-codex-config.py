@@ -387,6 +387,9 @@ def patch_managed_scalar_line(line: str, key: str, new_value: str) -> str | None
     return f"{prefix}{new_value}{comment_suffix}"
 
 
+TOML_ESCAPES = {"\\": "\\\\", '"': '\\"', "\t": "\\t", "\n": "\\n", "\r": "\\r"}
+
+
 def format_toml_scalar(value: Any) -> str:
     """Format a scalar value for TOML."""
     if isinstance(value, bool):
@@ -396,9 +399,13 @@ def format_toml_scalar(value: Any) -> str:
     if isinstance(value, float):
         return repr(value)
     if isinstance(value, str):
-        if "\n" in value:
-            return '"""\n' + value + '\n"""'
-        escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+        # One basic string with every character TOML does not take raw escaped, a newline
+        # included, so any value reads back unchanged.
+        escaped = "".join(
+            TOML_ESCAPES.get(ch)
+            or (f"\\u{ord(ch):04X}" if ord(ch) < 0x20 or ord(ch) == 0x7F else ch)
+            for ch in value
+        )
         return f'"{escaped}"'
     raise ValueError(f"unsupported scalar type: {type(value)}")
 

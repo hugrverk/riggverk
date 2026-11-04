@@ -225,7 +225,7 @@ fn cleanup_temp_dir(path: &Path) {
 
 /// Shown when no Python that can read TOML is found: the merge scripts need `tomllib`.
 pub(crate) const CODEX_PYTHON_REQUIRED: &str =
-    "Python 3.11 or newer is needed to update the Codex config.";
+    "Python 3.11 or newer is needed to update the Codex config. A python3 that someone other than you or root owns or can write, or whose folder they can write, is not used.";
 /// A merge script failed. Its output is never shown: it can quote lines of the user's config.
 const CODEX_MERGE_FAILED: &str = "the Codex config could not be merged safely; nothing was written";
 const PYTHON_PROBE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
@@ -248,8 +248,10 @@ pub(crate) fn with_codex_python<T>(python: Option<PathBuf>, f: impl FnOnce() -> 
 
 /// The `python3` that runs the Codex merge scripts: the first one that can `import tomllib`
 /// (Python 3.11+), from the tool folders a GUI launch lacks and then `PATH`. A Finder launch puts
-/// macOS's own `/usr/bin/python3` (3.9) first, whose fallback parser refuses valid TOML. Probed
-/// once per process; `None` when there is none.
+/// macOS's own `/usr/bin/python3` (3.9) first, whose fallback parser refuses valid TOML. A
+/// candidate another user could replace is never run (see
+/// [`crate::executable_resolver::trusted_executable`]). Probed once per process, and the resolved
+/// file is what runs; `None` when there is none.
 pub(crate) fn codex_python() -> Option<PathBuf> {
     #[cfg(test)]
     if let Some(forced) = FORCED_CODEX_PYTHON.with(|forced| forced.borrow().clone()) {
@@ -257,30 +259,13 @@ pub(crate) fn codex_python() -> Option<PathBuf> {
     }
     static FOUND: std::sync::OnceLock<Option<PathBuf>> = std::sync::OnceLock::new();
     FOUND
-        .get_or_init(|| first_python_with_tomllib(&python_candidates()))
+        .get_or_init(|| {
+            first_python_with_tomllib(&crate::executable_resolver::python3_candidates(
+                crate::executable_resolver::tool_dirs(),
+                std::env::var_os("PATH"),
+            ))
+        })
         .clone()
-}
-
-fn python_candidates() -> Vec<PathBuf> {
-    let mut dirs = crate::executable_resolver::tool_dirs();
-    if let Some(path) = std::env::var_os("PATH") {
-        dirs.extend(std::env::split_paths(&path));
-    }
-    let pathext = std::env::var("PATHEXT").ok();
-    let mut found: Vec<PathBuf> = Vec::new();
-    for dir in dirs {
-        let Some(dir) = dir.to_str().filter(|dir| !dir.is_empty()) else {
-            continue;
-        };
-        if let Some(python) =
-            crate::executable_resolver::resolve_executable("python3", dir, pathext.as_deref())
-        {
-            if !found.contains(&python) {
-                found.push(python);
-            }
-        }
-    }
-    found
 }
 
 fn first_python_with_tomllib(candidates: &[PathBuf]) -> Option<PathBuf> {
@@ -291,6 +276,7 @@ fn first_python_with_tomllib(candidates: &[PathBuf]) -> Option<PathBuf> {
     };
     candidates
         .iter()
+        .filter_map(|python| crate::executable_resolver::trusted_executable(python))
         .find(|python| {
             let Some(program) = python.to_str() else {
                 return false;
@@ -308,7 +294,6 @@ fn first_python_with_tomllib(candidates: &[PathBuf]) -> Option<PathBuf> {
             )
             .success
         })
-        .cloned()
 }
 
 /// Render Codex managed config fields from `managed_source` into `dest` via the
@@ -991,9 +976,76 @@ apps._default.default_tools_approval_mode = "prompt"
         let newer = fake("newer", 0);
         let found = first_python_with_tomllib(&[old.clone(), new.clone(), newer]);
         let none = first_python_with_tomllib(&[old]);
+        let new = fs::canonicalize(&new).expect("resolve");
         cleanup(&dir);
         assert_eq!(found, Some(new));
         assert_eq!(none, None);
+    }
+
+    /// The tool folders come before `PATH`, and a candidate another user could replace is skipped
+    /// for a later one.
+    #[cfg(unix)]
+    #[test]
+    fn python_is_looked_for_in_the_tool_folders_first_and_only_trusted_ones_run() {
+        use std::os::unix::fs::PermissionsExt;
+        let tools = temp_root("python-order-tools");
+        let path = temp_root("python-order-path");
+        let fake = |path: PathBuf| {
+            write_file(&path, "#!/bin/sh\nexit 0\n");
+            fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).expect("chmod");
+            path
+        };
+        let in_tool_folder = fake(tools.join("python3"));
+        let on_path = fake(path.join("python3"));
+        let candidates = crate::executable_resolver::python3_candidates(
+            vec![tools.clone()],
+            Some(path.clone().into_os_string()),
+        );
+        let trusted = first_python_with_tomllib(&candidates);
+        fs::set_permissions(&tools, fs::Permissions::from_mode(0o777)).expect("chmod");
+        let skipped = first_python_with_tomllib(&candidates);
+        let (in_tool_folder_resolved, on_path_resolved) = (
+            fs::canonicalize(&in_tool_folder).expect("resolve"),
+            fs::canonicalize(&on_path).expect("resolve"),
+        );
+        cleanup(&tools);
+        cleanup(&path);
+        assert_eq!(candidates, [in_tool_folder, on_path]);
+        assert_eq!(trusted, Some(in_tool_folder_resolved));
+        assert_eq!(skipped, Some(on_path_resolved));
+    }
+
+    /// Another local user who can write a `python3` or its folder would choose what reads the
+    /// Codex config, so such a candidate is never run, through a link or not.
+    #[cfg(unix)]
+    #[test]
+    fn a_python_another_user_could_replace_is_never_run() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = temp_root("python-trust");
+        let marker = dir.join("ran");
+        let fake = |path: PathBuf| {
+            write_file(
+                &path,
+                &format!("#!/bin/sh\ntouch '{}'\nexit 0\n", marker.display()),
+            );
+            fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).expect("chmod");
+            path
+        };
+        let shared = fake(dir.join("shared/python3"));
+        fs::set_permissions(dir.join("shared"), fs::Permissions::from_mode(0o777)).expect("chmod");
+        let writable = fake(dir.join("writable/python3"));
+        fs::set_permissions(&writable, fs::Permissions::from_mode(0o757)).expect("chmod");
+        let linked = dir.join("linked/python3");
+        fs::create_dir_all(dir.join("linked")).expect("dir");
+        std::os::unix::fs::symlink(&shared, &linked).expect("link");
+
+        let found = first_python_with_tomllib(&[shared.clone(), writable, linked]);
+        let ran = marker.exists();
+        let refused = crate::executable_resolver::trusted_executable(&shared);
+        cleanup(&dir);
+        assert_eq!(found, None);
+        assert!(!ran, "a refused python was run");
+        assert_eq!(refused, None);
     }
 
     fn add_rules(ws: &Path, home: &Path) {

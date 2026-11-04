@@ -259,7 +259,7 @@ fn validate(text: &str, own_skills: &BTreeSet<&str>) -> Result<Vec<String>, Stri
 /// overrides, word joiner and invisible operators, the byte order mark, interlinear annotation marks,
 /// shorthand format controls and tag characters, plus the line and paragraph separators. The ranges are
 /// those of the Unicode Character Database.
-pub(crate) fn is_invisible_format(c: char) -> bool {
+fn is_invisible_format(c: char) -> bool {
     matches!(
         u32::from(c),
         0x00AD
@@ -289,9 +289,9 @@ pub(crate) fn is_invisible_format(c: char) -> bool {
 /// A character a routing line refuses because it shows as nothing: the invisible format characters
 /// above, plus the other default-ignorable code points that are not format characters (combining
 /// grapheme joiner, Hangul fillers, Khmer inherent vowels, Mongolian and other variation selectors)
-/// and the blank Braille pattern. Variation selectors can encode text no diff shows, and a routing
-/// line reaches every agent; a `SKILL.md` is only flagged, so this stricter set is routing's own.
-fn is_invisible_in_routing(c: char) -> bool {
+/// and the blank Braille pattern. Variation selectors can encode text no diff shows. A routing line
+/// with one is refused, since it reaches every agent; a `SKILL.md` import flags the same set.
+pub(crate) fn is_invisible_in_routing(c: char) -> bool {
     is_invisible_format(c)
         || matches!(
             u32::from(c),

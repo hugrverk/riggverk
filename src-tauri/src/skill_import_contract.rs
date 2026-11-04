@@ -726,6 +726,38 @@ mod tests {
         );
     }
 
+    /// `allowed-tools` or `hooks` spelled so a YAML parser reads them and a line reader would not
+    /// cannot reach the pack unlisted: the frontmatter is refused as unreadable.
+    #[test]
+    fn the_preview_refuses_frontmatter_that_could_hide_a_key_from_the_flags() {
+        let env = Env::new("hidden-keys");
+        let spellings = [
+            ("explicit", "\n? allowed-tools\n: Bash(*)\n"),
+            ("tagged", "\n!!str allowed-tools: Bash(*)\n"),
+            ("carriage", "\rallowed-tools: Bash(*)\n"),
+            ("merged", "\nbase: &a\n  hooks: {}\n<<: *a\n"),
+        ];
+        let sources: Vec<PathBuf> = spellings
+            .iter()
+            .map(|(name, rest)| {
+                let text = format!("---\nname: {name}\ndescription: d{rest}---\n# Demo\n");
+                env.source(name, &[("SKILL.md", &text)])
+            })
+            .collect();
+        let shown = preview(&sources.iter().collect::<Vec<_>>());
+        let candidates = shown["candidates"].as_array().expect("candidates");
+        assert_eq!(candidates.len(), spellings.len());
+        for candidate in candidates {
+            assert_eq!(candidate["status"], "refused", "{candidate}");
+            let problems = candidate["problems"].to_string();
+            assert!(
+                problems.contains("the frontmatter cannot be read"),
+                "{problems}"
+            );
+        }
+        assert!(shown["token"].is_null(), "nothing can be imported");
+    }
+
     #[test]
     fn a_changed_staging_copy_or_a_changed_import_in_place_refuses_the_commit() {
         let env = Env::new("tamper");
@@ -874,6 +906,42 @@ mod tests {
             .is_empty());
         assert_eq!(fs::read_dir(&backups).expect("backups").count(), 3);
         assert!(undo_last_import().is_err(), "nothing left to undo");
+    }
+
+    /// Nothing authenticates a backup, so undo restores one only while it is the user's alone and
+    /// still the copy the record describes, as a setup rollback does.
+    #[cfg(unix)]
+    #[test]
+    fn undo_refuses_a_backup_someone_else_could_write_or_that_changed() {
+        use std::os::unix::fs::PermissionsExt;
+        let env = Env::new("undo-trust");
+        let source = env.source("release-notes-plus", &[("SKILL.md", SPEC)]);
+        commit(&preview(&[&source]), &["0"]).expect("import");
+        remove_imported_skill("release-notes-plus".into()).expect("remove");
+        let backup = fs::read_dir(env.base.join("backups/imports"))
+            .expect("backups")
+            .flatten()
+            .next()
+            .expect("one")
+            .path()
+            .join("release-notes-plus/SKILL.md");
+
+        fs::set_permissions(&backup, fs::Permissions::from_mode(0o620)).expect("chmod");
+        let error = undo_last_import().expect_err("group-writable");
+        assert!(error.contains("someone else could have written"), "{error}");
+        fs::set_permissions(&backup, fs::Permissions::from_mode(0o600)).expect("chmod");
+
+        fs::write(&backup, SPEC.replace("# Notes", "# Changed")).expect("tamper");
+        let error = undo_last_import().expect_err("changed");
+        assert!(error.contains("not the copy it recorded"), "{error}");
+        assert!(!env.imported().join("release-notes-plus").exists());
+
+        fs::write(&backup, SPEC).expect("put back");
+        undo_last_import().expect("the recorded copy");
+        assert_eq!(
+            fs::read_to_string(env.imported().join("release-notes-plus/SKILL.md")).expect("back"),
+            SPEC
+        );
     }
 
     #[test]

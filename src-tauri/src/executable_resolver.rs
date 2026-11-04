@@ -121,6 +121,63 @@ pub(crate) fn is_executable_file(path: &Path, pathext: Option<&str>) -> bool {
     }
 }
 
+/// On Unix, the file `path` runs, links resolved, or `None` when it or its folder is owned by
+/// someone other than root or the current user or is writable by its group or by everyone: another
+/// local user could then choose what runs. Run the returned path, so a link changed later is not
+/// followed. Elsewhere, `path` as it is.
+pub(crate) fn trusted_executable(path: &Path) -> Option<PathBuf> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        let resolved = std::fs::canonicalize(path).ok()?;
+        let folder = resolved.parent().unwrap_or(&resolved);
+        for entry in [resolved.as_path(), folder] {
+            let meta = std::fs::metadata(entry).ok()?;
+            let owner = [0, crate::skill_sources::effective_uid()].contains(&meta.uid());
+            if !owner || meta.mode() & 0o022 != 0 {
+                return None;
+            }
+        }
+        Some(resolved)
+    }
+    #[cfg(not(unix))]
+    {
+        Some(path.to_path_buf())
+    }
+}
+
+/// Every `python3` in `tool_dirs` (the folders a GUI launch lacks, [`tool_dirs`]) and then on
+/// `path` (the process `PATH`), each once. Tool folders come first: a Finder launch has `/usr/bin`
+/// first on `PATH`, and running its `python3` stub without the Command Line Tools opens their
+/// installer.
+pub(crate) fn python3_candidates(tool_dirs: Vec<PathBuf>, path: Option<OsString>) -> Vec<PathBuf> {
+    let mut dirs = tool_dirs;
+    if let Some(path) = path {
+        dirs.extend(std::env::split_paths(&path));
+    }
+    let pathext = std::env::var("PATHEXT").ok();
+    let mut found: Vec<PathBuf> = Vec::new();
+    for dir in dirs {
+        let Some(dir) = dir.to_str().filter(|dir| !dir.is_empty()) else {
+            continue;
+        };
+        if let Some(python) = resolve_executable("python3", dir, pathext.as_deref()) {
+            if !found.contains(&python) {
+                found.push(python);
+            }
+        }
+    }
+    found
+}
+
+/// The first of [`python3_candidates`] that [`trusted_executable`] accepts, resolved: for helpers
+/// that run on any Python 3, such as the OpenCode config generator.
+pub(crate) fn trusted_python3(tool_dirs: Vec<PathBuf>, path: Option<OsString>) -> Option<PathBuf> {
+    python3_candidates(tool_dirs, path)
+        .iter()
+        .find_map(|python| trusted_executable(python))
+}
+
 /// Returns `current` with every existing directory from `fallbacks` that is not already on it
 /// appended, or `None` when nothing changes. Append-only so system tools earlier on the path
 /// are never shadowed. An unset or empty `current` is left alone.
