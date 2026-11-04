@@ -351,6 +351,17 @@ describe("useAppCommands", () => {
       expect(unchecked.openInstall).toHaveBeenCalledWith("workspace");
     });
 
+    it("refuses every target before the settings load, a harness too", () => {
+      const early = makeDeps({ settingsLoaded: false, enabledHarnessIds: [], dataFolderOk: false, dataFolderVerdict: "unchecked" });
+      setup(early);
+      for (const line of ["update workspace", "update claude", "update --all"]) {
+        runLine(line);
+        expect(commandLineError()).toBe("update: settings not loaded yet");
+        fireEvent.keyDown(screen.getByRole("combobox", { name: "Command" }), { key: "Escape" });
+      }
+      expect(early.openInstall).not.toHaveBeenCalled();
+    });
+
     it("points at Check, not at Enter, when the diagnostics failed", () => {
       const failed = makeDeps({ dataFolderOk: false, dataFolderVerdict: "check_failed" });
       setup(failed);

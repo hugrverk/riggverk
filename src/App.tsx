@@ -731,6 +731,7 @@ function AppShell() {
 
   useAppCommands({
     enabledHarnessIds,
+    settingsLoaded: appSettings !== null,
     dataFolderOk,
     dataFolderVerdict,
     busyLabel: wsRunning,

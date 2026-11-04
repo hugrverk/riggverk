@@ -24,6 +24,8 @@ interface Backend {
   lightHealthRequests: string[];
   /** When set, get_claude_runtime_health resolves only after this promise does. */
   holdClaudeHealth: Promise<void> | null;
+  /** When set, get_settings resolves only after this promise does. */
+  holdSettings: Promise<void> | null;
   /** When set, get_workspace_diagnostics resolves only after this promise does. */
   holdDiagnostics: Promise<void> | null;
   /** When set, get_workspace_diagnostics rejects with this message. */
@@ -43,6 +45,7 @@ function installBackend(overrides: Partial<AppSettings> = {}): Backend {
     holdUpdate: null,
     lightHealthRequests: [],
     holdClaudeHealth: null,
+    holdSettings: null,
     holdDiagnostics: null,
     failDiagnostics: null,
     docs: [],
@@ -52,7 +55,7 @@ function installBackend(overrides: Partial<AppSettings> = {}): Backend {
     backend.commandLog.push(command);
     switch (command) {
       case "get_settings":
-        return Promise.resolve({ settings: backend.settings, load_warning: null });
+        return (backend.holdSettings ?? Promise.resolve()).then(() => ({ settings: backend.settings, load_warning: null }));
       case "update_settings":
         return (backend.holdUpdate ?? Promise.resolve()).then(() => {
           backend.settings = { ...(args?.settings ?? backend.settings), revision: (backend.settings.revision ?? 0) + 1 };
@@ -358,6 +361,25 @@ describe("App shell", () => {
     fireEvent.keyDown(document.body, { key: "z" });
     await act(async () => {});
     expect(backend.commandLog).not.toContain("rollback_setup_transaction");
+  });
+
+  it("refuses update before the settings load instead of closing the line, and Enter then runs it", async () => {
+    const backend = installBackend();
+    let answerSettings = () => {};
+    backend.holdSettings = new Promise<void>(resolve => {
+      answerSettings = resolve;
+    });
+    render(<App />);
+    fireEvent.keyDown(document.body, { key: ":", shiftKey: true });
+    const input = screen.getByRole("combobox", { name: "Command" });
+    fireEvent.change(input, { target: { value: "update workspace" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(screen.getByRole("alert").textContent).toBe("update: settings not loaded yet");
+    expect(screen.getByRole("combobox", { name: "Command" })).toBe(input);
+    answerSettings();
+    await ready();
+    fireEvent.keyDown(input, { key: "Enter" });
+    await screen.findByRole("region", { name: "Workspace install review" });
   });
 
   describe("while nothing is known about the workspace folder", () => {
