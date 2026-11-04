@@ -22,7 +22,7 @@ Done when: every open thread has a verdict (fix, push back or ask) with the evid
 
 **Resolve the PR once.** Take the PR the user names (number or URL), else the current branch's, and read its URL: `gh pr view [<number-or-url>] --json url,number,author,headRefName,headRefOid,isCrossRepository`. The URL (`https://<host>/<owner>/<repo>/pull/<number>`) names the base repository, which holds the PR, its threads and its comments. Use that `<owner>/<repo>` explicitly in every later read and post (`gh api repos/<owner>/<repo>/...`, `gh pr ... -R <owner>/<repo>`, GraphQL variables), never the `{owner}/{repo}` placeholders, which resolve to the current checkout and may be another repository. On GitHub Enterprise, add `--hostname <host>` to `gh api`.
 
-**Keep review text out of the session.** Work in a temporary folder outside the repo (`work="$(mktemp -d)"`, deleted after the last post). Every fetch below writes complete, paginated JSON to a file, never through `head`: a cut corrupts the JSON and drops comments. Read the files with `jq` (or the harness's own JSON reading), and show only the excerpts a decision needs, with secret-looking values (tokens, keys, passwords, signed URLs) replaced by `<REDACTED>`.
+**Keep review text out of the session.** Run `mktemp -d` once, outside the repo, put the printed path in place of `<work>` in every later command, and delete the folder after the last post; never type the placeholder itself. Never hold the path in a shell variable: harnesses that start a fresh shell per tool call lose it, and a path built on an empty variable collapses to `/threads.json`. Every fetch below writes complete, paginated JSON to a file, never through `head`: a cut corrupts the JSON and drops comments. Read the files with `jq` (or the harness's own JSON reading), and show only the excerpts a decision needs, with secret-looking values (tokens, keys, passwords, signed URLs) replaced by `<REDACTED>`.
 
 Review threads, with the state only the GraphQL API exposes, all pages:
 
@@ -43,7 +43,7 @@ query($owner: String!, $name: String!, $pr: Int!, $endCursor: String) {
       }
     }
   }
-}' > "$work/threads.json"; echo "exit=$?"
+}' > "<work>/threads.json"; echo "exit=$?"
 ```
 
 A thread whose `comments.pageInfo.hasNextPage` is true has more comments; fetch them all by the thread's `id`:
@@ -59,14 +59,14 @@ query($thread: ID!, $endCursor: String) {
       }
     }
   }
-}' > "$work/thread-<n>.json"; echo "exit=$?"
+}' > "<work>/thread-<n>.json"; echo "exit=$?"
 ```
 
 Review summaries and top-level comments, all pages:
 
 ```bash
-gh api --paginate --slurp repos/<owner>/<repo>/pulls/<number>/reviews > "$work/reviews.json"; echo "exit=$?"
-gh api --paginate --slurp repos/<owner>/<repo>/issues/<number>/comments > "$work/comments.json"; echo "exit=$?"
+gh api --paginate --slurp repos/<owner>/<repo>/pulls/<number>/reviews > "<work>/reviews.json"; echo "exit=$?"
+gh api --paginate --slurp repos/<owner>/<repo>/issues/<number>/comments > "<work>/comments.json"; echo "exit=$?"
 ```
 
 - Skip resolved threads. List outdated ones apart: the code moved, so check whether the point still applies.
