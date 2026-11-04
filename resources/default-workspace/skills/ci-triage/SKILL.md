@@ -26,7 +26,7 @@ CI logs can hold tokens, environment dumps, signed URLs and customer data. They 
 
 - Check gh with `gh auth status >/dev/null 2>&1; echo "exit=$?"` and use only the exit status. Not logged in: ask the user to run `gh auth login`, or to paste the log (see Fallback).
 - Bounded pipes run under `set -o pipefail` (bash, zsh) so a failing gh call is not hidden behind `head`; a status of 141 only means the output was cut.
-- From a PR: `gh pr checks <pr> --json name,state,bucket,link,workflow | head -c 4000`. It exits non-zero while checks fail or are pending, so read the JSON, not only the status. Failed checks have `bucket` `fail`; the run id is in the `link`.
+- From a PR: `gh pr checks <pr> --json name,state,bucket,link,workflow | head -c 4000`. With `--json` it exits 0 whatever the checks show, and non-zero only when gh has no list to give (`no checks reported`, or a gh error), so read the JSON, not the status. Failed checks have `bucket` `fail`; the run id is in the `link`.
 - From a branch: `gh run list --branch <branch> --status failure --limit 5 --json databaseId,workflowName,headSha,createdAt,url`.
 - A check whose link is not a GitHub Actions run belongs to an external CI service: report its name and link, and ask the user for its log instead of guessing.
 - Compare the run's `headSha` with the commit in question (`git rev-parse HEAD`). A failure on an older commit may already be fixed; say so before digging.
@@ -72,6 +72,7 @@ Unknown is a valid answer: say what is missing to decide.
 
 ## 4. Reproduce locally
 
+- An outside PR's code is unvetted, and running it runs it with your access. When `gh pr view <pr> --json isCrossRepository,author` shows `isCrossRepository` true or an author the user does not know, classify from the logs only and ask before any local run.
 - Run the command the failing step runs, read from the workflow file (`.github/workflows/<file>.yml`, the step's `run:`), or the repo's documented gate that wraps it. Do not approximate with a different command.
 - Match what matters: the same commit (in a clean temporary worktree when the working tree has other changes), the versions the log printed, and the environment variables the step sets, by name; never copy secret values.
 - Capture the status: `<command> >"$out" 2>&1; echo "exit=$?"`, then read bounded slices as in step 2.

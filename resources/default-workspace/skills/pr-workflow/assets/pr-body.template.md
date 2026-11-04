@@ -1,10 +1,10 @@
 ## Why
 
-<The problem or goal in one or two sentences. Link an issue only when you know its number.>
+<The problem as the person affected would describe it, or the goal when nothing is broken, in one or two sentences. Link an issue only when you know its number.>
 
 ## What
 
-<Changes grouped by behaviour, not file by file.>
+<Changes grouped by behavior, not file by file.>
 
 ## Verification
 
