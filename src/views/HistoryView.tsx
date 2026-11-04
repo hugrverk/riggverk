@@ -1,6 +1,7 @@
 import { useId, useState } from "react";
 import { Receipt } from "../components/run/Receipt";
 import { useHistory } from "../hooks/useHistory";
+import { dataFolderUnknownSentence, type DataFolderVerdict } from "../lib/installationView";
 import { receiptLines, runMetaText, runPill, runTitle } from "../lib/lastUpdate";
 import type { SetupHistoryEntry } from "../types";
 import { StatePill } from "../ui/StatePill";
@@ -10,6 +11,7 @@ import { cx } from "../ui/tone";
 export interface HistoryViewProps {
   /** Without a usable workspace folder there is no backup root to read the history from. */
   dataFolderOk: boolean;
+  dataFolderVerdict?: DataFolderVerdict;
   /** Backups on disk, for the Backup line. */
   backupCount: number | null;
   /** Label of the workspace task in flight, or null. */
@@ -65,7 +67,7 @@ function RunRow({ entry, open, backupCount, undoTarget, undoDisabled, onToggle, 
  * the newest completed one (the backend's `undoable`), and starts the same dry run and confirm as `z`; nothing is
  * written before the confirm. The page writes nothing itself.
  */
-export function HistoryView({ dataFolderOk, backupCount, wsRunning, wsLogCompletedAt, onUndo }: HistoryViewProps) {
+export function HistoryView({ dataFolderOk, dataFolderVerdict, backupCount, wsRunning, wsLogCompletedAt, onUndo }: HistoryViewProps) {
   const history = useHistory({
     enabled: dataFolderOk,
     // A finished apply, uninstall or rollback changes the history; so does starting and ending a task.
@@ -77,7 +79,7 @@ export function HistoryView({ dataFolderOk, backupCount, wsRunning, wsLogComplet
 
   let body;
   if (!dataFolderOk) {
-    body = <p className="hist-note">History is read from the workspace folder, which Riggverk can't use right now. The Overview says why.</p>;
+    body = <p className="hist-note">{dataFolderUnknownSentence(dataFolderVerdict) ?? "History is read from the workspace folder, which Riggverk can't use right now. The Overview says why."}</p>;
   } else if (history.status === "loading") {
     body = <p className="hist-note" role="status">Reading the history…</p>;
   } else if (history.status === "error") {

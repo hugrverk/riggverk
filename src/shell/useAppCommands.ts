@@ -7,7 +7,7 @@ import {
 } from "../hooks/useInstallationOverview";
 import { HARNESS_NAV_ORDER } from "../lib/harnessInstallation";
 import type { InstallTarget } from "../lib/installPlan";
-import { WORKSPACE_FOLDER_UNCHECKED, WORKSPACE_FOLDER_UNUSABLE } from "../lib/installationView";
+import { dataFolderReason, WORKSPACE_FOLDER_UNUSABLE, type DataFolderVerdict } from "../lib/installationView";
 import { BUNDLED_RELEASES } from "../lib/releaseNotes";
 import { workspaceTaskBlockedMessage } from "../lib/workspaceErrors";
 import type { AppSettings, InstallAgent } from "../types";
@@ -18,8 +18,8 @@ import { VIEW_DEFS, type AppView } from "./views";
 export interface AppCommandDeps {
   enabledHarnessIds: readonly InstallAgent[];
   dataFolderOk: boolean;
-  /** The diagnostics have answered. Until then `dataFolderOk` is false without the folder being unusable. */
-  dataFolderChecked: boolean;
+  /** Why `dataFolderOk` is false. Without it, a false `dataFolderOk` means unusable. */
+  dataFolderVerdict?: DataFolderVerdict;
   /** Label of the workspace task in flight (apply, uninstall, ...), or null. */
   busyLabel: string | null;
   overview?: InstallationOverview;
@@ -80,10 +80,8 @@ export function useAppCommands(deps: AppCommandDeps): void {
 
   const targets = () => updateTargets(deps.enabledHarnessIds);
   const busyReason = () => (deps.busyLabel ? `${deps.busyLabel} is running` : true);
-  const workspaceReason = () => {
-    if (deps.dataFolderOk) return true;
-    return deps.dataFolderChecked ? WORKSPACE_FOLDER_UNUSABLE : WORKSPACE_FOLDER_UNCHECKED;
-  };
+  const workspaceReason = () => (deps.dataFolderOk ? true : dataFolderReason(deps.dataFolderVerdict));
+  const folderUnknown = () => deps.dataFolderVerdict === "unchecked" || deps.dataFolderVerdict === "check_failed";
   const guarded = (...checks: Array<() => true | string>) => (): true | string => {
     for (const check of checks) {
       const result = check();
@@ -97,7 +95,7 @@ export function useAppCommands(deps: AppCommandDeps): void {
     parsed.flags.all ? "all" : (parsed.named.target as InstallTarget);
 
   // With an unusable workspace folder only the workspace itself can be installed.
-  const targetValues = (): OverviewId[] => (deps.dataFolderOk || !deps.dataFolderChecked ? targets() : ["workspace"]);
+  const targetValues = (): OverviewId[] => (deps.dataFolderOk || folderUnknown() ? targets() : ["workspace"]);
   const targetArgs: CommandSpec["args"] = [
     {
       name: "target",
@@ -111,8 +109,11 @@ export function useAppCommands(deps: AppCommandDeps): void {
     const name = parsed.cmd.name;
     if (!parsed.named.target && !parsed.flags.all) return `${name}: name a target (${targetValues().join(" | ")}) or pass --all`;
     if (parsed.named.target && parsed.flags.all) return `${name}: use either a target or --all`;
-    // A refused line stays open, so Enter runs it again once the answer is in.
-    if (!deps.dataFolderChecked && parsed.named.target !== "workspace") return `${name}: ${WORKSPACE_FOLDER_UNCHECKED}, press Enter to try again`;
+    // A refused line stays open, so Enter runs it again once an answer that is on its way is in.
+    if (folderUnknown() && parsed.named.target !== "workspace") {
+      const retry = deps.dataFolderVerdict === "unchecked" ? ", press Enter to try again" : "";
+      return `${name}: ${dataFolderReason(deps.dataFolderVerdict)}${retry}`;
+    }
     if (!deps.dataFolderOk && parsed.flags.all) return `${name}: ${WORKSPACE_FOLDER_UNUSABLE} (the Overview says why)`;
     return null;
   };

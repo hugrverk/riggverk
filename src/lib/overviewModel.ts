@@ -2,7 +2,7 @@ import type { InstallationOverview, OverviewEntry } from "../hooks/useInstallati
 import type { AppSettings, InstallAgent, SecurityPosture, SetupSurfaceId, WorkspaceDiagnostics } from "../types";
 import { HARNESS_LABELS, HARNESS_NAV_ORDER } from "./harnessInstallation";
 import { runtimeVerdict, type HarnessRuntimeHealth } from "./harnessRuntimeRows";
-import { surfaceRowsFor, surfaceShortName } from "./installationView";
+import { surfaceRowsFor, surfaceShortName, type DataFolderVerdict } from "./installationView";
 import { riskyFindingPhrases } from "./securityPostureRows";
 import { harnessUiItems } from "./shellSummary";
 import {
@@ -69,10 +69,14 @@ export interface AgentCardModel {
   unchecked: "loading" | "failed" | "folder" | null;
 }
 
-function uncheckedReason(items: readonly UiItem[], dataFolderOk: boolean): AgentCardModel["unchecked"] {
+function uncheckedReason(
+  items: readonly UiItem[],
+  dataFolderOk: boolean,
+  dataFolderVerdict: DataFolderVerdict | undefined,
+): AgentCardModel["unchecked"] {
   const open = items.filter(item => item.state === null);
   if (open.length === 0 || items.some(item => item.state !== null && item.state !== "off")) return null;
-  if (!dataFolderOk) return "folder";
+  if (!dataFolderOk && dataFolderVerdict !== "unchecked" && dataFolderVerdict !== "check_failed") return "folder";
   return open.some(item => item.subline === "Checking…") ? "loading" : "failed";
 }
 
@@ -94,11 +98,12 @@ function harnessModel(input: {
   entry: OverviewEntry | undefined;
   settings: EnabledSettings;
   dataFolderOk: boolean;
+  dataFolderVerdict?: DataFolderVerdict;
   runtime?: HarnessRuntimeHealth | null;
 }): HarnessModel {
-  const { harness, entry, settings, dataFolderOk, runtime } = input;
+  const { harness, entry, settings, dataFolderOk, dataFolderVerdict, runtime } = input;
   // Same order: `harnessUiItems` maps `surfaceRowsFor` one to one.
-  const items = harnessUiItems(harness, entry, settings, dataFolderOk);
+  const items = harnessUiItems(harness, entry, settings, dataFolderOk, dataFolderVerdict);
   const surfaceRows = surfaceRowsFor(harness, entry, settings);
   const notInstalled = items.map((_, index) => surfaceRows[index]?.state === "not_installed");
 
@@ -139,7 +144,7 @@ function harnessModel(input: {
       rows,
       notes,
       unavailable,
-      unchecked: uncheckedReason(items, dataFolderOk),
+      unchecked: uncheckedReason(items, dataFolderOk, dataFolderVerdict),
     },
     items,
     allNotInstalled,
@@ -157,15 +162,17 @@ export function workspaceItemModel(input: {
   entry: OverviewEntry | undefined;
   settings: EnabledSettings | null;
   dataFolderOk: boolean;
+  dataFolderVerdict?: DataFolderVerdict;
   diagnostics: Pick<WorkspaceDiagnostics, "error"> | null;
 }): WorkspaceItemModel {
-  const { entry, settings, dataFolderOk, diagnostics } = input;
+  const { entry, settings, dataFolderOk, dataFolderVerdict, diagnostics } = input;
   const row = surfaceRowsFor("workspace", entry, settings)[0];
   const { state, subline } = surfaceUiState({
     display: row?.state ?? "unknown",
     surface: "workspace_bundle",
     detail: row?.detail,
     dataFolderOk,
+    dataFolderVerdict,
     workspaceItem: true,
     workspaceError: diagnostics?.error ?? null,
     entryError: entry?.error,
@@ -189,15 +196,16 @@ export function overviewSummaryModel(input: {
   settings: EnabledSettings | null;
   enabledHarnessIds: readonly InstallAgent[];
   dataFolderOk: boolean;
+  dataFolderVerdict?: DataFolderVerdict;
   diagnostics: Pick<WorkspaceDiagnostics, "error"> | null;
   runtime?: Partial<Record<InstallAgent, HarnessRuntimeHealth | null>>;
 }): OverviewSummaryModel {
-  const { overview, settings, dataFolderOk, diagnostics, runtime } = input;
+  const { overview, settings, dataFolderOk, dataFolderVerdict, diagnostics, runtime } = input;
   const harnesses = HARNESS_NAV_ORDER.filter(harness => input.enabledHarnessIds.includes(harness));
-  const workspace = workspaceItemModel({ entry: overview.entries.workspace, settings, dataFolderOk, diagnostics });
+  const workspace = workspaceItemModel({ entry: overview.entries.workspace, settings, dataFolderOk, dataFolderVerdict, diagnostics });
   const models = settings
     ? harnesses.map(harness =>
-        harnessModel({ harness, entry: overview.entries[harness], settings, dataFolderOk, runtime: runtime?.[harness] ?? null }),
+        harnessModel({ harness, entry: overview.entries[harness], settings, dataFolderOk, dataFolderVerdict, runtime: runtime?.[harness] ?? null }),
       )
     : [];
   const counts = tally([workspace.item, ...models.flatMap(model => model.items)]);
@@ -210,6 +218,7 @@ export function overviewSummaryModel(input: {
   return {
     headline: overviewHeadline(counts, {
       dataFolderOk,
+      dataFolderVerdict,
       anyStatus: entries.some(entry => entry.status !== null),
       allNotInstalled,
       failedChecks: entries.filter(entry => entry.error).length,

@@ -1,4 +1,5 @@
 import { displayPath } from "../../lib/displayPath";
+import { dataFolderUnknownSentence, type DataFolderVerdict } from "../../lib/installationView";
 import { isPersonalDoc } from "../../lib/libraryDirtyGuards";
 import { IMPORTED_PACK, isImportedSkill, isPersonalSkill, packGroup, packNoticeLines, type PackNoticeLine } from "../../lib/packSkills";
 import { harnessOfRulesSurface } from "../../lib/rulesView";
@@ -105,6 +106,7 @@ export interface LibraryGroup {
 
 export interface LibraryModelInput {
   dataFolderOk: boolean;
+  dataFolderVerdict?: DataFolderVerdict;
   docs: DocSummary[];
   agentTemplateLoaded: boolean;
   rulesFiles: RulesFileSummary[];
@@ -350,7 +352,9 @@ export function topicGroups(topic: LibrarySourceType, input: LibraryModelInput):
           label: "Your rules files",
           hint: "the base block is managed; you edit below END",
           rows: files,
-          empty: input.dataFolderOk ? "No rules files are on." : "Rules files need a usable workspace folder.",
+          empty: input.dataFolderOk
+            ? "No rules files are on."
+            : dataFolderUnknownSentence(input.dataFolderVerdict) ?? "Rules files need a usable workspace folder.",
         },
         {
           key: "rules-base",

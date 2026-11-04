@@ -8,6 +8,7 @@ import { useFocusRunOnNewTransaction } from "./components/run/useFocusRunOnNewTr
 import { useCloseGuard } from "./hooks/useCloseGuard";
 import { useKeymap } from "./keyboard/useKeymap";
 import { useBackups } from "./lib/useBackups";
+import { dataFolderVerdictOf } from "./lib/installationView";
 import { decideCountsByHarness, updateAllDisabledReason } from "./lib/shellSummary";
 import { useUninstallRecovery } from "./lib/useUninstallRecovery";
 import { useWorkspaceActions } from "./lib/useWorkspaceActions";
@@ -72,6 +73,7 @@ function AppShell() {
 
   const {
     workspaceDiagnostics,
+    workspaceDiagnosticsFailed,
     opencodeRuntimeHealth,
     codexRuntimeHealth,
     cursorProfileHealth,
@@ -609,6 +611,7 @@ function AppShell() {
   const visibleSkillIds = useMemo(() => new Set(visibleSkills.map(skill => skill.id)), [visibleSkills]);
   const visibleAgentIds = useMemo(() => new Set(visibleAgentSources.map(agent => agent.id)), [visibleAgentSources]);
   const dataFolderOk = workspaceDiagnostics?.valid === true;
+  const dataFolderVerdict = dataFolderVerdictOf(workspaceDiagnostics, workspaceDiagnosticsFailed);
 
   const overview = useInstallationOverview({
     dataFolderOk,
@@ -642,6 +645,7 @@ function AppShell() {
   // would read the selection that is not saved yet.
   const updateAllDisabled = updateAllDisabledReason(overview, {
     dataFolderOk,
+    dataFolderVerdict,
     busyLabel: wsRunning,
     settingsSaving: settingsSaveStatus === "saving" || settingsSaveStatus === "pending",
   });
@@ -672,6 +676,7 @@ function AppShell() {
     wsRunning,
     wsProgress,
     dataFolderOk,
+    dataFolderVerdict,
     overview,
     install,
     backupRoot: workspaceDiagnostics?.backup_root ?? null,
@@ -727,7 +732,7 @@ function AppShell() {
   useAppCommands({
     enabledHarnessIds,
     dataFolderOk,
-    dataFolderChecked: workspaceDiagnostics !== null,
+    dataFolderVerdict,
     busyLabel: wsRunning,
     overview,
     switchView,
@@ -847,6 +852,7 @@ function AppShell() {
         {view === "history" && (
           <HistoryView
             dataFolderOk={dataFolderOk}
+            dataFolderVerdict={dataFolderVerdict}
             backupCount={backups.length}
             wsRunning={wsRunning}
             wsLogCompletedAt={wsLogCompletedAt}
@@ -930,6 +936,7 @@ function AppShell() {
             configEditorSourceContent={configEditorSourceContent}
             // Common
             dataFolderOk={dataFolderOk}
+            dataFolderVerdict={dataFolderVerdict}
             showConfigs={configTargets.length > 0}
             onOpenHarnessView={harness => void switchView(harness)}
             onConfirmLeave={confirmLeave}

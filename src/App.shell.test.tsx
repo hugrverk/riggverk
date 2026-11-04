@@ -26,6 +26,8 @@ interface Backend {
   holdClaudeHealth: Promise<void> | null;
   /** When set, get_workspace_diagnostics resolves only after this promise does. */
   holdDiagnostics: Promise<void> | null;
+  /** When set, get_workspace_diagnostics rejects with this message. */
+  failDiagnostics: string | null;
   /** Personal docs the Library lists. */
   docs: Array<{ id: string; title: string; content: string }>;
   /** The skill packs the Library lists; forget_pack drops one. */
@@ -42,6 +44,7 @@ function installBackend(overrides: Partial<AppSettings> = {}): Backend {
     lightHealthRequests: [],
     holdClaudeHealth: null,
     holdDiagnostics: null,
+    failDiagnostics: null,
     docs: [],
     packs: { folder: "~/packs", packs: [], skills: [], ignored: [] },
   };
@@ -70,6 +73,7 @@ function installBackend(overrides: Partial<AppSettings> = {}): Backend {
       case "list_skills":
         return Promise.resolve([]);
       case "get_workspace_diagnostics":
+        if (backend.failDiagnostics) return Promise.reject(new Error(backend.failDiagnostics));
         return (backend.holdDiagnostics ?? Promise.resolve()).then(() => ({
           candidate_path: "/tmp/ws",
           resolved_path: "/tmp/ws",
@@ -354,6 +358,57 @@ describe("App shell", () => {
     fireEvent.keyDown(document.body, { key: "z" });
     await act(async () => {});
     expect(backend.commandLog).not.toContain("rollback_setup_transaction");
+  });
+
+  describe("while nothing is known about the workspace folder", () => {
+    const CLAIMS = /unusable|can't use|needs? (a usable|the) workspace folder/i;
+    const pages = ["Overview", "Claude", "History", "Library"];
+
+    /** Everything on the page a reader can get at: the text, and the tooltips and hidden reasons in the attributes. */
+    const expectNoClaim = (page: string) => {
+      const said = [document.body.textContent ?? "", ...[...document.querySelectorAll("[title]")].map(element => element.getAttribute("title") ?? "")];
+      expect(said.filter(text => CLAIMS.test(text)), page).toEqual([]);
+    };
+
+    const visitEveryPage = async () => {
+      for (const page of pages) {
+        fireEvent.click(within(nav()).getByRole("button", { name: page }));
+        await screen.findByRole("region", { name: page });
+        expectNoClaim(page);
+      }
+    };
+
+    it("does not call it unusable before the diagnostics answer, and keeps Update all off", async () => {
+      const backend = installBackend();
+      backend.holdDiagnostics = new Promise<void>(() => {});
+      render(<App />);
+      await ready();
+      await visitEveryPage();
+      fireEvent.click(within(nav()).getByRole("button", { name: "Overview" }));
+      const updateAll = screen.getByRole("button", { name: "Update all" });
+      expect(updateAll.getAttribute("title")).toBe("workspace folder not checked yet");
+      expect(updateAll.getAttribute("aria-disabled")).toBe("true");
+    });
+
+    it("points at Check when the diagnostics failed, and Check recovers", async () => {
+      const backend = installBackend();
+      backend.failDiagnostics = "disk on fire";
+      render(<App />);
+      await ready();
+      await waitFor(() => expect(screen.getByRole("button", { name: "Update all" }).getAttribute("title")).toBe("couldn't check the workspace folder, try Check again"));
+      await visitEveryPage();
+      fireEvent.click(within(nav()).getByRole("button", { name: "Overview" }));
+      fireEvent.keyDown(document.body, { key: ":", shiftKey: true });
+      const input = screen.getByRole("combobox", { name: "Command" });
+      fireEvent.change(input, { target: { value: "update --all" } });
+      fireEvent.keyDown(input, { key: "Enter" });
+      expect(screen.getAllByRole("alert").map(alert => alert.textContent)).toContain("update: couldn't check the workspace folder, try Check again");
+      fireEvent.keyDown(input, { key: "Escape" });
+
+      backend.failDiagnostics = null;
+      fireEvent.click(screen.getByRole("button", { name: "Check" }));
+      await waitFor(() => expect(screen.getByRole("button", { name: "Update all" }).getAttribute("title")).toBe("Everything Riggverk can update is already up to date."));
+    });
   });
 
   it("refuses update --all truthfully until the folder is checked, and Enter then runs it", async () => {

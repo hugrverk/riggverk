@@ -32,7 +32,6 @@ function makeDeps(overrides: Partial<AppCommandDeps> = {}): AppCommandDeps {
   return {
     enabledHarnessIds: ["codex", "opencode", "cursor", "claude"],
     dataFolderOk: true,
-    dataFolderChecked: true,
     busyLabel: null,
     switchView: vi.fn(),
     setLibrarySource: vi.fn(),
@@ -339,7 +338,7 @@ describe("useAppCommands", () => {
     });
 
     it("does not call the folder unusable before the diagnostics have answered", () => {
-      const unchecked = makeDeps({ dataFolderOk: false, dataFolderChecked: false });
+      const unchecked = makeDeps({ dataFolderOk: false, dataFolderVerdict: "unchecked" });
       setup(unchecked);
       runLine("update --all");
       expect(commandLineError()).toBe("update: workspace folder not checked yet, press Enter to try again");
@@ -350,6 +349,14 @@ describe("useAppCommands", () => {
       expect(unchecked.openInstall).not.toHaveBeenCalled();
       runLine("update workspace");
       expect(unchecked.openInstall).toHaveBeenCalledWith("workspace");
+    });
+
+    it("points at Check, not at Enter, when the diagnostics failed", () => {
+      const failed = makeDeps({ dataFolderOk: false, dataFolderVerdict: "check_failed" });
+      setup(failed);
+      runLine("update --all");
+      expect(commandLineError()).toBe("update: couldn't check the workspace folder, try Check again");
+      expect(failed.openInstall).not.toHaveBeenCalled();
     });
 
     it("lets the workspace be installed without a valid workspace, but nothing that needs one", () => {
