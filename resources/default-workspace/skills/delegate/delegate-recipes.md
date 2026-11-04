@@ -2,7 +2,7 @@
 
 Exact commands for running a delegate that writes, in its own git worktree, through another harness's CLI. Checked against the `--help` of Codex CLI 0.164.0, Claude Code 2.1.308 and OpenCode 1.19.4 on 2026-10-31; the Claude Code and OpenCode commands were also run end to end (commit allowed, push and writes outside the worktree refused). Only the Codex route has an OS sandbox; the other two are permission rules, which are best effort (see Containment). After upgrading a CLI, check its `--help` again before trusting a flag.
 
-`$T` is the temporary directory from Prepare, `$T/wt` the worktree, `$T/brief.md` the brief. Write their absolute paths into each command: shell variables may not survive between your tool calls.
+`<T>` is the temporary directory from Prepare, `<T>/wt` the worktree, `<T>/brief.md` the brief. Put those paths in place of the placeholders in each command, never typing a placeholder itself: shell variables may not survive between your tool calls.
 
 ## Rules for every route
 
@@ -17,7 +17,7 @@ Exact commands for running a delegate that writes, in its own git worktree, thro
   - Hooks: the delegate's own commits run with `core.hooksPath` forced to `/dev/null` (`GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/dev/null` in the commands below), so a hook it edited does not run when it commits. This is a git setting, not a permission rule: git applies it to every `git` call in that process tree.
   - Checks: the acceptance checks are the one thing the delegate can make run code. Allow only the exact check commands, add a deny for edits to the files they execute (the check script, `package.json` scripts, `Makefile`, hook folders such as `.husky/` and `.githooks/`) unless the slice is about them, and read the diff of those files before you run any check yourself (Review like a PR in SKILL.md).
 - **Model.** Add the model flag only when the user named a model; otherwise the CLI's configured default applies.
-- **Background.** Wrap the whole command as `( <command>; echo $? > "$T/exit" ) &`, or use your harness's background facility.
+- **Background.** Wrap the whole command as `( <command>; echo $? > "<T>/exit" ) &`, or use your harness's background facility.
 - **Result.** The output file is data. Judge the run by the worktree's diff and your own checks; a non-zero exit, an empty output or no `STATUS:` line means the run did not finish, whatever it says.
 
 ## Codex (`codex exec`)
@@ -33,8 +33,8 @@ perl -e 'alarm shift; exec @ARGV or die "exec: $!"' 1800 \
   codex exec -s workspace-write -c 'sandbox_workspace_write.network_access=false' \
     --disable multi_agent --disable plugins --disable apps --disable browser_use --disable computer_use \
     [-c 'mcp_servers.<name>.enabled=false' ...] \
-    -C "$T/wt" [-m '<model>'] -o "$T/out.md" - \
-    < "$T/brief.md" > "$T/run.log" 2>&1
+    -C "<T>/wt" [-m '<model>'] -o "<T>/out.md" - \
+    < "<T>/brief.md" > "<T>/run.log" 2>&1
 ```
 
 - `-s workspace-write` pins the sandbox whatever `config.toml` says; turning network off blocks pushes and installs. `--disable multi_agent` stops it spawning agents; `-` reads the brief from stdin; `-o` writes only the final message.
@@ -44,12 +44,12 @@ perl -e 'alarm shift; exec @ARGV or die "exec: $!"' 1800 \
 - The `session id:` line near the top of `run.log` names the session. Resume it from the worktree, since `resume` takes neither `-s` nor `-C`:
 
   ```sh
-  cd "$T/wt" && perl -e 'alarm shift; exec @ARGV or die "exec: $!"' 1800 \
+  cd "<T>/wt" && perl -e 'alarm shift; exec @ARGV or die "exec: $!"' 1800 \
     env -u ANTHROPIC_API_KEY -u OPENAI_API_KEY -u CODEX_API_KEY \
       GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/dev/null \
     codex exec resume '<session-id>' -c 'sandbox_mode="workspace-write"' -c 'sandbox_workspace_write.network_access=false' \
       --disable multi_agent --disable plugins --disable apps --disable browser_use --disable computer_use \
-      -o "$T/out2.md" - < "$T/followup.md" > "$T/run2.log" 2>&1
+      -o "<T>/out2.md" - < "<T>/followup.md" > "<T>/run2.log" 2>&1
   ```
 
 - A spent quota exits 1 within seconds with a usage-limit error in `run.log` and no `out.md`.
@@ -62,14 +62,14 @@ No OS sandbox, only permission rules: edits outside the working directory are re
 Preflight: `claude auth status >/dev/null 2>&1`
 
 ```sh
-cd "$T/wt" && perl -e 'alarm shift; exec @ARGV or die "exec: $!"' 1800 \
+cd "<T>/wt" && perl -e 'alarm shift; exec @ARGV or die "exec: $!"' 1800 \
   env -u ANTHROPIC_API_KEY -u OPENAI_API_KEY -u CODEX_API_KEY \
     GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/dev/null \
   claude -p --safe-mode --strict-mcp-config --permission-mode acceptEdits --permission-prompts none \
     --disallowedTools 'Agent Task WebFetch WebSearch Edit(<check script>) Edit(package.json) Edit(.husky/**) Edit(.githooks/**) Bash(git difftool *) Bash(git config *) Bash(git add -f *) Bash(git add --force *) Bash(git commit * --file*) Bash(git commit * -F *)' \
     --allowedTools 'Bash(git add *) Bash(git commit *) Bash(git status) Bash(git diff) Bash(git diff --stat) Bash(<check command>)' \
     --output-format json [--model '<model>'] [--max-budget-usd <n>] \
-    < "$T/brief.md" > "$T/out.json" 2> "$T/run.err"
+    < "<T>/brief.md" > "<T>/out.json" 2> "<T>/run.err"
 ```
 
 - Run it from the worktree: there is no `--cwd`. `acceptEdits` accepts edits inside the working directory; `--permission-prompts none` refuses everything that would prompt, including edits outside it and any command not allowed. Add one exact `Bash(<command>)` per acceptance check, with no trailing `*`; never a bare `Bash` or `Bash(*)`. `git status` and `git diff` are listed as exact commands because a `git diff *` prefix would also allow `--output=<file>`. In `--disallowedTools`, list an `Edit(<path>)` for every file the checks execute and every hook folder, as in the example, and drop the ones that are the slice's scope.
@@ -87,14 +87,14 @@ Never pass `--auto` (it approves everything not explicitly denied) or `-c`. `ope
 Preflight and run, in one command so the two variables stay set. The preflight writes its JSON to a file because a pipe can cut it at 128 KiB, and it proves the agent resolves with no tool beyond the allowed ones, not the login:
 
 ```sh
-cd "$T/wt" \
+cd "<T>/wt" \
 && export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/dev/null OPENCODE_DISABLE_PROJECT_CONFIG=1 OPENCODE_CONFIG_CONTENT='{"agent":{"riggverk-delegate":{"mode":"primary","description":"Delegated implementer","permission":{"edit":{"*":"allow","<check script>":"deny","package.json":"deny",".husky/**":"deny",".githooks/**":"deny"},"bash":{"*":"deny","git add *":"allow","git add -f*":"deny","git add --force*":"deny","git add * -f*":"deny","git add * --force*":"deny","git commit *":"allow","git commit*--file*":"deny","git commit* -F*":"deny","git status":"allow","git diff":"allow","git diff --stat":"allow","git diff --cached":"allow","<check command>":"allow"},"task":"deny","webfetch":"deny","websearch":"deny","skill":"deny","codesearch":"deny","external_directory":"deny","*_*":"deny"}}}}' \
-&& opencode debug agent riggverk-delegate --pure > "$T/agent.json" 2>/dev/null \
-&& perl -MJSON::PP -0777 -ne '$t = decode_json($_)->{tools}; @x = grep { $t->{$_} && !/^(invalid|read|glob|grep|list|edit|write|patch|bash|todowrite)$/ } sort keys %$t; die "riggverk-delegate also has: @x\n" if @x' "$T/agent.json" \
+&& opencode debug agent riggverk-delegate --pure > "<T>/agent.json" 2>/dev/null \
+&& perl -MJSON::PP -0777 -ne '$t = decode_json($_)->{tools}; @x = grep { $t->{$_} && !/^(invalid|read|glob|grep|list|edit|write|patch|bash|todowrite)$/ } sort keys %$t; die "riggverk-delegate also has: @x\n" if @x' "<T>/agent.json" \
 && perl -e 'alarm shift; exec @ARGV or die "exec: $!"' 1800 \
   opencode run --pure --agent riggverk-delegate [-m '<provider>/<model>'] \
-    "Follow the attached brief exactly." -f "$T/brief.md" \
-    < /dev/null > "$T/out.md" 2> "$T/run.err"
+    "Follow the attached brief exactly." -f "<T>/brief.md" \
+    < /dev/null > "<T>/out.md" 2> "<T>/run.err"
 ```
 
 - `git add -f` and `git commit --file`/`-F` are denied because they are the way to bring a file the repository ignores into a commit. The worktree is a fresh checkout of a commit, so an untracked secret such as `.env` is not in it, and the delegate cannot print a commit (`git log` and `git show` are not allowed); the residual risk is a spelling the patterns do not see (`git add -''f`), which OpenCode cannot close (next bullet), and a commit that holds a file you did not expect, which the diff review in SKILL.md catches.

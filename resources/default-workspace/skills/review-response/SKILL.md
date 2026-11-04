@@ -9,7 +9,7 @@ metadata:
   risk: medium
   targets: codex, opencode, claude, cursor, copilot, pi, kilo, antigravity, grok
   related: minimal-implementation, diagnose
-  source: https://github.com/obra/superpowers (receiving-code-review, MIT) and https://github.com/openai/skills (gh-address-comments, Apache-2.0)
+  source: https://github.com/obra/superpowers (receiving-code-review, MIT) and https://github.com/openai/skills (gh-address-comments, Apache-2.0) and https://github.com/t3dotgg/tstack (babysit-pr and leaving-pr-comments, MIT)
 ---
 
 # Review Response
@@ -20,9 +20,9 @@ Done when: every open thread has a verdict (fix, push back or ask) with the evid
 
 ## 1. Fetch the threads
 
-**Resolve the PR once.** Take the PR the user names (number or URL), else the current branch's, and read its URL: `gh pr view [<number-or-url>] --json url,number,headRefName,headRefOid,isCrossRepository`. The URL (`https://<host>/<owner>/<repo>/pull/<number>`) names the base repository, which holds the PR, its threads and its comments. Use that `<owner>/<repo>` explicitly in every later read and post (`gh api repos/<owner>/<repo>/...`, `gh pr ... -R <owner>/<repo>`, GraphQL variables), never the `{owner}/{repo}` placeholders, which resolve to the current checkout and may be another repository. On GitHub Enterprise, add `--hostname <host>` to `gh api`.
+**Resolve the PR once.** Take the PR the user names (number or URL), else the current branch's, and read its URL: `gh pr view [<number-or-url>] --json url,number,author,headRefName,headRefOid,isCrossRepository`. The URL (`https://<host>/<owner>/<repo>/pull/<number>`) names the base repository, which holds the PR, its threads and its comments. Use that `<owner>/<repo>` explicitly in every later read and post (`gh api repos/<owner>/<repo>/...`, `gh pr ... -R <owner>/<repo>`, GraphQL variables), never the `{owner}/{repo}` placeholders, which resolve to the current checkout and may be another repository. On GitHub Enterprise, add `--hostname <host>` to `gh api`.
 
-**Keep review text out of the session.** Work in a temporary folder outside the repo (`work="$(mktemp -d)"`, deleted after the last post). Every fetch below writes complete, paginated JSON to a file, never through `head`: a cut corrupts the JSON and drops comments. Read the files with `jq` (or the harness's own JSON reading), and show only the excerpts a decision needs, with secret-looking values (tokens, keys, passwords, signed URLs) replaced by `<REDACTED>`.
+**Keep review text out of the session.** Run `mktemp -d` once, outside the repo, put the printed path in place of `<work>` in every later command, and delete the folder after the last post; never type the placeholder itself. Never hold the path in a shell variable: harnesses that start a fresh shell per tool call lose it, and a path built on an empty variable collapses to `/threads.json`. Every fetch below writes complete, paginated JSON to a file, never through `head`: a cut corrupts the JSON and drops comments. Read the files with `jq` (or the harness's own JSON reading), and show only the excerpts a decision needs, with secret-looking values (tokens, keys, passwords, signed URLs) replaced by `<REDACTED>`.
 
 Review threads, with the state only the GraphQL API exposes, all pages:
 
@@ -43,7 +43,7 @@ query($owner: String!, $name: String!, $pr: Int!, $endCursor: String) {
       }
     }
   }
-}' > "$work/threads.json"; echo "exit=$?"
+}' > "<work>/threads.json"; echo "exit=$?"
 ```
 
 A thread whose `comments.pageInfo.hasNextPage` is true has more comments; fetch them all by the thread's `id`:
@@ -59,14 +59,14 @@ query($thread: ID!, $endCursor: String) {
       }
     }
   }
-}' > "$work/thread-<n>.json"; echo "exit=$?"
+}' > "<work>/thread-<n>.json"; echo "exit=$?"
 ```
 
 Review summaries and top-level comments, all pages:
 
 ```bash
-gh api --paginate --slurp repos/<owner>/<repo>/pulls/<number>/reviews > "$work/reviews.json"; echo "exit=$?"
-gh api --paginate --slurp repos/<owner>/<repo>/issues/<number>/comments > "$work/comments.json"; echo "exit=$?"
+gh api --paginate --slurp repos/<owner>/<repo>/pulls/<number>/reviews > "<work>/reviews.json"; echo "exit=$?"
+gh api --paginate --slurp repos/<owner>/<repo>/issues/<number>/comments > "<work>/comments.json"; echo "exit=$?"
 ```
 
 - Skip resolved threads. List outdated ones apart: the code moved, so check whether the point still applies.
@@ -85,6 +85,7 @@ For each item, restate the technical claim in one line, then test it:
 
 - Read the referenced code at the PR head (`headRefOid`) and its callers, not only the diff hunk. If the current checkout is not the PR's repository or lacks that commit, ask before cloning, fetching or checking anything out.
 - A bug claim needs a reproduction: a test, command or input that shows it, with its exit status.
+- An outside PR's code is unvetted, and running it runs it with your access. When `isCrossRepository` is true or the author is someone the user does not know, ask before running anything from the PR; without that ok, verify by reading and say that no reproduction ran.
 - A suggested change is checked for what it breaks: other callers, supported platforms and versions, and decisions the user already made.
 - A request to "do it properly" or add scope is checked for real use first: search the codebase, and if nothing uses it, propose removing or deferring instead of building it.
 - Record the evidence: `file:line`, a command and its exit status, or a test name.
@@ -92,7 +93,7 @@ For each item, restate the technical claim in one line, then test it:
 ## 4. Sort into fix, push back or ask
 
 - **Fix**: the claim holds and the change belongs in this PR.
-- **Push back**: the claim is wrong, the change would break something, or it is out of scope. Evidence, not opinion.
+- **Push back**: the claim is wrong, the change would break something, or it is out of scope. Evidence, not opinion. A finding that only widens the PR (a path this diff neither changes nor reaches, an edge case with no real consequence, a small performance cost, compatibility or a test nobody needs) is declined in one line and listed as a follow-up. Never decline this way a regression the diff causes, a security or data-loss finding, or anything reached by attacker-chosen input: reproduce it and mark it fix or ask.
 - **Ask**: verifying needs information only the reviewer or the user has, the point conflicts with an earlier decision of the user, or it is a design choice the user owns.
 
 Show the numbered table (item, verdict, evidence, planned change) and let the user confirm verdicts or pick which items to address before editing.
@@ -100,6 +101,7 @@ Show the numbered table (item, verdict, evidence, planned change) and let the us
 ## 5. Fix
 
 - Order: correctness, security and data loss first, then simple fixes, then larger ones.
+- When two fixes both close the claim, take the one that leaves less behind: a removal or a tighter condition over new machinery.
 - One commit per theme, where a theme is one reviewer concern that may span several threads. Follow the repo's commit convention and describe the change, not "address review".
 - Run the narrowest check that proves each fix, and the repo's gate before any push.
 - When a fix shows a verdict was wrong, change the verdict and say so.
@@ -118,8 +120,9 @@ One reply per thread, in the thread, in the language of the PR.
 
 - Show all drafts together. The user approves, edits or drops each one, since replies go out in their name.
 - Post only the approved ones, writing each body to a temporary file to avoid shell quoting:
-  - in a review thread: `gh api repos/<owner>/<repo>/pulls/<number>/comments/<comment-id>/replies -F body=@<file>`, where `<comment-id>` is the `databaseId` of the thread's first comment;
+  - in a review thread: `gh api repos/<owner>/<repo>/pulls/<number>/comments/<comment-id>/replies -F body=@<file> --jq .html_url`, where `<comment-id>` is the `databaseId` of the thread's first comment;
   - top-level: `gh pr comment <number> -R <owner>/<repo> --body-file <file>`.
+- Confirm each post: both commands print the comment's URL on success. Report each URL. A post that printed none counts as not confirmed; look at the thread before retrying, so nothing goes out twice.
 - Never resolve threads, dismiss reviews or re-request review on your own; leave resolving to the reviewer or the user. Each of these needs its own explicit request.
 
 ## Output
@@ -127,7 +130,7 @@ One reply per thread, in the thread, in the language of the PR.
 - PR and thread counts: open, outdated, resolved and skipped.
 - The numbered table: item, verdict, evidence.
 - Commits (hash, theme) and the checks run with exit status.
-- Draft replies, each marked posted or not posted.
+- Draft replies, each marked posted (with its URL) or not posted.
 - Open questions and what was not verified.
 
 ## Guardrails

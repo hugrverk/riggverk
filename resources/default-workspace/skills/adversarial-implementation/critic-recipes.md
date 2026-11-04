@@ -5,7 +5,7 @@ Exact commands for running a fresh, read-only critic in another harness's CLI. E
 ## Rules for every route
 
 - **Preflight** once per session per route, before its first run. Use only the exit status; never print or quote the output, which can name the account. A failed preflight drops that candidate, and the start line says why. Riggverk never checks logins; the lead does, here.
-- **Files.** Write the filled brief (diff pasted in) to a fresh directory outside the repository (`mktemp -d`) as `brief.md`, and send the output there too. Files inside the repository would trip the mutation guard. `$T` below is that directory: write its absolute path into each command, since shell variables may not survive between your tool calls.
+- **Files.** Write the filled brief (diff pasted in) to a fresh directory outside the repository (`mktemp -d`) as `brief.md`, and send the output there too. Files inside the repository would trip the mutation guard. `<T>` below is that directory: put its path in place of the placeholder in each command, never typing the placeholder itself, since shell variables may not survive between your tool calls.
 - **Stdin.** Feed the brief through stdin or close it with `< /dev/null`; Codex can hang on an open stdin.
 - **Timeout.** macOS has no `timeout`, so wrap the command in `perl -e 'alarm shift; exec @ARGV or die "exec: $!"' <seconds>`. Exit status 142 means it timed out. 1200 seconds suits one round.
 - **Environment.** Do not hand the critic API keys its own login does not use: prefix `env -u ANTHROPIC_API_KEY -u OPENAI_API_KEY -u CODEX_API_KEY`, keeping only a variable the user's login for that CLI relies on. A stray `ANTHROPIC_API_KEY` moves `claude -p` to API billing.
@@ -26,8 +26,8 @@ perl -e 'alarm shift; exec @ARGV or die "exec: $!"' 1200 \
   codex exec -s read-only --ephemeral --ignore-rules -c project_doc_max_bytes=0 --disable multi_agent \
     --disable plugins --disable apps --disable browser_use --disable computer_use \
     [-c 'mcp_servers.<name>.enabled=false' ...] \
-    -C "<repo-root>" [-m '<model>'] -o "$T/critic.md" - \
-    < "$T/brief.md" > "$T/critic.log" 2>&1
+    -C "<repo-root>" [-m '<model>'] -o "<T>/critic.md" - \
+    < "<T>/brief.md" > "<T>/critic.log" 2>&1
 ```
 
 - `-s read-only` pins the sandbox whatever `config.toml` says; `--ephemeral` keeps no session files; `--ignore-rules` skips execpolicy `.rules` files, including the reviewed repository's; `-c project_doc_max_bytes=0` stops Codex loading the repository's `AGENTS.md` and `AGENTS.override.md` (from the root down to `-C`), which `--ignore-rules` does not cover, so the change under review cannot instruct its own reviewer (checked with `codex debug prompt-input` on 0.166.0: without it a marker in `AGENTS.md` reaches the model input, with it nothing does); `--disable multi_agent` stops the critic spawning agents; `-` reads the brief from stdin; `-o` writes only the final message. The `model:` line near the top of `critic.log` names the model for the ledger.
@@ -47,7 +47,7 @@ cd "<repo-root>" && perl -e 'alarm shift; exec @ARGV or die "exec: $!"' 1200 \
   env -u ANTHROPIC_API_KEY -u OPENAI_API_KEY -u CODEX_API_KEY \
   claude -p --safe-mode --restricted --strict-mcp-config --tools Read,Grep,Glob --permission-mode dontAsk \
     --no-session-persistence --output-format json [--model '<model>'] [--max-budget-usd <n>] \
-    < "$T/brief.md" > "$T/critic.json" 2> "$T/critic.err"
+    < "<T>/brief.md" > "<T>/critic.json" 2> "<T>/critic.err"
 ```
 
 - Run it from the repository root: there is no `--cwd`. `--restricted` removes the command-running tools and WebFetch, ignores user, project and local settings (so the reviewed repository's hooks do not run) and confines the file tools to the working directory; `--tools Read,Grep,Glob` is the whole tool set; `dontAsk` denies anything that would prompt; `--safe-mode` turns off CLAUDE.md, skills, plugins, hooks and MCP servers but keeps the subscription login; `--strict-mcp-config` without `--mcp-config` also drops MCP servers that managed settings would add, since `--tools` limits only the built-in set.
@@ -69,8 +69,8 @@ cd "<repo-root>" \
 && opencode debug agent riggverk-critic --pure 2>/dev/null | perl -MJSON::PP -0e '$t = decode_json(<STDIN>)->{tools}; @x = grep { $t->{$_} && !/^(invalid|read|glob|grep)$/ } sort keys %$t; die "riggverk-critic also has: @x\n" if @x' \
 && perl -e 'alarm shift; exec @ARGV or die "exec: $!"' 1200 \
   opencode run --pure --agent riggverk-critic [-m '<provider>/<model>'] \
-    "Follow the attached brief exactly." -f "$T/brief.md" \
-    < /dev/null > "$T/critic.md" 2> "$T/critic.err"
+    "Follow the attached brief exactly." -f "<T>/brief.md" \
+    < /dev/null > "<T>/critic.md" 2> "<T>/critic.err"
 ```
 
 - Put the message before `-f`: `-f` takes every following word as a file.

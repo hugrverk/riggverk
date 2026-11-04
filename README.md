@@ -219,6 +219,7 @@ Several bundled skills adapt methods from open skill collections. The wording is
 | [raddue/crucible](https://github.com/raddue/crucible) | the fresh-critic loop in the adversarial skills | MIT |
 | [dementev-dev/adversarial-review](https://github.com/dementev-dev/adversarial-review) | the read-only critic and its adjudication | Apache-2.0 |
 | [openai/skills](https://github.com/openai/skills) | `ci-triage`, `review-response` | Apache-2.0 |
+| [t3dotgg/tstack](https://github.com/t3dotgg/tstack) | `pr-workflow`, `review-response` | MIT |
 | [cloudflare/security-audit-skill](https://github.com/cloudflare/security-audit-skill) | `security-audit` (vendored) | MIT |
 | [anthropics/skills](https://github.com/anthropics/skills) | the framing behind `frontend-design` | Apache-2.0 |
 | [Lobe Icons](https://github.com/lobehub/lobe-icons) | the agent icons; the marks belong to their owners, and Riggverk is not affiliated with or endorsed by them | MIT |

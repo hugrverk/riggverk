@@ -25,10 +25,10 @@ Do not duplicate full `SKILL.md` content here. This file is an index for choosin
 | `handoff` | Reviewing executor evidence or compacting paused work into a trustworthy handoff with verified state and next action. |
 | `implementation-plan` | Creating small verifiable implementation slices with exact files, steps, commands, and risks. |
 | `minimal-implementation` | Implementing or refactoring with the smallest complete diff that fits existing ownership. |
-| `pr-workflow` | Turning finished work into logical commits that follow the repo's own convention, running the gate, pushing a branch and opening or updating a PR with gh. Never force-pushes; each commit, push and PR step needs an explicit ok. Ships `assets/pr-body.template.md`. |
+| `pr-workflow` | Turning finished work into logical commits that follow the repo's own convention, running the gate, pushing a branch and opening or updating a PR with gh. Never force-pushes; each commit, push and PR step needs an explicit ok. On request it also watches a PR through CI with `gh pr checks --watch`, sends red checks to `ci-triage` and open threads to `review-response`, and reports readiness without merging. Ships `assets/pr-body.template.md`. |
 | `prototype` | Validating throwaway UI variants, state-machine/data-model checks, and interaction experiments before production implementation. |
 | `retro` | User-invoked only (`/retro`, `$retro` in Codex): reviewing a named coding session and proposing ranked, evidence-traced improvements to steering files, checks, and tooling. Proposals only. |
-| `review-response` | Working through review comments on a PR (fetched with `gh api` or pasted): verifies each claim against the code, sorts it into fix, push back with evidence, or ask, commits one theme at a time, and drafts one reply per thread without performative agreement. Posts replies only after explicit approval and never resolves threads. |
+| `review-response` | Working through review comments on a PR (fetched with `gh api` or pasted): verifies each claim against the code, sorts it into fix, push back with evidence, or ask, declines as follow-ups only the findings that widen the PR (never a regression, a security or data-loss finding), prefers the smaller of two fixes that both close the claim, asks before running an outside contributor's code, commits one theme at a time, and drafts one reply per thread without performative agreement. Posts replies only after explicit approval, confirms each posted URL and never resolves threads. |
 | `release-check` | Running pre-merge or pre-deploy readiness checks, including tests, migrations, env risk, smoke routes, and rollback. |
 | `release-notes` | Drafting user-facing release notes or a changelog section from commits and merged PRs since the last tag, in the project's own format and language: breaking changes first, internal chores excluded with reasons, human curation required. Writes into the repo's notes file only when asked, after showing the diff. |
 | `screenshot-review` | Reviewing supplied UI screenshots before implementation or for responsive/layout critique. |
@@ -61,6 +61,8 @@ Domain skills for a team's own projects and stack are not bundled: keep them in 
 | `agents-md` / global rules | `agents-md` writes a repository's own `AGENTS.md` from verified facts; it never edits or repeats the user's global rules, which the project file complements. |
 | `handoff` / `release-check` | Handoff compacts session state; release-check validates merge/deploy readiness. |
 | `pr-workflow` / `release-check` | Pr-workflow commits, pushes and opens the PR, and runs the repo's gate before the push; release-check owns the go/no-go verdict on merge or deploy readiness. |
+| `pr-workflow` / `ci-triage` | Pr-workflow's watch waits for the checks and reports them; ci-triage takes over when one is red or canceled. |
+| `pr-workflow` / `review-response` | Pr-workflow's watch reports the open threads; review-response verifies them and drafts the replies. |
 | `release-notes` / `release-check` | Release-notes drafts what changed for users; release-check decides whether the branch is ready to ship. |
 | `security-review` / `security-audit` | Security-review checks a change or answers a focused question in the current context; security-audit runs a full multi-agent audit of a whole codebase only when one is explicitly asked for. |
 | `security-review` / `sentinel` (agent) | Skill guides the review in the current context; where the harness has the sentinel agent (OpenCode, Claude), it performs an independent read-only review of a finished diff, otherwise the review stays inline. |
@@ -82,6 +84,7 @@ Domain skills for a team's own projects and stack are not bundled: keep them in 
 - Pausing, executor reports, or context transfer: `handoff`; add `context-budget` for large reports.
 - Project status report or weekly summary: `status-report`.
 - Commit, push and open or update a PR: `pr-workflow`; add `release-check` before the push.
+- Watching a PR through CI, on request: `pr-workflow`; it hands a red check to `ci-triage` and open threads to `review-response`.
 - Release readiness: `release-check`.
 - Onboarding agents to a repo, or a missing or stale `AGENTS.md`: `agents-md`.
 - Release notes or a changelog section: `release-notes`; add `release-check` for the gate.

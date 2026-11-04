@@ -128,6 +128,40 @@ Path: `resources/default-workspace/skills/security-audit/`. Copyright (c) 2025-2
 
 `ci-triage` draws on the `gh-fix-ci` skill of [openai/skills](https://github.com/openai/skills) (`skills/.curated/gh-fix-ci/SKILL.md`, read at commit `49f948faa9258a0c61caceaf225e179651397431`), licensed under the [Apache License, Version 2.0](https://www.apache.org/licenses/LICENSE-2.0). Used: checking gh authentication first, finding failed checks with `gh pr checks --json`, reporting a check that is not a GitHub Actions run by its link only, and reading a job's own log when the run is still in progress. Changes: the text is Riggverk's own; the failure classes, the local reproduction, the hand-off to `diagnose`, the redaction rules and the approval-gated rerun are not in that work. No files of that work are included.
 
+## t3dotgg/tstack
+
+`pr-workflow` and `review-response` draw on [t3dotgg/tstack](https://github.com/t3dotgg/tstack) at commit `1085050f3baed1ac724caa4a8166145fb2ac88af`.
+
+- From `skills/file-pr/SKILL.md`: a PR description that leads with the problem, a title that states the effect, and a REST fallback for an exhausted GraphQL limit.
+- From `skills/babysit-pr/SKILL.md`: one watcher per PR, checking the GraphQL rate limit, readiness conditions on the latest head, reporting `BEHIND` and `DIRTY`, declining findings that grow a PR, and preferring the fix that leaves less code.
+- From `skills/leaving-pr-comments/SKILL.md`: confirming the posted comment's URL.
+
+The text was rewritten for Riggverk. Riggverk's own part is the reading of check results, the handling of a PR with no checks, the verdicts, an explicit ok for each push, comment and post, and the hand-offs to `ci-triage` and `review-response`. No files of that work are included.
+
+License of the original work:
+
+MIT License
+
+Copyright (c) 2026 Theo Browne
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
 ## Acknowledgements
 
 These skills share an idea with public work but no text, structure or distinctive method taken from it:
