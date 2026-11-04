@@ -114,11 +114,17 @@ Updates need public release files: the app fetches `https://github.com/hugrverk/
    ```
 
    It writes the private key `~/.tauri/riggverk-updater.key` and the public key `~/.tauri/riggverk-updater.key.pub`.
-2. **Keep the key safe.** Store the private key (the one line in `~/.tauri/riggverk-updater.key`) and its password in the login Keychain, where `publish` reads them; each command prompts for the value:
+2. **Keep the key safe.** Store the private key and its password in the login Keychain, where `publish` reads them. Do not paste the key at the `-w` prompt: the prompt is reported to cut values at 128 bytes, and the key is longer. `security -i` reads it from standard input, so it never appears in a process list:
 
    ```bash
-   security add-generic-password -s riggverk-updater-key -a "$USER" -w
-   security add-generic-password -s riggverk-updater-password -a "$USER" -w
+   printf 'add-generic-password -U -s riggverk-updater-key -a %s -T "" -w "%s"\n' "$USER" "$(cat ~/.tauri/riggverk-updater.key)" | security -i
+   security add-generic-password -U -s riggverk-updater-password -a "$USER" -T "" -w   # prompts twice; ASCII, under 128 characters
+   ```
+
+   `-T ""` trusts no program, so macOS asks before each read: choose Allow, never Always Allow, or any process of your user could read the key silently. Before deleting anything, check that both items work. This signs a scratch file and prints only `SIGNED` or `FAILED`:
+
+   ```bash
+   ( export TAURI_SIGNING_PRIVATE_KEY="$(security find-generic-password -s riggverk-updater-key -w)" TAURI_SIGNING_PRIVATE_KEY_PASSWORD="$(security find-generic-password -s riggverk-updater-password -w)"; f="$(mktemp)"; npm run -s tauri signer sign -- "$f" >/dev/null 2>&1 && echo SIGNED || echo FAILED; rm -f "$f" "$f.sig" )
    ```
 
    Make an encrypted offline backup of the key file and its password too (for example an encrypted disk image on a USB stick kept elsewhere), then delete `~/.tauri/riggverk-updater.key` so no other copy stays on the Mac. A lost key means installed apps can never be updated again: every later release would have to be installed by hand. A leaked key lets someone sign an update, so it is never printed, committed, pasted anywhere or exported into a shell.
