@@ -19,6 +19,7 @@ import type {
   SkillImportResult,
   SkillSummary,
 } from "../types";
+import type { DataFolderVerdict } from "../lib/installationView";
 import { IMPORTED_PACK, IMPORTED_SKILL_PREFIX } from "../lib/packSkills";
 import { buildEntry } from "./library/entry";
 import { GroupView } from "./library/LibraryGroups";
@@ -145,6 +146,7 @@ export interface LibraryViewProps {
 
   // Common
   dataFolderOk: boolean;
+  dataFolderVerdict?: DataFolderVerdict;
   showConfigs: boolean;
   /** Goes to a harness page, where a rules conflict is decided. */
   onOpenHarnessView?: (harness: InstallAgent) => void;
@@ -201,6 +203,7 @@ export function LibraryView(props: LibraryViewProps) {
 
   const input: LibraryModelInput = {
     dataFolderOk,
+    dataFolderVerdict: props.dataFolderVerdict,
     docs: props.docs,
     agentTemplateLoaded: props.agentTemplate !== null,
     rulesFiles: props.rulesFiles,

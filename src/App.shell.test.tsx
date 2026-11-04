@@ -24,6 +24,12 @@ interface Backend {
   lightHealthRequests: string[];
   /** When set, get_claude_runtime_health resolves only after this promise does. */
   holdClaudeHealth: Promise<void> | null;
+  /** When set, get_settings resolves only after this promise does. */
+  holdSettings: Promise<void> | null;
+  /** When set, get_workspace_diagnostics resolves only after this promise does. */
+  holdDiagnostics: Promise<void> | null;
+  /** When set, get_workspace_diagnostics rejects with this message. */
+  failDiagnostics: string | null;
   /** Personal docs the Library lists. */
   docs: Array<{ id: string; title: string; content: string }>;
   /** The skill packs the Library lists; forget_pack drops one. */
@@ -39,6 +45,9 @@ function installBackend(overrides: Partial<AppSettings> = {}): Backend {
     holdUpdate: null,
     lightHealthRequests: [],
     holdClaudeHealth: null,
+    holdSettings: null,
+    holdDiagnostics: null,
+    failDiagnostics: null,
     docs: [],
     packs: { folder: "~/packs", packs: [], skills: [], ignored: [] },
   };
@@ -46,7 +55,7 @@ function installBackend(overrides: Partial<AppSettings> = {}): Backend {
     backend.commandLog.push(command);
     switch (command) {
       case "get_settings":
-        return Promise.resolve({ settings: backend.settings, load_warning: null });
+        return (backend.holdSettings ?? Promise.resolve()).then(() => ({ settings: backend.settings, load_warning: null }));
       case "update_settings":
         return (backend.holdUpdate ?? Promise.resolve()).then(() => {
           backend.settings = { ...(args?.settings ?? backend.settings), revision: (backend.settings.revision ?? 0) + 1 };
@@ -67,7 +76,8 @@ function installBackend(overrides: Partial<AppSettings> = {}): Backend {
       case "list_skills":
         return Promise.resolve([]);
       case "get_workspace_diagnostics":
-        return Promise.resolve({
+        if (backend.failDiagnostics) return Promise.reject(new Error(backend.failDiagnostics));
+        return (backend.holdDiagnostics ?? Promise.resolve()).then(() => ({
           candidate_path: "/tmp/ws",
           resolved_path: "/tmp/ws",
           valid: true,
@@ -78,7 +88,7 @@ function installBackend(overrides: Partial<AppSettings> = {}): Backend {
           total_config_targets: 0,
           backup_root: "/tmp/backups",
           backup_root_exists: false,
-        });
+        }));
       case "list_pack_skills":
         return Promise.resolve(backend.packs);
       case "forget_pack": {
@@ -353,10 +363,103 @@ describe("App shell", () => {
     expect(backend.commandLog).not.toContain("rollback_setup_transaction");
   });
 
+  it("refuses update before the settings load instead of closing the line, and Enter then runs it", async () => {
+    const backend = installBackend();
+    let answerSettings = () => {};
+    backend.holdSettings = new Promise<void>(resolve => {
+      answerSettings = resolve;
+    });
+    render(<App />);
+    fireEvent.keyDown(document.body, { key: ":", shiftKey: true });
+    const input = screen.getByRole("combobox", { name: "Command" });
+    fireEvent.change(input, { target: { value: "update workspace" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(screen.getByRole("alert").textContent).toBe("update: settings not loaded yet");
+    expect(screen.getByRole("combobox", { name: "Command" })).toBe(input);
+    answerSettings();
+    await ready();
+    fireEvent.keyDown(input, { key: "Enter" });
+    await screen.findByRole("region", { name: "Workspace install review" });
+  });
+
+  describe("while nothing is known about the workspace folder", () => {
+    const CLAIMS = /unusable|can't use|needs? (a usable|the) workspace folder/i;
+    const pages = ["Overview", "Claude", "History", "Library"];
+
+    /** Everything on the page a reader can get at: the text, and the tooltips and hidden reasons in the attributes. */
+    const expectNoClaim = (page: string) => {
+      const said = [document.body.textContent ?? "", ...[...document.querySelectorAll("[title]")].map(element => element.getAttribute("title") ?? "")];
+      expect(said.filter(text => CLAIMS.test(text)), page).toEqual([]);
+    };
+
+    const visitEveryPage = async () => {
+      for (const page of pages) {
+        fireEvent.click(within(nav()).getByRole("button", { name: page }));
+        await screen.findByRole("region", { name: page });
+        expectNoClaim(page);
+      }
+    };
+
+    it("does not call it unusable before the diagnostics answer, and keeps Update all off", async () => {
+      const backend = installBackend();
+      backend.holdDiagnostics = new Promise<void>(() => {});
+      render(<App />);
+      await ready();
+      await visitEveryPage();
+      fireEvent.click(within(nav()).getByRole("button", { name: "Overview" }));
+      const updateAll = screen.getByRole("button", { name: "Update all" });
+      expect(updateAll.getAttribute("title")).toBe("workspace folder not checked yet");
+      expect(updateAll.getAttribute("aria-disabled")).toBe("true");
+    });
+
+    it("points at Check when the diagnostics failed, and Check recovers", async () => {
+      const backend = installBackend();
+      backend.failDiagnostics = "disk on fire";
+      render(<App />);
+      await ready();
+      await waitFor(() => expect(screen.getByRole("button", { name: "Update all" }).getAttribute("title")).toBe("couldn't check the workspace folder, try Check again"));
+      await visitEveryPage();
+      fireEvent.click(within(nav()).getByRole("button", { name: "Overview" }));
+      fireEvent.keyDown(document.body, { key: ":", shiftKey: true });
+      const input = screen.getByRole("combobox", { name: "Command" });
+      fireEvent.change(input, { target: { value: "update --all" } });
+      fireEvent.keyDown(input, { key: "Enter" });
+      expect(screen.getAllByRole("alert").map(alert => alert.textContent)).toContain("update: couldn't check the workspace folder, try Check again");
+      fireEvent.keyDown(input, { key: "Escape" });
+
+      backend.failDiagnostics = null;
+      fireEvent.click(screen.getByRole("button", { name: "Check" }));
+      await waitFor(() => expect(screen.getByRole("button", { name: "Update all" }).getAttribute("title")).toBe("Everything Riggverk can update is already up to date."));
+    });
+  });
+
+  it("refuses update --all truthfully until the folder is checked, and Enter then runs it", async () => {
+    const backend = installBackend();
+    let answerDiagnostics = () => {};
+    backend.holdDiagnostics = new Promise<void>(resolve => {
+      answerDiagnostics = resolve;
+    });
+    render(<App />);
+    await ready();
+    fireEvent.keyDown(document.body, { key: ":", shiftKey: true });
+    const input = screen.getByRole("combobox", { name: "Command" });
+    fireEvent.change(input, { target: { value: "update --all" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(screen.getByRole("alert").textContent).toBe("update: workspace folder not checked yet, press Enter to try again");
+    expect(screen.queryByRole("region", { name: "Workspace install review" })).toBeNull();
+    answerDiagnostics();
+    // The answer arrives while the line is still open, as it would for someone reading the refusal.
+    await waitFor(() => expect(screen.getByRole("button", { name: "Update all" }).getAttribute("title")).toBe("Everything Riggverk can update is already up to date."));
+    fireEvent.keyDown(input, { key: "Enter" });
+    await screen.findByRole("region", { name: "Workspace install review" });
+  });
+
   it.each(["all", "workspace"])("keeps the right outcome actions after update %s", async target => {
     const backend = installBackend();
     render(<App />);
     await ready();
+    // `--all` needs the folder's verdict, which arrives after the sidebar; the settled Update all shows it is in.
+    await waitFor(() => expect(screen.getByRole("button", { name: "Update all" }).getAttribute("title")).toBe("Everything Riggverk can update is already up to date."));
     fireEvent.keyDown(document.body, { key: ":", shiftKey: true });
     const input = screen.getByRole("combobox", { name: "Command" });
     fireEvent.change(input, { target: { value: `update ${target === "all" ? "--all" : target}` } });

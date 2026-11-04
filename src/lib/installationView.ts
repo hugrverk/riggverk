@@ -49,6 +49,34 @@ const STATE_DISPLAY: Record<SurfaceDisplayState, StateDisplay> = {
  */
 export const WORKSPACE_FOLDER_UNUSABLE = "workspace folder unusable";
 
+/** Why it cannot run yet: the diagnostics that judge the folder have not answered (launch, a workspace switch). */
+export const WORKSPACE_FOLDER_UNCHECKED = "workspace folder not checked yet";
+
+/** Why it cannot run: the diagnostics call itself failed, so nothing is known about the folder. Check calls it again. */
+export const WORKSPACE_FOLDER_CHECK_FAILED = "couldn't check the workspace folder, try Check again";
+
+/** What is known about the folder. `dataFolderOk` is false for all but `ok`; only `unusable` is a finding about the folder. */
+export type DataFolderVerdict = "ok" | "unchecked" | "check_failed" | "unusable";
+
+export function dataFolderVerdictOf(diagnostics: { valid: boolean } | null, checkFailed: boolean): DataFolderVerdict {
+  if (diagnostics) return diagnostics.valid ? "ok" : "unusable";
+  return checkFailed ? "check_failed" : "unchecked";
+}
+
+/** Why something that needs the folder is off. A caller that passes no verdict knows the folder is unusable. */
+export function dataFolderReason(verdict?: DataFolderVerdict): string {
+  if (verdict === "unchecked") return WORKSPACE_FOLDER_UNCHECKED;
+  if (verdict === "check_failed") return WORKSPACE_FOLDER_CHECK_FAILED;
+  return WORKSPACE_FOLDER_UNUSABLE;
+}
+
+/** The sentence for a folder nothing is known about yet, or null: a page says why a folder is unusable in its own words. */
+export function dataFolderUnknownSentence(verdict?: DataFolderVerdict): string | null {
+  if (verdict === "unchecked") return "Checking the workspace folder…";
+  if (verdict === "check_failed") return "Couldn't check the workspace folder. Try Check again.";
+  return null;
+}
+
 /** What an off target tells beyond its name, for a target whose default is not obvious from the name. */
 const OFF_DETAIL: Partial<Record<string, string>> = {
   claude_config: "off · Claude Code keeps its default commit and PR attribution",
@@ -180,7 +208,7 @@ export interface UpdateAction {
 export function updateActionFor(
   id: OverviewId,
   entry: OverviewEntry | undefined,
-  context: { dataFolderOk: boolean; busyLabel: string | null; settingsSaving: boolean },
+  context: { dataFolderOk: boolean; dataFolderVerdict?: DataFolderVerdict; busyLabel: string | null; settingsSaving: boolean },
 ): UpdateAction {
   const state = entry?.status?.state;
   const hasConflicts = (entry?.status?.counts.conflict_count ?? 0) > 0;
@@ -193,7 +221,7 @@ export function updateActionFor(
           ? "update safe files"
           : "update";
   let disabled: string | false = false;
-  if (!context.dataFolderOk && id !== "workspace") disabled = WORKSPACE_FOLDER_UNUSABLE;
+  if (!context.dataFolderOk && id !== "workspace") disabled = dataFolderReason(context.dataFolderVerdict);
   else if (context.busyLabel) disabled = `${context.busyLabel} is running`;
   else if (context.settingsSaving) disabled = "saving target changes";
   else if (context.dataFolderOk && entry?.loading && !entry.status) disabled = "checking status…";
@@ -205,9 +233,9 @@ export function updateActionFor(
 /** Why a read-only preview cannot run, or false. */
 export function previewDisabledFor(
   id: OverviewId,
-  context: { dataFolderOk: boolean; busyLabel: string | null },
+  context: { dataFolderOk: boolean; dataFolderVerdict?: DataFolderVerdict; busyLabel: string | null },
 ): string | false {
-  if (!context.dataFolderOk && id !== "workspace") return WORKSPACE_FOLDER_UNUSABLE;
+  if (!context.dataFolderOk && id !== "workspace") return dataFolderReason(context.dataFolderVerdict);
   if (context.busyLabel) return `${context.busyLabel} is running`;
   return false;
 }

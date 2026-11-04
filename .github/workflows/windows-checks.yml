@@ -26,7 +26,7 @@ jobs:
           node-version: "22"
           cache: npm
 
-      # Same pinned toolchain as ci.yml.
+      # The version must match rust-toolchain.toml.
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
           toolchain: "1.97.1"

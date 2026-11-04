@@ -13,7 +13,7 @@ metadata:
 
 # Release Notes
 
-Drafts notes for the people who use the project: what changed for them, what breaks, and what to do before updating. The draft is a proposal that a human curates before it ships. Not for a status report, a PR description or the release gate itself. Swedish requests such as "skriv release notes" or "vad är nytt sedan 1.4" mean this skill.
+Drafts notes for the people who use the project: what changed for them, what breaks, and what to do before updating. The draft is a proposal that a human curates before it ships. Not for a status report, a PR description or the release gate itself. Requests in any language for release notes or changes since a version mean this skill.
 
 Done when: every merged change in the range is either in the draft or on the excluded list with a reason, breaking changes lead the draft, the user has the draft plus the items that need curation, and nothing was written to the repo unless the user asked for it and saw the diff first.
 

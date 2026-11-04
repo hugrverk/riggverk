@@ -1,6 +1,7 @@
 import type { EffectiveSkillLoadsState } from "../hooks/useEffectiveSkillLoads";
 import type { InstallationOverview } from "../hooks/useInstallationOverview";
 import type { InstallScreen, RunWorkspaceTask } from "../hooks/useInstallScreen";
+import type { DataFolderVerdict } from "../lib/installationView";
 import type { SettingsSaveStatus } from "../lib/settingsDraft";
 import type { AgentTargetMeta, ApplyProgress, AppSettings, SetupResult } from "../types";
 
@@ -12,6 +13,8 @@ export interface PageOutputProps {
   /** What the backend last reported for that task (backup/apply counts, current file), or null. */
   wsProgress: ApplyProgress | null;
   dataFolderOk: boolean;
+  /** Why `dataFolderOk` is false. Without it, a false `dataFolderOk` means unusable. */
+  dataFolderVerdict?: DataFolderVerdict;
 }
 
 /** Installation state, the install review and the rollback path, shared by the Start and harness pages. */

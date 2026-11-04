@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { OverviewEntry, OverviewId } from "../hooks/useInstallationOverview";
 import type { AgentTargetMeta, InstallationState, InstallationStatus, SetupSurfaceId, SurfaceInstallationStatus } from "../types";
 import {
+  dataFolderVerdictOf,
   harnessRowsFor,
   previewDisabledFor,
   surfaceRowsFor,
@@ -166,5 +167,23 @@ describe("updateActionFor", () => {
     expect(previewDisabledFor("workspace", { dataFolderOk: false, busyLabel: null })).toBe(false);
     expect(previewDisabledFor("claude", { dataFolderOk: false, busyLabel: null })).toBe("workspace folder unusable");
     expect(previewDisabledFor("claude", { dataFolderOk: true, busyLabel: "apply" })).toBe("apply is running");
+  });
+});
+
+describe("the workspace folder verdict", () => {
+  it("reads the diagnostics first, then whether the call failed", () => {
+    expect(dataFolderVerdictOf({ valid: true }, true)).toBe("ok");
+    expect(dataFolderVerdictOf({ valid: false }, false)).toBe("unusable");
+    expect(dataFolderVerdictOf(null, false)).toBe("unchecked");
+    expect(dataFolderVerdictOf(null, true)).toBe("check_failed");
+  });
+
+  it("keeps a harness action off with the reason that is true, and the workspace action as it was", () => {
+    const off = { dataFolderOk: false, busyLabel: null, settingsSaving: false };
+    expect(updateActionFor("claude", undefined, off).disabled).toBe("workspace folder unusable");
+    expect(updateActionFor("claude", undefined, { ...off, dataFolderVerdict: "unusable" }).disabled).toBe("workspace folder unusable");
+    expect(updateActionFor("claude", undefined, { ...off, dataFolderVerdict: "unchecked" }).disabled).toBe("workspace folder not checked yet");
+    expect(previewDisabledFor("claude", { ...off, dataFolderVerdict: "check_failed" })).toBe("couldn't check the workspace folder, try Check again");
+    expect(previewDisabledFor("workspace", { ...off, dataFolderVerdict: "unchecked" })).toBe(false);
   });
 });

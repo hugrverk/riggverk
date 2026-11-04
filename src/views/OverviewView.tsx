@@ -99,6 +99,7 @@ export function OverviewView({
   wsRunning,
   wsProgress,
   dataFolderOk,
+  dataFolderVerdict,
 }: OverviewViewProps) {
   const busy = wsRunning !== null;
   const showPlan = install.isOpenOn("start");
@@ -112,10 +113,11 @@ export function OverviewView({
         settings: appSettings,
         enabledHarnessIds,
         dataFolderOk,
+        dataFolderVerdict,
         diagnostics: workspaceDiagnostics,
         runtime: runtimeHealth,
       }),
-    [overview, appSettings, enabledHarnessIds, dataFolderOk, workspaceDiagnostics, runtimeHealth],
+    [overview, appSettings, enabledHarnessIds, dataFolderOk, dataFolderVerdict, workspaceDiagnostics, runtimeHealth],
   );
   const postures = usePostureOverview(enabledHarnessIds, checkedAt?.getTime() ?? 0);
   const look = useMemo(() => worthALook(postures, enabledHarnessIds), [postures, enabledHarnessIds]);
@@ -155,7 +157,7 @@ export function OverviewView({
   };
 
   const updateDisabled =
-    updateAllDisabled ?? updateAllDisabledReason(overview, { dataFolderOk, busyLabel: wsRunning, settingsSaving: false });
+    updateAllDisabled ?? updateAllDisabledReason(overview, { dataFolderOk, dataFolderVerdict, busyLabel: wsRunning, settingsSaving: false });
   const previewDisabled = previewDisabledFor("workspace", { dataFolderOk, busyLabel: wsRunning });
 
   const pageBindings: Binding[] = [
@@ -274,6 +276,7 @@ export function OverviewView({
             path={resolvedPath}
             diagnostics={workspaceDiagnostics}
             dataFolderOk={dataFolderOk}
+            dataFolderVerdict={dataFolderVerdict}
             dataFolder={dataFolder}
             backupCount={backupCount}
             backupRoot={backupRoot}

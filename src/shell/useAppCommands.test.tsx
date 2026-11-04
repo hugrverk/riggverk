@@ -337,6 +337,39 @@ describe("useAppCommands", () => {
       expect(idle.openInstall).not.toHaveBeenCalled();
     });
 
+    it("does not call the folder unusable before the diagnostics have answered", () => {
+      const unchecked = makeDeps({ dataFolderOk: false, dataFolderVerdict: "unchecked" });
+      setup(unchecked);
+      runLine("update --all");
+      expect(commandLineError()).toBe("update: workspace folder not checked yet, press Enter to try again");
+      fireEvent.keyDown(screen.getByRole("combobox", { name: "Command" }), { key: "Escape" });
+      runLine("update claude");
+      expect(commandLineError()).toBe("update: workspace folder not checked yet, press Enter to try again");
+      fireEvent.keyDown(screen.getByRole("combobox", { name: "Command" }), { key: "Escape" });
+      expect(unchecked.openInstall).not.toHaveBeenCalled();
+      runLine("update workspace");
+      expect(unchecked.openInstall).toHaveBeenCalledWith("workspace");
+    });
+
+    it("refuses every target before the settings load, a harness too", () => {
+      const early = makeDeps({ settingsLoaded: false, enabledHarnessIds: [], dataFolderOk: false, dataFolderVerdict: "unchecked" });
+      setup(early);
+      for (const line of ["update workspace", "update claude", "update --all"]) {
+        runLine(line);
+        expect(commandLineError()).toBe("update: settings not loaded yet");
+        fireEvent.keyDown(screen.getByRole("combobox", { name: "Command" }), { key: "Escape" });
+      }
+      expect(early.openInstall).not.toHaveBeenCalled();
+    });
+
+    it("points at Check, not at Enter, when the diagnostics failed", () => {
+      const failed = makeDeps({ dataFolderOk: false, dataFolderVerdict: "check_failed" });
+      setup(failed);
+      runLine("update --all");
+      expect(commandLineError()).toBe("update: couldn't check the workspace folder, try Check again");
+      expect(failed.openInstall).not.toHaveBeenCalled();
+    });
+
     it("lets the workspace be installed without a valid workspace, but nothing that needs one", () => {
       const none = makeDeps({ dataFolderOk: false });
       setup(none);

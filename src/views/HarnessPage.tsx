@@ -25,7 +25,8 @@ import {
   previewDisabledFor,
   surfaceShortName,
   updateActionFor,
-  WORKSPACE_FOLDER_UNUSABLE,
+  dataFolderReason,
+  dataFolderUnknownSentence,
   type HarnessRowModel,
 } from "../lib/installationView";
 import { ROW_LABEL, ROW_ORDER } from "../lib/overviewModel";
@@ -89,6 +90,7 @@ export function HarnessPage({
   wsRunning,
   wsProgress,
   dataFolderOk,
+  dataFolderVerdict,
   onUndo,
 }: HarnessPageProps) {
   const label = HARNESS_LABELS[harness];
@@ -97,9 +99,9 @@ export function HarnessPage({
   const [markedKey, setMarkedKey] = useState<string | null>(null);
   const saving = settingsSaveStatus === "saving" || settingsSaveStatus === "pending";
 
-  const baseUpdate = updateActionFor(harness, entry, { dataFolderOk, busyLabel: wsRunning, settingsSaving: saving });
+  const baseUpdate = updateActionFor(harness, entry, { dataFolderOk, dataFolderVerdict, busyLabel: wsRunning, settingsSaving: saving });
   const update = baseUpdate.disabled === false && installBlockedBy ? { ...baseUpdate, disabled: installBlockedBy } : baseUpdate;
-  const basePreviewDisabled = previewDisabledFor(harness, { dataFolderOk, busyLabel: wsRunning });
+  const basePreviewDisabled = previewDisabledFor(harness, { dataFolderOk, dataFolderVerdict, busyLabel: wsRunning });
   const previewDisabled = basePreviewDisabled === false && installBlockedBy ? installBlockedBy : basePreviewDisabled;
 
   const rows = useMemo(
@@ -107,8 +109,8 @@ export function HarnessPage({
     [appSettings, harness, entry, agentTargets],
   );
   const uiItems: UiItem[] = useMemo(
-    () => (appSettings ? harnessUiItems(harness, entry, appSettings, dataFolderOk) : []),
-    [appSettings, harness, entry, dataFolderOk],
+    () => (appSettings ? harnessUiItems(harness, entry, appSettings, dataFolderOk, dataFolderVerdict) : []),
+    [appSettings, harness, entry, dataFolderOk, dataFolderVerdict],
   );
   const stateOf = (row: HarnessRowModel): UiItem | null => uiItems.find(item => item.surface === row.surface) ?? null;
 
@@ -281,8 +283,8 @@ export function HarnessPage({
     );
   }
 
-  // With an unusable workspace folder there is no runtime to judge: the verdict says so and no rows follow.
-  const verdict = dataFolderOk ? runtimeVerdict(runtime) : { text: WORKSPACE_FOLDER_UNUSABLE, tone: "dim" as const };
+  // Without a usable workspace folder there is no runtime to judge: the verdict says why and no rows follow.
+  const verdict = dataFolderOk ? runtimeVerdict(runtime) : { text: dataFolderReason(dataFolderVerdict), tone: "dim" as const };
   const override = rulesOverrideWarning(runtime.harness === "codex" ? runtime.health : null);
   const conflictDetails = entry?.status?.conflict_details ?? [];
 
@@ -429,7 +431,7 @@ export function HarnessPage({
 
         {!dataFolderOk && (
           <p className="hp-alert" role="status">
-            The workspace folder is unusable. The Overview page says why.
+            {dataFolderUnknownSentence(dataFolderVerdict) ?? "The workspace folder is unusable. The Overview page says why."}
           </p>
         )}
         {override && (
