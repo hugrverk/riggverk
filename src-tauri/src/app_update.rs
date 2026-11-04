@@ -27,6 +27,9 @@ pub const UPDATE_MENU_EVENT: &str = "app-update-check-requested";
 
 /// How long a check may take before it is given up (offline, a slow network).
 const CHECK_TIMEOUT: Duration = Duration::from_secs(10);
+/// How long the check or the download may wait for the next bytes (connecting, the response, each read) before it is
+/// given up as stalled. It restarts with every read, so a slow download that keeps arriving is never cut off.
+const STALL_TIMEOUT: Duration = Duration::from_secs(30);
 /// A daily check runs when the last successful one is at least this old.
 pub const DAILY_INTERVAL_SECS: u64 = 24 * 60 * 60;
 /// At most about ten progress events per second; the last chunk and phase changes are always sent.
@@ -97,7 +100,7 @@ pub enum UpdateCheck {
     Available {
         version: String,
         current_version: String,
-        /// Release notes as plain text (Markdown source), shown as text.
+        /// Release notes as Markdown source; unsigned, so the review renders them without raw HTML.
         notes: Option<String>,
         /// RFC 3339 publication date, when the manifest has one.
         date: Option<String>,
@@ -259,9 +262,11 @@ pub async fn check_app_update<R: Runtime>(
             return Ok(UpdateCheck::Skipped);
         }
     }
+    // The update keeps this client setup for its download, but not the check's total timeout.
     let updater = app
         .updater_builder()
         .timeout(CHECK_TIMEOUT)
+        .configure_client(|client| client.read_timeout(STALL_TIMEOUT))
         .build()
         .map_err(|error| user_error(&error, CHECK_FAILED))?;
     let found = updater

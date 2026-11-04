@@ -26,7 +26,7 @@ Canonical bundled sources live in `resources/default-workspace/`. Edit sources, 
 python3 scripts/generate.py write
 ```
 
-Follow the [skill catalog and standards](resources/default-workspace/docs/SKILLS.md). Be conservative with new bundled skills; prefer optional skill packs (coming) for specialized content.
+Follow the [skill catalog and standards](resources/default-workspace/docs/SKILLS.md). Be conservative with new bundled skills; prefer a skill pack (see [Skill packs](docs/WORKSPACE_CONTRACT.md#skill-packs)) for specialized content.
 
 After dependency changes, regenerate and commit `THIRD_PARTY_NOTICES.md`:
 
@@ -43,7 +43,7 @@ This requires installed npm dependencies and Cargo metadata for the locked Rust 
 
 Use English commit subjects in the form `<type>(<scope>): <subject>`, imperative and at most 72 characters. Types: `feat`, `fix`, `refactor`, `chore`, `docs`. Keep each commit to one logical change.
 
-Releases use CalVer `YYYY.MM.N`: year, month (without a leading zero), and a counter within that month.
+Releases use CalVer `YYYY.M.N`: year, month (without a leading zero), and a counter within that month.
 
 ## Conduct
 

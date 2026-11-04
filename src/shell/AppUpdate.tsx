@@ -1,4 +1,5 @@
 import { useEffect, useRef, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { SafeMarkdown } from "../components/SafeMarkdown";
 import type { AppUpdate } from "../hooks/useAppUpdate";
 import { TButton } from "../ui/TButton";
 import { scrollHelpBox, trapTab, useRestoreFocus } from "./overlay";
@@ -42,7 +43,7 @@ function formatBytes(bytes: number): string {
 }
 
 /**
- * The review of a new version, built like the what's new overlay: the version, its notes as text, the app it
+ * The review of a new version, built like the what's new overlay: the version, its notes (safe markdown), the app it
  * replaces, and one button, "Download and restart". Also the answer to a check the user asked for (up to date, or
  * the error). Esc closes it, except while the new version is being installed.
  */
@@ -128,7 +129,11 @@ function AppUpdateBody({ update }: { update: AppUpdate }) {
                 </>
               )}
             </dl>
-            <pre className="app-update-notes">{available.notes?.trim() || "No release notes."}</pre>
+            {/* The notes in latest.json are not signed: rendered without raw HTML, links only http(s) or in-page. */}
+            <SafeMarkdown
+              className="markdown-body app-update-notes"
+              content={available.notes?.trim() || "No release notes."}
+            />
             <p className="app-update-text c-dim">
               Your rules, skills and backups are not touched; only the app is replaced.
             </p>

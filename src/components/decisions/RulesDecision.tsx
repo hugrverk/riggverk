@@ -75,7 +75,7 @@ export function RulesDecision({ model, harnessLabel, fileName, flow, rules, gate
           {
             id: "merge",
             title: "Merge in updates",
-            sub: "Riggverk’s rules go in a managed block. Your changed sections move below it and stay yours.",
+            sub: "Riggverk's rules go in a managed block. Your changed sections move below it and stay yours.",
             keyName: "v",
             disabled: gates.convert.reason ?? false,
             onChoose: () => rules.run("convert"),
@@ -87,7 +87,7 @@ export function RulesDecision({ model, harnessLabel, fileName, flow, rules, gate
           {
             id: "keep",
             title: "Keep mine",
-            sub: "Riggverk never writes this file. You won’t get rule updates until you change your mind.",
+            sub: "Riggverk never writes this file. You won't get rule updates until you change your mind.",
             keyName: "m",
             disabled: gates.leave.reason ?? false,
             onChoose: () => rules.run("leave"),
@@ -141,7 +141,7 @@ export function RulesDecision({ model, harnessLabel, fileName, flow, rules, gate
         </CellButton>
       </div>
       {open && (
-        <Fold id={foldId} label={`Compare ${fileName} with Riggverk’s rules`}>
+        <Fold id={foldId} label={`Compare ${fileName} with Riggverk's rules`}>
           {state.status === "loading" && (
             <p className="hp-fold-status" role="status">
               <ActivityLoader />

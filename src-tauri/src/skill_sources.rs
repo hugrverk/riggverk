@@ -658,7 +658,7 @@ fn report_candidate(
 /// The effective user id of this process. `std` has no accessor and the crate has no `libc`
 /// dependency, so this declares the one C function it needs; `geteuid` is always linked on Unix.
 #[cfg(unix)]
-fn effective_uid() -> u32 {
+pub(crate) fn effective_uid() -> u32 {
     extern "C" {
         fn geteuid() -> u32;
     }

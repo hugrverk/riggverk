@@ -1528,6 +1528,10 @@ mod tests {
         // The pack folder cannot be searched, so its skills folder can neither be read nor found
         // missing.
         set_mode(&pack, 0o000);
+        if fs::read_dir(&pack).is_ok() {
+            set_mode(&pack, 0o755);
+            return; // permissions are not enforced (running as root)
+        }
         let reason = env.sources().packs()[0].refused.clone();
         set_mode(&pack, 0o755);
         assert!(

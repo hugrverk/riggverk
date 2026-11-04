@@ -90,9 +90,7 @@ pub(super) fn models_args(version: Option<&CliVersion>) -> &'static [&'static st
 static PROBE_DIR_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 /// A new, empty folder for one probe to run from, owner-only (0700 on unix) and removed on drop.
-/// The system temp folder itself is shared by every user on Linux, so it is never the working
-/// directory; a folder somebody else made first at the same name (or a link there) is refused,
-/// never reused.
+/// A folder somebody else made first at the same name (or a link there) is refused, never reused.
 pub(super) struct ProbeDir(PathBuf);
 
 impl ProbeDir {
@@ -102,7 +100,14 @@ impl ProbeDir {
             .unwrap_or_default()
             .as_nanos();
         let sequence = PROBE_DIR_SEQUENCE.fetch_add(1, Ordering::Relaxed);
-        let path = std::env::temp_dir().join(format!(
+        let root = crate::platform_paths::app_support_dir(
+            &crate::platform_paths::PlatformEnv::from_process_env(),
+            crate::platform_paths::Platform::current(),
+        )
+        .map_err(std::io::Error::other)?;
+        crate::safe_filesystem::create_private_leaf_directory(&root)
+            .map_err(std::io::Error::other)?;
+        let path = root.join(format!(
             "riggverk-probe-{}-{nanos}-{sequence}",
             std::process::id()
         ));
@@ -555,6 +560,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn probes_run_from_a_fresh_private_folder_without_project_config() {
+        let _guard = crate::test_env::guard::lock();
         let stub = Stub::new(
             "cwd",
             "d=\"$(dirname \"$0\")\"\npwd -P >> \"$d/cwd.txt\"\nls -ld . | cut -c1-10 >> \"$d/mode.txt\"\necho \"$OPENCODE_DISABLE_PROJECT_CONFIG\" >> \"$d/env.txt\"\necho 1.19.3",
@@ -564,7 +570,14 @@ mod tests {
         probe_agent(stub.program(), "architect", timeout);
         let read = |name: &str| std::fs::read_to_string(stub.dir.join(name)).expect(name);
         let seen: Vec<PathBuf> = read("cwd.txt").lines().map(PathBuf::from).collect();
-        let shared = std::fs::canonicalize(std::env::temp_dir()).expect("temp dir");
+        let shared = std::fs::canonicalize(
+            crate::platform_paths::app_support_dir(
+                &crate::platform_paths::PlatformEnv::from_process_env(),
+                crate::platform_paths::Platform::current(),
+            )
+            .expect("app data dir"),
+        )
+        .expect("canonical app data dir");
         assert_eq!(seen.len(), 2);
         assert_ne!(seen[0], seen[1], "each probe gets its own folder");
         for cwd in &seen {
@@ -580,6 +593,7 @@ mod tests {
 
     #[test]
     fn a_probe_folder_is_new_owner_only_and_removed_on_drop() {
+        let _guard = crate::test_env::guard::lock();
         let first = ProbeDir::create().expect("first");
         let second = ProbeDir::create().expect("second");
         assert_ne!(first.path(), second.path());

@@ -2098,6 +2098,8 @@ mod tests {
             let moved = env.base.join("xdg-config");
             fs::create_dir_all(&moved).unwrap();
             std::env::set_var("XDG_CONFIG_HOME", &moved);
+            // On Linux the app's own settings move with the variable too.
+            enable_everything();
             assert_eq!(env.dest(), moved.join("kilo/kilo.jsonc"));
             assert_eq!(
                 env.spec().allowlist_root(&env.home),

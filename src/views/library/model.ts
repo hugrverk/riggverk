@@ -118,7 +118,7 @@ export interface LibraryModelInput {
   canCopySkill: boolean;
   /** A pack that cannot be read offers "Forget pack". */
   canForgetPack: boolean;
-  /** A rules conflict offers "Open <harness> view ›". */
+  /** A rules conflict offers "Open <harness> page ›". */
   canOpenHarness: boolean;
   /** The Packs group offers "Import skill…", and imported skills "Remove import" and "Undo import". */
   canImportSkill: boolean;
@@ -147,7 +147,7 @@ function rulesRow(file: RulesFileSummary, input: Pick<LibraryModelInput, "canOpe
       state: { state: "decide", label: "Needs your decision" },
       verbs: [
         { label: "View", action: { type: "open", target } },
-        ...(harness && input.canOpenHarness ? [{ label: `Open ${HARNESS_LABELS[harness]} view ›`, action: { type: "harness", harness } as RowAction }] : []),
+        ...(harness && input.canOpenHarness ? [{ label: `Open ${HARNESS_LABELS[harness]} page ›`, action: { type: "harness", harness } as RowAction }] : []),
       ],
       haystack: search,
     };
@@ -313,7 +313,7 @@ function packRows(input: LibraryModelInput): LibraryRow[] {
       desc: attention ? pack.reason || PACK_FOLDER_UNREADABLE : undefined,
       verbs: [
         ...(forgettable && input.canForgetPack ? [{ label: "Forget pack", action: { type: "forget", pack: pack.name } as RowAction }] : []),
-        ...(undoRemove && undo ? [{ label: `Undo remove of ${undo.name}`, action: { type: "undo-import" } as RowAction }] : []),
+        ...(undoRemove && undo ? [{ label: `Undo removal of ${undo.name}`, action: { type: "undo-import" } as RowAction }] : []),
       ],
       haystack: haystack(pack.name, packGroup(pack.name), library.folder, "pack", pack.reason),
     });

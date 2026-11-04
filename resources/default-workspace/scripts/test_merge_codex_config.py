@@ -679,6 +679,25 @@ def test_fallback_parsers_read_single_quoted_literal_strings() -> None:
         assert result["apps"]["_default"]["approvals_reviewer"] == "user", result
 
 
+def test_string_values_are_written_as_toml_that_reads_back_the_same() -> None:
+    import tomllib
+
+    routing = _load_routing_module()
+    for value in [
+        "plain",
+        'a "quoted" word',
+        "back\\slash at the end\\",
+        "two\nlines\n",
+        'triple """ quotes\n"""',
+        "tab\tcr\rcrlf\r\nnul\0esc\x1bdel\x7f",
+        "",
+    ]:
+        for script in (_merge_mod, routing):
+            rendered = f"key = {script.format_toml_scalar(value)}\n"
+            assert tomllib.loads(rendered)["key"] == value, rendered
+            assert script.parse_minimal_toml(rendered)["key"] == value, rendered
+
+
 def test_line_patchers_keep_a_hash_inside_a_literal_string() -> None:
     line = "profile = 'safe#x' # note"
     assert _merge_mod.split_managed_scalar_assignment(line, "profile") == ("profile = ", " # note")

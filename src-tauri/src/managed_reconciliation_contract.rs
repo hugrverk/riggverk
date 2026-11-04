@@ -75,14 +75,19 @@ mod tests {
         Ok(())
     }
 
-    const SOURCE_COMMIT: &str = "2d85d94b6f2f1dc06f45f6ec52a22ae97e499588";
+    /// `resources/default-workspace/` at commit 2d85d94b, the pre-manifest ownership source. Pinned
+    /// snapshots are tree ids, not commit ids: a history rewrite that leaves
+    /// `resources/default-workspace/` byte for byte keeps them, while every commit id changes.
+    const SOURCE_BUNDLE_TREE: &str = "ee0eefd4b7c8d84f7dc40de05556aaa225d9b087";
+    /// `agents/scout.md` as the bundle held it before commit 931bfa47, by blob id for the same reason.
+    const HISTORICAL_SCOUT_BLOB: &str = "36f4cd3a2180fecd477d7e30672becc7e4dfcd62";
+    /// The bundle trees of commits 0f2eac13 and 0e042154 (rules history fixtures).
+    const RULES_0F2EAC13_TREE: &str = "5cd5e873083956c199a6670256f0eabc4c384441";
+    const RULES_0E042154_TREE: &str = "6e700814a131bb3895290535dce2f8d1c295f202";
 
     fn historical_bytes(rel: &str) -> Vec<u8> {
         let output = Command::new("git")
-            .args([
-                "show",
-                &format!("{SOURCE_COMMIT}:resources/default-workspace/{rel}"),
-            ])
+            .args(["show", &format!("{SOURCE_BUNDLE_TREE}:{rel}")])
             .current_dir(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(".."))
             .output()
             .expect("run git show");
@@ -96,10 +101,7 @@ mod tests {
 
     fn historical_scout_bytes() -> Vec<u8> {
         let output = Command::new("git")
-            .args([
-                "show",
-                "931bfa47e2eadb328a0084f6418099c4ae930377^:resources/default-workspace/agents/scout.md",
-            ])
+            .args(["show", HISTORICAL_SCOUT_BLOB])
             .current_dir(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(".."))
             .output()
             .expect("run git show");
@@ -1760,19 +1762,16 @@ mod tests {
         let _ = fs::remove_dir_all(&base);
     }
 
-    /// File of the app repository at a commit (rules history fixtures).
-    fn rules_at_commit(commit: &str, rel: &str) -> String {
+    /// A bundle file in a pinned bundle tree (rules history fixtures).
+    fn rules_in_bundle_tree(tree: &str, rel: &str) -> String {
         let output = Command::new("git")
-            .args([
-                "show",
-                &format!("{commit}:resources/default-workspace/{rel}"),
-            ])
+            .args(["show", &format!("{tree}:{rel}")])
             .current_dir(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(".."))
             .output()
             .expect("run git show");
         assert!(
             output.status.success(),
-            "{commit}:{rel}: {}",
+            "{tree}:{rel}: {}",
             String::from_utf8_lossy(&output.stderr)
         );
         String::from_utf8(output.stdout).expect("utf-8 rules")
@@ -1807,8 +1806,8 @@ mod tests {
         .expect("home");
 
         let rel = "templates/sync/claude-rules.md";
-        let recorded_template = rules_at_commit("0f2eac13", rel);
-        let installed_base = rules_at_commit("0e042154", rel);
+        let recorded_template = rules_in_bundle_tree(RULES_0F2EAC13_TREE, rel);
+        let installed_base = rules_in_bundle_tree(RULES_0E042154_TREE, rel);
         let refined = installed_base.replace("`gpt-5.6-sol` at `high`", "`gpt-6.1-sol` at `xhigh`");
         assert_ne!(refined, installed_base, "fixture must hold the edited line");
         let installed_path = resolved_home.join(".claude/CLAUDE.md");
