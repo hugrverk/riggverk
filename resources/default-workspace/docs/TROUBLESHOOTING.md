@@ -83,6 +83,12 @@ Harness installs need a usable workspace folder (absent, or a real folder). The 
 - A Copilot or Pi page shows `unserved`: Codex is enabled with a customised `CODEX_HOME`, and Codex's isolation keeps `~/.agents/skills` (the only shared folder those two read) out of the install. Disable Codex or unset `CODEX_HOME`.
 - Target and harness changes autosave. If an agent page says `not saved`, press `s` in Settings to retry.
 
+## Claude Code shows only the names of most skills
+
+On a model with a 200k context window, such as Sonnet 4.6 or Haiku 4.5, Claude Code fits its skill list into 1% of the window and shares that space with its built-in skills. Most bundled skills then keep their name but lose their description, so the model has less to choose by. Models with a 1M window, such as Opus 5.5 and Sonnet 5.5, list them all. In `/context`, a skill that kept only its name shows `< 20` tokens.
+
+To list them all on a smaller model, add `"skillListingBudgetFraction": 0.03` to `~/.claude/settings.json` yourself. It uses more of the context window. Descriptions short enough to fit would be too short to help, because the built-in skills take most of the space.
+
 ## Environment overrides
 
 The app honors these in normal use, so check them when paths surprise you: `RIGGVERK_WORKSPACE_PATH`, `RIGGVERK_BACKUP_DIR`, `CODEX_HOME` (Codex config, rules, agents, and, when customised, skills), `CODEX_SKILLS_PATH`, `CLAUDE_SKILLS_PATH` (inside your home folder), `OPENCODE_SKILLS_PATH` and `CURSOR_SKILLS_PATH` (only where older copies are cleaned up), `PLAYWRIGHT_MCP_CONFIG_PATH`, `XDG_CONFIG_HOME` (Linux app support). `COPILOT_HOME` and `PI_CODING_AGENT_DIR` move those harnesses' own folders (rules file included); the app does not follow them and says so on the page when one is set. `XDG_CONFIG_HOME` also moves Kilo's rules file, and the app follows it.

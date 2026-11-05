@@ -66,8 +66,9 @@ FENCE_RE = re.compile(r"^\s*(`{3,}|~{3,})")
 HEADING_RE = re.compile(r"^#{1,6}\s")
 
 # Description standard (docs/SKILLS.md): one plain line, triggers visible to harnesses
-# that never see the body, at most 300 chars. The whole catalog stays under the smallest
-# documented harness catalog budget (Codex fallback, 8,000 chars).
+# that never see the body, at most 300 chars. The whole catalog stays under the Codex fallback
+# budget (8,000 chars). This counts the kit's own text only: Claude Code on a 200k window has less
+# room than this, shared with its built-in skills. scripts/kit_listing_probe.py shows what is listed.
 DESCRIPTION_MAX_CHARS = 300
 CATALOG_DESCRIPTION_BUDGET = 8000
 DESCRIPTION_TRIGGER = "Use when"
