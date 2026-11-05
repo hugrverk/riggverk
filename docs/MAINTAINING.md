@@ -89,6 +89,13 @@ Each recipe lists the files to touch, the command, and what fails if you forget.
 
 The harness list lives in several places no compiler connects: `HarnessId` and the target registry in Rust (`src-tauri/src/agent_targets.rs`, `skill_roots.rs`, `skill_loads.rs`, `setup_lifecycle.rs`), `metadata/light-harnesses.json` and `metadata/rules-adapters.json` in the bundle, the rules and MCP templates, and the TypeScript tables (`src/types.ts`, `src/lib/harnessInstallation.ts`, `src/lib/rulesView.ts`, `src/shell/views.ts`, `src/App.tsx`), plus the skill target ids (`VALID_SKILL_AGENTS` in `agent_skill_targets.rs`, `ALL_HARNESSES` in `scripts/check-skill-routing.py` and `metadata.targets` of every bundled skill). `python3 scripts/check-harness-mirror.py` names the first mismatch of each kind; `check-managed-installation-contract.py` requires each harness view to render exactly one `HarnessPage`.
 
+### Check what the harnesses list
+
+Before a release and after upgrading a harness, run `python3 scripts/kit_listing_probe.py`. It runs Claude Code, Codex, OpenCode and Kilo from a throwaway home with a placeholder key and no model call, and reports per skill whether the description is listed in full, plus what the kit adds to the always-loaded prompt. Harnesses can still contact their vendors for catalogs and telemetry. It stays out of `release-check.sh`, because it depends on the installed harnesses.
+
+- Codex shows the prompt itself. Claude Code shows token estimates, so "full" there means about the size of the description. OpenCode and Kilo show what they discovered, not what reaches the prompt.
+- Exit 1: a default setup lost a description. Exit 2: the run says nothing about the kit, because a harness is missing, a control failed or a model was retired or changed. Use `--harness` to run fewer, and update the model names at the top of the script.
+
 ### Add or change a posture check
 
 The code lives in `src-tauri/src/commands/security_posture.rs`, the phrases in `src/lib/securityPostureRows.ts`.
