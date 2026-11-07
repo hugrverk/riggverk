@@ -111,6 +111,7 @@ impl ProbeDir {
             "riggverk-probe-{}-{nanos}-{sequence}",
             std::process::id()
         ));
+        #[cfg_attr(not(unix), allow(unused_mut))]
         let mut builder = std::fs::DirBuilder::new();
         #[cfg(unix)]
         {

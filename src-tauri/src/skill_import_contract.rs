@@ -661,6 +661,7 @@ mod tests {
                 ("assets/blob.bin", "\0\u{1}"),
             ],
         );
+        #[cfg_attr(not(unix), allow(unused_mut))]
         let mut paths = vec![
             &tag, &bidi, &nested, &badname, &mismatch, &dup, &space, &unknown, &flagged,
         ];

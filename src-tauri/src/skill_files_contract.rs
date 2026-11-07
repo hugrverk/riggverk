@@ -26,9 +26,9 @@ mod tests {
     use crate::shipped_digests::test_override;
     use crate::skill_roots::SkillRoot;
     use crate::stable_digest;
-    use crate::test_env::{
-        guard, guard::EnvRestore, set_test_user_dirs, skill_file_counts, source_skill_count,
-    };
+    #[cfg(unix)]
+    use crate::test_env::skill_file_counts;
+    use crate::test_env::{guard, guard::EnvRestore, set_test_user_dirs, source_skill_count};
 
     const SKILL_SURFACES: [SetupSurfaceId; 1] = [SetupSurfaceId::Skills];
 

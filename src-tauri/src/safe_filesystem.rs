@@ -24,15 +24,16 @@ fn replace_file_atomic(temp: &Path, destination: &Path) -> std::io::Result<()> {
 fn replace_file_atomic(temp: &Path, destination: &Path) -> std::io::Result<()> {
     const BACKOFF_MS: [u64; 4] = [20, 40, 80, 160];
 
-    for attempt in 0..=BACKOFF_MS.len() {
+    for backoff in BACKOFF_MS {
         match replace_file_atomic_once(temp, destination) {
-            Err(error) if attempt < BACKOFF_MS.len() && should_retry_windows_replace(&error) => {
-                std::thread::sleep(std::time::Duration::from_millis(BACKOFF_MS[attempt]));
+            Err(error) if should_retry_windows_replace(&error) => {
+                std::thread::sleep(std::time::Duration::from_millis(backoff));
             }
             result => return result,
         }
     }
-    unreachable!("the final replacement attempt returns")
+    // The last attempt: whatever it returns is the answer.
+    replace_file_atomic_once(temp, destination)
 }
 
 #[cfg(windows)]

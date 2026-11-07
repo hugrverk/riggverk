@@ -194,6 +194,7 @@ fn create_render_temp_dir() -> Result<PathBuf, String> {
         "riggverk-codex-render-{}-{nanos}-{sequence}",
         std::process::id()
     ));
+    #[cfg_attr(not(unix), allow(unused_mut))]
     let mut builder = fs::DirBuilder::new();
     #[cfg(unix)]
     {
