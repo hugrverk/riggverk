@@ -1,4 +1,4 @@
-import { useContext, useEffect, useRef, type RefObject } from "react";
+import { useContext, useLayoutEffect, useRef, type RefObject } from "react";
 import { KeymapContext } from "./context";
 import { evaluateWhen, type Binding } from "./registry";
 
@@ -39,7 +39,8 @@ export function useKeymap(bindings: readonly Binding[], options: UseKeymapOption
   latest.current = bindings;
   const signature = enabled ? bindings.map(signatureOf).join("\n") : "";
 
-  useEffect(() => {
+  // In the commit, not after it: a key pressed as soon as the element is on screen must reach its binding.
+  useLayoutEffect(() => {
     if (!registry || !enabled) return;
     const current = (id: string) => latest.current.find(binding => binding.id === id);
     const proxies = latest.current.map((binding): Binding => ({
