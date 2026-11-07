@@ -106,7 +106,7 @@ def run(write: bool, notes_dir: Path = NOTES_DIR, output: Path = OUTPUT) -> int:
     label = output.relative_to(ROOT) if output.is_relative_to(ROOT) else output
     if write:
         output.parent.mkdir(parents=True, exist_ok=True)
-        output.write_text(expected, encoding="utf-8")
+        output.write_text(expected, encoding="utf-8", newline="\n")
         print(f"wrote {label}")
         return 0
     actual = output.read_text(encoding="utf-8") if output.is_file() else None
