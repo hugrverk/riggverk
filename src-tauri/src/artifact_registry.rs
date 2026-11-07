@@ -788,38 +788,39 @@ pub fn expand_surface<R: SourceRoot + ?Sized>(
 /// Check whether a destination path would own a broad harness root.
 /// Returns Err with description if the path is too broad.
 pub fn reject_broad_artifact_root(path: &Path) -> Result<(), String> {
-    let path_str = path.to_string_lossy();
-    let normalized = path_str.trim_end_matches('/');
-
     if let Some(home) = dirs_home() {
-        let home_str = home.to_string_lossy();
-        let home_norm = home_str.trim_end_matches('/');
-        let mut broad_roots = vec![
-            format!("{home_norm}/.cursor"),
-            format!("{home_norm}/.claude"),
-            format!("{home_norm}/.codex"),
-            format!("{home_norm}/.agents"),
-            format!("{home_norm}/.config/opencode"),
+        // Compared as paths, not strings: `/` and `\` both separate components on Windows, and
+        // a trailing separator does not change the path.
+        let mut broad_roots: Vec<std::path::PathBuf> = [
+            ".cursor",
+            ".claude",
+            ".codex",
+            ".agents",
+            ".config/opencode",
             // The light tier's own folders.
-            format!("{home_norm}/.copilot"),
-            format!("{home_norm}/.pi"),
-            format!("{home_norm}/.pi/agent"),
-            format!("{home_norm}/.kilo"),
-            format!("{home_norm}/.config/kilo"),
-            format!("{home_norm}/.grok"),
-        ];
+            ".copilot",
+            ".pi",
+            ".pi/agent",
+            ".kilo",
+            ".config/kilo",
+            ".grok",
+        ]
+        .iter()
+        .map(|rel| home.join(rel))
+        .collect();
         // Kilo's and OpenCode's config folders move with XDG_CONFIG_HOME.
         if let Some(xdg) = std::env::var("XDG_CONFIG_HOME")
             .ok()
-            .map(|value| value.trim().trim_end_matches('/').to_string())
+            .map(|value| value.trim().to_string())
             .filter(|value| !value.is_empty())
         {
-            broad_roots.push(xdg.clone());
-            broad_roots.push(format!("{xdg}/kilo"));
-            broad_roots.push(format!("{xdg}/opencode"));
+            let xdg = std::path::PathBuf::from(xdg);
+            broad_roots.push(xdg.join("kilo"));
+            broad_roots.push(xdg.join("opencode"));
+            broad_roots.push(xdg);
         }
         for root in &broad_roots {
-            if normalized == root.as_str() || normalized == format!("{root}/").as_str() {
+            if path == root.as_path() {
                 return Err(format!(
                     "refusing broad harness root as artifact: {}",
                     path.display()
