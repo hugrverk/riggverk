@@ -369,7 +369,7 @@ def manifest_roles() -> dict[str, object]:
 
 
 def write_manifest() -> None:
-    MANIFEST_PATH.write_text(json.dumps({"version": 1, "roles": manifest_roles()}, indent=2) + "\n", encoding="utf-8")
+    MANIFEST_PATH.write_text(json.dumps({"version": 1, "roles": manifest_roles()}, indent=2) + "\n", encoding="utf-8", newline="\n")
 
 
 def main() -> None:
@@ -401,7 +401,7 @@ def main() -> None:
         write_manifest()
         for path, content in outputs.items():
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(content, encoding="utf-8")
+            path.write_text(content, encoding="utf-8", newline="\n")
         legacy_scout = WS_ROOT / "agents" / "scout.md"
         if legacy_scout.exists():
             legacy_scout.unlink()

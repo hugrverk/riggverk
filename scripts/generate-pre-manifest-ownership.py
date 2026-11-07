@@ -385,7 +385,7 @@ def main() -> None:
             raise SystemExit(1)
         print("pre-manifest ownership semantic coverage passed")
         return
-    MANIFEST.write_text(encoded(expected), encoding="utf-8")
+    MANIFEST.write_text(encoded(expected), encoding="utf-8", newline="\n")
     print(f"wrote {MANIFEST.relative_to(ROOT)} ({len(expected['artifacts'])} entries)")
 
 
