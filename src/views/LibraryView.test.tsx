@@ -556,6 +556,23 @@ describe("Library sheet", () => {
     expect(document.activeElement).toBe(bundled.getAllByRole("button", { name: "Read" })[0]);
   });
 
+  it("takes Escape from the moment the sheet appears", async () => {
+    await renderLibrary({ topic: "agents" });
+    let pressed = false;
+    const observer = new MutationObserver(() => {
+      const dialog = document.querySelector('[role="dialog"]');
+      if (dialog && !pressed) {
+        pressed = true;
+        fireEvent.keyDown(dialog, { key: "Escape" });
+      }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    fireEvent.click(within(rowOf("verifier")).getByRole("button", { name: "Read" }));
+    await waitFor(() => expect(pressed).toBe(true));
+    observer.disconnect();
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  });
+
   it("closes on Escape and on a click on the backdrop", async () => {
     await renderLibrary({ topic: "agents" });
     let sheet = await openSheet("verifier", "Read");
