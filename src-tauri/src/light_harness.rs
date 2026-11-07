@@ -1412,10 +1412,17 @@ mod tests {
     #[test]
     fn the_rules_file_is_below_home_and_the_kilo_file_follows_xdg_config_home() {
         let home = Path::new("/home/someone");
+        // Absolute on the platform the test runs on: `/data/config` has no drive on Windows.
+        let abs = if cfg!(windows) {
+            r"C:\data\config"
+        } else {
+            "/data/config"
+        };
+        let abs_slash = format!("{abs}/");
         let copilot = rules_of("copilot");
         let pi = rules_of("pi");
         let kilo = rules_of("kilo");
-        for xdg in [None, Some(""), Some("  "), Some("/data/config")] {
+        for xdg in [None, Some(""), Some("  "), Some(abs)] {
             assert_eq!(
                 copilot.resolve_dest_with(home, xdg),
                 home.join(".copilot").join("copilot-instructions.md")
@@ -1433,8 +1440,8 @@ mod tests {
             );
         }
         assert_eq!(
-            kilo.resolve_dest_with(home, Some("/data/config")),
-            Path::new("/data/config").join("kilo").join("AGENTS.md")
+            kilo.resolve_dest_with(home, Some(abs)),
+            Path::new(abs).join("kilo").join("AGENTS.md")
         );
         // A relative value is not a path the XDG specification allows: it is ignored. So is one
         // that is the file system root or climbs with `..`, which would widen the allowlist.
@@ -1447,29 +1454,28 @@ mod tests {
             assert_eq!(kilo.allowlist_root_with(home, Some(bad)), home, "{bad}");
         }
         assert_eq!(
-            kilo.resolve_dest_with(home, Some("/data/config/")),
-            Path::new("/data/config").join("kilo").join("AGENTS.md")
+            kilo.resolve_dest_with(home, Some(&abs_slash)),
+            Path::new(abs).join("kilo").join("AGENTS.md")
         );
     }
 
     #[test]
     fn the_allowlist_root_is_home_unless_xdg_config_home_holds_the_file_outside_home() {
         let home = Path::new("/home/someone");
+        let abs = if cfg!(windows) {
+            r"C:\data\config"
+        } else {
+            "/data/config"
+        };
         let kilo = rules_of("kilo");
         assert_eq!(kilo.allowlist_root_with(home, None), home);
         assert_eq!(
             kilo.allowlist_root_with(home, Some("/home/someone/dotfiles")),
             home
         );
-        assert_eq!(
-            kilo.allowlist_root_with(home, Some("/data/config")),
-            Path::new("/data/config")
-        );
+        assert_eq!(kilo.allowlist_root_with(home, Some(abs)), Path::new(abs));
         assert_eq!(kilo.allowlist_root_with(home, Some("rel")), home);
-        assert_eq!(
-            rules_of("pi").allowlist_root_with(home, Some("/data/config")),
-            home
-        );
+        assert_eq!(rules_of("pi").allowlist_root_with(home, Some(abs)), home);
     }
 
     #[test]

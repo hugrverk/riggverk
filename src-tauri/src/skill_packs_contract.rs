@@ -1120,6 +1120,7 @@ mod tests {
     }
 
     /// The reason the pack `name` is refused with, if it is.
+    #[cfg(unix)]
     fn refusal(sources: &SkillSources, name: &str) -> Option<String> {
         sources
             .packs()

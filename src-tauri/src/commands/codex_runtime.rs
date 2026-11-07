@@ -194,6 +194,7 @@ fn create_render_temp_dir() -> Result<PathBuf, String> {
         "riggverk-codex-render-{}-{nanos}-{sequence}",
         std::process::id()
     ));
+    #[cfg_attr(not(unix), allow(unused_mut))]
     let mut builder = fs::DirBuilder::new();
     #[cfg(unix)]
     {
@@ -1755,7 +1756,11 @@ sandbox_mode = "workspace-write"
             .find(|check| check.id == "skills")
             .unwrap();
         assert_eq!(check.label, "Global skills (~/.agents/skills)");
-        assert!(check.detail.contains(".agents/skills"), "{}", check.detail);
+        assert!(
+            check.detail.replace('\\', "/").contains(".agents/skills"),
+            "{}",
+            check.detail
+        );
         assert_eq!(clean.legacy_skills_migratable_count, 0);
 
         // An older version's copies: one still what the app shipped, one edited.
@@ -1773,7 +1778,7 @@ sandbox_mode = "workspace-write"
         );
         assert_eq!(
             with_old.legacy_skills_path,
-            home.join(".codex/skills").to_string_lossy()
+            home.join(".codex").join("skills").to_string_lossy()
         );
         assert_eq!(with_old.legacy_skills_migratable_count, 1);
         assert_eq!(with_old.legacy_skills_conflict_count, 1);
@@ -1781,7 +1786,8 @@ sandbox_mode = "workspace-write"
         assert!(with_old
             .warnings
             .iter()
-            .any(|warning| warning.contains("moves them") && warning.contains(".agents/skills")));
+            .any(|warning| warning.contains("moves them")
+                && warning.replace('\\', "/").contains(".agents/skills")));
         assert!(with_old
             .warnings
             .iter()
@@ -1818,7 +1824,7 @@ sandbox_mode = "workspace-write"
         assert!(check.detail.contains("isolated-codex"), "{}", check.detail);
         assert_eq!(
             health.legacy_skills_path,
-            home.join(".agents/skills").to_string_lossy()
+            home.join(".agents").join("skills").to_string_lossy()
         );
 
         // Without a readable bundle nothing is reported as installed.

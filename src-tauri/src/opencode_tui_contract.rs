@@ -364,9 +364,14 @@ mod tests {
         let installed = env.read_tui();
 
         let plan = preview_uninstall().expect("uninstall preview");
-        let tui = env.tui().display().to_string();
-        assert!(plan.merged.iter().any(|item| item.path == tui), "{tui}");
-        assert!(plan.removable.iter().all(|item| item.path != tui));
+        let tui = env.tui();
+        let is_tui = |path: &str| std::path::Path::new(path) == tui.as_path();
+        assert!(
+            plan.merged.iter().any(|item| is_tui(&item.path)),
+            "{}",
+            tui.display()
+        );
+        assert!(plan.removable.iter().all(|item| !is_tui(&item.path)));
         let result = apply_uninstall(plan.plan_fingerprint, plan.preview_token).expect("uninstall");
         assert!(result.success, "uninstall: {}", result.message);
         assert_eq!(env.read_tui(), installed);

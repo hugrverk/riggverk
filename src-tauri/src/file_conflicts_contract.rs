@@ -797,7 +797,7 @@ mod tests {
         assert!(
             plan.preserved
                 .iter()
-                .any(|item| item.path.ends_with("tdd/SKILL.md")),
+                .any(|item| std::path::Path::new(&item.path).ends_with("tdd/SKILL.md")),
             "{:?}",
             plan.preserved
                 .iter()

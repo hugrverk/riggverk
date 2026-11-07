@@ -1179,7 +1179,15 @@ mod tests {
         while let Some(dir) = stack.pop() {
             for entry in fs::read_dir(&dir).expect("read dir").flatten() {
                 let meta = entry.metadata().expect("metadata");
-                entries.push((entry.path(), meta.modified().expect("mtime"), meta.len()));
+                // On Windows a folder's timestamp is not compared: NTFS refreshes it lazily, so it
+                // can move between two listings with nothing written. An entry added or removed
+                // still shows up as a path. Elsewhere it still catches a temp file made and removed.
+                let modified = if cfg!(windows) && meta.is_dir() {
+                    SystemTime::UNIX_EPOCH
+                } else {
+                    meta.modified().expect("mtime")
+                };
+                entries.push((entry.path(), modified, meta.len()));
                 if meta.is_dir() {
                     stack.push(entry.path());
                 }
