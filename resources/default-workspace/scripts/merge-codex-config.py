@@ -565,7 +565,7 @@ def apply_merge(target: Path, managed: dict[str, Any], backup_dir: Path | None) 
             if key in managed:
                 new_lines.append(f"{key} = {format_toml_scalar(managed[key])}")
         new_lines.append("")
-        target.write_text("\n".join(new_lines), encoding="utf-8", newline="\n")
+        target.write_bytes("\n".join(new_lines).encode("utf-8"))
         return
 
     # Existing file: backup is mandatory
@@ -606,7 +606,7 @@ def apply_merge(target: Path, managed: dict[str, Any], backup_dir: Path | None) 
     # Write through staged file
     staged = target.with_suffix(target.suffix + ".tmp")
     try:
-        staged.write_text(patched, encoding="utf-8", newline="\n")
+        staged.write_bytes(patched.encode("utf-8"))
     except OSError as exc:
         if staged.exists():
             staged.unlink()
@@ -706,7 +706,7 @@ def main() -> None:
         else:
             merged = json.loads(json.dumps(managed_value))
         args.output.parent.mkdir(parents=True, exist_ok=True)
-        args.output.write_text(json.dumps(merged, indent=2) + "\n", encoding="utf-8")
+        args.output.write_bytes((json.dumps(merged, indent=2) + "\n").encode("utf-8"))
         return
 
     if args.output:

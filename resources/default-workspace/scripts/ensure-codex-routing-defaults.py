@@ -517,7 +517,7 @@ def apply_defaults(target: Path, managed_path: Path, backup_dir: Path | None) ->
     managed = load_toml(managed_path)
     if not target.is_file():
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(managed_path.read_text(encoding="utf-8"), encoding="utf-8", newline="\n")
+        target.write_bytes(managed_path.read_text(encoding="utf-8").encode("utf-8"))
         return
 
     validate_backup_dir(backup_dir, target)
@@ -543,7 +543,7 @@ def apply_defaults(target: Path, managed_path: Path, backup_dir: Path | None) ->
 
     staged = target.with_suffix(target.suffix + ".routing.tmp")
     try:
-        staged.write_text(patched, encoding="utf-8", newline="\n")
+        staged.write_bytes(patched.encode("utf-8"))
         staged_parsed = load_toml(staged)
         if not managed_match(staged_parsed, managed):
             fail(f"staged validation failed for {target}: managed routing defaults mismatch")
