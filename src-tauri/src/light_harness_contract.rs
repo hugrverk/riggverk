@@ -2494,7 +2494,9 @@ mod tests {
                     "{text}"
                 );
                 assert!(!text.contains("chromium"), "{text}");
-                assert!(text.contains(&browsers), "{text}");
+                // `text` is JSON, where a backslash is written twice.
+                let escaped = serde_json::Value::String(browsers.clone()).to_string();
+                assert!(text.contains(escaped.trim_matches('"')), "{text}");
                 assert!(!text.contains("__PLAYWRIGHT_"), "{text}");
                 assert_eq!(
                     crate::light_mcp::pinned_version(&entry).as_deref(),

@@ -4145,7 +4145,12 @@ mod tests {
         let dir = temp_root("resolve-path");
         std::fs::create_dir_all(&dir).expect("mkdir");
 
-        let fake_path = dir.join("opencode");
+        // On Windows a file is a program by its extension (PATHEXT), not by a mode bit.
+        let fake_path = dir.join(if cfg!(windows) {
+            "opencode.cmd"
+        } else {
+            "opencode"
+        });
         std::fs::write(&fake_path, "#!/bin/sh\necho opencode/fake-model\n")
             .expect("write fake opencode");
         make_executable(&fake_path);
@@ -4153,7 +4158,18 @@ mod tests {
         let result = super::resolve_opencode_executable_in(&dir.to_string_lossy(), &[]);
 
         assert!(result.is_some(), "should find opencode via PATH");
-        assert_eq!(result.unwrap(), fake_path);
+        let found = result.unwrap();
+        if cfg!(windows) {
+            // PATHEXT spells the extension in capitals (`.CMD`).
+            assert!(
+                found
+                    .to_string_lossy()
+                    .eq_ignore_ascii_case(&fake_path.to_string_lossy()),
+                "{found:?}"
+            );
+        } else {
+            assert_eq!(found, fake_path);
+        }
 
         cleanup(&dir);
     }

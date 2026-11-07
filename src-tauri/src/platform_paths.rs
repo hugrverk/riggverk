@@ -518,13 +518,21 @@ mod tests {
 
     #[test]
     fn linux_settings_honor_xdg_override() {
+        // Absolute on the platform the test runs on: `/custom/config` has no drive on Windows.
+        let custom = if cfg!(windows) {
+            r"C:\custom\config"
+        } else {
+            "/custom/config"
+        };
         let env = PlatformEnv {
-            xdg_config_home: Some("/custom/config".into()),
+            xdg_config_home: Some(custom.into()),
             ..linux_env()
         };
         assert_eq!(
             settings_file_path(&env, Platform::Linux).expect("settings"),
-            PathBuf::from("/custom/config/se.hugrverk.riggverk/settings.json")
+            PathBuf::from(custom)
+                .join("se.hugrverk.riggverk")
+                .join("settings.json")
         );
     }
 
@@ -558,8 +566,13 @@ mod tests {
 
     #[test]
     fn legacy_app_support_dir_differs_only_in_the_last_component() {
+        let custom = if cfg!(windows) {
+            r"C:\custom\config"
+        } else {
+            "/custom/config"
+        };
         let custom_xdg = PlatformEnv {
-            xdg_config_home: Some("/custom/config".into()),
+            xdg_config_home: Some(custom.into()),
             ..linux_env()
         };
         let cases = [
@@ -569,7 +582,7 @@ mod tests {
                 "/Users/example/Library/Application Support",
             ),
             (Platform::Linux, linux_env(), "/home/example/.config"),
-            (Platform::Linux, custom_xdg, "/custom/config"),
+            (Platform::Linux, custom_xdg, custom),
         ];
         for (platform, env, parent) in cases {
             assert_eq!(
