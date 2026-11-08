@@ -1,6 +1,31 @@
 {
   "releases": [
     {
+      "version": "2026.11.11",
+      "sections": [
+        {
+          "title": "New",
+          "items": [
+            "A new bundled skill, `pr-modernize`, decides first whether an old or inherited pull request should still land (modernize, rework or close), then rebases it in a throwaway worktree with hooks off, compares the series with `git range-diff`, keeps the original authors' credit and asks before any push",
+            "`pr-workflow` can watch a pull request through CI when you ask, handing a red check to `ci-triage` and open threads to `review-response`; `review-response` keeps review fixes small and confirms each reply it posts",
+            "The bundled troubleshooting guide explains why Claude Code shows only the names of most skills on models with a 200k context window, and the setting that shows them in full",
+            "The skills guide says what to check before you clone a whole skill repository into `packs/`, with tstack as an example"
+          ]
+        },
+        {
+          "title": "Fixes",
+          "items": [
+            "The Dock icon uses the standard macOS background in light and dark mode, like Apple's own icons",
+            "A key pressed the moment a view opens, such as Escape on a Library item, is no longer lost",
+            "Right after launch, before the workspace folder has been checked, the app says \"Checking…\" instead of calling the folder unusable, and `:update` asks you to try again",
+            "A skill whose frontmatter is ambiguous is refused instead of guessed, and the helper scripts are hardened",
+            "New config files, backups and saved CLI output are readable by your user only",
+            "On Linux, a relative `XDG_CONFIG_HOME` is ignored, as the XDG specification requires"
+          ]
+        }
+      ]
+    },
+    {
       "version": "2026.11.10",
       "sections": [
         {
