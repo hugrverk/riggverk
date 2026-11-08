@@ -42,7 +42,7 @@ Releases are on GitHub Releases as a disk image and a zip of the same universal 
 Requirements:
 
 - Node.js 22 (the version pinned in `.github/workflows/ci.yml`; Vite 8 needs 20.19+ or 22.12+) and npm 10+
-- stable Rust toolchain (1.97.1 is the version the disabled workflows pin; there is no rust-toolchain file)
+- Rust via rustup: `rust-toolchain.toml` pins 1.97.1, the version the disabled workflows also pin
 - Python 3.11 or newer (the release check uses `tomllib`) and Bash for the generators, merge scripts, and release check
 
 ```bash
