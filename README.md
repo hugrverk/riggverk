@@ -42,7 +42,7 @@ Releases are on GitHub Releases as a disk image and a zip of the same universal 
 Requirements:
 
 - Node.js 22 (the version pinned in `.github/workflows/ci.yml`; Vite 8 needs 20.19+ or 22.12+) and npm 10+
-- stable Rust toolchain (1.97.1 is the version the disabled workflows pin; there is no rust-toolchain file)
+- Rust via rustup: `rust-toolchain.toml` pins 1.97.1, the version the disabled workflows also pin
 - Python 3.11 or newer (the release check uses `tomllib`) and Bash for the generators, merge scripts, and release check
 
 ```bash
@@ -219,7 +219,7 @@ Several bundled skills adapt methods from open skill collections. The wording is
 | [raddue/crucible](https://github.com/raddue/crucible) | the fresh-critic loop in the adversarial skills | MIT |
 | [dementev-dev/adversarial-review](https://github.com/dementev-dev/adversarial-review) | the read-only critic and its adjudication | Apache-2.0 |
 | [openai/skills](https://github.com/openai/skills) | `ci-triage`, `review-response` | Apache-2.0 |
-| [t3dotgg/tstack](https://github.com/t3dotgg/tstack) | `pr-workflow`, `review-response` | MIT |
+| [t3dotgg/tstack](https://github.com/t3dotgg/tstack) | `pr-workflow`, `review-response`, `pr-modernize` | MIT |
 | [cloudflare/security-audit-skill](https://github.com/cloudflare/security-audit-skill) | `security-audit` (vendored) | MIT |
 | [anthropics/skills](https://github.com/anthropics/skills) | the framing behind `frontend-design` | Apache-2.0 |
 | [Lobe Icons](https://github.com/lobehub/lobe-icons) | the agent icons; the marks belong to their owners, and Riggverk is not affiliated with or endorsed by them | MIT |
