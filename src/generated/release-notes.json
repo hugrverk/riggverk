@@ -6,36 +6,21 @@
         {
           "title": "New",
           "items": [
-            "Add pr-modernize",
-            "Probe what each harness lists of the kit",
-            "Watch a PR through CI and keep review fixes small"
+            "A new bundled skill, `pr-modernize`, decides first whether an old or inherited pull request should still land (modernize, rework or close), then rebases it in a throwaway worktree with hooks off, compares the series with `git range-diff`, keeps the original authors' credit and asks before any push",
+            "`pr-workflow` can watch a pull request through CI when you ask, handing a red check to `ci-triage` and open threads to `review-response`; `review-response` keeps review fixes small and confirms each reply it posts",
+            "The bundled troubleshooting guide explains why Claude Code shows only the names of most skills on models with a 200k context window, and the setting that shows them in full",
+            "The skills guide says what to check before you clone a whole skill repository into `packs/`, with tstack as an example"
           ]
         },
         {
           "title": "Fixes",
           "items": [
-            "Use the system default tile background",
-            "Make the Rust test suite run and pass on Windows",
-            "Write LF on every platform",
-            "Register key bindings in the commit",
-            "Stop calling an unchecked workspace folder unusable",
-            "Fail closed on ambiguous skill frontmatter and harden helpers",
-            "Ignore a relative XDG_CONFIG_HOME and fix two Linux-only tests",
-            "Look up pinned snapshots by tree id, not commit id",
-            "Keep new config files, backups and CLI probes private",
-            "Keep the signing key in the build and harden the review"
-          ]
-        },
-        {
-          "title": "Other",
-          "items": [
-            "Point the Rust requirement at rust-toolchain.toml",
-            "Note whole-repo packs",
-            "Store the updater key without the truncating prompt",
-            "Make the security model match the code",
-            "Tidy the repository for the open-source release",
-            "Correct public docs and UI copy before the open-source release",
-            "Bump vite and vitest and refresh lockfiles"
+            "The Dock icon uses the standard macOS background in light and dark mode, like Apple's own icons",
+            "A key pressed the moment a view opens, such as Escape on a Library item, is no longer lost",
+            "Right after launch, before the workspace folder has been checked, the app says \"Checking…\" instead of calling the folder unusable, and `:update` asks you to try again",
+            "A skill whose frontmatter is ambiguous is refused instead of guessed, and the helper scripts are hardened",
+            "New config files, backups and saved CLI output are readable by your user only",
+            "On Linux, a relative `XDG_CONFIG_HOME` is ignored, as the XDG specification requires"
           ]
         }
       ]
