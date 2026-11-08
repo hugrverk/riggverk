@@ -568,6 +568,38 @@ mod tests {
         assert!(twice.reason.contains("more than once"), "{}", twice.reason);
     }
 
+    #[test]
+    fn a_pack_skill_with_characters_that_hide_or_reorder_text_is_an_error() {
+        let env = Env::new("hidden-unicode");
+        let skills = env.pack("mine").join("skills");
+        for (folder, body) in [
+            ("bidi", "Run the \u{202E}stset\u{202C} first."),
+            ("tag", "Fine\u{E0041}\u{E0042}."),
+            ("emoji", "Careful \u{26A0}\u{FE0F} here."),
+        ] {
+            fs::create_dir_all(skills.join(folder)).expect("skill dir");
+            let text = format!("---\nname: {folder}\ndescription: a skill\n---\n{body}\n");
+            fs::write(skills.join(folder).join("SKILL.md"), text).expect("SKILL.md");
+        }
+        Env::tighten(&skills);
+
+        let sources = env.sources();
+        let state = |folder: &str| {
+            let skill = sources.packs()[0]
+                .skills
+                .iter()
+                .find(|skill| skill.folder == folder)
+                .expect(folder);
+            (skill.state, skill.reason.clone())
+        };
+        for folder in ["bidi", "tag"] {
+            let (state, reason) = state(folder);
+            assert_eq!(state, PackSkillState::Error, "{folder}");
+            assert!(reason.contains("bidi override"), "{folder}: {reason}");
+        }
+        assert_eq!(state("emoji").0, PackSkillState::Active);
+    }
+
     /// The older top-level layout, the Agent Skills spec layout (`metadata:`) and a mix of both.
     const LAYOUTS: [(&str, &str); 3] = [
         (

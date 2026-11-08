@@ -130,7 +130,10 @@ pub(crate) fn routing_line(when: &str, name: &str) -> Result<String, String> {
         return Err("invalid routing description".to_string());
     }
     let when = when.trim();
-    if when.is_empty() || when.starts_with('#') || when.contains(['`', '<']) || when.contains("~~~")
+    if when.is_empty()
+        || when.starts_with('#')
+        || when.contains(['`', '<', '@'])
+        || when.contains("~~~")
     {
         return Err("invalid routing description".to_string());
     }
@@ -238,6 +241,11 @@ fn validate(text: &str, own_skills: &BTreeSet<&str>) -> Result<Vec<String>, Stri
         }
         if line.contains('<') {
             return refuse("holds markup (<)");
+        }
+        // Claude Code reads `@path` in CLAUDE.md as an import, so a line could pull any file into
+        // every session.
+        if line.contains('@') {
+            return refuse("holds an @ (a Claude Code file import)");
         }
         if line.contains("```") || line.contains("~~~") {
             return refuse("holds a code fence");
@@ -525,6 +533,10 @@ mod tests {
                 "line 1 holds markup",
             ),
             ("- <b>bold</b> `mine`\n", "line 1 holds markup"),
+            (
+                "- deploy, see @~/.aws/credentials `mine`\n",
+                "line 1 holds an @",
+            ),
             ("- ``` `mine`\n", "line 1 holds a code fence"),
             ("- ~~~ `mine`\n", "line 1 holds a code fence"),
             ("- no skill here\n", "line 1 names no skill"),

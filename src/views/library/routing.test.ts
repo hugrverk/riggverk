@@ -17,7 +17,7 @@ describe("imported skill routing", () => {
   it("checks the text the way the backend writes the line", () => {
     expect(routingLine("  Fix bugs  ", "mine")).toBe("- Fix bugs: `mine`.");
     expect(whenProblem("Fix bugs", "mine")).toBe("");
-    for (const text of ["", "  ", "# heading", "a\nb", "a\tb", "x\u200b", "x\ufe0f", "x\u{e0101}", "x\u3164", "~~~", "<tag>", "`x`", "x".repeat(240)]) {
+    for (const text of ["", "  ", "# heading", "a\nb", "a\tb", "x\u200b", "x\ufe0f", "x\u{e0101}", "x\u3164", "~~~", "<tag>", "`x`", "see @~/.aws/credentials", "x".repeat(240)]) {
       expect(whenProblem(text, "mine")).not.toBe("");
     }
   });

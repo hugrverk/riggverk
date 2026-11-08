@@ -20,7 +20,7 @@ export function whenProblem(when: string, name: string): string {
   const text = when.trim();
   if (text === "") return "Say when an agent should use it.";
   if (INVISIBLE.test(when)) return "Remove the line break or invisible character.";
-  if (text.startsWith("#") || /[`<]/.test(text) || text.includes("~~~")) return "Plain words only: no backticks, < or a leading #.";
+  if (text.startsWith("#") || /[`<@]/.test(text) || text.includes("~~~")) return "Plain words only: no backticks, <, @ or a leading #.";
   if (Array.from(routingLine(when, name)).length > MAX_LINE_CHARS) return `Keep the line under ${MAX_LINE_CHARS} characters.`;
   return "";
 }

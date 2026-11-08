@@ -31,16 +31,18 @@ SPEC_KEYS = ("name", "description", "license", "compatibility", "metadata", "all
 # them only at the top level). A strict validator flags them; docs/SKILLS.md says which and why.
 CLAUDE_EXTENSION_KEYS = ("context", "agent", "background", "disable-model-invocation")
 # `allowed-tools` pre-approves a prefix: `Bash(git config *)` also runs `git config core.fsmonitor <cmd>`,
-# `Bash(git log *)` also writes `--output=<file>`, `Bash(jq *)` also reads the environment. Commands
+# `Bash(git log *)` also writes `--output=<file>`, `Bash(jq *)` and a gh read command with `--jq env` also
+# print the environment. Commands
 # with such a write, exec or secret-printing form may be pre-approved only as these exact rules; the
 # built-in read-only handling of Claude Code covers the rest without a prompt.
 RISKY_ALLOWED_TOOL_PREFIXES = (
     "git config", "git remote", "git branch", "git tag", "git log", "git diff", "git show", "git fetch",
-    "gh auth", "gh api", "jq", "head", "tail", "find", "tree",
+    "gh auth", "gh api", "gh pr", "gh run", "gh release", "gh issue", "gh repo", "jq", "head", "tail", "find",
+    "tree",
 )
 SAFE_RISKY_ALLOWED_TOOLS = {
-    "git config --get *", "git remote -v", "git branch --show-current",
-    "git tag --list *", "git tag --merged *", "gh auth status",
+    "git config --get commit.template", "git remote -v", "git branch --show-current",
+    "git tag --list *", "git tag --merged *", "gh auth status", "gh pr diff *",
 }
 ALLOWED_TOOL_RULE_RE = re.compile(r"Bash\(([^)]*)\)")
 # Keys Riggverk reads that the spec keeps under `metadata:`. Packs and personal skills may still set
