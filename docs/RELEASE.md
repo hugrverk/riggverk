@@ -103,7 +103,7 @@ A failure after the tag was created prints these commands. A typo in the notes o
 
 ## Turning on updates
 
-The app can update itself (Tauri's updater with a static `latest.json` on GitHub Releases), but it ships switched off: there is no `plugins.updater` in `src-tauri/tauri.conf.json`, so the app has no updater, no menu item, no update card and makes no network request, and `publish` makes no updater files. The design: the user is asked once ("Check daily" or "Not now"; nothing is requested before the answer), a new version is named in the sidebar foot, its review shows the notes, and one click, Download and restart, installs exactly that version after settling unsaved work. Nothing installs in the background, and older versions are never installed.
+The app can update itself (Tauri's updater with a static `latest.json` on GitHub Releases), and it is on: `plugins.updater` in `src-tauri/tauri.conf.json` is the switch. Without that block the app has no updater, no menu item, no update card and makes no network request, and `publish` makes no updater files. The design: the user is asked once ("Check daily" or "Not now"; nothing is requested before the answer), a new version is named in the sidebar foot, its review shows the notes, and one click, Download and restart, installs exactly that version after settling unsaved work. Nothing installs in the background, and older versions are never installed.
 
 Updates need public release files: the app fetches `https://github.com/hugrverk/riggverk/releases/latest/download/latest.json` without credentials, which a private repository answers with 404. Turn them on the day the repository goes public, in this order:
 
