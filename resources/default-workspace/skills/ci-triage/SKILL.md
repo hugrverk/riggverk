@@ -3,7 +3,7 @@ name: ci-triage
 description: Classifies a red CI run from its failed job logs (code, flaky test, environment, infra), reproduces it locally with the repo's own command, then hands the root cause to diagnose. Use when CI fails on a branch or PR. Not for failures seen only locally (diagnose).
 license: MIT
 compatibility: Uses an authenticated gh CLI for GitHub Actions runs and logs; without it, works from a log the user pastes.
-allowed-tools: Bash(gh auth status) Bash(gh pr checks *) Bash(gh pr view *) Bash(gh run list *) Bash(gh run view *) Bash(git rev-parse *)
+allowed-tools: Bash(gh auth status) Bash(git rev-parse *)
 metadata:
   category: diagnosis
   risk: medium
@@ -103,7 +103,7 @@ Unknown is a valid answer: say what is missing to decide.
 
 ### Claude Code
 
-- The `allowed-tools` frontmatter key is Claude Code only: it pre-approves the read-only gh commands above and the exact `gh auth status`, never a form that can print the token. Claude Code runs `git log`, `head` and `tail` without a prompt on its own. Other harnesses ignore it and ask or allow as configured.
+- The `allowed-tools` frontmatter key is Claude Code only: it pre-approves only the exact `gh auth status` and `git rev-parse`. The gh read commands are left out, because a pre-approved prefix would also allow `--jq env`, which prints the environment. Claude Code runs `git log`, `head` and `tail` without a prompt on its own. Other harnesses ignore it and ask or allow as configured.
 
 ### Light harnesses
 
