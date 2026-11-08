@@ -204,9 +204,9 @@ expected = re.search(pattern, source)
 actual = re.search(pattern, rune)
 if not expected or not actual or expected.group(0) != actual.group(0):
     raise SystemExit("FAIL: Riggverk.icon/Assets/rune.svg must carry the rune group of assets/icon-source.svg unchanged")
-appearances = [spec.get("appearance") for spec in json.loads(manifest).get("fill-specializations", [])]
-if None not in appearances or "dark" not in appearances:
-    raise SystemExit("FAIL: Riggverk.icon/icon.json must specialise the tile fill for the default and dark appearances")
+# "automatic" is the system default tile: actool compiles it to Apple's system-light and system-dark gradients.
+if json.loads(manifest).get("fill") != "automatic":
+    raise SystemExit('FAIL: Riggverk.icon/icon.json must set the tile fill to "automatic" (the system default background)')
 PY
 
 printf 'macOS app icon prepared (icns fallback, Icon Composer document checked), disk image art rendered\n'
