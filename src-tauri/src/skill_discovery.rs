@@ -343,6 +343,15 @@ fn extract_frontmatter_list(fields: &BTreeMap<String, String>, key: &str) -> Vec
 pub(crate) const MAX_SKILL_MD_BYTES: u64 = 1024 * 1024;
 
 /// The text of a `SKILL.md`, refusing one over [`MAX_SKILL_MD_BYTES`].
+/// Unicode tag characters and bidi overrides or isolates: they can hide or reorder an instruction
+/// so that it reads differently in a review than to an agent.
+pub(crate) fn hides_or_reorders_text(c: char) -> bool {
+    let code = u32::from(c);
+    (0xE0000..=0xE007F).contains(&code)
+        || (0x202A..=0x202E).contains(&code)
+        || (0x2066..=0x2069).contains(&code)
+}
+
 pub(crate) fn read_skill_md_capped(skill_md: &Path) -> Result<String, String> {
     use std::io::Read;
     let file =

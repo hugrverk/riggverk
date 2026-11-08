@@ -893,6 +893,15 @@ fn candidate(
             .ok()
             .or_else(|| crate::skill_discovery::declared_skill_name(skill_md));
         let (name, description, mut targets) = metadata?;
+        // As in Import skill: a pack is often a repository cloned from elsewhere.
+        let text = crate::skill_discovery::read_skill_md_capped(skill_md)?;
+        if text.contains(crate::skill_discovery::hides_or_reorders_text) {
+            return Err(
+                "SKILL.md holds hidden Unicode tag or bidi override characters, which can hide or \
+                 reorder text"
+                    .to_string(),
+            );
+        }
         // `targets` is Riggverk's own key, outside the Agent Skills spec: a pack skill without it
         // (any skill taken from elsewhere) is for every harness. A target it does name must exist.
         if targets.is_empty() {

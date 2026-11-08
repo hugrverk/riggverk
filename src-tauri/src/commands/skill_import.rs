@@ -674,15 +674,11 @@ fn hidden_unicode(text: &str) -> Result<Option<ImportFlag>, String> {
     for (index, line) in text.lines().enumerate() {
         let mut previous: Option<char> = None;
         for c in line.chars() {
-            let code = u32::from(c);
             let presentation = matches!(c, '\u{FE0E}' | '\u{FE0F}')
                 && previous.is_some_and(|p| {
                     !p.is_ascii() && !p.is_whitespace() && !p.is_control() && !invisible(p)
                 });
-            if (0xE0000..=0xE007F).contains(&code)
-                || (0x202A..=0x202E).contains(&code)
-                || (0x2066..=0x2069).contains(&code)
-            {
+            if crate::skill_discovery::hides_or_reorders_text(c) {
                 refused.insert(index + 1);
             } else if invisible(c) && !presentation {
                 flagged.insert(index + 1);

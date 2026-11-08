@@ -3,7 +3,7 @@ name: pr-workflow
 description: Turns finished work into clean commits and a pull request split by logical change, following the repo's conventions, opens or updates it with gh, and on request watches it through CI. Use when the user asks to commit, push, open, update or watch a PR. Not for replying to review comments.
 license: MIT
 compatibility: Needs git. Opening, updating or watching a PR needs an authenticated gh CLI; without it the skill prints the title and body for the user to paste, and cannot watch.
-allowed-tools: Bash(git branch --show-current) Bash(git remote -v) Bash(git config --get *)
+allowed-tools: Bash(git branch --show-current) Bash(git remote -v) Bash(git config --get commit.template)
 metadata:
   category: workflow
   risk: medium
@@ -92,7 +92,7 @@ A step needs an explicit ok in chat unless the user already asked for exactly th
 
 ### Claude Code
 
-- The `allowed-tools` frontmatter key is Claude Code only: it pre-approves only the exact read forms `git branch --show-current`, `git remote -v` and `git config --get <key>`; broader prefixes such as `git config *` would also allow `git config core.fsmonitor <cmd>`. Commit, push and `gh pr` commands are deliberately not pre-approved, so the permission prompt backs up the approvals above. Other harnesses ignore the key and ask or allow as configured.
+- The `allowed-tools` frontmatter key is Claude Code only: it pre-approves only the exact read forms `git branch --show-current`, `git remote -v` and `git config --get commit.template`; broader prefixes such as `git config *` would also allow `git config core.fsmonitor <cmd>`, and `git config --get *` would read any INI file through `--file`. Commit, push and `gh pr` commands are deliberately not pre-approved, so the permission prompt backs up the approvals above. Other harnesses ignore the key and ask or allow as configured.
 - To watch, run the wait as a background Bash command, which reports when it exits, or with the Monitor tool where the session has it. A foreground command runs into the tool's time limit.
 
 ### Codex
