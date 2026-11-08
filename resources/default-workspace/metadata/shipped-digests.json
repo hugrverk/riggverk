@@ -415,11 +415,17 @@
       "sha256:1f6557d9a8a014e7ed6914e152fc47b30845bbb79462d68ab56cc0ce20a0382c",
       "sha256:89f3839942fa5da82a132eaba2fd0de762999e04ba960d2a9760d316846086cb"
     ],
+    "skills/pr-modernize/SKILL.md": [
+      "sha256:0dd2d8591625a0b75bc9da2665f078118162807416efba7e023f76694627349c",
+      "sha256:2bed482c9d54e94e20a258d14305f5643bedc7ace0bc6eb80226e4a72ce50fdf",
+      "sha256:4e802dd9ced5ec2253911bc1b1e20a4e0006eec0ad89aba5bd3ff179745cfbf7"
+    ],
     "skills/pr-workflow/SKILL.md": [
       "sha256:1fa0bc086a24195dd61ece99400730ecdea122c5fbacad41c42874c52f9cf28a",
       "sha256:72f059870bd72be1d4d667c32f1e68fad30c012e9324970f395ba6469d973fee",
       "sha256:a763ccd195d73a322f776964b5894c846b773fc84eec2a57de3f08096bdfd1ce",
       "sha256:db437c11f0699d7b44489bd6838b240e422cc3f1d4454425d00b44c91e2380c1",
+      "sha256:effd033bdcb83e98a111017bebfbe45e6774dcd3240d2a33e36824fda919d171",
       "sha256:f0786359b00bbb065ebb554f6078981703d57195baaac88d6b525747ab482fba"
     ],
     "skills/pr-workflow/assets/pr-body.template.md": [
