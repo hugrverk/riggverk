@@ -256,6 +256,8 @@ PIN_ENTRIES: dict[str, tuple[str, ...]] = {
     "templates/mcp/grok.playwright.json": ("args",),
 }
 PIN_TEMPLATES = tuple(PIN_ENTRIES)
+# Every entry runs npx with an app-owned empty folder as its project (`--prefix`), filled in per user.
+NPX_PREFIX_PLACEHOLDER = "__PLAYWRIGHT_NPX_PREFIX_PATH__"
 PIN_OUTSIDE_DOCS = ("README.md", "docs/*.md")
 PIN_MAX_AGE_DAYS = 183  # about six months
 
@@ -335,6 +337,11 @@ def pin_entry_errors(path: Path, rel: str, location: tuple[str, ...], version: s
         errors.append(
             f"{W}{rel}: does not pass `--no-webmcp`: a page could register tools that the model "
             "would see as webmcp_* tools"
+        )
+    if ("--prefix", NPX_PREFIX_PLACEHOLDER, "-y") not in list(zip(arguments, arguments[1:], arguments[2:])):
+        errors.append(
+            f"{W}{rel}: does not pass `--prefix {NPX_PREFIX_PLACEHOLDER}` before `-y`: npx would "
+            "load the .npmrc and node_modules of the folder the agent runs in"
         )
     return errors
 

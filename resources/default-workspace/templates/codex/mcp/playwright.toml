@@ -1,7 +1,9 @@
 # Optional Playwright MCP snippet for Codex config review.
 # Requires the runtime environment to provide npx and browser dependencies.
 # Install scripts render __PLAYWRIGHT_*__ placeholders to user-local paths.
+# The --prefix folder must be an empty folder you own (Riggverk uses npx-prefix in its app data
+# folder): without it npm reads the .npmrc and node_modules of the folder Codex runs in.
 
 [mcp_servers.playwright]
 command = "npx"
-args = ["-y", "@playwright/mcp@0.0.83", "--config", "__PLAYWRIGHT_MCP_CONFIG_PATH__", "--browser", "chrome", "--isolated", "--no-webmcp"]
+args = ["--prefix", "__PLAYWRIGHT_NPX_PREFIX_PATH__", "-y", "@playwright/mcp@0.0.83", "--config", "__PLAYWRIGHT_MCP_CONFIG_PATH__", "--browser", "chrome", "--isolated", "--no-webmcp"]

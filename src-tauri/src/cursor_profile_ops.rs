@@ -6,7 +6,7 @@ use crate::commands::backups::backup_root;
 #[cfg(test)]
 use crate::commands::cursor_profile::manifest_recommended_skills;
 use crate::commands::cursor_profile::{
-    cursor_root, default_playwright_mcp_config_path, json_has_unsafe_literals,
+    cursor_root, default_playwright_mcp_config_path, json_has_unsafe_literals, npx_prefix_path,
     resolve_playwright_browsers_path, transform_playwright_template_value,
 };
 
@@ -243,10 +243,12 @@ fn prepare_legacy_permission_cleanup(target_path: &Path) -> Result<Option<String
         .map_err(|e| format!("serialize permissions: {e}"))
 }
 
-fn resolve_playwright_paths(home: &Path) -> Option<(PathBuf, PathBuf)> {
+/// The sidecar config, the browser cache and the npx prefix folder of the Playwright entry.
+fn resolve_playwright_paths(home: &Path) -> Option<(PathBuf, PathBuf, PathBuf)> {
     let browsers = resolve_playwright_browsers_path(home)?;
     let config = default_playwright_mcp_config_path(home);
-    Some((config, browsers))
+    let npx_prefix = npx_prefix_path(home)?;
+    Some((config, browsers, npx_prefix))
 }
 
 pub(crate) fn mcp_diff_status(workspace_root: &Path, paths: &CursorProfilePaths) -> String {
@@ -260,7 +262,8 @@ pub(crate) fn mcp_diff_status(workspace_root: &Path, paths: &CursorProfilePaths)
     let Ok(template_parsed) = serde_json::from_str::<serde_json::Value>(&template_content) else {
         return "template-invalid".into();
     };
-    let Some((config_path, browsers_path)) = resolve_playwright_paths(&paths.user_home) else {
+    let Some((config_path, browsers_path, npx_prefix)) = resolve_playwright_paths(&paths.user_home)
+    else {
         return "unsupported".into();
     };
     let expected = template_parsed
@@ -272,6 +275,7 @@ pub(crate) fn mcp_diff_status(workspace_root: &Path, paths: &CursorProfilePaths)
                 &value,
                 &config_path.to_string_lossy(),
                 &browsers_path.to_string_lossy(),
+                &npx_prefix.to_string_lossy(),
             )
         });
     let Some(expected) = expected else {
@@ -317,6 +321,7 @@ fn prepare_mcp_merge(
     target_path: &Path,
     config_path: &Path,
     browsers_path: &Path,
+    npx_prefix: &Path,
 ) -> Result<String, String> {
     let template_content =
         fs::read_to_string(template_path).map_err(|e| format!("read MCP template: {e}"))?;
@@ -337,6 +342,7 @@ fn prepare_mcp_merge(
         &playwright_entry,
         &config_path.to_string_lossy(),
         &browsers_path.to_string_lossy(),
+        &npx_prefix.to_string_lossy(),
     );
 
     let mut data = read_mcp_target(target_path)?;
@@ -505,7 +511,7 @@ fn preflight_global_profile(
         read_mcp_target(&paths.mcp_config)?;
     }
 
-    let (config_path, browsers_path) = resolve_playwright_paths(&paths.user_home)
+    let (config_path, browsers_path, npx_prefix) = resolve_playwright_paths(&paths.user_home)
         .ok_or_else(|| "could not resolve Playwright MCP paths for this platform".to_string())?;
 
     let mcp_serialized = prepare_mcp_merge(
@@ -513,6 +519,7 @@ fn preflight_global_profile(
         &paths.mcp_config,
         &config_path,
         &browsers_path,
+        &npx_prefix,
     )?;
 
     backup_root()?;
@@ -617,8 +624,9 @@ pub fn run_global_mcp_only(
     let template_path = mcp_template_path(workspace_root);
 
     // Resolve Playwright paths
-    let (config_path, browsers_path) = match resolve_playwright_paths(&paths.user_home) {
-        Some((c, b)) => (c, b),
+    let (config_path, browsers_path, npx_prefix) = match resolve_playwright_paths(&paths.user_home)
+    {
+        Some(paths) => paths,
         None => {
             return ProfileRunOutput {
                 success: false,
@@ -636,6 +644,7 @@ pub fn run_global_mcp_only(
             &paths.mcp_config,
             &config_path,
             &browsers_path,
+            &npx_prefix,
         ) {
             Ok(s) => s,
             Err(err) => {
@@ -962,6 +971,7 @@ mod tests {
             &target,
             &PathBuf::from(r"C:\Users\Example\.config\playwright-mcp\config.json"),
             &PathBuf::from(r"C:\Users\Example\AppData\Local\ms-playwright"),
+            &PathBuf::from(r"C:\Users\Example\AppData\Roaming\se.hugrverk.riggverk\npx-prefix"),
         )
         .expect("merge");
         fs::write(&target, serialized).expect("write");
@@ -970,6 +980,13 @@ mod tests {
             serde_json::from_str(&fs::read_to_string(&target).expect("read")).expect("json");
         assert!(merged["mcpServers"]["custom"].is_object());
         assert!(merged["mcpServers"]["playwright"].is_object());
+        let args = &merged["mcpServers"]["playwright"]["args"];
+        assert_eq!(args[0], "--prefix");
+        assert_eq!(
+            args[1],
+            r"C:\Users\Example\AppData\Roaming\se.hugrverk.riggverk\npx-prefix"
+        );
+        assert_eq!(args[2], "-y");
         let _ = fs::remove_dir_all(&root);
     }
 

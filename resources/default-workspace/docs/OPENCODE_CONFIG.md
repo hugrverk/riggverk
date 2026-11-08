@@ -77,6 +77,7 @@ Playwright MCP is defined in `templates/opencode.base.json` and included in the 
 Defaults:
 
 - Package: `@playwright/mcp@0.0.83` (`PLAYWRIGHT_MCP_VERSION` overrides it)
+- npm project: the entry runs `npx --prefix <folder> -y ...` with an empty, owner-only `npx-prefix` folder in the app data folder, so npm never loads the `.npmrc` or a `node_modules/@playwright/mcp` of the repository the agent works in, which could run code as the server starts
 - MCP config: `~/.config/playwright-mcp/config.json` (or `PLAYWRIGHT_MCP_CONFIG_PATH`) from `templates/playwright-mcp.config.json`
 - Browser: the entry passes `--browser chrome --isolated --no-webmcp` after `--config`, so the server opens the system Google Chrome in a profile kept in memory, and the tools a page registers through WebMCP stay off. The MCP config holds `browserName: chromium` and `isolated: true`; on the command line the flags win over it. On `@playwright/mcp@0.0.83` a browser named in the config file alone gets no channel and would resolve to Playwright's own Chromium, which needs a download; the flag avoids that. Read from the source of that release, not from a launch
 - Binaries: shared cache (`~/Library/Caches/ms-playwright` on macOS, `$XDG_CACHE_HOME/ms-playwright` on Linux, `~/AppData/Local/ms-playwright` on Windows; `PLAYWRIGHT_BROWSERS_PATH` overrides). The entry uses the installed Google Chrome, so nothing is downloaded into it unless you install a Playwright browser yourself

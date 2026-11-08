@@ -3,6 +3,8 @@
     "playwright": {
       "command": "npx",
       "args": [
+        "--prefix",
+        "__PLAYWRIGHT_NPX_PREFIX_PATH__",
         "-y",
         "@playwright/mcp@0.0.83",
         "--config",

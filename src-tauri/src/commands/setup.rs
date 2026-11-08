@@ -998,6 +998,16 @@ fn apply_single_artifact(
         );
     }
 
+    // Every Playwright entry runs `npx --prefix <folder>`: the folder exists before the entry does.
+    if matches!(
+        artifact,
+        crate::artifact_registry::ArtifactId::HarnessMcp(_)
+            | crate::artifact_registry::ArtifactId::CursorMcp
+            | crate::artifact_registry::ArtifactId::OpenCodeConfig
+    ) {
+        crate::commands::cursor_profile::ensure_npx_prefix_dir(home)?;
+    }
+
     if let crate::artifact_registry::ArtifactId::HarnessMcp(harness) = artifact {
         return apply_mcp_artifact(*harness, workspace_root, home, &dest, &root);
     }

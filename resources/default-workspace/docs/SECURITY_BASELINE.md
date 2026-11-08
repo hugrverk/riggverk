@@ -17,7 +17,7 @@ The `security` group on a harness page reads a few named keys of that harness's 
 | OpenCode | The `permission` block in `templates/opencode.json`, generated from `opencode.base.json` and `opencode.policy.json`: `"*": "ask"`, deny rules for secret files, ask for web fetch and search, sharing disabled. The rules are matched against command and path text, not enforced by an OS sandbox ([OPENCODE_CONFIG.md](OPENCODE_CONFIG.md)). | The rules block in `AGENTS.md`. | Keep secrets gitignored or outside the project (`grep` can show the contents of any file ripgrep reads), and use a container for repositories you do not trust. |
 | Cursor | `readonly: true` on the read-only agents. Run mode, `~/.cursor/sandbox.json` and `permissions.json` are not managed. | The rules and the user rules text. | Prefer auto-review, never use Run Everything on a repository you do not know, and consider a `~/.cursor/sandbox.json`. |
 | Copilot CLI, Pi, Kilo Code | Nothing. | The rules block. | Use a container or VM. For Kilo, write your own `permission` block. For Copilot, approve tools one at a time instead of `--allow-all-tools`. |
-| MCP (Playwright) | The managed entry runs with `--isolated` and a pinned version (`templates/mcp/*.json`, `templates/playwright-mcp.config.json`). | None. | Review any MCP server you add: it runs with your rights. |
+| MCP (Playwright) | The managed entry runs with `--isolated` and a pinned version (`templates/mcp/*.json`, `templates/playwright-mcp.config.json`), through `npx --prefix` with an empty folder of the app's, so npm never loads the `.npmrc` or `node_modules` of the repository the agent works in. | None. | Review any MCP server you add: it runs with your rights. |
 
 ## Practice
 
