@@ -1,6 +1,46 @@
 {
   "releases": [
     {
+      "version": "2026.11.11",
+      "sections": [
+        {
+          "title": "New",
+          "items": [
+            "Add pr-modernize",
+            "Probe what each harness lists of the kit",
+            "Watch a PR through CI and keep review fixes small"
+          ]
+        },
+        {
+          "title": "Fixes",
+          "items": [
+            "Use the system default tile background",
+            "Make the Rust test suite run and pass on Windows",
+            "Write LF on every platform",
+            "Register key bindings in the commit",
+            "Stop calling an unchecked workspace folder unusable",
+            "Fail closed on ambiguous skill frontmatter and harden helpers",
+            "Ignore a relative XDG_CONFIG_HOME and fix two Linux-only tests",
+            "Look up pinned snapshots by tree id, not commit id",
+            "Keep new config files, backups and CLI probes private",
+            "Keep the signing key in the build and harden the review"
+          ]
+        },
+        {
+          "title": "Other",
+          "items": [
+            "Point the Rust requirement at rust-toolchain.toml",
+            "Note whole-repo packs",
+            "Store the updater key without the truncating prompt",
+            "Make the security model match the code",
+            "Tidy the repository for the open-source release",
+            "Correct public docs and UI copy before the open-source release",
+            "Bump vite and vitest and refresh lockfiles"
+          ]
+        }
+      ]
+    },
+    {
       "version": "2026.11.10",
       "sections": [
         {
