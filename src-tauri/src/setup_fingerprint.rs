@@ -99,11 +99,13 @@ fn opencode_playwright_mcp_dest(home: &Path) -> PathBuf {
     crate::commands::cursor_profile::default_playwright_mcp_config_path(home)
 }
 
-fn resolve_playwright_paths(home: &Path) -> Result<(PathBuf, PathBuf), String> {
+fn resolve_playwright_paths(home: &Path) -> Result<(PathBuf, PathBuf, PathBuf), String> {
     let browsers = crate::commands::cursor_profile::resolve_playwright_browsers_path(home)
         .ok_or_else(|| "cannot resolve PLAYWRIGHT_BROWSERS_PATH".to_string())?;
     let config = crate::commands::cursor_profile::default_playwright_mcp_config_path(home);
-    Ok((config, browsers))
+    let npx_prefix = crate::commands::cursor_profile::npx_prefix_path(home)
+        .ok_or_else(|| "cannot resolve the npx prefix folder".to_string())?;
+    Ok((config, browsers, npx_prefix))
 }
 
 fn cursor_playwright_projection_from_template(
@@ -115,7 +117,7 @@ fn cursor_playwright_projection_from_template(
         fs::read_to_string(&template_path).map_err(|e| format!("read cursor mcp template: {e}"))?;
     let template_parsed: serde_json::Value = serde_json::from_str(&template_content)
         .map_err(|e| format!("parse cursor mcp template: {e}"))?;
-    let (config_path, browsers_path) = resolve_playwright_paths(home)?;
+    let (config_path, browsers_path, npx_prefix) = resolve_playwright_paths(home)?;
     template_parsed
         .get("mcpServers")
         .and_then(|v| v.get("playwright"))
@@ -125,6 +127,7 @@ fn cursor_playwright_projection_from_template(
                 &value,
                 &config_path.to_string_lossy(),
                 &browsers_path.to_string_lossy(),
+                &npx_prefix.to_string_lossy(),
             )
         })
         .ok_or_else(|| "cursor mcp template missing playwright entry".into())

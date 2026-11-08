@@ -1543,6 +1543,17 @@ mod tests {
                     Value::Object(root),
                     "the file holds the entry and nothing else"
                 );
+                // The folder the entry passes to `npx --prefix` exists, owner-only and empty.
+                let prefix = crate::commands::cursor_profile::npx_prefix_path(&env.home)
+                    .expect("npx prefix");
+                assert!(prefix.starts_with(&env.home), "{}", prefix.display());
+                assert_eq!(fs::read_dir(&prefix).expect("npx prefix").count(), 0);
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::PermissionsExt;
+                    let mode = fs::metadata(&prefix).unwrap().permissions().mode() & 0o777;
+                    assert_eq!(mode, 0o700);
+                }
                 assert!(String::from_utf8(env.bytes()).unwrap().ends_with("}\n"));
                 assert_eq!(env.recorded_mcp(), Some(env.entry_digest()));
                 assert_eq!(
@@ -2498,6 +2509,22 @@ mod tests {
                 let escaped = serde_json::Value::String(browsers.clone()).to_string();
                 assert!(text.contains(escaped.trim_matches('"')), "{text}");
                 assert!(!text.contains("__PLAYWRIGHT_"), "{text}");
+                // npx runs with the app's empty folder as its project, never the agent's.
+                let prefix = crate::commands::cursor_profile::npx_prefix_path(home)
+                    .expect("npx prefix")
+                    .to_string_lossy()
+                    .into_owned();
+                let args = entry
+                    .get("args")
+                    .or_else(|| entry.get("command"))
+                    .and_then(Value::as_array)
+                    .expect("argument list");
+                let at = args
+                    .iter()
+                    .position(|word| word == "--prefix")
+                    .expect("--prefix");
+                assert_eq!(args[at + 1], json!(prefix), "{text}");
+                assert_eq!(args[at + 2], json!("-y"), "{text}");
                 assert_eq!(
                     crate::light_mcp::pinned_version(&entry).as_deref(),
                     Some(crate::commands::cursor_profile::PLAYWRIGHT_MCP_VERSION)
@@ -2528,7 +2555,14 @@ mod tests {
                 .is_some_and(|text| !text.is_empty()));
             assert_eq!(pi["args"], copilot["args"]);
             assert_eq!(pi["env"], copilot["env"]);
-            assert_eq!(copilot["args"].as_array().unwrap()[0], "-y");
+            assert_eq!(
+                copilot["args"].as_array().unwrap()[..3],
+                [
+                    json!("--prefix"),
+                    json!("__PLAYWRIGHT_NPX_PREFIX_PATH__"),
+                    json!("-y")
+                ]
+            );
 
             // Antigravity's stdio entry: command, args and env (its documented keys), nothing
             // the other harnesses add.

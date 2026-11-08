@@ -243,7 +243,7 @@ class BundleTests(unittest.TestCase):
     def test_a_template_with_another_version_fails(self) -> None:
         version, _ = bc.read_pin(self.tree)
         self.edit("templates/mcp/pi.playwright.json", f"@playwright/mcp@{version}", "@playwright/mcp@0.0.1")
-        self.assertFails("playwright-pin", "templates/mcp/pi.playwright.json:5: names @playwright/mcp@0.0.1")
+        self.assertFails("playwright-pin", "templates/mcp/pi.playwright.json:7: names @playwright/mcp@0.0.1")
         self.assertFails("playwright-pin", "templates/mcp/pi.playwright.json: does not pin")
 
     def test_a_template_without_a_pin_fails(self) -> None:
@@ -290,6 +290,17 @@ class BundleTests(unittest.TestCase):
                 original = path.read_text(encoding="utf-8")
                 path.write_text(original.replace("--no-webmcp", "--webmcp", 1), encoding="utf-8")
                 self.assertFails("playwright-pin", f"{rel}: does not pass `--no-webmcp`")
+                path.write_text(original, encoding="utf-8")
+                self.assertEqual(self.failures("playwright-pin"), [])
+
+    def test_an_entry_without_the_npx_prefix_fails(self) -> None:
+        # Without it npm takes the agent's working folder as the project (.npmrc, node_modules).
+        for rel in bc.PIN_ENTRIES:
+            with self.subTest(template=rel):
+                path = self.tree / WS / rel
+                original = path.read_text(encoding="utf-8")
+                path.write_text(original.replace('"--prefix"', '"--cache"', 1), encoding="utf-8")
+                self.assertFails("playwright-pin", f"{rel}: does not pass `--prefix")
                 path.write_text(original, encoding="utf-8")
                 self.assertEqual(self.failures("playwright-pin"), [])
 
