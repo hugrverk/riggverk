@@ -1,6 +1,36 @@
 {
   "releases": [
     {
+      "version": "2026.11.12",
+      "sections": [
+        {
+          "title": "New",
+          "items": [
+            "Turn on signed app updates for the public repository"
+          ]
+        },
+        {
+          "title": "Fixes",
+          "items": [
+            "List each OpenCode key an install replaces in the review",
+            "Leave a foreign agent-workspace folder alone",
+            "Correct wording defects in the shipped skills",
+            "Treat a skill whose SKILL.md is not the app's as the user's",
+            "Start the Playwright MCP npx from an app-owned folder",
+            "Refuse hidden text in supporting files too",
+            "Run the Playwright MCP through npx with an app-owned prefix",
+            "Close three findings from the source audit"
+          ]
+        },
+        {
+          "title": "Other",
+          "items": [
+            "Third-party notices, macOS 13.3, README and release docs"
+          ]
+        }
+      ]
+    },
+    {
       "version": "2026.11.11",
       "sections": [
         {
