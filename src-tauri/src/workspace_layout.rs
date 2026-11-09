@@ -5,6 +5,11 @@
 //! other names (`LEGACY_WORKSPACE_DIR_NAME`, `LEGACY_STATE_DIR`). Now they are `~/.config/riggverk`
 //! and `.riggverk/`. Nothing moves at launch and reading never writes:
 //!
+//! - The earlier default data folder counts as Riggverk's only while it holds a state folder of
+//!   either name (every earlier release wrote its marker there). `agent-workspace` is a generic
+//!   name: a folder of that name without one belongs to something else. It is never read, moved,
+//!   written into, or reported; Riggverk starts a fresh profile under the current name. A folder
+//!   chosen explicitly (`RIGGVERK_WORKSPACE_PATH`, a saved custom folder) is used as chosen.
 //! - Reads use the current names where they exist and the earlier ones where only those exist. A
 //!   current name that is an empty plain folder counts as absent.
 //! - The first mutation (under the mutation lock, before any write) renames the earlier folder to
@@ -94,6 +99,12 @@ pub fn holds_state_dir(workspace_root: &Path) -> bool {
         .any(|name| fs::symlink_metadata(workspace_root.join(name)).is_ok_and(|meta| meta.is_dir()))
 }
 
+/// Whether the earlier default data folder is Riggverk's: it holds a state folder (see the module
+/// doc). One without it is another tool's folder that happens to have the generic earlier name.
+fn earlier_default_is_ours(earlier: &Path) -> bool {
+    holds_state_dir(earlier)
+}
+
 fn current_default() -> Result<PathBuf, String> {
     default_installed_workspace_path(&PlatformEnv::from_process_env(), Platform::current())
 }
@@ -105,12 +116,12 @@ pub fn legacy_default_workspace_path() -> Option<PathBuf> {
 }
 
 /// The default data folder to read: the current one when it holds something or is all there is,
-/// else the earlier one when it exists, else the current one (a fresh profile).
+/// else the earlier one when it is Riggverk's, else the current one (a fresh profile).
 pub fn default_workspace_to_read() -> Result<PathBuf, String> {
     let current = current_default()?;
     Ok(match legacy_default_workspace_path() {
-        Some(earlier) => pick(earlier, current),
-        None => current,
+        Some(earlier) if earlier_default_is_ours(&earlier) => pick(earlier, current),
+        _ => current,
     })
 }
 
@@ -125,9 +136,9 @@ fn saved_path_is(earlier: &Path) -> bool {
 
 /// Maps the earlier default data folder onto the current one, so a key made from either names the
 /// same workspace. It maps when the earlier folder is gone (it was moved), or when it is still the
-/// default folder waiting for its first move: not while both folders hold something, and not when
-/// the path comes from `RIGGVERK_WORKSPACE_PATH` or a saved custom folder. Any other path is
-/// returned as it is.
+/// default folder waiting for its first move: not while both folders hold something, not when the
+/// earlier folder is not Riggverk's, and not when the path comes from `RIGGVERK_WORKSPACE_PATH` or
+/// a saved custom folder. Any other path is returned as it is.
 pub fn canonical_workspace_path(path: &Path) -> PathBuf {
     let (Some(earlier), Ok(current)) = (legacy_default_workspace_path(), current_default()) else {
         return path.to_path_buf();
@@ -139,7 +150,7 @@ pub fn canonical_workspace_path(path: &Path) -> PathBuf {
     let default_pending = !exists(&current) || is_empty_plain_dir(&current);
     let default_origin =
         crate::env_overrides::workspace_path_override().is_none() && !saved_path_is(&earlier);
-    if moved || (default_pending && default_origin) {
+    if moved || (default_pending && default_origin && earlier_default_is_ours(&earlier)) {
         current
     } else {
         path.to_path_buf()
@@ -212,15 +223,19 @@ fn migrate_default_workspace_with(path: &Path, rename: &Rename) -> PathBuf {
     if path != earlier {
         return path.to_path_buf();
     }
+    if !earlier_default_is_ours(&earlier) {
+        // Another tool's folder: never renamed and never written into.
+        return current;
+    }
     match move_over(&earlier, &current, "folder", rename) {
         Move::Moved | Move::CurrentWins => current,
         Move::Stays => path.to_path_buf(),
     }
 }
 
-/// Moves the earlier default data folder to the current name when `path` is it and the current
-/// one does not exist or is empty. Returns the folder to use afterwards: the current one after a
-/// move, else `path`. Call it only under the mutation lock, before the first write.
+/// Moves the earlier default data folder to the current name when `path` is it, it is Riggverk's,
+/// and the current one does not exist or is empty. Returns the folder to use afterwards: the
+/// current one after a move or when the earlier folder is not Riggverk's, else `path`. Call it only under the mutation lock, before the first write.
 pub fn migrate_default_workspace(path: &Path) -> PathBuf {
     migrate_default_workspace_with(path, &|from, to| fs::rename(from, to))
 }
@@ -256,7 +271,7 @@ pub fn layout_notes(workspace_root: Option<&Path>) -> Vec<String> {
         .map(|(_, note)| note.clone())
         .collect();
     if let (Some(earlier), Ok(current)) = (legacy_default_workspace_path(), current_default()) {
-        if exists(&earlier) && exists(&current) && !is_empty_plain_dir(&current) {
+        if earlier_default_is_ours(&earlier) && exists(&current) && !is_empty_plain_dir(&current) {
             notes.push(format!(
                 "An earlier folder {} still exists next to {}; Riggverk uses {} and left the earlier folder untouched. Move what you need out of it, then delete it.",
                 earlier.display(),
