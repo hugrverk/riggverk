@@ -140,7 +140,7 @@ Updates need public release files: the app fetches `https://github.com/hugrverk/
    }
    ```
 
-   The app and `release_tools.py updater-config` treat anything weaker (no `requireSignedVersion`, `allowDowngrades`, a `dangerous*` option, plain HTTP, another endpoint shape) as off or as an error. Merge it through a normal pull request; it ships with the next release.
+   The app treats anything weaker (no `requireSignedVersion`, `allowDowngrades`, a `dangerous*` option, plain HTTP) as off, and `release_tools.py updater-config` also refuses another endpoint shape. Merge it through a normal pull request; it ships with the next release.
 4. **Make the repository public**, and turn on immutable releases (Settings, General, Releases) so a published release's files cannot be swapped.
 5. **Update docs/SECURITY_MODEL.md** (Core principles and "App updates") for updates on, in the same pull request as step 3.
 6. **Publish.** The `plugins.updater` block is the switch: with it, `publish` needs both Keychain items from step 2 and stops before building when either is missing or cannot be read (a release without `latest.json` never reaches installed apps). It reads them itself (`security find-generic-password -s riggverk-updater-key -w`, and `riggverk-updater-password`) and hands them, as `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, to the environment of the one `tauri build` and nothing else: no other step, `git`, `gh` or Python helper sees them, they are never printed (not even under `bash -x`) and never written to a file. Nothing after the build needs the key. Never export them in your shell: `publish` refuses to run while either is set there, because every program started from that shell, an agent CLI included, would inherit them.
