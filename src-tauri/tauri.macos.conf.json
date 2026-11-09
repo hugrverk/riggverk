@@ -27,7 +27,7 @@
         "Resources/Riggverk.icns": "macos/Riggverk.icns"
       },
       "infoPlist": "Info.plist",
-      "minimumSystemVersion": "10.14",
+      "minimumSystemVersion": "13.3",
       "signingIdentity": "-",
       "hardenedRuntime": false,
       "dmg": {

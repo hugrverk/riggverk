@@ -8,7 +8,7 @@ Do not duplicate full `SKILL.md` content here. This file is an index for choosin
 
 | Skill | Use When |
 | --- | --- |
-| `adversarial-implementation` | Only when the user explicitly asks for it, in plain words ("run an adversarial implementation", "have a critic review it") or with `/adversarial-implementation`; it is kept out of the routing rules: an adversarial, critic-reviewed or two-agent implementation. A delegated implementer works against a fresh read-only critic chosen by capability first; only findings whose proof the lead re-runs count, the judging tests are frozen, and a deletion-only round ends the loop. Roles work with no setup and change with one phrase in chat or an `Adversarial roles:` line below END in the rules. |
+| `adversarial-implementation` | Only when the user explicitly asks for it, in plain words ("run an adversarial implementation", "implement this against a critic") or with `/adversarial-implementation`; it is kept out of the routing rules: an adversarial, critic-reviewed or two-agent implementation. A delegated implementer works against a fresh read-only critic chosen by capability first; only findings whose proof the lead re-runs count, the judging tests are frozen, and a deletion-only round ends the loop. Roles work with no setup and change with one phrase in chat or an `Adversarial roles:` line below END in the rules. |
 | `adversarial-review` | Only on an explicit request (`/adversarial-review`, or plain language such as "run an adversarial review" or "review the plan adversarially"): a fresh read-only critic chosen by capability attacks an existing diff, or a plan in plan mode, and only findings whose proof the lead re-runs are reported, in Fatal, Significant, Minor and Pre-existing buckets. It fixes nothing and offers a re-review of later changes at most once. Roles work as in `adversarial-implementation`. |
 | `adversarial-test` | Only when the user explicitly asks for it, in plain words ("write adversarial tests", "let an adversary write the tests") or with `/adversarial-test`; it is kept out of the routing rules: a fresh read-only adversary, chosen by capability first, proposes failing tests tied to the acceptance criteria. The lead keeps only tests it ran and saw fail for the stated reason, freezes them, and the implementer changes production code only or reports `BLOCKED`. At most two rounds; only tests that protect a criterion stay. Roles as for `adversarial-implementation`. |
 | `agents-md` | Creating or refreshing a repository's `AGENTS.md` from commands that actually ran, the real layout and sourced invariants, with an optional `CLAUDE.md` that only holds `@AGENTS.md`. Writes only on request, after showing the diff. Ships `assets/AGENTS.template.md`. |
@@ -84,7 +84,7 @@ Domain skills for a team's own projects and stack are not bundled: keep them in 
 - Security-sensitive changes: `security-review`; add `database-migrations` for schema/data work.
 - Full codebase security audit or pen test: `security-audit`.
 - Prototyping before implementation: `prototype`; add `frontend-design` for UI prototypes.
-- Pausing, executor reports, or context transfer: `handoff`; add `context-budget` for large reports.
+- Pausing, executor reports, or context transfer: `handoff`.
 - Project status report or weekly summary: `status-report`.
 - Commit, push and open or update a PR: `pr-workflow`; add `release-check` before the push.
 - Watching a PR through CI, on request: `pr-workflow`; it hands a red check to `ci-triage` and open threads to `review-response`.
@@ -109,7 +109,7 @@ Bundled `SKILL.md` frontmatter follows the [Agent Skills spec](https://agentskil
 name: browser-qa
 description: Verifies frontend changes in a real browser ... Use when ...
 license: MIT
-compatibility: Needs browser automation, such as the Playwright MCP server Riggverk installs or the Playwright CLI (npx playwright).
+compatibility: Needs browser automation, such as the Playwright MCP server Riggverk installs or the Playwright CLI route in playwright-cli.md (needs Node.js and npm).
 metadata:
   category: frontend
   risk: medium
@@ -125,13 +125,13 @@ metadata:
 - `metadata.targets` — comma-separated harnesses that get the skill. Every harness reads the skills folders Riggverk installs into, so bundled skills list all nine: codex, opencode, claude, cursor, copilot, pi, kilo, antigravity, grok.
 - `metadata.related` — comma-separated related skill names; the routing check verifies each name exists.
 - `metadata.source` — upstream work a skill adapts or draws on (see `NOTICE.md`).
-- `disable-model-invocation` — optional `true` for user-invoked skills (currently `retro`). Claude Code and Cursor then hide the skill from the model; Codex, OpenCode and the light harnesses ignore the flag, so such a skill must not be referenced in routing bullets, its description says it runs only on an explicit request and names the invocation (`/retro`, `$retro` in Codex), and its body repeats the rule.
+- `disable-model-invocation` — optional `true` for user-invoked skills (currently `retro` and `grill-me`). Claude Code and Cursor then hide the skill from the model; Codex, OpenCode and the light harnesses ignore the flag, so such a skill must not be referenced in routing bullets, its description says it runs only on an explicit request and names the invocation (`/retro`, `$retro` in Codex), and its body repeats the rule.
 
 The `adversarial-*` skills keep model invocation so plain words can start them, but each run spends several agents, so the routing check also keeps them out of routing bullets.
 
 Claude-only frontmatter keys sit directly in the skill's frontmatter, because Claude Code reads them only there: `context`, `agent`, `background`, `disable-model-invocation`, and `allowed-tools` (for example `release-check` runs in a forked `verifier` context on Claude Code). `allowed-tools` pre-approves a command prefix, so a bundled skill lists only exact read forms (`git remote -v`, `git config --get commit.template`, `git tag --list *`, `gh auth status`, `gh pr diff *`) and never a prefix that can write, run code or print a secret (`git config *`, `git log *`, `jq *`, or a gh read command, which takes `--jq env`); `scripts/check-skill-routing.py` refuses those, and Claude Code's built-in read-only handling covers `git status`, `git log`, `git diff`, `head` and `tail` without a prompt. Codex and OpenCode ignore them. A skill that sets one of `context`, `agent`, `background` or `allowed-tools` also carries a `### Claude Code` notes section (see below).
 
-The spec allows `allowed-tools` (experimental). The other four are outside it, and a strict validator (`skills-ref validate`, a skill upload to claude.ai or the Skills API) refuses them: today that is `retro` (`disable-model-invocation`) and `release-check` (`context`, `agent`, `background`). They stay because moving them under `metadata:` would turn the behaviour off; remove them from a copy you upload elsewhere. Every other bundled skill passes a strict validator, and `scripts/check-skill-routing.py` refuses any other top-level key in a bundled skill.
+The spec allows `allowed-tools` (experimental). The other four are outside it, and a strict validator (`skills-ref validate`, a skill upload to claude.ai or the Skills API) refuses them: today that is `retro` and `grill-me` (`disable-model-invocation`) and `release-check` (`context`, `agent`, `background`). They stay because moving them under `metadata:` would turn the behaviour off; remove them from a copy you upload elsewhere. Every other bundled skill passes a strict validator, and `scripts/check-skill-routing.py` refuses any other top-level key in a bundled skill.
 
 Packs and personal skills may keep `category`, `risk`, `targets` and `related` at the top level, as older releases wrote them; the app reads both layouts. When a file sets a key in both places, the non-empty `metadata.<key>` wins. A Library save writes the text as you typed it and never moves keys between the layouts.
 

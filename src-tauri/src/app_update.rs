@@ -263,10 +263,12 @@ pub async fn check_app_update<R: Runtime>(
         }
     }
     // The update keeps this client setup for its download, but not the check's total timeout.
+    // `https_only` also covers redirects and the manifest's download URL, which the plugin only
+    // warns about.
     let updater = app
         .updater_builder()
         .timeout(CHECK_TIMEOUT)
-        .configure_client(|client| client.read_timeout(STALL_TIMEOUT))
+        .configure_client(|client| client.read_timeout(STALL_TIMEOUT).https_only(true))
         .build()
         .map_err(|error| user_error(&error, CHECK_FAILED))?;
     let found = updater

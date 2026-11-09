@@ -106,7 +106,7 @@ export function UninstallCard({
               )}
               {plan.preserved.length > 0 && (
                 <details className="uninstall-detail">
-                  <summary>{plural(plan.preserved.length, "modified file")} preserved</summary>
+                  <summary>{plural(plan.preserved.length, "file")} of yours kept</summary>
                   <ul className="uninstall-list">
                     {plan.preserved.map((item) => (
                       <li key={item.path}><code>{item.path}</code></li>

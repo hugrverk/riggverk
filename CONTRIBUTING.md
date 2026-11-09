@@ -2,6 +2,8 @@
 
 Use a full clone: generators read Git history, so shallow clones are not supported.
 
+Riggverk was developed in a private repository before it was published. References such as `riggverk-archive#123` in older commit messages, and `(#123)` in release notes from before the first public release, point to pull requests in that private archive and do not link anywhere.
+
 Requirements:
 
 - Node.js 22 and npm.

@@ -3,8 +3,9 @@
 
 release-notes/<version>.md (one per release, CalVer YYYY.M.N) is the owner-edited source. This writes
 src/generated/release-notes.json, newest release first, which the app imports at build time. Sections
-named "Install" are for the GitHub release page only and are left out, and a trailing PR reference
-such as "(#41)" is dropped from each item.
+named "Install" are for the GitHub release page only and are left out, and every parenthesized PR
+reference such as "(#41)", "(#40, #41)" or "(#40–#44)" is dropped from each item: the numbers mean
+nothing inside the app.
 
 Usage:
   python3 scripts/generate-release-notes.py --check
@@ -25,7 +26,7 @@ OUTPUT = ROOT / "src/generated/release-notes.json"
 
 CALVER = re.compile(r"^(\d{4})\.([1-9]|1[0-2])\.([1-9]\d*)$")
 EXCLUDED_SECTIONS = {"install"}
-PR_SUFFIX = re.compile(r"\s*\(#\d+\)\s*$")
+PR_REFERENCE = re.compile(r"\s*\(#\d+(?:\s*[,–-]\s*#\d+)*\)")
 BULLET = re.compile(r"^[-*]\s+(.*)$")
 
 
@@ -82,7 +83,7 @@ def parse_notes(version: str, text: str) -> dict:
             item_open = False
 
     for section in sections:
-        section["items"] = [PR_SUFFIX.sub("", item) for item in section["items"]]
+        section["items"] = [PR_REFERENCE.sub("", item).strip() for item in section["items"]]
     sections = [section for section in sections if section["items"]]
     if not sections:
         raise NotesError(f"release-notes/{version}.md has no items for the what's new overlay")

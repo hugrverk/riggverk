@@ -19,7 +19,6 @@ Done when: every changed trust boundary is listed as checked or not checked, and
 
 - The task is only release readiness; use `release-check`.
 - The task is pure debugging; use `diagnose`.
-- The review would require inspecting secrets, `.env` files, private keys, cookies, dumps, or credential stores.
 
 ## Process
 
@@ -74,7 +73,7 @@ Done when: every changed trust boundary is listed as checked or not checked, and
 
 ## Guardrails
 
-- Do not print or inspect secrets.
+- Do not print secret values, and do not open `.env*`, key files, dumps or credential stores: review how secrets are loaded, referenced and logged, never the values.
 - Do not invent vulnerabilities without evidence.
 - Do not require perfect security for low-risk changes; match depth to blast radius.
 - Do not claim secure unless the reviewed scope and verification are explicit.

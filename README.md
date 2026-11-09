@@ -6,23 +6,6 @@ Riggverk is a local agent environment manager: a Tauri control panel that instal
 
 The repository contains the application and its canonical bundled workspace. Installed workspaces and harness files are downstream user-owned data.
 
-## Upgrading from earlier versions
-
-<!-- residue-allow-begin: the upgrade notes name the identifiers of earlier releases -->
-
-Releases before the Riggverk rename used other technical names. An install made under them keeps working and is carried over without any action:
-
-- The data folder `~/.config/agent-workspace` is read in place and nothing moves at launch. The first write (an install, a saved personal doc, a kept choice) renames it to `~/.config/riggverk`. If both folders exist, `~/.config/riggverk` is used and the old one is left alone and reported in the workspace diagnostics; nothing is merged. A custom folder saved by an earlier version is never moved.
-- The `.agent-workspace/` state folder inside a data folder becomes `.riggverk/` the same way (ownership records, "leave as is" and "keep mine" choices keep applying).
-- Rules blocks between `AGENT-WORKSPACE BASE` markers are recognized. The next update rewrites them with `RIGGVERK BASE` markers and keeps the text outside the block byte for byte. A block you edited stays a conflict, as before.
-- `AGENT_WORKSPACE_PATH` and `AGENT_WORKSPACE_BACKUP_DIR` still work as aliases of `RIGGVERK_WORKSPACE_PATH` and `RIGGVERK_BACKUP_DIR`; the new name wins when both are set.
-- Rolling back a transaction made before the move maps the old folder onto the new one. It is refused, with a message, if a folder under the old name exists again next to the new one.
-- Quit any older Riggverk (or the app under its earlier name) before the first launch of this version: the move is a rename, and an older app that writes during it can leave a mixed layout.
-- Tools, editors and scripts of your own that mention `~/.config/agent-workspace` must be pointed at `~/.config/riggverk` after the move.
-- Going back to an older version after the move is not supported: it looks for the old folder, finds none and starts as a fresh profile. To go back by hand, quit Riggverk, rename `~/.config/riggverk` to `~/.config/agent-workspace` and the `.riggverk/` folder inside it to `.agent-workspace/`; rules files that were rewritten with `RIGGVERK BASE` markers are not recognized by an older version, so restore them from the backups folder (`backups/setup/<transaction id>/`) if you need them as they were.
-
-<!-- residue-allow-end -->
-
 ## Repository layout
 
 - `src/` - React and Vite frontend (shell, keyboard layer, pages, Library).
@@ -35,7 +18,24 @@ The workspace folder lives at `~/.config/riggverk` unless a custom folder saved 
 
 ## Install
 
-Releases are on GitHub Releases as a disk image and a zip of the same universal app (Apple silicon and Intel): open `Riggverk-v<version>-macOS.dmg` and drag Riggverk to Applications (or unzip `Riggverk-v<version>-macOS.zip` and move `Riggverk.app` to `/Applications`), then open it. `SHA256SUMS` lists their checksums. The app is ad hoc signed and not notarized, so macOS stops the first launch: open System Settings, Privacy & Security, and choose Open Anyway next to the message about Riggverk. Riggverk replaces the app's earlier build under its previous name; moving over from it (settings and backups carry over) is described in `docs/RELEASE.md`.
+Riggverk needs macOS 13.3 or later. Releases are on [GitHub Releases](https://github.com/hugrverk/riggverk/releases/latest) as a disk image and a zip of the same universal app (Apple silicon and Intel): open `Riggverk-v<version>-macOS.dmg` and drag Riggverk to Applications (or unzip `Riggverk-v<version>-macOS.zip` and move `Riggverk.app` to `/Applications`), then open it. `SHA256SUMS` lists their checksums. The app is ad hoc signed and not notarized, so macOS stops the first launch. After that first attempt, open System Settings, Privacy & Security, and choose Open Anyway next to the message about Riggverk. Riggverk replaces the app's earlier build under its previous name; moving over from it (settings and backups carry over) is described in `docs/RELEASE.md`.
+
+## Upgrading from earlier versions
+
+<!-- residue-allow-begin: the upgrade notes name the identifiers of earlier releases -->
+
+Releases before the Riggverk rename used other technical names. An install made under them keeps working and is carried over without any action:
+
+- The data folder `~/.config/agent-workspace` is read in place and nothing moves at launch. It counts as Riggverk's only when it holds a `.agent-workspace/` or `.riggverk/` state folder; a folder of that name without one belongs to another tool and is left alone (Riggverk starts fresh in `~/.config/riggverk`). The first write (an install, a saved personal doc, a kept choice) renames it to `~/.config/riggverk`. If both folders exist, `~/.config/riggverk` is used and the old one is left alone and reported in the workspace diagnostics; nothing is merged. A custom folder saved by an earlier version is never moved.
+- The `.agent-workspace/` state folder inside a data folder becomes `.riggverk/` the same way (ownership records, "leave as is" and "keep mine" choices keep applying).
+- Rules blocks between `AGENT-WORKSPACE BASE` markers are recognized. The next update rewrites them with `RIGGVERK BASE` markers and keeps the text outside the block byte for byte. A block you edited stays a conflict, as before.
+- `AGENT_WORKSPACE_PATH` and `AGENT_WORKSPACE_BACKUP_DIR` still work as aliases of `RIGGVERK_WORKSPACE_PATH` and `RIGGVERK_BACKUP_DIR`; the new name wins when both are set.
+- Rolling back a transaction made before the move maps the old folder onto the new one. It is refused, with a message, if a folder under the old name exists again next to the new one.
+- Quit any older Riggverk (or the app under its earlier name) before the first launch of this version: the move is a rename, and an older app that writes during it can leave a mixed layout.
+- Tools, editors and scripts of your own that mention `~/.config/agent-workspace` must be pointed at `~/.config/riggverk` after the move.
+- Going back to an older version after the move is not supported: it looks for the old folder, finds none and starts as a fresh profile. To go back by hand, quit Riggverk, rename `~/.config/riggverk` to `~/.config/agent-workspace` and the `.riggverk/` folder inside it to `.agent-workspace/`; rules files that were rewritten with `RIGGVERK BASE` markers are not recognized by an older version, so restore them from the backups folder (`backups/setup/<transaction id>/`) if you need them as they were.
+
+<!-- residue-allow-end -->
 
 ## Development
 
@@ -157,6 +157,8 @@ Stored in `settings.json` under the app support dir; autosaved.
 | `motion` | `"full"` | `"full"`, `"subtle"`, or `"off"`. `"off"` stops animations and transitions; the OS reduced-motion preference always counts as `"off"`. Older files with `reduce_motion: true` load as `"off"`; the legacy `reduce_motion` flag is still written beside it. |
 | `landing_view` | `"start"` | View shown on start: `"start"`, `"library"`. |
 | `last_seen_version` | unset | App version whose "what's new" was handled. Set by the app, not in Settings: it records the version on a fresh install and after the overlay is closed on the first launch after an update. `:whatsnew` opens the notes at any time. |
+| `update_check` | `"ask"` | When the app looks for a new version: `"ask"` (nothing is requested until you choose), `"daily"` (once a day at startup) or `"manual"` (only from Check for Updates). |
+| `last_update_check` | unset | When the last successful update check finished, in seconds since the Unix epoch. Set by the app, not in Settings. |
 
 Target toggles gate these surfaces: rules, agents, and config per harness (`claude_config` is the attribution setting above), Cursor agents plus MCP (`cursor_setup`), the rules file (`copilot_rules`, `pi_rules`, `kilo_rules`, `antigravity_rules`) and the Playwright MCP entry (`copilot_mcp`, `pi_mcp`, `kilo_mcp`, `antigravity_mcp`, `grok_mcp`) of each light harness; they only act once their harness is enabled. Five targets are off by default: `codex_config` because it rewrites the Codex approval and sandbox posture, `claude_config` because it changes how Claude Code attributes commits and pull requests in your `~/.claude/settings.json`, `kilo_mcp` because Kilo's main config file may hold provider keys, `antigravity_mcp`, opt-in the same way, and `grok_mcp` because `~/.grok/config.toml` may hold an `api_key`. Settings files from before target gating are migrated once: every default stays on, and any target you had enabled or whose surface is already managed stays on, so nothing already installed is dropped. Later additions to the defaults (the light rules targets, then `copilot_mcp` and `pi_mcp`, then `antigravity_rules`) are added to older files without touching a toggle you switched off. Skills and the `workspace` row are never gated.
 
@@ -183,6 +185,7 @@ Overrides are honored in release builds too. Use them with a temporary `HOME` wh
 - Config and rules merges preserve user-owned content or refuse unsafe writes with zero mutation.
 - Credential-bearing files and unrelated personal files are outside the workspace contract.
 - Python generators and merge scripts run from the bundled copy, never from the workspace.
+- The app itself makes network requests only for app updates: the check runs only after you turned on "Check daily" or chose Check for Updates, and a download starts only after you reviewed the new version and pressed Download and restart. Updates must carry the release key's signature. The agents' own tools, such as the Playwright MCP entry that runs `npx`, use the network on their own terms.
 - Each harness page has a read-only `security` group: it reads named permission and sandbox keys of that harness's global config in memory, shows no values, and never reports a setup as secure. What Riggverk enforces per harness and what stays up to you is in the bundled Security Baseline (Library, Docs; `resources/default-workspace/docs/SECURITY_BASELINE.md`).
 
 See `docs/SECURITY_MODEL.md` for the full boundaries.
