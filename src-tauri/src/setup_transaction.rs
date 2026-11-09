@@ -2150,6 +2150,22 @@ pub fn plan_artifacts_for_uninstall(
         }
     }
 
+    // A skill is one unit, and its `SKILL.md` decides whose it is: where that file stays, the skill
+    // is the user's and no file of it in that folder is removed, whatever its bytes.
+    let users_skills: HashSet<_> = preserved
+        .iter()
+        .filter_map(ArtifactId::as_skill_file)
+        .filter(|file| file.rel.is_skill_md())
+        .map(|file| (file.root, file.skill))
+        .collect();
+    let (kept, removals): (Vec<_>, Vec<_>) = removals.into_iter().partition(|operation| {
+        operation
+            .artifact
+            .as_skill_file()
+            .is_some_and(|file| users_skills.contains(&(file.root, file.skill)))
+    });
+    preserved.extend(kept.into_iter().map(|operation| operation.artifact));
+
     Ok(UninstallArtifactPlan {
         removals,
         preserved,
@@ -2329,6 +2345,7 @@ pub fn plan_artifacts_for_surfaces_with(
     let kept = crate::kept_files::KeptFiles::load(workspace_root);
     let mut planned = Vec::new();
     let mut seen = std::collections::HashSet::new();
+    let mut users_skills = HashSet::new();
     for artifact in artifacts {
         seen.insert(crate::managed_state::artifact_identity(&artifact));
         let surface = artifact.surface();
@@ -2414,6 +2431,18 @@ pub fn plan_artifacts_for_surfaces_with(
                 }
             }
         };
+        // A `SKILL.md` that stays as it is, with no record of the app writing it, makes the skill
+        // the user's.
+        if managed_hash.is_none()
+            && (kind == OperationKind::Conflict || file.is_some_and(|file| file.kept.is_some()))
+        {
+            if let Some(file) = artifact
+                .as_skill_file()
+                .filter(|file| file.rel.is_skill_md())
+            {
+                users_skills.insert((file.root, file.skill));
+            }
+        }
         let rollback_action = rollback_action_for(kind, previous_state);
         planned.push(PlannedArtifact {
             artifact,
@@ -2527,6 +2556,7 @@ pub fn plan_artifacts_for_surfaces_with(
         });
     }
     keep_stale_units_whole(&mut planned);
+    keep_users_skills_whole(&mut planned, &users_skills);
     // Removals go last, whatever order the stale artifacts were found in (stable: the order inside
     // each group is kept).
     planned.sort_by_key(|operation| operation.kind == OperationKind::Remove);
@@ -2608,6 +2638,39 @@ fn keep_stale_units_whole(planned: &mut [PlannedArtifact]) {
             continue;
         };
         if kept_units.contains(&(file.root, file.skill.clone())) {
+            operation.kind = OperationKind::Manual;
+            operation.rollback_action =
+                rollback_action_for(OperationKind::Manual, operation.previous_state);
+        }
+    }
+}
+
+/// A skill whose `SKILL.md` is the user's (in conflict or kept, with no record of the app writing
+/// it) is theirs as a whole: no other file of it in that folder is created, updated, adopted or
+/// removed. Those operations become manual steps, as in [`keep_stale_units_whole`].
+fn keep_users_skills_whole(
+    planned: &mut [PlannedArtifact],
+    users_skills: &HashSet<(
+        crate::skill_roots::SkillRoot,
+        crate::artifact_registry::SkillName,
+    )>,
+) {
+    if users_skills.is_empty() {
+        return;
+    }
+    for operation in planned.iter_mut().filter(|operation| {
+        matches!(
+            operation.kind,
+            OperationKind::Create
+                | OperationKind::Update
+                | OperationKind::NoChange
+                | OperationKind::Remove
+        )
+    }) {
+        let Some(file) = operation.artifact.as_skill_file() else {
+            continue;
+        };
+        if users_skills.contains(&(file.root, file.skill)) {
             operation.kind = OperationKind::Manual;
             operation.rollback_action =
                 rollback_action_for(OperationKind::Manual, operation.previous_state);
