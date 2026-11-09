@@ -68,7 +68,7 @@
         {
           "title": "Linux and Windows groundwork",
           "items": [
-            "Riggverk is being tested on Linux and Windows. These changes do not affect the Mac app (#193–#196):",
+            "Riggverk is being tested on Linux and Windows. These changes do not affect the Mac app:",
             "Open folder and file actions use xdg-open on Linux and Explorer on Windows.",
             "Agent CLIs installed through npm, bun, cargo, scoop or Linuxbrew are found.",
             "On Windows, a second Riggverk window cannot apply at the same time, and folders behind symlinks or junctions are refused while OneDrive folders work.",
@@ -95,12 +95,12 @@
         {
           "title": "New",
           "items": [
-            "Import a skill you found. In Library → Packs, choose Import skill… and drop or paste a folder, a `SKILL.md` or a folder of several skills (#178):",
+            "Import a skill you found. In Library → Packs, choose Import skill… and drop or paste a folder, a `SKILL.md` or a folder of several skills:",
             "Riggverk first shows the whole `SKILL.md` and flags what lets a skill act without asking: `allowed-tools`, `hooks`, `!` commands, scripts and hidden Unicode.",
             "The skill goes into its own read-only pack, `imported`, with a record of where it came from. Your agents get it at the next Update all.",
             "You can import again with a diff, remove it (a backup is kept), undo, or Edit as my copy.",
             "A pack skill without `targets` now counts for all agents, so skills from GitHub work as they are.",
-            "Update all shows what will happen before you apply (#177):",
+            "Update all shows what will happen before you apply:",
             "Count tiles sum up what will be created, updated, removed, skipped and left alone.",
             "A small flow map shows what is written to each agent, with the plan grouped by agent beside it.",
             "While applying, the map follows the run. When it is done, a receipt lists any steps left to you, with Undo."
@@ -371,13 +371,13 @@
         {
           "title": "Fixes",
           "items": [
-            "Quitting or closing the window with unsaved changes in the Library now asks first: Save and quit, Discard, or Keep editing. Typing while a save runs is kept, and a doc or skill that changed on disk since you opened it is not overwritten (#120, #121)",
+            "Quitting or closing the window with unsaved changes in the Library now asks first: Save and quit, Discard, or Keep editing. Typing while a save runs is kept, and a doc or skill that changed on disk since you opened it is not overwritten",
             "A Cursor `mcp.json` with a token in one of your own servers no longer makes every Install fail and roll back, and your own `playwright` entry there is a conflict for you to decide instead of being replaced",
             "Your own agent models in OpenCode's `opencode.json` stay yours. Riggverk removes only the models it wrote itself",
-            "Renaming a skill file in letter case only no longer deletes it, a skill with an edit you have not decided on is never removed by halves, and a nested `name:` in a pack skill can no longer pass as a bundled skill (#119, #122)",
+            "Renaming a skill file in letter case only no longer deletes it, a skill with an edit you have not decided on is never removed by halves, and a nested `name:` in a pack skill can no longer pass as a bundled skill",
             "Errors never quote lines from your config files, which can hold tokens. Undo is refused while a newer update was not rolled back, a second Riggverk window cannot write at the same time as the first, and an Install after a crash asks you to preview again",
-            "Overview says when an agent could not be checked instead of \"Everything is set up.\", lists items to fix by hand, and the run panel with progress and Undo now shows on every page (#121, #123)",
-            "Actions that only had a key now have a button: OpenCode model Save, Reset and Reload, Settings Reset appearance and Retry save, install plan details, and the rules and Codex reviews. The Undo dialog names the update instead of showing an id, and custom colours warn when text or the focus ring would be hard to see (#121, #123)",
+            "Overview says when an agent could not be checked instead of \"Everything is set up.\", lists items to fix by hand, and the run panel with progress and Undo now shows on every page",
+            "Actions that only had a key now have a button: OpenCode model Save, Reset and Reload, Settings Reset appearance and Retry save, install plan details, and the rules and Codex reviews. The Undo dialog names the update instead of showing an id, and custom colours warn when text or the focus ring would be hard to see",
             "Update all and Undo finish about a second sooner when OpenCode is on"
           ]
         }
@@ -392,7 +392,7 @@
             "Overview shows how your setup flows: Riggverk's base, your own refinements and each skill pack on the left, your agents on the right, joined by curves. A thicker curve carries more, a dashed one has an update waiting, and the agents your last update wrote keep a faint glow. A decision is a filled square on the agent. Select an agent, a source or a curve and the panel beside the map shows its details, the last update for just that agent, and what you can do next, such as Open, Undo or Install everything. While an update runs, the panel follows it file by file and the map shows which agent is being written",
             "The Library is laid out like System Settings: topics for Rules, Skills, Agents, Docs, Configs and Packs, one search across all of them, and rows that say what you can do. Opening an item brings down a sheet to read or edit it. Leaving with unsaved changes always asks: Discard, Keep editing, or Save and continue",
             "Edit your rules files in the Library: the managed block stays read-only above, and you edit only your refinements below it. Effective shows exactly what the agent will read, and Diff shows your change against the file on disk before you save. Riggverk says when one of your headings also exists in the base. A file whose managed block was edited by hand stays read-only and points you to the agent's page to decide",
-            "Edit as my copy: copy a bundled skill into your own `personal` pack under a new name, such as `tdd-mine`, and edit it there. The bundled skill keeps its name and stays active, and the next Update installs your copy next to it. Saving keeps a backup (#113, #115)"
+            "Edit as my copy: copy a bundled skill into your own `personal` pack under a new name, such as `tdd-mine`, and edit it there. The bundled skill keeps its name and stays active, and the next Update installs your copy next to it. Saving keeps a backup"
           ]
         }
       ]
@@ -415,12 +415,12 @@
         {
           "title": "New",
           "items": [
-            "A new look. The terminal-style screens are gone: a sidebar lists Overview, your agents, History, Library and Settings (keys 1 to 8 always open the same place), and a top bar has Check and Update all. Everything is mouse-first, with the keyboard shortcuts as accelerators (`?` lists them). Neutral graphite with a matching light theme, the system font for text, and motion that follows Settings > Motion (#94, #102, #103, #105, #108, #109)",
+            "A new look. The terminal-style screens are gone: a sidebar lists Overview, your agents, History, Library and Settings (keys 1 to 8 always open the same place), and a top bar has Check and Update all. Everything is mouse-first, with the keyboard shortcuts as accelerators (`?` lists them). Neutral graphite with a matching light theme, the system font for text, and motion that follows Settings > Motion",
             "Overview answers \"is my setup OK?\" at the top: \"Your setup works.\" or \"Everything is set up.\", with one line that counts only what is not zero. Each agent has a card, and the last update shows what changed and what was left for you, with Undo",
-            "Decisions are shown where they belong. A file you edited gets a card that says why Riggverk left it alone; Compare opens the side-by-side difference right there, and the two choices say what happens next. Nothing is written before you preview it, Enter never applies, and `y` or the Apply button does (#105, #107)",
-            "Codex settings: the table shows Riggverk's value next to yours for each key Riggverk manages. Keep mine keeps your value; Use Riggverk defaults sets only the keys that differ, after a preview, with a backup and Undo. Riggverk refuses instead of touching anything the preview didn't show (#99, #107)",
-            "History lists every update, also after a restart, with what changed, what was already current and what was left for you. Undo is offered on the newest one and always asks first (#98, #106)",
-            "Skill packs: put your own skills in `~/.config/riggverk/packs/<name>/skills/` and Riggverk installs them like its own, with backups and Undo. If a pack goes missing or can't be read, its skills stay installed until you choose Forget pack in the Library. Packs that others can write to are refused (#101, #104)"
+            "Decisions are shown where they belong. A file you edited gets a card that says why Riggverk left it alone; Compare opens the side-by-side difference right there, and the two choices say what happens next. Nothing is written before you preview it, Enter never applies, and `y` or the Apply button does",
+            "Codex settings: the table shows Riggverk's value next to yours for each key Riggverk manages. Keep mine keeps your value; Use Riggverk defaults sets only the keys that differ, after a preview, with a backup and Undo. Riggverk refuses instead of touching anything the preview didn't show",
+            "History lists every update, also after a restart, with what changed, what was already current and what was left for you. Undo is offered on the newest one and always asks first",
+            "Skill packs: put your own skills in `~/.config/riggverk/packs/<name>/skills/` and Riggverk installs them like its own, with backups and Undo. If a pack goes missing or can't be read, its skills stay installed until you choose Forget pack in the Library. Packs that others can write to are refused"
           ]
         }
       ]
@@ -439,7 +439,7 @@
           "items": [
             "Riggverk's own names now say Riggverk everywhere. The data folder moves from `~/.config/agent-workspace` to `~/.config/riggverk`, its state folder from `.agent-workspace/` to `.riggverk/`, and the markers in your rules files become `BEGIN RIGGVERK BASE` / `END RIGGVERK BASE`. Nothing moves when the app opens: the folder is renamed the first time Riggverk writes something, and your rules files get the new markers on their next update, with everything you wrote below END kept byte for byte. `RIGGVERK_WORKSPACE_PATH` and `RIGGVERK_BACKUP_DIR` replace the old variables, which still work. A saved custom folder is never moved. If the move cannot happen, Riggverk keeps working in the old folder and says why on the workspace row. Scripts or editors that open files in `~/.config/agent-workspace` need the new path, and going back to an older version after the move is not supported",
             "Codex settings you changed on purpose can stay yours. When an enforced key in `~/.codex/config.toml` differs from Riggverk's value, such as `approvals_reviewer`, press `m` on the Codex config row: Riggverk keeps your value, stops reporting it as a conflict and never writes over it, while the other managed keys keep following Riggverk. Change the value again and it becomes a conflict again; press `m` once more to hand it back",
-            "First steps of the new look: a neutral graphite palette with no amber, a neutral light theme, and calmer review screens. Install previews, rules reviews, file conflicts and confirm dialogs are now cards that say what happens before you apply (\"Preview first · Backed up · Undo any time\"). Enter still never applies; `y` or the Apply button does (#89, #93)"
+            "First steps of the new look: a neutral graphite palette with no amber, a neutral light theme, and calmer review screens. Install previews, rules reviews, file conflicts and confirm dialogs are now cards that say what happens before you apply (\"Preview first · Backed up · Undo any time\"). Enter still never applies; `y` or the Apply button does"
           ]
         }
       ]
@@ -476,7 +476,7 @@
           "title": "Changes",
           "items": [
             "Riggverk no longer keeps a copy of its bundle in your workspace folder (`~/.config/agent-workspace`). The Library and health read the bundle inside the app, and the folder now holds only Riggverk's state (`.agent-workspace/`), your personal docs (`docs/context/`) and anything you put there yourself",
-            "Old copies from earlier versions show on the `workspace` row as \"N old copies to remove\". Press `u` to review: every removal is listed per folder and backed up first, and `z` restores them. Nothing is removed at launch (#76, #78)",
+            "Old copies from earlier versions show on the `workspace` row as \"N old copies to remove\". Press `u` to review: every removal is listed per folder and backed up first, and `z` restores them. Nothing is removed at launch",
             "Files you edited, and files Riggverk cannot prove it wrote, are left in place and shown as \"left in place\". To keep a copy of everything, cancel the review, or press `z` after applying",
             "The workspace view no longer shows the data folder's git branch or uncommitted changes; GIT_VERSIONING.md now covers versioning `docs/context/` only"
           ]
@@ -498,7 +498,7 @@
             "adversarial-review: a fresh read-only critic finds and verifies issues and reports them without fixing anything; plan mode and a separate list for issues that were already there",
             "adversarial-test: an adversary writes failing tests that are then frozen, and the implementer may change only production code",
             "adversarial-implementation v2: the critic is chosen by capability, every finding carries a proof the lead runs, at most three rounds with frozen tests and a final round that may only delete; a start line shows who plays each role and how to change it",
-            "Start the adversarial skills in plain words or with their slash command (#69, #71, #72)",
+            "Start the adversarial skills in plain words or with their slash command",
             "OpenCode: a critic model row, so the adversarial skills' critic (inspector) can run a stronger model than the other subagents"
           ]
         },
@@ -522,21 +522,21 @@
         {
           "title": "New",
           "items": [
-            "Copilot, Pi and Kilo as opt-in harnesses: rules block, skills and the Playwright MCP entry (#40, #41, #42)",
-            "One shared SKILL.md per skill, installed into each folder your harnesses read; see which copy each harness loads (#28, #30, #33, #34)",
-            "Resolve a conflicting skill or agent file: keep your version or take the bundled one (#44, #45)",
-            "Library: bundled items are read-only and come straight from the app; edit your personal docs and your own refinements below the rules base (#49, #52, #57)",
-            "OpenCode: version-aware health with CLI probes and lsp, model/small model/subagent model overrides, runtime rows that show what differs, warnings when other config files or env override the team settings, only the bundled tui.json keys are managed, XDG_CONFIG_HOME is followed (#31, #32, #54, #55, #60, #63)",
+            "Copilot, Pi and Kilo as opt-in harnesses: rules block, skills and the Playwright MCP entry",
+            "One shared SKILL.md per skill, installed into each folder your harnesses read; see which copy each harness loads",
+            "Resolve a conflicting skill or agent file: keep your version or take the bundled one",
+            "Library: bundled items are read-only and come straight from the app; edit your personal docs and your own refinements below the rules base",
+            "OpenCode: version-aware health with CLI probes and lsp, model/small model/subagent model overrides, runtime rows that show what differs, warnings when other config files or env override the team settings, only the bundled tui.json keys are managed, XDG_CONFIG_HOME is followed",
             "What's new after each update",
-            "New skills: adversarial-implementation, security-audit, kretsverket-status-report (#19, #20, #21)",
-            "Master-detail pages, bracket buttons, apply progress and motion levels (#14, #17)"
+            "New skills: adversarial-implementation, security-audit, kretsverket-status-report",
+            "Master-detail pages, bracket buttons, apply progress and motion levels"
           ]
         },
         {
           "title": "Changed",
           "items": [
-            "Renamed to Riggverk; app data moves on first launch (#37, #39)",
-            "Prompt Builder, Brain Setup and the in-app release check are removed (#26, #27)",
+            "Renamed to Riggverk; app data moves on first launch",
+            "Prompt Builder, Brain Setup and the in-app release check are removed",
             "The workspace folder chooser is gone: a saved folder keeps working, and `R` resets to the default after a confirm",
             "Playwright MCP 0.0.83 runs your installed Google Chrome; tools that web pages register (WebMCP) are off"
           ]
@@ -544,9 +544,9 @@
         {
           "title": "Fixes",
           "items": [
-            "OpenCode permissions match OpenCode 1.19.3: compound commands are checked part by part, and secret files are denied in bash however the path is written (#29, #65, #66)",
-            "The managed OpenCode config converges, and health compares with what Install writes (#51, #56)",
-            "The window opens centered at 1280x800, the boot lines clear the traffic lights, and the pane grid holds at large text (#13, #22, #38)",
+            "OpenCode permissions match OpenCode 1.19.3: compound commands are checked part by part, and secret files are denied in bash however the path is written",
+            "The managed OpenCode config converges, and health compares with what Install writes",
+            "The window opens centered at 1280x800, the boot lines clear the traffic lights, and the pane grid holds at large text",
             "Codex delegation only when Codex is installed and logged in",
             "The Playwright entry is added to an existing mcp.json"
           ]
