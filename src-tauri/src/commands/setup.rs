@@ -3201,7 +3201,7 @@ pub fn preview_uninstall() -> Result<UninstallPlanView, String> {
         .collect();
 
     let summary = format!(
-        "{} app-owned file(s) will be removed; {} modified file(s) preserved; {} merged config(s) left in place",
+        "{} app-owned file(s) will be removed; {} file(s) of yours kept; {} merged config(s) left in place",
         removable.len(),
         preserved.len(),
         merged.len()
