@@ -243,7 +243,7 @@ class BundleTests(unittest.TestCase):
     def test_a_template_with_another_version_fails(self) -> None:
         version, _ = bc.read_pin(self.tree)
         self.edit("templates/mcp/pi.playwright.json", f"@playwright/mcp@{version}", "@playwright/mcp@0.0.1")
-        self.assertFails("playwright-pin", "templates/mcp/pi.playwright.json:7: names @playwright/mcp@0.0.1")
+        self.assertFails("playwright-pin", "templates/mcp/pi.playwright.json:8: names @playwright/mcp@0.0.1")
         self.assertFails("playwright-pin", "templates/mcp/pi.playwright.json: does not pin")
 
     def test_a_template_without_a_pin_fails(self) -> None:
@@ -293,16 +293,35 @@ class BundleTests(unittest.TestCase):
                 path.write_text(original, encoding="utf-8")
                 self.assertEqual(self.failures("playwright-pin"), [])
 
-    def test_an_entry_without_the_npx_prefix_fails(self) -> None:
-        # Without it npm takes the agent's working folder as the project (.npmrc, node_modules).
-        for rel in bc.PIN_ENTRIES:
+    def test_every_entry_starts_npx_in_the_app_folders(self) -> None:
+        version, _ = bc.read_pin(self.tree)
+        for rel, location in bc.PIN_ENTRIES.items():
             with self.subTest(template=rel):
-                path = self.tree / WS / rel
-                original = path.read_text(encoding="utf-8")
-                path.write_text(original.replace('"--prefix"', '"--cache"', 1), encoding="utf-8")
-                self.assertFails("playwright-pin", f"{rel}: does not pass `--prefix")
-                path.write_text(original, encoding="utf-8")
-                self.assertEqual(self.failures("playwright-pin"), [])
+                arguments = bc.entry_arguments(self.tree / WS / rel, location)
+                self.assertEqual(arguments[:6], [*bc.NPX_START, f"@playwright/mcp@{version}"])
+
+    def test_an_entry_that_does_not_start_npx_in_the_app_folders_fails(self) -> None:
+        # Started any other way, npx would use the .npmrc, node_modules or node_modules/.bin
+        # (sh, node) of the folder the agent runs in.
+        broken = {
+            "npx itself": ('"/bin/sh"', '"npx"'),
+            "a shell looked up on PATH": ('"/bin/sh"', '"sh"'),
+            "npx started in the agent's folder": ('cd -- \\"$1\\" && shift && ', ""),
+            "the prefix in the wrong place": ("__PLAYWRIGHT_NPX_PREFIX_PATH__", "__PLAYWRIGHT_X__"),
+            "another output folder": ("__PLAYWRIGHT_OUTPUT_PATH__", "/tmp"),
+        }
+        for rel in bc.PIN_ENTRIES:
+            for reason, (old, new) in broken.items():
+                with self.subTest(template=rel, broken=reason):
+                    path = self.tree / WS / rel
+                    original = path.read_text(encoding="utf-8")
+                    if rel.endswith(".toml"):
+                        old = old.replace('\\"', '"')
+                    self.assertIn(old, original)
+                    path.write_text(original.replace(old, new, 1), encoding="utf-8")
+                    self.assertFails("playwright-pin", f"{rel}: does not start with ['/bin/sh', '-c',")
+                    path.write_text(original, encoding="utf-8")
+                    self.assertEqual(self.failures("playwright-pin"), [])
 
     def test_an_entry_that_is_not_isolated_fails(self) -> None:
         for rel in bc.PIN_ENTRIES:

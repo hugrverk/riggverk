@@ -243,21 +243,28 @@ PLAYWRIGHT_RULES = (
 PIN_SOURCE = "src-tauri/src/commands/cursor_profile.rs"
 PIN_LINE = re.compile(r'PLAYWRIGHT_MCP_VERSION: &str = "([^"]+)";\s*// released (\d{4}-\d{2}-\d{2})')
 PINNED = re.compile(r"@playwright/mcp@(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]*[0-9A-Za-z])?)")
-# Template -> where the argument list of the Playwright entry sits in it.
+# Template -> where the Playwright entry sits in it (its `command`, and `args` unless the
+# command is a list).
 PIN_ENTRIES: dict[str, tuple[str, ...]] = {
-    "templates/opencode.base.json": ("mcp", "playwright", "command"),
-    "templates/opencode.json": ("mcp", "playwright", "command"),
-    "templates/cursor/mcp/playwright.mcp.json": ("mcpServers", "playwright", "args"),
-    "templates/codex/mcp/playwright.toml": ("mcp_servers", "playwright", "args"),
-    "templates/mcp/copilot.playwright.json": ("args",),
-    "templates/mcp/pi.playwright.json": ("args",),
-    "templates/mcp/kilo.playwright.json": ("command",),
-    "templates/mcp/antigravity.playwright.json": ("args",),
-    "templates/mcp/grok.playwright.json": ("args",),
+    "templates/opencode.base.json": ("mcp", "playwright"),
+    "templates/opencode.json": ("mcp", "playwright"),
+    "templates/cursor/mcp/playwright.mcp.json": ("mcpServers", "playwright"),
+    "templates/codex/mcp/playwright.toml": ("mcp_servers", "playwright"),
+    "templates/mcp/copilot.playwright.json": (),
+    "templates/mcp/pi.playwright.json": (),
+    "templates/mcp/kilo.playwright.json": (),
+    "templates/mcp/antigravity.playwright.json": (),
+    "templates/mcp/grok.playwright.json": (),
 }
 PIN_TEMPLATES = tuple(PIN_ENTRIES)
-# Every entry runs npx with an app-owned empty folder as its project (`--prefix`), filled in per user.
+# Every entry starts the server the same way, folders filled in per user: the absolute shell (no
+# PATH lookup) changes into the app's output folder ($1) and runs npx with the app's empty folder
+# ($0) as its project, so neither the .npmrc, the node_modules nor the node_modules/.bin (`sh`,
+# `node`) of the folder the agent runs in, or of any folder above it, is used.
 NPX_PREFIX_PLACEHOLDER = "__PLAYWRIGHT_NPX_PREFIX_PATH__"
+NPX_OUTPUT_PLACEHOLDER = "__PLAYWRIGHT_OUTPUT_PATH__"
+NPX_SCRIPT = 'cd -- "$1" && shift && exec npx --prefix "$0" -y "$@"'
+NPX_START = ["/bin/sh", "-c", NPX_SCRIPT, NPX_PREFIX_PLACEHOLDER, NPX_OUTPUT_PLACEHOLDER]
 PIN_OUTSIDE_DOCS = ("README.md", "docs/*.md")
 PIN_MAX_AGE_DAYS = 183  # about six months
 
@@ -303,7 +310,8 @@ def playwright_pin(root: Path, files: list[str]) -> list[str]:
 
 
 def entry_arguments(path: Path, location: tuple[str, ...]) -> list[str] | str:
-    """The argument list of the Playwright entry in a template, or a message saying why not."""
+    """The command line of the Playwright entry in a template (its `command` list, or its
+    `command` followed by its `args`), or a message saying why it cannot be read."""
     try:
         text = path.read_text(encoding="utf-8")
         node: object = tomllib.loads(text) if path.suffix == ".toml" else json.loads(text)
@@ -313,9 +321,20 @@ def entry_arguments(path: Path, location: tuple[str, ...]) -> list[str] | str:
         if not isinstance(node, dict) or key not in node:
             return f"has no {'.'.join(location)} entry"
         node = node[key]
-    if not isinstance(node, list) or not all(isinstance(word, str) for word in node):
-        return f"{'.'.join(location)} is not a list of strings"
-    return node
+    if not isinstance(node, dict) or "command" not in node:
+        return f"has no {'.'.join((*location, 'command'))} entry"
+    command = node["command"]
+    if isinstance(command, str):
+        if "args" not in node:
+            return f"has no {'.'.join((*location, 'args'))} entry"
+        words = [command, *node["args"]] if isinstance(node["args"], list) else None
+        name = ".".join((*location, "args"))
+    else:
+        words = command if isinstance(command, list) else None
+        name = ".".join((*location, "command"))
+    if words is None or not all(isinstance(word, str) for word in words):
+        return f"{name} is not a list of strings"
+    return words
 
 
 def pin_entry_errors(path: Path, rel: str, location: tuple[str, ...], version: str) -> list[str]:
@@ -338,10 +357,11 @@ def pin_entry_errors(path: Path, rel: str, location: tuple[str, ...], version: s
             f"{W}{rel}: does not pass `--no-webmcp`: a page could register tools that the model "
             "would see as webmcp_* tools"
         )
-    if ("--prefix", NPX_PREFIX_PLACEHOLDER, "-y") not in list(zip(arguments, arguments[1:], arguments[2:])):
+    if arguments[: len(NPX_START) + 1] != [*NPX_START, f"@playwright/mcp@{version}"]:
         errors.append(
-            f"{W}{rel}: does not pass `--prefix {NPX_PREFIX_PLACEHOLDER}` before `-y`: npx would "
-            "load the .npmrc and node_modules of the folder the agent runs in"
+            f"{W}{rel}: does not start with {[*NPX_START, f'@playwright/mcp@{version}']}: npx would "
+            "load the .npmrc, the "
+            "node_modules or the node_modules/.bin (sh, node) of the folder the agent runs in"
         )
     return errors
 
