@@ -2677,6 +2677,7 @@ fn plan_surfaces(
     attach_rules_details(&mut plan, home);
     attach_mcp_details(&mut plan, home);
     attach_claude_settings_details(&mut plan);
+    attach_opencode_details(&mut plan, ws_root, home, sources.as_ref().ok());
     attach_plan_preview(&mut plan, ws_root, home, &sources)?;
     Ok(plan)
 }
@@ -2747,6 +2748,62 @@ fn attach_claude_settings_details(plan: &mut SetupPlan) {
             "~ ~/.claude/settings.json (hides commit and PR attribution; other keys stay)"
                 .to_string()
         });
+    }
+}
+
+/// The review of an update of the OpenCode config names every managed key the merge changes in
+/// the user's `opencode.json` and `tui.json`, with the value now and the one it becomes
+/// (`opencode_review`), and each other file of the surface it writes.
+fn attach_opencode_details(
+    plan: &mut SetupPlan,
+    workspace_root: &Path,
+    home: &Path,
+    sources: Option<&crate::skill_sources::SkillSources>,
+) {
+    let surface = SetupSurfaceId::OpenCodeConfig;
+    if !plan.operations.iter().any(|op| {
+        matches!(op.surface, SetupSurfaceId::OpenCodeConfig) && op.kind == OperationKind::Update
+    }) {
+        return;
+    }
+    let (Some(sources), Ok(scope)) = (
+        sources,
+        setup_transaction::scope_for_surfaces(&[surface], home),
+    ) else {
+        return;
+    };
+    let Ok(planned) = setup_transaction::plan_artifacts_for_surfaces_with(
+        &[surface],
+        workspace_root,
+        home,
+        &scope,
+        sources,
+    ) else {
+        return;
+    };
+    let details: Vec<String> = planned
+        .iter()
+        .flat_map(|p| {
+            match (
+                p.artifact.resolve_dest(home, workspace_root),
+                p.artifact.resolve_source(sources),
+            ) {
+                (Ok(dest), Some(source)) => crate::opencode_review::artifact_lines(
+                    &p.artifact,
+                    p.kind,
+                    &dest,
+                    &source,
+                    workspace_root,
+                    home,
+                ),
+                _ => Vec::new(),
+            }
+        })
+        .collect();
+    for op in plan.operations.iter_mut().filter(|op| {
+        matches!(op.surface, SetupSurfaceId::OpenCodeConfig) && op.kind == OperationKind::Update
+    }) {
+        op.details = details.clone();
     }
 }
 
@@ -5886,6 +5943,147 @@ mod tests {
                 assert!(!text.contains(marker), "{label} leaked {marker}");
             }
         }
+    }
+
+    // ── OpenCode review lines ──
+
+    fn opencode_op(plan: &SetupPlan) -> &PlannedOperation {
+        plan.operations
+            .iter()
+            .find(|op| matches!(op.surface, SetupSurfaceId::OpenCodeConfig))
+            .expect("the OpenCode config is planned")
+    }
+
+    /// A user's own `opencode.json` and `tui.json` with values for keys Riggverk manages.
+    fn write_own_opencode_profile(env: &TempSetupEnv, playwright: &str, lsp: &str) {
+        let dir = env.home.join(".config/opencode");
+        fs::create_dir_all(&dir).unwrap();
+        let config = format!(
+            r#"{{
+    "$schema": "https://opencode.ai/config.json",
+    "theme": "tokyonight",
+    "model": "anthropic/claude-sonnet-4-5",
+    "default_agent": "build",
+    "share": "manual",
+    "autoupdate": false,
+    "permission": {{
+        "edit": "allow",
+        "bash": {{ "git push*": "ask", "*": "allow" }},
+        "webfetch": "allow"
+    }},
+    "lsp": {lsp},
+    "watcher": {{ "ignore": ["priv/static/**"] }},
+    "mcp": {{
+        "github": {{ "type": "remote", "url": "https://example.invalid/mcp" }},
+        "playwright": {playwright}
+    }}
+}}
+"#
+        );
+        fs::write(dir.join("opencode.json"), config).unwrap();
+        fs::write(
+            dir.join("tui.json"),
+            "{\n  \"theme\": \"gruvbox\",\n  \"mouse\": false\n}\n",
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn opencode_review_names_every_managed_key_the_install_changes() {
+        let env = TempSetupEnv::new("opencode-review-keys");
+        write_own_opencode_profile(
+            &env,
+            r#"{ "type": "local", "command": ["npx", "@playwright/mcp@latest", "--extension"] }"#,
+            r#"{ "elixir-ls": { "command": ["/opt/elixir-ls/language_server.sh"], "extensions": [".ex", ".exs"] } }"#,
+        );
+
+        let plan = preview_setup(vec!["open_code_config".into()]).expect("preview");
+        let op = opencode_op(&plan);
+        assert_eq!(op.kind, OperationKind::Update);
+        assert_eq!(
+            op.details,
+            [
+                "~ opencode.json share (now \"manual\"; becomes \"disabled\")",
+                "~ opencode.json autoupdate (now false; becomes \"notify\")",
+                "~ opencode.json snapshot (not set now; becomes true)",
+                "~ opencode.json default_agent (now \"build\"; becomes \"architect\")",
+                "~ opencode.json lsp (now your settings with 1 entry: elixir-ls; becomes true)",
+                "~ opencode.json compaction (not set now; becomes Riggverk's settings with 3 entries: auto, prune, reserved)",
+                "~ opencode.json watcher (now your settings with 1 entry: ignore; becomes Riggverk's settings with 1 entry: ignore)",
+                "~ opencode.json permission (now your settings with 3 entries: edit, bash, webfetch; becomes Riggverk's settings with 16 entries: *, external_directory, doom_loop, ...)",
+                "~ opencode.json mcp.playwright (your entry is replaced by Riggverk's)",
+                "~ opencode.json agent.plan.permission (not set now; becomes Riggverk's settings with 4 entries: question, plan_exit, task, ...)",
+                "~ opencode.json agent.explore.permission (not set now; becomes Riggverk's settings with 16 entries: *, external_directory, doom_loop, ...)",
+                "~ tui.json $schema (not set now; becomes \"https://opencode.ai/tui.json\")",
+                "~ tui.json theme (now \"gruvbox\"; becomes \"system\")",
+                "~ tui.json leader_timeout (not set now; becomes 2000)",
+                "~ tui.json scroll_acceleration (not set now; becomes Riggverk's settings with 1 entry: enabled)",
+                "~ tui.json diff_style (not set now; becomes \"auto\")",
+                "~ tui.json mouse (now false; becomes true)",
+                "+ ~/.config/playwright-mcp/config.json (new file)",
+            ]
+        );
+
+        // The lines describe the write: what was not listed stays, and the next review is clean.
+        let result = apply_setup(
+            vec!["open_code_config".into()],
+            true,
+            plan.plan_fingerprint.clone(),
+            plan.preview_token.clone(),
+        )
+        .expect("apply");
+        assert!(result.success, "{}", result.message);
+        let installed: serde_json::Value = serde_json::from_str(
+            &fs::read_to_string(env.home.join(".config/opencode/opencode.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(installed["theme"], "tokyonight");
+        assert_eq!(installed["model"], "anthropic/claude-sonnet-4-5");
+        assert_eq!(installed["mcp"]["github"]["type"], "remote");
+        let again = preview_setup(vec!["open_code_config".into()]).expect("preview again");
+        assert!(again.synced.contains(&SetupSurfaceId::OpenCodeConfig));
+        assert!(again.operations.iter().all(|op| op.details.is_empty()));
+    }
+
+    #[test]
+    fn opencode_review_never_shows_a_secret_of_an_mcp_entry_or_an_object_value() {
+        const MCP_SECRET: &str = "sk-live-mcp-secret-0123456789";
+        const LSP_SECRET: &str = "lsp-env-secret-9876543210";
+        let env = TempSetupEnv::new("opencode-review-secret");
+        write_own_opencode_profile(
+            &env,
+            &format!(
+                r#"{{ "type": "local", "command": ["npx", "@playwright/mcp", "--token={MCP_SECRET}"],
+                     "environment": {{ "API_KEY": "{MCP_SECRET}" }},
+                     "headers": {{ "Authorization": "Bearer {MCP_SECRET}" }} }}"#
+            ),
+            &format!(
+                r#"{{ "gopls": {{ "command": ["gopls"], "env": {{ "GOPROXY_TOKEN": "{LSP_SECRET}" }} }} }}"#
+            ),
+        );
+
+        let plan = preview_setup(vec!["open_code_config".into()]).expect("preview");
+        let details = &opencode_op(&plan).details;
+        assert!(details.contains(
+            &"~ opencode.json mcp.playwright (your entry is replaced by Riggverk's)".to_string()
+        ));
+        assert!(details.contains(
+            &"~ opencode.json lsp (now your settings with 1 entry: gopls; becomes true)"
+                .to_string()
+        ));
+        let text = serde_json::to_string(&plan).unwrap();
+        for secret in [MCP_SECRET, LSP_SECRET, "GOPROXY_TOKEN", "API_KEY", "Bearer"] {
+            assert!(!text.contains(secret), "the review shows {secret}");
+        }
+    }
+
+    #[test]
+    fn opencode_review_of_a_fresh_install_has_no_key_lines() {
+        let _env = TempSetupEnv::new("opencode-review-fresh");
+        let plan = preview_setup(vec!["open_code_config".into()]).expect("preview");
+        let op = opencode_op(&plan);
+        assert_eq!(op.kind, OperationKind::Create);
+        assert!(op.details.is_empty(), "{:?}", op.details);
     }
 
     // ── Target gating ──

@@ -1032,7 +1032,17 @@ function plannedOperation(surface: SetupSurfaceId): PlannedOperation {
       ]
       : kind === "update" && surface === "claude_agents"
         ? ["+ create agents/sentinel.md", "~ update agents/verifier.md"]
-        : undefined;
+        : kind === "update" && surface === "open_code_config"
+          // One line per managed key the merge changes in the user's files; objects by shape only.
+          ? [
+            "~ opencode.json share (now \"manual\"; becomes \"disabled\")",
+            "~ opencode.json snapshot (not set now; becomes true)",
+            "~ opencode.json lsp (now your settings with 1 entry: elixir-ls; becomes true)",
+            "~ opencode.json permission (now your settings with 3 entries: edit, bash, webfetch; becomes Riggverk's settings with 16 entries: *, external_directory, doom_loop, ...)",
+            "~ opencode.json mcp.playwright (your entry is replaced by Riggverk's)",
+            "~ tui.json theme (now \"gruvbox\"; becomes \"system\")",
+          ]
+          : undefined;
   return {
     surface,
     kind,
