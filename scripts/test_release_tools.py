@@ -264,6 +264,17 @@ class NotesBundleTests(unittest.TestCase):
             },
         )
 
+    def test_every_parenthesized_pr_reference_is_dropped(self) -> None:
+        notes = (
+            "# Riggverk 2026.10.1\n\n## New\n\n"
+            "- Several at once (#40, #41)\n- A range (#40–#44)\n- Before a colon (#42):\n"
+            "- Wrapped (#1, #2,\n  #3)\n- Issue #5 in prose and (a note) stay\n"
+        )
+        self.assertEqual(
+            generator.parse_notes("2026.10.1", notes)["sections"][0]["items"],
+            ["Several at once", "A range", "Before a colon:", "Wrapped", "Issue #5 in prose and (a note) stay"],
+        )
+
     def test_a_heading_for_another_version_is_refused(self) -> None:
         with self.assertRaises(generator.NotesError):
             generator.parse_notes("2026.10.1", "# Riggverk 2026.10.10\n\n## New\n\n- x\n")

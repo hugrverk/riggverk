@@ -88,10 +88,10 @@ The app installs the Playwright MCP config with the OpenCode config target and r
 
 Security note: Playwright MCP provides privileged browser automation tools. Its documented default tool list includes an unsafe code execution tool, and no stable server-side option to disable only that tool is currently documented. Do not use it on private or authenticated sites unless the runtime agent permissions and prompt scope are appropriate. Isolated sessions do not persist logged-in browser state between runs. Tools that a page registers through WebMCP are off (`--no-webmcp`): their names, descriptions and results come from the page, not from Playwright.
 
-Local MCP checks:
+Local MCP checks. Run the first from an empty folder, as shown: npx reads the `.npmrc` and `node_modules` of the folder it starts in.
 
 ```
-npx -y @playwright/mcp@0.0.83 --help
+(cd "$(mktemp -d)" && npx -y @playwright/mcp@0.0.83 --help)
 opencode mcp list
 ```
 

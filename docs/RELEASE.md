@@ -91,15 +91,17 @@ The app is not notarized (there is no Apple Developer ID yet). Users open the di
 
 ### Rollback
 
-If a publish went wrong, delete the release and its tag, then publish again (the version in `main` is already bumped, so nothing else changes):
+If `publish` stops before the release is public (after the tag or the draft release was made), it prints the commands that clear them. Run them and publish again (the version in `main` is already bumped, so nothing else changes):
 
 ```bash
-gh release delete v<version> --cleanup-tag --yes   # the GitHub release and the remote tag
+gh release delete v<version> --cleanup-tag --yes   # the draft release and the remote tag
 git tag -d v<version>                              # the local tag
 ./scripts/release.sh publish
 ```
 
-A failure after the tag was created prints these commands. A typo in the notes of a published release needs no rollback: `gh release edit v<version> --notes-file release-notes/<version>.md`. If the build itself is wrong, fix it in a pull request and publish with `--allow-newer`, or prepare the next version.
+A published release cannot be redone. With immutable releases on (see Turning on updates), its files and its tag are locked, and deleting the release does not free the tag name: `v<version>` can never be published again. Fix forward: merge the fix and prepare the next version. If the published build must not be installed at all, delete the release with `gh release delete v<version> --yes`; `releases/latest` then answers with the release before it, so installed apps are no longer offered the bad one.
+
+A typo in the notes of a published release needs no rollback, and immutable releases allow it: `gh release edit v<version> --notes-file release-notes/<version>.md`. If the build is wrong and the release is not public yet, fix it in a pull request and publish with `--allow-newer`.
 
 ## Turning on updates
 
