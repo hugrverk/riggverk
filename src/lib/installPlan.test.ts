@@ -116,6 +116,34 @@ describe("buildPlanGroups", () => {
     ]);
   });
 
+  it("reads the OpenCode config's per-key lines as one row per key, a shape in the note kept whole", () => {
+    const opencode = review(
+      [
+        op("open_code_config", "update", {
+          details: [
+            "~ opencode.json lsp (now your settings with 1 entry: elixir-ls; becomes true)",
+            "~ opencode.json snapshot (not set now; becomes true)",
+            "~ opencode.json mcp.playwright (your entry is replaced by Riggverk's)",
+            "~ tui.json theme (now \"gruvbox\"; becomes \"system\")",
+            "+ ~/.config/playwright-mcp/config.json (new file)",
+          ],
+        }),
+      ],
+      ["open_code_config"],
+    );
+    const rows = buildPlanGroups(opencode)[0]!.rows;
+    expect(rows.map(row => [row.kind, row.file, row.note, planRowAgent(row)])).toEqual([
+      ["update", "opencode.json lsp", "now your settings with 1 entry: elixir-ls; becomes true", "opencode"],
+      ["update", "opencode.json snapshot", "not set now; becomes true", "opencode"],
+      ["update", "opencode.json mcp.playwright", "your entry is replaced by Riggverk's", "opencode"],
+      ["update", "tui.json theme", "now \"gruvbox\"; becomes \"system\"", "opencode"],
+      ["create", "~/.config/playwright-mcp/config.json", "new file", "opencode"],
+    ]);
+    // Several keys of one file are one file to write and to back up.
+    expect(planFileCount(rows)).toBe(3);
+    expect(backupSentence(rows)).toBe("2 existing files are backed up before anything is written");
+  });
+
   it("reads a skill the user keeps (=) as a manual row, and points a skill in conflict at the page that resolves it", () => {
     const skills = review(
       [

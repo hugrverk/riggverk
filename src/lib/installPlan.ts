@@ -371,9 +371,24 @@ export function rowFileCount(row: Pick<PlanRow, "note">): number {
   return Number(FILES_IN_NOTE.exec(row.note)?.[1] ?? 1);
 }
 
+/** A row for one key of a JSON file the user keeps ("opencode.json share", `opencode_review.rs`): the file, not the key. */
+const KEY_OF_FILE = /^(\S+\.json) \S+$/;
+
+/** How many files `rows` stand for (`rowFileCount`), a file with a row per changed key counted once. */
+function filesIn(rows: readonly PlanRow[]): number {
+  const keyed = new Set<string>();
+  let total = 0;
+  for (const row of rows) {
+    const file = KEY_OF_FILE.exec(row.file)?.[1];
+    if (file) keyed.add(`${row.surface}:${file}`);
+    else total += rowFileCount(row);
+  }
+  return total + keyed.size;
+}
+
 /** How many files the safe rows write (`rowFileCount`). */
 export function planFileCount(rows: readonly PlanRow[]): number {
-  return rows.filter(row => row.safe).reduce((total, row) => total + rowFileCount(row), 0);
+  return filesIn(rows.filter(row => row.safe));
 }
 
 /**
@@ -381,7 +396,7 @@ export function planFileCount(rows: readonly PlanRow[]): number {
  * remove rows, counted like `planFileCount`).
  */
 export function backupSentence(rows: readonly PlanRow[]): string {
-  const existing = rows.filter(row => row.kind === "update" || row.kind === "remove").reduce((total, row) => total + rowFileCount(row), 0);
+  const existing = filesIn(rows.filter(row => row.kind === "update" || row.kind === "remove"));
   if (existing > 0) return `${plural(existing, "existing file")} ${existing === 1 ? "is" : "are"} backed up before anything is written`;
   return rows.some(row => row.kind === "create") ? "Nothing that exists is overwritten; Undo removes what is created" : "Nothing is written";
 }

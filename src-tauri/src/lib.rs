@@ -24,6 +24,7 @@ mod managed_bootstrap;
 mod managed_state;
 mod mutation_lock;
 mod opencode_precedence;
+mod opencode_review;
 mod opencode_tui;
 mod pack_routing;
 mod path_safety;
