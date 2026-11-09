@@ -933,6 +933,11 @@ fn candidate(
                     "a supporting file the installer cannot represent: {rel}"
                 ));
             }
+            let bytes =
+                fs::read(skill_dir.join(&rel)).map_err(|e| format!("cannot read {rel}: {e}"))?;
+            if crate::skill_discovery::file_hides_or_reorders_text(&bytes) {
+                return Err(crate::skill_discovery::support_file_hides_text(&rel));
+            }
         }
         Ok(skill)
     })();
