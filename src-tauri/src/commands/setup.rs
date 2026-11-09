@@ -2761,11 +2761,9 @@ fn attach_opencode_details(
     sources: Option<&crate::skill_sources::SkillSources>,
 ) {
     let surface = SetupSurfaceId::OpenCodeConfig;
-    if !plan
-        .operations
-        .iter()
-        .any(|op| op.surface == surface && op.kind == OperationKind::Update)
-    {
+    if !plan.operations.iter().any(|op| {
+        matches!(op.surface, SetupSurfaceId::OpenCodeConfig) && op.kind == OperationKind::Update
+    }) {
         return;
     }
     let (Some(sources), Ok(scope)) = (
@@ -2802,11 +2800,9 @@ fn attach_opencode_details(
             }
         })
         .collect();
-    for op in plan
-        .operations
-        .iter_mut()
-        .filter(|op| op.surface == surface && op.kind == OperationKind::Update)
-    {
+    for op in plan.operations.iter_mut().filter(|op| {
+        matches!(op.surface, SetupSurfaceId::OpenCodeConfig) && op.kind == OperationKind::Update
+    }) {
         op.details = details.clone();
     }
 }
@@ -5954,7 +5950,7 @@ mod tests {
     fn opencode_op(plan: &SetupPlan) -> &PlannedOperation {
         plan.operations
             .iter()
-            .find(|op| op.surface == SetupSurfaceId::OpenCodeConfig)
+            .find(|op| matches!(op.surface, SetupSurfaceId::OpenCodeConfig))
             .expect("the OpenCode config is planned")
     }
 
