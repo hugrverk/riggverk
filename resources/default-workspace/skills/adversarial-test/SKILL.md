@@ -41,14 +41,14 @@ Roles: adversary=codex/<model> (default: other family, comparable, preflight ok)
 1. Read the owning code and write down: the task; numbered acceptance criteria (C1, C2, ...), each one testable sentence quoted from the user, issue or spec, or written by you and confirmed with the user when unclear; the public interfaces in scope; the production paths the implementer may change; the full test command and the narrowest command that runs one test file; what is out of scope.
 2. Choose the round's **test file**: one new file per round, at a path the repo's runner collects and in its test style (for example next to the existing tests of that module). Never add adversary tests to an existing test file, so that freezing the file freezes exactly the adversary's tests.
 3. Snapshot the base commit and `git status --porcelain`. Keep briefs and adversary output in a temporary directory outside the repository (`mktemp -d`).
-4. Freeze the existing tests that cover the behaviour: record `git hash-object -- <paths>`. From here on only you change a frozen test, and only to discard one proven wrong, which goes into the ledger.
+4. Freeze the existing tests that cover the behaviour: record `git hash-object -w -- <paths>`. From here on only you change a frozen test, and only to discard one proven wrong, which goes into the ledger.
 
 The current code is the working tree: the user's change, or the base when nothing is implemented yet, in which case the implementer's first turn is the implementation.
 
 ## Each round
 
 1. **Adversary brief.** Fresh agent, cold start. Fill in the brief below with the task, the criteria, the interfaces, the commands, this round's test file, one existing test file as the style example, the diff against the base (`git diff <base>` plus every new untracked file, pasted) and the discarded-with-reason list from earlier rounds. Never add the implementer's reports.
-2. **Mutation guard.** Record `git status --porcelain` and `git diff --stat` before and after the adversary runs. Any change means it wrote to the tree: discard the round, restore the previous state and stop with the diagnostic.
+2. **Mutation guard.** Record `git status --porcelain` and `git diff --stat` before and after the adversary runs. Any change means the adversary wrote to the tree: discard the round, show the user the paths that changed and stop with the diagnostic. Do not reset, clean, stash or check out the tree to undo it; the change under test lives there.
 3. **Qualify** each proposed test on its own: write it into the round's test file and run the one-file command. It qualifies only when all of these hold:
    - it names one criterion and checks only what that criterion says;
    - it fails on the current code and the failure message matches the stated reason. A syntax, import, collection or fixture error disqualifies it, unless the stated reason is that a public interface the criterion requires is missing;
@@ -56,9 +56,9 @@ The current code is the working tree: the user's change, or the base when nothin
    - it goes through public interfaces in the repo's test style, asserts literal expected values from the criterion or a worked example, and mocks only system boundaries (network, clock, randomness, filesystem, database), never code the repository owns;
    - no existing or already qualified test checks the same thing.
    Remove a test that does not qualify and log one line with the reason; it joins the discarded list the next adversary receives. A test that passes is not a finding: discard it.
-4. **Freeze** the qualified tests: record `git hash-object -- <round test file>`. If none qualified, delete the empty test file and stop with Done.
+4. **Freeze** the qualified tests: record `git hash-object -w -- <round test file>`. If none qualified, delete the empty test file and stop with Done.
 5. **Implementer turn.** Send a work order with the criteria, the frozen test paths and their failing output, the production paths in scope, the commands and these rules: change production code only, in the smallest diff that makes the frozen tests pass and keeps the rest green; never edit, skip, delete, weaken or special-case a test, and never detect that tests are running; if a test is impossible to pass or contradicts a criterion or another test, stop and report `BLOCKED: <test> - <evidence>` instead of working around it; report the exact commands run and their results.
-6. **Path guard.** Re-run `git hash-object` on every frozen file and compare `git status --porcelain` with the round's start. A frozen file that changed, or any new or changed test file, is restored and the turn counts as `BLOCKED`. Then run the full test command yourself. A qualified test that still fails goes back to the implementer once with the output; if it fails again, Escalated.
+6. **Path guard.** Re-run `git hash-object` on every frozen file and compare `git status --porcelain` with the round's start. A frozen file that changed is put back from its recorded hash (`git cat-file -p <hash> > <path>`), any other new or changed test file is removed from the implementer's diff, and the turn counts as `BLOCKED`. Then run the full test command yourself. A qualified test that still fails goes back to the implementer once with the output; if it fails again, Escalated.
 7. **Arbitrate `BLOCKED`** against the criteria, and log the decision:
    - the test checks more than, or something other than, its criterion: discard it (delete it, drop its hash, log the evidence);
    - the criteria contradict each other or need a product decision: Escalated, with one batched question to the user;

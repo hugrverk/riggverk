@@ -3201,7 +3201,7 @@ pub fn preview_uninstall() -> Result<UninstallPlanView, String> {
         .collect();
 
     let summary = format!(
-        "{} app-owned file(s) will be removed; {} modified file(s) preserved; {} merged config(s) left in place",
+        "{} app-owned file(s) will be removed; {} file(s) of yours kept; {} merged config(s) left in place",
         removable.len(),
         preserved.len(),
         merged.len()
@@ -6459,5 +6459,277 @@ mod tests {
                 "{label}: nothing may be backed up for a refused plan"
             );
         }
+    }
+
+    // ── A skill is one unit: its SKILL.md decides whose it is ──
+
+    use crate::skill_roots::SkillRoot;
+
+    /// Folders where a user may hold their own copy of a skill the app bundles too.
+    const USER_SKILL_ROOTS: [(&str, SkillRoot); 3] = [
+        (".agents/skills", SkillRoot::Agents),
+        (".claude/skills", SkillRoot::Claude),
+        (".codex/skills", SkillRoot::CodexHome),
+    ];
+
+    fn bundled_skill_dir(env: &TempSetupEnv, name: &str) -> PathBuf {
+        crate::setup_roots::bundled_root_for(&env.ws)
+            .expect("bundled root")
+            .join("skills")
+            .join(name)
+    }
+
+    /// Every file under `dir` with the digest of its bytes, by path relative to `dir`.
+    fn snapshot_files(dir: &Path) -> Vec<(PathBuf, String)> {
+        fn walk(base: &Path, dir: &Path, out: &mut Vec<(PathBuf, String)>) {
+            let Ok(entries) = fs::read_dir(dir) else {
+                return;
+            };
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    walk(base, &path, out);
+                } else {
+                    let rel = path.strip_prefix(base).unwrap().to_path_buf();
+                    out.push((rel, crate::stable_digest::file(&path).unwrap()));
+                }
+            }
+        }
+        let mut out = Vec::new();
+        walk(dir, dir, &mut out);
+        out.sort();
+        out
+    }
+
+    /// Cloudflare's `security-audit` skill as the user installed it from upstream: every file but
+    /// `SKILL.md` is byte-identical to the vendored copy, and upstream has a `README.md` and no
+    /// `UPSTREAM.md`.
+    fn seed_upstream_security_audit(env: &TempSetupEnv, root: &str) -> PathBuf {
+        let source = bundled_skill_dir(env, "security-audit");
+        let dest = env.home.join(root).join("security-audit");
+        fs::create_dir_all(&dest).unwrap();
+        for entry in fs::read_dir(&source).unwrap().flatten() {
+            let name = entry.file_name();
+            if name == "SKILL.md" || name == "UPSTREAM.md" || !entry.path().is_file() {
+                continue;
+            }
+            fs::copy(entry.path(), dest.join(&name)).unwrap();
+        }
+        fs::write(
+            dest.join("SKILL.md"),
+            "---\nname: security-audit\ndescription: the upstream version\n---\n# upstream\n",
+        )
+        .unwrap();
+        fs::write(dest.join("README.md"), "upstream readme\n").unwrap();
+        dest
+    }
+
+    fn install_skills() {
+        let plan = preview_setup(vec!["skills".into()]).expect("preview");
+        let result = apply_setup(
+            vec!["skills".into()],
+            true,
+            plan.plan_fingerprint,
+            plan.preview_token,
+        )
+        .expect("apply");
+        assert!(result.success, "install: {}", result.message);
+    }
+
+    /// Previews a full uninstall and applies it when it removes anything.
+    fn uninstall_all() -> UninstallPlanView {
+        let view = preview_uninstall().expect("preview uninstall");
+        if view.plan_fingerprint.is_some() {
+            let result = apply_uninstall(view.plan_fingerprint.clone(), view.preview_token.clone())
+                .expect("uninstall");
+            assert!(result.success, "uninstall: {}", result.message);
+        }
+        view
+    }
+
+    fn listed_under(items: &[UninstallItem], dir: &Path) -> Vec<String> {
+        items
+            .iter()
+            .filter(|item| Path::new(&item.path).starts_with(dir))
+            .map(|item| item.path.clone())
+            .collect()
+    }
+
+    fn skill_record_identities(root: SkillRoot, skill: &str, names: &[&str]) -> Vec<String> {
+        names
+            .iter()
+            .map(|name| {
+                crate::managed_state::artifact_identity(&ArtifactId::skill_file(
+                    root,
+                    crate::artifact_registry::SkillName::new(skill).unwrap(),
+                    crate::artifact_registry::SkillRelPath::new(*name).unwrap(),
+                ))
+            })
+            .collect()
+    }
+
+    fn recorded(env: &TempSetupEnv, identity: &str) -> bool {
+        crate::managed_state::read_managed_state(&env.ws)
+            .is_some_and(|state| state.artifacts.iter().any(|r| r.identity == identity))
+    }
+
+    #[test]
+    fn uninstall_without_any_install_leaves_a_users_own_skill_whole() {
+        for (root, _) in USER_SKILL_ROOTS {
+            let env = TempSetupEnv::new("unit-uninstall-no-install");
+            let dest = seed_upstream_security_audit(&env, root);
+            let before = snapshot_files(&dest);
+
+            let view = uninstall_all();
+
+            assert_eq!(
+                listed_under(&view.removable, &dest),
+                Vec::<String>::new(),
+                "{root}: {}",
+                view.summary
+            );
+            // Every file the bundle has too is reported as kept, not only the user's SKILL.md.
+            let preserved = listed_under(&view.preserved, &dest);
+            for (rel, _) in &before {
+                if bundled_skill_dir(&env, "security-audit")
+                    .join(rel)
+                    .is_file()
+                {
+                    let path = dest.join(rel).display().to_string();
+                    assert!(preserved.contains(&path), "{root}: {path} not preserved");
+                }
+            }
+            assert_eq!(snapshot_files(&dest), before, "{root}");
+        }
+    }
+
+    #[test]
+    fn install_leaves_a_users_own_skill_untouched_and_uninstall_keeps_it_whole() {
+        for (root, skill_root) in USER_SKILL_ROOTS {
+            let env = TempSetupEnv::new("unit-install-upstream");
+            let dest = seed_upstream_security_audit(&env, root);
+            let before = snapshot_files(&dest);
+
+            install_skills();
+
+            assert_eq!(
+                snapshot_files(&dest),
+                before,
+                "{root}: install wrote into the user's skill"
+            );
+            let mut names: Vec<String> = before
+                .iter()
+                .map(|(rel, _)| rel.display().to_string())
+                .collect();
+            names.push("UPSTREAM.md".to_string());
+            let names: Vec<&str> = names.iter().map(String::as_str).collect();
+            for identity in skill_record_identities(skill_root, "security-audit", &names) {
+                assert!(
+                    !recorded(&env, &identity),
+                    "{root}: install adopted {identity}"
+                );
+            }
+
+            let view = uninstall_all();
+
+            assert!(
+                !view.removable.is_empty(),
+                "{root}: the app's own skills are removable"
+            );
+            assert_eq!(
+                listed_under(&view.removable, &dest),
+                Vec::<String>::new(),
+                "{root}: {}",
+                view.summary
+            );
+            assert_eq!(snapshot_files(&dest), before, "{root}");
+        }
+    }
+
+    #[test]
+    fn install_then_uninstall_on_a_clean_profile_removes_every_installed_skill_file() {
+        let env = TempSetupEnv::new("unit-clean-profile");
+        install_skills();
+        assert!(env
+            .home
+            .join(".agents/skills/security-audit/UPSTREAM.md")
+            .is_file());
+
+        uninstall_all();
+
+        for (root, _) in USER_SKILL_ROOTS {
+            assert_eq!(
+                snapshot_files(&env.home.join(root))
+                    .into_iter()
+                    .map(|(rel, _)| rel)
+                    .collect::<Vec<_>>(),
+                Vec::<PathBuf>::new(),
+                "{root}"
+            );
+        }
+    }
+
+    #[test]
+    fn uninstall_of_an_app_installed_skill_keeps_only_what_the_user_edited_or_added() {
+        let env = TempSetupEnv::new("unit-owned-skill");
+        install_skills();
+        let dir = env.home.join(".agents/skills/security-audit");
+        fs::write(dir.join("HUNTING.md"), "my own hunting notes\n").unwrap();
+        fs::write(dir.join("NOTES.md"), "mine\n").unwrap();
+
+        uninstall_all();
+
+        assert!(!dir.join("SKILL.md").exists());
+        assert!(!dir.join("UPSTREAM.md").exists());
+        assert!(!dir.join("ATTACK-CLASSES.md").exists());
+        assert_eq!(
+            fs::read_to_string(dir.join("HUNTING.md")).unwrap(),
+            "my own hunting notes\n"
+        );
+        assert_eq!(fs::read_to_string(dir.join("NOTES.md")).unwrap(), "mine\n");
+    }
+
+    #[test]
+    fn taking_the_bundled_skill_md_lets_the_next_install_complete_the_skill() {
+        let env = TempSetupEnv::new("unit-take-bundled");
+        let dest = seed_upstream_security_audit(&env, ".agents/skills");
+        install_skills();
+        assert!(!dest.join("UPSTREAM.md").exists());
+
+        let key = format!("skill:{}:security-audit", SkillRoot::Agents.label());
+        let preview = crate::commands::file_conflicts::preview_take_bundled(
+            "skills".into(),
+            vec![key.clone()],
+        )
+        .expect("preview take bundled");
+        let taken = crate::commands::file_conflicts::apply_take_bundled(
+            "skills".into(),
+            vec![key],
+            Some(preview.plan_fingerprint),
+            Some(preview.preview_token),
+        )
+        .expect("take bundled");
+        assert!(taken.success, "take bundled: {}", taken.message);
+        install_skills();
+
+        let bundled = bundled_skill_dir(&env, "security-audit");
+        for (rel, digest) in snapshot_files(&bundled) {
+            assert_eq!(
+                crate::stable_digest::file(&dest.join(&rel)).ok(),
+                Some(digest),
+                "{} not installed",
+                rel.display()
+            );
+        }
+
+        uninstall_all();
+
+        assert_eq!(
+            snapshot_files(&dest)
+                .into_iter()
+                .map(|(rel, _)| rel)
+                .collect::<Vec<_>>(),
+            vec![PathBuf::from("README.md")]
+        );
     }
 }

@@ -87,7 +87,7 @@ Keep `-c core.hooksPath=/dev/null` on every later command in `<wt>` that can wri
    - The same subject on a `<` line and a `>` line means the rewrite was too large to pair: run it again with `--creation-factor=100`.
    - A commit left on a `<` line alone is gone. Rebase skips a commit whose change is already on the base, so confirm that it is there and not lost.
 4. **Read the result.** `git -C <wt> diff <base-remote>/<base>...HEAD`, bounded. Nothing the PR meant to do has disappeared, and nothing the base already has has come back.
-5. **Check.** Tests, install scripts and build steps from the branch run with your access. Read its diff first, including build, test and CI files, and ask before running anything from a PR whose author has no write access to the base repository. Then run the repo's own checks for the touched area, capture each exit status, and separate real failures from ones the base already has.
+5. **Check.** Tests, install scripts and build steps from the branch run with your access. Read its diff first, including build, test and CI files, and ask before running anything from the branch when `isCrossRepository` is true or the author is someone the user does not know. Then run the repo's own checks for the touched area, capture each exit status, and separate real failures from ones the base already has.
 
 ## 5. Inherited work
 

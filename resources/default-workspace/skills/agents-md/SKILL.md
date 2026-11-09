@@ -76,7 +76,7 @@ Done when: every command in the proposed file ran with exit 0 here (or was cut),
 
 ### OpenCode
 
-- OpenCode reads `AGENTS.md`, and falls back to `CLAUDE.md` only when no `AGENTS.md` exists, so the pointer does no harm once the real file exists. Use Explore or repo-scout for the read-only mapping in steps 1 to 3.
+- OpenCode reads `AGENTS.md`, and falls back to `CLAUDE.md` only when no `AGENTS.md` exists, so the pointer does no harm once the real file exists. Use `explore` or `repo-scout` for the read-only mapping in steps 1 to 3.
 
 ### Cursor
 

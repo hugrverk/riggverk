@@ -21,7 +21,7 @@ Done when: every required check is run or listed with a reason, blockers are sep
 ## Process
 
 1. Discover the repo's canonical release gate (`./scripts/release-check.sh`, `npm run verify`, CI workflow, Makefile target) and prefer running it over composing an ad-hoc list. Keep its exit status when you bound its output: a pipe such as `gate | tail` reports the status of `tail`, which is 0 even when the gate failed. Write the output to a file and read the status first (`LOG="$(mktemp)"; gate >"$LOG" 2>&1; echo "exit $? log $LOG"; tail -c 4000 "$LOG"`, as one command, since a shell variable may not survive between tool calls; use the printed path to read more), or run the pipe under `set -o pipefail` in bash or zsh. The gate's own exit code, not the last line it printed, decides pass or fail.
-2. Inspect branch, git status, recent commits, and diff summary: run `git status --short --branch`, `git log --oneline -10` and `git diff --stat`, each piped through `head -c 2000`. Skip this outside a git repository and say so.
+2. Inspect branch, git status, recent commits, and diff summary: run `git status --short --branch`, `git log --oneline -10`, `git diff --stat` (uncommitted work) and `git diff --stat <base>...HEAD` (the branch against the branch it merges into: the default branch unless the user named another; say which you used), each piped through `head -c 2000`. Skip this outside a git repository and say so.
 3. Identify changed areas and risk level.
 4. Check whether migrations, env changes, credentials, scheduled jobs, webhooks, or data backfills are involved.
 5. Run or list required build, lint, test, typecheck, or project verification commands not covered by the canonical gate.

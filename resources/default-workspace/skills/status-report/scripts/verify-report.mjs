@@ -162,7 +162,7 @@ if (htmlPath) {
   scanLeaks("report.html", html);
   if (!/^\s*<!doctype html>/i.test(html)) fail("html: missing <!doctype html>");
   const lang = html.match(/<html[^>]*\blang="([^"]+)"/i)?.[1];
-  if (report && lang !== report.project.language) fail(`html: lang="${lang}" but project.language is ${report.project.language}`);
+  if (report && report.project && lang !== report.project.language) fail(`html: lang="${lang}" but project.language is ${report.project.language}`);
   const leftover = html.match(/\{\{\{?\s*[#^/]?\s*[\w.]+\s*\}?\}\}/);
   if (leftover) fail(`html: unrendered template tag ${leftover[0]}`);
 
