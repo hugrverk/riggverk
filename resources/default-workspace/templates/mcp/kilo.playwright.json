@@ -1,10 +1,11 @@
 {
   "type": "local",
   "command": [
-    "npx",
-    "--prefix",
+    "/bin/sh",
+    "-c",
+    "cd -- \"$1\" && shift && exec npx --prefix \"$0\" -y \"$@\"",
     "__PLAYWRIGHT_NPX_PREFIX_PATH__",
-    "-y",
+    "__PLAYWRIGHT_OUTPUT_PATH__",
     "@playwright/mcp@0.0.83",
     "--browser",
     "chrome",

@@ -286,8 +286,8 @@ pub fn pinned_version(entry: &Value) -> Option<String> {
         .map(str::to_string)
 }
 
-/// The entry the app writes: the bundled template with the Playwright browser folder and the npx
-/// prefix folder filled in.
+/// The entry the app writes: the bundled template with the Playwright browser folder, the npx
+/// prefix folder and the output folder filled in.
 /// The template is scanned for credentials (it is the one text of the app's own that is written
 /// into a file the user keeps secrets in) and must be an object.
 pub fn expected_entry(spec: &LightMcp, bundled_root: &Path, home: &Path) -> Result<Value, String> {
@@ -309,12 +309,15 @@ pub fn expected_entry(spec: &LightMcp, bundled_root: &Path, home: &Path) -> Resu
         .ok_or_else(|| "cannot resolve PLAYWRIGHT_BROWSERS_PATH".to_string())?;
     let npx_prefix = crate::commands::cursor_profile::npx_prefix_path(home)
         .ok_or_else(|| "cannot resolve the npx prefix folder".to_string())?;
+    let output = crate::commands::cursor_profile::playwright_output_path(home)
+        .ok_or_else(|| "cannot resolve the Playwright output folder".to_string())?;
     // The entry has no sidecar flag: the browser is chosen with inline flags.
     let entry = crate::commands::cursor_profile::transform_playwright_template_value(
         &template,
         "",
         &browsers.to_string_lossy(),
         &npx_prefix.to_string_lossy(),
+        &output.to_string_lossy(),
     );
     if entry.to_string().contains(PLACEHOLDER_PREFIX) {
         return Err("MCP entry template has a placeholder the app does not fill".to_string());

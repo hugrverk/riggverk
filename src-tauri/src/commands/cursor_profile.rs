@@ -226,42 +226,96 @@ pub(crate) const PLAYWRIGHT_MCP_VERSION: &str = "0.0.83"; // released 2026-09-28
 pub(crate) const PLAYWRIGHT_MCP_BROWSER_FLAGS: [&str; 4] =
     ["--browser", "chrome", "--isolated", "--no-webmcp"];
 
-/// Every argument list in `value` that holds the pinned package (an entry's `args` or `command`).
+/// The full command line of every entry in `value` that runs the pinned package: its `command`
+/// array, or its `command` followed by its `args`.
 #[cfg(test)]
-pub(crate) fn playwright_argument_lists(value: &serde_json::Value) -> Vec<Vec<String>> {
-    let mut found = Vec::new();
-    match value {
-        serde_json::Value::Array(items) => {
-            let words: Vec<String> = items
+pub(crate) fn playwright_command_lines(value: &serde_json::Value) -> Vec<Vec<String>> {
+    let words = |value: Option<&serde_json::Value>| -> Vec<String> {
+        match value {
+            Some(serde_json::Value::String(word)) => vec![word.clone()],
+            Some(serde_json::Value::Array(items)) => items
                 .iter()
                 .filter_map(|item| item.as_str().map(str::to_string))
-                .collect();
-            if words
-                .iter()
-                .any(|word| word.starts_with("@playwright/mcp@"))
-            {
-                found.push(words);
+                .collect(),
+            _ => Vec::new(),
+        }
+    };
+    match value {
+        serde_json::Value::Object(map) if map.contains_key("command") => {
+            let mut line = words(map.get("command"));
+            line.extend(words(map.get("args")));
+            if line.iter().any(|word| word.starts_with("@playwright/mcp@")) {
+                vec![line]
             } else {
-                for item in items {
-                    found.extend(playwright_argument_lists(item));
-                }
+                Vec::new()
             }
         }
-        serde_json::Value::Object(map) => {
-            for item in map.values() {
-                found.extend(playwright_argument_lists(item));
-            }
-        }
-        _ => {}
+        serde_json::Value::Object(map) => map.values().flat_map(playwright_command_lines).collect(),
+        _ => Vec::new(),
     }
-    found
+}
+
+/// `value` as the app wrote its Playwright entries before they started npx through `/bin/sh` in
+/// the output folder: `npx --prefix <npx prefix> -y <package> <flags...>`, run in whatever folder
+/// the harness starts it in.
+#[cfg(test)]
+pub(crate) fn as_the_npx_prefix_app_wrote_it(value: &serde_json::Value) -> serde_json::Value {
+    // `/bin/sh` with `[-c, <script>, <prefix>, <output>, <rest...>]` ->
+    // `npx` with `[--prefix, <prefix>, -y, <rest...>]`
+    let unwrap = |words: &[serde_json::Value]| -> Option<Vec<serde_json::Value>> {
+        match words {
+            [c, script, prefix, _output, rest @ ..]
+                if c == "-c" && script == PLAYWRIGHT_NPX_SCRIPT =>
+            {
+                let mut out = vec!["--prefix".into(), prefix.clone(), "-y".into()];
+                out.extend_from_slice(rest);
+                Some(out)
+            }
+            _ => None,
+        }
+    };
+    match value {
+        serde_json::Value::Object(map) if map.get("command").is_some_and(|c| c == "/bin/sh") => {
+            let mut out = map.clone();
+            let args = map.get("args").and_then(serde_json::Value::as_array);
+            if let Some(args) = args.and_then(|args| unwrap(args)) {
+                out.insert("command".into(), "npx".into());
+                out.insert("args".into(), serde_json::Value::Array(args));
+            }
+            serde_json::Value::Object(out)
+        }
+        serde_json::Value::Array(items)
+            if items.first().is_some_and(|first| first == "/bin/sh") =>
+        {
+            match unwrap(&items[1..]) {
+                Some(rest) => {
+                    serde_json::Value::Array(std::iter::once("npx".into()).chain(rest).collect())
+                }
+                None => value.clone(),
+            }
+        }
+        serde_json::Value::Array(items) => {
+            serde_json::Value::Array(items.iter().map(as_the_npx_prefix_app_wrote_it).collect())
+        }
+        serde_json::Value::Object(map) => serde_json::Value::Object(
+            map.iter()
+                .map(|(key, item)| (key.clone(), as_the_npx_prefix_app_wrote_it(item)))
+                .collect(),
+        ),
+        other => other.clone(),
+    }
 }
 
 /// `value` as the previous app wrote its Playwright entries: the 0.0.48 pin and the flags of
 /// that time. The OpenCode and Cursor entries had only `--config`; the light entries had
-/// `--browser chrome --isolated`. No entry had `--prefix`.
+/// `--browser chrome --isolated`. No entry had `--prefix` or the `/bin/sh` start.
 #[cfg(test)]
 pub(crate) fn as_the_previous_app_wrote_it(value: &serde_json::Value) -> serde_json::Value {
+    with_the_old_pin_and_no_prefix(&as_the_npx_prefix_app_wrote_it(value))
+}
+
+#[cfg(test)]
+fn with_the_old_pin_and_no_prefix(value: &serde_json::Value) -> serde_json::Value {
     match value {
         serde_json::Value::Array(items)
             if items.iter().any(|item| {
@@ -288,11 +342,11 @@ pub(crate) fn as_the_previous_app_wrote_it(value: &serde_json::Value) -> serde_j
             serde_json::Value::Array(out)
         }
         serde_json::Value::Array(items) => {
-            serde_json::Value::Array(items.iter().map(as_the_previous_app_wrote_it).collect())
+            serde_json::Value::Array(items.iter().map(with_the_old_pin_and_no_prefix).collect())
         }
         serde_json::Value::Object(map) => serde_json::Value::Object(
             map.iter()
-                .map(|(key, item)| (key.clone(), as_the_previous_app_wrote_it(item)))
+                .map(|(key, item)| (key.clone(), with_the_old_pin_and_no_prefix(item)))
                 .collect(),
         ),
         other => other.clone(),
@@ -338,6 +392,20 @@ pub(crate) const PLAYWRIGHT_NPX_PREFIX_PLACEHOLDER: &str = "__PLAYWRIGHT_NPX_PRE
 /// Name of that folder in the app data dir.
 pub(crate) const NPX_PREFIX_DIR_NAME: &str = "npx-prefix";
 
+/// Placeholder of the folder every Playwright entry starts npx in.
+pub(crate) const PLAYWRIGHT_OUTPUT_PLACEHOLDER: &str = "__PLAYWRIGHT_OUTPUT_PATH__";
+
+/// Name of that folder in the app data dir.
+pub(crate) const PLAYWRIGHT_OUTPUT_DIR_NAME: &str = "playwright-output";
+
+/// How every entry starts the server: `/bin/sh` with the arguments `-c`, this, the npx prefix
+/// folder, the output folder, the package and its flags. The shell changes into the output folder and runs
+/// `npx --prefix <npx prefix> -y <package> <flags...>`; `/bin/sh` is absolute, so no `PATH`
+/// lookup picks the shell.
+#[cfg(test)]
+pub(crate) const PLAYWRIGHT_NPX_SCRIPT: &str =
+    r#"cd -- "$1" && shift && exec npx --prefix "$0" -y "$@""#;
+
 /// The folder every Playwright entry passes to `npx --prefix`: an empty, owner-only folder in the
 /// app data dir that the app never writes into. Without it npm takes the nearest folder with a
 /// `package.json` or `node_modules` (usually the repository the agent works in) as the project,
@@ -346,6 +414,21 @@ pub(crate) const NPX_PREFIX_DIR_NAME: &str = "npx-prefix";
 /// `None` when the app data dir is not an absolute path: a relative prefix would resolve against
 /// the agent's working folder again.
 pub(crate) fn npx_prefix_path(home: &Path) -> Option<PathBuf> {
+    app_data_child(home, NPX_PREFIX_DIR_NAME)
+}
+
+/// The folder every Playwright entry starts npx in, next to the npx prefix folder. npm puts the
+/// `node_modules/.bin` of the working folder and of each folder above it first on the `PATH` of
+/// the package's bin, which it starts through a bare `sh`: started in a repository, an executable
+/// `node_modules/.bin/sh` or `node` of that repository would run. From here the walk reaches only
+/// the app's and the user's own folders. It is also the server's workspace when the client sends
+/// no MCP roots, so its `.playwright-mcp` outputs and the files it saves under a given name land
+/// here, never in the npx prefix folder, whose `.npmrc` and `node_modules` npm reads.
+pub(crate) fn playwright_output_path(home: &Path) -> Option<PathBuf> {
+    app_data_child(home, PLAYWRIGHT_OUTPUT_DIR_NAME)
+}
+
+fn app_data_child(home: &Path, name: &str) -> Option<PathBuf> {
     let home = home.to_string_lossy().into_owned();
     let env = crate::platform_paths::PlatformEnv {
         home: Some(home.clone()),
@@ -355,20 +438,22 @@ pub(crate) fn npx_prefix_path(home: &Path) -> Option<PathBuf> {
     let dir =
         crate::platform_paths::app_support_dir(&env, crate::platform_paths::Platform::current())
             .ok()?
-            .join(NPX_PREFIX_DIR_NAME);
+            .join(name);
     dir.is_absolute().then_some(dir)
 }
 
-/// Creates the npx prefix folder, owner-only (0700), when an MCP entry is installed. An existing
-/// folder is kept as it is, and nothing is written into it.
-pub(crate) fn ensure_npx_prefix_dir(home: &Path) -> Result<PathBuf, String> {
-    let dir = npx_prefix_path(home)
-        .ok_or_else(|| "cannot resolve the npx prefix folder in the app data dir".to_string())?;
-    if let Some(app_data) = dir.parent() {
-        crate::safe_filesystem::create_private_leaf_directory(app_data)?;
+/// Creates the npx prefix folder and the output folder, owner-only (0700), when an MCP entry is
+/// installed. An existing folder is kept as it is, and the app writes nothing into either.
+pub(crate) fn ensure_npx_dirs(home: &Path) -> Result<(), String> {
+    for dir in [npx_prefix_path(home), playwright_output_path(home)] {
+        let dir =
+            dir.ok_or_else(|| "cannot resolve the npx folders in the app data dir".to_string())?;
+        if let Some(app_data) = dir.parent() {
+            crate::safe_filesystem::create_private_leaf_directory(app_data)?;
+        }
+        crate::safe_filesystem::create_private_leaf_directory(&dir)?;
     }
-    crate::safe_filesystem::create_private_leaf_directory(&dir)?;
-    Ok(dir)
+    Ok(())
 }
 
 pub(crate) fn transform_playwright_template_value(
@@ -376,6 +461,7 @@ pub(crate) fn transform_playwright_template_value(
     config_path: &str,
     browsers_path: &str,
     npx_prefix: &str,
+    output_dir: &str,
 ) -> serde_json::Value {
     match value {
         serde_json::Value::Object(map) => {
@@ -388,6 +474,7 @@ pub(crate) fn transform_playwright_template_value(
                         config_path,
                         browsers_path,
                         npx_prefix,
+                        output_dir,
                     ),
                 );
             }
@@ -402,6 +489,7 @@ pub(crate) fn transform_playwright_template_value(
                         config_path,
                         browsers_path,
                         npx_prefix,
+                        output_dir,
                     )
                 })
                 .collect(),
@@ -413,6 +501,8 @@ pub(crate) fn transform_playwright_template_value(
                 serde_json::Value::String(browsers_path.to_string())
             } else if text == PLAYWRIGHT_NPX_PREFIX_PLACEHOLDER {
                 serde_json::Value::String(npx_prefix.to_string())
+            } else if text == PLAYWRIGHT_OUTPUT_PLACEHOLDER {
+                serde_json::Value::String(output_dir.to_string())
             } else if text.starts_with("@playwright/mcp@") {
                 serde_json::Value::String(format!("@playwright/mcp@{PLAYWRIGHT_MCP_VERSION}"))
             } else {
@@ -449,6 +539,9 @@ fn global_mcp_status(
     let Some(npx_prefix) = npx_prefix_path(&paths.user_home) else {
         return "unsupported-platform".into();
     };
+    let Some(output_dir) = playwright_output_path(&paths.user_home) else {
+        return "unsupported-platform".into();
+    };
     let config_path = default_playwright_mcp_config_path(&paths.user_home);
     let expected = template_parsed
         .get("mcpServers")
@@ -460,6 +553,7 @@ fn global_mcp_status(
                 &config_path.to_string_lossy(),
                 &browsers_path.to_string_lossy(),
                 &npx_prefix.to_string_lossy(),
+                &output_dir.to_string_lossy(),
             )
         });
     let Some(expected) = expected else {
@@ -771,10 +865,12 @@ mod tests {
         )
         .expect("rendered OpenCode config");
         let opencode_prefix = npx_prefix_path(home).expect("npx prefix");
+        let opencode_output = playwright_output_path(home).expect("output folder");
         let mut rendered = vec![(
             "opencode",
             opencode,
             opencode_prefix.to_string_lossy().into_owned(),
+            opencode_output.to_string_lossy().into_owned(),
         )];
         for (name, rel) in [
             ("cursor", "templates/cursor/mcp/playwright.mcp.json"),
@@ -791,23 +887,30 @@ mod tests {
                     "/cfg.json",
                     "/browsers",
                     "/prefix",
+                    "/output",
                 ),
                 "/prefix".to_string(),
+                "/output".to_string(),
             ));
         }
-        for (name, entry, prefix) in rendered {
-            let lists = playwright_argument_lists(&entry);
+        for (name, entry, prefix, output) in rendered {
+            let lists = playwright_command_lines(&entry);
             assert_eq!(lists.len(), 1, "{name}: {entry}");
             let words: Vec<&str> = lists[0].iter().map(String::as_str).collect();
-            // npx runs from the app's empty folder, not the agent's project, before `-y` and the
-            // package (the OpenCode and Kilo `command` starts with `npx` itself).
-            let at = words
-                .iter()
-                .position(|word| *word == "--prefix")
-                .unwrap_or_else(|| panic!("{name}: no --prefix in {words:?}"));
-            assert!(at <= 1, "{name}: {words:?}");
-            assert_eq!(words[at + 1], prefix, "{name}: {words:?}");
-            assert_eq!(words[at + 2], "-y", "{name}: {words:?}");
+            // The absolute shell starts npx in the app's output folder with the app's empty
+            // prefix folder as its project, never in or from the agent's project.
+            assert_eq!(
+                words[..6],
+                [
+                    "/bin/sh",
+                    "-c",
+                    PLAYWRIGHT_NPX_SCRIPT,
+                    prefix.as_str(),
+                    output.as_str(),
+                    format!("@playwright/mcp@{PLAYWRIGHT_MCP_VERSION}").as_str(),
+                ],
+                "{name}: {words:?}"
+            );
             assert!(
                 !entry.to_string().contains("__PLAYWRIGHT_"),
                 "{name}: {entry}"
@@ -834,31 +937,96 @@ mod tests {
             .collect::<Vec<_>>()
             .join(", ");
         assert!(codex.contains(&flags), "{codex}");
+        assert!(codex.contains(r#"command = "/bin/sh""#), "{codex}");
         assert!(
-            codex.contains(r#"args = ["--prefix", "__PLAYWRIGHT_NPX_PREFIX_PATH__", "-y", "#),
+            codex.contains(&format!(
+                r#"args = ["-c", '{PLAYWRIGHT_NPX_SCRIPT}', "__PLAYWRIGHT_NPX_PREFIX_PATH__", "__PLAYWRIGHT_OUTPUT_PATH__", "@playwright/mcp@{PLAYWRIGHT_MCP_VERSION}", "#
+            )),
             "{codex}"
         );
     }
 
     #[test]
-    fn the_npx_prefix_is_an_absolute_folder_in_the_app_data_dir() {
+    fn the_npx_folders_are_absolute_folders_in_the_app_data_dir() {
         let home = Path::new("/home/someone");
-        let prefix = npx_prefix_path(home).expect("npx prefix");
-        assert!(prefix.is_absolute(), "{}", prefix.display());
-        assert!(prefix.ends_with(
-            Path::new(crate::platform_paths::APP_DATA_DIR_NAME).join(NPX_PREFIX_DIR_NAME)
-        ));
-        if cfg!(target_os = "macos") {
-            assert_eq!(
-                prefix,
-                home.join("Library/Application Support/se.hugrverk.riggverk/npx-prefix")
-            );
+        for (dir, name) in [
+            (npx_prefix_path(home), NPX_PREFIX_DIR_NAME),
+            (playwright_output_path(home), PLAYWRIGHT_OUTPUT_DIR_NAME),
+        ] {
+            let dir = dir.expect("folder");
+            assert!(dir.is_absolute(), "{}", dir.display());
+            assert!(dir.ends_with(Path::new(crate::platform_paths::APP_DATA_DIR_NAME).join(name)));
+            if cfg!(target_os = "macos") {
+                assert_eq!(
+                    dir,
+                    home.join("Library/Application Support/se.hugrverk.riggverk")
+                        .join(name)
+                );
+            }
         }
+    }
+
+    /// The script the entries pass to `/bin/sh`, run by the real shell: it starts `npx` in the
+    /// output folder with the prefix folder as `--prefix`, and passes the package and its flags
+    /// on unchanged, a path with a space included.
+    #[cfg(unix)]
+    #[test]
+    fn the_npx_script_starts_npx_in_the_output_folder_with_the_prefix() {
+        use std::os::unix::fs::PermissionsExt;
+        let base = std::env::temp_dir().join(format!(
+            "aw-npx-script-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let bin = base.join("bin");
+        let prefix = base.join("app data/npx-prefix");
+        let output = base.join("app data/playwright-output");
+        for dir in [&bin, &prefix, &output] {
+            std::fs::create_dir_all(dir).unwrap();
+        }
+        // A stand-in `npx` that prints its working folder and its arguments, one per line.
+        let npx = bin.join("npx");
+        std::fs::write(
+            &npx,
+            "#!/bin/sh\npwd -P\nfor a in \"$@\"; do echo \"$a\"; done\n",
+        )
+        .unwrap();
+        std::fs::set_permissions(&npx, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let ran = std::process::Command::new("/bin/sh")
+            .args(["-c", PLAYWRIGHT_NPX_SCRIPT])
+            .arg(&prefix)
+            .arg(&output)
+            .args(["@playwright/mcp@0.0.83", "--browser", "chrome", "--a b"])
+            .current_dir(&base)
+            .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+            .output()
+            .expect("run /bin/sh");
+        assert!(ran.status.success(), "{ran:?}");
+        let printed = String::from_utf8(ran.stdout).unwrap();
+        let lines: Vec<&str> = printed.lines().collect();
+        let output_real = output.canonicalize().unwrap();
+        let prefix_text = prefix.to_string_lossy();
+        assert_eq!(
+            lines,
+            [
+                output_real.to_str().unwrap(),
+                "--prefix",
+                prefix_text.as_ref(),
+                "-y",
+                "@playwright/mcp@0.0.83",
+                "--browser",
+                "chrome",
+                "--a b",
+            ]
+        );
+        let _ = std::fs::remove_dir_all(&base);
     }
 
     #[cfg(unix)]
     #[test]
-    fn the_npx_prefix_folder_is_created_owner_only_and_left_empty() {
+    fn the_npx_folders_are_created_owner_only_and_left_empty() {
         use std::os::unix::fs::PermissionsExt;
         let _env = crate::test_env::guard::lock();
         let _restore = crate::test_env::guard::isolate_data_location_env();
@@ -872,33 +1040,53 @@ mod tests {
         let home = base.join("home");
         std::fs::create_dir_all(&home).unwrap();
         crate::test_env::set_test_user_dirs(&home);
-        let dir = ensure_npx_prefix_dir(&home).expect("create");
-        assert_eq!(Some(dir.clone()), npx_prefix_path(&home));
-        assert!(dir.starts_with(&base), "{}", dir.display());
+        ensure_npx_dirs(&home).expect("create");
         let mode = |path: &Path| std::fs::metadata(path).unwrap().permissions().mode() & 0o777;
-        assert_eq!(mode(&dir), 0o700);
-        assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 0);
-        // A second install keeps the folder.
-        assert_eq!(ensure_npx_prefix_dir(&home).expect("again"), dir);
-        assert_eq!(mode(&dir), 0o700);
+        let dirs = [npx_prefix_path(&home), playwright_output_path(&home)].map(Option::unwrap);
+        for dir in &dirs {
+            assert!(dir.starts_with(&base), "{}", dir.display());
+            assert_eq!(mode(dir), 0o700);
+            assert_eq!(std::fs::read_dir(dir).unwrap().count(), 0);
+        }
+        // A second install keeps the folders.
+        ensure_npx_dirs(&home).expect("again");
+        for dir in &dirs {
+            assert_eq!(mode(dir), 0o700);
+        }
         let _ = std::fs::remove_dir_all(&base);
     }
 
     #[test]
-    fn the_previous_app_wrote_the_old_pin_and_flags() {
+    fn the_older_apps_wrote_the_npx_prefix_only_and_before_that_the_old_pin_and_flags() {
+        let script = PLAYWRIGHT_NPX_SCRIPT;
         let entry = serde_json::json!({
-            "opencode": ["npx", "--prefix", "/p", "-y", "@playwright/mcp@0.0.83", "--config",
-                "c.json", "--browser", "chrome", "--isolated", "--no-webmcp"],
-            "light": ["--prefix", "/p", "-y", "@playwright/mcp@0.0.83", "--browser", "chrome",
-                "--isolated", "--no-webmcp"],
-            "other": ["npx", "-y", "other@1.0.0", "--no-webmcp"],
+            "opencode": {"command": ["/bin/sh", "-c", script, "/p", "/o",
+                "@playwright/mcp@0.0.83", "--config", "c.json", "--browser", "chrome",
+                "--isolated", "--no-webmcp"]},
+            "light": {"command": "/bin/sh", "args": ["-c", script, "/p", "/o",
+                "@playwright/mcp@0.0.83", "--browser", "chrome", "--isolated", "--no-webmcp"],
+                "env": {}},
+            "other": {"command": ["npx", "-y", "other@1.0.0", "--no-webmcp"]},
         });
+        assert_eq!(
+            as_the_npx_prefix_app_wrote_it(&entry),
+            serde_json::json!({
+                "opencode": {"command": ["npx", "--prefix", "/p", "-y", "@playwright/mcp@0.0.83",
+                    "--config", "c.json", "--browser", "chrome", "--isolated", "--no-webmcp"]},
+                "light": {"command": "npx", "args": ["--prefix", "/p", "-y",
+                    "@playwright/mcp@0.0.83", "--browser", "chrome", "--isolated",
+                    "--no-webmcp"], "env": {}},
+                "other": {"command": ["npx", "-y", "other@1.0.0", "--no-webmcp"]},
+            })
+        );
         assert_eq!(
             as_the_previous_app_wrote_it(&entry),
             serde_json::json!({
-                "opencode": ["npx", "-y", "@playwright/mcp@0.0.48", "--config", "c.json"],
-                "light": ["-y", "@playwright/mcp@0.0.48", "--browser", "chrome", "--isolated"],
-                "other": ["npx", "-y", "other@1.0.0", "--no-webmcp"],
+                "opencode": {"command": ["npx", "-y", "@playwright/mcp@0.0.48", "--config",
+                    "c.json"]},
+                "light": {"command": "npx", "args": ["-y", "@playwright/mcp@0.0.48", "--browser",
+                    "chrome", "--isolated"], "env": {}},
+                "other": {"command": ["npx", "-y", "other@1.0.0", "--no-webmcp"]},
             })
         );
     }
