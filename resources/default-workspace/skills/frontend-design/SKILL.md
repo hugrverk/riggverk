@@ -11,7 +11,7 @@ metadata:
 
 # Frontend Design
 
-Done when: the design thesis is stated, every listed state was rendered and checked at two or more viewports, and body-text contrast was verified.
+Done when: the design thesis is stated, each state the change touches was rendered and checked at two or more viewports, and body-text contrast was verified; anything not rendered is reported as Not verified.
 
 ## Mode
 

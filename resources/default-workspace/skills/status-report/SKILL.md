@@ -13,7 +13,7 @@ metadata:
 
 # Status Report
 
-Produces one self-contained HTML file that shows a developer, lead or stakeholder what happened, what is happening and what comes next in a project during a period, with every statement backed by cited evidence. Not for release notes, PR descriptions or a short status reply in chat. Requests in any language for a status report mean this skill.
+Produces one HTML file (no dependencies beyond an optional web-font load) that shows a developer, lead or stakeholder what happened, what is happening and what comes next in a project during a period, with every statement backed by cited evidence. Not for release notes, PR descriptions or a short status reply in chat. Requests in any language for a status report mean this skill.
 
 Done when: `report.json` and the HTML pass `verify-report.mjs`, the file is outside version control, and the user has the path plus a three-line summary that names the gaps.
 
@@ -109,6 +109,6 @@ All copy in `report.json` is in the user's language, and `project.language` foll
 
 Claude Code runs the commands below when the skill loads; in other harnesses they appear as plain text, so run them yourself.
 
-- Default branch: !`git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null`
+- Default branch ref (this is `origin/<default>`): !`git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null`
 - Latest tags: !`git tag --list --sort=-creatordate 2>/dev/null | head -5`
 - Recent commits: !`git log --oneline -10 2>/dev/null | head -c 800`

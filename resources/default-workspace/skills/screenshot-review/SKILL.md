@@ -47,4 +47,3 @@ Done when: each issue has a root-cause hypothesis, a likely file, and a verifica
 - Do not redesign the product from one screenshot.
 - Do not claim browser verification from screenshot review alone.
 - Do not invent design tokens if existing tokens fit.
-- Do not optimize only for novelty.
