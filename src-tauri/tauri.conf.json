@@ -48,5 +48,14 @@
       "icons/icon.ico",
       "macos/Riggverk.icon"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDlFRUFCNjU2QkU5OTIyRjQKUldUMElwbStWcmJxbm1OUE8vWDg3OW1IZVlPZzJTRGZUV1U3Yis1WCsxNWduOUNCTE5KUmhwck0K",
+      "endpoints": [
+        "https://github.com/hugrverk/riggverk/releases/latest/download/latest.json"
+      ],
+      "requireSignedVersion": true
+    }
   }
 }

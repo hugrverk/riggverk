@@ -329,14 +329,16 @@ class UpdaterTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             conf = json.loads((ROOT / "src-tauri/tauri.conf.json").read_text(encoding="utf-8"))
-            if updater is not None:
+            if updater is None:
+                conf.pop("plugins", None)
+            else:
                 conf.setdefault("plugins", {})["updater"] = updater
             (root / "src-tauri").mkdir()
             (root / "src-tauri/tauri.conf.json").write_text(json.dumps(conf), encoding="utf-8")
             return tools.updater_config(root)
 
-    def test_the_shipped_config_has_updates_off(self) -> None:
-        self.assertIsNone(tools.updater_config())
+    def test_the_shipped_config_turns_updates_on_for_the_release_repo(self) -> None:
+        self.assertEqual(tools.updater_config(), "hugrverk/riggverk")
 
     def test_a_complete_strict_config_names_the_release_repo(self) -> None:
         self.assertEqual(self.config(ON), "hugrverk/riggverk")
