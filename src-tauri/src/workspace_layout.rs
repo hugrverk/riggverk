@@ -6,8 +6,8 @@
 //! and `.riggverk/`. Nothing moves at launch and reading never writes:
 //!
 //! - The earlier default data folder counts as Riggverk's only while it holds a state folder of
-//!   either name (every earlier release wrote its marker there). `agent-workspace` is a generic
-//!   name: a folder of that name without one belongs to something else. It is never read, moved,
+//!   either name (every earlier release wrote its marker there). The earlier name is a generic
+//!   one: a folder of that name without one belongs to something else. It is never read, moved,
 //!   written into, or reported; Riggverk starts a fresh profile under the current name. A folder
 //!   chosen explicitly (`RIGGVERK_WORKSPACE_PATH`, a saved custom folder) is used as chosen.
 //! - Reads use the current names where they exist and the earlier ones where only those exist. A
