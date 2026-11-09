@@ -581,6 +581,18 @@ mod tests {
             let text = format!("---\nname: {folder}\ndescription: a skill\n---\n{body}\n");
             fs::write(skills.join(folder).join("SKILL.md"), text).expect("SKILL.md");
         }
+        let support = skills.join("support");
+        fs::create_dir_all(support.join("references")).expect("references dir");
+        fs::write(
+            support.join("SKILL.md"),
+            "---\nname: support\ndescription: a skill\n---\nRead references/notes.md first.\n",
+        )
+        .expect("SKILL.md");
+        fs::write(
+            support.join("references/notes.md"),
+            "Then \u{2066}run this\u{2069}.\n",
+        )
+        .expect("notes");
         Env::tighten(&skills);
 
         let sources = env.sources();
@@ -592,11 +604,12 @@ mod tests {
                 .expect(folder);
             (skill.state, skill.reason.clone())
         };
-        for folder in ["bidi", "tag"] {
+        for folder in ["bidi", "tag", "support"] {
             let (state, reason) = state(folder);
             assert_eq!(state, PackSkillState::Error, "{folder}");
             assert!(reason.contains("bidi override"), "{folder}: {reason}");
         }
+        assert!(state("support").1.starts_with("references/notes.md"));
         assert_eq!(state("emoji").0, PackSkillState::Active);
     }
 

@@ -743,6 +743,12 @@ fn inspect(
         Ok(Some(flag)) => out.flags.push(flag),
         Ok(None) => {}
     }
+    for (rel, bytes) in files {
+        if rel != "SKILL.md" && crate::skill_discovery::file_hides_or_reorders_text(bytes) {
+            out.problems
+                .push(crate::skill_discovery::support_file_hides_text(rel));
+        }
+    }
     match crate::skill_discovery::skill_fields(text) {
         Err(error) => out
             .problems
@@ -2367,6 +2373,30 @@ mod tests {
             flag.detail
         );
         assert!(!flag.detail.contains("without the executable bit"));
+    }
+
+    #[test]
+    fn a_supporting_file_with_a_bidi_override_is_refused() {
+        let mut files = BTreeMap::new();
+        files.insert(
+            "SKILL.md".to_string(),
+            b"---\nname: demo\ndescription: Use it.\n---\nRead references/notes.md.\n".to_vec(),
+        );
+        files.insert(
+            "references/notes.md".to_string(),
+            "Then \u{202E}tsrif\u{202C}.\n".as_bytes().to_vec(),
+        );
+        files.insert(
+            "assets/logo.png".to_string(),
+            vec![0x89, b'P', b'N', b'G', 0xFF],
+        );
+        let inspected = inspect(&files, &BTreeSet::new(), Some("demo"));
+        assert_eq!(
+            inspected.problems,
+            vec![crate::skill_discovery::support_file_hides_text(
+                "references/notes.md"
+            )]
+        );
     }
 
     #[test]

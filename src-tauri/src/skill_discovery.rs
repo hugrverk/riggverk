@@ -352,6 +352,17 @@ pub(crate) fn hides_or_reorders_text(c: char) -> bool {
         || (0x2066..=0x2069).contains(&code)
 }
 
+/// Whether a supporting file is UTF-8 text with a character of [`hides_or_reorders_text`]. A skill
+/// can tell the agent to read any of its files, so they get the same check as `SKILL.md`.
+pub(crate) fn file_hides_or_reorders_text(bytes: &[u8]) -> bool {
+    std::str::from_utf8(bytes).is_ok_and(|text| text.contains(hides_or_reorders_text))
+}
+
+/// The refusal for a supporting file that [`file_hides_or_reorders_text`].
+pub(crate) fn support_file_hides_text(rel: &str) -> String {
+    format!("{rel} holds hidden Unicode tag or bidi override characters, which can hide or reorder text")
+}
+
 pub(crate) fn read_skill_md_capped(skill_md: &Path) -> Result<String, String> {
     use std::io::Read;
     let file =
