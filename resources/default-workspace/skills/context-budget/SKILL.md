@@ -29,7 +29,6 @@ Done when: each recommendation names the file, measured bytes saved, behavior ri
    - Agent prompts.
    - Docs.
    - Tool/MCP config.
-   - App default workspace resources.
 2. Measure the always-loaded surface first: rules files, skill `description` text, agent descriptions, tool schemas. Bodies load on demand and rank lower.
    - Count bytes (`wc -c`), files, and lines; estimate tokens only as an estimate.
    - Note always-loaded vs optional or on-demand content.
@@ -78,5 +77,5 @@ Done when: each recommendation names the file, measured bytes saved, behavior ri
 
 - Do not optimize away critical safety, security, verification, or repository instructions.
 - Do not make broad deletions automatically unless explicitly asked.
-- Do not focus only on one agent; Riggverk is agent-agnostic.
+- Do not audit one harness's copy only when the same rules or skills are installed for several agents.
 - Do not claim token savings are exact unless measured with a tokenizer.
