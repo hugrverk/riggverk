@@ -659,7 +659,10 @@ mod tests {
         let env = Home::new("keys");
         let key = |path: &Path| workspace_key(path).expect("key");
         let (earlier, current) = (env.legacy_ws(), env.new_ws());
+        // Without a state folder it is not Riggverk's folder: never the default workspace.
         fs::create_dir_all(&earlier).unwrap();
+        assert_eq!(key(&earlier), earlier.to_string_lossy());
+        fs::create_dir_all(earlier.join(LEGACY_STATE)).unwrap();
 
         // The default folder waiting for its first move is the same workspace as after it.
         assert_eq!(key(&earlier), key(&current));
@@ -669,7 +672,6 @@ mod tests {
         assert_eq!(key(&earlier), earlier.to_string_lossy());
         unsafe { std::env::remove_var("RIGGVERK_WORKSPACE_PATH") };
         let saved = earlier.to_string_lossy().into_owned();
-        fs::create_dir_all(earlier.join(LEGACY_STATE)).unwrap();
         fs::write(
             earlier.join(LEGACY_STATE).join("workspace.json"),
             MARKER_JSON,
@@ -1017,5 +1019,69 @@ mod tests {
         assert!(fs::read_to_string(env.claude_file())
             .unwrap()
             .starts_with(NEW_BEGIN));
+    }
+
+    // ── a folder under the earlier name that Riggverk never used ──
+
+    /// A folder at the earlier default path that another tool made: no state folder of either name.
+    fn seed_foreign_folder(env: &Home) {
+        env.write(&env.legacy_ws().join("config.toml"), "owner = \"other\"\n");
+        env.write(&env.legacy_ws().join("data/notes.txt"), "not Riggverk's\n");
+    }
+
+    #[test]
+    fn a_foreign_folder_under_the_earlier_name_is_never_read_moved_or_reported() {
+        use crate::setup_transaction::workspace_key;
+        let env = Home::new("foreign");
+        seed_foreign_folder(&env);
+        let before = env.tree(&env.legacy_ws());
+
+        let diagnostics = env.diagnostics();
+        assert_eq!(diagnostics["valid"], true, "{diagnostics}");
+        assert_eq!(resolved(&diagnostics), env.new_ws(), "a fresh profile");
+        assert_eq!(
+            workspace_key(&env.legacy_ws()).unwrap(),
+            env.legacy_ws().to_string_lossy(),
+            "the other folder is not the default workspace"
+        );
+
+        let result = env.apply("claude_rules");
+        assert!(result.success, "{}", result.message);
+
+        assert_eq!(
+            env.tree(&env.legacy_ws()),
+            before,
+            "the other folder is byte for byte what it was"
+        );
+        assert!(!env.legacy_ws().join(NEW_STATE).exists());
+        assert!(!env.legacy_ws().join(LEGACY_STATE).exists());
+        assert!(env
+            .new_ws()
+            .join(NEW_STATE)
+            .join("managed-state.json")
+            .is_file());
+        assert!(!env.new_ws().join("config.toml").exists(), "nothing moved");
+        let diagnostics = env.diagnostics();
+        assert_eq!(resolved(&diagnostics), env.new_ws());
+        let notes = diagnostics["layout_notes"].to_string();
+        assert!(!notes.contains("agent-workspace"), "{notes}");
+    }
+
+    #[test]
+    fn a_foreign_folder_under_the_earlier_name_chosen_explicitly_is_used() {
+        let env = Home::new("foreign-explicit");
+        seed_foreign_folder(&env);
+        unsafe { std::env::set_var("RIGGVERK_WORKSPACE_PATH", env.legacy_ws()) };
+
+        assert_eq!(resolved(&env.diagnostics()), env.legacy_ws());
+        let result = env.apply("claude_rules");
+        assert!(result.success, "{}", result.message);
+        assert!(env
+            .legacy_ws()
+            .join(NEW_STATE)
+            .join("managed-state.json")
+            .is_file());
+        assert!(env.legacy_ws().join("config.toml").is_file());
+        assert!(!env.new_ws().exists(), "the chosen folder is never moved");
     }
 }
