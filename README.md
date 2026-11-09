@@ -42,7 +42,7 @@ Releases are on GitHub Releases as a disk image and a zip of the same universal 
 Requirements:
 
 - Node.js 22 (the version pinned in `.github/workflows/ci.yml`; Vite 8 needs 20.19+ or 22.12+) and npm 10+
-- stable Rust toolchain (1.97.1 is the version the disabled workflows pin; there is no rust-toolchain file)
+- Rust via rustup: `rust-toolchain.toml` pins 1.97.1, the version the disabled workflows also pin
 - Python 3.11 or newer (the release check uses `tomllib`) and Bash for the generators, merge scripts, and release check
 
 ```bash
@@ -104,7 +104,7 @@ An edited block or a pre-existing file without markers is a conflict: Install le
 
 OpenCode and Cursor get the named Playwright MCP entry (see their rows under Harness ownership). The light tier gets one `playwright` entry in the MCP file its harness reads: GitHub Copilot `~/.copilot/mcp-config.json` (key `mcpServers`; the CLI and VS Code both read it), Pi `~/.pi/agent/mcp.json` (`mcpServers`) and Kilo Code `kilo.jsonc` (else an existing `kilo.json`) in `$XDG_CONFIG_HOME/kilo` (default `~/.config/kilo`; key `mcp`). Google Antigravity gets it in `~/.gemini/config/mcp_config.json` (`mcpServers`). The target `kilo_mcp` is off by default because that file is Kilo's main config and may hold provider keys; `antigravity_mcp` is off by default too. Grok Build gets it as the `[mcp_servers.playwright]` table in `~/.grok/config.toml`, edited in place with every other byte kept; the target `grok_mcp` is off by default because that file may hold `api_key`.
 
-The entry is `npx -y @playwright/mcp@0.0.83 --browser chrome --isolated --no-webmcp` with the shared browser cache in `PLAYWRIGHT_BROWSERS_PATH`: the system Google Chrome in a profile kept in memory (no Playwright Chromium download), and no tools registered by a page (WebMCP, on by default in Playwright MCP since 0.0.81). The OpenCode and Cursor entries pass the same three flags after `--config ~/.config/playwright-mcp/config.json`; the light entries do not use that sidecar, so they work whichever targets are on. Pi does not declare the tools of an MCP server to the model by default (`exposure` `codemode`); the entry leaves that choice to you, and the Pi page says so.
+The entry runs `npx --prefix <npx-prefix> -y @playwright/mcp@0.0.83 --browser chrome --isolated --no-webmcp` with the shared browser cache in `PLAYWRIGHT_BROWSERS_PATH`: the system Google Chrome in a profile kept in memory (no Playwright Chromium download), and no tools registered by a page (WebMCP, on by default in Playwright MCP since 0.0.81). It starts npx through `/bin/sh` from `<playwright-output>`, an owner-only `playwright-output` folder in the app data folder, and `<npx-prefix>` is an empty, owner-only `npx-prefix` folder next to it. So npx never uses the `.npmrc`, the `node_modules` or the `node_modules/.bin` (a `sh` or `node` there included) of the repository the agent runs in, any of which could run code as the server starts. A client that sends no MCP roots gets `playwright-output` as the server's working folder, so screenshots and other files the server saves land there, not in your project. The OpenCode and Cursor entries pass the same three flags after `--config ~/.config/playwright-mcp/config.json`; the light entries do not use that sidecar, so they work whichever targets are on. Pi does not declare the tools of an MCP server to the model by default (`exposure` `codemode`); the entry leaves that choice to you, and the Pi page says so.
 
 Only that entry is written. The file is read and written as strict JSON: your other servers keep their values and their order, and a file with comments, a trailing comma or a byte order mark is refused with zero mutation and a plain reason (it never quotes the file). An entry named `playwright` that is not the managed one is yours and is left as is. A new file is owner-only. Uninstall never deletes an MCP file. Details are in `docs/WORKSPACE_CONTRACT.md` and `docs/SECURITY_MODEL.md`.
 
@@ -219,7 +219,7 @@ Several bundled skills adapt methods from open skill collections. The wording is
 | [raddue/crucible](https://github.com/raddue/crucible) | the fresh-critic loop in the adversarial skills | MIT |
 | [dementev-dev/adversarial-review](https://github.com/dementev-dev/adversarial-review) | the read-only critic and its adjudication | Apache-2.0 |
 | [openai/skills](https://github.com/openai/skills) | `ci-triage`, `review-response` | Apache-2.0 |
-| [t3dotgg/tstack](https://github.com/t3dotgg/tstack) | `pr-workflow`, `review-response` | MIT |
+| [t3dotgg/tstack](https://github.com/t3dotgg/tstack) | `pr-workflow`, `review-response`, `pr-modernize` | MIT |
 | [cloudflare/security-audit-skill](https://github.com/cloudflare/security-audit-skill) | `security-audit` (vendored) | MIT |
 | [anthropics/skills](https://github.com/anthropics/skills) | the framing behind `frontend-design` | Apache-2.0 |
 | [Lobe Icons](https://github.com/lobehub/lobe-icons) | the agent icons; the marks belong to their owners, and Riggverk is not affiliated with or endorsed by them | MIT |

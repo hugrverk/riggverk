@@ -725,6 +725,8 @@ fn transform_playwright_json(
     value: &serde_json::Value,
     config_path: &str,
     browsers_path: &str,
+    npx_prefix: &str,
+    output_dir: &str,
     version: &str,
 ) -> serde_json::Value {
     let package = format!("@playwright/mcp@{version}");
@@ -734,7 +736,14 @@ fn transform_playwright_json(
             for (key, item) in map {
                 out.insert(
                     key.clone(),
-                    transform_playwright_json(item, config_path, browsers_path, version),
+                    transform_playwright_json(
+                        item,
+                        config_path,
+                        browsers_path,
+                        npx_prefix,
+                        output_dir,
+                        version,
+                    ),
                 );
             }
             serde_json::Value::Object(out)
@@ -742,7 +751,16 @@ fn transform_playwright_json(
         serde_json::Value::Array(items) => serde_json::Value::Array(
             items
                 .iter()
-                .map(|item| transform_playwright_json(item, config_path, browsers_path, version))
+                .map(|item| {
+                    transform_playwright_json(
+                        item,
+                        config_path,
+                        browsers_path,
+                        npx_prefix,
+                        output_dir,
+                        version,
+                    )
+                })
                 .collect(),
         ),
         serde_json::Value::String(text) => {
@@ -750,6 +768,10 @@ fn transform_playwright_json(
                 serde_json::Value::String(config_path.to_string())
             } else if text == PLAYWRIGHT_BROWSERS_PLACEHOLDER {
                 serde_json::Value::String(browsers_path.to_string())
+            } else if text == crate::commands::cursor_profile::PLAYWRIGHT_NPX_PREFIX_PLACEHOLDER {
+                serde_json::Value::String(npx_prefix.to_string())
+            } else if text == crate::commands::cursor_profile::PLAYWRIGHT_OUTPUT_PLACEHOLDER {
+                serde_json::Value::String(output_dir.to_string())
             } else if text.starts_with("@playwright/mcp@") {
                 serde_json::Value::String(package)
             } else {
@@ -788,8 +810,16 @@ pub(crate) fn render_expected_opencode_config(
     let (config_path, browsers_path) = resolve_playwright_paths(home_dir)?;
     let config_path = config_path.to_string_lossy().into_owned();
     let browsers_path = browsers_path.to_string_lossy().into_owned();
-    let mut rendered =
-        transform_playwright_json(template_json, &config_path, &browsers_path, &version);
+    let npx_prefix = crate::commands::cursor_profile::npx_prefix_path(home_dir)?;
+    let output_dir = crate::commands::cursor_profile::playwright_output_path(home_dir)?;
+    let mut rendered = transform_playwright_json(
+        template_json,
+        &config_path,
+        &browsers_path,
+        &npx_prefix.to_string_lossy(),
+        &output_dir.to_string_lossy(),
+        &version,
+    );
 
     // Overlay app-level model override if present. Status/render callers pass the
     // resolved user home explicitly, so tests and smoke runs must not read a

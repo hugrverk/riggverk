@@ -3,7 +3,7 @@ name: status-report
 description: Builds a one-file HTML status report of what happened, what is in progress and what comes next in any repository, from cited git, GitHub, CI and doc evidence. Use when asked for a status report or a sprint or weekly summary.
 license: MIT
 compatibility: Needs git, an authenticated gh CLI and Node.js for the bundled render and verify scripts; the browser check uses Playwright when it resolves.
-allowed-tools: Bash(git tag --list *) Bash(gh pr list *) Bash(gh release list *) Bash(gh run list *)
+allowed-tools: Bash(git tag --list *)
 metadata:
   category: workflow
   risk: low

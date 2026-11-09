@@ -343,6 +343,26 @@ fn extract_frontmatter_list(fields: &BTreeMap<String, String>, key: &str) -> Vec
 pub(crate) const MAX_SKILL_MD_BYTES: u64 = 1024 * 1024;
 
 /// The text of a `SKILL.md`, refusing one over [`MAX_SKILL_MD_BYTES`].
+/// Unicode tag characters and bidi overrides or isolates: they can hide or reorder an instruction
+/// so that it reads differently in a review than to an agent.
+pub(crate) fn hides_or_reorders_text(c: char) -> bool {
+    let code = u32::from(c);
+    (0xE0000..=0xE007F).contains(&code)
+        || (0x202A..=0x202E).contains(&code)
+        || (0x2066..=0x2069).contains(&code)
+}
+
+/// Whether a supporting file is UTF-8 text with a character of [`hides_or_reorders_text`]. A skill
+/// can tell the agent to read any of its files, so they get the same check as `SKILL.md`.
+pub(crate) fn file_hides_or_reorders_text(bytes: &[u8]) -> bool {
+    std::str::from_utf8(bytes).is_ok_and(|text| text.contains(hides_or_reorders_text))
+}
+
+/// The refusal for a supporting file that [`file_hides_or_reorders_text`].
+pub(crate) fn support_file_hides_text(rel: &str) -> String {
+    format!("{rel} holds hidden Unicode tag or bidi override characters, which can hide or reorder text")
+}
+
 pub(crate) fn read_skill_md_capped(skill_md: &Path) -> Result<String, String> {
     use std::io::Read;
     let file =

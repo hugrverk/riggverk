@@ -1543,6 +1543,22 @@ mod tests {
                     Value::Object(root),
                     "the file holds the entry and nothing else"
                 );
+                // The folder the entry passes to `npx --prefix` and the one it starts npx in
+                // exist, owner-only and empty.
+                for dir in [
+                    crate::commands::cursor_profile::npx_prefix_path(&env.home),
+                    crate::commands::cursor_profile::playwright_output_path(&env.home),
+                ] {
+                    let dir = dir.expect("npx folder");
+                    assert!(dir.starts_with(&env.home), "{}", dir.display());
+                    assert_eq!(fs::read_dir(&dir).expect("npx folder").count(), 0);
+                    #[cfg(unix)]
+                    {
+                        use std::os::unix::fs::PermissionsExt;
+                        let mode = fs::metadata(&dir).unwrap().permissions().mode() & 0o777;
+                        assert_eq!(mode, 0o700);
+                    }
+                }
                 assert!(String::from_utf8(env.bytes()).unwrap().ends_with("}\n"));
                 assert_eq!(env.recorded_mcp(), Some(env.entry_digest()));
                 assert_eq!(
@@ -1894,6 +1910,33 @@ mod tests {
                     env.health_mcp().mcp.playwright_version.as_deref(),
                     Some(pin)
                 );
+            });
+        }
+
+        #[test]
+        fn an_entry_that_ran_npx_with_the_prefix_only_is_updated_not_a_conflict() {
+            each_mcp("prefix-only", |env| {
+                // What the app wrote while entries ran `npx --prefix <folder> -y ...` in the
+                // harness's working folder, recorded when it did.
+                let old = crate::commands::cursor_profile::as_the_npx_prefix_app_wrote_it(
+                    &env.expected(),
+                );
+                assert_ne!(old, env.expected());
+                assert!(!old.to_string().contains("/bin/sh"), "{old}");
+                assert!(old.to_string().contains(r#""--prefix""#), "{old}");
+                let mut file: Value = serde_json::from_str(&env.user_file()).unwrap();
+                file[env.root_key()]["playwright"] = old.clone();
+                env.put(serde_json::to_string_pretty(&file).unwrap() + "\n");
+                env.record_mcp(&env.entry_digest());
+
+                let planned = env.plan_mcp();
+                assert_eq!(planned.kind, OperationKind::Update);
+                assert_eq!(planned.mcp, Some(EntryState::Differs));
+
+                let result = env.apply_mcp();
+                assert!(result.success, "{}", result.message);
+                assert_eq!(env.json()[env.root_key()]["playwright"], env.expected());
+                assert_eq!(env.recorded_mcp(), Some(env.entry_digest()));
             });
         }
 
@@ -2498,6 +2541,26 @@ mod tests {
                 let escaped = serde_json::Value::String(browsers.clone()).to_string();
                 assert!(text.contains(escaped.trim_matches('"')), "{text}");
                 assert!(!text.contains("__PLAYWRIGHT_"), "{text}");
+                // The absolute shell starts npx in the app's output folder with the app's empty
+                // folder as its project, never in or from the agent's project.
+                let folder = |dir: Option<std::path::PathBuf>| {
+                    dir.expect("npx folder").to_string_lossy().into_owned()
+                };
+                let lines = crate::commands::cursor_profile::playwright_command_lines(&entry);
+                assert_eq!(lines.len(), 1, "{text}");
+                assert_eq!(
+                    lines[0][..5],
+                    [
+                        "/bin/sh".to_string(),
+                        "-c".to_string(),
+                        crate::commands::cursor_profile::PLAYWRIGHT_NPX_SCRIPT.to_string(),
+                        folder(crate::commands::cursor_profile::npx_prefix_path(home)),
+                        folder(crate::commands::cursor_profile::playwright_output_path(
+                            home
+                        )),
+                    ],
+                    "{text}"
+                );
                 assert_eq!(
                     crate::light_mcp::pinned_version(&entry).as_deref(),
                     Some(crate::commands::cursor_profile::PLAYWRIGHT_MCP_VERSION)
@@ -2515,26 +2578,34 @@ mod tests {
             };
             assert_eq!(keys(&copilot), ["args", "command", "env", "tools", "type"]);
             assert_eq!(copilot["type"], "local");
-            assert_eq!(copilot["command"], "npx");
+            assert_eq!(copilot["command"], "/bin/sh");
             assert_eq!(copilot["tools"], json!(["*"]));
 
             // Pi refuses `type: "local"` and a command that is an array.
             let pi = bundled_json("templates/mcp/pi.playwright.json");
             assert_eq!(keys(&pi), ["args", "command", "description", "env"]);
             assert!(pi.get("type").is_none() && pi.get("exposure").is_none());
-            assert_eq!(pi["command"], "npx");
+            assert_eq!(pi["command"], "/bin/sh");
             assert!(pi["description"]
                 .as_str()
                 .is_some_and(|text| !text.is_empty()));
             assert_eq!(pi["args"], copilot["args"]);
             assert_eq!(pi["env"], copilot["env"]);
-            assert_eq!(copilot["args"].as_array().unwrap()[0], "-y");
+            assert_eq!(
+                copilot["args"].as_array().unwrap()[..4],
+                [
+                    json!("-c"),
+                    json!(crate::commands::cursor_profile::PLAYWRIGHT_NPX_SCRIPT),
+                    json!("__PLAYWRIGHT_NPX_PREFIX_PATH__"),
+                    json!("__PLAYWRIGHT_OUTPUT_PATH__"),
+                ]
+            );
 
             // Antigravity's stdio entry: command, args and env (its documented keys), nothing
             // the other harnesses add.
             let antigravity = bundled_json("templates/mcp/antigravity.playwright.json");
             assert_eq!(keys(&antigravity), ["args", "command", "env"]);
-            assert_eq!(antigravity["command"], "npx");
+            assert_eq!(antigravity["command"], "/bin/sh");
             assert_eq!(antigravity["args"], copilot["args"]);
             assert_eq!(antigravity["env"], copilot["env"]);
         }
@@ -2700,7 +2771,7 @@ mod tests {
                 assert_eq!(env.plan_mcp().kind, OperationKind::Create);
                 let result = env.apply_mcp();
                 assert!(result.success, "{}", result.message);
-                assert!(text(&env).starts_with("[mcp_servers.playwright]\ncommand = \"npx\"\n"));
+                assert!(text(&env).starts_with("[mcp_servers.playwright]\ncommand = \"/bin/sh\"\n"));
                 assert_eq!(entry_of(&env), Some(env.expected()));
                 assert_eq!(env.plan_mcp().kind, OperationKind::NoChange);
                 assert_eq!(env.status_mcp().state, InstallationState::Current);

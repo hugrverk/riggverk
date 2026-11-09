@@ -998,6 +998,17 @@ fn apply_single_artifact(
         );
     }
 
+    // Every Playwright entry starts `npx --prefix <npx prefix>` in the output folder: both exist
+    // before the entry does.
+    if matches!(
+        artifact,
+        crate::artifact_registry::ArtifactId::HarnessMcp(_)
+            | crate::artifact_registry::ArtifactId::CursorMcp
+            | crate::artifact_registry::ArtifactId::OpenCodeConfig
+    ) {
+        crate::commands::cursor_profile::ensure_npx_dirs(home)?;
+    }
+
     if let crate::artifact_registry::ArtifactId::HarnessMcp(harness) = artifact {
         return apply_mcp_artifact(*harness, workspace_root, home, &dest, &root);
     }
@@ -6238,25 +6249,20 @@ mod tests {
         assert_eq!(server_names(&after), vec!["playwright"]);
     }
 
-    /// An installed file the way an older app wrote it: the same entry with the previous pin and
-    /// the flags of that time (`--config` only, without the Chrome selection and `--no-webmcp`),
-    /// and the record that app made of it.
-    fn as_the_older_app_wrote_it(env: &TempSetupEnv, artifact: &ArtifactId, path: &Path) {
+    /// An installed file the way an older app wrote it (`older` turns the current entry into
+    /// that app's), and the record that app made of it.
+    fn as_the_older_app_wrote_it(
+        env: &TempSetupEnv,
+        artifact: &ArtifactId,
+        path: &Path,
+        older: fn(&serde_json::Value) -> serde_json::Value,
+    ) {
         let text = fs::read_to_string(path).expect("installed file");
         let current: serde_json::Value = serde_json::from_str(&text).expect("installed JSON");
-        let older = crate::commands::cursor_profile::as_the_previous_app_wrote_it(&current);
-        assert_ne!(
-            older, current,
-            "the installed file must pin the current version"
-        );
+        let older = older(&current);
+        assert_ne!(older, current, "the installed file must be the current one");
         let older_text = serde_json::to_string_pretty(&older).expect("serialize") + "\n";
-        assert!(
-            older_text.contains("@playwright/mcp@0.0.48")
-                && !older_text.contains("--no-webmcp")
-                && !older_text.contains("\"--browser\""),
-            "{older_text}"
-        );
-        fs::write(path, older_text).expect("write the previous pin and flags");
+        fs::write(path, older_text).expect("write the older entry");
         let digest = crate::setup_fingerprint::artifact_installed_managed_digest(
             artifact, &env.ws, &env.home,
         )
@@ -6294,10 +6300,17 @@ mod tests {
     }
 
     #[test]
-    fn a_playwright_pin_from_an_older_app_is_an_update_not_a_conflict() {
+    fn a_playwright_entry_from_an_older_app_is_an_update_not_a_conflict() {
         let env = TempSetupEnv::new("previous-playwright-pin");
         let pin = crate::commands::cursor_profile::PLAYWRIGHT_MCP_VERSION;
-        for (wire, surface, artifact, rel) in [
+        // The previous pin and the flags of that time (`--config` only, without the Chrome
+        // selection and `--no-webmcp`), and later `npx --prefix <folder> -y ...` started in the
+        // harness's working folder.
+        let older_apps: [fn(&serde_json::Value) -> serde_json::Value; 2] = [
+            crate::commands::cursor_profile::as_the_previous_app_wrote_it,
+            crate::commands::cursor_profile::as_the_npx_prefix_app_wrote_it,
+        ];
+        for ((wire, surface, artifact, rel), older) in [
             (
                 "open_code_config",
                 SetupSurfaceId::OpenCodeConfig,
@@ -6310,7 +6323,10 @@ mod tests {
                 ArtifactId::CursorMcp,
                 ".cursor/mcp.json",
             ),
-        ] {
+        ]
+        .into_iter()
+        .flat_map(|surface| older_apps.map(|older| (surface.clone(), older)))
+        {
             let apply = || {
                 let plan = preview_setup(vec![wire.into()]).expect("preview");
                 assert!(!plan.is_blocked, "{wire}: {:?}", plan.operations);
@@ -6322,10 +6338,12 @@ mod tests {
                 )
                 .expect("apply")
             };
-            let result = apply();
-            assert!(result.success, "{wire}: {}", result.message);
             let path = env.home.join(rel);
-            as_the_older_app_wrote_it(&env, &artifact, &path);
+            if !path.exists() {
+                let result = apply();
+                assert!(result.success, "{wire}: {}", result.message);
+            }
+            as_the_older_app_wrote_it(&env, &artifact, &path, older);
 
             let planned = env.plan(&[surface]);
             let kind = planned
@@ -6344,7 +6362,7 @@ mod tests {
             );
             let installed: serde_json::Value =
                 serde_json::from_str(&installed).expect("installed JSON");
-            let lists = crate::commands::cursor_profile::playwright_argument_lists(&installed);
+            let lists = crate::commands::cursor_profile::playwright_command_lines(&installed);
             assert_eq!(lists.len(), 1, "{wire}: {lists:?}");
             assert!(
                 lists[0]
@@ -6352,6 +6370,15 @@ mod tests {
                     .any(|window| window
                         == crate::commands::cursor_profile::PLAYWRIGHT_MCP_BROWSER_FLAGS),
                 "{wire}: the Chrome selection and the WebMCP flag must be added: {lists:?}"
+            );
+            assert_eq!(
+                lists[0][..3],
+                [
+                    "/bin/sh",
+                    "-c",
+                    crate::commands::cursor_profile::PLAYWRIGHT_NPX_SCRIPT
+                ],
+                "{wire}: npx must start in the output folder: {lists:?}"
             );
         }
     }

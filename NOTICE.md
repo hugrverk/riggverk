@@ -130,13 +130,15 @@ Path: `resources/default-workspace/skills/security-audit/`. Copyright (c) 2025-2
 
 ## t3dotgg/tstack
 
-`pr-workflow` and `review-response` draw on [t3dotgg/tstack](https://github.com/t3dotgg/tstack) at commit `1085050f3baed1ac724caa4a8166145fb2ac88af`.
+`pr-workflow`, `review-response` and `pr-modernize` draw on [t3dotgg/tstack](https://github.com/t3dotgg/tstack) at commit `1085050f3baed1ac724caa4a8166145fb2ac88af`.
 
 - From `skills/file-pr/SKILL.md`: a PR description that leads with the problem, a title that states the effect, and a REST fallback for an exhausted GraphQL limit.
 - From `skills/babysit-pr/SKILL.md`: one watcher per PR, checking the GraphQL rate limit, readiness conditions on the latest head, reporting `BEHIND` and `DIRTY`, declining findings that grow a PR, and preferring the fix that leaves less code.
 - From `skills/leaving-pr-comments/SKILL.md`: confirming the posted comment's URL.
+- From `skills/modernize/SKILL.md`: stating the smallest goal first, the modernize, rework or close disposition before pushing, judging what changed around a PR rather than only its conflicts, a disposable worktree, comparing with `git range-diff`, and a lease tied to the observed head.
+- From `skills/takeover/SKILL.md`: importing the original commits, preserving contributors' credit, treating a handoff as context rather than proof, confirming the original failure, and rechecking the source PR.
 
-The text was rewritten for Riggverk. Riggverk's own part is the reading of check results, the handling of a PR with no checks, the verdicts, an explicit ok for each push, comment and post, and the hand-offs to `ci-triage` and `review-response`. No files of that work are included.
+The text was rewritten for Riggverk. Riggverk's own part is the reading of check results, the handling of a PR with no checks, the verdicts, an explicit ok for each force push, push, comment and post, the guards against running a PR's hooks and shell syntax, the cleanup, and the hand-offs to `ci-triage` and `review-response`. No files of that work are included.
 
 License of the original work:
 
