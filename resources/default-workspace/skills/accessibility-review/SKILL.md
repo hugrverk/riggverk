@@ -16,7 +16,7 @@ Done when: every changed interactive control is checked for name, role, state, k
 ## Do Not Use When
 
 - The task is primarily visual style, brand, or layout polish, or baseline accessibility while building UI; use `frontend-design`.
-- The task is runtime browser verification; use `browser-qa` as well.
+- The task is general runtime verification of a change; use `browser-qa`, and add this skill only for the accessibility part.
 - The task requires formal legal certification or a full WCAG audit.
 - The UI cannot be inspected in code, screenshots, or browser output.
 

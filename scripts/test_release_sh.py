@@ -118,6 +118,11 @@ class ReleaseShTests(unittest.TestCase):
         for relative in COPIED:
             (self.repo / relative).parent.mkdir(parents=True, exist_ok=True)
             shutil.copy(ROOT / relative, self.repo / relative)
+        # Start with updates off whatever the repository ships; turn_updates_on() switches them on.
+        conf_path = self.repo / "src-tauri/tauri.conf.json"
+        conf = json.loads(conf_path.read_text())
+        conf.pop("plugins", None)
+        conf_path.write_text(json.dumps(conf, indent=2) + "\n")
         self.set_versions("0.1.0")
         self.python("scripts/generate-release-notes.py", "--write")
         (self.repo / "node_modules").mkdir()

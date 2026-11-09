@@ -28,7 +28,7 @@
       "properties": {
         "from": { "$ref": "#/$defs/date" },
         "to": { "$ref": "#/$defs/date" },
-        "label": { "type": "string", "maxLength": 60, "description": "Optional. Human label such as 'Senaste två veckorna'." }
+        "label": { "type": "string", "maxLength": 60, "description": "Optional. Human label such as 'Last two weeks'." }
       }
     },
     "health": {

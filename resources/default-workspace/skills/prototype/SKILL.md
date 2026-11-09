@@ -37,7 +37,7 @@ If the question is ambiguous and the user is unavailable, choose the branch that
 6. Delete unused prototype code. Do not create a permanent variant system.
 7. End with a delete-or-absorb follow-up.
 
-Boundary: prototype code lives in a clearly named throwaway directory or file. It is never imported by production modules.
+Boundary: prototype code lives in a clearly named throwaway directory or file. Production modules never import it, except the one temporary variant switch in the host page of a UI prototype, which is removed with the prototype.
 
 ## Output
 

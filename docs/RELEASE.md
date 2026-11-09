@@ -91,21 +91,23 @@ The app is not notarized (there is no Apple Developer ID yet). Users open the di
 
 ### Rollback
 
-If a publish went wrong, delete the release and its tag, then publish again (the version in `main` is already bumped, so nothing else changes):
+If `publish` stops before the release is public (after the tag or the draft release was made), it prints the commands that clear them. Run them and publish again (the version in `main` is already bumped, so nothing else changes):
 
 ```bash
-gh release delete v<version> --cleanup-tag --yes   # the GitHub release and the remote tag
+gh release delete v<version> --cleanup-tag --yes   # the draft release and the remote tag
 git tag -d v<version>                              # the local tag
 ./scripts/release.sh publish
 ```
 
-A failure after the tag was created prints these commands. A typo in the notes of a published release needs no rollback: `gh release edit v<version> --notes-file release-notes/<version>.md`. If the build itself is wrong, fix it in a pull request and publish with `--allow-newer`, or prepare the next version.
+A published release cannot be redone. With immutable releases on (see Turning on updates), its files and its tag are locked, and deleting the release does not free the tag name: `v<version>` can never be published again. Fix forward: merge the fix and prepare the next version. If the published build must not be installed at all, delete the release with `gh release delete v<version> --yes`; `releases/latest` then answers with the release before it, so installed apps are no longer offered the bad one.
+
+A typo in the notes of a published release needs no rollback, and immutable releases allow it: `gh release edit v<version> --notes-file release-notes/<version>.md`. If the build is wrong and the release is not public yet, fix it in a pull request and publish with `--allow-newer`.
 
 ## Turning on updates
 
-The app can update itself (Tauri's updater with a static `latest.json` on GitHub Releases), but it ships switched off: there is no `plugins.updater` in `src-tauri/tauri.conf.json`, so the app has no updater, no menu item, no update card and makes no network request, and `publish` makes no updater files. The design: the user is asked once ("Check daily" or "Not now"; nothing is requested before the answer), a new version is named in the sidebar foot, its review shows the notes, and one click, Download and restart, installs exactly that version after settling unsaved work. Nothing installs in the background, and older versions are never installed.
+The app can update itself (Tauri's updater with a static `latest.json` on GitHub Releases), and it is on: `plugins.updater` in `src-tauri/tauri.conf.json` is the switch. Without that block the app has no updater, no menu item, no update card and makes no network request, and `publish` makes no updater files. The design: the user is asked once ("Check daily" or "Not now"; nothing is requested before the answer), a new version is named in the sidebar foot, its review shows the notes, and one click, Download and restart, installs exactly that version after settling unsaved work. Nothing installs in the background, and older versions are never installed.
 
-Updates need public release files: the app fetches `https://github.com/hugrverk/riggverk/releases/latest/download/latest.json` without credentials, which a private repository answers with 404. Turn them on the day the repository goes public, in this order:
+Updates need public release files: the app fetches `https://github.com/hugrverk/riggverk/releases/latest/download/latest.json` without credentials, which a private repository answers with 404. They were turned on the day the repository went public, with these steps; repeat them if the key is ever replaced:
 
 1. **Make the signing key** (once, on the release Mac; never in the repository, never in CI while CI is off):
 
@@ -140,9 +142,9 @@ Updates need public release files: the app fetches `https://github.com/hugrverk/
    }
    ```
 
-   The app and `release_tools.py updater-config` treat anything weaker (no `requireSignedVersion`, `allowDowngrades`, a `dangerous*` option, plain HTTP, another endpoint shape) as off or as an error. Merge it through a normal pull request; it ships with the next release.
+   The app treats anything weaker (no `requireSignedVersion`, `allowDowngrades`, a `dangerous*` option, plain HTTP) as off, and `release_tools.py updater-config` also refuses another endpoint shape. Merge it through a normal pull request; it ships with the next release.
 4. **Make the repository public**, and turn on immutable releases (Settings, General, Releases) so a published release's files cannot be swapped.
-5. **Apply the wording** that docs/SECURITY_MODEL.md ("App updates") gives for when updates are on, in the same pull request as step 3.
+5. **Update docs/SECURITY_MODEL.md** (Core principles and "App updates") for updates on, in the same pull request as step 3.
 6. **Publish.** The `plugins.updater` block is the switch: with it, `publish` needs both Keychain items from step 2 and stops before building when either is missing or cannot be read (a release without `latest.json` never reaches installed apps). It reads them itself (`security find-generic-password -s riggverk-updater-key -w`, and `riggverk-updater-password`) and hands them, as `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, to the environment of the one `tauri build` and nothing else: no other step, `git`, `gh` or Python helper sees them, they are never printed (not even under `bash -x`) and never written to a file. Nothing after the build needs the key. Never export them in your shell: `publish` refuses to run while either is set there, because every program started from that shell, an agent CLI included, would inherit them.
 
    ```bash

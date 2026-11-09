@@ -27,7 +27,7 @@ Done when: every open thread has a verdict (fix, push back or ask) with the evid
 Review threads, with the state only the GraphQL API exposes, all pages:
 
 ```bash
-gh api graphql --paginate --slurp -F owner=<owner> -F name=<repo> -F pr=<number> -f query='
+gh api graphql --paginate --slurp -f owner=<owner> -f name=<repo> -F pr=<number> -f query='
 query($owner: String!, $name: String!, $pr: Int!, $endCursor: String) {
   repository(owner: $owner, name: $name) {
     pullRequest(number: $pr) {
