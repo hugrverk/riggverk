@@ -1,4 +1,4 @@
-import { useEffect, useRef, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useEffect, useRef, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import type { ReleaseNotes } from "../lib/releaseNotes";
 import { TButton } from "../ui/TButton";
 import { scrollHelpBox, trapTab, useRestoreFocus } from "./overlay";
@@ -80,7 +80,23 @@ function WhatsNewRow({ label, text }: { label: string; text: string }) {
   return (
     <>
       <dt className="c-dim">{label.toLowerCase()}</dt>
-      <dd>{text}</dd>
+      <dd>{inlineMarkdown(text)}</dd>
     </>
   );
+}
+
+const INLINE_MARK = /(`[^`]+`|\*\*[^*]+\*\*)/;
+
+/** The Markdown the release notes use inside a line: `code` and **bold**. Anything else stays as written. */
+function inlineMarkdown(text: string): ReactNode[] {
+  return text.split(INLINE_MARK).map((part, index) => {
+    if (index % 2 === 0) return part;
+    return part.startsWith("`") ? (
+      <code key={index} className="markdown-inline-code">
+        {part.slice(1, -1)}
+      </code>
+    ) : (
+      <strong key={index}>{part.slice(2, -2)}</strong>
+    );
+  });
 }
