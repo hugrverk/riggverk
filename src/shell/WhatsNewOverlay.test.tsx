@@ -8,7 +8,10 @@ import { useShellState } from "./ShellState";
 afterEach(cleanup);
 
 const RELEASES: ReleaseNotes[] = [
-  { version: "2026.10.2", sections: [{ title: "Fixes", items: ["Close the gap"] }] },
+  {
+    version: "2026.10.2",
+    sections: [{ title: "Fixes", items: ["Close the gap", "**Routing** reads `opencode.json` and a lone ` or *"] }],
+  },
   {
     version: "2026.10.1",
     sections: [
@@ -49,6 +52,15 @@ describe("WhatsNewOverlay", () => {
       ["new", "Show skill copies"],
       ["fixes", "Wait for the apply hint"],
     ]);
+  });
+
+  it("shows the notes' `code` and **bold** as code and bold, without the marks", () => {
+    const { dialog } = open();
+
+    const row = within(dialog).getAllByRole("region")[0]!.querySelectorAll("dd")[1]!;
+    expect(row.textContent).toBe("Routing reads opencode.json and a lone ` or *");
+    expect(row.querySelector("strong")!.textContent).toBe("Routing");
+    expect(row.querySelector("code.markdown-inline-code")!.textContent).toBe("opencode.json");
   });
 
   it("reuses the help overlay structure and styling hooks, with its own modifier", () => {
