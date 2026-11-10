@@ -19,7 +19,7 @@
             "A routing line for a pack or an imported skill may not contain `@`, which Claude Code reads in a rules file as \"import this file\"",
             "A pack skill with hidden or reordering Unicode characters is refused, in `SKILL.md` and in its supporting files, the same way Import skill already refused them",
             "The bundled skills pre-approve fewer commands for Claude Code: `gh` reads and `git config --get` with a free argument now ask first, because both can be made to print secrets",
-            "The install review counts every file it writes. A folder of subagents and a new OpenCode config each counted as one file, so the total under the plan was lower than the number of files written",
+            "The install review counts every file it writes or removes. A folder of subagents, a new OpenCode config, a folder of removed skill copies, the old copies in the workspace folder and a flagged pack skill each counted as one file, so the total under the plan was lower than the number of files changed",
             "What's new shows code and bold text in the notes as code and bold. Before, the Markdown marks were printed as they are written",
             "Wording corrections in 24 of the bundled skill files",
             "Riggverk needs macOS 13.3 or later, and the app now declares it"

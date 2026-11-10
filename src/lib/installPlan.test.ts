@@ -80,7 +80,7 @@ describe("buildPlanGroups", () => {
         op("skills", "update", {
           details: [
             "+ ~/.agents/skills (25 skills, 46 files)",
-            "- $CODEX_HOME/skills (25 skills, owned copies)",
+            "- $CODEX_HOME/skills (25 skills, 25 files, owned copies)",
             "! ~/.cursor/skills/tdd (edited, kept; Codex reads both copies)",
           ],
         }),
@@ -91,7 +91,7 @@ describe("buildPlanGroups", () => {
     expect(group.title).toBe("skills");
     expect(group.rows.map(row => [row.kind, row.file, row.note, row.safe, row.conflict])).toEqual([
       ["create", "~/.agents/skills", "25 skills, 46 files", true, false],
-      ["remove", "$CODEX_HOME/skills", "25 skills, owned copies", true, false],
+      ["remove", "$CODEX_HOME/skills", "25 skills, 25 files, owned copies", true, false],
       ["conflict", "~/.cursor/skills/tdd", "edited, kept; Codex reads both copies", false, true],
     ]);
     expect(describePlanCounts(countPlanRows([group]))).toBe("apply 2 safe changes, skip 1 conflict");
@@ -103,7 +103,7 @@ describe("buildPlanGroups", () => {
         op("skills", "update", {
           details: [
             "+ ~/.claude/skills (3 skills, 5 files)",
-            "+ ~/.claude/skills/deploy (pack team; allowed-tools: Bash(git *) [grants tool access without asking])",
+            "+ ~/.claude/skills/deploy (2 files; pack team; allowed-tools: Bash(git *) [grants tool access without asking])",
           ],
         }),
       ],
@@ -112,7 +112,7 @@ describe("buildPlanGroups", () => {
     const rows = buildPlanGroups(skills)[0]!.rows;
     expect(rows.map(row => [row.kind, row.file, row.note])).toEqual([
       ["create", "~/.claude/skills", "3 skills, 5 files"],
-      ["create", "~/.claude/skills/deploy", "pack team; allowed-tools: Bash(git *) [grants tool access without asking]"],
+      ["create", "~/.claude/skills/deploy", "2 files; pack team; allowed-tools: Bash(git *) [grants tool access without asking]"],
     ]);
   });
 
@@ -357,7 +357,7 @@ const UPDATE_ALL = review(
       details: [
         "+ ~/.agents/skills (17 skills, 17 files)",
         "~ ~/.claude/skills (17 skills, 17 files)",
-        "- $CODEX_HOME/skills (17 skills, owned copies)",
+        "- $CODEX_HOME/skills (17 skills, 17 files, owned copies)",
         "! ~/.cursor/skills/tdd (edited, kept)",
       ],
     }),
@@ -441,9 +441,10 @@ describe("the plan per agent", () => {
       ["unchanged", 3, "already in sync"],
     ]);
     // A row that names its files counts them; any other row is one file.
-    expect(planFileCount(planRows(groups))).toBe(17 + 17 + 1 + 1 + 1 + 1 + 1 + 1);
-    // The backed-up files are counted like the file total: the one ~/.claude/skills update row is 17 files.
-    expect(backupSentence(planRows(groups))).toBe(`${17 + 1 + 1 + 1 + 1 + 1} existing files are backed up before anything is written`);
+    expect(planFileCount(planRows(groups))).toBe(17 + 17 + 17 + 1 + 1 + 1 + 1 + 1);
+    // The backed-up files are counted like the file total: the ~/.claude/skills update row and the
+    // $CODEX_HOME/skills removal row are 17 files each.
+    expect(backupSentence(planRows(groups))).toBe(`${17 + 17 + 1 + 1 + 1 + 1} existing files are backed up before anything is written`);
     expect(backupSentence(planRows(buildPlanGroups(review([op("claude_rules", "create")], ["claude_rules"]))))).toBe(
       "Nothing that exists is overwritten; Undo removes what is created",
     );

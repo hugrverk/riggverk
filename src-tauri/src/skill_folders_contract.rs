@@ -357,8 +357,18 @@ mod tests {
                     all.len(),
                     file_count(&all)
                 ),
-                format!("- $CODEX_HOME/skills ({} skills, owned copies)", all.len()),
+                // The old layout owned one file per skill, and the line counts the files that go.
+                format!(
+                    "- $CODEX_HOME/skills ({} skills, {} files, owned copies)",
+                    all.len(),
+                    all.len()
+                ),
             ]
+        );
+        assert_eq!(
+            files_below(&old_root).len(),
+            all.len() + 2,
+            "the owned copies, Codex's own skill and the user's"
         );
         assert!(plan.has_pending_changes && !plan.is_blocked, "{plan:?}");
 
@@ -616,8 +626,9 @@ mod tests {
         assert_eq!(
             op.details,
             vec![format!(
-                "- ~/.agents/skills ({} skills, owned copies)",
-                catalog().len()
+                "- ~/.agents/skills ({} skills, {} files, owned copies)",
+                catalog().len(),
+                file_count(&catalog())
             )]
         );
         let removed = env.apply();
@@ -974,8 +985,9 @@ mod tests {
         let op = skills_operation(&plan);
         assert!(
             op.details.contains(&format!(
-                "- ~/.gemini/config/skills ({} skills, owned copies)",
-                catalog().len()
+                "- ~/.gemini/config/skills ({} skills, {} files, owned copies)",
+                catalog().len(),
+                file_count(&catalog())
             )),
             "{:?}",
             op.details

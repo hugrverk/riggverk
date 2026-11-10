@@ -27,7 +27,7 @@ function agentPlanOf(operations: PlannedOperation[], synced: SetupSurfaceId[] = 
 
 const PLAN = agentPlanOf([
   op("skills", "update", {
-    details: ["+ ~/.agents/skills (3 skills, 3 files)", "- $CODEX_HOME/skills (3 skills, owned copies)", "! ~/.cursor/skills/tdd (edited, kept)"],
+    details: ["+ ~/.agents/skills (3 skills, 3 files)", "- $CODEX_HOME/skills (3 skills, 3 files, owned copies)", "! ~/.cursor/skills/tdd (edited, kept)"],
   }),
   op("open_code_rules", "update"),
   op("open_code_config", "update"),

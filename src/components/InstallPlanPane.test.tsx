@@ -467,7 +467,7 @@ describe("InstallPlanPane", () => {
 describe("InstallPlanPane: band, map and states", () => {
   const AGENT_OPS: PlannedOperation[] = [
     op("skills", "update", {
-      details: ["+ ~/.agents/skills (3 skills, 3 files)", "- $CODEX_HOME/skills (3 skills, owned copies)", "! ~/.cursor/skills/tdd (edited, kept)"],
+      details: ["+ ~/.agents/skills (3 skills, 3 files)", "- $CODEX_HOME/skills (3 skills, 3 files, owned copies)", "! ~/.cursor/skills/tdd (edited, kept)"],
     }),
     op("claude_rules", "update", { summary: "Update ~/.claude/CLAUDE.md" }),
     op("claude_agents", "update", { details: ["+ create agents/sentinel.md"] }),
@@ -488,7 +488,7 @@ describe("InstallPlanPane: band, map and states", () => {
     ]);
     const band = document.querySelector(".plan-band")!;
     expect(band.querySelector(".plan-bar")!.getAttribute("aria-hidden")).toBe("true");
-    expect(band.querySelector(".plan-ask")!.textContent).toBe("4 safe changes · 6 files2 existing files are backed up before anything is written");
+    expect(band.querySelector(".plan-ask")!.textContent).toBe("4 safe changes · 8 files4 existing files are backed up before anything is written");
   });
 
   it("draws what apply writes to each agent on a map the table states in words, hidden from assistive technology", () => {
