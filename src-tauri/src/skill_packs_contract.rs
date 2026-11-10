@@ -754,7 +754,7 @@ mod tests {
             .collect();
         for root in [SkillRoot::Claude, SkillRoot::Agents] {
             let expected = format!(
-                "+ {}/deploy (pack team; allowed-tools: Bash(touch *) [grants tool access without \
+                "+ {}/deploy (1 file; pack team; allowed-tools: Bash(touch *) [grants tool access without \
                  asking]; hooks: PreToolUse: - matcher: Bash [runs commands without asking]; \
                  !: line 12: Branch: !`git branch --show-current` [runs shell commands when the \
                  skill loads])",

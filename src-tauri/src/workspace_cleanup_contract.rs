@@ -291,7 +291,7 @@ mod tests {
         assert!(
             op.details
                 .iter()
-                .any(|line| line.starts_with("- skills/ (") && line.contains("old copies")),
+                .any(|line| line.starts_with("- skills/ (") && line.contains(" files, old copies;")),
             "{:?}",
             op.details
         );

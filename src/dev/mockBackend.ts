@@ -1027,7 +1027,7 @@ function plannedOperation(surface: SetupSurfaceId): PlannedOperation {
       ? [
         `+ ~/.agents/skills (${skills.length} skills, ${skills.length} files)`,
         `~ ~/.claude/skills (${skills.length} skills, ${skills.length} files)`,
-        `- $CODEX_HOME/skills (${skills.length} skills, owned copies)`,
+        `- $CODEX_HOME/skills (${skills.length} skills, ${skills.length} files, owned copies)`,
         "! ~/.cursor/skills/tdd (edited, kept)",
       ]
       : kind === "update" && surface === "claude_agents"

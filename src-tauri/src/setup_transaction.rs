@@ -2731,17 +2731,19 @@ fn flagged_note(flagged: &FlaggedSkill) -> String {
 /// ```text
 /// + ~/.agents/skills (N skills, M files)
 /// ~ ~/.claude/skills (N skills, M files)
-/// + ~/.claude/skills/deploy (pack team; allowed-tools: Bash(git *) [grants tool access without asking])
-/// - $CODEX_HOME/skills (N skills, owned copies)
+/// + ~/.claude/skills/deploy (M files; pack team; allowed-tools: Bash(git *) [grants tool access without asking])
+/// - $CODEX_HOME/skills (N skills, M files, owned copies)
 /// ! ~/.cursor/skills/tdd (edited, kept)
 /// = ~/.claude/skills/diagnose (you manage; bundled update available)
 /// ```
 ///
 /// Creations, updates and removals are summarised per folder, except a pack skill in `flagged`
 /// (it sets keys the harness acts on without asking), which gets a line of its own in each folder
-/// it is written to, naming those keys and their values. Every skill that stays because it was
-/// edited or is in the way gets its own line, with the harnesses that read both that copy and the
-/// installed one. `=` marks a skill with a file the user keeps.
+/// it is written to, naming those keys and their values. Each of these lines says how many files
+/// it stands for, before anything a pack wrote: the review's file total reads the first count in
+/// a note. Every skill that stays because it was edited or is in the way gets its own line, with
+/// the harnesses that read both that copy and the installed one. `=` marks a skill with a file
+/// the user keeps.
 pub fn skill_plan_details(
     planned: &[PlannedArtifact],
     scope: &SkillScope,
@@ -2764,22 +2766,25 @@ pub fn skill_plan_details(
                 .partition(|file| !owned && flagged.contains_key(file.skill.as_str()));
             if !files.is_empty() {
                 let skills: BTreeSet<_> = files.iter().map(|file| file.skill.as_str()).collect();
-                let tail = if owned {
-                    "owned copies".to_string()
-                } else {
-                    count(files.len(), "file")
-                };
+                let mut tail = count(files.len(), "file");
+                if owned {
+                    tail.push_str(", owned copies");
+                }
                 lines.push(format!(
                     "{sign} {} ({}, {tail})",
                     root.display(),
                     count(skills.len(), "skill")
                 ));
             }
-            let own_skills: BTreeSet<_> = own_line.iter().map(|file| file.skill.as_str()).collect();
-            for skill in own_skills {
+            let mut own_skills: BTreeMap<&str, usize> = BTreeMap::new();
+            for file in &own_line {
+                *own_skills.entry(file.skill.as_str()).or_default() += 1;
+            }
+            for (skill, files) in own_skills {
                 lines.push(format!(
-                    "{sign} {}/{skill} ({})",
+                    "{sign} {}/{skill} ({}; {})",
                     root.display(),
+                    count(files, "file"),
                     flagged_note(&flagged[skill])
                 ));
             }
@@ -4678,8 +4683,8 @@ mod tests {
             [
                 "+ ~/.claude/skills (1 skill, 1 file)".to_string(),
                 format!(
-                    "+ ~/.claude/skills/deploy (pack team; allowed-tools: Bash(git *) [grants tool \
-                     access without asking]; model: {}… (whole value in the Library))",
+                    "+ ~/.claude/skills/deploy (2 files; pack team; allowed-tools: Bash(git *) \
+                     [grants tool access without asking]; model: {}… (whole value in the Library))",
                     "x".repeat(200)
                 ),
             ]

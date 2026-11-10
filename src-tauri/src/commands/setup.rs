@@ -3027,7 +3027,8 @@ fn workspace_plan_details(planned: &[setup_transaction::PlannedArtifact]) -> Vec
         .into_iter()
         .map(|(place, n)| {
             format!(
-                "- {place} ({n} old cop{}; backed up, z restores them)",
+                "- {place} ({n} file{}, old cop{}; backed up, z restores them)",
+                if n == 1 { "" } else { "s" },
                 if n == 1 { "y" } else { "ies" }
             )
         })
