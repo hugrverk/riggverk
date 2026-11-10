@@ -2678,6 +2678,7 @@ fn plan_surfaces(
     attach_mcp_details(&mut plan, home);
     attach_claude_settings_details(&mut plan);
     attach_opencode_details(&mut plan, ws_root, home, sources.as_ref().ok());
+    attach_file_count_details(&mut plan, ws_root, home, sources.as_ref().ok());
     attach_plan_preview(&mut plan, ws_root, home, &sources)?;
     Ok(plan)
 }
@@ -2805,6 +2806,99 @@ fn attach_opencode_details(
     }) {
         op.details = details.clone();
     }
+}
+
+/// A surface that writes several files and has no review lines of its own (an agents folder, a new
+/// OpenCode config) would show as one row, and the review would count it as one file. It gets a
+/// line per kind and folder with the number of files, so the review's file total is the number of
+/// files the apply writes. Paths and counts only.
+fn attach_file_count_details(
+    plan: &mut SetupPlan,
+    workspace_root: &Path,
+    home: &Path,
+    sources: Option<&crate::skill_sources::SkillSources>,
+) {
+    let writes = |kind: OperationKind| {
+        matches!(
+            kind,
+            OperationKind::Create | OperationKind::Update | OperationKind::Remove
+        )
+    };
+    // The skills and the workspace surface write their own lines, per folder.
+    let surfaces: Vec<SetupSurfaceId> = plan
+        .operations
+        .iter()
+        .filter(|op| op.details.is_empty() && writes(op.kind))
+        .map(|op| op.surface)
+        .filter(|surface| {
+            surface.canonical() != SetupSurfaceId::Skills
+                && *surface != SetupSurfaceId::WorkspaceBundle
+        })
+        .collect();
+    let Some(sources) = sources else {
+        return;
+    };
+    if surfaces.is_empty() {
+        return;
+    }
+    let Ok(planned) = setup_transaction::plan_artifacts_for_surfaces_with(
+        &surfaces,
+        workspace_root,
+        home,
+        &crate::skill_roots::SkillScope::all(),
+        sources,
+    ) else {
+        return;
+    };
+    for op in plan
+        .operations
+        .iter_mut()
+        .filter(|op| surfaces.contains(&op.surface))
+    {
+        let written: Option<Vec<(OperationKind, PathBuf)>> = planned
+            .iter()
+            .filter(|p| p.surface == op.surface && writes(p.kind))
+            .map(|p| {
+                let dest = p.artifact.resolve_dest(home, workspace_root).ok()?;
+                Some((p.kind, dest))
+            })
+            .collect();
+        // One file is the row the surface already has, and a file without a path leaves it too.
+        if let Some(written) = written.filter(|written| written.len() > 1) {
+            op.details = file_count_lines(&written, home);
+        }
+    }
+}
+
+/// One line per kind and folder: the file itself when the folder gets one, else the folder and
+/// how many files (`+ ~/.claude/agents (5 files)`).
+fn file_count_lines(written: &[(OperationKind, PathBuf)], home: &Path) -> Vec<String> {
+    let mut lines = Vec::new();
+    for (sign, kind) in [
+        ("+", OperationKind::Create),
+        ("~", OperationKind::Update),
+        ("-", OperationKind::Remove),
+    ] {
+        let mut folders: std::collections::BTreeMap<&Path, Vec<&Path>> =
+            std::collections::BTreeMap::new();
+        for (_, dest) in written.iter().filter(|(k, _)| *k == kind) {
+            folders
+                .entry(dest.parent().unwrap_or(dest))
+                .or_default()
+                .push(dest);
+        }
+        for (folder, files) in folders {
+            lines.push(match files.as_slice() {
+                [only] => format!("{sign} {}", crate::skill_loads::display_path(only, home)),
+                _ => format!(
+                    "{sign} {} ({} files)",
+                    crate::skill_loads::display_path(folder, home),
+                    files.len()
+                ),
+            });
+        }
+    }
+    lines
 }
 
 /// A new rules file can shadow another file its harness reads (Kilo loads one global rules file,
@@ -5945,6 +6039,78 @@ mod tests {
         }
     }
 
+    // ── File counts of the review ──
+
+    #[test]
+    fn a_surface_of_several_files_says_how_many_it_writes() {
+        let env = TempSetupEnv::new("file-count-lines");
+        let surfaces: Vec<String> = vec![
+            "claude_agents".into(),
+            "claude_rules".into(),
+            "open_code_config".into(),
+        ];
+        let plan = preview_setup(surfaces.clone()).expect("preview");
+        let details = |surface: SetupSurfaceId| {
+            plan.operations
+                .iter()
+                .find(|planned| planned.surface == surface)
+                .expect("planned")
+                .details
+                .clone()
+        };
+        // One file is the row of its surface.
+        assert!(details(SetupSurfaceId::ClaudeRules).is_empty());
+        assert_eq!(
+            details(SetupSurfaceId::OpenCodeConfig),
+            [
+                "+ ~/.config/opencode (2 files)",
+                "+ ~/.config/playwright-mcp/config.json"
+            ]
+        );
+
+        // The count is the number of files the apply writes.
+        let result = apply_setup(
+            surfaces,
+            true,
+            plan.plan_fingerprint.clone(),
+            plan.preview_token.clone(),
+        )
+        .expect("apply");
+        assert!(result.success, "{}", result.message);
+        let agents = fs::read_dir(env.home.join(".claude/agents"))
+            .expect("agents folder")
+            .count();
+        assert!(agents > 1, "{agents}");
+        assert_eq!(
+            details(SetupSurfaceId::ClaudeAgents),
+            [format!("+ ~/.claude/agents ({agents} files)")]
+        );
+        let again = preview_setup(vec!["claude_agents".into()]).expect("preview again");
+        assert!(again.operations.iter().all(|op| op.details.is_empty()));
+    }
+
+    #[test]
+    fn file_count_lines_group_the_files_by_kind_and_folder() {
+        let home = Path::new("/home/u");
+        let at = |kind: OperationKind, rel: &str| (kind, home.join(rel));
+        assert_eq!(
+            file_count_lines(
+                &[
+                    at(OperationKind::Create, ".claude/agents/new.md"),
+                    at(OperationKind::Update, ".claude/agents/inspector.md"),
+                    at(OperationKind::Update, ".claude/agents/verifier.md"),
+                    at(OperationKind::Remove, ".claude/agents/old.md"),
+                ],
+                home
+            ),
+            [
+                "+ ~/.claude/agents/new.md",
+                "~ ~/.claude/agents (2 files)",
+                "- ~/.claude/agents/old.md"
+            ]
+        );
+    }
+
     // ── OpenCode review lines ──
 
     fn opencode_op(plan: &SetupPlan) -> &PlannedOperation {
@@ -6083,7 +6249,14 @@ mod tests {
         let plan = preview_setup(vec!["open_code_config".into()]).expect("preview");
         let op = opencode_op(&plan);
         assert_eq!(op.kind, OperationKind::Create);
-        assert!(op.details.is_empty(), "{:?}", op.details);
+        // Only the files it creates: nothing of the user's is replaced.
+        assert!(
+            op.details
+                .iter()
+                .all(|line| line.starts_with("+ ~/.config/")),
+            "{:?}",
+            op.details
+        );
     }
 
     // ── Target gating ──
