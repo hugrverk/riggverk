@@ -31,3 +31,9 @@ libc = "0.2"
 [profile.release]
 strip = true
 lto = "thin"
+
+# Proc macros and build scripts run on the build machine and are never shipped. Stripped with `strip = true` and built
+# for the bundle's minimum macOS (13.3, which `tauri build` sets), their dylibs fail to load on current macOS
+# ("mis-aligned LINKEDIT string pool"), so a release build from a clean target directory fails.
+[profile.release.build-override]
+strip = false
