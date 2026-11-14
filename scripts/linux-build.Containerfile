@@ -1,7 +1,10 @@
 # Build image for the Linux release packages (AppImage, deb, rpm). See scripts/linux-build.sh.
 #
 # Ubuntu 22.04 (glibc 2.35) is the oldest supported base: the binary and the AppImage run on that glibc or newer.
-# Every download is pinned by version and checksum, the base image by digest. Bump deliberately.
+# The base image is pinned by digest, Node and rustup by version and SHA-256. Bump deliberately. Not pinned: the apt
+# packages (current 22.04 archive) and the AppImage tools the Tauri bundler downloads without a checksum (AppRun,
+# linuxdeploy, linuxdeploy-plugin-appimage from its `continuous` tag); the bundler keeps those in the
+# riggverk-linux-tauri-cache volume and reuses them, so `podman volume rm riggverk-linux-tauri-cache` fetches them anew.
 FROM docker.io/library/ubuntu:22.04@sha256:45e9ddc6895604674618a409ca9f73d301da8fdb75fe330e8e9a27b3b219e4ad
 
 ARG NODE_VERSION=22.23.5
