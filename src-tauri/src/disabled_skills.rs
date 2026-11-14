@@ -29,11 +29,11 @@ pub const UNUSABLE: &str = "disabled-skills.json cannot be read; fix or remove i
 pub const FOREIGN: &str =
     "disabled-skills.json was written by another version of Riggverk; update the app or move the file away";
 
-#[derive(Debug, Default, Serialize, Deserialize)]
+/// Both fields are required: a file without the list must not read as "nothing disabled", or a
+/// plan would install the skills it was meant to keep off.
+#[derive(Debug, Serialize, Deserialize)]
 struct DisabledDocument {
-    #[serde(default)]
     schema_version: u32,
-    #[serde(default)]
     disabled: Vec<String>,
 }
 
@@ -131,6 +131,13 @@ pub fn set(workspace_root: &Path, names: &[String], enabled: bool) -> Result<(),
     };
     let raw = serde_json::to_vec_pretty(&document)
         .map_err(|error| format!("serialize disabled skills: {error}"))?;
+    // The reader refuses a bigger file, and a file it refuses cannot be changed here again.
+    if raw.len() as u64 > MAX_FILE_BYTES {
+        return Err(format!(
+            "the disabled skills would not fit in {} KiB; enable some first",
+            MAX_FILE_BYTES / 1024
+        ));
+    }
     crate::managed_state::ensure_data_folder(workspace_root)?;
     crate::safe_filesystem::write_regular_file_atomic(
         &path_of(workspace_root),
@@ -182,6 +189,10 @@ mod tests {
         for (raw, phrase) in [
             ("not json", UNUSABLE),
             (r#"{"schema_version": 1, "disabled": "tdd"}"#, UNUSABLE),
+            // A missing field fails closed rather than reading as nothing disabled.
+            (r#"{"schema_version": 1}"#, UNUSABLE),
+            (r#"{"disabled": []}"#, UNUSABLE),
+            ("{}", UNUSABLE),
             (r#"{"schema_version": 7, "disabled": ["tdd"]}"#, FOREIGN),
         ] {
             write_raw(&ws, raw);
@@ -256,6 +267,31 @@ mod tests {
         let error = set(&ws, &all, false).unwrap_err();
         assert!(error.contains("at most"), "{error}");
         assert!(!path_of(&ws).exists());
+        let _ = fs::remove_dir_all(&ws);
+    }
+
+    #[test]
+    fn a_disable_that_would_outgrow_the_file_is_refused_and_writes_nothing() {
+        let ws = temp("bytes");
+        // Fewer names than the cap, but long ones: more bytes than the reader accepts.
+        let long: Vec<String> = (0..100)
+            .map(|i| format!("skill-{i}-{}", "x".repeat(1000)))
+            .collect();
+        assert!(long.len() < MAX_ENTRIES);
+        let error = set(&ws, &long, false).unwrap_err();
+        assert!(error.contains("would not fit"), "{error}");
+        assert!(!path_of(&ws).exists(), "nothing is written");
+
+        // With a usable file in place it is left as it was, and stays readable.
+        set(&ws, &names(&["tdd"]), false).unwrap();
+        let before = fs::read(path_of(&ws)).unwrap();
+        assert!(set(&ws, &long, false).is_err());
+        assert_eq!(fs::read(path_of(&ws)).unwrap(), before);
+        assert_eq!(load(&ws), Ok(BTreeSet::from(["tdd".to_string()])));
+
+        // What does fit is written and read back.
+        set(&ws, &long[..10], false).unwrap();
+        assert_eq!(load(&ws).unwrap().len(), 11);
         let _ = fs::remove_dir_all(&ws);
     }
 
