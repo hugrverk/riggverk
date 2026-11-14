@@ -707,7 +707,7 @@ mod tests {
     }
 
     #[test]
-    fn named_by_lists_ci_triage_for_diagnose() {
+    fn named_by_lists_the_ci_skill_for_diagnose() {
         let env = Env::new("named-by");
         let choices = crate::commands::list_skill_choices().expect("choices");
         let by = choices.named_by.get("diagnose").expect("diagnose is named");
