@@ -85,6 +85,9 @@ pub enum SkillLoadFlag {
     ShadowedByFolderOrder,
     /// At least one of several copies is the user's own: the app cannot fix it
     ForeignCopy,
+    /// The user disabled the skill (see `disabled_skills`) and a copy is still here: the next
+    /// Update removes the app's copies; the user's own stays
+    Disabled,
 }
 
 /// One skill name as one harness sees it.
@@ -194,6 +197,8 @@ pub struct OwnershipProof {
     current: HashMap<String, String>,
     /// The `SKILL.md` files the user keeps
     kept: crate::kept_files::KeptFiles,
+    /// The skills the user disabled; none while `disabled-skills.json` cannot be read
+    disabled: std::collections::BTreeSet<String>,
 }
 
 impl OwnershipProof {
@@ -217,6 +222,7 @@ impl OwnershipProof {
                 .collect(),
             current,
             kept: crate::kept_files::KeptFiles::default(),
+            disabled: sources.disabled().cloned().unwrap_or_default(),
         })
     }
 
@@ -572,7 +578,13 @@ pub fn effective_skill_loads(
         let skills = by_name
             .into_iter()
             .map(|(name, copies)| SkillLoad {
-                flags: flags_for(harness, &copies),
+                flags: {
+                    let mut flags = flags_for(harness, &copies);
+                    if proof.disabled.contains(&name) {
+                        flags.push(SkillLoadFlag::Disabled);
+                    }
+                    flags
+                },
                 winner: winner_for(harness, &copies),
                 name,
                 copies,

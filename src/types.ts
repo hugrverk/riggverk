@@ -408,7 +408,9 @@ export type SkillLoadFlag =
   | "duplicate_identical"
   | "possible_duplicate"
   | "shadowed_by_folder_order"
-  | "foreign_copy";
+  | "foreign_copy"
+  /** The user disabled the skill and a copy is still here: the next Update removes Riggverk's, the user's stays. */
+  | "disabled";
 
 export interface SkillCopy {
   folder: SkillReadFolder;

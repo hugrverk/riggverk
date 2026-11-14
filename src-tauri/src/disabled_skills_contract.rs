@@ -707,4 +707,41 @@ mod tests {
         assert!(choices.disabled.is_empty());
         drop(env);
     }
+
+    // ── Harness pages ──
+
+    #[test]
+    fn a_disabled_skills_installed_copy_is_flagged() {
+        use crate::skill_loads::{
+            effective_skill_loads, FolderPaths, OwnershipProof, SkillLoadFlag,
+        };
+        let env = Env::new("loads");
+        env.apply();
+        let loads = || {
+            let records = crate::managed_state::read_managed_state(&env.ws)
+                .expect("state")
+                .artifacts;
+            let proof = OwnershipProof::new(&env.sources(), &records).expect("proof");
+            effective_skill_loads(
+                &env.home,
+                &[crate::agent_targets::HarnessId::Claude],
+                &FolderPaths::resolve(&env.home),
+                &proof,
+            )
+        };
+        let flags_of = |name: &str| {
+            loads().harnesses[0]
+                .skills
+                .iter()
+                .find(|load| load.name == name)
+                .map(|load| load.flags.clone())
+        };
+        assert_eq!(flags_of("tdd"), Some(Vec::new()));
+
+        env.disable(&["tdd"]);
+        assert_eq!(flags_of("tdd"), Some(vec![SkillLoadFlag::Disabled]));
+        assert_eq!(flags_of("diagnose"), Some(Vec::new()));
+        env.apply();
+        assert_eq!(flags_of("tdd"), None, "removed: nothing loads it");
+    }
 }

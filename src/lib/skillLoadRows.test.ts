@@ -73,6 +73,24 @@ function codexTwice(count: number, start = 0): SkillLoad[] {
 const CODEX_FOLDERS: SkillReadFolder[] = ["agents", "codex_home"];
 
 describe("skillLoadRows", () => {
+  it("flags a disabled skill's installed copy: Riggverk's goes with the next Update, the user's stays", () => {
+    const view = loadsOf([
+      harnessOf("claude", ["claude"], [
+        load("tdd", [copy("claude", "tdd")], ["disabled"]),
+        load("mine", [copy("claude", "mine", { owner: "foreign", current: false })], ["disabled"]),
+        single("diagnose", "claude"),
+      ]),
+    ]);
+    const rows = skillLoadRows(view, "claude");
+    expect(rows[0]).toEqual({ label: "skill loads", value: "3 skills, 1 copy each", tone: "ok" });
+    expect(rows.slice(1).map((row) => row.value)).toEqual([
+      "tdd · ~/.claude/skills · disabled; next Update removes it",
+      "mine · ~/.claude/skills · disabled; your copy stays, delete it to stop loading it",
+    ]);
+    expect(isWarningFlag("disabled")).toBe(false);
+    expect(skillLoadProblemCount(summarizeSkillLoads(view.loads, "claude"))).toBe(0);
+  });
+
   it("shows nothing while the loads are not read, and a dim row when reading them failed", () => {
     expect(skillLoadRows({ loads: null, error: null }, "codex")).toEqual([]);
     expect(skillLoadRows({ loads: null, error: "workspace invalid" }, "codex")).toEqual([
