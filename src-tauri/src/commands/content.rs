@@ -396,15 +396,21 @@ pub fn read_doc(id: String) -> Result<DocumentContent, String> {
 /// files Install writes.
 const CURSOR_USER_RULES_DOC: &str = "templates/cursor/user-rules.md";
 
-/// `doc`, a bundled rules text, with the routing of the data folder's packs spliced in as Install
-/// does (see `pack_routing`). Without a usable data folder or packs it is returned as it is.
+/// `doc`, a bundled rules text, composed with the data folder's disabled skills and packs' routing
+/// as Install does (see `pack_routing::compose`). Without a usable data folder, packs or disabled
+/// skills it is returned as it is.
 fn with_pack_routing(mut doc: DocumentContent, bundle_root: &Path) -> DocumentContent {
     if let Ok(data_folder) = workspace_root() {
         let sources =
             crate::skill_sources::SkillSources::new(bundle_root.to_path_buf(), &data_folder);
-        doc.content = crate::pack_routing::splice(
+        use crate::skill_sources::SourceRoot;
+        // A `disabled-skills.json` that cannot be read leaves out nothing here: this is a view,
+        // and the plans that write rules are unavailable until it is fixed.
+        let none = std::collections::BTreeSet::new();
+        doc.content = crate::pack_routing::compose(
             &doc.content,
-            crate::skill_sources::SourceRoot::pack_routing(&sources),
+            sources.disabled().unwrap_or(&none),
+            sources.pack_routing(),
         );
     }
     doc

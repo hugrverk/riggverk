@@ -60,6 +60,9 @@ pub struct PackSummary {
     /// Why its `routing.md` is not used, as a whole (a fixed phrase); `None` when it is or there is
     /// none.
     pub(crate) routing_problem: Option<String>,
+    /// Valid lines of its `routing.md` left out of the rules block because they name a disabled
+    /// skill.
+    pub(crate) routing_left_out: usize,
 }
 
 #[derive(Serialize)]
@@ -102,6 +105,7 @@ fn library(
             .skills
             .iter()
             .any(|skill| skill.state == PackSkillState::Active);
+        let (routing, routing_left_out) = sources.routing_of(pack);
         packs.push(PackSummary {
             name: pack.name.clone(),
             state: if pack.refused.is_some() {
@@ -112,8 +116,9 @@ fn library(
             .to_string(),
             reason: pack.refused.clone().unwrap_or_default(),
             forgettable: held_here && !any_active,
-            routing: pack.routing.lines().to_vec(),
+            routing,
             routing_problem: pack.routing.problem().map(str::to_string),
+            routing_left_out,
         });
         for skill in &pack.skills {
             skills.push(PackSkillSummary {
@@ -166,6 +171,7 @@ fn library(
                 forgettable: true,
                 routing: Vec::new(),
                 routing_problem: None,
+                routing_left_out: 0,
             });
         }
         let already_listed = skills

@@ -134,8 +134,11 @@ mod tests {
             let packs = self.ws.join("packs");
             let dir = packs.join(pack).join("skills").join(name);
             fs::create_dir_all(&dir).expect("skill dir");
-            fs::write(dir.join("SKILL.md"), canonical_skill_text(name, "a pack skill"))
-                .expect("SKILL.md");
+            fs::write(
+                dir.join("SKILL.md"),
+                canonical_skill_text(name, "a pack skill"),
+            )
+            .expect("SKILL.md");
             for folder in [
                 packs.clone(),
                 packs.join(pack),
@@ -426,7 +429,8 @@ mod tests {
         let plan = env.plan();
         assert!(!plan.is_empty());
         assert!(
-            plan.iter().all(|planned| planned.kind == OperationKind::Remove),
+            plan.iter()
+                .all(|planned| planned.kind == OperationKind::Remove),
             "every installed file is removed"
         );
         let operation = env.skills_operation();
@@ -454,6 +458,20 @@ mod tests {
         let plan = env.preview();
         assert!(!plan.has_pending_changes);
         assert!(plan.plan_fingerprint.is_none());
+        // The rules route to skills too: they are unavailable as well.
+        assert!(
+            crate::pack_routing::rules_source_text(&ArtifactId::ClaudeRules, &env.sources())
+                .is_err()
+        );
+        let rules = plan_artifacts_for_surfaces(&[SetupSurfaceId::ClaudeRules], &env.ws, &env.home)
+            .expect("rules plan");
+        assert!(
+            rules
+                .iter()
+                .all(|planned| planned.kind == OperationKind::Unavailable),
+            "{:?}",
+            rules.iter().map(|planned| planned.kind).collect::<Vec<_>>()
+        );
         assert_eq!(files_below(&env.root(SkillRoot::Claude)), before);
         assert_eq!(
             fs::read_to_string(env.disabled_file()).expect("file"),

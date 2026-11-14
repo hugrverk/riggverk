@@ -379,6 +379,12 @@ impl SkillSources {
         }
     }
 
+    /// The routing lines of `pack` in the rules block, and how many name a disabled skill (see
+    /// [`routed_lines`]).
+    pub fn routing_of(&self, pack: &PackReport) -> (Vec<String>, usize) {
+        routed_lines(pack, &self.disabled)
+    }
+
     /// Whether the user disabled the skill `name`. False while `disabled-skills.json` cannot be
     /// read: callers that install skills fail on that before they ask.
     pub fn is_disabled(&self, name: &str) -> bool {
@@ -455,16 +461,38 @@ impl SkillSources {
 fn render_routing(
     packs: &[PackReport],
     catalog: &Result<Vec<CatalogSkill>, String>,
-    _disabled: &Result<BTreeSet<String>, String>,
+    disabled: &Result<BTreeSet<String>, String>,
 ) -> String {
     if catalog.is_err() {
         return String::new();
     }
+    let routed: Vec<(&str, Vec<String>)> = packs
+        .iter()
+        .map(|pack| (pack.name.as_str(), routed_lines(pack, disabled).0))
+        .collect();
     crate::pack_routing::render_section(
-        packs
-            .iter()
-            .map(|pack| (pack.name.as_str(), pack.routing.lines())),
+        routed.iter().map(|(name, lines)| (*name, lines.as_slice())),
     )
+}
+
+/// The routing lines of `pack` that go into the rules block, and how many are left out because
+/// they name a disabled skill. While `disabled-skills.json` cannot be read nothing is left out:
+/// the rules sources are unavailable then.
+pub fn routed_lines(
+    pack: &PackReport,
+    disabled: &Result<BTreeSet<String>, String>,
+) -> (Vec<String>, usize) {
+    let lines = pack.routing.lines();
+    let Ok(disabled) = disabled else {
+        return (lines.to_vec(), 0);
+    };
+    let kept: Vec<String> = lines
+        .iter()
+        .filter(|line| !crate::pack_routing::names_any(line, disabled))
+        .cloned()
+        .collect();
+    let left_out = lines.len() - kept.len();
+    (kept, left_out)
 }
 
 /// Counts, per thread, how often the catalog was read, so a test can hold a plan, an apply or a
