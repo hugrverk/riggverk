@@ -2,7 +2,8 @@
 # Local release flow (no CI). See docs/RELEASE.md.
 #
 #   scripts/release.sh prepare [--dry-run] [--since REV]   next CalVer version, notes draft, bump, release check, PR
-#   scripts/release.sh build-linux [--dry-run]             on Linux: AppImage, deb and rpm of main into release/linux
+#   scripts/release.sh build-linux [--dry-run] [--allow-newer]
+#                                                          on Linux: AppImage, deb and rpm of main into release/linux
 #   scripts/release.sh publish [--dry-run] [--allow-newer] [--no-linux]
 #                                                          on macOS: universal build, dmg, zip, the Linux packages from
 #                                                          release/linux, SHA256SUMS, tag and GitHub release
@@ -54,7 +55,7 @@ usage() {
   cat <<'USAGE'
 usage:
   scripts/release.sh prepare [--dry-run] [--since REV]
-  scripts/release.sh build-linux [--dry-run]
+  scripts/release.sh build-linux [--dry-run] [--allow-newer]
   scripts/release.sh publish [--dry-run] [--allow-newer] [--no-linux]
 USAGE
 }
@@ -644,7 +645,8 @@ check_version_and_notes() {
 }
 
 # The Linux packages build-linux left in release/linux: of this version, built from HEAD, unchanged. --no-linux
-# releases macOS alone; installed Linux apps then see no update until the next release with Linux packages.
+# releases macOS alone; installed Linux apps then fail their update check ("Could not check for a new version") until
+# the next release with Linux packages, since its latest.json has no linux-x86_64 entry.
 check_linux() {
   local no_linux="$1"
   if [ "$no_linux" -eq 1 ]; then
@@ -745,6 +747,11 @@ cmd_publish() {
   zip_app
   step "disk image"
   dmg_app
+  if [ "$linux" -eq 1 ]; then
+    # The macOS build took minutes; sign and release only packages that still match the stamp.
+    step "check the Linux packages again"
+    check_linux 0
+  fi
   if [ "$updater" -eq 1 ] && [ "$linux" -eq 1 ]; then
     step "sign the Linux AppImage"
     sign_linux_appimage
