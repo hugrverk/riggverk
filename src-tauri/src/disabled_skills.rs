@@ -29,11 +29,11 @@ pub const UNUSABLE: &str = "disabled-skills.json cannot be read; fix or remove i
 pub const FOREIGN: &str =
     "disabled-skills.json was written by another version of Riggverk; update the app or move the file away";
 
-#[derive(Debug, Default, Serialize, Deserialize)]
+/// Both fields are required: a file without the list must not read as "nothing disabled", or a
+/// plan would install the skills it was meant to keep off.
+#[derive(Debug, Serialize, Deserialize)]
 struct DisabledDocument {
-    #[serde(default)]
     schema_version: u32,
-    #[serde(default)]
     disabled: Vec<String>,
 }
 
@@ -182,6 +182,10 @@ mod tests {
         for (raw, phrase) in [
             ("not json", UNUSABLE),
             (r#"{"schema_version": 1, "disabled": "tdd"}"#, UNUSABLE),
+            // A missing field fails closed rather than reading as nothing disabled.
+            (r#"{"schema_version": 1}"#, UNUSABLE),
+            (r#"{"disabled": []}"#, UNUSABLE),
+            ("{}", UNUSABLE),
             (r#"{"schema_version": 7, "disabled": ["tdd"]}"#, FOREIGN),
         ] {
             write_raw(&ws, raw);
