@@ -189,6 +189,14 @@ The preview copies the source into a private staging folder, never through a lin
 
 In the Library, Skills lists them under `pack:<name>`. A pack skill named like a bundled one is *shadowed*: the bundle's wins. When two packs both provide a skill of the same name, neither is used and both show an *error*. If a pack's folder disappears, the skills you installed from it stay as they are and show *pack missing*; **Forget pack** (Library, Skills) lets the next Install remove them, with a backup.
 
+### Turning a skill off
+
+Library → Skills → **Disable** on a bundled skill or an active pack skill (or `:disable <names…>`) turns it off for every agent. Disable asks first and names the skills whose `SKILL.md` mentions it; they keep pointing to it, which is a warning, not a refusal. The choice is saved in `.riggverk/disabled-skills.json` in the data folder, and nothing is removed yet.
+
+The next **Update all** removes the copies Riggverk installed, with a backup, and leaves every routing line that names the skill out of the rules: the base's "Skill routing" bullets and a pack's `routing.md` lines alike (the Packs view says how many lines it left out). `z` restores the copies, but the skill stays disabled. A copy you edited stays as it is and the review says so; delete it yourself to stop loading it. **Enable** (or `:enable <names…>`) turns it on again, and the next Update installs it.
+
+A shadowed, broken or missing pack skill cannot be disabled; a shadowed skill's name is the bundled one's, so disabling that name turns the bundled skill off and the pack skill stays shadowed. A disabled name that leaves the catalog stays listed as disabled, and stays disabled if it comes back. Uninstall removes the app's copies of every skill, disabled ones included, and keeps the choice. If `disabled-skills.json` cannot be read, skills and rules updates are unavailable until you fix or remove it.
+
 ### Which folders
 
 | Harness | Reads |
