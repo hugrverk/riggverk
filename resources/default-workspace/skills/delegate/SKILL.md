@@ -144,7 +144,8 @@ Integrate parallel slices one at a time and re-run the checks after each. A conf
 
 ### OpenCode
 
-- Subagent route: the task tool with the `general` subagent, given the worktree path; read-only agents such as `explore` cannot write. An external CLI through bash asks once per run.
+- No subagent route for code. Riggverk's `architect` may start only `explore`, `repo-scout`, `inspector`, `sentinel`, `scribe` and `verifier`, and none of them writes code, so send each write slice through an external CLI route from `delegate-recipes.md`; bash asks once per run. Use those roles for scouting and review only.
+- The architect stops after 100 steps, which can end a long run before Collect: keep slices small, and if the session stops, collect what the worktree holds before anything else (Failure modes).
 
 ### Cursor
 
