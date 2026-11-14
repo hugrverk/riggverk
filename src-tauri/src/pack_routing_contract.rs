@@ -442,6 +442,28 @@ mod tests {
     }
 
     #[test]
+    fn the_library_rules_views_fail_closed_on_an_unusable_disabled_skills_file() {
+        let env = Env::new("disabled-unusable-views");
+        let path = crate::workspace_layout::state_file(&env.ws, "disabled-skills.json");
+        fs::create_dir_all(path.parent().expect("state dir")).expect("state dir");
+        fs::write(&path, "not json").expect("garbage");
+        let phrase = crate::disabled_skills::UNUSABLE.to_string();
+        assert_eq!(
+            crate::commands::read_doc("templates/cursor/user-rules.md".into()).map(|_| ()),
+            Err(phrase.clone())
+        );
+        assert_eq!(
+            crate::commands::read_agent_template().map(|_| ()),
+            Err(phrase)
+        );
+        // Another bundled doc is not a rules text and reads as usual.
+        assert!(crate::commands::read_doc("docs/USING_THE_APP.md".into()).is_ok());
+
+        fs::remove_file(&path).expect("remove");
+        assert!(crate::commands::read_agent_template().is_ok());
+    }
+
+    #[test]
     fn a_pack_line_naming_a_disabled_skill_is_left_out_and_the_rest_of_the_file_stays() {
         let env = Env::new("disabled-pack");
         env.pack("mine", &["my-canvas", "my-files"]);

@@ -383,11 +383,11 @@ pub fn read_doc(id: String) -> Result<DocumentContent, String> {
         None => {
             let bundle = bundled_library_root()?;
             let doc = read_curated_doc(&bundle, &id)?;
-            Ok(if doc.id == CURSOR_USER_RULES_DOC {
+            if doc.id == CURSOR_USER_RULES_DOC {
                 with_pack_routing(doc, &bundle)
             } else {
-                doc
-            })
+                Ok(doc)
+            }
         }
     }
 }
@@ -398,22 +398,21 @@ const CURSOR_USER_RULES_DOC: &str = "templates/cursor/user-rules.md";
 
 /// `doc`, a bundled rules text, composed with the data folder's disabled skills and packs' routing
 /// as Install does (see `pack_routing::compose`). Without a usable data folder, packs or disabled
-/// skills it is returned as it is.
-fn with_pack_routing(mut doc: DocumentContent, bundle_root: &Path) -> DocumentContent {
+/// skills it is returned as it is. A `disabled-skills.json` that cannot be read is an error with its
+/// fixed phrase, as for the rules Install writes: the text would route to skills the user turned
+/// off, and the Cursor User Rules are copied by hand from it.
+fn with_pack_routing(
+    mut doc: DocumentContent,
+    bundle_root: &Path,
+) -> Result<DocumentContent, String> {
     if let Ok(data_folder) = workspace_root() {
         let sources =
             crate::skill_sources::SkillSources::new(bundle_root.to_path_buf(), &data_folder);
         use crate::skill_sources::SourceRoot;
-        // A `disabled-skills.json` that cannot be read leaves out nothing here: this is a view,
-        // and the plans that write rules are unavailable until it is fixed.
-        let none = std::collections::BTreeSet::new();
-        doc.content = crate::pack_routing::compose(
-            &doc.content,
-            sources.disabled().unwrap_or(&none),
-            sources.pack_routing(),
-        );
+        let disabled = sources.disabled().map_err(str::to_string)?;
+        doc.content = crate::pack_routing::compose(&doc.content, disabled, sources.pack_routing());
     }
-    doc
+    Ok(doc)
 }
 
 /// A bundled doc, read from `bundle_root`. Its `path` is relative to the bundle.
@@ -1890,7 +1889,7 @@ mod tests {
 #[tauri::command]
 pub fn read_agent_template() -> Result<DocumentContent, String> {
     let bundle = bundled_library_root()?;
-    read_agent_template_at_root(&bundle).map(|doc| with_pack_routing(doc, &bundle))
+    read_agent_template_at_root(&bundle).and_then(|doc| with_pack_routing(doc, &bundle))
 }
 
 /// The bundled rules base, read from `bundle_root`.
