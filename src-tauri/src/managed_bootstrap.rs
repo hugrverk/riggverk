@@ -517,7 +517,9 @@ pub fn collect_stale_removal_artifacts(
         }
         if let Ok(artifact) = artifact_from_identity(&record.identity) {
             let dest = artifact.resolve_dest(home, workspace_root)?;
-            if dest.exists() {
+            // A link counts, dangling or not: it is planned, and classified as a conflict, rather
+            // than missed, so the rest of its skill is not removed around it.
+            if fs::symlink_metadata(&dest).is_ok() {
                 stale.push(artifact);
             }
         }

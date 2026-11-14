@@ -441,6 +441,7 @@ mod tests {
         env.apply();
         assert!(files_below(&env.root(SkillRoot::Claude)).is_empty());
         assert!(env.plan().is_empty(), "nothing left to plan");
+
     }
 
     #[test]
@@ -743,5 +744,42 @@ mod tests {
         assert_eq!(flags_of("diagnose"), Some(Vec::new()));
         env.apply();
         assert_eq!(flags_of("tdd"), None, "removed: nothing loads it");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_disabled_skill_whose_recorded_support_file_is_a_dangling_link_keeps_all_its_files() {
+        let env = Env::new("dangling");
+        env.apply();
+        let skill_md = env.path(&file_of(SkillRoot::Claude, TWO_FILES, "SKILL.md"));
+        let support = env.path(&file_of(SkillRoot::Claude, TWO_FILES, TWO_FILES_SUPPORT));
+        fs::remove_file(&support).expect("remove support file");
+        std::os::unix::fs::symlink(env.base.join("nowhere"), &support).expect("dangling link");
+        env.disable(&[TWO_FILES]);
+
+        let claude: Vec<(ArtifactId, OperationKind)> = env
+            .kinds_of(TWO_FILES)
+            .into_iter()
+            .filter(|(artifact, _)| {
+                artifact
+                    .as_skill_file()
+                    .is_some_and(|file| file.root == SkillRoot::Claude)
+            })
+            .collect();
+        assert_eq!(claude.len(), 2, "the link is planned too: {claude:?}");
+        assert!(
+            claude
+                .iter()
+                .all(|(_, kind)| *kind == OperationKind::Manual),
+            "{claude:?}"
+        );
+
+        env.apply();
+        assert!(skill_md.is_file(), "no half skill is left behind");
+        assert!(fs::symlink_metadata(&support)
+            .expect("link")
+            .file_type()
+            .is_symlink());
+        assert!(!env.root(SkillRoot::Agents).join(TWO_FILES).exists());
     }
 }
