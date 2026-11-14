@@ -48,7 +48,7 @@ The root LICENSE applies to this repository. This notice preserves attribution f
 
 ## crucible red-team skill
 
-The fresh-critic loop of `adversarial-implementation` and `adversarial-review` draws on the `red-team` skill of [raddue/crucible](https://github.com/raddue/crucible) (`skills/red-team/SKILL.md` and `red-team-prompt.md`, read at commit `3b871d38f216e0dfcb7826fd09b979f3b85dce98`). Used: a fresh critic each round, the steel-man finding format (**Best Defense** and **Why The Defense Fails**), the Fatal, Significant and Minor severities with Minor never blocking, and iterating until the work is clean or the weighted score (Fatal 3, Significant 1) stagnates. The text was reworded and extended for Riggverk; the proof rule, the minimality dimension, frozen tests and the deletion-only round are Riggverk's own.
+The fresh-critic loop of the `adversarial` skill (its implement and review modes) draws on the `red-team` skill of [raddue/crucible](https://github.com/raddue/crucible) (`skills/red-team/SKILL.md` and `red-team-prompt.md`, read at commit `3b871d38f216e0dfcb7826fd09b979f3b85dce98`). Used: a fresh critic each round, the steel-man finding format (**Best Defense** and **Why The Defense Fails**), the Fatal, Significant and Minor severities with Minor never blocking, and iterating until the work is clean or the weighted score (Fatal 3, Significant 1) stagnates. The text was reworded and extended for Riggverk; the proof rule, the minimality dimension, frozen tests and the deletion-only round are Riggverk's own.
 
 License of the original work:
 
@@ -76,7 +76,7 @@ SOFTWARE.
 
 ## dementev-dev adversarial-review
 
-`adversarial-implementation` and `adversarial-review` also draw on [dementev-dev/adversarial-review](https://github.com/dementev-dev/adversarial-review) (`SKILL.md`, read at commit `584ae8d1c62c75bedfdc191a0a8393c3bbf819fe`), licensed under the [Apache License, Version 2.0](https://www.apache.org/licenses/LICENSE-2.0). Used: the read-only critic as "an auditor, not a contributor", the aim to break confidence in the change, and the lead's accept, re-scope or reject adjudication of each finding. Changes: the ideas were reworded for Riggverk, any critic harness was allowed, and rejections were tied to proof (a failing test or command, or a quoted requirement). No files of that work are included.
+The implement and review modes of `adversarial` also draw on [dementev-dev/adversarial-review](https://github.com/dementev-dev/adversarial-review) (`SKILL.md`, read at commit `584ae8d1c62c75bedfdc191a0a8393c3bbf819fe`), licensed under the [Apache License, Version 2.0](https://www.apache.org/licenses/LICENSE-2.0). Used: the read-only critic as "an auditor, not a contributor", the aim to break confidence in the change, and the lead's accept, re-scope or reject adjudication of each finding. Changes: the ideas were reworded for Riggverk, any critic harness was allowed, and rejections were tied to proof (a failing test or command, or a quoted requirement). No files of that work are included.
 
 ## superpowers writing-plans
 

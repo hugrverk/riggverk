@@ -1,6 +1,6 @@
 # Critic recipes
 
-Exact commands for running a fresh, read-only critic in another harness's CLI. Every adversarial skill carries an identical copy of this file in its own folder, so none reads another skill's folder; `scripts/check-skill-routing.py` fails when the copies differ. Checked against the `--help` of Codex CLI 0.164.0, Claude Code 2.1.308 and OpenCode 1.19.4 on 2026-10-27; after upgrading a CLI, check its `--help` again before trusting a flag.
+Exact commands for running a fresh, read-only critic (or test-mode adversary) in another harness's CLI, for every mode of the `adversarial` skill. Checked against the `--help` of Codex CLI 0.164.0, Claude Code 2.1.308 and OpenCode 1.19.4 on 2026-10-27; after upgrading a CLI, check its `--help` again before trusting a flag.
 
 ## Rules for every route
 
