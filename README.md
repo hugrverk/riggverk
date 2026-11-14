@@ -90,7 +90,7 @@ Installed layout is flat and holds the whole skill directory: `<skills-folder>/<
 
 An edited skill or agent file is a conflict Install leaves alone. Resolve it from the harness page: `d` shows the diff against the bundled file, `b` replaces your file by the bundled one after a review (`y` applies, `n` cancels; your file is backed up first and `z` rolls it back), `m` keeps your version (recorded in `.riggverk/kept-files.json`; the app never writes the file and says when a bundled update is waiting) or hands it back, `c` marks the next one, and `:resolve diff|bundled|mine|manage` does the same by name.
 
-All skills support the central harnesses and the light tier. The skills surface is not gated by target toggles. Deprecated Riggverk skills are matched against bundled reference snapshots: identical managed copies are removed after backup, diverged and unknown copies are preserved.
+All skills support the central harnesses and the light tier. The skills surface is not gated by target toggles. To turn a skill off for every harness, use **Disable** on its row in Library → Skills or `:disable <names…>` (recorded in `.riggverk/disabled-skills.json`): the next Update removes the copies the app installed, with a backup (`z` restores them), and leaves the routing lines that name it out of the rules block; an edited copy stays. **Enable** or `:enable <names…>` installs it again. Deprecated Riggverk skills are matched against bundled reference snapshots: identical managed copies are removed after backup, diverged and unknown copies are preserved.
 
 ## Rules
 
