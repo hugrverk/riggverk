@@ -590,4 +590,121 @@ mod tests {
         assert_eq!(after.expected, before.expected - 2);
         assert_eq!(after.synced, after.expected, "the others stay synced");
     }
+
+    // ── Commands ──
+
+    #[test]
+    fn set_skills_enabled_refuses_shadowed_held_and_unknown_names_on_disable() {
+        use crate::commands::set_skills_enabled;
+        let env = Env::new("refusals");
+        env.pack_skill("one", "dup");
+        env.pack_skill("two", "dup");
+        env.pack_skill("mine", "my-checklist");
+        env.pack_skill("mine", "tdd");
+        env.apply();
+        // The pack folder of an installed skill goes: the skill is held.
+        fs::remove_dir_all(env.ws.join("packs/mine/skills/my-checklist")).expect("remove");
+        fs::remove_dir_all(env.ws.join("packs/mine/skills/tdd")).expect("remove");
+        fs::remove_dir_all(env.ws.join("packs/mine")).expect("remove pack");
+        assert_eq!(env.sources().held().len(), 1);
+
+        let refuse = |name: &str| {
+            let error = set_skills_enabled(vec![name.to_string()], false).unwrap_err();
+            assert!(!env.disabled_file().exists(), "{name}: nothing is written");
+            error
+        };
+        let held = refuse("my-checklist");
+        assert!(held.contains("kept as it is installed"), "{held}");
+        let broken = refuse("dup");
+        assert!(broken.contains("another pack skill"), "{broken}");
+        let unknown = refuse("no-such-skill");
+        assert!(
+            unknown.contains("no skill named no-such-skill"),
+            "{unknown}"
+        );
+        // One refused name refuses the whole call.
+        set_skills_enabled(names(&["diagnose", "no-such-skill"]), false).unwrap_err();
+        assert!(!env.disabled_file().exists());
+        assert!(set_skills_enabled(Vec::new(), false).is_err());
+
+        // A shadowed pack skill has the bundled skill's name: that names the bundled skill, which
+        // is disabled, and the pack skill stays shadowed.
+        env.pack_skill("mine", "tdd");
+        set_skills_enabled(names(&["tdd", "diagnose"]), false).expect("disable");
+        let sources = env.sources();
+        assert!(sources.is_disabled("tdd") && sources.is_disabled("diagnose"));
+        let pack = sources
+            .packs()
+            .iter()
+            .find(|pack| pack.name == "mine")
+            .expect("pack");
+        assert_eq!(pack.skills[0].state, PackSkillState::Shadowed);
+
+        // A file that cannot be read refuses every change.
+        fs::write(env.disabled_file(), "not json").expect("garbage");
+        for enabled in [true, false] {
+            assert_eq!(
+                set_skills_enabled(names(&["diagnose"]), enabled),
+                Err(UNUSABLE.to_string())
+            );
+        }
+        let choices = crate::commands::list_skill_choices().expect("choices");
+        assert_eq!(choices.problem.as_deref(), Some(UNUSABLE));
+        assert!(choices.disabled.is_empty());
+    }
+
+    #[test]
+    fn enable_forgets_an_unknown_name() {
+        use crate::commands::{list_skill_choices, set_skills_enabled};
+        let env = Env::new("forget");
+        env.pack_skill("mine", "my-checklist");
+        env.apply();
+        set_skills_enabled(names(&["my-checklist", "tdd"]), false).expect("disable");
+        let choices = list_skill_choices().expect("choices");
+        let listed: Vec<(&str, &str, bool)> = choices
+            .disabled
+            .iter()
+            .map(|skill| (skill.name.as_str(), skill.source.as_str(), skill.installed))
+            .collect();
+        assert_eq!(
+            listed,
+            vec![("my-checklist", "pack:mine", true), ("tdd", "bundle", true)]
+        );
+
+        // The pack goes: the name stays disabled and is listed as not in the catalog.
+        fs::remove_dir_all(env.ws.join("packs")).expect("remove packs");
+        let choices = list_skill_choices().expect("choices");
+        assert_eq!(choices.disabled[0].name, "my-checklist");
+        assert_eq!(choices.disabled[0].source, "unknown");
+        assert!(env.sources().is_disabled("my-checklist"));
+
+        set_skills_enabled(names(&["my-checklist"]), true).expect("enable");
+        let choices = list_skill_choices().expect("choices");
+        assert_eq!(
+            choices
+                .disabled
+                .iter()
+                .map(|skill| skill.name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["tdd"]
+        );
+        // Enabling a name that was never disabled changes nothing.
+        set_skills_enabled(names(&["never-disabled"]), true).expect("enable");
+        assert!(env.sources().is_disabled("tdd"));
+    }
+
+    #[test]
+    fn named_by_lists_ci_triage_for_diagnose() {
+        let env = Env::new("named-by");
+        let choices = crate::commands::list_skill_choices().expect("choices");
+        let by = choices.named_by.get("diagnose").expect("diagnose is named");
+        assert!(by.contains(&"ci-triage".to_string()), "{by:?}");
+        assert!(!by.contains(&"diagnose".to_string()), "not by itself");
+        let mut sorted = by.clone();
+        sorted.sort();
+        assert_eq!(by, &sorted);
+        assert!(choices.problem.is_none());
+        assert!(choices.disabled.is_empty());
+        drop(env);
+    }
 }

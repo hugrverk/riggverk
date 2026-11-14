@@ -1247,7 +1247,7 @@ fn write_record(workspace_root: &Path, after: Record) -> Result<(), String> {
 }
 
 /// Names of the skills the managed state holds a file of.
-fn installed_skill_names(workspace_root: &Path) -> HashSet<String> {
+pub(crate) fn installed_skill_names(workspace_root: &Path) -> HashSet<String> {
     crate::managed_state::read_managed_state(workspace_root)
         .map(|state| {
             state

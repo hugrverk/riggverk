@@ -84,7 +84,9 @@ pub use skill_import::{
     commit_skill_import, preview_skill_import, remove_imported_skill, set_imported_skill_routing,
     undo_last_import,
 };
-pub use skills::{get_effective_skill_loads, list_skills, read_skill};
+pub use skills::{
+    get_effective_skill_loads, list_skill_choices, list_skills, read_skill, set_skills_enabled,
+};
 pub use workspace::{
     get_workspace_diagnostics, open_default_workspace_folder, reset_active_workspace_path,
 };
