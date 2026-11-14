@@ -442,6 +442,17 @@ mod tests {
         assert!(files_below(&env.root(SkillRoot::Claude)).is_empty());
         assert!(env.plan().is_empty(), "nothing left to plan");
 
+        // Health: nothing is expected because of the user's choice, which is not a failure.
+        let status = crate::skill_health::skill_files_status(
+            &SkillSources::for_health(&real_bundle(), Some(&env.ws)),
+            &env.home,
+            &[SkillRoot::Claude],
+        )
+        .expect("status");
+        assert_eq!((status.expected, status.disabled), (0, every.len()));
+        assert!(!status.catalog_empty());
+        assert!(status.is_synced());
+        assert_eq!(status.label(), "synced");
     }
 
     #[test]
@@ -589,6 +600,7 @@ mod tests {
         env.disable(&["tdd", TWO_FILES]);
         let after = status("after");
         assert_eq!(after.expected, before.expected - 2);
+        assert_eq!((before.disabled, after.disabled), (0, 2));
         assert_eq!(after.synced, after.expected, "the others stay synced");
     }
 
