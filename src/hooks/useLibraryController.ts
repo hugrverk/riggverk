@@ -22,6 +22,7 @@ import type {
   RulesFileContent,
   RulesFileSummary,
   RulesSurfaceId,
+  SkillChoices,
   SkillSummary,
 } from "../types";
 
@@ -54,6 +55,8 @@ export function useLibraryController({
   const [skillsLoaded, setSkillsLoaded] = useState(false);
   const [packLibrary, setPackLibrary] = useState<PackLibrary | null>(null);
   const [packError, setPackError] = useState<string | null>(null);
+  /** The disabled skills and which skills name which; null while they could not be listed. */
+  const [skillChoices, setSkillChoices] = useState<SkillChoices | null>(null);
   const [activeSkillId, setActiveSkillId] = useState<string | null>(null);
   const [activeSkillContent, setActiveSkillContent] = useState<DocumentContent | null>(null);
   const activeSkillIdRef = useRef<string | null>(null);
@@ -241,10 +244,18 @@ export function useLibraryController({
       } catch (e) {
         packFailure = String(e);
       }
+      // Without the choices the skills are listed as they are, with nothing to disable or enable.
+      let choices: SkillChoices | null = null;
+      try {
+        choices = await invoke<SkillChoices>("list_skill_choices");
+      } catch {
+        choices = null;
+      }
       const loaded = [...bundled, ...packSkillSummaries(packs)];
       if (!isWorkspaceLoadCurrent(generation)) return;
       setPackLibrary(packs);
       setPackError(packFailure);
+      setSkillChoices(choices);
       setSkills(loaded);
       setSkillsLoaded(true);
       // A list that lacks the open skill (its pack failed to list) never takes an unsaved draft away.
@@ -819,6 +830,39 @@ export function useLibraryController({
     }
   }, [confirm, reloadChangedPacks, setError]);
 
+  /**
+   * Disables (asking first: the next Update removes the installed copies) or enables skills for every harness, then
+   * lists the skills again. Resolves true once the choice is saved.
+   */
+  const setSkillsEnabled = useCallback(async (names: string[], enabled: boolean): Promise<boolean> => {
+    if (names.length === 0) return false;
+    if (!enabled) {
+      const list = names.join(", ");
+      const one = names.length === 1;
+      const namedBy = [...new Set(names.flatMap(name => skillChoices?.named_by[name] ?? []))]
+        .filter(name => !names.includes(name))
+        .sort();
+      const ok = await confirm({
+        title: `Disable ${list}?`,
+        message: [
+          `The next Update removes the ${one ? "copies" : "copies of each"} Riggverk installed in your agents, with a backup; z restores them. Routing lines that name ${one ? "it" : "them"} leave the rules block. An edited copy stays until you delete it.`,
+          namedBy.length > 0 ? `Named by ${namedBy.join(", ")}; they will point to a skill that is not installed.` : "",
+        ].filter(Boolean).join(" "),
+        confirmLabel: "Disable",
+        destructive: true,
+      });
+      if (!ok) return false;
+    }
+    try {
+      await invoke("set_skills_enabled", { names, enabled });
+      await reloadChangedPacks();
+      return true;
+    } catch (e) {
+      setError(`${enabled ? "Enable" : "Disable"} skill: ${e}`);
+      return false;
+    }
+  }, [confirm, reloadChangedPacks, setError, skillChoices]);
+
   const readSkill = useCallback(async (id: string) => {
     if (id !== activeSkillIdRef.current && !(await confirmLeave())) return;
     activeSkillIdRef.current = id;
@@ -1024,6 +1068,8 @@ export function useLibraryController({
     packLibrary,
     packError,
     forgetPack,
+    skillChoices,
+    setSkillsEnabled,
     activeSkillId,
     activeSkillContent,
     readSkill,

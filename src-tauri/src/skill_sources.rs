@@ -82,7 +82,15 @@ pub trait SourceRoot {
     fn pack_routing(&self) -> &str {
         ""
     }
+    /// The skills the user disabled (see [`crate::disabled_skills`]): in the catalog, never
+    /// installed. An error is the fixed phrase of a `disabled-skills.json` that cannot be used;
+    /// whatever installs skills or renders routing then fails closed. None without a data folder.
+    fn disabled(&self) -> Result<&BTreeSet<String>, &str> {
+        Ok(&NO_DISABLED)
+    }
 }
+
+static NO_DISABLED: BTreeSet<String> = BTreeSet::new();
 
 /// The bundle alone. For code that reads an artifact which is no skill (rules, agents, configs,
 /// templates); a skill read through it would miss the packs.
@@ -224,6 +232,8 @@ pub struct SkillSources {
     record_problem: Option<String>,
     /// The routing section of the packs, rendered once (see [`crate::pack_routing`]).
     routing_section: String,
+    /// `disabled-skills.json` (see [`crate::disabled_skills`]).
+    disabled: Result<BTreeSet<String>, String>,
 }
 
 impl SourceRoot for SkillSources {
@@ -245,6 +255,9 @@ impl SourceRoot for SkillSources {
     }
     fn pack_routing(&self) -> &str {
         &self.routing_section
+    }
+    fn disabled(&self) -> Result<&BTreeSet<String>, &str> {
+        self.disabled.as_ref().map_err(String::as_str)
     }
 }
 
@@ -290,6 +303,7 @@ impl SkillSources {
             held: Vec::new(),
             record_problem: None,
             routing_section: String::new(),
+            disabled: Ok(BTreeSet::new()),
         }
     }
 
@@ -337,16 +351,8 @@ impl SkillSources {
         }
         let by_name = index_by_name(&catalog);
         let (held, record_problem) = compute_held(workspace_root, &packs, &catalog);
-        // A bundle that does not load plans nothing, so its packs route nothing either.
-        let routing_section = if catalog.is_ok() {
-            crate::pack_routing::render_section(
-                packs
-                    .iter()
-                    .map(|pack| (pack.name.as_str(), pack.routing.lines())),
-            )
-        } else {
-            String::new()
-        };
+        let disabled = crate::disabled_skills::load(workspace_root);
+        let routing_section = render_routing(&packs, &catalog, &disabled);
         Self {
             bundled,
             workspace_root: workspace_root.to_path_buf(),
@@ -357,7 +363,34 @@ impl SkillSources {
             held,
             record_problem,
             routing_section,
+            disabled,
         }
+    }
+
+    /// The same sources with no skill disabled, whatever `disabled-skills.json` says: for
+    /// uninstall, which removes the app's copies of every skill and must not be blocked by a file
+    /// that cannot be read.
+    pub fn ignoring_disabled(&self) -> Self {
+        let disabled = Ok(BTreeSet::new());
+        Self {
+            routing_section: render_routing(&self.packs, &self.catalog, &disabled),
+            disabled,
+            ..self.clone()
+        }
+    }
+
+    /// The routing lines of `pack` in the rules block, and how many name a disabled skill (see
+    /// [`routed_lines`]).
+    pub fn routing_of(&self, pack: &PackReport) -> (Vec<String>, usize) {
+        routed_lines(pack, &self.disabled)
+    }
+
+    /// Whether the user disabled the skill `name`. False while `disabled-skills.json` cannot be
+    /// read: callers that install skills fail on that before they ask.
+    pub fn is_disabled(&self, name: &str) -> bool {
+        self.disabled
+            .as_ref()
+            .is_ok_and(|disabled| disabled.contains(name))
     }
 
     /// The folder a source file must stay inside: its pack folder, or the bundle.
@@ -421,6 +454,45 @@ impl SkillSources {
             })
             .unwrap_or_default()
     }
+}
+
+/// The routing section of `packs`. A bundle that does not load plans nothing, so its packs route
+/// nothing either.
+fn render_routing(
+    packs: &[PackReport],
+    catalog: &Result<Vec<CatalogSkill>, String>,
+    disabled: &Result<BTreeSet<String>, String>,
+) -> String {
+    if catalog.is_err() {
+        return String::new();
+    }
+    let routed: Vec<(&str, Vec<String>)> = packs
+        .iter()
+        .map(|pack| (pack.name.as_str(), routed_lines(pack, disabled).0))
+        .collect();
+    crate::pack_routing::render_section(
+        routed.iter().map(|(name, lines)| (*name, lines.as_slice())),
+    )
+}
+
+/// The routing lines of `pack` that go into the rules block, and how many are left out because
+/// they name a disabled skill. While `disabled-skills.json` cannot be read nothing is left out:
+/// the rules sources are unavailable then.
+pub fn routed_lines(
+    pack: &PackReport,
+    disabled: &Result<BTreeSet<String>, String>,
+) -> (Vec<String>, usize) {
+    let lines = pack.routing.lines();
+    let Ok(disabled) = disabled else {
+        return (lines.to_vec(), 0);
+    };
+    let kept: Vec<String> = lines
+        .iter()
+        .filter(|line| !crate::pack_routing::names_any(line, disabled))
+        .cloned()
+        .collect();
+    let left_out = lines.len() - kept.len();
+    (kept, left_out)
 }
 
 /// Counts, per thread, how often the catalog was read, so a test can hold a plan, an apply or a
@@ -1175,7 +1247,7 @@ fn write_record(workspace_root: &Path, after: Record) -> Result<(), String> {
 }
 
 /// Names of the skills the managed state holds a file of.
-fn installed_skill_names(workspace_root: &Path) -> HashSet<String> {
+pub(crate) fn installed_skill_names(workspace_root: &Path) -> HashSet<String> {
     crate::managed_state::read_managed_state(workspace_root)
         .map(|state| {
             state

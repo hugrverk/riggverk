@@ -89,7 +89,7 @@ export function GroupView({ group, scope, onVerb, onGroupAction }: GroupViewProp
       </div>
       <div className="lib-group">
         {group.notes && group.notes.length > 0 && (
-          <div className="lib-notes" role="group" aria-label="Skill pack problems">
+          <div className="lib-notes" role="group" aria-label={group.notesLabel ?? "Skill pack problems"}>
             {group.notes.map(line => (
               <div key={line.key} className="lib-note">
                 <StateMark state="fix" />

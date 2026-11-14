@@ -199,7 +199,7 @@ mod tests {
     // ── No packs: nothing changes ──
 
     #[test]
-    fn without_routing_every_rules_source_is_the_bundled_base_byte_for_byte() {
+    fn without_routing_and_nothing_disabled_every_rules_source_is_the_bundled_base_byte_for_byte() {
         let env = Env::new("none");
         let check = |label: &str| {
             let sources = env.sources();
@@ -225,6 +225,11 @@ mod tests {
         check("a pack without routing.md");
         env.routing("mine", "\n  \n");
         check("a blank routing.md");
+        crate::disabled_skills::set(&env.ws, &["my-canvas".to_string()], false).expect("disable");
+        check("a disabled skill no line names");
+        crate::disabled_skills::set(&env.ws, &["my-canvas".to_string()], true).expect("enable");
+        assert!(crate::workspace_layout::state_file(&env.ws, "disabled-skills.json").is_file());
+        check("an empty disabled list");
 
         // And an install writes exactly the bundled block, then has nothing to do.
         env.apply(&["claude_rules"]);
@@ -306,6 +311,226 @@ mod tests {
             crate::pack_routing::splice(&cursor_base, &expected_section())
         );
         assert_ne!(cursor.content, cursor_base);
+    }
+
+    // ── Disabled skills ──
+
+    /// The lines of `text` inside its `## Skill routing` section.
+    fn base_routing_lines(text: &str) -> Vec<&str> {
+        text.lines()
+            .skip_while(|line| *line != "## Skill routing")
+            .skip(1)
+            .take_while(|line| !line.starts_with("## "))
+            .collect()
+    }
+
+    /// `text` without the bullets of its `## Skill routing` section that name one of `names`.
+    fn without_bullets_naming(text: &str, names: &[&str]) -> String {
+        let mut out = String::new();
+        let mut in_section = false;
+        for line in text.split_inclusive('\n') {
+            let content = line.trim_end();
+            if content.starts_with("## ") {
+                in_section = content == "## Skill routing";
+            } else if in_section
+                && content.starts_with("- ")
+                && names
+                    .iter()
+                    .any(|name| content.contains(&format!("`{name}`")))
+            {
+                continue;
+            }
+            out.push_str(line);
+        }
+        out
+    }
+
+    /// A bundled skill a bullet of the base's routing section names, read from the text rather than
+    /// assumed, so the test holds whatever the routing says.
+    fn routed_bundled_skill(env: &Env) -> String {
+        let catalog = env.sources().catalog().expect("catalog");
+        let base = bundled_text(&ArtifactId::ClaudeRules);
+        base_routing_lines(&base)
+            .into_iter()
+            .filter(|line| line.starts_with("- "))
+            .find_map(|line| {
+                catalog
+                    .iter()
+                    .map(|entry| entry.skill.name.clone())
+                    .find(|name| line.contains(&format!("`{name}`")))
+            })
+            .expect("the base routes to a bundled skill")
+    }
+
+    fn disable(env: &Env, names: &[&str]) {
+        let names: Vec<String> = names.iter().map(|name| name.to_string()).collect();
+        crate::disabled_skills::set(&env.ws, &names, false).expect("disable");
+    }
+
+    fn only_canvas_section() -> String {
+        format!(
+            "{SECTION_HEADING}\nRouting from the skill packs in your data folder. Each line names only skills of its own pack.\n### mine pack\n- Canvas work: `my-canvas`.\n"
+        )
+    }
+
+    #[test]
+    fn a_disabled_skill_leaves_no_routing_line_in_any_rules_target_or_cursor_user_rules() {
+        let env = Env::new("disabled-base");
+        env.pack("mine", &["my-canvas", "my-files"]);
+        env.routing("mine", GOOD);
+        let skill = routed_bundled_skill(&env);
+        disable(&env, &[&skill, "my-files"]);
+
+        let sources = env.sources();
+        for artifact in rules_artifacts() {
+            let base = bundled_text(&artifact);
+            let text = rules_source_text(&artifact, &sources).expect("source");
+            assert_eq!(
+                text,
+                crate::pack_routing::splice(
+                    &without_bullets_naming(&base, &[&skill]),
+                    &only_canvas_section()
+                ),
+                "{artifact:?}"
+            );
+            for line in base_routing_lines(&text) {
+                assert!(
+                    !line.contains(&format!("`{skill}`")),
+                    "{artifact:?}: {line}"
+                );
+            }
+            assert!(!text.contains("`my-files`"), "{artifact:?}");
+        }
+
+        // What the Library shows, and the Cursor User Rules the user copies by hand, leave it out too.
+        let cursor = crate::commands::read_doc("templates/cursor/user-rules.md".into())
+            .expect("cursor user rules");
+        let cursor_base = fs::read_to_string(bundle().join("templates/cursor/user-rules.md"))
+            .expect("bundled cursor rules");
+        assert_ne!(
+            without_bullets_naming(&cursor_base, &[&skill]),
+            cursor_base,
+            "the cursor rules route to it"
+        );
+        assert_eq!(
+            cursor.content,
+            crate::pack_routing::splice(
+                &without_bullets_naming(&cursor_base, &[&skill]),
+                &only_canvas_section()
+            )
+        );
+        let template = crate::commands::read_agent_template().expect("template");
+        for line in base_routing_lines(&template.content) {
+            assert!(!line.contains(&format!("`{skill}`")), "{line}");
+        }
+        assert!(template.content.contains(&only_canvas_section()));
+
+        // Installed as composed, and health compares with the same text.
+        env.apply(&["claude_rules"]);
+        let expected = rules_source_text(&ArtifactId::ClaudeRules, &sources).expect("source");
+        assert_eq!(env.read_claude(), render_new(&expected));
+        assert_eq!(
+            env.plan(SetupSurfaceId::ClaudeRules).kind,
+            OperationKind::NoChange
+        );
+        assert!(crate::pack_routing::health_rules_synced(
+            &ArtifactId::ClaudeRules,
+            &env.claude_file(),
+            &bundle(),
+            Some(&env.ws),
+        ));
+    }
+
+    #[test]
+    fn a_pack_line_naming_a_disabled_skill_is_left_out_and_the_rest_of_the_file_stays() {
+        let env = Env::new("disabled-pack");
+        env.pack("mine", &["my-canvas", "my-files"]);
+        env.routing("mine", GOOD);
+        disable(&env, &["my-files"]);
+
+        // Validation still counts the disabled skill as the pack's own: the file is valid.
+        assert_eq!(
+            env.routing_of("mine"),
+            PackRouting::Applied(GOOD.lines().map(str::to_string).collect())
+        );
+        let sources = env.sources();
+        assert_eq!(sources.pack_routing(), only_canvas_section());
+        assert_eq!(
+            rules_source_text(&ArtifactId::ClaudeRules, &sources).expect("source"),
+            crate::pack_routing::splice(
+                &bundled_text(&ArtifactId::ClaudeRules),
+                &only_canvas_section()
+            )
+        );
+        let library = list_pack_skills().expect("packs");
+        let pack = library
+            .packs
+            .iter()
+            .find(|p| p.name == "mine")
+            .expect("pack");
+        assert_eq!(
+            pack.routing,
+            vec!["- Canvas work: `my-canvas`.".to_string()]
+        );
+        assert_eq!(pack.routing_left_out, 1);
+        assert_eq!(pack.routing_problem, None);
+
+        // Every line left out: no pack section at all, the base byte for byte.
+        disable(&env, &["my-canvas"]);
+        let sources = env.sources();
+        assert_eq!(sources.pack_routing(), "");
+        for artifact in rules_artifacts() {
+            assert_eq!(
+                rules_source_text(&artifact, &sources).expect("source"),
+                bundled_text(&artifact),
+                "{artifact:?}"
+            );
+        }
+        let library = list_pack_skills().expect("packs");
+        assert_eq!(library.packs[0].routing_left_out, 2);
+        assert!(library.packs[0].routing.is_empty());
+    }
+
+    #[test]
+    fn disabling_is_a_rules_update_with_a_diff_and_undo() {
+        let env = Env::new("disabled-update");
+        env.pack("mine", &["my-canvas", "my-files"]);
+        env.routing("mine", GOOD);
+        env.apply(&["skills", "claude_rules"]);
+        let before = env.read_claude();
+
+        disable(&env, &["my-files"]);
+        let planned = env.plan(SetupSurfaceId::ClaudeRules);
+        assert_eq!(planned.kind, OperationKind::Update);
+        assert_eq!(planned.rules.expect("rules").plan, RulesPlan::UpdateBlock);
+        let diff = preview_rules_diff("claude_rules".into(), None).expect("diff");
+        assert!(diff.applicable);
+        assert_eq!((diff.added, diff.removed), (0, 1), "{}", diff.diff);
+        assert!(
+            diff.diff
+                .contains("-- Saved files: `my-files`; add `my-canvas` for drawings."),
+            "{}",
+            diff.diff
+        );
+
+        let result = env.apply(&["claude_rules"]);
+        let updated = env.read_claude();
+        assert!(!updated.contains("`my-files`"));
+        assert!(updated.contains("- Canvas work: `my-canvas`."));
+
+        let rolled = rollback_setup_transaction(result.transaction_id, false).expect("rollback");
+        assert!(rolled.success, "{}", rolled.message);
+        assert_eq!(env.read_claude(), before, "undo restores the block");
+        assert!(
+            crate::disabled_skills::load(&env.ws)
+                .expect("disabled")
+                .contains("my-files"),
+            "undo does not enable the skill"
+        );
+        assert_eq!(
+            env.plan(SetupSurfaceId::ClaudeRules).kind,
+            OperationKind::Update
+        );
     }
 
     // ── Invalid routing ──
