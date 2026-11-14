@@ -62,6 +62,8 @@ mod claude_settings_contract;
 #[cfg(test)]
 mod codex_config_keep_contract;
 #[cfg(test)]
+mod disabled_skills_contract;
+#[cfg(test)]
 mod file_conflicts_contract;
 #[cfg(test)]
 mod health_bundle_contract;
