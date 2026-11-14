@@ -24,7 +24,7 @@ This local check is the gate: run it before merging and before a release. GitHub
 
 ## Cutting a release
 
-Releases are local: the flow does not use GitHub Actions. A release is a disk image, a zip of the same app and a `SHA256SUMS` file on GitHub Releases, built, ad hoc signed and uploaded from a maintainer's Mac by two commands. The app is universal: one bundle runs on Apple silicon and Intel Macs.
+Releases are local: the flow does not use GitHub Actions. A release is, on GitHub Releases, a disk image and a zip of the same macOS app, an AppImage, a deb and an rpm of the same Linux build, and a `SHA256SUMS` file. The macOS app is built, ad hoc signed and uploaded from a maintainer's Mac; the Linux packages are built on a Linux machine with `release.sh build-linux` and copied to the Mac before `publish`, which uploads everything. The macOS app is universal: one bundle runs on Apple silicon and Intel Macs. The Linux packages are x86_64 and need glibc 2.35 or newer (Ubuntu 22.04, Fedora 36 and later).
 
 Versions are CalVer `YYYY.M.N`, which is valid semver: the year, the month without a leading zero, and a counter inside that month that starts at 1 (`2026.10.1`, `2026.10.2`, `2026.11.1`). Tags are `v<version>`. Other tags (`app-v0.1.0`, `v0.1.0-rc.1`) are ignored. The next version is computed from the tags and today's date, so the counter restarts when the month changes.
 
@@ -33,6 +33,8 @@ Needs: a Mac (`codesign`, `ditto`, `hdiutil`, `lipo`), `python3` 3.11 or newer f
 ```bash
 rustup target add aarch64-apple-darwin x86_64-apple-darwin   # once; publish stops when one is missing
 ```
+
+The Linux machine needs rootless `podman`, `python3` 3.11 or newer, `git` and `gh` logged in; the build itself runs in a pinned Ubuntu 22.04 image (`scripts/linux-build.Containerfile`), so the host's own Node, Rust and libraries do not matter.
 
 The disk image's window layout is set through Finder, so the first `publish` (or any `tauri build` of the disk image) asks once to let the terminal control Finder; allow it, or turn it on in System Settings, Privacy & Security, Automation.
 
@@ -67,27 +69,40 @@ The draft is the pull request titles that were merged into `main` since the prev
 
 The same file is the GitHub release body and the app's "what's new". The app shows the notes since the version a user last saw once, on the first launch after an update (the overlay of `?`: Escape closes it, `j`/`k` scroll), and `:whatsnew` opens all of them at any time. A fresh install records its version and shows nothing. An install that predates `last_seen_version` also counts as fresh once, so the first update that carries the field shows nothing; every one after it does.
 
-### 3. Publish
+### 3. Build the Linux packages
 
-Merge the pull request, then on `main` (pulled, nothing else merged in between):
+Merge the pull request, then on the Linux machine, on `main` (pulled, nothing else merged in between):
+
+```bash
+./scripts/release.sh build-linux --dry-run
+./scripts/release.sh build-linux
+```
+
+`build-linux` makes the same checks as `publish` below (version files, notes, no tag or release yet, `main` ends with the release pull request; `--allow-newer` as there), then runs `scripts/linux-build.sh`: `git archive HEAD` is built in the Ubuntu 22.04 image (glibc 2.35), which fails unless the binary needs glibc 2.35 or older, the AppImage holds the one `riggverk` binary and its `default-workspace` equals `resources/default-workspace`. It writes the packages under their release names to `release/linux/` (`Riggverk-v<version>-linux-x86_64.AppImage`, `Riggverk-v<version>-linux-amd64.deb`, `Riggverk-v<version>-linux-x86_64.rpm`) with `release/linux/linux-build.json`, which records the version, the commit and the SHA-256 of each package. It needs no signing key and tags or uploads nothing.
+
+Copy the folder to the same place in the Mac's checkout, for example with `scp -r release/linux mac:<checkout>/release/`. Before installing it anywhere, the packages can be tried on Linux as in [APP_RELEASE_SMOKE.md](./APP_RELEASE_SMOKE.md#linux-packages).
+
+### 4. Publish
+
+On the Mac, on the same `main`:
 
 ```bash
 ./scripts/release.sh publish --dry-run
 ./scripts/release.sh publish
 ```
 
-`publish` checks that the version files agree, that it is newer than the latest release, that `release-notes/<version>.md` exists and the bundled notes match it, that neither the tag nor the GitHub release exists, that `node_modules` is what `package-lock.json` locks (`node_modules/.package-lock.json`; run `npm ci` otherwise), and that `main` ends with the release pull request and nothing landed on `main` after the release commit, whether merged meanwhile or brought into the release branch by updating it from `main` (`--allow-newer` skips the two `main` checks; use it only when you know the notes cover what was merged since). Then it builds with `npm run tauri build -- --target universal-apple-darwin --bundles app,dmg -- --locked` (stdin from `/dev/null`, and an `actool` shim first on `PATH` that gives the real `actool` `/dev/null` too: the Tauri CLI hands its children a pipe as stdin, on which `actool` fails with "Bad file descriptor"), checks the bundle reports the version and that its binary holds both `arm64` and `x86_64` (`lipo -archs`), and verifies the ad hoc signature the bundler made (`signingIdentity: "-"` in `src-tauri/tauri.macos.conf.json`; `codesign --verify --deep --strict`, `Signature=adhoc`). The app is signed before the disk image is made and never re-signed, so the zip and the disk image carry the same bytes. Then it:
+`publish` checks that the version files agree, that it is newer than the latest release, that `release-notes/<version>.md` exists and the bundled notes match it, that neither the tag nor the GitHub release exists, that `node_modules` is what `package-lock.json` locks (`node_modules/.package-lock.json`; run `npm ci` otherwise), and that `main` ends with the release pull request and nothing landed on `main` after the release commit, whether merged meanwhile or brought into the release branch by updating it from `main` (`--allow-newer` skips the two `main` checks; use it only when you know the notes cover what was merged since), and that `release/linux/` holds the three Linux packages of this version, built from this very commit and unchanged since (`linux-build.json`). `--no-linux` releases macOS alone; installed Linux apps then see no new version until a release that has Linux packages. Then it builds with `npm run tauri build -- --target universal-apple-darwin --bundles app,dmg -- --locked` (stdin from `/dev/null`, and an `actool` shim first on `PATH` that gives the real `actool` `/dev/null` too: the Tauri CLI hands its children a pipe as stdin, on which `actool` fails with "Bad file descriptor"), checks the bundle reports the version and that its binary holds both `arm64` and `x86_64` (`lipo -archs`), and verifies the ad hoc signature the bundler made (`signingIdentity: "-"` in `src-tauri/tauri.macos.conf.json`; `codesign --verify --deep --strict`, `Signature=adhoc`). The app is signed before the disk image is made and never re-signed, so the zip and the disk image carry the same bytes. Then it:
 
 - zips the app with `ditto -c -k --keepParent` as `release/Riggverk-v<version>-macOS.zip` and checks that the signature survives the zip;
 - puts the Riggverk volume icon on the bundler's disk image (the bundler cannot take one) and writes it as `release/Riggverk-v<version>-macOS.dmg`, then runs `hdiutil verify`, mounts it read-only and checks the app's signature and architectures, the Applications link and the volume icon;
-- writes `release/SHA256SUMS` (`shasum -a 256` of the disk image and the zip);
-- creates the annotated tag `v<version>`, pushes it and runs `gh release create v<version> <dmg> <zip> SHA256SUMS --notes-file release-notes/<version>.md`.
+- writes `release/SHA256SUMS` (`shasum -a 256` of the disk image, the zip and the three Linux packages, by file name);
+- creates the annotated tag `v<version>`, pushes it and runs `gh release create v<version> <dmg> <zip> <AppImage> <deb> <rpm> SHA256SUMS --notes-file release-notes/<version>.md`.
 
 It prints the release URL. It does not rerun `release-check.sh`; `prepare` did.
 
 The disk image art (a 660x400 graphite window with its @2x, the rune and wordmark top left, one silver arrow from the app to Applications, and the volume icon: the rune on a square graphite plate) is rendered from `assets/icon-source.svg` by `scripts/render-macos-rune-icons.swift` through `scripts/prepare-macos-app-icon.sh`, the build's `beforeBundleCommand`, into the ignored `src-tauri/macos/dmg/`. `release-check.sh` renders it too and checks the layout in `tauri.macos.conf.json` against it.
 
-The app is not notarized (there is no Apple Developer ID yet). Users open the disk image and drag Riggverk to Applications (or unzip the zip and move the app there). On first launch macOS says it cannot verify the app: open System Settings, Privacy & Security, and choose Open Anyway. The **Install** section of every release says so, and names `SHA256SUMS` for checking a download (`shasum -a 256 -c SHA256SUMS --ignore-missing` in the download folder).
+The app is not notarized (there is no Apple Developer ID yet). Users open the disk image and drag Riggverk to Applications (or unzip the zip and move the app there). On first launch macOS says it cannot verify the app: open System Settings, Privacy & Security, and choose Open Anyway. The **Install** section of every release says so, says how to run the AppImage and install the deb or rpm, and names `SHA256SUMS` for checking a download (`shasum -a 256 -c SHA256SUMS --ignore-missing` on macOS, `sha256sum -c SHA256SUMS --ignore-missing` on Linux, in the download folder). The deb and rpm are not GPG-signed and there is no apt or dnf repository: users install the downloaded file.
 
 ### Rollback
 
@@ -98,6 +113,8 @@ gh release delete v<version> --cleanup-tag --yes   # the draft release and the r
 git tag -d v<version>                              # the local tag
 ./scripts/release.sh publish
 ```
+
+`release/linux/` stays valid for the retry as long as `main` has not moved. If a fix had to be merged, build the Linux packages again on the new commit and copy them over.
 
 A published release cannot be redone. With immutable releases on (see Turning on updates), its files and its tag are locked, and deleting the release does not free the tag name: `v<version>` can never be published again. Fix forward: merge the fix and prepare the next version. If the published build must not be installed at all, delete the release with `gh release delete v<version> --yes`; `releases/latest` then answers with the release before it, so installed apps are no longer offered the bad one.
 
@@ -145,18 +162,20 @@ Updates need public release files: the app fetches `https://github.com/hugrverk/
    The app treats anything weaker (no `requireSignedVersion`, `allowDowngrades`, a `dangerous*` option, plain HTTP) as off, and `release_tools.py updater-config` also refuses another endpoint shape. Merge it through a normal pull request; it ships with the next release.
 4. **Make the repository public**, and turn on immutable releases (Settings, General, Releases) so a published release's files cannot be swapped.
 5. **Update docs/SECURITY_MODEL.md** (Core principles and "App updates") for updates on, in the same pull request as step 3.
-6. **Publish.** The `plugins.updater` block is the switch: with it, `publish` needs both Keychain items from step 2 and stops before building when either is missing or cannot be read (a release without `latest.json` never reaches installed apps). It reads them itself (`security find-generic-password -s riggverk-updater-key -w`, and `riggverk-updater-password`) and hands them, as `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, to the environment of the one `tauri build` and nothing else: no other step, `git`, `gh` or Python helper sees them, they are never printed (not even under `bash -x`) and never written to a file. Nothing after the build needs the key. Never export them in your shell: `publish` refuses to run while either is set there, because every program started from that shell, an agent CLI included, would inherit them.
+6. **Publish.** The `plugins.updater` block is the switch: with it, `publish` needs both Keychain items from step 2 and stops before building when either is missing or cannot be read (a release without `latest.json` never reaches installed apps). It reads them itself (`security find-generic-password -s riggverk-updater-key -w`, and `riggverk-updater-password`) and hands them, as `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, to the environment of the one `tauri build` and nothing else: no other step, `git`, `gh` or Python helper sees them, they are never printed (not even under `bash -x`) and never written to a file. The one other program that gets them is the signer of the Linux AppImage (`npm run tauri -- signer sign --app-version <version>`), started the same way, so the key never leaves the Mac and the Linux machine never needs it. Never export them in your shell: `publish` refuses to run while either is set there, because every program started from that shell, an agent CLI included, would inherit them.
 
    ```bash
    ./scripts/release.sh publish --dry-run   # says "updates: on (signing key: in the Keychain; latest.json for hugrverk/riggverk)"
    ./scripts/release.sh publish
    ```
 
-   The build is the only step that sees the key, but within it every build script runs with it (npm scripts, Cargo build scripts and proc-macros of the locked dependencies). With the key, `publish` also builds the signed updater archive (`createUpdaterArtifacts`; the bundler signs it for the version, so `requireSignedVersion` holds), checks the app inside it, writes `release/latest.json` (`release_tools.py updater-manifest`: both `darwin-aarch64` and `darwin-x86_64` point at the universal `Riggverk-v<version>-macOS.app.tar.gz`, with the notes minus the Install section), adds the archive to `SHA256SUMS`, creates the release as a draft with every file, checks that every file is there, and only then publishes it as the latest release, so `latest.json` never points at a missing file.
+   The build is the only step that sees the key, but within it every build script runs with it (npm scripts, Cargo build scripts and proc-macros of the locked dependencies). With the key, `publish` also builds the signed updater archive (`createUpdaterArtifacts`; the bundler signs it for the version, so `requireSignedVersion` holds), checks the app inside it, signs the Linux AppImage for the version (`Riggverk-v<version>-linux-x86_64.AppImage.sig`; `--app-version` binds it as the bundler binds its own), writes `release/latest.json` (`release_tools.py updater-manifest`: both `darwin-aarch64` and `darwin-x86_64` point at the universal `Riggverk-v<version>-macOS.app.tar.gz`, `linux-x86_64` and `linux-x86_64-appimage` at the AppImage, each signature checked against the key id of the public key, with the notes minus the Install section), adds the archive to `SHA256SUMS`, creates the release as a draft with every file, checks that every file is there, and only then publishes it as the latest release, so `latest.json` never points at a missing file.
 
 The first release with the block is still installed by hand; the ones after it reach installed apps. A broken release is fixed with a newer version: the app never installs an older one, and there is no remote switch to stop a published update.
 
 Until the app is notarized (Apple Developer ID), an update is still ad hoc signed: the update itself needs no Open Anyway (the app downloads it, so it carries no quarantine flag), but macOS may ask for folder or automation permissions again after it, because each ad hoc build counts as a new app. An app run from the disk image or straight from Downloads (App Translocation) cannot be replaced; the review says "Move Riggverk to Applications first".
+
+On Linux only the AppImage updates itself: the updater writes the new AppImage next to the running one and replaces it, so its folder must be writable (the review says "Move the Riggverk AppImage to a folder you can write to" otherwise). A deb or rpm install belongs to the package manager. The plugin could install those through `pkexec`, `zenity` or a terminal `sudo`, but Riggverk never asks for an administrator password: such an install finds the new version (the updater falls back from `linux-x86_64-deb` to `linux-x86_64`), shows its notes and says to download the new package from the release page, and Download and restart stays off.
 
 To try the update UI without a release: `npm run dev`, then `http://localhost:1420/?mock=update`.
 
@@ -197,6 +216,8 @@ The bundle is ad-hoc signed and not notarized, so Gatekeeper and any folder-acce
 For installs that predate the rename, see [Upgrading from earlier versions](../README.md#upgrading-from-earlier-versions) in the README and [App data move](#app-data-move) below.
 
 Releases are built and zipped by `scripts/release.sh publish` (see [Cutting a release](#cutting-a-release)); name any other manual zip `Riggverk-v<version>-<channel>-macOS.zip`.
+
+On Linux, `scripts/linux-build.sh` builds the committed `HEAD` (a clean tree) into `release/linux-build/` in the same container `build-linux` uses: the AppImage, deb and rpm under the bundler's names. A plain `npm run tauri build` on the host also works but links against the host's glibc, so its packages may not start on older distributions.
 
 ## App data move
 
