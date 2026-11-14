@@ -144,6 +144,10 @@ mod tests {
         assert_eq!(RULES_PREFERENCES_FILE, "rules-preferences.json");
         assert_eq!(KEPT_FILES_FILE, "kept-files.json");
         assert_eq!(
+            crate::disabled_skills::DISABLED_SKILLS_FILE,
+            "disabled-skills.json"
+        );
+        assert_eq!(
             crate::config_preferences::CONFIG_PREFERENCES_FILE,
             "config-preferences.json"
         );

@@ -12,6 +12,7 @@ mod commands;
 mod config_preferences;
 mod cursor_profile_ops;
 mod cursor_profile_paths;
+mod disabled_skills;
 mod env_overrides;
 mod executable_resolver;
 mod file_conflicts;
