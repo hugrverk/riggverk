@@ -1,6 +1,6 @@
 ---
 name: security-review
-description: Reviews changed code for realistic security risks in authn/authz, input handling, injection, secrets, uploads, SSRF, CSRF/XSS, webhooks, dependencies, and local-agent shell or file access. Use when a change touches auth, user input, endpoints, payments, uploads, shell execution, or sensitive data.
+description: Reviews changed code for security risks in auth, input, injection, secrets, uploads, SSRF, CSRF/XSS, webhooks, dependencies, and agent shell or file access. Use when a change touches auth, input, endpoints, payments, uploads, shell or sensitive data. Not for whole-codebase audits (security-audit).
 license: MIT
 metadata:
   category: security

@@ -191,6 +191,8 @@ pub(crate) const RETIRED_FROM_BUNDLE: &[&str] = &[
     "skills/wordpress-woocommerce/SKILL.md",
     "templates/cursor/rules/nextjs-supabase.mdc",
     "templates/cursor/rules/wordpress-woocommerce.mdc",
+    // Merged into `adversarial` after 2026.11.12.
+    "skills/adversarial-implementation/SKILL.md",
 ];
 
 /// The marker followed by the frozen list: every path the `WorkspaceBundle` surface installs and

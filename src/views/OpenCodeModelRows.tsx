@@ -420,7 +420,7 @@ export function OpenCodeModelRows({ dataFolderOk, health, onModelUpdated, onUnsa
     },
     ...errorRow(criticModelId, criticError),
     ...sourceRow("critic", selection?.critic_source, criticState),
-    { label: "", value: "used by the adversarial skills' critic (inspector)", tone: "dim", wrap: true, id: "critic-hint" },
+    { label: "", value: "used by the adversarial skill's critic (inspector)", tone: "dim", wrap: true, id: "critic-hint" },
   ];
 
   return (

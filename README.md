@@ -77,7 +77,7 @@ Every harness file is installed from the packaged bundle, and the Library and he
 
 ## Skills
 
-The bundled catalog is listed in [SKILLS.md](resources/default-workspace/docs/SKILLS.md). `retro` is user-invoked only, and `adversarial-implementation`, `adversarial-review` and `adversarial-test` run only when you ask for them (they are not in the routing rules).
+The bundled catalog is listed in [SKILLS.md](resources/default-workspace/docs/SKILLS.md). `retro` is user-invoked only, and `adversarial` (modes implement, review and test) runs only when you ask for it (it is not in the routing rules).
 
 ```text
 skills/<skill>/SKILL.md
@@ -219,7 +219,7 @@ Several bundled skills adapt methods from open skill collections. The wording is
 |---|---|---|
 | [Matt Pocock's skills](https://github.com/mattpocock/skills) | `diagnose`, `tdd`, `prototype`, `handoff`, `context-budget`, `retro`, `grill-me`; the idea behind `zoom-out` | MIT |
 | [obra/superpowers](https://github.com/obra/superpowers) | `implementation-plan`, `delegate`, `review-response` | MIT |
-| [raddue/crucible](https://github.com/raddue/crucible) | the fresh-critic loop in the adversarial skills | MIT |
+| [raddue/crucible](https://github.com/raddue/crucible) | the fresh-critic loop in the `adversarial` skill | MIT |
 | [dementev-dev/adversarial-review](https://github.com/dementev-dev/adversarial-review) | the read-only critic and its adjudication | Apache-2.0 |
 | [openai/skills](https://github.com/openai/skills) | `ci-triage`, `review-response` | Apache-2.0 |
 | [t3dotgg/tstack](https://github.com/t3dotgg/tstack) | `pr-workflow`, `review-response`, `pr-modernize` | MIT |

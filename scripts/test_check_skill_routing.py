@@ -167,18 +167,59 @@ class CheckSkillRoutingTests(unittest.TestCase):
         result = run(self.tree, "check-skill-routing.py")
         self.assertEqual(result.returncode, 0, result.stderr)
 
-    def test_adversarial_skill_reading_the_implementation_skill_fails(self) -> None:
-        self.append(self.skill("adversarial-test"), "\nRecipes: `../adversarial-implementation/critic-recipes.md`.\n")
-        self.assert_fails("references the files of skill 'adversarial-implementation'")
+    def test_adversarial_mode_file_reading_another_skill_fails(self) -> None:
+        self.append(self.skill("adversarial").parent / "test.md", "\nLoop: `../tdd/SKILL.md`.\n")
+        self.assert_fails("references the files of skill 'tdd'")
 
-    def test_adversarial_reference_copies_must_match(self) -> None:
-        copy = self.skill("adversarial-review").parent / "critic-recipes.md"
-        self.append(copy, "\nExtra line.\n")
-        self.assert_fails("critic-recipes.md: copies differ")
+    def test_adversarial_skill_without_a_mode_file_fails(self) -> None:
+        (self.skill("adversarial").parent / "review.md").unlink()
+        self.assert_fails("missing; adversarial carries review.md next to its SKILL.md")
 
-    def test_adversarial_skill_without_its_own_reference_copy_fails(self) -> None:
-        (self.skill("adversarial-test").parent / "adversarial-roles.md").unlink()
-        self.assert_fails("every adversarial-* skill carries its own copy of adversarial-roles.md")
+    def test_adversarial_skill_without_its_reference_file_fails(self) -> None:
+        (self.skill("adversarial").parent / "adversarial-roles.md").unlink()
+        self.assert_fails("missing; adversarial carries adversarial-roles.md next to its SKILL.md")
+
+    def test_adversarial_skill_must_send_the_agent_to_each_mode_file(self) -> None:
+        path = self.skill("adversarial")
+        path.write_text(path.read_text(encoding="utf-8").replace("`test.md`", "the test file"), encoding="utf-8")
+        self.assert_fails("never names `test.md`")
+
+    def test_merged_skill_names_are_retired(self) -> None:
+        for old in ("adversarial-" + "implementation", "adversarial-" + "review", "adversarial-" + "test"):
+            with self.subTest(old=old):
+                self.assertFalse(list((self.tree / WS / "skills").rglob(f"{old}/SKILL.md")))
+                path = self.skill("tdd").parent / "notes.md"
+                path.write_text(f"See `{old}`.\n", encoding="utf-8")
+                self.assert_fails(f"references removed skill {old}")
+                path.unlink()
+
+    def test_upstream_project_named_like_a_removed_skill_passes(self) -> None:
+        upstream = "dementev-dev/adversarial-" + "review"
+        self.assertIn(upstream, self.skill("adversarial").read_text(encoding="utf-8"))
+        (self.skill("tdd").parent / "notes.md").write_text(f"See https://github.com/{upstream}.\n", encoding="utf-8")
+        result = run(self.tree, "check-skill-routing.py")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_release_notes_and_rules_history_may_name_removed_skills(self) -> None:
+        old = "adversarial-" + "review"
+        (self.tree / "release-notes").mkdir()
+        (self.tree / "release-notes/2026.1.1.md").write_text(f"- New skill: {old}\n", encoding="utf-8")
+        history = self.tree / WS / "metadata/rules-history/claude/old.md"
+        history.parent.mkdir(parents=True, exist_ok=True)
+        history.write_text(f"- Frontend: add `{old}`.\n", encoding="utf-8")
+        result = run(self.tree, "check-skill-routing.py")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_checkout_below_a_claude_folder_is_still_scanned(self) -> None:
+        with tempfile.TemporaryDirectory() as outer:
+            nested = Path(outer) / ".claude/worktree"
+            nested.mkdir(parents=True)
+            build_tree(nested)
+            removed = "cave" + "man"
+            (nested / "draft.md").write_text(f"see {removed}\n", encoding="utf-8")
+            result = run(nested, "check-skill-routing.py")
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn(f"draft.md: references removed skill {removed}", result.stderr)
 
     def test_light_harness_notes_are_accepted_last(self) -> None:
         text = self.skill("release-check").read_text(encoding="utf-8")
@@ -339,9 +380,31 @@ class CheckSkillRoutingTests(unittest.TestCase):
         self.edit(
             self.tree / WS / "templates/global-agent-rules.md",
             "## Skill routing\n",
-            "## Skill routing\n- Risky changes: `adversarial-review`.\n",
+            "## Skill routing\n- Risky changes: `adversarial`.\n",
         )
-        self.assert_fails("names on-request skill `adversarial-review`")
+        self.assert_fails("names on-request skill `adversarial`")
+
+    def test_routing_bullet_naming_two_skills_fails(self) -> None:
+        for rules in ("templates/global-agent-rules.md", "templates/cursor/user-rules.md", "templates/sync/codex-rules.md"):
+            with self.subTest(rules=rules):
+                path = self.tree / WS / rules
+                original = path.read_text(encoding="utf-8")
+                self.edit(path, "`diagnose`.\n", "`diagnose`; add `tdd` for a regression test.\n")
+                self.assert_fails("bullet names exactly one bundled skill, found ['diagnose', 'tdd']")
+                path.write_text(original, encoding="utf-8")
+
+    def test_routing_bullet_naming_no_skill_fails(self) -> None:
+        self.edit(
+            self.tree / WS / "templates/global-agent-rules.md",
+            "## Skill routing\n",
+            "## Skill routing\n- Anything else: use judgement.\n",
+        )
+        self.assert_fails("bullet names exactly one bundled skill, found []")
+
+    def test_bullets_after_the_routing_section_are_not_routing_bullets(self) -> None:
+        self.append(self.tree / WS / "templates/global-agent-rules.md", "\n## Notes\n- Pair `diagnose` with `tdd` by hand.\n")
+        result = run(self.tree, "check-skill-routing.py")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_user_invoked_skill_in_composed_sync_rules_fails(self) -> None:
         sync = self.tree / WS / "templates/sync/codex-rules.md"
