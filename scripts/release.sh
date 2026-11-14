@@ -1,12 +1,16 @@
 #!/usr/bin/env bash
-# Local macOS release flow (no CI). See docs/RELEASE.md.
+# Local release flow (no CI). See docs/RELEASE.md.
 #
 #   scripts/release.sh prepare [--dry-run] [--since REV]   next CalVer version, notes draft, bump, release check, PR
-#   scripts/release.sh publish [--dry-run] [--allow-newer] universal build, dmg, zip, SHA256SUMS, tag and GitHub release
+#   scripts/release.sh build-linux [--dry-run]             on Linux: AppImage, deb and rpm of main into release/linux
+#   scripts/release.sh publish [--dry-run] [--allow-newer] [--no-linux]
+#                                                          on macOS: universal build, dmg, zip, the Linux packages from
+#                                                          release/linux, SHA256SUMS, tag and GitHub release
 #
 # App updates: with plugins.updater in src-tauri/tauri.conf.json, publish reads the signing key and its password from
 # the macOS Keychain into the environment of the tauri build alone, signs the updater archive, writes latest.json and
-# releases as a draft that is published once every asset is there; see docs/RELEASE.md, "Turning on updates".
+# releases as a draft that is published once every asset is there; see docs/RELEASE.md, "Turning on updates". The
+# Linux AppImage is signed there too, so the signing key never leaves the Mac.
 #
 # --dry-run runs the read-only checks (and git fetch) and prints what a real run would do; it changes nothing.
 set -euo pipefail
@@ -29,6 +33,9 @@ updater_repo=""
 # Keychain items (generic passwords) that hold the updater signing key and its password.
 updater_key_item="riggverk-updater-key"
 updater_password_item="riggverk-updater-password"
+# Where build-linux leaves the Linux packages and where publish takes them from (copied over from the Linux machine).
+linux_dir="release/linux"
+linux=0
 
 step() {
   printf '\n==> %s\n' "$1"
@@ -47,7 +54,8 @@ usage() {
   cat <<'USAGE'
 usage:
   scripts/release.sh prepare [--dry-run] [--since REV]
-  scripts/release.sh publish [--dry-run] [--allow-newer]
+  scripts/release.sh build-linux [--dry-run]
+  scripts/release.sh publish [--dry-run] [--allow-newer] [--no-linux]
 USAGE
 }
 
@@ -504,15 +512,42 @@ updater_artifacts() {
   tar -xzf "$updater_file" -C "$check_dir"
   check_signature "$check_dir/Riggverk.app"
   check_universal "$check_dir/Riggverk.app"
+  local linux_args=()
+  [ "$linux" -eq 0 ] || linux_args=(--linux-asset "$(basename "$linux_appimage")" --linux-signature-file "$linux_appimage.sig")
   python3 scripts/release_tools.py updater-manifest --version "$version" --repo "$updater_repo" \
-    --asset "$(basename "$updater_file")" --signature-file "$updater_file.sig" --notes-file "$notes_file" >"$manifest_file"
+    --asset "$(basename "$updater_file")" --signature-file "$updater_file.sig" --notes-file "$notes_file" \
+    ${linux_args[@]+"${linux_args[@]}"} >"$manifest_file"
   info "$updater_file, its .sig and $manifest_file"
 }
 
+# Signs the Linux AppImage for the updater, bound to this version like the bundler's own signatures; the key is read
+# here, for the signer alone, as in build_app, and never leaves the Mac.
+sign_linux_appimage() {
+  rm -f "$linux_appimage.sig"
+  (
+    { set +x; } 2>/dev/null
+    TAURI_SIGNING_PRIVATE_KEY="$(security find-generic-password -s "$updater_key_item" -w)" &&
+      [ -n "$TAURI_SIGNING_PRIVATE_KEY" ] || fail "could not read the signing key from the Keychain item $updater_key_item"
+    TAURI_SIGNING_PRIVATE_KEY_PASSWORD="$(security find-generic-password -s "$updater_password_item" -w)" ||
+      fail "could not read the key password from the Keychain item $updater_password_item"
+    export TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD
+    exec npm run --silent tauri -- signer sign --app-version "$version" "$linux_appimage" </dev/null
+  ) >/dev/null
+  [ -s "$linux_appimage.sig" ] || fail "signing did not produce $linux_appimage.sig"
+  info "$linux_appimage.sig"
+}
+
 write_checksums() {
-  local files=("$(basename "$dmg_file")" "$(basename "$zip_file")")
+  local files=("$(basename "$dmg_file")" "$(basename "$zip_file")") file
   [ "$updater" -eq 0 ] || files+=("$(basename "$updater_file")")
   (cd "$(dirname "$sums_file")" && shasum -a 256 "${files[@]}") >"$sums_file"
+  if [ "$linux" -eq 1 ]; then
+    files=()
+    for file in "${linux_files[@]}"; do
+      files+=("$(basename "$file")")
+    done
+    (cd "$linux_dir" && shasum -a 256 "${files[@]}") >>"$sums_file"
+  fi
   sed 's/^/  /' "$sums_file"
 }
 
@@ -522,14 +557,14 @@ create_release() {
   stage="tagged"
   git push --quiet origin "refs/tags/v$version"
   if [ "$updater" -eq 0 ]; then
-    url="$(gh release create "v$version" "$dmg_file" "$zip_file" "$sums_file" --title "Riggverk $version" \
+    url="$(gh release create "v$version" "${release_assets[@]}" --title "Riggverk $version" \
       --notes-file "$notes_file" --verify-tag)"
   else
     # A draft first: latest.json goes public only together with every file it and the page point to.
-    gh release create "v$version" "$dmg_file" "$zip_file" "$updater_file" "$updater_file.sig" "$manifest_file" \
-      "$sums_file" --title "Riggverk $version" --notes-file "$notes_file" --verify-tag --draft >/dev/null
+    gh release create "v$version" "${release_assets[@]}" --title "Riggverk $version" --notes-file "$notes_file" \
+      --verify-tag --draft >/dev/null
     stage="drafted"
-    check_release_assets "$dmg_file" "$zip_file" "$updater_file" "$updater_file.sig" "$manifest_file" "$sums_file"
+    check_release_assets "${release_assets[@]}"
     url="$(gh release edit "v$version" --draft=false --latest)"
   fi
   stage="released"
@@ -566,32 +601,10 @@ $newer"
   fi
 }
 
-cmd_publish() {
-  local allow_newer=0 head_message
-  while [ $# -gt 0 ]; do
-    case "$1" in
-      --dry-run) dry_run=1 ;;
-      --allow-newer) allow_newer=1 ;;
-      *) usage >&2; fail "unknown option for publish: $1" ;;
-    esac
-    shift
-  done
-
-  step "preflight"
-  require_python
-  require_tools git gh npm codesign ditto hdiutil lipo shasum
-  require_universal_targets
-  check_updater
-  require_gh_login
-  # The build uses whatever is installed; it must be what the tag's lock says.
-  if python3 scripts/release_tools.py check-node-modules; then
-    info "checked: node_modules matches package-lock.json"
-  else
-    problem "node_modules is not what package-lock.json locks (npm ci)"
-  fi
-  require_clean_main
-
-  step "version and notes"
+# The version main releases: consistent everywhere, newer than every release, with its notes, not yet tagged or
+# released, and main ends with its release PR. Sets version and notes_file (version stays empty when inconsistent).
+check_version_and_notes() {
+  local allow_newer="$1" head_message
   if version="$(python3 scripts/release_tools.py check-versions)"; then
     info "app version: $version"
   else
@@ -628,29 +641,93 @@ cmd_publish() {
         ;;
     esac
   fi
+}
+
+# The Linux packages build-linux left in release/linux: of this version, built from HEAD, unchanged. --no-linux
+# releases macOS alone; installed Linux apps then see no update until the next release with Linux packages.
+check_linux() {
+  local no_linux="$1"
+  if [ "$no_linux" -eq 1 ]; then
+    info "Linux: skipped (--no-linux)"
+    return 0
+  fi
+  if python3 scripts/release_tools.py linux-stamp check --dir "$linux_dir" --version "$version" --commit "$(git rev-parse HEAD)"; then
+    linux=1
+    info "checked: $linux_dir holds the AppImage, deb and rpm of $version, built from HEAD"
+  else
+    problem "no Linux packages of this commit in $linux_dir (run ./scripts/release.sh build-linux on Linux and copy $linux_dir here, or --no-linux)"
+  fi
+}
+
+cmd_publish() {
+  local allow_newer=0 no_linux=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --dry-run) dry_run=1 ;;
+      --allow-newer) allow_newer=1 ;;
+      --no-linux) no_linux=1 ;;
+      *) usage >&2; fail "unknown option for publish: $1" ;;
+    esac
+    shift
+  done
+
+  step "preflight"
+  require_python
+  require_tools git gh npm codesign ditto hdiutil lipo shasum
+  require_universal_targets
+  check_updater
+  require_gh_login
+  # The build uses whatever is installed; it must be what the tag's lock says.
+  if python3 scripts/release_tools.py check-node-modules; then
+    info "checked: node_modules matches package-lock.json"
+  else
+    problem "node_modules is not what package-lock.json locks (npm ci)"
+  fi
+  require_clean_main
+
+  step "version and notes"
+  check_version_and_notes "$allow_newer"
+  if [ -n "$version" ]; then
+    check_linux "$no_linux"
+  fi
 
   zip_file="release/Riggverk-v${version:-VERSION}-macOS.zip"
   dmg_file="release/Riggverk-v${version:-VERSION}-macOS.dmg"
   sums_file="release/SHA256SUMS"
   updater_file="release/Riggverk-v${version:-VERSION}-macOS.app.tar.gz"
   manifest_file="release/latest.json"
+  linux_appimage="$linux_dir/Riggverk-v${version:-VERSION}-linux-x86_64.AppImage"
+  linux_files=("$linux_appimage" "$linux_dir/Riggverk-v${version:-VERSION}-linux-amd64.deb"
+    "$linux_dir/Riggverk-v${version:-VERSION}-linux-x86_64.rpm")
+  release_assets=("$dmg_file" "$zip_file")
+  [ "$updater" -eq 0 ] || release_assets+=("$updater_file" "$updater_file.sig" "$manifest_file")
+  [ "$linux" -eq 0 ] || release_assets+=("${linux_files[@]}")
+  [ "$updater" -eq 0 ] || [ "$linux" -eq 0 ] || release_assets+=("$linux_appimage.sig")
+  release_assets+=("$sums_file")
   if [ "$dry_run" -eq 1 ]; then
     step "release"
     would "build: npm run tauri build -- --target $build_target --bundles app,dmg -- --locked (expects $app_bundle, universal)"
     would "verify the bundler's ad hoc signature: codesign --verify --deep --strict $app_bundle"
     would "zip: ditto -c -k --keepParent $app_bundle $zip_file, then verify the signature inside the zip"
     would "disk image: add the volume icon to the bundler's disk image as $dmg_file, then hdiutil verify, mount and check the app"
+    if [ "$updater" -eq 1 ] && [ "$linux" -eq 1 ]; then
+      would "sign the Linux AppImage: npm run tauri -- signer sign --app-version ${version:-VERSION} $linux_appimage, with the same Keychain key in the signer's environment only"
+    fi
     if [ "$updater" -eq 1 ]; then
-      would "updates: build with createUpdaterArtifacts and the signing key from the Keychain ($updater_key_item, $updater_password_item) in that build's environment only, copy the signed archive to $updater_file (+ .sig), check the app inside, write $manifest_file for $updater_repo"
-      would "checksums: shasum -a 256 of the disk image, the zip and the updater archive into $sums_file"
+      local linux_entry=""
+      [ "$linux" -eq 0 ] || linux_entry=" and the AppImage for linux-x86_64"
+      would "updates: build with createUpdaterArtifacts and the signing key from the Keychain ($updater_key_item, $updater_password_item) in that build's environment only, copy the signed archive to $updater_file (+ .sig), check the app inside, write $manifest_file for $updater_repo$linux_entry"
+    fi
+    if [ "$linux" -eq 1 ]; then
+      would "checksums: shasum -a 256 of the macOS files and the Linux packages in $linux_dir into $sums_file"
     else
-      would "checksums: shasum -a 256 of the disk image and the zip into $sums_file"
+      would "checksums: shasum -a 256 of the macOS files into $sums_file"
     fi
     would "tag: git tag -a v${version:-VERSION} -m 'Riggverk ${version:-VERSION}', then git push origin refs/tags/v${version:-VERSION}"
     if [ "$updater" -eq 1 ]; then
-      would "release: gh release create v${version:-VERSION} $dmg_file $zip_file $updater_file $updater_file.sig $manifest_file $sums_file --title 'Riggverk ${version:-VERSION}' --notes-file ${notes_file:-release-notes/VERSION.md} --verify-tag --draft, check the assets, then gh release edit v${version:-VERSION} --draft=false --latest"
+      would "release: gh release create v${version:-VERSION} ${release_assets[*]} --title 'Riggverk ${version:-VERSION}' --notes-file ${notes_file:-release-notes/VERSION.md} --verify-tag --draft, check the assets, then gh release edit v${version:-VERSION} --draft=false --latest"
     else
-      would "release: gh release create v${version:-VERSION} $dmg_file $zip_file $sums_file --title 'Riggverk ${version:-VERSION}' --notes-file ${notes_file:-release-notes/VERSION.md} --verify-tag"
+      would "release: gh release create v${version:-VERSION} ${release_assets[*]} --title 'Riggverk ${version:-VERSION}' --notes-file ${notes_file:-release-notes/VERSION.md} --verify-tag"
     fi
     finish_dry_run
     return
@@ -668,6 +745,10 @@ cmd_publish() {
   zip_app
   step "disk image"
   dmg_app
+  if [ "$updater" -eq 1 ] && [ "$linux" -eq 1 ]; then
+    step "sign the Linux AppImage"
+    sign_linux_appimage
+  fi
   if [ "$updater" -eq 1 ]; then
     step "updater archive and latest.json"
     updater_artifacts
@@ -678,10 +759,78 @@ cmd_publish() {
   create_release
 }
 
+# ── build-linux ──
+
+cleanup_build_linux() {
+  local status=$?
+  trap - EXIT
+  if [ -n "$tmp_dir" ] && [ -d "$tmp_dir" ]; then
+    rm -rf "$tmp_dir"
+  fi
+  exit "$status"
+}
+
+# Runs on the Linux machine at the commit publish will release: the same checks as publish, then the container build
+# (scripts/linux-build.sh) and the release names and stamp in release/linux. Nothing is tagged or uploaded here.
+cmd_build_linux() {
+  local allow_newer=0 commit build_dir
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --dry-run) dry_run=1 ;;
+      --allow-newer) allow_newer=1 ;;
+      *) usage >&2; fail "unknown option for build-linux: $1" ;;
+    esac
+    shift
+  done
+
+  step "preflight"
+  [ "$(uname -s)" = "Linux" ] && [ "$(uname -m)" = "x86_64" ] || problem "build-linux runs on a Linux x86_64 host"
+  require_python
+  require_tools git gh podman
+  require_gh_login
+  require_clean_main
+
+  step "version and notes"
+  check_version_and_notes "$allow_newer"
+  commit="$(git rev-parse HEAD)"
+
+  if [ "$dry_run" -eq 1 ]; then
+    step "build"
+    would "build: scripts/linux-build.sh (AppImage, deb and rpm of $commit in the Ubuntu 22.04 image)"
+    would "copy them to $linux_dir as Riggverk-v${version:-VERSION}-linux-x86_64.AppImage, Riggverk-v${version:-VERSION}-linux-amd64.deb and Riggverk-v${version:-VERSION}-linux-x86_64.rpm, and write $linux_dir/linux-build.json (version, commit, SHA-256)"
+    finish_dry_run
+    return
+  fi
+
+  tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/riggverk-release.XXXXXX")"
+  trap cleanup_build_linux EXIT
+  trap 'exit 130' INT TERM
+  build_dir="$tmp_dir/build"
+
+  step "build"
+  scripts/linux-build.sh --out "$build_dir"
+
+  step "release files"
+  rm -rf "$linux_dir"
+  mkdir -p "$linux_dir"
+  cp "$build_dir/Riggverk_${version}_amd64.AppImage" "$linux_dir/Riggverk-v$version-linux-x86_64.AppImage"
+  cp "$build_dir/Riggverk_${version}_amd64.deb" "$linux_dir/Riggverk-v$version-linux-amd64.deb"
+  cp "$build_dir/Riggverk-${version}-1.x86_64.rpm" "$linux_dir/Riggverk-v$version-linux-x86_64.rpm"
+  python3 scripts/release_tools.py linux-stamp write --dir "$linux_dir" --version "$version" --commit "$commit"
+  ls -l "$linux_dir" | sed '1d; s/^/  /'
+
+  printf '\nNext: copy %s to %s in the checkout on the Mac (at the same commit), then run ./scripts/release.sh publish there.\n' \
+    "$linux_dir" "$linux_dir"
+}
+
 case "${1:-}" in
   prepare)
     shift
     cmd_prepare "$@"
+    ;;
+  build-linux)
+    shift
+    cmd_build_linux "$@"
     ;;
   publish)
     shift

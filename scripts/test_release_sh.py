@@ -2,8 +2,8 @@
 """Checks scripts/release.sh --dry-run and its refusals in a throwaway repository.
 
 The repository gets a bare local origin, a few merged pull requests, and stand-ins for gh, npm, cargo, rustup,
-codesign, ditto, hdiutil, lipo and security (the Keychain), so nothing real is built, pushed, uploaded or read from the
-Keychain. A dry run must also leave the repository untouched.
+codesign, ditto, hdiutil, lipo, security (the Keychain), uname, podman and scripts/linux-build.sh, so nothing real is
+built, pushed, uploaded or read from the Keychain. A dry run must also leave the repository untouched.
 """
 
 from __future__ import annotations
@@ -73,6 +73,23 @@ esac
 """
 KEYCHAIN_ITEMS = "riggverk-updater-key riggverk-updater-password"
 
+# build-linux runs on Linux x86_64 only; the tests run on macOS too.
+UNAME_STUB = """#!/usr/bin/env bash
+case "$1" in -s) echo Linux ;; -m) echo x86_64 ;; *) exit 1 ;; esac
+"""
+
+# The container build: the three packages under the bundler's names in --out, for the version tauri.conf.json says.
+LINUX_BUILD_STUB = """#!/usr/bin/env bash
+set -euo pipefail
+[ "$1" = "--out" ]
+version="$(python3 -c 'import json; print(json.load(open("src-tauri/tauri.conf.json"))["version"])')"
+mkdir -p "$2"
+for name in "Riggverk_${version}_amd64.AppImage" "Riggverk_${version}_amd64.deb" "Riggverk-${version}-1.x86_64.rpm"; do
+  printf 'package %s\\n' "$name" >"$2/$name"
+done
+echo "linux-build stub ran" >>"$LINUX_BUILD_STUB_LOG"
+"""
+
 today = datetime.date.today()
 NEXT = f"{today.year}.{today.month}.1"
 
@@ -87,7 +104,7 @@ class ReleaseShTests(unittest.TestCase):
         self.gh_log = base / "gh.log"
         bin_dir = base / "bin"
         bin_dir.mkdir()
-        for name in ("cargo", "codesign", "ditto", "hdiutil", "lipo"):
+        for name in ("cargo", "codesign", "ditto", "hdiutil", "lipo", "podman"):
             self.stub(bin_dir / name, "#!/usr/bin/env bash\nexit 0\n")
         self.stub(bin_dir / "npm", NPM_STUB)
         self.npm_log = base / "npm.log"
@@ -95,6 +112,10 @@ class ReleaseShTests(unittest.TestCase):
         self.stub(bin_dir / "gh", GH_STUB)
         self.stub(bin_dir / "security", SECURITY_STUB)
         self.security_log = base / "security.log"
+        self.stub(bin_dir / "uname", UNAME_STUB)
+        self.linux_build_log = base / "linux-build.log"
+        # publish finds Linux packages of HEAD in release/linux unless a test turns this off.
+        self.linux_packages = True
         (bin_dir / "python3").symlink_to(sys.executable)
         self.env = {
             **os.environ,
@@ -102,6 +123,7 @@ class ReleaseShTests(unittest.TestCase):
             "GH_STUB_LOG": str(self.gh_log),
             "SECURITY_STUB_LOG": str(self.security_log),
             "NPM_STUB_LOG": str(self.npm_log),
+            "LINUX_BUILD_STUB_LOG": str(self.linux_build_log),
             "GIT_CONFIG_GLOBAL": os.devnull,
             "GIT_CONFIG_SYSTEM": os.devnull,
             "GIT_AUTHOR_NAME": "t",
@@ -123,12 +145,13 @@ class ReleaseShTests(unittest.TestCase):
         conf = json.loads(conf_path.read_text())
         conf.pop("plugins", None)
         conf_path.write_text(json.dumps(conf, indent=2) + "\n")
+        self.stub(self.repo / "scripts/linux-build.sh", LINUX_BUILD_STUB)
         self.set_versions("0.1.0")
         self.python("scripts/generate-release-notes.py", "--write")
         (self.repo / "node_modules").mkdir()
         # What npm ci records: the locked packages, as installed.
         shutil.copy(self.repo / "package-lock.json", self.repo / "node_modules/.package-lock.json")
-        (self.repo / ".git/info/exclude").write_text("node_modules\n")
+        (self.repo / ".git/info/exclude").write_text("node_modules\nrelease/\n")
         self.git("add", ".")
         self.git("commit", "-q", "-m", "root")
         self.merge(1, "feat/old", "feat(app): shipped earlier")
@@ -163,6 +186,8 @@ class ReleaseShTests(unittest.TestCase):
         self.git("merge", "-q", "--no-ff", branch, "-m", f"Merge pull request #{number} from o/{branch}", "-m", title)
 
     def release(self, *args: str, **extra_env: str) -> subprocess.CompletedProcess:
+        if args[0] == "publish" and self.linux_packages:
+            self.add_linux_packages()
         return subprocess.run(
             ["bash", "scripts/release.sh", *args],
             cwd=self.repo,
@@ -170,6 +195,24 @@ class ReleaseShTests(unittest.TestCase):
             capture_output=True,
             text=True,
             check=False,
+        )
+
+    def add_linux_packages(self, commit: str = "HEAD") -> None:
+        """What build-linux leaves in release/linux for the current version, stamped with `commit`."""
+        version = json.loads((self.repo / "src-tauri/tauri.conf.json").read_text())["version"]
+        if not re.match(r"^\d{4}\.", version):
+            return
+        linux = self.repo / "release/linux"
+        linux.mkdir(parents=True, exist_ok=True)
+        for name in (
+            f"Riggverk-v{version}-linux-x86_64.AppImage",
+            f"Riggverk-v{version}-linux-amd64.deb",
+            f"Riggverk-v{version}-linux-x86_64.rpm",
+        ):
+            (linux / name).write_text(f"package {name}\n")
+        self.python(
+            "scripts/release_tools.py", "linux-stamp", "write", "--dir", "release/linux", "--version", version,
+            "--commit", self.git("rev-parse", commit).strip(),
         )
 
     def snapshot(self) -> tuple[str, ...]:
@@ -311,8 +354,11 @@ class ReleaseShTests(unittest.TestCase):
         self.assertIn("codesign --verify --deep --strict", result.stdout)
         self.assertNotIn("codesign --force", result.stdout)
         self.assertIn(f"release/Riggverk-v{NEXT}-macOS.dmg, then hdiutil verify", result.stdout)
+        self.assertIn(f"release/linux holds the AppImage, deb and rpm of {NEXT}, built from HEAD", result.stdout)
         self.assertIn(
             f"gh release create v{NEXT} release/Riggverk-v{NEXT}-macOS.dmg release/Riggverk-v{NEXT}-macOS.zip "
+            f"release/linux/Riggverk-v{NEXT}-linux-x86_64.AppImage release/linux/Riggverk-v{NEXT}-linux-amd64.deb "
+            f"release/linux/Riggverk-v{NEXT}-linux-x86_64.rpm "
             f"release/SHA256SUMS --title 'Riggverk {NEXT}' --notes-file release-notes/{NEXT}.md --verify-tag",
             result.stdout,
         )
@@ -365,6 +411,11 @@ class ReleaseShTests(unittest.TestCase):
         self.assertIn(f"release/Riggverk-v{NEXT}-macOS.app.tar.gz (+ .sig)", result.stdout)
         self.assertIn("--draft, check the assets, then gh release edit", result.stdout)
         self.assertIn("release/latest.json", result.stdout)
+        self.assertIn(
+            f"signer sign --app-version {NEXT} release/linux/Riggverk-v{NEXT}-linux-x86_64.AppImage", result.stdout
+        )
+        self.assertIn("and the AppImage for linux-x86_64", result.stdout)
+        self.assertIn(f"release/linux/Riggverk-v{NEXT}-linux-x86_64.AppImage.sig release/SHA256SUMS", result.stdout)
         self.assertEqual(
             self.security_log.read_text().splitlines(),
             ["find-generic-password -s riggverk-updater-key -w", "find-generic-password -s riggverk-updater-password -w"],
@@ -401,6 +452,7 @@ class ReleaseShTests(unittest.TestCase):
     def test_xtrace_never_shows_a_keychain_secret(self) -> None:
         self.turn_updates_on()
         self.merge_release_pr(NEXT)
+        self.add_linux_packages()
 
         result = subprocess.run(
             ["bash", "-x", "scripts/release.sh", "publish", "--dry-run"],
@@ -418,6 +470,7 @@ class ReleaseShTests(unittest.TestCase):
     def test_publish_passes_the_keychain_secrets_to_the_tauri_build_alone(self) -> None:
         self.turn_updates_on()
         self.merge_release_pr(NEXT)
+        self.add_linux_packages()
 
         # A real run (under xtrace) up to the build, which makes no app here, so it stops before tagging.
         result = subprocess.run(
@@ -535,6 +588,84 @@ class ReleaseShTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 1)
         self.assertIn("bundled what's new does not match", result.stderr)
+
+
+    # Linux packages
+
+    def test_publish_refuses_without_linux_packages_unless_told_to_skip_them(self) -> None:
+        self.linux_packages = False
+        self.merge_release_pr(NEXT)
+
+        refused = self.release("publish", "--dry-run")
+        skipped = self.release("publish", "--dry-run", "--no-linux")
+
+        self.assertEqual(refused.returncode, 1)
+        self.assertIn("release/linux/linux-build.json is missing", refused.stderr)
+        self.assertIn("run ./scripts/release.sh build-linux on Linux", refused.stderr)
+        self.assertEqual(skipped.returncode, 0, skipped.stderr)
+        self.assertIn("Linux: skipped (--no-linux)", skipped.stdout)
+        self.assertNotIn("release/linux/", skipped.stdout)
+
+    def test_publish_refuses_linux_packages_of_another_commit_or_changed_since(self) -> None:
+        self.linux_packages = False
+        self.merge_release_pr(NEXT)
+        self.add_linux_packages("HEAD^")
+
+        other_commit = self.release("publish", "--dry-run")
+        self.add_linux_packages()
+        (self.repo / f"release/linux/Riggverk-v{NEXT}-linux-amd64.deb").write_text("tampered\n")
+        changed = self.release("publish", "--dry-run")
+
+        self.assertEqual(other_commit.returncode, 1)
+        self.assertIn("were built from", other_commit.stderr)
+        self.assertEqual(changed.returncode, 1)
+        self.assertIn("changed after the build", changed.stderr)
+
+    def test_build_linux_dry_run_plans_the_build_and_changes_nothing(self) -> None:
+        self.merge_release_pr(NEXT)
+        before = self.snapshot()
+
+        result = self.release("build-linux", "--dry-run")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(f"app version: {NEXT}", result.stdout)
+        self.assertIn("scripts/linux-build.sh", result.stdout)
+        self.assertIn(f"release/linux/linux-build.json", result.stdout)
+        self.assertEqual(self.snapshot(), before)
+        self.assertFalse(self.linux_build_log.exists())
+        self.assertFalse((self.repo / "release").exists())
+
+    def test_build_linux_leaves_stamped_packages_that_publish_takes(self) -> None:
+        self.linux_packages = False
+        self.merge_release_pr(NEXT)
+
+        built = self.release("build-linux")
+        published = self.release("publish", "--dry-run")
+
+        self.assertEqual(built.returncode, 0, built.stderr)
+        self.assertEqual(self.linux_build_log.read_text(), "linux-build stub ran\n")
+        stamp = json.loads((self.repo / "release/linux/linux-build.json").read_text())
+        self.assertEqual(stamp["version"], NEXT)
+        self.assertEqual(stamp["commit"], self.git("rev-parse", "HEAD").strip())
+        self.assertEqual(
+            sorted(stamp["files"]),
+            sorted(
+                [
+                    f"Riggverk-v{NEXT}-linux-amd64.deb",
+                    f"Riggverk-v{NEXT}-linux-x86_64.AppImage",
+                    f"Riggverk-v{NEXT}-linux-x86_64.rpm",
+                ]
+            ),
+        )
+        self.assertEqual(published.returncode, 0, published.stderr)
+        self.assertIn("built from HEAD", published.stdout)
+
+    def test_build_linux_needs_the_release_on_main(self) -> None:
+        result = self.release("build-linux", "--dry-run")
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("is missing or empty", result.stderr)
+        self.assertEqual(self.release("build-linux", "--nope").returncode, 1)
 
 
 if __name__ == "__main__":

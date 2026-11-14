@@ -18,7 +18,14 @@ The workspace folder lives at `~/.config/riggverk` unless a custom folder saved 
 
 ## Install
 
-Riggverk needs macOS 13.3 or later. Releases are on [GitHub Releases](https://github.com/hugrverk/riggverk/releases/latest) as a disk image and a zip of the same universal app (Apple silicon and Intel): open `Riggverk-v<version>-macOS.dmg` and drag Riggverk to Applications (or unzip `Riggverk-v<version>-macOS.zip` and move `Riggverk.app` to `/Applications`), then open it. `SHA256SUMS` lists their checksums. The app is ad hoc signed and not notarized, so macOS stops the first launch. After that first attempt, open System Settings, Privacy & Security, and choose Open Anyway next to the message about Riggverk. Riggverk replaces the app's earlier build under its previous name; moving over from it (settings and backups carry over) is described in `docs/RELEASE.md`.
+Releases are on [GitHub Releases](https://github.com/hugrverk/riggverk/releases/latest); `SHA256SUMS` lists the checksums of every download.
+
+**macOS** (13.3 or later): a disk image and a zip of the same universal app (Apple silicon and Intel). Open `Riggverk-v<version>-macOS.dmg` and drag Riggverk to Applications (or unzip `Riggverk-v<version>-macOS.zip` and move `Riggverk.app` to `/Applications`), then open it. The app is ad hoc signed and not notarized, so macOS stops the first launch. After that first attempt, open System Settings, Privacy & Security, and choose Open Anyway next to the message about Riggverk. Riggverk replaces the app's earlier build under its previous name; moving over from it (settings and backups carry over) is described in `docs/RELEASE.md`.
+
+**Linux** (x86_64, glibc 2.35 or newer, such as Ubuntu 22.04 and Fedora 36 or later; needs WebKitGTK 4.1): an AppImage, a deb and an rpm of the same build.
+
+- AppImage: `chmod +x Riggverk-v<version>-linux-x86_64.AppImage` and run it. Keep it in a folder you can write to (such as `~/Applications`): it updates itself in place.
+- deb: `sudo apt install ./Riggverk-v<version>-linux-amd64.deb`. rpm: `sudo dnf install ./Riggverk-v<version>-linux-x86_64.rpm`. Both install `riggverk` and pull in WebKitGTK. A package install tells you when a new version is out, but never asks for an administrator password: install the next package the same way.
 
 ## Upgrading from earlier versions
 
