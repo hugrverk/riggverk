@@ -11,6 +11,7 @@ import type {
   PackLibrary,
   RulesFileContent,
   RulesFileSummary,
+  SkillChoices,
   SkillSummary,
 } from "../types";
 import { LibraryView } from "./LibraryView";
@@ -47,6 +48,7 @@ interface Fixture {
   packListFailsAfterCopy: boolean;
   /** When set, read_doc of the bundled README fails with this message. */
   readDocFails: string | null;
+  choices: SkillChoices;
 }
 
 function skill(id: string, description: string, extra: Partial<SkillSummary> = {}): SkillSummary {
@@ -118,6 +120,7 @@ function freshFixture(): Fixture {
     packListFails: false,
     packListFailsAfterCopy: false,
     readDocFails: null,
+    choices: { disabled: [], named_by: {}, problem: null },
   };
 }
 
@@ -191,6 +194,15 @@ function installBackend() {
           return Promise.resolve({ id, title: name, path: `~/packs/personal/skills/${name}/SKILL.md`, section: "pack:personal", source: "pack", content: personal });
         }
         return Promise.resolve({ id, title: id, path: `skills/${id}/SKILL.md`, section: "", source: "curated", content: `# ${id} skill\n\nBody of ${id}.` });
+      }
+      case "list_skill_choices":
+        return Promise.resolve(fixture.choices);
+      case "set_skills_enabled": {
+        const names = args!.names as string[];
+        const kept = fixture.choices.disabled.filter(entry => !names.includes(entry.name));
+        const added = args!.enabled ? [] : names.map(name => ({ name, source: "bundle", installed: true }));
+        fixture.choices = { ...fixture.choices, disabled: [...kept, ...added] };
+        return Promise.resolve(null);
       }
       case "forget_pack":
         fixture.packs = { ...fixture.packs, packs: fixture.packs.packs.filter(pack => pack.name !== args!.name) };
@@ -299,6 +311,8 @@ function Harness({ showConfigs = true, onOpenHarnessView, withoutCopy = false, t
       packLibrary={lib.packLibrary}
       packError={lib.packError}
       onForgetPack={lib.forgetPack}
+      skillChoices={lib.skillChoices}
+      onSetSkillsEnabled={lib.setSkillsEnabled}
       agentSources={lib.agentSources}
       activeAgentContent={lib.activeAgentContent}
       onSelectAgent={lib.selectAgent}
@@ -1015,6 +1029,105 @@ describe("Library packs", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "Forget pack" }));
     await waitFor(() => expect(callsTo("forget_pack")).toEqual([{ name: "old-pack" }]));
     await waitFor(() => expect(screen.queryAllByRole("listitem").some(item => item.querySelector("b")?.textContent === "old-pack")).toBe(false));
+  });
+});
+
+describe("Library disabled skills", () => {
+  const bundledSection = () => within(screen.getByRole("heading", { name: "Bundled" }).closest("section")!);
+  const bundledRow = (name: string) =>
+    bundledSection().getAllByRole("listitem").find(item => item.querySelector("b")?.textContent === name)!;
+
+  function run(line: string) {
+    fireEvent.keyDown(document.body, { key: ":", shiftKey: true });
+    const input = screen.getByRole("combobox", { name: "Command" }) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: line } });
+    fireEvent.keyDown(input, { key: "Enter" });
+  }
+
+  it("shows a disabled skill as Disabled with removed on next Update", async () => {
+    fixture.choices = {
+      disabled: [
+        { name: "tdd", source: "bundle", installed: true },
+        { name: "gone-skill", source: "unknown", installed: false },
+      ],
+      named_by: { tdd: ["diagnose"] },
+      problem: null,
+    };
+    await renderLibrary({ topic: "skills" });
+    await waitFor(() => expect(within(bundledRow("tdd")).getByText("Disabled")).toBeTruthy());
+    const tdd = bundledRow("tdd");
+    expect(within(tdd).getByText("removed on next Update")).toBeTruthy();
+    expect(within(tdd).getByText(/named by diagnose/)).toBeTruthy();
+    expect(within(tdd).getByRole("button", { name: "Enable" })).toBeTruthy();
+    expect(within(tdd).queryByRole("button", { name: "Disable" })).toBeNull();
+    expect(within(bundledRow("diagnose")).getByRole("button", { name: "Disable" })).toBeTruthy();
+    expect(screen.getByText("2 · 1 disabled · read-only")).toBeTruthy();
+    // The pack's shadowed tdd is not the one disabled.
+    const yours = within(screen.getByRole("heading", { name: "Yours" }).closest("section")!);
+    expect(yours.queryByText("Disabled")).toBeNull();
+    // A disabled name the catalog no longer holds can be enabled to forget it.
+    const gone = rowOf("gone-skill");
+    expect(within(gone).getByText("Disabled · not in the catalog")).toBeTruthy();
+    expect(within(gone).getByRole("button", { name: "Enable" })).toBeTruthy();
+    // Search finds it by its state.
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search all topics" }), { target: { value: "disabled" } });
+    const results = await screen.findByRole("region", { name: "Search results" });
+    expect(within(results).getAllByText("tdd")).toHaveLength(1);
+  });
+
+  it("Disable asks first and names the skills that reference it", async () => {
+    fixture.choices = { disabled: [], named_by: { diagnose: ["ci-triage", "tdd"] }, problem: null };
+    await renderLibrary({ topic: "skills" });
+    const disable = await waitFor(() => within(bundledRow("diagnose")).getByRole("button", { name: "Disable" }));
+    fireEvent.click(disable);
+    let dialog = await screen.findByRole("dialog", { name: "Disable diagnose?" });
+    expect(dialog.textContent).toContain("The next Update removes the copies Riggverk installed in your agents, with a backup; z restores them.");
+    expect(dialog.textContent).toContain("Named by ci-triage, tdd; they will point to a skill that is not installed.");
+    fireEvent.click(within(dialog).getByRole("button", { name: "cancel" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(callsTo("set_skills_enabled")).toEqual([]);
+
+    fireEvent.click(within(bundledRow("diagnose")).getByRole("button", { name: "Disable" }));
+    dialog = await screen.findByRole("dialog", { name: "Disable diagnose?" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Disable" }));
+    await waitFor(() => expect(callsTo("set_skills_enabled")).toEqual([{ names: ["diagnose"], enabled: false }]));
+    await waitFor(() => expect(within(bundledRow("diagnose")).getByText("Disabled")).toBeTruthy());
+  });
+
+  it("Enable runs without a confirm", async () => {
+    fixture.choices = { disabled: [{ name: "tdd", source: "bundle", installed: false }], named_by: {}, problem: null };
+    await renderLibrary({ topic: "skills" });
+    const enable = await waitFor(() => within(bundledRow("tdd")).getByRole("button", { name: "Enable" }));
+    expect(within(bundledRow("tdd")).queryByText("removed on next Update")).toBeNull();
+    fireEvent.click(enable);
+    await waitFor(() => expect(callsTo("set_skills_enabled")).toEqual([{ names: ["tdd"], enabled: true }]));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    await waitFor(() => expect(within(bundledRow("tdd")).getByRole("button", { name: "Disable" })).toBeTruthy());
+  });
+
+  it("`:disable a b` disables both", async () => {
+    await renderLibrary({ topic: "skills" });
+    await waitFor(() => expect(within(bundledRow("tdd")).getByRole("button", { name: "Disable" })).toBeTruthy());
+    run("disable tdd my-checklist");
+    const dialog = await screen.findByRole("dialog", { name: "Disable tdd, my-checklist?" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Disable" }));
+    await waitFor(() => expect(callsTo("set_skills_enabled")).toEqual([{ names: ["tdd", "my-checklist"], enabled: false }]));
+  });
+
+  it("refuses toggles and says why while disabled-skills.json cannot be read", async () => {
+    fixture.choices = { disabled: [], named_by: {}, problem: "disabled-skills.json cannot be read; fix or remove it" };
+    await renderLibrary({ topic: "skills" });
+    const problem = await screen.findByRole("group", { name: "Disabled skills problem" });
+    expect(problem.textContent).toContain("unavailable: disabled-skills.json cannot be read; fix or remove it");
+    expect(screen.queryByRole("button", { name: "Disable" })).toBeNull();
+    expect(bundledSection().getAllByRole("button", { name: "Read" })).toHaveLength(BUNDLED_SKILLS.length);
+  });
+
+  it("says how many routing lines a disabled skill leaves out", async () => {
+    fixture.packs.packs[0] = { ...fixture.packs.packs[0]!, routing: ["- Checklists: `my-checklist`."], routing_left_out: 1 };
+    await renderLibrary();
+    await goToTopic("Packs");
+    expect(within(rowOf("routing.md")).getByText("- Checklists: `my-checklist`. · 1 routing line left out: they name a disabled skill")).toBeTruthy();
   });
 });
 

@@ -85,6 +85,7 @@ import type {
   SetupSurfaceId,
   SkillCopy,
   SkillLoad,
+  SkillChoices,
   SkillLoadFlag,
   SkillReadFolder,
   SkillSummary,
@@ -1525,6 +1526,9 @@ const skills: SkillSummary[] = scenario === "empty"
 // Skill packs: one pack that loads and routes to its skill in the rules, one whose folder is gone while its skill
 // stays installed, and one whose `routing.md` is refused as a whole.
 const MINE_ROUTING = ["- Release checklists: `my-checklist`."];
+/** Skills disabled in this session (`set_skills_enabled`). */
+const disabledSkills = new Set<string>();
+
 const packLibrary: PackLibrary = scenario === "empty" || scenario === "fresh"
   ? { folder: "~/.config/riggverk/packs", packs: [], skills: [], ignored: [] }
   : {
@@ -2185,6 +2189,23 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
       packLibrary.packs = packLibrary.packs.filter(pack => pack.name !== name);
       packLibrary.skills = packLibrary.skills.filter(skill => skill.pack !== name);
       return 1;
+    }
+    case "list_skill_choices":
+      return {
+        disabled: [...disabledSkills].sort().map(name => ({
+          name,
+          source: skills.some(s => s.name === name) ? "bundle" : packLibrary.skills.some(s => s.name === name && s.state === "active") ? `pack:${packLibrary.skills.find(s => s.name === name)!.pack}` : "unknown",
+          installed: true,
+        })),
+        named_by: { diagnose: ["ci-triage"] },
+        problem: null,
+      } satisfies SkillChoices;
+    case "set_skills_enabled": {
+      for (const name of arg<string[]>(args, "names")) {
+        if (arg<boolean>(args, "enabled")) disabledSkills.delete(name);
+        else disabledSkills.add(name);
+      }
+      return null;
     }
     case "get_effective_skill_loads":
       await delay(120);
