@@ -2685,11 +2685,9 @@ fn plan_surfaces(
 }
 
 fn attach_codex_profile_detail(plan: &mut SetupPlan, workspace_root: &Path, home: &Path) {
-    let Some(op) = plan
-        .operations
-        .iter_mut()
-        .find(|op| op.surface == SetupSurfaceId::CodexConfig && op.kind == OperationKind::Update)
-    else {
+    let Some(op) = plan.operations.iter_mut().find(|op| {
+        matches!(op.surface, SetupSurfaceId::CodexConfig) && op.kind == OperationKind::Update
+    }) else {
         return;
     };
     let Some(profile) = crate::artifact_registry::ArtifactId::CodexConfig
