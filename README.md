@@ -59,6 +59,8 @@ npm run dev           # browser only: Vite on :1420, no Tauri backend
 npm run tauri build
 ```
 
+`npm run tauri build` from a shell without a terminal (a background job, an agent, CI) can fail in `actool` with "Bad file descriptor": the Icon Composer icon needs stdin open. Put a shim first on `PATH`, as `scripts/release.sh` does: a script named `actool` containing `exec xcrun actool "$@" </dev/null`.
+
 Browser-only visual QA: open `http://localhost:1420/?mock=<scenario>` while `npm run dev` runs. `main.tsx` swaps in `src/dev/mockBackend.ts` (dev builds only). Scenarios: `default`, `conflict`, `fresh`, `error`, `empty`, `update` (app updates on, a new version on offer); `&theme=light|dark|system` sets the appearance; `&light=unserved` leaves Copilot and Pi without a skills folder (turn them on in Settings first).
 
 Release verification:

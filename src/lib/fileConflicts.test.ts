@@ -164,9 +164,9 @@ describe("unitDetail and filesWhy", () => {
   });
 
   it("says what Riggverk left alone, counted by unit, and what the user manages", () => {
-    expect(filesWhy(modelOf([unit()]))).toBe("Riggverk left the 1 skill you edited exactly as it is. The rest of the update is not held up.");
+    expect(filesWhy(modelOf([unit()]))).toBe("Riggverk left the 1 skill you edited exactly as it is. The other skills update once you choose below.");
     expect(filesWhy(modelOf([unit(), unit({ key: "skill:claude:b", name: "b" })]))).toBe(
-      "Riggverk left the 2 skills you edited exactly as they are. The rest of the update is not held up.",
+      "Riggverk left the 2 skills you edited exactly as they are. The other skills update once you choose below.",
     );
     const kept = unit({ state: "kept", files: [{ rel: "SKILL.md", state: "kept", reason: "edited", bundle_changed: false }] });
     expect(filesWhy(modelOf([kept]))).toBe("You manage 1 skill, so Riggverk never writes it. Bundled updates stay visible.");
