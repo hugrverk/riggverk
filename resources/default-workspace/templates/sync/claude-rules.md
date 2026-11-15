@@ -32,6 +32,7 @@ Use skills as routing and workflow guidance, not boilerplate. Select only task-r
 - Unfamiliar or architectural code, before editing it: `zoom-out`.
 - Multi-step work, or scope that needs slicing before non-trivial edits: `blueprint`.
 - Mechanical or parallel slices handed to another agent CLI or subagent, only when the user wants other agents used: `dispatch`.
+- Leading several agents toward a goal, only when the user asks: `orchestrate`.
 - PR review comments or pasted reviewer feedback: `comments`.
 - Building or restyling UI: `frontend`.
 - Supplied screenshots of a UI, app, dashboard or document to critique: `screenshot`.

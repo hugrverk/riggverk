@@ -375,6 +375,7 @@
       "sha256:ead0fe0d57c03086e5ffe044ddb8553f2642cd56f96a7abd0ecb2038e401f6b8"
     ],
     "skills/dispatch/SKILL.md": [
+      "sha256:187dc9cfaf167a5daa7574b8444ccf44a468d7dc29ec22fc252c70a2ee45021e",
       "sha256:795cda63e9afd6992e4daa910c8259735501515b510d5aa5f95b33ccf525b932",
       "sha256:7eda8e874f43748564d9c520cb702d90574d33c8ed7e5d0b2d5f73f07807608d",
       "sha256:84025eeef87dd5ebc6565d56b9a7eec49649f95d815713b157485ac56f5eb7b7"
@@ -492,6 +493,10 @@
     "skills/nextjs-product-slice/SKILL.md": [
       "sha256:1f6557d9a8a014e7ed6914e152fc47b30845bbb79462d68ab56cc0ce20a0382c",
       "sha256:89f3839942fa5da82a132eaba2fd0de762999e04ba960d2a9760d316846086cb"
+    ],
+    "skills/orchestrate/SKILL.md": [
+      "sha256:9c7f7e6bbedf30f66e1381eca22d1ff7c5350ee4996ca8f0b5db34b54677b3ab",
+      "sha256:b05e03d90f8c87b9f86e58aab4eb72351d1f734000f30980a285fbd7fe0d3778"
     ],
     "skills/pr-modernize/SKILL.md": [
       "sha256:0dd2d8591625a0b75bc9da2665f078118162807416efba7e023f76694627349c",
