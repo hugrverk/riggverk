@@ -83,6 +83,10 @@ PLAIN_SCALAR_BAD_START = "\"'[]{}>|*&!%@`#"
 REQUIRED_SUPPORT_FILES = {
     "adversarial": ("implement.md", "review.md", "test.md", "adversarial-roles.md", "critic-recipes.md"),
 }
+# Codex ignores `disable-model-invocation`; its own per-skill policy file keeps these skills explicit-only.
+CODEX_POLICY_SKILLS = ("retro", "grill-me")
+CODEX_POLICY_FILE = "agents/openai.yaml"
+CODEX_POLICY_TEXT = "policy:\n  allow_implicit_invocation: false\n"
 URL_RE = re.compile(r"https?://\S+", re.IGNORECASE)
 
 STATIC_ROUTING_SOURCES = [
@@ -702,6 +706,18 @@ def validate_required_support_files(discovered: dict[str, Path]) -> None:
                 fail(f"{rel(skill_md)}: never names `{filename}`, so no agent is sent to it")
 
 
+def validate_codex_policy_files(discovered: dict[str, Path]) -> None:
+    """A user-invoked skill carries the Codex policy file that stops implicit invocation."""
+    for name in CODEX_POLICY_SKILLS:
+        if name not in discovered:
+            fail(f"bundled skill {name!r} is missing; update CODEX_POLICY_SKILLS with it")
+        target = discovered[name].parent / CODEX_POLICY_FILE
+        if not target.is_file():
+            fail(f"{rel(target)}: missing; {name} carries {CODEX_POLICY_FILE} next to its SKILL.md")
+        if target.read_text(encoding="utf-8") != CODEX_POLICY_TEXT:
+            fail(f"{rel(target)}: must set only policy.allow_implicit_invocation: false")
+
+
 # Phrases of the retired model, one skills folder per harness (Codex in $CODEX_HOME/skills, Cursor
 # in ~/.cursor/skills, ~/.agents/skills as an "old" Codex location).
 STALE_SKILL_FOLDER_CLAIMS = [
@@ -851,6 +867,7 @@ def main() -> None:
     validate_canonical_skill_files(discovered_map)
     validate_no_sibling_references(discovered_map)
     validate_required_support_files(discovered_map)
+    validate_codex_policy_files(discovered_map)
     validate_routing_sources(discovered)
     validate_user_invoked_routing(discovered_map)
     validate_one_skill_per_routing_bullet(discovered_map)
