@@ -61,6 +61,8 @@ export function useLibraryController({
   const [skillChoices, setSkillChoices] = useState<SkillChoices | null>(null);
   /** How much agents comment code; null while it could not be read. */
   const [commentPolicy, setCommentPolicyState] = useState<CommentPolicyChoice | null>(null);
+  /** The latest comment policy read: an earlier one that answers later never overwrites it. */
+  const commentPolicyLoadSeqRef = useRef(0);
   const [activeSkillId, setActiveSkillId] = useState<string | null>(null);
   const [activeSkillContent, setActiveSkillContent] = useState<DocumentContent | null>(null);
   const activeSkillIdRef = useRef<string | null>(null);
@@ -461,13 +463,14 @@ export function useLibraryController({
 
   /** Reads the comment policy. A failure leaves it unread: Rules then shows no choice, and nothing is reported. */
   const loadCommentPolicy = useCallback(async (generation = workspaceLoadGenerationRef.current) => {
+    const loadSeq = ++commentPolicyLoadSeqRef.current;
     let choice: CommentPolicyChoice | null = null;
     try {
       choice = await invoke<CommentPolicyChoice>("get_comment_policy");
     } catch {
       choice = null;
     }
-    if (!isWorkspaceLoadCurrent(generation)) return;
+    if (!isWorkspaceLoadCurrent(generation) || commentPolicyLoadSeqRef.current !== loadSeq) return;
     setCommentPolicyState(choice);
   }, [isWorkspaceLoadCurrent, workspaceLoadGenerationRef]);
 
@@ -512,6 +515,7 @@ export function useLibraryController({
     setActiveAgentId(null);
     setActiveAgentContent(null);
     setAgentTemplate(null);
+    commentPolicyLoadSeqRef.current += 1;
     setCommentPolicyState(null);
 
     // A config source load still running belongs to the old workspace.
@@ -891,6 +895,8 @@ export function useLibraryController({
       await invoke("set_comment_policy", { level });
     } catch (e) {
       setError(`Code comments: ${e}`);
+      // The refusal may be a file that became unusable: read it again, so the Library says why and offers no level.
+      await loadCommentPolicy();
       return false;
     }
     // What the next Update writes changed: the overview plans it again.

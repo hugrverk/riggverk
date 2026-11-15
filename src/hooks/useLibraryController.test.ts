@@ -1501,3 +1501,48 @@ describe("useLibraryController refresh keeps unsaved drafts", () => {
     expect(result.current.rulesDirty).toBe(true);
   });
 });
+
+describe("useLibraryController comment policy", () => {
+  beforeEach(() => {
+    invoke.mockReset();
+  });
+
+  it("keeps the newer level when an earlier read answers after the refresh that follows a Set", async () => {
+    const { deps } = createDeps();
+    const { result } = renderHook(() => useLibraryController(deps));
+    let level: "harness_default" | "minimal" = "harness_default";
+    let releaseOld: () => void = () => {};
+    let reads = 0;
+    invoke.mockImplementation((cmd: string, args?: Record<string, unknown>) => {
+      switch (cmd) {
+        case "get_comment_policy": {
+          reads += 1;
+          const answer = { level, problem: null };
+          // The first read is slow: it answers only after the Set and its own read are done.
+          return reads === 1 ? new Promise(resolve => { releaseOld = () => resolve(answer); }) : Promise.resolve(answer);
+        }
+        case "set_comment_policy":
+          level = args!.level as typeof level;
+          return Promise.resolve(null);
+        case "read_agent_template":
+          return Promise.resolve(bundledDoc);
+        default:
+          return Promise.reject(new Error(`unexpected invoke: ${cmd}`));
+      }
+    });
+
+    let older: Promise<void> = Promise.resolve();
+    act(() => {
+      older = result.current.loadCommentPolicy();
+    });
+    await act(async () => {
+      expect(await result.current.setCommentPolicy("minimal")).toBe(true);
+    });
+    expect(result.current.commentPolicy?.level).toBe("minimal");
+    await act(async () => {
+      releaseOld();
+      await older;
+    });
+    expect(result.current.commentPolicy).toEqual({ level: "minimal", problem: null });
+  });
+});

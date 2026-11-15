@@ -51,6 +51,8 @@ interface Fixture {
   readDocFails: string | null;
   choices: SkillChoices;
   commentPolicy: CommentPolicyChoice;
+  /** When set, set_comment_policy refuses with this reason, and the file reads as unusable from then on. */
+  refuseCommentPolicy: string | null;
 }
 
 function skill(id: string, description: string, extra: Partial<SkillSummary> = {}): SkillSummary {
@@ -124,6 +126,7 @@ function freshFixture(): Fixture {
     readDocFails: null,
     choices: { disabled: [], named_by: {}, problem: null },
     commentPolicy: { level: "harness_default", problem: null },
+    refuseCommentPolicy: null,
   };
 }
 
@@ -210,6 +213,10 @@ function installBackend() {
       case "get_comment_policy":
         return Promise.resolve(fixture.commentPolicy);
       case "set_comment_policy":
+        if (fixture.refuseCommentPolicy) {
+          fixture.commentPolicy = { level: null, problem: fixture.refuseCommentPolicy };
+          return Promise.reject(fixture.refuseCommentPolicy);
+        }
         fixture.commentPolicy = { level: args!.level as CommentPolicyChoice["level"], problem: null };
         return Promise.resolve(null);
       case "forget_pack":
@@ -1174,6 +1181,17 @@ describe("Library code comments", () => {
   it("refuses a level and says why while comment-policy.json cannot be read", async () => {
     fixture.commentPolicy = { level: null, problem: "comment-policy.json cannot be read; fix or remove it" };
     await renderLibrary();
+    const problem = await screen.findByRole("group", { name: "Comment policy problem" });
+    expect(problem.textContent).toContain("unavailable: comment-policy.json cannot be read; fix or remove it");
+    expect(commentsGroup().queryByRole("button", { name: "Use" })).toBeNull();
+    expect(commentsGroup().queryByText("In use")).toBeNull();
+  });
+
+  it("after a refused Use, reads the policy again: the problem shows and no level is offered", async () => {
+    await renderLibrary();
+    await screen.findByRole("heading", { name: "Code comments" });
+    fixture.refuseCommentPolicy = "comment-policy.json cannot be read; fix or remove it";
+    fireEvent.click(within(rowOf("Off")).getByRole("button", { name: "Use" }));
     const problem = await screen.findByRole("group", { name: "Comment policy problem" });
     expect(problem.textContent).toContain("unavailable: comment-policy.json cannot be read; fix or remove it");
     expect(commentsGroup().queryByRole("button", { name: "Use" })).toBeNull();
