@@ -25,6 +25,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use crate::comment_policy::CommentPolicy;
 use crate::pack_routing::PackRouting;
 use crate::skill_discovery::DiscoveredSkill;
 
@@ -87,6 +88,12 @@ pub trait SourceRoot {
     /// whatever installs skills or renders routing then fails closed. None without a data folder.
     fn disabled(&self) -> Result<&BTreeSet<String>, &str> {
         Ok(&NO_DISABLED)
+    }
+    /// How much agents comment code (see [`crate::comment_policy`]): the section the rules block
+    /// gets. An error is the fixed phrase of a `comment-policy.json` that cannot be used; whatever
+    /// renders rules then fails closed. Harness default without a data folder.
+    fn comment_policy(&self) -> Result<CommentPolicy, &str> {
+        Ok(CommentPolicy::HarnessDefault)
     }
 }
 
@@ -234,6 +241,8 @@ pub struct SkillSources {
     routing_section: String,
     /// `disabled-skills.json` (see [`crate::disabled_skills`]).
     disabled: Result<BTreeSet<String>, String>,
+    /// `comment-policy.json` (see [`crate::comment_policy`]).
+    comment_policy: Result<CommentPolicy, String>,
 }
 
 impl SourceRoot for SkillSources {
@@ -258,6 +267,12 @@ impl SourceRoot for SkillSources {
     }
     fn disabled(&self) -> Result<&BTreeSet<String>, &str> {
         self.disabled.as_ref().map_err(String::as_str)
+    }
+    fn comment_policy(&self) -> Result<CommentPolicy, &str> {
+        self.comment_policy
+            .as_ref()
+            .copied()
+            .map_err(String::as_str)
     }
 }
 
@@ -304,6 +319,7 @@ impl SkillSources {
             record_problem: None,
             routing_section: String::new(),
             disabled: Ok(BTreeSet::new()),
+            comment_policy: Ok(CommentPolicy::HarnessDefault),
         }
     }
 
@@ -353,6 +369,7 @@ impl SkillSources {
         let (held, record_problem) = compute_held(workspace_root, &packs, &catalog);
         let disabled = crate::disabled_skills::load(workspace_root);
         let routing_section = render_routing(&packs, &catalog, &disabled);
+        let comment_policy = crate::comment_policy::load(workspace_root);
         Self {
             bundled,
             workspace_root: workspace_root.to_path_buf(),
@@ -364,6 +381,7 @@ impl SkillSources {
             record_problem,
             routing_section,
             disabled,
+            comment_policy,
         }
     }
 

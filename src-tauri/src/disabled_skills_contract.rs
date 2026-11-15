@@ -484,6 +484,22 @@ mod tests {
             "{:?}",
             rules.iter().map(|planned| planned.kind).collect::<Vec<_>>()
         );
+        let review =
+            preview_setup(vec![surface_name(SetupSurfaceId::ClaudeRules)]).expect("rules preview");
+        let rules_operation = review
+            .operations
+            .iter()
+            .chain(&review.conflicts)
+            .chain(&review.manual_steps)
+            .find(|op| op.surface == SetupSurfaceId::ClaudeRules)
+            .expect("rules operation");
+        assert_eq!(
+            rules_operation.summary,
+            format!(
+                "{} unavailable: {UNUSABLE}",
+                SetupSurfaceId::ClaudeRules.label()
+            )
+        );
         assert_eq!(files_below(&env.root(SkillRoot::Claude)), before);
         assert_eq!(
             fs::read_to_string(env.disabled_file()).expect("file"),

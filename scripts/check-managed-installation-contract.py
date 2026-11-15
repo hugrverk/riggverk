@@ -340,6 +340,8 @@ def main() -> None:
         TAURI / "commands/file_conflicts.rs",
         # Disabling a skill writes only disabled-skills.json, through safe_filesystem.
         TAURI / "disabled_skills.rs",
+        # Choosing a comment policy writes only comment-policy.json, through safe_filesystem.
+        TAURI / "comment_policy.rs",
     ):
         # Whole production file, minus #[cfg(test)] items; comments and string
         # literals are blanked so only real calls count.
@@ -354,6 +356,8 @@ def main() -> None:
         fail("kept_files.rs must publish kept-files.json through safe_filesystem")
     if "write_regular_file_atomic" not in production_code[TAURI / "disabled_skills.rs"]:
         fail("disabled_skills.rs must publish disabled-skills.json through safe_filesystem")
+    if "write_regular_file_atomic" not in production_code[TAURI / "comment_policy.rs"]:
+        fail("comment_policy.rs must publish comment-policy.json through safe_filesystem")
     # The preview token is consumed exactly once, inside the apply owner.
     setup_code = production_code[TAURI / "commands/setup.rs"]
     if len(re.findall(r"\bconsume_preview_token\b", setup_code)) != 1:
