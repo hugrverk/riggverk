@@ -321,8 +321,8 @@ class CheckHarnessMirrorTests(unittest.TestCase):
         self.assert_fails("LightHarnessView")
 
     def test_the_health_command_must_be_registered(self) -> None:
-        self.edit(mirror.RUST_LIB, "get_light_runtime_health,\n            list_skills", "list_skills")
-        self.edit(mirror.RUST_LIB, "get_light_runtime_health, ", "")
+        # Every mention, wherever rustfmt wraps the import and handler lists.
+        self.edit(mirror.RUST_LIB, "get_light_runtime_health,", "", count=-1)
         self.assert_fails("get_light_runtime_health")
 
 
