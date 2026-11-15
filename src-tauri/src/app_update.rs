@@ -37,7 +37,18 @@ const PROGRESS_INTERVAL: Duration = Duration::from_millis(100);
 
 pub const MOVE_TO_APPLICATIONS: &str =
     "Move Riggverk to Applications first, then open it from there. It is running from a disk image or a quarantined download, where it cannot be replaced.";
+#[cfg(not(target_os = "linux"))]
 pub const NOT_INSTALLED: &str = "Updates apply to an installed Riggverk.app only.";
+#[cfg(target_os = "linux")]
+pub const NOT_INSTALLED: &str = "Updates apply to the Riggverk AppImage only.";
+/// The AppImage is replaced by a new file next to it, so its folder must be writable.
+#[cfg(target_os = "linux")]
+pub const MOVE_APPIMAGE: &str =
+    "Move the Riggverk AppImage to a folder you can write to, such as ~/Applications, then open it from there.";
+/// A .deb or .rpm install belongs to the package manager; the app never asks for an administrator password.
+#[cfg(target_os = "linux")]
+pub const PACKAGE_INSTALLED: &str =
+    "Riggverk was installed as a .deb or .rpm package. Download the new package from the release page and install it the same way.";
 pub const APPLY_RUNNING: &str =
     "Riggverk is applying changes. Wait until they are finished, then download the new version.";
 pub const STALE_REVIEW: &str =
@@ -159,6 +170,7 @@ pub fn automatic_check_due(update_check: &str, last_update_check: Option<u64>, n
 }
 
 /// The `.app` bundle that holds `exe` (`…/Riggverk.app/Contents/MacOS/riggverk`), if it is one.
+#[cfg_attr(target_os = "linux", allow(dead_code))]
 pub fn bundle_of(exe: &Path) -> Option<PathBuf> {
     exe.ancestors()
         .find(|path| path.extension().is_some_and(|ext| ext == "app"))
@@ -167,6 +179,7 @@ pub fn bundle_of(exe: &Path) -> Option<PathBuf> {
 
 /// Why the app at `bundle` cannot be replaced in place: App Translocation (a quarantined download opened where it
 /// lies runs from a randomized read-only mount) or a read-only volume (the disk image itself).
+#[cfg_attr(target_os = "linux", allow(dead_code))]
 pub fn install_blocker(bundle: &Path) -> Option<&'static str> {
     let translocated = bundle
         .components()
@@ -199,12 +212,57 @@ fn read_only_volume(_path: &Path) -> bool {
     false
 }
 
+/// Why the AppImage at `appimage` cannot be replaced in place: its folder is not writable for this user (a system
+/// folder, a read-only mount).
+#[cfg(target_os = "linux")]
+pub fn appimage_blocker(appimage: &Path) -> Option<&'static str> {
+    use std::os::unix::ffi::OsStrExt;
+    let folder = appimage.parent().unwrap_or(Path::new("/"));
+    let Ok(c_folder) = std::ffi::CString::new(folder.as_os_str().as_bytes()) else {
+        return Some(MOVE_APPIMAGE);
+    };
+    // SAFETY: `c_folder` is a valid NUL-terminated string.
+    let writable = unsafe { libc::access(c_folder.as_ptr(), libc::W_OK) } == 0;
+    (!writable).then_some(MOVE_APPIMAGE)
+}
+
 /// Where this app runs from and whether it can be replaced there: `Err` when it is not an installed bundle.
+#[cfg(not(target_os = "linux"))]
 fn current_bundle() -> Result<(PathBuf, Option<&'static str>), &'static str> {
     let exe = std::env::current_exe().map_err(|_| NOT_INSTALLED)?;
     let bundle = bundle_of(&exe).ok_or(NOT_INSTALLED)?;
     let blocker = install_blocker(&bundle);
     Ok((bundle, blocker))
+}
+
+/// Where this app runs from and whether it can be replaced there. Only the AppImage updates itself (the plugin
+/// replaces the file `$APPIMAGE` names); a .deb or .rpm install is left to the package manager, and a build that is
+/// no bundle (`cargo run`, `tauri dev`) is not installed.
+#[cfg(target_os = "linux")]
+fn current_bundle() -> Result<(PathBuf, Option<&'static str>), &'static str> {
+    use tauri::utils::{config::BundleType, platform::bundle_type};
+    match bundle_type() {
+        Some(BundleType::AppImage) => {
+            let appimage = std::env::var_os("APPIMAGE")
+                .map(PathBuf::from)
+                .ok_or(NOT_INSTALLED)?;
+            let blocker = appimage_blocker(&appimage);
+            Ok((appimage, blocker))
+        }
+        Some(BundleType::Deb | BundleType::Rpm) => Err(PACKAGE_INSTALLED),
+        _ => Err(NOT_INSTALLED),
+    }
+}
+
+/// What the user must do when the plugin finds the app cannot be replaced where it is.
+#[cfg(not(target_os = "linux"))]
+fn cannot_replace() -> &'static str {
+    MOVE_TO_APPLICATIONS
+}
+
+#[cfg(target_os = "linux")]
+fn cannot_replace() -> &'static str {
+    MOVE_APPIMAGE
 }
 
 fn shown_path(path: &Path) -> String {
@@ -227,7 +285,7 @@ fn user_error(error: &tauri_plugin_updater::Error, fallback: &str) -> String {
         | Error::SignatureUtf8(_)
         | Error::MissingSignedVersion
         | Error::SignedVersionMismatch { .. } => SIGNATURE_MISMATCH.to_string(),
-        Error::TempDirNotOnSameMountPoint => MOVE_TO_APPLICATIONS.to_string(),
+        Error::TempDirNotOnSameMountPoint => cannot_replace().to_string(),
         _ => fallback.to_string(),
     }
 }
@@ -492,6 +550,19 @@ mod tests {
         assert_eq!(install_blocker(translocated), Some(MOVE_TO_APPLICATIONS));
         let writable = std::env::temp_dir();
         assert_eq!(install_blocker(&writable), None);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn an_appimage_in_a_folder_it_cannot_write_must_be_moved_first() {
+        let writable = std::env::temp_dir().join("Riggverk.AppImage");
+        assert_eq!(appimage_blocker(&writable), None);
+        if unsafe { libc::geteuid() } != 0 {
+            assert_eq!(
+                appimage_blocker(Path::new("/usr/bin/Riggverk.AppImage")),
+                Some(MOVE_APPIMAGE)
+            );
+        }
     }
 
     #[cfg(target_os = "macos")]
