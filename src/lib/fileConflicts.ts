@@ -115,7 +115,7 @@ export function filesWhy(model: FileConflictModel): string {
   const noun = model.surface === "skills" ? "skill" : "agent";
   const conflicts = model.units.filter(unit => unit.state === "conflict").length;
   if (conflicts > 0) {
-    return `Riggverk left the ${plural(conflicts, noun)} you edited exactly as ${conflicts === 1 ? "it is" : "they are"}. The other ${noun}s update once you choose below.`;
+    return `Riggverk left the ${plural(conflicts, noun)} you edited exactly as ${conflicts === 1 ? "it is" : "they are"}. The rest of the update is not held up.`;
   }
   const kept = model.units.filter(unit => unit.state === "kept").length;
   return `You manage ${plural(kept, noun)}, so Riggverk never writes ${kept === 1 ? "it" : "them"}. Bundled updates stay visible.`;
