@@ -270,8 +270,19 @@ def extract_managed(config: dict[str, Any]) -> dict[str, Any]:
     return extracted
 
 
+def has_permission_profile(config: dict[str, Any]) -> bool:
+    profiles = config.get("permissions")
+    return "default_permissions" in config or (
+        isinstance(profiles, dict) and any(isinstance(value, dict) for value in profiles.values())
+    )
+
+
 def managed_keys_match(installed: dict[str, Any], managed: dict[str, Any]) -> bool:
-    return extract_managed(installed) == extract_managed(managed)
+    actual, expected = extract_managed(installed), extract_managed(managed)
+    if has_permission_profile(installed):
+        actual.pop("sandbox_mode", None)
+        expected.pop("sandbox_mode", None)
+    return actual == expected
 
 
 def find_existing_table_line(lines: list[str], table_path: str) -> int | None:
@@ -530,6 +541,8 @@ def render_rollback_managed_projection(target: Path, backup: Path) -> str:
     managed = extract_managed(load_toml(backup))
     installed_dict = load_toml(target)
     existing_text = target.read_text(encoding="utf-8")
+    if has_permission_profile(installed_dict):
+        managed.pop("sandbox_mode", None)
     top_level, legacy_values, legacy_profiles, legacy_fields = load_managed_keys()
     patched = patch_toml_text(
         existing_text, top_level, managed, legacy_values, legacy_profiles, legacy_fields
@@ -576,6 +589,8 @@ def apply_merge(target: Path, managed: dict[str, Any], backup_dir: Path | None) 
         return
 
     existing_text = target.read_text(encoding="utf-8")
+    if has_permission_profile(installed_dict):
+        managed = {key: value for key, value in managed.items() if key != "sandbox_mode"}
     patched = patch_toml_text(
         existing_text, top_level, managed, legacy_values, legacy_profiles, legacy_fields
     )
@@ -692,7 +707,7 @@ def main() -> None:
             merged = json.loads(json.dumps(installed_value))
             top_level, legacy_values, legacy_profiles, legacy_fields = load_managed_keys()
             for key in top_level:
-                if key in managed_value:
+                if key in managed_value and not (key == "sandbox_mode" and has_permission_profile(installed_value)):
                     merged[key] = json.loads(json.dumps(managed_value[key]))
             if isinstance(merged.get("profile"), str) and merged["profile"] in legacy_values:
                 del merged["profile"]

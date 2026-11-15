@@ -118,6 +118,21 @@ fn choice_for_dest(workspace_root: &Path, home: &Path) -> Option<CodexConfigChoi
     (dest_label(workspace_root, home).ok()? == choice.dest).then_some(choice)
 }
 
+/// The permission profile selector or tables take precedence over the legacy sandbox setting.
+pub(crate) fn permission_profile(config: &toml::Value) -> Option<&'static str> {
+    if config.get("default_permissions").is_some() {
+        Some("default_permissions")
+    } else if config
+        .get("permissions")
+        .and_then(toml::Value::as_table)
+        .is_some_and(|profiles| profiles.values().any(toml::Value::is_table))
+    {
+        Some("permissions.*")
+    } else {
+        None
+    }
+}
+
 /// The kept keys that apply to `installed`: those whose installed value equals the kept value.
 pub fn active_kept(
     workspace_root: &Path,
@@ -129,7 +144,10 @@ pub fn active_kept(
             choice
                 .kept
                 .into_iter()
-                .filter(|(key, value)| string_at(installed, key).as_deref() == Some(value))
+                .filter(|(key, value)| {
+                    !(key == "sandbox_mode" && permission_profile(installed).is_some())
+                        && string_at(installed, key).as_deref() == Some(value)
+                })
                 .collect()
         })
         .unwrap_or_default()
@@ -155,7 +173,19 @@ pub fn assess(
     let active = workspace_root
         .map(|root| active_kept(root, home, installed))
         .unwrap_or_default();
-    let effective = effective_template(template, &active);
+    let mut effective = effective_template(template, &active);
+    if permission_profile(installed).is_some() {
+        if let Some(table) = effective.as_table_mut() {
+            match installed.get("sandbox_mode") {
+                Some(value) => {
+                    table.insert("sandbox_mode".into(), value.clone());
+                }
+                None => {
+                    table.remove("sandbox_mode");
+                }
+            }
+        }
+    }
     Assessment { active, effective }
 }
 
@@ -185,6 +215,9 @@ pub fn differing_keys(installed: &toml::Value, expected: &toml::Value) -> Vec<Ke
     CODEX_KEEPABLE_PATHS
         .iter()
         .filter_map(|key| {
+            if *key == "sandbox_mode" && permission_profile(installed).is_some() {
+                return None;
+            }
             let value = string_at(installed, key)?;
             (string_at(expected, key).as_deref() != Some(value.as_str())).then(|| KeyValue {
                 key: (*key).to_string(),

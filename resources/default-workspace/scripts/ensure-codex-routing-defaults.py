@@ -258,10 +258,19 @@ def managed_values(managed: dict[str, Any]) -> dict[tuple[str, ...], Any]:
     return values
 
 
+def has_permission_profile(config: dict[str, Any]) -> bool:
+    profiles = config.get("permissions")
+    return "default_permissions" in config or (
+        isinstance(profiles, dict) and any(isinstance(value, dict) for value in profiles.values())
+    )
+
+
 def differing_paths(installed: dict[str, Any], managed: dict[str, Any]) -> list[tuple[str, ...]]:
     desired = managed_values(managed)
     diffs: list[tuple[str, ...]] = []
     for path, expected in desired.items():
+        if path == ("sandbox_mode",) and has_permission_profile(installed):
+            continue
         current = get_path(installed, path)
         if path in CREATE_ONLY_PATHS:
             if current is MISSING:
@@ -489,6 +498,8 @@ def patch_toml_text(text: str, installed: dict[str, Any], managed: dict[str, Any
     changed = False
 
     for path, value in desired.items():
+        if path == ("sandbox_mode",) and has_permission_profile(installed):
+            continue
         if path in CREATE_ONLY_PATHS and get_path(installed, path) is not MISSING:
             continue
         assert_path_prefix_is_table(installed, path)
