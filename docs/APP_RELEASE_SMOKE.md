@@ -225,11 +225,27 @@ Use a scratch profile or back up `~/.claude/settings.json` first.
 - [ ] Skill moved from a pack into the bundle: with a throwaway `HOME` installed from 2026.11.12 with a pack that ships its own `orchestrate`, and the pack still holding it, Library shows the pack's `orchestrate` as "shadowed · bundle wins"; one Update lists only an update of `orchestrate/SKILL.md` in every enabled agent's skills folder (no conflict, removal or held skill) and installs the bundle's copy; the next Update has nothing for it; a copy you edited stays and is flagged in the review
 - [ ] No Tools icon or tool switcher exists
 
+## Linux packages
+
+For a release, after `./scripts/release.sh build-linux`, before the folder is copied to the Mac: the packages in `release/linux/` (or `release/linux-build/` from `scripts/linux-build.sh`). Start every run with a throwaway profile so your own settings are not read or written:
+
+```bash
+export HOME="$(mktemp -d)" XDG_CONFIG_HOME="$HOME/.config" XDG_DATA_HOME="$HOME/.local/share" XDG_CACHE_HOME="$HOME/.cache"
+```
+
+The oldest supported system is Ubuntu 22.04 (glibc 2.35); a distrobox gives a quick one on another distribution (`distrobox create --name riggverk-ubuntu2204 --image docker.io/library/ubuntu:22.04`, then `distrobox enter riggverk-ubuntu2204`). It shares the host's display and session bus, so a full Ubuntu 22.04 install or VM is the stronger check before a release that changes the bundle or its dependencies.
+
+- [ ] AppImage on the build machine's distribution and on Ubuntu 22.04: `chmod +x` and run it; the window opens and renders, nothing but `atk-bridge` warnings on stderr; it runs without `libfuse2` installed
+- [ ] deb on Ubuntu 22.04: `sudo apt install ./Riggverk-v<version>-linux-amd64.deb` pulls in WebKitGTK; `riggverk` starts from the shell and from the application menu; `ldd "$(command -v riggverk)" | grep 'not found'` prints nothing; `sudo apt remove riggverk` removes it
+- [ ] rpm on Fedora: `sudo dnf install ./Riggverk-v<version>-linux-x86_64.rpm`; `rpm -V riggverk` prints nothing; `riggverk` starts; `sudo dnf remove riggverk` removes it
+- [ ] Updates, from the second release with Linux packages on: an AppImage of the previous release in a writable folder offers the new version, Download and restart replaces the file and the new version starts; an AppImage in a folder it cannot write (for example owned by root) shows "Move the Riggverk AppImage to a folder you can write to" and no download button; a deb or rpm install shows the new version with "Download the new package from the release page" and asks for no password
+
 ## 10. Known limitations
 
 - The `.riggverk/workspace.json` marker is not created for new users and is never removed where an earlier release wrote it; the default workspace path is `~/.config/riggverk`
 - Uninstall recovery and the in-app rollback of the last install are session-scoped; they are not rediscovered after a restart even when transaction evidence remains on disk
 - Opening folders uses the macOS `open` command only
+- On Linux only the AppImage updates itself; a deb or rpm install is updated by installing the next package
 - Python 3 must be on `PATH` for config merges and generators
 
 ## 11. Pass / fail report template
@@ -285,6 +301,10 @@ Use a scratch profile or back up `~/.claude/settings.json` first.
 
 ### Library
 - [ ] Lists and document, personal doc save and backup, rules refinements save and backup, bundled items read-only passed
+- Notes: ________
+
+### Linux packages
+- [ ] AppImage (build distribution and Ubuntu 22.04), deb (Ubuntu 22.04), rpm (Fedora) start and render; updates of the AppImage and the package notice passed or skipped
 - Notes: ________
 
 ### Skipped checks and residual risk

@@ -14,7 +14,8 @@ Usage (tags are read from stdin, one per line):
   python3 scripts/release_tools.py check-node-modules
   python3 scripts/release_tools.py updater-config
   python3 scripts/release_tools.py updater-manifest --version V --repo OWNER/REPO --asset NAME --signature-file SIG \
-      --notes-file F [--pub-date RFC3339]
+      --notes-file F [--linux-asset NAME --linux-signature-file SIG] [--pub-date RFC3339]
+  python3 scripts/release_tools.py linux-stamp write|check --dir DIR --version V --commit SHA
 """
 
 from __future__ import annotations
@@ -22,6 +23,7 @@ from __future__ import annotations
 import argparse
 import base64
 import datetime
+import hashlib
 import json
 import re
 import subprocess
@@ -47,7 +49,13 @@ INSTALL_NOTE = (
     "`Riggverk-v{version}-macOS.zip` and move `Riggverk.app` to `/Applications`). One app runs on Apple silicon "
     "and Intel Macs. Riggverk is ad hoc signed and not notarized, so macOS stops the first launch: open System "
     "Settings, Privacy & Security, and choose Open Anyway next to the message about Riggverk. `SHA256SUMS` lists "
-    "the checksums of both downloads (`shasum -a 256 -c SHA256SUMS --ignore-missing`)."
+    "the checksums of every download (`shasum -a 256 -c SHA256SUMS --ignore-missing`).\n\n"
+    "On Linux (x86_64, glibc 2.35 or newer, such as Ubuntu 22.04 and Fedora 36 or later): make "
+    "`Riggverk-v{version}-linux-x86_64.AppImage` executable (`chmod +x`) and run it; it updates itself. Or install "
+    "`Riggverk-v{version}-linux-amd64.deb` (`sudo apt install ./Riggverk-v{version}-linux-amd64.deb`) or "
+    "`Riggverk-v{version}-linux-x86_64.rpm` (`sudo dnf install ./Riggverk-v{version}-linux-x86_64.rpm`); a package "
+    "install is updated by installing the next package. Check a download with "
+    "`sha256sum -c SHA256SUMS --ignore-missing`."
 )
 OTHER_COMMENT = (
     "<!-- Chores, refactors and docs. Delete this section to keep them out of the notes and the in-app what's new. -->"
@@ -272,6 +280,10 @@ def check_node_modules(root: Path = ROOT) -> None:
 UPDATER_ENDPOINT_RE = re.compile(r"^https://github\.com/([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)/releases/latest/download/latest\.json$")
 # The universal app serves both architectures; the updater looks for darwin-<arch>.
 UPDATER_PLATFORMS = ("darwin-aarch64", "darwin-x86_64")
+# The AppImage updates itself; the updater looks for linux-x86_64-<bundle type>, then linux-x86_64. A .deb or .rpm
+# install finds the AppImage there too, so it learns of the update, and the app sends it to the release page instead
+# of installing (src-tauri/src/app_update.rs).
+LINUX_UPDATER_PLATFORMS = ("linux-x86_64", "linux-x86_64-appimage")
 
 
 def updater_config(root: Path = ROOT) -> str | None:
@@ -341,21 +353,98 @@ def update_notes(notes: str) -> str:
     return re.sub(r"\n{3,}", "\n\n", notes).strip() + "\n"
 
 
-def updater_manifest(version: str, repo: str, asset: str, signature: str, notes: str, pub_date: str) -> dict:
-    """latest.json for the updater: one universal archive for every macOS architecture."""
+def updater_manifest(
+    version: str,
+    repo: str,
+    asset: str,
+    signature: str,
+    notes: str,
+    pub_date: str,
+    linux_asset: str | None = None,
+    linux_signature: str | None = None,
+) -> dict:
+    """latest.json for the updater: one universal archive for every macOS architecture and, when the release has
+    Linux packages, the AppImage for Linux."""
     if parse_version(version) is None:
         raise ReleaseError(f"{version} is not a CalVer version (YYYY.M.N)")
-    signature = signature.strip()
-    if not signature or "\n" in signature:
-        raise ReleaseError("the updater signature must be the one-line contents of the .sig file")
-    url = f"https://github.com/{repo}/releases/download/v{version}/{asset}"
-    platform = {"signature": signature, "url": url}
+    if (linux_asset is None) != (linux_signature is None):
+        raise ReleaseError("the Linux updater entry needs both the AppImage and its signature")
+
+    def platform(name: str, sig: str) -> dict:
+        sig = sig.strip()
+        if not sig or "\n" in sig:
+            raise ReleaseError("the updater signature must be the one-line contents of the .sig file")
+        return {"signature": sig, "url": f"https://github.com/{repo}/releases/download/v{version}/{name}"}
+
+    platforms = {name: platform(asset, signature) for name in UPDATER_PLATFORMS}
+    if linux_asset is not None and linux_signature is not None:
+        platforms.update({name: platform(linux_asset, linux_signature) for name in LINUX_UPDATER_PLATFORMS})
     return {
         "version": version,
         "notes": update_notes(notes),
         "pub_date": pub_date,
-        "platforms": {name: dict(platform) for name in UPDATER_PLATFORMS},
+        "platforms": platforms,
     }
+
+
+# ── Linux packages ──
+
+LINUX_STAMP = "linux-build.json"
+
+
+def linux_assets(version: str) -> tuple[str, str, str]:
+    """The release names of the Linux packages: the AppImage, the deb and the rpm."""
+    return (
+        f"Riggverk-v{version}-linux-x86_64.AppImage",
+        f"Riggverk-v{version}-linux-amd64.deb",
+        f"Riggverk-v{version}-linux-x86_64.rpm",
+    )
+
+
+def sha256_of(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def write_linux_stamp(folder: Path, version: str, commit: str) -> None:
+    """Records which version and commit the Linux packages in `folder` were built from, and their checksums, so
+    publish (on another machine) takes only packages of the commit it releases, copied whole."""
+    if parse_version(version) is None:
+        raise ReleaseError(f"{version} is not a CalVer version (YYYY.M.N)")
+    files = {}
+    for name in linux_assets(version):
+        if not (folder / name).is_file():
+            raise ReleaseError(f"{folder / name} is missing")
+        files[name] = sha256_of(folder / name)
+    stamp = {"version": version, "commit": commit, "files": files}
+    (folder / LINUX_STAMP).write_text(json.dumps(stamp, indent=2) + "\n", encoding="utf-8")
+
+
+def check_linux_stamp(folder: Path, version: str, commit: str) -> None:
+    """The Linux packages in `folder` are the three of `version`, built from `commit`, and unchanged since."""
+    stamp_path = folder / LINUX_STAMP
+    if not stamp_path.is_file():
+        raise ReleaseError(f"{stamp_path} is missing (run scripts/release.sh build-linux on Linux and copy {folder})")
+    try:
+        stamp = json.loads(stamp_path.read_text(encoding="utf-8"))
+    except ValueError as error:
+        raise ReleaseError(f"{stamp_path} is not JSON") from error
+    if stamp.get("version") != version:
+        raise ReleaseError(f"the Linux packages are version {stamp.get('version')}, expected {version}")
+    if stamp.get("commit") != commit:
+        raise ReleaseError(f"the Linux packages were built from {stamp.get('commit')}, not from HEAD {commit}")
+    expected = set(linux_assets(version))
+    files = stamp.get("files")
+    if not isinstance(files, dict) or set(files) != expected:
+        raise ReleaseError(f"{stamp_path} must list exactly {', '.join(sorted(expected))}")
+    for name, digest in sorted(files.items()):
+        if not (folder / name).is_file():
+            raise ReleaseError(f"{folder / name} is missing")
+        if sha256_of(folder / name) != digest:
+            raise ReleaseError(f"{folder / name} changed after the build (checksum mismatch)")
 
 
 # ── CLI ──
@@ -389,7 +478,14 @@ def main() -> int:
     manifest.add_argument("--asset", required=True)
     manifest.add_argument("--signature-file", required=True)
     manifest.add_argument("--notes-file", required=True)
+    manifest.add_argument("--linux-asset")
+    manifest.add_argument("--linux-signature-file")
     manifest.add_argument("--pub-date")
+    stamp = sub.add_parser("linux-stamp")
+    stamp.add_argument("action", choices=("write", "check"))
+    stamp.add_argument("--dir", required=True)
+    stamp.add_argument("--version", required=True)
+    stamp.add_argument("--commit", required=True)
     args = parser.parse_args()
 
     try:
@@ -408,13 +504,24 @@ def main() -> int:
             set_version(args.version)
         elif args.command == "check-node-modules":
             check_node_modules()
+        elif args.command == "linux-stamp":
+            if args.action == "write":
+                write_linux_stamp(Path(args.dir), args.version, args.commit)
+            else:
+                check_linux_stamp(Path(args.dir), args.version, args.commit)
         elif args.command == "updater-config":
             repo = updater_config()
             print(f"on {repo}" if repo else "off")
         elif args.command == "updater-manifest":
             signature = Path(args.signature_file).read_text(encoding="utf-8")
+            linux_signature = (
+                Path(args.linux_signature_file).read_text(encoding="utf-8") if args.linux_signature_file else None
+            )
             conf = json.loads((ROOT / TAURI_CONF).read_text(encoding="utf-8"))
-            check_signature_key(signature, str(conf.get("plugins", {}).get("updater", {}).get("pubkey", "")))
+            pubkey = str(conf.get("plugins", {}).get("updater", {}).get("pubkey", ""))
+            check_signature_key(signature, pubkey)
+            if linux_signature is not None:
+                check_signature_key(linux_signature, pubkey)
             pub_date = args.pub_date or datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
             data = updater_manifest(
                 args.version,
@@ -423,6 +530,8 @@ def main() -> int:
                 signature,
                 Path(args.notes_file).read_text(encoding="utf-8"),
                 pub_date,
+                args.linux_asset,
+                linux_signature,
             )
             print(json.dumps(data, indent=2))
         else:
