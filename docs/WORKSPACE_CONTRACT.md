@@ -309,7 +309,7 @@ The light tier is off by default and manages the rules file of each (see Rules; 
 
 | Harness | File | Keys |
 |---------|------|------|
-| Claude Code | `~/.claude/settings.json` (not read while `CLAUDE_CONFIG_DIR` is set) | `permissions.defaultMode`, `permissions.disableBypassPermissionsMode`, `permissions.deny` (whether a `Read` rule names `.env`), `sandbox.enabled` |
+| Claude Code | `~/.claude/settings.json` (not read while `CLAUDE_CONFIG_DIR` is set) | `permissions.defaultMode`, `permissions.disableBypassPermissionsMode`, `permissions.deny` (whether a `Read` rule that is not a `!` negation matches a file named `.env`), `sandbox.enabled` |
 | Codex | `$CODEX_HOME/config.toml` (default `~/.codex/config.toml`) | `sandbox_mode`, `approval_policy`, `sandbox_workspace_write.network_access`, count of `projects.*.trust_level = "trusted"` |
 | OpenCode | `opencode.json`, `opencode.jsonc`, `config.json` in OpenCode's config folder | `permission` (`"*"`), `permission.bash`, count of `deny` actions under `permission.bash` and `permission.read` of `opencode.json` |
 | Cursor | `~/.cursor/sandbox.json` | `type`, `networkPolicy.default` |
@@ -317,6 +317,8 @@ The light tier is off by default and manages the rules file of each (see Rules; 
 | GitHub Copilot, Pi, Google Antigravity, Grok Build | none | none |
 
 Each file is read once, up to 1 MiB, as UTF-8; symlinks are followed for the read, and a directory, FIFO, oversized or non-UTF-8 file is unreadable. Claude `settings.json` is parsed as strict JSON, Codex as TOML, the others as JSONC. A missing file counts as defaults. The check never reads `.env` files, writes anything, or sees project or managed config, profiles, command-line flags or aliases, so it never reports a harness as secure.
+
+While the Claude Code check finds no such rule, its Safety notes suggest the two lines `"Read(**/.env)",` and `"Read(**/.env.*)"` for `permissions.deny` in `~/.claude/settings.json`, with a Copy button and what they do not cover (they block `.env.example` too); the app never writes them.
 
 #### MCP entry of the light tier
 
