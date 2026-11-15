@@ -90,6 +90,7 @@ Use the workspace final report (Changed, Verified, Not verified, Risk, Next) and
 ### Claude Code
 
 - Lanes: the Agent tool in the background, with `isolation: "worktree"` for write lanes and read-only agent types for review and mapping. Send independent launches in one message. You do not choose the base of an `isolation` worktree (it has started from the default branch), so a lane that must start from `orchestrate/<slug>` gets a worktree you add yourself, given by path.
+- If the `advisor` tool is available, call it after writing the charter and slices, before re-slicing on contrary evidence, and before declaring a terminal state.
 
 ### OpenCode
 
