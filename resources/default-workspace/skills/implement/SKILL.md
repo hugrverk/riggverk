@@ -36,6 +36,7 @@ Before finishing, remove anything unnecessary:
 - speculative abstractions
 - second paths for existing operations
 - changes outside the requested scope
+- comments this diff added that restate the code, narrate the change or address the reviewer; keep comments the language or tooling requires and every comment you did not write
 
 Stop and report if the task requires an unapproved rewrite, dependency, architecture change, or materially broader scope.
 
