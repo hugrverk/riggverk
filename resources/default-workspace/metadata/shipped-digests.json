@@ -376,7 +376,8 @@
     ],
     "skills/dispatch/SKILL.md": [
       "sha256:795cda63e9afd6992e4daa910c8259735501515b510d5aa5f95b33ccf525b932",
-      "sha256:7eda8e874f43748564d9c520cb702d90574d33c8ed7e5d0b2d5f73f07807608d"
+      "sha256:7eda8e874f43748564d9c520cb702d90574d33c8ed7e5d0b2d5f73f07807608d",
+      "sha256:84025eeef87dd5ebc6565d56b9a7eec49649f95d815713b157485ac56f5eb7b7"
     ],
     "skills/dispatch/delegate-recipes.md": [
       "sha256:8bf1ee6a5a47bf61a3b410bf6374a10a9a3f40eeea138841d55cab81f92da0d0"

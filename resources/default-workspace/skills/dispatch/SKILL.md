@@ -1,6 +1,6 @@
 ---
 name: dispatch
-description: Hands well-specified slices to other coding-agent CLIs (Codex, Claude Code, OpenCode) or subagents, each in its own worktree, then reviews each like a PR and re-runs all checks. Use when the user wants other agents used for mechanical or parallel work. Not for a goal-driven agent loop (orchestrate).
+description: Hands well-specified slices to other agent CLIs (Codex, Claude Code, OpenCode) or subagents, each in its own worktree, then reviews each like a PR and re-runs all checks. Use when the user wants other agents used for mechanical or parallel work. Not for leading agents with a charter and ledger.
 license: MIT
 compatibility: Needs a shell and git, plus at least one other coding-agent CLI with a headless mode (Codex, Claude Code, OpenCode) or subagents in the current harness.
 metadata:
