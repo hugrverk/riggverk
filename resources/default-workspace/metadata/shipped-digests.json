@@ -230,6 +230,7 @@
     ],
     "skills/adversarial/SKILL.md": [
       "sha256:1fa6efa29d35c388b92b25e2988de9b38f838a68738e55febc1697d27b7373e4",
+      "sha256:7db6f877e9a79a5c8823c86c6880b413b4aec2a891de5d66c9d6a58377233c5a",
       "sha256:d14f524487293cc0f245259c30d9e0a5445831100c20606e9d3f5b0e082257bd"
     ],
     "skills/adversarial/adversarial-roles.md": [
@@ -240,7 +241,8 @@
       "sha256:4911867e79cfab6a7c6bebe6a344811fc32ee468d056618eb412a968b5a7f8a6"
     ],
     "skills/adversarial/implement.md": [
-      "sha256:d09f57f292e7db4caef43252702eb52e469fd2a6234b92c1c1bcc0785d71fe96"
+      "sha256:d09f57f292e7db4caef43252702eb52e469fd2a6234b92c1c1bcc0785d71fe96",
+      "sha256:ebdc550a0d3244eb00e9c7996c0c5fdd8cb2dde4e4f11a71799e137b7a40f5e8"
     ],
     "skills/adversarial/review.md": [
       "sha256:15fe87f89ad66efde9a0f9228596bcb982df840d2cc6720b41c9f7ffa89d7ebc",
@@ -575,7 +577,8 @@
       "sha256:e03331d933da05bf18f991a9030370dfe71cdd518930097d9bddb6e84fdc0dfa"
     ],
     "skills/screenshot/SKILL.md": [
-      "sha256:2b38aa267fa4c01eeb221eef2bfe44dd4d1965b1bb8bf7e6ece4d95969e8849a"
+      "sha256:2b38aa267fa4c01eeb221eef2bfe44dd4d1965b1bb8bf7e6ece4d95969e8849a",
+      "sha256:7b7f6a9bd1e60b7248522258f5072c8d51dec33fc66c4649b791aef4cfc031ce"
     ],
     "skills/security-audit/AI-AND-LLM.md": [
       "sha256:7335a95c43554eadefcf03ece639291bb0e038c398a179299e3887ffe06bd2ef"
