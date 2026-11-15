@@ -7,7 +7,7 @@ metadata:
   category: workflow
   risk: medium
   targets: codex, opencode, claude, cursor, copilot, pi, kilo, antigravity, grok
-  related: pr-workflow, handoff, review-response
+  related: pr-workflow, handoff, comments
   source: https://github.com/t3dotgg/tstack (modernize and takeover, MIT)
 ---
 
@@ -33,7 +33,7 @@ git merge-base <base-remote>/<base> <headRefOid>
 
 - `state` `MERGED`: stop and report; there is nothing left to update. `CLOSED`: a push does not reopen it, so ask whether the user wants it reopened, or offer section 5.
 - Keep `headRefOid` as `<sha>`: it is the lease for any later push. Each fetch must exit 0, since after a failed one `FETCH_HEAD` is stale. If `FETCH_HEAD` differs, the PR moved while you read it, so read it again.
-- Read all of it: the commits and full diff, the title and body, the issues it links, and its threads (fetched as in `review-response`). Before judging the code, name in one line the least the PR had to achieve.
+- Read all of it: the commits and full diff, the title and body, the issues it links, and its threads (fetched as in `comments`). Before judging the code, name in one line the least the PR had to achieve.
 
 ## 2. Survey the base since then
 

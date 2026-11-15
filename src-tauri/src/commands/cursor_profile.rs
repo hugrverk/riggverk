@@ -828,10 +828,10 @@ mod tests {
         fs::create_dir_all(&home).expect("home");
         crate::test_env::set_test_user_dirs(&home);
         unsafe { std::env::remove_var("CLAUDE_SKILLS_PATH") };
-        crate::test_env::write_canonical_skill(&bundle, None, "frontend-design", "body");
-        let installed = home.join(".claude/skills/frontend-design");
+        crate::test_env::write_canonical_skill(&bundle, None, "frontend", "body");
+        let installed = home.join(".claude/skills/frontend");
         fs::create_dir_all(&installed).expect("installed dir");
-        let canonical = fs::read_to_string(bundle.join("skills/frontend-design/SKILL.md")).unwrap();
+        let canonical = fs::read_to_string(bundle.join("skills/frontend/SKILL.md")).unwrap();
         fs::write(installed.join("SKILL.md"), &canonical).expect("write installed");
         let roots = [SkillRoot::Claude];
 

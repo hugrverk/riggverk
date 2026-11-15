@@ -1051,13 +1051,13 @@ mod tests {
     #[test]
     fn skill_artifacts_resolve_to_skill_md_files() {
         let ws = temp_dir("skill-md");
-        write_skill(&ws, "skills/frontend-design", "frontend-design", "opencode");
+        write_skill(&ws, "skills/frontend", "frontend", "opencode");
         let home = temp_dir("skill-md-home");
-        let artifact = ArtifactId::OpenCodeSkill(SkillName::new("frontend-design").unwrap());
+        let artifact = ArtifactId::OpenCodeSkill(SkillName::new("frontend").unwrap());
         let dest = artifact.resolve_dest(&home, &ws).unwrap();
         let source = artifact.resolve_source(&ws).unwrap();
         assert!(source.is_file(), "source SKILL.md should exist");
-        assert!(source.ends_with("skills/frontend-design/SKILL.md"));
+        assert!(source.ends_with("skills/frontend/SKILL.md"));
         assert_eq!(source.file_name().unwrap(), "SKILL.md");
         assert_eq!(dest.file_name().unwrap(), "SKILL.md");
         let _ = fs::remove_dir_all(&home);
@@ -1066,11 +1066,11 @@ mod tests {
     #[test]
     fn every_harness_skill_artifact_resolves_to_the_same_canonical_file() {
         let ws = temp_dir("all-skill-sources");
-        crate::test_env::write_canonical_skill(&ws, None, "frontend-design", "body");
+        crate::test_env::write_canonical_skill(&ws, None, "frontend", "body");
         crate::test_env::write_canonical_skill(&ws, Some("group"), "grouped-skill", "body");
 
         for (skill, expected) in [
-            ("frontend-design", "skills/frontend-design/SKILL.md"),
+            ("frontend", "skills/frontend/SKILL.md"),
             ("grouped-skill", "skills/group/grouped-skill/SKILL.md"),
         ] {
             let name = SkillName::new(skill).unwrap();
@@ -1096,7 +1096,7 @@ mod tests {
     #[test]
     fn a_skill_missing_from_the_catalog_resolves_to_a_missing_root_level_file() {
         let ws = temp_dir("retired-skill-source");
-        crate::test_env::write_canonical_skill(&ws, None, "frontend-design", "body");
+        crate::test_env::write_canonical_skill(&ws, None, "frontend", "body");
         let artifact = ArtifactId::ClaudeSkill(SkillName::new("retired-skill").unwrap());
         let source = artifact.resolve_source(&ws).expect("source path");
         assert!(source.ends_with("skills/retired-skill/SKILL.md"));
@@ -1108,8 +1108,8 @@ mod tests {
         let ws = temp_dir("skill-root");
         write_skill(
             &ws,
-            "skills/accessibility-review",
-            "accessibility-review",
+            "skills/accessibility",
+            "accessibility",
             "codex, opencode, claude, cursor",
         );
         write_skill(
@@ -1124,7 +1124,7 @@ mod tests {
         assert_eq!(artifacts.len(), 2);
         assert!(artifacts.contains(&ArtifactId::skill_md(
             SkillRoot::Agents,
-            SkillName::new("accessibility-review").unwrap()
+            SkillName::new("accessibility").unwrap()
         )));
         assert!(artifacts.contains(&ArtifactId::skill_md(
             SkillRoot::Agents,
@@ -1137,8 +1137,8 @@ mod tests {
         let ws = temp_dir("skill-grouped");
         write_skill(
             &ws,
-            "skills/ux/accessibility-review",
-            "accessibility-review",
+            "skills/ux/accessibility",
+            "accessibility",
             "codex, opencode, claude, cursor",
         );
 
@@ -1147,7 +1147,7 @@ mod tests {
         assert_eq!(artifacts.len(), 1);
         assert!(artifacts.contains(&ArtifactId::skill_md(
             SkillRoot::Claude,
-            SkillName::new("accessibility-review").unwrap()
+            SkillName::new("accessibility").unwrap()
         )));
     }
 
@@ -1161,12 +1161,7 @@ mod tests {
             &ws.join("templates/cursor/agents/inspector.md"),
             "# inspector",
         );
-        write_skill(
-            &ws,
-            "skills/accessibility-review",
-            "accessibility-review",
-            "cursor",
-        );
+        write_skill(&ws, "skills/accessibility", "accessibility", "cursor");
 
         let agents =
             expand_surface(SetupSurfaceId::CursorAgents, &ws, &SkillScope::all()).expect("expand");

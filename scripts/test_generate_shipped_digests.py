@@ -31,7 +31,7 @@ class ShippedDigestsGeneratorTests(unittest.TestCase):
 
     def test_legacy_per_harness_skill_adapters_keep_their_own_path_as_key(self) -> None:
         for rel in (
-            "templates/skills/claude/frontend-design/SKILL.md",
+            "templates/skills/claude/browser-qa/SKILL.md",
             "templates/skills/codex/tdd/SKILL.md",
             "templates/skills/opencode/release-check/SKILL.md",
             "templates/skills/cursor/handoff/SKILL.md",

@@ -34,7 +34,7 @@ The verdict is **changes requested** when at least one accepted or re-scoped Fat
 
 ## After the report
 
-Offer the next step and do nothing until the user picks one: hand the accepted findings to implement mode (only on the user's request) or to a normal fix with `minimal-implementation`. Do not fix anything in this mode.
+Offer the next step and do nothing until the user picks one: hand the accepted findings to implement mode (only on the user's request) or to a normal fix with `implement`. Do not fix anything in this mode.
 
 **One re-review at most.** If the user asks after changes were made, review only what changed since the reviewed state. Record that state when you report: the head SHA, and for uncommitted work also `git stash create` (a commit object; it leaves the stash list and the tree alone) and `git hash-object` of the untracked files. A fresh critic gets the delta plus the rejected-with-evidence list, never the accepted findings. Re-run the proof of every earlier accepted finding yourself: one that no longer reproduces is resolved. Further reviews start from scratch.
 

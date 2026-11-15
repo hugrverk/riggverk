@@ -193,6 +193,15 @@ pub(crate) const RETIRED_FROM_BUNDLE: &[&str] = &[
     "templates/cursor/rules/wordpress-woocommerce.mdc",
     // Merged into `adversarial` after 2026.11.12.
     "skills/adversarial-implementation/SKILL.md",
+    // Renamed to short names after 2026.11.12 (`accessibility`, `migrations`, `frontend`,
+    // `blueprint`, `implement`, `screenshot`, `security`).
+    "skills/accessibility-review/SKILL.md",
+    "skills/database-migrations/SKILL.md",
+    "skills/frontend-design/SKILL.md",
+    "skills/implementation-plan/SKILL.md",
+    "skills/minimal-implementation/SKILL.md",
+    "skills/screenshot-review/SKILL.md",
+    "skills/security-review/SKILL.md",
 ];
 
 /// The marker followed by the frozen list: every path the `WorkspaceBundle` surface installs and

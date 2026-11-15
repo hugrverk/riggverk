@@ -1490,20 +1490,20 @@ function lightHealthWithRules(harness: LightAgent): LightRuntimeHealth {
 /* ---- library ---- */
 
 const SKILL_ROWS: Array<[string, string, string, string]> = [
-  ["minimal-implementation", "implementation · planning", "implementation", "low"],
-  ["implementation-plan", "implementation · planning", "implementation", "low"],
+  ["implement", "implementation · planning", "implementation", "low"],
+  ["blueprint", "implementation · planning", "implementation", "low"],
   ["tdd", "implementation · planning", "implementation", "low"],
-  ["frontend-design", "frontend", "frontend", "medium"],
+  ["frontend", "frontend", "frontend", "medium"],
   ["browser-qa", "frontend", "frontend", "medium"],
-  ["screenshot-review", "frontend", "frontend", "low"],
-  ["accessibility-review", "frontend", "frontend", "low"],
+  ["screenshot", "frontend", "frontend", "low"],
+  ["accessibility", "frontend", "frontend", "low"],
   ["diagnose", "workflow · diagnosis", "workflow", "medium"],
   ["release-check", "workflow · diagnosis", "workflow", "medium"],
   ["handoff", "workflow · diagnosis", "workflow", "low"],
   ["context-budget", "workflow · diagnosis", "workflow", "low"],
   ["prototype", "workflow · diagnosis", "workflow", "low"],
-  ["security-review", "security · data · domain", "security", "high"],
-  ["database-migrations", "security · data · domain", "data", "high"],
+  ["security", "security · data · domain", "security", "high"],
+  ["migrations", "security · data · domain", "data", "high"],
   ["current-docs", "security · data · domain", "research", "low"],
   ["zoom-out", "security · data · domain", "research", "low"],
   ["retro", "workflow · diagnosis", "workflow", "low"],
@@ -1520,7 +1520,7 @@ const skills: SkillSummary[] = scenario === "empty"
     category,
     risk,
     targets: [...INSTALL_AGENTS],
-    related: ["implementation-plan", "diagnose"].filter(r => r !== id),
+    related: ["blueprint", "diagnose"].filter(r => r !== id),
   }));
 
 // Skill packs: one pack that loads and routes to its skill in the rules, one whose folder is gone while its skill
@@ -1641,7 +1641,7 @@ function agentMetadata(): AgentMetadataListResponse {
         summary: agentRows.find(([filename]) => filename === agent.id)?.[2] ?? "",
         targets: ["codex", "opencode", "claude", "cursor"],
         risk: agent.id === "sentinel.md" ? "high" : "low",
-        default_skills: ["minimal-implementation"],
+        default_skills: ["implement"],
         safe_to_edit_runtime: true,
         notes: [],
       },
@@ -1717,7 +1717,7 @@ function actionResult(action: string, success: boolean, stdout: string, stderr =
 
 /* ---- apply progress ---- */
 
-const MOCK_SKILLS = ["handoff", "diagnose", "implementation-plan", "release-check"];
+const MOCK_SKILLS = ["handoff", "diagnose", "blueprint", "release-check"];
 
 /** The files a surface writes, for display: a directory surface lists its files like the backend would. */
 function surfaceFiles(surface: SetupSurfaceId): string[] {

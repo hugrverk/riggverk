@@ -5,7 +5,7 @@
       "summary": "Primary executor for most user tasks. Breaks work into bounded slices, inspects repository reality first, delegates investigation, review, docs, security, and QA work to subagents when useful, implements safe patches, verifies, commits when requested, and reports exact changes.",
       "targets": ["opencode"],
       "risk": "medium",
-      "default_skills": ["minimal-implementation", "implementation-plan", "diagnose", "handoff"],
+      "default_skills": ["implement", "blueprint", "diagnose", "handoff"],
       "safe_to_edit_runtime": false,
       "notes": [
         "The only primary-mode agent.",
@@ -40,7 +40,7 @@
       "summary": "Reviews auth, permissions, uploads, forms, checkout, account pages, API routes, database access, secrets, shell execution, webhooks, dependency changes, and user/customer data. Read-only security review.",
       "targets": ["opencode", "claude", "codex"],
       "risk": "high",
-      "default_skills": ["security-review"],
+      "default_skills": ["security"],
       "safe_to_edit_runtime": false,
       "notes": [
         "Use automatically for security-sensitive surfaces.",

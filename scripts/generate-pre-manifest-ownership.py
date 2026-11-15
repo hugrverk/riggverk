@@ -54,7 +54,8 @@ HISTORICAL_SKILL_FILES = (
 # added in c0b6e8d and removed a day later in 19b4040 (app-v0.1.0 predates both, v0.1.0-alpha has both).
 NEVER_RELEASED_SKILLS = ("sync-agent-rules",)
 # Skills dropped from the bundle after managed records existed: the Kretsverket and WordPress skills,
-# moved to a team pack after 2026.10.17, and the skills merged into others after 2026.11.12. An
+# moved to a team pack after 2026.10.17, and the skills merged into others or renamed after
+# 2026.11.12. An
 # installed copy is retired through its managed record (or the shipped digests), or adopted by a pack
 # that ships the same name, so they take no removed-skill identity; their committed `skill:` entries
 # stay (append-only) and still prove a pre-manifest copy for a pack that ships the skill.
@@ -63,6 +64,16 @@ RETIRED_AFTER_MANIFEST = (
     "adversarial-implementation",
     "adversarial-review",
     "adversarial-test",
+    # Renamed to short names after 2026.11.12; the new name is a new skill identity.
+    "accessibility-review",
+    "database-migrations",
+    "delegate",
+    "frontend-design",
+    "implementation-plan",
+    "minimal-implementation",
+    "review-response",
+    "screenshot-review",
+    "security-review",
     "kretsverket-editor-change",
     "kretsverket-electrical-drawing",
     "kretsverket-file-compatibility",

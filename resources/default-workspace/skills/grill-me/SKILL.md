@@ -7,7 +7,7 @@ metadata:
   category: workflow
   risk: low
   targets: codex, opencode, claude, cursor, copilot, pi, kilo, antigravity, grok
-  related: implementation-plan, prototype
+  related: blueprint, prototype
   source: https://github.com/mattpocock/skills (grill-me and grilling, MIT, commit 4ae2317ddb22b046e26455e4f9c9b3aaaf62212d)
 ---
 
@@ -28,7 +28,7 @@ Run only on an explicit request, such as `/grill-me`, `$grill-me`, "grill me on 
 3. In each round ask the whole current frontier: all decisions whose prerequisites are settled. Never ask a question that depends on another unanswered question, including one in the same round. Ask for decisions rather than facts. Prefer open questions over pre-baked choices.
 4. Present each question in plain text with a number, a short title, the question, and your recommended answer on its own line. The user can answer by number. If the user's rules ask for the harness's question tool, use it and put the recommendation first among its options.
 5. Wait for answers, update the tree, and repeat without a numeric round limit. If a decision about look, feel, or layout needs something concrete to react to, identify it as needing a prototype and suggest `prototype`; resume the interview after there is something to assess. Continue independent questions where possible.
-6. When the user says they are done (for example, "wrap up"), or the tree is settled, post a short decision summary in chat: decided items, one line each; still open; and items needing a prototype. Optionally suggest a next step such as `implementation-plan`. Do not write a file.
+6. When the user says they are done (for example, "wrap up"), or the tree is settled, post a short decision summary in chat: decided items, one line each; still open; and items needing a prototype. Optionally suggest a next step such as `blueprint`. Do not write a file.
 
 ## Harness notes
 

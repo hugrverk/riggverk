@@ -1,17 +1,17 @@
 ---
-name: delegate
-description: Hands one or more independent, well-specified slices to other agent CLIs (Codex, Claude Code, OpenCode) or subagents, each in its own worktree, then reviews each like a PR and re-runs every check. Use when the user wants other agents used for mechanical or parallel work, with no charter or ledger.
+name: dispatch
+description: Hands well-specified slices to other agent CLIs (Codex, Claude Code, OpenCode) or subagents, each in its own worktree, then reviews each like a PR and re-runs all checks. Use when the user wants other agents used for mechanical or parallel work. Not for leading agents with a charter and ledger.
 license: MIT
 compatibility: Needs a shell and git, plus at least one other coding-agent CLI with a headless mode (Codex, Claude Code, OpenCode) or subagents in the current harness.
 metadata:
   category: workflow
   risk: medium
   targets: codex, opencode, claude, cursor, copilot, pi, kilo, antigravity, grok
-  related: implementation-plan, minimal-implementation, handoff, security-review
+  related: blueprint, implement, handoff, security
   source: https://github.com/obra/superpowers (dispatching-parallel-agents and using-git-worktrees, MIT)
 ---
 
-# Delegate
+# Dispatch
 
 You, the lead, hand one well-specified slice to another agent. It works in its own git worktree on its own branch; you review the result like a pull request from a stranger and re-run every check yourself. The delegate's report is a claim, never evidence.
 
@@ -30,7 +30,7 @@ Good slices:
 Do not delegate:
 
 - work whose next step needs a decision you have not made: design, unclear requirements, root-cause diagnosis;
-- security-sensitive judgement: auth, permissions, secrets handling, validation at trust boundaries, payments, crypto, sandbox or shell policy. The security review of delegated output also stays with you (`security-review`);
+- security-sensitive judgement: auth, permissions, secrets handling, validation at trust boundaries, payments, crypto, sandbox or shell policy. The security review of delegated output also stays with you (`security`);
 - slices that share files or state with another running slice;
 - anything smaller than its own brief.
 
@@ -93,7 +93,7 @@ When a run ends (exit status, timeout or notification):
 - **Executable surfaces first.** Before you run any check, hook or script from the worktree, read the diff of everything that executes: git hooks and hook folders (`.husky/`, `.githooks/`, `.git/hooks`, a `core.hooksPath` target), the acceptance-check scripts and the files they call, `package.json` scripts, `Makefile`, CI files and test config. Any change there that the brief did not ask for is a reject or a fix by you, and you run no check until it is resolved. Running the checks is what would execute a delegate's edit.
 - **Forbidden surfaces.** No new dependencies, lockfiles, CI, build config, migrations, env files, hooks or widened ignore rules unless the brief asked for them.
 - **Decisions.** The code follows the brief's decisions and the repository's patterns, and is no larger than the slice needs.
-- **Security.** New network calls, shell execution, input handling, auth or secrets in the diff go through `security-review`, run by you.
+- **Security.** New network calls, shell execution, input handling, auth or secrets in the diff go through `security`, run by you.
 - **Verify.** Only after the executable-surface read above, re-run every acceptance check yourself in the worktree, plus the repository's wider gate when the surface needs it. Trust the output you saw, not the delegate's report; a claim with no matching result of yours is Not verified.
 
 Then decide: accept; fix small issues yourself in the worktree as separate commits; send one follow-up brief to the same session for larger ones (resume commands in the recipes), at most two follow-ups; or reject the branch and do the slice yourself.

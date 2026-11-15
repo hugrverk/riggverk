@@ -1,15 +1,15 @@
 ---
-name: database-migrations
-description: Plans and reviews schema and data changes (migrations, backfills, constraints, indexes, policies) for compatibility, lock risk, and rollback, and reports DB-push status explicitly. Use when a change touches schema, migrations, seeds, backfills, or RLS and policies.
+name: migrations
+description: Plans and reviews database schema and data changes (backfills, constraints, indexes, policies) for compatibility, lock risk and rollback, and reports DB-push status. Use when a change touches schema, migrations, seeds, backfills or RLS. Not for framework or dependency upgrades (current-docs).
 license: MIT
 metadata:
   category: database
   risk: high
   targets: codex, opencode, claude, cursor, copilot, pi, kilo, antigravity, grok
-  related: security-review, release-check
+  related: security, release-check
 ---
 
-# Database Migrations
+# Migrations
 
 Works across Postgres/Supabase, SQLite, MySQL, WordPress/WooCommerce databases, and common ORMs.
 

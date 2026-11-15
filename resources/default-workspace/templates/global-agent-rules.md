@@ -25,21 +25,21 @@ Do not trade away correctness, security, or final verification quality to save t
 
 ## Skill routing
 Use skills as routing and workflow guidance, not boilerplate. Select only task-relevant skills; usually 1-3. Do not paste full skill contents unless needed. Translate skill expectations into concrete actions, acceptance criteria, verification, and reporting; skill names alone are not enough. Prefer a repository's own `docs/SKILLS.md` for the full catalog when that file exists; do not go looking for it otherwise.
-- Code implementation and refactoring: `minimal-implementation`.
+- Code implementation and refactoring: `implement`.
 - Bugs, regressions, flakes, or slowness: `diagnose`.
 - A focused regression test, or test-first work on known behaviour: `tdd`.
 - Red CI runs or failing PR checks: `ci-triage`, which hands the root cause to diagnosis.
 - Unfamiliar or architectural code, before editing it: `zoom-out`.
-- Multi-step work, or scope that needs slicing before non-trivial edits: `implementation-plan`.
-- Mechanical or parallel slices handed to another agent CLI or subagent, only when the user wants other agents used: `delegate`.
-- PR review comments or pasted reviewer feedback: `review-response`.
-- Building or restyling UI: `frontend-design`.
-- Supplied screenshots of a UI, app, dashboard or document to critique: `screenshot-review`.
+- Multi-step work, or scope that needs slicing before non-trivial edits: `blueprint`.
+- Mechanical or parallel slices handed to another agent CLI or subagent, only when the user wants other agents used: `dispatch`.
+- PR review comments or pasted reviewer feedback: `comments`.
+- Building or restyling UI: `frontend`.
+- Supplied screenshots of a UI, app, dashboard or document to critique: `screenshot`.
 - Proof in a real browser that a UI change works: `browser-qa`.
-- Accessibility reviews, or custom controls, modals, menus, and dynamic validation: `accessibility-review`.
+- Accessibility reviews, or custom controls, modals, menus, and dynamic validation: `accessibility`.
 - An approach, UI or logic, that cheap experiments can decide: `prototype`.
-- Security, auth, permissions, uploads, shell, sensitive data, or a wider trusted surface: `security-review`.
-- Database-persisted data, schema, migrations, or RLS: `database-migrations`.
+- Security, auth, permissions, uploads, shell, sensitive data, or a wider trusted surface: `security`.
+- Database-persisted data, schema, migrations, or RLS: `migrations`.
 - Fast-moving APIs, SDKs, CLIs, frameworks, or dependencies: `current-docs`.
 - Merge or deploy readiness: `release-check`.
 - Creating or refreshing a repository's `AGENTS.md` (and its `CLAUDE.md` pointer): `agents-md`.
