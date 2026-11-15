@@ -411,6 +411,46 @@ class UpdaterTests(unittest.TestCase):
         with self.assertRaises(tools.ReleaseError):
             tools.updater_manifest("2026.11.7", "a/b", "x.tar.gz", "line one\nline two", "", "2026-11-08T12:00:00Z")
 
+    def test_the_manifest_points_linux_at_the_appimage(self) -> None:
+        data = tools.updater_manifest(
+            "2026.11.7", "hugrverk/riggverk", "Riggverk-v2026.11.7-macOS.app.tar.gz", "bWFj", "", "2026-11-08T12:00:00Z",
+            "Riggverk-v2026.11.7-linux-x86_64.AppImage", "bGludXg=\n",
+        )
+        linux = {
+            "signature": "bGludXg=",
+            "url": "https://github.com/hugrverk/riggverk/releases/download/v2026.11.7/Riggverk-v2026.11.7-linux-x86_64.AppImage",
+        }
+        self.assertEqual(data["platforms"]["linux-x86_64"], linux)
+        self.assertEqual(data["platforms"]["linux-x86_64-appimage"], linux)
+        self.assertEqual(data["platforms"]["darwin-aarch64"]["signature"], "bWFj")
+        self.assertNotIn("linux-x86_64-deb", data["platforms"])
+        with self.assertRaises(tools.ReleaseError):
+            tools.updater_manifest("2026.11.7", "a/b", "x.tar.gz", "sig", "", "2026-11-08T12:00:00Z", "x.AppImage")
+
+    def test_the_linux_stamp_ties_the_packages_to_their_version_and_commit(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            names = tools.linux_assets("2026.11.7")
+            for name in names:
+                (folder / name).write_text(name)
+            tools.write_linux_stamp(folder, "2026.11.7", "abc123")
+            tools.check_linux_stamp(folder, "2026.11.7", "abc123")
+            stamp = json.loads((folder / "linux-build.json").read_text())
+            self.assertEqual(sorted(stamp["files"]), sorted(names))
+
+            for version, commit in (("2026.11.8", "abc123"), ("2026.11.7", "def456")):
+                with self.subTest(version=version, commit=commit), self.assertRaises(tools.ReleaseError):
+                    tools.check_linux_stamp(folder, version, commit)
+            (folder / names[1]).write_text("changed")
+            with self.assertRaisesRegex(tools.ReleaseError, "changed after the build"):
+                tools.check_linux_stamp(folder, "2026.11.7", "abc123")
+            (folder / names[1]).unlink()
+            with self.assertRaisesRegex(tools.ReleaseError, "missing"):
+                tools.write_linux_stamp(folder, "2026.11.7", "abc123")
+            (folder / "linux-build.json").unlink()
+            with self.assertRaisesRegex(tools.ReleaseError, "build-linux"):
+                tools.check_linux_stamp(folder, "2026.11.7", "abc123")
+
     def test_the_signature_must_come_from_the_configured_key(self) -> None:
         def minisign(algorithm: bytes, key_id: bytes, rest: int) -> str:
             line = base64.b64encode(algorithm + key_id + bytes(rest)).decode()
