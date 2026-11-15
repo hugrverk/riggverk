@@ -19,7 +19,7 @@ Done when: every delegated branch is integrated after you re-ran its checks, or 
 
 ## When to delegate
 
-Only when the user wants other agents used: they ask for it in this conversation ("let Codex do the renames", "delegate this"), or their own rules opt in, for example with a line such as `Delegation: prefer codex for mechanical work`. A "do it yourself" or "no other agents" from the user wins over any rule. Never start another agent on your own initiative because it looks cheaper.
+Only when the user wants other agents used: they ask for it in this conversation ("let Codex do the renames", "delegate this"), or their own rules opt in, for example with a line such as `Delegation: prefer codex for mechanical work`. A "do it yourself" or "no other agents" from the user wins over any rule. Never start another agent on your own initiative because it looks cheaper. When the user asks you to lead agents toward a goal across many slices, `orchestrate` runs that loop and uses this skill for each lane.
 
 Good slices:
 

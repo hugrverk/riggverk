@@ -24,6 +24,7 @@ Do not duplicate full `SKILL.md` content here. This file is an index for choosin
 | `handoff` | Compacting paused work, a session or an executor's report into a trustworthy handoff with verified state and next action. Not for reviewing a delegated agent's report while the delegation runs (`dispatch`). |
 | `implement` | Implementing or refactoring with the smallest complete diff that fits existing ownership. |
 | `migrations` | Planning or reviewing schema/data changes with migration, rollback, and DB push reporting. |
+| `orchestrate` | Only when the user asks for it ("orchestrate this", "lead agents toward X", `/orchestrate <goal>`): the lead drives one goal to done through several agents. It writes a charter with done criteria, authority and caps, keeps a ledger file that survives context loss, slices the goal with `blueprint`, routes slices by risk to lanes started through `dispatch`, integrates them one at a time on an `orchestrate/<slug>` branch, verifies every report itself and batches decisions to the user. |
 | `pr-modernize` | An old or inherited PR: decides modernize, rework or close from its goal and what changed on the base, rebases in a disposable worktree with the PR's hooks off, compares the series with `git range-diff`, and keeps the original authors' credit. |
 | `pr-workflow` | Turning finished work into logical commits that follow the repo's own convention, running the gate, pushing a branch and opening or updating a PR with gh. Never force-pushes; each commit, push and PR step needs an explicit ok. On request it also watches a PR through CI with `gh pr checks --watch`, sends red checks to `ci-triage` and open threads to `comments`, and reports readiness without merging. Ships `assets/pr-body.template.md`. |
 | `prototype` | Validating throwaway UI variants, state-machine/data-model checks, and interaction experiments before production implementation. |
@@ -49,6 +50,7 @@ Domain skills for a team's own projects and stack are not bundled: keep them in 
 | `adversarial` / `/code-review` | `/code-review` (or the `inspector` agent) is the routine review; `adversarial` review mode runs a fresh critic from another route and reports only findings the lead proved, only when the user asks for it. "Have a critic review it" about finished work or a plan means review mode, not implement mode. |
 | `tdd` / `adversarial` | TDD has the current agent write each test and then the code; `adversarial` test mode has a separate adversary write the tests and a separate implementer fix the code against them frozen, only when the user explicitly asks for it. |
 | `dispatch` / `adversarial` | `dispatch` hands one or more slices to other agents and the lead reviews and verifies each once; `adversarial` implement mode adds a fresh hostile critic every round and runs only when the user asks for it. |
+| `dispatch` / `orchestrate` | `dispatch` hands one or more slices to other agents and verifies each; `orchestrate` leads a whole goal through many such lanes with a charter, a ledger and an integration branch, only when the user asks for it. |
 | `dispatch` / `handoff` | `dispatch` runs other agents on slices and verifies their branches, including their reports while a delegation runs; handoff compacts state for whoever picks the work up. |
 | `grill-me` / `blueprint` | Grill-me clarifies decisions through an explicit user-requested interview; `blueprint` turns settled scope into verifiable implementation slices. |
 | `grill-me` / `prototype` | Grill-me identifies decisions that need something to react to; prototype builds throwaway variants to test them. |
@@ -92,6 +94,7 @@ Domain skills for a team's own projects and stack are not bundled: keep them in 
 - Docs, rules, or prompt consolidation: `context-budget`; add `blueprint` for explicit maps.
 - Session retrospective: `retro`, only when the user invokes `/retro` or `$retro` (it is not routed by the rules).
 - Adversarial implementation, review of a diff or plan, or tests: `adversarial` with the matching mode, only when the user explicitly asks for it (it is not routed by the rules).
+- Leading several agents toward one goal: `orchestrate`, only when the user asks for it; it starts each lane through `dispatch` and slices the goal with `blueprint`.
 - Review passes: Claude Code uses the built-in `/code-review` and `/simplify`; other harnesses use the `inspector` agent.
 - Review comments on the user's PR: `comments`; add `implement` for the fixes.
 

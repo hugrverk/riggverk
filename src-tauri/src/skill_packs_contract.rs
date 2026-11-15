@@ -177,6 +177,17 @@ mod tests {
             group
         }
 
+        /// Ships a copy of the bundle without the bundled skill `name`, from now on: the release
+        /// before that skill moved from a pack into the bundle.
+        fn ship_bundle_without(&mut self, name: &str) {
+            self._bundle = None;
+            let bundle = self.base.join("bundle");
+            let _ = fs::remove_dir_all(&bundle);
+            copy_tree(&Self::real_bundle(), &bundle);
+            fs::remove_dir_all(bundle.join("skills").join(name)).expect("bundled skill");
+            self._bundle = Some(crate::setup_roots::test_bundle::set(bundle));
+        }
+
         /// Ships the real bundle again, from now on: the release that dropped the group.
         fn ship_real_bundle(&mut self) {
             self._bundle = None;
@@ -473,6 +484,128 @@ mod tests {
             expected,
             "the backup restored every removed file"
         );
+    }
+
+    // ── Moving a skill from a pack into the bundle ──
+
+    /// A skill a pack shipped before a release bundled it under the same name.
+    const BUNDLED_FROM_PACK: &str = "orchestrate";
+
+    fn skill_md(root: SkillRoot) -> ArtifactId {
+        file_of(root, BUNDLED_FROM_PACK, "SKILL.md")
+    }
+
+    /// Installs the skill from a pack on the release that did not bundle it, then ships the one
+    /// that does while the pack still has it. Returns the pack's bytes.
+    fn installed_from_a_pack_before_the_bundle(label: &str) -> (Env, Vec<u8>) {
+        let mut env = Env::new(label);
+        env.ship_bundle_without(BUNDLED_FROM_PACK);
+        let pack_md = env
+            .pack_skill("team", None, BUNDLED_FROM_PACK, "kept in the pack", &[])
+            .join("SKILL.md");
+        let pack_bytes = fs::read(pack_md).expect("pack SKILL.md");
+        let result = env.apply();
+        assert!(result.success, "install: {}", result.message);
+        for root in [SkillRoot::Claude, SkillRoot::Agents] {
+            assert_eq!(
+                fs::read(env.path(&skill_md(root))).expect("installed"),
+                pack_bytes,
+                "{root:?} holds the pack's copy"
+            );
+        }
+        assert_eq!(
+            env.recorded_packs()["packs"]["team"],
+            serde_json::json!([BUNDLED_FROM_PACK])
+        );
+        env.ship_real_bundle();
+        (env, pack_bytes)
+    }
+
+    fn bundled_bytes() -> Vec<u8> {
+        fs::read(
+            Env::real_bundle()
+                .join("skills")
+                .join(BUNDLED_FROM_PACK)
+                .join("SKILL.md"),
+        )
+        .expect("the bundle ships the skill")
+    }
+
+    /// The pack's copy is shadowed by the bundle's and one Update hands the path over: the
+    /// bundle's bytes in every root, with no conflict, hold or removal, and then nothing to do,
+    /// also after the pack drops the skill.
+    #[test]
+    fn an_unedited_pack_copy_of_a_skill_the_bundle_takes_over_is_updated_in_one_step() {
+        let (env, pack_bytes) = installed_from_a_pack_before_the_bundle("to-bundle");
+        let bundled = bundled_bytes();
+        assert_ne!(bundled, pack_bytes, "the bundle ships other bytes");
+
+        let sources = env.sources();
+        let skill = sources.packs()[0]
+            .skills
+            .iter()
+            .find(|skill| skill.name == BUNDLED_FROM_PACK)
+            .expect("pack skill");
+        assert_eq!(skill.state, PackSkillState::Shadowed);
+        assert!(sources.held().is_empty(), "{:?}", sources.held());
+
+        let mut pending = env.pending();
+        pending.sort_by_key(|(artifact, _)| artifact_identity(artifact));
+        let mut expected: Vec<_> = [SkillRoot::Claude, SkillRoot::Agents]
+            .into_iter()
+            .map(|root| (skill_md(root), OperationKind::Update))
+            .collect();
+        expected.sort_by_key(|(artifact, _)| artifact_identity(artifact));
+        assert_eq!(pending, expected, "one Update per root, nothing else");
+
+        let result = env.apply();
+        assert!(result.success, "update: {}", result.message);
+        for root in [SkillRoot::Claude, SkillRoot::Agents] {
+            assert_eq!(
+                files_below(&env.root(root).join(BUNDLED_FROM_PACK)),
+                files_below(&Env::real_bundle().join("skills").join(BUNDLED_FROM_PACK)),
+                "{root:?} holds the bundle's copy"
+            );
+        }
+        assert_eq!(env.pending(), vec![], "the second plan is empty");
+
+        // The pack drops the skill in a later version: the bundle keeps the path.
+        fs::remove_dir_all(env.packs().join("team/skills").join(BUNDLED_FROM_PACK))
+            .expect("drop from the pack");
+        assert!(env.sources().held().is_empty());
+        assert_eq!(env.pending(), vec![], "nothing retired or held");
+    }
+
+    /// A pack copy the user edited stays as it is and needs the user's decision; the unedited
+    /// copy in the other root is updated to the bundle's bytes.
+    #[test]
+    fn an_edited_pack_copy_of_a_skill_the_bundle_takes_over_is_kept_as_a_conflict() {
+        let (env, _) = installed_from_a_pack_before_the_bundle("to-bundle-edited");
+        let edited = skill_md(SkillRoot::Claude);
+        let mine = b"my own notes on orchestrating\n";
+        fs::write(env.path(&edited), mine).expect("edit");
+
+        let kinds: BTreeMap<String, OperationKind> = env
+            .pending()
+            .into_iter()
+            .map(|(artifact, kind)| (artifact_identity(&artifact), kind))
+            .collect();
+        let mut expected = BTreeMap::new();
+        expected.insert(artifact_identity(&edited), OperationKind::Conflict);
+        expected.insert(
+            artifact_identity(&skill_md(SkillRoot::Agents)),
+            OperationKind::Update,
+        );
+        assert_eq!(kinds, expected);
+
+        let result = env.apply();
+        assert!(result.success, "update: {}", result.message);
+        assert_eq!(fs::read(env.path(&edited)).expect("kept"), mine);
+        assert_eq!(
+            fs::read(env.path(&skill_md(SkillRoot::Agents))).expect("updated"),
+            bundled_bytes()
+        );
+        assert_eq!(env.kind(&edited), Some(OperationKind::Conflict));
     }
 
     // ── Name collisions ──
