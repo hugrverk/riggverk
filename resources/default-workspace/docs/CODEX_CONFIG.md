@@ -13,6 +13,8 @@ Files:
 
 In the app, the config is the `codex_config` target on the Codex page. It is **off by default** because it sets your approval and sandbox posture. With it on, `u` previews and applies the merge into `$CODEX_HOME/config.toml` (default `~/.codex/config.toml`).
 
+When `default_permissions` or a `[permissions.*]` table is present, Riggverk leaves `sandbox_mode` untouched and does not report it as drift.
+
 - The five managed keys follow the template (currently `on-request`, reviewer `user`, `workspace-write`, prompt-based app tool approvals).
 - **Keep mine.** If you set one of the five on purpose (say `approvals_reviewer = "auto_review"`), the config row shows a conflict or an update. Press `m` on the row: Riggverk asks, then records your value for every managed key that differs in `.riggverk/config-preferences.json`. Those keys then count as current for as long as the value stays as it is, and an update never writes them; the other managed keys keep following the template. Change the value again and the key is managed again; press `m` once more (with nothing differing) to hand every kept key back. Riggverk never writes `config.toml` to do this.
 - `model` and `model_reasoning_effort` are yours: never written, overwritten, or reported as drift. Riggverk sets no model; your agent's own default applies.
