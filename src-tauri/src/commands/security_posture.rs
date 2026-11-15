@@ -245,6 +245,56 @@ struct ClaudeFacts {
     env_read_denied: bool,
 }
 
+/// Whether a `permissions.deny` entry is a `Read(<pattern>)` rule that blocks reading a `.env`
+/// file: the pattern is not a `!` negation (which carves paths out of the rules before it instead),
+/// and its last path segment names `.env` and matches the name `.env` as a gitignore glob. So
+/// `Read(**/.env)`, `Read(./.env)` and `Read(*.env)` count; `Read(**/.env.*)` alone (which leaves
+/// `.env` itself readable), `Read(!.env)`, `Read(./.envrc)` and `Edit(./.env)` do not.
+fn denies_env_reads(rule: &str) -> bool {
+    let Some(pattern) = rule
+        .strip_prefix("Read(")
+        .and_then(|rest| rest.strip_suffix(')'))
+    else {
+        return false;
+    };
+    if pattern.starts_with('!') {
+        return false;
+    }
+    let segment = pattern.rsplit('/').next().unwrap_or(pattern);
+    segment.contains(".env") && glob_segment_matches(segment.as_bytes(), b".env")
+}
+
+/// A gitignore-style match of one path segment: `*` matches any run of bytes and `?` one byte;
+/// every other byte (a `[` class included) matches only itself, which can only under-count. The
+/// usual greedy matcher with one backtrack point: linear in practice, whatever the file holds.
+fn glob_segment_matches(pattern: &[u8], name: &[u8]) -> bool {
+    let (mut p, mut n) = (0, 0);
+    let mut star: Option<(usize, usize)> = None;
+    while n < name.len() {
+        match pattern.get(p) {
+            Some(b'*') => {
+                star = Some((p, n));
+                p += 1;
+            }
+            Some(&byte) if byte == b'?' || byte == name[n] => {
+                p += 1;
+                n += 1;
+            }
+            _ => match star {
+                Some((star_p, star_n)) => {
+                    p = star_p + 1;
+                    n = star_n + 1;
+                    star = Some((star_p, star_n + 1));
+                }
+                None => return false,
+            },
+        }
+    }
+    pattern[p.min(pattern.len())..]
+        .iter()
+        .all(|&byte| byte == b'*')
+}
+
 fn claude_facts(text: &str) -> Option<ClaudeFacts> {
     let value = parse_json(text)?;
     let bypass_disabled =
@@ -253,12 +303,7 @@ fn claude_facts(text: &str) -> Option<ClaudeFacts> {
         .get("permissions")
         .and_then(|p| p.get("deny"))
         .and_then(Value::as_array)
-        .is_some_and(|rules| {
-            rules
-                .iter()
-                .filter_map(Value::as_str)
-                .any(|rule| rule.starts_with("Read") && rule.contains(".env"))
-        });
+        .is_some_and(|rules| rules.iter().filter_map(Value::as_str).any(denies_env_reads));
     Some(ClaudeFacts {
         bypass_disabled,
         bypass_default: !bypass_disabled
@@ -765,6 +810,63 @@ mod tests {
             &f.posture(HarnessId::Claude),
             FindingCode::ClaudeEnvReadOpen
         ));
+    }
+
+    #[test]
+    fn claude_env_deny_counts_the_two_suggested_lines_and_never_a_negation() {
+        let f = Fixture::new("claude-env-negation");
+        let denied = |deny: &str| {
+            f.write(
+                ".claude/settings.json",
+                &format!(r#"{{"permissions":{{"deny":{deny}}}}}"#),
+            );
+            let p = f.posture(HarnessId::Claude);
+            assert_ne!(
+                has(&p, FindingCode::ClaudeEnvReadDenied),
+                has(&p, FindingCode::ClaudeEnvReadOpen),
+                "{deny}"
+            );
+            has(&p, FindingCode::ClaudeEnvReadDenied)
+        };
+        // The two lines the Claude Code page suggests, together and each alone.
+        assert!(denied(r#"["Read(**/.env)","Read(**/.env.*)"]"#));
+        assert!(denied(r#"["Read(**/.env)"]"#));
+        // The second line alone leaves `.env` itself readable.
+        assert!(!denied(r#"["Read(**/.env.*)"]"#));
+        // A negation alone carves out, it never blocks.
+        assert!(!denied(r#"["Read(!.env)"]"#));
+        assert!(!denied(r#"["Read(!**/.env.*)"]"#));
+        // A normal rule next to a negation still counts, for the normal rule.
+        assert!(denied(r#"["Read(*.env)","Read(!sample.env)"]"#));
+        // Patterns that name something else, or no Read rule at all.
+        assert!(!denied(
+            r#"["Read(./.envrc)","Read(src/**)","Read(.environment)"]"#
+        ));
+        assert!(!denied(r#"["Edit(**/.env)","Bash(cat .env)","Read"]"#));
+    }
+
+    #[test]
+    fn the_segment_glob_follows_star_and_question_mark() {
+        for (pattern, name, expected) in [
+            (".env", ".env", true),
+            ("*.env", ".env", true),
+            (".env*", ".env.local", true),
+            (".env.*", ".env", false),
+            (".env.*", ".env.local", true),
+            ("?env", ".env", true),
+            ("**", ".env", true),
+            ("*a*", ".env", false),
+            (".env", ".envrc", false),
+        ] {
+            assert_eq!(
+                glob_segment_matches(pattern.as_bytes(), name.as_bytes()),
+                expected,
+                "{pattern} vs {name}"
+            );
+        }
+        // Many stars are still matched quickly.
+        let long = "*".repeat(10_000) + "x";
+        assert!(!glob_segment_matches(long.as_bytes(), b".env"));
     }
 
     #[test]
