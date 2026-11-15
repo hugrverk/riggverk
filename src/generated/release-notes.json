@@ -1,6 +1,32 @@
 {
   "releases": [
     {
+      "version": "2026.11.13",
+      "sections": [
+        {
+          "title": "New",
+          "items": [
+            "Publish the Linux packages with each release",
+            "Build the Linux packages in an Ubuntu 22.04 container",
+            "Add a code comment policy for every harness",
+            "Suggest .env deny lines and read negations in posture",
+            "Advisor steps, Codex skill policy and agent effort",
+            "Bundle the orchestrate skill",
+            "Rename nine bundled skills to short names",
+            "Overhaul the bundle and let users disable skills"
+          ]
+        },
+        {
+          "title": "Fixes",
+          "items": [
+            "Smoke findings for the next release",
+            "Leave sandbox_mode to a Codex permission profile",
+            "Match delegate OpenCode note to architect permissions"
+          ]
+        }
+      ]
+    },
+    {
       "version": "2026.11.12",
       "sections": [
         {
