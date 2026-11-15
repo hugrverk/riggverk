@@ -22,10 +22,10 @@ mod tests {
         let content = std::fs::read_to_string(path).expect("read global rules template");
         for required in [
             "## Skill routing",
-            "diagnose",
-            "blueprint",
-            "security",
-            "release-check",
+            "`diagnose`",
+            "`blueprint`",
+            "`security`",
+            "`release-check`",
         ] {
             assert!(content.contains(required), "template missing: {required}");
         }

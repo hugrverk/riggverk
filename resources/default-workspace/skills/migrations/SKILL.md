@@ -1,6 +1,6 @@
 ---
 name: migrations
-description: Plans and reviews database schema and data changes (migrations, backfills, constraints, indexes, policies) for compatibility, lock risk and rollback, and reports DB-push status. Use when a change touches schema, seeds, backfills or RLS. Not for framework or dependency upgrades (current-docs).
+description: Plans and reviews database schema and data changes (backfills, constraints, indexes, policies) for compatibility, lock risk and rollback, and reports DB-push status. Use when a change touches schema, migrations, seeds, backfills or RLS. Not for framework or dependency upgrades (current-docs).
 license: MIT
 metadata:
   category: database
