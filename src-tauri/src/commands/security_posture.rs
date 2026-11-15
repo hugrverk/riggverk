@@ -245,23 +245,52 @@ struct ClaudeFacts {
     env_read_denied: bool,
 }
 
-/// Whether a `permissions.deny` entry is a `Read(<pattern>)` rule that blocks reading a `.env`
-/// file: the pattern is not a `!` negation (which carves paths out of the rules before it instead),
-/// and its last path segment names `.env` and matches the name `.env` as a gitignore glob. So
-/// `Read(**/.env)`, `Read(./.env)` and `Read(*.env)` count; `Read(**/.env.*)` alone (which leaves
-/// `.env` itself readable), `Read(!.env)`, `Read(./.envrc)` and `Edit(./.env)` do not.
-fn denies_env_reads(rule: &str) -> bool {
+/// What one `permissions.deny` entry says about reading a file named `.env`.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum EnvRule {
+    /// A `Read(<pattern>)` rule whose last path segment names `.env` and matches the name `.env`
+    /// as a gitignore glob: `Read(**/.env)`, `Read(./.env)`, `Read(*.env)`. Not `Read(**/.env.*)`,
+    /// which leaves `.env` itself readable, nor `Read(./.envrc)` or `Edit(./.env)`.
+    Blocks,
+    /// A `Read(!<pattern>)` negation whose last segment matches the name `.env`: it carves `.env`
+    /// back out of the rules listed before it (`Read(!.env)`, `Read(!*)`).
+    Reopens,
+    Other,
+}
+
+fn env_rule(rule: &str) -> EnvRule {
     let Some(pattern) = rule
         .strip_prefix("Read(")
         .and_then(|rest| rest.strip_suffix(')'))
     else {
-        return false;
+        return EnvRule::Other;
     };
-    if pattern.starts_with('!') {
-        return false;
-    }
+    let (negated, pattern) = match pattern.strip_prefix('!') {
+        Some(rest) => (true, rest),
+        None => (false, pattern),
+    };
     let segment = pattern.rsplit('/').next().unwrap_or(pattern);
-    segment.contains(".env") && glob_segment_matches(segment.as_bytes(), b".env")
+    let matches = glob_segment_matches(segment.as_bytes(), b".env");
+    match (negated, matches) {
+        // In doubt `.env` is open: any negation that can match the name reopens it.
+        (true, true) => EnvRule::Reopens,
+        (false, true) if segment.contains(".env") => EnvRule::Blocks,
+        _ => EnvRule::Other,
+    }
+}
+
+/// Whether the `deny` list, read in order like Claude Code reads it, ends with `.env` blocked: a
+/// blocking rule blocks it, a later negation that matches `.env` reopens it, and a negation listed
+/// before any blocking rule carves nothing out. Anchors (`/`, `~/`, `//`) and directory patterns
+/// are not modelled; every doubt leaves `.env` open, which at worst shows the suggested lines.
+fn denies_env_reads<'a>(rules: impl IntoIterator<Item = &'a str>) -> bool {
+    rules
+        .into_iter()
+        .fold(false, |denied, rule| match env_rule(rule) {
+            EnvRule::Blocks => true,
+            EnvRule::Reopens => false,
+            EnvRule::Other => denied,
+        })
 }
 
 /// A gitignore-style match of one path segment: `*` matches any run of bytes and `?` one byte;
@@ -303,7 +332,7 @@ fn claude_facts(text: &str) -> Option<ClaudeFacts> {
         .get("permissions")
         .and_then(|p| p.get("deny"))
         .and_then(Value::as_array)
-        .is_some_and(|rules| rules.iter().filter_map(Value::as_str).any(denies_env_reads));
+        .is_some_and(|rules| denies_env_reads(rules.iter().filter_map(Value::as_str)));
     Some(ClaudeFacts {
         bypass_disabled,
         bypass_default: !bypass_disabled
@@ -836,8 +865,18 @@ mod tests {
         // A negation alone carves out, it never blocks.
         assert!(!denied(r#"["Read(!.env)"]"#));
         assert!(!denied(r#"["Read(!**/.env.*)"]"#));
-        // A normal rule next to a negation still counts, for the normal rule.
+        // A negation that does not match `.env` leaves it blocked.
         assert!(denied(r#"["Read(*.env)","Read(!sample.env)"]"#));
+        assert!(denied(
+            r#"["Read(**/.env)","Read(**/.env.*)","Read(!sample.env)"]"#
+        ));
+        // The list is read in order: a later negation reopens `.env`, an earlier one carves
+        // nothing out, and a rule after the negation blocks it again.
+        assert!(!denied(r#"["Read(**/.env)","Read(!.env)"]"#));
+        assert!(denied(r#"["Read(!.env)","Read(**/.env)"]"#));
+        assert!(denied(r#"["Read(**/.env)","Read(!.env)","Read(**/.env)"]"#));
+        // In doubt it is open: a negation that can match the name reopens it.
+        assert!(!denied(r#"["Read(**/.env)","Read(!*)"]"#));
         // Patterns that name something else, or no Read rule at all.
         assert!(!denied(
             r#"["Read(./.envrc)","Read(src/**)","Read(.environment)"]"#
