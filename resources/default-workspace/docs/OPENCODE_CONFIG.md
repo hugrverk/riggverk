@@ -221,7 +221,7 @@ The OpenCode page has a model override in its Model cell. It holds four values:
 - `model` and `small model`: the global `model` and `small_model` of `opencode.json`.
 - `subagent model` (optional): the model the read-only subagent roles run on. Unset (shown as `inherit main model`), the subagents use the main model, as before.
 
-`critic model` (optional, stored as `critic_model`) is used by the adversarial skills' critic (`inspector`). It pins only `agent.inspector.model`, taking precedence over the subagent model; the other roles keep their subagent model. There is no bundled critic default: unset, inspector follows the subagent model or inherits the main model. Clearing it restores that fallback on the next install. It uses the same `provider/model` validation, model list, source/state display and reset as the other rows.
+`critic model` (optional, stored as `critic_model`) is used by the critic of the `adversarial` skill (`inspector`). It pins only `agent.inspector.model`, taking precedence over the subagent model; the other roles keep their subagent model. There is no bundled critic default: unset, inspector follows the subagent model or inherits the main model. Clearing it restores that fallback on the next install. It uses the same `provider/model` validation, model list, source/state display and reset as the other rows.
 
 Keys in the cell: `e` edit, `s` save, `x` clear the overrides, `R` reload the model list (read with the arguments of the installed OpenCode major).
 

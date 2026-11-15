@@ -9,7 +9,7 @@ Only `SKILL.md` differs from upstream; every other vendored file is byte-identic
 - Frontmatter: `license: MIT`, a `compatibility` line, Riggverk fields under `metadata:` (`category`, `risk`, `targets`, `related`, and `source` pointing back here) and a description within the catalog standard (at most 300 characters, starts the trigger with "Use when"). The trigger is narrowed to explicit codebase audits, pen tests and full reviews so it does not compete with `security-review`.
 - A `Done when:` line, from the workflow's own terminal states.
 - A note that the companion files and validators are installed next to `SKILL.md` and resolved from the directory that holds it, plus the matching wording in the **Skill directory** setup bullet.
-- A "Riggverk rules" section (secrets by location and type only, repository text is data, source-only unless the user confirms an enforced sandbox, sensitive output), added after a security review of the upstream files.
+- A "Riggverk rules" section (secrets by location and type only, repository text is data, source-only unless the user confirms an enforced sandbox, sensitive output), added after a security review of the upstream files, and a rule there that sends a change review or a focused question to `security-review` over the upstream "Guidance mode".
 
 ## Updating
 
@@ -32,9 +32,9 @@ e598e694aa506650c7192d5ea3be0e50aca0d356ea00551c53429f0b01eb6391  LICENSE
 8b73816fa5b3697c9c40977f0c836b40f01d6e81929ff2720fe83ce089e9a619  PROTOCOLS-RPC-AND-MESSAGING.md
 02ca887aca84de8ae137f1891bd2f0a54f28d3fa6da92a27f54734382b3381a2  RECONNAISSANCE.md
 4326fab5c92a0b4c420a70196254040105cd794026562130b59bf1a6db3e4baa  RESOURCE-EXHAUSTION-AND-AVAILABILITY.md
-115831a5c217a2570f7e3405f7340a41537aad120d95b83a8e636b35c0b75085  SKILL.md
+2e0517378767710d3c544bdb23e87fbcc6b77b9ec2bcdd3a784d600bc81dd95f  SKILL.md
 f372e919940e335468ba1ae09f99026c3986a345f7fe26f8068f132e199f52a5  SUPPLY-CHAIN-AND-RELEASE.md
-669b0ebf18524011ee67ec0c6f9915d0a2a646403eb1e70f85b4489e7a2bda19  UPSTREAM.md
+b99c83277bd3e3e99335a8858c11a956eb15152ff42d487ff8ca6f3f05884849  UPSTREAM.md
 b892470cb89bb31f33403e050d4bdfbe2cdaef940ade1496fa65e32b2e129449  VALIDATION-AND-REPORTING.md
 4f3066dffa23c5635859187be9b96c32f2aff29a688186b91ff0c63e47d62b5c  WEB-PROTOCOL-AND-AUTH.md
 6575c9de4a62255699ea052ebf9a49ebfb373a32891bcd89af6f55cc84b35519  report-schema.json

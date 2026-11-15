@@ -78,10 +78,10 @@ DONE_WHEN_RE = re.compile(r"^Done when: \S", re.MULTILINE)
 BLOCK_SCALAR_RE = re.compile(r"^[>|][+-]?\d*$")
 PLAIN_SCALAR_BAD_START = "\"'[]{}>|*&!%@`#"
 
-# A skill is installed on its own, so it may not read another skill's files. Skills that share a
-# reference carry identical copies of it; these are the files that must match across a family.
-SHARED_REFERENCE_FAMILIES = {
-    "adversarial-": ("adversarial-roles.md", "critic-recipes.md"),
+# A skill is installed on its own, so it may not read another skill's files. Supporting files a
+# skill's SKILL.md depends on must sit next to it: one file per mode plus the shared references.
+REQUIRED_SUPPORT_FILES = {
+    "adversarial": ("implement.md", "review.md", "test.md", "adversarial-roles.md", "critic-recipes.md"),
 }
 URL_RE = re.compile(r"https?://\S+", re.IGNORECASE)
 
@@ -115,6 +115,14 @@ ACTIVE_DOC_SOURCES = [
 
 MIGRATION_FIXTURE_ALLOWLIST = {
     REPO_ROOT / "scripts/check-skill-routing.py",
+    # Lists the skills dropped after managed records existed (RETIRED_AFTER_MANIFEST).
+    REPO_ROOT / "scripts/generate-pre-manifest-ownership.py",
+    # Frozen list of the workspace copy and its tests (RETIRED_FROM_BUNDLE): paths of retired files.
+    REPO_ROOT / "src-tauri/src/commands/retired_workspace_files.rs",
+    # Parser tests that use skill names as arbitrary fixture strings.
+    REPO_ROOT / "src-tauri/src/commands/skills.rs",
+    # Release notes of past versions name the skills they shipped.
+    REPO_ROOT / "src/generated/release-notes.json",
     REPO_ROOT / "src-tauri/src/managed_reconciliation_contract.rs",
     REPO_ROOT / "src-tauri/src/managed_bootstrap.rs",
     REPO_ROOT / "src-tauri/src/commands/workspace.rs",
@@ -126,6 +134,12 @@ MIGRATION_FIXTURE_ALLOWLIST = {
 }
 
 DEPRECATED_METADATA_PREFIX = "resources/default-workspace/metadata/deprecated-skills"
+# History that names skills as they were: release notes per version and the rules bases the app
+# shipped (append-only, keyed by digest).
+HISTORICAL_PREFIXES = ("release-notes/", "resources/default-workspace/metadata/rules-history/")
+# Upstream projects whose name contains a removed skill name; a mention of the project is not one of
+# the skill.
+UPSTREAM_PROJECT_NAMES = ("dementev-dev/adversarial-review", "dementev-dev adversarial-review")
 
 FRONTMATTER_RE = re.compile(r"^---\s*$([\s\S]*?)^---\s*$", re.MULTILINE)
 FIELD_RE = re.compile(r"^([a-zA-Z0-9_-]+):\s*(.+?)\s*$")
@@ -156,13 +170,19 @@ def removed_skill_names() -> set[str]:
     return set(re.findall(r'"([^"]+)"', match.group(1)))
 
 
-REMOVED_SKILLS = removed_skill_names()
+# Skills dropped after managed records existed are retired through those records and the shipped
+# digests, not REMOVED_SKILL_NAMES (the pre-manifest list; see RETIRED_AFTER_MANIFEST in
+# scripts/generate-pre-manifest-ownership.py). Their names must not come back either.
+MERGED_SKILL_NAMES = {"adversarial-implementation", "adversarial-review", "adversarial-test"}
+REMOVED_SKILLS = removed_skill_names() | MERGED_SKILL_NAMES
 # A removed name counts only as a whole skill name: `triage` is stale, while a current skill whose
 # name merely contains it (`ci-triage`) is not.
 REMOVED_SKILL_RES = {name: re.compile(rf"(?<![a-z0-9-]){re.escape(name)}(?![a-z0-9-])") for name in REMOVED_SKILLS}
 
 
 def removed_skills_in(text: str) -> list[str]:
+    for project in UPSTREAM_PROJECT_NAMES:
+        text = text.replace(project, "")
     return sorted(name for name, pattern in REMOVED_SKILL_RES.items() if pattern.search(text))
 
 
@@ -345,13 +365,13 @@ def rules_files() -> list[Path]:
 # Skills that start only when the user asks for them in plain words or by slash command.
 # The model may invoke them, so disable-model-invocation does not mark them; the rules
 # must still never route to them, since each run spends several agents.
-ON_REQUEST_PREFIX = "adversarial-"
+ON_REQUEST_SKILLS = ("adversarial",)
 
 
 def validate_user_invoked_routing(discovered: dict[str, Path]) -> None:
     """Reject automatic routes to user-invoked and on-request skills."""
     user_invoked = user_invoked_skills(discovered)
-    on_request = {name for name in discovered if name.startswith(ON_REQUEST_PREFIX)}
+    on_request = {name for name in discovered if name in ON_REQUEST_SKILLS}
     if not user_invoked and not on_request:
         return
     for source in rules_files():
@@ -364,7 +384,37 @@ def validate_user_invoked_routing(discovered: dict[str, Path]) -> None:
                 if token in user_invoked:
                     fail(f"{rel(source)}:{number}: routing bullet names user-invoked skill `{token}` (disable-model-invocation)")
                 elif token in on_request:
-                    fail(f"{rel(source)}:{number}: routing bullet names on-request skill `{token}` ({ON_REQUEST_PREFIX}*)")
+                    fail(f"{rel(source)}:{number}: routing bullet names on-request skill `{token}` (runs only when the user asks)")
+
+
+SKILL_ROUTING_HEADING = "## Skill routing"
+
+
+def validate_one_skill_per_routing_bullet(discovered: dict[str, Path]) -> None:
+    """Each bullet of the base's `## Skill routing` section names exactly one bundled skill.
+
+    Composition stays in plain words, so a line routes to one skill and the rules never ask for a
+    second skill on every match.
+    """
+    # The base and its hand copy for Cursor, plus the generated rules files that embed the base.
+    for source in [*RULES_STATIC, *sorted((WS_ROOT / "templates/sync").glob("*.md"))]:
+        lines = source.read_text(encoding="utf-8").splitlines()
+        starts = [index for index, line in enumerate(lines) if line.rstrip() == SKILL_ROUTING_HEADING]
+        if len(starts) != 1:
+            fail(f"{rel(source)}: expected one '{SKILL_ROUTING_HEADING}' section, found {len(starts)}")
+        bullets = 0
+        for number in range(starts[0] + 1, len(lines)):
+            line = lines[number]
+            if line.startswith("#"):
+                break
+            if not line.startswith("- "):
+                continue
+            bullets += 1
+            named = [token for token in BACKTICK_NAME_RE.findall(line) if token in discovered]
+            if len(named) != 1:
+                fail(f"{rel(source)}:{number + 1}: a '{SKILL_ROUTING_HEADING}' bullet names exactly one bundled skill, found {named}")
+        if not bullets:
+            fail(f"{rel(source)}: '{SKILL_ROUTING_HEADING}' has no routing bullets")
 
 
 def parse_claude_header(path: Path) -> dict[str, str]:
@@ -573,19 +623,19 @@ def validate_no_sibling_references(discovered: dict[str, Path]) -> None:
                     )
 
 
-def validate_shared_reference_copies(discovered: dict[str, Path]) -> None:
-    """Skills of a family carry byte-identical copies of their shared reference files."""
-    for prefix, filenames in SHARED_REFERENCE_FAMILIES.items():
-        family = {name: path.parent for name, path in discovered.items() if name.startswith(prefix)}
+def validate_required_support_files(discovered: dict[str, Path]) -> None:
+    """A skill carries the supporting files its SKILL.md sends the agent to."""
+    for name, filenames in REQUIRED_SUPPORT_FILES.items():
+        if name not in discovered:
+            fail(f"bundled skill {name!r} is missing; update REQUIRED_SUPPORT_FILES with it")
+        skill_md = discovered[name]
+        text = skill_md.read_text(encoding="utf-8")
         for filename in filenames:
-            copies: dict[str, bytes] = {}
-            for name, folder in family.items():
-                target = folder / filename
-                if not target.is_file():
-                    fail(f"{rel(target)}: missing; every {prefix}* skill carries its own copy of {filename}")
-                copies[name] = target.read_bytes()
-            if len(set(copies.values())) > 1:
-                fail(f"{filename}: copies differ across {sorted(copies)}; edit one and copy it to the others")
+            target = skill_md.parent / filename
+            if not target.is_file():
+                fail(f"{rel(target)}: missing; {name} carries {filename} next to its SKILL.md")
+            if f"`{filename}`" not in text:
+                fail(f"{rel(skill_md)}: never names `{filename}`, so no agent is sent to it")
 
 
 # Phrases of the retired model, one skills folder per harness (Codex in $CODEX_HOME/skills, Cursor
@@ -701,7 +751,8 @@ def scan_repo_for_removed_skills() -> None:
             continue
         if path in MIGRATION_FIXTURE_ALLOWLIST:
             continue
-        if {"node_modules", "target", ".git", ".claude"} & set(path.parts):
+        # Relative parts: a checkout that itself lives below a `.claude` folder is still scanned.
+        if {"node_modules", "target", ".git", ".claude"} & set(path.relative_to(REPO_ROOT).parts):
             continue
         if path.suffix not in SCANNED_SUFFIXES:
             continue
@@ -720,6 +771,9 @@ def scan_repo_for_removed_skills() -> None:
             # 2. This checker script itself (parses the removed names)
             if rel_posix == "scripts/check-skill-routing.py":
                 continue
+            # 3. History: past release notes and shipped rules bases
+            if rel_posix.startswith(HISTORICAL_PREFIXES):
+                continue
             fail(f"{rel_posix}: references removed skill {removed} outside migration fixtures")
 
 
@@ -732,9 +786,10 @@ def main() -> None:
     validate_descriptions(discovered_map)
     validate_canonical_skill_files(discovered_map)
     validate_no_sibling_references(discovered_map)
-    validate_shared_reference_copies(discovered_map)
+    validate_required_support_files(discovered_map)
     validate_routing_sources(discovered)
     validate_user_invoked_routing(discovered_map)
+    validate_one_skill_per_routing_bullet(discovered_map)
     validate_agent_metadata(discovered_map)
     validate_active_docs()
     scan_repo_for_removed_skills()

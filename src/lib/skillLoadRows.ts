@@ -20,9 +20,12 @@ export interface SkillLoadsView {
   error: string | null;
 }
 
-/** Whether a flag is worth a warning. Identical copies only show up in a log or a diagnostic of the harness. */
+/**
+ * Whether a flag warns of several copies. Identical copies only show up in a log or a diagnostic of the harness; a
+ * disabled skill is listed on its own.
+ */
 export function isWarningFlag(flag: SkillLoadFlag): boolean {
-  return flag !== "duplicate_identical";
+  return flag !== "duplicate_identical" && flag !== "disabled";
 }
 
 export interface HarnessLoadSummary {
@@ -35,6 +38,8 @@ export interface HarnessLoadSummary {
   identical: SkillLoad[];
   /** Names with several copies, some of them the user's: the app cannot fix them. */
   foreign: ForeignSkillDuplicate[];
+  /** Names the user disabled that still have a copy here. */
+  disabled: SkillLoad[];
 }
 
 /** The loads of one harness, or null while there is no data (or the harness is not enabled). */
@@ -50,6 +55,7 @@ export function summarizeSkillLoads(
     flagged: own.skills.filter((skill) => skill.flags.some(isWarningFlag) && !skill.flags.includes("foreign_copy")),
     identical: own.skills.filter((skill) => skill.flags.includes("duplicate_identical")),
     foreign: loads.foreign_duplicates.filter((duplicate) => duplicate.harnesses.includes(harness)),
+    disabled: own.skills.filter((skill) => skill.flags.includes("disabled")),
   };
 }
 
@@ -76,6 +82,7 @@ function effectOf(flag: SkillLoadFlag): string {
     case "shadowed_by_folder_order": return "first folder wins, the others are hidden";
     case "duplicate_identical": return "identical copies";
     case "foreign_copy": return "yours, Riggverk cannot fix";
+    case "disabled": return "disabled; next Update removes it";
   }
 }
 
@@ -119,6 +126,15 @@ function foreignEffect(copies: readonly SkillCopy[]): string {
     : effectOf("foreign_copy");
 }
 
+/** A disabled skill still installed: Riggverk's copies go with the next Update, a copy of the user's stays. */
+function disabledRow(summary: HarnessLoadSummary, skill: SkillLoad): KvItem {
+  const where = copyFolders(summary.harness, skill.copies);
+  const effect = skill.copies.some((copy) => copy.owner === "aw")
+    ? effectOf("disabled")
+    : "disabled; your copy stays, delete it to stop loading it";
+  return { label: "", id: `disabled-${skill.name}`, value: `${skill.name} · ${where} · ${effect}`, tone: "warn", wrap: true };
+}
+
 function foreignRow(summary: HarnessLoadSummary, duplicate: ForeignSkillDuplicate): KvItem {
   const own = summary.harness.skills.find((skill) => skill.name === duplicate.name);
   const copies = own?.copies ?? duplicate.copies;
@@ -136,6 +152,7 @@ export function skillLoadRows({ loads, error }: SkillLoadsView, harness: Install
   const problems: KvItem[] = [
     ...summary.flagged.map((skill) => flaggedRow(summary, skill)),
     ...summary.foreign.map((duplicate) => foreignRow(summary, duplicate)),
+    ...summary.disabled.map((skill) => disabledRow(summary, skill)),
   ];
   const more = problems.length - MAX_FLAGGED_ROWS;
   return [

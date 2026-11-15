@@ -77,7 +77,7 @@ Every harness file is installed from the packaged bundle, and the Library and he
 
 ## Skills
 
-The bundled catalog is listed in [SKILLS.md](resources/default-workspace/docs/SKILLS.md). `retro` is user-invoked only, and `adversarial-implementation`, `adversarial-review` and `adversarial-test` run only when you ask for them (they are not in the routing rules).
+The bundled catalog is listed in [SKILLS.md](resources/default-workspace/docs/SKILLS.md). `retro` is user-invoked only, and `adversarial` (modes implement, review and test) runs only when you ask for it (it is not in the routing rules).
 
 ```text
 skills/<skill>/SKILL.md
@@ -90,7 +90,7 @@ Installed layout is flat and holds the whole skill directory: `<skills-folder>/<
 
 An edited skill or agent file is a conflict Install leaves alone. Resolve it from the harness page: `d` shows the diff against the bundled file, `b` replaces your file by the bundled one after a review (`y` applies, `n` cancels; your file is backed up first and `z` rolls it back), `m` keeps your version (recorded in `.riggverk/kept-files.json`; the app never writes the file and says when a bundled update is waiting) or hands it back, `c` marks the next one, and `:resolve diff|bundled|mine|manage` does the same by name.
 
-All skills support the central harnesses and the light tier. The skills surface is not gated by target toggles. Deprecated Riggverk skills are matched against bundled reference snapshots: identical managed copies are removed after backup, diverged and unknown copies are preserved.
+All skills support the central harnesses and the light tier. The skills surface is not gated by target toggles. To turn a skill off for every harness, use **Disable** on its row in Library → Skills or `:disable <names…>` (recorded in `.riggverk/disabled-skills.json`): the next Update removes the copies the app installed, with a backup (`z` restores them), and leaves the routing lines that name it out of the rules block; an edited copy stays. **Enable** or `:enable <names…>` installs it again. Deprecated Riggverk skills are matched against bundled reference snapshots: identical managed copies are removed after backup, diverged and unknown copies are preserved.
 
 ## Rules
 
@@ -219,7 +219,7 @@ Several bundled skills adapt methods from open skill collections. The wording is
 |---|---|---|
 | [Matt Pocock's skills](https://github.com/mattpocock/skills) | `diagnose`, `tdd`, `prototype`, `handoff`, `context-budget`, `retro`, `grill-me`; the idea behind `zoom-out` | MIT |
 | [obra/superpowers](https://github.com/obra/superpowers) | `implementation-plan`, `delegate`, `review-response` | MIT |
-| [raddue/crucible](https://github.com/raddue/crucible) | the fresh-critic loop in the adversarial skills | MIT |
+| [raddue/crucible](https://github.com/raddue/crucible) | the fresh-critic loop in the `adversarial` skill | MIT |
 | [dementev-dev/adversarial-review](https://github.com/dementev-dev/adversarial-review) | the read-only critic and its adjudication | Apache-2.0 |
 | [openai/skills](https://github.com/openai/skills) | `ci-triage`, `review-response` | Apache-2.0 |
 | [t3dotgg/tstack](https://github.com/t3dotgg/tstack) | `pr-workflow`, `review-response`, `pr-modernize` | MIT |

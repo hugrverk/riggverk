@@ -16,6 +16,7 @@ import type {
   RulesFileSummary,
   RulesSurfaceId,
   SkillImportPreview,
+  SkillChoices,
   SkillImportResult,
   SkillSummary,
 } from "../types";
@@ -119,6 +120,13 @@ export interface LibraryViewProps {
   packError?: string | null;
   /** Resolves true once the pack is forgotten; its row is then gone and focus moves to the next one. */
   onForgetPack?: (name: string) => void | boolean | Promise<boolean | void>;
+  /** The disabled skills and which skills name which. */
+  skillChoices?: SkillChoices | null;
+  /**
+   * Disables (asking first) or enables skills for every harness; resolves true once saved. Without it no row offers
+   * Disable or Enable and there is no `:disable` or `:enable`.
+   */
+  onSetSkillsEnabled?: (names: string[], enabled: boolean) => Promise<boolean>;
   /**
    * Skill import: preview copies the dropped or given paths into private staging; commit publishes the previewed
    * copy into pack:imported and lists the packs again. Without them there is no "Import skill…".
@@ -213,6 +221,8 @@ export function LibraryView(props: LibraryViewProps) {
     configEditorSources: props.configEditorSources,
     packLibrary: props.packLibrary ?? null,
     packError: props.packError ?? null,
+    skillChoices: props.skillChoices ?? null,
+    canToggleSkills: props.onSetSkillsEnabled !== undefined,
     canCopySkill: props.onCopySkill !== undefined,
     canForgetPack: props.onForgetPack !== undefined,
     canOpenHarness: props.onOpenHarnessView !== undefined,
@@ -447,6 +457,19 @@ export function LibraryView(props: LibraryViewProps) {
     }
   };
 
+  /** What `:disable` and `:enable` may name, while skills can be toggled at all. */
+  function skillToggle() {
+    const choices = props.skillChoices;
+    const onSet = props.onSetSkillsEnabled;
+    if (!onSet || !choices || choices.problem) return null;
+    const disabled = new Set(choices.disabled.map(entry => entry.name));
+    const disableable = props.skills
+      .filter(skill => skill.packState === undefined || skill.packState === "active")
+      .map(skill => skill.name)
+      .filter(name => !disabled.has(name));
+    return { disableable: [...new Set(disableable)].sort(), enableable: [...disabled].sort(), set: onSet };
+  }
+
   const { onRootKeyDown } = useLibraryKeys({
     rootRef,
     sheetRef,
@@ -456,11 +479,18 @@ export function LibraryView(props: LibraryViewProps) {
     stepTopic,
     newDoc: dataFolderOk && sheet === null ? () => void openNewDoc() : null,
     requestClose,
+    skillToggle: skillToggle(),
   });
 
   const runVerb = (scope: string) => (row: LibraryRow, verb: RowVerb) => {
     const action = verb.action;
     switch (action.type) {
+      case "disable":
+        void props.onSetSkillsEnabled?.([action.name], false);
+        break;
+      case "enable":
+        void props.onSetSkillsEnabled?.([action.name], true);
+        break;
       case "open":
         void openTarget(action.target, row.name, `${scope}/${row.key}`);
         break;

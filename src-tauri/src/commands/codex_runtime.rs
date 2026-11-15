@@ -542,7 +542,7 @@ fn compute_health_with_bundle(
             if status.missing > 0 || status.diverged > 0 {
                 has_warn = true;
             }
-            if status.expected == 0 {
+            if status.catalog_empty() {
                 has_fail = true;
             }
             match status.label() {

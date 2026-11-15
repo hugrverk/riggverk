@@ -103,6 +103,8 @@ function AppShell() {
     packLibrary,
     packError,
     forgetPack,
+    skillChoices,
+    setSkillsEnabled,
     activeSkillId,
     activeSkillContent,
     readSkill,
@@ -917,6 +919,8 @@ function AppShell() {
             packLibrary={packLibrary}
             packError={packError}
             onForgetPack={forgetPack}
+            skillChoices={skillChoices}
+            onSetSkillsEnabled={setSkillsEnabled}
             onPreviewImport={previewSkillImport}
             onCommitImport={commitSkillImport}
             onSetImportedRouting={setImportedSkillRouting}

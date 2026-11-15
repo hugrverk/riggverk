@@ -1,6 +1,6 @@
 ---
 name: delegate
-description: Hands a well-specified slice to another installed coding-agent CLI (Codex, Claude Code, OpenCode) or a subagent in its own git worktree, then reviews it like a PR and re-runs every check. Use when the user wants other agents used for mechanical or parallel work.
+description: Hands one or more independent, well-specified slices to other agent CLIs (Codex, Claude Code, OpenCode) or subagents, each in its own worktree, then reviews each like a PR and re-runs every check. Use when the user wants other agents used for mechanical or parallel work, with no charter or ledger.
 license: MIT
 compatibility: Needs a shell and git, plus at least one other coding-agent CLI with a headless mode (Codex, Claude Code, OpenCode) or subagents in the current harness.
 metadata:

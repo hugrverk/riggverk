@@ -14,6 +14,7 @@ import type {
   PackLibrary,
   RulesFileSummary,
   RulesSurfaceId,
+  SkillChoices,
   SkillSummary,
 } from "../../types";
 
@@ -59,7 +60,10 @@ export type RowAction =
   | { type: "forget"; pack: string }
   | { type: "routing"; name: string }
   | { type: "remove-import"; name: string }
-  | { type: "undo-import" };
+  | { type: "undo-import" }
+  /** Disables (asks first) or enables a skill for every harness. */
+  | { type: "disable"; name: string }
+  | { type: "enable"; name: string };
 
 export interface RowVerb {
   label: string;
@@ -102,6 +106,8 @@ export interface LibraryGroup {
   emptyPath?: string;
   /** Plain lines above the rows (pack problems). */
   notes?: PackNoticeLine[];
+  /** What the notes are about, for assistive technology; pack problems when absent. */
+  notesLabel?: string;
 }
 
 export interface LibraryModelInput {
@@ -116,6 +122,10 @@ export interface LibraryModelInput {
   configEditorSources: ConfigEditorSourceMeta[];
   packLibrary: PackLibrary | null;
   packError: string | null;
+  /** The disabled skills and which skills name which; null while they could not be listed. */
+  skillChoices?: SkillChoices | null;
+  /** Bundled and active pack skills offer Disable, disabled ones Enable. */
+  canToggleSkills?: boolean;
   /** The bundled skill rows offer "Edit as my copy". */
   canCopySkill: boolean;
   /** A pack that cannot be read offers "Forget pack". */
@@ -189,7 +199,50 @@ function docRow(doc: DocSummary): LibraryRow {
   };
 }
 
-type SkillRowInput = Pick<LibraryModelInput, "canCopySkill" | "canImportSkill" | "packLibrary">;
+type SkillRowInput = Pick<LibraryModelInput, "canCopySkill" | "canImportSkill" | "packLibrary" | "skillChoices" | "canToggleSkills">;
+
+/** Disable and Enable apply while the choices are listed and `disabled-skills.json` can be used. */
+function canToggle(input: Pick<LibraryModelInput, "skillChoices" | "canToggleSkills">): boolean {
+  return input.canToggleSkills === true && !!input.skillChoices && !input.skillChoices.problem;
+}
+
+/** "named by ci-triage, security-review": the skills that point to `name`. */
+function namedByText(input: Pick<LibraryModelInput, "skillChoices">, name: string): string | undefined {
+  const by = input.skillChoices?.named_by[name] ?? [];
+  return by.length > 0 ? `named by ${by.join(", ")}` : undefined;
+}
+
+/**
+ * A bundled or active pack skill row with its Disable or Enable verb. A disabled skill says so, whether its copy is
+ * still installed (the next Update removes it) and which skills name it.
+ */
+function withChoice(row: LibraryRow, skill: SkillSummary, input: SkillRowInput): LibraryRow {
+  const choice = input.skillChoices?.disabled.find(entry => entry.name === skill.name);
+  const toggle = canToggle(input);
+  if (!choice) {
+    return toggle ? { ...row, verbs: [...row.verbs, { label: "Disable", action: { type: "disable", name: skill.name } }] } : row;
+  }
+  return {
+    ...row,
+    desc: [namedByText(input, skill.name), row.desc].filter(Boolean).join(" · ") || undefined,
+    note: choice.installed ? "removed on next Update" : row.note,
+    state: { state: "off", label: "Disabled" },
+    verbs: toggle ? [...row.verbs, { label: "Enable", action: { type: "enable", name: skill.name } }] : row.verbs,
+    haystack: `${row.haystack} disabled`,
+  };
+}
+
+/** A disabled name the catalog no longer holds: it stays disabled if it comes back, and Enable forgets it. */
+function unknownDisabledRow(name: string, input: SkillRowInput): LibraryRow {
+  return {
+    key: `disabled:${name}`,
+    name,
+    desc: "Disabled · not in the catalog",
+    state: { state: "off", label: "Disabled" },
+    verbs: canToggle(input) ? [{ label: "Enable", action: { type: "enable", name } }] : [],
+    haystack: haystack(name, "skill", "disabled"),
+  };
+}
 
 function skillRow(skill: SkillSummary, input: SkillRowInput, indent = false): LibraryRow {
   const target: OpenTarget = { kind: "skill", id: skill.id };
@@ -197,13 +250,13 @@ function skillRow(skill: SkillSummary, input: SkillRowInput, indent = false): Li
   const common = { key: targetKey(target), name: skill.name, indent };
   if (skill.packState === undefined) {
     if (input.canCopySkill) verbs.push({ label: "Edit as my copy", action: { type: "copy", skill: skill.name } });
-    return {
+    return withChoice({
       ...common,
       desc: skill.description,
       tag: { kind: "riggverk", label: "riggverk" },
       verbs,
       haystack: haystack(skill.name, skill.description, skill.category, "skill", "riggverk"),
-    };
+    }, skill, input);
   }
   const personal = isPersonalSkill(skill.id, skill);
   const imported = isImportedSkill(skill.id, skill);
@@ -226,7 +279,7 @@ function skillRow(skill: SkillSummary, input: SkillRowInput, indent = false): Li
     haystack: haystack(skill.name, skill.description, skill.group, "skill", personal ? "yours" : "pack", skill.provenance?.source),
   };
   if (skill.packState === "active") {
-    return { ...base, desc: [origin, skill.description].filter(Boolean).join(" · "), state: { state: "ok", label: "Active" } };
+    return withChoice({ ...base, desc: [origin, skill.description].filter(Boolean).join(" · "), state: { state: "ok", label: "Active" } }, skill, input);
   }
   if (skill.packState === "shadowed") {
     return {
@@ -323,12 +376,14 @@ function packRows(input: LibraryModelInput): LibraryRow[] {
       rows.push(skillRow(skill, input, true));
     }
     const routing = pack.routing ?? [];
-    if (routing.length > 0) {
+    const leftOut = pack.routing_left_out ?? 0;
+    if (routing.length > 0 || leftOut > 0) {
+      const leftOutText = leftOut > 0 ? `${leftOut} routing ${leftOut === 1 ? "line" : "lines"} left out: they name a disabled skill` : undefined;
       rows.push({
         key: `pack:${pack.name}:routing`,
         name: "routing.md",
         indent: true,
-        desc: routing.join(" · "),
+        desc: [routing.join(" · "), leftOutText].filter(Boolean).join(" · "),
         note: `${routing.length} ${routing.length === 1 ? "line" : "lines"} in the rules block`,
         tag: { kind: "pack", label: packGroup(pack.name) },
         state: { state: "ok", label: "Routed" },
@@ -377,7 +432,11 @@ export function topicGroups(topic: LibrarySourceType, input: LibraryModelInput):
     case "skills": {
       const yours = input.skills.filter(skill => skill.packState !== undefined);
       const bundled = input.skills.filter(skill => skill.packState === undefined);
-      return [
+      const disabled = input.skillChoices?.disabled ?? [];
+      const bundledDisabled = bundled.filter(skill => disabled.some(entry => entry.name === skill.name)).length;
+      const unknown = disabled.filter(entry => entry.source === "unknown");
+      const problem = input.skillChoices?.problem;
+      const groups: LibraryGroup[] = [
         {
           key: "skills-yours",
           label: "Yours",
@@ -388,11 +447,22 @@ export function topicGroups(topic: LibrarySourceType, input: LibraryModelInput):
         {
           key: "skills-bundled",
           label: "Bundled",
-          hint: `${bundled.length} · read-only`,
+          hint: bundledDisabled > 0 ? `${bundled.length} · ${bundledDisabled} disabled · read-only` : `${bundled.length} · read-only`,
           rows: bundled.map(skill => skillRow(skill, input)),
           empty: "No skills found.",
+          notes: problem ? [{ key: "disabled-skills", label: "disabled skills", text: `unavailable: ${problem}` }] : undefined,
+          notesLabel: problem ? "Disabled skills problem" : undefined,
         },
       ];
+      if (unknown.length > 0) {
+        groups.push({
+          key: "skills-disabled-unknown",
+          label: "Disabled, not in the catalog",
+          hint: "they stay disabled if they come back",
+          rows: unknown.map(entry => unknownDisabledRow(entry.name, input)),
+        });
+      }
+      return groups;
     }
     case "agents":
       return [

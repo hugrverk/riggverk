@@ -700,6 +700,7 @@ pub fn detect_surface_state_with(
     home: &Path,
     sources: &SkillSources,
 ) -> (SetupSurfaceId, OperationKind, String) {
+    let disabled_removed: HashSet<String>;
     let (kinds, conflict_reason, manual_count): (Vec<OperationKind>, Option<String>, usize) =
         match scope_for_surfaces(&[surface], home).and_then(|scope| {
             plan_artifacts_for_surfaces_with(&[surface], workspace_root, home, &scope, sources)
@@ -747,6 +748,13 @@ pub fn detect_surface_state_with(
                     .iter()
                     .filter(|p| p.kind == OperationKind::Manual)
                     .count();
+                disabled_removed = planned
+                    .iter()
+                    .filter(|p| p.kind == OperationKind::Remove)
+                    .filter_map(|p| p.artifact.as_skill_file())
+                    .map(|file| file.skill.as_str().to_string())
+                    .filter(|name| sources.is_disabled(name))
+                    .collect();
                 (planned.iter().map(|p| p.kind).collect(), reason, manual)
             }
             // The workspace folder holds no old copy of the bundle: nothing to do.
@@ -825,6 +833,13 @@ pub fn detect_surface_state_with(
             surface.label()
         ),
         OperationKind::Unavailable => format!("{} unavailable", surface.label()),
+        // Copies of the skills the user disabled.
+        OperationKind::Remove if !disabled_removed.is_empty() => format!(
+            "{}: {} disabled skill{} to remove",
+            surface.label(),
+            disabled_removed.len(),
+            if disabled_removed.len() == 1 { "" } else { "s" }
+        ),
         OperationKind::Remove => format!("{} has old app files to remove", surface.label()),
     };
     (surface, kind, summary)
@@ -2009,7 +2024,9 @@ pub fn plan_artifacts_for_uninstall(
 ) -> Result<UninstallArtifactPlan, String> {
     let managed = crate::managed_state::read_managed_state(workspace_root);
     let records = records_with_bootstrap(workspace_root, home, managed.as_ref());
-    let sources = SkillSources::for_workspace(workspace_root)?;
+    // Uninstall removes the app's copies of every skill, disabled or not, and is not blocked by a
+    // `disabled-skills.json` it cannot read (it never deletes that file either).
+    let sources = SkillSources::for_workspace(workspace_root)?.ignoring_disabled();
 
     // Uninstall sees every root: copies in folders a harness no longer needs are the app's too.
     let scope = SkillScope::all();
@@ -2326,8 +2343,17 @@ pub fn plan_artifacts_for_surfaces_with(
     let managed = crate::managed_state::read_managed_state(workspace_root);
     let records = records_with_bootstrap(workspace_root, home, managed.as_ref());
 
+    // While `disabled-skills.json` cannot be read, no skill counts as stale for being disabled:
+    // the skills surface itself is unavailable then, and nothing else may remove a skill.
+    let ignoring_disabled;
+    let identity_sources = if sources.disabled().is_err() {
+        ignoring_disabled = sources.ignoring_disabled();
+        &ignoring_disabled
+    } else {
+        sources
+    };
     let mut canonical_identities =
-        match crate::managed_state::canonical_artifact_identities(sources, scope) {
+        match crate::managed_state::canonical_artifact_identities(identity_sources, scope) {
             Ok(identities) => identities,
             #[cfg(test)]
             Err(_) => std::collections::HashSet::new(),
@@ -2535,7 +2561,14 @@ pub fn plan_artifacts_for_surfaces_with(
                 )
             })
             .flatten();
-        let kind = if file.is_some_and(|file| file.kept.is_some()) {
+        // The copy of a skill the user disabled is removed only while it is the app's: an edited
+        // one stays as a manual step and does not block the update.
+        let disabled = artifact
+            .as_skill_file()
+            .is_some_and(|file| sources.is_disabled(file.skill.as_str()));
+        let kind = if file.is_some_and(|file| file.kept.is_some())
+            || (disabled && kind == OperationKind::Conflict)
+        {
             OperationKind::Manual
         } else {
             kind
@@ -2555,7 +2588,7 @@ pub fn plan_artifacts_for_surfaces_with(
             overwrite: None,
         });
     }
-    keep_stale_units_whole(&mut planned);
+    keep_stale_units_whole(&mut planned, sources);
     keep_users_skills_whole(&mut planned, &users_skills);
     // Removals go last, whatever order the stale artifacts were found in (stable: the order inside
     // each group is kept).
@@ -2613,15 +2646,21 @@ fn file_conflict(
 
 /// A retired skill with a file the user keeps, or an edited file they have not resolved yet,
 /// keeps all its files: removing the others would leave half a skill behind. Its other removals
-/// become manual steps.
-fn keep_stale_units_whole(planned: &mut [PlannedArtifact]) {
+/// become manual steps. So does a disabled skill with an edited file left in place.
+fn keep_stale_units_whole(planned: &mut [PlannedArtifact], sources: &SkillSources) {
     use crate::artifact_registry::ArtifactId::SkillFile;
     let kept_units: HashSet<_> = planned
         .iter()
         .filter(|operation| {
-            crate::file_conflicts::is_kept(operation) || operation.kind == OperationKind::Conflict
+            ((crate::file_conflicts::is_kept(operation)
+                || operation.kind == OperationKind::Conflict)
+                && operation.file.is_some_and(|file| !file.wanted))
+                || (operation.kind == OperationKind::Manual
+                    && operation
+                        .artifact
+                        .as_skill_file()
+                        .is_some_and(|file| sources.is_disabled(file.skill.as_str())))
         })
-        .filter(|operation| operation.file.is_some_and(|file| !file.wanted))
         .filter_map(|operation| match &operation.artifact {
             SkillFile(file) => Some((file.root, file.skill.clone())),
             _ => None,
@@ -2735,6 +2774,8 @@ fn flagged_note(flagged: &FlaggedSkill) -> String {
 /// - $CODEX_HOME/skills (N skills, M files, owned copies)
 /// ! ~/.cursor/skills/tdd (edited, kept)
 /// = ~/.claude/skills/diagnose (you manage; bundled update available)
+/// - ~/.claude/skills/tdd (3 files; disabled)
+/// = ~/.agents/skills/tdd (disabled; your edited copy stays, delete it to stop loading it)
 /// ```
 ///
 /// Creations, updates and removals are summarised per folder, except a pack skill in `flagged`
@@ -2743,11 +2784,13 @@ fn flagged_note(flagged: &FlaggedSkill) -> String {
 /// it stands for, before anything a pack wrote: the review's file total reads the first count in
 /// a note. Every skill that stays because it was edited or is in the way gets its own line, with
 /// the harnesses that read both that copy and the installed one. `=` marks a skill with a file
-/// the user keeps.
+/// the user keeps. A skill in `disabled` that is removed gets a line of its own too, and one whose
+/// edited copy stays says so instead of a conflict or kept line.
 pub fn skill_plan_details(
     planned: &[PlannedArtifact],
     scope: &SkillScope,
     flagged: &std::collections::BTreeMap<String, FlaggedSkill>,
+    disabled: &std::collections::BTreeSet<String>,
 ) -> Vec<String> {
     use std::collections::{BTreeMap, BTreeSet};
     let count = |n: usize, noun: &str| format!("{n} {noun}{}", if n == 1 { "" } else { "s" });
@@ -2763,7 +2806,14 @@ pub fn skill_plan_details(
                 .filter(|operation| operation.kind == kind)
                 .filter_map(|operation| operation.artifact.as_skill_file())
                 .filter(|file| file.root == root)
-                .partition(|file| !owned && flagged.contains_key(file.skill.as_str()));
+                .partition(|file| {
+                    let name = file.skill.as_str();
+                    if owned {
+                        disabled.contains(name)
+                    } else {
+                        flagged.contains_key(name)
+                    }
+                });
             if !files.is_empty() {
                 let skills: BTreeSet<_> = files.iter().map(|file| file.skill.as_str()).collect();
                 let mut tail = count(files.len(), "file");
@@ -2781,11 +2831,15 @@ pub fn skill_plan_details(
                 *own_skills.entry(file.skill.as_str()).or_default() += 1;
             }
             for (skill, files) in own_skills {
+                let note = if owned {
+                    "disabled".to_string()
+                } else {
+                    flagged_note(&flagged[skill])
+                };
                 lines.push(format!(
-                    "{sign} {}/{skill} ({}; {})",
+                    "{sign} {}/{skill} ({}; {note})",
                     root.display(),
                     count(files, "file"),
-                    flagged_note(&flagged[skill])
                 ));
             }
         }
@@ -2798,15 +2852,24 @@ pub fn skill_plan_details(
         kept: bool,
         update: bool,
         wanted: bool,
+        disabled: bool,
     }
     let mut held: BTreeMap<(usize, String), Held> = BTreeMap::new();
-    for operation in planned
-        .iter()
-        .filter(|operation| operation.kind == OperationKind::Conflict || is_kept(operation))
-    {
+    for operation in planned.iter().filter(|operation| {
+        matches!(
+            operation.kind,
+            OperationKind::Conflict | OperationKind::Manual
+        )
+    }) {
         let Some(file) = operation.artifact.as_skill_file() else {
             continue;
         };
+        // Only a skill the user disabled stays as a plain manual step; any other manual step of
+        // a skill is a file they keep.
+        let is_disabled = disabled.contains(file.skill.as_str());
+        if !is_disabled && operation.kind == OperationKind::Manual && !is_kept(operation) {
+            continue;
+        }
         let order = crate::skill_roots::SkillRoot::ALL
             .iter()
             .position(|root| *root == file.root)
@@ -2814,6 +2877,10 @@ pub fn skill_plan_details(
         let entry = held
             .entry((order, file.skill.as_str().to_string()))
             .or_default();
+        if is_disabled {
+            entry.disabled = true;
+            continue;
+        }
         match operation
             .file
             .and_then(|file| file.kept.map(|kept| (kept, file.wanted)))
@@ -2839,6 +2906,13 @@ pub fn skill_plan_details(
             })
             .map(|harness| harness_name(*harness))
             .collect();
+        if held.disabled {
+            lines.push(format!(
+                "= {}/{skill} (disabled; your edited copy stays, delete it to stop loading it)",
+                root.display()
+            ));
+            continue;
+        }
         let reads = match readers.as_slice() {
             [] => String::new(),
             [one] => format!("; {one} reads both copies"),
@@ -4677,7 +4751,7 @@ mod tests {
                 ],
             },
         )]);
-        let lines = skill_plan_details(&planned, &SkillScope::all(), &flagged);
+        let lines = skill_plan_details(&planned, &SkillScope::all(), &flagged, &Default::default());
         assert_eq!(
             lines,
             [
@@ -4690,7 +4764,12 @@ mod tests {
             ]
         );
         assert_eq!(
-            skill_plan_details(&planned, &SkillScope::all(), &Default::default()),
+            skill_plan_details(
+                &planned,
+                &SkillScope::all(),
+                &Default::default(),
+                &Default::default()
+            ),
             ["+ ~/.claude/skills (2 skills, 3 files)"]
         );
     }

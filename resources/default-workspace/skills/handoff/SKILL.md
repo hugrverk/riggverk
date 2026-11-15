@@ -1,6 +1,6 @@
 ---
 name: handoff
-description: Turns a session or an executor or subagent report into a compact, redacted handoff with verified versus claimed state, changed files, risks, and the single safest next action. Use when pausing work, transferring context, reviewing another agent's report, or nearing the context limit.
+description: Turns a session or an executor or subagent report into a compact, redacted handoff with verified versus claimed state, changed files, risks, and the single safest next action. Use when pausing work, transferring context, or nearing the context limit.
 license: MIT
 metadata:
   category: workflow
@@ -26,7 +26,7 @@ Done when: a fresh agent could execute the next action without reading the sessi
    - continue with a bounded slice
 4. Reference existing commits, diffs, docs, issues, and reports instead of duplicating them.
 5. Redact secrets, tokens, passwords, auth headers, and personal data from everything you write or quote.
-6. Produce a compact handoff that another agent can act on without rereading the full session. When it is written to a file, save it in the OS temporary directory, not the workspace.
+6. Produce a compact handoff that another agent can act on without rereading the full session. When it is written to a file, save it where the user says; otherwise at a path that `git check-ignore` confirms is ignored; otherwise in the OS temporary directory, and say that a restart may clear it.
 
 ## Output
 

@@ -22,6 +22,8 @@ pub struct SkillFilesStatus {
     pub missing: usize,
     /// Installed, but a file is missing or differs in some root.
     pub diverged: usize,
+    /// Skills of the catalog the user disabled: not expected, and not a reason to fail.
+    pub disabled: usize,
 }
 
 impl SkillFilesStatus {
@@ -30,13 +32,20 @@ impl SkillFilesStatus {
         self.expected - self.missing
     }
 
+    /// Every expected skill is synced. With none expected only because the user disabled every
+    /// skill, that holds; an empty catalog never is.
     pub fn is_synced(&self) -> bool {
-        self.expected > 0 && self.synced == self.expected
+        (self.expected > 0 || self.disabled > 0) && self.synced == self.expected
+    }
+
+    /// Nothing is expected and nothing was disabled: the catalog itself is empty.
+    pub fn catalog_empty(&self) -> bool {
+        self.expected == 0 && self.disabled == 0
     }
 
     /// `synced`, `missing`, `partial` (some skills missing, none different) or `diverged`.
     pub fn label(&self) -> &'static str {
-        if self.expected == 0 {
+        if self.catalog_empty() {
             "missing"
         } else if self.missing == 0 && self.diverged == 0 {
             "synced"
@@ -58,8 +67,10 @@ pub fn skill_files_status<R: SourceRoot + ?Sized>(
     roots: &[SkillRoot],
 ) -> Result<SkillFilesStatus, String> {
     let skills = catalog_skill_files(bundled_root)?;
+    let catalog = bundled_root.catalog()?;
     let mut status = SkillFilesStatus {
         expected: skills.len(),
+        disabled: catalog.len() - skills.len(),
         ..Default::default()
     };
     for skill in &skills {
@@ -185,7 +196,8 @@ mod tests {
                 expected: 2,
                 synced: 0,
                 missing: 2,
-                diverged: 0
+                diverged: 0,
+                disabled: 0,
             }
         );
         assert_eq!(none.label(), "missing");

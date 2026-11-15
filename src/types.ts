@@ -408,7 +408,9 @@ export type SkillLoadFlag =
   | "duplicate_identical"
   | "possible_duplicate"
   | "shadowed_by_folder_order"
-  | "foreign_copy";
+  | "foreign_copy"
+  /** The user disabled the skill and a copy is still here: the next Update removes Riggverk's, the user's stays. */
+  | "disabled";
 
 export interface SkillCopy {
   folder: SkillReadFolder;
@@ -1015,6 +1017,26 @@ export interface PackEntry {
   routing?: string[];
   /** Why its `routing.md` is not used, as a whole (a fixed phrase); null when it is used or there is none. */
   routing_problem?: string | null;
+  /** Valid lines of its `routing.md` left out of the rules block because they name a disabled skill. */
+  routing_left_out?: number;
+}
+
+/** A skill the user disabled (`list_skill_choices`). */
+export interface DisabledSkillChoice {
+  name: string;
+  /** `bundle`, `pack:<pack>`, or `unknown` for a name the catalog no longer holds. */
+  source: string;
+  /** Riggverk's copy is still installed: the next Update removes it. */
+  installed: boolean;
+}
+
+/** Which skills are disabled, and which skills name each skill (`list_skill_choices`). */
+export interface SkillChoices {
+  disabled: DisabledSkillChoice[];
+  /** Skill name to the skills whose `SKILL.md` names it in backticks. */
+  named_by: Record<string, string[]>;
+  /** Why `disabled-skills.json` cannot be used; set, nothing can be enabled or disabled. */
+  problem?: string | null;
 }
 
 export interface PackLibrary {

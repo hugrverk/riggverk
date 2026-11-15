@@ -2961,7 +2961,10 @@ fn attach_skill_details(
         return;
     };
     let flagged = setup_transaction::flagged_pack_skills(sources);
-    let details = setup_transaction::skill_plan_details(&planned, &scope, &flagged);
+    let disabled = crate::skill_sources::SourceRoot::disabled(sources)
+        .cloned()
+        .unwrap_or_default();
+    let details = setup_transaction::skill_plan_details(&planned, &scope, &flagged, &disabled);
     for op in plan
         .operations
         .iter_mut()

@@ -26,22 +26,27 @@ Do not trade away correctness, security, or final verification quality to save t
 ## Skill routing
 Use skills as routing and workflow guidance, not boilerplate. Select only task-relevant skills; usually 1-3. Do not paste full skill contents unless needed. Translate skill expectations into concrete actions, acceptance criteria, verification, and reporting; skill names alone are not enough. Prefer a repository's own `docs/SKILLS.md` for the full catalog when that file exists; do not go looking for it otherwise.
 - Code implementation and refactoring: `minimal-implementation`.
-- Bugs, regressions, flakes, or slowness: `diagnose`; add `tdd` for a focused regression test.
-- Red CI runs or failing PR checks: `ci-triage`, which hands root cause to `diagnose`.
-- Unfamiliar or architectural code: `zoom-out`; add `implementation-plan` before non-trivial edits.
-- Multi-step work: `implementation-plan`.
+- Bugs, regressions, flakes, or slowness: `diagnose`.
+- A focused regression test, or test-first work on known behaviour: `tdd`.
+- Red CI runs or failing PR checks: `ci-triage`, which hands the root cause to diagnosis.
+- Unfamiliar or architectural code, before editing it: `zoom-out`.
+- Multi-step work, or scope that needs slicing before non-trivial edits: `implementation-plan`.
 - Mechanical or parallel slices handed to another agent CLI or subagent, only when the user wants other agents used: `delegate`.
 - PR review comments or pasted reviewer feedback: `review-response`.
-- Frontend: `frontend-design`; add `screenshot-review`, `browser-qa`, `accessibility-review`, or `prototype` as needed.
-- Security, auth, permissions, uploads, shell, or sensitive data: `security-review`.
-- Database or persisted data changes: `database-migrations`; add `security-review` where access control or sensitive data is involved.
-- Fast-moving APIs, SDKs, CLIs, frameworks, or dependencies: `current-docs`; add `security-review` when trusted surface expands.
-- Release readiness: `release-check`.
+- Building or restyling UI: `frontend-design`.
+- Supplied screenshots of a UI, app, dashboard or document to critique: `screenshot-review`.
+- Proof in a real browser that a UI change works: `browser-qa`.
+- Accessibility reviews, or custom controls, modals, menus, and dynamic validation: `accessibility-review`.
+- An approach, UI or logic, that cheap experiments can decide: `prototype`.
+- Security, auth, permissions, uploads, shell, sensitive data, or a wider trusted surface: `security-review`.
+- Database-persisted data, schema, migrations, or RLS: `database-migrations`.
+- Fast-moving APIs, SDKs, CLIs, frameworks, or dependencies: `current-docs`.
+- Merge or deploy readiness: `release-check`.
 - Creating or refreshing a repository's `AGENTS.md` (and its `CLAUDE.md` pointer): `agents-md`.
 - Auditing rules, skills or agent prompts for size, duplication or contradictions: `context-budget`.
 - Release notes or a changelog section: `release-notes`.
-- Executor reports, paused work, or context transfer: `handoff`.
-- Committing, pushing, or opening or updating a PR: `pr-workflow`; add `release-check` before the push.
+- Paused work, context transfer, or compacting an executor's report: `handoff`.
+- Committing, pushing, or opening or updating a PR: `pr-workflow`; it runs the repo's gate before the push.
 
 ## Task flow
 For non-trivial tasks, start with a short plan. Non-trivial means 3+ meaningful steps, multiple approaches, architectural impact, unclear requirements, cross-file behavior, frontend/design judgment, or security/deployment/database/release risk.

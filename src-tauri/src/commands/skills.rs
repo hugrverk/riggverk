@@ -2,7 +2,7 @@ use serde::Serialize;
 use std::path::Path;
 
 use super::content::{bundled_library_root, DocumentContent};
-use super::workspace::setup_workspace_target_path;
+use super::workspace::{setup_workspace_target_path, workspace_target_for_write};
 use crate::path_safety::reject_symlink;
 #[cfg(test)]
 use crate::skills_install::discover_workspace_skills;
@@ -187,6 +187,185 @@ pub fn get_effective_skill_loads() -> Result<crate::skill_loads::EffectiveSkillL
         &crate::skill_loads::FolderPaths::resolve(&home),
         &proof,
     ))
+}
+
+/// Most names one `set_skills_enabled` call takes.
+const MAX_NAMES_PER_CALL: usize = 200;
+/// Largest part of a `SKILL.md` read for the skills it names.
+const MAX_NAMED_BY_BYTES: u64 = 256 * 1024;
+
+/// A skill the user disabled.
+#[derive(Debug, Serialize)]
+pub struct DisabledSkillChoice {
+    pub(crate) name: String,
+    /// `bundle`, `pack:<pack>`, or `unknown` for a name the catalog no longer holds.
+    pub(crate) source: String,
+    /// The managed state still holds a copy of it: the next Update removes it.
+    pub(crate) installed: bool,
+}
+
+/// Which skills are disabled, and which skills name which others, for the Library.
+#[derive(Debug, Serialize)]
+pub struct SkillChoices {
+    pub(crate) disabled: Vec<DisabledSkillChoice>,
+    /// Skill name to the skills whose `SKILL.md` names it in backticks, both sorted. Only names
+    /// some skill names.
+    pub(crate) named_by: std::collections::BTreeMap<String, Vec<String>>,
+    /// Why `disabled-skills.json` cannot be used; set, nothing can be enabled or disabled.
+    pub(crate) problem: Option<String>,
+}
+
+/// The backticked spans of `text`, line by line, so an unpaired backtick spoils one line at most.
+fn backticked_spans(text: &str) -> impl Iterator<Item = &str> {
+    text.lines().flat_map(|line| {
+        let parts: Vec<&str> = line.split('`').collect();
+        let paired = parts.len() % 2 == 1;
+        parts
+            .into_iter()
+            .skip(1)
+            .step_by(2)
+            .filter(move |span| paired && !span.is_empty())
+    })
+}
+
+/// For each catalog skill, the other catalog skills whose `SKILL.md` names it in a backticked span
+/// exactly. Each file is read up to [`MAX_NAMED_BY_BYTES`].
+fn named_by<R: crate::skill_sources::SourceRoot + ?Sized>(
+    sources: &R,
+) -> std::collections::BTreeMap<String, Vec<String>> {
+    use std::collections::{BTreeMap, BTreeSet};
+    use std::io::Read;
+    let catalog = sources.catalog().unwrap_or_default();
+    let names: BTreeSet<&str> = catalog
+        .iter()
+        .map(|entry| entry.skill.name.as_str())
+        .collect();
+    let mut out: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    for entry in &catalog {
+        let mut text = String::new();
+        let Ok(file) = std::fs::File::open(&entry.skill.skill_md_path) else {
+            continue;
+        };
+        if file
+            .take(MAX_NAMED_BY_BYTES)
+            .read_to_string(&mut text)
+            .is_err()
+        {
+            continue;
+        }
+        for span in backticked_spans(&text) {
+            if span != entry.skill.name && names.contains(span) {
+                out.entry(span.to_string())
+                    .or_default()
+                    .insert(entry.skill.name.clone());
+            }
+        }
+    }
+    out.into_iter()
+        .map(|(name, by)| (name, by.into_iter().collect()))
+        .collect()
+}
+
+fn skill_choices(
+    workspace_root: &Path,
+    sources: &crate::skill_sources::SkillSources,
+) -> SkillChoices {
+    use crate::skill_sources::SourceRoot;
+    let installed = crate::skill_sources::installed_skill_names(workspace_root);
+    let catalog = sources.catalog().unwrap_or_default();
+    let (disabled, problem) = match sources.disabled() {
+        Ok(names) => (
+            names
+                .iter()
+                .map(|name| DisabledSkillChoice {
+                    name: name.clone(),
+                    source: match catalog.iter().find(|entry| &entry.skill.name == name) {
+                        Some(entry) => match &entry.pack {
+                            Some(pack) => format!("pack:{pack}"),
+                            None => "bundle".to_string(),
+                        },
+                        None => "unknown".to_string(),
+                    },
+                    installed: installed.contains(name),
+                })
+                .collect(),
+            None,
+        ),
+        Err(problem) => (Vec::new(), Some(problem.to_string())),
+    };
+    SkillChoices {
+        disabled,
+        named_by: named_by(sources),
+        problem,
+    }
+}
+
+/// The disabled skills and the skills that name each skill. Read-only.
+#[tauri::command(async)]
+pub fn list_skill_choices() -> Result<SkillChoices, String> {
+    let workspace_root = setup_workspace_target_path()?;
+    let sources = crate::skill_sources::SkillSources::for_workspace(&workspace_root)?;
+    Ok(skill_choices(&workspace_root, &sources))
+}
+
+/// Why `name` cannot be disabled, or `None` when it can: a bundled skill or an active pack skill.
+/// A shadowed pack skill's name is the bundled skill's, so it disables the bundled one.
+fn disable_refusal(sources: &crate::skill_sources::SkillSources, name: &str) -> Option<String> {
+    use crate::skill_sources::SourceRoot;
+    let in_catalog = sources
+        .catalog()
+        .unwrap_or_default()
+        .iter()
+        .any(|entry| entry.skill.name == name);
+    if in_catalog {
+        return None;
+    }
+    if let Some(held) = sources.held().iter().find(|held| held.name == name) {
+        return Some(format!(
+            "{name} is kept as it is installed ({}); fix or forget its pack first",
+            held.reason
+        ));
+    }
+    if let Some(skill) = sources
+        .packs()
+        .iter()
+        .flat_map(|pack| &pack.skills)
+        .find(|skill| skill.name == name)
+    {
+        return Some(format!("{name} is not in use: {}", skill.reason));
+    }
+    Some(format!("no skill named {name} is bundled or in a pack"))
+}
+
+/// Disables (`enabled` false) or enables the skills `names` for every harness. Writes only
+/// `disabled-skills.json`; the next Update removes or installs their copies. Disabling takes a
+/// bundled skill or an active pack skill; enabling takes any name, so a disabled name that left the
+/// catalog can be forgotten.
+#[tauri::command(async)]
+pub fn set_skills_enabled(names: Vec<String>, enabled: bool) -> Result<(), String> {
+    if names.is_empty() {
+        return Err("name at least one skill".to_string());
+    }
+    if names.len() > MAX_NAMES_PER_CALL {
+        return Err(format!("at most {MAX_NAMES_PER_CALL} skills at a time"));
+    }
+    // Changes what an apply plans: wait for a running mutation instead of interleaving with it.
+    let _mutation = crate::mutation_lock::acquire()?;
+    let _guard = crate::setup_mutation_guard::try_acquire_setup_mutation_guard()?;
+    let workspace_root = workspace_target_for_write()?;
+    let sources = crate::skill_sources::SkillSources::for_workspace(&workspace_root)?;
+    if let Err(problem) = crate::skill_sources::SourceRoot::disabled(&sources) {
+        return Err(problem.to_string());
+    }
+    if !enabled {
+        if let Some(refusal) = names
+            .iter()
+            .find_map(|name| disable_refusal(&sources, name))
+        {
+            return Err(refusal);
+        }
+    }
+    crate::disabled_skills::set(&workspace_root, &names, enabled)
 }
 
 #[tauri::command]

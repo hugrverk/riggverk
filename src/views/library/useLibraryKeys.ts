@@ -21,6 +21,19 @@ interface LibraryKeysOptions {
   newDoc: (() => void) | null;
   /** Closes the sheet, asking first when there are unsaved changes. */
   requestClose: () => void | Promise<void>;
+  /** The skills `:disable` and `:enable` may name and how to set them; null while skills cannot be toggled. */
+  skillToggle?: SkillToggle | null;
+}
+
+export interface SkillToggle {
+  disableable: readonly string[];
+  enableable: readonly string[];
+  set: (names: string[], enabled: boolean) => unknown;
+}
+
+/** The names of a `:disable a b` line. */
+function namesOf(raw: string | undefined): string[] {
+  return [...new Set((raw ?? "").split(/\s+/).filter(Boolean))];
 }
 
 /** Rows the arrow keys move between: the first verb of each row. */
@@ -42,9 +55,12 @@ export function useLibraryKeys({
   stepTopic,
   newDoc,
   requestClose,
+  skillToggle = null,
 }: LibraryKeysOptions): { onRootKeyDown: (event: ReactKeyboardEvent<HTMLElement>) => void } {
   const latest = useRef(entry);
   latest.current = entry;
+  const toggle = useRef(skillToggle);
+  toggle.current = skillToggle;
 
   const moveRow = (delta: number): void | false => {
     const root = rootRef.current;
@@ -171,6 +187,30 @@ export function useLibraryKeys({
       enabled: () => (latest.current?.dirty ? true : "no unsaved changes"),
       run: () => latest.current?.onReset(),
     },
+    ...([false, true] as const).map((enabled): CommandSpec => {
+      const verb = enabled ? "enable" : "disable";
+      const allowed = () => (enabled ? toggle.current?.enableable : toggle.current?.disableable) ?? [];
+      return {
+        name: verb,
+        summary: enabled
+          ? "enable disabled skills again (the next Update installs them)"
+          : "disable skills for every harness (asks first; the next Update removes them)",
+        group: "Library",
+        args: [{ name: "names", kind: "rest", description: "skill names" }],
+        complete: ({ args }) => allowed().filter(name => !args.includes(name)).map(value => ({ value })),
+        enabled: () => (toggle.current ? true : "skills cannot be enabled or disabled now"),
+        validate: parsed => {
+          const names = namesOf(parsed.named.names);
+          if (names.length === 0) return `${verb}: name a skill`;
+          const refused = names.find(name => !allowed().includes(name));
+          if (refused === undefined) return null;
+          return enabled ? `${verb}: ${refused} is not disabled` : `${verb}: ${refused} is not a bundled or active pack skill that is enabled`;
+        },
+        run: parsed => {
+          void toggle.current?.set(namesOf(parsed.named.names), enabled);
+        },
+      };
+    }),
   ];
   useCommands(commands);
 

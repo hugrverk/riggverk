@@ -12,6 +12,7 @@ mod commands;
 mod config_preferences;
 mod cursor_profile_ops;
 mod cursor_profile_paths;
+mod disabled_skills;
 mod env_overrides;
 mod executable_resolver;
 mod file_conflicts;
@@ -60,6 +61,8 @@ mod app_data_migration_contract;
 mod claude_settings_contract;
 #[cfg(test)]
 mod codex_config_keep_contract;
+#[cfg(test)]
+mod disabled_skills_contract;
 #[cfg(test)]
 mod file_conflicts_contract;
 #[cfg(test)]
@@ -111,14 +114,15 @@ use commands::{
     get_installation_status, get_light_runtime_health, get_opencode_runtime_health,
     get_security_posture, get_settings, get_workspace_diagnostics, list_agent_metadata,
     list_available_opencode_models, list_backups, list_docs, list_opencode_config_editor_sources,
-    list_rules_files, list_setup_history, list_skills, open_backups_folder,
+    list_rules_files, list_setup_history, list_skill_choices, list_skills, open_backups_folder,
     open_default_workspace_folder, open_doc, open_rules_file, preview_codex_config_defaults,
     preview_file_diff, preview_rules_conversion, preview_rules_diff, preview_setup,
     preview_take_bundled, preview_uninstall, read_agent_source, read_agent_template,
     read_config_template, read_doc, read_opencode_config_source, read_opencode_model_selection,
     read_rules_file, read_skill, reset_active_workspace_path, reset_opencode_model_selection,
     rollback_setup_transaction, save_doc, save_rules_refinements, set_codex_config_kept,
-    set_files_kept, set_rules_user_managed, update_opencode_model_selection, update_settings,
+    set_files_kept, set_rules_user_managed, set_skills_enabled, update_opencode_model_selection,
+    update_settings,
 };
 use commands::{
     commit_skill_import, copy_skill_to_pack, forget_pack, list_pack_skills, preview_skill_import,
@@ -171,6 +175,8 @@ pub fn run() {
             get_cursor_profile_health,
             get_light_runtime_health,
             list_skills,
+            list_skill_choices,
+            set_skills_enabled,
             get_installation_status,
             get_effective_skill_loads,
             read_skill,

@@ -19,6 +19,11 @@
 //! fingerprint, ownership digest, apply, health check and Library view compares with, so a change
 //! of `routing.md` is an ordinary block update with a preview diff, backup and rollback. With no
 //! routing the source is the bundled base byte for byte.
+//!
+//! A skill the user disabled (see [`crate::disabled_skills`]) is routed to by no line: [`compose`]
+//! leaves out every bullet of the base's `## Skill routing` section that names it, and every pack
+//! line that does. A pack line is validated first, so a line naming a disabled skill of its own pack
+//! is valid and only left out. With nothing disabled the text is unchanged, byte for byte.
 
 use std::collections::BTreeSet;
 use std::fs;
@@ -337,6 +342,48 @@ fn backticked(line: &str) -> Option<Vec<&str>> {
     Some(spans)
 }
 
+/// Whether `line` names any of `disabled` in a backticked span (see [`names_skill`]).
+pub(crate) fn names_any(line: &str, disabled: &BTreeSet<String>) -> bool {
+    !disabled.is_empty() && disabled.iter().any(|name| names_skill(line, name))
+}
+
+/// `base` without the bullets of its `## Skill routing` section that name a skill in `disabled`.
+/// An indented line right after such a bullet continues it and goes too. Everything else, the
+/// rest of the section included, stays byte for byte.
+fn without_disabled_routing(base: &str, disabled: &BTreeSet<String>) -> String {
+    if disabled.is_empty() {
+        return base.to_string();
+    }
+    let mut out = String::with_capacity(base.len());
+    let mut in_anchor = false;
+    let mut dropping = false;
+    for line in base.split_inclusive('\n') {
+        let content = line.trim_end_matches(['\r', '\n']);
+        if content.starts_with("## ") {
+            in_anchor = content == ANCHOR_HEADING;
+            dropping = false;
+        } else if in_anchor {
+            if content.starts_with("- ") {
+                dropping = names_any(content, disabled);
+            } else if !(dropping && content.starts_with([' ', '\t']) && !content.trim().is_empty())
+            {
+                dropping = false;
+            }
+        }
+        if !dropping {
+            out.push_str(line);
+        }
+    }
+    out
+}
+
+/// The rules text of a bundled base: its routing to `disabled` skills left out, then the packs'
+/// routing `section` spliced in (see [`splice`]). The one place a rules text is composed: every
+/// rules source and the Library's rules views go through it.
+pub fn compose(base: &str, disabled: &BTreeSet<String>, section: &str) -> String {
+    splice(&without_disabled_routing(base, disabled), section)
+}
+
 /// The section for `packs` (name and lines, in the order given); empty when no pack has a line.
 pub fn render_section<'a>(packs: impl IntoIterator<Item = (&'a str, &'a [String])>) -> String {
     let mut out = String::new();
@@ -386,8 +433,8 @@ pub fn splice(template: &str, section: &str) -> String {
 }
 
 /// The text an install puts into the managed block of the rules artifact `artifact`: its bundled
-/// base with the routing of `sources` spliced in. A source that is a symlink, missing, or not
-/// UTF-8 is an error.
+/// base with the routing of `sources` composed in (see [`compose`]). A source that is a symlink,
+/// missing, or not UTF-8 is an error, and so is a `disabled-skills.json` that cannot be read.
 pub fn rules_source_text<R: SourceRoot + ?Sized>(
     artifact: &ArtifactId,
     sources: &R,
@@ -399,7 +446,8 @@ pub fn rules_source_text<R: SourceRoot + ?Sized>(
     let bytes = fs::read(&source).map_err(|e| format!("read rules source: {e}"))?;
     let text =
         String::from_utf8(bytes).map_err(|_| "rules source is not valid UTF-8".to_string())?;
-    Ok(splice(&text, sources.pack_routing()))
+    let disabled = sources.disabled().map_err(str::to_string)?;
+    Ok(compose(&text, disabled, sources.pack_routing()))
 }
 
 /// Whether the installed rules file at `installed` carries the source of `artifact` (the bundled

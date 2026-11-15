@@ -644,7 +644,7 @@ pub struct SkillFiles {
     pub files: Vec<SkillRelPath>,
 }
 
-/// Every skill of the catalog with its files. `targets` stays validated metadata and filters
+/// Every skill of the catalog with its files, except the disabled ones. `targets` stays validated metadata and filters
 /// nothing: the folders skills are installed into are shared by harnesses, so a skill cannot be
 /// installed for one of them only.
 pub fn catalog_skill_files<R: SourceRoot + ?Sized>(sources: &R) -> Result<Vec<SkillFiles>, String> {
@@ -656,6 +656,10 @@ pub fn catalog_skill_files<R: SourceRoot + ?Sized>(sources: &R) -> Result<Vec<Sk
     if skills.is_empty() {
         return Err("the skill catalog is empty".to_string());
     }
+    // A disabled skill is not installed. Disabling every skill is allowed: the check above is of
+    // the catalog, not of what is left.
+    let disabled = sources.disabled().map_err(str::to_string)?;
+    skills.retain(|skill| !disabled.contains(&skill.name));
     skills.sort_by(|a, b| a.name.cmp(&b.name));
     let mut out = Vec::new();
     for skill in skills {
