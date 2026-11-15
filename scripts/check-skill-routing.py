@@ -429,7 +429,7 @@ def rules_files() -> list[Path]:
 # Skills that start only when the user asks for them in plain words or by slash command.
 # The model may invoke them, so disable-model-invocation does not mark them; the rules
 # must still never route to them, since each run spends several agents.
-ON_REQUEST_SKILLS = ("adversarial",)
+ON_REQUEST_SKILLS = ("adversarial", "orchestrate")
 
 
 def validate_user_invoked_routing(discovered: dict[str, Path]) -> None:
