@@ -10,6 +10,10 @@
 //! The base a file started from is found among the bundled rules history
 //! (`metadata/rules-history`), picking the shipped base with the fewest
 //! differing lines.
+//!
+//! A `## Code comments` section exactly as a comment policy level writes it is
+//! never moved: it is the app's text, and the new block carries the level the
+//! user has chosen now.
 
 use std::fs;
 use std::path::Path;
@@ -275,7 +279,12 @@ pub fn convert(
         ),
     };
     let closest = closest_base(source, bases, &user_text);
-    let changes = section_changes(&to_lf(&closest.text), &user_text);
+    let mut changes = section_changes(&to_lf(&closest.text), &user_text);
+    // A comment policy section as the app wrote it is the app's text, never the user's: the new
+    // block carries the level chosen now (see `comment_policy`).
+    changes
+        .changed
+        .retain(|section| !crate::comment_policy::is_app_section(&section.text));
     let moved = moved_text(&changes.changed, file_label);
     let moved_for_file = if crlf {
         moved.replace('\n', "\r\n")
@@ -394,6 +403,27 @@ mod tests {
         let changes = section_changes(BASE_OLD, user);
         assert!(changes.changed.is_empty());
         assert_eq!(changes.removed, vec!["## Git", "## Delegation"]);
+    }
+
+    #[test]
+    fn a_comment_policy_section_the_app_wrote_is_never_moved() {
+        let off = crate::comment_policy::CommentPolicy::Off.section();
+        let minimal = crate::comment_policy::CommentPolicy::Minimal.section();
+        let user = format!("{BASE_NEW}\n{minimal}\n## Mine\nExtra.\n");
+        let installed = format!("{BEGIN_MARKER}\n{user}{END_MARKER}\n");
+        let source = format!("{BASE_NEW}\n{off}");
+        let converted = convert(installed.as_bytes(), &source, &[], "CLAUDE.md").unwrap();
+        assert_eq!(converted.moved_sections, vec!["## Mine"]);
+        let suffix = converted.result.split(END_MARKER).nth(1).unwrap();
+        assert!(!suffix.contains("## Code comments"), "{suffix}");
+        // One the user edited is theirs, and moves like any other.
+        let edited = user.replace("Comment only", "Comment rarely, only");
+        let installed = format!("{BEGIN_MARKER}\n{edited}{END_MARKER}\n");
+        let converted = convert(installed.as_bytes(), &source, &[], "CLAUDE.md").unwrap();
+        assert_eq!(
+            converted.moved_sections,
+            vec!["## Code comments", "## Mine"]
+        );
     }
 
     #[test]

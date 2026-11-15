@@ -701,6 +701,7 @@ pub fn detect_surface_state_with(
     sources: &SkillSources,
 ) -> (SetupSurfaceId, OperationKind, String) {
     let disabled_removed: HashSet<String>;
+    let mut unavailable_reason: Option<String> = None;
     let (kinds, conflict_reason, manual_count): (Vec<OperationKind>, Option<String>, usize) =
         match scope_for_surfaces(&[surface], home).and_then(|scope| {
             plan_artifacts_for_surfaces_with(&[surface], workspace_root, home, &scope, sources)
@@ -755,6 +756,18 @@ pub fn detect_surface_state_with(
                     .map(|file| file.skill.as_str().to_string())
                     .filter(|name| sources.is_disabled(name))
                     .collect();
+                // A rules block is unavailable while a choice it is composed from cannot be read:
+                // the review says which file and what to do, in its fixed phrase.
+                if planned
+                    .iter()
+                    .any(|p| p.kind == OperationKind::Unavailable && p.artifact.is_rules_block())
+                {
+                    unavailable_reason = sources
+                        .disabled()
+                        .err()
+                        .or_else(|| sources.comment_policy().err())
+                        .map(str::to_string);
+                }
                 (planned.iter().map(|p| p.kind).collect(), reason, manual)
             }
             // The workspace folder holds no old copy of the bundle: nothing to do.
@@ -832,7 +845,10 @@ pub fn detect_surface_state_with(
             "{}: you manage this file; base updates are skipped",
             surface.label()
         ),
-        OperationKind::Unavailable => format!("{} unavailable", surface.label()),
+        OperationKind::Unavailable => match unavailable_reason {
+            Some(reason) => format!("{} unavailable: {reason}", surface.label()),
+            None => format!("{} unavailable", surface.label()),
+        },
         // Copies of the skills the user disabled.
         OperationKind::Remove if !disabled_removed.is_empty() => format!(
             "{}: {} disabled skill{} to remove",

@@ -24,6 +24,10 @@
 //! leaves out every bullet of the base's `## Skill routing` section that names it, and every pack
 //! line that does. A pack line is validated first, so a line naming a disabled skill of its own pack
 //! is valid and only left out. With nothing disabled the text is unchanged, byte for byte.
+//!
+//! The user's comment policy (see [`crate::comment_policy`]) is composed in the same place: its
+//! `## Code comments` section goes right after the base's `## Scope` section. At harness default
+//! there is no section and the text is unchanged, byte for byte.
 
 use std::collections::BTreeSet;
 use std::fs;
@@ -31,6 +35,7 @@ use std::io::Read;
 use std::path::Path;
 
 use crate::artifact_registry::ArtifactId;
+use crate::comment_policy::CommentPolicy;
 use crate::skill_sources::SourceRoot;
 
 /// File name inside a pack folder.
@@ -39,6 +44,8 @@ pub const ROUTING_FILE: &str = "routing.md";
 pub const SECTION_HEADING: &str = "## Pack skill routing";
 /// The base section the pack section follows.
 const ANCHOR_HEADING: &str = "## Skill routing";
+/// The base section the comment policy's section follows.
+const COMMENTS_ANCHOR_HEADING: &str = "## Scope";
 /// Largest `routing.md` read.
 pub const MAX_ROUTING_BYTES: u64 = 12 * 1024;
 /// Most lines a `routing.md` may have, blank ones included.
@@ -377,11 +384,18 @@ fn without_disabled_routing(base: &str, disabled: &BTreeSet<String>) -> String {
     out
 }
 
-/// The rules text of a bundled base: its routing to `disabled` skills left out, then the packs'
-/// routing `section` spliced in (see [`splice`]). The one place a rules text is composed: every
+/// The rules text of a bundled base: its routing to `disabled` skills left out, the packs' routing
+/// `section` spliced in (see [`splice`]), then the section of the `comments` policy after the
+/// `## Scope` section (or at the end without one). The one place a rules text is composed: every
 /// rules source and the Library's rules views go through it.
-pub fn compose(base: &str, disabled: &BTreeSet<String>, section: &str) -> String {
-    splice(&without_disabled_routing(base, disabled), section)
+pub fn compose(
+    base: &str,
+    disabled: &BTreeSet<String>,
+    section: &str,
+    comments: CommentPolicy,
+) -> String {
+    let routed = splice(&without_disabled_routing(base, disabled), section);
+    splice_after(&routed, COMMENTS_ANCHOR_HEADING, comments.section())
 }
 
 /// The section for `packs` (name and lines, in the order given); empty when no pack has a line.
@@ -408,6 +422,12 @@ pub fn render_section<'a>(packs: impl IntoIterator<Item = (&'a str, &'a [String]
 /// `template` with `section` inserted after its `## Skill routing` section, or at its end when it
 /// has none. An empty `section` returns `template` unchanged, byte for byte.
 pub fn splice(template: &str, section: &str) -> String {
+    splice_after(template, ANCHOR_HEADING, section)
+}
+
+/// `template` with `section` inserted after the section headed `anchor`, or at its end when it has
+/// none. An empty `section` returns `template` unchanged, byte for byte.
+fn splice_after(template: &str, anchor: &str, section: &str) -> String {
     if section.is_empty() {
         return template.to_string();
     }
@@ -418,7 +438,7 @@ pub fn splice(template: &str, section: &str) -> String {
         if in_anchor && content.starts_with("## ") {
             return format!("{}{section}\n{}", &template[..offset], &template[offset..]);
         }
-        if content == ANCHOR_HEADING {
+        if content == anchor {
             in_anchor = true;
         }
         offset += line.len();
@@ -433,8 +453,9 @@ pub fn splice(template: &str, section: &str) -> String {
 }
 
 /// The text an install puts into the managed block of the rules artifact `artifact`: its bundled
-/// base with the routing of `sources` composed in (see [`compose`]). A source that is a symlink,
-/// missing, or not UTF-8 is an error, and so is a `disabled-skills.json` that cannot be read.
+/// base with the routing and comment policy of `sources` composed in (see [`compose`]). A source
+/// that is a symlink, missing, or not UTF-8 is an error, and so is a `disabled-skills.json` or a
+/// `comment-policy.json` that cannot be read.
 pub fn rules_source_text<R: SourceRoot + ?Sized>(
     artifact: &ArtifactId,
     sources: &R,
@@ -447,7 +468,8 @@ pub fn rules_source_text<R: SourceRoot + ?Sized>(
     let text =
         String::from_utf8(bytes).map_err(|_| "rules source is not valid UTF-8".to_string())?;
     let disabled = sources.disabled().map_err(str::to_string)?;
-    Ok(compose(&text, disabled, sources.pack_routing()))
+    let comments = sources.comment_policy().map_err(str::to_string)?;
+    Ok(compose(&text, disabled, sources.pack_routing(), comments))
 }
 
 /// Whether the installed rules file at `installed` carries the source of `artifact` (the bundled
@@ -548,6 +570,56 @@ mod tests {
         assert_eq!(
             splice("# A", section),
             "# A\n\n## Pack skill routing\n- x\n"
+        );
+    }
+
+    const SCOPED: &str = "# Rules\n\n## Skill routing\n- Bugs: `diagnose`.\n- Tests: `tdd`.\n\n## Scope\nStay in scope.\n\n## Evidence\nCite.\n";
+
+    #[test]
+    fn harness_default_composes_nothing_and_each_level_follows_scope() {
+        let none = BTreeSet::new();
+        assert_eq!(
+            compose(SCOPED, &none, "", CommentPolicy::HarnessDefault),
+            SCOPED
+        );
+        for level in [CommentPolicy::Minimal, CommentPolicy::Off] {
+            assert_eq!(
+                compose(SCOPED, &none, "", level),
+                SCOPED.replace(
+                    "## Evidence\n",
+                    &format!("{}\n## Evidence\n", level.section())
+                ),
+                "{level:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_comment_section_composes_with_disabled_skills_and_pack_routing() {
+        let disabled = BTreeSet::from(["tdd".to_string()]);
+        let section = render_section([("mine", &["- Canvas: `my-canvas`.".to_string()][..])]);
+        let composed = compose(SCOPED, &disabled, &section, CommentPolicy::Off);
+        assert_eq!(
+            composed,
+            format!(
+                "# Rules\n\n## Skill routing\n- Bugs: `diagnose`.\n\n{section}\n## Scope\nStay in scope.\n\n{}\n## Evidence\nCite.\n",
+                CommentPolicy::Off.section()
+            )
+        );
+    }
+
+    #[test]
+    fn without_a_scope_section_the_comment_section_goes_last() {
+        let none = BTreeSet::new();
+        let off = CommentPolicy::Off.section();
+        assert_eq!(
+            compose(BASE, &none, "", CommentPolicy::Off),
+            format!("{BASE}\n{off}")
+        );
+        // A trailing `## Scope` section has no next heading: the section still ends the text.
+        assert_eq!(
+            compose("## Scope\nStay.\n", &none, "", CommentPolicy::Off),
+            format!("## Scope\nStay.\n\n{off}")
         );
     }
 

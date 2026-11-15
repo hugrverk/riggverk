@@ -105,6 +105,8 @@ function AppShell() {
     forgetPack,
     skillChoices,
     setSkillsEnabled,
+    commentPolicy,
+    setCommentPolicy,
     activeSkillId,
     activeSkillContent,
     readSkill,
@@ -921,6 +923,8 @@ function AppShell() {
             onForgetPack={forgetPack}
             skillChoices={skillChoices}
             onSetSkillsEnabled={setSkillsEnabled}
+            commentPolicy={commentPolicy}
+            onSetCommentPolicy={setCommentPolicy}
             onPreviewImport={previewSkillImport}
             onCommitImport={commitSkillImport}
             onSetImportedRouting={setImportedSkillRouting}

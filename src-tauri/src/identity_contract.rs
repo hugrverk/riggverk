@@ -148,6 +148,10 @@ mod tests {
             "disabled-skills.json"
         );
         assert_eq!(
+            crate::comment_policy::COMMENT_POLICY_FILE,
+            "comment-policy.json"
+        );
+        assert_eq!(
             crate::config_preferences::CONFIG_PREFERENCES_FILE,
             "config-preferences.json"
         );

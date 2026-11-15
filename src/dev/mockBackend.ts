@@ -86,6 +86,8 @@ import type {
   SkillCopy,
   SkillLoad,
   SkillChoices,
+  CommentPolicyChoice,
+  CommentPolicyLevel,
   SkillLoadFlag,
   SkillReadFolder,
   SkillSummary,
@@ -1650,18 +1652,34 @@ function agentMetadata(): AgentMetadataListResponse {
   };
 }
 
-const agentTemplate: DocumentContent = {
-  id: "agent-template",
-  title: "Agent Rules",
-  path: "templates/global-agent-rules.md",
-  section: "",
-  source: "curated",
-  content: "# Global Agent Rules\n\n## Priority\nRepository reality overrides assumptions. Explicit user instructions override these defaults.\n\n## Communication\nBe direct, dense, technical, and concise.\n\n## Verification\nNever claim done without evidence.\n"
-    // Like the backend: the routing of the packs follows the base (here at its end: the mock base has no routing section).
-    + (packLibrary.packs.some(pack => pack.routing?.length)
-      ? `\n## Pack skill routing\nRouting from the skill packs in your data folder. Each line names only skills of its own pack.\n${packLibrary.packs.filter(pack => pack.routing?.length).map(pack => `### ${pack.name} pack\n${pack.routing!.join("\n")}\n`).join("")}`
-      : ""),
+/** The comment policy chosen in this session (`set_comment_policy`). */
+let commentPolicyLevel: CommentPolicyLevel = "harness_default";
+
+/** The section each comment policy level adds to the rules, as the backend's `comment_policy` writes it. */
+const COMMENT_SECTIONS: Record<CommentPolicyLevel, string> = {
+  harness_default: "",
+  minimal: "## Code comments\nComment only what the code cannot show: intent, an invariant, a workaround or a contract. Never restate the code, narrate the change or address the reviewer. Comments the language or tooling requires are always allowed: license headers, directives and pragmas, lint suppressions, API docs a public interface requires, `// SAFETY:` on Rust `unsafe`. Keep existing comments unless you remove their code; update any your change makes false. A repository's own comment rules (its AGENTS.md, CLAUDE.md or linters) win.\n",
+  off: "## Code comments\nAdd no comments except those the language or tooling requires: license headers, directives and pragmas, lint suppressions, API docs a public interface requires, `// SAFETY:` on Rust `unsafe`. Keep existing comments unless you remove their code; update any your change makes false. A repository's own comment rules (its AGENTS.md, CLAUDE.md or linters) win.\n",
 };
+
+/** The bundled base as the Library shows it, composed per read like the backend's. */
+function agentTemplate(): DocumentContent {
+  const comments = COMMENT_SECTIONS[commentPolicyLevel];
+  return {
+    id: "agent-template",
+    title: "Agent Rules",
+    path: "templates/global-agent-rules.md",
+    section: "",
+    source: "curated",
+    content: "# Global Agent Rules\n\n## Priority\nRepository reality overrides assumptions. Explicit user instructions override these defaults.\n\n## Communication\nBe direct, dense, technical, and concise.\n\n## Verification\nNever claim done without evidence.\n"
+      // Like the backend: the routing of the packs follows the base (here at its end: the mock base has no routing section).
+      + (packLibrary.packs.some(pack => pack.routing?.length)
+        ? `\n## Pack skill routing\nRouting from the skill packs in your data folder. Each line names only skills of its own pack.\n${packLibrary.packs.filter(pack => pack.routing?.length).map(pack => `### ${pack.name} pack\n${pack.routing!.join("\n")}\n`).join("")}`
+        : "")
+      // The comment policy follows the base's Scope section; the mock base has none, so it goes last.
+      + (comments ? `\n${comments}` : ""),
+  };
+}
 
 const configSources: ConfigEditorSourceMeta[] = [
   { id: "base", label: "base", rel_path: "templates/opencode.base.json", helper: "bundled base config" },
@@ -2200,6 +2218,14 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
         named_by: { diagnose: ["ci-triage"] },
         problem: null,
       } satisfies SkillChoices;
+    case "get_comment_policy":
+      return { level: commentPolicyLevel, problem: null } satisfies CommentPolicyChoice;
+    case "set_comment_policy": {
+      const level = arg<CommentPolicyLevel>(args, "level");
+      if (!Object.prototype.hasOwnProperty.call(COMMENT_SECTIONS, level)) throw new Error(`unknown comment policy: ${String(level)}`);
+      commentPolicyLevel = level;
+      return null;
+    }
     case "set_skills_enabled": {
       for (const name of arg<string[]>(args, "names")) {
         if (arg<boolean>(args, "enabled")) disabledSkills.delete(name);
@@ -2259,7 +2285,7 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
       return agent;
     }
     case "read_agent_template":
-      return agentTemplate;
+      return agentTemplate();
     case "list_rules_files":
       return RULES_SURFACES.filter(rulesSurfaceEnabled).map(rulesFileSummary) satisfies RulesFileSummary[];
     case "read_rules_file":

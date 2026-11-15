@@ -1039,6 +1039,17 @@ export interface SkillChoices {
   problem?: string | null;
 }
 
+/** How much agents comment code, for every harness (`comment-policy.json`). */
+export type CommentPolicyLevel = "harness_default" | "minimal" | "off";
+
+/** The comment policy (`get_comment_policy`). */
+export interface CommentPolicyChoice {
+  /** Null while `comment-policy.json` cannot be used. */
+  level: CommentPolicyLevel | null;
+  /** Why `comment-policy.json` cannot be used; set, no level can be chosen. */
+  problem: string | null;
+}
+
 export interface PackLibrary {
   /** Why `pack-skills.json` cannot be used; set, installed pack skills are kept as they are. */
   record_problem?: string | null;

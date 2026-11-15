@@ -396,11 +396,12 @@ pub fn read_doc(id: String) -> Result<DocumentContent, String> {
 /// files Install writes.
 const CURSOR_USER_RULES_DOC: &str = "templates/cursor/user-rules.md";
 
-/// `doc`, a bundled rules text, composed with the data folder's disabled skills and packs' routing
-/// as Install does (see `pack_routing::compose`). Without a usable data folder, packs or disabled
-/// skills it is returned as it is. A `disabled-skills.json` that cannot be read is an error with its
-/// fixed phrase, as for the rules Install writes: the text would route to skills the user turned
-/// off, and the Cursor User Rules are copied by hand from it.
+/// `doc`, a bundled rules text, composed with the data folder's disabled skills, packs' routing and
+/// comment policy as Install does (see `pack_routing::compose`). Without a usable data folder, packs,
+/// disabled skills or a comment policy it is returned as it is. A `disabled-skills.json` or
+/// `comment-policy.json` that cannot be read is an error with its fixed phrase, as for the rules
+/// Install writes: the text would route to skills the user turned off or leave out the comment policy
+/// they chose, and the Cursor User Rules are copied by hand from it.
 fn with_pack_routing(
     mut doc: DocumentContent,
     bundle_root: &Path,
@@ -410,7 +411,9 @@ fn with_pack_routing(
             crate::skill_sources::SkillSources::new(bundle_root.to_path_buf(), &data_folder);
         use crate::skill_sources::SourceRoot;
         let disabled = sources.disabled().map_err(str::to_string)?;
-        doc.content = crate::pack_routing::compose(&doc.content, disabled, sources.pack_routing());
+        let comments = sources.comment_policy().map_err(str::to_string)?;
+        doc.content =
+            crate::pack_routing::compose(&doc.content, disabled, sources.pack_routing(), comments);
     }
     Ok(doc)
 }

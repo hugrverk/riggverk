@@ -4,6 +4,7 @@ import type { ActionResult } from "../components/TerminalOutput";
 import type {
   AgentTargetMeta,
   CodexConfigDefaultsPreview,
+  CommentPolicyChoice,
   DocSummary,
   DocumentContent,
   FileDiffView,
@@ -239,6 +240,27 @@ describe("mock backend: pack routing", () => {
     const template = await invoke<DocumentContent>("read_agent_template");
     expect(template.content).toContain("## Pack skill routing\n");
     expect(template.content).toContain("### mine pack\n- Release checklists: `my-checklist`.\n");
+  });
+});
+
+describe("mock backend: comment policy", () => {
+  it("starts at harness default, keeps a chosen level across reads and composes it into the base", async () => {
+    expect(await invoke<CommentPolicyChoice>("get_comment_policy")).toEqual({ level: "harness_default", problem: null });
+    expect((await invoke<DocumentContent>("read_agent_template")).content).not.toContain("## Code comments");
+
+    await invoke("set_comment_policy", { level: "minimal" });
+    expect(await invoke<CommentPolicyChoice>("get_comment_policy")).toEqual({ level: "minimal", problem: null });
+    const template = (await invoke<DocumentContent>("read_agent_template")).content;
+    expect(template).toContain("\n## Code comments\nComment only what the code cannot show");
+    expect(template.match(/## Code comments/g)).toHaveLength(1);
+
+    await invoke("set_comment_policy", { level: "off" });
+    expect((await invoke<DocumentContent>("read_agent_template")).content).toContain("## Code comments\nAdd no comments except");
+    await expect(invoke("set_comment_policy", { level: "loud" })).rejects.toThrow(/unknown comment policy/);
+    expect((await invoke<CommentPolicyChoice>("get_comment_policy")).level).toBe("off");
+
+    await invoke("set_comment_policy", { level: "harness_default" });
+    expect((await invoke<DocumentContent>("read_agent_template")).content).not.toContain("## Code comments");
   });
 });
 
