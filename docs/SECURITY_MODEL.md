@@ -85,7 +85,7 @@ The `security` group of a harness page reads a few named keys of that harness's 
 
 | Harness | File | Keys read |
 |---------|------|-----------|
-| Claude Code | `~/.claude/settings.json`; skipped while `CLAUDE_CONFIG_DIR` is set | `permissions.defaultMode`, `permissions.disableBypassPermissionsMode`, `permissions.deny` (only whether a `Read` rule that is not a `!` negation matches a file named `.env`), `sandbox.enabled` |
+| Claude Code | `~/.claude/settings.json`; skipped while `CLAUDE_CONFIG_DIR` is set | `permissions.defaultMode`, `permissions.disableBypassPermissionsMode`, `permissions.deny` (only whether a `Read` rule that is not a `!` negation matches a file named `.env`, and no later `Read(!…)` negation that matches `.env` reopens it), `sandbox.enabled` |
 | Codex | `$CODEX_HOME/config.toml` | `sandbox_mode`, `approval_policy`, `sandbox_workspace_write.network_access`, `projects.*.trust_level` (counted) |
 | OpenCode | `opencode.json`, `opencode.jsonc`, `config.json` | `permission`, `permission.bash`, `permission.read` (counted `deny` actions) |
 | Cursor | `~/.cursor/sandbox.json` | `type`, `networkPolicy.default` |

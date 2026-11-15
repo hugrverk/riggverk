@@ -309,7 +309,7 @@ The light tier is off by default and manages the rules file of each (see Rules; 
 
 | Harness | File | Keys |
 |---------|------|------|
-| Claude Code | `~/.claude/settings.json` (not read while `CLAUDE_CONFIG_DIR` is set) | `permissions.defaultMode`, `permissions.disableBypassPermissionsMode`, `permissions.deny` (whether a `Read` rule that is not a `!` negation matches a file named `.env`), `sandbox.enabled` |
+| Claude Code | `~/.claude/settings.json` (not read while `CLAUDE_CONFIG_DIR` is set) | `permissions.defaultMode`, `permissions.disableBypassPermissionsMode`, `permissions.deny` (whether a `Read` rule that is not a `!` negation matches a file named `.env`, and no later `Read(!…)` negation that matches `.env` reopens it), `sandbox.enabled` |
 | Codex | `$CODEX_HOME/config.toml` (default `~/.codex/config.toml`) | `sandbox_mode`, `approval_policy`, `sandbox_workspace_write.network_access`, count of `projects.*.trust_level = "trusted"` |
 | OpenCode | `opencode.json`, `opencode.jsonc`, `config.json` in OpenCode's config folder | `permission` (`"*"`), `permission.bash`, count of `deny` actions under `permission.bash` and `permission.read` of `opencode.json` |
 | Cursor | `~/.cursor/sandbox.json` | `type`, `networkPolicy.default` |
