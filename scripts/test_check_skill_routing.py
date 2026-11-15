@@ -175,6 +175,16 @@ class CheckSkillRoutingTests(unittest.TestCase):
         (self.skill("adversarial").parent / "review.md").unlink()
         self.assert_fails("missing; adversarial carries review.md next to its SKILL.md")
 
+    def test_user_invoked_skill_without_its_codex_policy_file_fails(self) -> None:
+        for name in ("retro", "grill-me"):
+            policy = self.skill(name).parent / "agents" / "openai.yaml"
+            self.assertTrue(policy.is_file(), policy)
+            policy.unlink()
+            self.assert_fails(f"missing; {name} carries agents/openai.yaml next to its SKILL.md")
+            policy.write_text("policy:\n  allow_implicit_invocation: true\n", encoding="utf-8")
+            self.assert_fails("must set only policy.allow_implicit_invocation: false")
+            policy.write_text("policy:\n  allow_implicit_invocation: false\n", encoding="utf-8")
+
     def test_adversarial_skill_without_its_reference_file_fails(self) -> None:
         (self.skill("adversarial").parent / "adversarial-roles.md").unlink()
         self.assert_fails("missing; adversarial carries adversarial-roles.md next to its SKILL.md")

@@ -68,3 +68,9 @@ Done when: every slice lists its files and a falsifying verification command, an
 - Do not plan broad rewrites unless explicitly requested.
 - Do not bury risky changes inside a large slice.
 - Do not treat the plan as verified implementation.
+
+## Harness notes
+
+### Claude Code
+
+- Call `advisor` (when available) after drafting the slices and before handing the plan over.
