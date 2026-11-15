@@ -2222,7 +2222,7 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
       return { level: commentPolicyLevel, problem: null } satisfies CommentPolicyChoice;
     case "set_comment_policy": {
       const level = arg<CommentPolicyLevel>(args, "level");
-      if (!(level in COMMENT_SECTIONS)) throw new Error(`unknown comment policy: ${String(level)}`);
+      if (!Object.prototype.hasOwnProperty.call(COMMENT_SECTIONS, level)) throw new Error(`unknown comment policy: ${String(level)}`);
       commentPolicyLevel = level;
       return null;
     }
