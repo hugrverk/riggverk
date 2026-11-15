@@ -86,13 +86,13 @@ The `security` group of a harness page reads a few named keys of that harness's 
 
 | Harness | File | Keys read |
 |---------|------|-----------|
-| Claude Code | `~/.claude/settings.json`; skipped while `CLAUDE_CONFIG_DIR` is set | `permissions.defaultMode`, `permissions.disableBypassPermissionsMode`, `permissions.deny` (only whether a `Read` rule names `.env`), `sandbox.enabled` |
+| Claude Code | `~/.claude/settings.json`; skipped while `CLAUDE_CONFIG_DIR` is set | `permissions.defaultMode`, `permissions.disableBypassPermissionsMode`, `permissions.deny` (only whether a `Read` rule that is not a `!` negation matches a file named `.env`, and no later `Read(!…)` negation that matches `.env` reopens it), `sandbox.enabled` |
 | Codex | `$CODEX_HOME/config.toml` | `sandbox_mode`, `approval_policy`, `sandbox_workspace_write.network_access`, `projects.*.trust_level` (counted) |
 | OpenCode | `opencode.json`, `opencode.jsonc`, `config.json` | `permission`, `permission.bash`, `permission.read` (counted `deny` actions) |
 | Cursor | `~/.cursor/sandbox.json` | `type`, `networkPolicy.default` |
 | Kilo Code | `kilo.jsonc` or `kilo.json` | `permission`, `permission.bash` |
 
-It sees global config only. Project and managed config, profiles, command-line flags and aliases can change what a harness does and are named in the page as not checked; the page never says secure. Copilot, Pi, Antigravity and Grok are reported as not covered without reading anything.
+It sees global config only. Project and managed config, profiles, command-line flags and aliases can change what a harness does and are named in the page as not checked; the page never says secure. Copilot, Pi, Antigravity and Grok are reported as not covered without reading anything. When no such `Read` rule is found, the Claude Code page suggests two `permissions.deny` lines to copy; the app never writes them.
 
 ## Backups
 

@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CLEAN_CODEX, postureOf, RISKY_CLAUDE } from "../test/pageFixtures";
 import type { SecurityPosture } from "../types";
@@ -121,5 +121,55 @@ describe("SecurityPostureRows", () => {
     invokeMock.mockImplementation(() => new Promise(() => {}));
     render(<SecurityPostureRows harness="claude" refreshKey="a" />);
     expect(screen.queryByRole("region", { name: "Safety notes" })).toBeNull();
+  });
+
+  describe("the .env deny lines on the Claude Code page", () => {
+    const LINES = '"Read(**/.env)",\n"Read(**/.env.*)"';
+
+    it("shows the two lines, where they go and what they miss, and copies exactly the lines", async () => {
+      const writeText = vi.fn(async () => {});
+      Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+      invokeMock.mockResolvedValue(RISKY_CLAUDE);
+      render(<SecurityPostureRows harness="claude" refreshKey="a" />);
+      const notes = await zone();
+      expect(notes.querySelector(".hp-env-deny pre")!.textContent).toBe(LINES);
+      const text = notes.querySelector(".hp-env-deny p")!.textContent!;
+      expect(text).toContain("deny array under permissions in ~/.claude/settings.json");
+      expect(text).toContain("Riggverk does not add them for you");
+      expect(text).toContain(".env.example too");
+      expect(text).toContain("(cat, head, tail, sed, tee, redirects)");
+      expect(text).toContain("not grep -r run from the folder or scripts that open files themselves");
+      expect(text).toContain("sandbox blocks at the OS level");
+      expect(text).toContain("Configure permissions");
+      fireEvent.click(within(notes).getByRole("button", { name: "Copy the .env deny lines" }));
+      await waitFor(() => expect(writeText).toHaveBeenCalledWith(LINES));
+      // The page only suggests the lines: copying asks the backend for nothing.
+      expect(invokeMock).toHaveBeenCalledTimes(1);
+    });
+
+    it("is hidden when a Read deny rule already covers .env, and on other harnesses", async () => {
+      invokeMock.mockResolvedValue(postureOf("claude", [["claude_env_read_denied", "enforced"], ["config_only", "not_covered"]]));
+      const claude = render(<SecurityPostureRows harness="claude" refreshKey="a" />);
+      const notes = await zone();
+      expect(rowsOf(notes)[0]![0]).toBe(".env reads");
+      expect(notes.querySelector(".hp-env-deny")).toBeNull();
+      expect(within(notes).queryByRole("button", { name: "Copy the .env deny lines" })).toBeNull();
+      claude.unmount();
+
+      invokeMock.mockResolvedValue(CLEAN_CODEX);
+      render(<SecurityPostureRows harness="codex" refreshKey="a" />);
+      expect((await zone()).querySelector(".hp-env-deny")).toBeNull();
+    });
+
+    it("is hidden when the settings could not be read or CLAUDE_CONFIG_DIR is set", async () => {
+      invokeMock.mockResolvedValue(postureOf("claude", [["claude_config_dir_set", "not_covered"], ["config_only", "not_covered"]]));
+      const moved = render(<SecurityPostureRows harness="claude" refreshKey="a" />);
+      expect((await zone()).querySelector(".hp-env-deny")).toBeNull();
+      moved.unmount();
+
+      invokeMock.mockRejectedValue(new Error("boom"));
+      render(<SecurityPostureRows harness="claude" refreshKey="a" />);
+      expect((await zone()).querySelector(".hp-env-deny")).toBeNull();
+    });
   });
 });

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { SafetyNotes } from "../components/harness/SafetyNotes";
-import { postureNotesFor, POSTURE_UNAVAILABLE } from "../lib/securityPostureRows";
+import { offersClaudeEnvDeny, postureNotesFor, POSTURE_UNAVAILABLE } from "../lib/securityPostureRows";
 import type { InstallAgent, SecurityPosture } from "../types";
 
 /** A usable answer: the mocks of other tests resolve `invoke` with nothing, and a failure must not break the page. */
@@ -36,5 +36,5 @@ export function SecurityPostureRows({ harness, refreshKey }: { harness: InstallA
   const shown = posture?.harness === harness ? posture : null;
   if (!shown && !failed) return null;
   const { verdict, notes } = shown ? postureNotesFor(shown) : { verdict: POSTURE_UNAVAILABLE, notes: [] };
-  return <SafetyNotes verdict={verdict} notes={notes} />;
+  return <SafetyNotes verdict={verdict} notes={notes} envDenySnippet={!!shown && offersClaudeEnvDeny(shown)} />;
 }
