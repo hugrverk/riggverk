@@ -265,6 +265,7 @@
       "sha256:ad924f92ee293a7c445b207118e20e61b28aeeee3e877698886a6215f60fb27c"
     ],
     "skills/blueprint/SKILL.md": [
+      "sha256:1ddfeaa8ab6d2625d8de38c73fada065c71effe98a2ca44bcfc21e084ab90dfe",
       "sha256:403b65d418a4b9db79014689a193e4318259adf630a8a1c1dd09a0dc579846d8",
       "sha256:ca6f1d6fdd504036184d69233c1cad8d8186d34649c15482e1eec806a69325bc"
     ],
@@ -377,7 +378,8 @@
     "skills/dispatch/SKILL.md": [
       "sha256:795cda63e9afd6992e4daa910c8259735501515b510d5aa5f95b33ccf525b932",
       "sha256:7eda8e874f43748564d9c520cb702d90574d33c8ed7e5d0b2d5f73f07807608d",
-      "sha256:84025eeef87dd5ebc6565d56b9a7eec49649f95d815713b157485ac56f5eb7b7"
+      "sha256:84025eeef87dd5ebc6565d56b9a7eec49649f95d815713b157485ac56f5eb7b7",
+      "sha256:d066e9fd951dabec043cf62633587fef21e6e0d4d128fd2e5a9fe4707598b0bd"
     ],
     "skills/dispatch/delegate-recipes.md": [
       "sha256:8bf1ee6a5a47bf61a3b410bf6374a10a9a3f40eeea138841d55cab81f92da0d0"
@@ -427,7 +429,8 @@
     ],
     "skills/implement/SKILL.md": [
       "sha256:24b2b7c04c440fe7a39a1bd16858a6a21df9316207f98576c800e8683263bcc9",
-      "sha256:b75a2eae044ab784d451d3eb201b6de99074f9caf0958c0aeb31bdd3734e7173"
+      "sha256:b75a2eae044ab784d451d3eb201b6de99074f9caf0958c0aeb31bdd3734e7173",
+      "sha256:be4791af72229ea3b797fe4047b13d1c945425f2775e02b51ad0e5a0a25341e1"
     ],
     "skills/implementation-plan/SKILL.md": [
       "sha256:02036ea114d6deadc8b879f028c74127855b470008795f470300b12b3a0315cd",
