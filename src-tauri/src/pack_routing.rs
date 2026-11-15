@@ -354,9 +354,10 @@ pub(crate) fn names_any(line: &str, disabled: &BTreeSet<String>) -> bool {
     !disabled.is_empty() && disabled.iter().any(|name| names_skill(line, name))
 }
 
-/// `base` without the bullets of its `## Skill routing` section that name a skill in `disabled`.
-/// An indented line right after such a bullet continues it and goes too. Everything else, the
-/// rest of the section included, stays byte for byte.
+/// `base` without the bullets that name a skill in `disabled`, in its `## Skill routing` section
+/// and in a harness appendix (`## <Harness> harness`), so no rules text points to a skill that is
+/// not installed. An indented line right after such a bullet continues it and goes too.
+/// Everything else, the rest of those sections included, stays byte for byte.
 fn without_disabled_routing(base: &str, disabled: &BTreeSet<String>) -> String {
     if disabled.is_empty() {
         return base.to_string();
@@ -367,7 +368,7 @@ fn without_disabled_routing(base: &str, disabled: &BTreeSet<String>) -> String {
     for line in base.split_inclusive('\n') {
         let content = line.trim_end_matches(['\r', '\n']);
         if content.starts_with("## ") {
-            in_anchor = content == ANCHOR_HEADING;
+            in_anchor = content == ANCHOR_HEADING || content.ends_with(" harness");
             dropping = false;
         } else if in_anchor {
             if content.starts_with("- ") {
@@ -592,6 +593,20 @@ mod tests {
                 "{level:?}"
             );
         }
+    }
+
+    #[test]
+    fn a_harness_appendix_bullet_naming_a_disabled_skill_is_left_out() {
+        let base = "## Skill routing\n- Bugs: `diagnose`.\n- Security: `security`.\n\n## Scope\nNever `security` here.\n\n## Claude harness\n- `/security-review` is built in; the skill is `security`.\n- Skills install to `~/.claude/skills`.\n";
+        let disabled = BTreeSet::from(["security".to_string()]);
+        assert_eq!(
+            compose(base, &disabled, "", CommentPolicy::HarnessDefault),
+            "## Skill routing\n- Bugs: `diagnose`.\n\n## Scope\nNever `security` here.\n\n## Claude harness\n- Skills install to `~/.claude/skills`.\n"
+        );
+        assert_eq!(
+            compose(base, &BTreeSet::new(), "", CommentPolicy::HarnessDefault),
+            base
+        );
     }
 
     #[test]
