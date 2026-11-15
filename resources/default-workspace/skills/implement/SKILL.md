@@ -40,3 +40,9 @@ Before finishing, remove anything unnecessary:
 Stop and report if the task requires an unapproved rewrite, dependency, architecture change, or materially broader scope.
 
 Verify with the narrowest check that can falsify the change. Report what ran, what did not run, and residual risk.
+
+## Harness notes
+
+### Claude Code
+
+- When `advisor` is available, call it before the first edit when the approach is not dictated by the task, and before reporting done.
