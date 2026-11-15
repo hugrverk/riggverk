@@ -241,6 +241,7 @@ class CheckSkillRoutingTests(unittest.TestCase):
                 self.assert_scan(prose, None)
         for skill in (
             f"Hand the slices to `{old}`.\n",
+            f"Not for parallel slices ({old}).\n",
             f"  related: diagnose, {old}, handoff\n",
             f"name: {old}\n",
             f"skills: [{old}]\n",

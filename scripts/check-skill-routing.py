@@ -213,14 +213,16 @@ _EDGE_AFTER = r"(?![A-Za-z0-9_-])"
 
 
 def _skill_name_contexts(name: str) -> re.Pattern[str]:
-    """Where a word names a skill: in backticks or quotes on its own, as an entry of a `name:`,
-    `related:`, `skills:` or `default_skills` field, or as a skill folder (`skills/<name>/`)."""
+    """Where a word names a skill: in backticks, quotes or parentheses on its own (descriptions
+    point to a skill as `(name)`), as an entry of a `name:`, `related:`, `skills:` or
+    `default_skills` field, or as a skill folder (`skills/<name>/`)."""
     word = re.escape(name)
     return re.compile(
         "|".join(
             (
                 rf"`{word}`",
                 rf"[\"']{word}[\"']",
+                rf"\({word}\)",
                 rf"^[ \t]*[\"']?(?:name|related|skills|default_skills)[\"']?[ \t]*:[^\n]*?{_EDGE_BEFORE}{word}{_EDGE_AFTER}",
                 rf"skills/(?:[a-z0-9-]+/)?{word}{_EDGE_AFTER}",
             )
