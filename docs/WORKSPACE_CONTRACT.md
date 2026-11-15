@@ -242,7 +242,7 @@ Harness ownership:
 
 - OpenCode: Markdown agents under `agents/`
 - Claude Code: native Markdown subagents under `templates/claude/agents/`
-- Codex: TOML agents under `templates/codex/agents/`
+- Codex: TOML agents under `templates/codex/agents/` (they set `model_reasoning_effort` and no `sandbox_mode`; Codex runs an agent under its parent's sandbox and approvals, so the reviewers are read-only by their instructions only)
 - Cursor: native Markdown agents under `templates/cursor/agents/`
 
 - OpenCode: `architect`, `repo-scout`, `inspector`, `sentinel`, `scribe`, `verifier`.

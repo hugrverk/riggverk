@@ -231,6 +231,7 @@
     ],
     "skills/adversarial/SKILL.md": [
       "sha256:1fa6efa29d35c388b92b25e2988de9b38f838a68738e55febc1697d27b7373e4",
+      "sha256:63d8a9182b2da85abdb82b51aafa7c9784dbf744d6b99155b57ed821df658754",
       "sha256:7db6f877e9a79a5c8823c86c6880b413b4aec2a891de5d66c9d6a58377233c5a",
       "sha256:d14f524487293cc0f245259c30d9e0a5445831100c20606e9d3f5b0e082257bd"
     ],
@@ -822,19 +823,23 @@
     ],
     "templates/codex/agents/inspector.toml": [
       "sha256:0663ca6af24670ad9cee93c22c44a2df027802c8646420a07a9f5e1ff5d3da79",
-      "sha256:35c8dbffcb7ddd04eff131a39b592c08c5b4c88a8d7486a16b1159975f30febd"
+      "sha256:35c8dbffcb7ddd04eff131a39b592c08c5b4c88a8d7486a16b1159975f30febd",
+      "sha256:afb76263c8d3258c6c4eb6674f51906a7d4e85f8ec4f5a9a898fb944a888d7fe"
     ],
     "templates/codex/agents/repo_scout.toml": [
       "sha256:1859d79cdc247f4361b0763d3e7664ade8fff5bd9226dcb81196f23bfcdc005f",
+      "sha256:27f4b5d2c88e8716e8404b902e8791f6970f3e5ffec7513d0d07267af15251d5",
       "sha256:5121332fc48e61392d288f40446a48eb0091638c5c146da98f1101ffead8de43"
     ],
     "templates/codex/agents/security_reviewer.toml": [
       "sha256:5537993d613f69cde6064586fd159c42a7682e3e19f32e4b4fb8df1ba1a19d68",
-      "sha256:a089a166eba8a61b1c5ff7d1a2f8d7e9ce8adf00574337d784d9967ba1a16964"
+      "sha256:a089a166eba8a61b1c5ff7d1a2f8d7e9ce8adf00574337d784d9967ba1a16964",
+      "sha256:a1016d9b7421395ca4c7ca79bbed0caee96cd03a567e89aabec573a2c4944cbe"
     ],
     "templates/codex/agents/verifier.toml": [
       "sha256:765975078a868a99dd6fde33175448233bb36ec8788b8d09e603bd2219b906c9",
       "sha256:7a52fb003201e6531f7be86c38d09f2ba0373e6dbac73c5b53be7390acff20f5",
+      "sha256:95eb6bdc5e536a4497931e4af11cd546c00f8cc6fe84ad6db22133e4f1e4a8c8",
       "sha256:aaaf528cb90df12a9fb991869cf456336132a0f8df4ef1287adcb695d8a7864a",
       "sha256:f9a17033e7383f7516d5b3ed2fb23d89901033e55ad36fd298cb8ccf9800f0c6"
     ],

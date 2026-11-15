@@ -98,7 +98,7 @@ Background: the fresh-critic loop, the steel-man finding format, the Fatal, Sign
 
 - Implementer (implement, test): one write-capable subagent for the whole loop, continued between rounds.
 - Critic, other family: Claude Code with the recipe in `critic-recipes.md`. Your sandbox blocks network and hides the login keychain, so request escalated permissions for that command (one approval per round), or fall back.
-- Critic, same family: a fresh `inspector` agent (read-only sandbox) per round. In review mode use this skill's brief, not the built-in review prompt.
+- Critic, same family: a fresh `inspector` agent (read-only by its instructions, under your sandbox) per round. In review mode use this skill's brief, not the built-in review prompt.
 
 ### OpenCode
 

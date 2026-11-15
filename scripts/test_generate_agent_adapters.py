@@ -104,6 +104,46 @@ class ClaudeHeaderContractTests(unittest.TestCase):
         self.assertTrue(any("plain YAML scalar" in e for e in errors), errors)
 
 
+class CodexAgentContractTests(unittest.TestCase):
+    EFFORTS = {"repo_scout": "low", "inspector": "high", "security_reviewer": "high", "verifier": "medium"}
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.generator = load_generator()
+
+    def test_bundled_codex_agents_set_effort_and_no_sandbox_or_model(self) -> None:
+        agents = ROOT / WS / "templates/codex/agents"
+        for role, effort in self.EFFORTS.items():
+            text = (agents / f"{role}.toml").read_text(encoding="utf-8")
+            keys = [line.split(" =", 1)[0] for line in text.splitlines() if line.startswith(("sandbox_mode", "model", "approval_policy"))]
+            self.assertEqual(keys, ["model_reasoning_effort"], role)
+            self.assertIn(f'model_reasoning_effort = "{effort}"\n', text, role)
+            meta = (agents / f"{role}.meta.json").read_text(encoding="utf-8")
+            self.assertNotIn("sandbox_mode", meta, role)
+
+    def test_sandbox_mode_in_a_codex_agent_meta_is_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            meta = Path(tmp) / "x.meta.json"
+            meta.write_text('{"name": "x", "description": "d", "sandbox_mode": "read-only"}', encoding="utf-8")
+            self.generator.WS_ROOT = Path(tmp)
+            try:
+                with self.assertRaises(SystemExit):
+                    self.generator.compose_codex_toml("x.meta.json", "Body.")
+            finally:
+                self.generator.WS_ROOT = ROOT / WS
+
+    def test_unknown_effort_in_a_codex_agent_meta_is_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            meta = Path(tmp) / "x.meta.json"
+            meta.write_text('{"name": "x", "description": "d", "model_reasoning_effort": "turbo"}', encoding="utf-8")
+            self.generator.WS_ROOT = Path(tmp)
+            try:
+                with self.assertRaises(SystemExit):
+                    self.generator.compose_codex_toml("x.meta.json", "Body.")
+            finally:
+                self.generator.WS_ROOT = ROOT / WS
+
+
 class BrokenCopyTests(unittest.TestCase):
     def test_removing_tools_from_a_header_fails_write_and_check(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
