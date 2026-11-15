@@ -9,7 +9,7 @@ metadata:
   related: blueprint, diagnose, tdd
 ---
 
-# Minimal Implementation
+# Implement
 
 Use for code implementation and refactoring. Build the smallest complete, clear, and verifiable solution. Minimize necessary complexity, not line count.
 

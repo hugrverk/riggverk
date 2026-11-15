@@ -9,7 +9,7 @@ metadata:
   related: screenshot, browser-qa, accessibility, prototype
 ---
 
-# Frontend Design
+# Frontend
 
 Done when: the design thesis is stated, each state the change touches was rendered and checked at two or more viewports where layout changed, and body-text contrast was verified; anything not rendered is reported as Not verified.
 

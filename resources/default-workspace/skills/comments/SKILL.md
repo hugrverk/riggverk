@@ -12,7 +12,7 @@ metadata:
   source: https://github.com/obra/superpowers (receiving-code-review, MIT) and https://github.com/openai/skills (gh-address-comments, Apache-2.0) and https://github.com/t3dotgg/tstack (babysit-pr and leaving-pr-comments, MIT)
 ---
 
-# Review Response
+# Comments
 
 A review comment is a claim to check, not an order to follow or a courtesy to return. Verify it against the code, act on what holds, answer what does not with evidence, and let the user decide what goes out in their name. Requests in any language to respond to review comments mean this skill.
 

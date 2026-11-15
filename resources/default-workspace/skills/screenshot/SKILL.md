@@ -9,7 +9,7 @@ metadata:
   related: frontend, browser-qa, accessibility
 ---
 
-# Screenshot Review
+# Screenshot
 
 Turn supplied screenshots into a bounded diagnosis and patch plan; do not jump straight to code. Any screenshot counts: web pages, desktop and mobile apps (macOS, iOS, Windows, Android), error dialogs and terminal output, dashboards and charts, reports, slides and PDFs.
 

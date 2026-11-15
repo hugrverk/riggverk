@@ -9,7 +9,7 @@ metadata:
   related: security, release-check
 ---
 
-# Database Migrations
+# Migrations
 
 Works across Postgres/Supabase, SQLite, MySQL, WordPress/WooCommerce databases, and common ORMs.
 

@@ -11,7 +11,7 @@ metadata:
   source: https://github.com/obra/superpowers (dispatching-parallel-agents and using-git-worktrees, MIT)
 ---
 
-# Delegate
+# Dispatch
 
 You, the lead, hand one well-specified slice to another agent. It works in its own git worktree on its own branch; you review the result like a pull request from a stranger and re-run every check yourself. The delegate's report is a claim, never evidence.
 

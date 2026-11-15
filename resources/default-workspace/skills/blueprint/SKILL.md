@@ -10,7 +10,7 @@ metadata:
   source: https://github.com/obra/superpowers (writing-plans, MIT)
 ---
 
-# Implementation Plan
+# Blueprint
 
 Make the plan clear enough for a coding agent with no project memory to execute safely; optimize for small diffs, verification, and low rework.
 

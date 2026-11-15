@@ -150,7 +150,8 @@
       "sha256:ebf2a25f4b84b1e6f142c3704671837859000b256def0385e0a6be7bb7146940"
     ],
     "skills/accessibility/SKILL.md": [
-      "sha256:d7d8a1362489ede164ba0ba3272356a2addbf3931fa87e39a063a91aef7e4421"
+      "sha256:d7d8a1362489ede164ba0ba3272356a2addbf3931fa87e39a063a91aef7e4421",
+      "sha256:fecc26a2a7639ff3f4a637196771d1874b9f9a8405a42447633c9bb2731b3fd4"
     ],
     "skills/adversarial-implementation/SKILL.md": [
       "sha256:1de652a7f2953442a243106000831b6ebac53304fb9d7cae66057b113615fbb5",
@@ -264,6 +265,7 @@
       "sha256:ad924f92ee293a7c445b207118e20e61b28aeeee3e877698886a6215f60fb27c"
     ],
     "skills/blueprint/SKILL.md": [
+      "sha256:403b65d418a4b9db79014689a193e4318259adf630a8a1c1dd09a0dc579846d8",
       "sha256:ca6f1d6fdd504036184d69233c1cad8d8186d34649c15482e1eec806a69325bc"
     ],
     "skills/browser-qa/SKILL.md": [
@@ -272,6 +274,7 @@
       "sha256:3b7de644540b33e04c8ca58eb568ce6d44317179b772ef3096295804463fc939",
       "sha256:3eadff493e957be3cec79bbca52e89b738f155f943efcae54c2ad9237896c878",
       "sha256:4f4550f956c01ae6eecb032b9bc6db0cd3eb86dbc650cbe85aa0f3b73e97d4d1",
+      "sha256:5a650014c8cca4c9260918481b1c967b65c7ac83eef809845406e64820662a55",
       "sha256:65c12ac3aa5de8a2595cf1e5d67ef077992cccbff59977d61918341f0269e605",
       "sha256:74bc5f54dfe6061b3a064669099103b420f69624f91fe2d437e0b2a242364e26",
       "sha256:866d7c04ace121e04540644eda09463a8500daa2eb8c6cee2bc26e5b11dc6f35",
@@ -304,6 +307,7 @@
       "sha256:d824284821afe4c771b721a1718835444f3542289c52441cc449f2b0725b94cb"
     ],
     "skills/comments/SKILL.md": [
+      "sha256:8fa1e34dee8bab4756afa6164b9d9b47f338cf8ba4ea4ea272cf462c25e89024",
       "sha256:afae19f22bffa8d84591cb8c3e35b18d6f79b2f4c290df92bb5410b44a727ba0"
     ],
     "skills/context-budget/SKILL.md": [
@@ -371,6 +375,7 @@
       "sha256:ead0fe0d57c03086e5ffe044ddb8553f2642cd56f96a7abd0ecb2038e401f6b8"
     ],
     "skills/dispatch/SKILL.md": [
+      "sha256:795cda63e9afd6992e4daa910c8259735501515b510d5aa5f95b33ccf525b932",
       "sha256:7eda8e874f43748564d9c520cb702d90574d33c8ed7e5d0b2d5f73f07807608d"
     ],
     "skills/dispatch/delegate-recipes.md": [
@@ -392,6 +397,7 @@
       "sha256:f842f1bed01d271bc11d44916b39a7cf44524fd53403c3c1f730bbcf6db1f385"
     ],
     "skills/frontend/SKILL.md": [
+      "sha256:8e77cbe1981bf254c35f3ae3fd6037dabc75665fd020de941c5a5fad4755c7fa",
       "sha256:c9a15b093e586929944fc60d863e31f1849309a083fb7214f50872a867e3049c"
     ],
     "skills/grill-me/SKILL.md": [
@@ -419,7 +425,8 @@
       "sha256:e12e29868f567b3ab38a335e659f3a3b2be416ca9c1ae39fd1af1957516001ec"
     ],
     "skills/implement/SKILL.md": [
-      "sha256:24b2b7c04c440fe7a39a1bd16858a6a21df9316207f98576c800e8683263bcc9"
+      "sha256:24b2b7c04c440fe7a39a1bd16858a6a21df9316207f98576c800e8683263bcc9",
+      "sha256:b75a2eae044ab784d451d3eb201b6de99074f9caf0958c0aeb31bdd3734e7173"
     ],
     "skills/implementation-plan/SKILL.md": [
       "sha256:02036ea114d6deadc8b879f028c74127855b470008795f470300b12b3a0315cd",
@@ -471,7 +478,8 @@
       "sha256:98fa8c0a64c9f31a665f0fe40577dbb4b54f7e231772e73d5fbb4114b0667f8d"
     ],
     "skills/migrations/SKILL.md": [
-      "sha256:6fe76800ba1f916c356373e84d9b22af579e6ab9af93c263bd4f1e4f41a78a09"
+      "sha256:6fe76800ba1f916c356373e84d9b22af579e6ab9af93c263bd4f1e4f41a78a09",
+      "sha256:86cfc50a79e92751595ec5dec2a4961962b494438485e117e4b0661710b20082"
     ],
     "skills/minimal-implementation/SKILL.md": [
       "sha256:262c9ed819614644fe3cc57fceb48768405b66e09d17ca15b139de33177a6e8a",
@@ -578,7 +586,8 @@
     ],
     "skills/screenshot/SKILL.md": [
       "sha256:2b38aa267fa4c01eeb221eef2bfe44dd4d1965b1bb8bf7e6ece4d95969e8849a",
-      "sha256:7b7f6a9bd1e60b7248522258f5072c8d51dec33fc66c4649b791aef4cfc031ce"
+      "sha256:7b7f6a9bd1e60b7248522258f5072c8d51dec33fc66c4649b791aef4cfc031ce",
+      "sha256:e5f15deba9f5af3c3195bddf1ca7b21255bb1b2556189e9fb17be4305dfbf3b8"
     ],
     "skills/security-audit/AI-AND-LLM.md": [
       "sha256:7335a95c43554eadefcf03ece639291bb0e038c398a179299e3887ffe06bd2ef"
@@ -668,6 +677,7 @@
       "sha256:e03ced2100075da5d4c2f3cdffcc0966d4c41d982502c264063870f9d7093b13"
     ],
     "skills/security/SKILL.md": [
+      "sha256:5469cc6449b51206d90bcf78c23c0bb2216a90509a269eb167ef38ebc15730c9",
       "sha256:92c3fdebe05e1d4b8b7cd8893f5baf33824bc7c9e81902f2ab5d105d39f0c535"
     ],
     "skills/status-report/SKILL.md": [

@@ -9,7 +9,7 @@ metadata:
   related: frontend, browser-qa
 ---
 
-# Accessibility Review
+# Accessibility
 
 Done when: every changed interactive control is checked for name, role, state, keyboard operation, and visible focus, and each finding states its evidence type (observed or code-inferred) and a fix.
 
