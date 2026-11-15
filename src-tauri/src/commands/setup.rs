@@ -2679,8 +2679,30 @@ fn plan_surfaces(
     attach_claude_settings_details(&mut plan);
     attach_opencode_details(&mut plan, ws_root, home, sources.as_ref().ok());
     attach_file_count_details(&mut plan, ws_root, home, sources.as_ref().ok());
+    attach_codex_profile_detail(&mut plan, ws_root, home);
     attach_plan_preview(&mut plan, ws_root, home, &sources)?;
     Ok(plan)
+}
+
+fn attach_codex_profile_detail(plan: &mut SetupPlan, workspace_root: &Path, home: &Path) {
+    let Some(op) = plan.operations.iter_mut().find(|op| {
+        matches!(op.surface, SetupSurfaceId::CodexConfig) && op.kind == OperationKind::Update
+    }) else {
+        return;
+    };
+    let Some(profile) = crate::artifact_registry::ArtifactId::CodexConfig
+        .resolve_dest(home, workspace_root)
+        .ok()
+        .and_then(|path| crate::codex_config_keep::read_config_bounded(&path).ok())
+        .and_then(|bytes| String::from_utf8(bytes).ok())
+        .and_then(|text| text.parse::<toml::Value>().ok())
+        .and_then(|config| crate::codex_config_keep::permission_profile(&config))
+    else {
+        return;
+    };
+    op.details.push(format!(
+        "sandbox_mode left out: your Codex permission profile ({profile}) sets the sandbox"
+    ));
 }
 
 /// The state of each surface, detected from one read of the sources.

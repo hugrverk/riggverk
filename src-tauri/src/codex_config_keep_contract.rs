@@ -206,6 +206,83 @@ mod tests {
     }
 
     #[test]
+    fn codex_config_permission_profiles_preserve_sandbox_through_update_and_reset() {
+        for (label, profile, marker) in [
+            (
+                "selector",
+                "default_permissions = \"work\"\n",
+                "default_permissions",
+            ),
+            ("table", "[permissions.work]\n", "permissions.*"),
+        ] {
+            for existing in [false, true] {
+                let env = Env::new(label);
+                let original = env.read();
+                let filtered = original
+                    .lines()
+                    .filter(|line| {
+                        !line.trim_start().starts_with("sandbox_mode =")
+                            && !line.trim_start().starts_with("approval_policy =")
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                let sandbox = if existing {
+                    "sandbox_mode = \"read-only\" # retained\n"
+                } else {
+                    ""
+                };
+                // Table headers must follow the top-level keys.
+                let text = if marker == "default_permissions" {
+                    format!("{profile}{sandbox}{filtered}\n")
+                } else {
+                    format!("{sandbox}{filtered}\n{profile}")
+                };
+                env.write(&text);
+                env.set_record(env.installed_digest());
+                let preview = preview_setup(vec![SURFACE.to_string()]).expect("preview");
+                assert!(
+                    preview
+                        .operations
+                        .iter()
+                        .any(|op| op
+                            .details
+                            .iter()
+                            .any(|line| line.contains(marker)
+                                && line.contains("sandbox_mode left out"))),
+                    "{preview:?}"
+                );
+                assert!(env.apply().success);
+                let written = env.read();
+                assert!(written.contains("approval_policy = \"on-request\""));
+                assert_eq!(
+                    written.contains("sandbox_mode = \"read-only\" # retained"),
+                    existing
+                );
+                assert!(!written.contains("sandbox_mode = \"workspace-write\""));
+                assert!(!written.contains("[sandbox_workspace_write]"));
+                assert!(env.plan_fingerprint().is_none());
+                assert_eq!(
+                    crate::get_codex_runtime_health().unwrap().config_status,
+                    "synced"
+                );
+                if existing {
+                    assert!(crate::codex_config_keep::plan_defaults(&env.ws, &env.home).is_err());
+                    env.set_top_level("approvals_reviewer", "auto_review");
+                    let reset =
+                        crate::codex_config_keep::plan_defaults(&env.ws, &env.home).unwrap();
+                    assert!(reset.keys.iter().all(|key| key.key != "sandbox_mode"));
+                    assert!(reset
+                        .operation
+                        .rules_rewrite
+                        .unwrap()
+                        .content
+                        .contains("sandbox_mode = \"read-only\" # retained"));
+                }
+            }
+        }
+    }
+
+    #[test]
     fn a_changed_value_is_a_conflict_until_kept_and_then_current() {
         let env = Env::new("owner");
         assert_eq!(env.kind(), OperationKind::NoChange);
