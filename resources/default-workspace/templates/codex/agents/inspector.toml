@@ -24,4 +24,4 @@ Return:
 - Concrete file paths and symbols where possible.
 - Final recommendation: accept, accept with follow-up, or revise before commit.
 """
-sandbox_mode = "read-only"
+model_reasoning_effort = "high"

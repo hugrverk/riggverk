@@ -5,6 +5,7 @@ model: sonnet
 skills: [security]
 tools: Read, Grep, Glob
 permissionMode: plan
+effort: high
 maxTurns: 12
 ---
 

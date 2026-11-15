@@ -36,7 +36,7 @@
 | OpenCode agents | `agents/` in OpenCode's config folder | |
 | OpenCode rules | `AGENTS.md` in OpenCode's config folder | Managed block merge. |
 | Codex config | `$CODEX_HOME/config.toml` (default `~/.codex/config.toml`) | Allowlisted keys only; `model` and `model_reasoning_effort` user-owned and not seeded. Target `codex_config`, off by default. A value you set on one of the five enforced keys is replaced only by the explicit "use Riggverk's defaults" transaction (below). A new file is owner-only (0600); an existing one keeps its permission bits. |
-| Codex agents | `$CODEX_HOME/agents/` | |
+| Codex agents | `$CODEX_HOME/agents/` | Set no `sandbox_mode`: Codex runs a custom agent under its parent's sandbox and approvals, so the reviewers are read-only by their instructions only. |
 | Codex rules | `$CODEX_HOME/AGENTS.md` | Managed block merge. |
 | Claude rules | `~/.claude/CLAUDE.md` | Managed block merge. |
 | Claude agents | `~/.claude/agents/` | |

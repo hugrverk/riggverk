@@ -28,4 +28,4 @@ Return:
 - Concrete remediation steps
 - Files and symbols involved
 """
-sandbox_mode = "read-only"
+model_reasoning_effort = "high"

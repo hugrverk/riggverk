@@ -134,6 +134,7 @@ Integrate parallel slices one at a time and re-run the checks after each. A conf
 
 ### Claude Code
 
+- When `advisor` is available, call it before sending a brief whose judgement calls you pre-decided, and before accepting a slice's diff.
 - Subagent route: the Agent tool, or a subagent definition, with `isolation: worktree` creates and cleans up its own worktree; use it instead of `git worktree add`, then collect from the path and branch it reports. A subagent runs on its definition's model unless the user named one.
 - `codex exec` cannot start its sandbox inside Claude Code's sandbox on macOS (`sandbox_apply: Operation not permitted`): run it outside the sandbox with the user's approval.
 

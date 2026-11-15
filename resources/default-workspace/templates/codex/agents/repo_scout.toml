@@ -23,4 +23,4 @@ Return format:
 - Recommended patch targets
 - Suggested verification
 """
-sandbox_mode = "read-only"
+model_reasoning_effort = "low"

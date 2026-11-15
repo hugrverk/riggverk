@@ -17,7 +17,7 @@ When `default_permissions` or a `[permissions.*]` table is present, Riggverk lea
 
 - The five managed keys follow the template (currently `on-request`, reviewer `user`, `workspace-write`, prompt-based app tool approvals).
 - **Keep mine.** If you set one of the five on purpose (say `approvals_reviewer = "auto_review"`), the config row shows a conflict or an update. Press `m` on the row: Riggverk asks, then records your value for every managed key that differs in `.riggverk/config-preferences.json`. Those keys then count as current for as long as the value stays as it is, and an update never writes them; the other managed keys keep following the template. Change the value again and the key is managed again; press `m` once more (with nothing differing) to hand every kept key back. Riggverk never writes `config.toml` to do this.
-- `model` and `model_reasoning_effort` are yours: never written, overwritten, or reported as drift. Riggverk sets no model; your agent's own default applies.
+- `model` and `model_reasoning_effort` are yours in `config.toml`: never written, overwritten, or reported as drift. (The bundled agent files set their own `model_reasoning_effort`; that does not touch `config.toml`.) Riggverk sets no model; your agent's own default applies.
 - Personality, MCP entries, unrelated tables, comments (including same-line comments on managed keys), and unknown keys are preserved. Ambiguous TOML is refused with nothing written.
 - App-shaped legacy `profile = "safe"` selectors and `[profiles.safe]` / `[profiles.workspace-write]` tables are removed during migration only, while they still hold app-shipped values. Other profiles are untouched.
 
@@ -25,6 +25,6 @@ The app installs from its bundled template, not from `templates/codex/config.tom
 
 ## Agents, rules, skills
 
-- Native agents: `templates/codex/agents/*.toml` install to `$CODEX_HOME/agents`.
+- Native agents: `templates/codex/agents/*.toml` install to `$CODEX_HOME/agents`. They set `model_reasoning_effort` (`repo_scout` low, `verifier` medium, `inspector` and `security_reviewer` high) and no `model`. They set no `sandbox_mode` either: Codex ignores sandbox and approval keys in a custom agent file and runs the agent under the parent's settings. The reviewers `inspector`, `repo_scout` and `security_reviewer` are read-only by their instructions only, not by a sandbox.
 - Rules: `$CODEX_HOME/AGENTS.md`, merge-managed ([AGENT_RULES.md](AGENT_RULES.md)). A non-empty `AGENTS.override.md` makes Codex ignore it.
 - Skills: the app installs to `~/.agents/skills`, the folder Codex reads personal skills from (checked against Codex 0.163; Codex builds before about 0.100 do not read it, so update Codex if a skill does not show up; `$CODEX_HOME/skills` is still read but deprecated). With a customised `CODEX_HOME` or `CODEX_SKILLS_PATH` the skills go to `$CODEX_HOME/skills` instead, so Codex reads nothing outside its own home. Copies older versions put in `$CODEX_HOME/skills` (typically `~/.codex/skills`) are removed by the update with a backup; an edited copy stays and Codex lists that skill twice until you move or delete it. `$CODEX_HOME/skills/.system` is Codex's own and is never touched.
