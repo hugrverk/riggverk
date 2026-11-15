@@ -588,6 +588,26 @@
   overflow-wrap: anywhere;
 }
 
+/* The .env deny lines on the Claude Code page: a suggestion, never written by the app. */
+
+.hp-env-deny {
+  display: grid;
+  gap: 8px;
+  padding-top: 7px;
+  border-top: 1px solid var(--border);
+}
+
+.hp-env-deny p {
+  margin: 0;
+  color: var(--text-muted);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.hp-env-deny .copyable-block { margin: 0; }
+
+.hp-env-deny .copyable-block .markdown-code { padding: 10px 40px 10px 14px; }
+
 /* ---- fewer columns when the page is narrow, which a larger text size makes happen sooner ---- */
 
 @container hp (max-width: 640px) {
