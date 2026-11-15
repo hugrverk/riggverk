@@ -8,6 +8,17 @@ export interface PostureVerdict {
   tone: Tone;
 }
 
+/**
+ * The two `permissions.deny` lines the Claude Code page suggests while no Read deny rule covers `.env` files, exactly as
+ * they are pasted into `~/.claude/settings.json`. Riggverk only shows them; it never writes that file's permissions.
+ */
+export const CLAUDE_ENV_DENY_LINES = '"Read(**/.env)",\n"Read(**/.env.*)"';
+
+/** Whether the page offers {@link CLAUDE_ENV_DENY_LINES}: only while the check reports `.env` reads as allowed. */
+export function offersClaudeEnvDeny(posture: SecurityPosture): boolean {
+  return posture.harness === "claude" && posture.findings.some(finding => finding.code === "claude_env_read_open");
+}
+
 /** The verdict when the posture could not be loaded at all. */
 export const POSTURE_UNAVAILABLE: PostureVerdict = { text: "could not read config", tone: "dim" };
 
