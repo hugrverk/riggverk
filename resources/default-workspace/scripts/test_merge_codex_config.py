@@ -823,6 +823,27 @@ def test_routing_apply_seeds_model_and_effort_in_new_config() -> None:
         assert 'model_reasoning_effort = "xhigh"' in content
 
 
+
+def test_permission_profiles_preserve_sandbox_in_both_merge_scripts() -> None:
+    for profile in ('default_permissions = "work"\n', '[permissions.work]\n'):
+        for sandbox in ('', 'sandbox_mode = "read-only" # keep\n'):
+            with tempfile.TemporaryDirectory() as td:
+                tmp = Path(td)
+                managed = write_file(tmp / "managed.toml", ROUTING_ENFORCED_ONLY)
+                target = write_file(tmp / "installed.toml", sandbox + profile)
+                legacy = subprocess.run([sys.executable, str(SCRIPT), str(target), str(managed),
+                                         "--render-rollback-managed"], capture_output=True, text=True)
+                assert legacy.returncode == 0, legacy.stderr
+                target.write_text(legacy.stdout, encoding="utf-8")
+                result = run_routing(str(target), str(managed), "--apply", "--backup-dir", str(tmp / "backup"))
+                assert result.returncode == 0, result.stderr
+                content = target.read_text(encoding="utf-8")
+                assert ('sandbox_mode = "read-only" # keep' in content) == bool(sandbox)
+                assert 'sandbox_mode = "workspace-write"' not in content
+                assert 'approval_policy = "on-request"' in content
+                assert run_routing(str(target), str(managed), "--managed-match").returncode == 0
+
+
 # ── Main guard ──
 
 if __name__ == "__main__":

@@ -19,7 +19,7 @@ Done when: every delegated branch is integrated after you re-ran its checks, or 
 
 ## When to delegate
 
-Only when the user wants other agents used: they ask for it in this conversation ("let Codex do the renames", "delegate this"), or their own rules opt in, for example with a line such as `Delegation: prefer codex for mechanical work`. A "do it yourself" or "no other agents" from the user wins over any rule. Never start another agent on your own initiative because it looks cheaper.
+Only when the user wants other agents used: they ask for it in this conversation ("let Codex do the renames", "delegate this"), or their own rules opt in, for example with a line such as `Delegation: prefer codex for mechanical work`. A "do it yourself" or "no other agents" from the user wins over any rule. Never start another agent on your own initiative because it looks cheaper. When the user asks you to lead agents toward a goal across many slices, `orchestrate` runs that loop and uses this skill for each lane.
 
 Good slices:
 
@@ -134,6 +134,7 @@ Integrate parallel slices one at a time and re-run the checks after each. A conf
 
 ### Claude Code
 
+- When `advisor` is available, call it before sending a brief whose judgement calls you pre-decided, and before accepting a slice's diff.
 - Subagent route: the Agent tool, or a subagent definition, with `isolation: worktree` creates and cleans up its own worktree; use it instead of `git worktree add`, then collect from the path and branch it reports. A subagent runs on its definition's model unless the user named one.
 - `codex exec` cannot start its sandbox inside Claude Code's sandbox on macOS (`sandbox_apply: Operation not permitted`): run it outside the sandbox with the user's approval.
 

@@ -88,9 +88,60 @@ class ClaudeHeaderContractTests(unittest.TestCase):
         self.assertTrue(any("must not list Edit" in e for e in errors), errors)
         self.assertTrue(any("must list Edit in disallowedTools" in e for e in errors), errors)
 
+    def test_effort_must_be_a_documented_level(self) -> None:
+        self.assertEqual(self.errors("inspector", claude_agent("inspector", effort="high")), [])
+        errors = self.errors("inspector", claude_agent("inspector", effort="turbo"))
+        self.assertTrue(any("invalid effort" in e for e in errors), errors)
+
+    def test_bundled_reviewers_pin_high_effort_and_the_rest_leave_it_unset(self) -> None:
+        agents = ROOT / WS / "templates/claude/agents"
+        for role, expected in (("inspector", "high"), ("sentinel", "high"), ("repo-scout", None), ("verifier", None), ("scribe", None)):
+            fields = self.generator._parse_frontmatter_fields((agents / f"{role}.md").read_text(encoding="utf-8"))
+            self.assertEqual(fields.get("effort"), expected, role)
+
     def test_description_with_colon_space_fails(self) -> None:
         errors = self.errors("inspector", claude_agent("inspector", description="Read-only: include the diff."))
         self.assertTrue(any("plain YAML scalar" in e for e in errors), errors)
+
+
+class CodexAgentContractTests(unittest.TestCase):
+    EFFORTS = {"repo_scout": "low", "inspector": "high", "security_reviewer": "high", "verifier": "medium"}
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.generator = load_generator()
+
+    def test_bundled_codex_agents_set_effort_and_no_sandbox_or_model(self) -> None:
+        agents = ROOT / WS / "templates/codex/agents"
+        for role, effort in self.EFFORTS.items():
+            text = (agents / f"{role}.toml").read_text(encoding="utf-8")
+            keys = [line.split(" =", 1)[0] for line in text.splitlines() if line.startswith(("sandbox_mode", "model", "approval_policy"))]
+            self.assertEqual(keys, ["model_reasoning_effort"], role)
+            self.assertIn(f'model_reasoning_effort = "{effort}"\n', text, role)
+            meta = (agents / f"{role}.meta.json").read_text(encoding="utf-8")
+            self.assertNotIn("sandbox_mode", meta, role)
+
+    def test_sandbox_mode_in_a_codex_agent_meta_is_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            meta = Path(tmp) / "x.meta.json"
+            meta.write_text('{"name": "x", "description": "d", "sandbox_mode": "read-only"}', encoding="utf-8")
+            self.generator.WS_ROOT = Path(tmp)
+            try:
+                with self.assertRaises(SystemExit):
+                    self.generator.compose_codex_toml("x.meta.json", "Body.")
+            finally:
+                self.generator.WS_ROOT = ROOT / WS
+
+    def test_unknown_effort_in_a_codex_agent_meta_is_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            meta = Path(tmp) / "x.meta.json"
+            meta.write_text('{"name": "x", "description": "d", "model_reasoning_effort": "turbo"}', encoding="utf-8")
+            self.generator.WS_ROOT = Path(tmp)
+            try:
+                with self.assertRaises(SystemExit):
+                    self.generator.compose_codex_toml("x.meta.json", "Body.")
+            finally:
+                self.generator.WS_ROOT = ROOT / WS
 
 
 class BrokenCopyTests(unittest.TestCase):

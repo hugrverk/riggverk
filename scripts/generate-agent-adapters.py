@@ -106,6 +106,9 @@ def compose_markdown(header_rel: str, body: str) -> str:
 
 CLAUDE_READONLY_TOOLS = frozenset(["Read", "Grep", "Glob"])
 CLAUDE_READONLY_ROLES = frozenset(["repo-scout", "inspector", "sentinel"])
+CODEX_AGENT_EFFORTS = frozenset({"minimal", "low", "medium", "high", "xhigh"})
+CODEX_AGENT_FORBIDDEN_KEYS = frozenset({"sandbox_mode", "approval_policy", "model_provider", "mcp_servers"})
+CLAUDE_AGENT_EFFORTS = frozenset({"low", "medium", "high", "xhigh", "max"})
 CLAUDE_AGENT_MODELS = frozenset(["haiku", "sonnet"])
 CLAUDE_PERMISSION_MODES = frozenset(["default", "acceptEdits", "auto", "dontAsk", "bypassPermissions", "plan"])
 
@@ -194,6 +197,13 @@ def _validate_markdown_frontmatter(
             errors.append(
                 f"{rel}: Claude agent '{role_name}' must pin model to one of "
                 f"{', '.join(sorted(CLAUDE_AGENT_MODELS))}, found {model or 'none'!r}"
+            )
+
+        # effort, when present, must be a level Claude Code documents for subagents.
+        effort = fields.get("effort")
+        if effort is not None and effort not in CLAUDE_AGENT_EFFORTS:
+            errors.append(
+                f"{rel}: invalid effort {effort!r}; use one of {', '.join(sorted(CLAUDE_AGENT_EFFORTS))}"
             )
 
         # permissionMode, when present, must be a known value and never bypass permissions.
@@ -338,8 +348,16 @@ def compose_codex_toml(meta_rel: str, body: str) -> str:
         body.strip(),
         "\"\"\"",
     ]
-    if meta.get("sandbox_mode"):
-        lines.append(f'sandbox_mode = {json.dumps(meta["sandbox_mode"])}')
+    # A custom agent file cannot override the parent's sandbox or approval settings, so a
+    # sandbox_mode here would be ignored and read as a guarantee it is not.
+    forbidden = sorted(set(meta) & CODEX_AGENT_FORBIDDEN_KEYS)
+    if forbidden:
+        fail(f"{meta_path}: Codex ignores {', '.join(forbidden)} in a custom agent file; remove it")
+    effort = meta.get("model_reasoning_effort")
+    if effort is not None:
+        if effort not in CODEX_AGENT_EFFORTS:
+            fail(f"{meta_path}: invalid model_reasoning_effort {effort!r}; use one of {', '.join(sorted(CODEX_AGENT_EFFORTS))}")
+        lines.append(f'model_reasoning_effort = {json.dumps(effort)}')
     return "\n".join(lines) + "\n"
 
 

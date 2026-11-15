@@ -231,6 +231,7 @@
     ],
     "skills/adversarial/SKILL.md": [
       "sha256:1fa6efa29d35c388b92b25e2988de9b38f838a68738e55febc1697d27b7373e4",
+      "sha256:63d8a9182b2da85abdb82b51aafa7c9784dbf744d6b99155b57ed821df658754",
       "sha256:7db6f877e9a79a5c8823c86c6880b413b4aec2a891de5d66c9d6a58377233c5a",
       "sha256:d14f524487293cc0f245259c30d9e0a5445831100c20606e9d3f5b0e082257bd"
     ],
@@ -265,6 +266,7 @@
       "sha256:ad924f92ee293a7c445b207118e20e61b28aeeee3e877698886a6215f60fb27c"
     ],
     "skills/blueprint/SKILL.md": [
+      "sha256:1ddfeaa8ab6d2625d8de38c73fada065c71effe98a2ca44bcfc21e084ab90dfe",
       "sha256:403b65d418a4b9db79014689a193e4318259adf630a8a1c1dd09a0dc579846d8",
       "sha256:ca6f1d6fdd504036184d69233c1cad8d8186d34649c15482e1eec806a69325bc"
     ],
@@ -375,9 +377,12 @@
       "sha256:ead0fe0d57c03086e5ffe044ddb8553f2642cd56f96a7abd0ecb2038e401f6b8"
     ],
     "skills/dispatch/SKILL.md": [
+      "sha256:187dc9cfaf167a5daa7574b8444ccf44a468d7dc29ec22fc252c70a2ee45021e",
       "sha256:795cda63e9afd6992e4daa910c8259735501515b510d5aa5f95b33ccf525b932",
       "sha256:7eda8e874f43748564d9c520cb702d90574d33c8ed7e5d0b2d5f73f07807608d",
-      "sha256:84025eeef87dd5ebc6565d56b9a7eec49649f95d815713b157485ac56f5eb7b7"
+      "sha256:84025eeef87dd5ebc6565d56b9a7eec49649f95d815713b157485ac56f5eb7b7",
+      "sha256:b219b081756b4697a2f25f9dbdd46dd988e640dfe0700c79f17eae40a3d12fee",
+      "sha256:d066e9fd951dabec043cf62633587fef21e6e0d4d128fd2e5a9fe4707598b0bd"
     ],
     "skills/dispatch/delegate-recipes.md": [
       "sha256:8bf1ee6a5a47bf61a3b410bf6374a10a9a3f40eeea138841d55cab81f92da0d0"
@@ -408,6 +413,9 @@
       "sha256:c403f0fc0ada336851447c1439b5357c501e7c6d39daac18c4bfe48a3103debb",
       "sha256:edd0ba8c366cbfd326491f7fab72f6f2ea49d9b5f3715e10907b65e517d70464"
     ],
+    "skills/grill-me/agents/openai.yaml": [
+      "sha256:a1499d95abd8447558c535fe5554adcc3c9b988a0a39264a6283d430effe1e94"
+    ],
     "skills/grill-with-docs/SKILL.md": [
       "sha256:3a4e568413fb28860d9a8f677600d24ac60b3cdcb02989e434fae76458893b8f",
       "sha256:e590b5eec943b3736efe30f8e87888b4d600df00448fca1b3b2dece696ec2796",
@@ -427,7 +435,9 @@
     ],
     "skills/implement/SKILL.md": [
       "sha256:24b2b7c04c440fe7a39a1bd16858a6a21df9316207f98576c800e8683263bcc9",
-      "sha256:b75a2eae044ab784d451d3eb201b6de99074f9caf0958c0aeb31bdd3734e7173"
+      "sha256:7aed462d0d03af848c7f8a47384a27f8a166ad2d9520f3a7c87bace8eb7e7421",
+      "sha256:b75a2eae044ab784d451d3eb201b6de99074f9caf0958c0aeb31bdd3734e7173",
+      "sha256:be4791af72229ea3b797fe4047b13d1c945425f2775e02b51ad0e5a0a25341e1"
     ],
     "skills/implementation-plan/SKILL.md": [
       "sha256:02036ea114d6deadc8b879f028c74127855b470008795f470300b12b3a0315cd",
@@ -492,6 +502,11 @@
     "skills/nextjs-product-slice/SKILL.md": [
       "sha256:1f6557d9a8a014e7ed6914e152fc47b30845bbb79462d68ab56cc0ce20a0382c",
       "sha256:89f3839942fa5da82a132eaba2fd0de762999e04ba960d2a9760d316846086cb"
+    ],
+    "skills/orchestrate/SKILL.md": [
+      "sha256:578821be7bd8109cddd84a47f453d13cafccc659fce6b5889dac44a751ffc63f",
+      "sha256:9c7f7e6bbedf30f66e1381eca22d1ff7c5350ee4996ca8f0b5db34b54677b3ab",
+      "sha256:b05e03d90f8c87b9f86e58aab4eb72351d1f734000f30980a285fbd7fe0d3778"
     ],
     "skills/pr-modernize/SKILL.md": [
       "sha256:0dd2d8591625a0b75bc9da2665f078118162807416efba7e023f76694627349c",
@@ -562,6 +577,9 @@
       "sha256:6a9eab05a9a22e848b2260f988aadcc5fd912f2cb79e35d3d71ee2d9b245ef41",
       "sha256:776fc331b53ef022c1a7b7255d9d9c07dd3dfd68a5f9ab63dcbbe1f5ed3ece27",
       "sha256:c3ff6297bd1645b85ae9375c2f22813b9aa97a9542f6e04d493860111cd4ea76"
+    ],
+    "skills/retro/agents/openai.yaml": [
+      "sha256:a1499d95abd8447558c535fe5554adcc3c9b988a0a39264a6283d430effe1e94"
     ],
     "skills/review-response/SKILL.md": [
       "sha256:0a780fc6a9d183ac8ec4c4793547dfcffd213d582416fd5c2d75ae03f849d0cb",
@@ -772,6 +790,7 @@
       "sha256:341381b851045aba06a02c9f36112838e5b6d604b7a69eef7134130993005d21",
       "sha256:4661408bbd9dd7ade0533ce44241f70316a984a50e4e574d4cb9b69931d66cfa",
       "sha256:49ba5674bc1a981f57f13e22ab1ac60e0125383a000f021e81fdf799d0c9c3a3",
+      "sha256:d197466394978b8d9cd9507713cb41ce41d27e1e548e760db9527bbf4691d6e6",
       "sha256:ed2ded0851ac5abe2777b7cd6a19d02bfeebb161cad44159e4e669d44eb3b5cb"
     ],
     "templates/claude/agents/repo-scout.md": [
@@ -794,6 +813,7 @@
       "sha256:2df07c7bf50c40de5ea254261a5ec0d6d42ecf993bacb44892d8e13e9368503f",
       "sha256:6e3aa7b84fddcdec6d653942ad7cb3594a6ead716eb609aa7eea089414327c38",
       "sha256:a560d37a71881bbba61a7dc7c89ba0f76793aed66bd327263dd0517bb6d9bf80",
+      "sha256:aaf04e03b98fa4c879ea9248ddd74ad15ef7c9807c4185201e2d4e377c9d4e22",
       "sha256:c7493b9ecf2222d786d7b8b3c6f6cdc8a4fe29bfb2beef9a38f2bff3cfb8e7e1",
       "sha256:cfd0ecbe32ae7f57c6f711efc9a02ffdf8a9b82bb8d4db2a74fd1235ac5edbbc",
       "sha256:f17005882f49c492f0fa90c44916b319895cebe2cd523cffa7a309f103de0f62",
@@ -810,19 +830,23 @@
     ],
     "templates/codex/agents/inspector.toml": [
       "sha256:0663ca6af24670ad9cee93c22c44a2df027802c8646420a07a9f5e1ff5d3da79",
-      "sha256:35c8dbffcb7ddd04eff131a39b592c08c5b4c88a8d7486a16b1159975f30febd"
+      "sha256:35c8dbffcb7ddd04eff131a39b592c08c5b4c88a8d7486a16b1159975f30febd",
+      "sha256:afb76263c8d3258c6c4eb6674f51906a7d4e85f8ec4f5a9a898fb944a888d7fe"
     ],
     "templates/codex/agents/repo_scout.toml": [
       "sha256:1859d79cdc247f4361b0763d3e7664ade8fff5bd9226dcb81196f23bfcdc005f",
+      "sha256:27f4b5d2c88e8716e8404b902e8791f6970f3e5ffec7513d0d07267af15251d5",
       "sha256:5121332fc48e61392d288f40446a48eb0091638c5c146da98f1101ffead8de43"
     ],
     "templates/codex/agents/security_reviewer.toml": [
       "sha256:5537993d613f69cde6064586fd159c42a7682e3e19f32e4b4fb8df1ba1a19d68",
-      "sha256:a089a166eba8a61b1c5ff7d1a2f8d7e9ce8adf00574337d784d9967ba1a16964"
+      "sha256:a089a166eba8a61b1c5ff7d1a2f8d7e9ce8adf00574337d784d9967ba1a16964",
+      "sha256:a1016d9b7421395ca4c7ca79bbed0caee96cd03a567e89aabec573a2c4944cbe"
     ],
     "templates/codex/agents/verifier.toml": [
       "sha256:765975078a868a99dd6fde33175448233bb36ec8788b8d09e603bd2219b906c9",
       "sha256:7a52fb003201e6531f7be86c38d09f2ba0373e6dbac73c5b53be7390acff20f5",
+      "sha256:95eb6bdc5e536a4497931e4af11cd546c00f8cc6fe84ad6db22133e4f1e4a8c8",
       "sha256:aaaf528cb90df12a9fb991869cf456336132a0f8df4ef1287adcb695d8a7864a",
       "sha256:f9a17033e7383f7516d5b3ed2fb23d89901033e55ad36fd298cb8ccf9800f0c6"
     ],

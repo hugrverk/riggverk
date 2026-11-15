@@ -36,7 +36,14 @@ Before finishing, remove anything unnecessary:
 - speculative abstractions
 - second paths for existing operations
 - changes outside the requested scope
+- comments this diff added that restate the code, narrate the change or address the reviewer; keep comments the language or tooling requires and every comment you did not write
 
 Stop and report if the task requires an unapproved rewrite, dependency, architecture change, or materially broader scope.
 
 Verify with the narrowest check that can falsify the change. Report what ran, what did not run, and residual risk.
+
+## Harness notes
+
+### Claude Code
+
+- When `advisor` is available, call it before the first edit when the approach is not dictated by the task, and before reporting done.
