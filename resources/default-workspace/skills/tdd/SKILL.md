@@ -6,7 +6,7 @@ metadata:
   category: testing
   risk: low
   targets: codex, opencode, claude, cursor, copilot, pi, kilo, antigravity, grok
-  related: diagnose, implementation-plan
+  related: diagnose, blueprint
   source: https://github.com/mattpocock/skills (tdd, MIT)
 ---
 

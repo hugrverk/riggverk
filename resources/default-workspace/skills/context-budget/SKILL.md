@@ -6,7 +6,7 @@ metadata:
   category: workflow
   risk: low
   targets: codex, opencode, claude, cursor, copilot, pi, kilo, antigravity, grok
-  related: implementation-plan
+  related: blueprint
   source: https://github.com/mattpocock/skills (writing-for-agents, MIT)
 ---
 

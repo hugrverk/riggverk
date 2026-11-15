@@ -7,7 +7,7 @@ metadata:
   category: review
   risk: medium
   targets: codex, opencode, claude, cursor, copilot, pi, kilo, antigravity, grok
-  related: minimal-implementation, implementation-plan, security-review, tdd
+  related: implement, blueprint, security, tdd
   source: https://github.com/raddue/crucible (red-team, MIT) and https://github.com/dementev-dev/adversarial-review (Apache-2.0)
 ---
 
@@ -33,7 +33,7 @@ When the words fit no mode or more than one, ask the user one short question bef
 
 - **Lead** (this session): resolves the roles, writes every brief, keeps scope, runs every proof and the verification, adjudicates, asks the user when needed and decides. Verification is never a role you hand to a model.
 - **Critic**: a new read-only agent every round, cold start. It never learns who wrote the work and never sees the implementer's reports or earlier rounds' discussion. In test mode it is called the **adversary**: it proposes tests as text and you write them into the tree. Choose it by capability first: at least as capable as the implementer's model (in review mode, the author's; your own model when unknown), and between candidates of comparable capability, another model family. A weaker critic adds false alarms, not safety, and a weak test writer makes the code worse. Your rules' exception that lets a critic run on the strongest model covers the adversary.
-- **Implementer** (implement and test): one delegated agent that owns the diff for the whole loop, continued between rounds so it keeps its context. It follows `minimal-implementation`. Review mode has no implementer, so an `implementer` value is ignored there.
+- **Implementer** (implement and test): one delegated agent that owns the diff for the whole loop, continued between rounds so it keeps its context. It follows `implement`. Review mode has no implementer, so an `implementer` value is ignored there.
 
 ## Choose the roles
 

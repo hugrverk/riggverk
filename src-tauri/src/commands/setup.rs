@@ -3684,17 +3684,17 @@ mod tests {
             crate::platform_paths::Platform::current(),
         )
         .expect("home");
-        let dest = resolved_home.join(".config/opencode/skills/frontend-design/SKILL.md");
+        let dest = resolved_home.join(".config/opencode/skills/frontend/SKILL.md");
         fs::create_dir_all(dest.parent().unwrap()).expect("dest parent");
         fs::write(&dest, "managed old").expect("managed skill");
         fs::write(
-            resolved_home.join(".config/opencode/skills/frontend-design/user-notes.md"),
+            resolved_home.join(".config/opencode/skills/frontend/user-notes.md"),
             "keep me",
         )
         .expect("unknown sibling");
         let artifact = ArtifactId::skill_md(
             crate::skill_roots::SkillRoot::OpenCode,
-            crate::artifact_registry::SkillName::new("frontend-design").unwrap(),
+            crate::artifact_registry::SkillName::new("frontend").unwrap(),
         );
         apply_single_artifact(&artifact, &ws, &resolved_home, None, None).expect("apply skill");
         let source = artifact
@@ -3707,7 +3707,7 @@ mod tests {
         );
         assert_eq!(
             fs::read_to_string(
-                resolved_home.join(".config/opencode/skills/frontend-design/user-notes.md")
+                resolved_home.join(".config/opencode/skills/frontend/user-notes.md")
             )
             .unwrap(),
             "keep me"

@@ -500,7 +500,7 @@ class TestArchitect(unittest.TestCase):
     def test_delegate_recipe_opencode_agent_has_no_quoting_bypass(self) -> None:
         import re
 
-        recipes = REPO_ROOT / "resources" / "default-workspace" / "skills" / "delegate" / "delegate-recipes.md"
+        recipes = REPO_ROOT / "resources" / "default-workspace" / "skills" / "dispatch" / "delegate-recipes.md"
         match = re.search(r"OPENCODE_CONFIG_CONTENT='(\{.*?\})' \\\n", recipes.read_text(encoding="utf-8"))
         self.assertIsNotNone(match)
         perm = json.loads(match.group(1))["agent"]["riggverk-delegate"]["permission"]

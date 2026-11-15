@@ -1,12 +1,12 @@
 ---
-name: screenshot-review
-description: Critiques supplied screenshots of any UI, app, dashboard or document (web, native, dialogs, terminal, charts, slides, PDFs), returning a ranked patch plan without edits. Use when the user shares screenshots to critique. Not for live-browser verification (browser-qa) or building UI (frontend-design).
+name: screenshot
+description: Critiques screenshots the user supplies of any UI, app, dashboard or document (web, native, terminal, charts, PDFs) into a ranked patch plan without edits. Use when the user shares screenshots to critique. Not for taking screenshots, live-browser checks (browser-qa) or building UI (frontend).
 license: MIT
 metadata:
   category: frontend
   risk: low
   targets: codex, opencode, claude, cursor, copilot, pi, kilo, antigravity, grok
-  related: frontend-design, browser-qa, accessibility-review
+  related: frontend, browser-qa, accessibility
 ---
 
 # Screenshot Review

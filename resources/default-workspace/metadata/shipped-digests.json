@@ -149,6 +149,9 @@
       "sha256:ea2016c0c9b4c38b3a1bb26d8b2ea98067be4baac19450881085abe98edf383a",
       "sha256:ebf2a25f4b84b1e6f142c3704671837859000b256def0385e0a6be7bb7146940"
     ],
+    "skills/accessibility/SKILL.md": [
+      "sha256:d7d8a1362489ede164ba0ba3272356a2addbf3931fa87e39a063a91aef7e4421"
+    ],
     "skills/adversarial-implementation/SKILL.md": [
       "sha256:1de652a7f2953442a243106000831b6ebac53304fb9d7cae66057b113615fbb5",
       "sha256:4a3c1dc56094e2a71c47e3b3eef1c80f6348304fdc03d3eab58b4fbd9cec7c72",
@@ -226,10 +229,12 @@
       "sha256:bd55456493637dd7b0bc094c6ba8e4f8d35ee11e001d238ba022817b04ddfc5a"
     ],
     "skills/adversarial/SKILL.md": [
+      "sha256:1fa6efa29d35c388b92b25e2988de9b38f838a68738e55febc1697d27b7373e4",
       "sha256:d14f524487293cc0f245259c30d9e0a5445831100c20606e9d3f5b0e082257bd"
     ],
     "skills/adversarial/adversarial-roles.md": [
-      "sha256:3843c0fb2cba2626daee1270bc4f3ce9e5ee61f80983ed5a7579a0a56c06c918"
+      "sha256:3843c0fb2cba2626daee1270bc4f3ce9e5ee61f80983ed5a7579a0a56c06c918",
+      "sha256:78c269e3449236ac5b140019a11237dd53c997d2c5b1787df4983ecf6c664c75"
     ],
     "skills/adversarial/critic-recipes.md": [
       "sha256:4911867e79cfab6a7c6bebe6a344811fc32ee468d056618eb412a968b5a7f8a6"
@@ -238,7 +243,8 @@
       "sha256:d09f57f292e7db4caef43252702eb52e469fd2a6234b92c1c1bcc0785d71fe96"
     ],
     "skills/adversarial/review.md": [
-      "sha256:15fe87f89ad66efde9a0f9228596bcb982df840d2cc6720b41c9f7ffa89d7ebc"
+      "sha256:15fe87f89ad66efde9a0f9228596bcb982df840d2cc6720b41c9f7ffa89d7ebc",
+      "sha256:440efae451666b2b4696429c7736199d5e7bc18618ee7cc210972984a413c21c"
     ],
     "skills/adversarial/test.md": [
       "sha256:3f1b50e21d849f6eaa4fec87ad5871449e55bf50100d6d1606bdee96652a772b"
@@ -255,6 +261,9 @@
     "skills/agents-md/assets/AGENTS.template.md": [
       "sha256:ad924f92ee293a7c445b207118e20e61b28aeeee3e877698886a6215f60fb27c"
     ],
+    "skills/blueprint/SKILL.md": [
+      "sha256:ca6f1d6fdd504036184d69233c1cad8d8186d34649c15482e1eec806a69325bc"
+    ],
     "skills/browser-qa/SKILL.md": [
       "sha256:1746af0204c1d398d2a65d1aaff458a479dd457b2687762981f053a5c3cfdcf3",
       "sha256:30d52c06c27b4a01ae178cda2afbe8bda2ecc6493dd3f1a9c9c74ffcd2898022",
@@ -263,6 +272,7 @@
       "sha256:4f4550f956c01ae6eecb032b9bc6db0cd3eb86dbc650cbe85aa0f3b73e97d4d1",
       "sha256:65c12ac3aa5de8a2595cf1e5d67ef077992cccbff59977d61918341f0269e605",
       "sha256:74bc5f54dfe6061b3a064669099103b420f69624f91fe2d437e0b2a242364e26",
+      "sha256:866d7c04ace121e04540644eda09463a8500daa2eb8c6cee2bc26e5b11dc6f35",
       "sha256:93b3ae350b3db22136dada1fcb4fa63ac4ca98c7847e154939f95fcc0027a7c1",
       "sha256:b219395c52aa80026fbd7715ac336e5bcedc3557cecb807a2971f13aa0f670f0",
       "sha256:b458e3c34834be51c248a808b057213735ab2a3b420b345f21d78bc541599e6b",
@@ -291,12 +301,16 @@
       "sha256:d073d1faf21d8349a73358f2e863ab44dfe1f0369f6c89880c061161411c72a6",
       "sha256:d824284821afe4c771b721a1718835444f3542289c52441cc449f2b0725b94cb"
     ],
+    "skills/comments/SKILL.md": [
+      "sha256:afae19f22bffa8d84591cb8c3e35b18d6f79b2f4c290df92bb5410b44a727ba0"
+    ],
     "skills/context-budget/SKILL.md": [
       "sha256:1c4014a0cde8038051d766c643426e7598ff97ffdcb13d90b4b357ff383b0143",
       "sha256:224477c7c6dfe048ef5053df9b6a9c241de44069dd179043cbf0b5f8c30edc4b",
       "sha256:3c9b82db6e2982993ef19d75bcf0d5d7c7680092c59f1df49e6d698e02f121a3",
       "sha256:3ca0bb027599df9585310317749f58775be0ff63266dd55c0d4357b347c6f93b",
       "sha256:411ee5994a59b030cec69f327aaf1830352aa265a94c54f4aed6226026840095",
+      "sha256:5ec6636ce4d1d370b84e31430e773abfb050c53f366bf972fd046f1c4f7fbe1f",
       "sha256:c3b4644dc17afa663518be89f6abd4f1a5fd4bfde85ae4a326956bfbbd5819e4",
       "sha256:cb89eb828c89e674a87bc7bbd09447722fa616104a487a17a3fa1d9037821556",
       "sha256:d10a878a0f06cfa756990d8b9a0d90f20fe0c4d4d57a0e207de8c18994ffe2ce",
@@ -354,6 +368,12 @@
       "sha256:dcdecdc98a90050c5bd0a4a908696262d3cd3f97da7d3c3475403233b4a11bb2",
       "sha256:ead0fe0d57c03086e5ffe044ddb8553f2642cd56f96a7abd0ecb2038e401f6b8"
     ],
+    "skills/dispatch/SKILL.md": [
+      "sha256:7eda8e874f43748564d9c520cb702d90574d33c8ed7e5d0b2d5f73f07807608d"
+    ],
+    "skills/dispatch/delegate-recipes.md": [
+      "sha256:8bf1ee6a5a47bf61a3b410bf6374a10a9a3f40eeea138841d55cab81f92da0d0"
+    ],
     "skills/frontend-design/SKILL.md": [
       "sha256:1fc1b8432bee2695dbdabbfc3ecbe567ba83214fcaf18a72ac6a1b3998f4a9a3",
       "sha256:2ea8614e3d57454941b04a4214841ed70d25c4db7ece1c6619e3cb72c53b4dac",
@@ -369,10 +389,14 @@
       "sha256:f58e1cbec69fb39c739042006d696005b56acc29950401c04dc51bd6ae9c7510",
       "sha256:f842f1bed01d271bc11d44916b39a7cf44524fd53403c3c1f730bbcf6db1f385"
     ],
+    "skills/frontend/SKILL.md": [
+      "sha256:c9a15b093e586929944fc60d863e31f1849309a083fb7214f50872a867e3049c"
+    ],
     "skills/grill-me/SKILL.md": [
       "sha256:1b88f70e463777a67940b9d1de29857e1b4f0077474b4d6433a3dfa89b99abd6",
       "sha256:8f21bae9924f67c5f1f11a9b07d20dfd308a8ebde69a20d64229c70a48d970f8",
       "sha256:9efdea8c83d388540ce840148077d473baef194b72a2be64436d3179d21fdcc8",
+      "sha256:c403f0fc0ada336851447c1439b5357c501e7c6d39daac18c4bfe48a3103debb",
       "sha256:edd0ba8c366cbfd326491f7fab72f6f2ea49d9b5f3715e10907b65e517d70464"
     ],
     "skills/grill-with-docs/SKILL.md": [
@@ -383,6 +407,7 @@
     "skills/handoff/SKILL.md": [
       "sha256:135619dfec78bfc41bed4e77b685f260de6bffcf885acd3945f8079e4ee024ff",
       "sha256:43efbc5709ded97f674ba0db5a91da1184b4334ea47845ecdd5b85a9f87d4e9f",
+      "sha256:48c04ec71a7f6ef52547ec45ef46041d2417f655263a1afa0f45b42343302c12",
       "sha256:532e274c25065fd8ce5a56eb9f034103da03d95dd4242e03b65f4e09c32a6d74",
       "sha256:5c0984408486d465d90aaaa031b62eaf0efd17ce0250777add749d3d4a73c279",
       "sha256:8ddeecaf5d66e9de5f67ed7ce2ba5c5ce86442f7d97104f75517310f0791299f",
@@ -390,6 +415,9 @@
       "sha256:c4db855ff10a67d4bcd8fe5b6578dc17aadc43fcd1814f03589b704450b022fc",
       "sha256:d8d1aa4bda004bdf7b345bad0fd3a6f1a0c2620913de41c3afe464827ba2d933",
       "sha256:e12e29868f567b3ab38a335e659f3a3b2be416ca9c1ae39fd1af1957516001ec"
+    ],
+    "skills/implement/SKILL.md": [
+      "sha256:24b2b7c04c440fe7a39a1bd16858a6a21df9316207f98576c800e8683263bcc9"
     ],
     "skills/implementation-plan/SKILL.md": [
       "sha256:02036ea114d6deadc8b879f028c74127855b470008795f470300b12b3a0315cd",
@@ -440,6 +468,9 @@
     "skills/kretsverket/kretsverket-status-report/scripts/verify-report.mjs": [
       "sha256:98fa8c0a64c9f31a665f0fe40577dbb4b54f7e231772e73d5fbb4114b0667f8d"
     ],
+    "skills/migrations/SKILL.md": [
+      "sha256:6fe76800ba1f916c356373e84d9b22af579e6ab9af93c263bd4f1e4f41a78a09"
+    ],
     "skills/minimal-implementation/SKILL.md": [
       "sha256:262c9ed819614644fe3cc57fceb48768405b66e09d17ca15b139de33177a6e8a",
       "sha256:5afa20dddd82aa6c9ce0c357de25f0a8626fa9264d7826b833ae697d8486b460",
@@ -452,6 +483,7 @@
     ],
     "skills/pr-modernize/SKILL.md": [
       "sha256:0dd2d8591625a0b75bc9da2665f078118162807416efba7e023f76694627349c",
+      "sha256:27ab8843d33bcb2b92186b51f5b5197a935ed8267e5d274277e973e05acd2898",
       "sha256:2bed482c9d54e94e20a258d14305f5643bedc7ace0bc6eb80226e4a72ce50fdf",
       "sha256:4e802dd9ced5ec2253911bc1b1e20a4e0006eec0ad89aba5bd3ff179745cfbf7",
       "sha256:5e77c55c783360190cc3ca6bc22d2bd180207246ef87460f973710512d20f528",
@@ -461,6 +493,7 @@
       "sha256:00df44532de40c27c292ab4e2f329b0bc0078d8ea7209a7550a45bcbf3c819f0",
       "sha256:08fdd154f077393e661b773bee44cbac1a4f269df2477c0a354c15aa8f9bf9ee",
       "sha256:1fa0bc086a24195dd61ece99400730ecdea122c5fbacad41c42874c52f9cf28a",
+      "sha256:3d310ea0c35f487e857269dd376a994b6c814c0e892f9f606169878c17bd2af2",
       "sha256:70b127d9e30429a160c06bbc0024b371667620ec1d0e53eb31fb63980c129f93",
       "sha256:72f059870bd72be1d4d667c32f1e68fad30c012e9324970f395ba6469d973fee",
       "sha256:a763ccd195d73a322f776964b5894c846b773fc84eec2a57de3f08096bdfd1ce",
@@ -473,6 +506,7 @@
       "sha256:b9ddbb943e011cc13fd40b83838df78cc2438d5fbe1b63825c4b6845e4721e62"
     ],
     "skills/prototype/SKILL.md": [
+      "sha256:05f6deddae64eea3cacb30247f4e6c8e48b7f8271bfcccd95d25773d4b51f7fb",
       "sha256:0fcfddc60fe815dbb41248085d9084d58e81ac29f997631ae94aaeb1ae6b7484",
       "sha256:44ee9ea4a8301dfe08596db4aed7cacfb674a89227b4b86793ea8b86d2879442",
       "sha256:4872656ac3f578678dbdfa489af9ec18bc814771f63d2126a526ff08a070b12b",
@@ -487,6 +521,7 @@
     "skills/release-check/SKILL.md": [
       "sha256:0616103449798c7fe21e51a169c37801a69405836b762dfecb4f4465b4498526",
       "sha256:0c339a59dd56b95ad6945fef249cef52be48cf462d6ed2ea3edb633af31f0c37",
+      "sha256:38c5f9c382dd74e656f02d327474550755a2f7fe6b64e33505f7e8ba797cae4f",
       "sha256:4793f3d34f4c1a15603d6c9020a09efbcef727bd21ac8dd7e7667db610190860",
       "sha256:6d79e1af1b0f8cc6ac8bd57e0b964d7e5ba79db34ab55e27f6f7f69e3c8f61ba",
       "sha256:9224e0d6db001598ee56340ffc148a9091bda2b07c9d4cc32b7ae57691f57f5b",
@@ -539,6 +574,9 @@
       "sha256:a1d757a29e904771311130792883650429040ed0412064f82787fca482740fed",
       "sha256:e03331d933da05bf18f991a9030370dfe71cdd518930097d9bddb6e84fdc0dfa"
     ],
+    "skills/screenshot/SKILL.md": [
+      "sha256:2b38aa267fa4c01eeb221eef2bfe44dd4d1965b1bb8bf7e6ece4d95969e8849a"
+    ],
     "skills/security-audit/AI-AND-LLM.md": [
       "sha256:7335a95c43554eadefcf03ece639291bb0e038c398a179299e3887ffe06bd2ef"
     ],
@@ -580,17 +618,20 @@
       "sha256:2e0517378767710d3c544bdb23e87fbcc6b77b9ec2bcdd3a784d600bc81dd95f",
       "sha256:4ef9d998f89ad51893cbc073068371aabca51c20663009901d18639563bb4e86",
       "sha256:b1f9dda5d67d03d42f46d40859ce3ee2622347c42b44241aa9e603af7fca2282",
-      "sha256:bdc6db8aee8a096b7d5cc709bfd4169b862dce68d91ff927b41f296fc4c41c61"
+      "sha256:bdc6db8aee8a096b7d5cc709bfd4169b862dce68d91ff927b41f296fc4c41c61",
+      "sha256:c0ad19a6c2303ff0d5faf120a4a9051851bd6b7364b3f61745a39e3d32de9eec"
     ],
     "skills/security-audit/SUPPLY-CHAIN-AND-RELEASE.md": [
       "sha256:f372e919940e335468ba1ae09f99026c3986a345f7fe26f8068f132e199f52a5"
     ],
     "skills/security-audit/UPSTREAM.md": [
+      "sha256:07cc11b22d88b18bf5d78c230bdf9fecf22dc091666226d2799384d857d90c91",
       "sha256:2cdabf172f6f29ffc6403ebfe826e6eb7fc3e2cc090661b2f8a35f5af7c1a606",
       "sha256:440a622f988f7f742381a81219ee194d118dd43ae30d05b03cf8e3a038384cae",
       "sha256:5b50bf332a2fb2c4e4bdd61041107f7e462143cbb64287264b09f77afa223d46",
       "sha256:6760bd357684cb45c6ea28a6189170d48fc7510a39b4b0fcd1e7002c8fbb1b52",
       "sha256:67d9179b15cbaf5751c6acbc92f7edd2dfa279708997297bed5c9bd407dd2e91",
+      "sha256:7c04e88bd4bfe41d73b8686894306e5356f7f1616406a692b7d4f4f151dadd4d",
       "sha256:c72c14f5ffa32cc5b382859bc95c722de2ee8fd2fefd2aa6d501a59bd567deac",
       "sha256:ca010d4d9cc5471069e565ccdda4c62845f9512c1c10bebde06f3dff30e0a013"
     ],
@@ -622,6 +663,9 @@
       "sha256:857ecfb58d29e6c56199127f516784006d3415d03e035b6360adca4574616cbd",
       "sha256:d5c9bd97eee73237c5d17aa85e0daee7acdbb85d21c894c82f884863ca6c8654",
       "sha256:e03ced2100075da5d4c2f3cdffcc0966d4c41d982502c264063870f9d7093b13"
+    ],
+    "skills/security/SKILL.md": [
+      "sha256:92c3fdebe05e1d4b8b7cd8893f5baf33824bc7c9e81902f2ab5d105d39f0c535"
     ],
     "skills/status-report/SKILL.md": [
       "sha256:22a73f9d46a634cb8834b5775b954be6ab2b4e0a947997f7fc578c2763b65cfd",
@@ -661,6 +705,7 @@
     ],
     "skills/tdd/SKILL.md": [
       "sha256:5b155be0cd2fa170f9aa7cde27c1003b18ec424c2e649048a90b1d3f5e5b7961",
+      "sha256:834385ee01f86341efc43e337cbc8387caac6af1b712b9931b8ff077a25a5f86",
       "sha256:8442d79f5c890cfe8450a8edc7ba8ef2c8ddf4d29f8d23ef28699888e0e14668",
       "sha256:86dea3d8107d93041cace79ac7856e0e737e7f5739a4698cbc5a3cb705bb1a98",
       "sha256:b67ee4bbf7c99a0cf1fb887ff0cd1295dabbf90b0000a8dce89cdf27017f4479",
@@ -731,6 +776,7 @@
       "sha256:f710529ca58ab96447d846caf426e544a68969961a137a041512ef491c0ed96b"
     ],
     "templates/claude/agents/sentinel.md": [
+      "sha256:2df07c7bf50c40de5ea254261a5ec0d6d42ecf993bacb44892d8e13e9368503f",
       "sha256:6e3aa7b84fddcdec6d653942ad7cb3594a6ead716eb609aa7eea089414327c38",
       "sha256:a560d37a71881bbba61a7dc7c89ba0f76793aed66bd327263dd0517bb6d9bf80",
       "sha256:c7493b9ecf2222d786d7b8b3c6f6cdc8a4fe29bfb2beef9a38f2bff3cfb8e7e1",

@@ -1,12 +1,12 @@
 ---
-name: accessibility-review
-description: Audits UI code or a running app for WCAG 2.2 AA risks in semantics, names, keyboard, focus, labels, contrast, and reflow. Use when an accessibility review is requested or custom controls, modals, menus, live status, or dynamic validation change. Not for visual direction (frontend-design).
+name: accessibility
+description: Audits UI code or a running app for WCAG 2.2 AA accessibility risks in semantics, names, keyboard, focus, labels, contrast and reflow. Use when an accessibility review is requested or custom controls, modals, menus, live status or dynamic validation change. Not for visual direction (frontend).
 license: MIT
 metadata:
   category: accessibility
   risk: low
   targets: codex, opencode, claude, cursor, copilot, pi, kilo, antigravity, grok
-  related: frontend-design, browser-qa
+  related: frontend, browser-qa
 ---
 
 # Accessibility Review
@@ -15,7 +15,7 @@ Done when: every changed interactive control is checked for name, role, state, k
 
 ## Do Not Use When
 
-- The task is primarily visual style, brand, or layout polish, or baseline accessibility while building UI; use `frontend-design`.
+- The task is primarily visual style, brand, or layout polish, or baseline accessibility while building UI; use `frontend`.
 - The task is general runtime verification of a change; use `browser-qa`, and add this skill only for the accessibility part.
 - The task requires formal legal certification or a full WCAG audit.
 - The UI cannot be inspected in code, screenshots, or browser output.
@@ -66,5 +66,5 @@ Done when: every changed interactive control is checked for name, role, state, k
 
 - Do not claim WCAG compliance unless a full formal audit was performed.
 - Do not replace semantic HTML with ARIA when native elements solve the problem.
-- Do not duplicate aesthetic guidance from `frontend-design`.
+- Do not duplicate aesthetic guidance from `frontend`.
 - Do not claim keyboard or screen-reader behavior without evidence.

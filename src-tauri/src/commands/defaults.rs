@@ -23,8 +23,8 @@ mod tests {
         for required in [
             "## Skill routing",
             "diagnose",
-            "implementation-plan",
-            "security-review",
+            "blueprint",
+            "security",
             "release-check",
         ] {
             assert!(content.contains(required), "template missing: {required}");

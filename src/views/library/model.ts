@@ -206,7 +206,7 @@ function canToggle(input: Pick<LibraryModelInput, "skillChoices" | "canToggleSki
   return input.canToggleSkills === true && !!input.skillChoices && !input.skillChoices.problem;
 }
 
-/** "named by ci-triage, security-review": the skills that point to `name`. */
+/** "named by ci-triage, security": the skills that point to `name`. */
 function namedByText(input: Pick<LibraryModelInput, "skillChoices">, name: string): string | undefined {
   const by = input.skillChoices?.named_by[name] ?? [];
   return by.length > 0 ? `named by ${by.join(", ")}` : undefined;

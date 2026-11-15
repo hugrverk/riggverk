@@ -1,6 +1,6 @@
 ---
-name: review-response
-description: Works through PR review comments by verifying each claim against the code, then fixing, pushing back with evidence or asking, and drafting one reply per thread. Use when a PR has review comments or the user pastes reviewer feedback. Not for reviewing a diff yourself.
+name: comments
+description: Replies to and resolves PR review comments, verifying each claim against the code, then fixing, pushing back with evidence or asking, with one drafted reply per thread. Use when a PR has review comments or the user pastes reviewer feedback. Not for writing code comments or reviewing a diff yourself.
 license: MIT
 compatibility: Uses an authenticated gh CLI, with jq when installed, to read review threads and to post replies the user approved; without it, works from a pasted review.
 allowed-tools: Bash(gh pr diff *)
@@ -8,7 +8,7 @@ metadata:
   category: workflow
   risk: medium
   targets: codex, opencode, claude, cursor, copilot, pi, kilo, antigravity, grok
-  related: minimal-implementation, diagnose
+  related: implement, diagnose
   source: https://github.com/obra/superpowers (receiving-code-review, MIT) and https://github.com/openai/skills (gh-address-comments, Apache-2.0) and https://github.com/t3dotgg/tstack (babysit-pr and leaving-pr-comments, MIT)
 ---
 

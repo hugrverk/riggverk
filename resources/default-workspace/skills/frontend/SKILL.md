@@ -1,12 +1,12 @@
 ---
-name: frontend-design
-description: Chooses and implements visual direction for web and product UI, preserving an existing design system or committing to one coherent direction for greenfield work. Use when building or restyling screens, layouts, or components. Not for screenshot-only critique, accessibility audits, or runtime QA.
+name: frontend
+description: Chooses and implements the visual direction of web and product UI, keeping the existing design system or committing to one coherent direction. Use when building or restyling screens, layouts or components. Not for critiquing supplied screenshots (screenshot), a11y audits or runtime QA (browser-qa).
 license: MIT
 metadata:
   category: frontend
   risk: medium
   targets: codex, opencode, claude, cursor, copilot, pi, kilo, antigravity, grok
-  related: screenshot-review, browser-qa, accessibility-review, prototype
+  related: screenshot, browser-qa, accessibility, prototype
 ---
 
 # Frontend Design
@@ -23,9 +23,9 @@ Identify the working mode before any visual decision:
 
 ## Routing boundaries
 
-- **screenshot-review**: diagnoses static screenshots; does not implement unless asked.
-- **frontend-design** (this skill): chooses visual direction and implements UI when requested.
-- **accessibility-review**: specialist accessibility audit; not a substitute for baseline a11y during implementation.
+- **screenshot**: diagnoses static screenshots; does not implement unless asked.
+- **frontend** (this skill): chooses visual direction and implements UI when requested.
+- **accessibility**: specialist accessibility audit; not a substitute for baseline a11y during implementation.
 - **browser-qa**: supplies runtime evidence after implementation.
 - **prototype**: explores uncertain variants without creating permanent parallel design systems.
 

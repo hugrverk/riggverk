@@ -80,7 +80,7 @@ The implement and review modes of `adversarial` also draw on [dementev-dev/adver
 
 ## superpowers writing-plans
 
-The "Avoid placeholders" step of `implementation-plan` (no placeholder markers, no generic test or error-handling chores, no "similar to the previous task") is adapted from the "No Placeholders" list of `skills/writing-plans/SKILL.md` in [obra/superpowers](https://github.com/obra/superpowers) at commit `5bf4e78011075bcfc0dc295f0724994cd123ee71`. The wording is Riggverk's.
+The "Avoid placeholders" step of `blueprint` (no placeholder markers, no generic test or error-handling chores, no "similar to the previous task") is adapted from the "No Placeholders" list of `skills/writing-plans/SKILL.md` in [obra/superpowers](https://github.com/obra/superpowers) at commit `5bf4e78011075bcfc0dc295f0724994cd123ee71`. The wording is Riggverk's.
 
 License of the original work:
 
@@ -108,15 +108,15 @@ SOFTWARE.
 
 ## superpowers dispatching-parallel-agents and using-git-worktrees
 
-`delegate` draws on two skills of [obra/superpowers](https://github.com/obra/superpowers) at commit `2ce8aa15d05bd57213e6f746f953aafb7ded7a8b`: from `skills/dispatching-parallel-agents/SKILL.md`, one agent per independent slice with no shared files or state, a focused, self-contained brief with explicit constraints and expected output, and checking the returned work for conflicts before running the full suite; from `skills/using-git-worktrees/SKILL.md`, preferring the harness's native worktree tool over `git worktree add`, and a clean baseline run in the new worktree before work starts. The wording is Riggverk's; the CLI recipes, write confinement and the PR-style review are Riggverk's own. Same MIT license and copyright as in the superpowers writing-plans entry above.
+`dispatch` draws on two skills of [obra/superpowers](https://github.com/obra/superpowers) at commit `2ce8aa15d05bd57213e6f746f953aafb7ded7a8b`: from `skills/dispatching-parallel-agents/SKILL.md`, one agent per independent slice with no shared files or state, a focused, self-contained brief with explicit constraints and expected output, and checking the returned work for conflicts before running the full suite; from `skills/using-git-worktrees/SKILL.md`, preferring the harness's native worktree tool over `git worktree add`, and a clean baseline run in the new worktree before work starts. The wording is Riggverk's; the CLI recipes, write confinement and the PR-style review are Riggverk's own. Same MIT license and copyright as in the superpowers writing-plans entry above.
 
 ## superpowers receiving-code-review
 
-`review-response` adapts the method of `skills/receiving-code-review/SKILL.md` in [obra/superpowers](https://github.com/obra/superpowers) at commit `2ce8aa15d05bd57213e6f746f953aafb7ded7a8b`. Used: verify each point against the codebase before implementing it, no performative agreement or gratitude in replies, clarify unclear items before implementing related ones, the "is it actually used" check before building requested scope, fixing blocking issues first, pushing back with technical evidence, a one-line correction when pushback was wrong, and replying inside the review thread. The wording is Riggverk's; the fix, push back and ask verdicts, one commit per theme, and approval before posting are Riggverk's own. Same MIT license and copyright as in the superpowers writing-plans entry above.
+`comments` adapts the method of `skills/receiving-code-review/SKILL.md` in [obra/superpowers](https://github.com/obra/superpowers) at commit `2ce8aa15d05bd57213e6f746f953aafb7ded7a8b`. Used: verify each point against the codebase before implementing it, no performative agreement or gratitude in replies, clarify unclear items before implementing related ones, the "is it actually used" check before building requested scope, fixing blocking issues first, pushing back with technical evidence, a one-line correction when pushback was wrong, and replying inside the review thread. The wording is Riggverk's; the fix, push back and ask verdicts, one commit per theme, and approval before posting are Riggverk's own. Same MIT license and copyright as in the superpowers writing-plans entry above.
 
 ## openai/skills gh-address-comments
 
-`review-response` also draws on the `gh-address-comments` skill of [openai/skills](https://github.com/openai/skills) (`skills/.curated/gh-address-comments/SKILL.md`, read at commit `49f948faa9258a0c61caceaf225e179651397431`), licensed under the [Apache License, Version 2.0](https://www.apache.org/licenses/LICENSE-2.0). Used: finding the open PR of the current branch with gh, numbering every review thread and comment with a short summary of the fix it needs, and letting the user choose which items to address before changing code. Changes: the text is Riggverk's own, threads are read with the GitHub GraphQL API instead of a bundled script, and each item is verified and sorted before the user chooses. No files of that work are included.
+`comments` also draws on the `gh-address-comments` skill of [openai/skills](https://github.com/openai/skills) (`skills/.curated/gh-address-comments/SKILL.md`, read at commit `49f948faa9258a0c61caceaf225e179651397431`), licensed under the [Apache License, Version 2.0](https://www.apache.org/licenses/LICENSE-2.0). Used: finding the open PR of the current branch with gh, numbering every review thread and comment with a short summary of the fix it needs, and letting the user choose which items to address before changing code. Changes: the text is Riggverk's own, threads are read with the GitHub GraphQL API instead of a bundled script, and each item is verified and sorted before the user chooses. No files of that work are included.
 
 ## Cloudflare security-audit-skill
 
@@ -130,7 +130,7 @@ Path: `resources/default-workspace/skills/security-audit/`. Copyright (c) 2025-2
 
 ## t3dotgg/tstack
 
-`pr-workflow`, `review-response` and `pr-modernize` draw on [t3dotgg/tstack](https://github.com/t3dotgg/tstack) at commit `1085050f3baed1ac724caa4a8166145fb2ac88af`.
+`pr-workflow`, `comments` and `pr-modernize` draw on [t3dotgg/tstack](https://github.com/t3dotgg/tstack) at commit `1085050f3baed1ac724caa4a8166145fb2ac88af`.
 
 - From `skills/file-pr/SKILL.md`: a PR description that leads with the problem, a title that states the effect, and a REST fallback for an exhausted GraphQL limit.
 - From `skills/babysit-pr/SKILL.md`: one watcher per PR, checking the GraphQL rate limit, readiness conditions on the latest head, reporting `BEHIND` and `DIRTY`, declining findings that grow a PR, and preferring the fix that leaves less code.
@@ -138,7 +138,7 @@ Path: `resources/default-workspace/skills/security-audit/`. Copyright (c) 2025-2
 - From `skills/modernize/SKILL.md`: stating the smallest goal first, the modernize, rework or close disposition before pushing, judging what changed around a PR rather than only its conflicts, a disposable worktree, comparing with `git range-diff`, and a lease tied to the observed head.
 - From `skills/takeover/SKILL.md`: importing the original commits, preserving contributors' credit, treating a handoff as context rather than proof, confirming the original failure, and rechecking the source PR.
 
-The text was rewritten for Riggverk. Riggverk's own part is the reading of check results, the handling of a PR with no checks, the verdicts, an explicit ok for each force push, push, comment and post, the guards against running a PR's hooks and shell syntax, the cleanup, and the hand-offs to `ci-triage` and `review-response`. No files of that work are included.
+The text was rewritten for Riggverk. Riggverk's own part is the reading of check results, the handling of a PR with no checks, the verdicts, an explicit ok for each force push, push, comment and post, the guards against running a PR's hooks and shell syntax, the cleanup, and the hand-offs to `ci-triage` and `comments`. No files of that work are included.
 
 License of the original work:
 
@@ -169,7 +169,7 @@ SOFTWARE.
 These skills share an idea with public work but no text, structure or distinctive method taken from it:
 
 - `zoom-out` takes its name and idea (go up a layer and map the modules and callers before editing) from the former `zoom-out` skill in [mattpocock/skills](https://github.com/mattpocock/skills) (MIT, removed upstream); its text is Riggverk's own.
-- `frontend-design` shares the framing of committing to one coherent aesthetic direction, and matching implementation complexity to it, with the late-2025 `frontend-design` skill in [anthropics/skills](https://github.com/anthropics/skills) (Apache-2.0); its text and structure are Riggverk's own.
+- `frontend` shares the framing of committing to one coherent aesthetic direction, and matching implementation complexity to it, with the late-2025 `frontend-design` skill in [anthropics/skills](https://github.com/anthropics/skills) (Apache-2.0); its text and structure are Riggverk's own.
 
 Bundled skills credit their upstream in `metadata.source` of their `SKILL.md`, and carry `license: MIT` (the root LICENSE).
 

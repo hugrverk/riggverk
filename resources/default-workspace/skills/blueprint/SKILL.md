@@ -1,6 +1,6 @@
 ---
-name: implementation-plan
-description: Breaks multi-step or cross-file work into small, independently verifiable slices with exact files, steps, commands, and risks, without editing code. Use when changes span several files or layers, migrations, or scope that needs slicing. Execute slices with minimal-implementation.
+name: blueprint
+description: Writes an implementation plan that breaks multi-step or cross-file work into small, verifiable slices with exact files, steps, commands and risks, without editing code. Use when changes span several files or layers, migrations, or scope that needs slicing. Not for writing the code (implement).
 license: MIT
 metadata:
   category: planning

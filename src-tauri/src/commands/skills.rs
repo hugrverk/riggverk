@@ -580,7 +580,7 @@ mod tests {
     fn flat_baseline_starter_skills_are_discoverable() {
         let root = temp_root("baseline-skills");
         write_skill(&root, "skills/diagnose", "diagnose");
-        write_skill(&root, "skills/security-review", "security-review");
+        write_skill(&root, "skills/security", "security");
         write_skill(&root, "skills/context-budget", "context-budget");
 
         let skills = discover_skills(&root).expect("discover skills");
@@ -588,7 +588,7 @@ mod tests {
         let names: Vec<&str> = skills.iter().map(|s| s.name.as_str()).collect();
 
         assert!(names.contains(&"diagnose"));
-        assert!(names.contains(&"security-review"));
+        assert!(names.contains(&"security"));
         assert!(names.contains(&"context-budget"));
     }
 
@@ -696,12 +696,12 @@ mod tests {
         let root = temp_root("meta-fields");
         write_skill_with_metadata(
             &root,
-            "skills/frontend-design",
-            "frontend-design",
+            "skills/frontend",
+            "frontend",
             "frontend",
             "medium",
             "codex, opencode, claude, cursor",
-            "screenshot-review, browser-qa, accessibility-review",
+            "screenshot, browser-qa, accessibility",
         );
 
         let skills = discover_skills(&root).expect("discover skills");
@@ -709,14 +709,11 @@ mod tests {
 
         assert_eq!(skills.len(), 1);
         let s = &skills[0];
-        assert_eq!(s.name, "frontend-design");
+        assert_eq!(s.name, "frontend");
         assert_eq!(s.category, "frontend");
         assert_eq!(s.risk, "medium");
         assert_eq!(s.targets, vec!["codex", "opencode", "claude", "cursor"]);
-        assert_eq!(
-            s.related,
-            vec!["screenshot-review", "browser-qa", "accessibility-review"]
-        );
+        assert_eq!(s.related, vec!["screenshot", "browser-qa", "accessibility"]);
     }
 
     #[test]
@@ -724,8 +721,8 @@ mod tests {
         let root = temp_root("meta-lists");
         write_skill_with_metadata(
             &root,
-            "skills/security-review",
-            "security-review",
+            "skills/security",
+            "security",
             "security",
             "high",
             "codex,  opencode , claude,cursor,  ",
@@ -746,11 +743,11 @@ mod tests {
     #[test]
     fn spec_metadata_layout_reads_like_top_level_keys() {
         let root = temp_root("meta-spec-layout");
-        let path = root.join("skills/frontend-design/SKILL.md");
+        let path = root.join("skills/frontend/SKILL.md");
         fs::create_dir_all(path.parent().expect("parent")).expect("create skill parent");
         fs::write(
             &path,
-            "---\nname: frontend-design\ndescription: test skill\nlicense: MIT\nmetadata:\n  category: frontend\n  risk: medium\n  targets: codex, opencode, claude, cursor\n  related: screenshot-review, browser-qa\n---\n",
+            "---\nname: frontend\ndescription: test skill\nlicense: MIT\nmetadata:\n  category: frontend\n  risk: medium\n  targets: codex, opencode, claude, cursor\n  related: screenshot, browser-qa\n---\n",
         )
         .expect("write skill");
 
@@ -761,7 +758,7 @@ mod tests {
         assert_eq!(s.category, "frontend");
         assert_eq!(s.risk, "medium");
         assert_eq!(s.targets, vec!["codex", "opencode", "claude", "cursor"]);
-        assert_eq!(s.related, vec!["screenshot-review", "browser-qa"]);
+        assert_eq!(s.related, vec!["screenshot", "browser-qa"]);
     }
 
     #[test]

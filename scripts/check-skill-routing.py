@@ -137,9 +137,20 @@ DEPRECATED_METADATA_PREFIX = "resources/default-workspace/metadata/deprecated-sk
 # History that names skills as they were: release notes per version and the rules bases the app
 # shipped (append-only, keyed by digest).
 HISTORICAL_PREFIXES = ("release-notes/", "resources/default-workspace/metadata/rules-history/")
-# Upstream projects whose name contains a removed skill name; a mention of the project is not one of
-# the skill.
-UPSTREAM_PROJECT_NAMES = ("dementev-dev/adversarial-review", "dementev-dev adversarial-review")
+# Mentions that contain a removed skill name but are not the skill; they are cut before the scan.
+NOT_SKILL_MENTIONS = (
+    # Upstream projects and skills named like a removed skill (credited in NOTICE.md).
+    "dementev-dev/adversarial-review",
+    "dementev-dev adversarial-review",
+    "`frontend-design` skill in [anthropics/skills]",
+    # The Cursor rule file of that name, a separate bundled file.
+    "frontend-design.mdc",
+    # Claude Code's built-in command as its context listing prints it (kit_listing_probe fixture).
+    "| security-review | Built-in |",
+)
+# Harness built-in slash commands named like a removed skill: Claude Code's `/security-review` and
+# Copilot CLI's `/delegate`. A path such as `skills/security-review/` is still the skill.
+BUILTIN_COMMAND_RE = re.compile(r"(?<![\w./-])/(?:security-review|delegate)(?![\w-])")
 
 FRONTMATTER_RE = re.compile(r"^---\s*$([\s\S]*?)^---\s*$", re.MULTILINE)
 FIELD_RE = re.compile(r"^([a-zA-Z0-9_-]+):\s*(.+?)\s*$")
@@ -172,18 +183,69 @@ def removed_skill_names() -> set[str]:
 
 # Skills dropped after managed records existed are retired through those records and the shipped
 # digests, not REMOVED_SKILL_NAMES (the pre-manifest list; see RETIRED_AFTER_MANIFEST in
-# scripts/generate-pre-manifest-ownership.py). Their names must not come back either.
-MERGED_SKILL_NAMES = {"adversarial-implementation", "adversarial-review", "adversarial-test"}
-REMOVED_SKILLS = removed_skill_names() | MERGED_SKILL_NAMES
-# A removed name counts only as a whole skill name: `triage` is stale, while a current skill whose
-# name merely contains it (`ci-triage`) is not.
-REMOVED_SKILL_RES = {name: re.compile(rf"(?<![a-z0-9-]){re.escape(name)}(?![a-z0-9-])") for name in REMOVED_SKILLS}
+# scripts/generate-pre-manifest-ownership.py). Their names must not come back either. Each maps to
+# the skill that took its place.
+MERGED_SKILL_NAMES = {
+    # Merged into one skill with modes after 2026.11.12.
+    "adversarial-implementation": "adversarial",
+    "adversarial-review": "adversarial",
+    "adversarial-test": "adversarial",
+    # Renamed to short names after 2026.11.12.
+    "accessibility-review": "accessibility",
+    "database-migrations": "migrations",
+    "delegate": "dispatch",
+    "frontend-design": "frontend",
+    "implementation-plan": "blueprint",
+    "minimal-implementation": "implement",
+    "review-response": "comments",
+    "screenshot-review": "screenshot",
+    "security-review": "security",
+}
+REMOVED_SKILLS = removed_skill_names() | set(MERGED_SKILL_NAMES)
+# Removed names that are also ordinary words: they count only where they name a skill, so "a
+# delegated agent", "delegate the work" and `delegate_slice()` stay prose and code.
+CONTEXT_ONLY_NAMES = {"delegate"}
+# Not a letter, digit, `-` or `_`: a removed name counts only as a whole skill name, so `triage` is
+# stale while a current skill whose name merely contains it (`ci-triage`) and an identifier that
+# contains it (`test_ci_triage_fixture`) are not.
+_EDGE_BEFORE = r"(?<![A-Za-z0-9_-])"
+_EDGE_AFTER = r"(?![A-Za-z0-9_-])"
+
+
+def _skill_name_contexts(name: str) -> re.Pattern[str]:
+    """Where a word names a skill: in backticks or quotes on its own, as an entry of a `name:`,
+    `related:`, `skills:` or `default_skills` field, or as a skill folder (`skills/<name>/`)."""
+    word = re.escape(name)
+    return re.compile(
+        "|".join(
+            (
+                rf"`{word}`",
+                rf"[\"']{word}[\"']",
+                rf"^[ \t]*[\"']?(?:name|related|skills|default_skills)[\"']?[ \t]*:[^\n]*?{_EDGE_BEFORE}{word}{_EDGE_AFTER}",
+                rf"skills/(?:[a-z0-9-]+/)?{word}{_EDGE_AFTER}",
+            )
+        ),
+        re.MULTILINE,
+    )
+
+
+REMOVED_SKILL_RES = {
+    name: _skill_name_contexts(name) if name in CONTEXT_ONLY_NAMES else re.compile(rf"{_EDGE_BEFORE}{re.escape(name)}{_EDGE_AFTER}")
+    for name in REMOVED_SKILLS
+}
 
 
 def removed_skills_in(text: str) -> list[str]:
-    for project in UPSTREAM_PROJECT_NAMES:
-        text = text.replace(project, "")
+    for mention in NOT_SKILL_MENTIONS:
+        text = text.replace(mention, "")
+    text = BUILTIN_COMMAND_RE.sub("", text)
     return sorted(name for name, pattern in REMOVED_SKILL_RES.items() if pattern.search(text))
+
+
+def removed_skill_message(name: str) -> str:
+    """`references removed skill <name>`, plus where it went when another skill took its place."""
+    renamed = MERGED_SKILL_NAMES.get(name)
+    return f"references removed skill {name}" + (f" (renamed to {renamed})" if renamed else "")
 
 
 def parse_fields(frontmatter: str) -> dict[str, str]:
@@ -716,7 +778,7 @@ def validate_routing_sources(discovered: set[str]) -> None:
         if source.name == "codex.md" and "~/.agents/skills" not in text:
             fail(f"{source}: the Codex rules must name ~/.agents/skills as the Codex skills folder")
         for removed in removed_skills_in(text):
-            fail(f"{source}: references removed skill {removed}")
+            fail(f"{source}: {removed_skill_message(removed)}")
         if source.name == "SKILLS.md":
             rows = re.findall(r"^\|\s*`([a-z][a-z0-9-]*)`\s*\|", text, re.MULTILINE)
             catalog = set(rows)
@@ -774,7 +836,7 @@ def scan_repo_for_removed_skills() -> None:
             # 3. History: past release notes and shipped rules bases
             if rel_posix.startswith(HISTORICAL_PREFIXES):
                 continue
-            fail(f"{rel_posix}: references removed skill {removed} outside migration fixtures")
+            fail(f"{rel_posix}: {removed_skill_message(removed)} outside migration fixtures")
 
 
 def main() -> None:

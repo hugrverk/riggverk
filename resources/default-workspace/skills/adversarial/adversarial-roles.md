@@ -26,7 +26,7 @@ For each role on its own, the first source that sets it wins:
    }
    ```
 
-   An `adversary` key takes the same shape. An optional `implement`, `review` or `test` key holds the same role keys for that mode only and wins over the top-level ones, for example `"review": { "critic": { "harness": "claude" } }`. Ignore the whole file, and say so, when it is not valid JSON or `schema_version` is not 1.
+   An `adversary` key takes the same shape. An optional mode key, `"implement"`, `"review"` or `"test"`, holds the same role keys for that mode only and wins over the top-level ones, for example `"review": { "critic": { "harness": "claude" } }`. Ignore the whole file, and say so, when it is not valid JSON or `schema_version` is not 1.
 3. **Rules line.** One line in the user's own rules text, below the `<!-- END RIGGVERK BASE -->` marker (Riggverk's Library edits that text; Cursor users put it in their User Rules):
 
    `Adversarial roles: critic=<harness>[/<model>], adversary=<harness>[/<model>], implementer=<harness>[/<model>]`

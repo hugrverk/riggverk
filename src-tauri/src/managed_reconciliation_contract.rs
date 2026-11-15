@@ -972,7 +972,7 @@ mod tests {
         );
         let exact_claude = ArtifactId::skill_md(
             SkillRoot::Claude,
-            SkillName::new("accessibility-review").expect("canonical skill"),
+            SkillName::new("accessibility").expect("canonical skill"),
         );
         assert!(
             managed
@@ -984,7 +984,7 @@ mod tests {
         );
         let conflicted = ArtifactId::skill_md(
             SkillRoot::OpenCode,
-            SkillName::new("accessibility-review").expect("canonical skill"),
+            SkillName::new("accessibility").expect("canonical skill"),
         );
         assert!(
             managed
@@ -1009,7 +1009,7 @@ mod tests {
         let result = apply_surfaces_from_preview(&plan);
         assert!(result.success, "apply failed: {}", result.message);
 
-        let name = SkillName::new("accessibility-review").expect("canonical skill");
+        let name = SkillName::new("accessibility").expect("canonical skill");
         let exact_claude = ArtifactId::skill_md(SkillRoot::Claude, name.clone());
         let managed = read_managed_state(&fixture.ws).expect("managed-state.json");
         assert!(

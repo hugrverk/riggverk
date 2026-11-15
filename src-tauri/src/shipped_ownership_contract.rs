@@ -541,7 +541,7 @@ mod tests {
         let env = Installed::new("real-history", FILE_SURFACES);
         let show = |rel: &str| git_show(OLD_SHIPPED_BUNDLE_TREE, rel);
         let mut replayed = 0;
-        for name in ["frontend-design", "diagnose", "tdd", "security-review"] {
+        for name in ["handoff", "diagnose", "tdd", "release-check"] {
             let old = show(&format!("templates/skills/claude/{name}/SKILL.md"));
             let current = fs::read(bundled().join(format!("skills/{name}/SKILL.md")))
                 .expect("current source");
