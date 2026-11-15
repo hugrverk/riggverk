@@ -8,6 +8,8 @@ import type { UiState } from "../../lib/uiState";
 import type {
   AgentMetadataResponse,
   AgentTargetMeta,
+  CommentPolicyChoice,
+  CommentPolicyLevel,
   ConfigEditorSourceMeta,
   DocSummary,
   InstallAgent,
@@ -63,7 +65,9 @@ export type RowAction =
   | { type: "undo-import" }
   /** Disables (asks first) or enables a skill for every harness. */
   | { type: "disable"; name: string }
-  | { type: "enable"; name: string };
+  | { type: "enable"; name: string }
+  /** Chooses how much agents comment code, for every harness. */
+  | { type: "comment-policy"; level: CommentPolicyLevel };
 
 export interface RowVerb {
   label: string;
@@ -134,6 +138,10 @@ export interface LibraryModelInput {
   canOpenHarness: boolean;
   /** The Packs group offers "Import skill…", and imported skills "Remove import" and "Undo import". */
   canImportSkill: boolean;
+  /** The comment policy; null while it could not be read (the group is then left out). */
+  commentPolicy?: CommentPolicyChoice | null;
+  /** The levels the comment policy is not at offer "Use". */
+  canSetCommentPolicy?: boolean;
 }
 
 const SHADOWED_TEXT = "A bundled skill has this name, so the bundle wins. Rename it in the pack to use it.";
@@ -183,6 +191,38 @@ function rulesRow(file: RulesFileSummary, input: Pick<LibraryModelInput, "canOpe
       : { state: "off", label: "No refinements" },
     verbs: [{ label: hasRefinements ? "Edit refinements" : "Add refinements", action: { type: "open", target } }],
     haystack: search,
+  };
+}
+
+/** The comment policy's levels, in the order shown, each said in one line. */
+export const COMMENT_POLICY_LEVELS: readonly { level: CommentPolicyLevel; name: string; desc: string }[] = [
+  { level: "harness_default", name: "Harness default", desc: "Adds nothing: each agent keeps its own habits and your repositories' rules." },
+  { level: "minimal", name: "Minimal", desc: "Comments only what the code cannot show, such as intent, an invariant or a workaround." },
+  { level: "off", name: "Off", desc: "No new comments beyond what the language, tooling or repository requires." },
+];
+
+/** The "Code comments" group: one row per level, the one in use marked, the others offering Use. */
+function commentPolicyGroup(input: LibraryModelInput): LibraryGroup | null {
+  const choice = input.commentPolicy;
+  if (!choice) return null;
+  const canSet = input.canSetCommentPolicy === true && input.dataFolderOk && !choice.problem;
+  return {
+    key: "rules-comments",
+    label: "Code comments",
+    hint: "for every harness · the next Update changes the rules",
+    rows: COMMENT_POLICY_LEVELS.map(({ level, name, desc }) => {
+      const inUse = !choice.problem && choice.level === level;
+      return {
+        key: `comments:${level}`,
+        name,
+        desc,
+        state: inUse ? { state: "ok" as const, label: "In use" } : undefined,
+        verbs: canSet && !inUse ? [{ label: "Use", action: { type: "comment-policy", level } as RowAction }] : [],
+        haystack: haystack(name, desc, "code comments", "comment policy", "rules", inUse ? "in use" : undefined),
+      };
+    }),
+    notes: choice.problem ? [{ key: "comment-policy", label: "comment policy", text: `unavailable: ${choice.problem}` }] : undefined,
+    notesLabel: choice.problem ? "Comment policy problem" : undefined,
   };
 }
 
@@ -427,6 +467,7 @@ export function topicGroups(topic: LibrarySourceType, input: LibraryModelInput):
             },
           ],
         },
+        ...[commentPolicyGroup(input)].filter((group): group is LibraryGroup => group !== null),
       ];
     }
     case "skills": {

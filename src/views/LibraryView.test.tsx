@@ -6,6 +6,7 @@ import { renderInFrame } from "../test/renderWithShell";
 import type {
   AgentMetadataResponse,
   AgentTargetMeta,
+  CommentPolicyChoice,
   DocumentContent,
   InstallAgent,
   PackLibrary,
@@ -49,6 +50,7 @@ interface Fixture {
   /** When set, read_doc of the bundled README fails with this message. */
   readDocFails: string | null;
   choices: SkillChoices;
+  commentPolicy: CommentPolicyChoice;
 }
 
 function skill(id: string, description: string, extra: Partial<SkillSummary> = {}): SkillSummary {
@@ -121,6 +123,7 @@ function freshFixture(): Fixture {
     packListFailsAfterCopy: false,
     readDocFails: null,
     choices: { disabled: [], named_by: {}, problem: null },
+    commentPolicy: { level: "harness_default", problem: null },
   };
 }
 
@@ -204,6 +207,11 @@ function installBackend() {
         fixture.choices = { ...fixture.choices, disabled: [...kept, ...added] };
         return Promise.resolve(null);
       }
+      case "get_comment_policy":
+        return Promise.resolve(fixture.commentPolicy);
+      case "set_comment_policy":
+        fixture.commentPolicy = { level: args!.level as CommentPolicyChoice["level"], problem: null };
+        return Promise.resolve(null);
       case "forget_pack":
         fixture.packs = { ...fixture.packs, packs: fixture.packs.packs.filter(pack => pack.name !== args!.name) };
         return Promise.resolve(1);
@@ -313,6 +321,8 @@ function Harness({ showConfigs = true, onOpenHarnessView, withoutCopy = false, t
       onForgetPack={lib.forgetPack}
       skillChoices={lib.skillChoices}
       onSetSkillsEnabled={lib.setSkillsEnabled}
+      commentPolicy={lib.commentPolicy}
+      onSetCommentPolicy={lib.setCommentPolicy}
       agentSources={lib.agentSources}
       activeAgentContent={lib.activeAgentContent}
       onSelectAgent={lib.selectAgent}
@@ -1128,6 +1138,54 @@ describe("Library disabled skills", () => {
     await renderLibrary();
     await goToTopic("Packs");
     expect(within(rowOf("routing.md")).getByText("- Checklists: `my-checklist`. · 1 routing line left out: they name a disabled skill")).toBeTruthy();
+  });
+});
+
+describe("Library code comments", () => {
+  function commentsGroup() {
+    return within(screen.getByRole("heading", { name: "Code comments" }).closest("section")!);
+  }
+
+  it("lists the three levels under Rules with the one in use marked", async () => {
+    await renderLibrary();
+    await screen.findByRole("heading", { name: "Code comments" });
+    const group = commentsGroup();
+    expect(group.getByText("for every harness · the next Update changes the rules")).toBeTruthy();
+    for (const name of ["Harness default", "Minimal", "Off"]) expect(group.getByText(name)).toBeTruthy();
+    expect(within(rowOf("Harness default")).getByText("In use")).toBeTruthy();
+    expect(within(rowOf("Harness default")).queryByRole("button", { name: "Use" })).toBeNull();
+    expect(within(rowOf("Minimal")).getByText(/Comments only what the code cannot show/)).toBeTruthy();
+    expect(within(rowOf("Off")).getByRole("button", { name: "Use" })).toBeTruthy();
+  });
+
+  it("Use sets the level for every harness, reads it back and shows the composed base again", async () => {
+    await renderLibrary();
+    await screen.findByRole("heading", { name: "Code comments" });
+    const templateReads = callsTo("read_agent_template").length;
+    fireEvent.click(within(rowOf("Minimal")).getByRole("button", { name: "Use" }));
+    await waitFor(() => expect(callsTo("set_comment_policy")).toEqual([{ level: "minimal" }]));
+    await waitFor(() => expect(within(rowOf("Minimal")).getByText("In use")).toBeTruthy());
+    expect(within(rowOf("Harness default")).getByRole("button", { name: "Use" })).toBeTruthy();
+    expect(callsTo("get_comment_policy").length).toBeGreaterThanOrEqual(2);
+    expect(callsTo("read_agent_template").length).toBeGreaterThan(templateReads);
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("refuses a level and says why while comment-policy.json cannot be read", async () => {
+    fixture.commentPolicy = { level: null, problem: "comment-policy.json cannot be read; fix or remove it" };
+    await renderLibrary();
+    const problem = await screen.findByRole("group", { name: "Comment policy problem" });
+    expect(problem.textContent).toContain("unavailable: comment-policy.json cannot be read; fix or remove it");
+    expect(commentsGroup().queryByRole("button", { name: "Use" })).toBeNull();
+    expect(commentsGroup().queryByText("In use")).toBeNull();
+  });
+
+  it("finds the levels by search", async () => {
+    await renderLibrary();
+    await screen.findByRole("heading", { name: "Code comments" });
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search all topics" }), { target: { value: "code comments" } });
+    const results = await screen.findByRole("region", { name: "Search results" });
+    expect(within(results).getByText("Minimal")).toBeTruthy();
   });
 });
 

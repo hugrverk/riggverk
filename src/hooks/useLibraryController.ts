@@ -23,6 +23,8 @@ import type {
   RulesFileSummary,
   RulesSurfaceId,
   SkillChoices,
+  CommentPolicyChoice,
+  CommentPolicyLevel,
   SkillSummary,
 } from "../types";
 
@@ -57,6 +59,8 @@ export function useLibraryController({
   const [packError, setPackError] = useState<string | null>(null);
   /** The disabled skills and which skills name which; null while they could not be listed. */
   const [skillChoices, setSkillChoices] = useState<SkillChoices | null>(null);
+  /** How much agents comment code; null while it could not be read. */
+  const [commentPolicy, setCommentPolicyState] = useState<CommentPolicyChoice | null>(null);
   const [activeSkillId, setActiveSkillId] = useState<string | null>(null);
   const [activeSkillContent, setActiveSkillContent] = useState<DocumentContent | null>(null);
   const activeSkillIdRef = useRef<string | null>(null);
@@ -455,6 +459,18 @@ export function useLibraryController({
     }
   }, [applyRulesFile, clearActiveRulesFile, isInvalidWorkspaceError, isWorkspaceLoadCurrent, setError, workspaceLoadGenerationRef]);
 
+  /** Reads the comment policy. A failure leaves it unread: Rules then shows no choice, and nothing is reported. */
+  const loadCommentPolicy = useCallback(async (generation = workspaceLoadGenerationRef.current) => {
+    let choice: CommentPolicyChoice | null = null;
+    try {
+      choice = await invoke<CommentPolicyChoice>("get_comment_policy");
+    } catch {
+      choice = null;
+    }
+    if (!isWorkspaceLoadCurrent(generation)) return;
+    setCommentPolicyState(choice);
+  }, [isWorkspaceLoadCurrent, workspaceLoadGenerationRef]);
+
   const loadWorkspaceLibraryResources = useCallback(async (generation = workspaceLoadGenerationRef.current) => {
     await Promise.all([
       loadSkills(generation).catch(() => {}),
@@ -462,9 +478,10 @@ export function useLibraryController({
       loadAgentSources(generation).catch(() => {}),
       loadAgentTemplate(generation),
       loadRulesFiles(generation),
+      loadCommentPolicy(generation),
     ]);
     setLibraryReloadEpoch(epoch => epoch + 1);
-  }, [loadAgentSources, loadAgentTemplate, loadDocs, loadRulesFiles, loadSkills, workspaceLoadGenerationRef]);
+  }, [loadAgentSources, loadAgentTemplate, loadCommentPolicy, loadDocs, loadRulesFiles, loadSkills, workspaceLoadGenerationRef]);
 
   const loadLibraryView = useCallback(() => {
     void loadDocs();
@@ -472,7 +489,8 @@ export function useLibraryController({
     void loadAgentSources();
     void loadAgentTemplate();
     void loadRulesFiles();
-  }, [loadAgentSources, loadAgentTemplate, loadDocs, loadRulesFiles, loadSkills]);
+    void loadCommentPolicy();
+  }, [loadAgentSources, loadAgentTemplate, loadCommentPolicy, loadDocs, loadRulesFiles, loadSkills]);
 
   const resetLibraryState = useCallback(() => {
     docSaveOpRef.current.invalidate();
@@ -494,6 +512,7 @@ export function useLibraryController({
     setActiveAgentId(null);
     setActiveAgentContent(null);
     setAgentTemplate(null);
+    setCommentPolicyState(null);
 
     // A config source load still running belongs to the old workspace.
     configSourceLoadSeqRef.current += 1;
@@ -863,6 +882,23 @@ export function useLibraryController({
     }
   }, [confirm, reloadChangedPacks, setError, skillChoices]);
 
+  /**
+   * Chooses how much agents comment code, for every harness, then reads the policy and the base template (which carries
+   * the section) again. The next Update changes the rules files, with a diff and undo. Resolves true once saved.
+   */
+  const setCommentPolicy = useCallback(async (level: CommentPolicyLevel): Promise<boolean> => {
+    try {
+      await invoke("set_comment_policy", { level });
+    } catch (e) {
+      setError(`Code comments: ${e}`);
+      return false;
+    }
+    // What the next Update writes changed: the overview plans it again.
+    onPacksChanged?.();
+    await Promise.all([loadCommentPolicy(), loadAgentTemplate()]);
+    return true;
+  }, [loadAgentTemplate, loadCommentPolicy, onPacksChanged, setError]);
+
   const readSkill = useCallback(async (id: string) => {
     if (id !== activeSkillIdRef.current && !(await confirmLeave())) return;
     activeSkillIdRef.current = id;
@@ -1070,6 +1106,9 @@ export function useLibraryController({
     forgetPack,
     skillChoices,
     setSkillsEnabled,
+    commentPolicy,
+    setCommentPolicy,
+    loadCommentPolicy,
     activeSkillId,
     activeSkillContent,
     readSkill,

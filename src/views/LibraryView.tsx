@@ -6,6 +6,8 @@ import type {
   AgentMetadataResponse,
   AgentSourceContent,
   AgentTargetMeta,
+  CommentPolicyChoice,
+  CommentPolicyLevel,
   ConfigEditorSourceMeta,
   DocSummary,
   DocumentContent,
@@ -127,6 +129,10 @@ export interface LibraryViewProps {
    * Disable or Enable and there is no `:disable` or `:enable`.
    */
   onSetSkillsEnabled?: (names: string[], enabled: boolean) => Promise<boolean>;
+  /** How much agents comment code; null while it could not be read (Rules then shows no "Code comments"). */
+  commentPolicy?: CommentPolicyChoice | null;
+  /** Chooses the comment policy for every harness; resolves true once saved. Without it no level offers Use. */
+  onSetCommentPolicy?: (level: CommentPolicyLevel) => Promise<boolean>;
   /**
    * Skill import: preview copies the dropped or given paths into private staging; commit publishes the previewed
    * copy into pack:imported and lists the packs again. Without them there is no "Import skill…".
@@ -227,6 +233,8 @@ export function LibraryView(props: LibraryViewProps) {
     canForgetPack: props.onForgetPack !== undefined,
     canOpenHarness: props.onOpenHarnessView !== undefined,
     canImportSkill: props.onPreviewImport !== undefined && props.onCommitImport !== undefined,
+    commentPolicy: props.commentPolicy ?? null,
+    canSetCommentPolicy: props.onSetCommentPolicy !== undefined,
   };
 
   const topics = LIBRARY_TOPICS.filter(topic => topic.id !== "configs" || showConfigs);
@@ -490,6 +498,11 @@ export function LibraryView(props: LibraryViewProps) {
         break;
       case "enable":
         void props.onSetSkillsEnabled?.([action.name], true);
+        break;
+      case "comment-policy":
+        void props.onSetCommentPolicy?.(action.level).then(saved => {
+          if (saved) notify(`Code comments: ${row.name} · the next Update changes your rules`, { tone: "ok" });
+        });
         break;
       case "open":
         void openTarget(action.target, row.name, `${scope}/${row.key}`);
