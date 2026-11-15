@@ -88,6 +88,17 @@ class ClaudeHeaderContractTests(unittest.TestCase):
         self.assertTrue(any("must not list Edit" in e for e in errors), errors)
         self.assertTrue(any("must list Edit in disallowedTools" in e for e in errors), errors)
 
+    def test_effort_must_be_a_documented_level(self) -> None:
+        self.assertEqual(self.errors("inspector", claude_agent("inspector", effort="high")), [])
+        errors = self.errors("inspector", claude_agent("inspector", effort="turbo"))
+        self.assertTrue(any("invalid effort" in e for e in errors), errors)
+
+    def test_bundled_reviewers_pin_high_effort_and_the_rest_leave_it_unset(self) -> None:
+        agents = ROOT / WS / "templates/claude/agents"
+        for role, expected in (("inspector", "high"), ("sentinel", "high"), ("repo-scout", None), ("verifier", None), ("scribe", None)):
+            fields = self.generator._parse_frontmatter_fields((agents / f"{role}.md").read_text(encoding="utf-8"))
+            self.assertEqual(fields.get("effort"), expected, role)
+
     def test_description_with_colon_space_fails(self) -> None:
         errors = self.errors("inspector", claude_agent("inspector", description="Read-only: include the diff."))
         self.assertTrue(any("plain YAML scalar" in e for e in errors), errors)

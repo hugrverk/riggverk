@@ -106,6 +106,7 @@ def compose_markdown(header_rel: str, body: str) -> str:
 
 CLAUDE_READONLY_TOOLS = frozenset(["Read", "Grep", "Glob"])
 CLAUDE_READONLY_ROLES = frozenset(["repo-scout", "inspector", "sentinel"])
+CLAUDE_AGENT_EFFORTS = frozenset({"low", "medium", "high", "xhigh", "max"})
 CLAUDE_AGENT_MODELS = frozenset(["haiku", "sonnet"])
 CLAUDE_PERMISSION_MODES = frozenset(["default", "acceptEdits", "auto", "dontAsk", "bypassPermissions", "plan"])
 
@@ -194,6 +195,13 @@ def _validate_markdown_frontmatter(
             errors.append(
                 f"{rel}: Claude agent '{role_name}' must pin model to one of "
                 f"{', '.join(sorted(CLAUDE_AGENT_MODELS))}, found {model or 'none'!r}"
+            )
+
+        # effort, when present, must be a level Claude Code documents for subagents.
+        effort = fields.get("effort")
+        if effort is not None and effort not in CLAUDE_AGENT_EFFORTS:
+            errors.append(
+                f"{rel}: invalid effort {effort!r}; use one of {', '.join(sorted(CLAUDE_AGENT_EFFORTS))}"
             )
 
         # permissionMode, when present, must be a known value and never bypass permissions.

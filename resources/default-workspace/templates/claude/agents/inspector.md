@@ -4,6 +4,7 @@ description: Use proactively after non-trivial implementation and before commit 
 model: sonnet
 tools: Read, Grep, Glob
 permissionMode: plan
+effort: high
 maxTurns: 12
 ---
 
