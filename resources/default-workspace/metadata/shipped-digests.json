@@ -246,7 +246,8 @@
       "sha256:78c269e3449236ac5b140019a11237dd53c997d2c5b1787df4983ecf6c664c75"
     ],
     "skills/adversarial/critic-recipes.md": [
-      "sha256:4911867e79cfab6a7c6bebe6a344811fc32ee468d056618eb412a968b5a7f8a6"
+      "sha256:4911867e79cfab6a7c6bebe6a344811fc32ee468d056618eb412a968b5a7f8a6",
+      "sha256:9f41d3016e776bbb888786cceb69bc4eac8b8e42645137697b8035570815d5dd"
     ],
     "skills/adversarial/implement.md": [
       "sha256:d09f57f292e7db4caef43252702eb52e469fd2a6234b92c1c1bcc0785d71fe96",
@@ -393,6 +394,7 @@
       "sha256:d066e9fd951dabec043cf62633587fef21e6e0d4d128fd2e5a9fe4707598b0bd"
     ],
     "skills/dispatch/delegate-recipes.md": [
+      "sha256:8a3c0ff0e35248e74b0ac307c4599b2851eca4a0a88e485d125f647d24a4587e",
       "sha256:8bf1ee6a5a47bf61a3b410bf6374a10a9a3f40eeea138841d55cab81f92da0d0"
     ],
     "skills/frontend-design/SKILL.md": [
