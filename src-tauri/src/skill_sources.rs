@@ -756,13 +756,15 @@ pub(crate) fn effective_uid() -> u32 {
     unsafe { geteuid() }
 }
 
-/// Why a pack entry cannot be trusted: writable by its group or by everyone, or owned by someone
-/// else than the current user (Unix); a symlink or junction (Windows). `what` names the entry in the reason.
+/// Why a pack entry cannot be trusted: writable by everyone or by a group other than the user's
+/// private group ([`crate::path_safety::user_private_gid`]), or owned by someone else than the
+/// current user (Unix); a symlink or junction (Windows). `what` names the entry in the reason.
 pub(crate) fn check_trusted(meta: &fs::Metadata, what: &str) -> Result<(), String> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::{MetadataExt, PermissionsExt};
-        if meta.permissions().mode() & 0o022 != 0 {
+        let private_group = Some(meta.gid()) == crate::path_safety::user_private_gid();
+        if crate::path_safety::others_can_write(meta.permissions().mode(), private_group) {
             return Err(format!(
                 "refusing {what}: it is writable by its group or by everyone; run chmod go-w on it"
             ));
@@ -917,7 +919,7 @@ fn sorted_dirs(dir: &Path) -> Result<Vec<(String, PathBuf)>, String> {
 }
 
 /// Refuses the pack on a symlink or any other link-like entry below `dir`, on an entry that is
-/// writable by its group or by everyone or not owned by the current user (Unix), and on a tree too
+/// writable by others or not owned by the current user ([`check_trusted`], Unix), and on a tree too
 /// big to read. Dot entries (`.git`) are never read, so they are not walked.
 fn reject_links_below(
     dir: &Path,
@@ -1474,11 +1476,21 @@ mod tests {
         assert_eq!(check(0o755), Ok(()));
         let group = fs::metadata(&pack).unwrap().gid();
         let private = crate::path_safety::user_private_gid() == Some(group);
-        assert_eq!(check(0o775).is_ok(), private, "group {group}, private: {private}");
+        assert_eq!(
+            check(0o775).is_ok(),
+            private,
+            "group {group}, private: {private}"
+        );
         let err = check(0o777).expect_err("writable by everyone");
-        assert!(err.contains("writable by its group or by everyone"), "{err}");
+        assert!(
+            err.contains("writable by its group or by everyone"),
+            "{err}"
+        );
         let err = check(0o757).expect_err("writable by everyone");
-        assert!(err.contains("writable by its group or by everyone"), "{err}");
+        assert!(
+            err.contains("writable by its group or by everyone"),
+            "{err}"
+        );
         let _ = fs::remove_dir_all(&pack);
     }
 }

@@ -218,10 +218,17 @@ pub(crate) fn own_folder_rule(
     if dir.uid != euid {
         return Err("it is not owned by you");
     }
-    if dir.mode & 0o002 != 0 || (dir.mode & 0o020 != 0 && !private_group) {
+    if others_can_write(dir.mode, private_group) {
         return Err("it is writable by its group or by everyone");
     }
     Ok(())
+}
+
+/// Whether `mode` lets anyone but the owner write: everyone, or a group other than the user's
+/// private group (`private_group`: the entry's group is [`user_private_gid`]).
+#[cfg(unix)]
+pub(crate) fn others_can_write(mode: u32, private_group: bool) -> bool {
+    mode & 0o002 != 0 || (mode & 0o020 != 0 && !private_group)
 }
 
 /// Whether the group named `group` with `members` is the private group of the user named `user`:
