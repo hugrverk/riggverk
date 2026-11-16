@@ -1,6 +1,6 @@
 ---
 name: repo-scout
-description: Use proactively before implementation when repository structure, ownership, existing patterns, relevant files, canonical docs, scripts, tests, or risk boundaries are unclear. Read-only. Return concise file map, constraints, and recommended patch targets.
+description: Use proactively before implementation when repository structure, ownership, existing patterns, relevant files, canonical docs, scripts, tests, or risk boundaries are unclear. Read-only with no shell. Return concise file map, constraints, and recommended patch targets.
 mode: subagent
 temperature: 0.1
 steps: 30
@@ -135,113 +135,6 @@ permission:
     "*": allow
   bash:
     "*": deny
-    "pwd": allow
-    "ls": allow
-    "ls -la": allow
-    "tree": allow
-    "git status": allow
-    "git status --short": allow
-    "git status --porcelain": allow
-    "git diff": allow
-    "git diff --stat": allow
-    "git diff --name-only": allow
-    "git diff --name-status": allow
-    "git log": allow
-    "git log -1": allow
-    "git log --oneline": allow
-    "git show": allow
-    "git show HEAD": allow
-    "git rev-parse HEAD": allow
-    "git rev-parse --show-toplevel": allow
-    "git ls-files": allow
-    "grep *": ask
-    "rg *": ask
-    "git grep*": ask
-    "*&*": deny
-    "*>*": deny
-    "*>>*": deny
-    "*< *": deny
-    "*<(*": deny
-    "*>(*": deny
-    "*\n*": deny
-    "*\r*": deny
-    "*|*": deny
-    "*&&*": deny
-    "*;*": deny
-    "*||*": deny
-    "*$(*": deny
-    "*`*": deny
-    "tree -*": deny
-    "tree --*": deny
-    "git diff*--ext-diff*": deny
-    "git diff*--textconv*": deny
-    "git show*--ext-diff*": deny
-    "find *": deny
-    "git add*": deny
-    "git commit*": deny
-    "git branch*": deny
-    "git checkout*": deny
-    "git switch*": deny
-    "git restore*": deny
-    "git reset*": deny
-    "git clean*": deny
-    "git stash*": deny
-    "git tag*": deny
-    "git fetch*": deny
-    "git pull*": deny
-    "git merge*": deny
-    "git rebase*": deny
-    "git diff*--output*": deny
-    "git log*--output*": deny
-    "git show*--output*": deny
-    "mkdir *": deny
-    "mkdir -p *": deny
-    "touch *": deny
-    "cp *": deny
-    "mv *": deny
-    "rm *": deny
-    "npm test*": deny
-    "npm run test*": deny
-    "npm run lint*": deny
-    "npm run typecheck*": deny
-    "npm run build*": deny
-    "npm run verify*": deny
-    "pnpm test*": deny
-    "pnpm run test*": deny
-    "pnpm run lint*": deny
-    "pnpm run typecheck*": deny
-    "pnpm run build*": deny
-    "pnpm run verify*": deny
-    "bun test*": deny
-    "bun run test*": deny
-    "bun run lint*": deny
-    "bun run typecheck*": deny
-    "bun run build*": deny
-    "bun run verify*": deny
-    "yarn test*": deny
-    "yarn run test*": deny
-    "yarn run lint*": deny
-    "yarn run typecheck*": deny
-    "yarn run build*": deny
-    "yarn run verify*": deny
-    "cargo *": deny
-    "npm install*": deny
-    "npm update*": deny
-    "pnpm install*": deny
-    "pnpm add*": deny
-    "yarn install*": deny
-    "yarn add*": deny
-    "bun install*": deny
-    "bun add*": deny
-    "npm run deploy*": deny
-    "npm run migrate*": deny
-    "npm run migration*": deny
-    "npm run seed*": deny
-    "npm run reset*": deny
-    "pnpm deploy*": deny
-    "pnpm migrate*": deny
-    "pnpm seed*": deny
-    "pnpm reset*": deny
     "git push --force*": deny
     "git push -f*": deny
     "git reset --hard*": deny

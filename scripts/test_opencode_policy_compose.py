@@ -134,28 +134,6 @@ ADVERSARIAL_READONLY_BASH = [
     ("cargo check", "deny"),
 ]
 
-READONLY_BASH_ALLOW = [
-    "pwd",
-    "ls",
-    "ls -la",
-    "tree",
-    "git status",
-    "git status --short",
-    "git status --porcelain",
-    "git diff",
-    "git diff --stat",
-    "git diff --name-only",
-    "git diff --name-status",
-    "git log",
-    "git log -1",
-    "git log --oneline",
-    "git show",
-    "git show HEAD",
-    "git rev-parse HEAD",
-    "git rev-parse --show-toplevel",
-    "git ls-files",
-]
-
 VERIFIER_FORBIDDEN = [
     (cmd, expected)
     for cmd, expected in ADVERSARIAL_READONLY_BASH
@@ -361,13 +339,6 @@ class TestReadOnlyRoles(unittest.TestCase):
                         f"{role} {command!r}: expected {expected}, got {action} "
                         f"({winning_rule(perm, 'bash', command)})",
                     )
-
-    def test_inspection_bash_allowed(self) -> None:
-        for role in READONLY_ROLES:
-            perm = compose_role_permission(load_role(role))
-            for cmd in READONLY_BASH_ALLOW:
-                with self.subTest(role=role, cmd=cmd):
-                    self.assertTrue(bash_is_allowed(perm, cmd), f"{role} must allow {cmd}")
 
     def test_no_broad_allow_patterns(self) -> None:
         for role in READONLY_ROLES + ("scribe", "verifier"):
@@ -708,12 +679,22 @@ class TestShellCommandSplitting(unittest.TestCase):
     def test_known_upstream_gap_redirect_behind_a_second_command(self) -> None:
         # OpenCode 1.19.3 drops a redirect that follows a later `&&`/`||`/`|` element, so no bash
         # rule can see it: an allow-listed command can overwrite a file. This pins the model to
-        # the verified behaviour; the docs list it as a limit of every bash profile.
-        for role in ("repo-scout", "architect"):
+        # the verified behaviour for a profile that allows the command.
+        for role in ("architect",):
             perm = compose_role_permission(load_role(role))
             with self.subTest(role=role):
                 self.assertTrue(bash_is_allowed(perm, "git status && git status > changed.txt"))
                 self.assertFalse(bash_is_allowed(perm, "git status > changed.txt"))
+
+    def test_readonly_roles_deny_shell_commands(self) -> None:
+        permissions = {role: compose_role_permission(load_role(role)) for role in READONLY_ROLES + ("scribe",)}
+        permissions["explore"] = build_builtin_agent_overrides(load_policy())["explore"]["permission"]
+        for role, perm in permissions.items():
+            with self.subTest(role=role):
+                self.assertTrue(all(action == "deny" for action in perm["bash"].values()))
+            for command in ("git status", "git status && git status > changed.txt"):
+                with self.subTest(role=role, command=command):
+                    self.assertEqual(effective_bash_action(perm, command), "deny")
 
 
 class TestPipeToShell(unittest.TestCase):
@@ -818,7 +799,8 @@ class TestDenyInsideCompounds(unittest.TestCase):
     def test_operator_rules_still_catch_quoted_operators(self) -> None:
         # `*|*`, `*;*` ... never match an unquoted operator after the split, but a quoted one stays
         # in the command's text. Dropping them would turn these denies into asks.
-        perm = compose_role_permission(load_role("repo-scout"))
+        perm = compose_role_permission(load_role("verifier"))
+        perm["bash"]["*"] = "ask"
         loosened = json.loads(json.dumps(perm))
         for pattern in ("*|*", "*;*", "*&&*", "*&*", "*$(*"):
             del loosened["bash"][pattern]
@@ -889,7 +871,7 @@ class TestSecretPathSpellings(unittest.TestCase):
             for names, expected in ((self.OPEN, open_action), (self.RESTRICTIVE, restrictive_action)):
                 for name in names:
                     with self.subTest(agent=name, command=command):
-                        self.assertEqual(self.action(name, command), expected)
+                        self.assertEqual(self.action(name, command), "deny" if name in READONLY_ROLES + ("scribe", "explore") else expected)
 
     def test_known_limits_still_ask(self) -> None:
         # Pinned so the docs cannot claim more: a quoted path that ends right at a fixed name, and
@@ -1059,9 +1041,9 @@ class TestMutationRejection(unittest.TestCase):
         # Each command of a compound is evaluated on its own, so `*&*` is not what gates `touch`.
         action = self._mutated_action("repo-scout", {"*&*": "allow"}, "git status & touch changed.txt")
         self.assertEqual(action, "deny")
-        action = self._mutated_action("repo-scout", {"touch *": "allow"}, "git status & touch changed.txt")
+        action = self._mutated_action("repo-scout", {"git status": "allow", "touch *": "allow"}, "git status & touch changed.txt")
         self.assertEqual(action, "allow")
-        action = self._mutated_action("repo-scout", {"sh": "allow"}, "git status | sh")
+        action = self._mutated_action("repo-scout", {"git status": "allow", "sh": "allow"}, "git status | sh")
         self.assertEqual(action, "allow")
 
     def test_widen_tree_allows_bypass_when_flag_deny_removed(self) -> None:

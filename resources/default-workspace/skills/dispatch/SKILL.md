@@ -145,6 +145,7 @@ Integrate parallel slices one at a time and re-run the checks after each. A conf
 
 ### OpenCode
 
+- The `explore`, `repo-scout`, `inspector`, `sentinel` and `scribe` roles have no shell. Include the diff or changed-file list in their prompt when needed.
 - No subagent route for code. Riggverk's `architect` may start only `explore`, `repo-scout`, `inspector`, `sentinel`, `scribe` and `verifier`, and none of them writes code, so send each write slice through an external CLI route from `delegate-recipes.md`; bash asks once per run. Use those roles for scouting and review only.
 - The architect stops after 100 steps, which can end a long run before Collect: keep slices small, and if the session stops, collect what the worktree holds before anything else (Failure modes).
 
