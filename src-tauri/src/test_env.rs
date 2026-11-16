@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 #[cfg(test)]
 pub fn create_dir_all(path: impl AsRef<Path>) -> std::io::Result<()> {
     let path = path.as_ref();
+    #[cfg(unix)]
     let missing: Vec<PathBuf> = path
         .ancestors()
         .take_while(|dir| !dir.as_os_str().is_empty() && !dir.exists())

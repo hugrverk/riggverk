@@ -4623,7 +4623,7 @@ mod tests {
         for (path, open_mode, phrase) in [
             (
                 backup_dir.clone(),
-                0o770,
+                0o777,
                 "refusing the setup transaction folder",
             ),
             (
