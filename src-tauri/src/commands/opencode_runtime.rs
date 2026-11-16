@@ -1812,12 +1812,31 @@ pub fn get_opencode_runtime_health() -> Result<OpenCodeRuntimeHealth, String> {
             user.as_deref(),
         )),
     );
-    apply_cli_probes(
-        &mut health,
-        resolve_opencode_executable().as_deref(),
-        ProbeLimits::PRODUCTION,
-    );
+    apply_resolved_cli_probes(&mut health, &opencode_candidates(), ProbeLimits::PRODUCTION);
     Ok(health)
+}
+
+/// [`apply_cli_probes`] with the first trusted of `candidates`. When every one found is passed
+/// over, the CLI stays missing and its detail says where one was found and why it is not used.
+fn apply_resolved_cli_probes(
+    health: &mut OpenCodeRuntimeHealth,
+    candidates: &[PathBuf],
+    limits: ProbeLimits,
+) {
+    let program = first_trusted_opencode(candidates);
+    apply_cli_probes(health, program.as_deref(), limits);
+    let (None, Some(found)) = (program, candidates.first()) else {
+        return;
+    };
+    let detail = format!(
+        "found at {}, but not used: it or a folder above it can be changed by another user; it \
+         must belong to you or root and not be writable by others",
+        found.display()
+    );
+    if let Some(cli) = health.cli.as_mut() {
+        cli.detail = detail.clone();
+    }
+    set_check(&mut health.checks, "cli", "OpenCode CLI", "warn", detail);
 }
 
 /// Adds what the process environment and the machine add to OpenCode's config: the names of the
@@ -2130,25 +2149,42 @@ fn opencode_fallback_candidates(home: Option<&Path>) -> Vec<PathBuf> {
     candidates
 }
 
-/// Resolve the absolute path to the `opencode` CLI.
-///
-/// Resolution order:
-/// 1. Normal PATH lookup via `executable_resolver::resolve_executable`.
-/// 2. The fallback locations of `opencode_fallback_candidates`.
-///
-/// Returns `None` if no executable is found.
+/// Every `opencode` executable found, in resolution order: each `path_env` folder, then the
+/// fallback locations of `opencode_fallback_candidates`.
+fn opencode_candidates_in(path_env: &str, fallbacks: &[PathBuf]) -> Vec<PathBuf> {
+    let on_path = std::env::split_paths(path_env)
+        .filter_map(|dir| dir.to_str().map(str::to_owned))
+        .filter(|dir| !dir.trim().is_empty())
+        .filter_map(|dir| crate::executable_resolver::resolve_executable("opencode", &dir, None));
+    let fallbacks = fallbacks.iter().filter_map(|candidate| {
+        crate::executable_resolver::resolve_executable(&candidate.to_string_lossy(), "", None)
+    });
+    on_path.chain(fallbacks).collect()
+}
+
+/// The first candidate [`crate::executable_resolver::trusted_executable`] accepts, resolved: the
+/// file that runs. A candidate another user could replace is passed over.
+fn first_trusted_opencode(candidates: &[PathBuf]) -> Option<PathBuf> {
+    candidates
+        .iter()
+        .find_map(|candidate| crate::executable_resolver::trusted_executable(candidate))
+}
+
+/// Resolve the absolute path to the `opencode` CLI (see [`opencode_candidates_in`] and
+/// [`first_trusted_opencode`]). Returns `None` if no usable executable is found.
+#[cfg(test)]
 fn resolve_opencode_executable_in(path_env: &str, fallbacks: &[PathBuf]) -> Option<PathBuf> {
-    crate::executable_resolver::resolve_executable("opencode", path_env, None).or_else(|| {
-        fallbacks.iter().find_map(|candidate| {
-            crate::executable_resolver::resolve_executable(&candidate.to_string_lossy(), "", None)
-        })
-    })
+    first_trusted_opencode(&opencode_candidates_in(path_env, fallbacks))
+}
+
+fn opencode_candidates() -> Vec<PathBuf> {
+    let path_env = std::env::var("PATH").unwrap_or_default();
+    let home = crate::agent_targets::home_dir().ok();
+    opencode_candidates_in(&path_env, &opencode_fallback_candidates(home.as_deref()))
 }
 
 fn resolve_opencode_executable() -> Option<PathBuf> {
-    let path_env = std::env::var("PATH").unwrap_or_default();
-    let home = crate::agent_targets::home_dir().ok();
-    resolve_opencode_executable_in(&path_env, &opencode_fallback_candidates(home.as_deref()))
+    first_trusted_opencode(&opencode_candidates())
 }
 
 // ── OpenCode model selection ──
@@ -4198,7 +4234,7 @@ mod tests {
                 "{found:?}"
             );
         } else {
-            assert_eq!(found, fake_path);
+            assert_eq!(found, std::fs::canonicalize(&fake_path).unwrap());
         }
 
         cleanup(&dir);
@@ -5780,8 +5816,8 @@ mod tests {
         let home = temp_root("installer-home");
         let stub = write_stub_opencode(&home.join(".opencode/bin"), "echo 1.19.3");
         let found = resolve_opencode_executable_in("", &[home.join(".opencode/bin/opencode")]);
+        assert_eq!(found, Some(fs::canonicalize(&stub).unwrap()));
         cleanup(&home);
-        assert_eq!(found, Some(stub));
 
         let nothing = resolve_opencode_executable_in("", &[PathBuf::from("/nonexistent/opencode")]);
         assert_eq!(nothing, None);
@@ -5795,9 +5831,50 @@ mod tests {
         let wanted = write_stub_opencode(&on_path, "echo 1.19.3");
         let other = write_stub_opencode(&fallback, "echo 1.19.3");
         let found = resolve_opencode_executable_in(&on_path.to_string_lossy(), &[other]);
+        assert_eq!(found, Some(fs::canonicalize(&wanted).unwrap()));
         cleanup(&on_path);
         cleanup(&fallback);
-        assert_eq!(found, Some(wanted));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_resolve_skips_an_opencode_others_can_change() {
+        use std::os::unix::fs::PermissionsExt;
+        let open = temp_root("untrusted-first");
+        let trusted = temp_root("trusted-second");
+        let skipped = write_stub_opencode(&open.join("bin"), "echo 1.19.3");
+        let wanted = write_stub_opencode(&trusted.join("bin"), "echo 1.19.3");
+        // Everyone can write the folder above the first one, without the sticky bit.
+        fs::set_permissions(&open, fs::Permissions::from_mode(0o777)).unwrap();
+        let path_env = format!("{}:{}", open.join("bin").display(), trusted.join("bin").display());
+        let canonical = fs::canonicalize(&wanted).unwrap();
+
+        assert_eq!(resolve_opencode_executable_in(&path_env, &[]), Some(canonical.clone()));
+        assert_eq!(
+            resolve_opencode_executable_in("", &[skipped.clone(), wanted.clone()]),
+            Some(canonical)
+        );
+        assert_eq!(resolve_opencode_executable_in("", &[skipped]), None);
+        cleanup(&open);
+        cleanup(&trusted);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_health_names_an_opencode_it_does_not_use() {
+        use std::os::unix::fs::PermissionsExt;
+        let open = temp_root("untrusted-health");
+        let stub = write_stub_opencode(&open.join("bin"), "echo 1.19.3");
+        fs::set_permissions(&open, fs::Permissions::from_mode(0o777)).unwrap();
+        let (before, _) = probe_synced("untrusted-health-ws", None, LIMITS);
+        let mut health = before.clone();
+        apply_resolved_cli_probes(&mut health, std::slice::from_ref(&stub), LIMITS);
+        cleanup(&open);
+        let cli = health.cli.as_ref().expect("cli health");
+        assert_eq!(cli.status, "missing");
+        assert!(cli.detail.contains(&stub.display().to_string()), "{}", cli.detail);
+        assert!(cli.detail.contains("can be changed by another user"), "{}", cli.detail);
+        assert_eq!(check_of(&health, "cli").status, "warn");
     }
 
     #[test]
