@@ -27,7 +27,15 @@
             "The `.env` check on the Claude Code page reads the deny rules in order, so a later `Read(!…)` exception that reopens `.env` no longer counts as protection",
             "A disabled skill also leaves the agent-specific lines of the rules that name it",
             "Each renamed skill's description says what it is not for, so agents pick the right skill more often",
-            "The `dispatch` notes for OpenCode match what Riggverk's architect agent may start"
+            "The `dispatch` notes for OpenCode match what Riggverk's architect agent may start",
+            "OpenCode: the repo-scout, inspector, sentinel and scribe agents and the built-in explore agent have no shell, so they cannot change files through it. Give them the diff or the changed files in the prompt",
+            "Riggverk's window stays on its own pages: a link or a script cannot load another site in it",
+            "Use Riggverk's version on a pack skill names what the pack's `SKILL.md` lets the agent do without asking (hooks, allowed-tools and the like), as the Install review does, even when the diff is not shown",
+            "Skill import reads the chosen folder through the folders it opened, so a folder that is replaced by a link during the import is refused instead of followed",
+            "Codex: Keep mine records exactly the values the confirmation showed. If `config.toml` changed in the meantime, nothing is recorded and the page asks you to look again",
+            "The data folder, the backup folder and the folders above them must belong to you or the system and must not be writable by other users; otherwise Riggverk names the folder and why and does not use it. Personal docs are saved only into docs folders that belong to you",
+            "On Linux, a folder only your own user group can write counts as yours, so a pack cloned with the usual settings is no longer refused",
+            "Riggverk runs OpenCode and Python only from folders other users cannot change. An OpenCode it skips for that reason shows as found but not used"
           ]
         }
       ]
