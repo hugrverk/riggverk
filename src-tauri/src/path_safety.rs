@@ -215,7 +215,9 @@ pub fn check_folders_above(path: &Path, label: &str) -> Result<(), String> {
             let resolved = fs::canonicalize(existing)
                 .map_err(|e| format!("cannot resolve {label} {}: {e}", existing.display()))?;
             if resolved != existing {
-                check_chain_above(&resolved, label)?;
+                // The missing rest goes back on, so the folder the link points to is checked too.
+                let rest = path.strip_prefix(existing).unwrap_or(Path::new(""));
+                check_chain_above(&resolved.join(rest), label)?;
             }
         }
         Ok(())
@@ -355,22 +357,52 @@ mod tests {
         for mode in [0o777, 0o775, 0o757] {
             set(&folder, mode);
             let err = check_private_folder(&folder, "data folder").expect_err("open folder");
-            assert!(err.contains("it is writable by its group or by everyone"), "{err}");
+            assert!(
+                err.contains("it is writable by its group or by everyone"),
+                "{err}"
+            );
         }
         set(&folder, 0o700);
 
         // Everyone can write a folder above, without the sticky bit.
         set(&base, 0o777);
         let err = check_private_folder(&folder, "data folder").expect_err("open ancestor");
-        assert!(err.contains(&format!("the folder {} above it", base.display())), "{err}");
+        assert!(
+            err.contains(&format!("the folder {} above it", base.display())),
+            "{err}"
+        );
         let err = check_folders_above(&folder.join("missing"), "data folder")
             .expect_err("open ancestor of a missing folder");
-        assert!(err.contains("writable by its group or by everyone"), "{err}");
+        assert!(
+            err.contains("writable by its group or by everyone"),
+            "{err}"
+        );
 
         // With the sticky bit, the user's own folder in it cannot be replaced.
         set(&base, 0o1777);
         check_private_folder(&folder, "data folder").expect("sticky ancestor");
         set(&base, 0o755);
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_linked_folder_above_a_missing_path_is_checked_where_it_points() {
+        use std::os::unix::fs::PermissionsExt;
+        let base = temp("linked-above");
+        let real = base.join("real");
+        fs::create_dir_all(&real).unwrap();
+        fs::set_permissions(&base, fs::Permissions::from_mode(0o755)).unwrap();
+        std::os::unix::fs::symlink(&real, base.join("link")).unwrap();
+        let missing = base.join("link/data/missing");
+        fs::set_permissions(&real, fs::Permissions::from_mode(0o755)).unwrap();
+        check_folders_above(&missing, "data folder").expect("private linked folder");
+        fs::set_permissions(&real, fs::Permissions::from_mode(0o777)).unwrap();
+        let err = check_folders_above(&missing, "data folder").expect_err("open linked folder");
+        assert!(
+            err.contains("writable by its group or by everyone"),
+            "{err}"
+        );
         let _ = fs::remove_dir_all(&base);
     }
 
@@ -393,7 +425,10 @@ mod tests {
         std::os::unix::fs::chown(&cellar, None, Some(20)).unwrap();
         let err = check_folders_above(&folder.join("bin/tool"), "program")
             .expect_err("a group-writable folder of another group");
-        assert!(err.contains("writable by its group or by everyone"), "{err}");
+        assert!(
+            err.contains("writable by its group or by everyone"),
+            "{err}"
+        );
         let _ = fs::remove_dir_all(&base);
     }
 
