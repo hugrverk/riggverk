@@ -574,7 +574,12 @@ mod tests {
             mkdir(&folder, "");
             fs::set_permissions(home, fs::Permissions::from_mode(0o700)).unwrap();
             unsafe { std::env::set_var("RIGGVERK_WORKSPACE_PATH", &folder) };
-            for mode in [0o777, 0o775, 0o757] {
+            // Writable by its group: refused unless that is the user's private group.
+            fs::set_permissions(&folder, fs::Permissions::from_mode(0o775)).unwrap();
+            let group = std::os::unix::fs::MetadataExt::gid(&fs::metadata(&folder).unwrap());
+            let private = crate::path_safety::user_private_gid() == Some(group);
+            assert_eq!(workspace_root().is_ok(), private, "group {group}");
+            for mode in [0o777, 0o757] {
                 fs::set_permissions(&folder, fs::Permissions::from_mode(mode)).unwrap();
                 let error = workspace_root().expect_err("a data folder others can write");
                 assert!(
