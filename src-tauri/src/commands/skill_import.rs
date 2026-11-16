@@ -16,6 +16,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::workspace::workspace_target_for_write;
@@ -272,7 +273,11 @@ fn open_regular(path: &Path) -> Result<(fs::File, fs::Metadata), String> {
         use std::os::unix::fs::OpenOptionsExt;
         options.custom_flags(OPEN_FLAGS);
     }
-    let handle = options.open(path).map_err(|_| "cannot open".to_string())?;
+    regular(options.open(path).map_err(|_| "cannot open".to_string())?)
+}
+
+/// `handle` with its metadata (`fstat`) when it is a regular file with one link.
+fn regular(handle: fs::File) -> Result<(fs::File, fs::Metadata), String> {
     let meta = handle
         .metadata()
         .map_err(|_| "cannot inspect".to_string())?;
@@ -364,6 +369,301 @@ fn plural(count: usize, noun: &str) -> String {
     format!("{count} {noun}{}", if count == 1 { "" } else { "s" })
 }
 
+// ── Folders of the source, held open ──
+
+/// Device and inode number: which file or folder an entry is.
+type Identity = (u64, u64);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum EntryKind {
+    File,
+    Dir,
+    Link,
+    Other,
+}
+
+/// What `lstat` says of an entry of a source folder.
+#[derive(Debug, Clone, Copy)]
+struct EntryMeta {
+    kind: EntryKind,
+    len: u64,
+    links: u64,
+    executable: bool,
+    identity: Identity,
+}
+
+#[cfg(unix)]
+impl EntryMeta {
+    /// The types of the `stat` fields differ per platform (on macOS `st_dev` is `i32` and `st_nlink`
+    /// `u16`), so each is cast; the casts are the ones `MetadataExt` makes, so the identity matches
+    /// the `fstat` of the file once it is opened.
+    #[allow(clippy::unnecessary_cast)]
+    fn of(stat: &libc::stat) -> Self {
+        let kind = match stat.st_mode & libc::S_IFMT {
+            libc::S_IFREG => EntryKind::File,
+            libc::S_IFDIR => EntryKind::Dir,
+            libc::S_IFLNK => EntryKind::Link,
+            _ => EntryKind::Other,
+        };
+        Self {
+            kind,
+            len: stat.st_size as u64,
+            links: stat.st_nlink as u64,
+            executable: stat.st_mode & 0o111 != 0,
+            identity: (stat.st_dev as u64, stat.st_ino as u64),
+        }
+    }
+}
+
+#[cfg(not(unix))]
+impl EntryMeta {
+    fn of(meta: &fs::Metadata) -> Self {
+        let kind = meta.file_type();
+        Self {
+            kind: if kind.is_symlink() {
+                EntryKind::Link
+            } else if kind.is_dir() {
+                EntryKind::Dir
+            } else if kind.is_file() {
+                EntryKind::File
+            } else {
+                EntryKind::Other
+            },
+            len: meta.len(),
+            links: link_count(meta),
+            executable: executable_bit(meta),
+            identity: identity(meta),
+        }
+    }
+}
+
+/// A folder of the source, open. Its entries are listed, looked at and opened through the handle,
+/// one name at a time and never through a link, so what is read is what is in the folder that was
+/// opened, whatever its path leads to by then.
+struct SourceDir {
+    #[cfg(unix)]
+    handle: fs::File,
+    #[cfg(not(unix))]
+    path: PathBuf,
+}
+
+/// A name of one entry, for the `*at` calls: never a path, `.` or `..`.
+#[cfg(unix)]
+fn entry_name(name: &str) -> std::io::Result<std::ffi::CString> {
+    if name.is_empty() || name == "." || name == ".." || name.contains('/') {
+        return Err(std::io::ErrorKind::InvalidInput.into());
+    }
+    std::ffi::CString::new(name).map_err(|_| std::io::ErrorKind::InvalidInput.into())
+}
+
+#[cfg(unix)]
+impl SourceDir {
+    /// The folder at `path`, not through a link at it, when it is still the folder with identity
+    /// `seen`.
+    fn open_root(path: &Path, seen: Identity) -> std::io::Result<Self> {
+        use std::os::unix::fs::OpenOptionsExt;
+        let handle = fs::OpenOptions::new()
+            .read(true)
+            .custom_flags(libc::O_DIRECTORY | libc::O_NOFOLLOW)
+            .open(path)?;
+        Self::checked(handle, Some(seen))
+    }
+
+    /// The folder a loose `SKILL.md` is in: its path is followed like the folders above any root.
+    fn open_parent(path: &Path) -> std::io::Result<Self> {
+        use std::os::unix::fs::OpenOptionsExt;
+        let handle = fs::OpenOptions::new()
+            .read(true)
+            .custom_flags(libc::O_DIRECTORY)
+            .open(path)?;
+        Self::checked(handle, None)
+    }
+
+    /// The folder `name` in this one when it is still the folder with identity `seen`.
+    fn open_dir(&self, name: &str, seen: Identity) -> std::io::Result<Self> {
+        let handle = self.open_at(name, libc::O_RDONLY | libc::O_DIRECTORY | libc::O_NOFOLLOW)?;
+        Self::checked(handle, Some(seen))
+    }
+
+    fn checked(handle: fs::File, seen: Option<Identity>) -> std::io::Result<Self> {
+        let meta = handle.metadata()?;
+        if !meta.is_dir() || seen.is_some_and(|seen| identity(&meta) != seen) {
+            return Err(std::io::Error::other("not the folder that was looked at"));
+        }
+        Ok(Self { handle })
+    }
+
+    /// The regular file `name` in this folder, as [`open_regular`] opens a path.
+    fn open_file(&self, name: &str) -> Result<(fs::File, fs::Metadata), String> {
+        let handle = self
+            .open_at(name, libc::O_RDONLY | OPEN_FLAGS)
+            .map_err(|_| "cannot open".to_string())?;
+        regular(handle)
+    }
+
+    fn open_at(&self, name: &str, flags: libc::c_int) -> std::io::Result<fs::File> {
+        use std::os::unix::io::{AsRawFd, FromRawFd};
+        let name = entry_name(name)?;
+        // SAFETY: the folder's descriptor is open for the whole call and `name` is NUL-terminated;
+        // without O_CREAT no mode argument is read.
+        let fd = unsafe {
+            libc::openat(
+                self.handle.as_raw_fd(),
+                name.as_ptr(),
+                flags | libc::O_CLOEXEC,
+            )
+        };
+        if fd < 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+        // SAFETY: `fd` was just returned by openat and nothing else owns it.
+        Ok(unsafe { fs::File::from_raw_fd(fd) })
+    }
+
+    /// `lstat` of the entry `name` in this folder.
+    fn entry(&self, name: &str) -> std::io::Result<EntryMeta> {
+        use std::os::unix::io::AsRawFd;
+        let name = entry_name(name)?;
+        let mut stat = std::mem::MaybeUninit::<libc::stat>::uninit();
+        // SAFETY: the folder's descriptor is open for the whole call, `name` is NUL-terminated and
+        // `stat` is writable room for one `stat`.
+        let done = unsafe {
+            libc::fstatat(
+                self.handle.as_raw_fd(),
+                name.as_ptr(),
+                stat.as_mut_ptr(),
+                libc::AT_SYMLINK_NOFOLLOW,
+            )
+        };
+        if done != 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+        // SAFETY: fstatat succeeded, so it filled `stat`.
+        Ok(EntryMeta::of(&unsafe { stat.assume_init() }))
+    }
+
+    /// The names in this folder, at most `limit`, in the order the file system gives them. A read
+    /// error ends the list, as the skipped errors of `fs::read_dir` did.
+    fn names(&self, limit: usize) -> std::io::Result<Vec<std::ffi::OsString>> {
+        use std::os::unix::ffi::OsStrExt;
+        use std::os::unix::io::{FromRawFd, IntoRawFd};
+
+        /// Closes the stream and the descriptor it took over.
+        struct Stream(*mut libc::DIR);
+        impl Drop for Stream {
+            fn drop(&mut self) {
+                // SAFETY: the stream came from a successful fdopendir and is closed only here.
+                unsafe { libc::closedir(self.0) };
+            }
+        }
+
+        // The duplicate shares its read position with the held handle, and fdopendir reads on from
+        // that position: back to the first entry.
+        let mut duplicate = self.handle.try_clone()?;
+        std::io::Seek::rewind(&mut duplicate)?;
+        let fd = duplicate.into_raw_fd();
+        // SAFETY: `fd` is an open folder descriptor that nothing else owns; on success the stream
+        // owns it.
+        let stream = unsafe { libc::fdopendir(fd) };
+        if stream.is_null() {
+            let error = std::io::Error::last_os_error();
+            // SAFETY: fdopendir failed, so `fd` is still owned here and closed once.
+            drop(unsafe { std::os::fd::OwnedFd::from_raw_fd(fd) });
+            return Err(error);
+        }
+        let stream = Stream(stream);
+        let mut names = Vec::new();
+        while names.len() < limit {
+            // SAFETY: the stream is open; the entry stays valid until the next readdir or closedir.
+            let entry = unsafe { libc::readdir(stream.0) };
+            if entry.is_null() {
+                break;
+            }
+            // SAFETY: a non-null entry from readdir holds a NUL-terminated name.
+            let name = unsafe { std::ffi::CStr::from_ptr((*entry).d_name.as_ptr()) }.to_bytes();
+            if name != b"." && name != b".." {
+                names.push(std::ffi::OsStr::from_bytes(name).to_os_string());
+            }
+        }
+        Ok(names)
+    }
+}
+
+/// Without descriptors to hold, the folders are reached by path, a link at each one refused.
+#[cfg(not(unix))]
+impl SourceDir {
+    fn open_root(path: &Path, _seen: Identity) -> std::io::Result<Self> {
+        let meta = fs::symlink_metadata(path)?;
+        if !meta.is_dir() || meta.file_type().is_symlink() {
+            return Err(std::io::Error::other("not a folder"));
+        }
+        Ok(Self {
+            path: path.to_path_buf(),
+        })
+    }
+
+    fn open_parent(path: &Path) -> std::io::Result<Self> {
+        Ok(Self {
+            path: path.to_path_buf(),
+        })
+    }
+
+    fn open_dir(&self, name: &str, seen: Identity) -> std::io::Result<Self> {
+        Self::open_root(&self.path.join(name), seen)
+    }
+
+    fn open_file(&self, name: &str) -> Result<(fs::File, fs::Metadata), String> {
+        open_regular(&self.path.join(name))
+    }
+
+    fn entry(&self, name: &str) -> std::io::Result<EntryMeta> {
+        fs::symlink_metadata(self.path.join(name)).map(|meta| EntryMeta::of(&meta))
+    }
+
+    fn names(&self, limit: usize) -> std::io::Result<Vec<std::ffi::OsString>> {
+        Ok(fs::read_dir(&self.path)?
+            .flatten()
+            .take(limit)
+            .map(|entry| entry.file_name())
+            .collect())
+    }
+}
+
+/// A folder of the source: an open folder and the names below it, each with the identity its
+/// folder had when it was looked at. Opening it walks down again from the open folder, so a folder
+/// on the way that is a link or another folder by then is refused, never entered.
+#[derive(Clone)]
+struct Location {
+    anchor: Rc<SourceDir>,
+    steps: Vec<(String, Identity)>,
+}
+
+impl Location {
+    fn new(dir: SourceDir) -> Self {
+        Self {
+            anchor: Rc::new(dir),
+            steps: Vec::new(),
+        }
+    }
+
+    fn child(&self, name: &str, seen: Identity) -> Self {
+        let mut steps = self.steps.clone();
+        steps.push((name.to_string(), seen));
+        Self {
+            anchor: Rc::clone(&self.anchor),
+            steps,
+        }
+    }
+
+    fn open(&self) -> std::io::Result<Rc<SourceDir>> {
+        let mut dir = Rc::clone(&self.anchor);
+        for (name, seen) in &self.steps {
+            dir = Rc::new(dir.open_dir(name, *seen)?);
+        }
+        Ok(dir)
+    }
+}
+
 // ── Finding the skills of a source ──
 
 /// A skill the source holds, before it is read.
@@ -371,16 +671,19 @@ struct Found {
     kind: SourceKind,
     /// The skill folder, or the loose `SKILL.md`.
     path: PathBuf,
+    /// The skill folder, or the folder the loose `SKILL.md` is in.
+    at: Location,
 }
 
-fn is_file_named_skill_md(dir: &Path) -> bool {
-    fs::symlink_metadata(dir.join("SKILL.md")).is_ok()
+fn has_skill_md(dir: &SourceDir) -> bool {
+    dir.entry("SKILL.md").is_ok()
 }
 
 /// The skills below `path`: the folder itself, a loose `SKILL.md`, or (for a folder without one)
 /// `<name>/SKILL.md` and `skills/<name>/SKILL.md`, no deeper. `Err` says why there is none.
 fn find_skills(path: &Path, shown: &str) -> Result<Vec<Found>, String> {
-    let meta = fs::symlink_metadata(path).map_err(|_| format!("{shown}: cannot be read"))?;
+    let unreadable = || format!("{shown}: cannot be read");
+    let meta = fs::symlink_metadata(path).map_err(|_| unreadable())?;
     if meta.file_type().is_symlink() {
         return Err(format!("{shown}: is a link; links are not followed"));
     }
@@ -390,34 +693,53 @@ fn find_skills(path: &Path, shown: &str) -> Result<Vec<Found>, String> {
                 "{shown}: only a skill folder, a SKILL.md or a folder of skills can be imported"
             ));
         }
+        let parent = path.parent().ok_or_else(unreadable)?;
+        let dir = SourceDir::open_parent(parent).map_err(|_| unreadable())?;
         return Ok(vec![Found {
             kind: SourceKind::File,
             path: path.to_path_buf(),
+            at: Location::new(dir),
         }]);
     }
     if !meta.is_dir() {
         return Err(format!("{shown}: is not a file or a folder"));
     }
-    if is_file_named_skill_md(path) {
+    let root = Location::new(
+        SourceDir::open_root(path, identity(&meta))
+            .map_err(|_| format!("{shown}: changed while it was read; import again"))?,
+    );
+    let dir = root.open().map_err(|_| unreadable())?;
+    if has_skill_md(&dir) {
         return Ok(vec![Found {
             kind: SourceKind::Folder,
             path: path.to_path_buf(),
+            at: root,
         }]);
     }
     let mut seen = 0usize;
     let mut found = Vec::new();
-    for (name, sub) in child_dirs(path, &mut seen, shown)? {
-        if is_file_named_skill_md(&sub) {
+    // A folder that cannot be opened as the one listed is passed over, as a link is.
+    for (name, id) in child_dirs(&dir, &mut seen, shown)? {
+        let Ok(sub) = dir.open_dir(&name, id) else {
+            continue;
+        };
+        let at = root.child(&name, id);
+        if has_skill_md(&sub) {
             found.push(Found {
                 kind: SourceKind::Collection,
-                path: sub,
+                path: path.join(&name),
+                at,
             });
         } else if name == "skills" {
-            for (_, skill) in child_dirs(&sub, &mut seen, shown)? {
-                if is_file_named_skill_md(&skill) {
+            for (skill, id) in child_dirs(&sub, &mut seen, shown)? {
+                let Ok(skill_dir) = sub.open_dir(&skill, id) else {
+                    continue;
+                };
+                if has_skill_md(&skill_dir) {
                     found.push(Found {
                         kind: SourceKind::Collection,
-                        path: skill,
+                        path: path.join(&name).join(&skill),
+                        at: at.child(&skill, id),
                     });
                 }
             }
@@ -431,25 +753,35 @@ fn find_skills(path: &Path, shown: &str) -> Result<Vec<Found>, String> {
     Ok(found)
 }
 
-/// The folders directly in `dir`, sorted; dot entries and links are skipped (never followed).
-fn child_dirs(dir: &Path, seen: &mut usize, shown: &str) -> Result<Vec<(String, PathBuf)>, String> {
-    let entries = fs::read_dir(dir).map_err(|_| format!("{shown}: cannot be read"))?;
+/// The folders directly in `dir` with their identities, sorted; dot entries and links are skipped
+/// (never followed).
+fn child_dirs(
+    dir: &SourceDir,
+    seen: &mut usize,
+    shown: &str,
+) -> Result<Vec<(String, Identity)>, String> {
+    let room = (MAX_FOLDER_ENTRIES + 1).saturating_sub(*seen);
+    let names = dir
+        .names(room)
+        .map_err(|_| format!("{shown}: cannot be read"))?;
     let mut dirs = Vec::new();
-    for entry in entries.flatten() {
+    for name in names {
         *seen += 1;
         if *seen > MAX_FOLDER_ENTRIES {
             return Err(format!(
                 "{shown}: holds more than {MAX_FOLDER_ENTRIES} entries to look through"
             ));
         }
-        let Ok(name) = entry.file_name().into_string() else {
+        let Ok(name) = name.into_string() else {
             continue;
         };
         if name.starts_with('.') {
             continue;
         }
-        if entry.file_type().is_ok_and(|kind| kind.is_dir()) {
-            dirs.push((name, entry.path()));
+        if let Ok(meta) = dir.entry(&name) {
+            if meta.kind == EntryKind::Dir {
+                dirs.push((name, meta.identity));
+            }
         }
     }
     dirs.sort();
@@ -460,10 +792,12 @@ fn child_dirs(dir: &Path, seen: &mut usize, shown: &str) -> Result<Vec<(String, 
 
 struct SourceFile {
     rel: String,
-    path: PathBuf,
+    /// The folder the file is in, and its name there.
+    at: Location,
+    name: String,
     size: u64,
     executable: bool,
-    identity: (u64, u64),
+    identity: Identity,
 }
 
 #[derive(Default)]
@@ -476,13 +810,13 @@ struct Scan {
 }
 
 #[cfg(unix)]
-fn identity(meta: &fs::Metadata) -> (u64, u64) {
+fn identity(meta: &fs::Metadata) -> Identity {
     use std::os::unix::fs::MetadataExt;
     (meta.dev(), meta.ino())
 }
 
 #[cfg(not(unix))]
-fn identity(_meta: &fs::Metadata) -> (u64, u64) {
+fn identity(_meta: &fs::Metadata) -> Identity {
     (0, 0)
 }
 
@@ -512,12 +846,21 @@ fn executable_bit(_meta: &fs::Metadata) -> bool {
 /// copied: links, hard links, special files, nested `SKILL.md`, depth, counts, sizes and names.
 fn scan_skill(found: &Found) -> Scan {
     let mut scan = Scan::default();
-    match found.kind {
-        SourceKind::File => match fs::symlink_metadata(&found.path) {
-            Ok(meta) if meta.is_file() => add_file(&mut scan, "SKILL.md", &found.path, &meta),
-            _ => scan.problems.push("SKILL.md cannot be read".to_string()),
+    match found.at.open() {
+        Err(_) => scan
+            .problems
+            .push("the skill folder changed while it was read; import again".to_string()),
+        Ok(dir) => match found.kind {
+            SourceKind::File => match dir.entry("SKILL.md") {
+                Ok(meta) if meta.kind == EntryKind::File => {
+                    add_file(&mut scan, "SKILL.md", &found.at, "SKILL.md", &meta)
+                }
+                _ => scan.problems.push("SKILL.md cannot be read".to_string()),
+            },
+            SourceKind::Folder | SourceKind::Collection => {
+                scan_dir(&dir, &found.at, "", 1, &mut scan)
+            }
         },
-        SourceKind::Folder | SourceKind::Collection => scan_dir(&found.path, "", 1, &mut scan),
     }
     if !scan.files.iter().any(|file| file.rel == "SKILL.md") && scan.problems.is_empty() {
         scan.problems
@@ -543,21 +886,21 @@ fn scan_skill(found: &Found) -> Scan {
     scan
 }
 
-fn scan_dir(dir: &Path, prefix: &str, level: usize, scan: &mut Scan) {
+/// Scans the open folder `dir`, which is `at`, and the folders in it through their own handles.
+fn scan_dir(dir: &SourceDir, at: &Location, prefix: &str, level: usize, scan: &mut Scan) {
     let shown = if prefix.is_empty() {
         "the skill folder"
     } else {
         prefix
     };
-    let Ok(entries) = fs::read_dir(dir) else {
+    // Every entry counts, dot entries and unreadable names too, and no more are read than the cap.
+    let room = (MAX_SKILL_ENTRIES + 1).saturating_sub(scan.entries);
+    let Ok(mut names) = dir.names(room) else {
         scan.problems.push(format!("{shown}: cannot be read"));
         return;
     };
-    // Every entry counts, dot entries and unreadable names too, and no more are read than the cap.
-    let room = (MAX_SKILL_ENTRIES + 1).saturating_sub(scan.entries);
-    let mut entries: Vec<fs::DirEntry> = entries.flatten().take(room).collect();
-    entries.sort_by_key(|entry| entry.file_name());
-    for entry in entries {
+    names.sort();
+    for name in names {
         scan.entries += 1;
         if scan.entries > MAX_SKILL_ENTRIES {
             scan.problems.push(format!(
@@ -565,7 +908,7 @@ fn scan_dir(dir: &Path, prefix: &str, level: usize, scan: &mut Scan) {
             ));
             return;
         }
-        let Ok(name) = entry.file_name().into_string() else {
+        let Ok(name) = name.into_string() else {
             scan.problems
                 .push(format!("{shown}: holds a file name that is not UTF-8"));
             return;
@@ -575,42 +918,50 @@ fn scan_dir(dir: &Path, prefix: &str, level: usize, scan: &mut Scan) {
             scan.omitted.push(rel);
             continue;
         }
-        let Ok(meta) = fs::symlink_metadata(entry.path()) else {
+        let Ok(meta) = dir.entry(&name) else {
             scan.problems.push(format!("{rel}: cannot be read"));
             continue;
         };
-        let kind = meta.file_type();
-        if kind.is_symlink() {
-            scan.problems
-                .push(format!("{rel}: is a link; links are not followed"));
-        } else if kind.is_dir() {
-            if level >= MAX_SUPPORT_DEPTH {
-                scan.problems.push(format!(
-                    "{rel}/: nested deeper than {MAX_SUPPORT_DEPTH} levels"
-                ));
-            } else {
-                scan_dir(&entry.path(), &format!("{rel}/"), level + 1, scan);
+        match meta.kind {
+            EntryKind::Link => scan
+                .problems
+                .push(format!("{rel}: is a link; links are not followed")),
+            EntryKind::Dir if level >= MAX_SUPPORT_DEPTH => scan.problems.push(format!(
+                "{rel}/: nested deeper than {MAX_SUPPORT_DEPTH} levels"
+            )),
+            EntryKind::Dir => {
+                #[cfg(all(test, unix))]
+                tests::after_dir_check(&rel);
+                match dir.open_dir(&name, meta.identity) {
+                    Ok(sub) => scan_dir(
+                        &sub,
+                        &at.child(&name, meta.identity),
+                        &format!("{rel}/"),
+                        level + 1,
+                        scan,
+                    ),
+                    Err(_) => scan
+                        .problems
+                        .push(format!("{rel}/: changed while it was read; import again")),
+                }
             }
-        } else if kind.is_file() {
-            add_file(scan, &rel, &entry.path(), &meta);
-        } else {
-            scan.problems.push(format!(
+            EntryKind::File => add_file(scan, &rel, at, &name, &meta),
+            EntryKind::Other => scan.problems.push(format!(
                 "{rel}: is not a regular file (a device, socket or pipe)"
-            ));
+            )),
         }
     }
 }
 
-fn add_file(scan: &mut Scan, rel: &str, path: &Path, meta: &fs::Metadata) {
-    if link_count(meta) > 1 {
+fn add_file(scan: &mut Scan, rel: &str, at: &Location, name: &str, meta: &EntryMeta) {
+    if meta.links > 1 {
         scan.problems.push(format!(
             "{rel}: is a hard link; it shares its bytes with another file"
         ));
         return;
     }
-    let name = rel.rsplit('/').next().unwrap_or(rel);
     if rel == "SKILL.md" {
-        if meta.len() > MAX_SKILL_MD_BYTES {
+        if meta.len > MAX_SKILL_MD_BYTES {
             scan.problems.push("SKILL.md is over 1 MiB".to_string());
             return;
         }
@@ -620,7 +971,7 @@ fn add_file(scan: &mut Scan, rel: &str, path: &Path, meta: &fs::Metadata) {
                 .push(format!("{rel}: a second SKILL.md inside the skill"));
             return;
         }
-        if meta.len() > MAX_SUPPORT_FILE_BYTES {
+        if meta.len > MAX_SUPPORT_FILE_BYTES {
             scan.problems.push(format!("{rel}: over 1 MiB"));
         }
         if SkillRelPath::new(rel).is_none() {
@@ -632,10 +983,11 @@ fn add_file(scan: &mut Scan, rel: &str, path: &Path, meta: &fs::Metadata) {
     }
     scan.files.push(SourceFile {
         rel: rel.to_string(),
-        path: path.to_path_buf(),
-        size: meta.len(),
-        executable: executable_bit(meta),
-        identity: identity(meta),
+        at: at.clone(),
+        name: name.to_string(),
+        size: meta.len,
+        executable: meta.executable,
+        identity: meta.identity,
     });
 }
 
@@ -643,8 +995,10 @@ fn add_file(scan: &mut Scan, rel: &str, path: &Path, meta: &fs::Metadata) {
 /// a link or another file, or grown) between the scan and the copy.
 fn read_source(file: &SourceFile) -> Result<Vec<u8>, String> {
     let changed = || format!("{}: changed while it was read; import again", file.rel);
+    // A folder on the way that changed since the scan is refused while walking down to the file.
+    let dir = file.at.open().map_err(|_| changed())?;
     // A link, a pipe or another file swapped in since the scan is refused on the opened handle.
-    let (handle, meta) = open_regular(&file.path).map_err(|_| changed())?;
+    let (handle, meta) = dir.open_file(&file.name).map_err(|_| changed())?;
     if identity(&meta) != file.identity || executable_bit(&meta) != file.executable {
         return Err(changed());
     }
@@ -2309,6 +2663,139 @@ mod rename_tests {
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;
+    use std::cell::RefCell;
+
+    type DirHook = Box<dyn FnMut(&str)>;
+
+    thread_local! {
+        /// Runs in the walk after a folder entry was looked at and before it is entered.
+        static AFTER_DIR_CHECK: RefCell<Option<DirHook>> = const { RefCell::new(None) };
+    }
+
+    pub(super) fn after_dir_check(rel: &str) {
+        AFTER_DIR_CHECK.with(|hook| {
+            if let Some(hook) = hook.borrow_mut().as_mut() {
+                hook(rel);
+            }
+        });
+    }
+
+    fn set_after_dir_check(hook: Option<DirHook>) {
+        AFTER_DIR_CHECK.with(|slot| *slot.borrow_mut() = hook);
+    }
+
+    /// A skill folder `t` (name t, description d) with `sub/notes.md`, beside a folder `o` that is
+    /// not part of it.
+    fn skill_beside_other_folder(label: &str) -> (PathBuf, PathBuf, PathBuf) {
+        let base = dir(label);
+        let skill = base.join("t");
+        let other = base.join("o");
+        fs::create_dir_all(skill.join("sub")).expect("skill dir");
+        fs::write(
+            skill.join("SKILL.md"),
+            "---\nname: t\ndescription: d\n---\n# T\n",
+        )
+        .expect("SKILL.md");
+        fs::write(skill.join("sub/notes.md"), "inside\n").expect("notes");
+        fs::create_dir_all(&other).expect("other dir");
+        fs::write(other.join("secret.txt"), "outside bytes\n").expect("secret");
+        (base, skill, other)
+    }
+
+    fn files_below(dir: &Path, out: &mut Vec<Vec<u8>>) {
+        for entry in fs::read_dir(dir).into_iter().flatten().flatten() {
+            let meta = fs::symlink_metadata(entry.path()).expect("lstat");
+            if meta.is_dir() {
+                files_below(&entry.path(), out);
+            } else if meta.is_file() {
+                out.push(fs::read(entry.path()).expect("read"));
+            }
+        }
+    }
+
+    #[test]
+    fn a_folder_swapped_for_a_link_while_it_is_walked_is_refused() {
+        let (base, skill, other) = skill_beside_other_folder("dir-swap");
+        let found = find_skills(&skill, "t").expect("found");
+        let (moved, target, link) = (base.join("moved"), other.clone(), skill.join("sub"));
+        set_after_dir_check(Some(Box::new(move |rel| {
+            if rel == "sub" {
+                fs::rename(&link, &moved).expect("move away");
+                std::os::unix::fs::symlink(&target, &link).expect("link");
+            }
+        })));
+        let root = base.join("data");
+        let stage = base.join("stage");
+        fs::create_dir_all(&stage).expect("stage");
+        let names = Names {
+            bundled: BTreeSet::new(),
+            other_packs: BTreeMap::new(),
+        };
+        let result = stage_candidates(&root, &base, &names, &found, &stage);
+        set_after_dir_check(None);
+        let (candidates, staged) = result.expect("staged");
+        assert_eq!(candidates.len(), 1);
+        assert!(
+            candidates[0]
+                .problems
+                .iter()
+                .any(|problem| problem.contains("changed while it was read")),
+            "{:?}",
+            candidates[0].problems
+        );
+        assert!(candidates[0]
+            .files
+            .iter()
+            .all(|file| !file.path.ends_with("secret.txt")));
+        assert!(staged.is_empty());
+        let mut copied = Vec::new();
+        files_below(&stage, &mut copied);
+        assert!(!copied.iter().any(|bytes| bytes == b"outside bytes\n"));
+        let _ = fs::remove_dir_all(base);
+    }
+
+    /// The listing reads a duplicate of the held handle, which shares its read position.
+    #[test]
+    fn a_held_folder_lists_all_its_names_every_time() {
+        let base = dir("relist");
+        for name in ["a", "b", "c"] {
+            fs::write(base.join(name), "x").expect("file");
+        }
+        let folder = SourceDir::open_root(
+            &base,
+            identity(&fs::symlink_metadata(&base).expect("lstat")),
+        )
+        .expect("open");
+        let sorted = |mut names: Vec<std::ffi::OsString>| {
+            names.sort();
+            names
+        };
+        let first = sorted(folder.names(usize::MAX).expect("first"));
+        assert_eq!(first, ["a", "b", "c"]);
+        assert_eq!(folder.names(2).expect("capped").len(), 2);
+        assert_eq!(sorted(folder.names(usize::MAX).expect("again")), first);
+        let _ = fs::remove_dir_all(base);
+    }
+
+    #[test]
+    fn a_scanned_folder_moved_out_and_linked_back_is_refused() {
+        let (base, skill, other) = skill_beside_other_folder("dir-moved");
+        let found = find_skills(&skill, "t").expect("found");
+        let scan = scan_skill(&found[0]);
+        assert!(scan.problems.is_empty(), "{:?}", scan.problems);
+        let notes = scan
+            .files
+            .iter()
+            .find(|file| file.rel == "sub/notes.md")
+            .expect("scanned");
+        // The same folder and file, now outside the skill and reached through a link.
+        fs::rename(skill.join("sub"), other.join("sub")).expect("move out");
+        std::os::unix::fs::symlink(other.join("sub"), skill.join("sub")).expect("link");
+        assert!(read_source(notes)
+            .unwrap_err()
+            .contains("changed while it was read"));
+        let _ = fs::remove_dir_all(base);
+    }
 
     fn dir(label: &str) -> PathBuf {
         let nanos = SystemTime::now()
@@ -2322,9 +2809,15 @@ mod tests {
 
     fn scanned(path: &Path) -> SourceFile {
         let meta = fs::symlink_metadata(path).expect("lstat");
+        let folder = SourceDir::open_parent(path.parent().expect("parent")).expect("folder");
         SourceFile {
             rel: "a.md".to_string(),
-            path: path.to_path_buf(),
+            at: Location::new(folder),
+            name: path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .expect("name")
+                .to_string(),
             size: meta.len(),
             executable: false,
             identity: identity(&meta),
