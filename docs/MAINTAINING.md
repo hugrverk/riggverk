@@ -40,7 +40,7 @@ Edit the source column. `python3 scripts/generate.py write` rewrites the generat
   ```
 
 - Node.js 22 and npm 10+, then `npm ci`.
-- Stable Rust (the disabled workflows pin 1.97.1).
+- Stable Rust (the CI workflows pin 1.97.1).
 - Bash and git. `rg` is not needed.
 
 ## Daily loop
@@ -175,7 +175,7 @@ The history generators share one walk of every commit reachable from `HEAD` (and
 | public residue | `check-public-residue.py` | no name the project retired (today: the name from before the Riggverk rename, in every spelling) outside its allowlist: `LEGACY_*` constants, metadata history, release notes, `docs/RELEASE.md`, the upgrade contract tests, and lines or blocks marked `residue-allow`; `--list-allowed` prints the allowlist, and a later rename is one more entry in `RESIDUES`. Four scoped residues keep cleaned text out: Swedish in a skill `description:`, concrete model ids in skill text, hard-coded user home paths (placeholder names only), and team-pack content (Kretsverket, WordPress, the dev port) in the bundle. They match shapes, not names. A fifth keeps a maintainer's own rule phrases (personal tools, account-specific delegation) out of the bundle: they are listed in an untracked `.private-residue` (or the file `RIGGVERK_PRIVATE_RESIDUE_FILE` names), and without one it is skipped |
 | macOS app icon and disk image art | `prepare-macos-app-icon.sh` (macOS only) | the app icon, the disk image background (660x400 and @2x) and volume icon render from `assets/icon-source.svg`, and the layout in `tauri.macos.conf.json` matches the art |
 | frontend typecheck, tests and build | `npm run typecheck`, `npm test`, `npm run build` | |
-| rust fmt, clippy, tests | `cargo fmt --check`, `cargo clippy -D warnings`, `cargo test` | |
+| rust fmt, clippy, tests | `cargo fmt --check`, `cargo clippy -D warnings`, `cargo test` | `RELEASE_CHECK_RUST_TESTS=doc` runs only the doc tests; CI runs the others with cargo-nextest |
 | pre-manifest upgrade smoke | `smoke-pre-manifest-upgrade.sh` | an install from a real old commit upgrades cleanly |
 | tauri runtime smoke | `smoke-tauri-runtime.sh` | the backend commands against a temporary `HOME` |
 
@@ -187,7 +187,7 @@ A new `scripts/check-*.py`, `validate_*.py` or `smoke-*.sh` must be called from 
 
 ## Release flow
 
-`./scripts/release.sh prepare` computes the CalVer version, drafts the notes, bumps the versions, runs the gate and opens the release pull request; edit `release-notes/<version>.md` and run `python3 scripts/generate.py write --only release-notes`; merge; `./scripts/release.sh publish` builds, signs, zips and creates the GitHub release. Details and rollback: [RELEASE.md](./RELEASE.md). The local gate is authoritative: GitHub Actions is disabled, and nothing verifies Windows unless someone re-enables `windows-checks.yml`.
+`./scripts/release.sh prepare` computes the CalVer version, drafts the notes, bumps the versions, runs the gate and opens the release pull request; edit `release-notes/<version>.md` and run `python3 scripts/generate.py write --only release-notes`; merge; `./scripts/release.sh publish` builds, signs, zips and creates the GitHub release. Details and rollback: [RELEASE.md](./RELEASE.md). The local gate is authoritative; GitHub Actions also runs the checks on pull requests and on main, Windows included (`windows-checks.yml`), but builds no release.
 
 ## Common failures
 
