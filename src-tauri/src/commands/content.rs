@@ -754,7 +754,7 @@ mod tests {
 
     fn write_file(root: &Path, rel: &str, content: &str) {
         if let Some(parent) = root.join(rel).parent() {
-            fs::create_dir_all(parent).expect("create parent dirs");
+            crate::test_env::create_dir_all(parent).expect("create parent dirs");
         }
         fs::write(root.join(rel), content).expect("write file");
     }

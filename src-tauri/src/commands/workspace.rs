@@ -397,12 +397,12 @@ mod tests {
     }
 
     fn mkdir(root: &Path, rel: &str) {
-        fs::create_dir_all(root.join(rel)).expect("create dir");
+        crate::test_env::create_dir_all(root.join(rel)).expect("create dir");
     }
 
     fn write_file(root: &Path, rel: &str, content: &str) {
         if let Some(parent) = root.join(rel).parent() {
-            fs::create_dir_all(parent).expect("create parent dirs");
+            crate::test_env::create_dir_all(parent).expect("create parent dirs");
         }
         fs::write(root.join(rel), content).expect("write file");
     }
@@ -456,7 +456,7 @@ mod tests {
         let _guard = crate::test_env::guard::lock();
         let _restore = crate::test_env::guard::isolate_data_location_env();
         let home = temp_root(name);
-        fs::create_dir_all(&home).expect("create temp home");
+        crate::test_env::create_dir_all(&home).expect("create temp home");
         crate::test_env::set_test_user_dirs(&home);
         unsafe { std::env::set_var("RIGGVERK_BACKUP_DIR", home.join("backups")) };
         test(&home);
@@ -702,7 +702,7 @@ mod tests {
             // Every bundled copy goes, the workspace marker included; the records stay.
             let raw = fs::read(managed_state_path(&custom)).expect("read records");
             fs::remove_dir_all(&custom).expect("delete the copies");
-            fs::create_dir_all(custom.join(crate::workspace_layout::STATE_DIR))
+            crate::test_env::create_dir_all(custom.join(crate::workspace_layout::STATE_DIR))
                 .expect("state folder");
             fs::write(managed_state_path(&custom), &raw).expect("restore records");
             assert_eq!(entries(&custom), [".riggverk"]);

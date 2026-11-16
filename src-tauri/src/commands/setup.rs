@@ -4051,7 +4051,7 @@ mod tests {
         let _guard = guard::lock();
         let home = std::env::temp_dir().join("aw-setup-backup-chain");
         let _ = fs::remove_dir_all(&home);
-        fs::create_dir_all(&home).expect("create dir");
+        crate::test_env::create_dir_all(&home).expect("create dir");
         let _restore = guard::EnvRestore::capture();
         set_test_user_dirs(&home);
         unsafe {
@@ -4081,7 +4081,7 @@ mod tests {
             std::env::temp_dir().join(format!("aw-setup-backup-tighten-{}", std::process::id()));
         let _ = fs::remove_dir_all(&home);
         let root = home.join("backups");
-        fs::create_dir_all(root.join("20260101-000000")).expect("legacy run");
+        crate::test_env::create_dir_all(root.join("20260101-000000")).expect("legacy run");
         // Owner write-only: it cannot be opened to drop the group and other bits.
         let stuck = root.join("20260101-000000/config");
         fs::write(&stuck, b"old").expect("legacy file");

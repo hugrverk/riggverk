@@ -908,7 +908,7 @@ mod tests {
         let nonce = TEST_COUNTER.fetch_add(1, Ordering::Relaxed);
         let dir = std::env::temp_dir().join(format!("aw-codex-runtime-{label}-{nonce}"));
         let _ = fs::remove_dir_all(&dir);
-        fs::create_dir_all(&dir).expect("create temp dir");
+        crate::test_env::create_dir_all(&dir).expect("create temp dir");
         dir
     }
 
@@ -922,7 +922,7 @@ mod tests {
         use std::os::unix::fs::PermissionsExt;
         let base = fs::canonicalize(temp_root("python-recheck")).unwrap();
         let python = base.join("bin/python3");
-        fs::create_dir_all(python.parent().unwrap()).unwrap();
+        crate::test_env::create_dir_all(python.parent().unwrap()).unwrap();
         fs::write(&python, "#!/bin/sh\n").unwrap();
         fs::set_permissions(&python, fs::Permissions::from_mode(0o755)).unwrap();
         fs::set_permissions(&base, fs::Permissions::from_mode(0o755)).unwrap();
@@ -937,7 +937,7 @@ mod tests {
 
     fn write_file(path: &Path, content: &str) {
         if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent).expect("create parent");
+            crate::test_env::create_dir_all(parent).expect("create parent");
         }
         fs::write(path, content).expect("write file");
     }

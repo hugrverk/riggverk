@@ -1,6 +1,25 @@
 #[cfg(test)]
 use std::path::{Path, PathBuf};
 
+/// `fs::create_dir_all` whose new folders are 0755 whatever the umask: the folder ownership checks
+/// refuse a group-writable fixture folder.
+#[cfg(test)]
+pub fn create_dir_all(path: impl AsRef<Path>) -> std::io::Result<()> {
+    let path = path.as_ref();
+    let missing: Vec<PathBuf> = path
+        .ancestors()
+        .take_while(|dir| !dir.as_os_str().is_empty() && !dir.exists())
+        .map(Path::to_path_buf)
+        .collect();
+    std::fs::create_dir_all(path)?;
+    #[cfg(unix)]
+    for dir in missing {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o755))?;
+    }
+    Ok(())
+}
+
 /// Independently count canonical sources and supporting files without production discovery.
 #[cfg(test)]
 pub fn skill_file_counts(root: &Path) -> (usize, usize) {
@@ -55,7 +74,7 @@ pub fn seed_workspace_copy(ws: &Path) -> Vec<&'static str> {
         .collect();
     for rel in &paths {
         let dest = ws.join(rel);
-        std::fs::create_dir_all(dest.parent().expect("parent")).expect("copy folder");
+        create_dir_all(dest.parent().expect("parent")).expect("copy folder");
         std::fs::copy(bundle.join(rel), &dest).expect("copy a bundle file");
     }
     paths
@@ -89,8 +108,8 @@ pub fn set_test_user_dirs(dir: &Path) {
     let dir_str = dir.to_string_lossy();
     let xdg_config_home = dir.join(".config");
     let xdg_data_home = dir.join(".local").join("share");
-    let _ = std::fs::create_dir_all(&xdg_config_home);
-    let _ = std::fs::create_dir_all(&xdg_data_home);
+    let _ = create_dir_all(&xdg_config_home);
+    let _ = create_dir_all(&xdg_data_home);
     unsafe {
         std::env::set_var("HOME", dir_str.as_ref());
         std::env::set_var(

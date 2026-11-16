@@ -3876,7 +3876,7 @@ mod tests {
         let tools = temp_root("gen-python-tools");
         let path = temp_root("gen-python-path");
         for dir in [&tools, &path] {
-            fs::create_dir_all(dir).expect("mkdir");
+            crate::test_env::create_dir_all(dir).expect("mkdir");
             let python = dir.join("python3");
             fs::write(&python, "#!/bin/sh\nexit 0\n").expect("write python3");
             make_executable(&python);
@@ -4209,7 +4209,7 @@ mod tests {
     #[test]
     fn test_resolve_opencode_path_lookup() {
         let dir = temp_root("resolve-path");
-        std::fs::create_dir_all(&dir).expect("mkdir");
+        crate::test_env::create_dir_all(&dir).expect("mkdir");
 
         // On Windows a file is a program by its extension (PATHEXT), not by a mode bit.
         let fake_path = dir.join(if cfg!(windows) {
@@ -4285,7 +4285,7 @@ mod tests {
 
     #[cfg(unix)]
     fn write_stub_opencode(dir: &Path, body: &str) -> PathBuf {
-        fs::create_dir_all(dir).expect("create stub dir");
+        crate::test_env::create_dir_all(dir).expect("create stub dir");
         let path = dir.join("opencode");
         fs::write(&path, format!("#!/bin/sh\n{body}\n")).expect("write stub opencode");
         make_executable(&path);
