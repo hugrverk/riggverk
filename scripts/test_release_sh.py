@@ -116,6 +116,11 @@ class ReleaseShTests(unittest.TestCase):
         self.linux_build_log = base / "linux-build.log"
         # publish finds Linux packages of HEAD in release/linux unless a test turns this off.
         self.linux_packages = True
+        # Throwaway SSH keys: the builder is listed in scripts/linux-build-signers, the outsider is not.
+        self.signing_key = base / "builder"
+        self.outsider_key = base / "outsider"
+        for key in (self.signing_key, self.outsider_key):
+            subprocess.run(["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-C", key.name, "-f", str(key)], check=True)
         (bin_dir / "python3").symlink_to(sys.executable)
         self.env = {
             **os.environ,
@@ -146,6 +151,10 @@ class ReleaseShTests(unittest.TestCase):
         conf.pop("plugins", None)
         conf_path.write_text(json.dumps(conf, indent=2) + "\n")
         self.stub(self.repo / "scripts/linux-build.sh", LINUX_BUILD_STUB)
+        builder = (base / "builder.pub").read_text().split()
+        (self.repo / "scripts/linux-build-signers").write_text(
+            f'builder namespaces="riggverk-linux-build" {builder[0]} {builder[1]}\n'
+        )
         self.set_versions("0.1.0")
         self.python("scripts/generate-release-notes.py", "--write")
         (self.repo / "node_modules").mkdir()
@@ -197,8 +206,8 @@ class ReleaseShTests(unittest.TestCase):
             check=False,
         )
 
-    def add_linux_packages(self, commit: str = "HEAD") -> None:
-        """What build-linux leaves in release/linux for the current version, stamped with `commit`."""
+    def add_linux_packages(self, commit: str = "HEAD", key: Path | None = None) -> None:
+        """What build-linux leaves in release/linux for the current version, stamped with `commit` and signed."""
         version = json.loads((self.repo / "src-tauri/tauri.conf.json").read_text())["version"]
         if not re.match(r"^\d{4}\.", version):
             return
@@ -213,6 +222,14 @@ class ReleaseShTests(unittest.TestCase):
         self.python(
             "scripts/release_tools.py", "linux-stamp", "write", "--dir", "release/linux", "--version", version,
             "--commit", self.git("rev-parse", commit).strip(),
+        )
+        self.sign_stamp(key or self.signing_key)
+
+    def sign_stamp(self, key: Path) -> None:
+        stamp = self.repo / "release/linux/linux-build.json"
+        Path(f"{stamp}.sig").unlink(missing_ok=True)
+        subprocess.run(
+            ["ssh-keygen", "-Y", "sign", "-q", "-f", str(key), "-n", "riggverk-linux-build", str(stamp)], check=True
         )
 
     def snapshot(self) -> tuple[str, ...]:
@@ -625,12 +642,13 @@ class ReleaseShTests(unittest.TestCase):
         self.merge_release_pr(NEXT)
         before = self.snapshot()
 
-        result = self.release("build-linux", "--dry-run")
+        result = self.release("build-linux", "--dry-run", "--key", str(self.signing_key))
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn(f"app version: {NEXT}", result.stdout)
         self.assertIn("scripts/linux-build.sh", result.stdout)
         self.assertIn(f"release/linux/linux-build.json", result.stdout)
+        self.assertIn("ssh-keygen -Y sign -n riggverk-linux-build", result.stdout)
         self.assertEqual(self.snapshot(), before)
         self.assertFalse(self.linux_build_log.exists())
         self.assertFalse((self.repo / "release").exists())
@@ -639,7 +657,7 @@ class ReleaseShTests(unittest.TestCase):
         self.linux_packages = False
         self.merge_release_pr(NEXT)
 
-        built = self.release("build-linux")
+        built = self.release("build-linux", "--key", str(self.signing_key))
         published = self.release("publish", "--dry-run")
 
         self.assertEqual(built.returncode, 0, built.stderr)
@@ -657,11 +675,51 @@ class ReleaseShTests(unittest.TestCase):
                 ]
             ),
         )
+        self.assertIn("signed by builder", built.stdout)
         self.assertEqual(published.returncode, 0, published.stderr)
         self.assertIn("built from HEAD", published.stdout)
+        self.assertIn("linux-build.json is signed by builder", published.stdout)
+
+    def test_publish_refuses_linux_packages_without_a_signature_from_a_listed_key(self) -> None:
+        self.linux_packages = False
+        self.merge_release_pr(NEXT)
+        deb = self.repo / f"release/linux/Riggverk-v{NEXT}-linux-amd64.deb"
+        stamp = self.repo / "release/linux/linux-build.json"
+
+        self.add_linux_packages(key=self.outsider_key)
+        outsider = self.release("publish", "--dry-run")
+        self.add_linux_packages()
+        Path(f"{stamp}.sig").unlink()
+        unsigned = self.release("publish", "--dry-run")
+        # Replaced on the way: a new package and a stamp rewritten to match it, under the builder's old signature.
+        self.add_linux_packages()
+        deb.write_text("replaced\n")
+        signature = Path(f"{stamp}.sig").read_bytes()
+        self.python(
+            "scripts/release_tools.py", "linux-stamp", "write", "--dir", "release/linux", "--version", NEXT,
+            "--commit", self.git("rev-parse", "HEAD").strip(),
+        )
+        Path(f"{stamp}.sig").write_bytes(signature)
+        replaced = self.release("publish", "--dry-run")
+
+        for result in (outsider, unsigned, replaced):
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("no valid signature from a key in scripts/linux-build-signers", result.stderr)
+            self.assertNotIn("is signed by", result.stdout)
+
+    def test_build_linux_refuses_a_key_publish_would_not_accept(self) -> None:
+        self.merge_release_pr(NEXT)
+
+        outsider = self.release("build-linux", "--dry-run", "--key", str(self.outsider_key))
+        missing = self.release("build-linux", "--dry-run", "--key", str(self.repo / "no-such-key"))
+
+        self.assertEqual(outsider.returncode, 1)
+        self.assertIn("outsider.pub is not in scripts/linux-build-signers", outsider.stderr)
+        self.assertEqual(missing.returncode, 1)
+        self.assertIn("no SSH key to sign the packages with", missing.stderr)
 
     def test_build_linux_needs_the_release_on_main(self) -> None:
-        result = self.release("build-linux", "--dry-run")
+        result = self.release("build-linux", "--dry-run", "--key", str(self.signing_key))
 
         self.assertEqual(result.returncode, 1)
         self.assertIn("is missing or empty", result.stderr)

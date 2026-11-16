@@ -1,0 +1,5 @@
+# Who may build the Linux release packages: SSH public keys in ssh-keygen's allowed_signers format, one per line.
+# `release.sh build-linux` signs release/linux/linux-build.json with one of these keys, and `release.sh publish`
+# refuses Linux packages whose stamp is not signed by a key listed here. Change this file only in a reviewed PR.
+#
+#   <github-login> namespaces="riggverk-linux-build" <key-type> <public-key>

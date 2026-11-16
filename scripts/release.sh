@@ -2,8 +2,9 @@
 # Local release flow (no CI). See docs/RELEASE.md.
 #
 #   scripts/release.sh prepare [--dry-run] [--since REV]   next CalVer version, notes draft, bump, release check, PR
-#   scripts/release.sh build-linux [--dry-run] [--allow-newer]
-#                                                          on Linux: AppImage, deb and rpm of main into release/linux
+#   scripts/release.sh build-linux [--dry-run] [--allow-newer] [--key FILE]
+#                                                          on Linux: AppImage, deb and rpm of main into release/linux,
+#                                                          their stamp signed with an SSH key in scripts/linux-build-signers
 #   scripts/release.sh publish [--dry-run] [--allow-newer] [--no-linux]
 #                                                          on macOS: universal build, dmg, zip, the Linux packages from
 #                                                          release/linux, SHA256SUMS, tag and GitHub release
@@ -37,6 +38,10 @@ updater_password_item="riggverk-updater-password"
 # Where build-linux leaves the Linux packages and where publish takes them from (copied over from the Linux machine).
 linux_dir="release/linux"
 linux=0
+# The SSH public keys (allowed_signers format) whose signature on linux-build.json publish accepts, changed only by a
+# reviewed PR. The namespace keeps these signatures apart from anything else signed with the same key.
+linux_signers="scripts/linux-build-signers"
+linux_namespace="riggverk-linux-build"
 
 step() {
   printf '\n==> %s\n' "$1"
@@ -55,7 +60,7 @@ usage() {
   cat <<'USAGE'
 usage:
   scripts/release.sh prepare [--dry-run] [--since REV]
-  scripts/release.sh build-linux [--dry-run] [--allow-newer]
+  scripts/release.sh build-linux [--dry-run] [--allow-newer] [--key FILE]
   scripts/release.sh publish [--dry-run] [--allow-newer] [--no-linux]
 USAGE
 }
@@ -644,7 +649,22 @@ check_version_and_notes() {
   fi
 }
 
-# The Linux packages build-linux left in release/linux: of this version, built from HEAD, unchanged. --no-linux
+# Prints who signed release/linux/linux-build.json, or fails. The stamp holds the SHA-256 of each package, so a valid
+# signature from a key in $linux_signers ties the packages to that build: a folder replaced on the way to the Mac fails
+# here, before publish signs the AppImage with the updater key.
+linux_stamp_signer() {
+  local stamp="$linux_dir/linux-build.json" principal
+  command -v ssh-keygen >/dev/null 2>&1 || return 1
+  [ -s "$stamp.sig" ] && [ -s "$linux_signers" ] || return 1
+  principal="$(ssh-keygen -Y find-principals -s "$stamp.sig" -f "$linux_signers" 2>/dev/null | head -n 1)"
+  [ -n "$principal" ] || return 1
+  ssh-keygen -Y verify -f "$linux_signers" -I "$principal" -n "$linux_namespace" -s "$stamp.sig" <"$stamp" \
+    >/dev/null 2>&1 || return 1
+  printf '%s\n' "$principal"
+}
+
+# The Linux packages build-linux left in release/linux: of this version, built from HEAD, unchanged, and signed by a
+# key in $linux_signers. --no-linux
 # releases macOS alone; installed Linux apps then fail their update check ("Could not check for a new version") until
 # the next release with Linux packages, since its latest.json has no linux-x86_64 entry.
 check_linux() {
@@ -653,11 +673,17 @@ check_linux() {
     info "Linux: skipped (--no-linux)"
     return 0
   fi
-  if python3 scripts/release_tools.py linux-stamp check --dir "$linux_dir" --version "$version" --commit "$(git rev-parse HEAD)"; then
+  local signer
+  if ! python3 scripts/release_tools.py linux-stamp check --dir "$linux_dir" --version "$version" --commit "$(git rev-parse HEAD)"; then
+    problem "no Linux packages of this commit in $linux_dir (run ./scripts/release.sh build-linux on Linux and copy $linux_dir here, or --no-linux)"
+    return 0
+  fi
+  if signer="$(linux_stamp_signer)"; then
     linux=1
     info "checked: $linux_dir holds the AppImage, deb and rpm of $version, built from HEAD"
+    info "checked: $linux_dir/linux-build.json is signed by $signer ($linux_signers)"
   else
-    problem "no Linux packages of this commit in $linux_dir (run ./scripts/release.sh build-linux on Linux and copy $linux_dir here, or --no-linux)"
+    problem "$linux_dir/linux-build.json has no valid signature from a key in $linux_signers (build-linux signs it; do not publish packages that were changed or replaced on the way)"
   fi
 }
 
@@ -780,11 +806,16 @@ cleanup_build_linux() {
 # Runs on the Linux machine at the commit publish will release: the same checks as publish, then the container build
 # (scripts/linux-build.sh) and the release names and stamp in release/linux. Nothing is tagged or uploaded here.
 cmd_build_linux() {
-  local allow_newer=0 commit build_dir
+  local allow_newer=0 commit build_dir key="$HOME/.ssh/id_ed25519" public signer
   while [ $# -gt 0 ]; do
     case "$1" in
       --dry-run) dry_run=1 ;;
       --allow-newer) allow_newer=1 ;;
+      --key)
+        [ $# -ge 2 ] && [ -n "$2" ] || fail "--key needs the SSH key file to sign with"
+        key="$2"
+        shift
+        ;;
       *) usage >&2; fail "unknown option for build-linux: $1" ;;
     esac
     shift
@@ -793,9 +824,25 @@ cmd_build_linux() {
   step "preflight"
   [ "$(uname -s)" = "Linux" ] && [ "$(uname -m)" = "x86_64" ] || problem "build-linux runs on a Linux x86_64 host"
   require_python
-  require_tools git gh podman
+  require_tools git gh podman ssh-keygen
   require_gh_login
   require_clean_main
+  # Checked before the build so a key publish would refuse does not cost a container build. The private key is only
+  # handed to ssh-keygen; with ssh-agent, --key may name the .pub file.
+  [ -r "$key" ] || problem "no SSH key to sign the packages with at $key (--key FILE)"
+  public="$key"
+  case "$key" in *.pub) ;; *) public="$key.pub" ;; esac
+  if [ -r "$public" ] && [ -s "$linux_signers" ]; then
+    if grep -qF -- "$(awk '{print $2}' "$public")" "$linux_signers"; then
+      info "checked: $public is in $linux_signers"
+    else
+      problem "$public is not in $linux_signers; add it there in a reviewed PR first, or publish refuses these packages"
+    fi
+  elif [ -s "$linux_signers" ]; then
+    info "no $public to check against $linux_signers; the signature is checked after signing"
+  else
+    problem "$linux_signers lists no key"
+  fi
 
   step "version and notes"
   check_version_and_notes "$allow_newer"
@@ -805,6 +852,7 @@ cmd_build_linux() {
     step "build"
     would "build: scripts/linux-build.sh (AppImage, deb and rpm of $commit in the Ubuntu 22.04 image)"
     would "copy them to $linux_dir as Riggverk-v${version:-VERSION}-linux-x86_64.AppImage, Riggverk-v${version:-VERSION}-linux-amd64.deb and Riggverk-v${version:-VERSION}-linux-x86_64.rpm, and write $linux_dir/linux-build.json (version, commit, SHA-256)"
+    would "sign $linux_dir/linux-build.json with $key (ssh-keygen -Y sign -n $linux_namespace) and check the signature against $linux_signers"
     finish_dry_run
     return
   fi
@@ -824,9 +872,14 @@ cmd_build_linux() {
   cp "$build_dir/Riggverk_${version}_amd64.deb" "$linux_dir/Riggverk-v$version-linux-amd64.deb"
   cp "$build_dir/Riggverk-${version}-1.x86_64.rpm" "$linux_dir/Riggverk-v$version-linux-x86_64.rpm"
   python3 scripts/release_tools.py linux-stamp write --dir "$linux_dir" --version "$version" --commit "$commit"
+
+  step "sign"
+  ssh-keygen -Y sign -q -f "$key" -n "$linux_namespace" "$linux_dir/linux-build.json"
+  signer="$(linux_stamp_signer)" || fail "the signature of $linux_dir/linux-build.json does not verify against $linux_signers"
+  info "signed by $signer"
   ls -l "$linux_dir" | sed '1d; s/^/  /'
 
-  printf '\nNext: copy %s to %s in the checkout on the Mac (at the same commit), then run ./scripts/release.sh publish there.\n' \
+  printf '\nNext: copy %s (all of it, with linux-build.json.sig) to %s in the checkout on the Mac (at the same commit), then run ./scripts/release.sh publish there.\n' \
     "$linux_dir" "$linux_dir"
 }
 
