@@ -155,6 +155,134 @@ pub fn ensure_within_root(child: &Path, root: &Path, label: &str) -> Result<(), 
     Ok(())
 }
 
+/// Owner, group and mode bits of a directory, the only metadata [`folder_rule`] reads.
+#[cfg(unix)]
+#[derive(Clone, Copy)]
+pub(crate) struct DirOwnership {
+    pub uid: u32,
+    pub gid: u32,
+    pub mode: u32,
+}
+
+/// The group, besides root's (gid 0), whose members may write a folder on the way to the user's
+/// data or programs: on macOS the administrators (`admin`, gid 80), who own the Homebrew prefix.
+#[cfg(unix)]
+pub(crate) const fn trusted_admin_gid() -> Option<u32> {
+    if cfg!(target_os = "macos") {
+        Some(80)
+    } else {
+        None
+    }
+}
+
+/// Why someone other than the user (`euid`) or root could change what directory `dir` holds, or
+/// `None`. `child_uid` owns the entry below `dir` on the path, if it exists: in a sticky
+/// directory only that owner (or root) can rename or remove it.
+#[cfg(unix)]
+pub(crate) fn folder_rule(
+    dir: DirOwnership,
+    child_uid: Option<u32>,
+    euid: u32,
+    admin_gid: Option<u32>,
+) -> Result<(), &'static str> {
+    if dir.uid != 0 && dir.uid != euid {
+        return Err("is owned by another user");
+    }
+    let trusted_group = dir.gid == 0 || Some(dir.gid) == admin_gid;
+    let others_write = dir.mode & 0o002 != 0 || (dir.mode & 0o020 != 0 && !trusted_group);
+    if !others_write {
+        return Ok(());
+    }
+    if dir.mode & 0o1000 == 0 {
+        return Err("is writable by its group or by everyone");
+    }
+    match child_uid {
+        Some(uid) if uid != 0 && uid != euid => {
+            Err("is writable by everyone and the entry in it is owned by another user")
+        }
+        _ => Ok(()),
+    }
+}
+
+/// Refuses `path` when a folder above it can be changed by someone other than the user or root
+/// ([`folder_rule`]). Walks the path as written and, when a link on it resolves elsewhere, the
+/// resolved path too. Missing entries are skipped, so the caller can create them.
+pub fn check_folders_above(path: &Path, label: &str) -> Result<(), String> {
+    #[cfg(unix)]
+    {
+        check_chain_above(path, label)?;
+        if let Some(existing) = path.ancestors().find(|entry| entry.exists()) {
+            let resolved = fs::canonicalize(existing)
+                .map_err(|e| format!("cannot resolve {label} {}: {e}", existing.display()))?;
+            if resolved != existing {
+                check_chain_above(&resolved, label)?;
+            }
+        }
+        Ok(())
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = (path, label);
+        Ok(())
+    }
+}
+
+#[cfg(unix)]
+fn check_chain_above(path: &Path, label: &str) -> Result<(), String> {
+    use std::os::unix::fs::MetadataExt;
+    let euid = crate::skill_sources::effective_uid();
+    let mut child_uid = fs::symlink_metadata(path).ok().map(|meta| meta.uid());
+    for dir in path.ancestors().skip(1) {
+        let meta = fs::symlink_metadata(dir).ok();
+        if let Some(meta) = meta.as_ref().filter(|meta| meta.is_dir()) {
+            let ownership = DirOwnership {
+                uid: meta.uid(),
+                gid: meta.gid(),
+                mode: meta.mode(),
+            };
+            folder_rule(ownership, child_uid, euid, trusted_admin_gid()).map_err(|why| {
+                format!(
+                    "refusing {label} {}: the folder {} above it {why}; it and the folders \
+                     above it must belong to you or root and not be writable by others",
+                    path.display(),
+                    dir.display()
+                )
+            })?;
+        }
+        child_uid = meta.map(|meta| meta.uid());
+    }
+    Ok(())
+}
+
+/// Refuses the existing folder `dir` that holds the user's data (data folder, backup folder)
+/// unless it belongs to the user and only the user can write it, and no folder above it can be
+/// changed by someone else ([`check_folders_above`]).
+pub fn check_private_folder(dir: &Path, label: &str) -> Result<(), String> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        let meta = fs::symlink_metadata(dir)
+            .map_err(|e| format!("cannot inspect {label} {}: {e}", dir.display()))?;
+        if meta.file_type().is_symlink() || !meta.is_dir() {
+            return Err(format!("{label} is not a folder: {}", dir.display()));
+        }
+        let why = if meta.uid() != crate::skill_sources::effective_uid() {
+            Some("it is not owned by you")
+        } else if meta.mode() & 0o022 != 0 {
+            Some("it is writable by its group or by everyone")
+        } else {
+            None
+        };
+        if let Some(why) = why {
+            return Err(format!(
+                "refusing {label} {}: {why}; it must belong to you and not be writable by others",
+                dir.display()
+            ));
+        }
+    }
+    check_folders_above(dir, label)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -170,6 +298,103 @@ mod tests {
         fs::canonicalize(std::env::temp_dir())
             .unwrap_or_else(|_| std::env::temp_dir())
             .join(format!("aw-path-safety-{label}-{n}"))
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn folder_rule_accepts_only_folders_the_user_or_root_controls() {
+        let euid = 501;
+        let dir = |uid, gid, mode| DirOwnership { uid, gid, mode };
+        let rule = |d, child, admin| folder_rule(d, child, euid, admin);
+        assert_eq!(rule(dir(euid, 20, 0o755), None, None), Ok(()));
+        assert_eq!(rule(dir(0, 0, 0o755), Some(euid), None), Ok(()));
+        // Another user's folder: cannot be created here, so only the rule is tested.
+        assert_eq!(
+            rule(dir(502, 20, 0o755), None, None),
+            Err("is owned by another user")
+        );
+        // Group-writable: root's group always, the admin group only where it is trusted.
+        assert_eq!(rule(dir(euid, 0, 0o775), None, None), Ok(()));
+        assert_eq!(rule(dir(euid, 80, 0o775), None, Some(80)), Ok(()));
+        assert_eq!(
+            rule(dir(euid, 80, 0o775), None, None),
+            Err("is writable by its group or by everyone")
+        );
+        assert_eq!(
+            rule(dir(euid, 20, 0o775), None, Some(80)),
+            Err("is writable by its group or by everyone")
+        );
+        assert_eq!(
+            rule(dir(0, 0, 0o777), Some(euid), None),
+            Err("is writable by its group or by everyone")
+        );
+        // Sticky: others can add entries but not replace the one on the path.
+        assert_eq!(rule(dir(0, 0, 0o1777), Some(euid), None), Ok(()));
+        assert_eq!(rule(dir(0, 0, 0o1777), Some(0), None), Ok(()));
+        assert_eq!(rule(dir(0, 0, 0o1777), None, None), Ok(()));
+        assert!(rule(dir(0, 0, 0o1777), Some(502), None).is_err());
+        assert!(rule(dir(euid, 20, 0o1775), Some(502), None).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn private_folder_checks_the_folder_and_every_folder_above_it() {
+        use std::os::unix::fs::PermissionsExt;
+        let set = |path: &Path, mode| {
+            fs::set_permissions(path, fs::Permissions::from_mode(mode)).unwrap()
+        };
+        let base = temp("private-folder");
+        let folder = base.join("mid/data");
+        fs::create_dir_all(&folder).unwrap();
+        set(&base, 0o755);
+        set(&base.join("mid"), 0o755);
+        set(&folder, 0o700);
+        check_private_folder(&folder, "data folder").expect("owner-only folder");
+        check_folders_above(&folder.join("missing/child"), "data folder").expect("missing below");
+
+        for mode in [0o777, 0o775, 0o757] {
+            set(&folder, mode);
+            let err = check_private_folder(&folder, "data folder").expect_err("open folder");
+            assert!(err.contains("it is writable by its group or by everyone"), "{err}");
+        }
+        set(&folder, 0o700);
+
+        // Everyone can write a folder above, without the sticky bit.
+        set(&base, 0o777);
+        let err = check_private_folder(&folder, "data folder").expect_err("open ancestor");
+        assert!(err.contains(&format!("the folder {} above it", base.display())), "{err}");
+        let err = check_folders_above(&folder.join("missing"), "data folder")
+            .expect_err("open ancestor of a missing folder");
+        assert!(err.contains("writable by its group or by everyone"), "{err}");
+
+        // With the sticky bit, the user's own folder in it cannot be replaced.
+        set(&base, 0o1777);
+        check_private_folder(&folder, "data folder").expect("sticky ancestor");
+        set(&base, 0o755);
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn a_folder_above_writable_by_the_admin_group_is_accepted() {
+        use std::os::unix::fs::PermissionsExt;
+        let base = temp("admin-group");
+        let folder = base.join("Cellar/tool");
+        fs::create_dir_all(&folder).unwrap();
+        let cellar = base.join("Cellar");
+        // The Homebrew layout: the user's folder, group admin, writable by the group.
+        if std::os::unix::fs::chown(&cellar, None, Some(80)).is_err() {
+            eprintln!("skipped: the user cannot give a folder to the admin group here");
+            let _ = fs::remove_dir_all(&base);
+            return;
+        }
+        fs::set_permissions(&cellar, fs::Permissions::from_mode(0o775)).unwrap();
+        check_folders_above(&folder.join("bin/tool"), "program").expect("admin group folder");
+        std::os::unix::fs::chown(&cellar, None, Some(20)).unwrap();
+        let err = check_folders_above(&folder.join("bin/tool"), "program")
+            .expect_err("a group-writable folder of another group");
+        assert!(err.contains("writable by its group or by everyone"), "{err}");
+        let _ = fs::remove_dir_all(&base);
     }
 
     #[test]
