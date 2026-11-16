@@ -677,6 +677,8 @@ def validate_no_sibling_references(discovered: dict[str, Path]) -> None:
     names = sorted(discovered, key=len, reverse=True)
     for name, skill_md in discovered.items():
         siblings = [other for other in names if other != name]
+        if not siblings:
+            continue  # a pack may hold one skill
         pattern = re.compile(r"(?<![\w.-])(?:\.\./|skills/)(" + "|".join(re.escape(s) for s in siblings) + r")/")
         for file in sorted(skill_md.parent.rglob("*")):
             if not file.is_file() or file.is_symlink():
@@ -708,9 +710,10 @@ def validate_pack_routing(pack_dir: Path, own_names: set[str], bundled_names: se
         fail(f"{rel(path)}: routing.md is a symlink")
     if not path.is_file():
         fail(f"{rel(path)}: routing.md is not a regular file")
-    if hasattr(os, "geteuid") and hasattr(stat, "st_uid") and stat.st_uid != os.geteuid():
+    # The app checks owner and mode on Unix only (check_trusted in skill_sources.rs).
+    if os.name == "posix" and stat.st_uid != os.geteuid():
         fail(f"{rel(path)}: routing.md is not owned by the current user")
-    if hasattr(stat, "st_mode") and stat.st_mode & 0o022:
+    if os.name == "posix" and stat.st_mode & 0o022:
         fail(f"{rel(path)}: routing.md is writable by group or others")
     raw = path.read_bytes()
     if len(raw) > 12 * 1024:
@@ -726,14 +729,14 @@ def validate_pack_routing(pack_dir: Path, own_names: set[str], bundled_names: se
         fail(f"{rel(path)}: routing.md has more than 60 lines")
     for number, raw_line in enumerate(lines, 1):
         line = raw_line.removesuffix("\r")
-        if not line.strip():
+        if not line.strip(_RUST_WHITESPACE):
             continue
-        line = line.rstrip()
+        line = line.rstrip(_RUST_WHITESPACE)
         def refuse(reason: str) -> None:
             fail(f"{rel(path)}: routing.md line {number} {reason}")
         if len(line) > 240:
             refuse("is longer than 240 characters")
-        if any(ord(c) < 32 and c != "\t" or _routing_invisible(c) for c in line):
+        if any(_rust_control(c) and c != "\t" or _routing_invisible(c) for c in line):
             refuse("holds a control character")
         if not line.startswith("- "):
             refuse('is not a "- " bullet at the start of the line')
@@ -757,11 +760,21 @@ def validate_pack_routing(pack_dir: Path, own_names: set[str], bundled_names: se
             refuse("names a skill that is not an active skill of this pack")
 
 
+# What Rust's `str::trim` strips (Unicode White_Space); Python's `strip()` also takes U+001C to U+001F.
+_RUST_WHITESPACE = "\t\n\v\f\r \x85\xa0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000"
+
+
+def _rust_control(char: str) -> bool:
+    """Rust's `char::is_control`: the Cc category."""
+    code = ord(char)
+    return code < 0x20 or 0x7F <= code <= 0x9F
+
+
 def _routing_invisible(char: str) -> bool:
     code = ord(char)
     return (code in {0x00AD, 0x061C, 0x06DD, 0x070F, 0x08E2, 0x180E, 0x034F, 0x2800, 0x3164, 0xFFA0}
             or 0x0600 <= code <= 0x0605 or 0x0890 <= code <= 0x0891 or 0x200B <= code <= 0x200F
-            or 0x2028 <= code <= 0x202E or 0x2060 <= code <= 0x206F or code == 0xFEFF
+            or 0x2028 <= code <= 0x202E or 0x2060 <= code <= 0x2064 or 0x2066 <= code <= 0x206F or code == 0xFEFF
             or 0xFFF9 <= code <= 0xFFFB or 0x115F <= code <= 0x1160 or 0x17B4 <= code <= 0x17B5
             or 0x180B <= code <= 0x180F or 0xFE00 <= code <= 0xFE0F or 0xE0100 <= code <= 0xE01EF
             or code in {0x110BD, 0x110CD} or 0x13430 <= code <= 0x1343F
