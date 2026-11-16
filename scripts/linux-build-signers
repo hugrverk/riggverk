@@ -3,3 +3,4 @@
 # refuses Linux packages whose stamp is not signed by a key listed here. Change this file only in a reviewed PR.
 #
 #   <github-login> namespaces="riggverk-linux-build" <key-type> <public-key>
+lapitro namespaces="riggverk-linux-build" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIF4isWt2SmTm1kPXJ77swXXjmIszpLD8hn6upAPOlozr
