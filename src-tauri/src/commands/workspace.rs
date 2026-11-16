@@ -379,8 +379,7 @@ mod tests {
         configured_workspace_path, default_installed_workspace_path, get_workspace_diagnostics,
         open_default_workspace_folder, persisted_workspace_path_is_valid,
         reset_active_workspace_path, scrub_stale_workspace_path, setup_workspace_target_path,
-        workspace_diagnostics_for_unconfigured, workspace_root, workspace_target_for_write,
-        NO_WORKSPACE_SELECTED,
+        workspace_diagnostics_for_unconfigured, workspace_root, NO_WORKSPACE_SELECTED,
     };
     use crate::managed_state::{managed_state_path, read_managed_state};
     use crate::settings::{AppSettings, MutationOutcome};
@@ -568,6 +567,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn data_folder_must_belong_to_the_user_and_not_be_writable_by_others() {
+        use super::workspace_target_for_write;
         use std::os::unix::fs::PermissionsExt;
         with_isolated_settings("trusted-folder-home", |home| {
             let folder = home.join("env-folder");
