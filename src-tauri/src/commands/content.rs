@@ -201,6 +201,20 @@ fn require_personal_doc_path(root: &Path, target: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// Refuses a personal doc write when a folder between the data folder `root` and `target` (`docs`,
+/// `docs/context`) exists and does not belong to the user only, so the file written is the one
+/// checked. The data folder itself is checked where it is resolved.
+fn require_private_doc_folders(root: &Path, target: &Path) -> Result<(), String> {
+    let mut folder = target.parent();
+    while let Some(dir) = folder.filter(|dir| *dir != root && dir.starts_with(root)) {
+        if std::fs::symlink_metadata(dir).is_ok() {
+            crate::path_safety::check_private_folder(dir, "personal docs folder")?;
+        }
+        folder = dir.parent();
+    }
+    Ok(())
+}
+
 fn is_valid_slug(slug: &str) -> bool {
     if slug.is_empty() {
         return false;
@@ -608,6 +622,7 @@ fn save_doc_checked(
 
     let target_path = root.join(custom_doc_rel_path(slug));
     require_personal_doc_path(root, &target_path)?;
+    require_private_doc_folders(root, &target_path)?;
 
     if !target_path.exists() {
         return Err(format!(
@@ -695,6 +710,7 @@ fn create_doc_at_root(
     // A fresh profile has no data folder yet: the first personal doc creates it, owner-only.
     crate::managed_state::ensure_data_folder(root)?;
     require_personal_doc_path(root, &target_path)?;
+    require_private_doc_folders(root, &target_path)?;
     write_workspace_file(root, &target_path, &initial_content)?;
 
     Ok(DocumentContent {
@@ -921,6 +937,31 @@ mod tests {
         let backup_file = backup_dirs[0].join("notes.md");
         assert_eq!(mode_of(&backup_file), 0o600);
         assert_eq!(fs::read_to_string(&backup_file).unwrap(), "# old\n");
+        cleanup(&root);
+        let _ = fs::remove_dir_all(&backup_root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn personal_docs_are_not_written_into_folders_others_can_write() {
+        use std::os::unix::fs::PermissionsExt;
+        let root = temp_root("docs-open-folder");
+        let backup_root = temp_root("docs-open-folder-backup");
+        write_file(&root, "docs/context/notes.md", "# old\n");
+        for dir in ["docs", "docs/context"] {
+            fs::set_permissions(root.join(dir), fs::Permissions::from_mode(0o777)).unwrap();
+            let error = save_doc_at_root(&root, "custom:notes", "# new\n", Some(&backup_root))
+                .expect_err("a doc folder others can write");
+            assert!(error.contains("writable by its group or by everyone"), "{dir}: {error}");
+            let error = create_doc_at_root(&root, "Fresh", "fresh", None)
+                .expect_err("a doc folder others can write");
+            assert!(error.contains("writable by its group or by everyone"), "{dir}: {error}");
+            fs::set_permissions(root.join(dir), fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        assert_eq!(fs::read_to_string(root.join("docs/context/notes.md")).unwrap(), "# old\n");
+        assert!(!root.join("docs/context/fresh.md").exists());
+        save_doc_at_root(&root, "custom:notes", "# new\n", Some(&backup_root)).expect("save");
+        create_doc_at_root(&root, "Fresh", "fresh", None).expect("create");
         cleanup(&root);
         let _ = fs::remove_dir_all(&backup_root);
     }
