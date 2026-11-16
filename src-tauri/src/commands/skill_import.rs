@@ -415,9 +415,8 @@ impl EntryMeta {
     }
 }
 
-#[cfg(not(unix))]
 impl EntryMeta {
-    fn of(meta: &fs::Metadata) -> Self {
+    fn from_metadata(meta: &fs::Metadata) -> Self {
         let kind = meta.file_type();
         Self {
             kind: if kind.is_symlink() {
@@ -466,28 +465,18 @@ impl SourceDir {
             .read(true)
             .custom_flags(libc::O_DIRECTORY | libc::O_NOFOLLOW)
             .open(path)?;
-        Self::checked(handle, Some(seen))
-    }
-
-    /// The folder a loose `SKILL.md` is in: its path is followed like the folders above any root.
-    fn open_parent(path: &Path) -> std::io::Result<Self> {
-        use std::os::unix::fs::OpenOptionsExt;
-        let handle = fs::OpenOptions::new()
-            .read(true)
-            .custom_flags(libc::O_DIRECTORY)
-            .open(path)?;
-        Self::checked(handle, None)
+        Self::checked(handle, seen)
     }
 
     /// The folder `name` in this one when it is still the folder with identity `seen`.
     fn open_dir(&self, name: &str, seen: Identity) -> std::io::Result<Self> {
         let handle = self.open_at(name, libc::O_RDONLY | libc::O_DIRECTORY | libc::O_NOFOLLOW)?;
-        Self::checked(handle, Some(seen))
+        Self::checked(handle, seen)
     }
 
-    fn checked(handle: fs::File, seen: Option<Identity>) -> std::io::Result<Self> {
+    fn checked(handle: fs::File, seen: Identity) -> std::io::Result<Self> {
         let meta = handle.metadata()?;
-        if !meta.is_dir() || seen.is_some_and(|seen| identity(&meta) != seen) {
+        if !meta.is_dir() || identity(&meta) != seen {
             return Err(std::io::Error::other("not the folder that was looked at"));
         }
         Ok(Self { handle })
@@ -602,12 +591,6 @@ impl SourceDir {
         })
     }
 
-    fn open_parent(path: &Path) -> std::io::Result<Self> {
-        Ok(Self {
-            path: path.to_path_buf(),
-        })
-    }
-
     fn open_dir(&self, name: &str, seen: Identity) -> std::io::Result<Self> {
         Self::open_root(&self.path.join(name), seen)
     }
@@ -617,7 +600,7 @@ impl SourceDir {
     }
 
     fn entry(&self, name: &str) -> std::io::Result<EntryMeta> {
-        fs::symlink_metadata(self.path.join(name)).map(|meta| EntryMeta::of(&meta))
+        fs::symlink_metadata(self.path.join(name)).map(|meta| EntryMeta::from_metadata(&meta))
     }
 
     fn names(&self, limit: usize) -> std::io::Result<Vec<std::ffi::OsString>> {
@@ -671,8 +654,19 @@ struct Found {
     kind: SourceKind,
     /// The skill folder, or the loose `SKILL.md`.
     path: PathBuf,
-    /// The skill folder, or the folder the loose `SKILL.md` is in.
-    at: Location,
+    /// The skill folder, open; `None` for a loose `SKILL.md`, which is opened by its path like any
+    /// chosen root.
+    at: Option<Location>,
+}
+
+/// A folder of the source that could not be opened as the one that was looked at: unreadable, or
+/// changed since (a link, another folder, gone).
+fn unopened(error: &std::io::Error, shown: &str) -> String {
+    if error.kind() == std::io::ErrorKind::PermissionDenied {
+        format!("{shown}: cannot be read")
+    } else {
+        format!("{shown}: changed while it was read; import again")
+    }
 }
 
 fn has_skill_md(dir: &SourceDir) -> bool {
@@ -693,27 +687,24 @@ fn find_skills(path: &Path, shown: &str) -> Result<Vec<Found>, String> {
                 "{shown}: only a skill folder, a SKILL.md or a folder of skills can be imported"
             ));
         }
-        let parent = path.parent().ok_or_else(unreadable)?;
-        let dir = SourceDir::open_parent(parent).map_err(|_| unreadable())?;
         return Ok(vec![Found {
             kind: SourceKind::File,
             path: path.to_path_buf(),
-            at: Location::new(dir),
+            at: None,
         }]);
     }
     if !meta.is_dir() {
         return Err(format!("{shown}: is not a file or a folder"));
     }
     let root = Location::new(
-        SourceDir::open_root(path, identity(&meta))
-            .map_err(|_| format!("{shown}: changed while it was read; import again"))?,
+        SourceDir::open_root(path, identity(&meta)).map_err(|error| unopened(&error, shown))?,
     );
     let dir = root.open().map_err(|_| unreadable())?;
     if has_skill_md(&dir) {
         return Ok(vec![Found {
             kind: SourceKind::Folder,
             path: path.to_path_buf(),
-            at: root,
+            at: Some(root),
         }]);
     }
     let mut seen = 0usize;
@@ -728,7 +719,7 @@ fn find_skills(path: &Path, shown: &str) -> Result<Vec<Found>, String> {
             found.push(Found {
                 kind: SourceKind::Collection,
                 path: path.join(&name),
-                at,
+                at: Some(at),
             });
         } else if name == "skills" {
             for (skill, id) in child_dirs(&sub, &mut seen, shown)? {
@@ -739,7 +730,7 @@ fn find_skills(path: &Path, shown: &str) -> Result<Vec<Found>, String> {
                     found.push(Found {
                         kind: SourceKind::Collection,
                         path: path.join(&name).join(&skill),
-                        at: at.child(&skill, id),
+                        at: Some(at.child(&skill, id)),
                     });
                 }
             }
@@ -792,12 +783,19 @@ fn child_dirs(
 
 struct SourceFile {
     rel: String,
-    /// The folder the file is in, and its name there.
-    at: Location,
-    name: String,
+    origin: Origin,
     size: u64,
     executable: bool,
     identity: Identity,
+}
+
+/// How a scanned file is reached again to be read.
+#[derive(Clone)]
+enum Origin {
+    /// A loose `SKILL.md` chosen by its path.
+    Path(PathBuf),
+    /// A file in a folder of the source, by its name there.
+    In(Location, String),
 }
 
 #[derive(Default)]
@@ -846,20 +844,19 @@ fn executable_bit(_meta: &fs::Metadata) -> bool {
 /// copied: links, hard links, special files, nested `SKILL.md`, depth, counts, sizes and names.
 fn scan_skill(found: &Found) -> Scan {
     let mut scan = Scan::default();
-    match found.at.open() {
-        Err(_) => scan
-            .problems
-            .push("the skill folder changed while it was read; import again".to_string()),
-        Ok(dir) => match found.kind {
-            SourceKind::File => match dir.entry("SKILL.md") {
-                Ok(meta) if meta.kind == EntryKind::File => {
-                    add_file(&mut scan, "SKILL.md", &found.at, "SKILL.md", &meta)
-                }
-                _ => scan.problems.push("SKILL.md cannot be read".to_string()),
-            },
-            SourceKind::Folder | SourceKind::Collection => {
-                scan_dir(&dir, &found.at, "", 1, &mut scan)
-            }
+    match &found.at {
+        None => match fs::symlink_metadata(&found.path) {
+            Ok(meta) if meta.is_file() => add_file(
+                &mut scan,
+                "SKILL.md",
+                Origin::Path(found.path.clone()),
+                &EntryMeta::from_metadata(&meta),
+            ),
+            _ => scan.problems.push("SKILL.md cannot be read".to_string()),
+        },
+        Some(at) => match at.open() {
+            Ok(dir) => scan_dir(&dir, at, "", 1, &mut scan),
+            Err(error) => scan.problems.push(unopened(&error, "the skill folder")),
         },
     }
     if !scan.files.iter().any(|file| file.rel == "SKILL.md") && scan.problems.is_empty() {
@@ -940,12 +937,10 @@ fn scan_dir(dir: &SourceDir, at: &Location, prefix: &str, level: usize, scan: &m
                         level + 1,
                         scan,
                     ),
-                    Err(_) => scan
-                        .problems
-                        .push(format!("{rel}/: changed while it was read; import again")),
+                    Err(error) => scan.problems.push(unopened(&error, &format!("{rel}/"))),
                 }
             }
-            EntryKind::File => add_file(scan, &rel, at, &name, &meta),
+            EntryKind::File => add_file(scan, &rel, Origin::In(at.clone(), name), &meta),
             EntryKind::Other => scan.problems.push(format!(
                 "{rel}: is not a regular file (a device, socket or pipe)"
             )),
@@ -953,13 +948,14 @@ fn scan_dir(dir: &SourceDir, at: &Location, prefix: &str, level: usize, scan: &m
     }
 }
 
-fn add_file(scan: &mut Scan, rel: &str, at: &Location, name: &str, meta: &EntryMeta) {
+fn add_file(scan: &mut Scan, rel: &str, origin: Origin, meta: &EntryMeta) {
     if meta.links > 1 {
         scan.problems.push(format!(
             "{rel}: is a hard link; it shares its bytes with another file"
         ));
         return;
     }
+    let name = rel.rsplit('/').next().unwrap_or(rel);
     if rel == "SKILL.md" {
         if meta.len > MAX_SKILL_MD_BYTES {
             scan.problems.push("SKILL.md is over 1 MiB".to_string());
@@ -983,8 +979,7 @@ fn add_file(scan: &mut Scan, rel: &str, at: &Location, name: &str, meta: &EntryM
     }
     scan.files.push(SourceFile {
         rel: rel.to_string(),
-        at: at.clone(),
-        name: name.to_string(),
+        origin,
         size: meta.len,
         executable: meta.executable,
         identity: meta.identity,
@@ -995,10 +990,13 @@ fn add_file(scan: &mut Scan, rel: &str, at: &Location, name: &str, meta: &EntryM
 /// a link or another file, or grown) between the scan and the copy.
 fn read_source(file: &SourceFile) -> Result<Vec<u8>, String> {
     let changed = || format!("{}: changed while it was read; import again", file.rel);
-    // A folder on the way that changed since the scan is refused while walking down to the file.
-    let dir = file.at.open().map_err(|_| changed())?;
     // A link, a pipe or another file swapped in since the scan is refused on the opened handle.
-    let (handle, meta) = dir.open_file(&file.name).map_err(|_| changed())?;
+    let (handle, meta) = match &file.origin {
+        Origin::Path(path) => open_regular(path),
+        // A folder on the way that changed since the scan is refused while walking down to it.
+        Origin::In(at, name) => at.open().map_err(|_| changed())?.open_file(name),
+    }
+    .map_err(|_| changed())?;
     if identity(&meta) != file.identity || executable_bit(&meta) != file.executable {
         return Err(changed());
     }
@@ -2754,6 +2752,33 @@ mod tests {
         let _ = fs::remove_dir_all(base);
     }
 
+    /// A loose SKILL.md needs only search access to its folder; a folder without read access is
+    /// unreadable, not changed.
+    #[test]
+    fn folder_permissions_read_as_before() {
+        use std::os::unix::fs::PermissionsExt;
+        let (base, skill, _) = skill_beside_other_folder("perms");
+        let mode = |path: &Path, mode: u32| {
+            fs::set_permissions(path, fs::Permissions::from_mode(mode)).expect("chmod")
+        };
+        mode(&skill.join("sub"), 0o000);
+        let found = find_skills(&skill, "t").expect("found");
+        let problems = scan_skill(&found[0]).problems;
+        mode(&skill.join("sub"), 0o700);
+        assert_eq!(problems, ["sub/: cannot be read"]);
+        mode(&skill, 0o311);
+        let found = find_skills(&skill.join("SKILL.md"), "SKILL.md");
+        let read = found.as_ref().map(|found| {
+            let scan = scan_skill(&found[0]);
+            (scan.problems.clone(), read_source(&scan.files[0]))
+        });
+        mode(&skill, 0o700);
+        let (problems, bytes) = read.expect("found");
+        assert!(problems.is_empty(), "{problems:?}");
+        assert!(bytes.expect("read").starts_with(b"---\nname: t"));
+        let _ = fs::remove_dir_all(base);
+    }
+
     /// The listing reads a duplicate of the held handle, which shares its read position.
     #[test]
     fn a_held_folder_lists_all_its_names_every_time() {
@@ -2809,15 +2834,16 @@ mod tests {
 
     fn scanned(path: &Path) -> SourceFile {
         let meta = fs::symlink_metadata(path).expect("lstat");
-        let folder = SourceDir::open_parent(path.parent().expect("parent")).expect("folder");
+        let parent = path.parent().expect("parent");
+        let seen = identity(&fs::symlink_metadata(parent).expect("lstat parent"));
+        let folder = SourceDir::open_root(parent, seen).expect("folder");
+        let name = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .expect("name");
         SourceFile {
             rel: "a.md".to_string(),
-            at: Location::new(folder),
-            name: path
-                .file_name()
-                .and_then(|name| name.to_str())
-                .expect("name")
-                .to_string(),
+            origin: Origin::In(Location::new(folder), name.to_string()),
             size: meta.len(),
             executable: false,
             identity: identity(&meta),
