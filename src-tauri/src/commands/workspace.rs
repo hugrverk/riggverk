@@ -582,7 +582,10 @@ mod tests {
                     "{mode:o}: {error}"
                 );
                 let error = workspace_target_for_write().expect_err("the same folder for a write");
-                assert!(error.contains("writable by its group or by everyone"), "{error}");
+                assert!(
+                    error.contains("writable by its group or by everyone"),
+                    "{error}"
+                );
                 let diagnostics = get_workspace_diagnostics().expect("diagnostics");
                 assert!(!diagnostics.valid);
                 assert!(
@@ -602,7 +605,10 @@ mod tests {
 
             fs::set_permissions(home, fs::Permissions::from_mode(0o777)).unwrap();
             let error = workspace_root().expect_err("a folder above it everyone can write");
-            assert!(error.contains("writable by its group or by everyone"), "{error}");
+            assert!(
+                error.contains("writable by its group or by everyone"),
+                "{error}"
+            );
             fs::set_permissions(home, fs::Permissions::from_mode(0o700)).unwrap();
         });
     }

@@ -952,13 +952,22 @@ mod tests {
             fs::set_permissions(root.join(dir), fs::Permissions::from_mode(0o777)).unwrap();
             let error = save_doc_at_root(&root, "custom:notes", "# new\n", Some(&backup_root))
                 .expect_err("a doc folder others can write");
-            assert!(error.contains("writable by its group or by everyone"), "{dir}: {error}");
+            assert!(
+                error.contains("writable by its group or by everyone"),
+                "{dir}: {error}"
+            );
             let error = create_doc_at_root(&root, "Fresh", "fresh", None)
                 .expect_err("a doc folder others can write");
-            assert!(error.contains("writable by its group or by everyone"), "{dir}: {error}");
+            assert!(
+                error.contains("writable by its group or by everyone"),
+                "{dir}: {error}"
+            );
             fs::set_permissions(root.join(dir), fs::Permissions::from_mode(0o755)).unwrap();
         }
-        assert_eq!(fs::read_to_string(root.join("docs/context/notes.md")).unwrap(), "# old\n");
+        assert_eq!(
+            fs::read_to_string(root.join("docs/context/notes.md")).unwrap(),
+            "# old\n"
+        );
         assert!(!root.join("docs/context/fresh.md").exists());
         save_doc_at_root(&root, "custom:notes", "# new\n", Some(&backup_root)).expect("save");
         create_doc_at_root(&root, "Fresh", "fresh", None).expect("create");

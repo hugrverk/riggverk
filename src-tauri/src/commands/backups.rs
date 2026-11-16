@@ -189,9 +189,14 @@ pub(crate) fn tighten_legacy_backup_permissions(root: &Path) -> Result<(), Strin
                     .read(true)
                     .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
                     .open(&path)
-                    .and_then(|file| file.set_permissions(fs::Permissions::from_mode(mode & !0o077)))
+                    .and_then(|file| {
+                        file.set_permissions(fs::Permissions::from_mode(mode & !0o077))
+                    })
                     .map_err(|e| {
-                        format!("cannot make backup entry {} owner-only: {e}", path.display())
+                        format!(
+                            "cannot make backup entry {} owner-only: {e}",
+                            path.display()
+                        )
                     })?;
             }
         }
@@ -961,12 +966,21 @@ mod tests {
         // A folder above it that everyone can write, with and without the backup folder.
         fs::set_permissions(&base, fs::Permissions::from_mode(0o777)).unwrap();
         let error = backup_root().expect_err("a folder above it everyone can write");
-        assert!(error.contains("writable by its group or by everyone"), "{error}");
+        assert!(
+            error.contains("writable by its group or by everyone"),
+            "{error}"
+        );
         fs::remove_dir(&root).unwrap();
         let error = backup_root().expect_err("a missing backup folder below it");
-        assert!(error.contains("writable by its group or by everyone"), "{error}");
+        assert!(
+            error.contains("writable by its group or by everyone"),
+            "{error}"
+        );
         fs::set_permissions(&base, fs::Permissions::from_mode(0o700)).unwrap();
-        assert_eq!(backup_root().expect("a missing folder below a private one"), root);
+        assert_eq!(
+            backup_root().expect("a missing folder below a private one"),
+            root
+        );
         let _ = fs::remove_dir_all(&base);
     }
 

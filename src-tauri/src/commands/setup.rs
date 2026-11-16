@@ -4077,7 +4077,8 @@ mod tests {
         use std::os::unix::fs::PermissionsExt;
         let _guard = guard::lock();
         let _restore = guard::EnvRestore::capture();
-        let home = std::env::temp_dir().join(format!("aw-setup-backup-tighten-{}", std::process::id()));
+        let home =
+            std::env::temp_dir().join(format!("aw-setup-backup-tighten-{}", std::process::id()));
         let _ = fs::remove_dir_all(&home);
         let root = home.join("backups");
         fs::create_dir_all(root.join("20260101-000000")).expect("legacy run");
@@ -4094,7 +4095,10 @@ mod tests {
         fs::set_permissions(&stuck, fs::Permissions::from_mode(0o644)).expect("chmod");
         let dir = setup_backup_dir("txn-tighten-test").expect("every entry made private");
         assert!(dir.is_dir());
-        assert_eq!(fs::metadata(&stuck).unwrap().permissions().mode() & 0o777, 0o600);
+        assert_eq!(
+            fs::metadata(&stuck).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
         let _ = fs::remove_dir_all(&home);
     }
 

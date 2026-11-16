@@ -5846,10 +5846,17 @@ mod tests {
         let wanted = write_stub_opencode(&trusted.join("bin"), "echo 1.19.3");
         // Everyone can write the folder above the first one, without the sticky bit.
         fs::set_permissions(&open, fs::Permissions::from_mode(0o777)).unwrap();
-        let path_env = format!("{}:{}", open.join("bin").display(), trusted.join("bin").display());
+        let path_env = format!(
+            "{}:{}",
+            open.join("bin").display(),
+            trusted.join("bin").display()
+        );
         let canonical = fs::canonicalize(&wanted).unwrap();
 
-        assert_eq!(resolve_opencode_executable_in(&path_env, &[]), Some(canonical.clone()));
+        assert_eq!(
+            resolve_opencode_executable_in(&path_env, &[]),
+            Some(canonical.clone())
+        );
         assert_eq!(
             resolve_opencode_executable_in("", &[skipped.clone(), wanted.clone()]),
             Some(canonical)
@@ -5872,8 +5879,16 @@ mod tests {
         cleanup(&open);
         let cli = health.cli.as_ref().expect("cli health");
         assert_eq!(cli.status, "missing");
-        assert!(cli.detail.contains(&stub.display().to_string()), "{}", cli.detail);
-        assert!(cli.detail.contains("can be changed by another user"), "{}", cli.detail);
+        assert!(
+            cli.detail.contains(&stub.display().to_string()),
+            "{}",
+            cli.detail
+        );
+        assert!(
+            cli.detail.contains("can be changed by another user"),
+            "{}",
+            cli.detail
+        );
         assert_eq!(check_of(&health, "cli").status, "warn");
     }
 
