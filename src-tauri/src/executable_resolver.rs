@@ -122,8 +122,9 @@ pub(crate) fn is_executable_file(path: &Path, pathext: Option<&str>) -> bool {
 }
 
 /// On Unix, the file `path` runs, links resolved, or `None` when it or its folder is owned by
-/// someone other than root or the current user or is writable by its group or by everyone, or a
-/// folder above them can be changed by another user ([`crate::path_safety::check_folders_above`]):
+/// someone other than root or the current user or is writable by everyone or by a group other than
+/// the user's private group ([`crate::path_safety::others_can_write`]), or a folder above them can
+/// be changed by another user ([`crate::path_safety::check_folders_above`]):
 /// another local user could then choose what runs. Run the returned path, so a link changed later
 /// is not followed. Elsewhere, `path` as it is.
 pub(crate) fn trusted_executable(path: &Path) -> Option<PathBuf> {
@@ -135,7 +136,8 @@ pub(crate) fn trusted_executable(path: &Path) -> Option<PathBuf> {
         for entry in [resolved.as_path(), folder] {
             let meta = std::fs::metadata(entry).ok()?;
             let owner = [0, crate::skill_sources::effective_uid()].contains(&meta.uid());
-            if !owner || meta.mode() & 0o022 != 0 {
+            let private_group = Some(meta.gid()) == crate::path_safety::user_private_gid();
+            if !owner || crate::path_safety::others_can_write(meta.mode(), private_group) {
                 return None;
             }
         }
@@ -378,6 +380,24 @@ mod tests {
         // The sticky bit keeps others from replacing the user's own folder in it.
         fs::set_permissions(&base, fs::Permissions::from_mode(0o1777)).unwrap();
         assert_eq!(trusted_executable(&tool), Some(tool.clone()));
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_program_its_group_can_write_runs_only_for_the_users_private_group() {
+        use std::os::unix::fs::{MetadataExt, PermissionsExt};
+        let (base, tool) = trusted_tree("trusted-group-write");
+        let folder = tool.parent().unwrap().to_path_buf();
+        fs::set_permissions(&folder, fs::Permissions::from_mode(0o775)).unwrap();
+        fs::set_permissions(&tool, fs::Permissions::from_mode(0o775)).unwrap();
+        let group = fs::metadata(&tool).unwrap().gid();
+        let private = crate::path_safety::user_private_gid() == Some(group);
+        assert_eq!(trusted_executable(&tool).is_some(), private);
+
+        // Everyone can write it: never run, whatever the group.
+        fs::set_permissions(&tool, fs::Permissions::from_mode(0o777)).unwrap();
+        assert_eq!(trusted_executable(&tool), None);
         let _ = fs::remove_dir_all(&base);
     }
 
