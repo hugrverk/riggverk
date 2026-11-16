@@ -506,7 +506,14 @@
     "skills/orchestrate/SKILL.md": [
       "sha256:578821be7bd8109cddd84a47f453d13cafccc659fce6b5889dac44a751ffc63f",
       "sha256:9c7f7e6bbedf30f66e1381eca22d1ff7c5350ee4996ca8f0b5db34b54677b3ab",
-      "sha256:b05e03d90f8c87b9f86e58aab4eb72351d1f734000f30980a285fbd7fe0d3778"
+      "sha256:b05e03d90f8c87b9f86e58aab4eb72351d1f734000f30980a285fbd7fe0d3778",
+      "sha256:ed61cb8350802a53d375863a4526e6b045e0903bee6040c081d4271a644694c8"
+    ],
+    "skills/orchestrate/ledger-template.md": [
+      "sha256:d71b3d3cddfc1048451315062393c7afe801b25ef20ec4ffdce464ed64b51b6f"
+    ],
+    "skills/orchestrate/orchestrate-rules.md": [
+      "sha256:b212cf3edf745eca09ae858db9fbb0d69562e53a05fe71ad84a62d7da27ee44e"
     ],
     "skills/pr-modernize/SKILL.md": [
       "sha256:0dd2d8591625a0b75bc9da2665f078118162807416efba7e023f76694627349c",
