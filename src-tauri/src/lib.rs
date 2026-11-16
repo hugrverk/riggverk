@@ -25,6 +25,7 @@ mod light_mcp;
 mod managed_bootstrap;
 mod managed_state;
 mod mutation_lock;
+mod navigation_guard;
 mod opencode_precedence;
 mod opencode_review;
 mod opencode_tui;
@@ -137,6 +138,7 @@ use tauri::Manager;
 pub fn run() {
     executable_resolver::extend_path_with_tool_dirs();
     let context = tauri::generate_context!();
+    let dev_url = context.config().build.dev_url.clone();
     // The updater plugin exists only in a build whose config turns updates on (see app_update); otherwise the app
     // has no updater and makes no network request.
     let builder = if app_update::configured(context.config()) {
@@ -145,6 +147,7 @@ pub fn run() {
         tauri::Builder::default()
     };
     builder
+        .plugin(navigation_guard::plugin(dev_url))
         .manage(app_update::UpdateState::default())
         // Restores the main window's size, position and maximized state when it is created (hidden); setup shows it.
         // Its own setup reads `.window-state.json` before the app data move below. No build before the plugin wrote
