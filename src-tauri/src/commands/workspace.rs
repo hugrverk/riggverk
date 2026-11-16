@@ -71,9 +71,29 @@ fn holds_app_state(folder: &Path) -> bool {
         .any(|rel| folder.join(rel).is_file())
 }
 
-/// Why `path` is not a usable data folder, or `None`. It looks at the folder itself and, for a
-/// saved custom folder, at its state folder: never at bundled copies.
+/// Why `path` is not a usable data folder, or `None`: its shape ([`data_folder_shape_problem`]),
+/// then whether only the user can change it ([`data_folder_trust_problem`]).
 fn data_folder_problem(path: &Path, origin: DataFolderOrigin) -> Option<String> {
+    data_folder_shape_problem(path, origin).or_else(|| data_folder_trust_problem(path))
+}
+
+/// Why the data folder at `path` could be changed by someone other than the user, or `None`. An
+/// existing folder must belong to the user and be writable by the user only; for a missing one
+/// (a fresh profile) only the folders above it are checked.
+fn data_folder_trust_problem(path: &Path) -> Option<String> {
+    let checked = if fs::symlink_metadata(path).is_ok() {
+        crate::path_safety::check_private_folder(path, "data folder")
+    } else {
+        crate::path_safety::check_folders_above(path, "data folder")
+    };
+    checked.err()
+}
+
+/// Why `path` is not a usable data folder as a folder, or `None`. It looks at the folder itself
+/// and, for a saved custom folder, at its state folder: never at bundled copies. Ownership and
+/// permissions play no part, so a saved folder others can write stays saved and is refused with
+/// its reason instead of being dropped as stale.
+fn data_folder_shape_problem(path: &Path, origin: DataFolderOrigin) -> Option<String> {
     if !path.is_absolute() {
         return Some("not an absolute path".to_string());
     }
@@ -127,6 +147,9 @@ fn setup_target(settings: &settings::AppSettings) -> Result<(PathBuf, DataFolder
         ));
     }
     crate::path_safety::reject_symlink(&path, "setup workspace target")?;
+    if let Some(problem) = data_folder_trust_problem(&path) {
+        return Err(problem);
+    }
     Ok((path, origin))
 }
 
@@ -171,7 +194,7 @@ pub(super) fn workspace_root_for_write() -> Result<PathBuf, String> {
 
 /// Returns true when a saved custom path is a real folder holding the app's state.
 pub(crate) fn persisted_workspace_path_is_valid(path: &str) -> bool {
-    data_folder_problem(Path::new(path), DataFolderOrigin::Saved).is_none()
+    data_folder_shape_problem(Path::new(path), DataFolderOrigin::Saved).is_none()
 }
 
 /// Clear a saved custom path that is gone or no longer holds the app's state. Bundled copies
@@ -356,7 +379,8 @@ mod tests {
         configured_workspace_path, default_installed_workspace_path, get_workspace_diagnostics,
         open_default_workspace_folder, persisted_workspace_path_is_valid,
         reset_active_workspace_path, scrub_stale_workspace_path, setup_workspace_target_path,
-        workspace_diagnostics_for_unconfigured, workspace_root, NO_WORKSPACE_SELECTED,
+        workspace_diagnostics_for_unconfigured, workspace_root, workspace_target_for_write,
+        NO_WORKSPACE_SELECTED,
     };
     use crate::managed_state::{managed_state_path, read_managed_state};
     use crate::settings::{AppSettings, MutationOutcome};
@@ -538,6 +562,69 @@ mod tests {
                 workspace_root().expect("an existing env folder"),
                 folder.canonicalize().expect("canonical folder")
             );
+        });
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn data_folder_must_belong_to_the_user_and_not_be_writable_by_others() {
+        use std::os::unix::fs::PermissionsExt;
+        with_isolated_settings("trusted-folder-home", |home| {
+            let folder = home.join("env-folder");
+            mkdir(&folder, "");
+            fs::set_permissions(home, fs::Permissions::from_mode(0o700)).unwrap();
+            unsafe { std::env::set_var("RIGGVERK_WORKSPACE_PATH", &folder) };
+            for mode in [0o777, 0o775, 0o757] {
+                fs::set_permissions(&folder, fs::Permissions::from_mode(mode)).unwrap();
+                let error = workspace_root().expect_err("a data folder others can write");
+                assert!(
+                    error.contains("writable by its group or by everyone"),
+                    "{mode:o}: {error}"
+                );
+                let error = workspace_target_for_write().expect_err("the same folder for a write");
+                assert!(error.contains("writable by its group or by everyone"), "{error}");
+                let diagnostics = get_workspace_diagnostics().expect("diagnostics");
+                assert!(!diagnostics.valid);
+                assert!(
+                    diagnostics
+                        .error
+                        .as_deref()
+                        .is_some_and(|error| error.contains("writable by its group or by everyone")),
+                    "{:?}",
+                    diagnostics.error
+                );
+            }
+            fs::set_permissions(&folder, fs::Permissions::from_mode(0o700)).unwrap();
+            assert_eq!(
+                workspace_root().expect("an owner-only data folder"),
+                folder.canonicalize().unwrap()
+            );
+
+            fs::set_permissions(home, fs::Permissions::from_mode(0o777)).unwrap();
+            let error = workspace_root().expect_err("a folder above it everyone can write");
+            assert!(error.contains("writable by its group or by everyone"), "{error}");
+            fs::set_permissions(home, fs::Permissions::from_mode(0o700)).unwrap();
+        });
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_saved_folder_others_can_write_is_refused_but_stays_saved() {
+        use std::os::unix::fs::PermissionsExt;
+        with_isolated_settings("trusted-saved-home", |home| {
+            let folder = setup_used_folder("trusted-saved");
+            fs::set_permissions(&folder, fs::Permissions::from_mode(0o777)).unwrap();
+            let path = folder.to_string_lossy().into_owned();
+            // Not a stale path: the user is told what is wrong instead of losing the setting.
+            assert!(persisted_workspace_path_is_valid(&path));
+            let mut settings = AppSettings {
+                workspace_path: Some(path.clone()),
+                ..AppSettings::default()
+            };
+            assert!(!scrub_stale_workspace_path(&mut settings));
+            assert_eq!(settings.workspace_path.as_deref(), Some(path.as_str()));
+            let _ = home;
+            cleanup(&folder);
         });
     }
 
