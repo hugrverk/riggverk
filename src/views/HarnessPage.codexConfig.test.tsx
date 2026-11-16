@@ -93,7 +93,7 @@ const originalClose = HTMLDialogElement.prototype.close;
 
 beforeEach(() => {
   invokeMock.mockReset();
-  invokeMock.mockResolvedValue(null);
+  invokeMock.mockImplementation(async (command: string) => command === "set_codex_config_kept" ? DIFFERING.differing : null);
   // jsdom has no native modal dialog; emulate open/close and the `close` event browsers fire.
   HTMLDialogElement.prototype.showModal = vi.fn(function showModal(this: HTMLDialogElement) {
     this.setAttribute("open", "");
@@ -243,7 +243,7 @@ describe("keep mine (m)", () => {
     expect(dialog.textContent).toContain("other managed keys keep following Riggverk");
     expect(invokeMock).not.toHaveBeenCalled();
     fireEvent.click(within(dialog).getByRole("button", { name: "keep mine" }));
-    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("set_codex_config_kept", { kept: true }));
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("set_codex_config_kept", { kept: true, expected: DIFFERING.differing }));
     await waitFor(() => expect(p.overview.refresh).toHaveBeenCalledTimes(1));
     expect(p.refreshAfterApply).toHaveBeenCalledTimes(1);
   });
@@ -275,7 +275,7 @@ describe("keep mine (m)", () => {
     const dialog = await screen.findByRole("dialog");
     expect(invokeMock).not.toHaveBeenCalled();
     fireEvent.click(within(dialog).getByRole("button", { name: "keep mine" }));
-    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("set_codex_config_kept", { kept: true }));
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("set_codex_config_kept", { kept: true, expected: DIFFERING.differing }));
     await waitFor(() => expect(p.overview.refresh).toHaveBeenCalledTimes(1));
   });
 
@@ -291,7 +291,7 @@ describe("keep mine (m)", () => {
       if (command === "set_codex_config_kept") throw new Error("no enforced key differs from the bundled config; there is nothing to keep");
       return null;
     });
-    renderCodex("conflict", DIFFERING, CONFLICT_DETAIL);
+    const { p } = renderCodex("conflict", DIFFERING, CONFLICT_DETAIL);
     selectRow("rules");
     focusSurfaces();
     press("m");
@@ -303,6 +303,20 @@ describe("keep mine (m)", () => {
     press("m");
     fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "keep mine" }));
     expect((await screen.findByRole("alert")).textContent).toContain("nothing to keep");
+    await waitFor(() => expect(p.overview.refresh).toHaveBeenCalledTimes(1));
+  });
+
+  it("confirms existing and new kept values, and reports the recorded keys", async () => {
+    const existing = { key: "sandbox_mode", value: "read-only" };
+    invokeMock.mockResolvedValue([existing]);
+    renderCodex("conflict", { ...DIFFERING, kept: [existing] }, CONFLICT_DETAIL);
+    fireEvent.click(within(surfaceRow("config")).getByRole("button", { name: "Keep mine" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog.textContent).toContain("sandbox_mode = read-only");
+    expect(dialog.textContent).toContain("approvals_reviewer = auto_review");
+    fireEvent.click(within(dialog).getByRole("button", { name: "keep mine" }));
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("set_codex_config_kept", { kept: true, expected: [existing, ...DIFFERING.differing] }));
+    expect(await screen.findByText("Codex config: you keep sandbox_mode")).toBeTruthy();
   });
 });
 

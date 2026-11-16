@@ -15,7 +15,7 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::artifact_registry::ArtifactId;
 use crate::config_preferences::{self, CodexConfigChoice, CODEX_KEEPABLE_PATHS};
@@ -24,7 +24,7 @@ use crate::setup_transaction::{self, PlannedArtifact, PreviousState, RulesRewrit
 
 /// One key and a value of it, for the status the frontend reads. Key names and the values of the
 /// enforced approval and sandbox keys: nothing secret.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct KeyValue {
     pub key: String,
     pub value: String,
@@ -285,9 +285,28 @@ pub fn status(workspace_root: &Path, home: &Path) -> Option<CodexConfigStatus> {
 /// Records every enforced key whose installed value differs from the template, with that value.
 /// Refuses when the config cannot be read or nothing differs. Writes only
 /// `config-preferences.json`.
-pub fn keep(workspace_root: &Path, home: &Path) -> Result<Vec<KeyValue>, String> {
+pub fn keep(
+    workspace_root: &Path,
+    home: &Path,
+    expected: &[KeyValue],
+) -> Result<Vec<KeyValue>, String> {
     let (installed, template) = read_pair(workspace_root, home)?;
     let differing = differing_keys(&installed, &template);
+    let mut actual_pairs: Vec<_> = differing
+        .iter()
+        .map(|item| (&item.key, &item.value))
+        .collect();
+    let mut expected_pairs: Vec<_> = expected
+        .iter()
+        .map(|item| (&item.key, &item.value))
+        .collect();
+    actual_pairs.sort_unstable();
+    expected_pairs.sort_unstable();
+    if actual_pairs != expected_pairs {
+        return Err(
+            "the Codex config.toml changed since the page was read; review it again".to_string(),
+        );
+    }
     if differing.is_empty() {
         return Err(
             "no enforced key differs from the bundled config; there is nothing to keep".to_string(),
@@ -827,6 +846,47 @@ sandbox_mode = "read-only"
         fn drop(&mut self) {
             let _ = std::fs::remove_dir_all(&self.base);
         }
+    }
+
+    #[test]
+    fn keep_rejects_a_changed_snapshot_without_recording_a_choice() {
+        let dirs = Dirs::new("keep-snapshot");
+        crate::test_env::set_test_user_dirs(&dirs.home);
+        let codex_home = dirs.home.join("codex");
+        std::fs::create_dir_all(&codex_home).unwrap();
+        unsafe { std::env::set_var("CODEX_HOME", &codex_home) };
+        let bundle = dirs.base.join("bundle");
+        let template = bundle.join("templates/codex/config.toml");
+        std::fs::create_dir_all(template.parent().unwrap()).unwrap();
+        std::fs::write(&template, TEMPLATE).unwrap();
+        let _bundle = crate::setup_roots::test_bundle::set(bundle);
+        let config = codex_home.join("config.toml");
+        std::fs::write(&config, "approvals_reviewer = \"auto_review\"\n").unwrap();
+        let snapshot = status(&dirs.ws, &dirs.home).unwrap().differing;
+        assert_eq!(snapshot.len(), 1);
+        std::fs::write(
+            &config,
+            "approvals_reviewer = \"auto_review\"\nsandbox_mode = \"read-only\"\n",
+        )
+        .unwrap();
+        assert!(
+            keep(&dirs.ws, &dirs.home, &snapshot).is_err(),
+            "a stale snapshot must be refused"
+        );
+        assert!(config_preferences::load_codex_config(&dirs.ws).is_none());
+        let mut matching = status(&dirs.ws, &dirs.home).unwrap().differing;
+        matching.reverse();
+        let recorded = keep(&dirs.ws, &dirs.home, &matching).unwrap();
+        assert_eq!(recorded.len(), 2);
+        assert_eq!(
+            config_preferences::load_codex_config(&dirs.ws)
+                .unwrap()
+                .kept,
+            kept(&[
+                ("approvals_reviewer", "auto_review"),
+                ("sandbox_mode", "read-only")
+            ])
+        );
     }
 
     fn reset_key(key: &str, yours: &str, riggverk: &str) -> DefaultKey {

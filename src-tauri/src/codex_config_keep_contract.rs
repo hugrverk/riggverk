@@ -194,7 +194,10 @@ mod tests {
         }
 
         fn keep(&self) -> Result<Vec<String>, String> {
-            crate::codex_config_keep::keep(&self.ws, &self.home)
+            let expected = crate::codex_config_keep::status(&self.ws, &self.home)
+                .map(|status| [status.kept, status.differing].concat())
+                .unwrap_or_default();
+            crate::codex_config_keep::keep(&self.ws, &self.home, &expected)
                 .map(|items| items.into_iter().map(|item| item.key).collect())
         }
     }
@@ -447,12 +450,15 @@ mod tests {
     #[test]
     fn the_command_keeps_and_hands_back_and_never_writes_the_config() {
         let env = Env::new("command");
-        let error = crate::commands::set_codex_config_kept(true).unwrap_err();
+        let error = crate::commands::set_codex_config_kept(true, Some(vec![])).unwrap_err();
         assert!(error.contains("nothing to keep"), "{error}");
 
         env.set_top_level("approvals_reviewer", "auto_review");
         let config_before = env.read();
-        crate::commands::set_codex_config_kept(true).expect("keep");
+        let expected = crate::codex_config_keep::status(&env.ws, &env.home)
+            .unwrap()
+            .differing;
+        crate::commands::set_codex_config_kept(true, Some(expected)).expect("keep");
         assert_eq!(env.read(), config_before, "config.toml is never written");
         assert_eq!(env.kind(), OperationKind::NoChange);
         let prefs = fs::read_to_string(crate::workspace_layout::state_file(
@@ -462,7 +468,7 @@ mod tests {
         .expect("preferences");
         assert!(prefs.contains("auto_review"), "{prefs}");
 
-        crate::commands::set_codex_config_kept(false).expect("hand back");
+        crate::commands::set_codex_config_kept(false, None).expect("hand back");
         assert_eq!(env.read(), config_before);
         assert_eq!(env.kind(), OperationKind::Conflict);
     }
