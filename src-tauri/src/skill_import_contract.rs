@@ -927,8 +927,8 @@ mod tests {
             .path()
             .join("release-notes-plus/SKILL.md");
 
-        fs::set_permissions(&backup, fs::Permissions::from_mode(0o620)).expect("chmod");
-        let error = undo_last_import().expect_err("group-writable");
+        fs::set_permissions(&backup, fs::Permissions::from_mode(0o602)).expect("chmod");
+        let error = undo_last_import().expect_err("world-writable");
         assert!(error.contains("someone else could have written"), "{error}");
         fs::set_permissions(&backup, fs::Permissions::from_mode(0o600)).expect("chmod");
 

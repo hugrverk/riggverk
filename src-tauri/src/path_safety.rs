@@ -572,7 +572,8 @@ mod tests {
         check_private_folder(&folder, "data folder").expect("owner-only folder");
         check_folders_above(&folder.join("missing/child"), "data folder").expect("missing below");
 
-        for mode in [0o777, 0o775, 0o757] {
+        // Group write alone: `a_folder_writable_by_its_group_passes_only_for_the_users_private_group`.
+        for mode in [0o777, 0o757] {
             set(&folder, mode);
             let err = check_private_folder(&folder, "data folder").expect_err("open folder");
             assert!(

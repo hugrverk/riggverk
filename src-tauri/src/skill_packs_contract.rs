@@ -1255,7 +1255,7 @@ mod tests {
         let env = Env::new("writable");
         env.pack_skill("loose", None, "loose-skill", "x", &[]);
         env.pack_skill("tight", None, "tight-skill", "x", &[]);
-        set_mode(&env.packs().join("loose"), 0o775);
+        set_mode(&env.packs().join("loose"), 0o777);
 
         let sources = env.sources();
         let loose = sources
@@ -1287,6 +1287,23 @@ mod tests {
             .expect("loose")
             .refused
             .is_some());
+
+        // Writable by its group: refused unless that is the user's private group.
+        set_mode(&env.packs().join("loose"), 0o775);
+        let group = std::os::unix::fs::MetadataExt::gid(
+            &fs::metadata(env.packs().join("loose")).expect("pack"),
+        );
+        let private = crate::path_safety::user_private_gid() == Some(group);
+        let refused = env
+            .sources()
+            .packs()
+            .iter()
+            .find(|p| p.name == "loose")
+            .expect("loose")
+            .refused
+            .is_some();
+        assert_eq!(refused, !private, "group {group}");
+        set_mode(&env.packs().join("loose"), 0o757);
 
         let result = env.apply();
         assert!(result.success, "install: {}", result.message);
@@ -1321,11 +1338,11 @@ mod tests {
 
         // Each of these is a folder or file a pack-mate could rewrite after the review.
         let loose: [(&str, PathBuf, u32, u32); 5] = [
-            ("skills", pack.join("skills"), 0o775, 0o755),
+            ("skills", pack.join("skills"), 0o777, 0o755),
             ("skill folder", skill.clone(), 0o757, 0o755),
-            ("nested folder", skill.join("notes"), 0o775, 0o755),
+            ("nested folder", skill.join("notes"), 0o777, 0o755),
             ("SKILL.md", skill.join("SKILL.md"), 0o666, 0o644),
-            ("nested file", skill.join("notes/a.md"), 0o664, 0o644),
+            ("nested file", skill.join("notes/a.md"), 0o646, 0o644),
         ];
         for (label, path, bad, good) in loose {
             set_mode(&path, bad);
@@ -1352,7 +1369,7 @@ mod tests {
         let result = env.apply();
         assert!(result.success, "install: {}", result.message);
 
-        set_mode(&env.packs(), 0o775);
+        set_mode(&env.packs(), 0o777);
         let sources = env.sources();
         assert!(sources.packs().is_empty());
         assert!(

@@ -952,7 +952,7 @@ mod tests {
         fs::set_permissions(&base, fs::Permissions::from_mode(0o700)).unwrap();
         std::env::set_var("RIGGVERK_BACKUP_DIR", root.to_string_lossy().as_ref());
 
-        for mode in [0o777, 0o775, 0o757] {
+        for mode in [0o777, 0o757] {
             fs::set_permissions(&root, fs::Permissions::from_mode(mode)).unwrap();
             let error = backup_root().expect_err("a backup folder others can write");
             assert!(
@@ -960,6 +960,11 @@ mod tests {
                 "{mode:o}: {error}"
             );
         }
+        // Writable by its group: refused unless that is the user's private group.
+        fs::set_permissions(&root, fs::Permissions::from_mode(0o775)).unwrap();
+        let group = std::os::unix::fs::MetadataExt::gid(&fs::metadata(&root).unwrap());
+        let private = crate::path_safety::user_private_gid() == Some(group);
+        assert_eq!(backup_root().is_ok(), private, "group {group}");
         fs::set_permissions(&root, fs::Permissions::from_mode(0o700)).unwrap();
         assert_eq!(backup_root().expect("an owner-only backup folder"), root);
 
