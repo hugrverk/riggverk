@@ -235,7 +235,7 @@ fn is_private_group(user: &[u8], group: &[u8], members: &[Vec<u8>]) -> bool {
 /// Linux distributions that give every user one; its members can then only be the user. `None`
 /// otherwise, for example for macOS's `staff`, which every user shares. Looked up once.
 #[cfg(unix)]
-fn user_private_gid() -> Option<u32> {
+pub(crate) fn user_private_gid() -> Option<u32> {
     static GID: std::sync::OnceLock<Option<u32>> = std::sync::OnceLock::new();
     *GID.get_or_init(|| private_gid_of(crate::skill_sources::effective_uid()))
 }
@@ -497,6 +497,27 @@ mod tests {
         assert!(!is_private_group(&user, b"alex", &[b"sam".to_vec()]));
         assert!(!is_private_group(&user, b"staff", &[]));
         assert!(!is_private_group(&user, b"users", &[b"alex".to_vec()]));
+    }
+
+    /// Runs anywhere: a folder writable by its group passes only when that group is the user's
+    /// private group, which a Linux user with a private group and umask 002 gets by default.
+    #[cfg(unix)]
+    #[test]
+    fn a_folder_writable_by_its_group_passes_only_for_the_users_private_group() {
+        use std::os::unix::fs::{MetadataExt, PermissionsExt};
+        let base = temp("own-group");
+        let folder = base.join("data");
+        crate::test_env::create_dir_all(&folder).unwrap();
+        fs::set_permissions(&folder, fs::Permissions::from_mode(0o775)).unwrap();
+        let group = fs::metadata(&folder).unwrap().gid();
+        let private = user_private_gid() == Some(group);
+        let own = check_private_folder(&folder, "data folder");
+        assert_eq!(own.is_ok(), private, "group {group}: {own:?}");
+        let above = check_folders_above(&folder.join("child"), "data folder");
+        assert_eq!(above.is_ok(), private, "group {group}: {above:?}");
+        fs::set_permissions(&folder, fs::Permissions::from_mode(0o777)).unwrap();
+        assert!(check_private_folder(&folder, "data folder").is_err());
+        let _ = fs::remove_dir_all(&base);
     }
 
     #[cfg(target_os = "macos")]
