@@ -135,11 +135,20 @@ pub(crate) fn backup_root() -> Result<PathBuf, String> {
         }
     }
 
+    // Rollback trusts what the backups hold: only the user may be able to change the folder.
+    if std::fs::symlink_metadata(&root).is_ok() {
+        crate::path_safety::check_private_folder(&root, "backup folder")?;
+    } else {
+        crate::path_safety::check_folders_above(&root, "backup folder")?;
+    }
+
     Ok(root)
 }
 
+/// Makes every file and folder under `root` owner-only. An entry that cannot be changed is an
+/// error naming it, and the root is tried again on the next call.
 #[cfg(unix)]
-pub(crate) fn tighten_legacy_backup_permissions(root: &Path) {
+pub(crate) fn tighten_legacy_backup_permissions(root: &Path) -> Result<(), String> {
     use std::collections::HashSet;
     use std::fs;
     use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
@@ -150,14 +159,14 @@ pub(crate) fn tighten_legacy_backup_permissions(root: &Path) {
         .get_or_init(|| Mutex::new(HashSet::new()))
         .lock()
         .unwrap_or_else(|error| error.into_inner());
-    if !visited.insert(root.to_path_buf()) {
-        return;
+    if visited.contains(root) {
+        return Ok(());
     }
     let Ok(root_metadata) = fs::symlink_metadata(root) else {
-        return;
+        return Ok(());
     };
     if !root_metadata.is_dir() || root_metadata.file_type().is_symlink() {
-        return;
+        return Ok(());
     }
     let device = root_metadata.dev();
     let mut pending = vec![root.to_path_buf()];
@@ -176,16 +185,19 @@ pub(crate) fn tighten_legacy_backup_permissions(root: &Path) {
         if metadata.is_file() || metadata.is_dir() {
             let mode = metadata.permissions().mode();
             if mode & 0o077 != 0 {
-                if let Ok(file) = fs::OpenOptions::new()
+                fs::OpenOptions::new()
                     .read(true)
                     .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
                     .open(&path)
-                {
-                    let _ = file.set_permissions(fs::Permissions::from_mode(mode & !0o077));
-                }
+                    .and_then(|file| file.set_permissions(fs::Permissions::from_mode(mode & !0o077)))
+                    .map_err(|e| {
+                        format!("cannot make backup entry {} owner-only: {e}", path.display())
+                    })?;
             }
         }
     }
+    visited.insert(root.to_path_buf());
+    Ok(())
 }
 
 fn prepare_backup_root_for_open() -> Result<PathBuf, String> {
@@ -913,13 +925,48 @@ mod tests {
             fs::set_permissions(path, fs::Permissions::from_mode(0o644)).unwrap();
         }
         symlink(&outside, root.join("link")).unwrap();
-        tighten_legacy_backup_permissions(&root);
+        tighten_legacy_backup_permissions(&root).unwrap();
         let mode = |path: &Path| fs::metadata(path).unwrap().permissions().mode() & 0o777;
         assert_eq!(mode(&root), 0o700);
         assert_eq!(mode(&nested), 0o700);
         assert_eq!(mode(&file), 0o600);
         assert_eq!(mode(&outside), 0o755);
         assert_eq!(mode(&external), 0o644);
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn backup_root_must_belong_to_the_user_and_not_be_writable_by_others() {
+        use std::os::unix::fs::PermissionsExt;
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        let base = temp_root("trusted-root");
+        let root = base.join("backups");
+        fs::create_dir_all(&root).unwrap();
+        fs::set_permissions(&base, fs::Permissions::from_mode(0o700)).unwrap();
+        std::env::set_var("RIGGVERK_BACKUP_DIR", root.to_string_lossy().as_ref());
+
+        for mode in [0o777, 0o775, 0o757] {
+            fs::set_permissions(&root, fs::Permissions::from_mode(mode)).unwrap();
+            let error = backup_root().expect_err("a backup folder others can write");
+            assert!(
+                error.contains("writable by its group or by everyone"),
+                "{mode:o}: {error}"
+            );
+        }
+        fs::set_permissions(&root, fs::Permissions::from_mode(0o700)).unwrap();
+        assert_eq!(backup_root().expect("an owner-only backup folder"), root);
+
+        // A folder above it that everyone can write, with and without the backup folder.
+        fs::set_permissions(&base, fs::Permissions::from_mode(0o777)).unwrap();
+        let error = backup_root().expect_err("a folder above it everyone can write");
+        assert!(error.contains("writable by its group or by everyone"), "{error}");
+        fs::remove_dir(&root).unwrap();
+        let error = backup_root().expect_err("a missing backup folder below it");
+        assert!(error.contains("writable by its group or by everyone"), "{error}");
+        fs::set_permissions(&base, fs::Permissions::from_mode(0o700)).unwrap();
+        assert_eq!(backup_root().expect("a missing folder below a private one"), root);
         let _ = fs::remove_dir_all(&base);
     }
 
