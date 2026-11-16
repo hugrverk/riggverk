@@ -661,23 +661,47 @@ class PackCheckSkillRoutingTests(unittest.TestCase):
 
     def test_routing_heading_fails(self) -> None:
         self.add_skill()
-        (self.pack / "routing.md").write_text("# Heading\n", encoding="utf-8")
+        (self.pack / "routing.md").write_text("- # Heading: `fixture`.\n", encoding="utf-8")
         result = self.run_pack()
         self.assertEqual(result.returncode, 1)
-        self.assertIn('not a "- " bullet', result.stderr)
+        self.assertIn("holds a heading", result.stderr)
+
+    def test_routing_line_rules_match_the_app(self) -> None:
+        self.add_skill()
+        cases = {
+            "# Heading\n": 'not a "- " bullet',
+            "- Use \x7f fixtures: `fixture`.\n": "holds a control character",
+            "- Use fixtures: `fixture`.\x1f\n": "holds a control character",
+            "\x1f\n": "holds a control character",
+            "- Use <b>fixtures</b>: `fixture`.\n": "holds markup",
+            "- See @notes.md: `fixture`.\n": "holds an @",
+            "- Use fixtures: `fixture.\n": "unpaired or empty backticks",
+            "- Use fixtures.\n": "names no skill in backticks",
+            "- Use fixtures: `elsewhere`.\n": "not an active skill of this pack",
+            "- " + "x" * 240 + ": `fixture`.\n": "longer than 240 characters",
+        }
+        for text, message in cases.items():
+            with self.subTest(message=message, text=text[:20]):
+                (self.pack / "routing.md").write_text(text, encoding="utf-8")
+                result = self.run_pack()
+                self.assertEqual(result.returncode, 1)
+                self.assertIn(message, result.stderr)
+        # U+2065 is unassigned, not a format character: the app accepts it.
+        (self.pack / "routing.md").write_text("\ufeff- Use\u2065 fixtures: `fixture`.\r\n", encoding="utf-8")
+        result = self.run_pack()
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_single_skill_pack_has_no_sibling_to_reference(self) -> None:
+        path = self.add_skill()
+        path.write_text(path.read_text(encoding="utf-8") + "\nSee skills//x and ..//y.\n", encoding="utf-8")
+        result = self.run_pack()
+        self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_missing_skills_directory_fails(self) -> None:
         self.skills.rmdir()
         result = self.run_pack()
         self.assertEqual(result.returncode, 1)
         self.assertIn("skills root not found", result.stderr)
-
-    def test_external_pack_path_has_no_traceback(self) -> None:
-        self.add_skill()
-        result = self.run_pack()
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertNotIn("Traceback", result.stderr)
-
 
 if __name__ == "__main__":
     unittest.main()
