@@ -895,6 +895,16 @@ describe("take bundled (b, y)", () => {
     expect(screen.queryByRole("listbox", { name: "Claude surfaces" })).toBeNull();
   });
 
+  it("names the keys a pack skill sets that the harness acts on without asking, before the diff", async () => {
+    const flags = ["pack p; hooks: PreToolUse [runs commands without asking]"];
+    await openPreview(undefined, {}, { preview_take_bundled: () => takePreview({ units: [bundledUnit({ source: "pack:p", flags })] }) });
+    const pane = review();
+    const note = within(pane).getByText(/sets keys the harness acts on without asking/);
+    expect(note.textContent).toContain("hooks: PreToolUse [runs commands without asking]");
+    const diff = pane.querySelector(".diff-line");
+    expect(diff === null || note.compareDocumentPosition(diff) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it("counts the files of a skill and lists the backups, a few at a time", async () => {
     const files = ["A.md", "B.md", "C.md", "D.md", "E.md", "F.md"].map(rel => ({
       rel,

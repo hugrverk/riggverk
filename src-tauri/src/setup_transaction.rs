@@ -2763,7 +2763,7 @@ const REVIEW_KEY_VALUE_CHARS: usize = 200;
 
 /// The note of a flagged skill's review line: `pack team; allowed-tools: Bash(git *) [grants tool
 /// access without asking]; model: opus`.
-fn flagged_note(flagged: &FlaggedSkill) -> String {
+pub(crate) fn flagged_note(flagged: &FlaggedSkill) -> String {
     let mut parts = vec![format!("pack {}", flagged.pack)];
     for key in &flagged.keys {
         let mut value: String = key.value.chars().take(REVIEW_KEY_VALUE_CHARS).collect();

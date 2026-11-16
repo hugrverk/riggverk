@@ -244,6 +244,8 @@ export interface TakeBundledUnit {
   diff: FileDiffView;
   /** `pack:<name>` when the replacing files come from a skill pack; absent for the bundle. */
   source?: string;
+  /** What the pack skill sets that the harness acts on without asking, in the install review's words; absent when nothing. */
+  flags?: string[];
 }
 
 /** What replacing the files of these units by the bundled ones would do (`preview_take_bundled`), and the proof to apply it. */

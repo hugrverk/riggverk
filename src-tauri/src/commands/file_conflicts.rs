@@ -174,6 +174,10 @@ pub struct TakeBundledUnit {
     /// `pack:<name>` when the replacing files come from a skill pack; absent for the bundle.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source: Option<String>,
+    /// What the pack skill's `SKILL.md` sets that the harness acts on without asking, in the words
+    /// of the install review. Shown before the diff, which can be withheld or cut short.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub flags: Vec<String>,
 }
 
 /// What replacing the files of these units by the bundled ones would do, and the proof to apply it.
@@ -238,19 +242,31 @@ pub fn preview_take_bundled(
             .ok_or_else(|| UNKNOWN_UNIT.to_string())?;
         let (files, more_files) =
             file_conflicts::take_bundled_files(unit, &operations, &workspace_root, &home);
-        let source = (unit.kind == file_conflicts::UnitKind::Skill)
-            .then(|| {
-                crate::skill_sources::SkillSources::for_workspace(&workspace_root)
-                    .ok()
-                    .and_then(|sources| {
-                        sources
-                            .pack_of(&unit.name)
-                            .map(|pack| format!("pack:{pack}"))
-                    })
-            })
-            .flatten();
+        let (source, flags) = if unit.kind == file_conflicts::UnitKind::Skill {
+            let sources = crate::skill_sources::SkillSources::for_workspace(&workspace_root).ok();
+            let source = sources.as_ref().and_then(|sources| {
+                sources
+                    .pack_of(&unit.name)
+                    .map(|pack| format!("pack:{pack}"))
+            });
+            // The same keys and wording as the install review, so the line does not depend on
+            // the diff, which can be withheld, too large or cut short.
+            let flags = sources
+                .as_ref()
+                .and_then(|sources| {
+                    setup_transaction::flagged_pack_skills(sources)
+                        .get(&unit.name)
+                        .map(setup_transaction::flagged_note)
+                })
+                .into_iter()
+                .collect();
+            (source, flags)
+        } else {
+            (None, Vec::new())
+        };
         reviewed.push(TakeBundledUnit {
             source,
+            flags,
             key: unit.key.clone(),
             name: unit.name.clone(),
             folder: file_conflicts::unit_folder(unit, &home, &workspace_root),
