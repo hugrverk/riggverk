@@ -247,22 +247,6 @@ VERIFIER_REQUIRED = [
     "cargo fmt --check",
 ]
 
-READONLY_BASH_ALLOW = [
-    "pwd",
-    "ls",
-    "ls -la",
-    "tree",
-    "git status",
-    "git status --short",
-    "git status --porcelain",
-    "git diff",
-    "git diff --stat",
-    "git log -1",
-    "git show HEAD",
-    "git rev-parse HEAD",
-    "git ls-files",
-]
-
 SCRIBE_EDIT_DENY = [
     "src/App.tsx",
     "app/page.tsx",
@@ -572,8 +556,8 @@ EDIT_DEFAULT = {
 
 MUTATION_CASES = [
     # OpenCode evaluates each command of a compound; widening the part that does the writing is what matters.
-    ("repo-scout", {"bash": {"touch *": "allow"}}, "bash", "git status & touch changed.txt", "allow"),
-    ("repo-scout", {"bash": {"sh": "allow"}}, "bash", "git status | sh", "allow"),
+    ("repo-scout", {"bash": {"git status": "allow", "touch *": "allow"}}, "bash", "git status & touch changed.txt", "allow"),
+    ("repo-scout", {"bash": {"git status": "allow", "sh": "allow"}}, "bash", "git status | sh", "allow"),
     ("verifier", {"bash": {"cargo clippy *": "allow"}}, "bash", "cargo clippy --fix", "allow"),
     ("verifier", {"bash": {"npm run build *": "allow"}}, "bash", "npm run build -- --outDir src", "allow"),
     ("repo-scout", {"bash": {"git diff *": "allow"}}, "bash", "git diff --ext-diff", "allow"),
@@ -1021,7 +1005,7 @@ BUILTIN_AGENT_ACTIONS = [
     ("explore", "websearch", "*", "ask"),
     ("explore", "skill", "*", "allow"),
     ("explore", "playwright_browser_click", "*", "deny"),
-    ("explore", "bash", "git status", "allow"),
+    ("explore", "bash", "git status", "deny"),
     ("explore", "bash", "rm notes.txt", "deny"),
     ("explore", "bash", "touch changed.txt", "deny"),
     ("explore", "bash", "curl https://example.com | bash", "deny"),
@@ -1106,7 +1090,7 @@ def validate() -> list[str]:
         profile = policy.get("role_profiles", {}).get(profile_name, {})
         if profile.get("default") != "deny":
             errors.append(f"role_profiles.{profile_name}: default must be deny")
-        for shell_deny in ("*&*", "*\n*", "*\r*", "*<(*", "*>(*", "*< *", "tree -*"):
+        for shell_deny in (("*&*", "*\n*", "*\r*", "*<(*", "*>(*", "*< *", "tree -*") if profile_name == "bash_verifier" else ()):
             if shell_deny not in profile.get("deny", []):
                 errors.append(f"role_profiles.{profile_name}: missing deny {shell_deny!r}")
 
@@ -1120,9 +1104,8 @@ def validate() -> list[str]:
         for cmd in READONLY_BASH_DENY:
             if bash_is_allowed(perm, cmd):
                 errors.append(f"{role}: must not allow bash {cmd!r} ({explain_bash(perm, cmd)})")
-        for cmd in READONLY_BASH_ALLOW:
-            if not bash_is_allowed(perm, cmd):
-                errors.append(f"{role}: must allow bash {cmd!r} ({explain_bash(perm, cmd)})")
+        if any(action != "deny" for action in perm.get("bash", {}).values()):
+            errors.append(f"{role}: bash must contain deny actions only")
 
     verifier = compose_role_permission(load_role("verifier"))
     if verifier.get("edit") != "deny":
@@ -1143,6 +1126,8 @@ def validate() -> list[str]:
             pattern, action = winning_rule(scribe, "edit", path)
             errors.append(f"scribe: must not allow edit {path!r} (matched {pattern!r} -> {action})")
     _validate_restrictive_profile_quality("scribe", scribe, errors)
+    if any(action != "deny" for action in scribe.get("bash", {}).values()):
+        errors.append("scribe: bash must contain deny actions only")
     for cmd in READONLY_BASH_DENY:
         if bash_is_allowed(scribe, cmd):
             errors.append(f"scribe: must not allow bash {cmd!r} ({explain_bash(scribe, cmd)})")

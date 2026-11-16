@@ -94,6 +94,8 @@ Use the workspace final report (Changed, Verified, Not verified, Risk, Next) and
 
 ### OpenCode
 
+- The `explore`, `repo-scout`, `inspector`, `sentinel` and `scribe` roles have no shell. Include the diff or changed-file list in their prompt when needed.
+
 - Riggverk's architect may start only read-only roles, so start write lanes through the `dispatch` skill using external CLIs. Its step limit can end a long run before the goal: say so at the start, and keep the ledger current so a new session can resume.
 
 ### Light harnesses
