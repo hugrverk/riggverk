@@ -6,6 +6,7 @@ import { useKeymap } from "../keyboard/useKeymap";
 import { codexConfigGates, keepMessage, keyNames, type CodexConfigModel } from "../lib/codexConfig";
 import { useShellState } from "../shell/ShellState";
 import type { CodexDefaultsFlow } from "./useCodexDefaultsFlow";
+import type { CodexConfigKey } from "../types";
 
 export interface UseCodexConfigActionsOptions {
   /** The Codex config's kept and keepable keys, or null (no such keys, the target is off, status not loaded). */
@@ -56,26 +57,28 @@ export function useCodexConfigActions({
   const setKept = useCallback(
     async (kept: boolean) => {
       if (!model) return;
+      const expected = [...model.kept, ...model.differing];
       if (kept) {
         const approved = await confirm({
           title: "Keep mine",
-          message: keepMessage(model.differing),
+          message: keepMessage(expected),
           confirmLabel: "keep mine",
         });
         if (!approved) return;
       }
       try {
-        await invoke("set_codex_config_kept", { kept });
+        const recorded = await invoke<CodexConfigKey[]>("set_codex_config_kept", kept ? { kept, expected } : { kept });
         setError(null);
         notify(
           kept
-            ? `Codex config: you keep ${keyNames(model.differing)}`
+            ? `Codex config: you keep ${keyNames(recorded)}`
             : `Codex config: Riggverk manages ${keyNames(model.kept)} again`,
           { tone: "ok" },
         );
         await reload();
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
+        try { await reload(); } catch { /* Keep the original error visible. */ }
       }
     },
     [model, confirm, notify, reload],
