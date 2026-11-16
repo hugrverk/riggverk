@@ -574,5 +574,110 @@ class PortableSkillBodyTests(unittest.TestCase):
         self.assertIn('playwright" install chromium', (folder / "playwright-cli.md").read_text(encoding="utf-8"))
 
 
+class PackCheckSkillRoutingTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.pack = Path(self._tmp.name) / "pack"
+        self.skills = self.pack / "skills"
+        self.skills.mkdir(parents=True)
+
+    def add_skill(self, name: str = "fixture", *, description: str = "Use when checking fixtures.", related: str = "") -> Path:
+        path = self.skills / name / "SKILL.md"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        relation = f"metadata:\n  related: {related}\n" if related else ""
+        path.write_text(
+            f"---\nname: {name}\ndescription: {description}\n{relation}---\n"
+            "# Fixture\n\nDone when: the fixture check completes.\n\n"
+            "## Harness notes\n\n### Claude Code\n\n### Codex\n\n### OpenCode\n\n### Cursor\n\n### Light harnesses\n",
+            encoding="utf-8",
+        )
+        return path
+
+    def run_pack(self) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [sys.executable, str(ROOT / "scripts/check-skill-routing.py"), "--pack", str(self.pack)],
+            cwd=ROOT, text=True, capture_output=True, check=False,
+        )
+
+    def test_valid_pack_passes(self) -> None:
+        self.add_skill()
+        result = self.run_pack()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, f"PASS: 1 pack skills checked in {self.pack}\n")
+
+    def test_description_over_limit_fails(self) -> None:
+        self.add_skill(description="Use when " + "x" * 300)
+        result = self.run_pack()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("description is 309 chars (max 300)", result.stderr)
+
+    def test_description_without_trigger_fails(self) -> None:
+        self.add_skill(description="Check fixture cases.")
+        result = self.run_pack()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("description must contain 'Use when'", result.stderr)
+
+    def test_harness_notes_wrong_order_fails(self) -> None:
+        path = self.add_skill()
+        path.write_text(path.read_text().replace("### Codex\n\n### OpenCode", "### OpenCode\n\n### Codex"), encoding="utf-8")
+        result = self.run_pack()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("harness notes must follow the order", result.stderr)
+
+    def test_related_unknown_fails_and_bundled_name_passes(self) -> None:
+        self.add_skill(related="missing")
+        result = self.run_pack()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("related skill 'missing' does not exist", result.stderr)
+        (self.skills / "fixture/SKILL.md").unlink()
+        (self.skills / "fixture").rmdir()
+        self.add_skill(related="tdd")
+        result = self.run_pack()
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_shadowed_bundled_name_warns_and_passes(self) -> None:
+        self.add_skill("tdd")
+        result = self.run_pack()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("bundled skill 'tdd' shadows this pack skill", result.stderr)
+
+    def test_routing_line_count_limit(self) -> None:
+        self.add_skill()
+        (self.pack / "routing.md").write_text(("- Use fixtures: `fixture`.\n" * 61), encoding="utf-8")
+        result = self.run_pack()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("more than 60 lines", result.stderr)
+        (self.pack / "routing.md").write_text("- Use fixtures: `fixture`.\n" * 60, encoding="utf-8")
+        result = self.run_pack()
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_routing_bundle_name_fails(self) -> None:
+        self.add_skill()
+        (self.pack / "routing.md").write_text("- Use testing: `tdd`.\n", encoding="utf-8")
+        result = self.run_pack()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("names a bundled skill", result.stderr)
+
+    def test_routing_heading_fails(self) -> None:
+        self.add_skill()
+        (self.pack / "routing.md").write_text("# Heading\n", encoding="utf-8")
+        result = self.run_pack()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('not a "- " bullet', result.stderr)
+
+    def test_missing_skills_directory_fails(self) -> None:
+        self.skills.rmdir()
+        result = self.run_pack()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("skills root not found", result.stderr)
+
+    def test_external_pack_path_has_no_traceback(self) -> None:
+        self.add_skill()
+        result = self.run_pack()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()
