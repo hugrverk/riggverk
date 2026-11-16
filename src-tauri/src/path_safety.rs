@@ -177,18 +177,20 @@ pub(crate) const fn trusted_admin_gid() -> Option<u32> {
 
 /// Why someone other than the user (`euid`) or root could change what directory `dir` holds, or
 /// `None`. `child_uid` owns the entry below `dir` on the path, if it exists: in a sticky
-/// directory only that owner (or root) can rename or remove it.
+/// directory only that owner (or root) can rename or remove it. `private_group`: the folder's
+/// group is the user's private group ([`user_private_gid`]), whose members may write it.
 #[cfg(unix)]
 pub(crate) fn folder_rule(
     dir: DirOwnership,
     child_uid: Option<u32>,
     euid: u32,
     admin_gid: Option<u32>,
+    private_group: bool,
 ) -> Result<(), &'static str> {
     if dir.uid != 0 && dir.uid != euid {
         return Err("is owned by another user");
     }
-    let trusted_group = dir.gid == 0 || Some(dir.gid) == admin_gid;
+    let trusted_group = dir.gid == 0 || Some(dir.gid) == admin_gid || private_group;
     let others_write = dir.mode & 0o002 != 0 || (dir.mode & 0o020 != 0 && !trusted_group);
     if !others_write {
         return Ok(());
@@ -201,6 +203,107 @@ pub(crate) fn folder_rule(
             Err("is writable by everyone and the entry in it is owned by another user")
         }
         _ => Ok(()),
+    }
+}
+
+/// Why the folder that holds the user's data could be changed by someone other than the user, or
+/// `None`: it must belong to the user and be writable by no one else, except the user's private
+/// group (`private_group`).
+#[cfg(unix)]
+pub(crate) fn own_folder_rule(
+    dir: DirOwnership,
+    euid: u32,
+    private_group: bool,
+) -> Result<(), &'static str> {
+    if dir.uid != euid {
+        return Err("it is not owned by you");
+    }
+    if dir.mode & 0o002 != 0 || (dir.mode & 0o020 != 0 && !private_group) {
+        return Err("it is writable by its group or by everyone");
+    }
+    Ok(())
+}
+
+/// Whether the group named `group` with `members` is the private group of the user named `user`:
+/// it carries the user's name and lists no one else.
+#[cfg(unix)]
+fn is_private_group(user: &[u8], group: &[u8], members: &[Vec<u8>]) -> bool {
+    group == user && members.iter().all(|member| member.as_slice() == user)
+}
+
+/// The user's primary group when it is the user's private group ([`is_private_group`]), as on
+/// Linux distributions that give every user one; its members can then only be the user. `None`
+/// otherwise, for example for macOS's `staff`, which every user shares. Looked up once.
+#[cfg(unix)]
+fn user_private_gid() -> Option<u32> {
+    static GID: std::sync::OnceLock<Option<u32>> = std::sync::OnceLock::new();
+    *GID.get_or_init(|| private_gid_of(crate::skill_sources::effective_uid()))
+}
+
+#[cfg(unix)]
+fn private_gid_of(uid: u32) -> Option<u32> {
+    use std::ffi::CStr;
+    let (user, gid) = with_lookup_buffer(libc::_SC_GETPW_R_SIZE_MAX, |buf| {
+        // SAFETY: `passwd` is plain data; all-zero is a valid value that getpwuid_r overwrites.
+        let mut entry: libc::passwd = unsafe { std::mem::zeroed() };
+        let mut found: *mut libc::passwd = std::ptr::null_mut();
+        // SAFETY: every pointer is valid for the call and `buf.len()` is the buffer's size.
+        let code =
+            unsafe { libc::getpwuid_r(uid, &mut entry, buf.as_mut_ptr(), buf.len(), &mut found) };
+        if code != 0 || found.is_null() {
+            return Err(code);
+        }
+        // SAFETY: on success `pw_name` is a NUL-terminated string inside `buf`, still alive.
+        let name = unsafe { CStr::from_ptr(entry.pw_name) }.to_bytes().to_vec();
+        Ok((name, entry.pw_gid))
+    })?;
+    let (group, members) = with_lookup_buffer(libc::_SC_GETGR_R_SIZE_MAX, |buf| {
+        // SAFETY: `group` is plain data; all-zero is a valid value that getgrgid_r overwrites.
+        let mut entry: libc::group = unsafe { std::mem::zeroed() };
+        let mut found: *mut libc::group = std::ptr::null_mut();
+        // SAFETY: every pointer is valid for the call and `buf.len()` is the buffer's size.
+        let code =
+            unsafe { libc::getgrgid_r(gid, &mut entry, buf.as_mut_ptr(), buf.len(), &mut found) };
+        if code != 0 || found.is_null() {
+            return Err(code);
+        }
+        // SAFETY: on success `gr_name` is a NUL-terminated string and `gr_mem` a NULL-terminated
+        // array of them, all inside `buf`, still alive.
+        let (name, members) = unsafe {
+            let name = CStr::from_ptr(entry.gr_name).to_bytes().to_vec();
+            let mut members = Vec::new();
+            let mut cursor = entry.gr_mem;
+            while !cursor.is_null() && !(*cursor).is_null() {
+                members.push(CStr::from_ptr(*cursor).to_bytes().to_vec());
+                cursor = cursor.add(1);
+            }
+            (name, members)
+        };
+        Ok((name, members))
+    })?;
+    is_private_group(&user, &group, &members).then_some(gid)
+}
+
+/// Runs a reentrant user or group lookup with a buffer of the size `sysconf(size_key)` suggests,
+/// doubled while the call answers `ERANGE`. `None` when the entry is missing or the call fails.
+#[cfg(unix)]
+fn with_lookup_buffer<T>(
+    size_key: libc::c_int,
+    mut lookup: impl FnMut(&mut [libc::c_char]) -> Result<T, libc::c_int>,
+) -> Option<T> {
+    // SAFETY: sysconf takes a plain integer and has no preconditions.
+    let suggested = unsafe { libc::sysconf(size_key) };
+    let mut size = usize::try_from(suggested)
+        .ok()
+        .filter(|size| *size > 0)
+        .unwrap_or(1024);
+    loop {
+        let mut buf = vec![0 as libc::c_char; size];
+        match lookup(&mut buf) {
+            Ok(value) => return Some(value),
+            Err(libc::ERANGE) if size < 1 << 20 => size *= 2,
+            Err(_) => return None,
+        }
     }
 }
 
@@ -242,7 +345,15 @@ fn check_chain_above(path: &Path, label: &str) -> Result<(), String> {
                 gid: meta.gid(),
                 mode: meta.mode(),
             };
-            folder_rule(ownership, child_uid, euid, trusted_admin_gid()).map_err(|why| {
+            let private_group = Some(ownership.gid) == user_private_gid();
+            folder_rule(
+                ownership,
+                child_uid,
+                euid,
+                trusted_admin_gid(),
+                private_group,
+            )
+            .map_err(|why| {
                 format!(
                     "refusing {label} {}: the folder {} above it {why}; it and the folders \
                      above it must belong to you or root and not be writable by others",
@@ -257,8 +368,8 @@ fn check_chain_above(path: &Path, label: &str) -> Result<(), String> {
 }
 
 /// Refuses the existing folder `dir` that holds the user's data (data folder, backup folder)
-/// unless it belongs to the user and only the user can write it, and no folder above it can be
-/// changed by someone else ([`check_folders_above`]).
+/// unless it belongs to the user and only the user (or the user's private group) can write it, and
+/// no folder above it can be changed by someone else ([`check_folders_above`]).
 pub fn check_private_folder(dir: &Path, label: &str) -> Result<(), String> {
     #[cfg(unix)]
     {
@@ -268,14 +379,14 @@ pub fn check_private_folder(dir: &Path, label: &str) -> Result<(), String> {
         if meta.file_type().is_symlink() || !meta.is_dir() {
             return Err(format!("{label} is not a folder: {}", dir.display()));
         }
-        let why = if meta.uid() != crate::skill_sources::effective_uid() {
-            Some("it is not owned by you")
-        } else if meta.mode() & 0o022 != 0 {
-            Some("it is writable by its group or by everyone")
-        } else {
-            None
+        let ownership = DirOwnership {
+            uid: meta.uid(),
+            gid: meta.gid(),
+            mode: meta.mode(),
         };
-        if let Some(why) = why {
+        let euid = crate::skill_sources::effective_uid();
+        let private_group = Some(ownership.gid) == user_private_gid();
+        if let Err(why) = own_folder_rule(ownership, euid, private_group) {
             return Err(format!(
                 "refusing {label} {}: {why}; it must belong to you and not be writable by others",
                 dir.display()
@@ -307,7 +418,7 @@ mod tests {
     fn folder_rule_accepts_only_folders_the_user_or_root_controls() {
         let euid = 501;
         let dir = |uid, gid, mode| DirOwnership { uid, gid, mode };
-        let rule = |d, child, admin| folder_rule(d, child, euid, admin);
+        let rule = |d, child, admin| folder_rule(d, child, euid, admin, false);
         assert_eq!(rule(dir(euid, 20, 0o755), None, None), Ok(()));
         assert_eq!(rule(dir(0, 0, 0o755), Some(euid), None), Ok(()));
         // Another user's folder: cannot be created here, so only the rule is tested.
@@ -336,6 +447,85 @@ mod tests {
         assert_eq!(rule(dir(0, 0, 0o1777), None, None), Ok(()));
         assert!(rule(dir(0, 0, 0o1777), Some(502), None).is_err());
         assert!(rule(dir(euid, 20, 0o1775), Some(502), None).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn the_users_private_group_may_write_the_folders() {
+        let euid = 1000;
+        let dir = |uid, gid, mode| DirOwnership { uid, gid, mode };
+        // Above the folder: group-writable passes for the user's private group only.
+        assert_eq!(
+            folder_rule(dir(euid, 1000, 0o775), None, euid, None, true),
+            Ok(())
+        );
+        assert_eq!(
+            folder_rule(dir(euid, 1000, 0o775), None, euid, None, false),
+            Err("is writable by its group or by everyone")
+        );
+        assert_eq!(
+            folder_rule(dir(euid, 1000, 0o777), None, euid, None, true),
+            Err("is writable by its group or by everyone")
+        );
+        // The folder itself: the same, and world write stays refused.
+        assert_eq!(own_folder_rule(dir(euid, 1000, 0o775), euid, true), Ok(()));
+        assert_eq!(own_folder_rule(dir(euid, 1000, 0o700), euid, false), Ok(()));
+        assert_eq!(
+            own_folder_rule(dir(euid, 1000, 0o775), euid, false),
+            Err("it is writable by its group or by everyone")
+        );
+        assert_eq!(
+            own_folder_rule(dir(euid, 1000, 0o777), euid, true),
+            Err("it is writable by its group or by everyone")
+        );
+        assert_eq!(
+            own_folder_rule(dir(euid, 1000, 0o757), euid, true),
+            Err("it is writable by its group or by everyone")
+        );
+        assert_eq!(
+            own_folder_rule(dir(0, 1000, 0o700), euid, true),
+            Err("it is not owned by you")
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_private_group_has_the_users_name_and_no_other_member() {
+        let user = b"alex".to_vec();
+        assert!(is_private_group(&user, b"alex", &[]));
+        assert!(is_private_group(&user, b"alex", &[b"alex".to_vec()]));
+        assert!(!is_private_group(&user, b"alex", &[b"sam".to_vec()]));
+        assert!(!is_private_group(&user, b"staff", &[]));
+        assert!(!is_private_group(&user, b"users", &[b"alex".to_vec()]));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn the_shared_staff_group_is_not_a_private_group() {
+        use std::os::unix::fs::PermissionsExt;
+        assert_ne!(
+            user_private_gid(),
+            Some(20),
+            "staff is shared by every user"
+        );
+        let base = temp("staff-group");
+        let folder = base.join("data");
+        fs::create_dir_all(&folder).unwrap();
+        std::os::unix::fs::chown(&folder, None, Some(20)).unwrap();
+        fs::set_permissions(&base, fs::Permissions::from_mode(0o755)).unwrap();
+        fs::set_permissions(&folder, fs::Permissions::from_mode(0o775)).unwrap();
+        let err = check_private_folder(&folder, "data folder").expect_err("staff can write it");
+        assert!(
+            err.contains("writable by its group or by everyone"),
+            "{err}"
+        );
+        let err = check_folders_above(&folder.join("child"), "data folder")
+            .expect_err("staff can write the folder above");
+        assert!(
+            err.contains("writable by its group or by everyone"),
+            "{err}"
+        );
+        let _ = fs::remove_dir_all(&base);
     }
 
     #[cfg(unix)]
@@ -412,7 +602,7 @@ mod tests {
         use std::os::unix::fs::PermissionsExt;
         let base = temp("admin-group");
         let folder = base.join("Cellar/tool");
-        fs::create_dir_all(&folder).unwrap();
+        crate::test_env::create_dir_all(&folder).unwrap();
         let cellar = base.join("Cellar");
         // The Homebrew layout: the user's folder, group admin, writable by the group.
         if std::os::unix::fs::chown(&cellar, None, Some(80)).is_err() {
