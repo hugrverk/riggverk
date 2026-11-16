@@ -756,13 +756,15 @@ pub(crate) fn effective_uid() -> u32 {
     unsafe { geteuid() }
 }
 
-/// Why a pack entry cannot be trusted: writable by its group or by everyone, or owned by someone
-/// else than the current user (Unix); a symlink or junction (Windows). `what` names the entry in the reason.
+/// Why a pack entry cannot be trusted: writable by everyone or by a group other than the user's
+/// private group ([`crate::path_safety::user_private_gid`]), or owned by someone else than the
+/// current user (Unix); a symlink or junction (Windows). `what` names the entry in the reason.
 pub(crate) fn check_trusted(meta: &fs::Metadata, what: &str) -> Result<(), String> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::{MetadataExt, PermissionsExt};
-        if meta.permissions().mode() & 0o022 != 0 {
+        let private_group = Some(meta.gid()) == crate::path_safety::user_private_gid();
+        if crate::path_safety::others_can_write(meta.permissions().mode(), private_group) {
             return Err(format!(
                 "refusing {what}: it is writable by its group or by everyone; run chmod go-w on it"
             ));
@@ -917,7 +919,7 @@ fn sorted_dirs(dir: &Path) -> Result<Vec<(String, PathBuf)>, String> {
 }
 
 /// Refuses the pack on a symlink or any other link-like entry below `dir`, on an entry that is
-/// writable by its group or by everyone or not owned by the current user (Unix), and on a tree too
+/// writable by others or not owned by the current user ([`check_trusted`], Unix), and on a tree too
 /// big to read. Dot entries (`.git`) are never read, so they are not walked.
 fn reject_links_below(
     dir: &Path,
@@ -1452,5 +1454,43 @@ mod tests {
         for bad in ["", "-a", "A", "a_b", "a.b", ".git", "a b", &"a".repeat(65)] {
             assert!(!valid_pack_name(bad), "{bad}");
         }
+    }
+
+    /// A pack cloned with umask 002 is writable by its group: that passes only when the group is
+    /// the user's private group (Linux distributions that give every user one), never for a
+    /// shared group such as macOS's `staff`, and writable by everyone never passes.
+    #[cfg(unix)]
+    #[test]
+    fn a_pack_writable_by_the_users_private_group_only_is_trusted() {
+        use std::os::unix::fs::{MetadataExt, PermissionsExt};
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let pack = std::env::temp_dir().join(format!("aw-pack-trust-{nonce}"));
+        fs::create_dir_all(&pack).unwrap();
+        let check = |mode| {
+            fs::set_permissions(&pack, fs::Permissions::from_mode(mode)).unwrap();
+            check_trusted(&fs::symlink_metadata(&pack).unwrap(), "a pack folder")
+        };
+        assert_eq!(check(0o755), Ok(()));
+        let group = fs::metadata(&pack).unwrap().gid();
+        let private = crate::path_safety::user_private_gid() == Some(group);
+        assert_eq!(
+            check(0o775).is_ok(),
+            private,
+            "group {group}, private: {private}"
+        );
+        let err = check(0o777).expect_err("writable by everyone");
+        assert!(
+            err.contains("writable by its group or by everyone"),
+            "{err}"
+        );
+        let err = check(0o757).expect_err("writable by everyone");
+        assert!(
+            err.contains("writable by its group or by everyone"),
+            "{err}"
+        );
+        let _ = fs::remove_dir_all(&pack);
     }
 }

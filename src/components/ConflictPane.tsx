@@ -137,6 +137,12 @@ function BundledBody({ reviewed, unit }: { reviewed: TakeBundledUnit; unit: File
   return (
     <>
       <Kv items={items} aria-label="Take bundled summary" />
+      {(reviewed.flags ?? []).map(line => (
+        // Before the diff: it can be withheld, too large or cut short, and this is what the pack's file does on its own.
+        <p key={line} className="c-warn pane-note" role="status">
+          This pack skill sets keys the harness acts on without asking: {line}
+        </p>
+      ))}
       {keeps && (
         <p className="c-warn pane-note" role="status">
           You keep your version now. After taking the {source === "bundled" ? "bundled" : "pack"} one Riggverk manages it again; rolling back restores your file but not that choice.

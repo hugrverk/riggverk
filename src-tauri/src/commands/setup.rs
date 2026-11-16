@@ -64,7 +64,7 @@ fn setup_backup_dir(transaction_id: &str) -> Result<PathBuf, String> {
     // on a fresh install (or after an app identifier change).
     crate::safe_filesystem::create_private_root_directory_all_no_symlinks(&root)?;
     #[cfg(unix)]
-    crate::commands::backups::tighten_legacy_backup_permissions(&root);
+    crate::commands::backups::tighten_legacy_backup_permissions(&root)?;
     crate::safe_filesystem::create_private_directory_all_no_symlinks(&dir, &root)?;
     Ok(dir)
 }
@@ -4051,7 +4051,7 @@ mod tests {
         let _guard = guard::lock();
         let home = std::env::temp_dir().join("aw-setup-backup-chain");
         let _ = fs::remove_dir_all(&home);
-        fs::create_dir_all(&home).expect("create dir");
+        crate::test_env::create_dir_all(&home).expect("create dir");
         let _restore = guard::EnvRestore::capture();
         set_test_user_dirs(&home);
         unsafe {
@@ -4068,6 +4068,37 @@ mod tests {
         let dir = setup_backup_dir("txn-chain-test").expect("backup dir despite missing parents");
         assert!(dir.is_dir(), "transaction backup dir should exist");
         assert!(dir.ends_with("setup/txn-chain-test"));
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn setup_backup_dir_reports_a_backup_entry_it_cannot_make_private() {
+        use std::os::unix::fs::PermissionsExt;
+        let _guard = guard::lock();
+        let _restore = guard::EnvRestore::capture();
+        let home =
+            std::env::temp_dir().join(format!("aw-setup-backup-tighten-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&home);
+        let root = home.join("backups");
+        crate::test_env::create_dir_all(root.join("20260101-000000")).expect("legacy run");
+        // Owner write-only: it cannot be opened to drop the group and other bits.
+        let stuck = root.join("20260101-000000/config");
+        fs::write(&stuck, b"old").expect("legacy file");
+        fs::set_permissions(&stuck, fs::Permissions::from_mode(0o266)).expect("chmod");
+        set_test_user_dirs(&home);
+        unsafe { std::env::set_var("RIGGVERK_BACKUP_DIR", root.to_string_lossy().as_ref()) };
+
+        let error = setup_backup_dir("txn-tighten-test").expect_err("an entry left open");
+        assert!(error.contains("config"), "{error}");
+
+        fs::set_permissions(&stuck, fs::Permissions::from_mode(0o644)).expect("chmod");
+        let dir = setup_backup_dir("txn-tighten-test").expect("every entry made private");
+        assert!(dir.is_dir());
+        assert_eq!(
+            fs::metadata(&stuck).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
         let _ = fs::remove_dir_all(&home);
     }
 

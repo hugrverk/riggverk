@@ -636,7 +636,7 @@ mod tests {
         assert!(env.read_claude().contains(SECTION_HEADING));
 
         // The pack turns unreadable: its installed skill is held, and its routing is not read.
-        set_mode(&env.pack_dir("mine"), 0o775);
+        set_mode(&env.pack_dir("mine"), 0o777);
         if cfg!(unix) {
             let sources = env.sources();
             assert_eq!(

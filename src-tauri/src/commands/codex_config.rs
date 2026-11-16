@@ -13,7 +13,7 @@ use super::rules::user_home;
 use super::setup::{apply_planned_artifacts, SetupResult};
 use super::workspace::{setup_workspace_target_path, workspace_target_for_write};
 use crate::apply_progress::ProgressReporter;
-use crate::codex_config_keep::DefaultKey;
+use crate::codex_config_keep::{DefaultKey, KeyValue};
 use crate::setup_lifecycle::SetupSurfaceId;
 use crate::setup_transaction;
 
@@ -33,7 +33,10 @@ fn ensure_surface_enabled() -> Result<(), String> {
 /// Keeps (`kept = true`) the enforced keys whose installed value differs from the bundled config,
 /// or hands every key back to Riggverk (`kept = false`).
 #[tauri::command(async)]
-pub fn set_codex_config_kept(kept: bool) -> Result<(), String> {
+pub fn set_codex_config_kept(
+    kept: bool,
+    expected: Option<Vec<KeyValue>>,
+) -> Result<Vec<KeyValue>, String> {
     // Writes next to files an apply may also write: wait for a running mutation instead of
     // interleaving with it.
     let _mutation = crate::mutation_lock::acquire()?;
@@ -42,9 +45,11 @@ pub fn set_codex_config_kept(kept: bool) -> Result<(), String> {
     let _guard = crate::setup_mutation_guard::try_acquire_setup_mutation_guard()?;
     if kept {
         ensure_surface_enabled()?;
-        crate::codex_config_keep::keep(&workspace_root, &home).map(|_| ())
+        let expected = expected.ok_or("review the Codex config values before keeping them")?;
+        crate::codex_config_keep::keep(&workspace_root, &home, &expected)
     } else {
-        crate::codex_config_keep::hand_back(&workspace_root)
+        crate::codex_config_keep::hand_back(&workspace_root)?;
+        Ok(Vec::new())
     }
 }
 

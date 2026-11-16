@@ -832,6 +832,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn copilots_two_line_output_with_a_trailing_dot_gives_a_clean_version() {
+        let _guard = crate::test_env::guard::lock();
         let bin = Bin::new("copilot");
         // Exactly what `copilot --version` printed in the live check.
         bin.add(
@@ -853,6 +854,9 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn pi_kilo_and_agy_print_a_version_that_is_read() {
+        // The probe runs from a folder in the app data folder, which follows HOME and XDG_DATA_HOME:
+        // tests that point those at a temporary home and remove it must not run meanwhile.
+        let _guard = crate::test_env::guard::lock();
         for (id, program, output, expected) in [
             (HarnessId::Pi, "pi", "1.3.0", "1.3.0"),
             (HarnessId::Kilo, "kilo", "7.8.12", "7.8.12"),

@@ -1255,7 +1255,7 @@ mod tests {
         let env = Env::new("writable");
         env.pack_skill("loose", None, "loose-skill", "x", &[]);
         env.pack_skill("tight", None, "tight-skill", "x", &[]);
-        set_mode(&env.packs().join("loose"), 0o775);
+        set_mode(&env.packs().join("loose"), 0o777);
 
         let sources = env.sources();
         let loose = sources
@@ -1287,6 +1287,23 @@ mod tests {
             .expect("loose")
             .refused
             .is_some());
+
+        // Writable by its group: refused unless that is the user's private group.
+        set_mode(&env.packs().join("loose"), 0o775);
+        let group = std::os::unix::fs::MetadataExt::gid(
+            &fs::metadata(env.packs().join("loose")).expect("pack"),
+        );
+        let private = crate::path_safety::user_private_gid() == Some(group);
+        let refused = env
+            .sources()
+            .packs()
+            .iter()
+            .find(|p| p.name == "loose")
+            .expect("loose")
+            .refused
+            .is_some();
+        assert_eq!(refused, !private, "group {group}");
+        set_mode(&env.packs().join("loose"), 0o757);
 
         let result = env.apply();
         assert!(result.success, "install: {}", result.message);
@@ -1321,11 +1338,11 @@ mod tests {
 
         // Each of these is a folder or file a pack-mate could rewrite after the review.
         let loose: [(&str, PathBuf, u32, u32); 5] = [
-            ("skills", pack.join("skills"), 0o775, 0o755),
+            ("skills", pack.join("skills"), 0o777, 0o755),
             ("skill folder", skill.clone(), 0o757, 0o755),
-            ("nested folder", skill.join("notes"), 0o775, 0o755),
+            ("nested folder", skill.join("notes"), 0o777, 0o755),
             ("SKILL.md", skill.join("SKILL.md"), 0o666, 0o644),
-            ("nested file", skill.join("notes/a.md"), 0o664, 0o644),
+            ("nested file", skill.join("notes/a.md"), 0o646, 0o644),
         ];
         for (label, path, bad, good) in loose {
             set_mode(&path, bad);
@@ -1352,7 +1369,7 @@ mod tests {
         let result = env.apply();
         assert!(result.success, "install: {}", result.message);
 
-        set_mode(&env.packs(), 0o775);
+        set_mode(&env.packs(), 0o777);
         let sources = env.sources();
         assert!(sources.packs().is_empty());
         assert!(
@@ -2031,6 +2048,44 @@ mod tests {
         };
         assert_eq!(source_of("my-checklist"), Some("pack:mine".to_string()));
         assert_eq!(source_of("tdd"), None, "a bundled skill stays bundled");
+    }
+
+    /// The review of taking the pack's version names the keys the harness acts on without asking,
+    /// even when the diff itself is withheld because the text holds a private-key marker.
+    #[test]
+    fn the_take_bundled_review_names_the_privileged_keys_of_a_pack_skill_whose_diff_is_withheld() {
+        let env = Env::new("take-flags");
+        let text = "---\nname: s\ndescription: d\nhooks:\n  PreToolUse:\n    - matcher: Bash\n---\n# S\n\n\
+                    -----BEGIN dummy PRIVATE KEY-----\n";
+        let skills = env.pack("p").join("skills");
+        fs::create_dir_all(skills.join("s")).expect("skill dir");
+        fs::write(skills.join("s/SKILL.md"), text).expect("SKILL.md");
+        Env::tighten(&skills);
+        let installed = env.root(SkillRoot::Claude).join("s");
+        fs::create_dir_all(&installed).expect("installed dir");
+        fs::write(installed.join("SKILL.md"), "my own s\n").expect("installed copy");
+
+        let preview = crate::commands::preview_take_bundled(
+            "skills".to_string(),
+            vec!["skill:claude:s".to_string()],
+        )
+        .expect("preview");
+        let unit = &preview.units[0];
+        assert_eq!(unit.source, Some("pack:p".to_string()));
+        let entry = unit
+            .diff
+            .files
+            .iter()
+            .find(|entry| entry.rel == "SKILL.md")
+            .expect("SKILL.md entry");
+        assert_eq!(entry.kind, crate::file_conflicts::DiffKind::Withheld);
+        assert!(
+            unit.flags.iter().any(
+                |line| line.contains("hooks:") && line.contains("runs commands without asking")
+            ),
+            "{:?}",
+            unit.flags
+        );
     }
 
     impl Env {
