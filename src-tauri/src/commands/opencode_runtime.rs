@@ -5879,6 +5879,8 @@ mod tests {
         cleanup(&open);
         let cli = health.cli.as_ref().expect("cli health");
         assert_eq!(cli.status, "missing");
+        // The harness header (harnessHeader.ts) tells this case apart by the start of the detail.
+        assert!(cli.detail.starts_with("found at "), "{}", cli.detail);
         assert!(
             cli.detail.contains(&stub.display().to_string()),
             "{}",

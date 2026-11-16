@@ -67,6 +67,21 @@ describe("harnessSubline", () => {
     );
   });
 
+  it("tells an OpenCode CLI that was found but is not used apart from a missing one", () => {
+    const cli = (detail: string) => ({
+      harness: "opencode" as const,
+      health: { cli: { status: "missing", version: null, major: null, detail } } as OpenCodeRuntimeHealth,
+    });
+    const notUsed = cli("found at /opt/tools/opencode, but not used: it or a folder above it can be changed by another user");
+    expect(harnessSubline({ home: "~/.config/opencode", skills: null, runtime: notUsed, dataFolderOk: true })).toBe(
+      "~/.config/opencode · CLI found, not used",
+    );
+    const missing = cli("not found; install OpenCode 1.x");
+    expect(harnessSubline({ home: "~/.config/opencode", skills: null, runtime: missing, dataFolderOk: true })).toBe(
+      "~/.config/opencode · CLI not found",
+    );
+  });
+
   it("tells the CLI of a light harness", () => {
     const found = { harness: "pi" as const, health: { cli: { status: "found", version: "1.3.0", source: "path", detail: "" } } as LightRuntimeHealth };
     expect(harnessSubline({ home: "~/.pi/agent", skills: null, runtime: found, dataFolderOk: true })).toBe("~/.pi/agent · CLI 1.3.0");
