@@ -181,10 +181,16 @@ step "rust clippy"
 cargo clippy --manifest-path src-tauri/Cargo.toml --locked --all-targets -- -D warnings
 
 step "rust tests"
+# RELEASE_CHECK_RUST_TESTS=doc runs only the doc tests: CI runs the rest with cargo-nextest
+# (.github/workflows/ci.yml), one process per test and several at a time.
+rust_test_args=(-- --test-threads=1)
+if [ "${RELEASE_CHECK_RUST_TESTS:-all}" = "doc" ]; then
+  rust_test_args=(--doc)
+fi
 # residue-allow-begin: the earlier aliases must not leak into the test run
 env -u RIGGVERK_SMOKE -u RIGGVERK_WORKSPACE_PATH -u RIGGVERK_BACKUP_DIR \
   -u AGENT_WORKSPACE_PATH -u AGENT_WORKSPACE_BACKUP_DIR \
-  cargo test --manifest-path src-tauri/Cargo.toml --locked -- --test-threads=1
+  cargo test --manifest-path src-tauri/Cargo.toml --locked "${rust_test_args[@]}"
 # residue-allow-end
 
 step "real pre-manifest source-commit upgrade smoke"
