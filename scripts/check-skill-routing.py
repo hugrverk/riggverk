@@ -3,7 +3,9 @@
 
 from __future__ import annotations
 
+import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -325,12 +327,12 @@ def split_list(raw: str) -> list[str]:
     return [item.strip().strip('"').strip("'") for item in value.split(",") if item.strip()]
 
 
-def discover_skills() -> dict[str, Path]:
-    if not SKILLS_ROOT.is_dir():
-        fail(f"skills root not found: {SKILLS_ROOT}")
+def discover_skills(skills_root: Path = SKILLS_ROOT) -> dict[str, Path]:
+    if not skills_root.is_dir():
+        fail(f"skills root not found: {skills_root}")
 
     discovered: dict[str, Path] = {}
-    for entry in sorted(SKILLS_ROOT.iterdir()):
+    for entry in sorted(skills_root.iterdir()):
         if not entry.is_dir():
             continue
         root_md = entry / "SKILL.md"
@@ -387,17 +389,17 @@ def validate_skill_metadata(discovered: dict[str, Path]) -> None:
             fail(f"{rel(path)}: disable-model-invocation must be 'true' when present, found {invoke!r}")
 
 
-def validate_related(discovered: dict[str, Path]) -> None:
+def validate_related(discovered: dict[str, Path], additional_names: set[str] | None = None) -> None:
     """Every `related:` name must be a real skill other than the skill itself."""
     for name, path in discovered.items():
         for related in split_list(parse_frontmatter(path).get("related", "")):
             if related == name:
                 fail(f"{rel(path)}: {name} lists itself in related")
-            if related not in discovered:
+            if related not in discovered and related not in (additional_names or set()):
                 fail(f"{rel(path)}: related skill {related!r} does not exist")
 
 
-def validate_descriptions(discovered: dict[str, Path]) -> None:
+def validate_descriptions(discovered: dict[str, Path], *, catalog_budget: bool = True) -> None:
     """Lint the description standard documented in docs/SKILLS.md."""
     total = 0
     for name, path in discovered.items():
@@ -413,7 +415,7 @@ def validate_descriptions(discovered: dict[str, Path]) -> None:
         if not DONE_WHEN_RE.search(path.read_text(encoding="utf-8")):
             fail(f"{rel(path)}: missing a one-line 'Done when: ...' exit criterion")
         total += len(description)
-    if total > CATALOG_DESCRIPTION_BUDGET:
+    if catalog_budget and total > CATALOG_DESCRIPTION_BUDGET:
         fail(f"skill descriptions total {total} chars (budget {CATALOG_DESCRIPTION_BUDGET})")
 
 
@@ -616,7 +618,7 @@ def validate_allowed_tools(path: Path, value: str) -> None:
             )
 
 
-def validate_spec_frontmatter(path: Path, frontmatter: str) -> None:
+def validate_spec_frontmatter(path: Path, frontmatter: str, *, bundled_rules: bool = True) -> None:
     """A bundled skill stays valid under the Agent Skills spec, apart from the documented Claude keys."""
     allowed = (*SPEC_KEYS, *CLAUDE_EXTENSION_KEYS)
     unexpected = sorted(set(frontmatter_keys(frontmatter)) - set(allowed))
@@ -627,7 +629,7 @@ def validate_spec_frontmatter(path: Path, frontmatter: str) -> None:
         )
     fields = parse_fields(frontmatter)
     validate_allowed_tools(path, fields.get("allowed-tools", ""))
-    if fields.get("license") != BUNDLED_LICENSE:
+    if bundled_rules and fields.get("license") != BUNDLED_LICENSE:
         fail(f"{rel(path)}: bundled skills declare 'license: {BUNDLED_LICENSE}'")
     compatibility = fields.get("compatibility")
     if compatibility is not None and (len(compatibility) > COMPATIBILITY_MAX_CHARS or not plain_scalar_safe(compatibility)):
@@ -636,23 +638,25 @@ def validate_spec_frontmatter(path: Path, frontmatter: str) -> None:
     if len(nested_keys) != len(set(nested_keys)):
         fail(f"{rel(path)}: duplicate metadata keys {sorted({k for k in nested_keys if nested_keys.count(k) > 1})}")
     metadata = parse_metadata(frontmatter)
-    unknown = sorted(set(metadata) - set(BUNDLED_METADATA_KEYS))
-    missing = sorted(set(("category", "risk", "targets")) - set(metadata))
+    allowed_metadata = BUNDLED_METADATA_KEYS if bundled_rules else RIGGVERK_METADATA_KEYS
+    unknown = sorted(set(metadata) - set(allowed_metadata))
+    missing = sorted(set(("category", "risk", "targets")) - set(metadata)) if bundled_rules else []
     if unknown or missing:
-        fail(f"{rel(path)}: metadata keys must be from {list(BUNDLED_METADATA_KEYS)} and include category, risk and targets (unknown {unknown}, missing {missing})")
+        fail(f"{rel(path)}: metadata keys must be from {list(allowed_metadata)} and include category, risk and targets (unknown {unknown}, missing {missing})")
     for key, value in metadata.items():
         if not value or not plain_scalar_safe(value):
             fail(f"{rel(path)}: metadata.{key} must be a non-empty string on one safe plain YAML line")
 
 
-def validate_canonical_skill_files(discovered: dict[str, Path]) -> None:
+def validate_canonical_skill_files(discovered: dict[str, Path], skills_root: Path = SKILLS_ROOT, *, bundled_rules: bool = True) -> None:
     """Every harness installs the canonical SKILL.md byte for byte, so it must be clean as written."""
-    for retired in RETIRED_ADAPTER_PATHS:
-        if retired.exists():
-            fail(f"{rel(retired)} is retired: harnesses install skills/<name>/SKILL.md directly; delete it")
+    if bundled_rules:
+        for retired in RETIRED_ADAPTER_PATHS:
+            if retired.exists():
+                fail(f"{rel(retired)} is retired: harnesses install skills/<name>/SKILL.md directly; delete it")
     for name, path in discovered.items():
         for candidate in (path, *path.parents):
-            if candidate == SKILLS_ROOT.parent:
+            if candidate == skills_root.parent:
                 break
             if candidate.is_symlink():
                 fail(f"{rel(candidate)}: refusing symlink skill path")
@@ -663,7 +667,7 @@ def validate_canonical_skill_files(discovered: dict[str, Path]) -> None:
         duplicated = sorted({key for key in keys if keys.count(key) > 1})
         if duplicated:
             fail(f"{rel(path)}: duplicate frontmatter keys {duplicated}")
-        validate_spec_frontmatter(path, frontmatter)
+        validate_spec_frontmatter(path, frontmatter, bundled_rules=bundled_rules)
         validate_harness_notes(path, frontmatter, body)
 
 
@@ -689,6 +693,95 @@ def validate_no_sibling_references(discovered: dict[str, Path]) -> None:
                         f"{rel(file)}:{number}: references the files of skill {match.group(1)!r}; "
                         "a skill is installed on its own, so give it its own copy"
                     )
+
+
+def validate_pack_routing(pack_dir: Path, own_names: set[str], bundled_names: set[str]) -> None:
+    path = pack_dir / "routing.md"
+    try:
+        stat = path.lstat()
+    except FileNotFoundError:
+        return
+    except OSError:
+        fail(f"{rel(path)}: routing.md cannot be read safely")
+    if path.is_symlink():
+        fail(f"{rel(path)}: routing.md is a symlink")
+    if not path.is_file():
+        fail(f"{rel(path)}: routing.md is not a regular file")
+    if hasattr(os, "geteuid") and hasattr(stat, "st_uid") and stat.st_uid != os.geteuid():
+        fail(f"{rel(path)}: routing.md is not owned by the current user")
+    if hasattr(stat, "st_mode") and stat.st_mode & 0o022:
+        fail(f"{rel(path)}: routing.md is writable by group or others")
+    raw = path.read_bytes()
+    if len(raw) > 12 * 1024:
+        fail(f"{rel(path)}: routing.md is larger than 12288 bytes")
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        fail(f"{rel(path)}: routing.md is not UTF-8 text")
+    text = text.removeprefix("\ufeff")
+    raw_lines = text.split("\n")
+    lines = raw_lines[:-1] if text.endswith("\n") else raw_lines
+    if len(lines) > 60:
+        fail(f"{rel(path)}: routing.md has more than 60 lines")
+    for number, raw_line in enumerate(lines, 1):
+        line = raw_line.removesuffix("\r")
+        if not line.strip():
+            continue
+        line = line.rstrip()
+        def refuse(reason: str) -> None:
+            fail(f"{rel(path)}: routing.md line {number} {reason}")
+        if len(line) > 240:
+            refuse("is longer than 240 characters")
+        if any(ord(c) < 32 and c != "\t" or _routing_invisible(c) for c in line):
+            refuse("holds a control character")
+        if not line.startswith("- "):
+            refuse('is not a "- " bullet at the start of the line')
+        if line[2:].lstrip().startswith("#"):
+            refuse("holds a heading")
+        if "<" in line:
+            refuse("holds markup (<)")
+        if "@" in line:
+            refuse("holds an @ (a Claude Code file import)")
+        if "```" in line or "~~~" in line:
+            refuse("holds a code fence")
+        spans = re.split("`", line)
+        if len(spans) % 2 == 0 or any(not span for span in spans[1::2]):
+            refuse("has unpaired or empty backticks")
+        names = spans[1::2]
+        if not names:
+            refuse("names no skill in backticks")
+        if any(name in bundled_names for name in names):
+            refuse("names a bundled skill")
+        if any(name not in own_names for name in names):
+            refuse("names a skill that is not an active skill of this pack")
+
+
+def _routing_invisible(char: str) -> bool:
+    code = ord(char)
+    return (code in {0x00AD, 0x061C, 0x06DD, 0x070F, 0x08E2, 0x180E, 0x034F, 0x2800, 0x3164, 0xFFA0}
+            or 0x0600 <= code <= 0x0605 or 0x0890 <= code <= 0x0891 or 0x200B <= code <= 0x200F
+            or 0x2028 <= code <= 0x202E or 0x2060 <= code <= 0x206F or code == 0xFEFF
+            or 0xFFF9 <= code <= 0xFFFB or 0x115F <= code <= 0x1160 or 0x17B4 <= code <= 0x17B5
+            or 0x180B <= code <= 0x180F or 0xFE00 <= code <= 0xFE0F or 0xE0100 <= code <= 0xE01EF
+            or code in {0x110BD, 0x110CD} or 0x13430 <= code <= 0x1343F
+            or 0x1BCA0 <= code <= 0x1BCA3 or 0x1D173 <= code <= 0x1D17A
+            or code == 0xE0001 or 0xE0020 <= code <= 0xE007F)
+
+
+def check_pack(pack_dir: Path, shown_dir: str) -> None:
+    skills_root = pack_dir / "skills"
+    pack_skills = discover_skills(skills_root)
+    bundled = discover_skills()
+    names = set(pack_skills)
+    for name, path in pack_skills.items():
+        if name in bundled:
+            print(f"WARN: {rel(path)}: bundled skill '{name}' shadows this pack skill; the app never installs it", file=sys.stderr)
+    validate_related(pack_skills, set(bundled))
+    validate_descriptions(pack_skills, catalog_budget=False)
+    validate_canonical_skill_files(pack_skills, skills_root, bundled_rules=False)
+    validate_no_sibling_references(pack_skills)
+    validate_pack_routing(pack_dir, names, set(bundled))
+    print(f"PASS: {len(pack_skills)} pack skills checked in {shown_dir}")
 
 
 def validate_required_support_files(discovered: dict[str, Path]) -> None:
@@ -858,6 +951,12 @@ def scan_repo_for_removed_skills() -> None:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--pack", metavar="DIR")
+    args = parser.parse_args()
+    if args.pack is not None:
+        check_pack(Path(args.pack), args.pack)
+        return
     discovered_map = discover_skills()
     discovered = set(discovered_map.keys())
 
