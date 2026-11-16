@@ -122,9 +122,10 @@ pub(crate) fn is_executable_file(path: &Path, pathext: Option<&str>) -> bool {
 }
 
 /// On Unix, the file `path` runs, links resolved, or `None` when it or its folder is owned by
-/// someone other than root or the current user or is writable by its group or by everyone: another
-/// local user could then choose what runs. Run the returned path, so a link changed later is not
-/// followed. Elsewhere, `path` as it is.
+/// someone other than root or the current user or is writable by its group or by everyone, or a
+/// folder above them can be changed by another user ([`crate::path_safety::check_folders_above`]):
+/// another local user could then choose what runs. Run the returned path, so a link changed later
+/// is not followed. Elsewhere, `path` as it is.
 pub(crate) fn trusted_executable(path: &Path) -> Option<PathBuf> {
     #[cfg(unix)]
     {
@@ -138,6 +139,7 @@ pub(crate) fn trusted_executable(path: &Path) -> Option<PathBuf> {
                 return None;
             }
         }
+        crate::path_safety::check_folders_above(&resolved, "program").ok()?;
         Some(resolved)
     }
     #[cfg(not(unix))]
@@ -346,6 +348,37 @@ mod tests {
         let found = resolve_executable("aw-test-cmd", &path_env, None).expect("found in PATH");
         assert_eq!(found, script);
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(unix)]
+    fn trusted_tree(name: &str) -> (PathBuf, PathBuf) {
+        use std::os::unix::fs::PermissionsExt;
+        let base = fs::canonicalize(temp_bin_dir(name)).expect("canonical temp dir");
+        let tool = base.join("tools/bin/tool");
+        fs::create_dir_all(tool.parent().unwrap()).expect("mkdir");
+        fs::write(&tool, "#!/bin/sh\n").expect("write");
+        fs::set_permissions(&tool, fs::Permissions::from_mode(0o755)).expect("chmod");
+        for dir in [base.as_path(), &base.join("tools"), &base.join("tools/bin")] {
+            fs::set_permissions(dir, fs::Permissions::from_mode(0o755)).expect("chmod");
+        }
+        (base, tool)
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn trusted_executable_checks_every_folder_above_the_program() {
+        use std::os::unix::fs::PermissionsExt;
+        let (base, tool) = trusted_tree("trusted-ancestors");
+        assert_eq!(trusted_executable(&tool), Some(tool.clone()));
+
+        // Everyone can write the grandparent: the folder below it could be swapped.
+        fs::set_permissions(&base, fs::Permissions::from_mode(0o777)).unwrap();
+        assert_eq!(trusted_executable(&tool), None);
+
+        // The sticky bit keeps others from replacing the user's own folder in it.
+        fs::set_permissions(&base, fs::Permissions::from_mode(0o1777)).unwrap();
+        assert_eq!(trusted_executable(&tool), Some(tool.clone()));
+        let _ = fs::remove_dir_all(&base);
     }
 
     #[test]

@@ -38,9 +38,9 @@ function runtimeParts(runtime: HarnessRuntimeHealth): string[] {
     }
     case "opencode": {
       const cli = runtime.health!.cli;
-      return [
-        ...(cli?.status === "missing" ? ["CLI not found"] : cli?.version ? [`CLI ${cli.version}`] : cli ? ["CLI found"] : []),
-      ];
+      // A CLI others could change stays "missing"; the backend's detail then starts "found at <path>, but not used".
+      const missing = cli?.detail.startsWith("found at ") ? "CLI found, not used" : "CLI not found";
+      return [...(cli?.status === "missing" ? [missing] : cli?.version ? [`CLI ${cli.version}`] : cli ? ["CLI found"] : [])];
     }
     case "cursor":
       return [plural(runtime.health!.global_agents_count, "agent")];

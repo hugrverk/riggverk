@@ -226,7 +226,7 @@ fn cleanup_temp_dir(path: &Path) {
 
 /// Shown when no Python that can read TOML is found: the merge scripts need `tomllib`.
 pub(crate) const CODEX_PYTHON_REQUIRED: &str =
-    "Python 3.11 or newer is needed to update the Codex config. A python3 that someone other than you or root owns or can write, or whose folder they can write, is not used.";
+    "Python 3.11 or newer is needed to update the Codex config. A python3 that someone other than you or root owns or can write, or whose folder or a folder above it they can write, is not used.";
 /// A merge script failed. Its output is never shown: it can quote lines of the user's config.
 const CODEX_MERGE_FAILED: &str = "the Codex config could not be merged safely; nothing was written";
 const PYTHON_PROBE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
@@ -252,21 +252,31 @@ pub(crate) fn with_codex_python<T>(python: Option<PathBuf>, f: impl FnOnce() -> 
 /// macOS's own `/usr/bin/python3` (3.9) first, whose fallback parser refuses valid TOML. A
 /// candidate another user could replace is never run (see
 /// [`crate::executable_resolver::trusted_executable`]). Probed once per process, and the resolved
-/// file is what runs; `None` when there is none.
+/// file is what runs; `None` when there is none. The probed file is checked again on every call, so
+/// one that has since become changeable by another user is no longer run.
 pub(crate) fn codex_python() -> Option<PathBuf> {
     #[cfg(test)]
     if let Some(forced) = FORCED_CODEX_PYTHON.with(|forced| forced.borrow().clone()) {
         return forced;
     }
     static FOUND: std::sync::OnceLock<Option<PathBuf>> = std::sync::OnceLock::new();
-    FOUND
-        .get_or_init(|| {
-            first_python_with_tomllib(&crate::executable_resolver::python3_candidates(
-                crate::executable_resolver::tool_dirs(),
-                std::env::var_os("PATH"),
-            ))
-        })
-        .clone()
+    still_trusted(
+        FOUND
+            .get_or_init(|| {
+                first_python_with_tomllib(&crate::executable_resolver::python3_candidates(
+                    crate::executable_resolver::tool_dirs(),
+                    std::env::var_os("PATH"),
+                ))
+            })
+            .as_deref(),
+    )
+}
+
+/// `python` when [`crate::executable_resolver::trusted_executable`] still accepts it and it still
+/// resolves to itself.
+fn still_trusted(python: Option<&Path>) -> Option<PathBuf> {
+    let python = python?;
+    crate::executable_resolver::trusted_executable(python).filter(|resolved| resolved == python)
 }
 
 fn first_python_with_tomllib(candidates: &[PathBuf]) -> Option<PathBuf> {
@@ -898,7 +908,7 @@ mod tests {
         let nonce = TEST_COUNTER.fetch_add(1, Ordering::Relaxed);
         let dir = std::env::temp_dir().join(format!("aw-codex-runtime-{label}-{nonce}"));
         let _ = fs::remove_dir_all(&dir);
-        fs::create_dir_all(&dir).expect("create temp dir");
+        crate::test_env::create_dir_all(&dir).expect("create temp dir");
         dir
     }
 
@@ -906,9 +916,28 @@ mod tests {
         let _ = fs::remove_dir_all(path);
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn the_probed_python_is_checked_again_before_it_runs() {
+        use std::os::unix::fs::PermissionsExt;
+        let base = fs::canonicalize(temp_root("python-recheck")).unwrap();
+        let python = base.join("bin/python3");
+        crate::test_env::create_dir_all(python.parent().unwrap()).unwrap();
+        fs::write(&python, "#!/bin/sh\n").unwrap();
+        fs::set_permissions(&python, fs::Permissions::from_mode(0o755)).unwrap();
+        fs::set_permissions(&base, fs::Permissions::from_mode(0o755)).unwrap();
+        assert_eq!(still_trusted(Some(&python)), Some(python.clone()));
+        assert_eq!(still_trusted(None), None);
+
+        fs::set_permissions(&base, fs::Permissions::from_mode(0o777)).unwrap();
+        assert_eq!(still_trusted(Some(&python)), None);
+        fs::set_permissions(&base, fs::Permissions::from_mode(0o755)).unwrap();
+        cleanup(&base);
+    }
+
     fn write_file(path: &Path, content: &str) {
         if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent).expect("create parent");
+            crate::test_env::create_dir_all(parent).expect("create parent");
         }
         fs::write(path, content).expect("write file");
     }
