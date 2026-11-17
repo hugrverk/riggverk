@@ -47,8 +47,8 @@ else
 fi
 # Keep rustup/cargo on the real toolchain while harness paths use SMOKE_HOME.
 TOOLCHAIN_HOME="$REAL_HOME"
-export RUSTUP_HOME="$TOOLCHAIN_HOME/.rustup"
-export CARGO_HOME="$TOOLCHAIN_HOME/.cargo"
+export RUSTUP_HOME="${RUSTUP_HOME:-$TOOLCHAIN_HOME/.rustup}"
+export CARGO_HOME="${CARGO_HOME:-$TOOLCHAIN_HOME/.cargo}"
 export PATH="$CARGO_HOME/bin:$PATH"
 
 WORKSPACE="$SMOKE_ROOT/workspace"
@@ -85,8 +85,10 @@ export RIGGVERK_SMOKE=1
 export PLAYWRIGHT_MCP_CONFIG_PATH="$PLAYWRIGHT_CONFIG"
 export PLAYWRIGHT_BROWSERS_PATH="$PLAYWRIGHT_BROWSERS"
 CARGO_BIN="$CARGO_HOME/bin/cargo"
-if [ ! -x "$CARGO_BIN" ]; then
-  fail "cargo not found at $CARGO_BIN (set CARGO_HOME or install rust)"
+# A toolchain installed outside CARGO_HOME (Homebrew's rustup, for one) is found on PATH.
+[ -x "$CARGO_BIN" ] || CARGO_BIN="$(command -v cargo || true)"
+if [ -z "$CARGO_BIN" ] || [ ! -x "$CARGO_BIN" ]; then
+  fail "cargo not found in $CARGO_HOME/bin or on PATH (set CARGO_HOME or install rust)"
 fi
 
 # cargo exits 0 when a test filter matches nothing, so a renamed or removed test
