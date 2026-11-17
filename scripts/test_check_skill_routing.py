@@ -7,6 +7,7 @@ the expected message, so the semantic checks cannot silently become no-ops.
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import sys
@@ -605,6 +606,23 @@ class PackCheckSkillRoutingTests(unittest.TestCase):
         result = self.run_pack()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout, f"PASS: 1 pack skills checked in {self.pack}\n")
+
+    def test_group_write_counts_only_outside_the_private_group(self) -> None:
+        checker = load_checker(ROOT)
+        self.assertFalse(checker.others_can_write(0o644, False))
+        self.assertTrue(checker.others_can_write(0o664, False))
+        self.assertFalse(checker.others_can_write(0o664, True))
+        self.assertTrue(checker.others_can_write(0o666, True))
+
+    @unittest.skipUnless(os.name == "posix", "the app checks the mode on Unix only")
+    def test_world_writable_routing_fails(self) -> None:
+        self.add_skill()
+        routing = self.pack / "routing.md"
+        routing.write_text("- Fixture checks: `fixture`.\n", encoding="utf-8")
+        routing.chmod(0o646)
+        result = self.run_pack()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("routing.md is writable by its group or by everyone", result.stderr)
 
     def test_description_over_limit_fails(self) -> None:
         self.add_skill(description="Use when " + "x" * 300)

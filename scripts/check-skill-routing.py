@@ -698,6 +698,27 @@ def validate_no_sibling_references(discovered: dict[str, Path]) -> None:
                     )
 
 
+def others_can_write(mode: int, private_group: bool) -> bool:
+    """Mirror of others_can_write in path_safety.rs."""
+    return bool(mode & 0o002) or (bool(mode & 0o020) and not private_group)
+
+
+def user_private_gid() -> int | None:
+    """Mirror of user_private_gid in path_safety.rs: the user's primary group when it carries the
+    user's name and lists no one else, so only the user can be a member."""
+    import grp
+    import pwd
+
+    try:
+        user = pwd.getpwuid(os.geteuid())
+        group = grp.getgrgid(user.pw_gid)
+    except KeyError:
+        return None
+    if group.gr_name != user.pw_name or any(member != user.pw_name for member in group.gr_mem):
+        return None
+    return user.pw_gid
+
+
 def validate_pack_routing(pack_dir: Path, own_names: set[str], bundled_names: set[str]) -> None:
     path = pack_dir / "routing.md"
     try:
@@ -713,8 +734,8 @@ def validate_pack_routing(pack_dir: Path, own_names: set[str], bundled_names: se
     # The app checks owner and mode on Unix only (check_trusted in skill_sources.rs).
     if os.name == "posix" and stat.st_uid != os.geteuid():
         fail(f"{rel(path)}: routing.md is not owned by the current user")
-    if os.name == "posix" and stat.st_mode & 0o022:
-        fail(f"{rel(path)}: routing.md is writable by group or others")
+    if os.name == "posix" and others_can_write(stat.st_mode, stat.st_gid == user_private_gid()):
+        fail(f"{rel(path)}: routing.md is writable by its group or by everyone")
     raw = path.read_bytes()
     if len(raw) > 12 * 1024:
         fail(f"{rel(path)}: routing.md is larger than 12288 bytes")
