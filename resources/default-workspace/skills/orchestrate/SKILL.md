@@ -35,13 +35,11 @@ Ask one question up front only if the done criteria or the authority are unclear
 
 ## Ledger
 
-One Markdown file that lets you, or a new session, resume after context loss. Put it where the user says. Otherwise put it at a path that `git check-ignore` confirms is ignored and that no build or clean step wipes. With neither, ask. Never use the OS temp directory, which a restart can clear.
+One Markdown file that lets you, or a new session, resume after context loss. Put it where the user says. Otherwise use `orchestrate/<slug>.md` inside the directory `git rev-parse --path-format=absolute --git-common-dir` prints, which git never tracks or cleans and every worktree shares; ask only when that cannot be written. Never use the OS temp directory, which a restart can clear.
 
-Sections: Charter; Slices (id, files owned, acceptance checks, depends on, risk, status, lane); Lanes (route, model, worktree, branch, started, ended); Decisions (asked, answer, when); Findings (verified, unproven, rejected, with evidence); Log (one dated line per event); Next.
+Start it from `ledger-template.md` next to this file. Slices, Lanes and Next are edited in place; Decisions, Findings and Log are append-only, one line per event (a lane starts or ends, a check runs, a decision arrives, the plan changes) with the time `date -u +%FT%TZ` prints, written when the event happens and never reconstructed afterwards. Record a lane's worktree and branch as soon as you know them. It holds no secrets, and only names variables, never their values.
 
-Update it after every event: a lane starts or ends, a check runs, a decision arrives, the plan changes. Record a lane's worktree and branch as soon as you know them. It holds no secrets, and only names variables, never their values.
-
-**Resume.** Read the ledger first. Treat every lane without an end entry as dead: find its worktree with `git worktree list`, collect it as `dispatch` describes, then re-brief or finish the slice.
+**Resume.** Read the ledger first. Treat every lane without an end line as dead: find its worktree with `git worktree list`, collect it as `dispatch` describes, then re-brief or finish the slice.
 
 ## Loop
 
@@ -52,29 +50,30 @@ Update it after every event: a lane starts or ends, a check runs, a decision arr
    - **Critical** implementation (data, persistence formats, public contracts): the lead does it, or a lane on the model the user's rules name for critical work. Use `adversarial` when the user asked for critic review.
    - **Mechanical** (renames, codemods, boilerplate, docs sweeps): a lane on the route `dispatch` resolves.
    - **Review or research**: fresh read-only agents.
-4. **Dispatch.** Start lanes up to the caps, each with a `dispatch` brief in its own worktree.
-5. **Collect and verify** each lane as `dispatch` describes, and run the acceptance checks yourself. A review finding counts only when you reproduce it; log the rest as unproven and do not act on them.
+4. **Dispatch.** Start lanes up to the caps, each with a `dispatch` brief in its own worktree. Read each brief against the charter before it goes out: every decision in it follows from a done criterion or a scope line, and where the wording allows two readings, choose one and add an example that shows which.
+5. **Collect and verify** each lane as `dispatch` describes, and run the acceptance checks yourself. Tests a lane added beyond its brief are claims too: read what they pin. A review finding counts only when you reproduce it; log the rest as unproven and do not act on them. A lane gets at most two follow-up briefs, as in `dispatch`; after that, do the slice yourself or re-slice it, and log which.
 6. **Integrate** into `orchestrate/<slug>`, a branch you create from the base in your own worktree. Merge one lane at a time and run the checks after each. A conflict means the slices were not disjoint, so fix the plan, not just the merge. A lane that needs integrated work gets a worktree you add from `orchestrate/<slug>`. No integration runs while an adversarial slice is mid-round. Merging `orchestrate/<slug>` into the user's branch is an outward action.
 7. **Re-plan.** After each integration, compare the ledger with what you now know. When evidence contradicts the plan, stop dispatching and re-slice.
 8. **Decide.** Batch questions when a decision blocks a lane or crosses the authority. Use the harness's question tool when it has one, with the recommended option first and each question readable on its own. Keep unblocked lanes running while you wait.
+9. **Final review.** When the last slice is integrated, review `orchestrate/<slug>` as one change before you call it done. Read `git diff <base>..orchestrate/<slug>` in bounded slices and give it to a fresh read-only reviewer, whose findings count only when you reproduce them. Look for what per-lane checks cannot see: slices that contradict each other, duplicated helpers, a contract one slice changed and another still assumes, and hunks no done criterion needs. Then run every done criterion and the repository's wider gate yourself in the integration worktree. Fix what you prove in one wave and re-run the checks; a finding that needs a re-plan goes back to step 7.
 
 While lanes run, wait for their notifications instead of polling, and spend the time on lead work: verify finished lanes, prepare the next briefs, update the ledger. Tell the user at milestones (a slice landed, a decision needed, a terminal state), not at every event.
 
 ## Terminal states
 
-- **Done**: every done criterion verified by you.
+- **Done**: every done criterion verified by you, after the final review.
 - **Blocked**: every remaining slice waits on the user, so ask once with all of it.
 - **Budget**: the time or cost limit is reached.
 - **Stagnation**: two dispatch rounds in a row with nothing integrated, or the same failure twice. Escalate with the evidence.
 - **Stopped**: the user said stop. Start nothing new, collect running lanes, update the ledger.
 
-Each state ends with the report.
+Set the ledger's State on every terminal state. After any but Done, write its Next section (verified, not verified, the single safest next action) so a new session can resume from that file alone. Each state ends with the report.
 
 ## Guardrails
 
 - Outward actions happen only within the authority. Approval in one place does not carry over to the next.
 - The git stash stack is shared across worktrees: never run a bare `git stash` or `git stash pop`.
-- Clean up only what you created, as `dispatch` describes.
+- Clean up only what you created, as `dispatch` describes. Lane branches are merged into `orchestrate/<slug>`, not into the user's branch, so run `git branch -d` for them from the integration worktree before you remove it; anywhere else `-d` refuses them. Keep the branch `orchestrate/<slug>` and list it in the report until the user has merged or dropped it.
 
 ## Report
 
@@ -91,6 +90,12 @@ Use the workspace final report (Changed, Verified, Not verified, Risk, Next) and
 
 - Lanes: the Agent tool in the background, with `isolation: "worktree"` for write lanes and read-only agent types for review and mapping. Send independent launches in one message. You do not choose the base of an `isolation` worktree (it has started from the default branch), so a lane that must start from `orchestrate/<slug>` gets a worktree you add yourself, given by path.
 - If the `advisor` tool is available, call it after writing the charter and slices, before re-slicing on contrary evidence, and before declaring a terminal state.
+
+### Codex
+
+- Lanes: Codex subagents, each told to work only in a worktree you added. They inherit your sandbox and approval settings, and in a non-interactive run an action that needs approval fails back to you.
+- The sandbox keeps git metadata read-only, also for a linked worktree, so a lane's commits are refused: say in the brief that this is expected and no reason for `STATUS: BLOCKED`, and commit its work yourself in Collect. Your own `git worktree add`, commits and merges need approval: ask for it at the start.
+- `agents.max_concurrent_threads_per_session` caps open threads: keep the lane cap within it and close each collected lane's thread.
 
 ### OpenCode
 

@@ -82,6 +82,7 @@ PLAIN_SCALAR_BAD_START = "\"'[]{}>|*&!%@`#"
 # skill's SKILL.md depends on must sit next to it: one file per mode plus the shared references.
 REQUIRED_SUPPORT_FILES = {
     "adversarial": ("implement.md", "review.md", "test.md", "adversarial-roles.md", "critic-recipes.md"),
+    "orchestrate": ("ledger-template.md",),
 }
 # Codex ignores `disable-model-invocation`; its own per-skill policy file keeps these skills explicit-only.
 CODEX_POLICY_SKILLS = ("retro", "grill-me")
