@@ -519,6 +519,9 @@
       "sha256:b05e03d90f8c87b9f86e58aab4eb72351d1f734000f30980a285fbd7fe0d3778",
       "sha256:f7311283d3d68ed07d752c5ab7c62efa2ca474a52b1754137008d5d4e7c4db36"
     ],
+    "skills/orchestrate/ledger-template.md": [
+      "sha256:2cd158ab1428195390c39ccb62ce79a5ff8d484cbeabf8bc47cac799c95519bc"
+    ],
     "skills/pr-modernize/SKILL.md": [
       "sha256:0dd2d8591625a0b75bc9da2665f078118162807416efba7e023f76694627349c",
       "sha256:27ab8843d33bcb2b92186b51f5b5197a935ed8267e5d274277e973e05acd2898",
