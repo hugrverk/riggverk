@@ -1589,12 +1589,13 @@ mod tests {
         assert_eq!(counts.get("adversarial"), Some(&5));
         assert_eq!(counts.get("browser-qa"), Some(&1));
         assert_eq!(counts.get("dispatch"), Some(&1));
+        assert_eq!(counts.get("orchestrate"), Some(&2));
         assert_eq!(counts.get("status-report"), Some(&4));
         assert_eq!(counts.get("pr-workflow"), Some(&1));
         // Codex's per-skill policy files: they keep the user-invoked skills explicit-only.
         assert_eq!(counts.get("retro"), Some(&1));
         assert_eq!(counts.get("grill-me"), Some(&1));
-        assert_eq!(counts.len(), 9, "{counts:?}");
+        assert_eq!(counts.len(), 10, "{counts:?}");
         assert_eq!(
             canonical_skill_dir(&repo, "security-audit"),
             repo.join("skills/security-audit")

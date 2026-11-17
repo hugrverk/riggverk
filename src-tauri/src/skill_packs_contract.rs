@@ -495,6 +495,15 @@ mod tests {
         file_of(root, BUNDLED_FROM_PACK, "SKILL.md")
     }
 
+    /// The bundled skill's files beside `SKILL.md`, which the pack's one-file copy never had.
+    fn bundled_support_files(root: SkillRoot) -> Vec<ArtifactId> {
+        files_below(&Env::real_bundle().join("skills").join(BUNDLED_FROM_PACK))
+            .keys()
+            .filter(|rel| rel.as_str() != "SKILL.md")
+            .map(|rel| file_of(root, BUNDLED_FROM_PACK, rel))
+            .collect()
+    }
+
     /// Installs the skill from a pack on the release that did not bundle it, then ships the one
     /// that does while the pack still has it. Returns the pack's bytes.
     fn installed_from_a_pack_before_the_bundle(label: &str) -> (Env, Vec<u8>) {
@@ -532,7 +541,7 @@ mod tests {
     }
 
     /// The pack's copy is shadowed by the bundle's and one Update hands the path over: the
-    /// bundle's bytes in every root, with no conflict, hold or removal, and then nothing to do,
+    /// bundle's files in every root, with no conflict, hold or removal, and then nothing to do,
     /// also after the pack drops the skill.
     #[test]
     fn an_unedited_pack_copy_of_a_skill_the_bundle_takes_over_is_updated_in_one_step() {
@@ -553,10 +562,18 @@ mod tests {
         pending.sort_by_key(|(artifact, _)| artifact_identity(artifact));
         let mut expected: Vec<_> = [SkillRoot::Claude, SkillRoot::Agents]
             .into_iter()
-            .map(|root| (skill_md(root), OperationKind::Update))
+            .flat_map(|root| {
+                let created = bundled_support_files(root)
+                    .into_iter()
+                    .map(|file| (file, OperationKind::Create));
+                std::iter::once((skill_md(root), OperationKind::Update)).chain(created)
+            })
             .collect();
         expected.sort_by_key(|(artifact, _)| artifact_identity(artifact));
-        assert_eq!(pending, expected, "one Update per root, nothing else");
+        assert_eq!(
+            pending, expected,
+            "per root one Update and the bundle's new files, nothing else"
+        );
 
         let result = env.apply();
         assert!(result.success, "update: {}", result.message);
@@ -577,7 +594,8 @@ mod tests {
     }
 
     /// A pack copy the user edited stays as it is and needs the user's decision; the unedited
-    /// copy in the other root is updated to the bundle's bytes.
+    /// copy in the other root is updated to the bundle's bytes. The bundle's new files beside
+    /// `SKILL.md` are created in both roots.
     #[test]
     fn an_edited_pack_copy_of_a_skill_the_bundle_takes_over_is_kept_as_a_conflict() {
         let (env, _) = installed_from_a_pack_before_the_bundle("to-bundle-edited");
@@ -596,6 +614,11 @@ mod tests {
             artifact_identity(&skill_md(SkillRoot::Agents)),
             OperationKind::Update,
         );
+        for root in [SkillRoot::Claude, SkillRoot::Agents] {
+            for file in bundled_support_files(root) {
+                expected.insert(artifact_identity(&file), OperationKind::Create);
+            }
+        }
         assert_eq!(kinds, expected);
 
         let result = env.apply();
