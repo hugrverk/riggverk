@@ -31,13 +31,13 @@ perl -e 'alarm shift; exec @ARGV or die "exec: $!"' 1800 \
   env -u ANTHROPIC_API_KEY -u OPENAI_API_KEY -u CODEX_API_KEY \
     GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/dev/null \
   codex exec -s workspace-write -c 'sandbox_workspace_write.network_access=false' \
-    --disable multi_agent -c 'features.multi_agent_v2=false' --disable plugins --disable apps --disable browser_use --disable computer_use \
+    --disable multi_agent -c agents.enabled=false --disable plugins --disable apps --disable browser_use --disable computer_use \
     [-c 'mcp_servers.<name>.enabled=false' ...] \
     -C "<T>/wt" [-m '<model>'] -o "<T>/out.md" - \
     < "<T>/brief.md" > "<T>/run.log" 2>&1
 ```
 
-- `-s workspace-write` pins the sandbox whatever `config.toml` says; turning network off blocks pushes and installs. `--disable multi_agent` and `-c 'features.multi_agent_v2=false'` stop it spawning agents (Codex 0.169.0 lists the first feature as deprecated and ships the second, off by default; the second goes through `-c` because `--disable` rejects a feature name an older Codex does not know); `-` reads the brief from stdin; `-o` writes only the final message.
+- `-s workspace-write` pins the sandbox whatever `config.toml` says; turning network off blocks pushes and installs. `--disable multi_agent` and `-c agents.enabled=false` stop it spawning agents (checked with `codex debug prompt-input` on 0.169.0: the first alone leaves `spawn_agent` in the model input, because that version lists the feature as deprecated, and the second removes every agent tool); `-` reads the brief from stdin; `-o` writes only the final message.
 - MCP: take the server names that are still enabled from `codex --disable plugins mcp list --json`, reading only `name` and `enabled` (the JSON can hold commands and env values; never print it), and add one `-c 'mcp_servers.<name>.enabled=false'` each. Skip the route if a name is outside `[A-Za-z0-9_-]`, and re-run the list with the same flags: nothing may stay enabled.
 - Keep the user's command rules (no `--ignore-rules`) and config (no `--ignore-user-config`, which also drops their model). Never use `--dangerously-bypass-approvals-and-sandbox`.
 - The sandbox may refuse writes to the worktree's git metadata, which lives in the main repository's `.git`. Then the delegate's commits fail and it leaves the changes in place, as the brief says; you commit them in Collect. Do not make the git directory writable with `--add-dir`: that would let the delegate rewrite the main repository's hooks and config.
@@ -48,7 +48,7 @@ perl -e 'alarm shift; exec @ARGV or die "exec: $!"' 1800 \
     env -u ANTHROPIC_API_KEY -u OPENAI_API_KEY -u CODEX_API_KEY \
       GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/dev/null \
     codex exec resume '<session-id>' -c 'sandbox_mode="workspace-write"' -c 'sandbox_workspace_write.network_access=false' \
-      --disable multi_agent -c 'features.multi_agent_v2=false' --disable plugins --disable apps --disable browser_use --disable computer_use \
+      --disable multi_agent -c agents.enabled=false --disable plugins --disable apps --disable browser_use --disable computer_use \
       -o "<T>/out2.md" - < "<T>/followup.md" > "<T>/run2.log" 2>&1
   ```
 
