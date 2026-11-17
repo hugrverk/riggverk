@@ -49,7 +49,7 @@ Releases before the Riggverk rename used other technical names. An install made 
 Requirements:
 
 - Node.js 22 (the version pinned in `.github/workflows/ci.yml`; Vite 8 needs 20.19+ or 22.12+) and npm 10+
-- Rust via rustup: `rust-toolchain.toml` pins 1.97.1, the version the disabled workflows also pin
+- Rust via rustup: `rust-toolchain.toml` pins 1.97.1, the version the CI workflows also pin
 - Python 3.11 or newer (the release check uses `tomllib`) and Bash for the generators, merge scripts, and release check
 
 ```bash
@@ -201,7 +201,7 @@ See `docs/SECURITY_MODEL.md` for the full boundaries.
 
 ## Verification
 
-The local release check is the gate: run `./scripts/release-check.sh` before merging and before a release. GitHub Actions is disabled for this repository (`.github/workflows` is kept, switched off), so nothing runs on push or pull request, and nothing verifies Windows. The Bash release check is macOS and Linux only (see `docs/RELEASE.md`).
+The local release check is the gate: run `./scripts/release-check.sh` before merging and before a release. GitHub Actions runs on pull requests and pushes to main: the repository checks and the Rust tests in four cargo-nextest partitions on Linux, the Windows checks (`windows-checks.yml`), and on pushes to main the whole gate on macOS. CI does not build or sign releases. The Bash release check is macOS and Linux only (see `docs/RELEASE.md`).
 
 ```bash
 python3 scripts/generate.py check

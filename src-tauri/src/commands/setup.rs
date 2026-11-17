@@ -4623,7 +4623,7 @@ mod tests {
         for (path, open_mode, phrase) in [
             (
                 backup_dir.clone(),
-                0o770,
+                0o777,
                 "refusing the setup transaction folder",
             ),
             (
@@ -7023,8 +7023,13 @@ mod tests {
                     .join(rel)
                     .is_file()
                 {
-                    let path = dest.join(rel).display().to_string();
-                    assert!(preserved.contains(&path), "{root}: {path} not preserved");
+                    // Compared as paths: `root` uses `/`, which Windows paths mix with `\`.
+                    let path = dest.join(rel);
+                    assert!(
+                        preserved.iter().any(|kept| Path::new(kept) == path),
+                        "{root}: {} not preserved",
+                        path.display()
+                    );
                 }
             }
             assert_eq!(snapshot_files(&dest), before, "{root}");

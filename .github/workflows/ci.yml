@@ -11,16 +11,17 @@ permissions:
   contents: read
 
 jobs:
-  verify:
-    name: verify (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
+  # The repository checks run once; the Rust unit and contract tests run in four nextest
+  # partitions at once. nextest runs each test in its own process, so the tests that change
+  # process-wide state (HOME and the like) no longer need `--test-threads=1`.
+  linux:
+    name: linux (${{ matrix.part }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
-        os:
-          - ubuntu-latest
-          - macos-latest
+        part: [checks, tests 1/4, tests 2/4, tests 3/4, tests 4/4]
 
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -28,7 +29,6 @@ jobs:
           fetch-depth: 0
 
       - name: Install Linux system dependencies
-        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -59,9 +59,72 @@ jobs:
         run: npm ci
 
       - name: Typecheck
+        if: matrix.part == 'checks'
         run: npm run typecheck
 
-      # release-check runs the frontend tests, build, platform path helper tests,
-      # Rust gates and every repository check exactly once.
+      # release-check runs the frontend tests, build, platform path helper tests, Rust gates
+      # and every repository check; the doc tests stand in for its serial Rust test run.
       - name: Release check
+        if: matrix.part == 'checks'
+        env:
+          RELEASE_CHECK_RUST_TESTS: doc
         run: bash scripts/release-check.sh
+
+      # The app embeds the built frontend at compile time.
+      - name: Build frontend
+        if: matrix.part != 'checks'
+        run: npm run build
+
+      - uses: taiki-e/install-action@1919c4a95903d2c33e4a221102edca87309fc14b # v2.89.0
+        if: matrix.part != 'checks'
+        with:
+          tool: cargo-nextest@0.9.150
+
+      - name: Rust tests
+        if: matrix.part != 'checks'
+        env:
+          PART: ${{ matrix.part }}
+        run: cargo nextest run --locked --manifest-path src-tauri/Cargo.toml --no-fail-fast --partition "count:${PART#tests }"
+
+  # The platform releases are built on: the whole gate and every Rust test on each push to main,
+  # not on pull requests.
+  macos:
+    name: macos
+    if: github.event_name != 'pull_request'
+    runs-on: macos-latest
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "22"
+          cache: npm
+
+      # The version must match rust-toolchain.toml so new stable lints cannot turn
+      # `clippy -D warnings` red without a code change. Bump deliberately.
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: "1.97.1"
+          components: rustfmt, clippy
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Release check
+        env:
+          RELEASE_CHECK_RUST_TESTS: doc
+        run: bash scripts/release-check.sh
+
+      - uses: taiki-e/install-action@1919c4a95903d2c33e4a221102edca87309fc14b # v2.89.0
+        with:
+          tool: cargo-nextest@0.9.150
+
+      - name: Rust tests
+        run: cargo nextest run --locked --manifest-path src-tauri/Cargo.toml --no-fail-fast

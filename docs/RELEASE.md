@@ -20,7 +20,7 @@ It writes only ignored build artifacts in the repository and temporary directori
 
 It does not drive the Tauri webview, install into a real profile, or read `.env` files.
 
-This local check is the gate: run it before merging and before a release. GitHub Actions is disabled for this repository (`.github/workflows` is kept, switched off), so nothing runs on push or pull request, and nothing verifies Windows. Windows checks exist in `windows-checks.yml` and are disabled. The Bash release check is macOS and Linux only (WSL behaves as Linux); use the app on Windows.
+This local check is the gate: run it before merging and before a release. GitHub Actions runs on pull requests and pushes to main: the repository checks and the Rust tests in four cargo-nextest partitions on Linux, the Windows checks (`windows-checks.yml`), and on pushes to main the whole gate on macOS. CI does not build or sign releases. The Bash release check is macOS and Linux only (WSL behaves as Linux); use the app on Windows.
 
 ## Cutting a release
 
@@ -126,7 +126,7 @@ The app can update itself (Tauri's updater with a static `latest.json` on GitHub
 
 Updates need public release files: the app fetches `https://github.com/hugrverk/riggverk/releases/latest/download/latest.json` without credentials, which a private repository answers with 404. They were turned on the day the repository went public, with these steps; repeat them if the key is ever replaced:
 
-1. **Make the signing key** (once, on the release Mac; never in the repository, never in CI while CI is off):
+1. **Make the signing key** (once, on the release Mac; never in the repository, never in CI):
 
    ```bash
    npm run tauri signer generate -- -w ~/.tauri/riggverk-updater.key   # asks for a password; use a long one
