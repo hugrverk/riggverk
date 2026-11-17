@@ -37,7 +37,7 @@ Ask one question up front only if the done criteria or the authority are unclear
 
 One Markdown file that lets you, or a new session, resume after context loss. Put it where the user or the `Orchestrate:` line says. Otherwise use `orchestrate/<slug>.md` inside the directory `git rev-parse --path-format=absolute --git-common-dir` prints, which every worktree shares; ask only when that cannot be written. Never use the OS temp directory.
 
-Start it from `ledger-template.md` next to this file. Slices, Lanes and Next are edited in place; Decisions, Findings and Log are append-only, one line per event with the time `date -u +%FT%TZ` prints, written when the event happens and never reconstructed afterwards. Log a lane's worktree, branch and temporary directory as soon as you know them. The ledger holds no secrets: name a variable, never its value.
+Start it from `ledger-template.md` next to this file. Slices, Lanes and Next are edited in place; Decisions, Findings and Log are append-only, one line per event with the time `date -u +%FT%TZ` prints, written when the event happens and never reconstructed afterwards: write a lane's start line before you launch it. Log a lane's worktree, branch and temporary directory as soon as you know them. The ledger holds no secrets: name a variable, never its value.
 
 **Resume.** Read the ledger first. Treat every lane without an end line as dead: find its worktree with `git worktree list`, collect it as `dispatch` describes, then re-brief or finish the slice.
 
@@ -90,6 +90,7 @@ Use the workspace final report and add:
 
 - Write lanes: the Agent tool with the `general-purpose` type, in the background, with its `model` parameter when the caps name a model. `isolation: "worktree"` works on the session's own repository and starts from the remote default branch, or from your HEAD when the `worktree.baseRef` setting is `head`, never from a branch you name. Use it only when that is the charter's repository and base; otherwise, and for every lane that needs `orchestrate/<slug>`, add the worktree yourself and give its path.
 - Follow-up briefs go to the same lane with SendMessage, which keeps its context.
+- A subagent can start subagents of its own, which the lane cap does not count: say in each brief that the lane starts none.
 - Read-only lanes: `repo-scout`, `inspector` and `sentinel`, or `/code-review` for a review pass. The three have no shell and stop after 12 turns, so write the diff to a file outside the repository, give them its path, and split a large diff across several reviewers.
 - If the `advisor` tool is available, call it after writing the charter and slices, before re-slicing on contrary evidence, and before declaring a terminal state.
 
