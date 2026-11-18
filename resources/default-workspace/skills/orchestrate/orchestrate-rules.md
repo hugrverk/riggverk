@@ -29,7 +29,7 @@ Other rules still apply. A rule that prefers or forbids a route (for example a d
 
 - The harness must be one of the four values above. The model must match `^[A-Za-z0-9][A-Za-z0-9._:/@\[\]-]{0,127}$`; pass it as one quoted argument and never build a command string from it.
 - `lanes` above what the harness allows is lowered to that limit.
-- `ledger` must not be inside the OS temp directory and must not contain `..`.
+- A `ledger` value from chat or the rules line must not be inside the OS temp directory and must not contain `..`. The default path is not checked this way.
 - An invalid value is ignored, the next source decides, and the start line says so.
 
 ## Start line
