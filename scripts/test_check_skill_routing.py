@@ -7,6 +7,7 @@ the expected message, so the semantic checks cannot silently become no-ops.
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import sys
@@ -573,6 +574,152 @@ class PortableSkillBodyTests(unittest.TestCase):
         self.assertIn("playwright-cli.md", self.body_before_notes("browser-qa"))
         self.assertIn('playwright" install chromium', (folder / "playwright-cli.md").read_text(encoding="utf-8"))
 
+
+class PackCheckSkillRoutingTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.pack = Path(self._tmp.name) / "pack"
+        self.skills = self.pack / "skills"
+        self.skills.mkdir(parents=True)
+
+    def add_skill(self, name: str = "fixture", *, description: str = "Use when checking fixtures.", related: str = "") -> Path:
+        path = self.skills / name / "SKILL.md"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        relation = f"metadata:\n  related: {related}\n" if related else ""
+        path.write_text(
+            f"---\nname: {name}\ndescription: {description}\n{relation}---\n"
+            "# Fixture\n\nDone when: the fixture check completes.\n\n"
+            "## Harness notes\n\n### Claude Code\n\n### Codex\n\n### OpenCode\n\n### Cursor\n\n### Light harnesses\n",
+            encoding="utf-8",
+        )
+        return path
+
+    def run_pack(self) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [sys.executable, str(ROOT / "scripts/check-skill-routing.py"), "--pack", str(self.pack)],
+            cwd=ROOT, text=True, capture_output=True, check=False,
+        )
+
+    def test_valid_pack_passes(self) -> None:
+        self.add_skill()
+        result = self.run_pack()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, f"PASS: 1 pack skills checked in {self.pack}\n")
+
+    def test_group_write_counts_only_outside_the_private_group(self) -> None:
+        checker = load_checker(ROOT)
+        self.assertFalse(checker.others_can_write(0o644, False))
+        self.assertTrue(checker.others_can_write(0o664, False))
+        self.assertFalse(checker.others_can_write(0o664, True))
+        self.assertTrue(checker.others_can_write(0o666, True))
+
+    @unittest.skipUnless(os.name == "posix", "the app checks the mode on Unix only")
+    def test_world_writable_routing_fails(self) -> None:
+        self.add_skill()
+        routing = self.pack / "routing.md"
+        routing.write_text("- Fixture checks: `fixture`.\n", encoding="utf-8")
+        routing.chmod(0o646)
+        result = self.run_pack()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("routing.md is writable by its group or by everyone", result.stderr)
+
+    def test_description_over_limit_fails(self) -> None:
+        self.add_skill(description="Use when " + "x" * 300)
+        result = self.run_pack()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("description is 309 chars (max 300)", result.stderr)
+
+    def test_description_without_trigger_fails(self) -> None:
+        self.add_skill(description="Check fixture cases.")
+        result = self.run_pack()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("description must contain 'Use when'", result.stderr)
+
+    def test_harness_notes_wrong_order_fails(self) -> None:
+        path = self.add_skill()
+        path.write_text(path.read_text().replace("### Codex\n\n### OpenCode", "### OpenCode\n\n### Codex"), encoding="utf-8")
+        result = self.run_pack()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("harness notes must follow the order", result.stderr)
+
+    def test_related_unknown_fails_and_bundled_name_passes(self) -> None:
+        self.add_skill(related="missing")
+        result = self.run_pack()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("related skill 'missing' does not exist", result.stderr)
+        (self.skills / "fixture/SKILL.md").unlink()
+        (self.skills / "fixture").rmdir()
+        self.add_skill(related="tdd")
+        result = self.run_pack()
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_shadowed_bundled_name_warns_and_passes(self) -> None:
+        self.add_skill("tdd")
+        result = self.run_pack()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("bundled skill 'tdd' shadows this pack skill", result.stderr)
+
+    def test_routing_line_count_limit(self) -> None:
+        self.add_skill()
+        (self.pack / "routing.md").write_text(("- Use fixtures: `fixture`.\n" * 61), encoding="utf-8")
+        result = self.run_pack()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("more than 60 lines", result.stderr)
+        (self.pack / "routing.md").write_text("- Use fixtures: `fixture`.\n" * 60, encoding="utf-8")
+        result = self.run_pack()
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_routing_bundle_name_fails(self) -> None:
+        self.add_skill()
+        (self.pack / "routing.md").write_text("- Use testing: `tdd`.\n", encoding="utf-8")
+        result = self.run_pack()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("names a bundled skill", result.stderr)
+
+    def test_routing_heading_fails(self) -> None:
+        self.add_skill()
+        (self.pack / "routing.md").write_text("- # Heading: `fixture`.\n", encoding="utf-8")
+        result = self.run_pack()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("holds a heading", result.stderr)
+
+    def test_routing_line_rules_match_the_app(self) -> None:
+        self.add_skill()
+        cases = {
+            "# Heading\n": 'not a "- " bullet',
+            "- Use \x7f fixtures: `fixture`.\n": "holds a control character",
+            "- Use fixtures: `fixture`.\x1f\n": "holds a control character",
+            "\x1f\n": "holds a control character",
+            "- Use <b>fixtures</b>: `fixture`.\n": "holds markup",
+            "- See @notes.md: `fixture`.\n": "holds an @",
+            "- Use fixtures: `fixture.\n": "unpaired or empty backticks",
+            "- Use fixtures.\n": "names no skill in backticks",
+            "- Use fixtures: `elsewhere`.\n": "not an active skill of this pack",
+            "- " + "x" * 240 + ": `fixture`.\n": "longer than 240 characters",
+        }
+        for text, message in cases.items():
+            with self.subTest(message=message, text=text[:20]):
+                (self.pack / "routing.md").write_text(text, encoding="utf-8")
+                result = self.run_pack()
+                self.assertEqual(result.returncode, 1)
+                self.assertIn(message, result.stderr)
+        # U+2065 is unassigned, not a format character: the app accepts it.
+        (self.pack / "routing.md").write_text("\ufeff- Use\u2065 fixtures: `fixture`.\r\n", encoding="utf-8")
+        result = self.run_pack()
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_single_skill_pack_has_no_sibling_to_reference(self) -> None:
+        path = self.add_skill()
+        path.write_text(path.read_text(encoding="utf-8") + "\nSee skills//x and ..//y.\n", encoding="utf-8")
+        result = self.run_pack()
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_missing_skills_directory_fails(self) -> None:
+        self.skills.rmdir()
+        result = self.run_pack()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("skills root not found", result.stderr)
 
 if __name__ == "__main__":
     unittest.main()

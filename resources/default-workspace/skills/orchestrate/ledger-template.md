@@ -9,7 +9,7 @@ Copy this file to the ledger path, replace every `<...>`, and delete this paragr
   1. <command or observation that can fail>
 - Scope: in: <...>. Out: <...>.
 - Authority: <what you may do without asking>
-- Caps: <agents at a time>; <models that may be used, or configured defaults>
+- Caps: lanes=<n> (<source>), mechanical=<route> (<source>), critical=<route> (<source>)
 - Budget: <limit, or none given>
 - Base: <commit hash> on <branch>
 - Integration branch: orchestrate/<slug>, worktree <path>
