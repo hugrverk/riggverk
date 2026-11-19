@@ -131,6 +131,7 @@ permission:
   webfetch: ask
   websearch: ask
   task: deny
+  execute: ask
   skill:
     "*": allow
   bash:
