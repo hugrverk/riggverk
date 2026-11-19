@@ -1217,9 +1217,12 @@ describe("Library packs focus", () => {
     const dialog = await screen.findByRole("dialog", { name: "Forget pack old-pack?" });
     fireEvent.click(within(dialog).getByRole("button", { name: "Forget pack" }));
     await waitFor(() => expect(screen.queryAllByRole("listitem").some(item => item.querySelector("b")?.textContent === "old-pack")).toBe(false));
-    await waitFor(() => expect(document.activeElement).not.toBe(document.body));
+    // The focus moves in an effect once the forget has finished; until then it can still be in the closing dialog.
     const library = screen.getByRole("region", { name: "Library" });
-    expect(library.contains(document.activeElement)).toBe(true);
+    await waitFor(() => {
+      expect(document.activeElement).not.toBe(document.body);
+      expect(library.contains(document.activeElement)).toBe(true);
+    });
   });
 
   it("leaves focus alone when the forget is declined", async () => {
@@ -1255,8 +1258,9 @@ describe("Library keys", () => {
     skillRow.focus();
     fireEvent.keyDown(skillRow, { key: "[" });
     await waitFor(() => expect(tab("Rules").getAttribute("aria-selected")).toBe("true"));
-    // The row that had focus is gone with the old rows: the selected tab has it, so the keys keep working.
-    expect(document.activeElement).toBe(tab("Rules"));
+    // The row that had focus is gone with the old rows: the selected tab has it, so the keys keep working. The
+    // focus moves in an effect after the commit that selects the tab, so it can land a task later.
+    await waitFor(() => expect(document.activeElement).toBe(tab("Rules")));
     fireEvent.keyDown(document.activeElement!, { key: "[" });
     await waitFor(() => expect(tab("Packs").getAttribute("aria-selected")).toBe("true"));
   });
