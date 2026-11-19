@@ -1578,7 +1578,7 @@ def main(argv: list[str] | None = None) -> None:
             errors += crosscheck_errors
             crosscheck = (
                 f"OpenCode {version} cross-check: {count} decisions match the rules `debug agents` resolved "
-                "(rulesets and matching from the binary; read/edit resource shapes and shell scans from the 2.x source)"
+                "(rulesets from the binary, last match wins; read/edit resource shapes and shell scans from the 2.x source)"
             )
     if errors:
         print("FAIL: OpenCode permission contract validation failed:", file=sys.stderr)
