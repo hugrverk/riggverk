@@ -1,14 +1,36 @@
 #!/usr/bin/env python3
-"""Semantic validation of composed OpenCode agent permission boundaries."""
+"""Semantic validation of composed OpenCode agent permission boundaries.
+
+Every check models OpenCode 1.19.3 (see opencode_permission_eval.py). The non-shell decisions are
+also evaluated the OpenCode 2.x way: renamed actions (`bash` -> `shell`, `task` -> `subagent`,
+`write`/`patch`/`apply_patch` -> `edit`) and `read`/`edit` resources relative to the session
+Location, including a Location in a subfolder of the worktree.
+
+Shell (bash) rows model OpenCode 1.x only. OpenCode 2.x matches shell commands with a portable
+scanner (packages/core/src/shell/scan.ts at v2.3.2) that refuses a whole command it cannot analyse
+(command substitution, compound commands, heredocs, dynamic execution and the other reasons in
+`V2_SHELL_OPAQUE_REASONS`); that is a known difference, and no 2.x shell result is claimed.
+
+`--opencode2 BINARY` (or RIGGVERK_OPENCODE2_BIN) adds an opt-in cross-check: OpenCode 2.x resolves
+every bundled role and the managed built-in agents from the generated config in a throwaway home
+(`debug agents --standalone`), and each expected non-shell decision is evaluated against the rules
+the binary reports, last match wins. Without it the cross-check is skipped and the output says so.
+"""
 
 from __future__ import annotations
 
+import argparse
 import copy
 import functools
 import json
 import os
+import re
+import shutil
+import subprocess
 import sys
+import tempfile
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -29,7 +51,12 @@ from opencode_permission_eval import (  # noqa: E402
     ruleset_from_section,
     shell_command_patterns,
     strictest,
+    V2_SHELL_OPAQUE_REASONS,
+    location_resource,
     tool_hidden,
+    v2_action,
+    v2_rules_from_dump,
+    v2_ruleset_from_permission,
     wildcard_match,
     winning_rule,
     worktree_relative,
@@ -1089,6 +1116,199 @@ def _with_test_home(rules):
     ]
 
 
+# --- OpenCode 2.x: non-shell decisions -------------------------------------------------------------
+
+# OpenCode 2 asks `read`/`edit` relative to the session Location (FileAccess.resolve), so a session
+# started in a subfolder sees worktree files as `../P`. The `**/P` secret denies still match there.
+V2_SUBFOLDER_LOCATIONS = (f"{_WORKTREE}/src", f"{_WORKTREE}/docs")
+NOT_ALLOW = "not allow"
+# The built-in agents whose managed entries the rows below cover, plus `build`, which has none.
+V2_BUILTIN_AGENTS = ("build", "plan", "explore")
+SECRET_EDIT_SAMPLES = (".env", ".env.local", "src/.env.local", "id_rsa", "deploy/id_rsa")
+V2_FILE_KEYS = ("read", "edit", "write", "patch", "apply_patch")
+
+
+@dataclass(frozen=True)
+class DecisionRow:
+    agent: str
+    key: str  # the V1 permission key
+    resource: str  # an absolute path for read/edit, else the resource as asked
+    expected: str  # allow | ask | deny | NOT_ALLOW
+    location: str = _WORKTREE
+
+
+def _absolute(path: str) -> str:
+    """Rows hold worktree-relative paths (1.x patterns) or absolute ones; 2.x needs the file itself."""
+    return path if path.startswith("/") else os.path.normpath(os.path.join(_WORKTREE, path))
+
+
+def _row(agent: str, key: str, resource: str, expected: str, location: str = _WORKTREE) -> DecisionRow:
+    if key in V2_FILE_KEYS:
+        resource = _absolute(resource)
+    return DecisionRow(agent, key, resource, expected, location)
+
+
+def non_shell_rows() -> list[DecisionRow]:
+    """Every non-shell decision this validator asserts for the bundled roles and built-in agents."""
+    rows: list[DecisionRow] = []
+    for role in ALL_ROLES:
+        rows += [_row(role, "read", path, expected) for path, expected in READ_ACTIONS]
+        rows += [_row(role, key, "x", "ask") for key in GATED_TOP_LEVEL_KEYS]
+        rows += [_row(role, "edit", path, "deny") for path in SECRET_EDIT_SAMPLES]
+        rows += [
+            _row(role, "external_directory", f"{_HOME}/.claude/skills/x/*", "allow"),
+            _row(role, "external_directory", f"{_HOME}/.config/opencode/skills/x/*", "allow"),
+            _row(role, "external_directory", f"{_HOME}/other/*", "ask"),
+        ]
+    for role in READONLY_ROLES + ("verifier",):
+        rows.append(_row(role, "edit", "src/App.tsx", "deny"))
+    for role in READONLY_ROLES:
+        rows.append(_row(role, "task", "general", "deny"))
+    rows += [_row("architect", "edit", path, expected) for path, expected in EDIT_ACTIONS]
+    rows += [_row("architect", "task", "repo-scout", "allow"), _row("architect", "question", "x", "allow")]
+    rows += [_row("scribe", "edit", path, "allow") for path in ("README.md", "docs/guide.md")]
+    rows += [_row("scribe", "edit", path, NOT_ALLOW) for path in SCRIBE_EDIT_DENY]
+    rows += [_row(agent, key, resource, expected) for agent, key, resource, expected in BUILTIN_AGENT_ACTIONS if key != "bash"]
+    rows.append(_row("build", "edit", "src/x.ts", "allow"))
+    # A Location in a subfolder: every secret deny still holds, through `../P`.
+    for row in list(rows):
+        if row.key in V2_FILE_KEYS and row.expected == "deny" and row.resource.startswith(_WORKTREE + "/"):
+            rows += [DecisionRow(row.agent, row.key, row.resource, "deny", location) for location in V2_SUBFOLDER_LOCATIONS]
+    # Known 2.x difference: a root-anchored allow (`docs/**`, `README.md`) no longer matches from a
+    # subfolder, so the scribe's edit falls to its default deny. It fails closed.
+    rows += [
+        _row("scribe", "edit", "docs/guide.md", "deny", f"{_WORKTREE}/docs"),
+        _row("scribe", "edit", "README.md", "deny", f"{_WORKTREE}/src"),
+        _row("architect", "edit", "src/App.tsx", "allow", f"{_WORKTREE}/src"),
+    ]
+    return rows
+
+
+def v2_decision(rules: list[Rule], row: DecisionRow) -> str:
+    """The 2.x rule decision for one row: the renamed action, the Location-relative resource."""
+    resource = location_resource(row.resource, row.location, _WORKTREE) if row.key in V2_FILE_KEYS else row.resource
+    return evaluate(v2_action(row.key), resource, rules).action
+
+
+def _row_errors(prefix: str, rules: list[Rule], row: DecisionRow) -> list[str]:
+    actual = v2_decision(rules, row)
+    if actual == row.expected or (row.expected == NOT_ALLOW and actual != "allow"):
+        return []
+    where = "" if row.location == _WORKTREE else f" from Location {os.path.relpath(row.location, _WORKTREE)}/"
+    return [f"{prefix}{row.agent}: {v2_action(row.key)} {row.resource!r}{where} must be {row.expected}, got {actual}"]
+
+
+def v2_model_errors() -> list[str]:
+    """The bundled roles' own permission blocks, evaluated as OpenCode 2 holds them.
+
+    The built-in agents are left to the cross-check: their 2.x defaults differ from 1.19.3 and are
+    not modelled here.
+    """
+    errors: list[str] = []
+    rules = {role: _with_test_home(v2_ruleset_from_permission(compose_role_permission(load_role(role)))) for role in ALL_ROLES}
+    for row in non_shell_rows():
+        if row.agent in rules:
+            errors += _row_errors("opencode 2 model: ", rules[row.agent], row)
+    return errors
+
+
+# Folders and files OpenCode 2 loads as project config from the working folder and every folder above
+# it (packages/core/src/config/discovery.ts); any of them would change the resolved agents.
+V2_PROJECT_MARKERS = ("opencode.json", "opencode.jsonc", ".opencode", ".claude", ".agents")
+V2_TIMEOUT_SECONDS = 300
+V2_VERSION = re.compile(r"(\d+)\.(\d+)\.(\d+)")
+
+
+class CrossCheckError(Exception):
+    """The cross-check could not run as asked; never a pass."""
+
+
+def _v2_env(home: Path) -> dict[str, str]:
+    return {
+        "HOME": str(home),
+        "XDG_CONFIG_HOME": str(home / ".config"),
+        "XDG_DATA_HOME": str(home / ".local/share"),
+        "XDG_STATE_HOME": str(home / ".local/state"),
+        "XDG_CACHE_HOME": str(home / ".cache"),
+        "TMPDIR": str(home / "tmp"),
+        "PATH": "/usr/bin:/bin",
+        "OPENCODE_DISABLE_AUTOUPDATE": "1",
+    }
+
+
+def refuse_project_config_above(folder: Path) -> None:
+    for parent in (folder, *folder.parents):
+        for marker in V2_PROJECT_MARKERS:
+            if (parent / marker).exists():
+                raise CrossCheckError(f"OpenCode would load {parent / marker} as project config; set TMPDIR elsewhere")
+
+
+def _run(argv: list[str], home: Path, cwd: Path, output: Path) -> None:
+    with output.open("wb") as stdout:
+        try:
+            done = subprocess.run(
+                argv,
+                cwd=cwd,
+                env=_v2_env(home),
+                stdin=subprocess.DEVNULL,
+                stdout=stdout,
+                stderr=subprocess.DEVNULL,
+                timeout=V2_TIMEOUT_SECONDS,
+            )
+        except subprocess.TimeoutExpired as error:
+            raise CrossCheckError(f"{' '.join(argv[1:])} timed out after {V2_TIMEOUT_SECONDS} s") from error
+        except OSError as error:
+            raise CrossCheckError(f"cannot run {argv[0]}: {error}") from error
+    if done.returncode != 0:
+        raise CrossCheckError(f"{' '.join(argv[1:])} exited {done.returncode}")
+
+
+def resolve_v2_agents(binary: str) -> tuple[str, dict[str, list[Rule]]]:
+    """Run `debug agents --standalone` on the generated config; return the version and the rules
+    per agent id, with the throwaway home re-pointed at the test home the rows use."""
+    with tempfile.TemporaryDirectory(prefix="riggverk-oc2-permissions-") as folder:
+        home = Path(folder).resolve()
+        project = home / "proj"
+        config = home / ".config" / "opencode"
+        for directory in (project, config / "agents", home / "tmp"):
+            directory.mkdir(parents=True)
+        refuse_project_config_above(project)
+        _run([binary, "--version"], home, project, home / "version.txt")
+        text = (home / "version.txt").read_text(encoding="utf-8", errors="replace")
+        version = V2_VERSION.search(text)
+        if not version or version.group(1) != "2":
+            raise CrossCheckError(f"{binary} is not OpenCode 2.x (--version said {text.strip()[:40]!r})")
+        shutil.copyfile(SNAPSHOT_PATH, config / "opencode.json")
+        for role in ALL_ROLES:
+            shutil.copyfile(AGENTS_DIR / f"{role}.md", config / "agents" / f"{role}.md")
+        # About 4 MB of JSON: to a file, never to the terminal.
+        _run([binary, "debug", "agents", "--standalone"], home, project, home / "agents.json")
+        try:
+            agents = json.loads((home / "agents.json").read_text(encoding="utf-8"))
+            resolved = {agent["id"]: v2_rules_from_dump(agent["permissions"]) for agent in agents}
+        except (ValueError, KeyError, TypeError) as error:
+            raise CrossCheckError(f"debug agents output is unreadable ({error})") from error
+    prefix = str(home) + "/"
+    repointed = {
+        agent: [Rule(rule.permission, _HOME + "/" + rule.pattern[len(prefix) :], rule.action) if rule.pattern.startswith(prefix) else rule for rule in rules]
+        for agent, rules in resolved.items()
+    }
+    return version.group(0), repointed
+
+
+def v2_crosscheck_errors(resolved: dict[str, list[Rule]]) -> tuple[list[str], int]:
+    """Compare every expected non-shell decision with the rules OpenCode 2 resolved."""
+    errors: list[str] = []
+    rows = non_shell_rows()
+    for agent in dict.fromkeys(row.agent for row in rows):
+        if agent not in resolved:
+            errors.append(f"opencode 2 cross-check: agent {agent} is missing from debug agents")
+    for row in rows:
+        if row.agent in resolved:
+            errors += _row_errors("opencode 2 cross-check: ", resolved[row.agent], row)
+    return errors, len(rows)
+
+
 def validate() -> list[str]:
     errors: list[str] = []
 
@@ -1215,17 +1435,42 @@ def validate() -> list[str]:
         if not any(pattern in err for err in _secret_read_errors("repo-scout", repo_scout_mut)):
             errors.append(f"mutation sanity: removing read deny {pattern} was not detected")
 
+    errors.extend(v2_model_errors())
     return errors
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument(
+        "--opencode2",
+        metavar="BINARY",
+        default=os.environ.get("RIGGVERK_OPENCODE2_BIN") or None,
+        help="OpenCode 2.x binary for the opt-in cross-check (default: $RIGGVERK_OPENCODE2_BIN)",
+    )
+    args = parser.parse_args(argv)
     errors = validate()
+    crosscheck = "OpenCode 2 cross-check skipped: pass --opencode2 BINARY or set RIGGVERK_OPENCODE2_BIN to run it"
+    if args.opencode2:
+        try:
+            version, resolved = resolve_v2_agents(args.opencode2)
+        except CrossCheckError as error:
+            errors.append(f"opencode 2 cross-check could not run: {error}")
+        else:
+            crosscheck_errors, count = v2_crosscheck_errors(resolved)
+            errors += crosscheck_errors
+            crosscheck = (
+                f"OpenCode {version} cross-check: {count} non-shell decisions match the rules `debug agents` resolved "
+                "(rulesets and matching from the binary; read/edit resource shapes from the 2.x source)"
+            )
     if errors:
         print("FAIL: OpenCode permission contract validation failed:", file=sys.stderr)
         for err in errors:
             print(f"  - {err}", file=sys.stderr)
         sys.exit(1)
     print(f"PASS: OpenCode permission contract valid for {len(ALL_ROLES)} roles")
+    print(f"OpenCode 2 non-shell decisions modelled for {len(ALL_ROLES)} roles (renamed actions, Location-relative paths)")
+    print(f"Shell rows model OpenCode 1.x only; OpenCode 2 shell scanner refusals not modelled: {', '.join(V2_SHELL_OPAQUE_REASONS)}")
+    print(crosscheck)
 
 
 if __name__ == "__main__":
