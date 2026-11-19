@@ -9,7 +9,7 @@ metadata:
   category: workflow
   risk: medium
   targets: codex, opencode, claude, cursor, copilot, pi, kilo, antigravity, grok
-  related: security, migrations
+  related: security-review, database-migrations
 ---
 
 # Release Check

@@ -6,7 +6,7 @@ metadata:
   category: workflow
   risk: low
   targets: codex, opencode, claude, cursor, copilot, pi, kilo, antigravity, grok
-  related: diagnose, blueprint, release-check
+  related: diagnose, implementation-plan, release-check
   source: https://github.com/mattpocock/skills (handoff, MIT)
 ---
 

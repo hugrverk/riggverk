@@ -1059,8 +1059,8 @@ mod tests {
         let root = temp_root("comma");
         write_skill(
             &root,
-            "skills/security",
-            &skill_body("security", "codex,  opencode , claude,cursor"),
+            "skills/security-review",
+            &skill_body("security-review", "codex,  opencode , claude,cursor"),
         );
         let catalog = discover_skill_catalog(&root).expect("discover");
         let _ = fs::remove_dir_all(&root);
@@ -1586,15 +1586,17 @@ mod tests {
             .collect();
         assert_eq!(counts.get("security-audit"), Some(&19));
         assert_eq!(counts.get("agents-md"), Some(&1));
-        assert_eq!(counts.get("adversarial"), Some(&5));
+        assert_eq!(counts.get("adversarial-implementation"), Some(&2));
+        assert_eq!(counts.get("adversarial-review"), Some(&2));
+        assert_eq!(counts.get("adversarial-test"), Some(&2));
         assert_eq!(counts.get("browser-qa"), Some(&1));
-        assert_eq!(counts.get("dispatch"), Some(&1));
+        assert_eq!(counts.get("delegate"), Some(&1));
         assert_eq!(counts.get("status-report"), Some(&4));
         assert_eq!(counts.get("pr-workflow"), Some(&1));
         // Codex's per-skill policy files: they keep the user-invoked skills explicit-only.
         assert_eq!(counts.get("retro"), Some(&1));
         assert_eq!(counts.get("grill-me"), Some(&1));
-        assert_eq!(counts.len(), 9, "{counts:?}");
+        assert_eq!(counts.len(), 11, "{counts:?}");
         assert_eq!(
             canonical_skill_dir(&repo, "security-audit"),
             repo.join("skills/security-audit")

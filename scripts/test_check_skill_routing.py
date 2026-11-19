@@ -167,13 +167,9 @@ class CheckSkillRoutingTests(unittest.TestCase):
         result = run(self.tree, "check-skill-routing.py")
         self.assertEqual(result.returncode, 0, result.stderr)
 
-    def test_adversarial_mode_file_reading_another_skill_fails(self) -> None:
-        self.append(self.skill("adversarial").parent / "test.md", "\nLoop: `../tdd/SKILL.md`.\n")
+    def test_adversarial_reference_reading_another_skill_fails(self) -> None:
+        self.append(self.skill("adversarial-test").parent / "critic-recipes.md", "\nLoop: `../tdd/SKILL.md`.\n")
         self.assert_fails("references the files of skill 'tdd'")
-
-    def test_adversarial_skill_without_a_mode_file_fails(self) -> None:
-        (self.skill("adversarial").parent / "review.md").unlink()
-        self.assert_fails("missing; adversarial carries review.md next to its SKILL.md")
 
     def test_user_invoked_skill_without_its_codex_policy_file_fails(self) -> None:
         for name in ("retro", "grill-me"):
@@ -186,22 +182,12 @@ class CheckSkillRoutingTests(unittest.TestCase):
             policy.write_text("policy:\n  allow_implicit_invocation: false\n", encoding="utf-8")
 
     def test_adversarial_skill_without_its_reference_file_fails(self) -> None:
-        (self.skill("adversarial").parent / "adversarial-roles.md").unlink()
-        self.assert_fails("missing; adversarial carries adversarial-roles.md next to its SKILL.md")
+        (self.skill("adversarial-review").parent / "adversarial-roles.md").unlink()
+        self.assert_fails("missing; adversarial-review carries adversarial-roles.md next to its SKILL.md")
 
-    def test_adversarial_skill_must_send_the_agent_to_each_mode_file(self) -> None:
-        path = self.skill("adversarial")
-        path.write_text(path.read_text(encoding="utf-8").replace("`test.md`", "the test file"), encoding="utf-8")
-        self.assert_fails("never names `test.md`")
-
-    def test_merged_skill_names_are_retired(self) -> None:
-        for old in ("adversarial-" + "implementation", "adversarial-" + "review", "adversarial-" + "test"):
-            with self.subTest(old=old):
-                self.assertFalse(list((self.tree / WS / "skills").rglob(f"{old}/SKILL.md")))
-                path = self.skill("tdd").parent / "notes.md"
-                path.write_text(f"See `{old}`.\n", encoding="utf-8")
-                self.assert_fails(f"references removed skill {old} (renamed to adversarial)")
-                path.unlink()
+    def test_adversarial_shared_references_must_match(self) -> None:
+        self.append(self.skill("adversarial-review").parent / "critic-recipes.md", "\nChanged.\n")
+        self.assert_fails("critic-recipes.md: copies differ across adversarial skills")
 
     def assert_scan(self, text: str, failure: str | None) -> None:
         """Plant `text` in a doc outside any skill and expect the removed-name scan to pass or fail."""
@@ -217,55 +203,6 @@ class CheckSkillRoutingTests(unittest.TestCase):
         finally:
             notes.unlink()
 
-    def test_renamed_skill_names_fail_anywhere_and_name_the_new_skill(self) -> None:
-        # Old names are built at runtime so this file is not itself a stale reference.
-        renamed = (
-            ("minimal-" + "implementation", "implement"),
-            ("implementation-" + "plan", "blueprint"),
-            ("accessibility-" + "review", "accessibility"),
-            ("database-" + "migrations", "migrations"),
-            ("screenshot-" + "review", "screenshot"),
-            ("security-" + "review", "security"),
-            ("review-" + "response", "comments"),
-            ("frontend-" + "design", "frontend"),
-        )
-        for old, new in renamed:
-            with self.subTest(old=old):
-                self.assertFalse(list((self.tree / WS / "skills").rglob(f"{old}/SKILL.md")))
-                self.assertTrue(list((self.tree / WS / "skills").rglob(f"{new}/SKILL.md")))
-                self.assert_scan(f"Then run {old} on the diff.\n", f"references removed skill {old} (renamed to {new})")
-
-    def test_delegate_counts_only_where_it_names_the_skill(self) -> None:
-        old = "dele" + "gate"  # built at runtime so this file is not itself a stale reference
-        self.assertFalse(list((self.tree / WS / "skills").rglob(f"{old}/SKILL.md")))
-        for prose in (
-            f"Review the report of a {old}d agent.\n",
-            f"The architect may {old} work to subagents; the {old} reports back.\n",
-            f"Call `{old}_slice()` or {old}_slice() once.\n",
-            f"fn test_{old}_route() {{}}\n",
-            f"git branch -d {old}/<slug>\n",
-            f'"riggverk-{old}": {{"mode": "primary"}}\n',
-            f"Copilot CLI has a built-in `/{old}` command.\n",
-        ):
-            with self.subTest(prose=prose):
-                self.assert_scan(prose, None)
-        for skill in (
-            f"Hand the slices to `{old}`.\n",
-            f"Not for parallel slices ({old}).\n",
-            f"  related: diagnose, {old}, handoff\n",
-            f"name: {old}\n",
-            f"skills: [{old}]\n",
-            f'      "default_skills": ["{old}"],\n',
-            f"See resources/default-workspace/skills/{old}/SKILL.md.\n",
-        ):
-            with self.subTest(skill=skill):
-                self.assert_scan(skill, f"references removed skill {old} (renamed to dispatch)")
-
-    def test_built_in_slash_command_is_not_the_removed_skill(self) -> None:
-        old = "security-" + "review"
-        self.assert_scan(f"Claude Code's `/{old}` is its built-in review.\n", None)
-        self.assert_scan(f"Read `.claude/skills/{old}/SKILL.md`.\n", f"references removed skill {old}")
-
     def test_identifier_containing_a_removed_name_passes(self) -> None:
         removed = "tri" + "age"
         self.assert_scan(f"fn the_ci_{removed}_fixture_passes() {{}}\n", None)
@@ -273,13 +210,13 @@ class CheckSkillRoutingTests(unittest.TestCase):
 
     def test_upstream_project_named_like_a_removed_skill_passes(self) -> None:
         upstream = "dementev-dev/adversarial-" + "review"
-        self.assertIn(upstream, self.skill("adversarial").read_text(encoding="utf-8"))
+        self.assertIn(upstream, self.skill("adversarial-review").read_text(encoding="utf-8"))
         (self.skill("tdd").parent / "notes.md").write_text(f"See https://github.com/{upstream}.\n", encoding="utf-8")
         result = run(self.tree, "check-skill-routing.py")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_release_notes_and_rules_history_may_name_removed_skills(self) -> None:
-        old = "adversarial-" + "review"
+        old = "cave" + "man"
         (self.tree / "release-notes").mkdir()
         (self.tree / "release-notes/2026.1.1.md").write_text(f"- New skill: {old}\n", encoding="utf-8")
         history = self.tree / WS / "metadata/rules-history/claude/old.md"
@@ -436,7 +373,7 @@ class CheckSkillRoutingTests(unittest.TestCase):
         self.assert_fails("Done when")
 
     def test_unknown_related_name_fails(self) -> None:
-        self.edit(self.skill("tdd"), "related: diagnose, blueprint", "related: diagnose, no-such-skill")
+        self.edit(self.skill("tdd"), "related: diagnose, implementation-plan", "related: diagnose, no-such-skill")
         self.assert_fails("related skill 'no-such-skill' does not exist")
 
     def test_description_budget_fails(self) -> None:
@@ -458,9 +395,9 @@ class CheckSkillRoutingTests(unittest.TestCase):
         self.edit(
             self.tree / WS / "templates/global-agent-rules.md",
             "## Skill routing\n",
-            "## Skill routing\n- Risky changes: `adversarial`.\n",
+            "## Skill routing\n- Risky changes: `adversarial-review`.\n",
         )
-        self.assert_fails("names on-request skill `adversarial`")
+        self.assert_fails("names on-request skill `adversarial-review`")
 
     def test_routing_bullet_naming_two_skills_fails(self) -> None:
         for rules in ("templates/global-agent-rules.md", "templates/cursor/user-rules.md", "templates/sync/codex-rules.md"):

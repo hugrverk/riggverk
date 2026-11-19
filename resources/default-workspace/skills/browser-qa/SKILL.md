@@ -1,13 +1,13 @@
 ---
 name: browser-qa
-description: Verifies frontend changes in a real browser or automation with route smoke, critical interactions, two or more viewports, console and network checks, and dev-server lifecycle. Use when a user-facing UI change needs proof that it works. Not for critiquing supplied screenshots (screenshot).
+description: Verifies frontend changes in a browser with route smoke, interactions, two viewports, console and network checks, and dev-server lifecycle. Use when a user-facing UI change needs proof that it works. Not for critiquing supplied screenshots (screenshot-review).
 license: MIT
 compatibility: Needs browser automation, such as the Playwright MCP server Riggverk installs or the Playwright CLI route in playwright-cli.md (needs Node.js and npm).
 metadata:
   category: frontend
   risk: medium
   targets: codex, opencode, claude, cursor, copilot, pi, kilo, antigravity, grok
-  related: screenshot, accessibility, frontend
+  related: screenshot-review, accessibility-review, frontend-design
 ---
 
 # Browser QA
@@ -16,14 +16,14 @@ Done when: each affected route loaded without unclassified console errors or fai
 
 ## Do Not Use When
 
-- The task only asks for visual diagnosis from provided screenshots; use `screenshot`.
+- The task only asks for visual diagnosis from provided screenshots; use `screenshot-review`.
 - No runnable app, build or URL exists; report the blocker instead.
 - The change is backend-only and has no browser-visible behavior.
 - You did not run a browser; do not claim browser verification.
 
 ## Browser QA vs screenshot
 
-- `screenshot` critiques static images the user provides or that already exist.
+- `screenshot-review` critiques static images the user provides or that already exist.
 - Browser QA runs the product, loads routes, checks console/network behavior, performs interactions, and may capture screenshots as evidence.
 
 ## Process

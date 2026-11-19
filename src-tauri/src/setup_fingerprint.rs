@@ -779,9 +779,13 @@ mod tests {
     fn skill_digest_uses_skill_md_only() {
         let home = temp("skill-digest-home");
         let ws = temp("skill-digest-ws");
-        let skill_md = crate::test_env::write_canonical_skill(&ws, None, "frontend", "body");
-        fs::write(ws.join("skills/frontend/user-notes.md"), "unknown sibling").unwrap();
-        let artifact = ArtifactId::OpenCodeSkill(SkillName::new("frontend").unwrap());
+        let skill_md = crate::test_env::write_canonical_skill(&ws, None, "frontend-design", "body");
+        fs::write(
+            ws.join("skills/frontend-design/user-notes.md"),
+            "unknown sibling",
+        )
+        .unwrap();
+        let artifact = ArtifactId::OpenCodeSkill(SkillName::new("frontend-design").unwrap());
         let digest = artifact_source_digest(&artifact, &ws, &home).unwrap();
         assert_eq!(digest, hash_file(&skill_md).unwrap());
     }

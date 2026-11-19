@@ -784,21 +784,19 @@ mod tests {
         );
     }
 
-    /// `dispatch`'s name before the rename, split so the removed-name scan does not read it here.
-    const OLD_DISPATCH: &str = concat!("dele", "gate");
-    const OLD_DISPATCH_FILES: [(&str, &[u8]); 2] = [
+    /// A synthetic skill name never shipped by a release.
+    const RETIRED_SKILL: &str = "retired-dispatch";
+    const RETIRED_SKILL_FILES: [(&str, &[u8]); 2] = [
         ("SKILL.md", b"the skill under its old name\n"),
         ("delegate-recipes.md", b"its recipes under the old name\n"),
     ];
 
-    /// The state an Update after the rename starts from: the previous release's `dispatch` is
-    /// installed under its old name, recorded and unedited, and the new name is not installed
-    /// yet. Returns the roots the skill installs into.
-    fn installed_before_the_dispatch_rename(env: &Env) -> Vec<SkillRoot> {
+    /// A recorded retired skill is installed and the current skill is not installed yet. Returns the roots the skill installs into.
+    fn installed_before_retired_skill_update(env: &Env) -> Vec<SkillRoot> {
         let mut roots = Vec::new();
         for planned in env.plan(&SKILLS) {
             if let ArtifactId::SkillFile(file) = &planned.artifact {
-                if file.skill.as_str() == "dispatch" {
+                if file.skill.as_str() == "delegate" {
                     env.drop_record(&planned.artifact);
                     if !roots.contains(&file.root) {
                         roots.push(file.root);
@@ -806,11 +804,11 @@ mod tests {
                 }
             }
         }
-        assert!(!roots.is_empty(), "the bundle installs dispatch");
+        assert!(!roots.is_empty(), "the bundle installs delegate");
         for root in &roots {
-            fs::remove_dir_all(env.root(*root).join("dispatch")).expect("remove the new name");
-            for (rel, bytes) in OLD_DISPATCH_FILES {
-                let old = skill_file(*root, OLD_DISPATCH, rel);
+            fs::remove_dir_all(env.root(*root).join("delegate")).expect("remove the new name");
+            for (rel, bytes) in RETIRED_SKILL_FILES {
+                let old = skill_file(*root, RETIRED_SKILL, rel);
                 env.write(&old, bytes);
                 env.set_record(&old, bytes);
             }
@@ -825,15 +823,15 @@ mod tests {
         }
     }
 
-    /// One Update after a rename retires the app's unedited copies under the old name with a
+    /// One Update retires the app's unedited copies under the old name with a
     /// backup and creates the new name in the same plan. An edited old copy holds its whole skill
     /// as a manual step, and an old skill the user keeps stays installed beside the new one.
     #[test]
-    fn a_renamed_skill_moves_to_its_new_name_in_one_update_and_spares_what_the_user_owns() {
+    fn a_retired_skill_is_removed_while_a_current_skill_is_created_and_user_edits_are_spared() {
         // Recorded and unedited: removed with a backup while the new name is created.
         {
             let env = Env::new("renamed-clean", &SKILLS);
-            let roots = installed_before_the_dispatch_rename(&env);
+            let roots = installed_before_retired_skill_update(&env);
             let pending = env.pending(&SKILLS);
             let of = |name: &str| -> Vec<OperationKind> {
                 pending
@@ -842,13 +840,13 @@ mod tests {
                     .map(|(_, kind)| *kind)
                     .collect()
             };
-            let removed = of(OLD_DISPATCH);
-            assert_eq!(removed.len(), roots.len() * OLD_DISPATCH_FILES.len());
+            let removed = of(RETIRED_SKILL);
+            assert_eq!(removed.len(), roots.len() * RETIRED_SKILL_FILES.len());
             assert!(
                 removed.iter().all(|kind| *kind == OperationKind::Remove),
                 "{pending:?}"
             );
-            let created = of("dispatch");
+            let created = of("delegate");
             assert_eq!(created.len(), removed.len(), "{pending:?}");
             assert!(
                 created.iter().all(|kind| *kind == OperationKind::Create),
@@ -863,16 +861,16 @@ mod tests {
             let result = env.apply(&SKILLS);
             assert!(result.success, "update: {}", result.message);
             for root in &roots {
-                assert!(!env.root(*root).join(OLD_DISPATCH).exists(), "{root:?}");
-                let new = skill_file(*root, "dispatch", "SKILL.md");
+                assert!(!env.root(*root).join(RETIRED_SKILL).exists(), "{root:?}");
+                let new = skill_file(*root, "delegate", "SKILL.md");
                 assert_eq!(
                     fs::read(env.path(&new)).expect("new name"),
                     env.bundled_bytes(&new)
                 );
             }
             for root in &roots {
-                for (rel, bytes) in OLD_DISPATCH_FILES {
-                    let name = format!("artifacts/skill-{}-{OLD_DISPATCH}~{rel}", root.label());
+                for (rel, bytes) in RETIRED_SKILL_FILES {
+                    let name = format!("artifacts/skill-{}-{RETIRED_SKILL}~{rel}", root.label());
                     let backup = env.backed_up(&result.transaction_id, &name);
                     assert_eq!(fs::read(&backup).expect("backup"), bytes, "{name}");
                 }
@@ -884,9 +882,9 @@ mod tests {
         // beside the new name.
         {
             let env = Env::new("renamed-edited", &SKILLS);
-            installed_before_the_dispatch_rename(&env);
-            let edited = skill_file(SkillRoot::Claude, OLD_DISPATCH, "SKILL.md");
-            let sibling = skill_file(SkillRoot::Claude, OLD_DISPATCH, "delegate-recipes.md");
+            installed_before_retired_skill_update(&env);
+            let edited = skill_file(SkillRoot::Claude, RETIRED_SKILL, "SKILL.md");
+            let sibling = skill_file(SkillRoot::Claude, RETIRED_SKILL, "delegate-recipes.md");
             let mine = b"my own notes in the old skill\n";
             env.write(&edited, mine);
 
@@ -895,12 +893,12 @@ mod tests {
             assert_eq!(
                 env.kind(
                     &SKILLS,
-                    &skill_file(SkillRoot::Claude, "dispatch", "SKILL.md")
+                    &skill_file(SkillRoot::Claude, "delegate", "SKILL.md")
                 ),
                 OperationKind::Create
             );
             let review = skills_op(&env.preview(&SKILLS)).details.clone();
-            let flagged = format!("! ~/.claude/skills/{OLD_DISPATCH} (edited, kept)");
+            let flagged = format!("! ~/.claude/skills/{RETIRED_SKILL} (edited, kept)");
             assert!(review.contains(&flagged), "the review flags it: {review:?}");
 
             let result = env.apply(&SKILLS);
@@ -908,27 +906,27 @@ mod tests {
             assert_eq!(fs::read(env.path(&edited)).expect("edited stays"), mine);
             assert_eq!(
                 fs::read(env.path(&sibling)).expect("sibling stays"),
-                OLD_DISPATCH_FILES[1].1
+                RETIRED_SKILL_FILES[1].1
             );
             assert!(env
-                .path(&skill_file(SkillRoot::Claude, "dispatch", "SKILL.md"))
+                .path(&skill_file(SkillRoot::Claude, "delegate", "SKILL.md"))
                 .is_file());
         }
 
         // Kept: the old skill stays installed beside the new one, now and at the next Update.
         {
             let env = Env::new("renamed-kept", &SKILLS);
-            installed_before_the_dispatch_rename(&env);
-            let edited = skill_file(SkillRoot::Claude, OLD_DISPATCH, "SKILL.md");
+            installed_before_retired_skill_update(&env);
+            let edited = skill_file(SkillRoot::Claude, RETIRED_SKILL, "SKILL.md");
             let mine = b"my own copy of the old skill\n";
             env.write(&edited, mine);
             env.keep(
                 SetupSurfaceId::Skills,
-                &format!("skill:claude:{OLD_DISPATCH}"),
+                &format!("skill:claude:{RETIRED_SKILL}"),
             )
             .expect("keep");
-            for (rel, _) in OLD_DISPATCH_FILES {
-                let old = skill_file(SkillRoot::Claude, OLD_DISPATCH, rel);
+            for (rel, _) in RETIRED_SKILL_FILES {
+                let old = skill_file(SkillRoot::Claude, RETIRED_SKILL, rel);
                 assert_eq!(env.kind(&SKILLS, &old), OperationKind::Manual, "{rel}");
             }
 
@@ -937,10 +935,10 @@ mod tests {
             assert_eq!(fs::read(env.path(&edited)).expect("kept"), mine);
             let claude = env.root(SkillRoot::Claude);
             assert!(claude
-                .join(OLD_DISPATCH)
+                .join(RETIRED_SKILL)
                 .join("delegate-recipes.md")
                 .is_file());
-            let new = skill_file(SkillRoot::Claude, "dispatch", "SKILL.md");
+            let new = skill_file(SkillRoot::Claude, "delegate", "SKILL.md");
             assert_eq!(
                 fs::read(env.path(&new)).expect("new name"),
                 env.bundled_bytes(&new)

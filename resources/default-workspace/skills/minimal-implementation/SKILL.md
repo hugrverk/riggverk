@@ -1,15 +1,15 @@
 ---
-name: implement
-description: Implements a code change as the smallest complete diff that fits existing ownership, then a simplification pass and the narrowest falsifying check. Use when the direction is clear and code must change. Not for slicing undefined work (blueprint) or an unknown root cause (diagnose).
+name: minimal-implementation
+description: Implements the smallest complete change fitting existing ownership, then simplifies and runs the narrowest falsifying check. Use when the direction is clear and code must change. Not for slicing undefined work (implementation-plan) or an unknown root cause (diagnose).
 license: MIT
 metadata:
   category: implementation
   risk: low
   targets: codex, opencode, claude, cursor, copilot, pi, kilo, antigravity, grok
-  related: blueprint, diagnose, tdd
+  related: implementation-plan, diagnose, tdd
 ---
 
-# Implement
+# Minimal Implementation
 
 Use for code implementation and refactoring. Build the smallest complete, clear, and verifiable solution. Minimize necessary complexity, not line count.
 

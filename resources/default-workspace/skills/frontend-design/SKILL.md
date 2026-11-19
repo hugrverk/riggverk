@@ -1,15 +1,15 @@
 ---
-name: frontend
-description: Chooses and implements the visual direction of web and product UI, keeping the existing design system or committing to one coherent direction. Use when building or restyling screens, layouts or components. Not for critiquing supplied screenshots (screenshot), a11y audits or runtime QA (browser-qa).
+name: frontend-design
+description: Chooses and implements visual direction for web and product UI, keeping an existing design system or choosing one direction. Use when building or restyling screens, layouts or components. Not for critiquing supplied screenshots (screenshot-review), a11y audits or runtime QA (browser-qa).
 license: MIT
 metadata:
   category: frontend
   risk: medium
   targets: codex, opencode, claude, cursor, copilot, pi, kilo, antigravity, grok
-  related: screenshot, browser-qa, accessibility, prototype
+  related: screenshot-review, browser-qa, accessibility-review, prototype
 ---
 
-# Frontend
+# Frontend Design
 
 Done when: the design thesis is stated, each state the change touches was rendered and checked at two or more viewports where layout changed, and body-text contrast was verified; anything not rendered is reported as Not verified.
 

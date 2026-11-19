@@ -7,18 +7,18 @@ metadata:
   category: workflow
   risk: high
   targets: codex, opencode, claude, cursor, copilot, pi, kilo, antigravity, grok
-  related: dispatch, blueprint, zoom-out
+  related: delegate, implementation-plan, zoom-out
 ---
 
 # Orchestrate
 
-You are the lead. You drive a goal to done through other agents: you plan, route, verify, integrate and decide; they do bounded slices. `dispatch` hands slices to other agents (one or several, with no charter or ledger); this skill is the goal-driven loop around them. Agents' reports are claims, never evidence, and the goal is a verified result, not a busy fleet.
+You are the lead. You drive a goal to done through other agents: you plan, route, verify, integrate and decide; they do bounded slices. `delegate` hands slices to other agents (one or several, with no charter or ledger); this skill is the goal-driven loop around them. Agents' reports are claims, never evidence, and the goal is a verified result, not a busy fleet.
 
 Done when: every done criterion in the charter is met and verified by your own checks, or the loop stopped at a terminal state below; the ledger is current; every worktree and branch you created is integrated, removed or listed for the user; and the report is given.
 
 ## When
 
-Only when the user asks for it: "orchestrate this", "lead agents toward X", "run subagents until Y is done", or `/orchestrate <goal>`. Never start a fleet on your own initiative. A "do it yourself" from the user wins. This skill needs `dispatch`; if it is not installed, say so and stop.
+Only when the user asks for it: "orchestrate this", "lead agents toward X", "run subagents until Y is done", or `/orchestrate <goal>`. Never start a fleet on your own initiative. A "do it yourself" from the user wins. This skill needs `delegate`; if it is not installed, say so and stop.
 
 ## Charter
 
@@ -41,19 +41,19 @@ Sections: Charter; Slices (id, files owned, acceptance checks, depends on, risk,
 
 Update it after every event: a lane starts or ends, a check runs, a decision arrives, the plan changes. Record a lane's worktree and branch as soon as you know them. It holds no secrets, and only names variables, never their values.
 
-**Resume.** Read the ledger first. Treat every lane without an end entry as dead: find its worktree with `git worktree list`, collect it as `dispatch` describes, then re-brief or finish the slice.
+**Resume.** Read the ledger first. Treat every lane without an end entry as dead: find its worktree with `git worktree list`, collect it as `delegate` describes, then re-brief or finish the slice.
 
 ## Loop
 
 1. **Map.** Read the owning code and docs, or send read-only agents to map wide areas (`zoom-out`).
-2. **Slice.** Break the goal into slices with `blueprint`. Every slice owns a disjoint set of files and has its own acceptance checks. Two slices that touch the same file run one after the other.
+2. **Slice.** Break the goal into slices with `implementation-plan`. Every slice owns a disjoint set of files and has its own acceptance checks. Two slices that touch the same file run one after the other.
 3. **Route by risk.**
    - **The lead keeps**: decisions, root-cause diagnosis, security judgement, releases and other outward actions, integration, and final verification.
-   - **Critical** implementation (data, persistence formats, public contracts): the lead does it, or a lane on the model the user's rules name for critical work. Use `adversarial` when the user asked for critic review.
-   - **Mechanical** (renames, codemods, boilerplate, docs sweeps): a lane on the route `dispatch` resolves.
+   - **Critical** implementation (data, persistence formats, public contracts): the lead does it, or a lane on the model the user's rules name for critical work. Use `adversarial-implementation` when the user asked for critic review.
+   - **Mechanical** (renames, codemods, boilerplate, docs sweeps): a lane on the route `delegate` resolves.
    - **Review or research**: fresh read-only agents.
-4. **Dispatch.** Start lanes up to the caps, each with a `dispatch` brief in its own worktree.
-5. **Collect and verify** each lane as `dispatch` describes, and run the acceptance checks yourself. A review finding counts only when you reproduce it; log the rest as unproven and do not act on them.
+4. **Dispatch.** Start lanes up to the caps, each with a `delegate` brief in its own worktree.
+5. **Collect and verify** each lane as `delegate` describes, and run the acceptance checks yourself. A review finding counts only when you reproduce it; log the rest as unproven and do not act on them.
 6. **Integrate** into `orchestrate/<slug>`, a branch you create from the base in your own worktree. Merge one lane at a time and run the checks after each. A conflict means the slices were not disjoint, so fix the plan, not just the merge. A lane that needs integrated work gets a worktree you add from `orchestrate/<slug>`. No integration runs while an adversarial slice is mid-round. Merging `orchestrate/<slug>` into the user's branch is an outward action.
 7. **Re-plan.** After each integration, compare the ledger with what you now know. When evidence contradicts the plan, stop dispatching and re-slice.
 8. **Decide.** Batch questions when a decision blocks a lane or crosses the authority. Use the harness's question tool when it has one, with the recommended option first and each question readable on its own. Keep unblocked lanes running while you wait.
@@ -74,14 +74,14 @@ Each state ends with the report.
 
 - Outward actions happen only within the authority. Approval in one place does not carry over to the next.
 - The git stash stack is shared across worktrees: never run a bare `git stash` or `git stash pop`.
-- Clean up only what you created, as `dispatch` describes.
+- Clean up only what you created, as `delegate` describes.
 
 ## Report
 
 Use the workspace final report (Changed, Verified, Not verified, Risk, Next) and add:
 
 - the terminal state and the ledger path;
-- `dispatch`'s Output for each slice;
+- `delegate`'s Output for each slice;
 - decisions asked and answered;
 - what is left running or uncleaned, and why.
 
@@ -95,8 +95,8 @@ Use the workspace final report (Changed, Verified, Not verified, Risk, Next) and
 ### OpenCode
 
 - The `explore`, `repo-scout`, `inspector`, `sentinel` and `scribe` roles have no shell. Include the diff or changed-file list in their prompt when needed.
-- Riggverk's architect may start only read-only roles, so start write lanes through the `dispatch` skill using external CLIs. Its step limit can end a long run before the goal: say so at the start, and keep the ledger current so a new session can resume.
+- Riggverk's architect may start only read-only roles, so start write lanes through the `delegate` skill using external CLIs. Its step limit can end a long run before the goal: say so at the start, and keep the ledger current so a new session can resume.
 
 ### Light harnesses
 
-- Copilot, Pi, Kilo, Antigravity and Grok usually have no subagents. Start external CLI lanes through the `dispatch` skill. With none, say so and ask whether to work through the slices yourself, one at a time, which is not orchestration.
+- Copilot, Pi, Kilo, Antigravity and Grok usually have no subagents. Start external CLI lanes through the `delegate` skill. With none, say so and ask whether to work through the slices yourself, one at a time, which is not orchestration.

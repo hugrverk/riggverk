@@ -686,7 +686,7 @@ describe("OpenCodeView model override", () => {
       await loaded();
       expect(critic().value).toBe("");
       expect(critic().options[0].textContent).toBe("inherit subagent or main model");
-      expect(screen.getByText("used by the adversarial skill's critic (inspector)")).toBeTruthy();
+      expect(screen.getByText("used by the adversarial skills' critic (inspector)")).toBeTruthy();
       fireEvent.change(critic(), { target: { value: "openai/gpt-5" } });
       const body = paneBody();
       act(() => body.focus());

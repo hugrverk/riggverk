@@ -1,6 +1,6 @@
 # Critic recipes
 
-Exact commands for running a fresh, read-only critic (or test-mode adversary) in another harness's CLI, for every mode of the `adversarial` skill. Checked against the `--help` of Codex CLI 0.164.0, Claude Code 2.1.308 and OpenCode 1.19.4 on 2026-10-27; after upgrading a CLI, check its `--help` again before trusting a flag.
+Exact commands for running a fresh, read-only critic (or adversary) in another harness's CLI, for the adversarial skills. Checked against the `--help` of Codex CLI 0.164.0, Claude Code 2.1.308 and OpenCode 1.19.4 on 2026-10-27; after upgrading a CLI, check its `--help` again before trusting a flag.
 
 ## Rules for every route
 
