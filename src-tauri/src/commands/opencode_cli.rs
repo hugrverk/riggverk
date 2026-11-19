@@ -24,9 +24,9 @@ pub(super) const VERSION_TIMEOUT: Duration = Duration::from_secs(10);
 pub(super) const AGENT_TIMEOUT: Duration = Duration::from_secs(20);
 const OUTPUT_CAP: usize = 4 * 1024;
 /// OpenCode 2's `debug agents` prints every agent with its whole resolved permission ruleset:
-/// about 0.3 to 0.55 MB per agent under the team policy (4 MB for the 13 agents of a Riggverk
-/// install on 2.3.2). 32 MiB covers some 60 agents; bigger output is cut there and the agent then
-/// counts as not verified. It is held only while the ids are read.
+/// about 0.3 MB per agent under the team policy (4 MB for the 13 agents of a Riggverk install on
+/// 2.3.2). 32 MiB covers some 100 agents; bigger output is cut there and the agent then counts as
+/// not verified. It is held only while the ids are read.
 const AGENTS_OUTPUT_CAP: usize = 32 * 1024 * 1024;
 
 /// The OpenCode 2 release the 2.x support was checked against.

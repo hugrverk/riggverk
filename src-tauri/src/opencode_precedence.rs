@@ -260,15 +260,15 @@ pub fn native_v2_configs(
 }
 
 /// The warning for native OpenCode 2 keys in `file`. OpenCode 1.19.5 refuses to load a file with
-/// `permissions` and loads the other keys without using them.
+/// `permissions`; it loads one with the other keys.
 pub fn native_v2_warning(file: &str, keys: &[String]) -> String {
     let v1 = if keys.iter().any(|key| key == "permissions") {
-        "OpenCode 1.x refuses to load a file with permissions"
+        ", and OpenCode 1.x refuses to load a file with permissions"
     } else {
-        "OpenCode 1.x does not use them"
+        ""
     };
     format!(
-        "{file} sets native OpenCode 2 keys ({}); OpenCode 2 applies them after the 1.x keys Riggverk manages, so they win over the team's values, and {v1}: move these settings to their 1.x keys or remove them",
+        "{file} sets native OpenCode 2 keys ({}); OpenCode 2 applies them after the 1.x keys Riggverk manages, so they win over the team's values{v1}: move these settings to their 1.x keys or remove them",
         keys.join(", ")
     )
 }
@@ -616,7 +616,9 @@ mod tests {
         );
         let ignored = native_v2_warning("opencode.json", &["agents".to_string()]);
         assert!(
-            ignored.contains("OpenCode 1.x does not use them"),
+            ignored.ends_with(
+                "win over the team's values: move these settings to their 1.x keys or remove them"
+            ),
             "{ignored}"
         );
         for warning in [&refused, &ignored] {
