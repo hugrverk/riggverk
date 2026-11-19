@@ -597,11 +597,11 @@ mod tests {
 
     #[test]
     fn a_harness_appendix_bullet_naming_a_disabled_skill_is_left_out() {
-        let base = "## Skill routing\n- Bugs: `diagnose`.\n- Security: `security`.\n\n## Scope\nNever `security` here.\n\n## Claude harness\n- `/security-review` is built in; the skill is `security`.\n- Skills install to `~/.claude/skills`.\n";
-        let disabled = BTreeSet::from(["security".to_string()]);
+        let base = "## Skill routing\n- Bugs: `diagnose`.\n- Security: `security-review`.\n\n## Scope\nNever `security-review` here.\n\n## Claude harness\n- Security changes use `security-review`.\n- Skills install to `~/.claude/skills`.\n";
+        let disabled = BTreeSet::from(["security-review".to_string()]);
         assert_eq!(
             compose(base, &disabled, "", CommentPolicy::HarnessDefault),
-            "## Skill routing\n- Bugs: `diagnose`.\n\n## Scope\nNever `security` here.\n\n## Claude harness\n- Skills install to `~/.claude/skills`.\n"
+            "## Skill routing\n- Bugs: `diagnose`.\n\n## Scope\nNever `security-review` here.\n\n## Claude harness\n- Skills install to `~/.claude/skills`.\n"
         );
         assert_eq!(
             compose(base, &BTreeSet::new(), "", CommentPolicy::HarnessDefault),

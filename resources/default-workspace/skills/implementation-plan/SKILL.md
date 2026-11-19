@@ -1,6 +1,6 @@
 ---
-name: blueprint
-description: Writes an implementation plan that breaks multi-step or cross-file work into small, verifiable slices with exact files, steps, commands and risks, without editing code. Use when changes span several files or layers, migrations, or scope that needs slicing. Not for writing the code (implement).
+name: implementation-plan
+description: Breaks multi-step or cross-file work into verifiable slices with exact files, steps, commands and risks, without editing code. Use when changes span several files or layers, migrations, or scope needs slicing. Not for writing the code (minimal-implementation).
 license: MIT
 metadata:
   category: planning
@@ -10,7 +10,7 @@ metadata:
   source: https://github.com/obra/superpowers (writing-plans, MIT)
 ---
 
-# Blueprint
+# Implementation Plan
 
 Make the plan clear enough for a coding agent with no project memory to execute safely; optimize for small diffs, verification, and low rework.
 

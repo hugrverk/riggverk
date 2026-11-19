@@ -52,7 +52,7 @@ const MIXED = review(
     op("skills", "update", {
       details: [
         "+ create skills/handoff/SKILL.md",
-        "~ update skills/frontend/SKILL.md",
+        "~ update skills/frontend-design/SKILL.md",
         "− remove skills/zoom-in/SKILL.md (no longer bundled, backed up)",
       ],
     }),
@@ -68,7 +68,7 @@ describe("buildPlanGroups", () => {
     const skills = groups[2]!.rows;
     expect(skills.map(row => [row.kind, row.label, row.file])).toEqual([
       ["create", "create", "skills/handoff/SKILL.md"],
-      ["update", "update", "skills/frontend/SKILL.md"],
+      ["update", "update", "skills/frontend-design/SKILL.md"],
       ["remove", "remove", "skills/zoom-in/SKILL.md"],
     ]);
     expect(skills[2]!.note).toBe("no longer bundled, backed up");

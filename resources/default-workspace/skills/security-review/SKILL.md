@@ -1,5 +1,5 @@
 ---
-name: security
+name: security-review
 description: Reviews a change's security risks in auth, input, injection, secrets, uploads, SSRF, CSRF/XSS, webhooks, dependencies, and agent shell or file access. Use when a change touches auth, input, endpoints, payments, uploads, shell or sensitive data. Not for whole-codebase audits (security-audit).
 license: MIT
 metadata:
@@ -9,7 +9,7 @@ metadata:
   related: diagnose, release-check
 ---
 
-# Security
+# Security Review
 
 Focus on the changed surface and realistic abuse paths; keep findings evidence-based, scoped, and actionable. This skill guides the review in the current context; for an independent read-only pass over a finished diff, use the `sentinel` agent where the harness has it, otherwise review inline.
 

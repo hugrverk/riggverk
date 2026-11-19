@@ -1,13 +1,13 @@
 # Adversarial roles
 
-How the `adversarial` skill decides who implements and who criticises, in every mode. It works with no setup: the defaults run on the first try, and the user changes a role in one short phrase.
+How the adversarial skills decide who implements and who criticises. It works with no setup: the defaults run on the first try, and the user changes a role in one short phrase.
 
 ## Roles
 
 - **lead**: this session, always. It writes the briefs, runs every proof and the verification, and decides. Not configurable.
-- **implementer**: the agent that changes code, in implement and test mode. Review mode has none and ignores the value.
+- **implementer**: the agent that changes code, in `adversarial-implementation` and `adversarial-test`. `adversarial-review` has none and ignores the value.
 - **critic**: the fresh, read-only agent that attacks the work each round.
-- **adversary**: the critic of test mode: a fresh, read-only agent that proposes failing tests each round, which the lead writes into the tree.
+- **adversary**: the critic of `adversarial-test`: a fresh, read-only agent that proposes failing tests each round, which the lead writes into the tree.
 
 Verification is never a role choice: the lead runs it. A `verifier` value anywhere is ignored.
 
@@ -26,7 +26,7 @@ For each role on its own, the first source that sets it wins:
    }
    ```
 
-   An `adversary` key takes the same shape. An optional mode key, `"implement"`, `"review"` or `"test"`, holds the same role keys for that mode only and wins over the top-level ones, for example `"review": { "critic": { "harness": "claude" } }`. Ignore the whole file, and say so, when it is not valid JSON or `schema_version` is not 1.
+   An `adversary` key takes the same shape. An optional skill key, `"adversarial-implementation"`, `"adversarial-review"` or `"adversarial-test"`, holds the same role keys for that skill only and wins over the top-level ones, for example `"adversarial-review": { "critic": { "harness": "claude" } }`. Ignore the whole file, and say so, when it is not valid JSON or `schema_version` is not 1.
 3. **Rules line.** One line in the user's own rules text, below the `<!-- END RIGGVERK BASE -->` marker (Riggverk's Library edits that text; Cursor users put it in their User Rules):
 
    `Adversarial roles: critic=<harness>[/<model>], adversary=<harness>[/<model>], implementer=<harness>[/<model>]`
@@ -51,15 +51,15 @@ Never ask the user to configure anything before the first run. A failed prefligh
 
 ## Start line
 
-Before the first round, print exactly one line in the user's language: each role with its route and model, where it came from (`default`, `chat`, `roles.json` or `rules`), the mode, and how to change it. Add a few words when a source was ignored or a route failed.
+Before the first round, print exactly one line in the user's language: each role with its route and model, where it came from (`default`, `chat`, `roles.json` or `rules`), the skill, and how to change it. Add a few words when a source was ignored or a route failed.
 
 ```text
-Roles: implementer=claude subagent (default), critic=codex/<model> (default: other family, comparable, preflight ok); mode: implement. Change: say "critic: claude", or add "Adversarial roles: critic=claude" below END in your rules.
+Roles: implementer=claude subagent (default), critic=codex/<model> (default: other family, comparable, preflight ok); skill: adversarial-implementation. Change: say "critic: claude", or add "Adversarial roles: critic=claude" below END in your rules.
 ```
 
 ## Ledger line
 
-At the end, print one line in the user's language, after the report: terminal state and rounds, findings accepted, rejected and unproven, the critic route and model with its source, and what the simplification round removed (implement mode only). Review and test mode count their own items; their files show the line.
+At the end, print one line in the user's language, after the report: terminal state and rounds, findings accepted, rejected and unproven, the critic route and model with its source, and what the simplification round removed (`adversarial-implementation` only). `adversarial-review` and `adversarial-test` count their own items.
 
 ```text
 Ledger: Approved after 2 rounds; findings 3 accepted, 1 rejected, 2 unproven; critic codex/<model> (default); simplification -6 lines.

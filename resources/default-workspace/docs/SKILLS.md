@@ -8,31 +8,33 @@ Do not duplicate full `SKILL.md` content here. This file is an index for choosin
 
 | Skill | Use When |
 | --- | --- |
-| `accessibility` | Reviewing UI for WCAG 2.2 AA risks, semantics, controls, keyboard, focus, labels, contrast, and responsive usability. |
-| `adversarial` | Only when the user explicitly asks for it, in plain words ("run an adversarial review", "implement this against a critic", "write adversarial tests") or with `/adversarial implement`, `/adversarial review` or `/adversarial test` (`$adversarial ...` in Codex); it is kept out of the routing rules. A fresh read-only critic, chosen by capability first, attacks the work, and only findings whose proof the lead re-runs count. Three modes: **implement** runs a delegated implementer against a fresh critic each round, with frozen judging tests and a deletion-only last round; **review** attacks an existing diff, or a plan in plan mode, reports Fatal, Significant, Minor and Pre-existing findings and fixes nothing, with at most one re-review; **test** has an adversary propose failing tests tied to the acceptance criteria, which the lead qualifies and freezes while the implementer changes production code only or reports `BLOCKED`. Roles work with no setup and change with one phrase in chat, an `Adversarial roles:` line below END in the rules, or an optional `roles.json` next to the skill. Ships `implement.md`, `review.md`, `test.md`, `adversarial-roles.md` and `critic-recipes.md`. |
+| `accessibility-review` | Reviewing UI for WCAG 2.2 AA risks, semantics, controls, keyboard, focus, labels, contrast, and responsive usability. |
+| `adversarial-implementation` | Only on explicit request: a delegated implementer works against a fresh critic each round, with frozen judging tests and a deletion-only final round. |
+| `adversarial-review` | Only on explicit request: a fresh critic reviews a diff or plan; the lead verifies findings and makes no fixes. |
+| `adversarial-test` | Only on explicit request: an adversary proposes failing tests, the lead qualifies and freezes them, and an implementer changes production code only. |
 | `agents-md` | Creating or refreshing a repository's `AGENTS.md` from commands that actually ran, the real layout and sourced invariants, with an optional `CLAUDE.md` that only holds `@AGENTS.md`. Writes only on request, after showing the diff. Ships `assets/AGENTS.template.md`. |
-| `blueprint` | Creating small verifiable implementation slices with exact files, steps, commands, and risks. |
+| `implementation-plan` | Creating small verifiable implementation slices with exact files, steps, commands, and risks. |
 | `browser-qa` | Verifying frontend changes with live browser checks, route smoke tests, interactions, responsive checks, console/network review, and evidence. |
 | `ci-triage` | A red CI run or failing PR checks: reads the failed job logs with `gh run view --log-failed` (bounded, secrets never printed), classifies each failure as code, flaky test, environment or infra, reproduces it with the repo's own command, then hands root cause to `diagnose`. Reruns only infra failures, with the user's ok. Works from a pasted log without gh. |
-| `comments` | Working through review comments on a PR (fetched with `gh api` or pasted): verifies each claim against the code, sorts it into fix, push back with evidence, or ask, declines as follow-ups only the findings that widen the PR (never a regression, a security or data-loss finding), prefers the smaller of two fixes that both close the claim, asks before running an outside contributor's code, commits one theme at a time, and drafts one reply per thread without performative agreement. Posts replies only after explicit approval, confirms each posted URL and never resolves threads. |
+| `review-response` | Working through review comments on a PR (fetched with `gh api` or pasted): verifies each claim against the code, sorts it into fix, push back with evidence, or ask, declines as follow-ups only the findings that widen the PR (never a regression, a security or data-loss finding), prefers the smaller of two fixes that both close the claim, asks before running an outside contributor's code, commits one theme at a time, and drafts one reply per thread without performative agreement. Posts replies only after explicit approval, confirms each posted URL and never resolves threads. |
 | `context-budget` | Reducing duplicated rules, docs, prompts, skills, and token overhead without removing essential safety guidance. |
 | `current-docs` | Checking official/current docs for version-specific APIs, SDKs, CLIs, config, hooks, or platform behavior. |
 | `diagnose` | Debugging bugs, failures, flakes, slowness, and regressions with a red-capable feedback loop and falsifiable hypotheses. |
-| `dispatch` | Handing one or more independent, well-specified mechanical or parallel slices to other installed agent CLIs (`codex exec`, `claude -p`, `opencode run`) or a subagent, only when the user wants other agents used. Each slice runs in its own git worktree with a self-contained brief, a time budget and the user's configured model; the lead reviews the branch like a PR, re-runs every check itself and integrates by merge or cherry-pick. Ships `delegate-recipes.md` (preflight, timeout, environment and write confinement per CLI). |
-| `frontend` | Designing or improving frontend UI across repositories with coherent aesthetic direction, accessibility, and verification. |
+| `delegate` | Handing one or more independent, well-specified mechanical or parallel slices to other installed agent CLIs (`codex exec`, `claude -p`, `opencode run`) or a subagent, only when the user wants other agents used. Each slice runs in its own git worktree with a self-contained brief, a time budget and the user's configured model; the lead reviews the branch like a PR, re-runs every check itself and integrates by merge or cherry-pick. Ships `delegate-recipes.md` (preflight, timeout, environment and write confinement per CLI). |
+| `frontend-design` | Designing or improving frontend UI across repositories with coherent aesthetic direction, accessibility, and verification. |
 | `grill-me` | Only on explicit request: interviews the user in decision rounds to sharpen an idea, plan or design; writes no files. |
-| `handoff` | Compacting paused work, a session or an executor's report into a trustworthy handoff with verified state and next action. Not for reviewing a delegated agent's report while the delegation runs (`dispatch`). |
-| `implement` | Implementing or refactoring with the smallest complete diff that fits existing ownership. |
-| `migrations` | Planning or reviewing schema/data changes with migration, rollback, and DB push reporting. |
-| `orchestrate` | Only when the user asks for it ("orchestrate this", "lead agents toward X", `/orchestrate <goal>`): the lead drives one goal to done through several agents. It writes a charter with done criteria, authority and caps, keeps a ledger file that survives context loss, slices the goal with `blueprint`, routes slices by risk to lanes started through `dispatch`, integrates them one at a time on an `orchestrate/<slug>` branch, verifies every report itself and batches decisions to the user. |
+| `handoff` | Compacting paused work, a session or an executor's report into a trustworthy handoff with verified state and next action. Not for reviewing a delegated agent's report while the delegation runs (`delegate`). |
+| `minimal-implementation` | Implementing or refactoring with the smallest complete diff that fits existing ownership. |
+| `database-migrations` | Planning or reviewing schema/data changes with migration, rollback, and DB push reporting. |
+| `orchestrate` | Only when the user asks for it ("orchestrate this", "lead agents toward X", `/orchestrate <goal>`): the lead drives one goal to done through several agents. It writes a charter with done criteria, authority and caps, keeps a ledger file that survives context loss, slices the goal with `implementation-plan`, routes slices by risk to lanes started through `delegate`, integrates them one at a time on an `orchestrate/<slug>` branch, verifies every report itself and batches decisions to the user. |
 | `pr-modernize` | An old or inherited PR: decides modernize, rework or close from its goal and what changed on the base, rebases in a disposable worktree with the PR's hooks off, compares the series with `git range-diff`, and keeps the original authors' credit. |
-| `pr-workflow` | Turning finished work into logical commits that follow the repo's own convention, running the gate, pushing a branch and opening or updating a PR with gh. Never force-pushes; each commit, push and PR step needs an explicit ok. On request it also watches a PR through CI with `gh pr checks --watch`, sends red checks to `ci-triage` and open threads to `comments`, and reports readiness without merging. Ships `assets/pr-body.template.md`. |
+| `pr-workflow` | Turning finished work into logical commits that follow the repo's own convention, running the gate, pushing a branch and opening or updating a PR with gh. Never force-pushes; each commit, push and PR step needs an explicit ok. On request it also watches a PR through CI with `gh pr checks --watch`, sends red checks to `ci-triage` and open threads to `review-response`, and reports readiness without merging. Ships `assets/pr-body.template.md`. |
 | `prototype` | Validating throwaway UI variants, state-machine/data-model checks, and interaction experiments before production implementation. |
 | `release-check` | Running pre-merge or pre-deploy readiness checks, including tests, migrations, env risk, smoke routes, and rollback. |
 | `release-notes` | Drafting user-facing release notes or a changelog section from commits and merged PRs since the last tag, in the project's own format and language: breaking changes first, internal chores excluded with reasons, human curation required. Writes into the repo's notes file only when asked, after showing the diff. |
 | `retro` | User-invoked only (`/retro`, `$retro` in Codex): reviewing a named coding session and proposing ranked, evidence-traced improvements to steering files, checks, and tooling. Proposals only. |
-| `screenshot` | Critiquing supplied screenshots of any UI, app, dashboard or document (web pages, desktop and mobile apps, error dialogs and terminal output, charts, reports, slides and PDFs) into a ranked patch plan: each issue with a hypothesis, the likely cause or file when there is code, and how to verify it. Edits nothing unless asked. |
-| `security` | Reviewing auth, authorization, input, secrets, uploads, API endpoints, payments, shell execution, or sensitive data. |
+| `screenshot-review` | Critiquing supplied screenshots of any UI, app, dashboard or document (web pages, desktop and mobile apps, error dialogs and terminal output, charts, reports, slides and PDFs) into a ranked patch plan: each issue with a hypothesis, the likely cause or file when there is code, and how to verify it. Edits nothing unless asked. |
+| `security-review` | Reviewing auth, authorization, input, secrets, uploads, API endpoints, payments, shell execution, or sensitive data. |
 | `security-audit` | An explicit full codebase security audit or pen test: Cloudflare's six-phase workflow with independent verification and validated `findings.json`. Vendored (MIT); companion files and validators install next to its `SKILL.md`. |
 | `status-report` | A one-file HTML status report for any repository: what happened, what is in progress and what comes next, with every item citing git, GitHub, CI or doc evidence. Ships `report.schema.json`, `assets/report-template.html` and `scripts/render-report.mjs` and `scripts/verify-report.mjs`. |
 | `tdd` | Using a narrow red-green-refactor loop for behavior changes, fixes, regressions, and tests. |
@@ -46,57 +48,57 @@ Domain skills for a team's own projects and stack are not bundled: keep them in 
 | --- | --- |
 | `ci-triage` / `diagnose` | Ci-triage turns a red CI run into a classified failure and a local reproduction; diagnose finds the root cause from that loop. |
 | `diagnose` / `tdd` | Diagnose finds root cause; TDD locks behavior with a narrow test once the contract is clear. |
-| `implement` / `adversarial` | `implement` is one bounded patch by the current agent; `adversarial` implement mode runs that patch through a separate implementer and a fresh hostile critic per round, only when the user asks for it. |
-| `adversarial` / `/code-review` | `/code-review` (or the `inspector` agent) is the routine review; `adversarial` review mode runs a fresh critic from another route and reports only findings the lead proved, only when the user asks for it. "Have a critic review it" about finished work or a plan means review mode, not implement mode. |
-| `tdd` / `adversarial` | TDD has the current agent write each test and then the code; `adversarial` test mode has a separate adversary write the tests and a separate implementer fix the code against them frozen, only when the user explicitly asks for it. |
-| `dispatch` / `adversarial` | `dispatch` hands one or more slices to other agents and the lead reviews and verifies each once; `adversarial` implement mode adds a fresh hostile critic every round and runs only when the user asks for it. |
-| `dispatch` / `orchestrate` | `dispatch` hands one or more slices to other agents and verifies each; `orchestrate` leads a whole goal through many such lanes with a charter, a ledger and an integration branch, only when the user asks for it. |
-| `dispatch` / `handoff` | `dispatch` runs other agents on slices and verifies their branches, including their reports while a delegation runs; handoff compacts state for whoever picks the work up. |
-| `grill-me` / `blueprint` | Grill-me clarifies decisions through an explicit user-requested interview; `blueprint` turns settled scope into verifiable implementation slices. |
+| `minimal-implementation` / `adversarial-implementation` | `minimal-implementation` is one bounded patch by the current agent; `adversarial-implementation` runs that patch through a separate implementer and a fresh hostile critic per round, only when the user asks for it. |
+| `adversarial-review` / `/code-review` | `/code-review` (or the `inspector` agent) is the routine review; `adversarial-review` runs a fresh critic from another route and reports only findings the lead proved, only when the user asks for it. "Have a critic review it" about finished work or a plan means, not implement mode. |
+| `tdd` / `adversarial-test` | TDD has the current agent write each test and then the code; `adversarial-test` has a separate adversary write the tests and a separate implementer fix the code against them frozen, only when the user explicitly asks for it. |
+| `delegate` / `adversarial-implementation` | `delegate` hands one or more slices to other agents and the lead reviews and verifies each once; `adversarial-implementation` adds a fresh hostile critic every round and runs only when the user asks for it. |
+| `delegate` / `orchestrate` | `delegate` hands one or more slices to other agents and verifies each; `orchestrate` leads a whole goal through many such lanes with a charter, a ledger and an integration branch, only when the user asks for it. |
+| `delegate` / `handoff` | `delegate` runs other agents on slices and verifies their branches, including their reports while a delegation runs; handoff compacts state for whoever picks the work up. |
+| `grill-me` / `implementation-plan` | Grill-me clarifies decisions through an explicit user-requested interview; `implementation-plan` turns settled scope into verifiable implementation slices. |
 | `grill-me` / `prototype` | Grill-me identifies decisions that need something to react to; prototype builds throwaway variants to test them. |
-| `blueprint` / `implement` | `blueprint` defines slices; `implement` executes one bounded patch. |
-| `frontend` / `accessibility` | `frontend` includes baseline a11y during implementation; `accessibility` is a specialist audit. |
-| `frontend` / `screenshot` | `screenshot` critiques supplied screenshots of any UI or document; `frontend` chooses direction and implements. |
-| `frontend` / `browser-qa` | `frontend` owns visual direction; browser-qa supplies runtime verification evidence. |
+| `implementation-plan` / `minimal-implementation` | `implementation-plan` defines slices; `minimal-implementation` executes one bounded patch. |
+| `frontend-design` / `accessibility-review` | `frontend-design` includes baseline a11y during implementation; `accessibility-review` is a specialist audit. |
+| `frontend-design` / `screenshot-review` | `screenshot-review` critiques supplied screenshots of any UI or document; `frontend-design` chooses direction and implements. |
+| `frontend-design` / `browser-qa` | `frontend-design` owns visual direction; browser-qa supplies runtime verification evidence. |
 | `agents-md` / global rules | `agents-md` writes a repository's own `AGENTS.md` from verified facts; it never edits or repeats the user's global rules, which the project file complements. |
 | `handoff` / `release-check` | Handoff compacts session state; release-check validates merge/deploy readiness. |
 | `pr-workflow` / `release-check` | Pr-workflow commits, pushes and opens the PR, and runs the repo's gate before the push; release-check owns the go/no-go verdict on merge or deploy readiness. |
 | `pr-workflow` / `ci-triage` | Pr-workflow's watch waits for the checks and reports them; ci-triage takes over when one is red or canceled. |
-| `pr-workflow` / `comments` | Pr-workflow's watch reports the open threads; `comments` verifies them and drafts the replies. |
+| `pr-workflow` / `review-response` | Pr-workflow's watch reports the open threads; `review-response` verifies them and drafts the replies. |
 | `pr-workflow` / `pr-modernize` | Pr-workflow turns the user's own finished work into a new or updated PR and never rewrites pushed commits; pr-modernize revives, rebases or takes over an old or inherited PR and may rewrite its branch, only after an ok for the exact command (the one exception pr-workflow allows). |
 | `handoff` / `pr-modernize` | Handoff compacts state for whoever picks the work up; pr-modernize treats such a handoff as context, verifies it against the code and takes the PR forward. |
 | `release-notes` / `release-check` | Release-notes drafts what changed for users; release-check decides whether the branch is ready to ship. |
-| `security` / `security-audit` | `security` checks a change or answers a focused question in the current context; security-audit runs a full multi-agent audit of a whole codebase only when one is explicitly asked for. |
-| `security` / `sentinel` (agent) | The skill guides the review in the current context; where the harness has the sentinel agent (OpenCode, Claude), it performs an independent read-only review of a finished diff, otherwise the review stays inline. |
+| `security-review` / `security-audit` | `security-review` checks a change or answers a focused question in the current context; security-audit runs a full multi-agent audit of a whole codebase only when one is explicitly asked for. |
+| `security-review` / `sentinel` (agent) | The skill guides the review in the current context; where the harness has the sentinel agent (OpenCode, Claude), it performs an independent read-only review of a finished diff, otherwise the review stays inline. |
 | `retro` / `context-budget` | Retro mines one named session for environment fixes; context-budget audits instruction surfaces without a session. |
 | `zoom-out` / repo-scout (agent) | Zoom-out explains code context in chat; repo-scout agent maps unfamiliar repos read-only before implementation. |
-| `comments` / `/code-review` | `/code-review` (or the `inspector` agent) reviews a diff; `comments` answers someone else's review of the user's PR, claim by claim. |
+| `review-response` / `/code-review` | `/code-review` (or the `inspector` agent) reviews a diff; `review-response` answers someone else's review of the user's PR, claim by claim. |
 
 ## Common Combinations
 
 - Bugs or regressions: `diagnose`; add `tdd` when a narrow regression test is useful.
 - Red CI run or failing PR checks: `ci-triage`, then `diagnose` for root cause.
-- Code implementation: `implement`; add `blueprint` for larger slices.
-- Unfamiliar code: `zoom-out`, then `blueprint` if edits are needed.
-- Frontend implementation: `frontend`; add `browser-qa` for runtime verification and `accessibility` for UI risk.
-- Screenshot-driven UI: `screenshot`, then `frontend`.
-- Security-sensitive changes: `security`; add `migrations` for schema/data work.
+- Code implementation: `minimal-implementation`; add `implementation-plan` for larger slices.
+- Unfamiliar code: `zoom-out`, then `implementation-plan` if edits are needed.
+- Frontend implementation: `frontend-design`; add `browser-qa` for runtime verification and `accessibility-review` for UI risk.
+- Screenshot-driven UI: `screenshot-review`, then `frontend-design`.
+- Security-sensitive changes: `security-review`; add `database-migrations` for schema/data work.
 - Full codebase security audit or pen test: `security-audit`.
-- Prototyping before implementation: `prototype`; add `frontend` for UI prototypes.
+- Prototyping before implementation: `prototype`; add `frontend-design` for UI prototypes.
 - Pausing, executor reports, or context transfer: `handoff`.
 - Project status report or weekly summary: `status-report`.
 - Commit, push and open or update a PR: `pr-workflow`, which runs the repo's gate before the push; `release-check` when the question is merge or deploy readiness.
-- Watching a PR through CI, on request: `pr-workflow`; it hands a red check to `ci-triage` and open threads to `comments`.
-- Old, stale or inherited PR: `pr-modernize`; add `pr-workflow` to open a replacement and `comments` for its open threads.
+- Watching a PR through CI, on request: `pr-workflow`; it hands a red check to `ci-triage` and open threads to `review-response`.
+- Old, stale or inherited PR: `pr-modernize`; add `pr-workflow` to open a replacement and `review-response` for its open threads.
 - Release readiness: `release-check`.
 - Onboarding agents to a repo, or a missing or stale `AGENTS.md`: `agents-md`.
 - Release notes or a changelog section: `release-notes`; add `release-check` for the gate.
-- Docs, rules, or prompt consolidation: `context-budget`; add `blueprint` for explicit maps.
+- Docs, rules, or prompt consolidation: `context-budget`; add `implementation-plan` for explicit maps.
 - Session retrospective: `retro`, only when the user invokes `/retro` or `$retro` (it is not routed by the rules).
-- Adversarial implementation, review of a diff or plan, or tests: `adversarial` with the matching mode, only when the user explicitly asks for it (it is not routed by the rules).
-- Leading several agents toward one goal: `orchestrate`, only when the user asks for it; it starts each lane through `dispatch` and slices the goal with `blueprint`.
+- Adversarial work: `adversarial-implementation`, `adversarial-review` or `adversarial-test`, only when the user explicitly asks for it (not routed by the rules).
+- Leading several agents toward one goal: `orchestrate`, only when the user asks for it; it starts each lane through `delegate` and slices the goal with `implementation-plan`.
 - Review passes: Claude Code uses the built-in `/code-review` and `/simplify`; other harnesses use the `inspector` agent.
-- Review comments on the user's PR: `comments`; add `implement` for the fixes.
+- Review comments on the user's PR: `review-response`; add `minimal-implementation` for the fixes.
 
 ## Skill Metadata
 
@@ -112,12 +114,12 @@ metadata:
   category: frontend
   risk: medium
   targets: codex, opencode, claude, cursor, copilot, pi, kilo, antigravity, grok
-  related: screenshot, accessibility, frontend
+  related: screenshot-review, accessibility-review, frontend-design
 ---
 ```
 
 - `license` — `MIT` on every bundled skill, so the license travels with a copy taken out of the bundle. Third-party credits are in the repository's `NOTICE.md`.
-- `compatibility` — only where a skill needs something beyond reading and editing files: subagents or another agent CLI (`adversarial`, full `security-audit`), browser automation (`browser-qa`), `gh` and Node.js (`status-report`).
+- `compatibility` — only where a skill needs something beyond reading and editing files: subagents or another agent CLI (the adversarial skills, full `security-audit`), browser automation (`browser-qa`), `gh` and Node.js (`status-report`).
 - `metadata.category` — functional area.
 - `metadata.risk` — low, medium, or high.
 - `metadata.targets` — comma-separated harnesses that get the skill. Every harness reads the skills folders Riggverk installs into, so bundled skills list all nine: codex, opencode, claude, cursor, copilot, pi, kilo, antigravity, grok.
@@ -125,7 +127,7 @@ metadata:
 - `metadata.source` — upstream work a skill adapts or draws on (see `NOTICE.md`).
 - `disable-model-invocation` — optional `true` for user-invoked skills (currently `retro` and `grill-me`). Claude Code and Cursor then hide the skill from the model. Codex ignores that key and reads its own flag instead: `retro` and `grill-me` carry `agents/openai.yaml` with `policy.allow_implicit_invocation: false`, so Codex runs them only on an explicit `$retro` or `$grill-me`. OpenCode and the light harnesses honour neither, so such a skill must not be referenced in routing bullets, its description says it runs only on an explicit request and names the invocation (`/retro`, `$retro` in Codex), and its body repeats the rule.
 
-The `adversarial` skill keeps model invocation so plain words can start it, but each run spends several agents, so the routing check also keeps it out of routing bullets.
+The adversarial skills keep model invocation so plain words can start them, but each run spends several agents, so the routing check keeps them out of routing bullets.
 
 Claude-only frontmatter keys sit directly in the skill's frontmatter, because Claude Code reads them only there: `context`, `agent`, `background`, `disable-model-invocation`, and `allowed-tools` (for example `release-check` runs in a forked `verifier` context on Claude Code). `allowed-tools` pre-approves a command prefix, so a bundled skill lists only exact read forms (`git remote -v`, `git config --get commit.template`, `git tag --list *`, `gh auth status`, `gh pr diff *`) and never a prefix that can write, run code or print a secret (`git config *`, `git log *`, `jq *`, or a gh read command, which takes `--jq env`); `scripts/check-skill-routing.py` refuses those, and Claude Code's built-in read-only handling covers `git status`, `git log`, `git diff`, `head` and `tail` without a prompt. Codex and OpenCode ignore them. A skill that sets one of `context`, `agent`, `background` or `allowed-tools` also carries a `### Claude Code` notes section (see below).
 
@@ -141,7 +143,7 @@ The `description` is the only selection signal Codex, OpenCode, and Cursor see, 
 
 ## Supporting files
 
-Files next to a `SKILL.md` (references, schemas, templates, scripts) install with the skill, at the same relative paths, so a skill can say "read `HUNTING.md`" or "run `scripts/verify-report.mjs`" and mean the file next to it. `security-audit` carries its reference files, `status-report` carries its schema, template and `scripts/render-report.mjs` and `scripts/verify-report.mjs`, `browser-qa` carries `playwright-cli.md` (its route when no browser tool is available), and `adversarial` carries one file per mode (`implement.md`, `review.md`, `test.md`) plus `adversarial-roles.md` (how roles are chosen) and `critic-recipes.md` (CLI recipes for external critics). `retro` and `grill-me` each carry `agents/openai.yaml`, Codex's per-skill policy file. A skill is installed on its own, so it never reads another skill's files; `scripts/check-skill-routing.py` fails on a `../other-skill/` or `skills/other-skill/` reference and when a supporting file a skill depends on (the `adversarial` mode and reference files) is missing.
+Files next to a `SKILL.md` (references, schemas, templates, scripts) install with the skill, at the same relative paths, so a skill can say "read `HUNTING.md`" or "run `scripts/verify-report.mjs`" and mean the file next to it. `security-audit` carries its reference files, `status-report` carries its schema, template and `scripts/render-report.mjs` and `scripts/verify-report.mjs`, `browser-qa` carries `playwright-cli.md` (its route when no browser tool is available), and each adversarial skill carries `adversarial-roles.md` (how roles are chosen) and `critic-recipes.md` (CLI recipes for external critics). `retro` and `grill-me` each carry `agents/openai.yaml`, Codex's per-skill policy file. A skill is installed on its own, so it never reads another skill's files; `scripts/check-skill-routing.py` fails on a `../other-skill/` or `skills/other-skill/` reference and when a supporting file a skill depends on (the adversarial reference files) is missing.
 
 Rules for the files in a skill directory in the bundle: regular files only (no symlinks), names of letters, digits, `.`, `_` and `-` that do not start with a dot, at most four path levels, at most 64 files and 2 MiB in total, at most 1 MiB per file, and no `SKILL.md` below the skill's own. Dot files are ignored. A skill that breaks a rule installs nothing until it is fixed. Write paths in a skill relative to its directory; never point a skill at the workspace folder, since the installed copy lives in a skills folder.
 

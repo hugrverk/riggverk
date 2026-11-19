@@ -79,9 +79,11 @@ BLOCK_SCALAR_RE = re.compile(r"^[>|][+-]?\d*$")
 PLAIN_SCALAR_BAD_START = "\"'[]{}>|*&!%@`#"
 
 # A skill is installed on its own, so it may not read another skill's files. Supporting files a
-# skill's SKILL.md depends on must sit next to it: one file per mode plus the shared references.
+# skill's SKILL.md depends on must sit next to it: each adversarial skill carries the shared references.
 REQUIRED_SUPPORT_FILES = {
-    "adversarial": ("implement.md", "review.md", "test.md", "adversarial-roles.md", "critic-recipes.md"),
+    "adversarial-implementation": ("adversarial-roles.md", "critic-recipes.md"),
+    "adversarial-review": ("adversarial-roles.md", "critic-recipes.md"),
+    "adversarial-test": ("adversarial-roles.md", "critic-recipes.md"),
 }
 # Codex ignores `disable-model-invocation`; its own per-skill policy file keeps these skills explicit-only.
 CODEX_POLICY_SKILLS = ("retro", "grill-me")
@@ -141,21 +143,6 @@ DEPRECATED_METADATA_PREFIX = "resources/default-workspace/metadata/deprecated-sk
 # History that names skills as they were: release notes per version and the rules bases the app
 # shipped (append-only, keyed by digest).
 HISTORICAL_PREFIXES = ("release-notes/", "resources/default-workspace/metadata/rules-history/")
-# Mentions that contain a removed skill name but are not the skill; they are cut before the scan.
-NOT_SKILL_MENTIONS = (
-    # Upstream projects and skills named like a removed skill (credited in NOTICE.md).
-    "dementev-dev/adversarial-review",
-    "dementev-dev adversarial-review",
-    "`frontend-design` skill in [anthropics/skills]",
-    # The Cursor rule file of that name, a separate bundled file.
-    "frontend-design.mdc",
-    # Claude Code's built-in command as its context listing prints it (kit_listing_probe fixture).
-    "| security-review | Built-in |",
-)
-# Harness built-in slash commands named like a removed skill: Claude Code's `/security-review` and
-# Copilot CLI's `/delegate`. A path such as `skills/security-review/` is still the skill.
-BUILTIN_COMMAND_RE = re.compile(r"(?<![\w./-])/(?:security-review|delegate)(?![\w-])")
-
 FRONTMATTER_RE = re.compile(r"^---\s*$([\s\S]*?)^---\s*$", re.MULTILINE)
 FIELD_RE = re.compile(r"^([a-zA-Z0-9_-]+):\s*(.+?)\s*$")
 BACKTICK_NAME_RE = re.compile(r"`([a-z][a-z0-9-]*)`")
@@ -185,30 +172,7 @@ def removed_skill_names() -> set[str]:
     return set(re.findall(r'"([^"]+)"', match.group(1)))
 
 
-# Skills dropped after managed records existed are retired through those records and the shipped
-# digests, not REMOVED_SKILL_NAMES (the pre-manifest list; see RETIRED_AFTER_MANIFEST in
-# scripts/generate-pre-manifest-ownership.py). Their names must not come back either. Each maps to
-# the skill that took its place.
-MERGED_SKILL_NAMES = {
-    # Merged into one skill with modes after 2026.11.12.
-    "adversarial-implementation": "adversarial",
-    "adversarial-review": "adversarial",
-    "adversarial-test": "adversarial",
-    # Renamed to short names after 2026.11.12.
-    "accessibility-review": "accessibility",
-    "database-migrations": "migrations",
-    "delegate": "dispatch",
-    "frontend-design": "frontend",
-    "implementation-plan": "blueprint",
-    "minimal-implementation": "implement",
-    "review-response": "comments",
-    "screenshot-review": "screenshot",
-    "security-review": "security",
-}
-REMOVED_SKILLS = removed_skill_names() | set(MERGED_SKILL_NAMES)
-# Removed names that are also ordinary words: they count only where they name a skill, so "a
-# delegated agent", "delegate the work" and `delegate_slice()` stay prose and code.
-CONTEXT_ONLY_NAMES = {"delegate"}
+REMOVED_SKILLS = removed_skill_names()
 # Not a letter, digit, `-` or `_`: a removed name counts only as a whole skill name, so `triage` is
 # stale while a current skill whose name merely contains it (`ci-triage`) and an identifier that
 # contains it (`test_ci_triage_fixture`) are not.
@@ -216,42 +180,18 @@ _EDGE_BEFORE = r"(?<![A-Za-z0-9_-])"
 _EDGE_AFTER = r"(?![A-Za-z0-9_-])"
 
 
-def _skill_name_contexts(name: str) -> re.Pattern[str]:
-    """Where a word names a skill: in backticks, quotes or parentheses on its own (descriptions
-    point to a skill as `(name)`), as an entry of a `name:`, `related:`, `skills:` or
-    `default_skills` field, or as a skill folder (`skills/<name>/`)."""
-    word = re.escape(name)
-    return re.compile(
-        "|".join(
-            (
-                rf"`{word}`",
-                rf"[\"']{word}[\"']",
-                rf"\({word}\)",
-                rf"^[ \t]*[\"']?(?:name|related|skills|default_skills)[\"']?[ \t]*:[^\n]*?{_EDGE_BEFORE}{word}{_EDGE_AFTER}",
-                rf"skills/(?:[a-z0-9-]+/)?{word}{_EDGE_AFTER}",
-            )
-        ),
-        re.MULTILINE,
-    )
-
-
 REMOVED_SKILL_RES = {
-    name: _skill_name_contexts(name) if name in CONTEXT_ONLY_NAMES else re.compile(rf"{_EDGE_BEFORE}{re.escape(name)}{_EDGE_AFTER}")
+    name: re.compile(rf"{_EDGE_BEFORE}{re.escape(name)}{_EDGE_AFTER}")
     for name in REMOVED_SKILLS
 }
 
 
 def removed_skills_in(text: str) -> list[str]:
-    for mention in NOT_SKILL_MENTIONS:
-        text = text.replace(mention, "")
-    text = BUILTIN_COMMAND_RE.sub("", text)
     return sorted(name for name, pattern in REMOVED_SKILL_RES.items() if pattern.search(text))
 
 
 def removed_skill_message(name: str) -> str:
-    """`references removed skill <name>`, plus where it went when another skill took its place."""
-    renamed = MERGED_SKILL_NAMES.get(name)
-    return f"references removed skill {name}" + (f" (renamed to {renamed})" if renamed else "")
+    return f"references removed skill {name}"
 
 
 def parse_fields(frontmatter: str) -> dict[str, str]:
@@ -433,7 +373,7 @@ def rules_files() -> list[Path]:
 # Skills that start only when the user asks for them in plain words or by slash command.
 # The model may invoke them, so disable-model-invocation does not mark them; the rules
 # must still never route to them, since each run spends several agents.
-ON_REQUEST_SKILLS = ("adversarial", "orchestrate")
+ON_REQUEST_SKILLS = ("adversarial-implementation", "adversarial-review", "adversarial-test", "orchestrate")
 
 
 def validate_user_invoked_routing(discovered: dict[str, Path]) -> None:
@@ -706,6 +646,15 @@ def validate_required_support_files(discovered: dict[str, Path]) -> None:
                 fail(f"{rel(skill_md)}: never names `{filename}`, so no agent is sent to it")
 
 
+def validate_shared_reference_copies(discovered: dict[str, Path]) -> None:
+    """Shared adversarial references must remain byte-identical."""
+    names = ("adversarial-implementation", "adversarial-review", "adversarial-test")
+    for filename in ("adversarial-roles.md", "critic-recipes.md"):
+        copies = [(discovered[name].parent / filename).read_bytes() for name in names]
+        if len(set(copies)) != 1:
+            fail(f"{filename}: copies differ across adversarial skills")
+
+
 def validate_codex_policy_files(discovered: dict[str, Path]) -> None:
     """A user-invoked skill carries the Codex policy file that stops implicit invocation."""
     for name in CODEX_POLICY_SKILLS:
@@ -867,6 +816,7 @@ def main() -> None:
     validate_canonical_skill_files(discovered_map)
     validate_no_sibling_references(discovered_map)
     validate_required_support_files(discovered_map)
+    validate_shared_reference_copies(discovered_map)
     validate_codex_policy_files(discovered_map)
     validate_routing_sources(discovered)
     validate_user_invoked_routing(discovered_map)
