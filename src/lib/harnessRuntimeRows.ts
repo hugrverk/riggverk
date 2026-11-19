@@ -85,6 +85,7 @@ function opencodeCliRow(cli: OpenCodeCliHealth | null): KvItem[] {
   if (!cli) return [];
   switch (cli.status) {
     case "supported": return [{ label: "cli", value: cli.version ?? "found", tone: "ok" }];
+    case "compatible": return [{ label: "cli", value: `${cli.version ?? "unknown"} · compatible`, tone: "ok" }];
     case "unsupported": return [{ label: "cli", value: `${cli.version ?? "unknown"} · unsupported`, tone: "warn" }];
     case "missing": return [{ label: "cli", value: cli.detail, tone: "warn", wrap: true }];
     default: return [{ label: "cli", value: "found · version unknown", tone: "dim" }];
@@ -147,7 +148,9 @@ function opencodeRows(health: OpenCodeRuntimeHealth): KvItem[] {
     opencodeConfigRow(health),
     ...opencodeOverridesRow(health),
     opencodePlaywrightRow(health),
-    statusKeysRow("tui", health.tui_status, health.tui_diverged_keys),
+    health.tui_status === "not_read"
+      ? { label: "tui", value: "not read by OpenCode 2", tone: "dim" }
+      : statusKeysRow("tui", health.tui_status, health.tui_diverged_keys),
     ...nextRows(health.status, health.next_action),
     ...warningRows(health.warnings),
   ];

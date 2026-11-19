@@ -117,8 +117,10 @@ describe("runtimeRowsFor", () => {
     expect(row(rowsOf(), "cli")).toMatchObject({ value: "1.19.3", tone: "ok" });
     expect(rowsOf({ cli: null }).map(item => item.label)).not.toContain("cli");
 
-    const two = row(rowsOf({ cli: { status: "unsupported", version: "2.0.32", major: 2, detail: "long explanation" } }), "cli");
-    expect(two).toMatchObject({ value: "2.0.32 · unsupported", tone: "warn" });
+    const two = row(rowsOf({ cli: { status: "compatible", version: "2.3.2", major: 2, detail: "long explanation" } }), "cli");
+    expect(two).toMatchObject({ value: "2.3.2 · compatible", tone: "ok" });
+    const three = row(rowsOf({ cli: { status: "unsupported", version: "3.0.0", major: 3, detail: "long explanation" } }), "cli");
+    expect(three).toMatchObject({ value: "3.0.0 · unsupported", tone: "warn" });
 
     const detail = "not found; install OpenCode 1.x with npm i -g opencode-ai or brew install anomalyco/tap/opencode";
     const missing = row(rowsOf({ cli: { status: "missing", version: null, major: null, detail } }), "cli");
@@ -130,8 +132,8 @@ describe("runtimeRowsFor", () => {
   });
 
   it("shows the unsupported-version warning from the backend like any other warning", () => {
-    const warning = "OpenCode 2.0.32 is installed, but Riggverk supports OpenCode 1.x";
-    const rows = rowsOf({ warnings: [warning], cli: { status: "unsupported", version: "2.0.32", major: 2, detail: warning } });
+    const warning = "OpenCode 3.0.0 is installed, but Riggverk supports OpenCode 1.x";
+    const rows = rowsOf({ warnings: [warning], cli: { status: "unsupported", version: "3.0.0", major: 3, detail: warning } });
     expect(rows.filter(item => item.id?.startsWith("warning-")).map(item => [item.tone, item.value])).toEqual([["warn", warning]]);
   });
 
@@ -200,6 +202,7 @@ describe("runtimeRowsFor", () => {
     // A file that cannot be compared (comments, invalid JSON) names no key; the install review gives the reason.
     expect(row(rowsOf({ tui_status: "diverged", tui_diverged_keys: [] }), "tui")).toMatchObject({ value: "diverged", tone: "warn", wrap: false });
     expect(row(rowsOf({ tui_status: "missing" }), "tui")).toMatchObject({ value: "missing", tone: "fail" });
+    expect(row(rowsOf({ tui_status: "not_read", tui_diverged_keys: [] }), "tui")).toMatchObject({ value: "not read by OpenCode 2", tone: "dim" });
   });
 
   it("shows names and statuses only, never what a check or a config value says", () => {
