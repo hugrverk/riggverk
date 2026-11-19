@@ -692,4 +692,3 @@ def location_resource(path: str, location: str, worktree: str) -> str:
     if internal:
         return os.path.relpath(path, location).replace(os.sep, "/")
     return path.replace(os.sep, "/")
-
