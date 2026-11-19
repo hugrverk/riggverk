@@ -1190,6 +1190,18 @@ def non_shell_rows() -> list[DecisionRow]:
         _row("architect", "edit", path, "ask", f"{_WORKTREE}/src")
         for path in ("AGENTS.md", "opencode.json", ".opencode/agent/x.md", ".github/workflows/ci.yml")
     ]
+    # A Location inside `.opencode/` sees its files without the `.opencode` segment (`agent/x.md`),
+    # the same path a project file has from the root, so no rule can make them ask there without
+    # also asking for project files. Config names keep asking through their root-anchored rules;
+    # files under an allowed extension do not (documented in OPENCODE_CONFIG.md).
+    inside = f"{_WORKTREE}/.opencode"
+    rows += [
+        _row("architect", "edit", ".opencode/opencode.json", "ask", inside),
+        _row("architect", "edit", ".opencode/package.json", "ask", inside),
+        _row("architect", "edit", ".opencode/agent/x.md", "allow", inside),
+        _row("architect", "edit", ".opencode/plugins/x.ts", "allow", inside),
+        _row("architect", "edit", ".opencode/agent/x.md", "allow", f"{inside}/agent"),
+    ]
     return rows
 
 
