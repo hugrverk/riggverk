@@ -1,15 +1,20 @@
-//! What else decides the config OpenCode 1.x runs, beside the `opencode.json` the app manages.
+//! What else decides the config OpenCode runs, beside the `opencode.json` the app manages.
 //!
-//! OpenCode merges the global `config.json`, `opencode.json` and `opencode.jsonc` (in that order,
-//! a later file wins, all read as JSONC), then `OPENCODE_CONFIG`, project files,
+//! OpenCode 1.x merges the global `config.json`, `opencode.json` and `opencode.jsonc` (in that
+//! order, a later file wins, all read as JSONC), then `OPENCODE_CONFIG`, project files,
 //! `OPENCODE_CONFIG_DIR`, `OPENCODE_CONFIG_CONTENT`, the system managed config and its macOS
-//! managed preferences, and `OPENCODE_PERMISSION` (checked against OpenCode 1.19.3). Runtime health
-//! reports what of that it can see, so `synced` means OpenCode runs the team's values:
+//! managed preferences, and `OPENCODE_PERMISSION` (checked against OpenCode 1.19.3). OpenCode 2
+//! (checked against 2.3.2) no longer reads `config.json` or `OPENCODE_PERMISSION`, and also reads
+//! its own native keys (`permissions`, `agents`, `mcp.servers`, ...) beside the 1.x ones, applying
+//! them after the 1.x keys. Runtime health reports what of that it can see, so `synced` means
+//! OpenCode runs the team's values:
 //!
 //! - `opencode.json` is read as JSONC, so a file with comments still gets a real comparison; the
 //!   app still writes strict JSON only and leaves such a file alone, and says why.
-//! - `config.json` and `opencode.jsonc` in the same folder are read for the names of the managed
-//!   keys they set.
+//! - `config.json` (1.x only) and `opencode.jsonc` in the same folder are read for the names of the
+//!   managed keys they set.
+//! - `opencode.json` and `opencode.jsonc` are read for the names of the native OpenCode 2 keys they
+//!   set.
 //! - Of the environment only the names of the config variables that are set are kept.
 //! - Of the system managed config only whether its paths exist; nothing there is opened.
 //!
@@ -27,16 +32,23 @@ use crate::jsonc;
 const MAX_SIBLING_BYTES: u64 = 1024 * 1024;
 
 /// Global files OpenCode merges with `opencode.json`, and whether it reads them after it.
-const SIBLINGS: &[(&str, bool)] = &[("config.json", false), ("opencode.jsonc", true)];
+const SIBLINGS: &[(&str, bool)] = &[(V1_ONLY_SIBLING, false), ("opencode.jsonc", true)];
+
+/// The sibling only OpenCode 1.x reads: OpenCode 2 ignores it.
+pub const V1_ONLY_SIBLING: &str = "config.json";
 
 /// Variables that change the config OpenCode runs.
 const CONFIG_ENV_VARS: &[&str] = &[
     "OPENCODE_CONFIG",
     "OPENCODE_CONFIG_DIR",
     "OPENCODE_CONFIG_CONTENT",
-    "OPENCODE_PERMISSION",
+    V1_ONLY_ENV_VAR,
     "OPENCODE_DISABLE_PROJECT_CONFIG",
+    // OpenCode 2's name for `OPENCODE_DISABLE_PROJECT_CONFIG`.
+    "OPENCODE_CONFIG_PROJECT_DISABLE",
 ];
+/// The variable only OpenCode 1.x reads.
+const V1_ONLY_ENV_VAR: &str = "OPENCODE_PERMISSION";
 /// `OPENCODE_DISABLE_CLAUDE_CODE` and its `_PROMPT` and `_SKILLS` variants.
 const CONFIG_ENV_PREFIX: &str = "OPENCODE_DISABLE_CLAUDE_CODE";
 
@@ -135,26 +147,36 @@ pub fn conflict_reason(path: &Path) -> Option<String> {
     })
 }
 
-/// The global config files beside `opencode.json` in `config_dir` that set managed keys
-/// (`managed_key_names` names them) or cannot be read. A file is opened only when it is a regular
-/// file of at most 1 MiB; a bigger or odd one counts as unreadable.
+/// A config file beside `opencode.json`: `None` when it does not exist, `Some(None)` when it
+/// cannot be used. It is opened only when it is a regular file of at most 1 MiB; a bigger or odd
+/// one counts as unusable.
+fn read_sibling(path: &Path) -> Option<Option<serde_json::Value>> {
+    let meta = std::fs::metadata(path).ok()?;
+    Some(
+        (meta.is_file() && meta.len() <= MAX_SIBLING_BYTES)
+            .then(|| std::fs::read_to_string(path).ok())
+            .flatten()
+            .and_then(|text| jsonc::parse(&text))
+            .map(|parsed| parsed.value),
+    )
+}
+
+/// The global config files beside `opencode.json` in `config_dir` that the installed OpenCode
+/// major reads (`None`: 1.x) and that set managed keys (`managed_key_names` names them) or cannot
+/// be read.
 pub fn sibling_configs(
     config_dir: &Path,
+    opencode_major: Option<u32>,
     managed_key_names: impl Fn(&serde_json::Value) -> Vec<String>,
 ) -> Vec<SiblingConfig> {
     SIBLINGS
         .iter()
+        .filter(|(file, _)| opencode_major != Some(2) || *file != V1_ONLY_SIBLING)
         .filter_map(|(file, _)| {
-            let path = config_dir.join(file);
-            let meta = std::fs::metadata(&path).ok()?;
-            let parsed = (meta.is_file() && meta.len() <= MAX_SIBLING_BYTES)
-                .then(|| std::fs::read_to_string(&path).ok())
-                .flatten()
-                .and_then(|text| jsonc::parse(&text));
-            let sibling = match parsed {
-                Some(parsed) => SiblingConfig {
+            let sibling = match read_sibling(&config_dir.join(file))? {
+                Some(value) => SiblingConfig {
                     file: (*file).to_string(),
-                    managed_keys: managed_key_names(&parsed.value),
+                    managed_keys: managed_key_names(&value),
                     invalid: false,
                 },
                 None => SiblingConfig {
@@ -189,6 +211,68 @@ pub fn sibling_warning(sibling: &SiblingConfig) -> String {
     }
 }
 
+/// Top-level keys of OpenCode 2's own config format, beside `mcp.servers`.
+const NATIVE_V2_KEYS: &[&str] = &[
+    "permissions",
+    "agents",
+    "update",
+    "snapshots",
+    "plugins",
+    "providers",
+];
+
+/// The native OpenCode 2 keys `config` sets, by name. OpenCode 2 applies them after the 1.x keys
+/// the app manages (a later permission rule, agent, provider or MCP server of the same name wins;
+/// plugins are added), so they can change the team's values.
+pub fn native_v2_keys(config: &serde_json::Value) -> Vec<String> {
+    let mut keys: Vec<String> = NATIVE_V2_KEYS
+        .iter()
+        .filter(|key| config.get(**key).is_some())
+        .map(|key| (*key).to_string())
+        .collect();
+    if config
+        .get("mcp")
+        .and_then(|mcp| mcp.get("servers"))
+        .is_some()
+    {
+        keys.push("mcp.servers".into());
+    }
+    keys
+}
+
+/// The files OpenCode reads in `config_dir` that set native OpenCode 2 keys, with those keys:
+/// `opencode.json` (already parsed as `installed`) and `opencode.jsonc`.
+pub fn native_v2_configs(
+    config_dir: &Path,
+    installed: Option<&serde_json::Value>,
+) -> Vec<(String, Vec<String>)> {
+    let jsonc = read_sibling(&config_dir.join("opencode.jsonc")).flatten();
+    [
+        ("opencode.json", installed),
+        ("opencode.jsonc", jsonc.as_ref()),
+    ]
+    .into_iter()
+    .filter_map(|(file, value)| {
+        let keys = native_v2_keys(value?);
+        (!keys.is_empty()).then(|| (file.to_string(), keys))
+    })
+    .collect()
+}
+
+/// The warning for native OpenCode 2 keys in `file`. OpenCode 1.19.5 refuses to load a file with
+/// `permissions` and loads the other keys without using them.
+pub fn native_v2_warning(file: &str, keys: &[String]) -> String {
+    let v1 = if keys.iter().any(|key| key == "permissions") {
+        "OpenCode 1.x refuses to load a file with permissions"
+    } else {
+        "OpenCode 1.x does not use them"
+    };
+    format!(
+        "{file} sets native OpenCode 2 keys ({}); OpenCode 2 applies them after the 1.x keys Riggverk manages, so they win over the team's values, and {v1}: move these settings to their 1.x keys or remove them",
+        keys.join(", ")
+    )
+}
+
 /// The names of the config variables set (and not empty) in `vars`, sorted. Values are only
 /// checked for being empty.
 pub fn config_env_var_names(vars: impl IntoIterator<Item = (OsString, OsString)>) -> Vec<String> {
@@ -207,8 +291,13 @@ pub fn config_env_var_names(vars: impl IntoIterator<Item = (OsString, OsString)>
 
 /// The warning for the config variables set in the app's environment.
 pub fn env_warning(names: &[String]) -> String {
+    let v1_only = if names.iter().any(|name| name == V1_ONLY_ENV_VAR) {
+        format!(" ({V1_ONLY_ENV_VAR} is read by OpenCode 1.x only)")
+    } else {
+        String::new()
+    };
     format!(
-        "{} set in Riggverk's environment; they change which config OpenCode loads when it starts with them. Riggverk sees the environment it was launched with, not your shell's",
+        "{} set in Riggverk's environment; they change which config OpenCode loads when it starts with them{v1_only}. Riggverk sees the environment it was launched with, not your shell's",
         names.join(", ")
     )
 }
@@ -342,7 +431,7 @@ mod tests {
     #[test]
     fn siblings_are_reported_only_when_they_set_managed_keys_or_cannot_be_read() {
         let dir = temp("siblings");
-        assert!(sibling_configs(&dir, top_level_names).is_empty());
+        assert!(sibling_configs(&dir, None, top_level_names).is_empty());
 
         std::fs::write(
             dir.join("opencode.jsonc"),
@@ -351,7 +440,7 @@ mod tests {
         .unwrap();
         std::fs::write(dir.join("config.json"), "{\"theme\": \"dark\"}").unwrap();
         assert!(
-            sibling_configs(&dir, top_level_names).is_empty(),
+            sibling_configs(&dir, None, top_level_names).is_empty(),
             "files without managed keys are not reported"
         );
 
@@ -361,7 +450,7 @@ mod tests {
         )
         .unwrap();
         std::fs::write(dir.join("config.json"), "{\"model\": \"x/y\"}").unwrap();
-        let found = sibling_configs(&dir, top_level_names);
+        let found = sibling_configs(&dir, None, top_level_names);
         assert_eq!(
             found,
             vec![
@@ -377,6 +466,11 @@ mod tests {
                 },
             ]
         );
+        assert_eq!(
+            sibling_configs(&dir, Some(2), top_level_names),
+            found[1..],
+            "OpenCode 2 does not read config.json"
+        );
         let jsonc = sibling_warning(&found[1]);
         assert!(jsonc.contains("(model, permission)") && jsonc.contains("win over the team's"));
         let config = sibling_warning(&found[0]);
@@ -389,7 +483,7 @@ mod tests {
         }
 
         std::fs::write(dir.join("opencode.jsonc"), "{\"model\": sk-test-123").unwrap();
-        let invalid = sibling_configs(&dir, top_level_names);
+        let invalid = sibling_configs(&dir, None, top_level_names);
         assert!(invalid
             .iter()
             .any(|s| s.file == "opencode.jsonc" && s.invalid));
@@ -402,7 +496,7 @@ mod tests {
         std::fs::remove_file(dir.join("opencode.jsonc")).unwrap();
         std::fs::create_dir(dir.join("opencode.jsonc")).unwrap();
         assert!(
-            sibling_configs(&dir, top_level_names)
+            sibling_configs(&dir, None, top_level_names)
                 .iter()
                 .any(|s| s.file == "opencode.jsonc" && s.invalid),
             "a folder in place of the file counts as unreadable"
@@ -418,6 +512,7 @@ mod tests {
             ("OPENCODE_PERMISSION", ""),
             ("OPENCODE_DISABLE_CLAUDE_CODE_SKILLS", "1"),
             ("OPENCODE_DISABLE_PROJECT_CONFIG", "true"),
+            ("OPENCODE_CONFIG_PROJECT_DISABLE", "1"),
             ("OPENCODE_SERVER_PASSWORD", "sk-test-123"),
             ("OPENCODE_CONFIG", "/tmp/again.json"),
             ("HOME", "/Users/me"),
@@ -429,6 +524,7 @@ mod tests {
             [
                 "OPENCODE_CONFIG",
                 "OPENCODE_CONFIG_CONTENT",
+                "OPENCODE_CONFIG_PROJECT_DISABLE",
                 "OPENCODE_DISABLE_CLAUDE_CODE_SKILLS",
                 "OPENCODE_DISABLE_PROJECT_CONFIG",
             ]
@@ -439,7 +535,94 @@ mod tests {
             "{warning}"
         );
         assert!(warning.contains("not your shell's"));
+        assert!(!warning.contains("1.x only"), "{warning}");
         assert!(config_env_var_names(Vec::new()).is_empty());
+
+        let with_permission = config_env_var_names(
+            [("OPENCODE_PERMISSION", "{\"bash\":\"sk-test-123\"}")]
+                .map(|(name, value)| (OsString::from(name), OsString::from(value))),
+        );
+        assert_eq!(with_permission, ["OPENCODE_PERMISSION"]);
+        let warning = env_warning(&with_permission);
+        assert!(
+            warning.contains("(OPENCODE_PERMISSION is read by OpenCode 1.x only)"),
+            "{warning}"
+        );
+        assert!(!warning.contains("sk-test"), "{warning}");
+    }
+
+    #[test]
+    fn native_v2_keys_are_found_by_name_in_the_files_opencode_reads() {
+        let none = serde_json::json!({
+            "permission": {"bash": "ask"},
+            "agent": {"plan": {}},
+            "mcp": {"playwright": {}},
+            "autoupdate": false,
+            "snapshot": true,
+            "plugin": [],
+            "provider": {},
+        });
+        assert!(native_v2_keys(&none).is_empty());
+        let all = serde_json::json!({
+            "permissions": [],
+            "agents": {},
+            "update": "auto",
+            "snapshots": true,
+            "plugins": [],
+            "providers": {},
+            "mcp": {"servers": {}},
+        });
+        assert_eq!(
+            native_v2_keys(&all),
+            [
+                "permissions",
+                "agents",
+                "update",
+                "snapshots",
+                "plugins",
+                "providers",
+                "mcp.servers"
+            ]
+        );
+
+        let dir = temp("native");
+        let installed =
+            serde_json::json!({"model": "a/b", "agents": {"x": {"prompt": "sk-test-123"}}});
+        assert_eq!(
+            native_v2_configs(&dir, Some(&installed)),
+            [("opencode.json".to_string(), vec!["agents".to_string()])]
+        );
+        std::fs::write(
+            dir.join("opencode.jsonc"),
+            "{\n  // mine\n  \"permissions\": [{\"action\": \"shell\", \"resource\": \"*\", \"effect\": \"allow\"}],\n}",
+        )
+        .unwrap();
+        // OpenCode 2 ignores config.json, so a native key there changes nothing.
+        std::fs::write(dir.join("config.json"), "{\"permissions\": []}").unwrap();
+        let found = native_v2_configs(&dir, None);
+        assert_eq!(
+            found,
+            [(
+                "opencode.jsonc".to_string(),
+                vec!["permissions".to_string()]
+            )]
+        );
+        let refused = native_v2_warning(&found[0].0, &found[0].1);
+        assert!(
+            refused.starts_with("opencode.jsonc sets native OpenCode 2 keys (permissions)")
+                && refused.contains("win over the team's values")
+                && refused.contains("OpenCode 1.x refuses to load a file with permissions"),
+            "{refused}"
+        );
+        let ignored = native_v2_warning("opencode.json", &["agents".to_string()]);
+        assert!(
+            ignored.contains("OpenCode 1.x does not use them"),
+            "{ignored}"
+        );
+        for warning in [&refused, &ignored] {
+            assert!(!warning.contains("sk-test") && !warning.contains("shell"));
+        }
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]

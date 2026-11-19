@@ -2,10 +2,10 @@
 //! whether the default agent resolves.
 //!
 //! Every call is bounded by a timeout and an output cap, runs from a fresh owner-only folder with
-//! OpenCode's project config turned off and is parse-only: only an exit status and a version token
-//! are kept, never the raw output.
+//! OpenCode's project config turned off and is parse-only: only an exit status, a version token and
+//! (on OpenCode 2) whether one agent id is listed are kept, never the raw output.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -23,12 +23,20 @@ pub(super) const VERSION_TIMEOUT: Duration = Duration::from_secs(10);
 /// architect), which is read and dropped.
 pub(super) const AGENT_TIMEOUT: Duration = Duration::from_secs(20);
 const OUTPUT_CAP: usize = 4 * 1024;
+/// OpenCode 2's `debug agents` prints every agent with its whole resolved permission ruleset:
+/// about 0.3 to 0.55 MB per agent under the team policy (4 MB for the 13 agents of a Riggverk
+/// install on 2.3.2). 32 MiB covers some 60 agents; bigger output is cut there and the agent then
+/// counts as not verified. It is held only while the ids are read.
+const AGENTS_OUTPUT_CAP: usize = 32 * 1024 * 1024;
+
+/// The OpenCode 2 release the 2.x support was checked against.
+pub(super) const TESTED_V2_VERSION: &str = "2.3.2";
 
 /// The CLI row of the runtime health.
 #[derive(Serialize, Clone, Debug, PartialEq, Eq)]
 pub struct OpenCodeCliHealth {
-    /// `supported` (1.x), `unsupported` (any other major), `unknown` (found, but no version could
-    /// be read) or `missing`.
+    /// `supported` (1.x), `compatible` (2.x, see [`TESTED_V2_VERSION`]), `unsupported` (any
+    /// other major), `unknown` (found, but no version could be read) or `missing`.
     pub status: String,
     pub version: Option<String>,
     pub major: Option<u32>,
@@ -198,16 +206,27 @@ pub(super) struct CliReport {
 }
 
 fn unsupported_message(version: &CliVersion) -> String {
-    let detail = if version.major == 2 {
-        "OpenCode 2.x does not read tui.json and migrates the config in memory"
-    } else {
-        "only the 1.x config format is managed"
-    };
     format!(
-        "OpenCode {} is installed, but Riggverk supports OpenCode 1.x: {detail}. \
+        "OpenCode {} is installed, but Riggverk supports OpenCode 1.x and is compatible with \
+         OpenCode 2 (tested with {TESTED_V2_VERSION}): only the 1.x config format is managed. \
          Use 1.x ({INSTALL_COMMANDS}).",
         version.text,
     )
+}
+
+/// The CLI detail for OpenCode 2: it migrates the 1.x config Riggverk writes when it loads it.
+fn compatible_detail(version: &CliVersion) -> String {
+    if version.text == TESTED_V2_VERSION {
+        format!(
+            "OpenCode {} (compatible: OpenCode 2 reads the 1.x config Riggverk writes)",
+            version.text
+        )
+    } else {
+        format!(
+            "OpenCode {} (compatible: OpenCode 2 reads the 1.x config Riggverk writes; tested with {TESTED_V2_VERSION})",
+            version.text
+        )
+    }
 }
 
 /// Probe the CLI at `program` (`None`: not found anywhere).
@@ -227,21 +246,20 @@ pub(super) fn inspect(program: Option<&str>, timeout: Duration) -> CliReport {
     };
     match probe_version(program, timeout) {
         VersionProbe::Found(version) => {
-            let supported = version.major == 1;
-            let warning = (!supported).then(|| unsupported_message(&version));
+            let (status, detail, warning) = match version.major {
+                1 => ("supported", format!("OpenCode {}", version.text), None),
+                2 => ("compatible", compatible_detail(&version), None),
+                _ => {
+                    let message = unsupported_message(&version);
+                    ("unsupported", message.clone(), Some(message))
+                }
+            };
             CliReport {
                 health: OpenCodeCliHealth {
-                    status: if supported {
-                        "supported"
-                    } else {
-                        "unsupported"
-                    }
-                    .into(),
+                    status: status.into(),
                     version: Some(version.text.clone()),
                     major: Some(version.major),
-                    detail: warning
-                        .clone()
-                        .unwrap_or_else(|| format!("OpenCode {}", version.text)),
+                    detail,
                 },
                 version: Some(version),
                 responsive: true,
@@ -289,13 +307,18 @@ pub(super) fn is_valid_agent_name(name: &str) -> bool {
 }
 
 pub(super) enum AgentProbe {
-    /// `opencode debug agent <name>` exited 0: the agent parses and resolves.
+    /// 1.x: `opencode debug agent <name>` exited 0, so the agent parses and resolves. 2.x: the
+    /// agent is listed by `opencode debug agents`.
     Resolves,
-    /// It exited non-zero: the agent is missing or its definition is broken.
+    /// 1.x: it exited non-zero, so the agent is missing or its definition is broken. 2.x: the
+    /// listing was read and the agent is not in it.
     Unresolved,
     TimedOut,
     /// It could not be run at all.
     NotRun,
+    /// 2.x: it ran, but gave no listing that could be read (a non-zero exit, output that is not
+    /// the JSON list or is bigger than the cap).
+    Unreadable,
 }
 
 /// `opencode debug agent <name> --pure` (1.x), from a fresh probe folder without project config.
@@ -330,6 +353,60 @@ pub(super) fn probe_agent(program: &str, name: &str, timeout: Duration) -> Agent
     }
 }
 
+/// One entry of the OpenCode 2 `debug agents` list. Only `id` is read; serde skips every other
+/// field (the prompts and permission rules) without keeping it.
+#[derive(Deserialize)]
+struct ListedAgent {
+    id: Option<String>,
+}
+
+/// Whether the `debug agents` output lists an agent whose `id` is `name`: `None` when the output
+/// is not that JSON list. The `id` of a Markdown agent is its file name without `.md`, and the
+/// built-ins are lowercase (`build`, `plan`), the same names `default_agent` takes. No part of the
+/// output, nor the parse error, is kept.
+fn lists_agent(output: &str, name: &str) -> Option<bool> {
+    let agents: Vec<ListedAgent> = serde_json::from_str(output).ok()?;
+    Some(agents.iter().any(|agent| agent.id.as_deref() == Some(name)))
+}
+
+/// `opencode debug agents --standalone` (2.x), from a fresh probe folder without project config.
+/// OpenCode 2 has no `debug agent <name>`, and an agent file it cannot decode is left out of the
+/// list with exit status 0, so only the listed ids say whether the agent resolves.
+pub(super) fn probe_agent_v2(program: &str, name: &str, timeout: Duration) -> AgentProbe {
+    if !is_valid_agent_name(name) {
+        return AgentProbe::NotRun;
+    }
+    let Ok(cwd) = ProbeDir::create() else {
+        return AgentProbe::NotRun;
+    };
+    let result = run_cmd_bounded(
+        program,
+        &["debug", "agents", "--standalone"],
+        cwd.path(),
+        BoundedCmdOptions {
+            timeout: Some(timeout),
+            stdout_cap: AGENTS_OUTPUT_CAP,
+            stderr_cap: OUTPUT_CAP,
+            extra_env: project_config_off(),
+            ..BoundedCmdOptions::default()
+        },
+    );
+    if result.timed_out {
+        return AgentProbe::TimedOut;
+    }
+    if result.exit_code.is_none() {
+        return AgentProbe::NotRun;
+    }
+    if !result.success || result.stdout.len() >= AGENTS_OUTPUT_CAP {
+        return AgentProbe::Unreadable;
+    }
+    match lists_agent(&result.stdout, name) {
+        Some(true) => AgentProbe::Resolves,
+        Some(false) => AgentProbe::Unresolved,
+        None => AgentProbe::Unreadable,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -348,6 +425,9 @@ mod tests {
             Some(("2.1.0-beta.4+build.7".into(), 2))
         );
         assert_eq!(version("0.15.31"), Some(("0.15.31".into(), 0)));
+        // What `opencode --version` prints: 1.19.5 the bare version, 2.3.2 with a prefix.
+        assert_eq!(version("1.19.5\n"), Some(("1.19.5".into(), 1)));
+        assert_eq!(version("opencode v2.3.2\n"), Some(("2.3.2".into(), 2)));
     }
 
     #[test]
@@ -437,23 +517,48 @@ mod tests {
     }
 
     #[test]
-    fn the_unsupported_message_names_what_changed_and_what_to_install() {
-        let two = unsupported_message(&parse_version("2.0.32").expect("version"));
-        for needle in [
-            "2.0.32",
-            "supports OpenCode 1.x",
-            "tui.json",
-            "in memory",
-            "opencode-ai",
-            "anomalyco/tap/opencode",
-        ] {
-            assert!(two.contains(needle), "{two}");
+    fn the_unsupported_message_names_what_is_supported_and_what_to_install() {
+        for text in ["3.0.0", "0.15.0"] {
+            let message = unsupported_message(&parse_version(text).expect("version"));
+            for needle in [
+                text,
+                "supports OpenCode 1.x",
+                "compatible with OpenCode 2 (tested with 2.3.2)",
+                "opencode-ai",
+                "anomalyco/tap/opencode",
+            ] {
+                assert!(message.contains(needle), "{message}");
+            }
         }
-        let zero = unsupported_message(&parse_version("0.15.0").expect("version"));
-        assert!(
-            zero.contains("0.15.0") && !zero.contains("tui.json"),
-            "{zero}"
-        );
+    }
+
+    #[test]
+    fn the_compatible_detail_names_the_tested_version_unless_it_is_that_one() {
+        let tested = compatible_detail(&parse_version("opencode v2.3.2").expect("version"));
+        assert!(tested.starts_with("OpenCode 2.3.2 (compatible"), "{tested}");
+        assert!(!tested.contains("tested with"), "{tested}");
+        for text in ["2.4.0", "2.0.32", "2.3.2-beta.1"] {
+            let other = compatible_detail(&parse_version(text).expect("version"));
+            assert!(
+                other.contains(text) && other.contains("tested with 2.3.2"),
+                "{other}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_agent_listing_is_read_for_ids_only() {
+        let listing = r#"[{"id":"architect","name":"architect","mode":"primary","permissions":[{"action":"*","resource":"*","effect":"ask"}],"system":"sk-not-a-secret"},{"id":"build","name":"Build","hidden":false}]"#;
+        assert_eq!(lists_agent(listing, "architect"), Some(true));
+        assert_eq!(lists_agent(listing, "build"), Some(true));
+        // `name` is a display name (`Build`), not what `default_agent` matches.
+        assert_eq!(lists_agent(listing, "Build"), Some(false));
+        assert_eq!(lists_agent(listing, "repo-scout"), Some(false));
+        assert_eq!(lists_agent("[]", "build"), Some(false));
+        assert_eq!(lists_agent(r#"[{"name":"build"}]"#, "build"), Some(false));
+        for unreadable in ["", "{}", "[1]", r#"[{"id":"build"}"#, "Error: boom"] {
+            assert_eq!(lists_agent(unreadable, "build"), None, "{unreadable:?}");
+        }
     }
 
     // ── Probes against a stub `opencode` ──
@@ -506,16 +611,28 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn a_2x_cli_is_unsupported_with_a_precise_warning() {
-        let stub = Stub::new("v2", "echo 2.0.32");
+    fn a_2x_cli_is_compatible_without_a_warning() {
+        let stub = Stub::new("v2", "echo 'opencode v2.3.2'");
+        let report = inspect(Some(stub.program()), Duration::from_secs(10));
+        assert_eq!(report.health.status, "compatible");
+        assert_eq!(report.health.version.as_deref(), Some("2.3.2"));
+        assert_eq!(report.health.major, Some(2));
+        assert!(report.warning.is_none());
+        assert!(report.responsive);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_3x_cli_is_unsupported_with_a_precise_warning() {
+        let stub = Stub::new("v3", "echo 3.0.0");
         let report = inspect(Some(stub.program()), Duration::from_secs(10));
         assert_eq!(report.health.status, "unsupported");
-        assert_eq!(report.health.version.as_deref(), Some("2.0.32"));
-        assert_eq!(report.health.major, Some(2));
-        let warning = report.warning.expect("2.x warns");
-        for needle in ["2.0.32", "supports OpenCode 1.x", "tui.json", "in memory"] {
+        assert_eq!(report.health.major, Some(3));
+        let warning = report.warning.expect("3.x warns");
+        for needle in ["3.0.0", "supports OpenCode 1.x"] {
             assert!(warning.contains(needle), "{warning}");
         }
+        assert_eq!(report.health.detail, warning);
         assert!(
             report.responsive,
             "an unsupported CLI still answers the other probes"
@@ -569,6 +686,7 @@ mod tests {
         let timeout = Duration::from_secs(10);
         probe_version(stub.program(), timeout);
         probe_agent(stub.program(), "architect", timeout);
+        probe_agent_v2(stub.program(), "architect", timeout);
         let read = |name: &str| std::fs::read_to_string(stub.dir.join(name)).expect(name);
         let seen: Vec<PathBuf> = read("cwd.txt").lines().map(PathBuf::from).collect();
         let shared = std::fs::canonicalize(
@@ -579,17 +697,18 @@ mod tests {
             .expect("app data dir"),
         )
         .expect("canonical app data dir");
-        assert_eq!(seen.len(), 2);
+        assert_eq!(seen.len(), 3);
         assert_ne!(seen[0], seen[1], "each probe gets its own folder");
+        assert_ne!(seen[1], seen[2], "each probe gets its own folder");
         for cwd in &seen {
             assert_eq!(cwd.parent(), Some(shared.as_path()), "{cwd:?}");
             assert!(!cwd.exists(), "{cwd:?} is removed after the probe");
         }
         assert_eq!(
             read("mode.txt").lines().collect::<Vec<_>>(),
-            ["drwx------"; 2]
+            ["drwx------"; 3]
         );
-        assert_eq!(read("env.txt").lines().collect::<Vec<_>>(), ["1"; 2]);
+        assert_eq!(read("env.txt").lines().collect::<Vec<_>>(), ["1"; 3]);
     }
 
     #[test]
@@ -652,5 +771,96 @@ mod tests {
         let probe = probe_agent(stub.program(), "--print-logs", Duration::from_secs(10));
         assert!(matches!(probe, AgentProbe::NotRun));
         assert!(!stub.dir.join("ran").exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn the_2x_agent_probe_reads_only_the_listed_ids() {
+        let stub = Stub::new(
+            "agents-v2",
+            "[ \"$*\" = 'debug agents --standalone' ] || exit 64\necho '[{\"id\":\"architect\",\"name\":\"architect\",\"permissions\":[]},{\"id\":\"build\",\"name\":\"Build\"}]'",
+        );
+        let timeout = Duration::from_secs(10);
+        assert!(matches!(
+            probe_agent_v2(stub.program(), "architect", timeout),
+            AgentProbe::Resolves
+        ));
+        assert!(matches!(
+            probe_agent_v2(stub.program(), "build", timeout),
+            AgentProbe::Resolves
+        ));
+        assert!(matches!(
+            probe_agent_v2(stub.program(), "missing-agent", timeout),
+            AgentProbe::Unresolved
+        ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_2x_listing_that_cannot_be_read_never_counts_as_unresolved() {
+        let timeout = Duration::from_secs(10);
+        for (name, body) in [
+            ("agents-exit", "echo '[]'; exit 1"),
+            ("agents-text", "echo 'Error: config is broken'"),
+            ("agents-cut", "printf '[{\"id\":\"build\"'"),
+        ] {
+            let stub = Stub::new(name, body);
+            assert!(
+                matches!(
+                    probe_agent_v2(stub.program(), "build", timeout),
+                    AgentProbe::Unreadable
+                ),
+                "{name}"
+            );
+        }
+        let hang = Stub::new("agents-hang", "exec sleep 30");
+        assert!(matches!(
+            probe_agent_v2(hang.program(), "build", Duration::from_millis(300)),
+            AgentProbe::TimedOut
+        ));
+        let named = Stub::new("agents-name", "touch \"$(dirname \"$0\")/ran\"");
+        assert!(matches!(
+            probe_agent_v2(named.program(), "--print-logs", timeout),
+            AgentProbe::NotRun
+        ));
+        assert!(!named.dir.join("ran").exists());
+    }
+
+    /// The version and default-agent probes against a real `opencode`. Not run by default: set
+    /// `RIGGVERK_LIVE_OPENCODE` to a program that runs OpenCode in a throwaway home, and
+    /// `RIGGVERK_LIVE_AGENT` to the agent its config names, then run with `--ignored`.
+    #[test]
+    #[ignore = "needs a live opencode in a throwaway home"]
+    fn live_default_agent_probe() {
+        let program = std::env::var("RIGGVERK_LIVE_OPENCODE").expect("RIGGVERK_LIVE_OPENCODE");
+        let agent = std::env::var("RIGGVERK_LIVE_AGENT").expect("RIGGVERK_LIVE_AGENT");
+        let report = inspect(Some(&program), VERSION_TIMEOUT);
+        let version = report.version.expect("a readable version");
+        let probe = |name: &str| match version.major {
+            1 => probe_agent(&program, name, AGENT_TIMEOUT),
+            2 => probe_agent_v2(&program, name, AGENT_TIMEOUT),
+            major => panic!("no agent probe for major {major}"),
+        };
+        let found = probe(&agent);
+        let missing = probe("riggverk-no-such-agent");
+        println!(
+            "live opencode {} ({}): {agent} -> {}, riggverk-no-such-agent -> {}",
+            version.text,
+            report.health.status,
+            outcome(&found),
+            outcome(&missing)
+        );
+        assert!(matches!(found, AgentProbe::Resolves));
+        assert!(matches!(missing, AgentProbe::Unresolved));
+    }
+
+    fn outcome(probe: &AgentProbe) -> &'static str {
+        match probe {
+            AgentProbe::Resolves => "resolves",
+            AgentProbe::Unresolved => "unresolved",
+            AgentProbe::TimedOut => "timed out",
+            AgentProbe::NotRun => "not run",
+            AgentProbe::Unreadable => "unreadable",
+        }
     }
 }
