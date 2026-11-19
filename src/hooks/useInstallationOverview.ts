@@ -105,6 +105,11 @@ export function useInstallationOverview({
     if (!busy) void refresh();
   }, [busy, refresh, refreshKey]);
 
+  // Unmounting drops a fetch still in flight, as a newer fetch does: no state update lands after the unmount.
+  useEffect(() => () => {
+    generationRef.current += 1;
+  }, []);
+
   return useMemo(() => ({ entries, loading, refresh }), [entries, loading, refresh]);
 }
 
