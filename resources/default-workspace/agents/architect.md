@@ -137,6 +137,7 @@ permission:
     "sentinel": allow
     "scribe": allow
     "verifier": allow
+  execute: ask
   skill:
     "*": allow
   bash:

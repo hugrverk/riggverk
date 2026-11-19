@@ -184,6 +184,7 @@
     "webfetch": "ask",
     "websearch": "ask",
     "task": "allow",
+    "execute": "ask",
     "skill": {
       "*": "allow"
     },
@@ -2000,7 +2001,11 @@
         "edit": {
           "*": "deny",
           ".opencode/plans/*.md": "allow",
-          "*opencode/plans/*.md": "allow"
+          "*opencode/plans/*.md": "allow",
+          "~/.opencode/plan/*": "allow"
+        },
+        "external_directory": {
+          "~/.opencode/plan/*": "allow"
         }
       }
     },
@@ -2133,6 +2138,7 @@
         "webfetch": "ask",
         "websearch": "ask",
         "task": "deny",
+        "execute": "deny",
         "skill": {
           "*": "allow"
         },

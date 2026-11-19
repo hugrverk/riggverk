@@ -535,7 +535,7 @@ ARCHITECT_BASH_ACTIONS = [
 # Top-level permission keys every role must keep gated, and the edit default per role.
 # `edit` is a bare action for the read-only roles and a pattern map elsewhere; the map's `*`
 # entry is its default.
-GATED_TOP_LEVEL_KEYS = ("webfetch", "websearch", "doom_loop")
+GATED_TOP_LEVEL_KEYS = ("webfetch", "websearch", "doom_loop", "execute")
 # OpenCode allows its skill folders outside the worktree by default; a bare `external_directory: ask`
 # cancels that, so Riggverk restates it. Everything else outside the worktree stays ask-gated. The OpenCode
 # tmp dir (`<os tmpdir>/opencode`) is platform-specific and deliberately not listed.
@@ -980,6 +980,12 @@ BUILTIN_AGENT_ACTIONS = [
     ("plan", "edit", ".opencode/plans/plan.md", "allow"),
     ("plan", "edit", "../.local/share/opencode/plans/plan.md", "allow"),
     ("plan", "edit", ".local/share/opencode/plans/plan.md", "allow"),
+    # OpenCode 2 keeps plans under <home>/.opencode/plan (plugin/plan.ts); `~` expands in agent.ts
+    ("plan", "edit", f"{_HOME}/.opencode/plan/x.md", "allow"),
+    ("plan", "edit", f"{_HOME}/proj/src/x.ts", "deny"),
+    ("plan", "external_directory", f"{_HOME}/.opencode/plan/x.md", "allow"),
+    ("plan", "external_directory", f"{_HOME}/other/x.md", "ask"),
+    ("plan", "execute", "*", "ask"),
     ("plan", "task", "general", "deny"),
     ("plan", "task", "scribe", "deny"),
     ("plan", "task", "explore", "allow"),
@@ -994,6 +1000,7 @@ BUILTIN_AGENT_ACTIONS = [
     ("explore", "task", "general", "deny"),
     ("explore", "task", "scribe", "deny"),
     ("explore", "todowrite", "*", "deny"),
+    ("explore", "execute", "*", "deny"),
     ("explore", "read", "src/x.ts", "allow"),
     ("explore", "read", "wp-config.php", "deny"),
     ("explore", "read", ".npmrc", "deny"),

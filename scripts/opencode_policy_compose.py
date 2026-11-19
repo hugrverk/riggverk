@@ -25,6 +25,7 @@ PERMISSION_KEY_ORDER = [
     "webfetch",
     "websearch",
     "task",
+    "execute",
     "skill",
     "bash",
     "edit",
