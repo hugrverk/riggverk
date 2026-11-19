@@ -1184,6 +1184,12 @@ def non_shell_rows() -> list[DecisionRow]:
         _row("scribe", "edit", "README.md", "deny", f"{_WORKTREE}/src"),
         _row("architect", "edit", "src/App.tsx", "allow", f"{_WORKTREE}/src"),
     ]
+    # The `**/` twins of the root-anchored asks keep them asking from a subfolder, where the
+    # path is `../P` and would otherwise match the `*.md` allow.
+    rows += [
+        _row("architect", "edit", path, "ask", f"{_WORKTREE}/src")
+        for path in ("AGENTS.md", "opencode.json", ".opencode/agent/x.md", ".github/workflows/ci.yml")
+    ]
     return rows
 
 

@@ -121,6 +121,11 @@
       "opencode.jsonc",
       ".opencode/**",
       ".github/workflows/**",
+      "**/AGENTS.md",
+      "**/opencode.json",
+      "**/opencode.jsonc",
+      "**/.opencode/**",
+      "**/.github/workflows/**",
       "**/.claude/skills/**",
       "**/.agents/skills/**",
       "**/.config/opencode/skills/**"
