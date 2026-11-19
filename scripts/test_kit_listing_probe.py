@@ -166,8 +166,56 @@ text = "<skills_instructions>\\n" + "\\n".join(lines) + "\\n</skills_instruction
 print(json.dumps([{{"content": [{{"text": text}}]}}]))
 """
 DISCOVERY_BODY = """
+if "--version" in sys.argv:
+    print({version!r})
+    sys.exit(0)
 entries = {entries!r} if kit_skills else [{{"name": "builtin", "description": "x", "location": "<built-in>"}}]
 print(json.dumps(entries))
+"""
+
+# OpenCode 2: `--version`, and `serve`, which answers the two API reads the probe makes. Plugins
+# show up after `cold` reads and the skill list fills in one step later, like a cold Location.
+OPENCODE2_BODY = """
+import base64, http.server, signal, urllib.parse
+if "--version" in sys.argv:
+    print({version!r})
+    sys.exit(0)
+if "serve" not in sys.argv:
+    sys.exit(9)
+with open(os.path.join({root!r}, "server.pid"), "w") as out:
+    out.write(str(os.getpid()))
+if {exit_at_once!r}:
+    sys.exit(4)
+port = int(sys.argv[sys.argv.index("--port") + 1])
+expected = "Basic " + base64.b64encode(("opencode:" + os.environ["OPENCODE_PASSWORD"]).encode()).decode()
+entries = {skills!r} if kit_skills else [{{"name": "OpenCode", "description": "x", "path": "skill://opencode/SKILL.md"}}]
+state = {{"reads": 0, "skill_reads": 0}}
+
+class Handler(http.server.BaseHTTPRequestHandler):
+    def log_message(self, *args):
+        pass
+
+    def do_GET(self):
+        if self.headers.get("Authorization") != expected:
+            self.send_response(401)
+            self.end_headers()
+            return
+        url = urllib.parse.urlparse(self.path)
+        assert urllib.parse.parse_qs(url.query)["location[directory]"] == [os.getcwd()]
+        state["reads"] += 1
+        if url.path == "/api/plugin":
+            data = [{{"id": "p"}}] if state["reads"] > {cold!r} else []
+        else:
+            state["skill_reads"] += 1
+            data = entries[:1] if state["skill_reads"] == 1 else entries
+        body = json.dumps({{"location": {{"directory": os.getcwd()}}, "data": data}}).encode()
+        self.send_response(200)
+        self.send_header("content-type", "application/json")
+        self.end_headers()
+        self.wfile.write(body)
+
+signal.signal(signal.SIGTERM, lambda *args: sys.exit(0))
+http.server.HTTPServer(("127.0.0.1", port), Handler).serve_forever()
 """
 
 
@@ -206,8 +254,18 @@ class FakeHarnessTest(unittest.TestCase):
         cut = ["- alpha: Alpha  (file: r0/alpha/SKILL.md)"]
         self.install("codex", CODEX_BODY.format(kit_lines=full if kit_lines is None else kit_lines, short_lines=cut if short_lines is None else short_lines))
 
-    def install_discovery(self, name: str = "kilo", entries: list[dict[str, str]] | None = None) -> None:
-        self.install(name, DISCOVERY_BODY.format(entries=self.discovered if entries is None else entries))
+    def install_discovery(self, name: str = "kilo", entries: list[dict[str, str]] | None = None, version: str = "1.19.5") -> None:
+        self.install(name, DISCOVERY_BODY.format(entries=self.discovered if entries is None else entries, version=version))
+
+    def install_opencode2(self, skills: list[dict[str, str]] | None = None, cold: int = 2, exit_at_once: bool = False, version: str = "opencode v2.3.2") -> None:
+        if skills is None:
+            skills = [{"name": entry["name"], "description": entry["description"], "path": entry["location"]} for entry in self.discovered]
+        self.install("opencode", OPENCODE2_BODY.format(version=version, root=str(self.root), skills=skills, cold=cold, exit_at_once=exit_at_once))
+
+    def assert_server_stopped(self) -> None:
+        pid = int((self.root / "server.pid").read_text(encoding="utf-8"))
+        with self.assertRaises(ProcessLookupError):
+            os.kill(pid, 0)
 
     def main(self, harness: str) -> tuple[int, str, str]:
         environ = {"PATH": f"{self.bin}{os.pathsep}{os.environ['PATH']}", "SECRET_FROM_CALLER": "canary", "HOME": str(self.root / "real-home")}
@@ -334,6 +392,62 @@ class FakeHarnessTest(unittest.TestCase):
         code, _, err = self.main("kilo")
         self.assertEqual(code, 2)
         self.assertIn("no kit lists", err)
+
+    def test_opencode_1_lists_with_debug_skill(self) -> None:
+        self.install_discovery("opencode")
+        code, out, _ = self.main("opencode")
+        self.assertEqual(code, 0)
+        self.assertIn("  discovered: 2 full", out)
+        self.assertTrue(any(call["argv"][1:] == ["debug", "skill"] for call in self.calls()))
+
+    def test_opencode_2_lists_through_a_served_skill_list_and_stops_the_server(self) -> None:
+        self.install_opencode2()
+        code, out, err = self.main("opencode")
+        self.assertEqual((code, err), (0, ""))
+        self.assertIn("discovered by OpenCode 2.3.2 (server skill list): 2 full", out)
+        calls = self.calls()
+        self.assertFalse(any("debug" in call["argv"] for call in calls))
+        serves = [call for call in calls if "serve" in call["argv"]]
+        self.assertEqual(len(serves), 2)  # the empty control and the kit
+        for call in serves:
+            self.assertEqual(call["argv"][1:4], ["serve", "--hostname", "127.0.0.1"])
+            self.assertNotIn("--service", call["argv"])
+            self.assertIn("riggverk-kit-probe-", call["env"]["HOME"])
+            self.assertNotIn("SECRET_FROM_CALLER", call["env"])
+            self.assertEqual(call["env"]["OPENCODE_DISABLE_AUTOUPDATE"], "1")
+            self.assertGreaterEqual(len(call["env"]["OPENCODE_PASSWORD"]), 24)
+        self.assertNotEqual(serves[0]["env"]["OPENCODE_PASSWORD"], serves[1]["env"]["OPENCODE_PASSWORD"])
+        self.assert_server_stopped()
+
+    def test_opencode_2_missing_skill_exits_1_and_controls_exit_2(self) -> None:
+        self.install_opencode2(skills=[{"name": "alpha", "description": self.SMALL_KIT["alpha"], "path": "/h/.agents/skills/alpha/SKILL.md"}])
+        code, _, err = self.main("opencode")
+        self.assertEqual(code, 1)
+        self.assertIn("opencode: retro: missing", err)
+        self.install_opencode2(skills=[])
+        code, _, err = self.main("opencode")
+        self.assertEqual(code, 2)
+        self.assertIn("not visible", err)
+
+    def test_opencode_2_server_that_dies_or_never_loads_exits_2(self) -> None:
+        self.install_opencode2(exit_at_once=True)
+        code, _, err = self.main("opencode")
+        self.assertEqual(code, 2)
+        self.assertIn("serve exited 4", err)
+        self.install_opencode2(cold=10_000)
+        with mock.patch.object(probe, "TIMEOUT_SECONDS", 2):
+            code, _, err = self.main("opencode")
+        self.assertEqual(code, 2)
+        self.assertIn("no stable skills", err)
+        self.assert_server_stopped()
+
+    def test_an_unknown_opencode_major_exits_2(self) -> None:
+        self.install_discovery("opencode", version="3.0.0")
+        code, _, err = self.main("opencode")
+        self.assertEqual(code, 2)
+        self.assertIn("neither 1.x nor 2.x", err)
+        self.install_discovery("opencode", version="dev build")
+        self.assertIn("unreadable --version", self.main("opencode")[2])
 
     def test_harness_failures_and_crashes_exit_2_never_1(self) -> None:
         bodies = {

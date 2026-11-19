@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Mirror OpenCode 1.19.3 permission evaluation.
+"""Mirror OpenCode permission evaluation: 1.19.3 in full, 2.x for the non-shell rows.
 
 Source read: anomalyco/opencode tag v1.19.3 (commit e3c4eb242585dcd77be1a867391b7c25fd47ce52),
 which parses shell with tree-sitter-bash 0.25.0 (tag v0.25.0, commit 56b54c61fb48). Three layers
@@ -20,6 +20,23 @@ Not modelled: the extra `external_directory` ask that the shell tool adds for fi
 (`rm`, `cp`, `mv`, `mkdir`, `touch`, `chmod`, `chown`, `cat`, ...) whose path argument lies outside
 the worktree. With this policy that rule asks or allows, so it can turn a modelled allow into
 ask, never into deny.
+
+OpenCode 2.x (source read at tag v2.3.2), non-shell rows only:
+
+* the matcher is unchanged: `match` in packages/core/src/util/wildcard.ts and `evaluate`
+  (`findLast`, default ask) in packages/core/src/permission.ts are the same algorithm as 1.19.3,
+  so `evaluate` and `wildcard_match` below serve both majors;
+* the V1 `permission` object becomes an ordered rule list with renamed actions (`v2_action`, a
+  port of `normalizeAction` in packages/core/src/v1/config/migrate.ts);
+* `read`/`edit` resources are relative to the session Location, not the worktree, and a path
+  outside both is absolute (`location_resource`, from `FileAccess.resolve` in
+  packages/core/src/file-access.ts). Such a path is also asked as `external_directory`, as on
+  1.x; that second ask is not part of the modelled rule decision.
+
+Shell evaluation models OpenCode 1.x only. OpenCode 2.x replaced tree-sitter with a portable
+scanner (packages/core/src/shell/scan.ts) that refuses whole commands it cannot analyse, for the
+reasons in `V2_SHELL_OPAQUE_REASONS`; those refusals and its per-command resources are not
+modelled, so no 2.x shell result is claimed here.
 """
 
 from __future__ import annotations
@@ -611,3 +628,68 @@ def tool_hidden(rules: list[Rule], tool: str) -> bool:
     permission = "edit" if tool in EDIT_TOOLS else tool
     last = next((rule for rule in reversed(rules) if wildcard_match(permission, rule.permission)), None)
     return last is not None and last.pattern == "*" and last.action == "deny"
+
+
+# --- OpenCode 2.x: non-shell rows (tag v2.3.2) -----------------------------------------------------
+
+# `OpaqueReason` in packages/core/src/shell/scan.ts: a command the 2.x scanner cannot analyse fails
+# with "Portable shell scanner cannot analyze command: <reason>" (shell/parse.ts) instead of being
+# matched rule by rule.
+V2_SHELL_OPAQUE_REASONS = (
+    "command-substitution",
+    "compound-command",
+    "dynamic-command-name",
+    "dynamic-execution",
+    "heredoc",
+    "invalid-redirect",
+    "invalid-structure",
+    "unsupported-escape",
+    "unterminated-escape",
+    "unterminated-quote",
+)
+
+
+def v2_action(key: str) -> str:
+    """The 2.x action a V1 permission key becomes (`normalizeAction` in v1/config/migrate.ts)."""
+    if key in ("write", "patch", "apply_patch"):
+        return "edit"
+    if key == "task":
+        return "subagent"
+    if key == "bash":
+        return "shell"
+    return key
+
+
+def v2_ruleset(rules: Iterable[Rule]) -> list[Rule]:
+    """A V1-derived ruleset as 2.x holds it: same order, renamed actions."""
+    return [Rule(v2_action(rule.permission), rule.pattern, rule.action) for rule in rules]
+
+
+def v2_ruleset_from_permission(permission: dict[str, Any]) -> list[Rule]:
+    return v2_ruleset(ruleset_from_permission(permission))
+
+
+def v2_rules_from_dump(permissions: Iterable[dict[str, Any]]) -> list[Rule]:
+    """The `permissions` list of one agent in `opencode debug agents` output (2.x)."""
+    return [Rule(item["action"], item["resource"], item["effect"]) for item in permissions]
+
+
+def _contains(parent: str, child: str) -> bool:
+    return child == parent or child.startswith(parent.rstrip("/") + "/")
+
+
+def location_resource(path: str, location: str, worktree: str) -> str:
+    """The resource 2.x asks `read`/`edit` with for absolute `path` (`FileAccess.resolve`).
+
+    Inside the Location, or inside the worktree when the worktree is not the filesystem root, it
+    is relative to the Location (`../x` for a worktree file above a subfolder Location, `.` for
+    the Location itself); anywhere else it is the absolute path.
+    """
+    path = os.path.normpath(path)
+    location = os.path.normpath(location)
+    worktree = os.path.normpath(worktree)
+    internal = _contains(location, path) or (worktree != os.path.dirname(worktree) and _contains(worktree, path))
+    if internal:
+        return os.path.relpath(path, location).replace(os.sep, "/")
+    return path.replace(os.sep, "/")
+
