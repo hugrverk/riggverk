@@ -1,6 +1,6 @@
 # Critic recipes
 
-Exact commands for running a fresh, read-only critic (or adversary) in another harness's CLI, for the adversarial skills. Checked against the `--help` of Codex CLI 0.164.0, Claude Code 2.1.308 and OpenCode 1.19.4 on 2026-10-27; after upgrading a CLI, check its `--help` again before trusting a flag.
+Exact commands for running a fresh, read-only critic (or adversary) in another harness's CLI, for the adversarial skills. Checked against the `--help` of Codex CLI 0.164.0, Claude Code 2.1.308 and OpenCode 1.19.4 on 2026-10-27, and the OpenCode route against OpenCode 1.19.5 and 2.3.2 on 2026-11-19; after upgrading a CLI, check its `--help` again before trusting a flag.
 
 ## Rules for every route
 
@@ -59,23 +59,39 @@ cd "<repo-root>" && perl -e 'alarm shift; exec @ARGV or die "exec: $!"' 1200 \
 
 Permission rules only, no OS sandbox. The critic is a one-off primary agent defined inline, with everything but reading denied; the user's secret-file read rules still apply.
 
-Never pass `--agent inspector` or another subagent: `opencode run` warns that it is a subagent and falls back to the default agent, which can write. Never pass `--auto`, `-c` or `-s`.
+Never pass `--agent inspector` or another subagent: `opencode run` 1.x warns that it is a subagent and falls back to the default agent, which can write. Never pass `--auto`, `-c` or `-s`.
 
-Preflight: `opencode debug agent riggverk-critic --pure` with the two variables below. It is cheap (no model call) and proves the agent resolves and has no tool beyond reading, not the login, so it runs in the same command as the critic:
+The flags differ by major version, so the command reads `opencode --version` (1.x prints `1.19.5`, 2.x prints `opencode v2.3.2`) and refuses any other output. Preflight: `opencode debug agent riggverk-critic --pure` on 1.x, `opencode debug agents --standalone` on 2.x, with the two variables below. It is cheap (no model call) and proves the agent resolves and cannot write, not the login, so it runs in the same command as the critic:
 
 ```sh
 cd "<repo-root>" \
-&& export OPENCODE_DISABLE_PROJECT_CONFIG=1 OPENCODE_CONFIG_CONTENT='{"agent":{"riggverk-critic":{"mode":"primary","description":"Read-only critic","permission":{"edit":"deny","bash":"deny","task":"deny","webfetch":"deny","websearch":"deny","skill":"deny","todowrite":"deny","codesearch":"deny","external_directory":"deny","*_*":"deny"}}}}' \
-&& opencode debug agent riggverk-critic --pure 2>/dev/null | perl -MJSON::PP -0e '$t = decode_json(<STDIN>)->{tools}; @x = grep { $t->{$_} && !/^(invalid|read|glob|grep)$/ } sort keys %$t; die "riggverk-critic also has: @x\n" if @x' \
-&& perl -e 'alarm shift; exec @ARGV or die "exec: $!"' 1200 \
-  opencode run --pure --agent riggverk-critic [-m '<provider>/<model>'] \
-    "Follow the attached brief exactly." -f "<T>/brief.md" \
-    < /dev/null > "<T>/critic.md" 2> "<T>/critic.err"
+&& export OPENCODE_DISABLE_PROJECT_CONFIG=1 OPENCODE_CONFIG_CONTENT='{"plugins":["-*","opencode.*"],"agent":{"riggverk-critic":{"mode":"primary","description":"Read-only critic","permission":{"edit":"deny","bash":"deny","task":"deny","webfetch":"deny","websearch":"deny","skill":"deny","todowrite":"deny","codesearch":"deny","external_directory":"deny","execute":"deny","*_*":"deny"}}}}' \
+&& case "$(opencode --version 2>/dev/null)" in
+1.[0-9]*)
+  opencode debug agent riggverk-critic --pure > "<T>/agent.json" 2>/dev/null \
+  && perl -MJSON::PP -0777 -ne '$t = decode_json($_)->{tools}; @x = grep { $t->{$_} && !/^(invalid|read|glob|grep)$/ } sort keys %$t; die "riggverk-critic also has: @x\n" if @x' "<T>/agent.json" \
+  && perl -e 'alarm shift; exec @ARGV or die "exec: $!"' 1200 \
+    opencode run --pure --agent riggverk-critic [-m '<provider>/<model>'] \
+      "Follow the attached brief exactly." -f "<T>/brief.md" \
+      < /dev/null > "<T>/critic.md" 2> "<T>/critic.err" ;;
+"opencode v2."[0-9]*)
+  opencode debug agents --standalone > "<T>/agents.json" 2>/dev/null \
+  && perl -MJSON::PP -0777 -ne '@c = grep { ref eq "HASH" && $_->{id} eq "riggverk-critic" } @{decode_json($_)}; die "riggverk-critic is missing\n" unless @c == 1 && ref $c[0]{permissions} eq "ARRAY"; @r = @{$c[0]{permissions}}; die "riggverk-critic has a malformed rule\n" if grep { ref ne "HASH" || grep { !defined || ref } @$_{qw(action resource effect)} } @r; sub w { ($p, $s) = @_; $p = quotemeta($p =~ tr{\\}{/}r); $p =~ s/\\\*/.*/g; $p =~ s/\\\?/./g; $p =~ s/\\ \.\*\z/( .*)?/; $s =~ /^$p\z/s } for $x (qw(edit shell subagent execute webfetch websearch skill todowrite codesearch external_directory)) { @m = grep { w($_->{action}, $x) } @r; ($i) = grep { $m[$_]{resource} eq "*" && $m[$_]{effect} eq "deny" } reverse 0 .. $#m; die "riggverk-critic can use $x\n" if !defined $i || grep { $_->{effect} ne "deny" || $x eq "execute" && $_->{resource} ne "*" } @m[$i + 1 .. $#m] } ($k) = grep { $r[$_]{action} eq "*_*" && $r[$_]{resource} eq "*" && $r[$_]{effect} eq "deny" } reverse 0 .. $#r; die "riggverk-critic can use MCP tools\n" if !defined $k || grep { $_->{action} =~ /[_*?]/ && ($_->{effect} ne "deny" || $_->{resource} ne "*") } @r[$k + 1 .. $#r]' "<T>/agents.json" \
+  && perl -e 'alarm shift; exec @ARGV or die "exec: $!"' 1200 \
+    opencode run --standalone --agent riggverk-critic [-m '<provider>/<model>'] \
+      "Follow the attached brief exactly." -f "<T>/brief.md" \
+      < /dev/null > "<T>/critic.md" 2> "<T>/critic.err" ;;
+*) echo "OpenCode critic: unknown OpenCode version, only 1.x and 2.x are supported" >&2; false ;;
+esac
 ```
 
-- Put the message before `-f`: `-f` takes every following word as a file.
-- `OPENCODE_DISABLE_PROJECT_CONFIG=1` keeps the reviewed repository's own OpenCode config out; `--pure` runs without external plugins. The session is still stored in OpenCode's database.
-- `"*_*":"deny"` removes every MCP tool, since OpenCode names them `<server>_<tool>`; built-in reading tools have no underscore. Do not deny `"*"` and re-allow `read`: agent rules come last, so that would override the user's secret-file read rules.
-- Custom tools in `~/.config/opencode/tools/` (or `tool/`) keep their file name and are not plugins, so neither `--pure` nor `"*_*"` removes them. If the preflight stops with "riggverk-critic also has: …", add `"<name>":"deny"` for each listed tool to the critic's `permission` and run again.
-- An expired login or an unknown model exits 1 within seconds with the error on stderr and nothing in `critic.md`. If stderr says it is "falling back to default agent", treat the round as failed and check the mutation guard.
+- Put the message before `-f`: on 1.x `-f` takes every following word as a file.
+- `OPENCODE_DISABLE_PROJECT_CONFIG=1` keeps the reviewed repository's own OpenCode config out, and on 2.x its `.opencode/plugins/` too. `--pure` (1.x) and `"plugins":["-*","opencode.*"]` (2.x; 1.x ignores the key) run without external plugins, keeping OpenCode's built-in ones. The session is still stored in OpenCode's database.
+- 2.x: every command needs `--standalone`, which starts a private server that reads the two variables. Without it the CLI uses the shared background service when one is running, where the critic does not exist and the variables do not apply.
+- Both preflights write their JSON to a file: on 1.x a pipe cuts it at 128 KiB, which Riggverk's policy exceeds, and on 2.x it runs to megabytes. Never print it, since it lists the user's permission rules.
+- 2.x: `debug agents` shows each agent's resolved rules (last match wins) but not its tools. For each listed action the check finds the last rule that denies it for `*` and accepts only denies after it, so every call is refused. `edit` also covers write and patch; `shell` and `subagent` are the 2.x names of `bash` and `task`. For `execute`, Code Mode (its programs get `fetch` and nested tools), the last matching rule itself must deny `*`, which is what turns Code Mode off. After the last `*_*` deny, no rule may allow, ask or partly deny an action that could contain `_`. It stops with "riggverk-critic is missing" when the agent did not resolve, and with "riggverk-critic can use …" when a later rule lets an action through.
+- `"*_*":"deny"` removes every MCP tool, since OpenCode names them `<server>_<tool>`, and on 2.x also OpenCode's own namespaced tools (`opencode_worktree_create` and others, some of which ask no permission). Built-in reading tools have no underscore. Do not deny `"*"` and re-allow `read`: agent rules come last, so that would override the user's secret-file read rules.
+- Custom tools in `~/.config/opencode/tools/` (or `tool/`) on 1.x keep their file name and are not plugins, so neither `--pure` nor `"*_*"` removes them. If the preflight stops with "riggverk-critic also has: …", add `"<name>":"deny"` for each listed tool to the critic's `permission` and run again. On 2.x tools come from plugins, which the `plugins` filter turns off; the preflight cannot list tools, so a plugin whose ID starts with `opencode.` would stay unseen.
+- 1.x: an expired login or an unknown model exits 1 within seconds with the error on stderr and nothing in `critic.md`. If stderr says it is "falling back to default agent", treat the round as failed and check the mutation guard.
+- 2.x: `critic.err` holds a line `> <agent> · <model>`. Treat the round as failed if it names another agent than `riggverk-critic`. With no login, 2.3.2 answered through OpenCode's free hosted model instead of failing, so pass `-m` when the review must stay on a provider you chose.
 - OpenCode reads provider keys from the environment, so do not strip the one your model's provider needs.
