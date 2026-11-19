@@ -1169,7 +1169,10 @@ def non_shell_rows() -> list[DecisionRow]:
     rows += [_row("scribe", "edit", path, "allow") for path in ("README.md", "docs/guide.md")]
     rows += [_row("scribe", "edit", path, NOT_ALLOW) for path in SCRIBE_EDIT_DENY]
     rows += [_row(agent, key, resource, expected) for agent, key, resource, expected in BUILTIN_AGENT_ACTIONS if key != "bash"]
+    # `build` has no managed entry: these rows check the global block itself.
     rows.append(_row("build", "edit", "src/x.ts", "allow"))
+    rows += [_row("build", "read", path, expected) for path, expected in READ_ACTIONS]
+    rows += [_row("build", "edit", path, "deny") for path in SECRET_EDIT_SAMPLES]
     # A Location in a subfolder: every secret deny still holds, through `../P`.
     for row in list(rows):
         if row.key in V2_FILE_KEYS and row.expected == "deny" and row.resource.startswith(_WORKTREE + "/"):
