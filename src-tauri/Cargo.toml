@@ -28,6 +28,11 @@ sha2 = "0.10"
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
 
+# The contract tests spend most of their time in unoptimized string and digest code; opt-level 1
+# cuts the Rust test run several times over at a small build cost.
+[profile.test]
+opt-level = 1
+
 [profile.release]
 strip = true
 lto = "thin"
