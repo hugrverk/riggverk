@@ -2,7 +2,7 @@ import { useMemo, useRef, type CSSProperties } from "react";
 import { flowLayout } from "../lib/flowLayout";
 import { BASE_SOURCE_ID, edgeId, lineWeight } from "../lib/flowModel";
 import { useMotion } from "../lib/motion";
-import type { PlanCurve, PlanFlow, PlanPhase } from "../lib/planFlow";
+import type { PlanCurve, PlanFlow, PlanPhase, SourceCurve } from "../lib/planFlow";
 import type { InstallAgent } from "../types";
 import { AgentGlyph } from "../ui/agentIcons";
 import { cx } from "../ui/tone";
@@ -16,14 +16,18 @@ export interface PlanFlowMapProps {
   highlight: InstallAgent | null;
 }
 
-const CURVE_CLASS: Record<PlanCurve, string> = {
+const CURVE_CLASS: Record<PlanCurve | SourceCurve, string> = {
   write: "is-ready",
   kept: "is-kept",
   sync: "is-sync",
   live: "live",
   seen: "is-seen",
   written: "is-written",
+  fix: "is-fix",
 };
+
+/** Thin for a curve nothing is written along, heavier by what flows for one that is. */
+const thin = (curve: PlanCurve | SourceCurve) => curve === "sync" || curve === "kept" || curve === "fix";
 
 const NODE_CLASS: Record<PlanCurve, string> = {
   write: "is-ready",
@@ -42,10 +46,11 @@ const CAPTION: Record<PlanPhase, string> = { review: "What apply writes", applyi
 
 /**
  * The install review's map: the Overview's flow drawn with its geometry (`flowLayout`), icons and curve classes, from
- * the base to the agents of the plan, each base curve carrying a chip with what apply writes along it. Dashed waits
- * to be written, dotted is a conflict apply keeps, solid thin is already in sync, solid ok is written; the curve being
- * written is live (travelling dots at full motion only). It is a picture of the table beside it and says nothing the
- * table does not, so it is hidden from assistive technology.
+ * the base to the agents of the plan, each base curve carrying a chip with what apply writes along it. A pack's curves
+ * say the same of its skills (`sourceCurves`); your refinements' are always in sync. Dashed waits to be written, dotted
+ * is a conflict apply keeps, solid thin is already in sync, solid ok is written, dashed in the fix hue is a held pack;
+ * the curve being written is live (travelling dots at full motion only). The legend names every style drawn. It is a
+ * picture of the table beside it and says nothing the table does not, so it is hidden from assistive technology.
  */
 export function PlanFlowMap({ flow, phase, highlight }: PlanFlowMapProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -57,6 +62,8 @@ export function PlanFlowMap({ flow, phase, highlight }: PlanFlowMapProps) {
   useFlowPulses(svgRef, live, motion === "full", `${flow.model.edges.map(edge => edge.id).join(",")}@${layout.width}x${layout.height}`);
 
   const lit = highlight !== null && flow.agents.some(agent => agent.id === highlight) ? highlight : null;
+  const sourceEdges = flow.model.edges.filter(edge => edge.source !== BASE_SOURCE_ID);
+  const held = sourceEdges.some(edge => flow.sourceCurves[edge.id] === "fix");
   const agentCount = flow.agents.length;
   const s = layout.scale;
 
@@ -79,19 +86,29 @@ export function PlanFlowMap({ flow, phase, highlight }: PlanFlowMapProps) {
           focusable="false"
         >
           {layout.offCurve && <path className="flow-ln is-ghost" d={layout.offCurve.d} />}
-          {flow.model.edges
-            .filter(edge => edge.source !== BASE_SOURCE_ID)
-            .map(edge => (
-              <path key={edge.id} className={cx("flow-ln", "is-quiet", lit === edge.agent && "hl")} d={layout.curves[edge.id]!.d} data-agent={edge.agent} />
-            ))}
+          {sourceEdges.map(edge => {
+            const curve = flow.sourceCurves[edge.id] ?? "sync";
+            return (
+              <path
+                key={edge.id}
+                className={cx("flow-ln", "plan-ln", CURVE_CLASS[curve], lit === edge.agent && "hl")}
+                d={layout.curves[edge.id]!.d}
+                data-source={edge.source}
+                data-agent={edge.agent}
+                data-curve={curve}
+                style={{ strokeWidth: thin(curve) ? 1.2 : lineWeight(edge.total) + 0.4 }}
+              />
+            );
+          })}
           {flow.agents.map(agent => (
             <path
               key={agent.id}
               className={cx("flow-ln", "plan-ln", CURVE_CLASS[agent.curve], lit === agent.id && "hl")}
               d={layout.curves[edgeId(BASE_SOURCE_ID, agent.id)]!.d}
+              data-source={BASE_SOURCE_ID}
               data-agent={agent.id}
               data-curve={agent.curve}
-              style={{ strokeWidth: agent.curve === "sync" || agent.curve === "kept" ? 1.2 : lineWeight(agent.counts.create + agent.counts.update + agent.counts.remove) + 0.4 }}
+              style={{ strokeWidth: thin(agent.curve) ? 1.2 : lineWeight(agent.counts.create + agent.counts.update + agent.counts.remove) + 0.4 }}
             />
           ))}
 
@@ -186,6 +203,18 @@ export function PlanFlowMap({ flow, phase, highlight }: PlanFlowMapProps) {
           <i className="lg-sync" />
           already in sync
         </li>
+        {held && (
+          <li>
+            <i className="lg-fix" />
+            held pack, not written
+          </li>
+        )}
+        {layout.offCurve && (
+          <li>
+            <i className="lg-off" />
+            off, nothing written
+          </li>
+        )}
       </ul>
     </div>
   );

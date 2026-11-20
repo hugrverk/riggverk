@@ -73,6 +73,7 @@ import type {
   ImportCandidate,
   ImportFlag,
   PackLibrary,
+  PackWrite,
   PackSkillEntry,
   SkillImportPreview,
   SkillImportResult,
@@ -1025,11 +1026,21 @@ function plannedOperation(surface: SetupSurfaceId): PlannedOperation {
     manual: `Manual step for ${path}`,
     unavailable: `${SURFACE_LABELS[surface]} is disabled in settings`,
   };
+  // The active pack skills ride on the folder lines like the backend's, which name them in `pack_writes` with the
+  // enabled harnesses that read each folder. A skill with privileged keys gets a line of its own there; the mock has none.
+  const packSkills = packLibrary.skills.filter(skill => skill.state === "active" && !skill.privileged?.length);
+  const inFolders = skills.length + packSkills.length;
+  const packWritesOn = (line: number, folder: SkillReadFolder): PackWrite[] => {
+    const harnesses = settings.enabled_harness_ids.filter(harness => SKILL_READ_FOLDERS[harness].includes(folder));
+    const packs = [...new Set(packSkills.map(skill => skill.pack))];
+    return packs.map(pack => ({ line, pack, skills: packSkills.filter(skill => skill.pack === pack).length, harnesses }));
+  };
+  const skillsUpdate = kind === "update" && surface === "skills";
   const details =
-    kind === "update" && surface === "skills"
+    skillsUpdate
       ? [
-        `+ ~/.agents/skills (${skills.length} skills, ${skills.length} files)`,
-        `~ ~/.claude/skills (${skills.length} skills, ${skills.length} files)`,
+        `+ ~/.agents/skills (${inFolders} skills, ${inFolders} files)`,
+        `~ ~/.claude/skills (${inFolders} skills, ${inFolders} files)`,
         `- $CODEX_HOME/skills (${skills.length} skills, ${skills.length} files, owned copies)`,
         "! ~/.cursor/skills/tdd (edited, kept)",
       ]
@@ -1054,6 +1065,7 @@ function plannedOperation(surface: SetupSurfaceId): PlannedOperation {
     conflict_description:
       kind === "conflict" ? `${path} was modified locally since install; it is preserved and skipped.` : null,
     manual_step: kind === "manual" ? `${path} is left as is; convert it in the app or hand it back to take base updates` : null,
+    ...(skillsUpdate && packSkills.length > 0 ? { pack_writes: [...packWritesOn(0, "agents"), ...packWritesOn(1, "claude")] } : {}),
   };
 }
 

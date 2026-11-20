@@ -109,6 +109,120 @@ describe("buildPlanFlow", () => {
     expect(flow.sourceSub.base).toBe("25 items · in sync");
   });
 
+  describe("a pack's curves", () => {
+    // A new agent and a pack: the skills lines count the bundle's skills and the pack's together, `pack_writes` names
+    // the pack's share and every agent that reads each folder; an edited copy of another pack's skill is kept.
+    const packPlan = agentPlanOf([
+      op("skills", "update", {
+        details: [
+          "+ ~/.claude/skills (35 skills, 70 files)",
+          "+ ~/.agents/skills (35 skills, 70 files)",
+          "+ ~/.gemini/config/skills (35 skills, 70 files)",
+          "! ~/.claude/skills/team-x (edited, kept)",
+        ],
+        pack_writes: [
+          { line: 0, pack: "kretsverket", skills: 5, harnesses: ["claude", "opencode"] },
+          { line: 1, pack: "kretsverket", skills: 5, harnesses: ["codex", "opencode"] },
+          { line: 2, pack: "kretsverket", skills: 5, harnesses: ["antigravity"] },
+          { line: 3, pack: "team", skills: 1, harnesses: ["claude"] },
+        ],
+      }),
+    ]);
+    const packSource = (name: string, total: number, state: "ok" | "fix" = "ok") =>
+      ({ id: `pack:${name}`, kind: "pack" as const, label: name, state, items: [], total, notes: [] });
+    const edge = (source: string, id: InstallAgent) =>
+      ({ id: edgeId(source, id), source, agent: id, items: [], total: 1, status: "ok" as const, glow: false });
+    const PACKS: FlowModel = {
+      sources: [...BASE.sources, packSource("kretsverket", 5), packSource("team", 1), packSource("quiet", 2), packSource("broken", 1, "fix")],
+      agents: [agent("codex"), agent("opencode"), agent("claude"), agent("antigravity")],
+      offGroup: null,
+      edges: [
+        edge("yours", "claude"),
+        ...(["codex", "opencode", "claude", "antigravity"] as const).map(id => edge("pack:kretsverket", id)),
+        edge("pack:team", "codex"),
+        edge("pack:team", "claude"),
+        edge("pack:quiet", "claude"),
+        edge("pack:broken", "claude"),
+      ],
+    };
+    const curves = (phase: "review" | "applying" | "done") => buildPlanFlow(packPlan, { base: PACKS, phase }).sourceCurves;
+
+    it("are dashed where the plan writes the pack's skills, a shared folder reaching every agent that reads it", () => {
+      expect(curves("review")).toEqual({
+        "yours>claude": "sync",
+        "pack:kretsverket>codex": "write",
+        "pack:kretsverket>opencode": "write",
+        "pack:kretsverket>claude": "write",
+        "pack:kretsverket>antigravity": "write",
+        "pack:team>codex": "sync",
+        "pack:team>claude": "kept",
+        "pack:quiet>claude": "sync",
+        "pack:broken>claude": "fix",
+      });
+      // Nothing is claimed written before the run succeeded.
+      expect(curves("applying")).toEqual(curves("review"));
+      expect(buildPlanFlow(packPlan, { base: PACKS, phase: "review" }).sourceSub).toMatchObject({
+        "pack:kretsverket": "5 items · to write",
+        "pack:team": "1 item · yours kept",
+        "pack:quiet": "2 items · in sync",
+        "pack:broken": "held",
+        yours: "19 items · untouched",
+      });
+    });
+
+    it("are written once the run succeeded, the rest in sync rather than kept", () => {
+      const flow = buildPlanFlow(packPlan, { base: PACKS, phase: "done" });
+      expect(Object.entries(flow.sourceCurves).filter(([, curve]) => curve === "written").map(([id]) => id)).toEqual([
+        "pack:kretsverket>codex",
+        "pack:kretsverket>opencode",
+        "pack:kretsverket>claude",
+        "pack:kretsverket>antigravity",
+      ]);
+      expect(flow.sourceCurves["pack:quiet>claude"]).toBe("sync");
+      expect(flow.sourceCurves["yours>claude"]).toBe("sync");
+      expect(flow.sourceSub).toMatchObject({ "pack:kretsverket": "5 items · written", "pack:quiet": "2 items · in sync" });
+    });
+
+    it("leave the agents' own counts alone: a shared folder's pack reach is drawn on the pack's curve only", () => {
+      const flow = buildPlanFlow(packPlan, { base: PACKS, phase: "review" });
+      expect(flow.agents.map(entry => [entry.id, entry.curve, entry.chip])).toEqual([
+        // Codex and OpenCode own no row: the base's curve is in sync while the pack's is dashed.
+        ["codex", "sync", null],
+        ["opencode", "sync", null],
+        ["claude", "write", "+ 1 · ■ 1"],
+        ["antigravity", "write", "+ 1 create"],
+      ]);
+      expect(flow.sourceCurves["pack:kretsverket>codex"]).toBe("write");
+      expect(flow.writes).toBe(3);
+    });
+
+    it("say kept when the skills operation as a whole is a conflict naming the pack", () => {
+      const conflictPlan = agentPlanOf([
+        op("skills", "conflict", {
+          conflict_description: "~/.claude/skills/team-x was edited",
+          details: ["! ~/.claude/skills/team-x (edited, kept)"],
+          pack_writes: [{ line: 0, pack: "team", skills: 1, harnesses: ["claude"] }],
+        }),
+        op("claude_rules", "update"),
+      ]);
+      expect(conflictPlan.conflicts.map(row => row.packs.map(write => write.pack))).toEqual([["team"]]);
+      expect(buildPlanFlow(conflictPlan, { base: PACKS, phase: "review" }).sourceCurves["pack:team>claude"]).toBe("kept");
+    });
+  });
+
+  it("keeps a harness page's counts to the agent's own rows when a shared row carries its pack skills", () => {
+    const details = ["+ ~/.agents/skills (35 skills, 70 files)", "- $CODEX_HOME/skills (3 skills, 3 files, owned copies)"];
+    const without = buildPlanFlow(agentPlanOf([op("skills", "update", { details })]), { phase: "review" });
+    const withPacks = buildPlanFlow(
+      agentPlanOf([op("skills", "update", { details, pack_writes: [{ line: 0, pack: "kretsverket", skills: 5, harnesses: ["codex"] }] })]),
+      { phase: "review" },
+    );
+    expect(withPacks.agents.map(entry => [entry.id, entry.counts, entry.chip, entry.sub])).toEqual(
+      without.agents.map(entry => [entry.id, entry.counts, entry.chip, entry.sub]),
+    );
+    expect(withPacks.agents.map(entry => [entry.id, entry.chip])).toEqual([["codex", "− 1 remove"]]);
+  });
+
   it("draws only the plan's own agents from the base without the Overview's model, and none for the workspace bundle", () => {
     const flow = buildPlanFlow(agentPlanOf([op("claude_rules", "update")]), { phase: "review" });
     expect(flow.model.sources.map(source => source.label)).toEqual(["Riggverk base"]);

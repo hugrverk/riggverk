@@ -1,5 +1,5 @@
-import type { InstallAgent } from "../types";
-import { BASE_SOURCE_ID, edgeId, type FlowAgent, type FlowEdge, type FlowModel, type FlowSource, type RunTrace } from "./flowModel";
+import { INSTALL_AGENTS, type InstallAgent } from "../types";
+import { BASE_SOURCE_ID, edgeId, packSourceId, type FlowAgent, type FlowEdge, type FlowModel, type FlowSource, type RunTrace } from "./flowModel";
 import { HARNESS_LABELS, HARNESS_NAV_ORDER } from "./harnessInstallation";
 import { writeChip, writeCounts, writeLine, writesOf, type AgentPlan, type WriteCounts } from "./installPlan";
 
@@ -18,6 +18,14 @@ export type PlanPhase = "review" | "applying" | "done";
  * hue, only once the run succeeded.
  */
 export type PlanCurve = "write" | "kept" | "sync" | "live" | "seen" | "written";
+
+/**
+ * How a pack's or your refinements' curve to an agent is drawn, from the pack skills the plan's rows name
+ * (`PlanRow.packs`): `write` while apply will write some there (also while it runs: nothing is written before it
+ * succeeded), `written` once it has, `kept` when only an edited copy of one is kept, `sync` when apply leaves the pack
+ * there as it is, `fix` a pack that is held. Apply never writes your refinements: always `sync`.
+ */
+export type SourceCurve = "write" | "written" | "kept" | "sync" | "fix";
 
 /** The hue of a chip's text; the sign and the word in it always say the same. */
 export type PlanChipTone = "create" | "update" | "remove" | "conflict" | "ok" | "live";
@@ -42,6 +50,8 @@ export interface PlanFlow {
   agents: PlanFlowAgent[];
   /** The line under each source, by source id. */
   sourceSub: Record<string, string>;
+  /** How each curve that does not start at the base is drawn, by edge id. */
+  sourceCurves: Record<string, SourceCurve>;
   /** Writes the plan makes in all, the shared folders included. */
   writes: number;
 }
@@ -96,7 +106,23 @@ export function buildPlanFlow(
   plan: AgentPlan,
   { base = null, phase, trace = null }: { base?: FlowModel | null; phase: PlanPhase; trace?: RunTrace | null },
 ): PlanFlow {
-  const inPlan = new Set(plan.groups.map(group => group.agent).filter((agent): agent is InstallAgent => agent !== "shared"));
+  // What each pack's rows do per agent: a row names every agent that reads its folder, so a shared folder reaches several.
+  const packReach = new Map<string, { write: Set<InstallAgent>; kept: Set<InstallAgent> }>();
+  for (const row of plan.rows) {
+    if (!row.safe && !row.conflict) continue;
+    for (const write of row.packs) {
+      const id = packSourceId(write.pack);
+      const reach = packReach.get(id) ?? { write: new Set(), kept: new Set() };
+      packReach.set(id, reach);
+      for (const agent of write.harnesses) reach[row.safe ? "write" : "kept"].add(agent);
+    }
+  }
+  // On the Overview an agent a pack reaches only through a shared folder is still in the plan; a harness page keeps its own agents.
+  const packWritten = (agent: InstallAgent) => base !== null && [...packReach.values()].some(reach => reach.write.has(agent));
+  const inPlan = new Set([
+    ...plan.groups.map(group => group.agent).filter((agent): agent is InstallAgent => agent !== "shared"),
+    ...INSTALL_AGENTS.filter(packWritten),
+  ]);
   const active = base && inPlan.size > 0 ? base.agents.filter(agent => agent.status === "active").map(agent => agent.id) : [];
   const ids = HARNESS_NAV_ORDER.filter(id => inPlan.has(id) || active.includes(id));
   const offIds = base && ids.length > 0
@@ -105,6 +131,7 @@ export function buildPlanFlow(
 
   const agents: PlanFlowAgent[] = ids.map(id => {
     const group = plan.groups.find(entry => entry.agent === id);
+    // Only the agent's own rows: what a pack writes into a folder it shares with others is drawn on the pack's curve.
     const counts = writeCounts(group ? [...group.rows, ...group.skipped] : []);
     return { id, label: HARNESS_LABELS[id], counts, decision: counts.conflict > 0, ...agentState(id, counts, phase, trace) };
   });
@@ -114,8 +141,18 @@ export function buildPlanFlow(
   for (const agent of agents) {
     edges.push({ id: edgeId(BASE_SOURCE_ID, agent.id), source: BASE_SOURCE_ID, agent: agent.id, items: [], total: writesOf(agent.counts), status: "ok", glow: false });
   }
+  const sourceCurves: Record<string, SourceCurve> = {};
   for (const edge of base?.edges ?? []) {
-    if (edge.source !== BASE_SOURCE_ID && ids.includes(edge.agent) && sources.some(source => source.id === edge.source)) edges.push({ ...edge, glow: false });
+    const source = sources.find(entry => entry.id === edge.source);
+    if (edge.source === BASE_SOURCE_ID || !ids.includes(edge.agent) || !source) continue;
+    edges.push({ ...edge, glow: false });
+    const reach = packReach.get(source.id);
+    sourceCurves[edge.id] =
+      source.kind !== "pack" ? "sync"
+      : source.state === "fix" ? "fix"
+      : reach?.write.has(edge.agent) ? (phase === "done" ? "written" : "write")
+      : reach?.kept.has(edge.agent) ? "kept"
+      : "sync";
   }
 
   const writes = writesOf(writeCounts(plan.rows));
@@ -126,7 +163,14 @@ export function buildPlanFlow(
       const state = phase === "done" ? "in sync" : phase === "applying" ? "writing…" : `${writes} ${writes === 1 ? "write" : "writes"}`;
       sourceSub[source.id] = [items, state].filter(Boolean).join(" · ");
     } else if (source.kind === "yours") sourceSub[source.id] = [items, "untouched"].filter(Boolean).join(" · ");
-    else sourceSub[source.id] = source.state === "fix" ? "held" : items || "nothing yet";
+    else if (source.state === "fix") sourceSub[source.id] = "held";
+    else {
+      const reach = packReach.get(source.id);
+      const state = reach?.write.size
+        ? phase === "done" ? "written" : phase === "applying" ? "writing…" : "to write"
+        : reach?.kept.size ? "yours kept" : "in sync";
+      sourceSub[source.id] = [items, state].filter(Boolean).join(" · ");
+    }
   }
 
   const model: FlowModel = {
@@ -135,5 +179,5 @@ export function buildPlanFlow(
     offGroup: offIds.length > 0 ? { agents: offIds.map(id => flowAgent(id, "off", false, "off")), edges: [] } : null,
     edges,
   };
-  return { model, agents, sourceSub, writes };
+  return { model, agents, sourceSub, sourceCurves, writes };
 }

@@ -529,8 +529,7 @@
 .plan-map-fig { min-width: 0; }
 .plan-svg { width: 100%; }
 
-/* Curves: the base's curve to each agent says what apply does there (_flow.scss holds the shared ones). */
-.flow-ln.is-quiet { stroke-dasharray: 2 5; opacity: 0.28; }
+/* Curves: the base's and each pack's curve to an agent say what apply does there (_flow.scss holds the shared ones, is-fix and is-ghost among them). */
 .flow-ln.plan-ln.is-ready { stroke: var(--text-muted); stroke-dasharray: 3 4; opacity: 0.9; }
 .flow-ln.plan-ln.is-kept { stroke: var(--decide); stroke-dasharray: 1.5 3.5; opacity: 0.9; }
 .flow-ln.plan-ln.is-sync { opacity: 0.55; }
@@ -540,7 +539,7 @@
 
 .plan-svg.has-hl .flow-ln { opacity: 0.12; }
 .plan-svg.has-hl .flow-ln.hl { opacity: 1; }
-.plan-svg.has-hl .flow-ln.plan-ln.hl:not(.is-written):not(.is-kept) { stroke: var(--text); }
+.plan-svg.has-hl .flow-ln.plan-ln.hl:not(.is-written):not(.is-kept):not(.is-fix) { stroke: var(--text); }
 .plan-svg.has-hl .flow-agent:not(.hl) { opacity: 0.4; }
 .plan-svg.has-hl .plan-chip:not(.hl) { opacity: 0.3; }
 
@@ -582,6 +581,8 @@
 .plan-legend .lg-sync { border-top-style: solid; border-color: var(--border-strong); }
 .plan-legend .lg-written { border-top-style: solid; border-color: var(--ok); }
 .plan-legend .lg-live { border-top-style: solid; border-color: var(--ready); }
+.plan-legend .lg-fix { border-color: var(--fix); }
+.plan-legend .lg-off { border-top-style: dotted; border-color: var(--border-strong); }
 
 .plan-progress,
 .plan-done {
