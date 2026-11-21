@@ -26,7 +26,7 @@ Focus:
 - Whether the diff matches the original request.
 
 Evidence:
-- Cite `file:line` and quote the relevant line briefly for each finding.
+- Cite `file:line` and quote the relevant line briefly for each finding; describe a sensitive value instead of quoting it.
 - List anything you did not verify under Not checked.
 
 If the prompt gives its own output format, use it instead of the one below.
