@@ -714,4 +714,21 @@ describe("mock backend: pack skills in the skills review", () => {
       ["~ ~/.claude/skills", "mine", 1, ["opencode", "claude", "cursor"]],
     ]);
   });
+
+  it("removes a disabled pack skill on a line of its own per folder, naming its pack", async () => {
+    await invoke("set_skills_enabled", { names: ["my-checklist"], enabled: false });
+    try {
+      const plan = await invoke<SetupPlan>("preview_setup", { surfaces: ["skills"] });
+      const op = plan.operations.find(entry => entry.surface === "skills")!;
+      const named = (op.pack_writes ?? []).map(write => [op.details![write.line]!.split(" (")[0], write.pack, write.harnesses]);
+      expect(named).toEqual([
+        ["+ ~/.agents/skills", "imported", ["codex", "opencode", "cursor"]],
+        ["~ ~/.claude/skills", "imported", ["opencode", "claude", "cursor"]],
+        ["- ~/.agents/skills/my-checklist", "mine", ["codex", "opencode", "cursor"]],
+        ["- ~/.claude/skills/my-checklist", "mine", ["opencode", "claude", "cursor"]],
+      ]);
+    } finally {
+      await invoke("set_skills_enabled", { names: ["my-checklist"], enabled: true });
+    }
+  });
 });
