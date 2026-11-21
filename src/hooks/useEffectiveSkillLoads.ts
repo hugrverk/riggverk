@@ -66,5 +66,10 @@ export function useEffectiveSkillLoads({
     if (!busy) void refresh();
   }, [busy, refresh, refreshKey]);
 
+  // Unmounting drops a fetch still in flight, as a newer fetch does: no state update lands after the unmount.
+  useEffect(() => () => {
+    generationRef.current += 1;
+  }, []);
+
   return useMemo(() => ({ loads, loading, error, refresh }), [loads, loading, error, refresh]);
 }

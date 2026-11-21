@@ -204,6 +204,8 @@
   position: relative;
   display: grid;
   gap: 10px;
+  /* An auto column would grow to a long path's full width and push the cell past the window. */
+  grid-template-columns: minmax(0, 1fr);
   align-content: start;
   min-width: 0;
   padding: 16px 18px;
