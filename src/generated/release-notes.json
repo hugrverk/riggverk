@@ -32,7 +32,8 @@
             "Codex: Keep mine records exactly the values the confirmation showed. If `config.toml` changed in the meantime, nothing is recorded and the page asks you to look again",
             "The data folder, the backup folder and the folders above them must belong to you or the system and must not be writable by other users; otherwise Riggverk names the folder and why and does not use it. Personal docs are saved only into docs folders that belong to you",
             "On Linux, a folder only your own user group can write counts as yours, so a pack cloned with the usual settings is no longer refused",
-            "Riggverk runs OpenCode and Python only from folders other users cannot change. An OpenCode it skips for that reason shows as found but not used"
+            "Riggverk runs OpenCode and Python only from folders other users cannot change. An OpenCode it skips for that reason shows as found but not used",
+            "A long workspace folder path stays inside its card on the Overview page. Before, it could make the page wider than a narrow window"
           ]
         }
       ]
