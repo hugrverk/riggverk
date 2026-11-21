@@ -2986,7 +2986,9 @@ fn attach_skill_details(
     let disabled = crate::skill_sources::SourceRoot::disabled(sources)
         .cloned()
         .unwrap_or_default();
-    let details = setup_transaction::skill_plan_details(&planned, &scope, &flagged, &disabled);
+    let packs = setup_transaction::pack_of_skills(sources);
+    let (details, pack_writes) =
+        setup_transaction::skill_plan_details(&planned, &scope, &flagged, &disabled, &packs);
     for op in plan
         .operations
         .iter_mut()
@@ -2995,6 +2997,7 @@ fn attach_skill_details(
         .filter(|op| matches!(op.surface, SetupSurfaceId::Skills))
     {
         op.details = details.clone();
+        op.pack_writes = pack_writes.clone();
     }
 }
 

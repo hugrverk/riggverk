@@ -97,6 +97,29 @@ describe("buildPlanGroups", () => {
     expect(describePlanCounts(countPlanRows([group]))).toBe("apply 2 safe changes, skip 1 conflict");
   });
 
+  it("names a pack's share of a skills folder from the backend's pack writes, the file count still read first", () => {
+    const skills = review(
+      [
+        op("skills", "update", {
+          details: ["+ ~/.gemini/config/skills (35 skills, 70 files)", "+ ~/.agents/skills (35 skills, 70 files)", "~ ~/.claude/skills (2 skills, 2 files)"],
+          pack_writes: [
+            { line: 0, pack: "kretsverket", skills: 5, harnesses: ["antigravity"] },
+            { line: 1, pack: "kretsverket", skills: 5, harnesses: ["codex"] },
+            { line: 1, pack: "team", skills: 2, harnesses: ["codex"] },
+          ],
+        }),
+      ],
+      ["skills"],
+    );
+    const rows = buildPlanGroups(skills)[0]!.rows;
+    expect(rows.map(row => [planRowAgent(row), row.note, row.packs.map(write => write.pack)])).toEqual([
+      ["antigravity", "35 skills, 70 files · 5 from kretsverket", ["kretsverket"]],
+      ["shared", "35 skills, 70 files · 5 from kretsverket, 2 from team", ["kretsverket", "team"]],
+      ["claude", "2 skills, 2 files", []],
+    ]);
+    expect(planFileCount(rows)).toBe(142);
+  });
+
   it("reads a pack skill's own line, with the keys it acts on without asking, as a row of that skill", () => {
     const skills = review(
       [

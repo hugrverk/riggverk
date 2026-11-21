@@ -1,6 +1,6 @@
 import type { InstallFlowRequest, InstallReview } from "../hooks/useInstallFlow";
 import type { Tone } from "../ui/tone";
-import type { AppSettings, InstallAgent, PlannedOperation, SetupResult, SetupSurfaceId } from "../types";
+import type { AppSettings, InstallAgent, PackWrite, PlannedOperation, SetupResult, SetupSurfaceId } from "../types";
 import { resolvePointer } from "./fileConflicts";
 import {
   enabledSetupSurfaces,
@@ -62,6 +62,8 @@ export interface PlanRow {
   /** Apply would write this row (create, update or remove). */
   safe: boolean;
   conflict: boolean;
+  /** The pack skills among what the row writes (skills surface), with the harnesses that read its folder. */
+  packs: PackWrite[];
 }
 
 export interface PlanGroup {
@@ -126,6 +128,7 @@ function rowFor(
   file: string,
   note: string,
   detail: string[],
+  packs: PackWrite[] = [],
 ): PlanRow {
   return {
     id: `${surface}:${index}`,
@@ -137,7 +140,15 @@ function rowFor(
     detail,
     safe: kind === "create" || kind === "update" || kind === "remove",
     conflict: kind === "conflict",
+    packs,
   };
+}
+
+/** "35 skills, 70 files · 5 from kretsverket": the line's own count includes the bundle's skills, so a pack's share is named. */
+function withPacks(note: string, packs: readonly PackWrite[]): string {
+  if (packs.length === 0) return note;
+  const share = packs.map(write => `${write.skills} from ${write.pack}`).join(", ");
+  return note ? `${note} · ${share}` : share;
 }
 
 /** Where a skill or agent file in conflict is resolved: the review itself only reports it. */
@@ -154,20 +165,22 @@ function rowsForOperation(op: PlannedOperation): PlanRow[] {
   const safe = kind === "create" || kind === "update" || kind === "remove";
   if (safe && lines.length > 0) {
     return lines.map((line, index) => {
+      const packs = (op.pack_writes ?? []).filter(write => write.line === index);
       const match = DETAIL_LINE.exec(line);
-      if (!match) return rowFor(op.surface, index, kind, line, "", unique([...baseDetail, line]));
+      if (!match) return rowFor(op.surface, index, kind, line, withPacks("", packs), unique([...baseDetail, line]), packs);
       const rowKind = DETAIL_KIND[match[1]!] ?? kind;
       const withNote = TRAILING_NOTE.exec(match[2]!);
       const file = withNote ? withNote[1]! : match[2]!;
       const note = withNote ? withNote[2]! : "";
-      return rowFor(op.surface, index, rowKind, file, note, unique([...baseDetail, line, ...resolveLines(rowKind, op.surface)]));
+      return rowFor(op.surface, index, rowKind, file, withPacks(note, packs), unique([...baseDetail, line, ...resolveLines(rowKind, op.surface)]), packs);
     });
   }
   const note = op.conflict_description ?? op.manual_step ?? op.summary;
   const detail = unique([...baseDetail, ...lines, ...resolveLines(kind, op.surface)]);
   const effect = KIND_EFFECT[kind];
   const onlyNote = detail.every(line => line === note);
-  return [rowFor(op.surface, 0, kind, surfaceTitle(op.surface), note, onlyNote && effect ? [...detail, effect] : detail)];
+  // A skills operation that is a conflict or a manual step as a whole still names its packs, so their curves say kept.
+  return [rowFor(op.surface, 0, kind, surfaceTitle(op.surface), note, onlyNote && effect ? [...detail, effect] : detail, op.pack_writes ?? [])];
 }
 
 /** Rows grouped by surface, in request order; unchanged surfaces keep a header with no rows. */

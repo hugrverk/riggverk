@@ -265,6 +265,22 @@ pub struct PlannedOperation {
     /// If this is manual, describes what the user must do.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub manual_step: Option<String>,
+    /// The pack skills among the detail lines (skills surface only), so the review can name a
+    /// pack's share of a folder and draw its curve without reading the lines' prose.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pack_writes: Vec<PackWrite>,
+}
+
+/// The skills of one pack that one detail line of the skills surface creates, updates or removes,
+/// or keeps because they were edited (a `!` line).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PackWrite {
+    /// Index into `details` of the line that counts these skills.
+    pub line: usize,
+    pub pack: String,
+    pub skills: usize,
+    /// The enabled harnesses that read the line's folder: a shared folder reaches several.
+    pub harnesses: Vec<HarnessId>,
 }
 
 // ── Plan result ──
@@ -363,6 +379,7 @@ pub fn plan_setup(
                     details: Vec::new(),
                     conflict_description: None,
                     manual_step: None,
+                    pack_writes: Vec::new(),
                 };
                 operations.push(op);
                 is_blocked = true;
@@ -385,6 +402,7 @@ pub fn plan_setup(
                     details: detail_lines,
                     conflict_description: None,
                     manual_step: None,
+                    pack_writes: Vec::new(),
                 };
                 operations.push(op);
             }
@@ -397,6 +415,7 @@ pub fn plan_setup(
                     details: detail_lines,
                     conflict_description: Some(summary),
                     manual_step: None,
+                    pack_writes: Vec::new(),
                 };
                 operations.push(op.clone());
                 conflicts.push(op);
@@ -422,6 +441,7 @@ pub fn plan_setup(
                     details: detail_lines,
                     conflict_description: None,
                     manual_step: Some(step.clone()),
+                    pack_writes: Vec::new(),
                 };
                 operations.push(op.clone());
                 manual_steps.push(op);
@@ -435,6 +455,7 @@ pub fn plan_setup(
                     details: detail_lines,
                     conflict_description: None,
                     manual_step: None,
+                    pack_writes: Vec::new(),
                 };
                 operations.push(op);
             }
@@ -700,6 +721,7 @@ mod tests {
                 details: vec![],
                 conflict_description: None,
                 manual_step: None,
+                pack_writes: Vec::new(),
             }],
             synced: vec![],
             conflicts: vec![],

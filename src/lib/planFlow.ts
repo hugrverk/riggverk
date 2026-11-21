@@ -1,5 +1,5 @@
-import type { InstallAgent } from "../types";
-import { BASE_SOURCE_ID, edgeId, type FlowAgent, type FlowEdge, type FlowModel, type FlowSource, type RunTrace } from "./flowModel";
+import { INSTALL_AGENTS, type InstallAgent } from "../types";
+import { BASE_SOURCE_ID, edgeId, packSourceId, type FlowAgent, type FlowEdge, type FlowModel, type FlowSource, type RunTrace } from "./flowModel";
 import { HARNESS_LABELS, HARNESS_NAV_ORDER } from "./harnessInstallation";
 import { writeChip, writeCounts, writeLine, writesOf, type AgentPlan, type WriteCounts } from "./installPlan";
 
@@ -15,9 +15,18 @@ export type PlanPhase = "review" | "applying" | "done";
  * How the base's curve to an agent is drawn: `write` dashed (apply will write; while it runs, not reached yet), `kept`
  * dotted (only a conflict, which apply never writes), `sync` thin and solid (nothing to write), `live` the agent the
  * newest progress report names, `seen` an agent the run has reported and moved on from, `written` solid in the ok
- * hue, only once the run succeeded.
+ * hue, only once the run succeeded. An agent whose own rows change nothing but whose folder a pack's rows change takes
+ * that pack curve's `write` or `written`.
  */
 export type PlanCurve = "write" | "kept" | "sync" | "live" | "seen" | "written";
+
+/**
+ * How a pack's or your refinements' curve to an agent is drawn, from the pack skills the plan's rows name
+ * (`PlanRow.packs`): `write` while apply will write or remove some there (also while it runs: nothing is written
+ * before it succeeded), `written` once it has, `kept` when only an edited copy of one is kept, `sync` when apply leaves
+ * the pack there as it is, `fix` a pack that is held. Apply never writes your refinements: always `sync`.
+ */
+export type SourceCurve = "write" | "written" | "kept" | "sync" | "fix";
 
 /** The hue of a chip's text; the sign and the word in it always say the same. */
 export type PlanChipTone = "create" | "update" | "remove" | "conflict" | "ok" | "live";
@@ -42,9 +51,17 @@ export interface PlanFlow {
   agents: PlanFlowAgent[];
   /** The line under each source, by source id. */
   sourceSub: Record<string, string>;
+  /** How each curve that does not start at the base is drawn, by edge id. */
+  sourceCurves: Record<string, SourceCurve>;
   /** Writes the plan makes in all, the shared folders included. */
   writes: number;
 }
+
+/** What a pack's sub (and an agent only a pack changes) says it does, by phase; a write wins over a removal. */
+const PACK_WORD = {
+  write: { review: "to write", applying: "writing…", done: "written" },
+  remove: { review: "to remove", applying: "removing…", done: "removed" },
+} as const satisfies Record<string, Record<PlanPhase, string>>;
 
 const SYNTHETIC_BASE: FlowSource = { id: BASE_SOURCE_ID, kind: "base", label: "Riggverk base", state: "ok", items: [], total: 0, notes: [] };
 
@@ -88,35 +105,77 @@ function agentState(
 
 /**
  * The map of a plan. `base` is the Overview's model when the review is on the Overview: its sources and the agents
- * that are on (those with nothing in the plan say "in sync"), the agents that are off as one group. Without it (a
- * harness page) the map has the base and the plan's own agents. A plan that reaches no agent (the workspace bundle
- * alone) has no agents and the owner shows no map.
+ * that are on (those with nothing in the plan say "in sync", or what a pack does in a folder they read), the agents
+ * that are off as one group. Without it (a harness page) the map has the base and the plan's own agents. A plan that
+ * reaches no agent (the workspace bundle alone) has no agents and the owner shows no map.
  */
 export function buildPlanFlow(
   plan: AgentPlan,
   { base = null, phase, trace = null }: { base?: FlowModel | null; phase: PlanPhase; trace?: RunTrace | null },
 ): PlanFlow {
-  const inPlan = new Set(plan.groups.map(group => group.agent).filter((agent): agent is InstallAgent => agent !== "shared"));
+  // What each pack's rows do per agent: a row names every agent that reads its folder, so a shared folder reaches several.
+  // A removal (a disabled pack skill's copies) changes files too, but is told apart from a create or update.
+  const packReach = new Map<string, { write: Set<InstallAgent>; remove: Set<InstallAgent>; kept: Set<InstallAgent> }>();
+  for (const row of plan.rows) {
+    if (!row.safe && !row.conflict) continue;
+    const effect = row.conflict ? "kept" : row.kind === "remove" ? "remove" : "write";
+    for (const write of row.packs) {
+      const id = packSourceId(write.pack);
+      const reach = packReach.get(id) ?? { write: new Set(), remove: new Set(), kept: new Set() };
+      packReach.set(id, reach);
+      for (const agent of write.harnesses) reach[effect].add(agent);
+    }
+  }
+  // On the Overview an agent a pack reaches only through a shared folder is still in the plan; a harness page keeps its own agents.
+  const packWritten = (agent: InstallAgent) =>
+    base !== null && [...packReach.values()].some(reach => reach.write.has(agent) || reach.remove.has(agent));
+  const inPlan = new Set([
+    ...plan.groups.map(group => group.agent).filter((agent): agent is InstallAgent => agent !== "shared"),
+    ...INSTALL_AGENTS.filter(packWritten),
+  ]);
   const active = base && inPlan.size > 0 ? base.agents.filter(agent => agent.status === "active").map(agent => agent.id) : [];
   const ids = HARNESS_NAV_ORDER.filter(id => inPlan.has(id) || active.includes(id));
   const offIds = base && ids.length > 0
     ? HARNESS_NAV_ORDER.filter(id => !ids.includes(id) && (base.agents.some(agent => agent.id === id) || base.offGroup?.agents.some(agent => agent.id === id)))
     : [];
 
+  const sources = base?.sources.length ? base.sources : [SYNTHETIC_BASE];
+  const packEdges: FlowEdge[] = [];
+  const sourceCurves: Record<string, SourceCurve> = {};
+  // What the drawn pack curves change at each agent: a write wins over a removal.
+  const packChange = new Map<InstallAgent, keyof typeof PACK_WORD>();
+  for (const edge of base?.edges ?? []) {
+    const source = sources.find(entry => entry.id === edge.source);
+    if (edge.source === BASE_SOURCE_ID || !ids.includes(edge.agent) || !source) continue;
+    packEdges.push({ ...edge, glow: false });
+    const reach = packReach.get(source.id);
+    const change = reach?.write.has(edge.agent) ? "write" : reach?.remove.has(edge.agent) ? "remove" : null;
+    const curve: SourceCurve =
+      source.kind !== "pack" ? "sync"
+      : source.state === "fix" ? "fix"
+      : change ? (phase === "done" ? "written" : "write")
+      : reach?.kept.has(edge.agent) ? "kept"
+      : "sync";
+    sourceCurves[edge.id] = curve;
+    if ((curve === "write" || curve === "written") && change && packChange.get(edge.agent) !== "write") packChange.set(edge.agent, change);
+  }
+
   const agents: PlanFlowAgent[] = ids.map(id => {
     const group = plan.groups.find(entry => entry.agent === id);
+    // Only the agent's own rows: what a pack writes into a folder it shares with others is drawn on the pack's curve.
     const counts = writeCounts(group ? [...group.rows, ...group.skipped] : []);
-    return { id, label: HARNESS_LABELS[id], counts, decision: counts.conflict > 0, ...agentState(id, counts, phase, trace) };
+    const change = packChange.get(id);
+    // Its own rows change nothing but a pack changes a folder it reads: the node takes that pack curve's state, no chip.
+    const state = change && writesOf(counts) === 0 && counts.conflict === 0 && counts.manual === 0
+      ? { curve: phase === "done" ? "written" : "write", chip: null, tone: null, sub: PACK_WORD[change][phase] } as const
+      : agentState(id, counts, phase, trace);
+    return { id, label: HARNESS_LABELS[id], counts, decision: counts.conflict > 0, ...state };
   });
 
-  const sources = base?.sources.length ? base.sources : [SYNTHETIC_BASE];
-  const edges: FlowEdge[] = [];
-  for (const agent of agents) {
-    edges.push({ id: edgeId(BASE_SOURCE_ID, agent.id), source: BASE_SOURCE_ID, agent: agent.id, items: [], total: writesOf(agent.counts), status: "ok", glow: false });
-  }
-  for (const edge of base?.edges ?? []) {
-    if (edge.source !== BASE_SOURCE_ID && ids.includes(edge.agent) && sources.some(source => source.id === edge.source)) edges.push({ ...edge, glow: false });
-  }
+  const edges: FlowEdge[] = agents.map(agent => (
+    { id: edgeId(BASE_SOURCE_ID, agent.id), source: BASE_SOURCE_ID, agent: agent.id, items: [], total: writesOf(agent.counts), status: "ok", glow: false }
+  ));
+  edges.push(...packEdges);
 
   const writes = writesOf(writeCounts(plan.rows));
   const sourceSub: Record<string, string> = {};
@@ -126,7 +185,14 @@ export function buildPlanFlow(
       const state = phase === "done" ? "in sync" : phase === "applying" ? "writing…" : `${writes} ${writes === 1 ? "write" : "writes"}`;
       sourceSub[source.id] = [items, state].filter(Boolean).join(" · ");
     } else if (source.kind === "yours") sourceSub[source.id] = [items, "untouched"].filter(Boolean).join(" · ");
-    else sourceSub[source.id] = source.state === "fix" ? "held" : items || "nothing yet";
+    else if (source.state === "fix") sourceSub[source.id] = "held";
+    else {
+      const reach = packReach.get(source.id);
+      const state = reach?.write.size ? PACK_WORD.write[phase]
+        : reach?.remove.size ? PACK_WORD.remove[phase]
+        : reach?.kept.size ? "yours kept" : "in sync";
+      sourceSub[source.id] = [items, state].filter(Boolean).join(" · ");
+    }
   }
 
   const model: FlowModel = {
@@ -135,5 +201,5 @@ export function buildPlanFlow(
     offGroup: offIds.length > 0 ? { agents: offIds.map(id => flowAgent(id, "off", false, "off")), edges: [] } : null,
     edges,
   };
-  return { model, agents, sourceSub, writes };
+  return { model, agents, sourceSub, sourceCurves, writes };
 }

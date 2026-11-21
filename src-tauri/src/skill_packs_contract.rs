@@ -904,6 +904,92 @@ mod tests {
         }
     }
 
+    /// The review says, as data beside its lines, which pack skills each folder line writes and
+    /// which harnesses read that folder: the map draws a pack's curve from it, and the line's own
+    /// count ("N skills") includes the bundle's skills too, so it cannot tell.
+    #[test]
+    fn the_review_names_the_pack_skills_each_folder_line_writes_and_who_reads_the_folder() {
+        use crate::agent_targets::HarnessId;
+        let env = Env::new("pack-writes");
+        for name in ["team-one", "team-two"] {
+            env.pack_skill("team", None, name, "Team skill.", &[]);
+        }
+        let skills_op = |plan: SetupPlan| {
+            plan.operations
+                .into_iter()
+                .find(|op| op.surface == SetupSurfaceId::Skills)
+        };
+        let op = skills_op(env.preview()).expect("skills operation");
+        let mut lines = Vec::new();
+        for write in &op.pack_writes {
+            assert_eq!(
+                (write.pack.as_str(), write.skills),
+                ("team", 2),
+                "{write:?}"
+            );
+            let line = op.details[write.line].as_str();
+            lines.push(line.split(" (").next().expect("folder").to_string());
+            let reads = |harness| write.harnesses.contains(&harness);
+            if line.starts_with("+ ~/.claude/skills (") {
+                assert!(
+                    reads(HarnessId::Claude) && !reads(HarnessId::Codex),
+                    "{write:?}"
+                );
+            } else {
+                // ~/.agents/skills belongs to no single harness: every one that reads it is named.
+                assert!(
+                    reads(HarnessId::Codex)
+                        && reads(HarnessId::OpenCode)
+                        && !reads(HarnessId::Claude),
+                    "{write:?}"
+                );
+            }
+        }
+        assert_eq!(lines, ["+ ~/.claude/skills", "+ ~/.agents/skills"]);
+        let json = serde_json::to_value(&op).expect("operation JSON");
+        assert_eq!(json["pack_writes"][0]["pack"], "team");
+        assert_eq!(json["pack_writes"][0]["skills"], 2);
+        assert!(json["pack_writes"][0]["harnesses"]
+            .as_array()
+            .expect("harnesses")
+            .contains(&serde_json::json!("claude")));
+
+        let result = env.apply();
+        assert!(result.success, "install: {}", result.message);
+        // In sync: nothing is written, so no pack is named and the key is left out.
+        if let Some(op) = skills_op(env.preview()) {
+            assert!(op.pack_writes.is_empty(), "{:?}", op.pack_writes);
+            assert!(serde_json::to_value(&op)
+                .expect("JSON")
+                .get("pack_writes")
+                .is_none());
+        }
+
+        // A pack update over an edited copy: the copy is kept, and its own line names the pack.
+        fs::write(
+            env.root(SkillRoot::Claude).join("team-one/SKILL.md"),
+            "edited by hand\n",
+        )
+        .expect("edit installed copy");
+        env.pack_skill("team", None, "team-one", "Team skill, newer.", &[]);
+        let op = skills_op(env.preview()).expect("skills operation");
+        let named: Vec<(&str, &str, usize)> = op
+            .pack_writes
+            .iter()
+            .map(|write| {
+                let line = op.details[write.line].as_str();
+                (line, write.pack.as_str(), write.skills)
+            })
+            .collect();
+        assert_eq!(
+            named,
+            [
+                ("~ ~/.agents/skills (1 skill, 1 file)", "team", 1),
+                ("! ~/.claude/skills/team-one (edited, kept)", "team", 1),
+            ]
+        );
+    }
+
     /// On a case-insensitive volume `Notes.md` and `notes.md` are one file: a case-only rename is
     /// an update of the installed file, never a conflict plus a removal that deletes it.
     #[test]
