@@ -1,6 +1,6 @@
 ---
 name: pr-modernize
-description: Decides if an old or inherited PR should still land, rebases it and keeps authors' credit. Use when asked to modernize, revive, rebase or take over an old or inherited PR. Not for the user's own work or an ordinary PR update (pr-workflow).
+description: Decides if an old or inherited PR should still land, rebases it and keeps authors' credit. Use when asked to modernize, revive, rebase or take over such a PR. Not for the user's own work or an ordinary PR update (pr-workflow).
 license: MIT
 compatibility: Needs git and an authenticated gh CLI.
 metadata:
