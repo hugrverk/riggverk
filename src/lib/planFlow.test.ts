@@ -185,15 +185,53 @@ describe("buildPlanFlow", () => {
 
     it("leave the agents' own counts alone: a shared folder's pack reach is drawn on the pack's curve only", () => {
       const flow = buildPlanFlow(packPlan, { base: PACKS, phase: "review" });
-      expect(flow.agents.map(entry => [entry.id, entry.curve, entry.chip])).toEqual([
-        // Codex and OpenCode own no row: the base's curve is in sync while the pack's is dashed.
-        ["codex", "sync", null],
-        ["opencode", "sync", null],
-        ["claude", "write", "+ 1 · ■ 1"],
-        ["antigravity", "write", "+ 1 create"],
+      expect(flow.agents.map(entry => [entry.id, entry.counts.create + entry.counts.update + entry.counts.remove, entry.chip])).toEqual([
+        // Codex and OpenCode own no row: no chip and nothing counted, only the pack's curve reaches them.
+        ["codex", 0, null],
+        ["opencode", 0, null],
+        ["claude", 1, "+ 1 · ■ 1"],
+        ["antigravity", 1, "+ 1 create"],
       ]);
       expect(flow.sourceCurves["pack:kretsverket>codex"]).toBe("write");
       expect(flow.writes).toBe(3);
+    });
+
+    it("give an agent reached only through a shared folder the pack curve's state, not in sync", () => {
+      const node = (phase: "review" | "applying" | "done") => {
+        const entry = buildPlanFlow(packPlan, { base: PACKS, phase, trace: phase === "applying" ? EMPTY_TRACE : null }).agents.find(a => a.id === "codex")!;
+        return [entry.curve, entry.chip, entry.tone, entry.sub];
+      };
+      expect(node("review")).toEqual(["write", null, null, "to write"]);
+      expect(node("applying")).toEqual(["write", null, null, "writing…"]);
+      expect(node("done")).toEqual(["written", null, null, "written"]);
+      expect(buildPlanFlow(packPlan, { base: PACKS, phase: "done" }).model.agents.find(a => a.id === "codex")!.sub).toBe("written");
+    });
+
+    // A disabled pack skill: the backend gives its copies a `-` line of their own, naming the pack, after the folders' `+` lines.
+    const REMOVE_LINE = "- ~/.agents/skills/kv-old (1 file; disabled)";
+    const removeOn = (line: number) => ({ line, pack: "kretsverket", skills: 1, harnesses: ["codex", "opencode"] as InstallAgent[] });
+
+    it("say a pack whose rows only remove copies removes them, drawn like a write", () => {
+      const plan = agentPlanOf([op("skills", "update", { details: [REMOVE_LINE], pack_writes: [removeOn(0)] })]);
+      for (const [phase, word] of [["review", "to remove"], ["applying", "removing…"], ["done", "removed"]] as const) {
+        const flow = buildPlanFlow(plan, { base: PACKS, phase, trace: phase === "applying" ? EMPTY_TRACE : null });
+        expect(flow.sourceCurves["pack:kretsverket>codex"]).toBe(phase === "done" ? "written" : "write");
+        expect(flow.sourceSub["pack:kretsverket"]).toBe(`5 items · ${word}`);
+        expect(flow.agents.find(a => a.id === "codex")).toMatchObject({ curve: phase === "done" ? "written" : "write", chip: null, sub: word });
+      }
+    });
+
+    it("keep the write wording when the same pack creates and removes at the same agent", () => {
+      const plan = agentPlanOf([
+        op("skills", "update", {
+          details: ["+ ~/.agents/skills (6 skills, 6 files)", REMOVE_LINE],
+          pack_writes: [{ line: 0, pack: "kretsverket", skills: 5, harnesses: ["codex", "opencode"] }, removeOn(1)],
+        }),
+      ]);
+      const flow = buildPlanFlow(plan, { base: PACKS, phase: "review" });
+      expect(flow.sourceCurves["pack:kretsverket>codex"]).toBe("write");
+      expect(flow.sourceSub["pack:kretsverket"]).toBe("5 items · to write");
+      expect(flow.agents.find(a => a.id === "codex")).toMatchObject({ curve: "write", chip: null, sub: "to write" });
     });
 
     it("say kept when the skills operation as a whole is a conflict naming the pack", () => {
