@@ -7,6 +7,7 @@ metadata:
   risk: medium
   targets: codex, opencode, claude, cursor, copilot, pi, kilo, antigravity, grok
   related: screenshot-review, browser-qa, accessibility-review, prototype
+  source: https://github.com/emilkowalski/skills (emil-design-eng, MIT) and https://github.com/pbakaus/impeccable (impeccable, Apache-2.0)
 ---
 
 # Frontend Design
@@ -39,7 +40,7 @@ Before proposing a direction, inspect repository reality:
 - screenshots or live UI when available
 - existing motion, density, and state handling
 
-Preserve a mature product design system when one exists. Do not fall back to generic AI SaaS styling (purple gradients, interchangeable card stacks, stock dashboard chrome) unless the task explicitly requests a redesign.
+Preserve a mature product design system when one exists. Do not fall back to generic AI SaaS styling (purple gradients, interchangeable card stacks, stock dashboard chrome) unless the task explicitly requests a redesign. Other signs of generic AI-made design, to avoid unless the product already uses them: gradient text, same-size icon-heading-text cards as the page structure, a big number over a small label as the hero, glass or blur as decoration, a colored stripe down one side of a rounded box, emoji or text glyphs standing in for icons.
 
 ## Design thesis
 
@@ -54,7 +55,7 @@ Allow one or two reinforcing signature elements when they support the thesis —
 Treat typography as a primary design tool:
 
 - establish hierarchy with scale, weight, and rhythm
-- respect line length and reading comfort for body text
+- keep body text at about 65–75 characters per line (for example `max-width: 70ch`), with line height tuned to the face and width
 - prefer the existing type system; add fonts only with license, fallback, and performance justification
 - do not ban system fonts when the product already depends on them
 
@@ -82,6 +83,7 @@ Define interaction purpose before adding animation:
 - motion should clarify state, focus, or hierarchy — not decorate by default
 - respect `prefers-reduced-motion`
 - match implementation complexity to the chosen aesthetic; heavy animation requires clear value
+- when the change involves animation or transitions, read `motion.md` next to this file (when to animate, timing, easing, interruptibility, reduced motion); skip it otherwise
 
 ## States and content realism
 
@@ -90,6 +92,7 @@ Finish the states users actually encounter:
 - hover, focus, active, disabled, loading, empty, error, success
 - long labels, truncation, overflow, localization, and realistic content length
 - responsive behavior across narrow mobile through desktop widths
+- browser surfaces nobody draws: text selection color, focus ring, scrollbars and tabular numerals in data; take them from the existing tokens instead of leaving defaults that clash
 
 ## Verification
 
