@@ -1015,9 +1015,23 @@ class TestBuiltinAgents(unittest.TestCase):
         scout = compose_role_permission(load_role("repo-scout"))
         self.assertEqual(explore["*"], "deny")
         for key, value in scout.items():
-            if key not in {"*", "todowrite"}:
+            if key not in {"*", "todowrite", "execute"}:
                 with self.subTest(key=key):
                     self.assertEqual(explore[key], value)
+        # OpenCode 2 Code Mode: the scouts ask, explore keeps its deny default.
+        self.assertEqual(explore["execute"], "deny")
+        self.assertEqual(scout["execute"], "ask")
+
+    def test_plan_may_write_its_opencode_2_plan_folder_and_nothing_else(self) -> None:
+        plan = self.agent["plan"]["permission"]
+        self.assertEqual(plan["edit"]["*"], "deny")
+        self.assertEqual(plan["edit"]["~/.opencode/plan/*"], "allow")
+        self.assertEqual(plan["external_directory"], {"~/.opencode/plan/*": "allow"})
+
+    def test_global_external_directory_and_execute_stay_ask(self) -> None:
+        perm = build_base_permission(load_policy())
+        self.assertEqual(perm["external_directory"]["*"], "ask")
+        self.assertEqual(perm["execute"], "ask")
 
     def test_user_agent_entries_are_not_part_of_the_managed_projection(self) -> None:
         metadata = json.loads(
@@ -1096,7 +1110,7 @@ class TestMutationRejection(unittest.TestCase):
 
     def test_widening_a_gated_top_level_action_or_edit_default_is_detected(self) -> None:
         for role in ("architect", "scribe", "verifier"):
-            for key in ("external_directory", "webfetch", "websearch", "doom_loop"):
+            for key in ("external_directory", "webfetch", "websearch", "doom_loop", "execute"):
                 with self.subTest(role=role, key=key):
                     perm = compose_role_permission(load_role(role))
                     perm[key] = "allow"

@@ -16,7 +16,8 @@
     "question": "deny",
     "webfetch": "ask",
     "websearch": "ask",
-    "task": "allow"
+    "task": "allow",
+    "execute": "ask"
   },
   "skill": {
     "*": "allow"
@@ -120,6 +121,11 @@
       "opencode.jsonc",
       ".opencode/**",
       ".github/workflows/**",
+      "**/AGENTS.md",
+      "**/opencode.json",
+      "**/opencode.jsonc",
+      "**/.opencode/**",
+      "**/.github/workflows/**",
       "**/.claude/skills/**",
       "**/.agents/skills/**",
       "**/.config/opencode/skills/**"
@@ -433,7 +439,11 @@
         "edit": {
           "*": "deny",
           ".opencode/plans/*.md": "allow",
-          "*opencode/plans/*.md": "allow"
+          "*opencode/plans/*.md": "allow",
+          "~/.opencode/plan/*": "allow"
+        },
+        "external_directory": {
+          "~/.opencode/plan/*": "allow"
         }
       }
     },
@@ -443,6 +453,7 @@
       "permission": {
         "*": "deny",
         "edit": "deny",
+        "execute": "deny",
         "task": "deny",
         "todowrite": "deny"
       }

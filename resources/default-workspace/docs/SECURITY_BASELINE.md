@@ -29,6 +29,6 @@ The `security` group on a harness page reads a few named keys of that harness's 
 
 ## What the posture check sees
 
-It reads, in memory and only the named keys, one global config file per harness: Claude `~/.claude/settings.json`, Codex `config.toml` in `CODEX_HOME`, OpenCode `opencode.json`, `opencode.jsonc` and `config.json`, Cursor `~/.cursor/sandbox.json`, Kilo `kilo.jsonc` or `kilo.json`. It keeps and shows no value from them, only fixed phrases and counts.
+It reads, in memory and only the named keys, one global config file per harness: Claude `~/.claude/settings.json`, Codex `config.toml` in `CODEX_HOME`, OpenCode `opencode.json`, `opencode.jsonc` and `config.json` (read by OpenCode 1.x only), Cursor `~/.cursor/sandbox.json`, Kilo `kilo.jsonc` or `kilo.json`. It keeps and shows no value from them, only fixed phrases and counts.
 
 It does not see project or managed config, profiles, command-line flags, aliases or environment overrides, any of which can change what a harness does. It does not read `.env` files. For Copilot CLI and Pi it reads nothing. A row marked `enforced` means the key is set in the file read, not that the whole machine is covered.

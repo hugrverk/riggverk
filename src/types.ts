@@ -595,7 +595,7 @@ export interface OpenCodeAgentMismatch {
 
 /** The installed `opencode` CLI, from `opencode --version`. */
 export interface OpenCodeCliHealth {
-  /** `supported` (1.x), `unsupported` (another major), `unknown` (found, no readable version) or `missing`. */
+  /** `supported` (1.x), `compatible` (2.x, tested with 2.3.2), `unsupported` (another major), `unknown` (found, no readable version) or `missing`. */
   status: string;
   version: string | null;
   major: number | null;
@@ -656,6 +656,7 @@ export interface OpenCodeRuntimeHealth {
   // TUI config
   template_tui_path: string;
   installed_tui_path: string;
+  /** synced, diverged or missing; `not_read` when the installed OpenCode is 2.x, which does not read `tui.json`. */
   tui_status: string;
   /** Managed `tui.json` keys that differ from the bundled config, by name; empty when it matches or cannot be compared. */
   tui_diverged_keys: string[];

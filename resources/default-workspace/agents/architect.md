@@ -137,6 +137,7 @@ permission:
     "sentinel": allow
     "scribe": allow
     "verifier": allow
+  execute: ask
   skill:
     "*": allow
   bash:
@@ -1833,6 +1834,11 @@ permission:
     "opencode.jsonc": ask
     ".opencode/**": ask
     ".github/workflows/**": ask
+    "**/AGENTS.md": ask
+    "**/opencode.json": ask
+    "**/opencode.jsonc": ask
+    "**/.opencode/**": ask
+    "**/.github/workflows/**": ask
     "**/.claude/skills/**": ask
     "**/.agents/skills/**": ask
     "**/.config/opencode/skills/**": ask

@@ -4,7 +4,6 @@ description: Use automatically for auth, permissions, uploads, forms, payments, 
 mode: subagent
 temperature: 0.1
 steps: 45
-hidden: true
 permission:
   "*": ask
   external_directory:
@@ -131,6 +130,7 @@ permission:
   webfetch: ask
   websearch: ask
   task: deny
+  execute: ask
   skill:
     "*": allow
   bash:
