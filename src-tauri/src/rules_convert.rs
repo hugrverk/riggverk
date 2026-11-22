@@ -449,7 +449,8 @@ mod tests {
         let converted = convert(installed_both.as_bytes(), &source, &[], "CLAUDE.md").unwrap();
         assert_eq!(converted.moved_sections, vec!["## Mine"]);
         // One the user edited is theirs, and moves like any other.
-        let edited = user.replace("Lead with the answer.", "Lead with a summary.");
+        let edited = user.replacen(plain, &plain.replacen('\n', "\nMine. ", 1), 1);
+        assert_ne!(edited, user);
         let installed = format!("{BEGIN_MARKER}\n{edited}{END_MARKER}\n");
         let converted = convert(installed.as_bytes(), BASE_NEW, &[], "CLAUDE.md").unwrap();
         assert_eq!(converted.moved_sections, vec!["## Answer style", "## Mine"]);

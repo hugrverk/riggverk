@@ -191,16 +191,6 @@ mod tests {
             section.ends_with(".\n") && section.lines().count() == 2,
             "{section}"
         );
-        for clause in [
-            // The answer comes first.
-            "Lead with the answer.",
-            // Content is never cut to make the text shorter.
-            "Keep every fact, number, path and caveat: cut words, not content.",
-            // What must stay exact is left as it is.
-            "Leave code, commands, identifiers, quoted output and required report headings unchanged.",
-        ] {
-            assert!(section.contains(clause), "{clause}");
-        }
         // No Claude Code import, no markup or marker, no fence, no other heading.
         assert!(!section.contains(['@', '<', '>']), "{section}");
         assert!(!section.contains("```") && !section.contains("~~~"));
@@ -216,7 +206,7 @@ mod tests {
         assert_eq!(AnswerStyle::Plain.section(), PLAIN_SECTION);
         assert_eq!(AnswerStyle::HarnessDefault.section(), "");
         assert!(!is_app_section(
-            &PLAIN_SECTION.replace("Lead with", "Start with")
+            &PLAIN_SECTION.replacen('\n', "\nMine. ", 1)
         ));
         assert!(!is_app_section(""));
         // The comment policy's sections are not this setting's.

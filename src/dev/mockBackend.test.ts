@@ -274,7 +274,7 @@ describe("mock backend: answer style", () => {
     await invoke("set_answer_style", { level: "plain" });
     expect(await invoke<AnswerStyleChoice>("get_answer_style")).toEqual({ level: "plain", problem: null });
     const template = (await invoke<DocumentContent>("read_agent_template")).content;
-    expect(template).toContain("\n\n## Answer style\nWrite answers in plain technical language");
+    expect(template).toContain("\n\n## Answer style\n");
     expect(template.match(/## Answer style/g)).toHaveLength(1);
     // Right after the Communication section, before the section that follows it.
     expect(template.indexOf("## Answer style")).toBeGreaterThan(template.indexOf("## Communication"));

@@ -22,7 +22,7 @@ mod tests {
         apply_rules_conversion, get_answer_style, preview_rules_conversion, preview_rules_diff,
         set_answer_style, set_comment_policy,
     };
-    use crate::comment_policy::CommentPolicy;
+    use crate::comment_policy::{CommentPolicy, SECTION_HEADING as COMMENTS_HEADING};
     use crate::light_harness::LightHarnessId;
     use crate::pack_routing::{health_rules_synced, rules_source_text, PackRouting};
     use crate::rules_block::{body_digest, render_new, RulesPlan};
@@ -32,7 +32,6 @@ mod tests {
     use crate::test_env::{canonical_skill_text, guard, guard::EnvRestore, set_test_user_dirs};
 
     const CURSOR_USER_RULES: &str = "templates/cursor/user-rules.md";
-    const COMMENTS_HEADING: &str = "## Code comments";
 
     #[cfg(unix)]
     fn set_mode(path: &Path, mode: u32) {
@@ -736,9 +735,11 @@ mod tests {
         let env = Env::new("convert-edited-section");
         env.choose(AnswerStyle::Plain);
         env.apply(&["claude_rules"]);
+        let plain = AnswerStyle::Plain.section();
         let edited = env
             .read_claude()
-            .replacen("Lead with the answer.", "Lead with a summary.", 1);
+            .replacen(plain, &plain.replacen('\n', "\nMine. ", 1), 1);
+        assert_ne!(edited, env.read_claude());
         fs::write(env.claude_file(), edited).expect("edit");
         let preview = preview_rules_conversion("claude_rules".into()).expect("preview");
         assert_eq!(preview.moved_sections, vec![SECTION_HEADING]);
