@@ -125,7 +125,7 @@ OpenCode agent definitions live at `agents/*.md` in the workspace. The bundled a
 - `agents/scribe.md` — Documentation writer
 - `agents/verifier.md` — Non-destructive verification runner
 
-`architect` is the primary agent. `inspector` and `verifier` are subagents you can run directly: type `@inspector` or `@verifier` in the prompt. `repo-scout`, `sentinel` and `scribe` are `hidden: true`, which removes them from `@` autocomplete; the architect still delegates to them. Hiding only affects the menu, not what the model may delegate to.
+`architect` is the primary agent. `repo-scout`, `inspector`, `sentinel`, `scribe` and `verifier` are subagents: the architect delegates to them, and you can run one directly by typing `@` and its name in the prompt. None of them is `hidden`, because OpenCode 2 leaves a hidden agent out of the list the model delegates from.
 
 `templates/opencode.json` defines `default_agent` and no model. Riggverk sets no model; your agent's own default applies. Existing `model` and `small_model` values stay yours, including values written by earlier releases. Optional saved model overrides can explicitly set them or pin subagent and critic roles; bundled agent files carry no model.
 

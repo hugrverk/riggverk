@@ -4,7 +4,6 @@ description: Use automatically when code changes require README, docs, runbook, 
 mode: subagent
 temperature: 0.2
 steps: 35
-hidden: true
 permission:
   "*": ask
   external_directory:
