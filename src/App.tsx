@@ -107,6 +107,8 @@ function AppShell() {
     setSkillsEnabled,
     commentPolicy,
     setCommentPolicy,
+    answerStyle,
+    setAnswerStyle,
     activeSkillId,
     activeSkillContent,
     readSkill,
@@ -925,6 +927,8 @@ function AppShell() {
             onSetSkillsEnabled={setSkillsEnabled}
             commentPolicy={commentPolicy}
             onSetCommentPolicy={setCommentPolicy}
+            answerStyle={answerStyle}
+            onSetAnswerStyle={setAnswerStyle}
             onPreviewImport={previewSkillImport}
             onCommitImport={commitSkillImport}
             onSetImportedRouting={setImportedSkillRouting}

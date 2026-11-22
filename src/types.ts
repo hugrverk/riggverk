@@ -1064,6 +1064,17 @@ export interface CommentPolicyChoice {
   problem: string | null;
 }
 
+/** How agents word their answers, for every harness (`answer-style.json`). */
+export type AnswerStyleLevel = "harness_default" | "plain";
+
+/** The answer style (`get_answer_style`). */
+export interface AnswerStyleChoice {
+  /** Null while `answer-style.json` cannot be used. */
+  level: AnswerStyleLevel | null;
+  /** Why `answer-style.json` cannot be used; set, no level can be chosen. */
+  problem: string | null;
+}
+
 export interface PackLibrary {
   /** Why `pack-skills.json` cannot be used; set, installed pack skills are kept as they are. */
   record_problem?: string | null;

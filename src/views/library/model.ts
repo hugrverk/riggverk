@@ -8,6 +8,8 @@ import type { UiState } from "../../lib/uiState";
 import type {
   AgentMetadataResponse,
   AgentTargetMeta,
+  AnswerStyleChoice,
+  AnswerStyleLevel,
   CommentPolicyChoice,
   CommentPolicyLevel,
   ConfigEditorSourceMeta,
@@ -67,7 +69,9 @@ export type RowAction =
   | { type: "disable"; name: string }
   | { type: "enable"; name: string }
   /** Chooses how much agents comment code, for every harness. */
-  | { type: "comment-policy"; level: CommentPolicyLevel };
+  | { type: "comment-policy"; level: CommentPolicyLevel }
+  /** Chooses how agents word their answers, for every harness. */
+  | { type: "answer-style"; level: AnswerStyleLevel };
 
 export interface RowVerb {
   label: string;
@@ -142,6 +146,10 @@ export interface LibraryModelInput {
   commentPolicy?: CommentPolicyChoice | null;
   /** The levels the comment policy is not at offer "Use". */
   canSetCommentPolicy?: boolean;
+  /** The answer style; null while it could not be read (the group is then left out). */
+  answerStyle?: AnswerStyleChoice | null;
+  /** The levels the answer style is not at offer "Use". */
+  canSetAnswerStyle?: boolean;
 }
 
 const SHADOWED_TEXT = "A bundled skill has this name, so the bundle wins. Rename it in the pack to use it.";
@@ -223,6 +231,37 @@ function commentPolicyGroup(input: LibraryModelInput): LibraryGroup | null {
     }),
     notes: choice.problem ? [{ key: "comment-policy", label: "comment policy", text: `unavailable: ${choice.problem}` }] : undefined,
     notesLabel: choice.problem ? "Comment policy problem" : undefined,
+  };
+}
+
+/** The answer style's levels, in the order shown, each said in one line. */
+export const ANSWER_STYLE_LEVELS: readonly { level: AnswerStyleLevel; name: string; desc: string }[] = [
+  { level: "harness_default", name: "Harness default", desc: "Adds nothing: each agent keeps its own habits and your repositories' rules." },
+  { level: "plain", name: "Plain", desc: "Plain asks agents for short active sentences, the answer first, and numbered steps. A repository's own rules still win." },
+];
+
+/** The "Answer style" group: one row per level, the one in use marked, the others offering Use. */
+function answerStyleGroup(input: LibraryModelInput): LibraryGroup | null {
+  const choice = input.answerStyle;
+  if (!choice) return null;
+  const canSet = input.canSetAnswerStyle === true && input.dataFolderOk && !choice.problem;
+  return {
+    key: "rules-answers",
+    label: "Answer style",
+    hint: "for every harness · the next Update changes the rules",
+    rows: ANSWER_STYLE_LEVELS.map(({ level, name, desc }) => {
+      const inUse = !choice.problem && choice.level === level;
+      return {
+        key: `answers:${level}`,
+        name,
+        desc,
+        state: inUse ? { state: "ok" as const, label: "In use" } : undefined,
+        verbs: canSet && !inUse ? [{ label: "Use", action: { type: "answer-style", level } as RowAction }] : [],
+        haystack: haystack(name, desc, "answer style", "rules", inUse ? "in use" : undefined),
+      };
+    }),
+    notes: choice.problem ? [{ key: "answer-style", label: "answer style", text: `unavailable: ${choice.problem}` }] : undefined,
+    notesLabel: choice.problem ? "Answer style problem" : undefined,
   };
 }
 
@@ -467,7 +506,7 @@ export function topicGroups(topic: LibrarySourceType, input: LibraryModelInput):
             },
           ],
         },
-        ...[commentPolicyGroup(input)].filter((group): group is LibraryGroup => group !== null),
+        ...[commentPolicyGroup(input), answerStyleGroup(input)].filter((group): group is LibraryGroup => group !== null),
       ];
     }
     case "skills": {

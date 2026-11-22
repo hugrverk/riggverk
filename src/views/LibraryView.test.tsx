@@ -6,6 +6,7 @@ import { renderInFrame } from "../test/renderWithShell";
 import type {
   AgentMetadataResponse,
   AgentTargetMeta,
+  AnswerStyleChoice,
   CommentPolicyChoice,
   DocumentContent,
   InstallAgent,
@@ -53,6 +54,9 @@ interface Fixture {
   commentPolicy: CommentPolicyChoice;
   /** When set, set_comment_policy refuses with this reason, and the file reads as unusable from then on. */
   refuseCommentPolicy: string | null;
+  answerStyle: AnswerStyleChoice;
+  /** When set, set_answer_style refuses with this reason, and the file reads as unusable from then on. */
+  refuseAnswerStyle: string | null;
 }
 
 function skill(id: string, description: string, extra: Partial<SkillSummary> = {}): SkillSummary {
@@ -127,6 +131,8 @@ function freshFixture(): Fixture {
     choices: { disabled: [], named_by: {}, problem: null },
     commentPolicy: { level: "harness_default", problem: null },
     refuseCommentPolicy: null,
+    answerStyle: { level: "harness_default", problem: null },
+    refuseAnswerStyle: null,
   };
 }
 
@@ -218,6 +224,15 @@ function installBackend() {
           return Promise.reject(fixture.refuseCommentPolicy);
         }
         fixture.commentPolicy = { level: args!.level as CommentPolicyChoice["level"], problem: null };
+        return Promise.resolve(null);
+      case "get_answer_style":
+        return Promise.resolve(fixture.answerStyle);
+      case "set_answer_style":
+        if (fixture.refuseAnswerStyle) {
+          fixture.answerStyle = { level: null, problem: fixture.refuseAnswerStyle };
+          return Promise.reject(fixture.refuseAnswerStyle);
+        }
+        fixture.answerStyle = { level: args!.level as AnswerStyleChoice["level"], problem: null };
         return Promise.resolve(null);
       case "forget_pack":
         fixture.packs = { ...fixture.packs, packs: fixture.packs.packs.filter(pack => pack.name !== args!.name) };
@@ -330,6 +345,8 @@ function Harness({ showConfigs = true, onOpenHarnessView, withoutCopy = false, t
       onSetSkillsEnabled={lib.setSkillsEnabled}
       commentPolicy={lib.commentPolicy}
       onSetCommentPolicy={lib.setCommentPolicy}
+      answerStyle={lib.answerStyle}
+      onSetAnswerStyle={lib.setAnswerStyle}
       agentSources={lib.agentSources}
       activeAgentContent={lib.activeAgentContent}
       onSelectAgent={lib.selectAgent}
@@ -1204,6 +1221,78 @@ describe("Library code comments", () => {
     fireEvent.change(screen.getByRole("searchbox", { name: "Search all topics" }), { target: { value: "code comments" } });
     const results = await screen.findByRole("region", { name: "Search results" });
     expect(within(results).getByText("Minimal")).toBeTruthy();
+  });
+});
+
+describe("Library answer style", () => {
+  function answersGroup() {
+    return within(screen.getByRole("heading", { name: "Answer style" }).closest("section")!);
+  }
+
+  /** A row of the answer style group: "Harness default" names a row of the comment group too. */
+  function answerRow(name: string): HTMLElement {
+    const row = answersGroup().getAllByRole("listitem").find(item => item.querySelector("b")?.textContent === name);
+    if (!row) throw new Error(`no answer style row named ${name}`);
+    return row;
+  }
+
+  it("lists the two levels under Rules, right under Code comments, with the one in use marked", async () => {
+    await renderLibrary();
+    await screen.findByRole("heading", { name: "Answer style" });
+    const headings = screen.getAllByRole("heading").map(heading => heading.textContent);
+    expect(headings.indexOf("Answer style")).toBe(headings.indexOf("Code comments") + 1);
+    const group = answersGroup();
+    expect(group.getByText("for every harness · the next Update changes the rules")).toBeTruthy();
+    for (const name of ["Harness default", "Plain"]) expect(group.getByText(name)).toBeTruthy();
+    expect(within(answerRow("Harness default")).getByText("In use")).toBeTruthy();
+    expect(within(answerRow("Harness default")).queryByRole("button", { name: "Use" })).toBeNull();
+    expect(within(answerRow("Plain")).getByText("Plain asks agents for short active sentences, the answer first, and numbered steps. A repository's own rules still win.")).toBeTruthy();
+    expect(within(answerRow("Plain")).getByRole("button", { name: "Use" })).toBeTruthy();
+  });
+
+  it("Use sets the level for every harness, reads it back and shows the composed base again", async () => {
+    await renderLibrary();
+    await screen.findByRole("heading", { name: "Answer style" });
+    const templateReads = callsTo("read_agent_template").length;
+    fireEvent.click(within(answerRow("Plain")).getByRole("button", { name: "Use" }));
+    await waitFor(() => expect(callsTo("set_answer_style")).toEqual([{ level: "plain" }]));
+    await waitFor(() => expect(within(answerRow("Plain")).getByText("In use")).toBeTruthy());
+    expect(within(answerRow("Harness default")).getByRole("button", { name: "Use" })).toBeTruthy();
+    expect(callsTo("get_answer_style").length).toBeGreaterThanOrEqual(2);
+    expect(callsTo("read_agent_template").length).toBeGreaterThan(templateReads);
+    expect(callsTo("set_comment_policy")).toEqual([]);
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("refuses a level and says why while answer-style.json cannot be read", async () => {
+    fixture.answerStyle = { level: null, problem: "answer-style.json cannot be read; fix or remove it" };
+    await renderLibrary();
+    const problem = await screen.findByRole("group", { name: "Answer style problem" });
+    expect(problem.textContent).toContain("unavailable: answer-style.json cannot be read; fix or remove it");
+    expect(answersGroup().queryByRole("button", { name: "Use" })).toBeNull();
+    expect(answersGroup().queryByText("In use")).toBeNull();
+    // The comment setting is a separate file and still offers its levels.
+    expect(within(rowOf("Minimal")).getByRole("button", { name: "Use" })).toBeTruthy();
+  });
+
+  it("after a refused Use, reads the style again: the problem shows and no level is offered", async () => {
+    await renderLibrary();
+    await screen.findByRole("heading", { name: "Answer style" });
+    fixture.refuseAnswerStyle = "answer-style.json cannot be read; fix or remove it";
+    fireEvent.click(within(answerRow("Plain")).getByRole("button", { name: "Use" }));
+    const problem = await screen.findByRole("group", { name: "Answer style problem" });
+    expect(problem.textContent).toContain("unavailable: answer-style.json cannot be read; fix or remove it");
+    expect(answersGroup().queryByRole("button", { name: "Use" })).toBeNull();
+    expect(answersGroup().queryByText("In use")).toBeNull();
+  });
+
+  it("finds the levels by search", async () => {
+    await renderLibrary();
+    await screen.findByRole("heading", { name: "Answer style" });
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search all topics" }), { target: { value: "answer style" } });
+    const results = await screen.findByRole("region", { name: "Search results" });
+    expect(within(results).getByText("Plain")).toBeTruthy();
+    expect(within(results).queryByText("Minimal")).toBeNull();
   });
 });
 

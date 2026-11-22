@@ -89,6 +89,8 @@ import type {
   SkillChoices,
   CommentPolicyChoice,
   CommentPolicyLevel,
+  AnswerStyleChoice,
+  AnswerStyleLevel,
   SkillLoadFlag,
   SkillReadFolder,
   SkillSummary,
@@ -1684,16 +1686,29 @@ const COMMENT_SECTIONS: Record<CommentPolicyLevel, string> = {
   off: "## Code comments\nAdd no comments except those the language or tooling requires: license headers, directives and pragmas, lint suppressions, API docs a public interface requires, `// SAFETY:` on Rust `unsafe`. Keep existing comments unless you remove their code; update any your change makes false. A repository's own comment rules (its AGENTS.md, CLAUDE.md or linters) win.\n",
 };
 
+/** The answer style chosen in this session (`set_answer_style`). */
+let answerStyleLevel: AnswerStyleLevel = "harness_default";
+
+/** The section each answer style level adds to the rules, as the backend's `answer_style` writes it. */
+const ANSWER_SECTIONS: Record<AnswerStyleLevel, string> = {
+  harness_default: "",
+  plain: "## Answer style\nWrite answers in plain technical language, in the user's language. Lead with the answer. Aim for sentences of about 20 words or fewer, with one idea each. Use active voice and name who or what acts. Use one term for one thing. Write prose in full sentences. Write a procedure as numbered steps, one action per step. Put a warning or a condition in its own sentence before the step it affects. Keep lists, tables and code blocks where the content is parallel or meant to be copied; a list item may be a fragment. Keep every fact, number, path and caveat: cut words, not content. About one sentence in five may break these rules when a reason or a trade-off reads better as one longer sentence. Leave code, commands, identifiers, quoted output and required report headings unchanged.\n",
+};
+
 /** The bundled base as the Library shows it, composed per read like the backend's. */
 function agentTemplate(): DocumentContent {
   const comments = COMMENT_SECTIONS[commentPolicyLevel];
+  // The answer style follows the base's Communication section, before the section after it.
+  const answers = ANSWER_SECTIONS[answerStyleLevel];
   return {
     id: "agent-template",
     title: "Agent Rules",
     path: "templates/global-agent-rules.md",
     section: "",
     source: "curated",
-    content: "# Global Agent Rules\n\n## Priority\nRepository reality overrides assumptions. Explicit user instructions override these defaults.\n\n## Communication\nBe direct, dense, technical, and concise.\n\n## Verification\nNever claim done without evidence.\n"
+    content: "# Global Agent Rules\n\n## Priority\nRepository reality overrides assumptions. Explicit user instructions override these defaults.\n\n## Communication\nBe direct, dense, technical, and concise.\n\n"
+      + (answers ? `${answers}\n` : "")
+      + "## Verification\nNever claim done without evidence.\n"
       // Like the backend: the routing of the packs follows the base (here at its end: the mock base has no routing section).
       + (packLibrary.packs.some(pack => pack.routing?.length)
         ? `\n## Pack skill routing\nRouting from the skill packs in your data folder. Each line names only skills of its own pack.\n${packLibrary.packs.filter(pack => pack.routing?.length).map(pack => `### ${pack.name} pack\n${pack.routing!.join("\n")}\n`).join("")}`
@@ -2246,6 +2261,14 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
       const level = arg<CommentPolicyLevel>(args, "level");
       if (!Object.prototype.hasOwnProperty.call(COMMENT_SECTIONS, level)) throw new Error(`unknown comment policy: ${String(level)}`);
       commentPolicyLevel = level;
+      return null;
+    }
+    case "get_answer_style":
+      return { level: answerStyleLevel, problem: null } satisfies AnswerStyleChoice;
+    case "set_answer_style": {
+      const level = arg<AnswerStyleLevel>(args, "level");
+      if (!Object.prototype.hasOwnProperty.call(ANSWER_SECTIONS, level)) throw new Error(`unknown answer style: ${String(level)}`);
+      answerStyleLevel = level;
       return null;
     }
     case "set_skills_enabled": {
